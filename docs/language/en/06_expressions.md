@@ -400,6 +400,10 @@ Tuple patterns and struct patterns are not in the language: `case (...)` and `ca
 match type type {
     case struct => branch
     case array  => branch
+    case nullable => branch
+    case fallible => branch
+    case map    => branch
+    case set    => branch
     case tuple  => branch
     case func   => branch
     case #leaf  => branch
@@ -410,7 +414,7 @@ match type type {
 }
 ```
 
-- `struct` selects a structure; `tuple` selects an **ordinary** tuple; `array` selects every array type, whatever its elements (still a leaf for `#leaf` when no earlier case takes it); `func` selects a function type; `#leaf` selects every other type (scalars, `string`, arrays, functions, `T?`, `T!`, cells, ...). `struct` and `tuple` are the two shapes of an [R3 inner node](../../design/generic-structure/README.cn.md): `T?` and `T!` are tagged tuples and, like mutable cells, fall into `#leaf`, not `tuple`.
+- `struct` selects a structure; `tuple` selects an **ordinary** tuple; `array` selects every array type, whatever its elements (still a leaf for `#leaf` when no earlier case takes it); `func` selects a function type; `nullable` selects every `T?`, `fallible` every `T!`, `map` every map and `set` every set (each still a leaf for `#leaf` when no earlier case takes it); `#leaf` selects every other type (scalars, `string`, arrays, functions, `T?`, `T!`, cells, ...). `struct` and `tuple` are the two shapes of an [R3 inner node](../../design/generic-structure/README.cn.md): `T?` and `T!` are tagged tuples and, like mutable cells, fall into `#leaf`, not `tuple`.
 - A type written in the pattern is an **identity pattern**: `case int`, `case Json`, `case MyStruct`, `case T`. Identity is **exact**: `case float` does not select `int` (`float` and `f64` are the same type, and so are `int` and `i64`; `int` and `i32` are not); `case f32` does not select `f64`; `case MyStruct` selects the declared name, not another structure with the same fields; `case T` substitutes the binding of `T` at the instantiation, so it selects exactly that type. Shapes and identities share one case and one `|` (`case tuple | MyStruct`), judged in the order written: a type an earlier case already selects is `SemanticDiag::StaticMatchPatternCannotMatch` in a later identity pattern.
 - `_` selects everything, like `#leaf`, and is the fallback spelling; both must be the last case. `case struct | tuple` selects either shape. `case int` before `case #leaf` is normal; after `#leaf`/`_` it is `SemanticDiag::StaticMatchUnreachableCase`.
 - The type after `match type` is a type position: a `(` there is always the start of a type, so `match type () { ... }` matches the empty tuple type; a function type takes one more pair of parentheses, `match type ((x: int) => int) { ... }`. The pattern after `case` is a type position too, with the same rule: `case (int, int)` and `case ()` are tuples, and a function type is written `case ((x: int) => int)`.
@@ -418,6 +422,8 @@ match type type {
 - With no matching case the error is `SemanticDiag::StaticMatchNotExhaustive`; a case after `#leaf`/`_` is `SemanticDiag::StaticMatchUnreachableCase`. The construct compares concrete type names: `case int` or `case MyStruct` is part of it, and a scalar is named directly.
 - The selected branch becomes straight-line code at that position; the graph has no branch node. Its value is the value of the `match type`, and an empty branch has type `void`.
 - A generic function may omit its return type: each instance gets it from the selected branch (return-type inference). A recursive call that comes back to the **same type instance** while that instance's return type is still unknown reports `SemanticDiag::GenericInstantiationCycle`; recursion with strictly smaller type arguments finishes the child instance first as usual.
+
+**Type functions.** A type is also computed from a type (design principles 5.6): a type function is declared with `type`, `type F<T> = body`, and called `F<...>` where a type is written; its body is a type expression, and a `match type` whose cases give types is one: `type ElemOrSelf<T> = match type T { case array => ElementOf<T>  case _ => T }`. `types` declares the four that take a type apart where `match type` cannot: `ElementOf<T>` is the element type of an array or a set, `PayloadOf<T>` the `U` of `U?` or `U!`, `KeyOf<T>` and `ValueOf<T>` the key and value types of a map. A call is a type like any other: `is_integer::<ElementOf<T>>()` is a type argument, and `func first::<T>(xs: T): ElementOf<T>` has a result type that is one. While `T` is a type variable the call waits; when the instance binds `T` it is replaced by the type it computes, and a type the function does not accept (`ElementOf<int>`, or a `match type` no case selects) is `SemanticDiag::TypeFunctionNotApplicable`, at the type when it is written with concrete arguments and at the call that makes the instance otherwise.
 
 ```cml
 func duplicate::<T>(t: T) {

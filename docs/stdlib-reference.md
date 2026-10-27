@@ -143,8 +143,7 @@ per target type, named by the type: `int`, `i32`, `float`, `f32`, `bf16`, `f16`,
 (and `i64`, `f64`, the spellings of `int` and `float`). Each is one generic declaration over the
 source type. Applied to an array, a conversion converts every element (one rule with arithmetic:
 `f32(xs)` is one node, and `T(xs)` does it for the type a generic function is given); that entry
-is written in stdlib/signatures/tensor.cml, and needs no import: the first conversion of an array
-in a module brings it along. Converting a float to an integer drops the fraction.
+is declared below, with the core's conversions: it needs no import. Converting a float to an integer drops the fraction.
 
 #### `int`
 
@@ -236,6 +235,94 @@ conversion as bf16, at the other reduced precision (design principles 7.3).
 
 - Failure: fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of f16 (overflow or underflow).
 - Example: `f16(0.5)` gives `0.5`
+
+#### `i32`
+
+```camel
+i32: (x: number[]) => i32[..]
+```
+
+The conversion `i32` applied to every element of a numeric array: the result has the input's extents and element type `i32`. A scalar converts by the declaration above.
+
+- Pure.
+- Example: `i32([1.0, 2.0])`
+
+#### `i64`
+
+```camel
+i64: (x: number[]) => int64[..]
+```
+
+The conversion `i64` applied to every element of a numeric array: the result has the input's extents and element type `int64`. A scalar converts by the declaration above.
+
+- Pure.
+- Example: `i64([1.0, 2.0])`
+
+#### `int`
+
+```camel
+int: (x: number[]) => int64[..]
+```
+
+The conversion `int` applied to every element of a numeric array: the result has the input's extents and element type `int64`. A scalar converts by the declaration above.
+
+- Pure.
+- Example: `int([1.0, 2.0])`
+
+#### `f32`
+
+```camel
+f32: (x: number[]) => f32[..]
+```
+
+The conversion `f32` applied to every element of a numeric array: the result has the input's extents and element type `f32`. A scalar converts by the declaration above.
+
+- Pure.
+- Example: `f32([1.0, 2.0])`
+
+#### `f64`
+
+```camel
+f64: (x: number[]) => f64[..]
+```
+
+The conversion `f64` applied to every element of a numeric array: the result has the input's extents and element type `f64`. A scalar converts by the declaration above.
+
+- Pure.
+- Example: `f64([1.0, 2.0])`
+
+#### `float`
+
+```camel
+float: (x: number[]) => f64[..]
+```
+
+The conversion `float` applied to every element of a numeric array: the result has the input's extents and element type `f64`. A scalar converts by the declaration above.
+
+- Pure.
+- Example: `float([1.0, 2.0])`
+
+#### `bf16`
+
+```camel
+bf16: (x: number[]) => bf16[..]
+```
+
+The conversion `bf16` applied to every element of a numeric array: the result has the input's extents and element type `bf16`. A scalar converts by the declaration above. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3).
+
+- Pure.
+- Example: `bf16([1.0, 2.0])`
+
+#### `f16`
+
+```camel
+f16: (x: number[]) => f16[..]
+```
+
+The conversion `f16` applied to every element of a numeric array: the result has the input's extents and element type `f16`. A scalar converts by the declaration above. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3).
+
+- Pure.
+- Example: `f16([1.0, 2.0])`
 
 #### `c64`
 
@@ -1902,94 +1989,6 @@ A tensor of ones shaped and typed like t.
 
 ### Conversion and display
 
-#### `i32`
-
-```camel
-i32: (t: float[..] | number[]) => i32[..]
-```
-
-The conversion `i32` applied to every element of an array: the result has the input's extents and element type `i32`. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
-
-- Pure.
-- Example: `i32(new([1.0, 2.0]))`
-
-#### `i64`
-
-```camel
-i64: (t: float[..] | number[]) => int64[..]
-```
-
-The conversion `i64` applied to every element of an array: the result has the input's extents and element type `int64`. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
-
-- Pure.
-- Example: `i64(new([1.0, 2.0]))`
-
-#### `int`
-
-```camel
-int: (t: float[..] | number[]) => int64[..]
-```
-
-The conversion `int` applied to every element of an array: the result has the input's extents and element type `int64`. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
-
-- Pure.
-- Example: `int(new([1.0, 2.0]))`
-
-#### `f32`
-
-```camel
-f32: (t: float[..] | number[]) => f32[..]
-```
-
-The conversion `f32` applied to every element of an array: the result has the input's extents and element type `f32`. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
-
-- Pure.
-- Example: `f32(new([1.0, 2.0]))`
-
-#### `f64`
-
-```camel
-f64: (t: float[..] | number[]) => f64[..]
-```
-
-The conversion `f64` applied to every element of an array: the result has the input's extents and element type `f64`. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
-
-- Pure.
-- Example: `f64(new([1.0, 2.0]))`
-
-#### `float`
-
-```camel
-float: (t: float[..] | number[]) => f64[..]
-```
-
-The conversion `float` applied to every element of an array: the result has the input's extents and element type `f64`. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
-
-- Pure.
-- Example: `float(new([1.0, 2.0]))`
-
-#### `bf16`
-
-```camel
-bf16: (t: float[..] | number[]) => bf16[..]
-```
-
-The conversion `bf16` applied to every element of an array: the result has the input's extents and element type `bf16`. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3). Reading a `bf16` or `f16` tensor into a wider type is exact. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
-
-- Pure.
-- Example: `bf16(new([1.0, 2.0]))`
-
-#### `f16`
-
-```camel
-f16: (t: float[..] | number[]) => f16[..]
-```
-
-The conversion `f16` applied to every element of an array: the result has the input's extents and element type `f16`. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
-
-- Pure.
-- Example: `f16(new([1.0, 2.0]))`
-
 #### `load_npy`
 
 ```camel
@@ -2166,9 +2165,18 @@ no run-time inspection of a type: a predicate is settled when the call is compil
 
 One family, one spelling: `is_<property>::<T>()` asks one type, and `is_same::<T, U>()` asks two.
 The identity predicates (`is_integer`, `is_float`, `is_complex`, `is_string`, `is_bool`,
-`is_function`) carry the `match type` cases; the others ask them (`is_numeric`, `is_ordered`,
+`is_function`, and the shapes `is_array`, `is_nullable`, `is_fallible`, `is_map`, `is_set`) carry the
+`match type` cases; the others ask them (`is_numeric`, `is_ordered`,
 `is_plain`), so a type is named in one place and a new integer width is added to `is_integer`
 alone. A single type (`i32`, `f32`, `int`) is asked with `is_same`.
+
+Types are also computed from types, in the one language (design principles 5.6, 21): a type
+function is declared with `type`, takes its arguments in the angle brackets of a type position
+and has a type expression for its body, a `match type` among them. `ElementOf<T>` (the element
+of an array or a set), `PayloadOf<T>` (the `U` of `U?` or `U!`), `KeyOf<T>` and `ValueOf<T>` (the
+key and value types of a map) take a type apart where `match type` cannot, and are declared
+below without a body: the compiler provides them. They are evaluated when the instance that
+binds `T` is made, so `is_integer::<ElementOf<T>>()` asks the element type of `T`.
 
 `match type` compares a type's identity as well as its shape (design principles 5.5): the
 cases below name the types the language spells (`int`, `i32`, `float`, `f32`, `bf16`, `f16`,
@@ -2278,6 +2286,69 @@ True when `T` is a function type, whatever its parameters and result.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `is_function::<(x: int) => int>()` gives `true`
+
+#### `is_array`
+
+```camel
+is_array: () => bool
+```
+
+True when `T` is an array type, of any rank.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_array::<int[]>()` gives `true`
+- Example: `is_array::<f32[..]>()` gives `true`
+- Example: `is_array::<int>()` gives `false`
+
+#### `is_nullable`
+
+```camel
+is_nullable: () => bool
+```
+
+True when `T` is `U?` for some `U`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_nullable::<int?>()` gives `true`
+- Example: `is_nullable::<int!>()` gives `false`
+- Example: `is_nullable::<int>()` gives `false`
+
+#### `is_fallible`
+
+```camel
+is_fallible: () => bool
+```
+
+True when `T` is `U!` for some `U`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_fallible::<int!>()` gives `true`
+- Example: `is_fallible::<int?>()` gives `false`
+- Example: `is_fallible::<int>()` gives `false`
+
+#### `is_map`
+
+```camel
+is_map: () => bool
+```
+
+True when `T` is a map, `Map<K, V>`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_map::<Map<string, int>>()` gives `true`
+- Example: `is_map::<Set<int>>()` gives `false`
+
+#### `is_set`
+
+```camel
+is_set: () => bool
+```
+
+True when `T` is a set, `Set<E>`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_set::<Set<int>>()` gives `true`
+- Example: `is_set::<Map<string, int>>()` gives `false`
 
 #### `is_string`
 
@@ -2422,7 +2493,7 @@ The elements of the inner arrays, in order.
 #### `flatten`
 
 ```camel
-flatten: (xs: T[..]) => T[] when !is_array_type::<T>()
+flatten: (xs: T[..]) => T[] when !is_array::<T>()
 ```
 
 The elements of an array of any rank, in row-major order, as an array of one dimension.
@@ -4231,9 +4302,8 @@ The current working directory, the directory relative paths start at.
 A Json is a JSON value whose shape is known only when the program runs: `decode` reads a text,
 or gives an error value when the text is not JSON, and the accessors look into it, each giving
 a value of a definite type. To read a part whose shape is known, `decode_as::<T>` decodes
-straight to the type T, and `encode` writes the JSON text of a value; both have a result type
-that a declaration cannot express, so they are not declared here (see
-`stdlib/signatures/json.cml`). Everything here is pure.
+straight to the type T, and `encode` writes the JSON text of a value; both are applicable to the
+types that have a JSON form (`has_json_form`) and to no other. Everything here is pure.
 
 The data an accessor works on is its ordinary argument; the key or the index is its
 with-argument, so calls chain: `decode(text)->get<key: 'port'>->as_int`. An accessor has one
@@ -4241,37 +4311,6 @@ declaration for each tagged form of its argument -- `Json`, `Json?`, `Json!` and
 written from the most specific to the widest, which give the result `R?`, `R?`, `R!?` and
 `R!?`: an absent part is the null, and the error of a text that failed to decode is passed on
 unchanged, so one `!!` or `??` at the end of a chain settles it.
-
-#### `encode`
-
-```camel
-encode: (value: T) => string
-encode: <indent: int?> (value: T) => string
-```
-
-The JSON text of a value, on one line. The type of the value must have a JSON form: numbers,
-bool, string, null, a Json, and arrays, tuples, structs, sets and maps with string keys of
-those; a function or a tensor is refused when the call is compiled. A map is written with its
-keys in order, a struct with its fields in the order of its type, so the same value gives the
-same text.
-
-- Pure.
-- Example: `[1, 2]->encode` gives `'[1,2]'`
-
-#### `decode_as`
-
-```camel
-decode_as: (source: string) => T!
-decode_as: (source: Json) => T!
-```
-
-The value a JSON text (or a Json decoded before) describes, decoded to the type T. A part of
-T typed `Json` takes whatever is there. T is given where the call is written or taken from
-where the result goes (`let cfg: Config! = text->decode_as`).
-
-- Pure.
-- Failure: error value `JsonTypeError` when the text is JSON of another type (the message gives the path of the mismatch); error value `JsonParseError` when the text is not JSON; error value `JsonTooDeep` when the document nests deeper than the limit.
-- Example: `decode_as::<Map<string, int>>('{"a": 1}')` gives `{a: 1}`
 
 #### `decode`
 
@@ -4422,6 +4461,38 @@ The members of a JSON object, by name; null for any other kind.
 
 - Pure.
 - Example: `len((decode('{"b": 1, "a": 2}')->as_object ?? ([] as Map<string, Json>)) !! ([] as Map<string, Json>))` gives `2`
+
+#### `encode`
+
+```camel
+encode: <indent: int? = null> (value: T) => string when has_json_form::<T>()
+```
+
+The JSON text of a value, on one line, or indented by `indent` spaces per level when an indent
+is given. The type of the value must have a JSON form: numbers, bool, string, null, a Json, and
+arrays, tuples, structs, sets and maps with string keys of those; a function or a tensor is
+refused when the call is compiled. A map is written with its keys in order, a struct with its
+fields in the order of its type, so the same value gives the same text.
+
+- Pure.
+- Failure: fault `InvalidArgument` when indent is negative.
+- Example: `[1, 2]->encode` gives `'[1,2]'`
+- Example: `[1, 2]->encode<indent: 2>` gives `'[\n  1,\n  2\n]'`
+
+#### `decode_as`
+
+```camel
+decode_as: (source: string) => T! when has_json_form::<T>()
+decode_as: (source: Json) => T! when has_json_form::<T>()
+```
+
+The value a JSON text (or a Json decoded before) describes, decoded to the type T. A part of
+T typed `Json` takes whatever is there. T is given where the call is written or taken from
+where the result goes (`let cfg: Config! = text->decode_as`).
+
+- Pure.
+- Failure: error value `JsonTypeError` when the text is JSON of another type (the message gives the path of the mismatch); error value `JsonParseError` when the text is not JSON; error value `JsonTooDeep` when the document nests deeper than the limit.
+- Example: `decode_as::<Map<string, int>>('{"a": 1}')` gives `{a: 1}`
 
 <a id="hash"></a>
 
@@ -5647,7 +5718,7 @@ The `str()` of a Python object, as text.
 #### `to_py`
 
 ```camel
-to_py: (x: T) => PyObject!
+to_py: (x: T) => PyObject! when has_python_form::<T>()
 ```
 
 The Python object that stands for a Camel value, in the Python form of its type.
@@ -5658,7 +5729,7 @@ The Python object that stands for a Camel value, in the Python form of its type.
 #### `from_py`
 
 ```camel
-from_py: (obj: PyObject) => T!
+from_py: (obj: PyObject) => T! when has_python_form::<T>()
 ```
 
 The Camel value of type T that a Python object holds. T is written at the call

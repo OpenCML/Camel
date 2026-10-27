@@ -10,6 +10,8 @@
 
 #include "derivative.h"
 
+#include "array_convert.h"
+
 #include "camel/core/derivative.h"
 #include "camel/core/type/base.h"
 #include "camel/core/type/composite/array.h"
@@ -444,6 +446,25 @@ template <typename To> void convertVjp(VjpBuilder &b, const VjpCall &call, std::
     }
 }
 
+// A conversion of an array to another element type: the gradient converts back to the element type
+// of the input. An input that is not a float array has no gradient to receive.
+void arrayConvertVjp(VjpBuilder &b, const VjpCall &call) {
+    requireInputs(call, 1);
+    const auto dy = b.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    Type *input            = b.nodeType(call.inputs[0]);
+    const type::ArrayType *array = type::asArrayType(input);
+    if (array == nullptr || !type::isFloatingScalar(array->elemTypeCode())) {
+        return;
+    }
+    const std::array<vjp_node_t, 1> inputs{*dy};
+    b.accumulateGradient(
+        call.inputs[0],
+        b.addOper(input, arrayConversionUri(array->elemTypeCode()), inputs));
+}
+
 void dtofVjp(VjpBuilder &b, const VjpCall &call) { convertVjp<F64>(b, call, ":op/ftod"); }
 void ftodVjp(VjpBuilder &b, const VjpCall &call) { convertVjp<F32>(b, call, ":op/dtof"); }
 
@@ -473,6 +494,10 @@ void registerBuiltinDerivatives() {
     registry.setRule(":op/ftof", identityVjp);
     registry.setRule(":op/dtof", dtofVjp);
     registry.setRule(":op/ftod", ftodVjp);
+    for (const char *uri :
+         {":op/atoi", ":op/atol", ":op/atof", ":op/atod", ":op/atobf", ":op/atof6"}) {
+        registry.setRule(uri, arrayConvertVjp);
+    }
     registry.setRule(":op/idx_arr", idxArrayVjp);
     // `t[idx]` takes whole slabs along the axis it names, so its adjoint scatters them back into
     // the array's gradient along the same axis.

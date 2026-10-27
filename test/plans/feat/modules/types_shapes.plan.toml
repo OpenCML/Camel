@@ -1,0 +1,91 @@
+id = "modules.types_shapes"
+order = 1002
+tier = "fast"
+tags = ["feat", "modules", "types", "match-type"]
+desc = "The shapes `match type` names beside struct, tuple and func (array, nullable, fallible, map, set) and the predicates of `types` over them"
+
+[[tests]]
+name = "types_shapes.values"
+desc = "Each shape word selects exactly its family (an array of any rank, `T?`, `T!`, a map, a set), a struct, a tuple and a function keep theirs, a scalar is a leaf, `#leaf` still takes every type no shape took, and the predicates agree. Four schedulers."
+kind = "behavior"
+case = "../../../cases/modules/types/shapes.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "array array nullable fallible\nmap set struct\ntuple func leaf\ncollection collection other composite\ntrue false true false\ntrue false true false\ntrue false\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "types_shapes.identity_after_shape"
+desc = "An identity pattern after the shape that selects it (`case map`, then `case Map<string, int>`) is StaticMatchPatternCannotMatch."
+kind = "negative"
+case = "../../../cases/modules/types/shape_after_shape.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticMatchPatternCannotMatch"
+expect_diagnostic_line = 5
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "types_shapes.type_functions"
+desc = "`ElementOf`, `PayloadOf`, `KeyOf` and `ValueOf` called where a type is written: the element of an array and of a set, the `U` of `U?` and `U!`, the key and value types of a map, a call inside a call, and a call as a parameter and result type of a generic function. Four schedulers."
+kind = "behavior"
+case = "../../../cases/modules/types/type_functions.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "true false true\ntrue false true\ntrue false\ntrue false\ntrue false\n4 a\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "types_shapes.user_type_functions"
+desc = "A type function the program writes (`type ElemOrSelf<T> = match type T { ... }`): a `match type` body chosen by shape and by identity at the instance, a type function inside another, a parameter and result type, and a plain `type Pair<T> = (T, T)` beside them. Four schedulers."
+kind = "behavior"
+case = "../../../cases/modules/types/user_type_functions.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "true true false\ntrue true true false\ntrue true false\n(7, 7) (s, s)\ntrue true\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "types_shapes.type_function_not_applicable"
+desc = "A type function given a type it is not defined for (`ElementOf<int>`) is TypeFunctionNotApplicable, where the instance that makes it is built."
+kind = "negative"
+case = "../../../cases/modules/types/type_function_not_applicable.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeFunctionNotApplicable"
+expect_output_contains = ["ElementOf", "not applicable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "types_shapes.type_function_written_wrong"
+desc = "`ElementOf<int>` written with a concrete argument is refused at the type, where it is written."
+kind = "negative"
+case = "../../../cases/modules/types/type_function_written_wrong.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeFunctionNotApplicable"
+expect_diagnostic_line = 6
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "types_shapes.type_function_no_case"
+desc = "A `match type` of a type function that no case selects for the type it is given is TypeFunctionNotApplicable, where the instance is made."
+kind = "negative"
+case = "../../../cases/modules/types/type_function_no_case.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeFunctionNotApplicable"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

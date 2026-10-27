@@ -92,12 +92,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "any_typing.encode_function"
-desc = "json encode takes the types with a JSON form by a type rule instead of a parameter of type `any` (design principles 5.10); a function is refused when the call is compiled. It used to compile and fault at run time."
+desc = "json encode takes the types with a JSON form by a `when` condition instead of a parameter of type `any` (design principles 5.10); a function is refused when the call is compiled (WhenConditionUnmet, naming `has_json_form`). It used to compile and fault at run time."
 kind = "negative"
 case = "../../../cases/compile/any_typing/encode_function.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["encode_function.cml:8:19", "No matching function found for argument types: <> ((x: int) => int pure)", "<json:encode>: (value: T) => string", "name=SemanticDiag::NoMatchingFunction"]
+expect_output_contains = ["encode_function.cml:8:19", "No candidate of 'encode' applies to", "((x: int) => int pure)", "when has_json_form::<T>()", "name=SemanticDiag::WhenConditionUnmet"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 

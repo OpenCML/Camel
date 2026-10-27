@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-291 diagnostics: 271 errors, 20 warnings. 15 carry a machine-applicable edit, 276 say why they carry none.
+292 diagnostics: 272 errors, 20 warnings. 15 carry a machine-applicable edit, 277 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -256,6 +256,7 @@ prints one entry.
 | `0x030001FB` | [SemanticDiag::NativeValueNotLoaded](#nativevaluenotloaded) | Error | no |
 | `0x030001FC` | [SemanticDiag::NativeValueMismatch](#nativevaluemismatch) | Error | no |
 | `0x030001FD` | [SemanticDiag::NativeTypeNotProvided](#nativetypenotprovided) | Error | no |
+| `0x030001FE` | [SemanticDiag::TypeFunctionNotApplicable](#typefunctionnotapplicable) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8323,6 +8324,42 @@ A type written without '=' (`export type Graph`, `export type Txn<F>`) is the on
 export type Nope
 
 func main(): int sync {
+    return 0
+}
+```
+
+### TypeFunctionNotApplicable
+
+`0x030001FE` · Error · `SemanticDiag::TypeFunctionNotApplicable`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The type function '{0}' is not applicable: {1}.
+```
+
+**Help**
+
+```text
+A type function computes a type from types at compile time (design principles 21): `ElementOf<T>` is the element of an array or a set, `PayloadOf<T>` the `U` of `U?` or `U!`, and `KeyOf<T>` and `ValueOf<T>` the key and value types of a map; a program writes its own with `type F<T> = ...`, whose body may be a `match type`. It is called with `F<...>` where a type is written, and it accepts only the types it is defined for.
+```
+
+**Example** (`test/cases/modules/types/type_function_not_applicable.cml`, run as `camel test/cases/modules/types/type_function_not_applicable.cml`)
+
+```camel
+/// A type function that does not accept the type it is given is refused where the instance is made.
+import { is_integer, ElementOf } from types
+
+func element_is_integer::<T>(): bool {
+    return is_integer::<ElementOf<T>>()
+}
+
+func main(): int sync {
+    println(element_is_integer::<int>())
     return 0
 }
 ```

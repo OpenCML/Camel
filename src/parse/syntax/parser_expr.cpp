@@ -37,6 +37,7 @@
  */
 
 #include "parser_impl.h"
+#include "camel/parse/ast/type_case_words.h"
 
 namespace camel::parse::syntax {
 
@@ -1339,7 +1340,7 @@ void ParserImpl::parseTypeCasePattern() {
     switch (cur_) {
     case TK::Identifier: {
         const std::string_view word = tree_.tokens().text(pos_);
-        if (word == "struct" || word == "tuple" || word == "array") {
+        if (camel::parse::ast::typeCaseKindOfWord(word).has_value()) {
             bump();
             break;
         }

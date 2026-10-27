@@ -18,6 +18,7 @@
 #include "camel/core/type/enum.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/text.h"
+#include "camel/core/type/typecall.h"
 #include "camel/core/type/typevar.h"
 #include "camel/parse/ast/type.h"
 #include "camel/utils/escape.h"
@@ -1752,7 +1753,21 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
             : self(b), outer(std::exchange(b.fieldTagOwner_, owner)) {}
         ~FieldTagOwner() { self.fieldTagOwner_ = outer; }
     } fieldTagOwner(*this, declNode);
-    if (!typeNode) {
+    if (!typeNode && !typeLoad->params().empty() && module_->name() == "types" &&
+        TypeCallType::isTypeFunction(typeLoad->ref().toString())) {
+        // `export type ElementOf<T>`: a primitive type function (design principles 5.6), declared
+        // here without a body; the compiler takes the type apart where `match type` cannot.
+        const string typeName = typeLoad->ref().toString();
+        struct TypeScopeGuard {
+            Builder &self;
+            scope_ptr_t<Reference, Type *> outer;
+            ~TypeScopeGuard() { self.typeScope_ = outer; }
+        } typeScopeGuard{*this, typeScope_};
+        pushScope();
+        const std::vector<Type *> parameters = bindTypeParameters(typeLoad.get(), ast, typeName);
+        type = TypeFunctionType::create(
+            typeName, typeLoad->params(), TypeCallType::create(typeName, parameters));
+    } else if (!typeNode) {
         // `export type Graph`, `export type Txn<F>`: the type is provided by the C++ module of
         // the same name, under this name (design principles 10.4), like a function without a
         // body. Its identity is the module and the name.
@@ -5408,6 +5423,9 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
     case AST::TypeType::Spec:
         res = visitSpecType(ast);
         break;
+    case AST::TypeType::Match:
+        res = visitMatchTypeType(ast);
+        break;
     case AST::TypeType::Ref:
         res = visitRefType(ast);
         break;
@@ -5986,6 +6004,45 @@ void Builder::rejectDuplicateLiteralKeys(
 }
 
 /*
+MatchTypeType : Type subject, RepeatedLoad TypeCase ;
+A `match type` in a type position (design principles 5.6): a type of its own while the subject
+still has a type variable, the type of the case that selects the subject once it has not.
+*/
+Type *Builder::visitMatchTypeType(const AST::node_ptr_t &ast) {
+    ENTER("MatchTypeType");
+    Type *subject = visitType(ast->atAs<AST::TypeLoad>(0));
+    std::vector<MatchTypeArm> arms;
+    bool catchAll = false;
+    for (const auto &armAst : *ast->atAs<AST::RepeatedLoad>(1)) {
+        if (catchAll) {
+            // `#leaf` and `_` select every type, so a case after them selects nothing.
+            diags_->of(SemanticDiag::StaticMatchUnreachableCase)
+                .at(armAst->load()->tokenRange())
+                .commit("this case");
+            throw BuildAbortException();
+        }
+        MatchTypeArm arm;
+        for (const AST::TypeCasePattern &pattern : armAst->loadAs<AST::TypeCaseLoad>()->patterns()) {
+            const GCT::TypeCaseKind kind = static_cast<GCT::TypeCaseKind>(pattern.kind);
+            if (kind == GCT::TypeCaseKind::Identity) {
+                if (Type *identity = visitType(pattern.type)) {
+                    arm.identities.push_back(identity);
+                }
+                continue;
+            }
+            arm.shapes |= typeCaseBit(kind);
+            if (kind == GCT::TypeCaseKind::Leaf || kind == GCT::TypeCaseKind::Wildcard) {
+                catchAll = true;
+            }
+        }
+        arm.result = visitType(armAst->atAs<AST::TypeLoad>(0));
+        arms.push_back(std::move(arm));
+    }
+    LEAVE("MatchTypeType");
+    return MatchTypeType::create(subject, arms);
+}
+
+/*
 SpecType : Type base, RepeatedLoad typeOrData ;
 */
 Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
@@ -6065,8 +6122,19 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
                         types.size()));
             throw BuildAbortException();
         }
+        Type *applied = typeFunc->apply(types);
+        const bool concrete = std::none_of(types.begin(), types.end(), [](Type *argument) {
+            return containsTypeVar(argument);
+        });
+        if (concrete && containsTypeCall(applied)) {
+            // The arguments are concrete and the type function does not accept them.
+            diags_->of(SemanticDiag::TypeFunctionNotApplicable)
+                .at(ast->load()->tokenRange())
+                .commit(typeFunc->name() + "<...>", "it is not defined for the type it is given");
+            throw BuildAbortException();
+        }
         LEAVE("SpecType");
-        return typeFunc->apply(types);
+        return applied;
     }
     if (arguments.empty()) {
         LEAVE("SpecType");

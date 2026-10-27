@@ -3153,19 +3153,22 @@ TypeCaseKind Builder::typeCaseKindOf(cst::TypeCasePattern pattern) {
     // A word that names no shape is told, where it is written, instead of being read as `_`.
     diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
         .at(rangeOf(pattern->firstToken(), pattern->lastToken()))
-        .commit(text, "it is not a shape word (struct, tuple, array, func, #leaf, _)");
+        .commit(text, "it is not a shape word (struct, tuple, array, func, nullable, fallible, map, set, #leaf, _)");
     return TypeCaseKind::Wildcard;
 }
 
-/*
-typeCase
-    : CASE typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
-    ;
-*/
-Value Builder::visitTypeCase(cst::TypeCase context) {
-    ENTER("TypeCase");
+template <class List> static std::vector<cst::TypeCasePattern> patternsOf(const List &list) {
+    std::vector<cst::TypeCasePattern> out;
+    for (const auto pattern : list) {
+        out.push_back(pattern);
+    }
+    return out;
+}
+
+std::vector<TypeCasePattern>
+Builder::typeCasePatternsOf(const std::vector<cst::TypeCasePattern> &written) {
     std::vector<TypeCasePattern> patterns;
-    for (const auto pattern : context->all<cst::TypeCasePattern>()) {
+    for (const auto pattern : written) {
         TypeCasePattern entry;
         // A pattern with a type child is an identity pattern (`case int`, `case T`); the
         // shape words carry no type.
@@ -3177,7 +3180,18 @@ Value Builder::visitTypeCase(cst::TypeCase context) {
         }
         patterns.push_back(std::move(entry));
     }
-    node_ptr_t caseNode = createNodeAs<TypeCaseLoad>(std::move(patterns));
+    return patterns;
+}
+
+/*
+typeCase
+    : CASE typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
+    ;
+*/
+Value Builder::visitTypeCase(cst::TypeCase context) {
+    ENTER("TypeCase");
+    node_ptr_t caseNode = createNodeAs<TypeCaseLoad>(
+        typeCasePatternsOf(patternsOf(context->all<cst::TypeCasePattern>())));
     setNodeTokenRangeByContext(caseNode, context);
     node_ptr_t bodyNode = any2node(visitBlockExpr(context->lastChild().node()));
     *caseNode << bodyNode;
@@ -5102,6 +5116,32 @@ Value Builder::visitRefType(cst::RefType context) {
     return res;
 }
 
+/*
+matchTypeType : 'match' 'type' typeExpr '{' typeArm* '}'
+typeArm       : 'case' typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
+The cases are the cases of `match type` over values, and each holds the type it gives.
+*/
+Value Builder::visitMatchTypeType(cst::MatchTypeType context) {
+    node_ptr_t res = createNodeAs<MatchTypeTypeLoad>();
+    setNodeTokenRangeByContext(res, context);
+    *res << any2node(visitType(context->type()));
+    node_ptr_t arms = createNodeAs<RepeatedLoad>("TypeCase");
+    setNodeTokenRangeByContext(arms, context);
+    for (const auto arm : context->all<cst::TypeArm>()) {
+        *arms << any2node(visitTypeArm(arm));
+    }
+    *res << arms;
+    return res;
+}
+
+Value Builder::visitTypeArm(cst::TypeArm context) {
+    node_ptr_t arm = createNodeAs<TypeCaseLoad>(
+        typeCasePatternsOf(patternsOf(context->all<cst::TypeCasePattern>())));
+    setNodeTokenRangeByContext(arm, context);
+    *arm << any2node(visitType(context->type()));
+    return arm;
+}
+
 Value Builder::visitTypeOfType(cst::TypeOfType context) {
     node_ptr_t res = createNodeAs<TypeExprLoad>(TypeOp::TypeOf);
     setNodeTokenRangeByContext(res, context);
@@ -5369,6 +5409,8 @@ Value Builder::visitType(syn::Node context) {
         return visitFuncType(cst::FuncType(context));
     case NK::TypeOfType:
         return visitTypeOfType(cst::TypeOfType(context));
+    case NK::MatchTypeType:
+        return visitMatchTypeType(cst::MatchTypeType(context));
     case NK::EnumType:
         return visitEnumType(cst::EnumType(context));
     default:

@@ -297,6 +297,34 @@
 #                  ^ meta.block.camel string.quoted.single.camel punctuation.definition.string.begin.camel
 #                   ^^^^^ meta.block.camel string.quoted.single.camel
 #                        ^ meta.block.camel string.quoted.single.camel punctuation.definition.string.end.camel
+>    case nullable => 'nullable'
+#    ^^^^ meta.block.camel keyword.control.conditional.camel
+#         ^^^^^^^^ meta.block.camel keyword.other.contextual-position.camel
+#                  ^^ meta.block.camel keyword.operator.arrow.camel
+#                     ^ meta.block.camel string.quoted.single.camel punctuation.definition.string.begin.camel
+#                      ^^^^^^^^ meta.block.camel string.quoted.single.camel
+#                              ^ meta.block.camel string.quoted.single.camel punctuation.definition.string.end.camel
+>    case fallible => 'fallible'
+#    ^^^^ meta.block.camel keyword.control.conditional.camel
+#         ^^^^^^^^ meta.block.camel keyword.other.contextual-position.camel
+#                  ^^ meta.block.camel keyword.operator.arrow.camel
+#                     ^ meta.block.camel string.quoted.single.camel punctuation.definition.string.begin.camel
+#                      ^^^^^^^^ meta.block.camel string.quoted.single.camel
+#                              ^ meta.block.camel string.quoted.single.camel punctuation.definition.string.end.camel
+>    case map => 'map'
+#    ^^^^ meta.block.camel keyword.control.conditional.camel
+#         ^^^ meta.block.camel keyword.other.contextual-position.camel
+#             ^^ meta.block.camel keyword.operator.arrow.camel
+#                ^ meta.block.camel string.quoted.single.camel punctuation.definition.string.begin.camel
+#                 ^^^ meta.block.camel string.quoted.single.camel
+#                    ^ meta.block.camel string.quoted.single.camel punctuation.definition.string.end.camel
+>    case set => 'set'
+#    ^^^^ meta.block.camel keyword.control.conditional.camel
+#         ^^^ meta.block.camel keyword.other.contextual-position.camel
+#             ^^ meta.block.camel keyword.operator.arrow.camel
+#                ^ meta.block.camel string.quoted.single.camel punctuation.definition.string.begin.camel
+#                 ^^^ meta.block.camel string.quoted.single.camel
+#                    ^ meta.block.camel string.quoted.single.camel punctuation.definition.string.end.camel
 >    case #leaf => 'leaf'
 #    ^^^^ meta.block.camel keyword.control.conditional.camel
 #         ^ meta.block.camel punctuation.definition.tag.camel

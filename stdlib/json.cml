@@ -5,9 +5,8 @@
  * A Json is a JSON value whose shape is known only when the program runs: `decode` reads a text,
  * or gives an error value when the text is not JSON, and the accessors look into it, each giving
  * a value of a definite type. To read a part whose shape is known, `decode_as::<T>` decodes
- * straight to the type T, and `encode` writes the JSON text of a value; both have a result type
- * that a declaration cannot express, so they are not declared here (see
- * `stdlib/signatures/json.cml`). Everything here is pure.
+ * straight to the type T, and `encode` writes the JSON text of a value; both are applicable to the
+ * types that have a JSON form (`has_json_form`) and to no other. Everything here is pure.
  *
  * The data an accessor works on is its ordinary argument; the key or the index is its
  * with-argument, so calls chain: `decode(text)->get<key: 'port'>->as_int`. An accessor has one
@@ -17,8 +16,32 @@
  * unchanged, so one `!!` or `??` at the end of a chain settles it.
  */
 
+import { is_string, ElementOf, PayloadOf, KeyOf, ValueOf } from types
+
 /// A JSON value whose shape is known only when the program runs; the module provides the type.
 export type Json
+
+// Whether a value of type `T` has a JSON form: the scalars, `string`, a `Json` and `T?` of a type
+// that has one are JSON values; an array or a set is a JSON array of the forms of its elements, a
+// tuple one of the forms of its members, a struct and a map with string keys a JSON object of
+// the forms of their members; nothing else is (a function, a tensor, a `T!`). A type is asked
+// where the call is compiled, so a type without a form is refused there.
+func has_json_form::<T>(): bool {
+    return match type T {
+        case Json | bool | int | i32 | float | f32 | string => true
+        case nullable => has_json_form::<PayloadOf<T>>()
+        case array | set => has_json_form::<ElementOf<T>>()
+        case map => is_string::<KeyOf<T>>() && has_json_form::<ValueOf<T>>()
+        case struct | tuple => every_member_json::<T>()
+        case _ => false
+    }
+}
+
+// Every member of a struct or tuple has a JSON form. The walk is static, like every walk over a
+// known shape: the answer is a constant of the instantiation.
+func every_member_json::<T>(): bool {
+    return static loop every = true for n, F in fields T do every && has_json_form::<F>()
+}
 
 /// The value a JSON text describes, as a `Json`: a value of a definite type whose content is
 /// known only when the program runs. Look into it with `get`, `as_int`, `as_array` and the other
@@ -113,3 +136,24 @@ export func as_object(j: Json): Map<string, Json>?
 export func as_object(j: Json?): Map<string, Json>?
 export func as_object(j: Json!): Map<string, Json>!?
 export func as_object(j: Json!?): Map<string, Json>!?
+
+/// The JSON text of a value, on one line, or indented by `indent` spaces per level when an indent
+/// is given. The type of the value must have a JSON form: numbers, bool, string, null, a Json, and
+/// arrays, tuples, structs, sets and maps with string keys of those; a function or a tensor is
+/// refused when the call is compiled. A map is written with its keys in order, a struct with its
+/// fields in the order of its type, so the same value gives the same text.
+/// @pure
+/// @fails fault `InvalidArgument` when indent is negative
+/// @example [1, 2]->encode    // '[1,2]'
+/// @example [1, 2]->encode<indent: 2>    // '[\n  1,\n  2\n]'
+with <indent: int? = null>
+export func encode::<T>(value: T): string when has_json_form::<T>()
+
+/// The value a JSON text (or a Json decoded before) describes, decoded to the type T. A part of
+/// T typed `Json` takes whatever is there. T is given where the call is written or taken from
+/// where the result goes (`let cfg: Config! = text->decode_as`).
+/// @pure
+/// @fails error value `JsonTypeError` when the text is JSON of another type (the message gives the path of the mismatch); error value `JsonParseError` when the text is not JSON; error value `JsonTooDeep` when the document nests deeper than the limit
+/// @example decode_as::<Map<string, int>>('{"a": 1}')    // {a: 1}
+export func decode_as::<T>(source: string): T! when has_json_form::<T>()
+export func decode_as::<T>(source: Json): T! when has_json_form::<T>()

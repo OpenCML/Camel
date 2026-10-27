@@ -30,8 +30,29 @@
  * The other direction, Python calling Camel, is the package `camel` (`pip install camel-lang`).
  */
 
+import { ElementOf } from types
+
 /// A Python object seen from Camel; the module provides the type.
 export type PyObject
+
+// Whether a value of type `T` has a Python form (the table in the header): the scalars and
+// `string`, `Bytes` and a `PyObject` are Python objects by themselves; an array is a `list` of the
+// forms of its elements, and a tuple and a struct a `tuple` and a `dict` of the forms of their
+// members. Nothing else is (a `T?`, a `T!`, a map, a set, a function): the call is refused where
+// it is compiled.
+func has_python_form::<T>(): bool {
+    return match type T {
+        case PyObject | Bytes | bool | int | i32 | float | f32 | string => true
+        case array => has_python_form::<ElementOf<T>>()
+        case struct | tuple => every_member_python::<T>()
+        case _ => false
+    }
+}
+
+// Every member of a struct or tuple has a Python form; the walk is static.
+func every_member_python::<T>(): bool {
+    return static loop every = true for n, F in fields T do every && has_python_form::<F>()
+}
 
 /// Runs Python statements in the interpreter. Definitions and assignments stay visible to later
 /// calls, as in a Python session.
@@ -81,10 +102,10 @@ export func to_string(obj: PyObject): string!
 /// The Python object that stands for a Camel value, in the Python form of its type.
 /// @fails error value `PythonError` when the interpreter cannot make the object
 /// @example 2.0->to_py->to_string !! ''    // '2.0'
-export func to_py::<T>(x: T): PyObject!
+export func to_py::<T>(x: T): PyObject! when has_python_form::<T>()
 
 /// The Camel value of type T that a Python object holds. T is written at the call
 /// (`from_py::<int>(obj)`) or taken from the type of the position the call stands in.
 /// @fails error value `PythonTypeError` when the object does not have the type T (the message gives the path of the mismatch and what was found there); error value `PythonError` when reading it raises
 /// @example eval('1 + 2')->from_py::<int> !! 0    // 3
-export func from_py::<T>(obj: PyObject): T!
+export func from_py::<T>(obj: PyObject): T! when has_python_form::<T>()

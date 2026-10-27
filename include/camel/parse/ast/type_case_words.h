@@ -12,7 +12,8 @@ namespace camel::parse::ast {
 
 /// The words a `match type` case names a shape with (design principles 5.5): one table, read by
 /// the syntax tree builder (the word written -> the kind) and by the graph builder (the kind ->
-/// the word it prints). `case array` selects every array type.
+/// the word it prints). `case array` selects every array type, `case nullable` every `T?`, `case fallible` every `T!`, `case map`
+/// every map and `case set` every set.
 struct TypeCaseWord {
     std::string_view word;
     TypeCaseKind kind;
@@ -21,6 +22,8 @@ struct TypeCaseWord {
 inline constexpr TypeCaseWord kTypeCaseWords[] = {
     {"struct", TypeCaseKind::Struct}, {"tuple", TypeCaseKind::Tuple},
     {"array", TypeCaseKind::Array},   {"func", TypeCaseKind::Func},
+    {"nullable", TypeCaseKind::Nullable}, {"fallible", TypeCaseKind::Fallible},
+    {"map", TypeCaseKind::Map},       {"set", TypeCaseKind::Set},
     {"#leaf", TypeCaseKind::Leaf},    {"_", TypeCaseKind::Wildcard},
 };
 

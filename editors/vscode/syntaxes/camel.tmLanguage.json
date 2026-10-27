@@ -248,9 +248,9 @@
           }
         },
         {
-          "comment": "contextual keywords: 'struct', 'tuple', 'array' — in a `match type` case pattern they name a shape, not a type (typeCasePattern, grammar 8.5).",
+          "comment": "contextual keywords: 'struct', 'tuple', 'array', 'nullable', 'fallible', 'map', 'set' — in a `match type` case pattern they name a shape, not a type (typeCasePattern, grammar 8.5).",
           "name": "keyword.other.contextual-position.camel",
-          "match": "(?<=case\\s)(struct|tuple|array)\\b"
+          "match": "(?<=case\\s)(struct|tuple|array|nullable|fallible|map|set)\\b"
         },
         {
           "comment": "contextual keywords: 'error' — the pattern of a failed `T!` in a `case` is two words, `error e`.",

@@ -42,7 +42,8 @@ enum class DataType {
 };
 
 /// What a `match type` case selects (design principles 5.5, R3): the shape of a type
-/// (a structure, an ordinary tuple, a function, every leaf, or anything) or its identity
+/// (a structure, an ordinary tuple, a function, an array, a `T?`, a `T!`, a map, a set, every leaf,
+/// or anything) or its identity
 /// (`case int`, `case MyStruct`, `case T`).
 enum class TypeCaseKind : uint8_t {
     Struct   = 0,
@@ -51,7 +52,11 @@ enum class TypeCaseKind : uint8_t {
     Wildcard = 3,
     Func     = 4,
     Identity = 5,
-    Array    = 6
+    Array    = 6,
+    Nullable = 7,
+    Fallible = 8,
+    Map      = 9,
+    Set      = 10
 };
 
 std::string to_string(TypeCaseKind kind);

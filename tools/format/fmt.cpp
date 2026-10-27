@@ -1326,6 +1326,33 @@ any Formatter::visitTypeCase(cst::TypeCase context) {
 }
 
 /*
+matchTypeType
+    : 'match' 'type' typeExpr '{' typeArm* '}'
+    ;
+*/
+any Formatter::visitMatchTypeType(cst::MatchTypeType context) {
+    return "match type " + formatTypeInTypePosition(context->type()) + " {" +
+           formatList(
+               vec(context->all<cst::TypeArm>()),
+               context,
+               " ",
+               "",
+               PaddingNL | Multiline | PushScope) +
+           "}";
+}
+
+/*
+typeArm
+    : CASE typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
+    ;
+*/
+any Formatter::visitTypeArm(cst::TypeArm context) {
+    return "case " +
+           formatList(vec(context->all<cst::TypeCasePattern>()), context, " | ", " |") + " => " +
+           any_cast<string>(visit(context->type()));
+}
+
+/*
 typeCasePattern
     : 'struct' | 'tuple' | '#' 'leaf' | '_'
     ;
@@ -2171,6 +2198,8 @@ any Formatter::dispatch(syn::Node context) {
         CAMEL_FORMAT(ArrayType)
         CAMEL_FORMAT(ArrayDim)
         CAMEL_FORMAT(SpecType)
+        CAMEL_FORMAT(MatchTypeType)
+        CAMEL_FORMAT(TypeArm)
         CAMEL_FORMAT(ConstData)
         CAMEL_FORMAT(StructType)
         CAMEL_FORMAT(EnumType)

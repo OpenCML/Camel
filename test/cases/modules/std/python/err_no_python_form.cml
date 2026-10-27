@@ -1,0 +1,8 @@
+/// A value without a Python form is refused where the call is written: a map has none.
+import { to_py } from python
+
+func main(): int sync {
+    let m = [('a', 1)] as Map<string, int>
+    let _ = to_py(m)
+    return 0
+}
