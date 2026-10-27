@@ -415,6 +415,9 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
     }
     if (!builder->buildLibraryEntry(shared_from_this(), entryFunction, expected) ||
         diagnostics_->hasErrors()) {
+        if (!builder->libraryEntryProblem().empty()) {
+            problem = builder->libraryEntryProblem();
+        }
         return ProgramStatus::Failed;
     }
     root = builder->rootGraph();

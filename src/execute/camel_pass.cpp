@@ -243,9 +243,13 @@ class CamelPass final : public GraphIRPass {
             factory.setExitType(camel::core::type::TupleType::fallible(subject));
             expected = factory.build();
         }
+        std::optional<camel::core::error::DiagLabel> where;
         const auto tool = context_->definitions().libraryFunction(
-            module_, function_, problem, nullptr, nullptr, expected);
+            module_, function_, problem, &where, nullptr, expected);
         if (!tool.has_value()) {
+            if (where.has_value()) {
+                problem += ": " + where->message;
+            }
             // The instance for this program's function cannot be built (its `when` refuses the
             // type, or its body is in error): the pass is not applicable, and the reason is the
             // compile's own.

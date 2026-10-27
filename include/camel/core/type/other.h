@@ -106,6 +106,12 @@ class OtherType : public Type {
     /// (typevar.h) substitutes and binds through params() with cloneWithParams.
     virtual bool typeArguments() const { return false; }
 
+    /// Whether a value of this type is a handle: one resource per value, named by the type, which
+    /// a signature can name in its `uses` clause (design principles 3.3). A module type that is
+    /// a state edits change (a transaction) says so; the name is the module and the type.
+    virtual bool isResourceHandle() const { return false; }
+    virtual std::string resourceHandleName() const { return {}; }
+
     /// The type as a program writes it, for diagnostics that suggest source text (`x as T`).
     /// toString() is the default; a type whose printed form is not its source form overrides.
     virtual std::string spelling() const { return toString(); }

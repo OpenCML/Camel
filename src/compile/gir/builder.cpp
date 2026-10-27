@@ -73,6 +73,7 @@ void Builder::buildEntryCall() {
                         entryGraph = instance;
                         break;
                     }
+                    libraryEntryProblem_ = why;
                 }
             }
         }
@@ -657,6 +658,31 @@ bool Builder::isPassDeclaration(const GCT::node_ptr_t &gct) {
     const auto *when = GCT::Tree::of(gct)->whenOf(gct);
     if (when == nullptr) {
         return false;
+    }
+    // A pass is a function transform `(f: F) => F!` (design principles 9.1): one ordinary
+    // parameter and the same type, failable, as the result. A body-less declaration of another
+    // shape that is conditioned on `is_function` declares an operator of a function value
+    // (`graph_of::<F>(f: F): Graph when is_function::<F>()`).
+    const auto *signature = tt::as_ptr<FunctionType>(gct->at(0)->dataType());
+    if (signature == nullptr || signature->normTypesCount() != 1 || !signature->hasExitType()) {
+        return false;
+    }
+    const auto *answer = asFallible(signature->exitType());
+    if (answer == nullptr || !answer->payloadType()->equals(signature->normTypeAt(0))) {
+        return false;
+    }
+    // A function transform the module implements as an operator of its own (an engine of
+    // `rewrite`, which is called as `f->rewrite<rules>`) is no pass of the pipeline: a pass has a
+    // kernel of the core and no operator.
+    {
+        const std::string &declared = unit_->module->declaredName();
+        std::string uri = (declared.empty() ? unit_->module->name() : declared) + ":" + gct->name();
+        if (auto tagged = nativeOperatorUri(gct); tagged.has_value()) {
+            uri = std::move(*tagged);
+        }
+        if (camel::core::OperatorTable::instance().find(uri).has_value()) {
+            return false;
+        }
     }
     // The text the pipeline reads, normalized the same way: `is_function::<T>()` with any
     // identifier for the type parameter (pass_declarations.cpp, passDeclarationApplies). A

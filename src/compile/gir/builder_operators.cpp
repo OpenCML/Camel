@@ -949,7 +949,7 @@ std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
         // unmet, only when no rule at all takes it.
         std::string condition;
         const RuleVerdict verdict =
-            ruleVerdictForCall(resolver, ops->name(), ruleWith, normTypes, &condition);
+            ruleVerdictForCall(resolver, ops->name(), ruleWith, normTypes, &condition, explicitTypes);
         if (verdict == RuleVerdict::ConditionUnmet) {
             unmet.emplace_back(resolver->signature(), std::move(condition));
             continue;

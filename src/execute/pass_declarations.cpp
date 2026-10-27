@@ -4,6 +4,7 @@
 #include "pass_declarations.h"
 
 #include "camel/core/error/diagnostics.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/source/manager.h"
 #include "camel/parse/ast.h"
 #include "camel/parse/parse.h"
@@ -67,6 +68,33 @@ ast::node_ptr_t funcDataOf(const ast::node_ptr_t &declare) {
     return nullptr;
 }
 
+/// Whether the type of a body-less declaration is the shape of a pass, `(f: F): F!` (design
+/// principles 9.1): one ordinary parameter written as a name and the failable form of that name as
+/// the result. A declaration of another shape that is conditioned on `is_function` declares an
+/// operator of a function value, not a pass.
+bool hasPassShape(const ast::node_ptr_t &funcType) {
+    if (funcType == nullptr || funcType->size() < 3) {
+        return false;
+    }
+    const ast::node_ptr_t &norm = funcType->at(1);
+    if (norm->size() != 1 || norm->at(0)->size() == 0 ||
+        norm->at(0)->type() != ast::LoadType::NamedPair) {
+        return false;
+    }
+    const ast::node_ptr_t &parameterType = norm->at(0)->at(0);
+    const auto parameter = std::dynamic_pointer_cast<ast::RefTypeLoad>(parameterType->load());
+    if (parameter == nullptr || funcType->at(2)->size() == 0) {
+        return false;
+    }
+    const ast::node_ptr_t &result = funcType->at(2)->at(0);
+    const auto mark = std::dynamic_pointer_cast<ast::NullableTypeLoad>(result->load());
+    if (mark == nullptr || !mark->fallible() || result->size() != 1) {
+        return false;
+    }
+    const auto payload = std::dynamic_pointer_cast<ast::RefTypeLoad>(result->at(0)->load());
+    return payload != nullptr && payload->ref().toString() == parameter->ref().toString();
+}
+
 void collectDeclarations(
     const ast::node_ptr_t &node, const std::string &module,
     std::vector<PassDeclaration> &out) {
@@ -91,7 +119,10 @@ void collectDeclarations(
             // A pass declares when it applies (`when is_function::<F>()`). An ordinary body-less
             // declaration of the module (`func argsort(...)`) has no such condition and is not a
             // pass: the pipeline resolves it through the module's own exports.
-            if (declaration.when.empty()) {
+            if (declaration.when.empty() || !hasPassShape(funcType) ||
+                camel::core::OperatorTable::instance()
+                    .find(module + ":" + declaration.name)
+                    .has_value()) {
                 return;
             }
             if (funcType->size() > 0) {

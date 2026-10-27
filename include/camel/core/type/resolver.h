@@ -396,6 +396,9 @@ class DeclaredFuncTypeResolver : public FuncTypeResolver {
     size_t withCount() const { return funcType_->withTypesCount(); }
     size_t normCount() const { return funcType_->normTypesCount(); }
 
+    /// The names of the type variables a call's `::<...>` writes, in the order it writes them.
+    const std::vector<std::string> &bindableNames() const { return bindable_; }
+
   private:
     FunctionType *funcType_;
     /// The names of the type variables the declaration binds; empty for a fixed signature.

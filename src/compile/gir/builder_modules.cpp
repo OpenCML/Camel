@@ -792,7 +792,8 @@ bool Builder::sameImplSignature(FunctionType *function, FunctionType *kernel) {
 
 Builder::RuleVerdict Builder::ruleVerdictForCall(
     const camel::core::type::resolver_ptr_t &rule, const std::string &name,
-    const type_vec_t &withTypes, const type_vec_t &normTypes, std::string *conditionText) {
+    const type_vec_t &withTypes, const type_vec_t &normTypes, std::string *conditionText,
+    const type_vec_t &explicitTypes) {
     const auto found = nativeRuleConditions_.find(rule.get());
     if (found == nativeRuleConditions_.end()) {
         // No condition: the rule applies wherever its signature does.
@@ -811,6 +812,11 @@ Builder::RuleVerdict Builder::ruleVerdictForCall(
     if (const auto *generic = dynamic_cast<const DeclaredFuncTypeResolver *>(rule.get());
         generic != nullptr) {
         declared = generic->funcType();
+        // The variables the call writes (`constant::<int>(n)`) are bound before the arguments are
+        // read: a variable only the result mentions has no other binding.
+        for (size_t i = 0; i < explicitTypes.size() && i < generic->bindableNames().size(); ++i) {
+            bindings.emplace_back(generic->bindableNames()[i], explicitTypes[i]);
+        }
         if (declared->withTypesCount() != withTypes.size() ||
             declared->normTypesCount() != normTypes.size()) {
             return RuleVerdict::NotThisRule;

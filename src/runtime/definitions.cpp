@@ -324,7 +324,12 @@ std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction
         // failed instead of stitching that text into its message. A failure with no
         // position (an imported module that does not compile) keeps its reason in the message.
         auto location = firstErrorLocation(*module);
-        if (location) {
+        if (expected != nullptr && !problem.empty() && !location) {
+            // A generic pass has no instance for this program's function: its own reason.
+            problem = std::format(
+                "'{}::{}' cannot be applied to a function of type {}: {}", moduleName,
+                functionName, expected->normTypeAt(0)->toString(), problem);
+        } else if (location) {
             problem = std::format("its library '{}' does not compile", moduleName);
         } else {
             problem = std::format(
