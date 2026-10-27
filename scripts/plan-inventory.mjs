@@ -296,10 +296,15 @@ const INDEX_FILES = new Set(['test/plan-selection.json'])
 // benchmark pipeline, which is a harness of its own outside the plans.
 const NAMING_ROOTS = ['test/', 'scripts/', 'src/', 'include/', 'stdlib/', 'modules/', 'tools/', 'examples/', 'exemplars/']
 
+// What the test runs write is not part of the tree: `test/results` holds the reports and scratch of
+// every run on the host (a million files after a few days), is in `.gitignore`, and is not walked.
+const GENERATED_DIRS = new Set(['test/results'])
+
 function walkTreeFiles(dir) {
     const out = []
     const walk = (abs, prefix) => {
         for (const name of fs.readdirSync(abs).sort()) {
+            if (GENERATED_DIRS.has(`${prefix}/${name}`)) continue
             const child = `${abs}/${name}`
             if (fs.statSync(child).isDirectory()) walk(child, `${prefix}/${name}`)
             else out.push(`${prefix}/${name}`)
