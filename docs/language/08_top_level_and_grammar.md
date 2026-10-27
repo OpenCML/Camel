@@ -133,7 +133,8 @@ dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
                      | 'let' '_' (':' typeList)? '=' dataList
 carrier            : identList | parentIdents
 typeDecl           : frontMatter? 'type' identRef
-                     ('<' identDef (',' identDef)* ','? ('>' | '>='))? ('=' typeExpr)?
+                     ('<' identDef (',' identDef)* ','? ('>' | '>='))?
+                     ('=' typeExpr)?
 resourceDecl       : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
 retStmt            : ('return' | 'yield') dataList
 modifiers          : 'sync'+

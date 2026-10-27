@@ -27,7 +27,6 @@ rule 名字(形参) { 左边 <=> 右边 }
 ```cml
 module law
 
-import { Program } from graph
 import { rewrite } from rewrite
 
 // x - x is zero for every int: no condition, so nothing has to hold first.
@@ -37,8 +36,8 @@ rule sub_self(x: int) { x - x => 0 }
 rule fold_scales(x: int, const c1: int, const c2: int) { x * c1 + x * c2 => x * (c1 + c2) }
 
 /// A rule set is an array; a pass is an ordinary function that is handed one.
-export func simplify(p: Program): Program! {
-    return rewrite(p, [sub_self, fold_scales])
+export func simplify::<F>(p: F): F! {
+    return p->rewrite<[sub_self, fold_scales]>
 }
 ```
 
@@ -102,7 +101,6 @@ rule 名字::<T>(形参...) when 条件? { 左边 => 右边 }
 ```cml
 module tiled
 
-import { Program } from graph
 import { rewrite } from rewrite
 
 with <tile: int>
@@ -112,8 +110,8 @@ with <scale: int = 1>
 rule mul_one_scaled(x: int) when scale > 0 { x * 1 => x }
 
 /// add_zero_tiled<1> binds tile; mul_one_scaled's parameter has a default, so its name alone is a Rule.
-export func apply(p: Program): Program! {
-    return rewrite(p, [add_zero_tiled<1>, mul_one_scaled])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[add_zero_tiled<1>, mul_one_scaled]>
 }
 ```
 
@@ -126,17 +124,16 @@ export func apply(p: Program): Program! {
 ## 9.4 规则集是显式交出去的
 
 - **一条改写遍总是显式拿到规则集**：语言不会因为 import 某个模块就往流水线里加遍，也不会自动收集规则。在一个模块里写下一条 `rule`，不会悄悄改变别的遍做什么（[规则语言第二版 8.5](../design/rewrite/v2.cn.md)、[设计原则](../design-principles.cn.md) 第 9 节的遍模型）。
-- Camel 里的用法见[标准库参考](../stdlib-reference.md) 的 `rewrite` 模块：`rewrite(p, rules)` 单向应用到不动点；`saturate(p, rules, rounds)` 连重排的规则一起用；`run<rules>` 把轮数与代价显式带出来（`explain`、`why_not` 读它）。遍就是函数（[4.7](04_execution_model.md#47-遍与流水线)），组合就是函数组合与管道。
+- Camel 里的用法见[标准库参考](../stdlib-reference.md) 的 `rewrite` 模块：`p->rewrite<rules>` 单向应用到不动点；`p->saturate<rules, rounds: 8>` 连重排的规则一起用；`run<rules>` 把轮数与代价显式带出来（`explain`、`why_not` 读它）。遍就是函数（[4.7](04_execution_model.md#47-遍与流水线)），组合就是函数组合与管道。
 - 标准优化遍 `std::opt` 用标准库那批定律（`stdlib/rules.cml`）化简。要把自己的规则也交给它：Camel 里写 `f->std::opt<rules: [negate]>`，命令行写 `std::opt rules=[law::negate]`（`Rule[]` 是一个常量表达式，按遍参数的规则读）。
 
-**尚未实现。** 今天的 `std::opt` 没有 `rules` 参数：命令行写它会得到 `SemanticDiag::ParamArgumentUnknown`（"'rules' is not a parameter of 'std::opt'"），源码里也还解析不到 `std::opt` 这个名字。今天要应用自己的规则，就写一条自己的遍——遍是一个取程序、返回程序的函数——再把它交给命令行。这条遍的名字是模块名（这里是文件名），所以下面这样调用：
+**尚未实现。** 今天的 `std::opt` 没有 `rules` 参数：命令行写它会得到 `SemanticDiag::ParamArgumentUnknown`（"'rules' is not a parameter of 'std::opt'"），源码里也还解析不到 `std::opt` 这个名字。今天要应用自己的规则，就写一条自己的遍——遍是一个取函数、返回函数的函数（`(f: F) => F!`）——再把它交给命令行。这条遍的名字是模块名（这里是文件名），所以下面这样调用：
 
 ```cml
 // counts.cml
 module counts
 
 import { abs } from math
-import { Program } from graph
 import { rewrite } from rewrite
 
 /// What this program may rely on: its values are counts, so a count is never negative and a
@@ -152,8 +149,8 @@ fact nonnegative(v: int): bool match v {
 rule abs_of_count(x: int) when nonnegative(x) { abs(x) => x }
 
 /// The rule set is handed to the pass here, and nowhere else.
-export func simplify(p: Program): Program! {
-    return rewrite(p, [abs_of_count])
+export func simplify::<F>(p: F): F! {
+    return p->rewrite<[abs_of_count]>
 }
 
 func distance(a: int, b: int): int {
@@ -250,7 +247,7 @@ error[SemanticDiag::FactCaseDefaultMissing]: The fact 'sign' has no 'case _', so
 module parts
 
 import { max } from math
-import { Node, Program } from graph
+import { Node } from graph
 import { rewrite } from rewrite
 
 fact sign(v: int): int match v {
@@ -266,8 +263,8 @@ fact mul_by_one(a: Node, b: Node): bool match (a, b) {
 
 rule mul_one_by_parts(x: int, const c: int) when mul_by_one(x, node_of(c)) { x * c => x }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [mul_one_by_parts])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[mul_one_by_parts]>
 }
 ```
 
@@ -277,7 +274,6 @@ export func apply(p: Program): Program! {
 module capped_fact
 
 import { max } from math
-import { Program } from graph
 import { rewrite } from rewrite
 
 with <cap: int = 5>
@@ -292,8 +288,8 @@ rule at_default(x: int) when capped(x) == 5 { x + 0 => x }
 /// The argument is written out here: this is a different fact, `capped<3>`.
 rule at_three(x: int) when capped<3>(x) == 3 { x * 1 => x }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [at_default, at_three])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[at_default, at_three]>
 }
 ```
 
@@ -323,20 +319,20 @@ error[SemanticDiag::FactArgumentNotConstant]: The argument 'cap' of a fact is no
 
 ## 9.7 检查、解释与"哪个规则开火了"
 
-- `check(rules, samples, seed)` 抽查规则：随机造实例，把两边都算一遍再比较，给出一张判定表。它只抽样：给出反例说明规则错了，不报错只说明这一次没抽到反例。标准库的规则入库前都要过 `check`。
+- `rules->check<samples, seed>` 抽查规则：随机造实例，把两边都算一遍再比较，给出一张判定表。它只抽样：给出反例说明规则错了，不报错只说明这一次没抽到反例。标准库的规则入库前都要过 `check`。
 
 ```cml
 module checked
 
-import { check } from rewrite
+import { check, check_text } from rewrite
 
 rule sub_self(x: int) { x - x => 0 }
 
 rule fold_scales(x: int, const c1: int, const c2: int) { x * c1 + x * c2 => x * (c1 + c2) }
 
 func main(): int sync {
-    println(check([sub_self], 100, 1))
-    println(check([fold_scales], 100, 1))
+    println(check_text([sub_self]->check<100, 1>))
+    println(check_text([fold_scales]->check<100, 1>))
     return 0
 }
 ```
@@ -361,14 +357,13 @@ sampled fold_scales: proposition equality, evidence samples 100, fired 8 of 8, c
 module fired
 
 import { abs } from math
-import { Program } from graph
 import { rewrite } from rewrite
 
 // abs(x) => x, with no condition, so the dump is about the rule firing and nothing else.
 rule drop_abs(x: int) { abs(x) => x }
 
-export func simplify(p: Program): Program! {
-    return rewrite(p, [drop_abs])
+export func simplify::<F>(p: F): F! {
+    return p->rewrite<[drop_abs]>
 }
 
 func distance(a: int, b: int): int {

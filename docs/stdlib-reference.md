@@ -4591,42 +4591,25 @@ The Zen of Camel, the text of the file ZEN.
 
 <a id="graph"></a>
 
-## `graph`: a program as a value
+## `graph`: the graph of a function as a value
 
-### The program
+The graph of a function, as a value. A function is a graph; this module reads it and, in a
+transaction, edits it. The handles `Graph`, `Node`, `Op`, `TypeRef`, `Region` and `Tag` name
+things inside the graphs of one function and compare with `==` and `!=`. Reads are pure.
 
-#### `current`
+A pass is a function from a function to a function of the same type, `(f: F) => F!`, so it
+applies to one function, `loss->opt::fold`, or to the program's entry on the pipeline,
+`camel prog.cml opt::fold std::nvm`. A pass written in Camel opens a transaction on `f`
+(`open`), replaces and erases nodes, and commits (`commit`), which gives the changed function:
+the same type, the captured values it had, and every graph nothing changed shared. What a pass
+reads of the program around the function (declarations, tags, facts) is read through the
+function; no snapshot of the program is in this interface.
 
-```camel
-current: () => Program
-```
+A module that holds passes is compiled as a program of its own, whose entry is the pass: its
+module-level values are computed before the pass runs. It may import modules written in C++ and
+libraries written in Camel (for example `array`); the imports are declared and built with it.
 
-The Program the running program was compiled to: an immutable snapshot, whose graphs a pass reads.
-
-- Pure.
-- Example: `graphs(current())`
-
-#### `graphs`
-
-```camel
-graphs: (p: Program) => Graph[]
-```
-
-Every graph of the program, in the order of their ids.
-
-- Pure.
-- Example: `len(graphs(current()))`
-
-#### `root`
-
-```camel
-root: (p: Program) => Graph
-```
-
-The entry graph of the program.
-
-- Pure.
-- Example: `name(root(current()))`
+### The graphs of a function
 
 #### `name`
 
@@ -4636,8 +4619,7 @@ name: (g: Graph) => string
 
 The name of the graph.
 
-- Pure.
-- Example: `name(root(current()))` gives `'__root__'`
+- Example: `name(graph_of((x: int): int => x + 1))`
 
 #### `nodes`
 
@@ -4647,8 +4629,7 @@ nodes: (g: Graph) => Node[]
 
 The nodes of the graph in NodeId order; the places of removed nodes are skipped.
 
-- Pure.
-- Example: `nodes(root(current()))`
+- Example: `nodes(graph_of((x: int): int => x + 1))`
 
 ### Reading nodes
 
@@ -4660,8 +4641,8 @@ inputs: (n: Node) => Node[]
 
 The nodes whose values `n` takes as ordinary inputs, in order.
 
-- Pure.
-- Example: `inputs(n)`
+- Example (a fragment, not compiled): `inputs(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `with_inputs`
 
@@ -4671,19 +4652,32 @@ with_inputs: (n: Node) => Node[]
 
 The nodes whose values `n` takes as with inputs.
 
-- Pure.
-- Example: `with_inputs(n)`
+- Example (a fragment, not compiled): `with_inputs(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
-#### `ctrl_inputs`
+#### `sync_inputs`
 
 ```camel
-ctrl_inputs: (n: Node) => Node[]
+sync_inputs: (n: Node) => Node[]
 ```
 
-The nodes `n` waits for (control inputs).
+The nodes that must run before `n` when both run, because a sync block puts them in one chain
+(the sync edges of design principles 3.1).
 
-- Pure.
-- Example: `ctrl_inputs(n)`
+- Example (a fragment, not compiled): `sync_inputs(n)`
+- Why it is not compiled: n is a node of the surrounding pass
+
+#### `order_inputs`
+
+```camel
+order_inputs: (n: Node) => Node[]
+```
+
+The nodes that must run before `n` when both run, because they use the same resource (the
+order edges of design principles 3.1); an order edge never makes a node run.
+
+- Example (a fragment, not compiled): `order_inputs(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `users`
 
@@ -4693,8 +4687,8 @@ users: (n: Node) => Node[]
 
 The nodes that read `n` as an input of any kind, once each, in NodeId order.
 
-- Pure.
-- Example: `users(n)`
+- Example (a fragment, not compiled): `users(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `value_users`
 
@@ -4704,8 +4698,8 @@ value_users: (n: Node) => Node[]
 
 The nodes that read the value of `n` (ordinary or with input), once each.
 
-- Pure.
-- Example: `len(value_users(n)) == 0`
+- Example (a fragment, not compiled): `len(value_users(n)) == 0`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `kind`
 
@@ -4715,8 +4709,8 @@ kind: (n: Node) => NodeKind
 
 The kind of the node.
 
-- Pure.
-- Example: `kind(n) == NodeKind::Oper`
+- Example (a fragment, not compiled): `kind(n) == NodeKind::Oper`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `op`
 
@@ -4726,8 +4720,8 @@ op: (n: Node) => Op?
 
 The operator of an operation node, null for any other node.
 
-- Pure.
-- Example: `op(n)`
+- Example (a fragment, not compiled): `op(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `op_name`
 
@@ -4737,8 +4731,8 @@ op_name: (o: Op) => string
 
 The URI of the operator, such as `:op/add_l`.
 
-- Pure.
-- Example: `op_name(o)`
+- Example (a fragment, not compiled): `op_name(o)`
+- Why it is not compiled: o is the operator of a node of the surrounding pass
 
 #### `is_pure`
 
@@ -4748,8 +4742,8 @@ is_pure: (n: Node) => bool
 
 Whether the node is an operation whose operator is declared pure.
 
-- Pure.
-- Example: `is_pure(n)`
+- Example (a fragment, not compiled): `is_pure(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `is_anchor`
 
@@ -4757,10 +4751,11 @@ Whether the node is an operation whose operator is declared pure.
 is_anchor: (n: Node) => bool
 ```
 
-Whether the node anchors its graph (its exit, output or return, or the end of a branch arm); a transaction does not replace or erase it.
+Whether the node anchors its graph (its exit, output or return, or the end of a branch arm); a
+transaction does not replace or erase it.
 
-- Pure.
-- Example: `is_anchor(n)`
+- Example (a fragment, not compiled): `is_anchor(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `is_written_slot`
 
@@ -4768,10 +4763,12 @@ Whether the node anchors its graph (its exit, output or return, or the end of a 
 is_written_slot: (n: Node) => bool
 ```
 
-Whether the value of the node may be written in place: it is passed to a `var` parameter or to an operator that changes its operand, directly or through gates. A rewrite must not treat such a node as one value.
+Whether the value of the node may be written in place: it is passed to a `var` parameter or to
+an operator that changes its operand, directly or through gates. A rewrite must not treat such
+a node as one value.
 
-- Pure.
-- Example: `is_written_slot(n)`
+- Example (a fragment, not compiled): `is_written_slot(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `is_constant`
 
@@ -4781,8 +4778,8 @@ is_constant: (n: Node) => bool
 
 Whether the node is a constant of the graph.
 
-- Pure.
-- Example: `is_constant(n)`
+- Example (a fragment, not compiled): `is_constant(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `type_of`
 
@@ -4792,8 +4789,8 @@ type_of: (n: Node) => TypeRef?
 
 The type of the node's value, null when it has none.
 
-- Pure.
-- Example: `type_of(n)`
+- Example (a fragment, not compiled): `type_of(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `type_name`
 
@@ -4803,8 +4800,8 @@ type_name: (t: TypeRef) => string
 
 The type as a program writes it.
 
-- Pure.
-- Example: `type_name(t)` gives `'int'`
+- Example (a fragment, not compiled): `type_name(t)` gives `'int'`
+- Why it is not compiled: t is the type of a node of the surrounding pass
 
 #### `callee`
 
@@ -4814,8 +4811,8 @@ callee: (n: Node) => Graph?
 
 The graph a call or function node names, null for any other node.
 
-- Pure.
-- Example: `callee(n)`
+- Example (a fragment, not compiled): `callee(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `tags`
 
@@ -4825,8 +4822,8 @@ tags: (n: Node) => string
 
 The attributes of the node as text (empty when there are none).
 
-- Pure.
-- Example: `tags(n)`
+- Example (a fragment, not compiled): `tags(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `origin`
 
@@ -4836,25 +4833,20 @@ origin: (n: Node) => int
 
 The source origin id of the node, 0 when unknown.
 
-- Pure.
-- Example: `origin(n)`
+- Example (a fragment, not compiled): `origin(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `constant`
 
 ```camel
-constant: (n: Node, sample: i32) => i32?
-constant: (n: Node, sample: int) => int?
-constant: (n: Node, sample: f32) => f32?
-constant: (n: Node, sample: float) => float?
-constant: (n: Node, sample: bool) => bool?
-constant: (n: Node, sample: string) => string?
+constant: (n: Node) => T? when is_ordered::<T>()
 ```
 
-The value of a constant node of the type of the sample (a number, a bool or a string; the value
-of the sample is not read), null for any other node.
+The value of a constant node as the type T (a number, a bool or a string), null for a node
+that is no constant of that type. T is written (`constant::<int>(n)`).
 
-- Pure.
-- Example: `constant(n, 0)` gives `int?`
+- Example (a fragment, not compiled): `constant::<int>(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 ### Regions
 
@@ -4867,8 +4859,8 @@ region_of: (n: Node) => Region
 The innermost region the node is in. Every node is in one: region 0 is the body, also in a
 graph whose region table is empty.
 
-- Pure.
-- Example: `region_of(n)`
+- Example (a fragment, not compiled): `region_of(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `region_kind`
 
@@ -4879,8 +4871,8 @@ region_kind: (r: Region) => RegionKind
 The kind of the region: `Root` (the function body, region 0), `Arm`, `LoopCond`, `LoopBody`,
 `Inline`, `Block` or `Dead`.
 
-- Pure.
-- Example: `region_kind(r) == RegionKind::Inline`
+- Example (a fragment, not compiled): `region_kind(r) == RegionKind::Inline`
+- Why it is not compiled: r is a region of the surrounding pass
 
 #### `region_parent`
 
@@ -4890,8 +4882,8 @@ region_parent: (r: Region) => Region?
 
 The region the region is in; null for the body (region 0).
 
-- Pure.
-- Example: `region_parent(r)`
+- Example (a fragment, not compiled): `region_parent(r)`
+- Why it is not compiled: r is a region of the surrounding pass
 
 #### `show`
 
@@ -4901,8 +4893,8 @@ show: (n: Node) => string
 
 The node on one line: its id, kind, operator and type.
 
-- Pure.
-- Example: `show(n)` gives `'%2 Oper :op/mul_l : int'`
+- Example (a fragment, not compiled): `show(n)` gives `'%2 Oper :op/mul_l : int'`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `id`
 
@@ -4912,10 +4904,11 @@ id: (h: Node) => int
 id: (h: Op) => int
 ```
 
-The number a graph, a node or an operator is known by inside its Program: the GraphId, the NodeId or the OperId. Stable for the Program, so a pass can key a map by it.
+The number a graph, a node or an operator is known by inside its function: the GraphId, the
+NodeId or the OperId. Stable for the function, so a pass can key a map by it.
 
-- Pure.
-- Example: `id(n)`
+- Example (a fragment, not compiled): `id(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 ### Facts
 
@@ -4925,21 +4918,21 @@ The number a graph, a node or an operator is known by inside its Program: the Gr
 effects: (g: Graph) => Effects
 ```
 
-What running the graph once does besides computing its value: `external`, `writes_variables`, `may_fault`, `may_not_terminate`.
+What running the graph once does besides computing its value: `external`, `writes_variables`,
+`may_fault`, `may_not_terminate`.
 
-- Pure.
-- Example: `effects(g).external`
+- Example: `effects(graph_of((x: int): int => x + 1)).external`
 
-#### `shape`
+#### `shape_text`
 
 ```camel
-shape: (n: Node) => string?
+shape_text: (n: Node) => string?
 ```
 
-The tensor shape of the node's value as text, null when its value is no tensor.
+The shape of the node's value as text, null when its value is no array of known element type.
 
-- Pure.
-- Example: `shape(n)` gives `'f32 [2, 3]'`
+- Example (a fragment, not compiled): `shape_text(n)` gives `'f32 [2, 3]'`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `permissions`
 
@@ -4949,94 +4942,40 @@ permissions: (n: Node) => int
 
 The numeric permissions the program granted the node, as a bit set (0 for none).
 
-- Pure.
-- Example: `permissions(n)`
-
-### Function values
-
-#### `program_of`
-
-```camel
-program_of: (f: F) => Program
-```
-
-The Program a function value lives in.
-
-- Pure.
-- Example: `program_of((x: float): float => x + 1.0)`
-
-#### `graph_of`
-
-```camel
-graph_of: (f: F) => Graph
-```
-
-The graph of a function value.
-
-- Pure.
-- Example: `graph_of((x: float): float => x + 1.0)`
+- Example (a fragment, not compiled): `permissions(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 ### Transactions
-
-#### `open_function`
-
-```camel
-open_function: (f: F) => Txn
-```
-
-Opens a transaction on a function value's graph and the graphs it reaches.
-
-- With effects: opens a transaction.
-- Example: `open_function((x: float): float => x + 1.0)`
-
-#### `to_function`
-
-```camel
-to_function: (t: Txn, sample: F) => F!
-```
-
-Commits a transaction of `open_function` to a Program of its own (the running program is left as it is) and gives the function value, of the type of the sample. The error value has the kinds of `commit`, `SignatureMismatch` (the graph has another signature than the sample) or `ClosureNotEmpty` (the function captures values).
-
-- With effects: changes the transaction.
-- Example: `to_function(t, (x: float): float => x + 1.0)`
-
-#### `open`
-
-```camel
-open: (p: Program) => Txn
-```
-
-Opens a transaction on the Program: a private workspace in which graphs are edited. Nothing changes until `commit`.
-
-- With effects: opens a transaction.
-- Example: `let t = open(p)`
 
 #### `replace`
 
 ```camel
-replace: (t: Txn, old: Node, new: Node) => void
+replace: (t: Txn<F>, old: Node, new: Node) => void uses t
 ```
 
-Puts the node `new` of the same graph in the place of `old`, which is removed; what `old` ordered stays ordered. A fault when a node anchors its graph, when `new` is computed from `old`, or when the transaction is over.
+Puts the node `new` of the same graph in the place of `old`, which is removed; what `old`
+ordered stays ordered.
 
-- With effects: changes the transaction.
-- Example: `replace(t, n, inputs(n)[0])`
+- Failure: fault `InvalidArgument` when a node anchors its graph, when `new` is computed from `old`, or when the transaction is over.
+- Example (a fragment, not compiled): `replace(t, n, inputs(n)[0])`
+- Why it is not compiled: t is an open transaction and n a node of its graph
 
 #### `erase`
 
 ```camel
-erase: (t: Txn, n: Node) => void
+erase: (t: Txn<F>, n: Node) => void uses t
 ```
 
-Removes a node whose value nobody reads. A fault when the value is read or the node anchors its graph.
+Removes a node whose value nobody reads.
 
-- With effects: changes the transaction.
-- Example: `erase(t, n)`
+- Failure: fault `InvalidArgument` when the value is read, when the node anchors its graph, or when the transaction is over.
+- Example (a fragment, not compiled): `erase(t, n)`
+- Why it is not compiled: t is an open transaction and n a node of its graph
 
 #### `eval`
 
 ```camel
-eval: (t: Txn, n: Node) => Node?
+eval: (t: Txn<F>, n: Node) => Node? uses t
 ```
 
 Evaluates the pure operator of the node over its constant operands and gives the node holding
@@ -5045,135 +4984,82 @@ node is no pure operation, or evaluating it faults). The node the answer names i
 transaction's to put in place of `n` with `replace`. A constant expression that can only fault
 is left as written and warned about, as the C++ fold does.
 
-- With effects: changes the transaction.
-- Example: `eval(t, n)`
-
-#### `commit`
-
-```camel
-commit: (t: Txn) => Program!
-```
-
-Checks the edits and makes the new Program, which shares every graph nothing changed; the transaction is over. The new Program is a value: the one the transaction was opened on, and the running program, stay as they were (design principles 9.1), so two transactions over one Program commit to two Programs. The error value has the kind `GraphInvalid` (an edit broke an invariant; the message names the graph, the node and the edge) or `TxnUsed` (the transaction was over already).
-
-- With effects: changes the transaction.
-- Failure: error value `GraphInvalid` when an edit broke an invariant; error value `TxnUsed` when the transaction was over already.
-- Example: `commit(t)`
-
-#### `abort`
-
-```camel
-abort: (t: Txn) => void
-```
-
-Drops the transaction.
-
-- With effects: changes the transaction.
-- Example: `abort(t)`
+- Example (a fragment, not compiled): `eval(t, n)`
+- Why it is not compiled: t is an open transaction and n a node of its graph
 
 #### `add_constant`
 
 ```camel
-add_constant: (t: Txn, g: Graph, value: i32) => Node
-add_constant: (t: Txn, g: Graph, value: int) => Node
-add_constant: (t: Txn, g: Graph, value: f32) => Node
-add_constant: (t: Txn, g: Graph, value: float) => Node
-add_constant: (t: Txn, g: Graph, value: bool) => Node
-add_constant: (t: Txn, g: Graph, value: string) => Node
+add_constant: (t: Txn<F>, g: Graph, value: T) => Node uses t when is_ordered::<T>()
 ```
 
 Adds a value the transaction creates to the graph's static values and gives the node that
-holds it. The value may be a number, a bool or a string; a string is copied into the permanent
+holds it. The value is a number, a bool or a string; a string is copied into the permanent
 space because a value a transaction creates may be live at a safepoint where its draft is not
 traced.
 
-- With effects: changes the transaction.
-- Example: `add_constant(t, g, 7)`
+- Example (a fragment, not compiled): `add_constant(t, g, 7)`
+- Why it is not compiled: t is an open transaction and g a graph of it
+
+#### `commit`
+
+```camel
+commit: (t: Txn<F>) => F! uses t
+```
+
+Checks the edits and makes the changed function: the same type as the one that was opened, with
+the values it captured, sharing every graph nothing changed. The transaction is over.
+
+- Failure: error value `GraphConflict` when a graph the transaction touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant (the message names the graph, the node and the edge); error value `TxnUsed` when the transaction was over already.
+- Example (a fragment, not compiled): `commit(t)`
+- Why it is not compiled: t is an open transaction
+
+#### `abort`
+
+```camel
+abort: (t: Txn<F>) => void uses t
+```
+
+Drops the transaction.
+
+- Example (a fragment, not compiled): `abort(t)`
+- Why it is not compiled: t is an open transaction
 
 <a id="rewrite"></a>
 
 ## `rewrite`: rules applied to a program
 
-Rewrite engines and rule readers: `rewrite`, `saturate` and `extract` apply an array of `Rule`
-values to a `Program`, `check` tests rules on random programs, and the four readers report a
-`Rule`'s name, direction, required rewrites and added constants. `run` is `rewrite` with the
-round budget explicit and the cost kept: it answers a `Run`, the program and what the
-application cost. Its `explain` with parameter opens the attribution record; `explain`
-prints the shortest chain between two values and `explain_all` every rewrite that was made,
-each with the rule, round, graph and nodes (rewrite design 8.7); `why_not` says why a rule did
-not fire at a value. A rule that stops a rewrite without changing the program is a fault,
-and `strict` restricts the float rules to the ones that hold bit for bit.
+Rewrite engines and their records. `rewrite`, `saturate` and `extract` are passes, functions
+from a function to a function of the same type, `(f: F) => F!`, with the rule set and the
+choices in angle brackets: `f->rewrite<rules>`, `f->saturate<rules, rounds: 8>`,
+`f->extract<rules::nodes>`. A rule set is an ordinary `Rule[]`. `run` is `rewrite` with the
+cost kept: it answers a `Run`, the function and what the application cost. `check` tests rules
+on random instances. `explain` prints the shortest chain between two values of a run,
+`explain_all` every rewrite that was made, and `why_not` says why a rule did not fire at a
+value (rewrite design 8.7). A rule that stops a rewrite without changing the function is a
+fault, and `strict` restricts the float rules to the ones that hold bit for bit.
 
 The module also exports the reserved groups the language's own `rule`, `rule` with `when`, and
-`fact` declarations compile to (`rewrite:rule`, `rewrite:rule_when`,
-`rewrite:fact`). They have no callable Camel name, so they are not declared here and
-`inspect --ops` hides them from the name comparison.
+`fact` declarations compile to (`rewrite:rule`, `rewrite:rule_when`, `rewrite:fact`). They have
+no callable Camel name, so they are not declared here.
 
-#### `rewrite`
-
-```camel
-rewrite: (p: Program, rules: Rule[]) => Program!
-rewrite: (p: Program, rules: Rule[], strict: bool) => Program!
-```
-
-Applies `rules` to `p` until no rule changes the program, and gives the rewritten program.
-
-- With effects: runs the rules' functions.
-- Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow.
-- Example: `rewrite(p, rules)` gives `the rewritten program`
-
-#### `saturate`
-
-```camel
-saturate: (p: Program, rules: Rule[], rounds: int) => Program!
-saturate: (p: Program, rules: Rule[], rounds: int, strict: bool) => Program!
-```
-
-Applies the rearranging rules too, for at most `rounds` rounds, and gives the smallest
-writing of the value it finds.
-
-- With effects: runs the rules' functions.
-- Failure: error value `RuleInvalid` when a rule does not compile.
-- Example: `saturate(p, rules, 20)` gives `the smallest writing found`
-
-#### `extract`
-
-```camel
-extract: (p: Program, cost: string) => Program!
-```
-
-Extracts the program `p` in the cost model named `cost` (for example `"size"`).
-
-- With effects: rewrites the program and runs the cost model.
-- Failure: error value `NoCostModel` when there is no cost model named `cost`.
-- Example: `extract(p, 'size')` gives `the extracted program`
+### Checking rules
 
 #### `check`
 
 ```camel
-check: (rules: Rule[], samples: int = 100, seed: int = 0, program: Program? = null) => CheckReport
+check: <samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport
 ```
 
-Checks `rules` on `samples` random instances drawn with `seed`, and answers the verdict table
-(slice S0). Each row of the table carries, the instance (a generic law's type
-tuple), the verdict, what the verdict is about and the evidence or the reason for it; the
-verdicts are `proved`, `refuted` and `sampled`, and every line of the report wears one of them
-as its first word (the rule on `verification-verdict-surface`, 2). The sample
-stream of a rule follows the rule's identity -- its name and its instance's type tuple -- and
-not its place in `rules`, so a rule draws the same samples in any call (
-on `accuracy-check-sampling`, 1). A build without a solver can answer `sampled` and `refuted`
-and never `proved`: `proved` is a licence's proposition being established, which is not what
-comparing samples does.
+Checks `rules` on random instances drawn with `seed`: each row of the report carries the
+instance (a generic law's type tuple), the verdict, what the verdict is about and the evidence
+or the reason for it. The sample stream of a rule follows the rule's identity (its name and its
+instance's type tuple), not its place in `rules`, so a rule draws the same samples in any call.
+A build without a solver answers `Sampled` and `Refuted` and never `Proved`. A generic law is
+checked at the types every operator group registered.
 
-`samples` and `seed` have defaults, and `program` names the program whose own types a generic
-law is also checked at: the candidate set is the types every operator group registered, and
-then the types of the values the program has, each once, in the order its graphs write them
-(the rule on `generic-rule-check-surface-and-multi-parameter-instances`, 1).
-Left out, the candidate set is the registered types alone, so a call that gives no program
-reads exactly what it read before the parameter existed.
-
-- With effects: runs the rules' functions and draws random values.
-- Example: `check(rules, 1000, 7)` gives `the report`
+- Example (a fragment, not compiled): `rules->check<samples: 1000, seed: 7>`
+- Why it is not compiled: a rule set comes from the caller
 
 #### `check_text`
 
@@ -5181,204 +5067,74 @@ reads exactly what it read before the parameter existed.
 check_text: (r: CheckReport) => string
 ```
 
-The report's fixed rendering, as a string: the same text `print` writes, for a caller that
-wants it as a value.
+The report's fixed rendering, one line per row, for a caller that wants it as a value.
 
-- Pure.
-- Example: `check_text(r)` gives `'sampled add_zero: proposition equality, evidence samples 100, ...'`
+- Example (a fragment, not compiled): `check_text(report)` gives `'sampled add_zero: proposition equality, evidence samples 100, ...'`
+- Why it is not compiled: a report comes from a check
 
-#### `check_row_count`
-
-```camel
-check_row_count: (r: CheckReport) => int
-```
-
-How many rows the table has: one per rule, or one per instance of a generic law.
-
-- Pure.
-- Example: `check_row_count(r)` gives `2`
-
-#### `check_rule`
+#### `coverage_table`
 
 ```camel
-check_rule: (r: CheckReport, row: int) => string!
-```
-
-The rule of one row: the law's name, without the type tuple an instance adds.
-
-- Pure.
-- Failure: error value `IndexError` when the report has no such row.
-- Example: `check_rule(r, 0)` gives `'add_zero'`
-
-#### `check_instance`
-
-```camel
-check_instance: (r: CheckReport, row: int) => string!
-```
-
-The type tuple of one row's instance, as written (`int`, `int, int`). Empty for a rule that is
-not a generic law.
-
-- Pure.
-- Failure: error value `IndexError` when the report has no such row.
-- Example: `check_instance(r, 0)` gives `'i32'`
-
-#### `check_verdict`
-
-```camel
-check_verdict: (r: CheckReport, row: int) => string!
-```
-
-One row's verdict: `proved`, `refuted` or `sampled`. The words are closed: a rule nothing could
-be examined on is `sampled` with its reason, never a fourth word.
-
-- Pure.
-- Failure: error value `IndexError` when the report has no such row.
-- Example: `check_verdict(r, 0)` gives `'sampled'`
-
-#### `check_proposition`
-
-```camel
-check_proposition: (r: CheckReport, row: int) => string!
-```
-
-What one row's verdict is about (the rule on
-`verification-licence-to-precondition`): `equality` for a rule that needs no permission,
-`real equality + IEEE on special values` for the rules that ask for `reassociate` or `contract`,
-and `error bound` for the ones that ask for `refine_accuracy` or `change_precision`.
-
-- Pure.
-- Failure: error value `IndexError` when the report has no such row.
-- Example: `check_proposition(r, 0)` gives `'equality'`
-
-#### `check_evidence`
-
-```camel
-check_evidence: (r: CheckReport, row: int) => string!
-```
-
-What one row's verdict rests on: `solver` when a solver established it, `samples <n>` when `n`
-samples were drawn, `counterexample` when a value is the witness, and `none` when nothing could
-be examined.
-
-- Pure.
-- Failure: error value `IndexError` when the report has no such row.
-- Example: `check_evidence(r, 0)` gives `'samples 100'`
-
-#### `check_reason`
-
-```camel
-check_reason: (r: CheckReport, row: int) => string!
-```
-
-Why a row says what it says when the answer is not a counterexample: the reason nothing was
-examined (`no numeric bound`), or the reason a rule the engine never fired on its own left side
-is `refuted`. Written in its own column and never left implicit, so a `sampled` that sampled is
-never read as one that did not.
-
-- Pure.
-- Failure: error value `IndexError` when the report has no such row.
-- Example: `check_reason(r, 0)` gives `''`
-
-#### `check_coverage`
-
-```camel
-check_coverage: (r: CheckReport, row: int) => string!
-```
-
-What the translation layer made of one row's rule: the proposition it read out
-of the rule's two sides -- `integer scalar int: (x + 0) = x`, with `, no premise yet` when the
-declaration carries a condition -- or `beyond translation coverage` followed by the reason it
-refused. The layer never guesses: a rule it cannot translate says which width, operator or node
-kind stopped it, and that rule is `sampled`, never `proved`. A later slice adds the floating
-widths and the conditions as premises; `check_coverage_table` is the boundary as a value.
-
-- Pure.
-- Failure: error value `IndexError` when the report has no such row.
-- Example: `check_coverage(r, 0)` gives `'integer scalar int: (x + 0) = x'`
-
-#### `check_coverage_table`
-
-```camel
-check_coverage_table: () => string
+coverage_table: string
 ```
 
 The declared coverage of the translation layer: the widths it translates (`int`, `i32`), the
 widths the design lists beside them and it does not translate yet (`float`, `f32`, `bf16`,
 `f16`), the operators it translates, what happens to integer division and remainder, what is
 beyond translation coverage, and that a rule's condition is not a premise yet (rewrite design
-8.1). The boundary is a value a reader can read and a test can pin, not a paragraph in a design
-document that drifts from the code.
+8.1). The boundary is a value a reader can read and a test can pin.
 
-- Pure.
-- Example: `check_coverage_table()` gives `'the coverage of the integer scalar translation\n...'`
+- A value: written without parentheses, a constant where it is used.
+- Example: `coverage_table` gives `'the coverage of the integer scalar translation\n...'`
 
-#### `run`
-
-```camel
-run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false> (p: Program) => Run<Program>!
-```
-
-Applies `rules` to `p` one way, for at most `rounds` rounds, and gives the program it produced
-and what the application cost. This is `rewrite` with the round budget explicit and the cost
-kept. The rule set, the budget and the choices are configuration, so they are `with`
-parameters, written at the call (design principles 4.4): `p->run<rules>`,
-`p->run<rules, explain: true>`, `p->run<rules, rounds: 8, strict: true>`. The first one has no
-default and must be written; `rounds` defaults to 16 and `strict` and `explain` to false.
-`explain: true` opens the attribution record (rewrite design 8.7): `explain` then reads back
-the shortest chain between two values, and `explain_all` every rewrite that was made. Recording
-is off unless it is asked for, so a plain application pays nothing for it.
-
-- With effects: runs the rules' functions, and nothing else.
-- Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow.
-- Example: `let rs: Rule[] = []; p->run<rs>` gives `the run`
+### Reading a run
 
 #### `explain`
 
 ```camel
-explain: (r: Run<Program>, a: Node, b: Node) => Proof!
+explain: <a: Node, b: Node> (r: Run<F>) => Proof!
 ```
 
 The shortest chain of rewrites of the run `r` that connects the values `a` and `b`, as the
-derivation `a = ... = b`: only that chain, not every step the run made (rewrite design 8.7).
-Each line names the rule and whether the step is read backwards; a chain through a value that
-was later rewritten away names it too. When two chains are equally short both are printed, in
-the order the rewrites were made. A run that recorded nothing, or that holds no chain between
-the two values, is refused as an error value, never answered with an empty chain.
+derivation `a = ... = b`: only that chain, not every step the run made. Each line names the
+rule and whether the step is read backwards; a chain through a value that was later rewritten
+away names it too. When two chains are equally short both are printed, in the order the
+rewrites were made.
 
-- Pure.
-- Failure: error value `NoAttribution` when the run was made without `explain: true`, and `InvalidArgument` for a value of another program; error value `NoChain` when no rewrite connects the two values.
-- Example: `explain(r, a, b)` gives `the chain between a and b`
+- Failure: error value `NoAttribution` when the run was made without `explain: true`; error value `InvalidArgument` for a value of another function; error value `NoChain` when no rewrite connects the two values.
+- Example (a fragment, not compiled): `r->explain<a, b>`
+- Why it is not compiled: a run and two of its values come from the caller
 
 #### `explain_all`
 
 ```camel
-explain_all: (r: Run<Program>) => Proof!
+explain_all: (r: Run<F>) => Proof!
 ```
 
 Every rewrite of the run `r`, in the order it made them, each naming the rule, the round, the
-graph and the nodes that matched, were produced and were erased (rewrite design 8.7). This is
-the full record `explain` narrows to one chain. A run that applied nothing is explained as
-such, not as an empty table.
+graph and the nodes that matched, were produced and were erased. This is the full record
+`explain` narrows to one chain.
 
-- Pure.
-- Failure: error value `NoAttribution` when the run was made without `explain: true`, and `InvalidArgument` for a value of another program.
-- Example: `explain_all(r)` gives `every rewrite the run made`
+- Failure: error value `NoAttribution` when the run was made without `explain: true`; error value `InvalidArgument` for a value of another function.
+- Example (a fragment, not compiled): `explain_all(r)`
+- Why it is not compiled: a run comes from the caller
 
 #### `why_not`
 
 ```camel
-why_not: (r: Run<Program>, rule: Rule, v: Node) => string!
+why_not: <rule: Rule, v: Node> (r: Run<F>) => string!
 ```
 
-Why the rule `rule` did not fire at the value `v` of the run `r` (rewrite design 8.7): the
-first place the left side fails to match, the value the pattern wanted there and the value the
-program has, a missing permission, or the rule's condition being false with the values it read.
-A rule that did fire at `v` is reported as such.
+Why the rule `rule` did not fire at the value `v` of the run `r`: the first place the left side
+fails to match, the value the pattern wanted there and the value the program has, a missing
+permission, or the rule's condition being false with the values it read. A rule that did fire
+at `v` is reported as such.
 
-- With effects: runs the rule's condition.
-- Failure: error value `NoAttribution` when the run was made without `explain: true`, and `InvalidArgument` for a value of another program.
-- Example: `why_not(r, target, v)` gives `the reason`
+- Failure: error value `NoAttribution` when the run was made without `explain: true`; error value `InvalidArgument` for a value of another function.
+- Example (a fragment, not compiled): `r->why_not<target, v>`
+- Why it is not compiled: a run, a rule and a value come from the caller
+
+### Reading a rule
 
 #### `rule_name`
 
@@ -5388,8 +5144,8 @@ rule_name: (r: Rule) => string
 
 The name of the rule `r`.
 
-- Pure.
-- Example: `rule_name(r)` gives `'int_add_zero'`
+- Example (a fragment, not compiled): `rule_name(r)` gives `'int_add_zero'`
+- Why it is not compiled: a rule comes from the library
 
 #### `rule_two_way`
 
@@ -5399,8 +5155,8 @@ rule_two_way: (r: Rule) => bool
 
 Whether the rule `r` may also be applied from right to left.
 
-- Pure.
-- Example: `rule_two_way(r)` gives `false`
+- Example (a fragment, not compiled): `rule_two_way(r)` gives `false`
+- Why it is not compiled: a rule comes from the library
 
 #### `rule_needs`
 
@@ -5410,8 +5166,8 @@ rule_needs: (r: Rule) => int
 
 How many rewrites the rule `r` needs before it may fire.
 
-- Pure.
-- Example: `rule_needs(r)` gives `0`
+- Example (a fragment, not compiled): `rule_needs(r)` gives `0`
+- Why it is not compiled: a rule comes from the library
 
 #### `rule_consts`
 
@@ -5419,10 +5175,10 @@ How many rewrites the rule `r` needs before it may fire.
 rule_consts: (r: Rule) => int
 ```
 
-How many constants the rule `r` adds to the program.
+How many constants the rule `r` adds to the function.
 
-- Pure.
-- Example: `rule_consts(r)` gives `0`
+- Example (a fragment, not compiled): `rule_consts(r)` gives `0`
+- Why it is not compiled: a rule comes from the library
 
 <a id="tiles"></a>
 

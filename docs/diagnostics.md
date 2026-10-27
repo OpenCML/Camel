@@ -4476,14 +4476,13 @@ A requirement names a permission of design principles 7.2: reassociate, contract
 ```camel
 /// A requirement that names no permission: reported at the argument, where it is written.
 module err_requires_unknown
-import { Program } from graph
 import { rewrite } from rewrite
 
 #requires(reassociate2)
 rule r(x: int) { x + 0 => x }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [r])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[r]>
 }
 ```
 
@@ -6088,15 +6087,14 @@ A rule's condition decides whether the rule applies to a redex, and the engine e
 ```camel
 module condition_rewrite
 
-import { Program, current } from graph
 import { rewrite } from rewrite
 
 rule add_zero(x: int) when publish_now() { x + 0 => x }
 rule drop_one(x: int) when true { x * 1 => x }
 
 func publish_now(): bool {
-    let p = current()
-    return match rewrite(p, [drop_one]) {
+    let p = redex
+    return match p->rewrite<[drop_one]> {
         case error e => sync { println('inner error value: ', e.kind); return false }
         case q => sync { return true }
     }
@@ -6107,8 +6105,8 @@ func redex(x: int): int {
 }
 
 func main(): int sync {
-    let p = current()
-    return match rewrite(p, [add_zero]) {
+    let p = redex
+    return match p->rewrite<[add_zero]> {
         case error e => sync { println('outer error value: ', e.kind); return 1 }
         case q => sync { println('rewritten'); return 0 }
     }
@@ -6703,7 +6701,7 @@ A fact is computed once for the arguments it is queried with, and two different 
 
 ```camel
 module fact_arg_not_constant
-import { Program, Node } from graph
+import { Node } from graph
 import { max } from math
 import { rewrite } from rewrite
 
@@ -7477,15 +7475,18 @@ A rule whose declaration writes `with` parameters is a function of them, and onl
 
 ```camel
 module err_rule_with_unbound
-import { Program } from graph
 import { rewrite } from rewrite
 
 with <shift: int>
 rule add_shift(x: int) { x + 0 => x }
 
-export func apply(p: Program): Program! {
+export func apply(p: () => int): (() => int)! {
     let rules = [add_shift]
-    return rewrite(p, rules)
+    return p->rewrite<rules>
+}
+
+func main(): int sync {
+    return 0
 }
 ```
 
@@ -7514,13 +7515,13 @@ node_of reaches the node of a const parameter, so that a condition can read a fa
 ```camel
 module node_of_misuse
 
-import { Program, Node } from graph
+import { Node } from graph
 import { rewrite } from rewrite
 
 rule drop_by_node(x: int, const c: int) when node_of(x) == node_of(c) { x * c => x }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [drop_by_node])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[drop_by_node]>
 }
 
 func scaled(x: int): int { return x * 2 }
@@ -7904,7 +7905,7 @@ A `const` parameter means the left side matches a constant there: in the rule r(
 ```camel
 module const_param_unbound
 
-import { Program, Node, type_of, type_name } from graph
+import { Node, type_of, type_name } from graph
 import { rewrite } from rewrite
 
 func typeText(n: Node): string {
@@ -7916,8 +7917,8 @@ func typeText(n: Node): string {
 
 rule drop_by_shape(x: int, const c: int) when typeText(node_of(c)) == 'int' { x + 1 => x }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [drop_by_shape])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[drop_by_shape]>
 }
 
 func shifted(a: int): int { return a + 1 }
@@ -8245,15 +8246,14 @@ A rule's `with` value is part of what selects the instance the rule's sides and 
 ```camel
 module err_rule_with_not_constant
 
-import { Program, graphs } from graph
 import { rewrite } from rewrite
 
 with <tile: int>
 rule add_tile(x: int) when tile > 0 { x + tile => x }
 
 /// The factor is a parameter of the function, so it is not known while the program is compiled.
-func apply(p: Program, tile: int): Program! {
-    return rewrite(p, [add_tile<tile>])
+func apply(p: () => int, tile: int): (() => int)! {
+    return p->rewrite<[add_tile<tile>]>
 }
 
 func main(): int sync {
