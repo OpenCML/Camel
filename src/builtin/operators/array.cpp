@@ -85,16 +85,55 @@ template <typename Key> bool keyLess(Array *keys, Int64 a, Int64 b) {
     }
 }
 
+// The key a number is ordered by, held beside its position so that the sort reads memory in
+// order: an index vector sorted through the keys' array reads a random element at every
+// comparison, which for a long array of unordered keys costs ten times the sort of the keys.
+template <typename Key> struct OrderKey {
+    using type = Key;
+    static type of(Array *keys, size_t i) { return keys->dataAs<Key>()[i]; }
+};
+template <> struct OrderKey<BFloat16> {
+    using type = float;
+    static type of(Array *keys, size_t i) { return keys->dataAs<BFloat16>()[i].toFloat(); }
+};
+template <> struct OrderKey<Float16> {
+    using type = float;
+    static type of(Array *keys, size_t i) { return keys->dataAs<Float16>()[i].toFloat(); }
+};
+
 template <typename Key> slot_t argsortOf(ArgsView &norm) {
     Array *keys    = norm.get<Array *>(0);
     const size_t n = keys->size();
-    std::vector<Int64> order(n);
-    std::iota(order.begin(), order.end(), Int64(0));
-    std::stable_sort(
-        order.begin(), order.end(), [&](Int64 a, Int64 b) { return keyLess<Key>(keys, a, b); });
-    Array *result = Array::create(mm::autoSpace(), ArrayType::create(Type::Int64()), n);
-    for (size_t i = 0; i < n; ++i)
-        result->set<Int64>(i, order[i]);
+    Array *result  = Array::create(mm::autoSpace(), ArrayType::create(Type::Int64()), n);
+    if constexpr (std::is_same_v<Key, String *>) {
+        std::vector<Int64> order(n);
+        std::iota(order.begin(), order.end(), Int64(0));
+        std::stable_sort(order.begin(), order.end(), [&](Int64 a, Int64 b) {
+            return keyLess<Key>(keys, a, b);
+        });
+        for (size_t i = 0; i < n; ++i)
+            result->set<Int64>(i, order[i]);
+    } else {
+        using K = typename OrderKey<Key>::type;
+        struct Entry {
+            K key;
+            Int64 position;
+        };
+        std::vector<Entry> entries(n);
+        for (size_t i = 0; i < n; ++i)
+            entries[i] = {OrderKey<Key>::of(keys, i), static_cast<Int64>(i)};
+        // A total order: equal keys (every NaN among them) keep their positions' order, which is
+        // what the stable sort of the positions gives.
+        std::sort(entries.begin(), entries.end(), [](const Entry &a, const Entry &b) {
+            if (numberLess(a.key, b.key))
+                return true;
+            if (numberLess(b.key, a.key))
+                return false;
+            return a.position < b.position;
+        });
+        for (size_t i = 0; i < n; ++i)
+            result->set<Int64>(i, entries[i].position);
+    }
     return toSlot(result);
 }
 

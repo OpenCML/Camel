@@ -43,6 +43,10 @@ bool RandomModule::load() {
             {"philox", true},
             {"uniform_array", true},
             {"normal_array", true},
+            {"shuffle_i", true},
+            {"shuffle_l", true},
+            {"shuffle_f", true},
+            {"shuffle_d", true},
         });
     // What each touches (docs/design/op-semantics 8): the global stream, the resource `rng`.
     {

@@ -1,0 +1,29 @@
+id = "modules.random_shuffle_kernels"
+order = 1004
+tier = "fast"
+tags = ["feat", "modules", "random", "kernels"]
+desc = "`shuffle` of `random`: the meaning is `xs[permutation(k, len(xs))]`, with a kernel per element type that makes the same permutation without the arrays of draws and of positions"
+
+[[tests]]
+name = "random_shuffle_kernels"
+desc = "`shuffle` over the four element types it has a kernel for, beside the body spelled out on `permutation`: several keys, the empty array, one element, the inputs unchanged, and a long array whose shuffle equals the body's. Four schedulers."
+kind = "behavior"
+case = "../../../cases/modules/random/shuffle_kernels.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "shuffle [30, 50, 20, 10, 60, 40] [3, 5, 2, 1, 7, 6, 4, 8] [2.5, 4.5, 1.5, 0.5, 3.5] [1.5, 4.5, 0.0, -1.5, 7.5, 6.0, 3.0]\nbody [30, 50, 20, 10, 60, 40] [3, 5, 2, 1, 7, 6, 4, 8] [2.5, 4.5, 1.5, 0.5, 3.5] [1.5, 4.5, 0.0, -1.5, 7.5, 6.0, 3.0]\nkeys [2, 4, 3, 8, 6, 7, 5, 1] [2, 4, 3, 8, 6, 7, 5, 1] [1, 7, 8, 4, 6, 5, 3, 2] [1, 7, 8, 4, 6, 5, 3, 2]\nsmall [] [7]\ninput [10, 20, 30, 40, 50, 60] [1, 2, 3, 4, 5, 6, 7, 8] [0.5, 1.5, 2.5, 3.5, 4.5] [-1.5, 0.0, 1.5, 3.0, 4.5, 6.0, 7.5]\nlong true 2085 1714 12497500\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "random_shuffle_kernels.graph"
+desc = "The calls of `shuffle` in that program are the kernel operators of their element types (`rand:shuffle_i`, `_l`, `_f`, `_d`) in the graph, not the body expanded."
+kind = "behavior"
+case = "../../../cases/modules/random/shuffle_kernels.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["label=\"rand:shuffle_i\"", "label=\"rand:shuffle_l\"", "label=\"rand:shuffle_f\"", "label=\"rand:shuffle_d\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
