@@ -404,15 +404,15 @@ timeout_ms = 8000
 
 [[tests]]
 name = "context.struct_field_variable"
-desc = "A field of a struct literal written as a name is a variable: `let p: Point = { x: n, y: 2.0 }` with `n` an int does not meet the declared type (DeclaredTypeMismatch), though its literal fields do take the type."
+desc = "A field of a struct literal written as a name is a variable: it is a value of its own type and takes no type from the position, so `let p: Point = { x: n, y: 2.0 }` with `n` an int reports the field at itself as ElementTypeMismatch, naming the field and the type the field states -- a struct field is a position with an expected type like an array or a tuple element (design principles 5.1)."
 kind = "negative"
 case = "../../../cases/compile/literals/context_struct_field_variable.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_name = "SemanticDiag::ElementTypeMismatch"
 expect_diagnostic_line = 11
-expect_diagnostic_column = 5
-expect_output_contains = ["type '{ x: int, y: float }'", "declared type 'Point'"]
+expect_diagnostic_column = 25
+expect_output_contains = ["Cannot insert data of type 'int' into a(n) field 'x' of 'Point' with element type 'float'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -912,16 +912,25 @@ timeout_ms = 8000
 
 [[tests]]
 name = "context.composite_holes_mismatch"
-desc = "A computed element is a value of its own type and takes no type from the position: `float` where the field is `int`, and a computed `f64[]` where the field is an `f32[2]`, each leave the literal the type its own elements give it, so its literal siblings are not converted either and the return type mismatch is the one reported before (design principles 5.1)."
+desc = "A field of a struct literal is a position with an expected type like an array or a tuple element (design principles 5.1): a computed field is a value of its own type and takes no type from the position, so `float` where the field is `int`, and a computed `f64[]` where the field is an `f32[2]`, are each reported at the field itself as `ElementTypeMismatch`, naming the field and the type the position gives it."
 kind = "negative"
 case = "../../../cases/compile/literals/context_composite_holes_mismatch.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ReturnTypeMismatch"
-expect_diagnostic_line = 15
-expect_diagnostic_column = 35
-expect_output_contains = ["'{ n: float, t: (float, float) }'", "declared return type 'MA'", "'{ n: int, v: float[] }'", "declared return type 'MB'"]
+expect_diagnostic_name = "SemanticDiag::ElementTypeMismatch"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const diags = input.diagnostics.filter((d) => d.name === 'SemanticDiag::ElementTypeMismatch')
+assert(diags.length === 2, `expected one element type mismatch per struct, got ${JSON.stringify(input.diagnostics)}`)
+const at = diags.map((d) => `${d.line}:${d.column}`).join(',')
+assert(at === '15:47,18:54', `expected the computed fields at 15:47 and 18:54, got ${at}`)
+const out = input.normalized.output
+assert(out.includes("a(n) field 'n' of 'MA' with element type 'int'"), `the field and its type are named: ${out}`)
+assert(out.includes("a(n) field 'v' of 'MB' with element type 'f32[2]'"), `the field and its type are named: ${out}`)
+assert(input.diagnostics.every((d) => d.name === 'SemanticDiag::ElementTypeMismatch'), `unexpected diagnostic: ${JSON.stringify(input.diagnostics)}`)
+}
+"""
 timeout_ms = 8000
 
 # The expected type of a position reaches the elements of a literal with a computed element by
@@ -966,6 +975,8 @@ const diags = input.diagnostics.filter((d) => d.name === 'SemanticDiag::ElementT
 assert(diags.length === 3, `expected one element type mismatch per position, got ${JSON.stringify(input.diagnostics)}`)
 const lines = diags.map((d) => d.line).join(',')
 assert(lines === '14,17,21', `expected the computed elements at lines 14, 17 and 21, got ${lines}`)
+const at = diags.map((d) => `${d.line}:${d.column}`).join(',')
+assert(at === '14:64,17:32,21:58', `expected the three positions to name the same element, got ${at}`)
 assert(input.diagnostics.every((d) => d.name === 'SemanticDiag::ElementTypeMismatch'), `unexpected diagnostic among the three: ${JSON.stringify(input.diagnostics)}`)
 }
 """
