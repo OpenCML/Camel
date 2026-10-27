@@ -114,4 +114,10 @@ class MatchTypeType final : public OtherType {
 /// anywhere in `type`.
 bool containsTypeCall(Type *type);
 
+/// What stays unevaluated in `type` although its arguments are concrete, said for a diagnostic:
+/// `what` is the application (`ElementOf<int>`, `match type int {...}`) and `why` the reason
+/// (`int is neither an array nor a set`, `no case selects int`). False when nothing of the kind is
+/// left.
+bool describeUnevaluatedTypeCall(Type *type, std::string &what, std::string &why);
+
 } // namespace camel::core::type
