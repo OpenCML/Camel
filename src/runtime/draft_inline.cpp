@@ -1600,6 +1600,13 @@ DraftInlineResult inlineCallableInDraft(
         }
     }
 
+    // The order edges the call stood in: a read written before it is ordered before the body's
+    // writes, and the reads written after it after them, as they were before the call (5.7).
+    const std::vector<gc_node_ref_t> callOrderInputs(
+        draft.orderInputsOf(funcNodeId).begin(), draft.orderInputsOf(funcNodeId).end());
+    const std::vector<gc_node_ref_t> callOrderUsers(
+        draft.orderUsersOf(funcNodeId).begin(), draft.orderUsersOf(funcNodeId).end());
+
     // The body goes in a region of its own, inside the region of the call: where the code
     // came from stays recorded after the call is gone. The body of an arm of a branch is the
     // Arm region of that arm.
@@ -1884,7 +1891,19 @@ DraftInlineResult inlineCallableInDraft(
     // the call was written after and before the one written after it. The chain above carries the
     // same order for a body whose statements it reaches; this edge is what orders a body that
     // carries no chain of its own, and it is what survives when the chain's edges change kind.
-    addSpliceOrderEdges(draft, slotsBefore, callBlockRegion, ctrlPreds, callFollowers);
+    std::vector<gc_node_ref_t> orderPreds = ctrlPreds;
+    for (gc_node_ref_t pred : callOrderInputs) {
+        if (std::ranges::find(orderPreds, pred) == orderPreds.end()) {
+            orderPreds.push_back(pred);
+        }
+    }
+    std::vector<gc_node_ref_t> orderFollowers = callFollowers;
+    for (gc_node_ref_t user : callOrderUsers) {
+        if (std::ranges::find(orderFollowers, user) == orderFollowers.end()) {
+            orderFollowers.push_back(user);
+        }
+    }
+    addSpliceOrderEdges(draft, slotsBefore, callBlockRegion, orderPreds, orderFollowers);
 
     draft.eraseNode(funcNodeId);
     CAMEL_LOG_INFO_S("DraftInline", "Inline splice finished for draft node {}.", funcNodeId);

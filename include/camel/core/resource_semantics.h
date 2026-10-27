@@ -264,6 +264,11 @@ bool covers(const ResourceSignature &target, const ResourceSignature &source);
 /// `stderr`, `stdin`, `clock`, `env` and `fs`. They need no declaration and every module sees
 /// them; a module may still write `resource fs` to say it uses it, and a group may name them.
 std::span<const std::string_view> standardResourceNames();
+
+/// The name of a resource as source text and reports write it. A resource of a module is keyed
+/// `module:name` with one colon (`tiles:driver`, `counter:cnt`); it is written `module::name`.
+/// A name without a module is written as it is.
+std::string resourceDisplayName(std::string_view key);
 bool isStandardResource(std::string_view name);
 
 /// Whether values of `type` are handles (design effects plan 3.1): the type is a nominal type

@@ -163,7 +163,11 @@ func main(): int sync {
 
 An exported value is that very node of the common `__root__` graph: the importing module uses it directly at its top level and through a capture port in its functions; it is neither copied nor evaluated again. An exported value that nothing uses is not evaluated (an effect in its initializer does not run, and in an imported module this gives no warning).
 
-- **A `var` cannot be exported**: `export var count = 0` is `SemanticDiag::ExportedVariable`, located at the variable. Export the functions that read and write it (`counter` above).
+- **A `var` at the top level of a module is a resource of that module** (design principles 3.5): the resource is named by the variable, and its identity is the module plus the name, like a `resource` declaration. `export var count = 0` exports the resource; an importing module reads it and assigns it, and it is the same variable.
+  - A function that reads it is recorded as reading the resource, and one that writes it (path assignments `v[i] = x` included) as writing it. The compiler infers this, and `uses` can name it (`func bump(): int uses count sync`). A function that reads or writes it is not pure: a `pure` function that reads it is `SemanticDiag::UsesPromiseViolated`, its type carries `uses module::count`, and a `pure` parameter does not accept it.
+  - Reads and writes are effects: in a sync block they happen in written order; in a function body that is not a sync block, a write that stands as a statement and whose value nobody uses does not run.
+  - The initial value is evaluated by dependency before the first read, like a top-level `let`.
+  - In a function being differentiated, a gradient that would have to pass through it is refused, as for any `var`.
 - Two imports by name that bring values of one name (or a value and a function) are `SemanticDiag::ImportNameConflict`; values are not overloaded.
 
 ## 5.4 Namespaces
@@ -193,7 +197,7 @@ func main(): int sync {
 
 - A namespace is not an object: it is a path in a name. An `f` declared in `namespace A { namespace B { ... } }` is `A::B::f`; one namespace can be written in several blocks.
 - **Unqualified names in a block**: a name written in a namespace is looked up in that namespace, then in the enclosing namespaces, then at the top level of the module, and the first one found is taken; types too (`namespace Models { type Box = ...; func mk(): Box }`).
-- **A namespace can hold values**: `namespace Config { export let limit = 10 }`, used as `Config::limit`. It differs from a top-level `let` only by the path in its name. A `var` can be written, not exported.
+- **A namespace can hold values**: `namespace Config { export let limit = 10 }`, used as `Config::limit`. It differs from a top-level `let` only by the path in its name. A `var` can be written, and exported: it is a resource of the module.
 - **A module can qualify its own names with its own name**: in `module shapes`, `shapes::area` is the same as `area` (also when the file name is the module name).
 - A namespace may share its name with a type, which makes `Type::name` the usual way to write the constructors and helpers of a type (an `enum`'s variants are exactly that: `Shape::Circle`, `Shape::Empty`).
 - A name exported inside a namespace keeps its qualified name: `namespace Tools { export func inc(...) }` is `module::Tools::inc` in other modules, and `import { inc } from module::Tools` imports it.

@@ -4,6 +4,7 @@
 #include "operator_rules.h"
 
 #include "camel/core/numeric_convert.h"
+#include "camel/core/type/composite/array.h"
 #include "fault_sites.h"
 
 #include <format>
@@ -13,6 +14,8 @@
 namespace camel::passes::cpp {
 
 using camel::core::error::RuntimeDiag;
+using camel::core::type::asArrayType;
+using camel::core::type::ArrayType;
 using camel::core::type::TypeCode;
 
 std::string OperatorCall::operand(size_t i) const {
@@ -399,7 +402,29 @@ Rules buildRules() {
     };
 
     // ---- Arrays (struct.cpp, ops.cpp __builtin__idx__) ----
-    r[":op/idx_arr"]          = faultingFunction("at", RuntimeDiag::IndexOutOfRange, 3);
+    // A position is the element itself only when the value is a rank-1 array, which is what
+    // `rt::at` gives. An `rt::Array` here is a flat run of elements with no shape
+    // (cpp_types.cpp), so a position on a multidimensional value -- the slab this takes for a row
+    // of a rank-2 array, design principles 5.4 -- and a position on an open-rank value have no
+    // value in this back end: the operator runs through the bridge (camel/standalone/bridge.h).
+    // The axis word a call of the index writes is the same answer's: only the first dimension's
+    // position, the two-word call, is this rule's.
+    r[":op/idx_arr"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            const bool takesASlab =
+                value != nullptr && (value->anyRank() || value->rank() >= 2);
+            if (c.normCount() != 2 || takesASlab) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::at({}, {}, {})",
+                c.operand(0),
+                c.operand(1),
+                c.site(RuntimeDiag::IndexOutOfRange, marks(3)));
+        },
+        false,
+    };
     r[":struct/len_arr"]      = runtimeFunction("length");
     r[":struct/concat_arr"]   = runtimeFunction("concat");
     r[":struct/append_arr"]   = withArgument("append");

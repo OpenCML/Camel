@@ -208,3 +208,23 @@
 - **`var` 读取不是语句**（`2097d73c9`）：附二的误编译修好了，带 nvm、fvm、jit、opt 四种配置的用例。
 - 请在这上面复测 `progen-frontend-residuals` 的 (c)（`std::opt` 把 `q33 10` 挪到最前）和 (d)（种子 5、6）。
 - **新发现的误编译，决策者这边修**：`func main(): int sync { println('before'); exit(3) }`（`exit` 返回 `never`）在单跑 `std::opt::algebra` 时整个 `main` 被丢掉，没有输出，退出码 0。不加遍时退出码是 3。看来是改写提取遇到 `never` 类型的节点时出的问题。
+
+## holes-nested-placeholder-and-entering-cast
+
+两处都是我上一轮措辞不准，照下面执行。隔离实验做得很好，谢谢。
+1. **嵌套的复合字面量不是洞，是写下的元素**（取第二条路）。
+   - `((a, b), (b, a))` 的元素 0 是字面量 `(a, b)`：它从位置拿到元素类型 `(int, float)`，再把 `int`、`float` 递归交给自己的元素，`a`、`b` 才是洞。
+   - 在 `builder.cpp:4403` 不把嵌套字面量包成占位符，按写下的元素放进外层字面量，期望类型递归向下传。
+   - 删掉 `wroteAnElement` 之后，`nested_literals`、`rules` 的 `[[bump_one], [bump_ten]]`、`member_chain` 这些正例就应当是绿的。
+2. **"洞不转换"指的是不做数值转换，不包括进入 `T?`/`T!`**。
+   - 原则 3.8（第 209 行）规定，值进入 `T?`、`T!` 的位置时自动装入，数组元素也在其列，这是"进入"关系（`entersImplicitly`）的一部分，不是一次转换。
+   - 声明位回退里那一处 `coerceTo` 只放行进入（`T` 进 `T?`/`T!`、`null` 进 `T?`），不放行 `int`→`f32` 这类数值变换，而且三种位置都走这一个判断。
+   - `entering.positions` 的读数不改，`[4, null, 6]`、`total([7, null])` 都应当是绿的。
+
+## 前奏声明文件没有被任何检查读到（`prelude-declaration-file-read-by-no-check.md`）
+
+记录收下，这是真问题，由决策者这边处理（前奏的接入在决策者这边）。
+- 内建声明以前奏的声明文件为唯一来源（原则 6.4）。没有检查读它，它就不是来源，只是一份会说假话的文档。
+- 前奏的声明文件在每次编译时都要编译、都要检查：它不合法，任何程序的 `camel check` 都失败，并定位到这个文件。
+- 文件里今天的 6 处语法错误一并修掉。
+- `stdlib/signatures/` 下其余模块的同类文件，在各模块接入时并入 `stdlib/<m>.cml`，同一个模块不留两处声明。

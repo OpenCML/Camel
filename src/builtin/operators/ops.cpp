@@ -21,6 +21,7 @@
 #include "camel/utils/utf8.h"
 
 #include "half_ops.h"
+#include "struct.h"
 
 #include <cmath>
 #include <complex>
@@ -818,13 +819,10 @@ slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
             return tpl->get<slot_t>(idx);
         }
         case TypeCode::Array: {
-            Array *arr = norm.get<Array *>(0);
-            Int64 raw  = norm.get<Int64>(1);
-            size_t idx = static_cast<size_t>(raw);
-            if (raw < 0 || idx >= arr->size()) {
-                throwRuntimeFault(RuntimeDiag::IndexOutOfRange, raw, "an array", arr->size());
-            }
-            return arr->get<slot_t>(idx);
+            // The array's own position (design principles 5.4): the i-th element along the axis
+            // the call names, 0 -- the first dimension -- when it names none. The tuple, struct
+            // and string positions below are the same operator's other container kinds.
+            return __index_arr__(with, norm, ctx);
         }
         case TypeCode::String: {
             // A string is valid UTF-8 and its indices count code points (design principles

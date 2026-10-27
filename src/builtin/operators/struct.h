@@ -12,8 +12,13 @@ slot_t __len_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context
 
 slot_t __zip__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __range__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-// The subscript forms of design principles 5.4: `t[a:b:s]`, `t[idx]` and `last(t)`.
+// The subscript forms of design principles 5.4: `t[a:b:s]`, `t[i]` (on the axis it names, which
+// is the first one when it names none), `t[idx]` and `last(t)`.
 slot_t __slice_sub__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+// The array case of a position (`t[i]`), read by the same operator's dispatch when its value is an
+// array (src/builtin/operators/ops.cpp): the string, tuple and struct positions are that
+// dispatch's own cases.
+slot_t __index_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __slice_str__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __slice_bytes__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __len_bytes__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
@@ -40,13 +45,17 @@ slot_t __contains_str__(ArgsView &with, ArgsView &norm, camel::core::context::Co
 // of its elements. Inserted by autodiff into gradient graphs, never written by a program.
 slot_t __tangent_add_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __tangent_zeros_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+// The reverse of a position (`t[i]`): the gradient of what the position took -- one element, or
+// the slab along the axis for a deeper array -- added back where it was taken from, the rest of
+// the array left at its zero tangent. The axis is the fourth word, absent meaning the first.
 slot_t __tangent_scatter_add_arr__(
     ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 // The reverse of a slice: the gradient placed back in the range the slice took, zeros elsewhere.
 slot_t __tangent_scatter_slice_arr__(
     ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-// The reverse of a row take (`t[idx]`): the gradient of the rows the indices name added back
-// into the rows they were taken from, the rest of the array left at its zero tangent.
+// The reverse of a take (`t[idx]`): the gradient of the positions the indices name added back
+// where they were taken from, the rest of the array left at its zero tangent. The axis is the
+// fourth word, absent meaning the first.
 slot_t __tangent_scatter_take_arr__(
     ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __tangent_init_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

@@ -178,6 +178,7 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
                         targetElem = joinTypes(targetElem, valueTypeOf(refTypes[i]));
                     }
                 }
+                const auto *written = GCT::Tree::of(gct)->literalElementsOf(data);
                 for (size_t i = 0; i < refTypes.size(); ++i) {
                     Type *have = valueTypeOf(refTypes[i]);
                     if (targetElem == nullptr || targetElem->assignableFrom(have)) {
@@ -188,10 +189,19 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
                         refTypes[i] = targetElem;
                         continue;
                     }
-                    // Reported at the element (the literal itself carries no position).
-                    const camel::source::origin_id_t at = nodeDraftOf(refNodes[i])->nodeOrigin(nodeIdOf(refNodes[i])) != 0
-                                                              ? nodeDraftOf(refNodes[i])->nodeOrigin(nodeIdOf(refNodes[i]))
-                                                              : gct->origin();
+                    // A value the element type does not take as it stands: nothing is converted
+                    // here beyond what entering the type means (`int` into `int?` is a cast, an
+                    // `int` into an `f32` is not a conversion at all -- design principles 3.8,
+                    // 5.1), and what does not fit is reported at the element itself, where the
+                    // literal wrote it, not at the name it is read from.
+                    const GCT::Tree::LiteralElement *element = nullptr;
+                    if (written != nullptr && i < holes.size() && holes[i] < written->size()) {
+                        element = &(*written)[holes[i]];
+                    }
+                    const camel::source::origin_id_t at =
+                        element != nullptr && element->origin != camel::source::kInvalidOriginId
+                            ? element->origin
+                            : gct->origin();
                     diags_->of(SemanticDiag::ElementTypeMismatch)
                         .atOrigin(at)
                         .commit("array", have->toString(), targetElem->toString());
@@ -1455,6 +1465,11 @@ node_handle_t Builder::readVariableThrough(
     // on the chain when the read is folded into its version. The exception is a `var` parameter:
     // it may be the caller's variable passed twice, a name the callee cannot tell from another, so
     // only the place the read is written in orders it against the writes of the other name.
+    if (synced_ && lastIndirectCall_ != nullptr && sameGraph(lastIndirectCall_, currGraph_) &&
+        linkCheek(lastIndirectCall_, value) && nodeTakesAnOrder(value) &&
+        nodeTakesAnOrder(lastIndirectCall_) && !hasDirectDataDependency(lastIndirectCall_, value)) {
+        linkNodes(LinkType::Order, lastIndirectCall_, value);
+    }
     if (synced_) {
         syncedReads_.push_back(value);
         if (nodeKindOf(variable) == camel::runtime::GCNodeKind::Port) {
@@ -1479,6 +1494,39 @@ node_handle_t Builder::peekVariable(node_handle_t variable) {
 void Builder::collapseNonEscapingVariableReads() {
     if (variableReadSource_.empty() || currGraph_ == nullptr) {
         return;
+    }
+    // A read nothing uses is no statement and runs for nobody (`let after = c` that is never read):
+    // it is not on the chain any more, so nothing would reach it, and the writer's order edge to it
+    // would name a node the graph does not keep. It goes before the reads that are folded, with the
+    // order edge that kept the next write after it.
+    {
+        auto &graphDraft = currGraph_->draft();
+        std::vector<node_handle_t> unused;
+        for (const auto &entry : variableReadSource_) {
+            const node_handle_t read = entry.first;
+            if (!sameGraph(read, currGraph_) || graphDraft.header(nodeIdOf(read)) == nullptr ||
+                !graphDraft.alive(nodeIdOf(read))) {
+                continue;
+            }
+            const draft_node_ref_t readId = nodeIdOf(read);
+            if (readId == graphDraft.exitNode() || readId == graphDraft.outputNode() ||
+                readId == graphDraft.returnNode()) {
+                continue;
+            }
+            bool used = false;
+            for (const auto &users :
+                 {graphDraft.normUsersOf(readId), graphDraft.withUsersOf(readId),
+                  graphDraft.ctrlUsersOf(readId), graphDraft.syncUsersOf(readId)}) {
+                used = used || !users.empty();
+            }
+            if (!used) {
+                unused.push_back(read);
+            }
+        }
+        for (const node_handle_t read : unused) {
+            graphDraft.eraseNode(nodeIdOf(read));
+            variableReadSource_.erase(read);
+        }
     }
     // The reads recorded for this graph, grouped by the cell they read. A cell of an outer graph
     // belongs to that graph's own turn, so it is skipped here.

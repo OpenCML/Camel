@@ -71,16 +71,80 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
+name = "slice_two_axes_constant_and_computed"
+desc = "A subscript that cuts two axes, one at bounds the program writes and one at a bound the run reads (design principles 5.4). The axis with constants states the length they give it and the axis with the run's bound states `?`, so the value is an `f32[?, 2]`, which `block`'s parameter states, and the read is [[1, 2], [4, 5]], shape [2, 2], sum 12.0; the same slice with the run's bound is 12.0."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/subscript/slice_two_axes_constant_and_computed.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "ran\n[2, 2]\nvalue=12.0\ncomputed=12.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
 name = "index_other_dimension"
-desc = "A subscript that names a range on one dimension and a position on another (`m[:, 0]`) is refused at the bracket: the slice operator takes one axis and keeps every other dimension, and the index operator takes the first dimension and drops it, so neither reads a position on a later dimension (design principles 5.4). The message names the two forms the operators do take."
-kind = "negative"
+desc = "A subscript that names a range on one dimension and a position on another (`m[:, 0]`): each written dimension is one node of the core's, each naming the axis the subscript wrote it on, lowered from the last written dimension back (design principles 5.4). The position drops its dimension and every other one is kept whole, so the first column of an `f32[2, 3]` is an `f32[2]` -- `column`'s parameter states exactly that, so the call needs no conversion -- and its sum is 5.0."
+kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/index_other_dimension.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_output_contains = ["a subscript that names a range or a position on more than one dimension", "the slice operator takes one axis, and the index operator takes the first dimension"]
-expect_output_not_contains = ["reached"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_exit = 0
+expect_stdout_exact = "reached\n[2]\nvalue=5.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "index_position_range"
+desc = "`t[a:b, c]`: a range on one dimension and a position on another (design principles 5.4). The lowering goes from the last written dimension back, so the range on axis 0 reads what `t[a:b]` alone reads: `m[0:2, 1]` is an `f32[2]`, its sum is 7.0, and the distance between it and `s[:, 1]` -- the same slice with the same position on it -- is 0.0."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/subscript/index_position_range.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "ran\n[2, 3]\n[2]\nvalue=7.0\nd=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "index_two_positions"
+desc = "`m[i, j]`: a position on every dimension of a rank-2 value (design principles 5.4). Both dimensions are dropped, so the result is one element, an `f32` -- which `element`'s parameter states -- and `m[1, 2]` is 6.0."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/subscript/index_two_positions.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "ran\nvalue=6.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "index_rank3_mixed"
+desc = "Two mixed subscripts of a rank-3 value, with all three kinds of written dimension among them (design principles 5.4): `c[:, 1, 2:4]` writes a dimension whole, a position and a range, and `c[:, idx, 2:4]` takes a dimension with an integer array. The shapes are `f32[2, 2]` and `f32[2, 2, 2]`, which the two parameters state, and the sums are 54.0 and 108.0."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/subscript/index_rank3_mixed.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "ran\n[2, 2]\n[2, 2, 2]\none=54.0\ntwo=108.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "take_other_dimension"
+desc = "`m[:, idx]`: an integer array on a dimension other than the first, with a repeated index (design principles 5.4). The positions are taken in the order the indices give and every other dimension is kept whole, so a repeated index repeats that dimension's slab and the result states the indices' length on it: an `f32[2, 3]`, which `columns`' parameter states, and 19.0."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/subscript/take_other_dimension.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "ran\n[2, 3]\nvalue=19.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "index_adjoint"
+desc = "The adjoints of both index forms on a dimension other than the first (design principles 5.4, 9.9): the position `m[:, 0]` scatters a column's gradient back along axis 1 (`:tangent/scatter_add_arr`) and the take `m[:, [1, 1]]` scatters each column's gradient into the column it came from, adding where the index repeats (`:tangent/scatter_take_arr`). The values are 4.0 and 12.0, the gradients sum to 2.0 and 4.0, and their products with the gradients written out by hand are 2.0 and 8.0."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/subscript/index_adjoint.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "column value=4.0 grad_sum=2.0 grad_dot=2.0\ntake value=12.0 grad_sum=4.0 grad_dot=8.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]

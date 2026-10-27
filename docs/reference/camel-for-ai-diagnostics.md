@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 214
+**Semantic — errors** (`SemanticDiag`) — 213
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -115,7 +115,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `PartialApplicationRefused` | The context arguments <{0}> cannot be bound to '{1}' as a value: {2}. |
 | `ComprehensionSourceRefused` | The source of this list comprehension has type '{0}', which has no elements to take. |
 | `LogicalOperandNotBool` | The {1} side of '{0}' has type '{2}', not 'bool'. |
-| `ExportedVariable` | The variable '{0}' cannot be exported. |
 | `ModuleValueCycle` | The value '{0}' depends on itself: {1}. |
 | `CaptureAfterRecursiveCall` | The function '{1}' uses '{0}' only after it is called in its own recursion, where the call could not pass it. |
 | `AmbiguousName` | The name '{0}' is ambiguous here: {1}. |
