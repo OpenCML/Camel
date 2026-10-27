@@ -1,0 +1,15 @@
+// A type variable several arguments give takes the join of what they give: the element `void` of
+// an empty literal constrains nothing, a named struct is the solution over the unnamed one with
+// its fields, and of two element types the one the other enters.
+
+type Point = { x: int, y: int }
+
+func main(): int sync {
+    let p: Point = { x: 1, y: 2 }
+    let q: Point = { x: 7, y: 8 }
+    let a = []->append<1>
+    let b = [p]->append<{ x: 3, y: 4 }>
+    let c = [{ x: 5, y: 6 }]->concat([q])
+    println(a, len(b), c[1].y, len([]), []->contains<1>, [1, 2]->contains<2>)
+    return 0
+}

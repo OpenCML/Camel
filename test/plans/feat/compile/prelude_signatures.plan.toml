@@ -45,3 +45,14 @@ expect_exit = 1
 expect_output_contains = ["WithPackNeedsNativeDeclaration"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "binding_takes_the_join"
+desc = "A type variable several arguments give takes the join of what they give: an empty literal constrains nothing (`[]->append<1>` is an int array, `len([])` and `[]->contains<1>` work), a named struct wins over the unnamed one with its fields, and `concat` of two arrays takes the element type the other enters."
+kind = "behavior"
+case = "../../../cases/compile/binding_join/join.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_contains = ["[1] 2 8 0 false true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
