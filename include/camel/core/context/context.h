@@ -176,13 +176,22 @@ class Context : public std::enable_shared_from_this<Context> {
     /// Resolve a module name in the order of design principles 10.2, through the one lookup: the
     /// importing module's own directory, then the module roots (`-I` in the order given,
     /// `CAMEL_PACKAGES`), then the standard library. An empty `importerDir` means the entry
-    /// program, whose own directory is `entryDir`.
-    std::pair<std::string, bool>
-    resolveModulePath(const std::string &moduleName, const std::string &importerDir);
+    /// program, whose own directory is `entryDir`. `ownFile` is the importing module's own file,
+    /// which the lookup passes over: an import never resolves to the module that writes it (design
+    /// principles 10.1).
+    std::pair<std::string, bool> resolveModulePath(
+        const std::string &moduleName,
+        const std::string &importerDir,
+        const std::string &ownFile = {});
     /// The directory of the importing module: the directory of the file it was loaded from, or
     /// the entry file's directory for the entry program and for a program-level import (a pass
     /// library, a definition).
     std::string importerDirectory(const module::Module *importer) const;
+    /// The file of the importing module, which the lookup passes over, so that an import never
+    /// resolves to the module that writes it (design principles 10.1). Empty when the caller names
+    /// a module instead of importing it (the library of a pass, the module of an operator URI, the
+    /// built-in module) and there is therefore nothing to pass over.
+    std::string importerOwnFile(const module::Module *importer) const;
     /// The module already loaded from the file `path`, if any: the import cache is keyed by the
     /// file a name resolved to, so two modules that resolved to different files are two modules
     /// even when they have the same name.

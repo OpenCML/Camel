@@ -10,10 +10,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "math_kernels.values"
-desc = "`sqrt_d`: exact squares, sqrt(-0) is -0, +inf is +inf, a negative number is NaN. `shl_i/l` and `shr_i/l`: the unsigned shift into the sign bit, the arithmetic shift keeping the sign, count 0 and the largest count."
+desc = "`sqrt_d`: exact squares, sqrt(-0) is -0, +inf is +inf, a negative number is NaN. `shl_i/l` and `shr_i/l`: the unsigned shift into the sign bit, the arithmetic shift keeping the sign, count 0 and the largest count. The file is named `math` and is named on the command line by its path: its own `import math` is the standard library's, because the lookup passes over the module's own file (design principles 10.1)."
 kind = "behavior"
 case = "../../../cases/modules/math_kernels/math.cml"
-args = ["test/cases/modules/math_kernels/math.cml", "${backend}"]
+args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
 expect_exit = 0

@@ -1,6 +1,6 @@
-// Design principles 10.1: a module importing itself is allowed and has no effect. This file is
-// the entry module and imports itself by its file name, in both forms; it is not loaded a
-// second time (each diagnostic of it would be reported twice), and its names stay its own.
+// A module's import never resolves to itself (design principles 10.1): the lookup passes over the
+// importing module's own file and goes on through the search order. This file is the entry module
+// and imports its own file name in both forms; nothing else is named `self_entry`, so neither is found.
 module self_entry
 
 import self_entry

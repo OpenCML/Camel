@@ -1,9 +1,10 @@
 /**
  * The kernels of `math` the module of the draft declares (docs/handover/stdlib/math.cml): `sqrt` in
  * f64 and the shifts with their count in angle brackets. This file is named `math`, so it may
- * declare operators of the `math` protocol; it declares each as the module does and runs them. It
- * is run by its path from the root (the plan names it), because `import math` there is the
- * standard library's: an absolute path makes the file its own `math`.
+ * declare operators of the `math` protocol; it declares each as the module does and runs them. Its
+ * `import math` is the standard library's, not this file: the lookup passes over the module's own
+ * file and goes on through the search order (design principles 10.1), so the file may be named
+ * `math` and still reach the module that implements what it declares.
  */
 import { is_same } from types
 import { inf } from math

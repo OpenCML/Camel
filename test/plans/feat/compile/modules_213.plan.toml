@@ -2,7 +2,7 @@ id = "compile.modules_213"
 order = 337
 tier = "fast"
 tags = ["feat", "compile", "modules"]
-desc = "Modules by the rule (design principles 10.1): a module importing itself, types forming a cycle across modules, values exported by a C++ module."
+desc = "Modules by the rule (design principles 10.1): an import never resolving to the module that writes it, types forming a cycle across modules, values exported by a C++ module."
 
 [defaults]
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "Internal"]
@@ -11,17 +11,23 @@ timeout_ms = 8000
 
 [[tests]]
 name = "modules_213.self_entry"
-desc = "The entry module imports itself by its file name, in both forms: allowed, no effect; its names (qualified with its own name or not) stay its own."
-kind = "behavior"
+desc = "The entry module imports its own file name, in both forms: the lookup passes the module's own file over, nothing else of the search order is named `self_entry`, so both imports are not found (each was accepted with no effect, resolved to this module itself). Its names are its own already, with its own name in front or without, and need no import: `namespace_rules.p18_self_module` pins that."
+kind = "negative"
 case = "../../../cases/compile/modules_213/self_entry.cml"
 args = ["-E", "short", "${case}"]
-expect_exit = 0
-expect_stdout = "8 10\n"
-expect_output_not_contains = ["[Warn]", "[Error]"]
+expect_exit = 1
+expect_output_contains = ["self_entry.cml:6:1", "self_entry.cml:7:1", "name=SemanticDiag::ModuleNotFound", "only the module's own file 'self_entry.cml' is here, and an import never resolves to itself"]
+expect_output_not_contains = ["[Warn]", "ImportedModuleHasErrors", "ImportCycle"]
+verify_script = """
+const errors = input.stdout.concat(input.stderr).split('\n').filter((l) => l.includes('[Error]'))
+assert(errors.length === 2, 'one error per import: ' + input.stdout + input.stderr)
+assert(errors[0].includes("Module 'self_entry' not found"), errors[0])
+assert(errors[1].includes("Module 'self_entry' not found"), errors[1])
+"""
 
 [[tests]]
 name = "modules_213.self_entry_error"
-desc = "A module that imports itself is not loaded a second time: an error of it is reported once, as one of it (it was reported again for the copy, followed by ImportedModuleHasErrors)."
+desc = "A module whose import names its own file: the import is not found and the build stops there, so the unresolved name of its `main` is not reported as a second error either (the module is not loaded a second time, and no copy of it reports its error again)."
 kind = "negative"
 case = "../../../cases/compile/modules_213/self_entry_error.cml"
 args = ["-E", "short", "${case}"]
@@ -30,17 +36,18 @@ expect_output_not_contains = ["ImportedModuleHasErrors", "imported by"]
 verify_script = """
 const errors = input.stdout.concat(input.stderr).split('\n').filter((l) => l.includes('[Error]'))
 assert(errors.length === 1, 'one error: ' + input.stdout + input.stderr)
-assert(errors[0].includes("Unresolved reference: 'nothing_named_so'"), errors[0])
+assert(errors[0].includes("self_entry_error.cml:4:1"), errors[0])
+assert(errors[0].includes("Module 'self_entry_error' not found"), errors[0])
 """
 
 [[tests]]
 name = "modules_213.self_imported"
-desc = "An imported module that imports itself: no effect there either."
-kind = "behavior"
+desc = "An imported module whose own import names its own file: its import is not found, and the import of it here is ImportedModuleHasErrors (there was no effect there either, and this printed 3)."
+kind = "negative"
 case = "../../../cases/compile/modules_213/self_imported.cml"
 args = ["-E", "short", "${case}"]
-expect_exit = 0
-expect_stdout = "3\n"
+expect_exit = 1
+expect_output_contains = ["self_lib.cml:4:1", "self_imported.cml:2:1", "name=SemanticDiag::ModuleNotFound", "name=SemanticDiag::ImportedModuleHasErrors", "only the module's own file 'self_lib.cml' is here, and an import never resolves to itself"]
 
 [[tests]]
 name = "modules_213.type_cycle"
