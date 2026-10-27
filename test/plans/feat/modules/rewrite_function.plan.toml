@@ -1,0 +1,26 @@
+id = "modules.rewrite_function"
+order = 931
+tier = "fast"
+tags = ["feat", "modules", "rewrite"]
+desc = "The rewrite engines take a function and give a function of the same type (design principles 9.1): `f->rewrite<rules>`, `saturate`, `extract` with a cost written in Camel, `run`, and `check` over the types of a function; the report of a check is a struct."
+
+[defaults]
+kind = "behavior"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+[[tests]]
+name = "rewrite_function.engines"
+desc = "rewrite changes the function and leaves the one it was given; run counts what it did; saturate keeps every writing and extract chooses by a cost function; check answers a struct whose rows are read as fields and rendered by check_text."
+case = "../../../cases/modules/rewrite_function/apply.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "10 12\n1 true 12\n10\ntrue\n1\n"
+
+[[tests]]
+name = "rewrite_function.pipeline_pass"
+desc = "A pass of the rules library runs on the root function of the program on the pipeline: `(x + 0) * 1` in a function is its argument."
+case = "../../../cases/modules/rewrite_function/simp_target.cml"
+args = ["${case}", "rules::simplify", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "5\n"

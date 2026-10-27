@@ -2,177 +2,42 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Rewrite engines and rule readers: `rewrite`, `saturate` and `extract` apply an array of `Rule`
- * values to a `Program`, `check` tests rules on random programs, and the four readers report a
- * `Rule`'s name, direction, required rewrites and added constants. `run` is `rewrite` with the
- * round budget explicit and the cost kept: it answers a `Run`, the program and what the
- * application cost. Its `explain` with parameter opens the attribution record; `explain`
- * prints the shortest chain between two values and `explain_all` every rewrite that was made,
- * each with the rule, round, graph and nodes (rewrite design 8.7); `why_not` says why a rule did
- * not fire at a value. A rule that stops a rewrite without changing the program is a fault,
- * and `strict` restricts the float rules to the ones that hold bit for bit.
+ * Rewrite engines and their records. `rewrite`, `saturate` and `extract` are passes, functions
+ * from a function to a function of the same type, `(f: F) => F!`, with the rule set and the
+ * choices in angle brackets: `f->rewrite<rules>`, `f->saturate<rules, rounds: 8>`,
+ * `f->extract<rules::nodes>`. A rule set is an ordinary `Rule[]`. `run` is `rewrite` with the
+ * cost kept: it answers a `Run`, the function and what the application cost. `check` tests rules
+ * on random instances. `explain` prints the shortest chain between two values of a run,
+ * `explain_all` every rewrite that was made, and `why_not` says why a rule did not fire at a
+ * value (rewrite design 8.7). A rule that stops a rewrite without changing the function is a
+ * fault, and `strict` restricts the float rules to the ones that hold bit for bit.
  *
  * The module also exports the reserved groups the language's own `rule`, `rule` with `when`, and
- * `fact` declarations compile to (`rewrite:rule`, `rewrite:rule_when`,
- * `rewrite:fact`). They have no callable Camel name, so they are not declared here and
- * `inspect --ops` hides them from the name comparison.
+ * `fact` declarations compile to (`rewrite:rule`, `rewrite:rule_when`, `rewrite:fact`). They have
+ * no callable Camel name, so they are not declared here.
  */
 
 // The declarations of the callable operators of the C++ module `modules/rewrite` (design
-// principles 6.4). This file is the one source of their
-// signatures; the C++ side keeps the kernels, the executor and the purity.
-//
-// `Program` is the graph module's type, so the declarations import it; `Rule` and `Proof` are
-// this module's own types, exported by the C++ side, so they are written without an import; `Run`
-// is a plain Camel struct declared below.
-//
-// No signature of this module is computed from an argument: the two arities of `rewrite` and
-// `saturate` are written as two declarations each, and the other names have one signature. The
-// module therefore needs no `stdlib/signatures/rewrite.cml`. The three reserved groups stay in C++
-// because a declaration cannot name a group that has no Camel name.
+// principles 6.4); the C++ side keeps the kernels, the executor and the purity. `Rule` and `Proof`
+// are this module's own types, exported by the C++ side; `Node` and `Op` are the graph module's.
+// No signature is computed from an argument, so the module needs no `signatures/rewrite.cml`.
 
-module rewrite
+import { Node, Op } from graph
+import { is_function } from types
 
-import { Node, Program } from graph
-
-/// A rewrite rule, a value the engine applies to a program.
+/// A rewrite rule, a value the engine applies to a function.
 export type Rule
 
 /// What an engine run proved about a rule it applied.
 export type Proof
 
-/// The result of checking a set of rules.
-export type CheckReport
+// ---- the results ----
 
-/// Applies `rules` to `p` until no rule changes the program, and gives the rewritten program.
-/// @effect runs the rules' functions
-/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow
-/// @example rewrite(p, rules)    // the rewritten program
-export func rewrite(p: Program, rules: Rule[]): Program!
-
-// The same call with the strict-float choice explicit.
-export func rewrite(p: Program, rules: Rule[], strict: bool): Program!
-
-/// Applies the rearranging rules too, for at most `rounds` rounds, and gives the smallest
-/// writing of the value it finds.
-/// @effect runs the rules' functions
-/// @fails error value `RuleInvalid` when a rule does not compile
-/// @example saturate(p, rules, 20)    // the smallest writing found
-export func saturate(p: Program, rules: Rule[], rounds: int): Program!
-
-// The same call with the strict-float choice explicit.
-export func saturate(p: Program, rules: Rule[], rounds: int, strict: bool): Program!
-
-/// Extracts the program `p` in the cost model named `cost` (for example `"size"`).
-/// @effect rewrites the program and runs the cost model
-/// @fails error value `NoCostModel` when there is no cost model named `cost`
-/// @example extract(p, 'size')    // the extracted program
-export func extract(p: Program, cost: string): Program!
-
-/// Checks `rules` on `samples` random instances drawn with `seed`, and answers the verdict table
-/// (slice S0). Each row of the table carries, the instance (a generic law's type
-/// tuple), the verdict, what the verdict is about and the evidence or the reason for it; the
-/// verdicts are `proved`, `refuted` and `sampled`, and every line of the report wears one of them
-/// as its first word (the rule on `verification-verdict-surface`, 2). The sample
-/// stream of a rule follows the rule's identity -- its name and its instance's type tuple -- and
-/// not its place in `rules`, so a rule draws the same samples in any call (
-/// on `accuracy-check-sampling`, 1). A build without a solver can answer `sampled` and `refuted`
-/// and never `proved`: `proved` is a licence's proposition being established, which is not what
-/// comparing samples does.
-///
-/// `samples` and `seed` have defaults, and `program` names the program whose own types a generic
-/// law is also checked at: the candidate set is the types every operator group registered, and
-/// then the types of the values the program has, each once, in the order its graphs write them
-/// (the rule on `generic-rule-check-surface-and-multi-parameter-instances`, 1).
-/// Left out, the candidate set is the registered types alone, so a call that gives no program
-/// reads exactly what it read before the parameter existed.
-/// @effect runs the rules' functions and draws random values
-/// @example check(rules, 1000, 7)    // the report
-export func check(rules: Rule[], samples: int = 100, seed: int = 0, program: Program? = null): CheckReport
-
-/// The report's fixed rendering, as a string: the same text `print` writes, for a caller that
-/// wants it as a value.
-/// @pure
-/// @example check_text(r)    // 'sampled add_zero: proposition equality, evidence samples 100, ...'
-export func check_text(r: CheckReport): string
-
-/// How many rows the table has: one per rule, or one per instance of a generic law.
-/// @pure
-/// @example check_row_count(r)    // 2
-export func check_row_count(r: CheckReport): int
-
-/// The rule of one row: the law's name, without the type tuple an instance adds.
-/// @pure
-/// @fails error value `IndexError` when the report has no such row
-/// @example check_rule(r, 0)    // 'add_zero'
-export func check_rule(r: CheckReport, row: int): string!
-
-/// The type tuple of one row's instance, as written (`int`, `int, int`). Empty for a rule that is
-/// not a generic law.
-/// @pure
-/// @fails error value `IndexError` when the report has no such row
-/// @example check_instance(r, 0)    // 'i32'
-export func check_instance(r: CheckReport, row: int): string!
-
-/// One row's verdict: `proved`, `refuted` or `sampled`. The words are closed: a rule nothing could
-/// be examined on is `sampled` with its reason, never a fourth word.
-/// @pure
-/// @fails error value `IndexError` when the report has no such row
-/// @example check_verdict(r, 0)    // 'sampled'
-export func check_verdict(r: CheckReport, row: int): string!
-
-/// What one row's verdict is about (the rule on
-/// `verification-licence-to-precondition`): `equality` for a rule that needs no permission,
-/// `real equality + IEEE on special values` for the rules that ask for `reassociate` or `contract`,
-/// and `error bound` for the ones that ask for `refine_accuracy` or `change_precision`.
-/// @pure
-/// @fails error value `IndexError` when the report has no such row
-/// @example check_proposition(r, 0)    // 'equality'
-export func check_proposition(r: CheckReport, row: int): string!
-
-/// What one row's verdict rests on: `solver` when a solver established it, `samples <n>` when `n`
-/// samples were drawn, `counterexample` when a value is the witness, and `none` when nothing could
-/// be examined.
-/// @pure
-/// @fails error value `IndexError` when the report has no such row
-/// @example check_evidence(r, 0)    // 'samples 100'
-export func check_evidence(r: CheckReport, row: int): string!
-
-/// Why a row says what it says when the answer is not a counterexample: the reason nothing was
-/// examined (`no numeric bound`), or the reason a rule the engine never fired on its own left side
-/// is `refuted`. Written in its own column and never left implicit, so a `sampled` that sampled is
-/// never read as one that did not.
-/// @pure
-/// @fails error value `IndexError` when the report has no such row
-/// @example check_reason(r, 0)    // ''
-export func check_reason(r: CheckReport, row: int): string!
-
-/// What the translation layer made of one row's rule: the proposition it read out
-/// of the rule's two sides -- `integer scalar int: (x + 0) = x`, with `, no premise yet` when the
-/// declaration carries a condition -- or `beyond translation coverage` followed by the reason it
-/// refused. The layer never guesses: a rule it cannot translate says which width, operator or node
-/// kind stopped it, and that rule is `sampled`, never `proved`. A later slice adds the floating
-/// widths and the conditions as premises; `check_coverage_table` is the boundary as a value.
-/// @pure
-/// @fails error value `IndexError` when the report has no such row
-/// @example check_coverage(r, 0)    // 'integer scalar int: (x + 0) = x'
-export func check_coverage(r: CheckReport, row: int): string!
-
-/// The declared coverage of the translation layer: the widths it translates (`int`, `i32`), the
-/// widths the design lists beside them and it does not translate yet (`float`, `f32`, `bf16`,
-/// `f16`), the operators it translates, what happens to integer division and remainder, what is
-/// beyond translation coverage, and that a rule's condition is not a premise yet (rewrite design
-/// 8.1). The boundary is a value a reader can read and a test can pin, not a paragraph in a design
-/// document that drifts from the code.
-/// @pure
-/// @example check_coverage_table()    // 'the coverage of the integer scalar translation\n...'
-export func check_coverage_table(): string
-
-/// What one application of a rule set produced and cost: the program it produced, the rewrites it
-/// applied, the rounds it made (the last one applied nothing at a fixpoint), the nodes the matcher
-/// visited, the nodes it erased as no longer read, whether the last round reached a fixpoint, and
-/// the wall time in seconds. `proof` is the attribution of the application when `run` was
-/// asked to record it, and null otherwise (rewrite design 8.7).
+/// What one application of a rule set produced and cost: the function it produced, the rewrites
+/// it applied, the rounds it made (the last one applied nothing at a fixpoint), the nodes the
+/// matcher visited, the nodes it erased as no longer read, whether the last round reached a
+/// fixpoint, and the wall time in seconds. `proof` is the attribution of the application when
+/// `run` was asked to record it, and null otherwise.
 export type Run<F> = {
     result: F,
     rewrites: int,
@@ -184,79 +49,172 @@ export type Run<F> = {
     proof: Proof?,
 }
 
-/// Applies `rules` to `p` one way, for at most `rounds` rounds, and gives the program it produced
-/// and what the application cost. This is `rewrite` with the round budget explicit and the cost
-/// kept. The rule set, the budget and the choices are configuration, so they are `with`
-/// parameters, written at the call (design principles 4.4): `p->run<rules>`,
-/// `p->run<rules, explain: true>`, `p->run<rules, rounds: 8, strict: true>`. The first one has no
-/// default and must be written; `rounds` defaults to 16 and `strict` and `explain` to false.
-/// `explain: true` opens the attribution record (rewrite design 8.7): `explain` then reads back
-/// the shortest chain between two values, and `explain_all` every rewrite that was made. Recording
-/// is off unless it is asked for, so a plain application pays nothing for it.
-/// @effect runs the rules' functions, and nothing else
+/// How a check came out: `Proved` when a solver established the rule's proposition, `Refuted`
+/// when a value is a counterexample, `Sampled` when samples were compared (or nothing could be
+/// examined, and the reason says so).
+export type Verdict = enum { Proved, Refuted, Sampled }
+
+/// What a verdict is about: `Equality` for a rule that needs no permission, `RealEquality` for
+/// the rules that ask for `reassociate` or `contract` (equal on the reals, IEEE on the special
+/// values), `ErrorBound` for the ones that ask for `refine_accuracy` or `change_precision`.
+export type Proposition = enum { Equality, RealEquality, ErrorBound }
+
+/// One line of a check: a rule, or one instance of a generic law.
+///
+/// - `rule`: the law's name, without the type tuple an instance adds.
+/// - `instance`: the type tuple of the instance as written (`i32`, `int, int`), empty for a rule
+///   that is not a generic law.
+/// - `evidence`: what the verdict rests on: `solver`, `samples <n>`, `counterexample`, or `none`.
+/// - `reason`: why the verdict says what it says when it is not a counterexample: the reason
+///   nothing was examined (`no numeric bound`), or why a rule the engine never fired on its own
+///   left side is `Refuted`. Never left implicit, so a `Sampled` that sampled is never read as
+///   one that did not.
+/// - `detail`: the rest of the line the rendering writes: how often the engine fired, the worst
+///   error ratio, the values a counterexample has.
+/// - `coverage`: what the translation layer made of the rule: the proposition it read out of the
+///   two sides (`integer scalar int: (x + 0) = x`, with `, no premise yet` when the declaration
+///   carries a condition), or `beyond translation coverage` and the reason it refused.
+export type CheckRow = {
+    rule: string,
+    instance: string,
+    verdict: Verdict,
+    proposition: Proposition,
+    evidence: string,
+    reason: string,
+    coverage: string,
+    detail: string,
+}
+
+/// The verdict table of a check, one row per rule or per instance of a generic law, in the order
+/// of the rule set.
+export type CheckReport = { rows: CheckRow[] }
+
+// ---- the passes ----
+
+/// Applies `rules` until no rule changes the function, and gives the rewritten function.
 /// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow
-/// @example let rs: Rule[] = []; p->run<rs>    // the run
+/// @example-fragment a rule set comes from the caller
+/// @example f->rewrite<rules>
+with <rules: Rule[], strict: bool = false>
+export func rewrite::<F>(f: F): F! when is_function::<F>()
+
+/// Applies the rearranging rules too, for at most `rounds` rounds, and leaves the function with
+/// every writing the saturation found; `extract` chooses among them.
+/// @fails error value `RuleInvalid` when a rule does not compile
+/// @example-fragment a rule set comes from the caller
+/// @example f->saturate<rules, rounds: 20>
+with <rules: Rule[], rounds: int = 6, strict: bool = false>
+export func saturate::<F>(f: F): F! when is_function::<F>()
+
+/// Chooses one writing of every value that has several, the one of least total cost. The cost of
+/// a writing is `cost(o, inputs)`: the operator and the costs of the writings of its inputs.
+/// @example-fragment the cost function comes from `rules`
+/// @example f->extract<rules::nodes>
+with <cost: (o: Op, inputs: float[]) => float>
+export func extract::<F>(f: F): F! when is_function::<F>()
+
+/// Applies `rules` one way, for at most `rounds` rounds, and gives the function it produced and
+/// what the application cost. This is `rewrite` with the round budget explicit and the cost kept.
+/// `explain: true` opens the attribution record (rewrite design 8.7): `explain` then reads back
+/// the shortest chain between two values, and `explain_all` every rewrite that was made.
+/// Recording is off unless it is asked for, so a plain application pays nothing for it.
+/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow
+/// @example-fragment a rule set comes from the caller
+/// @example f->run<rules, rounds: 8, explain: true>
 #op('rewrite:run')
 with <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false>
-export func run(p: Program): Run<Program>!
+export func run::<F>(f: F): Run<F>! when is_function::<F>()
+
+// ---- checking rules ----
+
+/// Checks `rules` on random instances drawn with `seed`: each row of the report carries the
+/// instance (a generic law's type tuple), the verdict, what the verdict is about and the evidence
+/// or the reason for it. The sample stream of a rule follows the rule's identity (its name and its
+/// instance's type tuple), not its place in `rules`, so a rule draws the same samples in any call.
+/// A build without a solver answers `Sampled` and `Refuted` and never `Proved`. A generic law is
+/// checked at the types every operator group registered.
+/// @example-fragment a rule set comes from the caller
+/// @example rules->check<samples: 1000, seed: 7>
+with <samples: int = 100, seed: int = 0>
+export func check(rules: Rule[]): CheckReport
+
+/// The same, with the law also checked at the types of the values `over` has, each once, in the
+/// order its graphs write them.
+/// @example-fragment a rule set and a function come from the caller
+/// @example rules->check<over: f>
+#op('rewrite:check_over')
+with <over: F, samples: int = 100, seed: int = 0>
+export func check::<F>(rules: Rule[]): CheckReport when is_function::<F>()
+
+/// The report's fixed rendering, one line per row, for a caller that wants it as a value.
+/// @example-fragment a report comes from a check
+/// @example check_text(report)    // 'sampled add_zero: proposition equality, evidence samples 100, ...'
+export func check_text(r: CheckReport): string
+
+/// The declared coverage of the translation layer: the widths it translates (`int`, `i32`), the
+/// widths the design lists beside them and it does not translate yet (`float`, `f32`, `bf16`,
+/// `f16`), the operators it translates, what happens to integer division and remainder, what is
+/// beyond translation coverage, and that a rule's condition is not a premise yet (rewrite design
+/// 8.1). The boundary is a value a reader can read and a test can pin.
+/// @example coverage_table    // 'the coverage of the integer scalar translation\n...'
+export let coverage_table: string
+
+// ---- reading a run ----
 
 /// The shortest chain of rewrites of the run `r` that connects the values `a` and `b`, as the
-/// derivation `a = ... = b`: only that chain, not every step the run made (rewrite design 8.7).
-/// Each line names the rule and whether the step is read backwards; a chain through a value that
-/// was later rewritten away names it too. When two chains are equally short both are printed, in
-/// the order the rewrites were made. A run that recorded nothing, or that holds no chain between
-/// the two values, is refused as an error value, never answered with an empty chain.
-/// @pure
-/// @fails error value `NoAttribution` when the run was made without `explain: true`, and `InvalidArgument` for a value of another program; error value `NoChain` when no rewrite connects the two values
-/// @example explain(r, a, b)    // the chain between a and b
+/// derivation `a = ... = b`: only that chain, not every step the run made. Each line names the
+/// rule and whether the step is read backwards; a chain through a value that was later rewritten
+/// away names it too. When two chains are equally short both are printed, in the order the
+/// rewrites were made.
+/// @fails error value `NoAttribution` when the run was made without `explain: true`; error value `InvalidArgument` for a value of another function; error value `NoChain` when no rewrite connects the two values
+/// @example-fragment a run and two of its values come from the caller
+/// @example r->explain<a, b>
 #op('rewrite:explain')
-export func explain(r: Run<Program>, a: Node, b: Node): Proof!
+with <a: Node, b: Node>
+export func explain::<F>(r: Run<F>): Proof!
 
 /// Every rewrite of the run `r`, in the order it made them, each naming the rule, the round, the
-/// graph and the nodes that matched, were produced and were erased (rewrite design 8.7). This is
-/// the full record `explain` narrows to one chain. A run that applied nothing is explained as
-/// such, not as an empty table.
-/// @pure
-/// @fails error value `NoAttribution` when the run was made without `explain: true`, and `InvalidArgument` for a value of another program
-/// @example explain_all(r)    // every rewrite the run made
+/// graph and the nodes that matched, were produced and were erased. This is the full record
+/// `explain` narrows to one chain.
+/// @fails error value `NoAttribution` when the run was made without `explain: true`; error value `InvalidArgument` for a value of another function
+/// @example-fragment a run comes from the caller
+/// @example explain_all(r)
 #op('rewrite:explain_all')
-export func explain_all(r: Run<Program>): Proof!
+export func explain_all::<F>(r: Run<F>): Proof!
 
-/// Why the rule `rule` did not fire at the value `v` of the run `r` (rewrite design 8.7): the
-/// first place the left side fails to match, the value the pattern wanted there and the value the
-/// program has, a missing permission, or the rule's condition being false with the values it read.
-/// A rule that did fire at `v` is reported as such.
-/// @effect runs the rule's condition
-/// @fails error value `NoAttribution` when the run was made without `explain: true`, and `InvalidArgument` for a value of another program
-/// @example why_not(r, target, v)    // the reason
+/// Why the rule `rule` did not fire at the value `v` of the run `r`: the first place the left side
+/// fails to match, the value the pattern wanted there and the value the program has, a missing
+/// permission, or the rule's condition being false with the values it read. A rule that did fire
+/// at `v` is reported as such.
+/// @fails error value `NoAttribution` when the run was made without `explain: true`; error value `InvalidArgument` for a value of another function
+/// @example-fragment a run, a rule and a value come from the caller
+/// @example r->why_not<target, v>
 #op('rewrite:why_not')
-export func why_not(r: Run<Program>, rule: Rule, v: Node): string!
+with <rule: Rule, v: Node>
+export func why_not::<F>(r: Run<F>): string!
+
+// ---- reading a rule ----
 
 /// The name of the rule `r`.
-/// @pure
+/// @example-fragment a rule comes from the library
 /// @example rule_name(r)    // 'int_add_zero'
 #op('rewrite:name')
 export func rule_name(r: Rule): string
 
 /// Whether the rule `r` may also be applied from right to left.
-/// @pure
+/// @example-fragment a rule comes from the library
 /// @example rule_two_way(r)    // false
 #op('rewrite:two_way')
 export func rule_two_way(r: Rule): bool
 
 /// How many rewrites the rule `r` needs before it may fire.
-/// @pure
+/// @example-fragment a rule comes from the library
 /// @example rule_needs(r)    // 0
 #op('rewrite:needs')
 export func rule_needs(r: Rule): int
 
-/// How many constants the rule `r` adds to the program.
-/// @pure
+/// How many constants the rule `r` adds to the function.
+/// @example-fragment a rule comes from the library
 /// @example rule_consts(r)    // 0
 #op('rewrite:consts')
 export func rule_consts(r: Rule): int
-
-
-
-
-

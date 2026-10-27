@@ -1,0 +1,30 @@
+module apply
+
+import { Rule, rewrite, run, saturate, extract, check, check_text } from rewrite
+import { Node, Op } from graph
+
+rule bump_one(x: int) { x + 0 => x + 1 }
+
+func target(x: int): int {
+    return (x + 0) * 2
+}
+
+func unit_cost(o: Op, inputs: float[]): float {
+    return 1.0 + inputs->reduce<(acc: float, c: float) => acc + c, 0.0>
+}
+
+func main(): int sync {
+    let rules = [bump_one]
+    let g = target->rewrite<rules> !! target
+    println(target(5), g(5))
+    println(match target->run<rules, rounds: 4> {
+        case error e => e.message
+        case r => format<r.rewrites, r.fixpoint, r.result(5)>('{} {} {}')
+    })
+    let s = target->saturate<rules, rounds: 3> !! target
+    let e = s->extract<unit_cost> !! s
+    println(e(5))
+    println(len(check_text(rules->check<8, 1>)) > 0)
+    println(len((rules->check<target, 8, 1>).rows))
+    return 0
+}
