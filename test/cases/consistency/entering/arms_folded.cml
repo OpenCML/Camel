@@ -3,7 +3,6 @@
  * branch is pruned, what read the join reads the arm. (The arm's node kept the slot of the
  * plain value; std::opt::fold then printed a box as a float. progen finding F42.)
  */
-module arms_folded
 
 func main(): int sync {
     let a: float? = if false then null else 1.0

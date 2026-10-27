@@ -5,7 +5,6 @@
  * is: the float the function returns does not reach it. The declaration of `v` in `positioned`
  * is the arm's position, so `2` there is a float, though the function returns an int.
  */
-module literal_context_arm_exit
 
 func free(c: bool): float sync {
     let v = if c then { return 2; } else { 3 };

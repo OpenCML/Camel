@@ -3,8 +3,6 @@
  * array quotient is the scalar rule element by element (design principles 5.1: one semantics for
  * scalars and arrays). Float arrays keep their quotient.
  */
-module int_division
-
 import { new } from tensor
 
 func main(): int sync {

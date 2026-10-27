@@ -1,5 +1,4 @@
 /// `#requires` outside a rule: there is no tag of that name to write on a function.
-module err_requires_on_func
 
 #requires(reassociate)
 func f(x: int): int { return x }

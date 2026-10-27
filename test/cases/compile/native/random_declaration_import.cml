@@ -5,7 +5,6 @@
  * configuration (`stdlib/random.cml`). The keyed draws are pure; every call reaches its
  * operator or its Camel definition.
  */
-module random_declaration_import
 
 import {
     Key, seed, next_key, rand, randn, key, split, fold, randint, choice, sample, shuffle,

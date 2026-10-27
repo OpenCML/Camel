@@ -5,7 +5,6 @@
  * another -- and it is not refused, because the two readers are the two streams the `tee` gave
  * and neither stream has a second consumer.
  */
-module stream_tee_consumers
 
 import stream
 

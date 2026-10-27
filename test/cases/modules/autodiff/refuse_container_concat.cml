@@ -17,7 +17,6 @@
  * rule asks the container for its length (`:struct/len_arr`) instead of asking a tensor for an
  * extent it does not have.
  */
-module refuse_container_concat
 
 import { concat, reshape, sum } from tensor
 import { grad } from autodiff

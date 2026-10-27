@@ -184,6 +184,35 @@ if (process.argv.includes('--names')) {
 
 // (4) A module's pass is a declaration in the module's `.cml` file, and every registration has
 // one. A declaration is pass-shaped when its condition is the pipeline's (`is_function::<T>()`).
+// The number of ordinary parameters a declaration line writes: the commas at the top level of its
+// first parenthesised list, plus one. A pass takes one (the function it is applied to); a
+// declaration with the same condition and more is an operator that wants a function.
+function ordinaryParameterCount(line) {
+    const open = line.indexOf('(')
+    if (open < 0) {
+        return -1
+    }
+    let depth = 0
+    let count = 0
+    let seen = false
+    for (let i = open + 1; i < line.length; i++) {
+        const c = line[i]
+        if ('([<{'.includes(c)) {
+            depth++
+        } else if (')]>}'.includes(c)) {
+            if (depth === 0) {
+                break
+            }
+            depth--
+        } else if (c === ',' && depth === 0) {
+            count++
+        } else if (!/\s/.test(c)) {
+            seen = true
+        }
+    }
+    return seen ? count + 1 : 0
+}
+
 const moduleDeclarations = new Set()
 for (const entry of fs.readdirSync(path.join(REPO_ROOT, 'stdlib'))) {
     if (!entry.endsWith('.cml') || entry === 'std.cml') {
@@ -196,7 +225,8 @@ for (const entry of fs.readdirSync(path.join(REPO_ROOT, 'stdlib'))) {
     )) {
         const lineEnd = text.indexOf('\n', match.index)
         const line = text.slice(match.index, lineEnd < 0 ? undefined : lineEnd)
-        if (!line.replace(/\s+/g, '').includes('whenis_function::<')) {
+        if (!line.replace(/\s+/g, '').includes('whenis_function::<') ||
+            ordinaryParameterCount(line) !== 1) {
             continue
         }
         moduleDeclarations.add(`${module}::${match[1]}`)

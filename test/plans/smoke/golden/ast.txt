@@ -1,4 +1,4 @@
-Module: fib
+Module
 |-Import*
 |  \-ImportDecl: { now } from time
 |-Export?

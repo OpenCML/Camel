@@ -3,7 +3,6 @@
  * T and compares them with the constant the condition writes, so `when has_field::<Point>('w')`
  * is answered without a body being built for the point.
  */
-module when_user_predicate_has_field
 
 type Point = { w: int, h: int }
 

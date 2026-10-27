@@ -18,7 +18,6 @@
 // fold from a type that fixes every extent). A declaration names `tensor:<function>` by
 // convention, so no `#op` tag is needed.
 
-module tensor
 
 import { is_numeric, is_plain } from types
 

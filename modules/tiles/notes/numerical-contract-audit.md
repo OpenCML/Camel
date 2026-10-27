@@ -15,7 +15,6 @@ program below nevertheless produced a CPU/GPU difference on all three host
 schedulers: `std::nvm`, `std::fvm`, and `std::jit`.
 
 ```camel
-module tiles_exp_contract_audit
 import { Tensor, reshape, exp, sum } from tensor
 import { run_preferred_resident, download } from tiles
 

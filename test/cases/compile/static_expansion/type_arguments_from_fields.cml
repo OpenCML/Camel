@@ -5,7 +5,6 @@
  * walk is shown on a type whose leaves are all `int`; producing the leaf's own value needs a
  * native operator for the leaf type.
  */
-module type_arguments_from_fields
 
 func leaf::<L>(depth: int): L { return depth }
 

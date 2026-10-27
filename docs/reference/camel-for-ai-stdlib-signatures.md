@@ -501,13 +501,14 @@ unordered_foreach: <f: (item: T) => void> (xs: T[]) => void
 unordered_reduce: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T
 ```
 
-**`test_support`** — import { ... } from test_support — 4 name(s)
+**`test_support`** — import { ... } from test_support — 5 name(s)
 
 ```text
 rendezvous: (parties: int, timeout: float) => int uses rendezvous_point
 thread_count: () => int uses process
 with_probe: <base: int, step: int = 10, mode: int = 0> (x: T) => int
 with_probe: <base: int, step: int = 10, mode: int = 0> (xs: int[]) => int
+arity_probe: <tag: int, extra: int[] = []> (f: F, example: E) => int when is_function::<F>()
 ```
 
 **`this`** — import { ... } from this — 1 name(s)
@@ -708,6 +709,6 @@ asian_call_price: (paths: int, steps: int, seed: int) => float
 
 ```text
 supported_operators: () => string[]
-export_model: <out: string, dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'> (fn: F, example: E) => void!
+export_model: <out: string, dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'> (fn: F, example: E) => void! when is_function::<F>()
 ```
 <!-- camel-for-ai end: stdlib-signatures -->

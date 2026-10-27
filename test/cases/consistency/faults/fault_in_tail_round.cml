@@ -2,7 +2,6 @@
  * A fault in round 501 of a tail-recursive loop: DivisionByZero at the division, whatever the
  * back end does to run the loop.
  */
-module fault_in_tail_round
 
 func spin(i: int, n: int, acc: int): int {
     return if i > n then acc else spin(i + 1, n, acc + 1000 / (500 - i))

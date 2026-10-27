@@ -18,7 +18,6 @@
  * The three values can only come from the three paths, and the profile test beside this case shows
  * each of the two kernels used exactly once, with the complex call taking the body's `reduce`.
  */
-module array_reduction_arms
 
 import { sum } from array
 

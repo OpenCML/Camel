@@ -3,7 +3,6 @@
  * with neither, with a step, an int-array index (the `take` of the first dimension) and
  * `last(xs)`.
  */
-module subscript_forms
 
 func part(xs: int[], a: int, b: int): int[] { return xs[a:b] }
 

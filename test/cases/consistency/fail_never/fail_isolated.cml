@@ -3,7 +3,6 @@
  * one the program wrote, and the program runs on (design principles 3.9). Where the call
  * succeeds the value is the call's own.
  */
-module fail_isolated
 
 func limit(q: float): float {
     return if q > 0.0 then q else fail<'BadLimit'>('the limit must be positive')

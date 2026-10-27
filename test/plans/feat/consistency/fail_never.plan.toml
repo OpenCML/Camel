@@ -23,7 +23,7 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 expect_exit = 1
 expect_diagnostic_code = "0x040001AC"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 39
 verify_script = """
 assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
@@ -130,7 +130,7 @@ verify_script = """
 assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[0].name === 'SemanticDiag::NeverArgumentCall', input.diagnostics[0].name)
 assert(input.diagnostics[0].code === '0x031001C0', input.diagnostics[0].code)
-assert(input.diagnostics[0].line === 17, input.diagnostics[0].line)
+assert(input.diagnostics[0].line === 16, input.diagnostics[0].line)
 assert(input.diagnostics[0].column === 23, input.diagnostics[0].column)
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -148,7 +148,7 @@ verify_script = """
 assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[0].name === 'SemanticDiag::NeverArgumentCall', input.diagnostics[0].name)
 assert(input.diagnostics[0].code === '0x031001C0', input.diagnostics[0].code)
-assert(input.diagnostics[0].line === 18, input.diagnostics[0].line)
+assert(input.diagnostics[0].line === 17, input.diagnostics[0].line)
 assert(input.diagnostics[0].column === 21, input.diagnostics[0].column)
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -166,7 +166,7 @@ verify_script = """
 assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[0].name === 'SemanticDiag::FailNotExecuted', input.diagnostics[0].name)
 assert(input.diagnostics[0].code === '0x031001C1', input.diagnostics[0].code)
-assert(input.diagnostics[0].line === 11, input.diagnostics[0].line)
+assert(input.diagnostics[0].line === 10, input.diagnostics[0].line)
 assert(input.diagnostics[0].column === 9, input.diagnostics[0].column)
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -186,9 +186,9 @@ verify_script = """
 // registry declares and must not read as a citation of one.
 const faults = input.diagnostics.filter((d) => d.name === 'RuntimeDiag::' + 'NoPremise')
 const unreachable = input.diagnostics.filter((d) => d.name === 'SemanticDiag::StatementAfterFail')
-assert(faults.length === 1 && faults[0].line === 11, JSON.stringify(input.diagnostics))
+assert(faults.length === 1 && faults[0].line === 10, JSON.stringify(input.diagnostics))
 assert(unreachable.length === 2, JSON.stringify(input.diagnostics))
-assert(unreachable[0].line === 12 && unreachable[1].line === 13, JSON.stringify(unreachable))
+assert(unreachable[0].line === 11 && unreachable[1].line === 12, JSON.stringify(unreachable))
 assert(unreachable[0].code === '0x031001C2', unreachable[0].code)
 assert(input.diagnostics.length === 3, JSON.stringify(input.diagnostics))
 // The fault is raised at the `fail`, so the statement written after it never prints: the program
@@ -219,7 +219,7 @@ verify_script = """
 assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[0].name === 'SemanticDiag::NeverArgumentCall', input.diagnostics[0].name)
 assert(input.diagnostics[0].code === '0x031001C0', input.diagnostics[0].code)
-assert(input.diagnostics[0].line === 24, input.diagnostics[0].line)
+assert(input.diagnostics[0].line === 23, input.diagnostics[0].line)
 assert(input.diagnostics[0].column === 23, input.diagnostics[0].column)
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -240,9 +240,9 @@ verify_script = """
 assert(input.diagnostics.length === 2, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[0].name === 'RuntimeDiag::' + 'Stopped', input.diagnostics[0].name)
 assert(input.diagnostics[0].code === '0x040001AC', input.diagnostics[0].code)
-assert(input.diagnostics[0].line === 14 && input.diagnostics[0].column === 16, JSON.stringify(input.diagnostics[0]))
+assert(input.diagnostics[0].line === 13 && input.diagnostics[0].column === 16, JSON.stringify(input.diagnostics[0]))
 assert(input.diagnostics[1].name === 'SemanticDiag::NeverArgumentCall', input.diagnostics[1].name)
-assert(input.diagnostics[1].line === 24 && input.diagnostics[1].column === 23, JSON.stringify(input.diagnostics[1]))
+assert(input.diagnostics[1].line === 23 && input.diagnostics[1].column === 23, JSON.stringify(input.diagnostics[1]))
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
@@ -259,7 +259,7 @@ verify_script = """
 assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[0].name === 'SemanticDiag::NeverArgumentCall', input.diagnostics[0].name)
 assert(input.diagnostics[0].code === '0x031001C0', input.diagnostics[0].code)
-assert(input.diagnostics[0].line === 19, input.diagnostics[0].line)
+assert(input.diagnostics[0].line === 18, input.diagnostics[0].line)
 assert(input.diagnostics[0].column === 31, input.diagnostics[0].column)
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -278,7 +278,7 @@ verify_script = """
 assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[0].name === 'SemanticDiag::NeverArgumentCall', input.diagnostics[0].name)
 assert(input.diagnostics[0].code === '0x031001C0', input.diagnostics[0].code)
-assert(input.diagnostics[0].line === 25, input.diagnostics[0].line)
+assert(input.diagnostics[0].line === 24, input.diagnostics[0].line)
 assert(input.diagnostics[0].column === 21, input.diagnostics[0].column)
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -321,8 +321,8 @@ for (const d of input.diagnostics) {
     assert(d.name === 'SemanticDiag::NeverArgumentCall', JSON.stringify(d))
     assert(d.code === '0x031001C0', JSON.stringify(d))
 }
-assert(input.diagnostics[0].line === 18 && input.diagnostics[0].column === 35, JSON.stringify(input.diagnostics[0]))
-assert(input.diagnostics[1].line === 19 && input.diagnostics[1].column === 41, JSON.stringify(input.diagnostics[1]))
+assert(input.diagnostics[0].line === 17 && input.diagnostics[0].column === 35, JSON.stringify(input.diagnostics[0]))
+assert(input.diagnostics[1].line === 18 && input.diagnostics[1].column === 41, JSON.stringify(input.diagnostics[1]))
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
@@ -338,7 +338,7 @@ verify_script = """
 // The name is built from two pieces here too: the kind the program writes is its own word.
 assert(input.diagnostics.length === 3, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[0].name === 'RuntimeDiag::' + 'Stopped', JSON.stringify(input.diagnostics[0]))
-assert(input.diagnostics[0].line === 14 && input.diagnostics[0].column === 16, JSON.stringify(input.diagnostics[0]))
+assert(input.diagnostics[0].line === 13 && input.diagnostics[0].column === 16, JSON.stringify(input.diagnostics[0]))
 for (const d of input.diagnostics.slice(1)) {
     assert(d.name === 'SemanticDiag::NeverArgumentCall', JSON.stringify(d))
 }

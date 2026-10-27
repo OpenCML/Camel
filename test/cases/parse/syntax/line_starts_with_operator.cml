@@ -1,5 +1,4 @@
 /// A line that starts with '+' ends the statement of the line above.
-module line_starts_with_operator
 
 func main(): int {
     let x = 1

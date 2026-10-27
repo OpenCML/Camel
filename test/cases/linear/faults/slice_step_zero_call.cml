@@ -4,7 +4,6 @@
  * answer -- the catalog's `SemanticDiag::SliceStepZero`, with the caret under the step the program
  * wrote, and the program after it does not run (design principles 5.4, 3.9).
  */
-module slice_step_zero_call
 
 func main(): int sync {
     let xs = [1, 2, 3, 4, 5, 6]

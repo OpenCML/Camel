@@ -1,0 +1,26 @@
+/**
+ * Two generic overloads of one name that differ in their number of arguments and both write the
+ * same `when`: the count picks the candidates and `when` filters among them (design principles
+ * 4.4), so each call takes its own and a named `with` argument finds its parameter.
+ */
+import { is_function } from types
+
+with <out: string>
+func probe::<F>(f: F): int when is_function::<F>() {
+    return len(out)
+}
+
+with <out: string, axes: int[] = []>
+func probe::<F, E>(f: F, example: E): int when is_function::<F>() {
+    return len(out) * 10 + len(axes)
+}
+
+func identity(x: int): int {
+    return x
+}
+
+func main(): int sync {
+    println(probe<'ab'>(identity), probe<out: 'ab'>(identity))
+    println(probe<'abc', [1, 2]>(identity, 5), probe<out: 'abc', axes: [1]>(identity, 5), probe<out: 'abc'>(identity, 5))
+    return 0
+}

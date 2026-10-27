@@ -3,7 +3,6 @@
  * there is no mark to take apart (design principles 3.8): a compile-time error at the case
  * itself, not an internal error. The value is read with a literal pattern or `_`.
  */
-module pattern_identifier
 
 func f(n: int): int {
     return match n {

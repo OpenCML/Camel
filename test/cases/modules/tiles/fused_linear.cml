@@ -5,7 +5,6 @@
  * one region. Before the change the pass left `matmul_add`/`matmul_add_relu` in the graph, which
  * the region analysis has no contract for.
  */
-module tiles_fused_linear
 import { reshape, relu } from tensor
 import { regions } from tiles
 

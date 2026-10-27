@@ -4,7 +4,6 @@
  * unit that carried the form (a pass-through by then) left the grammar with the type operators in
  * the item-5 clearance, so nothing reads a second word inside a type any more.
  */
-module no_name_of_type
 
 func f(x: int): int {
     let a: k of T = x

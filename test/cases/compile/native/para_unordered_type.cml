@@ -3,7 +3,6 @@
  * message names the declaration's type variable and parameter (`xs`) — `stdlib/para.cml`, not the
  * C++, is the source (bucket 1).
  */
-module para_unordered_type
 
 import { unordered_foreach } from para
 

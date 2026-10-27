@@ -3,7 +3,6 @@
  * tuple and with named fields, and every pattern form in a match: a bare variant, a variant with
  * a tuple pattern and a variant with a struct pattern.
  */
-module parse_constructs_enum
 
 type Color = enum { Red, Green, Blue }
 

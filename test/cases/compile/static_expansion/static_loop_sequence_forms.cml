@@ -6,7 +6,6 @@
  * principles 4.2) and an array -- a literal, or a name bound once to one -- walks by element,
  * exactly as the constant interval `a..b` does.
  */
-module static_loop_sequence_forms
 
 func inRange(): int {
     return static loop acc = 0 for i in range(0, 10, 3) do acc + i

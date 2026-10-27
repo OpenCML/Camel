@@ -6,7 +6,6 @@
  * (design principles 4.4), so this file must print exactly what its twin
  * prints: the `i32` call is the subtraction and the `int` call is the addition.
  */
-module when_order_at_call_int_first
 
 /// The element type of the `int` arm: `int` alone.
 func is_arm_int::<T>(): bool {

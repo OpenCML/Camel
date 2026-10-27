@@ -1,4 +1,3 @@
-module tiles_loop_device
 import { load_npy, save_npy } from tensor
 import { source, run_preferred_resident, download } from tiles
 import { get_env } from env

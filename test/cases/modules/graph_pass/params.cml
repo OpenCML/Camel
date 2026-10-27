@@ -1,4 +1,3 @@
-module params
 import { Program } from graph
 
 func twice(x: int): int {

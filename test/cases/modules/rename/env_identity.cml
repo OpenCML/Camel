@@ -3,7 +3,6 @@
  * translation pass, so the graph does not depend on the environment or on the machine, and the
  * only thing the rename may change is the module name in the two operator URIs.
  */
-module env_identity
 
 import { get_env, get_cwd } from env
 

@@ -5,7 +5,6 @@
  *   camel collapse_random.cml std::macro std::opt std::gir
  *   camel collapse_random.cml std::macro std::opt std::nvm
  */
-module collapse_random
 
 import { grad } from autodiff
 import { seed, rand } from random

@@ -2,7 +2,6 @@
  * The statistics module: variance (the square of stdev: divisor n - 1), median and quantile
  * (linear interpolation), over float elements; an integer array is converted first.
  */
-module stats_quantiles
 
 import { mean } from array
 import { stdev, variance, median, quantile } from statistics

@@ -3,7 +3,6 @@
  * folded and false, so no candidate of `sum` applies and the call is reported as inapplicable
  * rather than failing inside the body.
  */
-module when_import_array_sum_unmet
 
 import array
 

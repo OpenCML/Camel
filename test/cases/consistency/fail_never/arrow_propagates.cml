@@ -4,7 +4,6 @@
  * failed is passed on instead -- the call is not made with it. An error value written in a
  * fallible position is the failed arm of that form.
  */
-module arrow_propagates
 
 func double(n: int): int { return n * 2 }
 

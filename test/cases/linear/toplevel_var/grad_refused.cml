@@ -1,5 +1,5 @@
 /** Gradients do not flow through a top-level `var` either, as for any `var`. */
-module grad_refused
+
 
 import { grad } from autodiff
 

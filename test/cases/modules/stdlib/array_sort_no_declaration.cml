@@ -3,7 +3,6 @@
  * complex array has no order, so the call is refused where it is written, with the condition it
  * does not meet, not by an executor at run time.
  */
-module array_sort_no_declaration
 
 import { sort } from array
 

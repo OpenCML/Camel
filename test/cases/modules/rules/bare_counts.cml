@@ -1,5 +1,4 @@
 /** The operator counts of the bare-term target, by element type. */
-module bare_counts
 
 import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
 

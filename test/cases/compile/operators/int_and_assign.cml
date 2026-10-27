@@ -2,7 +2,6 @@
  * Rejected when compiled, at the operator: `&=` is for bool; there is no bitwise `&`. A combination of operator and type without an
  * implementation used to compile and then do nothing, or fault, when run.
  */
-module int_and_assign
 
 func main(): int sync {
     var a = 1

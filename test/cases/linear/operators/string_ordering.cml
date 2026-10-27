@@ -3,7 +3,6 @@
  * comes first. They used to compile and give false whatever the operands (progen finding F27).
  * Each line: a < b, a <= b, a > b, a >= b.
  */
-module string_ordering
 
 func cmp(a: string, b: string): string {
     let lt = a < b

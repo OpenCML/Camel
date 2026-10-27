@@ -3,7 +3,6 @@
  * (a literal, several alternatives, the wildcard, an enum's tuple and struct variants, and the
  * two tagged patterns). The AST keeps the guard as a child of the case, after the arm.
  */
-module match_guard_construct
 
 type Shape = enum {
     Circle(float),

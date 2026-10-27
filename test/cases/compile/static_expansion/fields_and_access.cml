@@ -5,7 +5,6 @@
  * step 4). `n` is the field name (a tuple's decimal index) and `F` is the field type, visible
  * in `let v: F` and in a head declaration of `F`.
  */
-module fields_and_access
 
 func showStruct(t: {a: int, b: int}) {
     sync {

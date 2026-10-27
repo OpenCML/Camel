@@ -6,7 +6,6 @@
  * refuses it, exactly as it did before the expected type was carried through the call. Nothing is
  * converted on the way.
  */
-module expected_type_typed_value_not_converted
 
 func keep::<T>(xs: T[], n: int): T[] { return xs }
 

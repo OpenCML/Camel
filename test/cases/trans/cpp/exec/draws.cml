@@ -1,8 +1,6 @@
 /// The module random in a compiled program: seeded, it draws the numbers the interpreter draws
 /// (both run Philox4x32-10 from camel/utils/philox.h). The keyed draws that sit on arrays
 /// (`shuffle`, `sample`, `permutation`) are not translated yet.
-module draws
-
 import { seed, next_key, rand, key, split, uniform } from random
 
 func main(): int sync {

@@ -2,7 +2,6 @@
 /// edges; they differ only in the tags of the block region, `gpu` here and `cpu` there. The
 /// portable graph hash must differ (docs/design/gpu/plan.cn.md 4); it did not while the hash
 /// ignored region facts.
-module tiles_placement_hash
 
 func other(): int {
     return 5

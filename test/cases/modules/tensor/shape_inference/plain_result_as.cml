@@ -1,4 +1,3 @@
-module shape_inference_plain_result_as
 import { tanh, sum, ones } from tensor
 func g(x: f32[3]): f32[..] {
     return tanh(x * 0.0) + 2.0

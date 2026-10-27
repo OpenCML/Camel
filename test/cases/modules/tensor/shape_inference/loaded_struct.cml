@@ -1,4 +1,3 @@
-module shape_inference_loaded_struct
 import { sum, ones, load_npy } from tensor
 // Weights read from a file have no shape in their type; here one field of a struct.
 type P = { w: f32[3], b: f32[3] }

@@ -10,7 +10,6 @@
  *
  *   m = [[1, 2, 3], [4, 5, 6]];  m[:, [1, 1, 0]] = [[2, 2, 1], [5, 5, 4]];  sum = 19.0
  */
-module subscript_take_other_dimension
 import { reshape, shape, sum } from tensor
 
 func columns(a: f32[2, 3]): float {

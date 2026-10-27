@@ -10,7 +10,6 @@
  * read the graph does not order -- cannot reach this branch from source at all, so the conservative
  * direction is measured by setting the walk's limits to 1 (see the review of C3).
  */
-module inplace_write_then_read
 
 func main(): int sync {
     var v = [1, 2, 3]

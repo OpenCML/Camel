@@ -1,4 +1,3 @@
-module tiles_device_tree
 import { reshape, sum, abs, zeros } from tensor
 import { with_grad } from autodiff
 import { Device, upload, download, run_preferred_resident } from tiles

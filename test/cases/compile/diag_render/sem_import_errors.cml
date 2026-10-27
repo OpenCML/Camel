@@ -1,5 +1,3 @@
-module sem_import_errors
-
 import { helper } from broken_lib
 
 func main(): int sync {

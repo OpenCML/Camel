@@ -1,6 +1,5 @@
 // `map`, `filter` and `reduce` over a large array with element functions of a few built-in
 // operators each: the work of an element is far smaller than a task.
-module map_light
 
 func main(): int sync {
     let n = 300000

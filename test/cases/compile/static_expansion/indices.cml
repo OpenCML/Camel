@@ -4,7 +4,6 @@
  * ordinary `int` value and a compile-time key, the trip count is the tuple's arity, and a tuple
  * held by a type parameter gives a count known only at instantiation.
  */
-module indices
 
 func sum(t: (int, int, int)): int {
     return static loop acc = 0 for j in indices t do acc + t.[j]

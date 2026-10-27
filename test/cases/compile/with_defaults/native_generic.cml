@@ -5,7 +5,6 @@
  * (design principles 4.4, 6.4). The name is declared twice, for a value and for an array, and each
  * declaration gives the defaults it registers.
  */
-module with_defaults_native_generic
 
 import { with_probe } from test_support
 

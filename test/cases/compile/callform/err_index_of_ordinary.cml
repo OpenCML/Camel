@@ -1,5 +1,3 @@
-module err_index_of_ordinary
-
 import { index_of } from str
 
 func main(): int sync {

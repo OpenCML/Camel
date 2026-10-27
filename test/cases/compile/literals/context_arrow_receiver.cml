@@ -11,7 +11,6 @@
  * form converts each element from the exact value written, so the value just above the f32
  * midpoint prints 1.00000012 and not 1.
  */
-module literal_context_arrow_receiver
 
 type Point = { x: f32, y: f32 }
 type Box = { xs: f32[] }

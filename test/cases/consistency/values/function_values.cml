@@ -1,7 +1,6 @@
 /**
  * Functions that return functions, and functions applied to functions.
  */
-module function_values
 
 func adder(a: int): (x: int) => int {
     return (x: int): int => x + a

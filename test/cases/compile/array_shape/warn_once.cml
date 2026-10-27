@@ -1,5 +1,4 @@
 // A name written once in the signature relates nothing, so the compiler suggests `?`.
-module array_shape_warn_once
 
 func first(x: f32[n]): f32 {
     return x[0]

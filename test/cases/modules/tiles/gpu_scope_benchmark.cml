@@ -10,7 +10,6 @@
 ///
 /// Red when: the report runs the segments with inputs it does not have, times the wrapper, or
 /// says the runtime broke where the run has no device.
-module tiles_gpu_scope_benchmark
 
 import { reshape } from tensor
 import { benchmark } from tiles

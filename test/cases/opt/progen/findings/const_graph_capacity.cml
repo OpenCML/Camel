@@ -6,7 +6,6 @@
  * literal.
  * Expected output: a
  */
-module const_graph_capacity
 
 func f0(): string {
     return 'a'

@@ -7,7 +7,6 @@
  * (`vjp::<F>(rule: F) ... when is_function::<F>()`), and a group member may carry an argument
  * (`#[kernel, width(16)]`).
  */
-module parse_constructs_tags
 
 export tag kernel on nodes
 export tag fast on func, nodes

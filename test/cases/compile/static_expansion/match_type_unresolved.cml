@@ -3,7 +3,6 @@
  * case is not selected when the function is instantiated with an `int`, but `nope` is still
  * reported.
  */
-module match_type_unresolved
 
 func shape::<T>(t: T): int {
     return match type T {

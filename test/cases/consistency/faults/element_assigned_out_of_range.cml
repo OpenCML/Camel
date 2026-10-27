@@ -3,7 +3,6 @@
  * is (docs/design-principles.cn.md 3.9, 6.11). The statement writes the whole variable, so the
  * fault comes from the element store it lowers to.
  */
-module element_assigned_out_of_range
 
 func main(): int sync {
     var xs = [1, 2, 3]

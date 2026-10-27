@@ -1,6 +1,6 @@
 error[RuntimeDiag::InvalidNumberText]: Cannot convert the string 'abc' to int.
-  --> <ROOT>/test/cases/compile/diag_render/runtime_number_text.cml:5:13
+  --> <ROOT>/test/cases/compile/diag_render/runtime_number_text.cml:3:13
    |
- 5 |     println(int(s))
+ 3 |     println(int(s))
    |             ^^^
 help: The whole string must be an integer: no blanks before or after it and nothing else. A conversion that fails is a fault and ends the program; parse_int and parse_float return an error value (T!) instead.

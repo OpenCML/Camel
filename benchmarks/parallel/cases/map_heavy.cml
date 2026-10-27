@@ -1,6 +1,5 @@
 // `map` over 64 elements, each a scalar recursion of about a millisecond or more written in
 // Camel (no module operator): coarse, independent elements.
-module map_heavy
 
 func fib(n: int): int {
     return if n <= 1 then n else fib(n - 1) + fib(n - 2)

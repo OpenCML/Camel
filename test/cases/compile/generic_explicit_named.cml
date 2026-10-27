@@ -1,4 +1,3 @@
-module generic_explicit_named
 // Type arguments by position (the order of first appearance in the signature) or by name,
 // not mixed (design principles 5.9).
 func pair::<B, A>(b: B, a: A): (A, B) { return (a, b) }

@@ -1,7 +1,6 @@
 /**
  * `!!` opens a `T!`, not a `T?`: TaggedOperandMismatch.
  */
-module err_wrong_form
 
 func main(): int sync {
     println('never printed')

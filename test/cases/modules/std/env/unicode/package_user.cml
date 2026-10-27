@@ -3,7 +3,6 @@
  * (item 3): the search path comes from the environment as UTF-8. It also prints CAMEL_HOME,
  * so the test can check that the installation root it was started from is the one it sees.
  */
-module package_user
 
 import { twice } from helper
 import { get_env } from env

@@ -6,7 +6,6 @@
  * needs is sampled: the tensor's rank follows the axis operand, and the axis cycles through 0, 1,
  * 2 and -1.
  */
-module check_accuracy
 
 import { check } from rewrite
 import { log as scalar_log, log1p } from math

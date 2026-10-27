@@ -3,7 +3,6 @@
  * has no tangent, so the reverse pass carries the gradient of the accumulator alone while the
  * state keeps both values. Three rounds add 2·w each, so the gradient is 6.
  */
-module loop_grad_tuple_state
 
 import { grad, with_grad } from autodiff
 

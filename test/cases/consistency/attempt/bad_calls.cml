@@ -3,7 +3,6 @@
  * the deleted `attempt(f, x)` spelling, whose arguments are counted against the transform
  * (which takes one): writing it is a plain argument count mismatch, no diagnostic of its own.
  */
-module bad_calls
 
 func risky(d: int): int { return 100 / d }
 with <k: int>

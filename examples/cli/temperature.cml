@@ -1,7 +1,6 @@
 // A command-line tool: the parameters of `main` are the program's inputs and get their
 // values from `--arg name=value`. The unit is accepted in either case (`to_upper` of `str`).
 // Run: camel examples/cli/temperature.cml --arg value=21.5 --arg unit=C --arg steps=3
-module temperature
 
 import { trim, to_upper } from str
 

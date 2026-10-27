@@ -3,8 +3,6 @@
  * a compiled program prints what the interpreter prints. `fold` and `randint` can fail, and
  * `fail` is not translated yet.
  */
-module keyed_scalars
-
 import { key, split, uniform, seed, next_key, rand } from random
 
 func main(): int sync {

@@ -1,7 +1,6 @@
 /**
  * Small Fibonacci workload used by GC stress and diagnostic tests.
  */
-module gc_fib
 
 import { now } from time
 

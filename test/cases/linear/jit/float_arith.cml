@@ -1,7 +1,6 @@
 /**
  * Verifies JIT floating-point arithmetic keeps ordering and precision within a tight expected range.
  */
-module jit_float_arith
 
 func mix(x: float): float {
     let a = x * 2.0

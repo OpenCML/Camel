@@ -4,7 +4,6 @@
  * a number — the type's origin does not enter the rule, only whether `a + b` is defined and
  * gives `a`'s type.
  */
-module tensor_add_assign
 
 import { ones, sum } from tensor
 

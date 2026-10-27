@@ -4,7 +4,6 @@
  * set -- it stands where `pure` is asked for (design principles 3.3, effects plan 5). A lambda
  * needs no syntax of its own for this: its resources are inferred like any other body's.
  */
-module pure_parameter_takes_lambda
 
 func usePure(f: (x: int) => int pure): int {
     f(1)

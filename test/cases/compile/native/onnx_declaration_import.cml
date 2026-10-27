@@ -4,7 +4,6 @@
  * operator. The case is checked, not run: the
  * onnx declaration cases are compile-only.
  */
-module onnx_declaration_import
 
 import { supported_operators } from onnx
 

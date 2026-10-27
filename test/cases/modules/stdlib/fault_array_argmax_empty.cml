@@ -1,4 +1,4 @@
-module fault_array_argmax_empty
+
 
 import { argmax } from array
 

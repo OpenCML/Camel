@@ -1,7 +1,6 @@
 /**
  * Verifies mixed inline strategies can coexist in one graph without leaving stale work items after rescanning.
  */
-module inline_strategy_hybrid_mix
 
 func inc(v: int): int {
     return v + 1

@@ -3,7 +3,6 @@
  * result type has no argument to take a type from (design principles 5.5). No expected result
  * and no explicit type argument decides it, so the call is refused.
  */
-module err_head_return_only
 
 func make::<T>(x: int): T {
     return x

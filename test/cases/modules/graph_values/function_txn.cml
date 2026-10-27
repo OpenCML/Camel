@@ -3,7 +3,6 @@
  * `+ 1`, and `target` stays as it was for every other holder -- its own graph, a closure that
  * captured it before, and two callers that call it by name.
  */
-module function_txn
 import { Graph, Node, constant, graph_of, inputs, nodes, op, op_name, open_function, replace, to_function } from graph
 
 func target(x: int): int {

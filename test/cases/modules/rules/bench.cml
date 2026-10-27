@@ -6,7 +6,6 @@
  * The pass is `sync` and so are the callbacks it hands to `->`: printing is part of the pass's
  * execution, not a value left unapplied (`SemanticDiag::EffectNotExecuted`).
  */
-module bench
 
 import { Program } from graph
 import { Rule, Run, run } from rewrite

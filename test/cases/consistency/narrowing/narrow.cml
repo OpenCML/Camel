@@ -4,7 +4,6 @@
  * condition of an `if`, or one of the operands `&&` joins in it, the name is a `T` in the arm
  * that excludes null: the same branch as `match x { case null => B  case v => A }`.
  */
-module narrow
 
 func len_or_zero(s: string?): int {
     return if s != null then len(s) else 0

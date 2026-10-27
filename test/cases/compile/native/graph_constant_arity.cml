@@ -2,7 +2,6 @@
  * `graph:constant` is declared with two arguments per sample type: a third one is refused at the
  * call, and the overloads the message lists are the declarations' (bucket 1).
  */
-module graph_constant_arity
 
 import { current, root, nodes, constant } from graph
 

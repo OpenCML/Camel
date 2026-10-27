@@ -3,7 +3,6 @@
  * the message prints the declaration's own parameter name (`value`) -- the one source is
  * `stdlib/random.cml`, not the C++ module.
  */
-module random_type
 
 import { seed } from random
 

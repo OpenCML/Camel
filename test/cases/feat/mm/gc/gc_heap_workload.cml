@@ -1,7 +1,6 @@
 /**
  * Heap-heavy GC diagnostic workload covering arrays, structs, strings, closures, and mutation.
  */
-module gc_heap_workload
 
 type Box = {
     label: string,

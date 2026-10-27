@@ -1,5 +1,5 @@
 /** A module whose state is a top-level `var`: exported, it is a resource other modules read and write. */
-module counter_lib
+
 
 export var count = 0
 

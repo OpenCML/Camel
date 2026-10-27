@@ -4,7 +4,6 @@
  * fixed parameters take their arguments and `ts` is the tuple of the rest, so `indices ts` sees
  * a tuple whose arity is known, and `..(a, b)` passes the elements of a tuple literal.
  */
-module rest_params
 
 func sum(..ts): int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]

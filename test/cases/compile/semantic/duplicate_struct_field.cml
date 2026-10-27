@@ -2,7 +2,6 @@
  * A field written twice in a struct literal is a compile-time error at the second one (line 8,
  * column 21). The later value used to be dropped, silently.
  */
-module duplicate_struct_field
 
 func main(): int sync {
     let s = { x: 1, x: 2 }

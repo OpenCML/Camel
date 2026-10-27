@@ -5,7 +5,6 @@
  * high-water mark is the live set plus one window plus one temporary, however many steps the
  * program runs, and the number of collections is the volume divided by the window.
  */
-module gc_block_pacing
 
 func main(steps: int, temp: int): int sync {
     let keep = 0..5000000

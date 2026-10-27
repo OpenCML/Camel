@@ -1,4 +1,3 @@
-module grad_function_value_branch
 import { reshape, sum, tanh } from tensor
 import { grad } from autodiff
 

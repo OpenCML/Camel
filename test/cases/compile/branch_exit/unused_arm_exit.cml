@@ -5,7 +5,6 @@
  * ExitInUnusedBranch; what the program does is unchanged (every function here goes on to its
  * last statement).
  */
-module unused_arm_exit
 
 // The exits of both arms are lost: the function returns 0 for every b.
 func safe_div(a: int, b: int): int! {

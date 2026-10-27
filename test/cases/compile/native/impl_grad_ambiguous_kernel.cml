@@ -3,7 +3,6 @@
  * OPER of its kernel and nothing at the call site says which of the bodies it means, so autodiff
  * cannot differentiate it (design principles 10.4): a kernel implements one function.
  */
-module impl_grad_ambiguous_kernel
 
 import { grad } from autodiff
 

@@ -53,7 +53,7 @@ case = "../../../cases/compile/when_import/not_predicate.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenPredicateNotCompileTime"
-expect_output_contains = ["'ready' is not a compile-time predicate", "'when_import_predicates'"]
+expect_output_contains = ["'ready' is not a compile-time predicate", "'predicates'"]
 
 [[tests]]
 name = "when_import.not_imported"
@@ -63,7 +63,7 @@ case = "../../../cases/compile/when_import/not_imported.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenPredicateNotImported"
-expect_output_contains = ["'is_compound' is declared in module 'when_import_predicates'", "not imported"]
+expect_output_contains = ["'is_compound' is declared in module 'predicates'", "not imported"]
 
 [[tests]]
 name = "when_import.ambiguous"
@@ -73,7 +73,7 @@ case = "../../../cases/compile/when_import/ambiguous.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenPredicateAmbiguous"
-expect_output_contains = ["ambiguous", "'when_import_predicates'", "'when_import_predicates_other'"]
+expect_output_contains = ["ambiguous", "'predicates'", "'predicates_other'"]
 
 [[tests]]
 name = "when_import.array_sum"

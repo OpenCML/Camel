@@ -4,7 +4,6 @@
  * with a variable, conversions to a variable's type, a generic function declared inside a
  * function, `var` parameters.
  */
-module features
 
 let base = 100
 

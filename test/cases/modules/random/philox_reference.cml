@@ -10,8 +10,6 @@
  *   permutation  the permutation of 8, of 0 and of -3
  *   array     key(42)'s whole-array draw of shape [2, 3], then the scalar draws of the keys it folds
  */
-module philox_reference
-
 import {
     key, fold, uniform, normal, randint, permutation, seed, next_key, rand, uniform_array, normal_array
 } from random

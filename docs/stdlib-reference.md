@@ -4524,6 +4524,19 @@ declarations of the name a call reached.
 
 - Example: `with_probe<1>([5, 6])` gives `11002`
 
+#### `arity_probe`
+
+```camel
+arity_probe: <tag: int, extra: int[] = []> (f: F, example: E) => int when is_function::<F>()
+```
+
+An operator that wants a function and an example and writes `when is_function::<F>()`, the
+condition a pass writes: the count of ordinary parameters (a pass takes one) tells the two
+apart, so this is an operator, exported and callable with its `with` arguments by name, as
+`onnx::export_model` is. It gives `tag * 10 + len(extra)`.
+
+- Example: `arity_probe<7, [1]>((x: int): int => x, 0)` gives `71`
+
 <a id="this"></a>
 
 ## `this`
@@ -6258,7 +6271,7 @@ module and never touches the file system or the ONNX runtime.
 #### `export_model`
 
 ```camel
-export_model: <out: string, dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'> (fn: F, example: E) => void!
+export_model: <out: string, dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'> (fn: F, example: E) => void! when is_function::<F>()
 ```
 
 Writes the ONNX model of `fn` applied to arguments like `example` to the file `out`, at the

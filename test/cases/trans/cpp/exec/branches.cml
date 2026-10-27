@@ -1,7 +1,6 @@
 /// Branches are statements: the value of a branch used twice runs its arm once (it ran twice,
 /// design principles 10.6), and the effects of a sync block keep their order
 /// around a branch (D5). Nested branches, `match` on numbers.
-module branches
 
 func twice(flag: bool): int sync {
     let r = if flag then println(1) else println(2)

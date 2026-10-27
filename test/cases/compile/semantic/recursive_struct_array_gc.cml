@@ -4,7 +4,6 @@
  * while it is still read afterwards; the collector has to trace `children` (Array) with the
  * element type `Node`, and each moved Node's own `children` slot, to keep the subtree alive.
  */
-module recursive_struct_array_gc
 
 type Node = { value: int, children: Node[] }
 

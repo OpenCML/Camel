@@ -3,7 +3,6 @@
  * MatchWithoutDefault: one with `case _`, one over a bool that lists `true` and `false`, and
  * the fixed patterns over `T?` and `T!`. The graph of each has exactly the arms written.
  */
-module complete_matches
 
 func with_default(s: string): int {
     return match s {

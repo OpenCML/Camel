@@ -18,7 +18,6 @@
  * operation is the double one, computed the way the operator's kernel computes it, once per
  * folding. No other number is computed here.
  */
-module opt
 
 import { flatten, all, any } from array
 import { Program, Node, Graph, Txn, NodeKind, graphs, nodes, inputs, with_inputs, value_users, id, kind, op, op_name, is_pure, is_anchor, is_written_slot, is_constant, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph

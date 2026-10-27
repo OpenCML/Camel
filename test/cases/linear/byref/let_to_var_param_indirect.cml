@@ -3,7 +3,6 @@
  * Rejected at compile time: only a name bound by `var` denotes a mutable object
  * (docs/design-principles.cn.md 3.5).
  */
-module let_to_var_param_indirect
 
 func bump(var x: int) {
     x += 1

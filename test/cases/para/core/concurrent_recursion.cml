@@ -5,7 +5,6 @@
  * one, 0 when it timed out alone. With the two subtrees of some call running concurrently every
  * leaf finds a peer (8 leaves, groups of two); node by node, none does. Nothing is timed.
  */
-module concurrent_recursion
 
 import { rendezvous } from test_support
 

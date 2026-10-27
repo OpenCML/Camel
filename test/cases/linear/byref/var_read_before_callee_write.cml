@@ -6,7 +6,6 @@
  * used to be free to run before the read (std::opt: the snapshot came out as the
  * final value of the variable).
  */
-module var_read_before_callee_write
 import { reshape, sum } from tensor
 
 func ignores(x: f64[..], var c: int): int sync {

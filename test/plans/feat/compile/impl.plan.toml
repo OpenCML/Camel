@@ -434,7 +434,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImplOnBodylessDeclaration"
 expect_diagnostic_code = "0x030001D8"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 2
 expect_output_contains = ["The body-less declaration 'add_kernel' cannot carry '#impl(add_kernel)': it has no Camel body."]
 
@@ -447,7 +447,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImplKernelUnknown"
 expect_diagnostic_code = "0x030001D9"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_diagnostic_column = 2
 expect_output_contains = ["The '#impl' tag of 'add' names 'nope', which is no body-less declaration."]
 
@@ -460,7 +460,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImplKernelForeign"
 expect_diagnostic_code = "0x030001DA"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 2
 expect_output_contains = ["The '#impl' tag of 'first' names 'at', which another module declares."]
 
@@ -473,7 +473,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImplSignatureMismatch"
 expect_diagnostic_code = "0x030001DB"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 2
 expect_output_contains = ["The kernel 'add_kernel' of the '#impl' function 'add' has the signature (a: int, b: int) => int, but the function has (a: float, b: float) => float."]
 
@@ -486,7 +486,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImplKernelNotBodyless"
 expect_diagnostic_code = "0x030001DC"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_diagnostic_column = 2
 expect_output_contains = ["The '#impl' tag of 'add' names 'helper', which has a body."]
 
@@ -677,7 +677,7 @@ case = "../../../cases/compile/native/impl_syntax_args.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagArgumentCount"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 11
 expect_diagnostic_column = 2
 expect_output_contains = ["The tag 'impl' takes 1 parameter(s), but 0 argument(s) are written."]
 
@@ -691,6 +691,6 @@ case = "../../../cases/compile/native/impl_grad_ambiguous_kernel.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 25
+expect_diagnostic_line = 24
 expect_output_contains = ["2 semantic bodies of this program implement that kernel ('t', 'u')"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

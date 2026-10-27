@@ -82,7 +82,7 @@ backends = ["nvm", "fvm", "prl"]
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
-expect_diagnostic_line = 30
+expect_diagnostic_line = 29
 expect_diagnostic_column = 36
 expect_stdout_starts_with = "Attempted division by zero. / 305\nAttempted division by zero. / 305\nAttempted division by zero. / 305\nbefore\n"
 expect_output_contains = ["Index 105 is out of range"]
@@ -95,7 +95,7 @@ case = "../../../cases/para/handoff/fault_deep.cml"
 args = ["${case}", "${run_prl_no_bytecode}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
-expect_diagnostic_line = 30
+expect_diagnostic_line = 29
 expect_diagnostic_column = 36
 expect_stdout_starts_with = "Attempted division by zero. / 305\nAttempted division by zero. / 305\nAttempted division by zero. / 305\nbefore\n"
 expect_output_contains = ["Index 105 is out of range"]
@@ -127,7 +127,7 @@ backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 envs = ["A=10", "B=988"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
-expect_diagnostic_line = 22
+expect_diagnostic_line = 21
 expect_diagnostic_column = 38
 expect_stdout_starts_with = "start\n"
 expect_output_contains = ["Maximum recursion depth (1000) exceeded"]
@@ -152,7 +152,7 @@ backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 envs = ["A=0", "B=998"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
-expect_diagnostic_line = 22
+expect_diagnostic_line = 21
 expect_diagnostic_column = 38
 expect_output_contains = ["Maximum recursion depth (1000) exceeded"]
 
@@ -174,6 +174,6 @@ args = ["${case}", "${run_prl_no_bytecode}"]
 envs = ["A=10", "B=988"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
-expect_diagnostic_line = 22
+expect_diagnostic_line = 21
 expect_diagnostic_column = 38
 expect_output_contains = ["Maximum recursion depth (1000) exceeded"]

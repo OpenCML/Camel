@@ -6,7 +6,6 @@
 //
 // The Python script accuracy.py measures bf16 and fp64; this program measures the f32 tensor
 // type the language has today, so the two agree on where the naive form breaks.
-module naive_accuracy
 
 import { exp, log, log_softmax, new, one_hot, reshape, softmax, sum, transpose, zeros } from tensor
 import { is_inf, is_nan } from math

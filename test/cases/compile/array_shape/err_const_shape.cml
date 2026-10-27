@@ -1,6 +1,5 @@
 // A shape is written without `const`: the extents of an array type are expressions, so a `const`
 // in front of one is the retired spelling and the parser refuses the word there.
-module array_shape_err_const
 
 func bad(x: f32[const 3]): int {
     return 0

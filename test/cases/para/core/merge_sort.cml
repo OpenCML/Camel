@@ -1,14 +1,23 @@
 /**
  * Large recursive mergesort workload used to stress divide-and-conquer parallelism and deep task trees.
  */
-module merge_sort
 
 import { now } from time
 import { seed, rand, shuffle, next_key } from random
 import { sort } from array
 
+/// Merges two sorted arrays in one pass: the smaller front element goes out first, then what is
+/// left of either side.
 func merge(lhs: int[], rhs: int[]): int[] sync {
-    return sort(concat(lhs, rhs))
+    let none: int[] = []
+    // One expression for the body, so that `out` is the state's own array and `append` grows it in
+    // place; a block with a `let` in it would copy the array every round.
+    let (i, j, out) = loop i = 0, j = 0, out = none while i < len(lhs) && j < len(rhs) do (
+        if lhs[i] <= rhs[j] then i + 1 else i,
+        if lhs[i] <= rhs[j] then j else j + 1,
+        out->append<if lhs[i] <= rhs[j] then lhs[i] else rhs[j]>
+    )
+    return concat(concat(out, lhs[i:]), rhs[j:])
 }
 
 func mergesort(arr: int[]): int[] sync {

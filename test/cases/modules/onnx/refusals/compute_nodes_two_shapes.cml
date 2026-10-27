@@ -8,7 +8,6 @@
  * 15: the copy of `combine` that had been spliced in, two OPERs behind its own region, and the
  * three GATEs the splice adds for its arguments were counted).
  */
-module compute_nodes_two_shapes
 
 import { reshape } from tensor
 import { export_model } from onnx

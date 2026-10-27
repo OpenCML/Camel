@@ -2,7 +2,6 @@
  * The function of a reduce faults at its fourth step. reduce runs in element order on every
  * back end.
  */
-module fault_in_reduce
 
 func step(acc: int, x: int): int { return acc + 60 / (x - 3) }
 

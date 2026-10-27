@@ -2,7 +2,6 @@
  * One warning (EffectNotExecuted: `main`'s body is not a sync block, so the println nothing depends
  * on does not run) and no error. Used to test the command-line switches for warnings.
  */
-module warning
 
 func main(): int {
     println('never printed')

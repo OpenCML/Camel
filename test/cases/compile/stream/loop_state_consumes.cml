@@ -4,7 +4,6 @@
  * state. The rounds are counted by a second state here, and what the two rounds leave behind is
  * read afterwards: one element of `count(3)`, which is what threading the rest means.
  */
-module stream_loop_state_consumes
 
 func count(n: int): int.. {
     return step(n)

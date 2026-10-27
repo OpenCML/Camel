@@ -12,7 +12,6 @@
  * nvm and on fvm, and not 0.0234375 (the f32 fill) or a fault. The f32 gather in
  * `gather_discrete_index_zero` stays at 6.0 beside it.
  */
-module dtype_gather_grad_f64
 
 import { reshape, sum, take } from tensor
 import { with_grad } from autodiff

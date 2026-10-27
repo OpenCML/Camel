@@ -5,7 +5,6 @@
  * `device` reaches the C++ operator and answers the error value of kind `DeviceUnavailable`, which
  * the `!!` below stands for, so this case needs no GPU.
  */
-module tiles_declaration_import
 
 import { available, device } from tiles
 

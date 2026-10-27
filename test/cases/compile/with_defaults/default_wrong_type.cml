@@ -2,7 +2,6 @@
  * A default is a value of its parameter's type, as an argument at the call would be: a string
  * default of an `int` parameter is WithDefaultWrongType (design principles 4.4).
  */
-module with_default_wrong_type
 
 with <rounds: int = "many">
 func f(x: int): int {

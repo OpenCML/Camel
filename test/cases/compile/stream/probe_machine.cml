@@ -5,7 +5,6 @@
  * from together with the element it hands out, and builds the stream value as a step function over
  * that state.
  */
-module probe_machine
 
 /// The resume point and every value that lives across a `yield`.
 type CountState = { pc: int, n: int, i: int }

@@ -17,7 +17,6 @@
  * A compiler that refused the pair would print nothing; one that bound the kernel by name alone
  * could not tell the two arms apart and would print one arm's answer twice.
  */
-module when_arms_disjoint
 
 /// The element types of the first arm: `i32` alone.
 func is_arm_i32::<T>(): bool {

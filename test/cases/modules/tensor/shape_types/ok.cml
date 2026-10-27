@@ -1,4 +1,3 @@
-module shape_ok
 import { zeros, ones, reshape, sum, tanh, load_npy } from tensor
 func f(b: f32[3]): float {
     return float(sum(b + zeros([3])))

@@ -1,5 +1,3 @@
-module match_type_err_unreachable_array
-
 func kind::<T>(): string {
     return match type T {
         case array => 'array'

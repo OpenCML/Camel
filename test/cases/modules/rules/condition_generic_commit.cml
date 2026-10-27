@@ -4,7 +4,6 @@
  * and the declaration has no condition function to read. The effect is in the function the
  * condition calls, and the rule may not have it either way.
  */
-module condition_generic_commit
 
 import { Program, Graph, Node, current, root, open, commit, add_constant, id } from graph
 import { rewrite } from rewrite

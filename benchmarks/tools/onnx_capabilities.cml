@@ -2,7 +2,6 @@
  * Prints the operator URIs the ONNX backend can lower, one per line
  * (used by capabilities.py for the capability table).
  */
-module onnx_capabilities
 
 import { supported_operators } from onnx
 

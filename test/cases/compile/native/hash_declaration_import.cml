@@ -3,7 +3,6 @@
  * value (a text is encoded first, then one operator, `hash:sha256_bytes`, digests the bytes). Every
  * call reaches the C++ operator.
  */
-module hash_declaration_import
 
 import { sha256 } from hash
 import { encode } from bytes

@@ -1,4 +1,3 @@
-module shape_inference_computed_extent_stays_open
 import { reshape, sum } from tensor
 // The computed extent itself is not known: [?, 3] does not enter a [2, 3] parameter.
 func exact(a: f32[2, 3]): float {

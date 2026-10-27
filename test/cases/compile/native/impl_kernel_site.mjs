@@ -81,8 +81,7 @@ function run(name, files, entry) {
 const a = run(
     'foreign_tensor_kernel',
     {
-        'site_a.cml': `module kernel_site_a
-import tensor
+        'site_a.cml': `import tensor
 
 #op('tensor:log_softmax')
 func log_softmax_kernel(x: f32[..], axis: int): f32[..]
@@ -116,16 +115,15 @@ if (aFound) {
     check('A. the message names the operator', aFound.message.includes('tensor:log_softmax'), aFound.message)
     check('A. located in the file that declared it', path.basename(aFound.data.modulePath || '') === 'site_a.cml', String(aFound.data.modulePath))
     // The origin of a declaration is the `#op` tag that names the operator, 0-based as the runner
-    // reports it (the tag is line 4 of the file, the declaration's `func` line is 5).
-    check('A. located at the tag', Boolean(aFound.range) && aFound.range.start.line === 3, JSON.stringify(aFound.range))
+    // reports it (the tag is line 3 of the file, the declaration's `func` line is 4).
+    check('A. located at the tag', Boolean(aFound.range) && aFound.range.start.line === 2, JSON.stringify(aFound.range))
 }
 
 // ---- B: Adam's kernel is `nn`'s; the generic function it is written on is legal now ----
 const b = run(
     'foreign_adam_kernel',
     {
-        'site_b.cml': `module kernel_site_b
-import nn
+        'site_b.cml': `import nn
 
 #op('nn:adam')
 func adam_kernel::<P>(params: P, grads: P): P
@@ -158,9 +156,7 @@ if (bFound) check('B. the refusal is the catalog code', bFound.code === '0x03000
 
 // ---- C: the tensor module's own file declares the kernel and holds the body ----
 const cFiles = {
-    'tensor.cml': `module tensor
-
-#op('tensor:log_softmax')
+    'tensor.cml': `#op('tensor:log_softmax')
 func log_softmax_kernel(x: f32[..], axis: int): f32[..]
 
 #impl(log_softmax_kernel)

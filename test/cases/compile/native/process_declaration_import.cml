@@ -3,7 +3,6 @@
  * (seconds) and answers nothing, `user_name` answers the declared `string!`, and `cpu_count` the
  * declared `int`. Every call reaches the C++ operator.
  */
-module process_declaration_import
 
 import { sleep, user_name, cpu_count } from process
 

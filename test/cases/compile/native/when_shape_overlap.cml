@@ -12,7 +12,6 @@
  * (`Builder::isPassDeclaration`), so the two declarations below would not be a pair of rules at
  * all. `is_callable` says the same thing about the type it is given.
  */
-module when_shape_overlap
 
 func always::<T>(): bool {
     return match type T {

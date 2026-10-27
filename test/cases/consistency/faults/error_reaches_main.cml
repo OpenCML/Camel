@@ -1,7 +1,6 @@
 /**
  * An error value nobody handled is what main returns.
  */
-module error_reaches_main
 
 func safe_div(a: int, b: int): int! {
     if b == 0 then {

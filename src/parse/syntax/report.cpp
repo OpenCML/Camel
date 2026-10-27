@@ -673,7 +673,7 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
         //    or the end of the file with a block open.
         if (!open.empty()) {
             static const std::set<std::string> kStatementStart = {
-                "let", "var", "return", "func", "type", "import", "export", "module", "}"};
+                "let", "var", "return", "func", "type", "import", "export", "}"};
             const OpenDelimiter &top = open.back();
             if (atEof || (top.kind != '{' && kStatementStart.contains(off))) {
                 missingCloser(closerOf(top.kind), &top);

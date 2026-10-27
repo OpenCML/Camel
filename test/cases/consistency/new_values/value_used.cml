@@ -3,7 +3,6 @@
  * statement's value, a `map` element function, an arm of an `if` with `else`.
  * Expected output: [1, 2] [[0], [1]] [3]
  */
-module value_used
 
 func plus_two(xs: int[]): int[] {
     xs->append<2>

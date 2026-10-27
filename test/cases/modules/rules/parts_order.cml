@@ -23,7 +23,6 @@
  * `plain` (`a * 5.0`) has a guard on the value, which asks no question about parts: it loses its
  * product in the same pass, so a pass that quietly stopped doing its work would show up there.
  */
-module parts_order
 
 import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
 import { max } from math

@@ -3,7 +3,6 @@
  * ordinary syntax error (line 9, column 9), where the name being declared belongs. The array
  * carrier the parser used to read is gone with the struct and array carriers.
  */
-module no_array_destructuring
 
 func f(xs: int[]): int {
     let [a, b] = xs

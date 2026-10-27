@@ -3,7 +3,6 @@
  * two are left out entirely, so the call gives one `with` argument to a signature that declares
  * three.
  */
-module with_forms_all_defaults
 
 import { reshape } from tensor
 import { export_model } from onnx

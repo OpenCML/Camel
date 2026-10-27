@@ -4,7 +4,6 @@
  * without the annotation, in a `let`, a `var`, a struct field, an argument and a `return`
  * (design principles 5.1).
  */
-module comprehension_context_annotated
 
 type Box = { values: f32[], count: int }
 

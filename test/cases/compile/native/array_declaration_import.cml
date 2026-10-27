@@ -4,7 +4,6 @@
  * has one declaration per element type, each naming its own operator and taking that element type;
  * and `flatten` and `unique` are generic Camel functions of `stdlib/array.cml`.
  */
-module array_declaration_import
 
 import { sort, argsort, flatten, unique } from array
 

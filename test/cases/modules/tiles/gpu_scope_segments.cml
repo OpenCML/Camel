@@ -16,7 +16,6 @@
 ///
 /// Red when: the tag is not read (`pair` is not a device unit, or its nodes are the host's), the
 /// empty scope is not a device unit, or a `#cpu` body is compiled as one.
-module tiles_gpu_scope_segments
 
 import { reshape, sum } from tensor
 

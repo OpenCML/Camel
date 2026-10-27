@@ -6,7 +6,6 @@
  * inlining the call before it could not re-point the edge: the earlier
  * call's body no longer reached the exit and its println never ran.
  */
-module consecutive_sync_calls
 
 func one(a: int): int sync {
     println(a)

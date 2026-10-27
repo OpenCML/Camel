@@ -14,7 +14,6 @@
  * `loop_grad_tensor_iterable` asserts its adjoint against finite differences. What is left is the
  * shape whose rounds are not numbers, and it is refused rather than run.
  */
-module loop_grad_refuse_slice_iterable
 
 import { sum } from tensor
 import { grad } from autodiff

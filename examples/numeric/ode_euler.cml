@@ -1,7 +1,6 @@
 // Integrates the cooling equation dT/dt = -k (T - T_room) with Euler steps written as a
 // tail recursion, and compares the result with the exact solution.
 // Run: camel examples/numeric/ode_euler.cml
-module ode_euler
 
 import { exp } from math
 

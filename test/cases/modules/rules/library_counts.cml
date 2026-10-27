@@ -3,7 +3,6 @@
  * of operator nodes and the count of each operator the two libraries move. Printed before and
  * after a pass, it is the cost of the rewrite, not a count of source sites.
  */
-module library_counts
 
 import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
 

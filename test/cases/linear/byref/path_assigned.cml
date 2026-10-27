@@ -3,7 +3,6 @@
  * compound assignment (docs/design-principles.cn.md 3.5, 6.11). The whole variable is rebound
  * to the value with one place changed.
  */
-module path_assigned
 
 func main(): int sync {
     var m = [{ x: 1, y: 2 }, { x: 3, y: 4 }]

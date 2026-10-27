@@ -6,7 +6,6 @@
  * the signature: the consumer threads the rest of the stream it was handed, never a state of
  * its own, and the same closure called twice answers the same element.
  */
-module stream_step_value
 
 func count(n: int): int.. {
     return step(n)

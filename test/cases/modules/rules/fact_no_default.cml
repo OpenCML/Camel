@@ -2,7 +2,6 @@
  * Every fact needs one case that takes whatever the others do not: without `case _` nothing says
  * what the fact is for a value no case matched, and the declaration is refused.
  */
-module fact_no_default
 import { max } from math
 
 fact sign(v: int): int match v {

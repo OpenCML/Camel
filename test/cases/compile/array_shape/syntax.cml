@@ -1,6 +1,5 @@
 // The array's source syntax: `f32[4]` is one dimension of four, `?` (or the empty `[]`) is
 // an unknown dimension, and both spellings name the same type.
-module array_shape_syntax
 
 func first(x: f32[4]): f32 {
     return x[0]

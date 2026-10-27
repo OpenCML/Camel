@@ -7,7 +7,6 @@
  * Actual: CRASH
  * Reduced by test/tools/progen from seed 34 (generator version 1, all features).
  */
-module simplify_crash
 
 func main(): int sync {
     let n46 = '';

@@ -4,7 +4,6 @@
  * declaration (step 10). With no ordinary parameter this is the type case a
  * zero-argument declaration can have.
  */
-module tiles_result_type
 
 import { available } from tiles
 

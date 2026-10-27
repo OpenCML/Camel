@@ -6,7 +6,6 @@
  * so this also exercises a tangent type that belongs to a module (`tensor:add`, `tensor:zeros_like`)
  * through the zero tangent and the sum of two array tangents.
  */
-module loop_grad_iterable_tensors
 
 import { abs, reshape, sum } from tensor
 import { grad } from autodiff

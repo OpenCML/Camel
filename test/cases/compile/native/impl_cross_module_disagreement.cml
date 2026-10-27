@@ -7,7 +7,6 @@
  * The two paths disagree, so the agreement case cannot pass by checking that both paths merely
  * ran; and the direct call through an import still takes the kernel, not the body.
  */
-module impl_cross_module_disagreement
 
 import { add } from impl_cross_module_disagreement_lib
 

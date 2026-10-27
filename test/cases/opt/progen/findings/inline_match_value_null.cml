@@ -6,7 +6,6 @@
  * Actual: L6 null
  * Reduced by test/tools/progen from seed 468 (generator version 1, all features).
  */
-module inline_match_value_null
 
 type Q = { n: int, tag: string }
 

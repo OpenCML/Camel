@@ -2,7 +2,6 @@
  * A `constas` parameter may stand in any position among the ordinary parameters (rule,
  * 2026-10-22): the call writes its value at that position, and it takes no runtime slot.
  */
-module constas_not_first
 
 func place(x: int, constas n: int): int {
     return x * 10 + n

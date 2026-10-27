@@ -1,5 +1,3 @@
-module fault_variance_short
-
 import { variance } from statistics
 
 func main(): int sync {

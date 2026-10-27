@@ -2,7 +2,6 @@
  * Generic operator overloads (head type parameters, `func operator +::<T>`) next to plain
  * ones: each call takes the one overload that accepts its operands.
  */
-module generic
 
 func operator +::<T>(a: T[], b: T): T[] { return a->append<b> }
 func operator +::<T>(a: (T, T), b: T): (T, T) { return (a.1, b) }

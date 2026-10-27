@@ -10,7 +10,6 @@
  * too: `for n in fields T` takes the field's name alone, `for n, F in fields T` the name and the
  * type.
  */
-module static_loop_head_tags
 
 tag width(w: int) on field
 tag leaf on field

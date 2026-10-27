@@ -6,7 +6,6 @@
  * new one, so the volume allocated grows with `reps` and the volume alive does not. The memory
  * the collector holds must not depend on `reps`.
  */
-module gc_soak
 
 type Rec = {
     id: int,

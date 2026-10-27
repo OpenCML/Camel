@@ -3,7 +3,6 @@
  * nullable(fallible(T)). A `match` opens the outer form only, so `case null` is exhaustive
  * over `int!?` and not over `int?!` (design principles 3.9).
  */
-module two_layer
 
 func failing(): int! {
     return error('Boom', 'no value')

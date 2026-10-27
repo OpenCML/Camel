@@ -2,7 +2,6 @@
 // its state: a `var` whose first value is `null` does not take a type from a later assignment --
 // it stays `void`, and `v ?? 0` is refused ("its left side has type 'void', which is not a
 // 'T?'"). State that has to be typed is therefore not carried in a `null`-valued `var`.
-module cell_from_null_stays_void
 
 func main(): int sync {
     var v = null

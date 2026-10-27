@@ -1,4 +1,3 @@
-module shape_inference_plain_result
 import { tanh, sum, ones } from tensor
 // A result declared `f32[..]` has no extents for the caller, whatever the body computes.
 func g(x: f32[3]): f32[..] {

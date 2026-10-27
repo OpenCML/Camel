@@ -3,7 +3,6 @@
 // -2, 2, -4 and 0; under int64 normalization the products would sum to 4294967296 and `to_bytes`
 // would be eight bytes per element. `sum` is a float reduction (it returns float), which is why
 // the sums print with a decimal point.
-module tensor_dtype_i32_exact
 
 import { new, multiply, sum, to_bytes, from_bytes } from tensor
 import { to_array } from bytes

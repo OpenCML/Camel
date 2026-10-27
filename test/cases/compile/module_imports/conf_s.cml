@@ -1,5 +1,3 @@
-module conf_s
-
 export func f(x: string): string {
     return x + '!'
 }

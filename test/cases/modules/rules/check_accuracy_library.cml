@@ -20,7 +20,6 @@
  * `{3.4e+38, 2, 377.894}`). Recorded in the rule §accuracy-check-sampling`: the
  * rule is not this lane's, and neither is the measure.
  */
-module check_accuracy_library
 
 import { check } from rewrite
 import {

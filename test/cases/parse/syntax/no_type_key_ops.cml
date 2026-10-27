@@ -4,7 +4,6 @@
  * and the declaration asks for its `=` there (line 10, column 14). The type operators the grammar
  * reserved left the language in the item-5 clearance.
  */
-module no_type_key_ops
 
 func f(x: int): int {
     let a: A + B = x

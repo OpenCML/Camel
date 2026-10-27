@@ -4,7 +4,6 @@
  * form was still in the grammar; before that the marker was dropped and the program printed an
  * address.
  */
-module syntax_no_spread_in_array_literal
 
 func main(): int sync {
     let xs = [1, 2, 3]

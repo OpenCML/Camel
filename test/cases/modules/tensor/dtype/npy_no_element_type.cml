@@ -3,7 +3,6 @@
 // loaded a tensor whose element type was whatever the file held; now it does not resolve, and the
 // candidates name the five element types a
 // `.npy` file can hold (design principles 5.5).
-module tensor_dtype_npy_no_element_type
 
 import { load_npy } from tensor
 

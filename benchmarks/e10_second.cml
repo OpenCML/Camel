@@ -5,7 +5,6 @@
  * graph-stats comparison against e10_first.cml measures whether the
  * second-order graph normalizes like the first-order one.
  */
-module e10_second
 
 import { grad } from autodiff
 import { relu, mean, reshape } from tensor

@@ -1,7 +1,6 @@
 /**
  * Verifies macros can synthesize closures and pass them onward as first-class function values.
  */
-module macro_functor
 
 type Adder = (y: int) => int
 

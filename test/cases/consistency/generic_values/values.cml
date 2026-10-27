@@ -3,7 +3,6 @@
  * compiler builds the instance once the position fixes its type variables. That happens
  * while the program is compiled; the graph holds the instances and nothing else.
  */
-module values
 
 import { reverse } from array
 

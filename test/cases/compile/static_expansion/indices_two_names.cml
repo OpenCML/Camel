@@ -4,7 +4,6 @@
  * name (`F`, the type name `fields` has) has nothing to be. It is refused by name, not as a
  * syntax error.
  */
-module indices_two_names
 
 func bad(t: (int, int)): int {
     return static loop acc = 0 for j, F in indices t do acc + t.[j]

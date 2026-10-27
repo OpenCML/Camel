@@ -3,7 +3,6 @@
  * the input, whatever order the element functions ran in. A parallel scheduler may run the
  * element functions concurrently (the order of effects inside them is then not defined).
  */
-module map_result_order
 
 func slow_square(i: int): int {
     // more work for the first elements, so that later ones tend to finish first

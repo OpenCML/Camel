@@ -4,7 +4,6 @@
  * 'a'`. (`==` and `!=` work.)
  * Expected output (byte order, design principles log 2.9): four lines `true`.
  */
-module string_ordering
 
 func main(): int sync {
     println('a' < 'b')

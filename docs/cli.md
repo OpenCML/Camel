@@ -229,7 +229,9 @@ expression evaluated once, where the declaration is**, not at each call: the hel
 value (`top: int = 24`, not `top=8*3`), and every call that leaves the parameter out copies that
 one value. The `when` clause is the pass's applicability: `is_function::<F>()` is what the pipeline
 checks, and a declaration whose condition is something else is refused rather than applied on an
-assumption.
+assumption. A pass takes the function it is applied to and nothing else: one ordinary parameter. A
+body-less declaration with the same condition and more ordinary parameters is an operator that wants
+a function (`onnx::export_model(f, example)`), and is not a pass.
 
 The call is checked when the pipeline is resolved, before any pass runs, and the refusal is the
 language's own for a call, located at the call and in the semantic stage (`typecheck`):
@@ -462,7 +464,7 @@ Errors are printed on stdout, after any program output, as a JSON array of objec
 ]
 ```
 
-- `range` is 0-based; `data.modulePath` is the file the diagnostic is located in, and `data.moduleName` the name the diagnostic carries for its module (the declared `module` name — `main` when the entry file declares none — or the file stem for a diagnostic located by a position only). A diagnostic without a source position (an unknown pass name, a pass a module does not provide, passes that never run) has an all-zero range and both empty: what it is about is in `data.stage` (`pass:<module>::<pass>`) and in `message`.
+- `range` is 0-based; `data.modulePath` is the file the diagnostic is located in, and `data.moduleName` the name the diagnostic carries for its module (the module's name is its file's name, language reference 05, 5.1; or the file stem for a diagnostic located by a position only). A diagnostic without a source position (an unknown pass name, a pass a module does not provide, passes that never run) has an all-zero range and both empty: what it is about is in `data.stage` (`pass:<module>::<pass>`) and in `message`.
 - `data.name` is the stable diagnostic name; `code` is its numeric form.
 - Every graph a pass commits (and every graph the front end encodes) is validated structurally, in release builds as well: node, slot and edge references in range, inputs and outputs mirroring each other, `BRCH`/`JOIN` arm counts, a `GATE` with a value and a control input, a direct call passing as many arguments as its callee takes. A violation is a `RuntimeDiag::PassInternalError` naming the pass that committed the graph, before anything runs.
 - An exception that escapes a pass without being a diagnostic (graph validation when a rewrite is committed, a cycle met while a scheduler builds its execution order) is reported as `RuntimeDiag::PassInternalError` (`0x0400000C`) with stage `pass:<name>`, the exception text in the message, no source position, and exit code 1. It marks a defect of the compiler, not a refusal of the program. The stage names the pass even when it is a scheduling pass, so it does not tell whether part of the program had already run. An exception outside any pass is reported as `InternalDiag::UnknownInternalError` with stage `internal`.

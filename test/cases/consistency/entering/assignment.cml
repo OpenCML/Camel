@@ -6,7 +6,6 @@
  * writes the null slot. On the graph each is the CAST node a program would write with `as`. The
  * reverse never enters: see `err_assignment_reverse` and `err_assignment_other_payload`.
  */
-module assignment
 
 // A `var` captured by a closure and written inside a `sync` body (section 7 of the primer).
 func make_best(): (x: float) => float {

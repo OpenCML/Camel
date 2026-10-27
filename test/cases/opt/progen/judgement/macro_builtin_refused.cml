@@ -5,7 +5,6 @@
  * ':mark/reduce_arr' is unavailable in macro execution" (the same for map and filter).
  * See README.md, "For the owner to decide", J1.
  */
-module macro_builtin_refused
 
 #macro func total(n: int): int {
     return 0..n->reduce<(acc: int, x: int): int => acc + x, 0>

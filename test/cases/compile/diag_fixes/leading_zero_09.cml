@@ -4,7 +4,6 @@
  * test/cases/parse/numbers/leading_zero.cml, is refused with no fix: octal 77 and decimal 77 are
  * both readings of it.
  */
-module diag_fixes_leading_zero_09
 
 func main(): int sync {
     let a = 09

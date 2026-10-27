@@ -19,7 +19,6 @@
  * two rules the library follows rather than only that some number was produced: a value that is
  * equal under both rules would prove nothing.
  */
-module array_sum_rounding
 
 import { sum as array_sum } from array
 import { new, reshape, sum as tensor_sum, to_bytes } from tensor

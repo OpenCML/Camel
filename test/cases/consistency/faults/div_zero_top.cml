@@ -2,7 +2,6 @@
  * Integer division by zero written directly in main, after a line of output: the line is
  * printed, then DivisionByZero at the division.
  */
-module div_zero_top
 
 func main(): int sync {
     let z = 0

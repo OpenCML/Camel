@@ -5,7 +5,6 @@
  * its argument nor has an effect, and the write ordered before that call used to be dropped by
  * std::opt (the counter came out one short, silently).
  */
-module var_writes_through_recursion
 
 // one write per level, the base case returns a constant
 func climb(i: int, n: int, var c: int): int sync {

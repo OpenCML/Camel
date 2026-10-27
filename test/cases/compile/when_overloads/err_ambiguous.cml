@@ -1,4 +1,4 @@
-module when_overloads_err_ambiguous
+
 
 with <fast: bool, wide: bool>
 func pick(x: int): string when fast {

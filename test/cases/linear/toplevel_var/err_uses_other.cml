@@ -1,5 +1,5 @@
 /** A clause that leaves the variable out does not keep its promise: reading `cnt` is a use of it. */
-module err_uses_other
+
 
 resource db
 

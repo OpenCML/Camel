@@ -10,7 +10,6 @@
  * the exit reports it (design principles 3.9). The export that is expected to
  * succeed is dropped on purpose with `let _ =`.
  */
-module export_capability_exemplar
 
 import { reshape, relu } from tensor
 import { export_model } from onnx

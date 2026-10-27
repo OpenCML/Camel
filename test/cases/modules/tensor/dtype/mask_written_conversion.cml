@@ -5,7 +5,6 @@
  * bytes each answer occupies say so, four an element and not eight - and both are the same numbers
  * the mask idiom always gave (design principles 5.1).
  */
-module mask_written_conversion
 
 import { reshape, where, sum, to_bytes } from tensor
 

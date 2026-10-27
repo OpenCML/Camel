@@ -7,7 +7,6 @@
  * without CAMEL_TENSOR_BLAS the library name resolves to the canonical kernel, so the three
  * results are the canonical ones either way.
  */
-module library_gemm
 
 import { reshape, sum } from tensor
 import { is_numeric } from types

@@ -3,7 +3,6 @@
  * declarations' type, and the message prints their own parameter name (`x`) — the one source
  * is `stdlib/math.cml`, not the C++ module.
  */
-module math_type
 
 import { abs } from math
 

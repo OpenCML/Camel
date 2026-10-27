@@ -20,5 +20,6 @@ slot_t __test_support_thread_count__(ArgsView &with, ArgsView &norm, ctx::Contex
 slot_t __test_support_with_probe__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 // The same for an array argument, so the operator is a set of two declarations.
 slot_t __test_support_with_probe_array__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __test_support_arity_two__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 
 std::unordered_map<std::string, operator_t> getTestSupportOpsMap();

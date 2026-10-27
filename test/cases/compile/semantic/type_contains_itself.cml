@@ -3,7 +3,6 @@
  * would have to hold a value of itself (docs/design-principles.cn.md 5.2). The error names the
  * cycle: `A -> A`.
  */
-module type_contains_itself
 
 type A = { a: A }
 

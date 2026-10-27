@@ -2,7 +2,6 @@
  * Instances are ordinary subgraphs: a sync body, a write of a captured module-level variable,
  * a capture of a local of the enclosing function, a struct parameter, the macro tag.
  */
-module effects
 
 var total = 0
 

@@ -4,7 +4,6 @@
  * meant even though the first would take it by entering `f32[]`. Likewise `2.0` is a
  * `float` and takes the `float` parameter.
  */
-module exact_over_entering
 
 func pick(xs: f32[]): string {
     return 'f32[]'

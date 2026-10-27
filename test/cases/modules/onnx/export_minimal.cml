@@ -4,7 +4,6 @@
  * algebraic stage), and that copy is not a version of the running program: a checked commit there
  * must not compare it with the program that is running.
  */
-module export_minimal
 
 import { reshape } from tensor
 import { export_model } from onnx

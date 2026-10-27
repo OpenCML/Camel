@@ -3,7 +3,6 @@
 // `tree.cmo` still existed in the standard library, `import tree` would load it and this file
 // would either fail (no `tree_paths` there) or, worse, silently use it instead of
 // `stdlib/tree.cml`.
-module tree_library_and_ckpt
 
 import { tree_paths, tree_map } from tree
 import { tree_leaves } from ckpt

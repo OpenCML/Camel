@@ -9,7 +9,6 @@
  * Actual: L4 0 0
  * Reduced by test/tools/progen from seed 5362 (generator version 2, all features).
  */
-module inline_prl_tail_call_arguments
 
 func r4(a5: int, a6: int, a7: float): int {
     return if a5 <= 0 then a6 else r4(0, a5, 1.0);

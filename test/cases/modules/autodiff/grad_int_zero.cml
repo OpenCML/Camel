@@ -12,7 +12,6 @@
  * "a value of this type carries no gradient through the tape" (the machinery's own question, which
  * is still answered `no` for an int).
  */
-module grad_int_zero
 import { grad } from autodiff
 
 with <n: int>

@@ -81,7 +81,7 @@ kind = "behavior"
 case = "../../../../cases/modules/tensor/bounds/slice_runtime.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["ran", "[0]", "SliceOutOfRange", "The range 8 to 9 is out of range for an array of length 3", "slice_runtime.cml:7:"]
+expect_output_contains = ["ran", "[0]", "SliceOutOfRange", "The range 8 to 9 is out of range for an array of length 3", "slice_runtime.cml:6:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 

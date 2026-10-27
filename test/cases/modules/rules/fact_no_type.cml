@@ -3,7 +3,6 @@
  * rewrite design 7.5): the cases and the `join` all give a value of it. This declaration writes
  * none, and nothing here is compiled.
  */
-module fact_no_type
 import { max } from math
 
 fact depth(n) match n {

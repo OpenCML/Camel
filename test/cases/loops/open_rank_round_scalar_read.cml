@@ -3,7 +3,6 @@
 // takes a scalar and is refused when the program is compiled. The refusal keeps the type of both
 // operands and names the reading to write instead — the element the array holds is read with
 // `sum(v)` or an explicit conversion (this case pins that spelling).
-module open_rank_round_scalar_read
 import tensor
 
 

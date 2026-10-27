@@ -1,5 +1,3 @@
-module encode_function
-
 import { encode } from json
 
 // encode takes a value of every type that has a JSON form, by a type rule (design principles

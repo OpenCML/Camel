@@ -60,7 +60,7 @@ case = "../../../cases/modules/stdlib/array_sort_no_declaration.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
-expect_output_contains = ["array_sort_no_declaration.cml:14:17", "is_ordered::<T>()"]
+expect_output_contains = ["array_sort_no_declaration.cml:13:17", "is_ordered::<T>()"]
 timeout_ms = 20000
 
 # ---- the spellings the family does not use are refused by name ----
@@ -74,7 +74,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenDeclarationOverlap"
 expect_diagnostic_code = "0x030001E0"
-expect_output_contains = ["array_sort_kernel_overlap.cml:27:1", "Two declarations of 'sort_kernel' both apply to the type 'int'", "(xs: T[]) => T[] — when is_integer::<T>()", "(xs: T[]) => T[] — when is_ordered::<T>()"]
+expect_output_contains = ["array_sort_kernel_overlap.cml:26:1", "Two declarations of 'sort_kernel' both apply to the type 'int'", "(xs: T[]) => T[] — when is_integer::<T>()", "(xs: T[]) => T[] — when is_ordered::<T>()"]
 timeout_ms = 20000
 
 [[tests]]
@@ -86,5 +86,5 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::Redeclaration"
 expect_diagnostic_code = "0x03000001"
-expect_output_contains = ["array_sort_redeclaration.cml:15:1", "Redeclaration of reference: 'dup_sort'"]
+expect_output_contains = ["array_sort_redeclaration.cml:14:1", "Redeclaration of reference: 'dup_sort'"]
 timeout_ms = 20000

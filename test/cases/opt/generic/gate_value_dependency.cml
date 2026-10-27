@@ -1,5 +1,4 @@
 /** Forward values directly; transfer other waits to consumers and preserve effect order. */
-module gate_value_dependency
 
 import { seed, rand } from random
 import { grad } from autodiff

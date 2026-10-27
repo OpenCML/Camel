@@ -5,7 +5,6 @@
  * building it in the declared type. Once `three` is inlined and the struct is folded, the
  * conversion re-types a constant and moves nothing.
  */
-module fold_struct_cast
 
 type P = { a: int, b: float }
 

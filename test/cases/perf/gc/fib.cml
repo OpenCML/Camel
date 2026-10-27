@@ -1,5 +1,4 @@
 /** No allocation at all: what the collector's presence costs a program that does not use it. */
-module gc_fib
 
 func fib(n: int): int { return if n < 2 then n else fib(n - 1) + fib(n - 2) }
 

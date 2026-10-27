@@ -11,7 +11,6 @@
  * step when CAMEL_BENCH_GRADS names a directory.
  * Imported through CAMEL_PACKAGES=benchmarks/common.
  */
-module camel_bench
 
 import { load_npy, save_npy, set_num_threads } from tensor
 import { get_env } from env

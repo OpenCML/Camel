@@ -1,4 +1,2 @@
-module syntax_end_of_file
-
 func main(): int sync {
     return 0

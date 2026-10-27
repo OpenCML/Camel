@@ -32,7 +32,7 @@ for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::tf']) {
             diags.length === 1 &&
             d.data.name === 'RuntimeDiag::EntryArgumentMissing' &&
             d.data.stage === 'run' &&
-            d.range.start.line === 6 &&
+            d.range.start.line === 5 &&
             d.message.includes("'rate' and 'loud'") &&
             !proc.stdout.includes('hi 3')
         why = `exit ${proc.status}, ${diags.length} diagnostic(s), ${d.data.name} at stage ${d.data.stage}, line ${d.range.start.line}: ${d.message}`

@@ -4,7 +4,6 @@
  * leaves. Only the selected case is built: the `tuple` case of `selected` contains a type
  * error that must not be reported while the case is not selected.
  */
-module match_type_shapes
 
 func shape::<T>(t: T): string {
     return match type T {

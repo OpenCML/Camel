@@ -1,4 +1,3 @@
-module graph_function
 import { Node, Graph, graphs, nodes, inputs, op, op_name, constant, open_function, to_function, replace, graph_of, program_of, name } from graph
 
 func target(x: int): int {

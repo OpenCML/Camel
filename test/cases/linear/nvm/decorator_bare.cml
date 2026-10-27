@@ -1,7 +1,6 @@
 /**
  * Verifies a decorator applied without with-arguments (`@name`), with and without std::macro.
  */
-module decorator_bare
 
 func twice(f: (x: float) => float): (x: float) => float {
     return (x: float): float => {

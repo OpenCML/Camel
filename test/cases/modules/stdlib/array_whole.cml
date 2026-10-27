@@ -5,7 +5,7 @@
  * `argmin` with their tie, NaN and zero rules, and `sum`, `min`, `max` reducing every element in
  * row-major order.
  */
-module array_whole
+
 
 import { find_index, chunks, flatten, mean, argmax, argmin, sum, min, max, sort_by, unique, take, drop } from array
 import { nan } from math

@@ -10,7 +10,6 @@
  * product by 1 and a product by 2 -- the first fires once and the second never, so which constant
  * the rule rewrites is decided by the value the case read, not by the shape of the pattern.
  */
-module fact_with_value
 import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
 import { max } from math
 import { rewrite } from rewrite

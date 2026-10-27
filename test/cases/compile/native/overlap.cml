@@ -4,7 +4,6 @@
  * never from the order the declarations are
  * written in (design principles 4.3, 5.1).
  */
-module native_overlap
 
 #op(':op/idx_arr')
 export func pick::<T>(xs: T[], i: int): T

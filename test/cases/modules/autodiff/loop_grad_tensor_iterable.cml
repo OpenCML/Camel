@@ -33,7 +33,6 @@
  * or a `gap` that is orders of magnitude larger, and the uninitialized-memory version printed
  * `nan`/garbage in `d` instead of the row of ones.
  */
-module loop_grad_tensor_iterable
 
 import { reshape, sum } from tensor
 import { grad } from autodiff

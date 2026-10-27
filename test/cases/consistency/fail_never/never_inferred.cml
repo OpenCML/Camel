@@ -5,7 +5,6 @@
  * declared. Everything here is settled on the types, so the module is checked rather than run: the
  * program never reaches a value.
  */
-module never_inferred
 
 func pick::<T>(x: T): T { return x }
 

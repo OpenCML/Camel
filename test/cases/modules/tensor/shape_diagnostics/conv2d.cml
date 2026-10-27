@@ -2,7 +2,6 @@
  * Shape diagnostic of `conv2d`: statically known shapes conflict, so compilation fails at the
  * call with both shapes in the reason.
  */
-module shape_diag_conv2d
 
 import { zeros } from tensor
 import { conv2d } from nn

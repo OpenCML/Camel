@@ -3,7 +3,6 @@
  * The operator calls it with element values; a `var` parameter needs a variable. Rejected at
  * compile time, at the argument.
  */
-module var_function_to_operator
 
 func bump(var x: int) {
     x += 1

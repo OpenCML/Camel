@@ -1,4 +1,3 @@
-module named_dims_single_instance
 import { ones } from tensor
 // Dimension names are for checking only: `dense` is one graph, called with two different
 // shapes, and no instance name carries an extent (design principles 5.4).

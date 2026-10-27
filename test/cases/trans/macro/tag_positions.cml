@@ -1,5 +1,3 @@
-module tag_positions
-
 // #macro is a tag on a function declaration (design principles 6.2, 8). It may be written on
 // a top-level function, on a nested one, and on a generic function; each is evaluated ahead of
 // time by std::macro when its arguments are constants.

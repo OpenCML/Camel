@@ -2,7 +2,6 @@
  * Refused: the variable is read in a function the differentiated function calls. What the
  * variable holds when the callee runs is not known there.
  */
-module var_tensor_read_in_callee
 import { reshape, sum } from tensor
 import { with_grad } from autodiff
 

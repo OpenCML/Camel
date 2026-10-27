@@ -3,7 +3,6 @@
  * call through it is not an effect and a result nothing depends on is dropped without a warning
  * (the promise is what the caller was told). A pure function stands at the parameter.
  */
-module pure_parameter_takes_pure
 
 func usePure(f: (x: int) => int pure): int {
     f(1)

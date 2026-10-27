@@ -1,7 +1,7 @@
 error[SemanticDiag::UnresolvedReference]: Unresolved reference: 'missing_name'.
-  --> <ROOT>/test/cases/compile/diag_render/sem_long_line.cml:4:253
+  --> <ROOT>/test/cases/compile/diag_render/sem_long_line.cml:2:253
    |
- 4 | ...+ 1 + 1 + 1 + 1 + 1 + 1 + 1 + missing_name + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 +...
+ 2 | ...+ 1 + 1 + 1 + 1 + 1 + 1 + 1 + missing_name + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 +...
    |                                  ^^^^^^^^^^^^
 help: Make sure the name is declared and in scope.
 

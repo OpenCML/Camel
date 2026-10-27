@@ -2,7 +2,6 @@
  * A `match` without `case _` is a compile-time error (design principles 3.7): the compiler
  * adds no arm of its own, so a value no case lists would have nowhere to go.
  */
-module no_case_matches_string
 
 func f(s: string): int {
     return match s {

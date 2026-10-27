@@ -4,7 +4,6 @@
  * the export is refused at the println inside the callee, not only at the
  * leftover call.
  */
-module export_ctrl_effect_callee
 
 import { reshape, sum } from tensor
 import { export_model } from onnx

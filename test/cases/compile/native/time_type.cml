@@ -3,7 +3,6 @@
  * and the message prints the declaration's own parameter names (`text`, and `format` among the with-parameters); the one
  source is `stdlib/time.cml`, not the C++ module.
  */
-module time_type
 
 import { strptime } from time
 

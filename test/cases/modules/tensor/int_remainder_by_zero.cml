@@ -1,6 +1,4 @@
 /** An integer array remainder by zero is a division-by-zero fault, as the scalar remainder is. */
-module int_remainder_by_zero
-
 import { new } from tensor
 
 func main(): int sync {

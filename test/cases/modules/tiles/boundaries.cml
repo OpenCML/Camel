@@ -1,4 +1,3 @@
-module tiles_boundaries
 import { zeros, reshape, sum, max, abs, mean } from tensor
 import { run_preferred_resident, download } from tiles
 func add(a: f32[..], b: f32[..]): f32[..] { return a + b }

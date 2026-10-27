@@ -3,7 +3,6 @@
  * mixed pair that matches no arm (design principles 5.1), the same answer the arithmetic gives. The
  * conversion is written where the program wants the product; the shape rule is untouched by this.
  */
-module matmul_mixed_width
 
 import { reshape, matmul, sum } from tensor
 

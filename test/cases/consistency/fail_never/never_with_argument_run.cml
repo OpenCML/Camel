@@ -5,7 +5,6 @@
  * what ends the program. The call never runs -- it is typed `never` and no overload is chosen for
  * it -- and the value the call would have made is never made.
  */
-module never_with_argument_run
 
 func stop(m: string): never {
     return fail<'Stopped'>(m)

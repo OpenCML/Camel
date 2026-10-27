@@ -2,7 +2,6 @@
  * Rejected when compiled, at the operator: `%=` is for integers, as `%` is. A combination of operator and type without an
  * implementation used to compile and then do nothing, or fault, when run.
  */
-module float_mod_assign
 
 func main(): int sync {
     var x = 1.5

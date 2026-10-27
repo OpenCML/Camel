@@ -3,7 +3,6 @@
  * 7.5), and a fact without one cannot be computed for a value that has two writings. This
  * declaration leaves the clause out.
  */
-module fact_no_join
 import { max } from math
 
 fact sign(v: int): int match v {

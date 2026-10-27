@@ -13,7 +13,6 @@
  * another width and be read as if it were the derivative. Red when the accumulator accepts the
  * mismatch: the program then runs and prints `grad=0.0`.
  */
-module refuse_gradient_element_type_rule
 
 import { grad, vjp } from autodiff
 

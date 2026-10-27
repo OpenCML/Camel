@@ -28,7 +28,6 @@
 //     names: the reference page lists operators by their Camel name, and `inspect --ops` does not
 //     list these.
 
-module graph
 
 /// The types of the module are provided by it; a handle names a thing inside one Program and
 /// compares with `==` and `!=`.

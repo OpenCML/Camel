@@ -1,6 +1,4 @@
 /** An integer array quotient by zero is a division-by-zero fault, as the scalar quotient is. */
-module int_division_by_zero
-
 import { new } from tensor
 
 func main(): int sync {

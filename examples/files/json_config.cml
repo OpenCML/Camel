@@ -1,7 +1,6 @@
 // Keeps settings in a JSON file: writes it, reads it back into a typed struct, and falls
 // back to defaults when the file is missing or does not have the expected shape.
 // Run: camel examples/files/json_config.cml
-module json_config
 
 import json
 import { mkdirs, write_text, read_text } from fs

@@ -6,7 +6,6 @@
 // ends and may differ from run to run under `std::prl`. Steps that happen one after another
 // are written with `foreach`, `reduce` or a tail recursion.
 // Run: camel examples/numeric/random_walk.cml
-module random_walk
 
 import { seed, randint, next_key } from random
 import { stdev } from statistics

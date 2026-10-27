@@ -44,6 +44,8 @@ bool TestSupportModule::load() {
             // Reads its with arguments and nothing else.
             {"with_probe", true},
             {"with_probe_array", true},
+            // Reads its with arguments and nothing else.
+            {"arity_two", true},
         });
     // What each touches (docs/design/op-semantics 8): the one meeting point of the process, and
     // the process itself. The declaration module names the same two resources.

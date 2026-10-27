@@ -5,7 +5,6 @@
  * the error kind JsonTooDeep, with the line and column of the bracket that goes too deep. The
  * accessors on a document that has a value work as before, and chain over the two layers.
  */
-module json_accessor_error
 
 import { Json, decode, decode_as, get, as_bool, as_int, as_float, as_string, as_array, as_object } from json
 
