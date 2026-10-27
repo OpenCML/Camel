@@ -33,6 +33,45 @@ bool boolArg(ArgsView &args, size_t index);
 std::string stringArg(ArgsView &args, size_t index);
 Shape shapeArg(ArgsView &args, size_t index);
 
+/**
+ * The arguments of a call as the kernel of an operator registered with `withAfterNorm` reads
+ * them: the ordinary arguments, then the with-arguments. The graph keeps the with-arguments on
+ * their own edges; this view is only what the kernel is handed.
+ */
+class JoinedArgs final : public ArgsView {
+  public:
+    JoinedArgs(ArgsView &norm, ArgsView &with) : norm_(norm), with_(with) {
+        setResultType(norm.resultType());
+        setAttrs(norm.attrs());
+    }
+    size_t size() const override { return norm_.size() + with_.size(); }
+    slot_t slot(size_t index) const override {
+        return index < norm_.size() ? norm_.slot(index) : with_.slot(index - norm_.size());
+    }
+    void setSlot(size_t index, slot_t value) override {
+        index < norm_.size() ? norm_.setSlot(index, value)
+                             : with_.setSlot(index - norm_.size(), value);
+    }
+    type::TypeCode code(size_t index) const override {
+        return index < norm_.size() ? norm_.code(index) : with_.code(index - norm_.size());
+    }
+    type::Type *type(size_t index) const override {
+        return index < norm_.size() ? norm_.type(index) : with_.type(index - norm_.size());
+    }
+
+  private:
+    ArgsView &norm_;
+    ArgsView &with_;
+};
+
+/// A kernel that reads its arguments as one list, run for an operator registered with
+/// `withAfterNorm`: `.kernel = &positionally<reshapeKernel>`.
+template <operator_t Kernel>
+slot_t positionally(ArgsView &with, ArgsView &norm, context::Context &ctx) {
+    JoinedArgs joined(norm, with);
+    return Kernel(with, joined, ctx);
+}
+
 /// True when optional argument `index` was supplied.
 inline bool hasArg(ArgsView &args, size_t index) { return index < args.size(); }
 

@@ -670,9 +670,10 @@ std::vector<OpDef> layoutOps() {
         .exports   = {"reshape"},
         .params    = {{"t", ParamKind::TensorLike}, {"shape", ParamKind::IntArray}},
         .resultDoc = "float[..]",
-        .infer     = reshapeInfer,
-        .kernel    = &reshapeKernel,
-        .traits    = {}});
+        .infer         = reshapeInfer,
+        .kernel        = &positionally<reshapeKernel>,
+        .traits        = {},
+        .withAfterNorm = true});
     defs.push_back(OpDef{
         .name      = "flatten",
         .exports   = {"flatten"},

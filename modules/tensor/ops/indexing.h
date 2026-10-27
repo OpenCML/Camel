@@ -88,7 +88,7 @@ void attachIndexing(OpDef &def);
 
 /// The InstantiateFn of an IndexFn: the call's types and constant arguments become the
 /// InferContext inference sees. The registry declares OpDef::index through it.
-core::sem::InstantiateFn indexingFrom(IndexFn fn);
+core::sem::InstantiateFn indexingFrom(IndexFn fn, bool withAfterNorm = false);
 
 /**
  * The instance of `def` for what `ctx` knows, validated against its semantics (its laws), as

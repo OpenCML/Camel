@@ -99,8 +99,9 @@ template <k::ReduceOp Op> OpDef reduceAxisDef(std::string_view name, std::string
              {"keepdims", ParamKind::Bool, true}},
         .resultDoc = "float[..]",
         .infer     = reduceAxisInfer(Op),
-        .kernel    = &reduceAxisKernel<Op>,
-        .traits    = {},
+        .kernel        = &positionally<reduceAxisKernel<Op>>,
+        .traits        = {},
+        .withAfterNorm = true,
     };
 }
 

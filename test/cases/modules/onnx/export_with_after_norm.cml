@@ -1,0 +1,19 @@
+/**
+ * The configuration of `reshape` and `sum` is written in angle brackets and reaches the lowering as
+ * the kernel's own arguments: `reshape<[2, 3]>(x)` is a Reshape to the shape, `sum<1>(x)` a
+ * ReduceSum over the axis, as the call with the shape and the axis in parentheses was.
+ */
+import { reshape, sum } from tensor
+import { export_model } from onnx
+import { get_env } from env
+
+func rowSums(x: f32[..]): f32[..] {
+    return sum<1>(reshape<[2, 3]>(x))
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [6])
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[..]): f32[..] => rowSums(x), x)
+    println('exported')
+    return 0
+}

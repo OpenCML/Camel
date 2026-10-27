@@ -50,6 +50,7 @@ OperatorTraits OperatorTable::traitsOf(const sem::OperatorSemantics &facts) {
         .readsGraphs = facts.readsGraphs,
         .macro       = facts.macro,
         .foldable    = facts.foldable,
+        .withAfterNorm = facts.withAfterNorm,
     };
 }
 
@@ -112,6 +113,7 @@ void OperatorTable::set(std::string_view uri, OperatorTraits traits) {
     facts.readsGraphs  = traits.readsGraphs;
     facts.macro        = traits.macro;
     facts.foldable     = traits.foldable;
+    facts.withAfterNorm = traits.withAfterNorm;
     // "Never faults" is the empty list. Saying it may fault (the default) does not take back
     // a declared empty list; a declaration that does contradict it is refused when the
     // semantics are declared (checkSemantics).
@@ -165,6 +167,12 @@ bool OperatorTable::isPure(OperId id) const {
 bool OperatorTable::isPure(std::string_view uri) const {
     const auto id = lookup(uri);
     return id && isPure(*id);
+}
+
+bool OperatorTable::withAfterNorm(std::string_view uri) const {
+    const auto id = lookup(uri);
+    const sem::OperatorSemantics *facts = id ? record(*id) : nullptr;
+    return facts != nullptr && facts->withAfterNorm;
 }
 
 bool OperatorTable::mayBeRecomputed(OperId id) const {
@@ -616,6 +624,7 @@ void OperatorTable::declareSemantics(std::string_view uri, sem::OperatorSemantic
         semantics.callsGraphs = semantics.callsGraphs || old->callsGraphs;
         semantics.readsGraphs = semantics.readsGraphs || old->readsGraphs;
         semantics.macro       = semantics.macro || old->macro;
+        semantics.withAfterNorm = semantics.withAfterNorm || old->withAfterNorm;
         if (!semantics.faults && old->faults) {
             semantics.faults = old->faults;
         }

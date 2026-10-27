@@ -39,6 +39,7 @@
 #include "camel/passes/opt/config.h"
 #include "camel/passes/opt/generic.h"
 #include "camel/passes/trans/dot/graphviz.h"
+#include "camel/runtime/operator_instance.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
@@ -3429,8 +3430,11 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
         return evalVariableRead(act, ref);
     }
     const std::string uri(body->uri());
-    std::vector<Value> norm = evalAll(act, g->normInputsOf(ref));
-    std::vector<Value> with = evalAll(act, g->withInputsOf(ref));
+    // The lowerings read the arguments in kernel order: an operator whose kernel takes its
+    // with-arguments after the ordinary ones (`reshape<shape>(x)`) is lowered as `(x, shape)`.
+    const camel::runtime::KernelArguments kernelArguments = camel::runtime::kernelArgumentsOf(*g, ref);
+    std::vector<Value> norm = evalAll(act, kernelArguments.norm);
+    std::vector<Value> with = evalAll(act, kernelArguments.with);
     return applyOper(act, uri, std::move(norm), g->node(ref)->dataType(), std::move(with));
 }
 

@@ -135,6 +135,12 @@ struct OpDef {
     InferFn infer;
     operator_t kernel;
     OpTraits traits;
+    /// The kernel takes the with-arguments of a call after the ordinary ones, as one list
+    /// (`reshape<shape>(x)` is the kernel's `(x, shape)`): the operator is registered with that
+    /// fact (OperatorTraits::withAfterNorm), the resolver and the index semantics read the joined
+    /// list, and the kernel is wrapped by `positionally` (support.h). The graph keeps the
+    /// with-argument on its own edge.
+    bool withAfterNorm = false;
     VjpFn vjp = nullptr; // reverse-mode rule; nullptr when the operator is not differentiable
     FoldFn foldFromTypes = nullptr; // constant result from argument types, when they fix it
     /// What the operator computes (camel/core/operator_semantics.h), declared to the core

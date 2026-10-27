@@ -3103,3 +3103,25 @@ assert(take.inputs.join() === 'input' && take.outputs.join() === 'output', `unex
 }
 """
 timeout_ms = 10000
+[[tests]]
+name = "export_with_after_norm"
+desc = "The with-arguments of `reshape` and `sum` (`reshape<[2, 3]>(x)`, `sum<1>(x)`) reach the lowering in the kernel's argument order: the model has one Reshape and one ReduceSum."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_with_after_norm.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/export_with_after_norm.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'export_with_after_norm.onnx'))
+assert(model.ops.filter((op) => op === 'Reshape').length === 1, `expected one Reshape, got ${model.ops}`)
+assert(model.ops.filter((op) => op === 'ReduceSum').length === 1, `expected one ReduceSum, got ${model.ops}`)
+}
+"""
+timeout_ms = 10000
