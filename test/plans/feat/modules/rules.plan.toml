@@ -1751,7 +1751,7 @@ expect_diagnostic_code = "0x02000009"
 expect_diagnostic_line = 8
 expect_diagnostic_column = 13
 expect_output_contains = ["Expected ':' before ')'."]
-expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported"]
+expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -1767,7 +1767,7 @@ expect_diagnostic_code = "0x0200000A"
 expect_diagnostic_line = 8
 expect_diagnostic_column = 1
 expect_output_contains = ["Unexpected '}'; expected 'case'."]
-expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported"]
+expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -1783,7 +1783,7 @@ expect_diagnostic_code = "0x030001F9"
 expect_diagnostic_line = 8
 expect_diagnostic_column = 1
 expect_output_contains = ["The fact 'sign' writes no 'join'.", "it says how the facts of two writings of one value are merged", "Write it after the cases, naming one binary function or a lambda"]
-expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported"]
+expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -1799,7 +1799,7 @@ expect_diagnostic_code = "0x030001F7"
 expect_diagnostic_line = 8
 expect_diagnostic_column = 1
 expect_output_contains = ["The 'const' case 'c' of the fact 'one' writes no type.", "case const c: int => c", "fact sign(v: int): int"]
-expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported"]
+expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -1815,7 +1815,7 @@ expect_diagnostic_code = "0x030001F8"
 expect_diagnostic_line = 7
 expect_diagnostic_column = 1
 expect_output_contains = ["This case of the fact 'one' names no variable.", "the parts they read are the variables their patterns name", "bind a part with a name, or write `case _`"]
-expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported"]
+expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 

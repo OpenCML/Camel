@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 211
+**Semantic — errors** (`SemanticDiag`) — 210
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -87,7 +87,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ArgumentsRejected` | Invalid call to '{0}' with argument types {1}: {2}. |
 | `ImmutablePassedToVarParam` | '{0}' is immutable and cannot be passed to a var parameter of '{1}'. |
 | `AssignmentTargetNotVariable` | The target of an assignment must be a variable, or a path from one. |
-| `ConstructNotSupported` | '{0}' is not supported: {1}. |
 | `InvalidTypeArgument` | The arguments of the type '{0}<...>' are not accepted: {1}. |
 | `ArgumentNeedsConversion` | The call to '{0}' needs an explicit conversion: {1}. |
 | `ReturnNeedsConversion` | The returned value needs an explicit conversion to the function's declared return type '{0}': {1}. |
