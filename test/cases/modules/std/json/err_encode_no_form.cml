@@ -1,0 +1,8 @@
+/// A value without a JSON form is refused where the call is written: a function has none, and nor
+/// has a map whose keys are not strings.
+import { encode } from json
+
+func main(): int sync {
+    println(encode((x: int): int => x))
+    return 0
+}

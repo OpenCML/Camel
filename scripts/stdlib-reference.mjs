@@ -222,7 +222,6 @@ const MODULES = [
         // 
         source: 'json.cml',
         declaration: true,
-        computed: 'signatures/json.cml',
     },
     {
         name: 'hash',

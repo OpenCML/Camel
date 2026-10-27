@@ -457,7 +457,8 @@ enum class SemanticDiag : uint32_t {
     /// A `const` case whose constant has no type to take.
     FactConstCaseTypeRequired = 0x0001F7,
     /// A case whose pattern names no variable.
-    FactCaseBindsNoVariable = 0x0001F8,
+    FactCaseBindsNoVariable   = 0x0001F8,
+    TypeFunctionNotApplicable = 0x0001FE,
 
     // Warnings
     IgnoredSideEffect = 0x100002,

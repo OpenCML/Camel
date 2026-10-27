@@ -2196,6 +2196,14 @@ any Formatter::dispatch(syn::Node context) {
         return "(" + any_cast<string>(visit(context.type())) + ")";
     case NK::TypeOfType:
         return "typeof " + any_cast<string>(visit(context.expr()));
+    case NK::TypeCallType: {
+        // `f::<A, B>()`: the name, then the type arguments as a specialization writes its own.
+        const auto call             = cst::TypeCallType(context);
+        vector<syn::Node> arguments = vec(call->types());
+        string result               = any_cast<string>(visitType(arguments[0]));
+        arguments.erase(arguments.begin());
+        return result + "::<" + formatList(arguments, call, ", ", ",", PushScope) + ">()";
+    }
     case NK::ShapeComp: {
         // `T { static for n, F in fields U => e }`: the shape is written as a type, and the
         // generator prints as it does on its own; the braces are tokens, so the generator is

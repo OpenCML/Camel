@@ -18,6 +18,7 @@
 #include "camel/core/type/enum.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/text.h"
+#include "camel/core/type/typecall.h"
 #include "camel/core/type/typevar.h"
 #include "camel/parse/ast/type.h"
 #include "camel/utils/escape.h"
@@ -5992,6 +5993,40 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
     ENTER("SpecType");
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for SpecType");
     ASSERT(ast->size() >= 1, "SpecType must have base type");
+    if (ast->loadAs<AST::SpecTypeLoad>()->call()) {
+        // `f::<A>()`: a type function applied (design principles 21). The callee is a name, not a
+        // type; the arguments are types. With concrete arguments the call is the type it
+        // computes, and with a type variable among them it waits for the instance's bindings.
+        ASSERT(ast->size() == 2, "A type call has a callee and its arguments.");
+        const std::string name = ast->at(0)->loadAs<AST::RefTypeLoad>()->ref().toString();
+        if (!TypeCallType::isTypeFunction(name)) {
+            diags_->of(SemanticDiag::TypeFunctionNotApplicable)
+                .at(ast->load()->tokenRange())
+                .commit(name + "::<...>()", "it is not a type function (element_of, payload_of, key_of, value_of)");
+            throw BuildAbortException();
+        }
+        std::vector<Type *> arguments;
+        for (const auto &child : *ast->atAs<AST::RepeatedLoad>(1)) {
+            arguments.push_back(visitType(child));
+        }
+        const bool concrete = std::none_of(arguments.begin(), arguments.end(), [](Type *argument) {
+            return containsTypeVar(argument);
+        });
+        if (concrete) {
+            std::string error;
+            Type *computed = TypeCallType::evaluate(name, arguments, error);
+            if (computed == nullptr) {
+                diags_->of(SemanticDiag::TypeFunctionNotApplicable)
+                    .at(ast->load()->tokenRange())
+                    .commit(TypeCallType::create(name, arguments)->toString(), error);
+                throw BuildAbortException();
+            }
+            LEAVE("SpecType");
+            return computed;
+        }
+        LEAVE("SpecType");
+        return TypeCallType::create(name, arguments);
+    }
     typeFunctionBase_ = ast->size() >= 2;
     Type *base        = visitType(ast->atAs<AST::TypeLoad>(0));
     if (ast->size() < 2) {

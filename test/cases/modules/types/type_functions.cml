@@ -1,0 +1,40 @@
+/// The type functions, written where a type argument is: `element_of`, `payload_of`, `key_of` and
+/// `value_of` compute a type from a type when the instance is made, and the predicates of `types`
+/// are asked of the computed type.
+import { is_integer, is_float, is_string, is_array } from types
+
+func element_is_integer::<T>(): bool {
+    return is_integer::<element_of::<T>()>()
+}
+
+func payload_is_float::<T>(): bool {
+    return is_float::<payload_of::<T>()>()
+}
+
+func map_key_is_string::<T>(): bool {
+    return is_string::<key_of::<T>()>()
+}
+
+func map_value_is_array::<T>(): bool {
+    return is_array::<value_of::<T>()>()
+}
+
+// A call inside a call: the element of the element.
+func inner_is_integer::<T>(): bool {
+    return is_integer::<element_of::<element_of::<T>()>()>()
+}
+
+// A call as the type of a value: the first element of an array, typed by its own element type.
+func first_or::<T>(xs: T, fallback: element_of::<T>()): element_of::<T>() {
+    return if len(xs) > 0 then xs[0] else fallback
+}
+
+func main(): int sync {
+    println(element_is_integer::<int[]>(), element_is_integer::<f32[]>(), element_is_integer::<Set<i32>>())
+    println(payload_is_float::<float?>(), payload_is_float::<int!>(), payload_is_float::<f32?>())
+    println(map_key_is_string::<Map<string, int>>(), map_key_is_string::<Map<int, int>>())
+    println(map_value_is_array::<Map<string, int[]>>(), map_value_is_array::<Map<string, int>>())
+    println(inner_is_integer::<int[][]>(), inner_is_integer::<f32[][]>())
+    println(first_or([4, 5], 0), first_or(['a'], 'z'))
+    return 0
+}

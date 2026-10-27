@@ -82,6 +82,10 @@ let c = a + b
 | 类型与模式位置 | `struct` | `match type` 的 `case` 模式里，命名结构体这种形状 |
 | 类型与模式位置 | `tuple` | `match type` 的 `case` 模式里，命名元组这种形状 |
 | 类型与模式位置 | `array` | `match type` 的 `case` 模式里，命名数组这种形状 |
+| 类型与模式位置 | `nullable` | `match type` 的 `case` 模式里，命名 `T?` 这种形状 |
+| 类型与模式位置 | `fallible` | `match type` 的 `case` 模式里，命名 `T!` 这种形状 |
+| 类型与模式位置 | `map` | `match type` 的 `case` 模式里，命名映射这种形状 |
+| 类型与模式位置 | `set` | `match type` 的 `case` 模式里，命名集合这种形状 |
 | 类型与模式位置 | `leaf` | `match type` 的 `case` 模式里，`#` 之后的 `leaf`（`case #leaf =>`） |
 | 类型与模式位置 | `error` | `match` 的 `case` 模式里，失败的那个 `T!` 取出来的错误：两个词的写法 `error e` |
 | 类型与模式位置 | `fields` | `static for` 与 `static loop` 的头里，`in` 之后的 `fields`（后面是一个类型，给出名字、类型、标签） |

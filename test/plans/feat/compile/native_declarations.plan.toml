@@ -376,7 +376,7 @@ timeout_ms = 120000
 
 [[tests]]
 name = "native.one_module"
-desc = "The declaration module of a C++ module is that module, not a second one: the C++ module's type (`Json`) is declared in the `.cml` without a right side and its constants (`pi`) are written there without an import, a type the `.cml` exports is read by an importer beside the C++ ones, and every C++ name still answers through the one module."
+desc = "The declaration module of a C++ module is that module, not a second one: the C++ module's type (`Json`) is declared in the `.cml` without a right side and its constants (`pi`) are written there without an import, and a type the `.cml` exports is read by an importer beside the C++ ones."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/compile/native/one_module.mjs"

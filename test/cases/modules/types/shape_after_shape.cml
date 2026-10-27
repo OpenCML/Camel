@@ -1,0 +1,13 @@
+/// An identity pattern that a shape written before it already selects can never be reached.
+func f::<T>(): int {
+    return match type T {
+        case map => 1
+        case Map<string, int> => 2
+        case _ => 3
+    }
+}
+
+func main(): int sync {
+    println(f::<Map<string, int>>())
+    return 0
+}

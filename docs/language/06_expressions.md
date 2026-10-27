@@ -400,6 +400,10 @@ func main(): int sync {
 match type 类型 {
     case struct => 分支
     case array  => 分支
+    case nullable => 分支
+    case fallible => 分支
+    case map    => 分支
+    case set    => 分支
     case tuple  => 分支
     case func   => 分支
     case #leaf  => 分支
@@ -410,7 +414,7 @@ match type 类型 {
 }
 ```
 
-- `struct` 匹配结构体；`tuple` 匹配**普通**元组；`array` 匹配所有数组类型（不论元素是什么）；`func` 匹配函数类型；`#leaf` 匹配其余所有类型（标量、`string`、数组、函数、`T?`、`T!`、单元格等）。`struct` 和 `tuple` 是 [R3 内部节点](../design/generic-structure/README.cn.md)的两种形状：`T?`、`T!` 是带标记的元组，和可变单元格一样落在 `#leaf`，不算 `tuple`。
+- `struct` 匹配结构体；`tuple` 匹配**普通**元组；`array` 匹配所有数组类型（不论元素是什么）；`func` 匹配函数类型；`nullable` 匹配所有 `T?`，`fallible` 匹配所有 `T!`，`map` 匹配所有映射，`set` 匹配所有集合；`#leaf` 匹配其余所有类型（标量、`string`、数组、函数、`T?`、`T!`、映射、集合、单元格等）。`struct` 和 `tuple` 是 [R3 内部节点](../design/generic-structure/README.cn.md)的两种形状：`T?`、`T!` 是带标记的元组，和可变单元格一样落在 `#leaf`，不算 `tuple`。
 - 类型位置写一个类型名就是**身份模式**：`case int`、`case Json`、`case MyStruct`、`case T`。身份是**精确**的：`case float` 不选 `int`（`float` 与 `f64` 是同一个类型，`int` 与 `i64` 也是；`int` 与 `i32` 不是）；`case f32` 不选 `f64`；`case MyStruct` 按声明的名字选，不选另一个字段形状相同的结构体；`case T` 在实例化时先代入 `T` 的绑定，所以它选的正是那个类型。形状与身份可以写在同一个 case 里（`case tuple | MyStruct`），按书写顺序判断：前面的 case 已经选中的类型，后面的同一身份是 `SemanticDiag::StaticMatchPatternCannotMatch`。
 - `_` 与 `#leaf` 一样匹配一切，只作为“兜底”写法；两者都必须是最后一个 case。`case struct | tuple` 用 `|` 合并几种形状。`case int` 写在 `case #leaf` 之前是正常的；写在 `#leaf`/`_` 之后是 `SemanticDiag::StaticMatchUnreachableCase`。
 - `match type` 后面是类型位置：紧跟的 `(` 一律读作类型的开头，所以 `match type () { ... }` 匹配空元组类型；函数类型要再包一层括号，写成 `match type ((x: int) => int) { ... }`。`case` 后面也是类型位置，同样的规则：`case (int, int)`、`case ()` 是元组，函数类型写成 `case ((x: int) => int)`。
@@ -418,6 +422,8 @@ match type 类型 {
 - 没有 case 命中时是 `SemanticDiag::StaticMatchNotExhaustive`；`#leaf`/`_` 后面还有 case 是 `SemanticDiag::StaticMatchUnreachableCase`。`match type` 比较具体类型名：`case int`、`case MyStruct` 是这个构造的一部分，标量类型直接写类型名。
 - 选中的分支直接成为当前位置的直线代码，运行时没有分支节点。分支的值就是整个 `match type` 的值；空分支的值为 `void`。
 - 泛型函数的返回类型可以省略，由每个实例选中的分支推出（返回类型推断）。如果递归调用回到**同一个类型实例**、而该实例的返回类型还没有推出，报 `SemanticDiag::GenericInstantiationCycle`；递归到严格更小的类型参数则照常先完成子实例。
+
+**类型函数。** 类型也可以由类型算出，写成放在类型位置的调用（设计原则 21）：`element_of::<T>()` 是数组或集合的元素类型，`payload_of::<T>()` 是 `U?` 或 `U!` 里的 `U`，`key_of::<T>()` 与 `value_of::<T>()` 是映射的键类型与值类型。参数写在 `::<` 与 `>` 之间，参数表为空；调用本身就是一个类型，和别的类型一样用：`is_integer::<element_of::<T>()>()` 里它是类型实参，`func first::<T>(xs: T): element_of::<T>()` 里它是结果类型。`T` 还是类型变量时调用等着；实例绑定 `T` 之后，调用被它算出的类型取代。函数不接受的类型（`element_of::<int>()`）是 `SemanticDiag::TypeFunctionNotApplicable`：参数是具体类型的调用在写出处报，否则在造出实例的调用处报。不是这四个之一的名字同样报这条。
 
 ```cml
 func duplicate::<T>(t: T) {

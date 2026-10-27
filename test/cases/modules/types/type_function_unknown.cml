@@ -1,0 +1,9 @@
+/// A name that is not a type function is refused where it is written.
+func f::<T>(x: T): int {
+    return 1
+}
+
+func main(): int sync {
+    println(f::<third_of::<int[]>()>(1))
+    return 0
+}

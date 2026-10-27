@@ -225,6 +225,7 @@ arrayDimItem       : '?' | '..' identDef? | dataExpr
 specType           : primaryType ('<' typeOrData (',' typeOrData)* '>')?
 typeOrData         : typeExpr | arrayDim | 'const' dataExpr
 primaryType        : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
+                     | identRef '::' '<' typeExpr (',' typeExpr)* ','? '>' '(' ')'
                      | 'typeof' dataExpr
 tupleType          : '(' typeList? ','? ')'
 structType         : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'

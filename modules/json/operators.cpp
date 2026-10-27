@@ -393,51 +393,6 @@ bool jsonToTyped(const json &j, Type *type, const std::string &path, slot_t &out
     return false;
 }
 
-/// Whether jsonToTyped can produce a value of `type` at all, so that a call asking for a
-/// type without a JSON form is rejected when it is compiled.
-bool hasJsonForm(Type *type) {
-    if (isJsonType(type)) {
-        return true;
-    }
-    switch (type->code()) {
-    case TypeCode::Bool:
-    case TypeCode::Int64:
-    case TypeCode::Int32:
-    case TypeCode::Float64:
-    case TypeCode::Float32:
-    case TypeCode::String:
-        return true;
-    case TypeCode::Array:
-        return hasJsonForm(static_cast<ArrayType *>(type)->elemType());
-    case TypeCode::Tuple: {
-        auto *tupleType = static_cast<TupleType *>(type);
-        if (tupleType->isNullable())
-            return hasJsonForm(tupleType->payloadType());
-        if (tupleType->isTagged() || tupleType->isCell())
-            return false;
-        for (Type *member : tupleType->types()) {
-            if (!hasJsonForm(member))
-                return false;
-        }
-        return true;
-    }
-    case TypeCode::Struct:
-        for (Type *member : static_cast<StructType *>(type)->types()) {
-            if (!hasJsonForm(member))
-                return false;
-        }
-        return true;
-    default:
-        break;
-    }
-    if (const CollectionType *coll = asCollectionType(type)) {
-        if (!coll->isMap())
-            return hasJsonForm(coll->keyType());
-        return coll->keyType()->code() == TypeCode::String && hasJsonForm(coll->valueType());
-    }
-    return false;
-}
-
 } // namespace
 
 // encode(value) and encode<indent: n>(value): a null or absent indent is one line.
@@ -511,50 +466,6 @@ slot_t __json_decode__(ArgsView &, ArgsView &norm, Context &) {
                 cut ? "..." : ""),
             "<json::decode>");
     }
-}
-
-bool jsonTypeHasForm(Type *type) { return type != nullptr && hasJsonForm(type); }
-
-bool jsonTypeEncodable(Type *type) {
-    if (type == nullptr) {
-        return false;
-    }
-    if (isJsonType(type)) {
-        return true;
-    }
-    // The cases of camelToJson, which faults on anything else.
-    switch (type->code()) {
-    case TypeCode::Int32:
-    case TypeCode::Int64:
-    case TypeCode::Float32:
-    case TypeCode::Float64:
-    case TypeCode::Bool:
-    case TypeCode::Void:
-    case TypeCode::String:
-        return true;
-    case TypeCode::Array:
-        return jsonTypeEncodable(static_cast<ArrayType *>(type)->elemType());
-    case TypeCode::Tuple:
-        for (Type *member : static_cast<TupleType *>(type)->types()) {
-            if (!jsonTypeEncodable(member))
-                return false;
-        }
-        return true;
-    case TypeCode::Struct:
-        for (Type *member : static_cast<StructType *>(type)->types()) {
-            if (!jsonTypeEncodable(member))
-                return false;
-        }
-        return true;
-    default:
-        break;
-    }
-    if (const CollectionType *coll = asCollectionType(type)) {
-        if (!coll->isMap())
-            return jsonTypeEncodable(coll->keyType());
-        return coll->keyType()->code() == TypeCode::String && jsonTypeEncodable(coll->valueType());
-    }
-    return false;
 }
 
 // decode_as::<T>(source): the type T is the one the call names, or the one the position it stands
