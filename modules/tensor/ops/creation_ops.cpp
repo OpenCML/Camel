@@ -92,26 +92,6 @@ std::optional<Type *> fullInfer(const InferContext &ctx) {
     return tensorOf(ctx.type(1)->code(), shapeFromArg(ctx, 0));
 }
 
-slot_t randomKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    return runKernel("random", [&] {
-        return wrap(norm.resultType(), k::randomUniform(
-            shapeArg(norm, 0),
-            numberArg(norm, 1),
-            numberArg(norm, 2),
-            resultAllocator()));
-    });
-}
-
-slot_t randnKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    return runKernel("randn", [&] {
-        const double mean   = hasArg(norm, 1) ? numberArg(norm, 1) : 0.0;
-        const double stddev = hasArg(norm, 2) ? numberArg(norm, 2) : 1.0;
-        return wrap(
-            norm.resultType(),
-            k::randomNormal(shapeArg(norm, 0), mean, stddev, resultAllocator()));
-    });
-}
-
 slot_t eyeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel(
         "eye",
@@ -133,17 +113,11 @@ std::optional<Type *> eyeInfer(const InferContext &ctx) {
     return tensorOf(ctx.callElement(), StaticShape{n, n});
 }
 
-slot_t seedKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    k::seedRandom(static_cast<uint64_t>(intArg(norm, 0)));
-    return NullSlot;
-}
-
 const std::vector<ParamSpec> kShapeParam = {{"shape", ParamKind::IntArray}};
 
 } // namespace
 
 std::vector<OpDef> creationOps() {
-    const OpTraits impure{.pure = false};
     std::vector<OpDef> defs;
     defs.push_back(OpDef{
         .name            = "zeros",
@@ -172,28 +146,6 @@ std::vector<OpDef> creationOps() {
         .kernel    = &fullKernel,
         .traits    = {}});
     defs.push_back(OpDef{
-        .name    = "random",
-        .exports = {"random"},
-        .params =
-            {{"shape", ParamKind::IntArray},
-             {"low", ParamKind::Number},
-             {"high", ParamKind::Number}},
-        .resultDoc = "float[..]",
-        .infer     = shapedInfer(TypeCode::Float32),
-        .kernel    = &randomKernel,
-        .traits    = impure});
-    defs.push_back(OpDef{
-        .name    = "randn",
-        .exports = {"randn"},
-        .params =
-            {{"shape", ParamKind::IntArray},
-             {"mean", ParamKind::Number, true},
-             {"std", ParamKind::Number, true}},
-        .resultDoc = "float[..]",
-        .infer     = shapedInfer(TypeCode::Float32),
-        .kernel    = &randnKernel,
-        .traits    = impure});
-    defs.push_back(OpDef{
         .name            = "eye",
         .exports         = {"eye"},
         .params          = {{"n", ParamKind::Int}},
@@ -202,14 +154,6 @@ std::vector<OpDef> creationOps() {
         .kernel          = &eyeKernel,
         .traits          = {},
         .elementFromCall = true});
-    defs.push_back(OpDef{
-        .name      = "seed",
-        .exports   = {"seed"},
-        .params    = {{"seed", ParamKind::Int}},
-        .resultDoc = "void",
-        .infer     = [](const InferContext &) -> std::optional<Type *> { return Type::Void(); },
-        .kernel    = &seedKernel,
-        .traits    = impure});
     return defs;
 }
 

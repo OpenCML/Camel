@@ -1,4 +1,5 @@
-import { random, seed, exp, relu, sum, max } from tensor
+import { exp, relu, sum, max } from tensor
+import { next_key, seed, uniform } from random
 import { benchmark } from tiles
 func pipeline(x: f32[..], b: f32[..]): f32[..] {
     return exp(relu((x + b) * 0.5 - 0.25))
@@ -11,15 +12,15 @@ func product(x: f32[..], y: f32[..]): f32[..] { return x @ y }
 func maximum(x: f32[..]): f32[..] { return max<-1>(x) }
 func main(): int sync {
     seed(61)
-    let x = random([1024, 1024], -1.0, 1.0)
-    let b = random([1, 1024], -1.0, 1.0)
+    let x = (next_key()->uniform::<f32><shape: [1024, 1024]> * 2.0 - 1.0)
+    let b = (next_key()->uniform::<f32><shape: [1, 1024]> * 2.0 - 1.0)
     println(benchmark<pipeline>((x, b)))
-    let rows = random([128, 257], -10.0, 10.0)
+    let rows = (next_key()->uniform::<f32><shape: [128, 257]> * 20.0 - 10.0)
     println(benchmark<normalize>(rows))
-    let a = random([127, 259], -1.0, 1.0)
-    let w = random([259, 131], -1.0, 1.0)
+    let a = (next_key()->uniform::<f32><shape: [127, 259]> * 2.0 - 1.0)
+    let w = (next_key()->uniform::<f32><shape: [259, 131]> * 2.0 - 1.0)
     println(benchmark<product>((a, w)))
-    let wide = random([128, 4097], -1.0, 1.0)
+    let wide = (next_key()->uniform::<f32><shape: [128, 4097]> * 2.0 - 1.0)
     println(benchmark<maximum>(wide))
     return 0
 }

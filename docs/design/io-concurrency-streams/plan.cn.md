@@ -12,7 +12,7 @@
 2. **`f..g` 与 `?..` 今天都是硬错误，而且是同一个诊断**：`Builder::visitCompExpr` 对 `..` 报「function composition is not implemented」，对 `?..` 报「the operator is not implemented」，两处都是 `SemanticDiag::ConstructNotSupported`。诊断**不看操作数类型**：实测 `let xs = 1..5` 拿到的仍是「function composition is not implemented」——即「两边是数时是区间」这条读法今天连诊断都没有对应物。今天等价的区间写法是库函数 `range(start, end)`。
 3. **`yield` 不是关键字**：实测 `let yield = 1; println(yield)` 编译并打印 `1`。`include/camel/parse/syntax/token_kinds.def` 的词法表里没有 `yield`；`src/parse/ast/stmt.cpp` 里出现的 `"yield"` 只是 `ExitStmt` 的打印名，与生成器无关。
 4. **流类型不存在，而且是核心类型层面的缺口**：`TypeCode` 枚举（`include/camel/core/type/base.h#TypeCode`）没有流；`include/camel/core/type/composite/array.h#ArrayType` 的开秩形状 `[..]` 是**最接近**的邻居，但它是数组（有长度、可下标、可追加），不是按需产生的序列。写 `T..` 今天在**类型位置**是语法错误（实测 `let s: int.. = [1, 2, 3]` → `SyntaxDiag::UnexpectedToken`「Unexpected '..'; expected '='.」）；`as int..` 同样（「expected '}'.」）。
-5. **`map`/`filter`/`reduce`/`foreach` 今天只作用于数组**，是 `:mark/*_arr` 一类**带 `with` 参数的算子**（`src/builtin/modules/globals.cpp#map_arr` 等，`stdlib/prelude.cml#map` 的声明是 `with <f: (item: T) => U> (collect: T[]) => U[]`）。流的对应物（`scan`/`batch`/`zip` 流版/`take` 流版）**一个都没有**：实测在 `stdlib/` 与 `src/builtin/modules/` 里 `scan`、`batch`、`unfold`、`tee`、`window` 的声明数都是 0。`fold` 今天只有两个**遍**叫这个名字（`stdlib/std.cml#fold`、`stdlib/opt.cml#fold`），不是流折叠；数组的折叠叫 `reduce`。
+5. **`map`/`filter`/`reduce`/`foreach` 今天只作用于数组**，是 `:mark/*_arr` 一类**带 `with` 参数的算子**（`stdlib/prelude.cml#map` 等，`stdlib/prelude.cml#map` 的声明是 `with <f: (item: T) => U> (collect: T[]) => U[]`）。流的对应物（`scan`/`batch`/`zip` 流版/`take` 流版）**一个都没有**：实测在 `stdlib/` 与 `src/builtin/modules/` 里 `scan`、`batch`、`unfold`、`tee`、`window` 的声明数都是 0。`fold` 今天只有两个**遍**叫这个名字（`stdlib/std.cml#fold`、`stdlib/opt.cml#fold`），不是流折叠；数组的折叠叫 `reduce`。
 6. **驻留今天只是一个「推断 + 打印」，不插节点、不驱动执行**：`modules/tiles/src/residency.cpp#residencyReport` 按 `docs/design/gpu/plan.cn.md` 3.2 从图推出「每个值的块在哪、哪些值跨边界、调用搬不搬」，由 `modules/tiles/src/region_pass.cpp#RegionPass` 印成 `TILES_RESIDENCY`，注释明写 *"It reads the graph; it inserts no node yet."*。所以任务书第 4 条要的「涉及流的图可以驻留执行」今天**没有任何可复用的执行器**；可复用的是这套**推断的形状**（owner 表 + 跨边界计数 + 循环状态留在原地）。
 7. **规则引擎今天表达不了 `map` 融合，有两道各自独立的门**：（a）**项读取器**只接受算子、常量、参数，并且**明确拒绝带上下文（`with`）参数的算子**（`src/runtime/rules.cpp#SideReader::term`：「has an operator with a context argument or an order dependency」），而 `map` 的 `f` 正是 `with` 参数——实测 `std::gir` 里两个 map 节点各有一条 `type="WITH"` 的入边（`Function(graph=dbl, tupleSlots=0) -> N0A`）；（b）**规则的形参表写不出函数类型**：`rule h248_map_comp(xs: int[], f: (int) => int, g: (int) => int)` 在 `)` 处报 `SyntaxDiag::MissingComma`。另外规则体里必须写 `map<inc>(xs)` 而不是 `map(xs, inc)`（实测 `SemanticDiag::NoMatchingFunction` 给了这句话），所以融合规则的**左式拼写**已经定死为尖括号形式（泛型规则写法也在同一层）。
 8. **`for x in s` 今天只认数组、字符串、映射、张量**：`src/compile/gir/builder_control.cpp#LoopSequenceNotIterable` 的消息把四类逐一列出，**没有流**。扩展点是现成的：`src/builtin/modules/globals.cpp#__iter__` 是一个「每种可遍历类型一个重载」的算子组，张量模块与映射已经各加了一个。
@@ -78,7 +78,7 @@ pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
 
 | 名字 | 今天在哪 | 形态 |
 |---|---|---|
-| `map` | `stdlib/prelude.cml#map`；`src/builtin/modules/globals.cpp#map_arr`（`:mark/map_arr`） | `with <f: (item: T) => U> (collect: T[]) => U[]`；**只接受 `TypeCode::Array`**（resolver 里 `norm[0]->code() != TypeCode::Array` 直接 `return nullopt`） |
+| `map` | `stdlib/prelude.cml#map`；`stdlib/prelude.cml#map`（`:mark/map_arr`） | `with <f: (item: T) => U> (collect: T[]) => U[]`；**只接受 `TypeCode::Array`**（resolver 里 `norm[0]->code() != TypeCode::Array` 直接 `return nullopt`） |
 | `filter` | `stdlib/prelude.cml#filter`；`globals.cpp` 的 `:mark/filter_arr` | 同上，退出类型必须是 `bool` |
 | `reduce` | `stdlib/prelude.cml#reduce`（`:mark/reduce_arr`） | 数组的左折叠；**不是流折叠** |
 | `foreach` | `stdlib/prelude.cml#foreach` | 数组的按序副作用 |
@@ -602,7 +602,7 @@ N09 -> N0A [label="0|0", type="NORM"];
 | `TypeCode` 无流 | `include/camel/core/type/base.h#TypeCode` | 56–100 |
 | 开秩数组 `T[..]` | `include/camel/core/type/composite/array.h#ArrayType::openRank` | 83–87、111–118 |
 | 维度包落图 | `src/compile/gct/builder.cpp#DimPack` | 5095–5120、5775–5805 |
-| `map` / `filter` 的类型解析 | `src/builtin/modules/globals.cpp#map_arr` | 2266–2348 |
+| `map` / `filter` 的类型解析 | `stdlib/prelude.cml#map` | 2266–2348 |
 | 高阶算子的语义形状 | `src/builtin/executors/builtin_semantics.cpp#ElementCalls` | 190、222 |
 | 数组版签名 | `stdlib/prelude.cml#map` | 385（`zip`）、411–429（`map`/`filter`/`reduce`）、324（`range`） |
 | `__iter__` 扩展点 | `src/builtin/modules/globals.cpp#__iter__` | 1956–1977 |

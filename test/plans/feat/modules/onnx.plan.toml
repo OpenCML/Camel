@@ -87,14 +87,14 @@ envs = ["ONNX_OUT=${test_tmp}/export_impure.onnx"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_diagnostic_code = "0x04000051"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 13
 expect_diagnostic_column = 87
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes("impure operator 'tensor:randn' cannot be exported"), 'missing impure-operator detail')
-assert(/[^ ]*export_impure[.]cml:12:87:/.test(text), 'missing source position of the impure call')
+assert(text.includes("impure operator 'rand:next_key' cannot be exported"), 'missing impure-operator detail')
+assert(/[^ ]*export_impure[.]cml:13:87:/.test(text), 'missing source position of the impure call')
 assert(text.includes('ExportUnsupported'), 'the refusal must be the error value of the export_model call')
 }
 """
@@ -109,7 +109,7 @@ args = ["${case}"]
 envs = ["ONNX_OUT=${test_tmp}/export_mixed_width_refused.onnx"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_output_contains = ["Invalid call to '__add__'", "(float[..], f32[2, 2])", "the two tensor operands have different element types ('float' and 'f32')"]
+expect_output_contains = ["Invalid call to '__add__'", "(float[..], f32[..])", "the two tensor operands have different element types ('float' and 'f32')"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 

@@ -35,47 +35,7 @@ export func full(shape: int[], value: number): float[..]
 /// @example eye::<f32>(2)
 export func eye::<T>(n: int): T[..] when is_numeric::<T>()
 
-// ---- random ----
-
-/// A tensor of `f32` values drawn uniformly from [low, high) with the given extents.
-/// @effect reads and advances the random generator
-/// @example random([2, 2], 0.0, 1.0)
-export func random(shape: int[], low: number, high: number): f32[..]
-
-/// A tensor of `f32` values drawn from the normal distribution with the given mean (0 by
-/// default) and standard deviation (1 by default), with the given extents.
-/// @effect reads and advances the random generator
-/// @example randn([2, 3])
-export func randn(shape: int[], mean?: number, std?: number): f32[..]
-
 // ---- elementwise ----
-
-/// a + b per element, with NumPy broadcasting: a scalar operand applies to every element, and
-/// the element type is the wider of the two (a float with an integer gives `f32`).
-/// @pure
-/// @example add([1.0, 2.0] as float[], 1.0)    // [2.0, 3.0]
-export func add(lhs: float[..] | number, rhs: float[..] | number): float[..]
-
-/// a - b per element, with NumPy broadcasting.
-/// @pure
-/// @example subtract([1.0, 2.0] as float[], 0.5)    // [0.5, 1.5]
-export func subtract(lhs: float[..] | number, rhs: float[..] | number): float[..]
-
-/// a * b per element, with NumPy broadcasting.
-/// @pure
-/// @example multiply([1.0, 2.0] as float[], [3.0, 4.0] as float[])    // [3.0, 8.0]
-export func multiply(lhs: float[..] | number, rhs: float[..] | number): float[..]
-
-/// a / b per element, with NumPy broadcasting; IEEE division: x / 0 is an infinity or NaN, not a
-/// fault.
-/// @pure
-/// @example divide([1.0, 2.0] as float[], 2.0)    // [0.5, 1.0]
-export func divide(lhs: float[..] | number, rhs: float[..] | number): float[..]
-
-/// a raised to b per element, with NumPy broadcasting.
-/// @pure
-/// @example pow([2.0, 3.0] as float[], 2.0)    // [4.0, 9.0]
-export func pow(lhs: float[..] | number, rhs: float[..] | number): float[..]
 
 /// IEEE 754-2019 maximum per element, with NumPy broadcasting: NaN on either side gives the
 /// canonical quiet NaN, and -0 is below +0.
@@ -89,26 +49,11 @@ export func maximum(lhs: float[..] | number, rhs: float[..] | number): float[..]
 /// @example minimum([1.0, -0.0] as float[], 0.0)    // [0.0, -0.0]
 export func minimum(lhs: float[..] | number, rhs: float[..] | number): float[..]
 
-/// a % b per element, with NumPy broadcasting: the language's remainder, the truncated one
-/// (`camel::utils::remainder`), so the result takes the sign of the left operand and nothing is
-/// floored — a negative a and a positive b give a negative result. On a floating element type it
-/// is `fmod`, in the element type's own precision: a bf16 or f16 array computes in f32 and rounds
-/// once when it is stored. A divisor of zero gives NaN for a floating element type, as IEEE
-/// division does; an integer element type has the integer remainder.
-/// @pure
-/// @example mod([7.5, -7.5] as float[], 2.0)    // [1.5, -1.5]
-export func mod(lhs: float[..] | number, rhs: float[..] | number): float[..]
-
 /// lhs where cond holds, rhs elsewhere, broadcast to one shape; the element type is the wider of
 /// lhs and rhs.
 /// @pure
 /// @example where([true, false] as bool[], [1.0, 2.0] as float[], 0.0)    // [1.0, 0.0]
 export func where(cond: bool[..], lhs: float[..] | number, rhs: float[..] | number): float[..]
-
-/// -x per element: the sign flipped.
-/// @pure
-/// @example neg([1.0, -2.0] as float[])    // [-1.0, 2.0]
-export func neg(t: float[..]): float[..]
 
 /// |x| per element: the sign cleared.
 /// @pure
@@ -163,7 +108,7 @@ export func erf(t: float[..]): float[..]
 
 /// The complementary error function 1 - erf(x) per element.
 /// @pure
-/// @example erfc(new([0.0]))    // [1.0]
+/// @example erfc([0.0] as float[])    // [1.0]
 export func erfc(t: float[..]): float[..]
 
 // ---- shape and reshaping ----

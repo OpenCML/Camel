@@ -4,11 +4,11 @@
 // would be eight bytes per element. `sum` is a float reduction (it returns float), which is why
 // the sums print with a decimal point.
 
-import { multiply, sum, to_bytes, from_bytes } from tensor
+import { sum, to_bytes, from_bytes } from tensor
 import { to_array } from bytes
 
 func doubled(x: i32[..]): i32[..] {
-    return multiply(x, 2)
+    return (x * 2)
 }
 
 func main(): int sync {

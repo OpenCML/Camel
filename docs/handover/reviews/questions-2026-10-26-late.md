@@ -712,3 +712,56 @@ H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program
 - 实现层面的选择按原则自己定、先做，在提交信息里写明依据，决策者事后复核。
 - 只有原则没覆盖、或与原则冲突的才写问题页，写了也不停，转去做不依赖它的部分。
 - 语义层面今天定下的"依赖按区域计、分支与循环整体算"（原则 3.1、3.3）不会再变。
+13. **JSON 导出跟不上边的模型**（ECOOP 稿要用它对照 Lean 解释器）：
+    - `std::jgir`（版本 1）导出 normal、context、control、sync 四种边，没有顺序边；`canonical=true`（版本 2）只有 normal、context、control，连 sync 也没有。
+    - `docs/technical/gir-interchange.md` 两个版本都只写了三种边。
+    - 修法：两个版本都导出 sync 与 order 边，canonical 版本把它们纳入等价判定；控制边删除后从两个版本里一起去掉。文档同步。归第 1 路（与边的重构同一片）。
+
+## 移交：张量翻转的剩余部分与前奏的收尾交还施工方（负责人 2026-10-28）
+
+决策者这边的车道只留难的部分：程序变换的类型（`ParamsOf`/`WithOf`/`ResultOf`、包展开）及其后续的设计与核心实现。下面这些交给你们，作为第 7 路，代码区在 `modules/tensor`、`stdlib/`、`src/builtin`，与前六路不重叠：
+- **张量翻转剩下的**：逐元素函数的导出、`nn` 与 `optim` 各族改成声明与新写法、残留的 `Tensor` 名字。决策者这边的车道交最后一笔（随机数改为带键）时，会附一份剩余清单，我转到这里。
+- **前奏声明的预编译缓存模块**：声明每次运行都要编译一遍，做成缓存模块，加载要快，同时修好 `startup.cost`。车道交最后一笔时会附它知道的情况。
+- **`slice` 改成声明**：维度表达式与 `constas` 已经落地（原则 5.4）。
+决策者照旧审这些改动的设计，返工照常写在这里。
+
+**第 7 路的张量剩余清单**（决策者这边的车道交最后一笔时列出；随机数已改为带键，逐元素函数已改为运算符）：
+1. **`nn` 族**（`modules/nn/tensor_ops.cpp` 与 `stdlib/`）：
+   - `sgd`、`adam` 改成声明；
+   - `softmax_cross_entropy` 按元素类型；
+   - 损失与层改成声明；
+   - 替换 `resultDoc = "Tensor"` 一类字符串，删掉被替换的条目。
+2. **`optim` 模块**：照 `docs/handover/stdlib/` 里的草案落地。
+3. **删除 `stdlib/signatures/tensor.cml`**，以及文档与用例里残留的 `Tensor` 名字（逐个 grep；`test/cases/perf` 的 `step_budget.py` 仍用旧的 `random`/`seed`/`Tensor`）。
+4. **比较运算的 OpDef**（`lt`、`le`、`gt`、`ge`、`strict_eq`、`strict_neq`，在 `elementwise_ops.cpp` 约 491–499 行的 `compareDef`）：查清是否还有导出，按运算符收口。
+
+**容易踩的地方**：
+- 解析器与折叠器拿到的静态值是普通参数在前、with 参数在后，一律用 `kernelArgumentsOf`、`joinKernelArguments`，不直接读边。
+- 标了 `withAfterNorm`、`elementFromCall` 的算子拒绝把配置写在圆括号里；元素类型来自 `::<T>` 或期望的结果类型。
+- 求导规则里的浮点常量按操作数的宽度建（`floatGradientAtWidth`），`pow` 曾因此在 f32 上出错。
+- `uniform::<T>` 返回维数未定的 `T[..]`，参数是 `f32[?, ?]` 的调用处要写 `as f32[?, ?]`。
+- 改了标准库或签名后，用 `node scripts/stdlib-reference.mjs --write --camel <camel>` 重新生成 `docs/stdlib-reference.md`。
+
+**第 7 路的前奏缓存说明**（决策者这边的车道交最后一笔时列出）：
+- **现在每次运行都编译前奏**：`Context::checkPreludeDeclarations`（`src/core/context/context.cpp`）在一个上下文的第一个模块编译时，把 `stdlib/prelude.cml` 编到 `CompileStage::Declared`，`types` 是它唯一的依赖。别的标准库模块随导入付同样的解析、GCT、声明开销。
+- **开销**（`camel --time-phases`，只有一行 `println(1)` 的程序）：总计约 69 ms，编译 46 ms，其中：
+  - 前奏解析 2.6 ms；
+  - GCT 11.6 ms；
+  - **声明 29.9 ms**，主要在 `Builder::declareNativeOperator` 与随后的 `exportNativeOperators`：约 330 条声明逐条与同名的其他声明查重叠，带 `when` 的成对求值；
+  - 用户程序本身约 1.5 ms。
+
+  缓存要存下解析器与 `nativeRuleConditions_`（`when` 子句在声明单元的 GCT 里），或者直接恢复各组的状态。
+- **声明会动的全局状态**：
+  - 内建组（`OperatorGroup::addRule` 按 URI 与组发布到 `OperatorTable`）；
+  - `registerNativeType("prelude", "Error")`；
+  - 带 `#reads` 标签登记的泛型模板。
+
+  前奏必须在第一个用户模块的函数体建之前编完，因为用户模块构造时就取了内建组的引用，这些组对象是共享的；这也是 C++ 里还留着空的组的原因。
+- **两个陷阱**：
+  - 用例打印的图编号（`__g_N__`、`id(graph_of(p))`）随前奏占用的编号变化；缓存恢复时若不占这些编号，`graph.plan.toml` 的两处与示例 05、08 会再变一次。
+  - `registeredTypes` 的顺序跟着规则的发布顺序走，`rules.plan.toml` 里三处 `int`/`i32` 的顺序依赖它，缓存必须按稳定的顺序发布。
+- **验收**：一行程序的编译时间里，前奏部分接近零；`startup.cost` 转绿；上面两处编号与顺序不变。
+- **补充，并把缓存排在第 7 路最前**：前奏改成声明后，每个程序启动都多花约 45 ms 的 CPU，这是用户直接看得到的退步。
+  - `startup.cost` 量的是整个进程的 CPU，四条命令的上限是 12、18、95、90 ms（10-23 定，约为安静时中位数的 2.5 倍）。一行、不导入任何模块的程序，原来中位数 7 ms，现在约 52 ms，估计是上限的三倍。`declaration.cost` 的上限是每条声明 60 µs，前奏约 135 µs。两者都还没在这棵树上实测，先跑一次确认。
+  - **第五个陷阱**：带参数包的规则，它的 `DeclaredFuncTypeResolver`（`core_`）从签名建出，缓存存签名时要保留 `hasRest`、`hasWithRest`。
+  - 缓存只能往这些共享的组对象里填，不能换掉组对象。

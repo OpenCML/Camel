@@ -101,9 +101,15 @@ string: (x: T) => string
 parse_int: (text: string) => int!
 parse_float: (text: string) => float!
 error: (kind: string, message: string) => Error
+print: <fmt: string> (x: T, ..rest) => T
 print: (x: T, ..rest) => T
+print: () => void
+println: <fmt: string> (x: T, ..rest) => T
 println: (x: T, ..rest) => T
+println: () => void
+eprintln: <fmt: string> (x: T, ..rest) => T
 eprintln: (x: T, ..rest) => T
+eprintln: () => void
 format: <..args> (fmt: string) => string
 join: <sep: string> (xs: string[]) => string
 len: (x: string) => int
@@ -193,25 +199,16 @@ tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 tree_unzip: (r: R, s: S) => ?
 ```
 
-**`tensor`** — import { ... } from tensor — 65 name(s)
+**`tensor`** — import { ... } from tensor — 55 name(s)
 
 ```text
 zeros: (shape: int[]) => T[..] when is_numeric::<T>()
 ones: (shape: int[]) => T[..] when is_numeric::<T>()
 full: (shape: int[], value: number) => float[..]
 eye: (n: int) => T[..] when is_numeric::<T>()
-random: (shape: int[], low: number, high: number) => f32[..]
-randn: (shape: int[], mean?: number, std?: number) => f32[..]
-add: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-subtract: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-multiply: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-divide: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-pow: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
 maximum: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
 minimum: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-mod: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
 where: (cond: bool[..], lhs: float[..] | number, rhs: float[..] | number) => float[..]
-neg: (t: float[..]) => float[..]
 abs: (t: float[..]) => float[..]
 exp: (t: float[..]) => float[..]
 log: (t: float[..]) => float[..]
@@ -262,8 +259,6 @@ gemm_backend: () => string
 gemm_threads: () => int
 gemm_library_threads: () => int
 gemm_library: () => string
-seed: (seed: int) => void
-seed: (seed: i32) => void
 ```
 
 **`types`** — import { ... } from types — 16 name(s)

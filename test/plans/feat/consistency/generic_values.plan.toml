@@ -126,7 +126,7 @@ backends = ["nvm"]
 backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "live DREF"]
-expect_output_contains = ["name=SemanticDiag::GenericFunctionAsValue", "the operator 'println' does not say which function it expects", "its type variable(s) A stay undetermined"]
+expect_output_contains = ["name=SemanticDiag::GenericFunctionAsValue", "Signature: id: (x: A) => A"]
 
 [[tests]]
 name = "generic_values.err_declared_type"

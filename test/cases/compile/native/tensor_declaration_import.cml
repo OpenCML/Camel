@@ -6,7 +6,8 @@
  * or the result's position) stays in C++ and is imported the same way.
  */
 
-import { reshape, shape, numel, dim, to_bytes, from_bytes, load_npy, save_npy, seed, set_num_threads, num_threads } from tensor
+import { reshape, shape, numel, dim, to_bytes, from_bytes, load_npy, save_npy, set_num_threads, num_threads } from tensor
+import { seed } from random
 
 // The file operators still type-check (this function is not called): `load_npy` writes the
 // element type the file holds, and the file's own element type is checked against it when the

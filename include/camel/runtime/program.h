@@ -228,6 +228,10 @@ class Program final : public camel::core::rtdata::Object {
         byId_[index] = graph;
     }
     void setRoot(GCGraph *root) { root_ = root; }
+    /// Gives up a construction that failed half way (the encoder ran out of memory): the program
+    /// holds no graph afterwards, and each graph in `unconstructed` -- memory bound but never
+    /// built into a graph -- is forgotten by the manager, so that nothing destructs or traces it.
+    void abandonConstruction(std::span<GCGraph *const> unconstructed);
 
     /// The specializations made over the graphs of this program (specializations.h): copied
     /// with the program, so a rewrite that carries a program forward carries what it already

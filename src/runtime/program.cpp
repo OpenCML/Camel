@@ -113,6 +113,25 @@ void GCGraphManager::noteGraph(GCGraph *graph) {
     unbound_.erase(graph);
 }
 
+void GCGraphManager::forget(GCGraph *graph) {
+    std::lock_guard lock(mutex_);
+    graphs_.erase(graph);
+    unbound_.erase(graph);
+}
+
+void Program::abandonConstruction(std::span<GCGraph *const> unconstructed) {
+    if (manager_ != nullptr) {
+        for (GCGraph *graph : unconstructed) {
+            manager_->forget(graph);
+        }
+    }
+    byId_.clear();
+    own_.clear();
+    count_ = 0;
+    root_  = nullptr;
+    ++version_;
+}
+
 void GCGraphManager::noteUnbound(GCGraph *graph) {
     std::lock_guard lock(mutex_);
     graphs_.insert(graph);
