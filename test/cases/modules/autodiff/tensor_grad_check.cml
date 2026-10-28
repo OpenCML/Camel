@@ -6,7 +6,7 @@
  */
 
 import { grad } from autodiff
-import { sum, mean, max, min, exp, log, sqrt, rsqrt, sigmoid, tanh, relu, gelu, erf, abs, neg, maximum, minimum, where, softmax, log_softmax, layer_norm, matmul, linear, transpose, reshape, unsqueeze, permute, concat, pow, dim } from tensor
+import { sum, mean, max, min, exp, log, sqrt, rsqrt, sigmoid, tanh, relu, gelu, erf, abs, maximum, minimum, where, softmax, log_softmax, layer_norm, matmul, linear, transpose, reshape, unsqueeze, permute, concat, dim } from tensor
 import { next_key, seed, uniform } from random
 
 func check(name: string, f: <x: f32[..]> () => float, df: <x: f32[..]> () => f32[..], x: f32[..], v: f32[..]): int sync {
@@ -36,9 +36,9 @@ func arith(): float { return float(sum((x * x * 3.0 + x * w4() - x / w31() + 2.0
 with <x: f32[..]>
 func bcast_rhs(): float { return float(sum(w34() * x + w34() / (x * x + 1.0) - x)) }
 with <x: f32[..]>
-func powers(): float { return float(sum(pow(exp(x), 2.5) * w34() + pow(2.0, x))) }
+func powers(): float { return float(sum((exp(x) ^ 2.5) * w34() + (2.0 ^ x))) }
 with <x: f32[..]>
-func unary(): float { return float(sum((sigmoid(x) + tanh(x) * relu(x) + exp(x) / 4.0 + neg(x) * abs(x)) * w34())) }
+func unary(): float { return float(sum((sigmoid(x) + tanh(x) * relu(x) + exp(x) / 4.0 + (-x) * abs(x)) * w34())) }
 with <x: f32[..]>
 func roots(): float { return float(sum((sqrt(exp(x)) + rsqrt(exp(x)) + log(exp(x) + 1.0)) * w34())) }
 with <x: f32[..]>

@@ -340,7 +340,7 @@ void powVjp(VjpBuilder &b, const VjpCall &call) {
     if (auto dy = b.gradientOf(call.output)) {
         const vjp_node_t lhs = call.inputs[0], rhs = call.inputs[1];
         const vjp_node_t lowered =
-            addTensorOper(b, "tensor:subtract", {rhs, b.addStaticFloat(1.0)});
+            addTensorOper(b, "tensor:subtract", {rhs, floatGradientAtWidth(b, rhs, b.addStaticFloat(1.0))});
         const vjp_node_t slope = addTensorOper(
             b,
             "tensor:multiply",
@@ -475,18 +475,18 @@ void whereVjp(VjpBuilder &b, const VjpCall &call) {
 
 std::vector<OpDef> elementwiseOps() {
     std::vector<OpDef> defs;
-    defs.push_back(binaryDef<k::BinaryOp::Add>("add", {"__add__", "add"}));
-    defs.push_back(binaryDef<k::BinaryOp::Sub>("subtract", {"__sub__", "subtract"}));
-    defs.push_back(binaryDef<k::BinaryOp::Mul>("multiply", {"__mul__", "multiply"}));
-    defs.push_back(binaryDef<k::BinaryOp::Div>("divide", {"__div__", "divide"}));
-    defs.push_back(binaryDef<k::BinaryOp::Pow>("pow", {"__pow__", "pow"}));
+    defs.push_back(binaryDef<k::BinaryOp::Add>("add", {"__add__"}));
+    defs.push_back(binaryDef<k::BinaryOp::Sub>("subtract", {"__sub__"}));
+    defs.push_back(binaryDef<k::BinaryOp::Mul>("multiply", {"__mul__"}));
+    defs.push_back(binaryDef<k::BinaryOp::Div>("divide", {"__div__"}));
+    defs.push_back(binaryDef<k::BinaryOp::Pow>("pow", {"__pow__"}));
     defs.push_back(binaryDef<k::BinaryOp::Max>("maximum", {"maximum"}));
     defs.push_back(binaryDef<k::BinaryOp::Min>("minimum", {"minimum"}));
     // `%` over numeric arrays. It is the element type's own operator, applied elementwise: a
     // bf16 or f16 array computes in f32 and rounds once, the same path as + - * / and pow, so
     // reduced precision is not a reason to refuse it (design principles 7.3). Two scalars never
     // reach this definition (binaryInfer), so the scalar `%` is unchanged.
-    defs.push_back(binaryDef<k::BinaryOp::Mod>("mod", {"__mod__", "mod"}));
+    defs.push_back(binaryDef<k::BinaryOp::Mod>("mod", {"__mod__"}));
 
     defs.push_back(compareDef<k::CompareOp::Less>("lt", {"__lt__"}));
     defs.push_back(compareDef<k::CompareOp::LessEqual>("le", {"__le__"}));
@@ -498,7 +498,7 @@ std::vector<OpDef> elementwiseOps() {
     defs.push_back(compareDef<k::CompareOp::Equal>("strict_eq", {"__strict_eq__"}));
     defs.push_back(compareDef<k::CompareOp::NotEqual>("strict_neq", {"__strict_neq__"}));
 
-    defs.push_back(unaryDef<k::UnaryOp::Neg>("neg", {"__neg__", "neg"}));
+    defs.push_back(unaryDef<k::UnaryOp::Neg>("neg", {"__neg__"}));
     defs.push_back(unaryDef<k::UnaryOp::Abs>("abs", {"abs"}));
     defs.push_back(unaryDef<k::UnaryOp::Exp>("exp", {"exp"}));
     defs.push_back(unaryDef<k::UnaryOp::Log>("log", {"log"}));

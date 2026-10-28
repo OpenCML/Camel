@@ -1435,63 +1435,6 @@ The n by n identity matrix; the element type is the call's, as for `zeros`.
 
 ### Elementwise
 
-#### `add`
-
-```camel
-add: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-```
-
-a + b per element, with NumPy broadcasting: a scalar operand applies to every element, and
-the element type is the wider of the two (a float with an integer gives `f32`).
-
-- Pure.
-- Example: `add([1.0, 2.0] as float[], 1.0)` gives `[2.0, 3.0]`
-
-#### `subtract`
-
-```camel
-subtract: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-```
-
-a - b per element, with NumPy broadcasting.
-
-- Pure.
-- Example: `subtract([1.0, 2.0] as float[], 0.5)` gives `[0.5, 1.5]`
-
-#### `multiply`
-
-```camel
-multiply: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-```
-
-a * b per element, with NumPy broadcasting.
-
-- Pure.
-- Example: `multiply([1.0, 2.0] as float[], [3.0, 4.0] as float[])` gives `[3.0, 8.0]`
-
-#### `divide`
-
-```camel
-divide: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-```
-
-a / b per element, with NumPy broadcasting; IEEE division: x / 0 is an infinity or NaN, not a
-fault.
-
-- Pure.
-- Example: `divide([1.0, 2.0] as float[], 2.0)` gives `[0.5, 1.0]`
-
-#### `pow`
-
-```camel
-pow: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-```
-
-a raised to b per element, with NumPy broadcasting.
-
-- Pure.
-- Example: `pow([2.0, 3.0] as float[], 2.0)` gives `[4.0, 9.0]`
-
 #### `maximum`
 
 ```camel
@@ -1516,22 +1459,6 @@ canonical quiet NaN, and -0 is below +0.
 - Pure.
 - Example: `minimum([1.0, -0.0] as float[], 0.0)` gives `[0.0, -0.0]`
 
-#### `mod`
-
-```camel
-mod: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-```
-
-a % b per element, with NumPy broadcasting: the language's remainder, the truncated one
-(`camel::utils::remainder`), so the result takes the sign of the left operand and nothing is
-floored — a negative a and a positive b give a negative result. On a floating element type it
-is `fmod`, in the element type's own precision: a bf16 or f16 array computes in f32 and rounds
-once when it is stored. A divisor of zero gives NaN for a floating element type, as IEEE
-division does; an integer element type has the integer remainder.
-
-- Pure.
-- Example: `mod([7.5, -7.5] as float[], 2.0)` gives `[1.5, -1.5]`
-
 #### `where`
 
 ```camel
@@ -1543,17 +1470,6 @@ lhs and rhs.
 
 - Pure.
 - Example: `where([true, false] as bool[], [1.0, 2.0] as float[], 0.0)` gives `[1.0, 0.0]`
-
-#### `neg`
-
-```camel
-neg: (t: float[..]) => float[..]
-```
-
--x per element: the sign flipped.
-
-- Pure.
-- Example: `neg([1.0, -2.0] as float[])` gives `[-1.0, 2.0]`
 
 #### `abs`
 

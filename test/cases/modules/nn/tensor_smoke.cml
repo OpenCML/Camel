@@ -2,13 +2,13 @@
  * Minimal tensor smoke case covering shape propagation, matrix ops, reshape, transpose, and concatenation.
  */
 
-import { add, concat, eye, matmul, ones, reshape, shape, sum, transpose } from tensor
+import { concat, eye, matmul, ones, reshape, shape, sum, transpose } from tensor
 
 func main(): int sync {
     let a = ones::<f32>([2, 2])
     let b = eye::<f32>(2)
     let c = matmul(a, b)
-    let d = add(c, 2.0)
+    let d = (c + 2.0)
     let e = concat<0>([[1.0, 2.0]], [[3.0, 4.0]])
     let f = transpose(e)
     let g = reshape<[4]>(concat<0>([[1.0, 2.0]], [[3.0, 4.0]]))

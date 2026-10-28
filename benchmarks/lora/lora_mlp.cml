@@ -19,7 +19,7 @@
  *                graph carries the moments and the step count as extra I/O
  */
 
-import { relu, mean, sum, neg, log_softmax, load_npy } from tensor
+import { relu, mean, sum, log_softmax, load_npy } from tensor
 import { with_grad, stop_gradient } from autodiff
 import { OptimizerState, sgd, adam, adam_state, save_params } from nn
 import { get_env } from env
@@ -78,7 +78,7 @@ func step_full(m: LoraMlp, x: f32[..]): (float, LoraMlp) {
 with <m: LoraMlp>
 func loss_ce(x: f32[..], target: f32[..]): float {
     let y = forward<m>(x)
-    return float(mean(sum<1>(target * neg(log_softmax<1>(y)))))
+    return float(mean(sum<1>(target * (-log_softmax<1>(y)))))
 }
 
 func step_ce(m: LoraMlp, x: f32[..], target: f32[..]): (float, LoraMlp) {
