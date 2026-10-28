@@ -2464,7 +2464,19 @@ The expansion '{0}' must range over exactly one pack: {1}.
 A type expression written with '..' stands for one type per member of a pack, and the members come from one place: the rest parameter of the declaration, written '..xs: ..A', binds the pack 'A' to the types of the arguments a call leaves over (design principles 5.6). So the body of an expansion names that one pack, and the expansion is used where a call binds it.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/rest_params/pack_expand_two_packs.cml`, run as `camel test/cases/compile/rest_params/pack_expand_two_packs.cml`)
+
+```camel
+// An expansion ranges over one pack: a body that names two of them writes one type per member
+// of which pack, and nothing in the declaration says which.
+func blend::<..A, ..B>(..xs: ..A): ..{left: A, right: B} {
+    return {left: xs.[0], right: xs.[1]}
+}
+
+func main(): int sync {
+    return 0
+}
+```
 
 ### FunctionNameAsValue
 

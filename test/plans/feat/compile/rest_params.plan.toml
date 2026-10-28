@@ -45,10 +45,6 @@ assert(staticNodes.length === 0, `a static node was left in the graph: ${staticN
 """
 timeout_ms = 8000
 
-# An expansion that no call binds the pack for is refused where it is used
-# (`SemanticDiag::PackExpansionNeedsOnePack`). No program below fails that way: the pack of a
-# declaration whose rest parameter writes it is bound by every call, and one whose rest parameter
-# writes no type has no expansion to complain about, so the reference shows no example of it.
 [[tests]]
 name = "rest_parameter_pack"
 desc = "A rest parameter that writes its type declares the pack of the head (`func both::<..A>(..xs: ..A)`): each call binds one type per argument left over, and a type written `..A` is those types in order."
@@ -63,6 +59,34 @@ const want = ["1 x", "y 2"].join(String.fromCharCode(10))
 assert(input.normalized.stdout.trim() === want, `pack expansion changed: ${input.normalized.stdout}`)
 }
 """
+timeout_ms = 8000
+
+[[tests]]
+name = "pack_expansion_names_two_packs"
+desc = "An expansion ranges over one pack: `..{left: A, right: B}` names two of them, and the declaration says nothing to choose between them, so `SemanticDiag::PackExpansionNeedsOnePack` is reported where the expansion is written."
+kind = "negative"
+case = "../../../cases/compile/rest_params/pack_expand_two_packs.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::PackExpansionNeedsOnePack"
+expect_diagnostic_code = "0x03000058"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 36
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "pack_expansion_left_unbound"
+desc = "A pack whose members nothing binds stays an expansion at the use: a rest parameter that writes no type gives the pack none, so the result type `..A` has no member to write and `SemanticDiag::PackExpansionNeedsOnePack` is reported at the call."
+kind = "negative"
+case = "../../../cases/compile/rest_params/pack_expand_unbound.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::PackExpansionNeedsOnePack"
+expect_diagnostic_code = "0x03000058"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 18
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
