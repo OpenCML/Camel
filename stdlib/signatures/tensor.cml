@@ -163,7 +163,7 @@ export func erf(t: float[..]): float[..]
 
 /// The complementary error function 1 - erf(x) per element.
 /// @pure
-/// @example erfc(new([0.0]))    // [1.0]
+/// @example erfc([0.0] as float[])    // [1.0]
 export func erfc(t: float[..]): float[..]
 
 // ---- shape and reshaping ----

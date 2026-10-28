@@ -1699,7 +1699,7 @@ erfc: (t: float[..]) => float[..]
 The complementary error function 1 - erf(x) per element.
 
 - Pure.
-- Example: `erfc(new([0.0]))` gives `[1.0]`
+- Example: `erfc([0.0] as float[])` gives `[1.0]`
 
 ### Shape and reshaping
 
