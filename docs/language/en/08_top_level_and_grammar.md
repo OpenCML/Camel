@@ -50,7 +50,8 @@ logicalAnd : or ('&&' or)*
 or         : and ('|' and)*
 and        : equality ('&' equality)*
 equality   : relational (('===' | '!==' | '==' | '!=') relational)*
-relational : additive (('<' | '>' | '<=' | '>=') additive)*
+relational : range (('<' | '>' | '<=' | '>=') range)*
+range      : additive ('..' additive)*
 additive   : multiplicative (('+' | '-') multiplicative)*
 multiplicative : power (('*' | '/' | '@' | '%') power)*
 power      : nullable ('^' power)?
@@ -58,8 +59,7 @@ nullable   : unary (('??' | '!!') dataExpr)?
 unary      : neg (as type)?
 neg        : ('-' | '!' | '~') negPower | link
 negPower   : ('-' | '!' | '~') negPower | link ('^' negPower)?
-link       : comp ('->' comp)*
-comp       : anno ('..' anno)*
+link       : anno ('->' anno)*
 anno       : primary ( '.'field | '[' subscript ']' | '(' arguments ')' | '<' with arguments '>' )*
 primary    : name | literal | '[' element, ... ']' | '{' key: value, ... '}' | '(' expression, ... ')' | lambda
 lambda     : modifier* ('<' parameters '>')? '(' parameters ')' (':' type)? '=>' blockExpr
@@ -160,16 +160,16 @@ logicalAndExpr     : orExpr ('&&' orExpr)*
 orExpr             : andExpr ('|' andExpr)*
 andExpr            : equalityExpr ('&' equalityExpr)*
 equalityExpr       : relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
-relationalExpr     : additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
+relationalExpr     : rangeExpr (('<' | '>' | '<=' | '>=') rangeExpr)*
+rangeExpr          : additiveExpr ('..' additiveExpr)*
 additiveExpr       : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
 multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
 unaryExpr          : negExpr ('as' typeExpr)?
-linkExpr           : compExpr ('->' compExpr)*
+linkExpr           : annoExpr ('->' annoExpr)*
 negExpr            : ('-' | '!' | '~') negPower | linkExpr
 negPower           : ('-' | '!' | '~') negPower | linkExpr ('^' negPower)?
-compExpr           : annoExpr ('..' annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
 accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']'))*
