@@ -19,7 +19,7 @@ func twice(var w: f32[?, ?]): float sync {
 }
 
 func main(): int sync {
-    var w = zeros([2, 2])
+    var w = zeros::<f32>([2, 2])
     step(w, 0.5)
     println(sum(w))
     let s = twice(w)

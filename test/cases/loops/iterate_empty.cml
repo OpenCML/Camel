@@ -8,7 +8,7 @@ func main(): int sync {
     let none: int[] = []
     let s = loop n = 1 for c in '' do n + 1
     let m = loop n = 2 for kv in ([] as Map<int, int>) do n + 1
-    let t = loop n = 3 for row in zeros([0, 2]) do n + 1
+    let t = loop n = 3 for row in zeros::<f32>([0, 2]) do n + 1
     let a = loop n = 4 for x in none do n + 1
     let c = loop n = 5 for x in [1, 2] while n < 5 do n + x
     println(s, m, t, a, c)

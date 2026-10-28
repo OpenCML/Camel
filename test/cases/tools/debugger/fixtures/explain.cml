@@ -3,7 +3,7 @@
 // rule can match: no other function here holds `x + 0` or `x * 0`, so the proof counts the
 // program's own code and not this module's (the same rule explain_pass.cml follows).
 
-import { Graph, Node, NodeKind, Program, current, graphs, kind, name, nodes } from graph
+import { Graph, Node, NodeKind, kind, name, nodes, graphs_of } from graph
 import { Rule, Run, explain, why_not, run } from rewrite
 
 rule zero_to_one(x: int) { x + 0 => x + 1 }
@@ -19,28 +19,28 @@ func g(x: int): int {
     return x + 1
 }
 
-func nodesOf(p: Program, function: string): Node[] {
-    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+func nodesOf::<F>(p: F, function: string): Node[] {
+    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
 /// The one operation of `function`: the value a chain starts from or reaches, and the value
 /// `why_not` reads for a rule that cannot match it.
-func operOf(p: Program, function: string): Node {
+func operOf::<F>(p: F, function: string): Node {
     let ops = nodesOf(p, function)->filter<(n: Node): bool => kind(n) == NodeKind::Oper>
     return ops[0]
 }
 
 /// The run, the value it started from and the values it produced are parameters here, so every
 /// one of them is a name of this frame when the program stops inside it.
-func show(r: Run<Program>, before: Node, failing: Rule): int sync {
+func show::<F>(r: Run<F>, before: Node, failing: Rule): int sync {
     let after = operOf(r.result, 'f')
     let other = operOf(r.result, 'g')
-    let chain = match explain(r, before, after) {
+    let chain = match r->explain<before, after> {
         case error e => sync { println(e); 0 }
         case proof => sync { println(proof); 0 }
     }
-    let reason = match why_not(r, failing, other) {
+    let reason = match r->why_not<failing, other> {
         case error e => sync { println(e); 0 }
         case text => sync { println(text); 0 }
     }
@@ -48,8 +48,14 @@ func show(r: Run<Program>, before: Node, failing: Rule): int sync {
     return chain + reason
 }
 
+/// The function the rules are applied to: it reaches `f` and `g`, and is not `main`, whose use of
+/// the rules would make the reference to it a recursive one.
+func subject(): int {
+    return f(1) + g(1)
+}
+
 func main(): int sync {
-    let p = current()
+    let p = subject
     let before = operOf(p, 'f')
     let outcome = p->run<[zero_to_one], explain: true>
     return match outcome {

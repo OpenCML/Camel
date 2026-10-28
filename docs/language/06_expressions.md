@@ -109,8 +109,8 @@ func main(): int sync {
 ```cml
 func main(): int sync {
     let total = 1..6
-        ->map<(x: int): int => x * x>
-        ->filter<(x: int): bool => x % 2 == 1>
+        ->map<(x) => x * x>
+        ->filter<(x) => x % 2 == 1>
         ->reduce<(acc: int, x: int): int => acc + x, 0>
     println(`total = ${total}`)
     return 0
@@ -122,7 +122,7 @@ total = 35
 ```
 
 - 管道 `x -> f` 作用在 `T?`、`T!` 上时把空值或错误传下去，见 [6.6](#66-空值与错误的运算符)。
-- `f..g` 是函数组合：`(f..g)(x)` 即 `g(f(x))`，与管道 `x->f->g` 同向；两边是整数时 `a..b` 是左闭右开的区间，得到 `int[]`，带步长写 `range(a, b, step)`。`for i in 0..n` 由编译器融合，不物化数组。`..` 比 `->` 紧：`x->f..g` 读作 `x->(f..g)`。
+- `f..g` 是函数组合：`(f..g)(x)` 即 `g(f(x))`，与管道 `x->f->g` 同向；两边是整数时 `a..b` 是左闭右开的区间，得到 `int[]`，带步长写 `range(a, b, step)`。`for i in 0..n` 由编译器融合，不物化数组。`..` 比 `+`、`-` 松（6.12）：`1..n+1` 是 `1..(n+1)`，与人在别的语言里的读法一致；它也比 `->` 松，`x->f..g` 读作 `(x->f)..g`，管道里要组合直接写 `x->f->g`，二者等价。
 
 ## 6.6 空值与错误的运算符
 
@@ -175,7 +175,7 @@ func main(): int sync {
 | 一元 `-` | 四种实数值类型、`c64`、`c128` | |
 | `~` | `int`、`i32` | 按位取反：`~5` 是 `-6` |
 
-两个操作数的类型必须相同。没有按位与、或、异或、移位运算符；用 `math` 模块的 `bit_and`、`bit_or`、`bit_xor`、`bit_not`、`shl`、`shr`。
+两个操作数的类型必须相同。没有按位与、或、异或、移位运算符；用 `math` 模块的 `bit_and`、`bit_or`、`bit_xor` 和 `x->shl<n>`、`x->shr<n>`（移位量写在尖括号里）；按位取反是 `~x`。
 
 **两个容易出错的地方：**
 
@@ -400,6 +400,10 @@ func main(): int sync {
 match type 类型 {
     case struct => 分支
     case array  => 分支
+    case nullable => 分支
+    case fallible => 分支
+    case map    => 分支
+    case set    => 分支
     case tuple  => 分支
     case func   => 分支
     case #leaf  => 分支
@@ -410,7 +414,7 @@ match type 类型 {
 }
 ```
 
-- `struct` 匹配结构体；`tuple` 匹配**普通**元组；`array` 匹配所有数组类型（不论元素是什么）；`func` 匹配函数类型；`#leaf` 匹配其余所有类型（标量、`string`、数组、函数、`T?`、`T!`、单元格等）。`struct` 和 `tuple` 是 [R3 内部节点](../design/generic-structure/README.cn.md)的两种形状：`T?`、`T!` 是带标记的元组，和可变单元格一样落在 `#leaf`，不算 `tuple`。
+- `struct` 匹配结构体；`tuple` 匹配**普通**元组；`array` 匹配所有数组类型（不论元素是什么）；`func` 匹配函数类型；`nullable` 匹配所有 `T?`，`fallible` 匹配所有 `T!`，`map` 匹配所有映射，`set` 匹配所有集合；`#leaf` 匹配其余所有类型（标量、`string`、数组、函数、`T?`、`T!`、映射、集合、单元格等）。`struct` 和 `tuple` 是 [R3 内部节点](../design/generic-structure/README.cn.md)的两种形状：`T?`、`T!` 是带标记的元组，和可变单元格一样落在 `#leaf`，不算 `tuple`。
 - 类型位置写一个类型名就是**身份模式**：`case int`、`case Json`、`case MyStruct`、`case T`。身份是**精确**的：`case float` 不选 `int`（`float` 与 `f64` 是同一个类型，`int` 与 `i64` 也是；`int` 与 `i32` 不是）；`case f32` 不选 `f64`；`case MyStruct` 按声明的名字选，不选另一个字段形状相同的结构体；`case T` 在实例化时先代入 `T` 的绑定，所以它选的正是那个类型。形状与身份可以写在同一个 case 里（`case tuple | MyStruct`），按书写顺序判断：前面的 case 已经选中的类型，后面的同一身份是 `SemanticDiag::StaticMatchPatternCannotMatch`。
 - `_` 与 `#leaf` 一样匹配一切，只作为“兜底”写法；两者都必须是最后一个 case。`case struct | tuple` 用 `|` 合并几种形状。`case int` 写在 `case #leaf` 之前是正常的；写在 `#leaf`/`_` 之后是 `SemanticDiag::StaticMatchUnreachableCase`。
 - `match type` 后面是类型位置：紧跟的 `(` 一律读作类型的开头，所以 `match type () { ... }` 匹配空元组类型；函数类型要再包一层括号，写成 `match type ((x: int) => int) { ... }`。`case` 后面也是类型位置，同样的规则：`case (int, int)`、`case ()` 是元组，函数类型写成 `case ((x: int) => int)`。
@@ -418,6 +422,8 @@ match type 类型 {
 - 没有 case 命中时是 `SemanticDiag::StaticMatchNotExhaustive`；`#leaf`/`_` 后面还有 case 是 `SemanticDiag::StaticMatchUnreachableCase`。`match type` 比较具体类型名：`case int`、`case MyStruct` 是这个构造的一部分，标量类型直接写类型名。
 - 选中的分支直接成为当前位置的直线代码，运行时没有分支节点。分支的值就是整个 `match type` 的值；空分支的值为 `void`。
 - 泛型函数的返回类型可以省略，由每个实例选中的分支推出（返回类型推断）。如果递归调用回到**同一个类型实例**、而该实例的返回类型还没有推出，报 `SemanticDiag::GenericInstantiationCycle`；递归到严格更小的类型参数则照常先完成子实例。
+
+**类型函数。** 类型也可以由类型算出（设计原则 5.6）：类型函数用 `type` 声明，`type F<T> = 体`，在类型位置写成 `F<...>` 调用；函数体是类型表达式，各 case 给出类型的 `match type` 也是：`type ElemOrSelf<T> = match type T { case array => ElementOf<T>  case _ => T }`。`types` 声明了五个 `match type` 取不出或造不出的部分：`ElementOf<T>` 是数组或集合的元素类型，`PayloadOf<T>` 是 `U?` 或 `U!` 里的 `U`，`KeyOf<T>` 与 `ValueOf<T>` 是映射的键类型与值类型，`WithElement<A, E>` 是把数组类型 `A` 的元素类型换成 `E`、形状不变的数组类型（`f32(xs)` 的结果就是 `WithElement<A, f32>`）。调用本身就是一个类型，和别的类型一样用：`is_integer::<ElementOf<T>>()` 里它是类型实参，`func first::<T>(xs: T): ElementOf<T>` 里它是结果类型。`T` 还是类型变量时调用等着；实例绑定 `T` 之后，调用被它算出的类型取代。函数不接受的类型（`ElementOf<int>`，或没有 case 选中的 `match type`）是 `SemanticDiag::TypeFunctionNotApplicable`：参数是具体类型时在类型写出处报，否则在造出实例的调用处报。
 
 ```cml
 func duplicate::<T>(t: T) {
@@ -606,7 +612,7 @@ lambda 的写法是 `(形参): 返回类型 => 体`，返回类型可以省略�
 
 **形参类型从哪里来。** lambda 不写类型的形参，其类型从 lambda 所在位置的函数类型推出，省略的返回类型同样如此。这样的位置有三种：
 
-- 实参：调用一个形参是函数类型的函数，`with` 实参同理。
+- 实参：调用一个形参是函数类型的函数，`with` 实参同理。内建函数也一样，它们的签名写在标准库的 `stdlib/prelude.cml` 里：`xs->filter<(x) => x > 0>`、`xs->foreach<(x) => println(x)>` 的 `x` 是 `xs` 的元素类型。`->` 之后直接写的 lambda 取左边那个值的类型（`x->(v) => v + 1`）。
 
   <!-- camel-snippet: fragment: a call shown inside the block it would be written in -->
 
@@ -630,6 +636,16 @@ lambda 的写法是 `(形参): 返回类型 => 体`，返回类型可以省略�
   ```cml
   func adder(n: int): (x: int) => int {
       return (x) => x + n              // x: int，返回类型也是 int
+  }
+  ```
+
+- `->` 后面的 lambda：形参就是接收者，所以它的类型是接收者的类型，或者从 `T?`、`T!` 里取出的值的类型（3.9 的流水线）：
+
+  ```cml
+  func main(): int sync {
+      let a = 5 -> (y) => y + 1                  // y: int
+      println(a)
+      return 0
   }
   ```
 
@@ -684,10 +700,10 @@ func main(): int sync {
 ```cml
 func main(): int sync {
     let xs = 1..6
-    println(xs->map<(x: int): int => x * x>)
-    println(xs->filter<(x: int): bool => x % 2 == 0>)
+    println(xs->map<(x) => x * x>)
+    println(xs->filter<(x) => x % 2 == 0>)
     println(xs->reduce<(acc: int, x: int): int => acc + x, 0>)
-    xs->filter<(x: int): bool => x > 3>->foreach<(x: int) => sync { println('item', x) }>
+    xs->filter<(x) => x > 3>->foreach<(x) => sync { println('item', x) }>
     return 0
 }
 ```
@@ -766,6 +782,7 @@ DivisionByZero at main.cml:1:38
 | 4b | `&` | 左结合，两边都求值 |
 | 5 | `==` `!=` `===` `!==` | 整体比较与逐元素比较（见 [6.7.3](#673-比较)） |
 | 6 | `<` `>` `<=` `>=` | |
+| 6a | `..` | 区间（两边是数）与函数组合（两边是函数）；比加减松，`1..n+1` 是 `1..(n+1)` |
 | 7 | `+` `-` | 左结合 |
 | 8 | `*` `/` `%` `@` | 左结合 |
 | 8a | `^` | 右结合，比乘除高一级 |
@@ -773,7 +790,6 @@ DivisionByZero at main.cml:1:38
 | 10 | `as` | |
 | 10a | 一元 `-` `!` `~` | 比 `->` 与 `^` 松：`!xs->is_empty()` 是 `!(xs->is_empty())`，`-a->f` 是 `-(a->f)`，`-a ^ 2` 是 `-(a ^ 2)`；字面量与名字读法相同（`-1->abs` 是 `-(1->abs)`，先取负写 `(-1)->abs`） |
 | 11 | `->` | 左结合 |
-| 12 | `..` | 区间（两边是数）与函数组合（两边是函数）|
 | 13 | 后缀：`.字段`、`[下标]`、`(实参)`、`<with 实参>` | 必须紧贴 |
 
 `if`、`match` 可以出现在任何需要表达式的位置；它们的臂一直延伸到表达式结束，嵌在更大的表达式里时加括号。

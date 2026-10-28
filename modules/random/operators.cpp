@@ -7,39 +7,40 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/struct.h"
-#include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/utils/philox.h"
-#include "camel/utils/random.h"
 #include "camel/utils/type.h"
-#include "key.h"
+
+#include "../tensor/dtype.h"
+#include "../tensor/interop.h"
+#include "../tensor/ops/support.h"
+#include "../tensor/tensor.h"
 
 #include <algorithm>
-#include <format>
+#include <cmath>
+#include <vector>
+#include <mutex>
+#include <numbers>
 
 namespace mm = camel::core::mm;
 using namespace camel::core::error;
 using namespace camel::core::context;
 using namespace camel::core::rtdata;
-namespace rnd = camel::utils::random;
 namespace philox = camel::utils::philox;
 
-// The distributions are camel/utils/random.h's, not <random>'s: the same seed gives the same
-// numbers on every platform.
-static rnd::Engine g_rng;
-
+// The random module: the one keyed primitive, the two operators of the global stream, and the
+// kernels of the whole-array draws. Everything else of the module is Camel (stdlib/random.cml).
 std::unordered_map<std::string, operator_t> getRandomOpsMap() {
     return {
         {"seed", __rand_seed__},
-        {"rand", __rand_rand__},
-        {"randn", __rand_randn__},
-        {"randint", __rand_randint__},
-        {"choice", __rand_choice__},
-        {"sample", __rand_sample__},
-        {"shuffle", __rand_shuffle__},
-        {"key", __rand_key__},
-        {"split", __rand_split__},
-        {"permutation", __rand_permutation__},
+        {"next_key", __rand_next_key__},
+        {"philox", __rand_philox__},
+        {"uniform_array", __rand_uniform_array__},
+        {"normal_array", __rand_normal_array__},
+        {"shuffle_i", __rand_shuffle_i__},
+        {"shuffle_l", __rand_shuffle_l__},
+        {"shuffle_f", __rand_shuffle_f__},
+        {"shuffle_d", __rand_shuffle_d__},
     };
 }
 
@@ -59,130 +60,221 @@ philox::Key readKey(const Struct *value) {
         static_cast<philox::u64>(value->get<Int64>(1))};
 }
 
+/// The four words of the block for a key and a 64-bit counter: the key's low half is the Philox
+/// key, its high half and the counter are the 128-bit counter (the counter is the high word).
+philox::Block blockOf(const philox::Key &key, philox::u64 counter) {
+    return philox::detail::block(key.lo, key.hi, counter);
+}
+
+/// The key derived from `key` at `counter`: the words packed two by two, high word first. The
+/// Camel `derive` of stdlib/random.cml writes the same packing with `pack`.
+philox::Key deriveKey(const philox::Key &key, philox::u64 counter) {
+    const philox::Block w = blockOf(key, counter);
+    return philox::Key{
+        (static_cast<philox::u64>(w.word[0]) << 32) | w.word[1],
+        (static_cast<philox::u64>(w.word[2]) << 32) | w.word[3]};
+}
+
+/// The i-th key derived from `key` (the Camel `fold`): the derived keys use the counters from -3
+/// downwards, so they never share a word with a key's own draws, which count up from 0.
+philox::Key foldKey(const philox::Key &key, philox::u64 index) {
+    return deriveKey(key, static_cast<philox::u64>(-3) - index);
+}
+
+/// The global stream: the key `seed` set (the default is the key of seed 0) and the number of
+/// keys taken from it. `next_key` is `fold(key, taken)`, so the stream is the sequence of the
+/// keys the keyed `fold` gives.
+struct Stream {
+    std::mutex lock;
+    philox::Key key{0, 0};
+    philox::u64 taken = 0;
+};
+
+Stream &stream() {
+    static Stream instance;
+    return instance;
+}
+
+/// The uniform draw of `T` from the words of counter 0 of a key: 53 bits for f64, 24 for f32, 11
+/// for f16 and 8 for bf16, the same bits as the scalar `uniform` of the Camel module.
+template <typename T> double uniformBits(const philox::Block &w) {
+    if constexpr (std::is_same_v<T, double>) {
+        const philox::u64 high = w.word[0] >> 5, low = w.word[1] >> 6;
+        return static_cast<double>(high * 67108864ull + low) * 1.1102230246251565e-16;
+    } else if constexpr (std::is_same_v<T, float>) {
+        return static_cast<double>(w.word[0] >> 8) * 5.9604644775390625e-8;
+    } else if constexpr (std::is_same_v<T, Float16>) {
+        return static_cast<double>(w.word[0] >> 21) * 0.00048828125;
+    } else {
+        return static_cast<double>(w.word[0] >> 24) * 0.00390625;
+    }
+}
+
+/// A float of 53 bits from counter `counter` of `key`.
+double uniform53(const philox::Key &key, philox::u64 counter) {
+    return uniformBits<double>(blockOf(key, counter));
+}
+
+/// The standard normal value of a key: Box-Muller on two 53-bit uniforms, rounded once into T.
+double normalOf(const philox::Key &key) {
+    const double u = 1.0 - uniform53(key, 0);
+    const double v = uniform53(key, 1);
+    return std::sqrt(-2.0 * std::log(u)) * std::cos(2.0 * std::numbers::pi * v);
+}
+
+camel::core::type::TypeCode elementCodeOf(ArgsView &norm) {
+    const auto *result =
+        tt::as_ptr<camel::core::type::ArrayType>(norm.resultType());
+    return result->elemType()->code();
+}
+
+[[noreturn]] void refuseElement(const char *op) {
+    throwRuntimeFault(
+        RuntimeDiag::OperandTypeUnsupported,
+        op,
+        "the element type of a whole-array draw is f64, f32, f16 or bf16");
+}
+
+/// Fills a tensor of `dtype` and `shape` with `value(i)` for element i, rounded into the element
+/// type once.
+template <typename Value>
+::Array *drawArray(
+    camel::core::type::TypeCode dtype, std::span<const int64_t> shape, const char *op,
+    Value &&value) {
+    namespace tn = camel::tensor;
+    ::Array *out         = tn::createTensor(dtype, shape, tn::ops::resultAllocator());
+    const uint64_t count = out->numel();
+    const auto fill      = [&]<typename T>() {
+        T *values = out->dataAs<T>();
+        for (uint64_t i = 0; i < count; ++i) {
+            values[i] = T(value.template operator()<T>(i));
+        }
+    };
+    switch (dtype) {
+    case camel::core::type::TypeCode::Float64:
+        fill.template operator()<double>();
+        break;
+    case camel::core::type::TypeCode::Float32:
+        fill.template operator()<float>();
+        break;
+    case camel::core::type::TypeCode::Float16:
+        fill.template operator()<Float16>();
+        break;
+    case camel::core::type::TypeCode::BFloat16:
+        fill.template operator()<BFloat16>();
+        break;
+    default:
+        refuseElement(op);
+    }
+    return out;
+}
+
+/// `xs->shuffle<k>` for an array of numbers: `xs[permutation(k, len(xs))]`, with the permutation
+/// the positions ordered by one uniform draw each, the f64 `uniform` of the key folded with the
+/// position, ties in position order (stdlib/random.cml). The draws are made as the whole-array
+/// draw makes them and ordered together with their positions, and the elements are written
+/// straight to the result, so the permutation and the array of draws are never built: the result
+/// is the body's bit for bit, with 16 bytes of working memory for each element in place of 40.
+template <typename T> slot_t shuffleOf(ArgsView &with, ArgsView &norm) {
+    const philox::Key key = readKey(with.get<Struct *>(0));
+    ::Array *xs           = norm.get<::Array *>(0);
+    const auto *arrType   = tt::as_ptr<camel::core::type::ArrayType>(norm.type(0));
+    const size_t n        = xs->size();
+    ::Array *out          = ::Array::create(mm::autoSpace(), arrType, n);
+    if (n == 0) {
+        return toSlot(out);
+    }
+    struct Draw {
+        double value;
+        philox::u64 position;
+    };
+    std::vector<Draw> draws(n);
+    for (size_t i = 0; i < n; ++i) {
+        draws[i] = {uniformBits<double>(blockOf(foldKey(key, i), 0)), i};
+    }
+    std::sort(draws.begin(), draws.end(), [](const Draw &a, const Draw &b) {
+        return a.value < b.value || (a.value == b.value && a.position < b.position);
+    });
+    const T *from = xs->dataAs<T>();
+    T *to         = out->dataAs<T>();
+    for (size_t i = 0; i < n; ++i) {
+        to[i] = from[draws[i].position];
+    }
+    return toSlot(out);
+}
+
 } // namespace
 
 slot_t __rand_seed__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    g_rng.seed(norm.get<Int64>(0));
+    Stream &s = stream();
+    std::lock_guard guard(s.lock);
+    s.key   = philox::Key{0, static_cast<philox::u64>(norm.get<Int64>(0))};
+    s.taken = 0;
     return NullSlot;
 }
 
-slot_t __rand_rand__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    return toSlot(rnd::unitDouble(g_rng));
-}
-
-slot_t __rand_randn__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    // A fresh source per call: the second value of a pair is not kept, so the numbers after
-    // seed() depend on nothing but the calls made since.
-    return toSlot(rnd::NormalSource<double>{}(g_rng));
-}
-
-slot_t __rand_randint__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Int64 low = norm.get<Int64>(0), high = norm.get<Int64>(1);
-    if (low > high)
-        std::swap(low, high);
-    return toSlot(rnd::between(g_rng, low, high));
-}
-
-static void shuffleArray(Array *arr) {
-    size_t sz = arr->size();
-    if (sz <= 1)
-        return;
-    for (size_t i = sz - 1; i > 0; --i) {
-        size_t j = g_rng() % (i + 1);
-        const slot_t a = arr->getSlot(i);
-        arr->setSlot(i, arr->getSlot(j));
-        arr->setSlot(j, a);
+slot_t __rand_next_key__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Stream &s = stream();
+    philox::Key next;
+    {
+        std::lock_guard guard(s.lock);
+        next = foldKey(s.key, s.taken++);
     }
+    return toSlot(makeKey(next));
 }
 
-static Array *sampleArray(
-    const Array *arr, int32_t n, const camel::core::type::ArrayType *arrType) {
-    if (n <= 0 || arr->size() == 0)
-        return Array::create(mm::autoSpace(), arrType, 0);
-    size_t sz = arr->size();
-    if ((size_t)n > sz)
-        n = static_cast<int32_t>(sz);
-    Array *res = Array::create(mm::autoSpace(), arrType, static_cast<size_t>(n));
-    for (size_t i = 0; i < (size_t)n; ++i)
-        res->setSlot(i, arr->getSlot(i));
-    for (size_t i = n; i < sz; ++i) {
-        size_t j = g_rng() % (i + 1);
-        if (j < (size_t)n)
-            res->setSlot(j, arr->getSlot(i));
-    }
-    return res;
-}
-
-slot_t __rand_choice__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr = norm.get<Array *>(0);
-    if (arr->size() == 0) {
-        throwRuntimeFault(
-            RuntimeDiag::InvalidArgument,
-            "random.choice",
-            "the array is empty, so there is nothing to choose");
-    }
-    const size_t idx = static_cast<size_t>(rnd::below(g_rng, arr->size()));
-    return arr->get<slot_t>(idx);
-}
-
-slot_t __rand_sample__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr = norm.get<Array *>(0);
-    Int64 n    = norm.get<Int64>(1);
-    if (n < 0 || (size_t)n > arr->size()) {
-        throwRuntimeFault(
-            RuntimeDiag::InvalidArgument,
-            "random.sample",
-            std::format(
-                "the sample size is {} and the array has {} elements; the size must be between 0 "
-                "and the number of elements",
-                n,
-                arr->size()));
-    }
-    return toSlot(sampleArray(
-        arr,
-        static_cast<int32_t>(n),
-        tt::as_ptr<camel::core::type::ArrayType>(norm.type(0))));
-}
-
-slot_t __rand_shuffle__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr = norm.get<Array *>(0);
-    const camel::core::type::ArrayType *arrType =
-        tt::as_ptr<camel::core::type::ArrayType>(norm.type(0));
-    Array *res = static_cast<Array *>(arr->clone(mm::autoSpace(), arrType));
-    shuffleArray(res);
-    return toSlot(res);
-}
-
-// ---------------------------------------------------------------- keyed random
-
-slot_t __rand_key__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    return toSlot(makeKey(philox::key(static_cast<philox::u64>(norm.get<Int64>(0)))));
-}
-
-slot_t __rand_split__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    const auto [left, right] = philox::split(readKey(norm.get<Struct *>(0)));
-    Tuple *pair              = Tuple::create(2, mm::autoSpace());
-    pair->set(0, makeKey(left));
-    pair->set(1, makeKey(right));
-    return toSlot(pair);
-}
-
-slot_t __rand_permutation__(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t __rand_philox__(ArgsView &with, ArgsView &norm, Context &ctx) {
     const philox::Key key = readKey(norm.get<Struct *>(0));
-    const Int64 n         = norm.get<Int64>(1);
-    if (n < 0) {
-        throwRuntimeFault(
-            RuntimeDiag::InvalidArgument,
-            "random.permutation",
-            std::format("the permutation length is {}; it must be non-negative", n));
-    }
-    const std::vector<int64_t> order = philox::permutation(key, static_cast<int64_t>(n));
-    Array *result = Array::create(
+    const philox::Block w = blockOf(key, static_cast<philox::u64>(norm.get<Int64>(1)));
+    Array *result         = Array::create(
         mm::autoSpace(),
         camel::core::type::ArrayType::create(camel::core::type::Type::Int64()),
-        order.size());
-    for (size_t i = 0; i < order.size(); ++i) {
-        result->set<Int64>(i, static_cast<Int64>(order[i]));
+        4);
+    for (size_t i = 0; i < 4; ++i) {
+        result->set<Int64>(i, static_cast<Int64>(w.word[i]));
     }
     return toSlot(result);
+}
+
+slot_t __rand_uniform_array__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    namespace tn = camel::tensor;
+    return tn::ops::runKernel("rand.uniform_array", [&] {
+        const philox::Key key = readKey(norm.get<Struct *>(0));
+        const tn::Shape shape = tn::parseShapeArray(with.get<::Array *>(0), with.type(0));
+        ::Array *out          = drawArray(
+            elementCodeOf(norm),
+            shape,
+            "rand.uniform_array",
+            [&]<typename T>(uint64_t i) {
+                return uniformBits<T>(blockOf(foldKey(key, i), 0));
+            });
+        return tn::ops::wrap(norm.resultType(), out);
+    });
+}
+
+slot_t __rand_normal_array__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    namespace tn = camel::tensor;
+    return tn::ops::runKernel("rand.normal_array", [&] {
+        const philox::Key key = readKey(norm.get<Struct *>(0));
+        const tn::Shape shape = tn::parseShapeArray(with.get<::Array *>(0), with.type(0));
+        ::Array *out          = drawArray(
+            elementCodeOf(norm),
+            shape,
+            "rand.normal_array",
+            [&]<typename T>(uint64_t i) { return normalOf(foldKey(key, i)); });
+        return tn::ops::wrap(norm.resultType(), out);
+    });
+}
+
+slot_t __rand_shuffle_i__(ArgsView &with, ArgsView &norm, Context &) {
+    return shuffleOf<Int32>(with, norm);
+}
+slot_t __rand_shuffle_l__(ArgsView &with, ArgsView &norm, Context &) {
+    return shuffleOf<Int64>(with, norm);
+}
+slot_t __rand_shuffle_f__(ArgsView &with, ArgsView &norm, Context &) {
+    return shuffleOf<Float32>(with, norm);
+}
+slot_t __rand_shuffle_d__(ArgsView &with, ArgsView &norm, Context &) {
+    return shuffleOf<Float64>(with, norm);
 }

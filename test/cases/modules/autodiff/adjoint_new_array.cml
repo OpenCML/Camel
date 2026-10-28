@@ -26,7 +26,7 @@ func plain(): float {
 with <w: float[]>
 func weighted(): float {
     let t = new(w)
-    let c = reshape([2.0, 3.0, 4.0] as f64[], [3])
+    let c = reshape<[3]>([2.0, 3.0, 4.0] as f64[])
     return float(sum(t * c))
 }
 

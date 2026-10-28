@@ -948,8 +948,8 @@ any Formatter::visitResourceClause(cst::ResourceClause context) {
 
 /*
 typeDecl
-    : TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
-      (typeExpr | STRING)
+    : TYPE identRef ('<' identDef (',' identDef)* ','? ('>' | '>='))?
+      ('=' (typeExpr | STRING))?
     ;
 */
 any Formatter::visitTypeDecl(cst::TypeDecl context) {
@@ -968,11 +968,11 @@ any Formatter::visitTypeDecl(cst::TypeDecl context) {
         }
         result += ">";
     }
-    result += " = ";
+    // An opaque type has no right side: `export type Graph`.
     if (context->type()) {
-        result += any_cast<string>(visitType(context->type()));
-    } else {
-        result += formatStringLiteral(context->tok(TK::String)->text());
+        result += " = " + any_cast<string>(visitType(context->type()));
+    } else if (context->tokCount(TK::String) > 0) {
+        result += " = " + formatStringLiteral(context->tok(TK::String)->text());
     }
     return result;
 }
@@ -1323,6 +1323,33 @@ any Formatter::visitTypeCase(cst::TypeCase context) {
     return "case " +
            formatList(vec(context->all<cst::TypeCasePattern>()), context, " | ", " |") + " => " +
            any_cast<string>(visitBlockExpr(context->lastChild().node()));
+}
+
+/*
+matchTypeType
+    : 'match' 'type' typeExpr '{' typeArm* '}'
+    ;
+*/
+any Formatter::visitMatchTypeType(cst::MatchTypeType context) {
+    return "match type " + formatTypeInTypePosition(context->type()) + " {" +
+           formatList(
+               vec(context->all<cst::TypeArm>()),
+               context,
+               " ",
+               "",
+               PaddingNL | Multiline | PushScope) +
+           "}";
+}
+
+/*
+typeArm
+    : CASE typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
+    ;
+*/
+any Formatter::visitTypeArm(cst::TypeArm context) {
+    return "case " +
+           formatList(vec(context->all<cst::TypeCasePattern>()), context, " | ", " |") + " => " +
+           any_cast<string>(visit(context->type()));
 }
 
 /*
@@ -2171,6 +2198,8 @@ any Formatter::dispatch(syn::Node context) {
         CAMEL_FORMAT(ArrayType)
         CAMEL_FORMAT(ArrayDim)
         CAMEL_FORMAT(SpecType)
+        CAMEL_FORMAT(MatchTypeType)
+        CAMEL_FORMAT(TypeArm)
         CAMEL_FORMAT(ConstData)
         CAMEL_FORMAT(StructType)
         CAMEL_FORMAT(EnumType)

@@ -9,7 +9,7 @@ func my_head::<T>(xs: T[]): T {
 
 // tail: (xs: T[]) => T[]
 func my_tail::<T>(xs: T[]): T[] {
-    return xs->slice<1, len(xs)>
+    return xs[1:]
 }
 
 // zip of two arrays: (xs: T[], ys: U[]) => (T, U)[]

@@ -293,9 +293,12 @@ class Builder {
     /// (UserDefinedModule::compileAsProgram). False when the function has no graph or a module
     /// is in error.
     bool buildLibraryEntry(
-        const camel::core::module::module_ptr_t &module, const std::string &entryFunction);
+        const camel::core::module::module_ptr_t &module, const std::string &entryFunction,
+        FunctionType *expected = nullptr);
 
     compile_graph_ptr_t rootGraph() const { return rootGraph_; }
+    /// Why a generic entry function has no instance for the type it was asked for.
+    const std::string &libraryEntryProblem() const { return libraryEntryProblem_; }
 
     /// The instance of one registered generic rule at `types`: its two sides and its condition,
     /// built here, in the builder the rule's templates belong to (where it was declared). Answers
@@ -425,6 +428,9 @@ class Builder {
         std::string name;
         std::string uri;
         oper_group_ptr_t group;
+        // The type arguments of the instance, when the kernel's variable is stated by them alone
+        // (`T[..]` only in the result): a direct call resolves the kernel with them.
+        camel::core::type::type_vec_t types;
     };
     // The semantic bodies of the `#impl` functions of every module, by their graphs (design
     // principles 10.4): a direct call of the function is a call of the kernel instead; the
@@ -552,14 +558,17 @@ class Builder {
     void exportDeclarations(const GCT::node_ptr_t &expt, bool decorated);
     // A body-less declaration of the current module (design principles 6.4, step
     // 1): checked against the operator table and the loaded executors, then kept as a rule of
-    // the operator group of its name. A body-less declaration with the pass applicability is
-    // not an operator; see `isPassDeclaration`.
+    // the operator group of its name. A body-less declaration with the pass applicability is a pass
+    // (`isPassDeclaration`), and an operator as well when the module implements one for it
+    // (`declarationHasOperator`).
     void declareNativeOperator(const GCT::node_ptr_t &gct);
     // Whether a body-less declaration declares a pass (design principles 9.3): its applicability
     // condition is `is_function::<T>()`, the same condition the pipeline reads from the module's
-    // `.cml` file. A pass is a function the pipeline applies to the program, not an operator of
-    // the module; nothing of it is compiled or exported.
-    static bool isPassDeclaration(const GCT::node_ptr_t &gct);
+    // `.cml` file. A pass is a function the pipeline applies to the program; nothing of it is
+    // compiled or exported as a function.
+    bool isPassDeclaration(const GCT::node_ptr_t &gct);
+    /// Whether the operator this body-less declaration names is the module's, implemented for it.
+    bool declarationHasOperator(const GCT::node_ptr_t &gct);
     // Exports the operator groups of the body-less declarations of the current module, one group
     // per declared name, after its declarations were read. A name the module's export list
     // `exportList` does not have stays private to the module.
@@ -597,6 +606,11 @@ class Builder {
     // The function the root graph calls, when the build is a library used as a program of its
     // own (buildLibraryEntry); empty for a program, whose entry is `main`.
     std::string libraryEntryFunction_;
+    // The type of the entry function when it is generic (a pass `(f: F) => F!`): the instance
+    // that is a function of this type is the one the root graph calls (instantiateGenericAs).
+    FunctionType *libraryEntryExpected_ = nullptr;
+    // Why the generic entry has no instance of the expected type, when it has none.
+    std::string libraryEntryProblem_;
 
     node_scope_ptr_t nodeScope_;
     graph_scope_ptr_t graphScope_;
@@ -725,6 +739,11 @@ class Builder {
         /// with a defaulted parameter between them): it has no node, and the declaration the
         /// call turns out to mean gives it its default (completeWithFor).
         bool left = false;
+        /// The value of a variable argument, read where the argument is written: an argument
+        /// after it may write the variable (`f(c, g(c))`), and the read is a use of the variable
+        /// that comes before that write (design principles 3.3). Unused when the parameter takes
+        /// the variable itself, and the read nobody uses is dropped with the graph's other dead reads.
+        node_handle_t early = nullptr;
     };
 
     using node_modifier_map_t = std::unordered_map<draft_node_ref_t, draft_node_ref_t>;
@@ -752,6 +771,25 @@ class Builder {
     // variable is named by it in diagnostics).
     std::unordered_map<node_handle_t, node_handle_t> captureOriginOf_;
     std::unordered_map<node_handle_t, std::string> originNames_;
+    // The cell of each `var` at the top level of a module, and the resource it is (the module and
+    // the name, `counter::cnt`): a body that reads or writes the cell through a capture touches
+    // that resource (builder_resources.cpp).
+    std::unordered_map<node_handle_t, std::string> moduleVariableResources_;
+    // The `with` arguments written after the explicit type arguments being applied
+    // (`f::<int><n: 2>`): their count and names choose among generic overloads that differ in their
+    // `with` parameters, exactly as they choose among the others (visitTypeApplication). A type
+    // application that is not the callee of a binding writes none.
+    size_t typeApplicationWithWritten_ = 0;
+    camel::core::type::Type *writtenArgumentType(const GCT::node_ptr_t &argument);
+    std::vector<std::optional<std::string>> typeApplicationWithNames_;
+    // The types of those arguments that are known before the call is chosen (a literal's own type,
+    // the type of a name read); nullptr for one that takes its type from the parameter it enters.
+    std::vector<camel::core::type::Type *> typeApplicationWithTypes_;
+    // The last call through a function value written in a sync block: it may write any variable the
+    // value captured, so a read written after it is ordered after it (readVariableThrough).
+    node_handle_t lastIndirectCall_ = nullptr;
+    std::optional<std::string>
+    moduleVariableOf(const runtime::GraphDraft &draft, draft_node_ref_t port) const;
     // The value the port of a machine's region stands for: a round takes the sequence it iterates
     // and the states it starts from out of its ports, so the port is that value inside the round,
     // exactly as a capture port is what it captured (design principles 3.7, rule C1). The machine
@@ -1657,8 +1695,11 @@ class Builder {
     /// instantiation, because that is when the instance's types are known (rule
     /// impl-kernel-site). An instance no rule accepts has no executor: it runs the body,
     /// which is the semantics, and gives the same result.
+    /// `bindings` are the instance's type arguments: a kernel whose type variable only the result
+    /// mentions (`T[..]`) is bound by them.
     void adoptImplKernel(
-        const generic_template_ptr_t &tmpl, const compile_graph_ptr_t &graph, FunctionType *funcType);
+        const generic_template_ptr_t &tmpl, const compile_graph_ptr_t &graph, FunctionType *funcType,
+        const camel::core::type::type_bindings_t &bindings = {});
     /// Whether the rule `rule` of a body-less declaration applies to an instance of these types:
     /// the condition the declaration wrote, answered for the instance's types (design principles
     /// 4.4), with the declaration's own type parameters bound by them. True when the rule has no
@@ -1667,7 +1708,8 @@ class Builder {
     bool declaredRuleApplies(
         const camel::core::type::resolver_ptr_t &rule, const std::string &name,
         const camel::core::type::type_vec_t &withTypes,
-        const camel::core::type::type_vec_t &normTypes);
+        const camel::core::type::type_vec_t &normTypes,
+        const camel::core::type::type_vec_t &explicitTypes = {});
     /// What a body-less declaration's `when` says about a call whose arguments have these types
     /// (design principles 4.4). `declaredRuleApplies` answers the same question about an `#impl`
     /// instance, where only "this rule is the executor" and "it is not" exist; selecting among a
@@ -1683,7 +1725,8 @@ class Builder {
     RuleVerdict ruleVerdictForCall(
         const camel::core::type::resolver_ptr_t &rule, const std::string &name,
         const camel::core::type::type_vec_t &withTypes,
-        const camel::core::type::type_vec_t &normTypes, std::string *conditionText = nullptr);
+        const camel::core::type::type_vec_t &normTypes, std::string *conditionText = nullptr,
+        const camel::core::type::type_vec_t &explicitTypes = {});
     /// The rule of the operator group `ops` a call means: a rule whose signature takes the
     /// arguments and whose own `when` holds for them (design principles 4.4). A rule that takes
     /// the arguments while its condition is false is not a candidate; it is recorded in `unmet`
@@ -2465,7 +2508,11 @@ class Builder {
         node_handle_t lhs, node_handle_t rhs, const GCT::node_ptr_t &gct);
     node_handle_t visitWithNode(const GCT::node_ptr_t &gct);
     node_handle_t visitTypeApplication(const GCT::node_ptr_t &gct);
-    FunctionType *signatureForArgumentContext(node_handle_t target) const;
+    /// The signature the arguments of a call take their expected types from. `withWritten` is the
+    /// number of `with` arguments the call writes: an overload with fewer `with` parameters
+    /// cannot be the one meant, so it does not keep the others from agreeing.
+    FunctionType *
+    signatureForArgumentContext(node_handle_t target, size_t withWritten = 0) const;
     node_handle_t visitAccsNode(const GCT::node_ptr_t &gct);
     node_handle_t visitBrchNode(const GCT::node_ptr_t &gct);
     /// `match type`: selects a case from the shape of the subject type and builds only that
@@ -2548,13 +2595,15 @@ class Builder {
     void markLoopStateInPlace(
         const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial,
         const std::vector<bool> &privateInitial = {});
-    /// The per-state half of markLoopStateInPlace: rewrites state `index` when its next value
-    /// (`next`) is `state->append<v>` and the body uses that state's parameter nowhere else.
-    /// `initialIsPrivate`: the first value is a projection of a value the loop does not own (a
-    /// part of a struct state); it is copied once before the loop either way.
+    /// The per-state half of markLoopStateInPlace: rewrites state `index` when each of its next
+    /// values (`nexts`: one for a body that gives the state directly, one per arm for a body that
+    /// ends in an `if` or `match`) is `state->append<v>` or the state itself, and the body uses
+    /// that state's parameter nowhere else. `initialIsPrivate`: the first value is a projection
+    /// of a value the loop does not own (a part of a struct state); it is copied once before the
+    /// loop either way.
     void markLoopStateInPlaceOne(
         const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial,
-        size_t index, node_handle_t next, bool initialIsPrivate = false);
+        size_t index, const std::vector<node_handle_t> &nexts, bool initialIsPrivate = false);
     /// Recognises a state that starts as an empty array and whose only use is appending one
     /// value per round, and gives the loop a collection slot for the appended values
     /// (design principles 3.10). The state itself stays: it is the value the program sees and
@@ -2647,6 +2696,8 @@ class Builder {
     // the one-bit tag of a value; nothing here adds a node kind. ----
     /// `a ?? b`, `a !! b`.
     node_handle_t visitTaggedBrchNode(const GCT::node_ptr_t &gct);
+    /// The value a declaration without a right side stands for: the C++ module's registered value.
+    node_handle_t nativeValueNode(const GCT::node_ptr_t &gct, Type *declared);
     /// The pipe `x -> f` (design principles 3.9). The call is built with `x` as it is, and the
     /// overloads of `f` (their `when` conditions included) are asked first; when none takes it and
     /// `x` is a `T?` or a `T!`, the call takes the value out of `x` (peelPipeReceiver).

@@ -1,0 +1,15 @@
+/**
+ * A type variable written as a conversion (`T(x)`) in a case of `match type` that the instance does
+ * not select still names the type the instance binds, as it does in the case it selects.
+ */
+func conv::<T>(x: float): T {
+    return match type T {
+        case float | f32 => T(x)
+        case _ => T(0)
+    }
+}
+
+func main(): int sync {
+    println(conv::<f32>(1.5), conv::<float>(2.5), conv::<int>(2.5))
+    return 0
+}

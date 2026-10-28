@@ -409,16 +409,11 @@ class GctConstantEvaluator {
             // Every other type, a function included, is a leaf: `#leaf` still selects it.
             shape = GCT::typeCaseBit(GCT::TypeCaseKind::Leaf);
         }
-        const bool isFunc       = subject->code() == TypeCode::Function;
-        const bool isArray      = subject->code() == TypeCode::Array;
         const uint16_t wildcard = GCT::typeCaseBit(GCT::TypeCaseKind::Wildcard);
+        const uint16_t extra    = extraTypeShapes(subject);
         for (size_t i = 1; i < node->size(); ++i) {
             const GCT::node_ptr_t &arm = node->at(i);
-            bool selected              = (arm->typeCasePatterns() & (shape | wildcard)) != 0 ||
-                            (isFunc && (arm->typeCasePatterns() &
-                                        GCT::typeCaseBit(GCT::TypeCaseKind::Func)) != 0) ||
-                            (isArray && (arm->typeCasePatterns() &
-                                         GCT::typeCaseBit(GCT::TypeCaseKind::Array)) != 0);
+            bool selected = (arm->typeCasePatterns() & (shape | wildcard | extra)) != 0;
             for (size_t k = 0; !selected && k < arm->typeCaseTypeCount(); ++k) {
                 Type *pattern = bound(arm->typeCaseTypeAt(k));
                 selected      = pattern != nullptr && !containsTypeVar(pattern) &&
@@ -1680,8 +1675,19 @@ Builder::FoldedCall Builder::evaluateCallAtBuildTime(
     }
 
     FoldTarget target;
-    const auto templateFound = templateScope_->get(request.name);
-    const bool generic       = templateFound.has_value() && static_cast<bool>(templateFound.value());
+    auto templateFound = templateScope_->get(request.name);
+    // A generic predicate a body calls with its type arguments (`is_integer::<T>()`) is found the
+    // way a condition finds one: among the module's own names, then what its imports bring by name
+    // or through a prefix or an alias, then the prelude. The scope above holds only the first.
+    if (!(templateFound.has_value() && static_cast<bool>(templateFound.value())) &&
+        request.typeApplied && request.callee != nullptr && request.callee->size() > 0) {
+        WhenResult unresolved;
+        if (const auto named = whenPredicateNamed(request.name, request.callee->at(0), unresolved);
+            named.has_value() && static_cast<bool>(*named)) {
+            templateFound = *named;
+        }
+    }
+    const bool generic = templateFound.has_value() && static_cast<bool>(templateFound.value());
     if (generic ? !foldTargetOfGeneric(templateFound.value(), request, target, result)
                 : !foldTargetOfFunction(request, target, result)) {
         return result;
@@ -2027,6 +2033,28 @@ void Builder::foldRunBody(
         return evaluateCallInsideBody(
             nestedCall, nestedCallee, nestedArguments, eval, nestedVars, nestedDepth);
     };
+    // The names the body calls are the declaring module's, not the module the call is written
+    // in: `has_ckpt_form` calls `is_numeric`, which calls `is_real` of its own module `types`.
+    struct DeclaringScope {
+        Builder &self;
+        camel::core::module::module_ptr_t module;
+        template_scope_ptr_t templates;
+        bool swapped = false;
+        DeclaringScope(Builder &builder, const generic_template_ptr_t &declaring) : self(builder) {
+            if (declaring != nullptr && declaring->module != nullptr &&
+                declaring->module != builder.module_ && declaring->templateScope != nullptr) {
+                module    = std::exchange(builder.module_, declaring->module);
+                templates = std::exchange(builder.templateScope_, declaring->templateScope);
+                swapped   = true;
+            }
+        }
+        ~DeclaringScope() {
+            if (swapped) {
+                self.module_        = std::move(module);
+                self.templateScope_ = std::move(templates);
+            }
+        }
+    } declaringScope(*this, target.declaring);
     try {
         result.data = GctConstantEvaluator::runFunction(
             target.func, target.bindings, *request.arguments, request.withArguments, nullptr,

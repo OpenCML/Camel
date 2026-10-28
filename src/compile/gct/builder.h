@@ -41,6 +41,7 @@ class Builder {
     /// at all; errors that leave a tree behind are in `diags`.
     std::unique_ptr<Tree> build(AST::node_ptr_t node, camel::core::error::diagnostics_ptr_t diags) {
         idIndex_ = 0;
+        pendingNames_.clear();
         diags_   = diags;
         tree_    = std::make_unique<Tree>();
         initInnerTypes();
@@ -108,6 +109,16 @@ class Builder {
     void initInnerTypes();
 
     std::pair<node_ptr_t, data_ptr_t> makeRefData(const node_ptr_t &expr);
+    // The elements of a literal that are plain names and have not been hoisted: they are read
+    // where the literal is built, which is after every element hoisted before it. When a computed
+    // element is hoisted after them, they are hoisted first (`pendingNames_`), so the uses of one
+    // variable in a literal happen from left to right, like the arguments of a call. Keyed by the
+    // block the literal hoists into, which the entry keeps alive.
+    struct PendingName {
+        std::shared_ptr<camel::core::data::RefData> data;
+        node_ptr_t expr;
+    };
+    std::vector<std::pair<node_ptr_t, std::vector<PendingName>>> pendingNames_;
     std::pair<data_ptr_t, bool> extractData(const node_ptr_t &node, node_ptr_t &execNode);
     std::pair<data_ptr_t, bool>
     extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling);
@@ -380,6 +391,7 @@ class Builder {
         const AST::node_ptr_t &ast, Tree::ParameterDefaults *defaultsOut = nullptr);
     Type *visitRefType(const AST::node_ptr_t &ast);
     Type *visitSpecType(const AST::node_ptr_t &ast);
+    Type *visitMatchTypeType(const AST::node_ptr_t &ast);
     /// The extents of one `[...]` as linear forms (design principles 5.4). An unknown extent
     /// (`?`, or the empty `[]`) is `ExtentForm::unknown()`; nullptr with a diagnostic reported.
     std::shared_ptr<const std::vector<camel::core::type::ExtentForm>>

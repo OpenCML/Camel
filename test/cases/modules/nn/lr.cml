@@ -15,8 +15,8 @@ func mean_squared_error(y_pred: f32[?, ?], y_true: f32[?, ?]): float {
 with <weights: f32[?, ?]>
 func predict(X: f32[?, ?]): f32[?, ?] {
     let num_of_samples = shape(X)[0]
-    let ones_col = ones([num_of_samples, 1])
-    let X_with_bias = concat(X, ones_col, 1)  // axis=1
+    let ones_col = ones::<f32>([num_of_samples, 1])
+    let X_with_bias = concat<1>(X, ones_col)  // axis=1
     return X_with_bias @ weights
 }
 
@@ -36,8 +36,8 @@ func train(var weights: f32[?, ?]): void {
     let m = shape(X)[0]  // number of samples
     let n = shape(X)[1]  // number of features
     
-    let ones_col = ones([m, 1])
-    let X_bias = concat(X, ones_col, 1)  // axis=1
+    let ones_col = ones::<f32>([m, 1])
+    let X_bias = concat<1>(X, ones_col)  // axis=1
 
     return 0..its->foreach<(i: int) => sync {
         let nw = update<X_bias, y, lr>(weights)
@@ -58,8 +58,8 @@ func main(): int sync {
     let num_features = 2
 
     let X = random([num_samples, num_features], 0.0, 10.0)
-    let y = ones([num_samples, 1])
-    var w = zeros([num_features + 1, 1]) // +1 for bias term
+    let y = ones::<f32>([num_samples, 1])
+    var w = zeros::<f32>([num_features + 1, 1]) // +1 for bias term
 
     println('Feature matrix X:', X)
     println('Target vector y:', y)

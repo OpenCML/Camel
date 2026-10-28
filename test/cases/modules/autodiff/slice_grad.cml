@@ -13,7 +13,7 @@
  *   stepped    sum(slice(x, 0, 0, 6, 2) * [2,3,5]) = x0*2 + x2*3 + x4*5 -> [2, 0, 3, 0, 5, 0]
  *   roundtrip  sum(reshape(transpose(transpose(reshape(x, [2,3]))), [6]) * w) with w = 1..6
  *              must give exactly the gradient of the unreshaped sum(x * w), which is w itself.
- *   query      sum(x * x) + sum(zeros([dim(x, 0)])) + sum(zeros([numel(x)])): a shape query is
+ *   query      sum(x * x) + sum(zeros::<f32>([dim(x, 0)])) + sum(zeros::<f32>([numel(x)])): a shape query is
  *              locally constant in the tensor it reads, so its contribution is exactly zero and
  *              the gradient is 2 * x = [2, 4, 6, 8, 10, 12].
  *
@@ -28,38 +28,38 @@ import { grad, with_grad } from autodiff
 
 with <x: f32[..]>
 func slice_loss(): float {
-    let c = reshape([2.0, 3.0, 5.0] as f32[], [3])
+    let c = reshape<[3]>([2.0, 3.0, 5.0] as f32[])
     return float(sum(x[1:4] * c))
 }
 
 with <x: f32[..]>
 func nested_loss(): float {
-    let c = reshape([7.0, 11.0] as f32[], [2])
+    let c = reshape<[2]>([7.0, 11.0] as f32[])
     return float(sum(x[1:5][1:3] * c))
 }
 
 with <x: f32[..]>
 func stepped_loss(): float {
-    let c = reshape([2.0, 3.0, 5.0] as f32[], [3])
+    let c = reshape<[3]>([2.0, 3.0, 5.0] as f32[])
     return float(sum(slice(x, 0, 0, 6, 2) * c))
 }
 
 with <x: f32[..]>
 func round_trip(): float {
-    let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [6])
-    return float(sum(reshape(transpose(transpose(reshape(x, [2, 3]))), [6]) * w))
+    let w = reshape<[6]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
+    return float(sum(reshape<[6]>(transpose(transpose(reshape<[2, 3]>(x)))) * w))
 }
 
 with <x: f32[..]>
 func plain(): float {
-    let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [6])
+    let w = reshape<[6]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     return float(sum(x * w))
 }
 
 with <x: f32[..]>
 func shape_queries(): float {
-    let a = zeros([dim(x, 0)])
-    let b = zeros([numel(x)])
+    let a = zeros::<f32>([dim<0>(x)])
+    let b = zeros::<f32>([numel(x)])
     return float(sum(x * x)) + float(sum(a)) + float(sum(b))
 }
 
@@ -68,8 +68,8 @@ func distance(g: f32[..], expected: f32[..]): float {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [6])
-    let zero = reshape([0.0, 0.0, 0.0, 0.0, 0.0, 0.0] as f32[], [6])
+    let x = reshape<[6]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
+    let zero = reshape<[6]>([0.0, 0.0, 0.0, 0.0, 0.0, 0.0] as f32[])
     let g1 = grad(slice_loss)<x>()
     let g2 = grad(nested_loss)<x>()
     let g3 = grad(stepped_loss)<x>()
@@ -77,11 +77,11 @@ func main(): int sync {
     let g5 = grad(plain)<x>()
     let g6 = grad(shape_queries)<x>()
     let (v, g7) = with_grad(slice_loss)<x>()
-    let slice_d = distance(g1, reshape([0.0, 2.0, 3.0, 5.0, 0.0, 0.0] as f32[], [6]))
-    let nested_d = distance(g2, reshape([0.0, 0.0, 7.0, 11.0, 0.0, 0.0] as f32[], [6]))
-    let stepped_d = distance(g3, reshape([2.0, 0.0, 3.0, 0.0, 5.0, 0.0] as f32[], [6]))
+    let slice_d = distance(g1, reshape<[6]>([0.0, 2.0, 3.0, 5.0, 0.0, 0.0] as f32[]))
+    let nested_d = distance(g2, reshape<[6]>([0.0, 0.0, 7.0, 11.0, 0.0, 0.0] as f32[]))
+    let stepped_d = distance(g3, reshape<[6]>([2.0, 0.0, 3.0, 0.0, 5.0, 0.0] as f32[]))
     let round_d = distance(g4, g5)
-    let query_d = distance(g6, reshape([2.0, 4.0, 6.0, 8.0, 10.0, 12.0] as f32[], [6]))
+    let query_d = distance(g6, reshape<[6]>([2.0, 4.0, 6.0, 8.0, 10.0, 12.0] as f32[]))
     let with_grad_d = distance(g7, g1)
     let nonzero = distance(g1, zero) + distance(g2, zero) + distance(g6, zero)
     'slice_grad slice_d={:.1f} nested_d={:.1f} stepped_d={:.1f} roundtrip_d={:.1f} query_d={:.1f} with_grad_d={:.1f} value={:.1f} nonzero={:.1f}'->format<

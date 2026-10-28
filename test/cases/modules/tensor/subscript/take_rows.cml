@@ -5,7 +5,7 @@
 import { reshape, shape, sum } from tensor
 
 func main(): int sync {
-    let b = reshape([1.0, 2.0, 3.0, 4.0], [4])
+    let b = reshape<[4]>([1.0, 2.0, 3.0, 4.0])
     let idx = [3, 0, 3]
     let rows = b[idx]
     println(shape(rows))

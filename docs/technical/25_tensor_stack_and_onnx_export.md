@@ -196,16 +196,16 @@ matter: the function still has one graph and no instance carries an extent.
 
 What inference derives without help, besides the propagation listed above:
 
-- a shape literal: `zeros([2, 3])`, `reshape(x, [3, 2])`, `reshape(x, [-1])` of
+- a shape literal: `zeros::<f32>([2, 3])`, `reshape<[3, 2]>(x)`, `reshape<[-1]>(x)` of
   a tensor whose extents are all known;
 - the shape operators of a tensor whose type carries the shape: `shape(x)`,
   `dim(x, k)` and `numel(x)` are constants where they are passed on, so
-  `reshape(y, shape(x))`, `zeros(shape(x))` and `ones([dim(x, 1)])` have static
+  `reshape<shape(x)>(y)`, `zeros::<f32>(shape(x))` and `ones::<f32>([dim<1>(x)])` have static
   shapes;
-- a shape written in place with a computed extent: `zeros([n, 3])` and
-  `reshape(x, [n, 3])` are `[?, 3]`. When every extent of the input is known and
+- a shape written in place with a computed extent: `zeros::<f32>([n, 3])` and
+  `reshape<[n, 3]>(x)` are `[?, 3]`. When every extent of the input is known and
   one extent of the target is computed, that extent is the only value that
-  fits (`reshape(y, [n, 3])` of a `[6]` tensor is `[2, 3]`; any other `n` is
+  fits (`reshape<[n, 3]>(y)` of a `[6]` tensor is `[2, 3]`; any other `n` is
   reshape's error when it runs);
 - tuples, structs, branches whose arms agree, and recursive functions whose
   declared types carry the shapes.
@@ -370,7 +370,7 @@ Every node evaluates to either a constant or a symbolic tensor:
 - `export_model<out: path, dynamic_axes: axes>(fn, x)` leaves input axes dynamic (axis 0
   is named `batch`). `shape(x)` then becomes `Shape`, but its statically known
   entries are tracked, so `shape(x)[3]` still folds and only the dynamic
-  extent flows through `Gather`/`Concat`; `zeros(shape)` becomes
+  extent flows through `Gather`/`Concat`; `zeros::<f32>(shape)` becomes
   `ConstantOfShape` and `reshape` takes the computed shape. All four benchmark
   models export with a dynamic batch and match the reference at batch sizes
   64/32/8 and 5.

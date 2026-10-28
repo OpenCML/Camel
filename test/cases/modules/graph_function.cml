@@ -1,4 +1,4 @@
-import { Node, Graph, graphs, nodes, inputs, op, op_name, constant, open_function, to_function, replace, graph_of, program_of, name } from graph
+import { Node, Graph, nodes, inputs, op, op_name, constant, open, commit, replace, graph_of, name } from graph
 
 func target(x: int): int {
     return (x + 0) * 3
@@ -12,7 +12,7 @@ func opText(n: Node): string {
 }
 
 func isZero(n: Node): bool {
-    return match constant(n, 0) {
+    return match constant::<int>(n) {
         case null => false
         case v => v == 0
     }
@@ -27,24 +27,15 @@ func adds(f: (x: int) => int): int {
     return len(nodes(graph_of(f))->filter<isAddZero>)
 }
 
-func other(s: string): int {
-    return len(s)
-}
-
 func main(): int sync {
     println(name(graph_of(target)))
     println(adds(target))
-    let t = open_function(target)
+    let t = open(target)
     nodes(graph_of(target))->filter<isAddZero>->foreach<(n: Node) => replace(t, n, inputs(n)[0])>
-    let result = to_function(t, target)
+    let result = commit(t)
     let g = result !! target
     println(adds(g))
     println(g(5))
     println(target(5))
-    let mismatch = to_function(open_function(target), other)
-    println(match mismatch {
-        case error e => e.kind
-        case h => 'accepted'
-    })
     return 0
 }

@@ -1,32 +1,22 @@
 /**
- * The sorting family of `array` after the per-element split: the sorts read the
- * element type code and become what the reductions became, one arm per element
- * type.
+ * The sort of `array` is one Camel function, `xs[argsort(xs)]`, and a kernel per element type that
+ * does the same thing without the index array: `array:sort_i` for `i32`, `array:sort_l` for `int`,
+ * `array:sort_f` for `f32` and `array:sort_d` for `float`. The kernel is the body run faster, so
+ * the two give the same bits: this program prints each (`sort`, then the body spelled out as
+ * `xs[argsort(xs)]`) for the four element types, and for floats with a NaN and the two zeros, where
+ * `-0` is below `+0` and every NaN comes last.
  *
- * One body-less declaration per element type, each naming its own element type's operator
- * (`#op('array:sort_i')` for `i32`, `#op('array:sort_d')` for `float`, ...) and taking that
- * element type in its signature, so the element type is fixed where the executor is chosen and no
- * executor reads an array's element type code. `array_sort_kernels.paths` is what pins that down:
- * one profile row per element type and one call each, and no row for a sort as a whole. A compiler
- * that kept the shared executor would show one `array:sort` row for all four of these calls.
- *
- * The element type of a result is the declaration's, and nothing is converted on the way: every
- * call here is bound to the element type of its own declaration (`let r_i: i32[] = sort(s_i)`,
- * `let r_f: f32[] = sort(s_f)`, ...), so a call answered by another element type's declaration does
- * not typecheck at all. The inputs are written as typed arrays for the same reason: an array
- * literal is an `int[]` or a `float[]`.
- *
- * The rebindings `v = v->sort` are the compiler's in-place forms (design principles 11.3;
- * Builder::inPlaceRebindingOf). They are per element type as well — `array:sort_i_in_place` for an
- * `i32[]`, `array:sort_d_in_place` for a `float[]` — because the form is chosen by name
- * (OperatorTable::inPlaceForm) and the executor takes one element type: a shared in-place form
- * would have to read the element type at run time, which is the switch this change deletes.
+ * Every call is bound to the element type of its own declaration (`let r_i: i32[] = sort(s_i)`),
+ * so a call answered by another element type's declaration does not typecheck. The rebindings
+ * `v = v->sort` are the compiler's in-place forms (design principles 11.3;
+ * Builder::inPlaceRebindingOf), per element type as well because the form is chosen by name
+ * (OperatorTable::inPlaceForm).
  */
 
-import { sort, insert_sort, quick_sort, merge_sort, merge_sorted_arrays, argsort } from array
+import { sort, argsort } from array
+import { nan } from math
 
 func main(): int sync {
-    // ---- sort: the four element types, one declaration and one executor each ----
     let s_i: i32[] = [3, 1, 2]
     let s_l: int[] = [30, 10, 20]
     let s_f: f32[] = [3.5, 1.5, 2.5]
@@ -35,108 +25,25 @@ func main(): int sync {
     let r_l: int[] = sort(s_l)
     let r_f: f32[] = sort(s_f)
     let r_d: float[] = sort(s_d)
-    println("sort {} {} {} {}", r_i, r_l, r_f, r_d)
+    println('sort', r_i, r_l, r_f, r_d)
+    println('body', s_i[argsort(s_i)], s_l[argsort(s_l)], s_f[argsort(s_f)], s_d[argsort(s_d)])
+    println('input', s_i, s_l, s_f, s_d)
 
-    // ---- insert_sort ----
-    let i_i: i32[] = [9, 8, 7]
-    let i_l: int[] = [90, 80, 70]
-    let i_f: f32[] = [9.5, 8.5, 7.5]
-    let i_d: float[] = [9.5, -8.5, 7.5]
-    let p_i: i32[] = insert_sort(i_i)
-    let p_l: int[] = insert_sort(i_l)
-    let p_f: f32[] = insert_sort(i_f)
-    let p_d: float[] = insert_sort(i_d)
-    println("insert_sort {} {} {} {}", p_i, p_l, p_f, p_d)
+    // ---- the in-place forms: nothing else refers to the variable ----
+    var v_i: i32[] = [9, 8, 7]
+    var v_l: int[] = [90, 70, 80]
+    var v_f: f32[] = [9.5, 8.5, 7.5]
+    var v_d: float[] = [9.5, -8.5, 7.5]
+    v_i = v_i->sort
+    v_l = v_l->sort
+    v_f = v_f->sort
+    v_d = v_d->sort
+    println('in_place', v_i, v_l, v_f, v_d)
 
-    // ---- quick_sort ----
-    let q_i: i32[] = [6, 5, 4]
-    let q_l: int[] = [60, 50, 40]
-    let q_f: f32[] = [6.5, 5.5, 4.5]
-    let q_d: float[] = [6.5, 5.5, -4.5]
-    let k_i: i32[] = quick_sort(q_i)
-    let k_l: int[] = quick_sort(q_l)
-    let k_f: f32[] = quick_sort(q_f)
-    let k_d: float[] = quick_sort(q_d)
-    println("quick_sort {} {} {} {}", k_i, k_l, k_f, k_d)
-
-    // ---- merge_sort ----
-    let m_i: i32[] = [2, 3, 1]
-    let m_l: int[] = [20, 30, 10]
-    let m_f: f32[] = [2.5, 3.5, 1.5]
-    let m_d: float[] = [2.5, -3.5, 1.5]
-    let n_i: i32[] = merge_sort(m_i)
-    let n_l: int[] = merge_sort(m_l)
-    let n_f: f32[] = merge_sort(m_f)
-    let n_d: float[] = merge_sort(m_d)
-    println("merge_sort {} {} {} {}", n_i, n_l, n_f, n_d)
-
-    // `merge_sorted_arrays` takes its element type in the declaration of both arguments, so the two
-    // arrays of a call are one element type and not one each.
-    let ga_i: i32[] = [1, 4]
-    let gb_i: i32[] = [2, 3]
-    let ga_f: f32[] = [1.5, 4.5]
-    let gb_f: f32[] = [2.5, 3.5]
-    let g_i: i32[] = merge_sorted_arrays(ga_i, gb_i)
-    let g_l: int[] = merge_sorted_arrays([10, 40], [20, 30])
-    let g_f: f32[] = merge_sorted_arrays(ga_f, gb_f)
-    let g_d: float[] = merge_sorted_arrays([-4.5, -1.5], [-3.5, -2.5])
-    println("merge_sorted_arrays {} {} {} {}", g_i, g_l, g_f, g_d)
-
-    // `argsort` takes the keys it can order: the sorts' four element types, and the two ordered
-    // types the sorts do not order.
-    let j_i: int[] = argsort(s_i)
-    let j_l: int[] = argsort(s_l)
-    let j_f: int[] = argsort(s_f)
-    let j_d: int[] = argsort(s_d)
-    println("argsort {} {} {} {}", j_i, j_l, j_f, j_d)
-    let j_b: bool[] = [true, false, true]
-    let j_s: string[] = ["pear", "apple", "fig"]
-    println("argsort_other {} {}", argsort(j_b), argsort(j_s))
-
-    // A sort returns a new array and changes nothing (design principles 11.3): the four inputs of
-    // the calls above are the arrays they were written as, in their own element types.
-    println("unchanged {} {} {} {}", s_i, s_l, s_f, s_d)
-
-    // ---- the in-place forms, one per element type and algorithm ----
-    var b_i: i32[] = [3, 1, 2]
-    var b_l: int[] = [30, 10, 20]
-    var b_f: f32[] = [3.5, 1.5, 2.5]
-    var b_d: float[] = [3.5, 1.5, -2.5]
-    b_i = b_i->sort
-    b_l = b_l->sort
-    b_f = b_f->sort
-    b_d = b_d->sort
-    println("sort_in_place {} {} {} {}", b_i, b_l, b_f, b_d)
-
-    var c_i: i32[] = [9, 8, 7]
-    var c_l: int[] = [90, 80, 70]
-    var c_f: f32[] = [9.5, 8.5, 7.5]
-    var c_d: float[] = [9.5, -8.5, 7.5]
-    c_i = c_i->insert_sort
-    c_l = c_l->insert_sort
-    c_f = c_f->insert_sort
-    c_d = c_d->insert_sort
-    println("insert_sort_in_place {} {} {} {}", c_i, c_l, c_f, c_d)
-
-    var d_i: i32[] = [6, 5, 4]
-    var d_l: int[] = [60, 50, 40]
-    var d_f: f32[] = [6.5, 5.5, 4.5]
-    var d_d: float[] = [6.5, 5.5, -4.5]
-    d_i = d_i->quick_sort
-    d_l = d_l->quick_sort
-    d_f = d_f->quick_sort
-    d_d = d_d->quick_sort
-    println("quick_sort_in_place {} {} {} {}", d_i, d_l, d_f, d_d)
-
-    var e_i: i32[] = [2, 3, 1]
-    var e_l: int[] = [20, 30, 10]
-    var e_f: f32[] = [2.5, 3.5, 1.5]
-    var e_d: float[] = [2.5, -3.5, 1.5]
-    e_i = e_i->merge_sort
-    e_l = e_l->merge_sort
-    e_f = e_f->merge_sort
-    e_d = e_d->merge_sort
-    println("merge_sort_in_place {} {} {} {}", e_i, e_l, e_f, e_d)
-
+    // ---- the order of floats: -0 below +0, every NaN after the numbers, ties keep their order ----
+    let z: float[] = [1.0, nan, 0.0, -0.0, -1.0, nan]
+    println('floats', sort(z), z[argsort(z)])
+    let w: f32[] = [f32(1.0), f32(0.0), f32(-0.0), f32(-1.0)]
+    println('f32', sort(w), w[argsort(w)])
     return 0
 }

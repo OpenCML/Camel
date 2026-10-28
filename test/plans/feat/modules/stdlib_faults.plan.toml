@@ -142,10 +142,10 @@ expect_diagnostic_line = 5
 
 [[tests]]
 name = "stdlib.fault.clamp_bounds"
-desc = "clamp whose lower bound is above the upper one."
+desc = "clamp whose lower bound is above the upper one: the fault of `clamp`, located in the library at its `fail` in stdlib/math.cml."
 case = "../../../cases/modules/stdlib/fault_clamp_bounds.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 470
 
 [[tests]]
 name = "stdlib.fault.clamp_bounds.opt"
@@ -154,14 +154,14 @@ case = "../../../cases/modules/stdlib/fault_clamp_bounds.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 470
 
 [[tests]]
 name = "stdlib.fault.clamp_nan"
-desc = "clamp with a NaN bound."
+desc = "clamp with a NaN bound: the fault of `clamp`, located in the library at its `fail` in stdlib/math.cml."
 case = "../../../cases/modules/stdlib/fault_clamp_nan.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 470
 
 [[tests]]
 name = "stdlib.fault.clamp_nan.opt"
@@ -170,14 +170,14 @@ case = "../../../cases/modules/stdlib/fault_clamp_nan.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 470
 
 [[tests]]
 name = "stdlib.fault.gcd_overflow"
-desc = "gcd whose result is the magnitude of the smallest integer."
+desc = "gcd of the smallest integer, which has no positive counterpart: the fault of `gcd`, located in the library at its `fail` in stdlib/math.cml."
 case = "../../../cases/modules/stdlib/fault_gcd_overflow.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 552
 
 [[tests]]
 name = "stdlib.fault.gcd_overflow.opt"
@@ -186,14 +186,14 @@ case = "../../../cases/modules/stdlib/fault_gcd_overflow.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 552
 
 [[tests]]
 name = "stdlib.fault.lcm_overflow"
-desc = "lcm that does not fit the integer type."
+desc = "lcm that does not fit the integer type: the fault of `lcm`, located in the library at its `fail` in stdlib/math.cml."
 case = "../../../cases/modules/stdlib/fault_lcm_overflow.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 568
 
 [[tests]]
 name = "stdlib.fault.lcm_overflow.opt"
@@ -202,14 +202,14 @@ case = "../../../cases/modules/stdlib/fault_lcm_overflow.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 568
 
 [[tests]]
 name = "stdlib.fault.quantile_range"
-desc = "quantile outside 0..1."
+desc = "quantile outside 0..1: located in the library."
 case = "../../../cases/modules/stdlib/fault_quantile_range.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 48
 
 [[tests]]
 name = "stdlib.fault.quantile_range.opt"
@@ -218,14 +218,62 @@ case = "../../../cases/modules/stdlib/fault_quantile_range.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 48
+
+[[tests]]
+name = "stdlib.fault.variance_short"
+desc = "The variance of one element: a fault, located in the library."
+case = "../../../cases/modules/stdlib/fault_variance_short.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 55
+
+[[tests]]
+name = "stdlib.fault.variance_short.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_variance_short.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 55
+
+[[tests]]
+name = "stdlib.fault.stdev_short"
+desc = "The standard deviation of one element: the variance underneath faults."
+case = "../../../cases/modules/stdlib/fault_stdev_short.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 55
+
+[[tests]]
+name = "stdlib.fault.stdev_short.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_stdev_short.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 55
+
+[[tests]]
+name = "stdlib.fault.median_empty"
+desc = "The median of no element: the quantile underneath faults."
+case = "../../../cases/modules/stdlib/fault_median_empty.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 49
+
+[[tests]]
+name = "stdlib.fault.median_empty.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_median_empty.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 49
 
 [[tests]]
 name = "stdlib.fault.zip_with"
-desc = "zip_with on arrays of different lengths: the fault of zip, located in the library. The line is \"return zip(xs, ys)->map<...>\" in stdlib/array.cml. It moved once: the reduction kernels took the place of the blank lines above three doc comments without moving it (each `#impl` tag stood for a blank line), and the sorting family's declarations grew from five generic ones to one per element type and algorithm, which stands above it and moved it from 254 to 300."
+desc = "zip_with on arrays of different lengths: the fault of zip, located in the library. The line is \"return zip(xs, ys)->map<...>\" in stdlib/array.cml. It moved once: the reduction kernels took the place of the blank lines above three doc comments without moving it (each `#impl` tag stood for a blank line), and the sorting family's declarations grew from five generic ones to one per element type and algorithm, which stood above it and moved it from 254 to 300; the module was rewritten on its own primitives (the other sorts and the merge went, the Camel definitions and the reductions over any rank came), which put it at 366."
 case = "../../../cases/modules/stdlib/fault_zip_with.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 303
+expect_diagnostic_line = 368
 
 [[tests]]
 name = "stdlib.fault.zip_with.opt"
@@ -234,4 +282,55 @@ case = "../../../cases/modules/stdlib/fault_zip_with.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 303
+expect_diagnostic_line = 368
+
+# ---- a reduction over no element is a fault (design principles 7.7) ----
+
+[[tests]]
+name = "stdlib.fault.min_empty"
+desc = "min of an empty int[]: the kernel faults at the call, `InvalidArgument`."
+case = "../../../cases/modules/stdlib/fault_array_min_empty.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 8
+
+[[tests]]
+name = "stdlib.fault.max_empty"
+desc = "max of an empty int[]: the kernel faults at the call, `InvalidArgument`."
+case = "../../../cases/modules/stdlib/fault_array_max_empty.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 8
+
+[[tests]]
+name = "stdlib.fault.min_empty_string"
+desc = "min of an empty string[]: no kernel, so the body faults, located in the library at the `fail` of `some_elements` in stdlib/array.cml."
+case = "../../../cases/modules/stdlib/fault_array_min_empty_string.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 137
+
+[[tests]]
+name = "stdlib.fault.mean_empty"
+desc = "mean of an empty float[]: the fault of `some_elements`, located in the library."
+case = "../../../cases/modules/stdlib/fault_array_mean_empty.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 137
+
+[[tests]]
+name = "stdlib.fault.argmax_empty"
+desc = "argmax of an empty int[]: the fault of `some_elements`, located in the library."
+case = "../../../cases/modules/stdlib/fault_array_argmax_empty.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 137
+
+[[tests]]
+name = "stdlib.fault.argmin_empty"
+desc = "argmin of an empty int[]: the fault of `some_elements`, located in the library."
+case = "../../../cases/modules/stdlib/fault_array_argmin_empty.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 137
+
+[[tests]]
+name = "stdlib.fault.chunks_zero"
+desc = "chunks<0>: a chunk holds at least one element, `InvalidArgument` located at the `fail` of `chunks` in stdlib/array.cml."
+case = "../../../cases/modules/stdlib/fault_array_chunks_zero.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 53

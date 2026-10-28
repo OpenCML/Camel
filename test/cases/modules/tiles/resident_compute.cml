@@ -6,7 +6,7 @@ func pair(a: f32[..], b: f32[..]): f32[..] { return a + b }
 type Input = { a: f32[..], b: (f32[..], f32[..]) }
 func aggregate(x: Input): f32[..] { return x.a + x.b.0 * x.b.1 }
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
+    let x = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     let d = upload(x)
     println(sum(abs(download(run_preferred_resident<square>(d)) - square(x))))
     println(sum(abs(download(d) - x)))
@@ -14,7 +14,7 @@ func main(): int sync {
     println(sum(abs(download(run_preferred_resident<pair>((d, x))) - (x + x))))
     println(sum(abs(download(run_preferred_resident<pair>((d, d))) - (x + x))))
     println(sum(abs(download(run_preferred_resident<aggregate>({a: d, b: (x, d)})) - (x + x * x))))
-    println(sum(download(run_preferred_resident<identity>(upload(zeros([0, 3]))))))
+    println(sum(download(run_preferred_resident<identity>(upload(zeros::<f32>([0, 3]))))))
     println(sum(abs(download(d) - x)))
     println(inspect<square>(d))
     return 0

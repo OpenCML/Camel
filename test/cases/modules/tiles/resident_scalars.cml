@@ -18,7 +18,7 @@ func mixed(x: f32[..]): (float, f32[..], float) {
 }
 func read(x: Device<float>): float { return download(x) }
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     let vg = (v: f32[..]): (float, f32[..]) => with_grad(loss)<v>()
     let result = run_preferred_resident<vg>(upload(x))
     println(read(result.0) - 14.0)
@@ -28,13 +28,13 @@ func main(): int sync {
     // declares is written here: read it back to the host and state the element type the boundary
     // takes.
     println(sum(abs(download(run_preferred_resident<scale>((result.1, f32(read(result.0))))) - x * 28.0)))
-    let exact = reshape([16777216.0, 1.0] as f32[], [2])
+    let exact = reshape<[2]>([16777216.0, 1.0] as f32[])
     let p = run_preferred_resident<mixed>(exact)
     println(read(p.0) - 16777217.0)
     println(read(p.2) - 1.0000000000000002)
     println(read(run_preferred_resident<identity>(p.0)) - 16777217.0)
     println(download(run_preferred_resident<identity>(p.0)) - 16777217.0)
     println(read(upload(1.0000000000000002)) - 1.0000000000000002)
-    println(read(run_preferred_resident<total>(zeros([0]))))
+    println(read(run_preferred_resident<total>(zeros::<f32>([0]))))
     return 0
 }

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "camel/core/type/bytes.h"
+#include "camel/core/type/native.h"
 #include "globals.h"
 #include "builtin/executors/builtin.h"
 #include "builtin/operators/array.h"
@@ -10,6 +11,7 @@
 #include "builtin/operators/enum.h"
 #include "builtin/operators/mem.h"
 #include "builtin/operators/ops.h"
+#include "builtin/operators/array_convert.h"
 #include "builtin/operators/set_value.h"
 #include "builtin/operators/tagged.h"
 #include "camel/core/context/context.h"
@@ -44,6 +46,21 @@ bool sameOrEnteringStruct(Type *a, Type *b) {
         return true;
     return a->code() == TypeCode::Struct && b->code() == TypeCode::Struct &&
            (a->assignableFrom(b) || b->assignableFrom(a));
+}
+
+// An element stands at a callback's parameter: the same type, or an unnamed struct and a named one
+// with its fields, which is the relation the other joins use (design principles 5.2). The
+// callback's parameter takes the element's resources when its own clause is unwritten.
+bool elementEntersParameter(Type *parameter, Type *element) {
+    if (sameTypeWithUnwrittenResources(parameter, element)) {
+        return true;
+    }
+    if (parameter->code() != TypeCode::Struct || element->code() != TypeCode::Struct ||
+        static_cast<const StructType *>(parameter)->named() ==
+            static_cast<const StructType *>(element)->named()) {
+        return false;
+    }
+    return parameter->assignableFrom(element);
 }
 
 /// Whether a value of type `type` exists at run time, so that an operator taking a value of
@@ -469,6 +486,10 @@ class StaticCheckedResolver final : public FuncTypeResolver {
 
     std::string signature() const override { return inner_->signature(); }
     FunctionType *fixedSignature() const override { return inner_->fixedSignature(); }
+    FunctionType *graftedSignature() const override { return inner_->graftedSignature(); }
+    void graftDeclaredSignature(FunctionType *signature) override {
+        inner_->graftDeclaredSignature(signature);
+    }
     bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)
         const override {
         return inner_->parameterNames(with, norm);
@@ -611,7 +632,7 @@ std::optional<Type *> coreSliceSubscriptResultType(const type_vec_t &norm, stati
 /// both bounds (`src/compile/gct/builder.cpp`:
 /// `intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0))` over the start and the end).
 ///
-/// The declaration of the function form (`stdlib/signatures/globals.cml`) carries the two words a
+/// The declaration of the function form (`stdlib/prelude.cml`) carries the two words a
 /// short call leaves out as its parameters' defaults -- the step 1, the mask 3 -- and a rule that
 /// fixes its signature is what the compiler looks for when it fills a native operator's defaults
 /// (`src/compile/gir/builder_calls.cpp`, `defaultsOfCallee`; the function form is generic
@@ -714,363 +735,31 @@ module_ptr_t GlobalsBuiltinModule::create(context_ptr_t ctx) {
 const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         // ======= Type conversions =======
-        OperatorGroup::create(
-            "i32",
-            {
-                {
-                    ":op/itoi",
-                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::Int32()),
-                },
-                {
-                    ":op/ltoi",
-                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Int32()),
-                },
-                {
-                    ":op/ftoi",
-                    StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::Int32()),
-                },
-                {
-                    ":op/dtoi",
-                    StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Int32()),
-                },
-                {
-                    ":op/stoi",
-                    StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Int32()),
-                },
-                {
-                    ":op/bftoi",
-                    StaticFuncTypeResolver::create({}, {{Type::BFloat16(), false}}, Type::Int32()),
-                },
-                {
-                    ":op/f6toi",
-                    StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Int32()),
-                },
-            }),
-        OperatorGroup::create(
-            "i64",
-            {
-                {
-                    ":op/itol",
-                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::Int64()),
-                },
-                {
-                    ":op/ltol",
-                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Int64()),
-                },
-                {
-                    ":op/ftol",
-                    StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::Int64()),
-                },
-                {
-                    ":op/dtol",
-                    StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Int64()),
-                },
-                {
-                    ":op/stol",
-                    StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Int64()),
-                },
-                {
-                    ":op/bftol",
-                    StaticFuncTypeResolver::create({}, {{Type::BFloat16(), false}}, Type::Int64()),
-                },
-                {
-                    ":op/f6tol",
-                    StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Int64()),
-                },
-            }),
-        OperatorGroup::create(
-            "int",
-            {
-                {
-                    ":op/itol",
-                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::Int64()),
-                },
-                {
-                    ":op/ltol",
-                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Int64()),
-                },
-                {
-                    ":op/ftol",
-                    StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::Int64()),
-                },
-                {
-                    ":op/dtol",
-                    StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Int64()),
-                },
-                {
-                    ":op/stol",
-                    StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Int64()),
-                },
-                {
-                    ":op/bftol",
-                    StaticFuncTypeResolver::create({}, {{Type::BFloat16(), false}}, Type::Int64()),
-                },
-                {
-                    ":op/f6tol",
-                    StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Int64()),
-                },
-            }),
-        OperatorGroup::create(
-            "f32",
-            {
-                {
-                    ":op/itof",
-                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::Float32()),
-                },
-                {
-                    ":op/ltof",
-                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Float32()),
-                },
-                {
-                    ":op/ftof",
-                    StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::Float32()),
-                },
-                {
-                    ":op/dtof",
-                    StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Float32()),
-                },
-                {
-                    ":op/stof",
-                    StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Float32()),
-                },
-                {
-                    ":op/bftof",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::BFloat16(), false}},
-                        Type::Float32()),
-                },
-                {
-                    ":op/f6tof",
-                    StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Float32()),
-                },
-            }),
-        OperatorGroup::create(
-            "f64",
-            {
-                {
-                    ":op/itod",
-                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::Float64()),
-                },
-                {
-                    ":op/ltod",
-                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Float64()),
-                },
-                {
-                    ":op/ftod",
-                    StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::Float64()),
-                },
-                {
-                    ":op/dtod",
-                    StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Float64()),
-                },
-                {
-                    ":op/stod",
-                    StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Float64()),
-                },
-                {
-                    ":op/bftod",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::BFloat16(), false}},
-                        Type::Float64()),
-                },
-                {
-                    ":op/f6tod",
-                    StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Float64()),
-                },
-            }),
-        OperatorGroup::create(
-            "float",
-            {
-                {
-                    ":op/itod",
-                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::Float64()),
-                },
-                {
-                    ":op/ltod",
-                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Float64()),
-                },
-                {
-                    ":op/ftod",
-                    StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::Float64()),
-                },
-                {
-                    ":op/dtod",
-                    StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Float64()),
-                },
-                {
-                    ":op/stod",
-                    StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Float64()),
-                },
-                {
-                    ":op/bftod",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::BFloat16(), false}},
-                        Type::Float64()),
-                },
-                {
-                    ":op/f6tod",
-                    StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Float64()),
-                },
-            }),
+        // The rules of `i32` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("i32", {}),
+        // The rules of `i64` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("i64", {}),
+        // The rules of `int` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("int", {}),
+        // The rules of `f32` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("f32", {}),
+        // The rules of `f64` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("f64", {}),
+        // The rules of `float` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("float", {}),
         // bf16 and f16 are floating types a program writes and converts like f32 (design
         // principles 7.3): `bf16(x)` and `f16(x)` take every numeric type and a text, and round
         // to nearest with ties to even once. Writing the conversion is asking for that
         // precision, so no numeric permission is involved; `change_precision` governs a
         // computation the compiler moves to lower precision.
-        OperatorGroup::create(
-            "bf16",
-            {
-                {
-                    ":op/itobf",
-                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::BFloat16()),
-                },
-                {
-                    ":op/ltobf",
-                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::BFloat16()),
-                },
-                {
-                    ":op/ftobf",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Float32(), false}},
-                        Type::BFloat16()),
-                },
-                {
-                    ":op/dtobf",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Float64(), false}},
-                        Type::BFloat16()),
-                },
-                {
-                    ":op/bftobf",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::BFloat16(), false}},
-                        Type::BFloat16()),
-                },
-                {
-                    ":op/stobf",
-                    StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::BFloat16()),
-                },
-            }),
-        OperatorGroup::create(
-            "f16",
-            {
-                {
-                    ":op/itof6",
-                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::Float16()),
-                },
-                {
-                    ":op/ltof6",
-                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Float16()),
-                },
-                {
-                    ":op/ftof6",
-                    StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::Float16()),
-                },
-                {
-                    ":op/dtof6",
-                    StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Float16()),
-                },
-                {
-                    ":op/f6tof6",
-                    StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Float16()),
-                },
-                {
-                    ":op/stof6",
-                    StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Float16()),
-                },
-            }),
-        OperatorGroup::create(
-            "c64",
-            {
-                {
-                    ":op/itoc",
-                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::Complex64()),
-                },
-                {
-                    ":op/ltoc",
-                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Complex64()),
-                },
-                {
-                    ":op/ftoc",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Float32(), false}},
-                        Type::Complex64()),
-                },
-                {
-                    ":op/dtoc",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Float64(), false}},
-                        Type::Complex64()),
-                },
-                {
-                    ":op/ctoc",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Complex64(), false}},
-                        Type::Complex64()),
-                },
-                {
-                    ":op/ztoc",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Complex128(), false}},
-                        Type::Complex64()),
-                },
-            }),
-        OperatorGroup::create(
-            "c128",
-            {
-                {
-                    ":op/itoz",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Int32(), false}},
-                        Type::Complex128()),
-                },
-                {
-                    ":op/ltoz",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Int64(), false}},
-                        Type::Complex128()),
-                },
-                {
-                    ":op/ftoz",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Float32(), false}},
-                        Type::Complex128()),
-                },
-                {
-                    ":op/dtoz",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Float64(), false}},
-                        Type::Complex128()),
-                },
-                {
-                    ":op/ctoz",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Complex64(), false}},
-                        Type::Complex128()),
-                },
-                {
-                    ":op/ztoz",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Complex128(), false}},
-                        Type::Complex128()),
-                },
-            }),
+        // The rules of `bf16` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("bf16", {}),
+        // The rules of `f16` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("f16", {}),
+        // The rules of `c64` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("c64", {}),
+        // The rules of `c128` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("c128", {}),
         OperatorGroup::create(
             "string",
             {
@@ -2407,22 +2096,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             }),
         // ======= IO (built-in input/print/println/eprintln) ======
         OperatorGroup::create(
-            "input",
-            {
-                {
-                    ":io/input",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(prompt: string) => string",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (!norm[0]->equals(Type::String()))
-                                return nullopt;
-                            return Type::String();
-                        }),
-                },
-            }),
-        OperatorGroup::create(
             "print",
             {
                 {
@@ -2485,72 +2158,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
             }),
         // ======= string =======
-        OperatorGroup::create(
-            "format",
-            {
-                {
-                    ":str/format",
-                    DynamicFuncTypeResolver::create(
-                        {{-1, {}}, {1, {false}}},
-                        "<...args: T...> (fmt: string) => string",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (!norm[0]->equals(Type::String()))
-                                return nullopt;
-                            return Type::String();
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "join",
-            {
-                {
-                    ":str/join",
-                    DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {1, {false}}},
-                        "<sep: string> (xs: string[]) => string",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (!with[0]->equals(Type::String()))
-                                return nullopt;
-                            const auto &type = norm[0];
-                            if (type->code() != TypeCode::Array) {
-                                return nullopt;
-                            }
-                            const auto &arrType = tt::as_ptr<ArrayType>(type);
-                            if (arrType->elemType()->code() != TypeCode::String) {
-                                return nullopt;
-                            }
-                            return Type::String();
-                        }),
-                },
-            }),
+        // The rule of `format` is the declaration of stdlib/prelude.cml (`with <..args>`).
+        OperatorGroup::create("format", {}),
+        // The rules of `join` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("join", {}),
         // ======= struct =======
-        OperatorGroup::create(
-            "len",
-            {
-                {
-                    ":struct/len_str",
-                    namedStaticSignature("x", Type::String(), Type::Int64()),
-                },
-                {
-                    ":struct/len_bytes",
-                    namedStaticSignature("x", BytesType::get(), Type::Int64()),
-                },
-                {
-                    ":struct/len_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        // One position, one name: the collection rule below is `len(x: …)` too.
-                        "<> (x: T[]) => int",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            return Type::Int64();
-                        }),
-                },
-            }),
+        // The rules of `len` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("len", {}),
         // The elements a `for` takes from a string (design principles 11.1): its code points,
         // each a one-character string. The loop builder converts a string to that array once,
         // before the first round; a program does not write `__iter__` itself. A map adds its
@@ -2600,104 +2214,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        OperatorGroup::create(
-            "head",
-            {
-                {
-                    ":struct/head_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "<> (xs: T[]) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                            return arrType->elemType();
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "last",
-            {
-                {
-                    ":struct/last_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "<> (xs: T[]) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                            return arrType->elemType();
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "tail",
-            {
-                {
-                    ":struct/tail_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "<> (xs: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                            return ArrayType::create(arrType->elemType());
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "range",
-            {
-                {
-                    ":struct/range",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {3, {false, false, false}}},
-                        "(start: int, end: int, step: int) => int[]",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            // `range(a, b, step)` is the integers `a`, `a + step`, ... below `b`; the interval
-                            // `a..b` is the step-1 case of it and lowers to exactly this call, `range(a, b, 1)`
-                            // (design principles 4.2). The two-argument spelling is gone, and the count below is
-                            // exactly three, so `range(a, b)` -- and any other arity -- is an ordinary no-match;
-                            // the interval keeps writing the step out so that this stays the only rule of the URI.
-                            if (norm.size() != 3) {
-                                return nullopt;
-                            }
-                            for (Type *type : norm) {
-                                if (type->code() != TypeCode::Int64) {
-                                    return nullopt;
-                                }
-                            }
-                            return ArrayType::create(Type::Int64());
-                        }),
-                },
-            }),
+        // The rules of `last` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("last", {}),
+        // The rules of `range` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("range", {}),
         OperatorGroup::create(
             "slice",
             {
-                {
-                    ":struct/slice_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{2, {false, false}}, {1, {false}}},
-                        "<start: int, end: int> (xs: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            if (with[0]->code() != TypeCode::Int64)
-                                return nullopt;
-                            if (with[1]->code() != TypeCode::Int64)
-                                return nullopt;
-                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                            return arrType;
-                        }),
-                },
                 {
                     // The function form of the same slice node the subscript lowers to; see
                     // coreSliceFunctionResolver for the calls each of the two answers.
@@ -2751,64 +2274,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     bytesSliceResolver(),
                 },
             }),
-        OperatorGroup::create(
-            "concat",
-            {
-                {
-                    ":struct/concat_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {false, false}}},
-                        "<> (xs: T[], ys: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            if (norm[1]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType      = tt::as_ptr<ArrayType>(norm[0]);
-                            const auto &otherArrType = tt::as_ptr<ArrayType>(norm[1]);
-                            // The same relation as `append` and `contains` hold their values
-                            // to (design principles 5.2): an unnamed struct element enters the
-                            // named element type of the other array, which is the result's.
-                            Type *left  = arrType->elemType();
-                            Type *right = otherArrType->elemType();
-                            if (left->equals(right))
-                                return ArrayType::create(left);
-                            // Elements are copied slot by slot, so only a value that is read as
-                            // the type without moving anything qualifies (assignableFrom).
-                            if (left == Type::Void() || right == Type::Void())
-                                return nullopt;
-                            if (left->assignableFrom(right))
-                                return ArrayType::create(left);
-                            if (right->assignableFrom(left))
-                                return ArrayType::create(right);
-                            return nullopt;
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "append",
-            {
-                {
-                    ":struct/append_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {1, {false}}},
-                        "<value: T> (xs: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                            const auto &eleType = arrType->elemType();
-                            // A value of the element type, or an unnamed struct value whose
-                            // fields are its fields in the same order (design principles 5.2):
-                            // the append writes the slot as it is, and the layout agrees.
-                            if (eleType != Type::Void() && !eleType->assignableFrom(with[0]))
-                                return nullopt;
-                            return arrType;
-                        }),
-                },
-            }),
+        // The rules of `concat` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("concat", {}),
+        // The rules of `append` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("append", {}),
         // A private copy of an array: one of the states of a loop whose body only appends to it
         // (Builder::markLoopStateInPlace, which decides per state), so the literal the program
         // wrote stays a constant and the loop appends to its own array. Not a name a program can
@@ -2855,70 +2324,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        OperatorGroup::create(
-            "extend",
-            {
-                {
-                    ":struct/extend_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {1, {false}}},
-                        "<other: T[]> (xs: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            if (with[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType      = tt::as_ptr<ArrayType>(norm[0]);
-                            const auto &otherArrType = tt::as_ptr<ArrayType>(with[0]);
-                            if (!arrType->equals(otherArrType))
-                                return nullopt;
-                            return arrType;
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "contains",
-            {
-                {
-                    ":struct/contains_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {1, {false}}},
-                        "<value: T> (xs: T[]) => bool",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                            Type *elem          = arrType->elemType();
-                            // The value is a value of the element type (design principles 5.2):
-                            // an unnamed struct value whose fields are the element type's
-                            // fields, in the same order, is read as that type without moving
-                            // anything. A value of another named type is not (an `as` says it);
-                            // nor is one whose fields are written in another order, which the
-                            // call would have to copy and this signature cannot ask for.
-                            if (!elem->assignableFrom(with[0]))
-                                return nullopt;
-                            return Type::Bool();
-                        }),
-                },
-                {
-                    ":struct/contains_str",
-                    // The names its declaration writes (`with <sub: string>`, `contains(s)`): the
-                    // collection form works on an element, this one on a substring, so the two
-                    // positions hold different things and are named accordingly. `contains` is a
-                    // group whose rules therefore disagree about what position 0 is called, and a
-                    // named argument is refused rather than bound to a position that means
-                    // another thing in this rule (docs/stdlib-reference.md, "Named arguments").
-                    [] {
-                        FunctionTypeFactory factory;
-                        factory.addWithArg("sub", Type::String(), false);
-                        factory.addNormArg("s", Type::String(), false);
-                        factory.setExitType(Type::Bool());
-                        return StaticFuncTypeResolver::create(factory.build());
-                    }(),
-                },
-            }),
+        // The rules of `contains` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("contains", {}),
         // ======= Marked Operators =======
         OperatorGroup::create(
             "map",
@@ -2943,43 +2350,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 // An element stands at the callback's result, and the callback's
                                 // parameter stands at the element type: each takes the other
                                 // side's resources when its own clause is unwritten.
-                                if (!sameTypeWithUnwrittenResources(
+                                if (!elementEntersParameter(
                                         funcType->normTypeAt(0), elemType))
                                     return nullopt;
                                 ASSERT(funcType->hasExitType(), "Function must have exit type");
                                 return ArrayType::create(funcType->exitType());
                             }),
                         mapRuleSignature()),
-                },
-            }),
-        OperatorGroup::create(
-            "apply",
-            {
-                {
-                    ":mark/apply_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {1, {false}}},
-                        "<f: (item: T) => T> (xs: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType  = tt::as_ptr<ArrayType>(norm[0]);
-                            const auto &elemType = arrType->elemType();
-                            if (with[0]->code() != TypeCode::Function)
-                                return nullopt;
-                            const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
-                            if (funcType->normTypesCount() != 1)
-                                return nullopt;
-                            // An element stands at the callback's result and the callback's
-                            // parameter: each takes the other side's resources when its own
-                            // clause is unwritten.
-                            if (!sameTypeWithUnwrittenResources(funcType->normTypeAt(0), elemType))
-                                return nullopt;
-                            if (!sameTypeWithUnwrittenResources(elemType, funcType->exitType()))
-                                return nullopt;
-                            return arrType;
-                        }),
                 },
             }),
         OperatorGroup::create(
@@ -3004,7 +2381,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 return nullopt;
                             // An element stands at the predicate's parameter, which takes the
                             // element's resources when its own clause is unwritten.
-                            if (!sameTypeWithUnwrittenResources(
+                            if (!elementEntersParameter(
                                     funcType->normTypeAt(0), arrType->elemType()))
                                 return nullopt;
                             if (!funcType->hasExitType() ||
@@ -3071,7 +2448,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 return nullopt;
                             // An element stands at the callback's parameter, which takes the
                             // element's resources when its own clause is unwritten.
-                            if (!sameTypeWithUnwrittenResources(
+                            if (!elementEntersParameter(
                                     funcType->normTypeAt(0), arrType->elemType()))
                                 return nullopt;
                             return Type::Void();
@@ -3234,6 +2611,8 @@ bool GlobalsBuiltinModule::load() {
         return std::make_shared<Executor>(ctx, getArrayOpsMap());
     });
     declareArrayOperatorFacts();
+    // The type `Error` of the prelude's declaration file (`export type Error`).
+    camel::core::type::registerNativeType("prelude", "Error", camel::core::type::errorType());
     loaded_ = true;
     return true;
 }

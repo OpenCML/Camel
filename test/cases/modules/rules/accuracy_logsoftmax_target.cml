@@ -9,13 +9,13 @@ import { reshape, log, log_softmax, softmax, sum } from tensor
 
 #[refine_accuracy]
 func composed(x: f32[..]): f32[..] {
-    return log(softmax(x, -1))
+    return log(softmax<-1>(x))
 }
 
 func main(): int sync {
-    let clean = reshape([0.3, -1.2, 0.5, 2.0, 1.1, 0.4, -0.7, 0.2] as f32[], [2, 4])
-    let gap = reshape([-300.0, 0.0] as f32[], [1, 2])
-    println('log of softmax clean', sum(composed(clean)), sum(log_softmax(clean, -1)))
-    println('log of softmax gap  ', sum(composed(gap)), sum(log_softmax(gap, -1)))
+    let clean = reshape<[2, 4]>([0.3, -1.2, 0.5, 2.0, 1.1, 0.4, -0.7, 0.2] as f32[])
+    let gap = reshape<[1, 2]>([-300.0, 0.0] as f32[])
+    println('log of softmax clean', sum(composed(clean)), sum(log_softmax<-1>(clean)))
+    println('log of softmax gap  ', sum(composed(gap)), sum(log_softmax<-1>(gap)))
     return 0
 }

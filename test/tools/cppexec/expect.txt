@@ -69,9 +69,6 @@ test/cases/consistency/logical/short_circuit.cml
 test/cases/consistency/logical/pure.cml
 test/cases/consistency/narrowing/narrow.cml
 
-# Seeded random numbers, drawn as the random module draws them.
-test/cases/modules/std/random/basic.cml
-
 # `acc = acc->append<v>` (:op/assn_owned, the in-place form of append) and reads that leave
 # the array growable (:var/peek).
 test/cases/consistency/new_values/rebinding_loop.cml

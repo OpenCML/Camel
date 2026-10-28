@@ -174,15 +174,6 @@ expect_exit = 0
 expect_stdout_contains = ["return static_cast<int>(main_(0, 3.14159));"]
 
 [[tests]]
-name = "root.export_var"
-desc = "A `var` cannot be exported (design principles 10.1): ExportedVariable at the variable, in the module that exports it."
-kind = "negative"
-case = "../../../cases/compile/module_root/export_var.cml"
-args = ["-E", "short", "${case}"]
-expect_exit = 1
-expect_output_contains = ["export_var_lib.cml:3:12: [Error]: The variable 'count' cannot be exported", "name=SemanticDiag::ExportedVariable", "name=SemanticDiag::ImportedModuleHasErrors"]
-
-[[tests]]
 name = "root.value_conflict"
 desc = "Two imports by name that bring values of one name conflict: ImportNameConflict at the second."
 kind = "negative"

@@ -189,6 +189,11 @@ struct OperatorTraits {
     /// `fact` installs the fact of its declaration, and neither is a value a pass may
     /// compute, move, merge or drop.
     bool foldable = true;
+    /// The operator's kernel takes the with-arguments of a call after the ordinary ones, as one
+    /// list (`kernelArgumentsOf`): a fact about the kernel's argument order, not about the
+    /// language, where the graph keeps a with-argument on its own edge. `reshape<shape>(x)` is
+    /// the kernel's `(x, shape)`.
+    bool withAfterNorm = false;
 };
 
 /**
@@ -319,14 +324,19 @@ class OperatorTable {
     std::optional<OperatorTraits> find(std::string_view uri) const;
 
     /// True when the operator is declared pure.
+    /// Whether the operator's kernel takes the with-arguments after the ordinary ones
+    /// (OperatorTraits::withAfterNorm).
+    bool withAfterNorm(std::string_view uri) const;
     bool isPure(OperId id) const;
     bool isPure(std::string_view uri) const;
 
     /// True when a call of the operator may be computed by the compiler or a pass itself and its
     /// result treated as a value: it has no effect, and it is foldable (isPure and the foldable
     /// fact). False for every operator that has an effect, and for a pure one that must run where
-    /// the program writes it (declareUnfoldable). A pass that folds, moves, merges or drops a
-    /// call asks this, not isPure.
+    /// the program writes it (declareUnfoldable). A pass that folds a call or merges it with an
+    /// identical one asks this, not isPure. Whether a pass may also drop, move or reorder the call
+    /// depends on whether it can fault as well: that is `nodeIsFreelySchedulable`
+    /// (camel/runtime/graph.h), the one question every pass asks.
     bool mayBeRecomputed(OperId id) const;
     bool mayBeRecomputed(std::string_view uri) const;
 
@@ -618,5 +628,22 @@ class OperatorTable {
     std::vector<std::pair<std::string, std::vector<std::string>>> groups_;
     std::atomic<uint64_t> epoch_{0};
 };
+
+
+/**
+ * The one place the kernel's argument order is decided. An operator registered with
+ * `withAfterNorm` has a kernel that reads the ordinary arguments and then the with-arguments as one
+ * list; for it this moves `with` behind `norm` (types, nodes, constants alike) and leaves `with`
+ * empty. For every other operator both lists stay as they are. Every reader that hands arguments
+ * to a kernel, a derivative rule, a lowering, an index instance or a type rule calls this, or
+ * `kernelArgumentsOf` (runtime/operator_instance.h) for a node.
+ */
+template <typename T>
+void joinKernelArguments(std::string_view uri, std::vector<T> &norm, std::vector<T> &with) {
+    if (!with.empty() && OperatorTable::instance().withAfterNorm(uri)) {
+        norm.insert(norm.end(), with.begin(), with.end());
+        with.clear();
+    }
+}
 
 } // namespace camel::core

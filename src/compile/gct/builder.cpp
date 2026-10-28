@@ -13,10 +13,12 @@
 #include "camel/core/tags.h"
 #include "camel/core/type/bytes.h"
 #include "camel/core/type/collection.h"
+#include "camel/core/type/native.h"
 #include "camel/core/type/composite/stream.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/text.h"
+#include "camel/core/type/typecall.h"
 #include "camel/core/type/typevar.h"
 #include "camel/parse/ast/type.h"
 #include "camel/utils/escape.h"
@@ -281,8 +283,38 @@ pair<data_ptr_t, bool> Builder::extractData(const node_ptr_t &node, node_ptr_t &
     // expression: `((h, k), 1)` is `let a = (h, k)` then `(a, 1)`. Embedded as a constant it
     // kept its unresolved element types ("(ref, ref)") and its names were never filled.
     if (data && !isUnresolvedLiteral(data)) {
+        if (node->type() == NodeKind::DREF) {
+            // A name: read where the literal is built, unless an element computed after it is
+            // hoisted first.
+            auto entry = std::find_if(
+                pendingNames_.begin(), pendingNames_.end(), [&](const auto &candidate) {
+                    return candidate.first == execNode;
+                });
+            if (entry == pendingNames_.end()) {
+                pendingNames_.emplace_back(execNode, std::vector<PendingName>{});
+                entry = std::prev(pendingNames_.end());
+            }
+            entry->second.push_back(
+                PendingName{std::dynamic_pointer_cast<camel::core::data::RefData>(data), node});
+        }
         return make_pair(data, false);
     } else {
+        // The names written before this element are used before it: they are hoisted ahead of it.
+        const auto entry = std::find_if(
+            pendingNames_.begin(), pendingNames_.end(), [&](const auto &candidate) {
+                return candidate.first == execNode;
+            });
+        if (entry != pendingNames_.end()) {
+            for (const PendingName &name : entry->second) {
+                auto [nameNode, nameData] = makeRefData(name.expr);
+                *execNode << nameNode;
+                if (name.data != nullptr) {
+                    name.data->rename(
+                        std::dynamic_pointer_cast<camel::core::data::RefData>(nameData)->ref());
+                }
+            }
+            entry->second.clear();
+        }
         auto [refNode, refData] = makeRefData(node);
         *execNode << refNode;
         return make_pair(refData, true);
@@ -561,6 +593,30 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
         try {
             visitResourceDecl(stmt);
         } catch (const BuildAbortException &) {
+        }
+    }
+    // A `var` at the top level is a resource of the module, named by the variable (design
+    // principles 3.5): `uses cnt` names it like any other, and a function that reads or writes it
+    // is measured as touching it. It is declared with the resources, before any clause is read.
+    for (const auto &stmt : *stmtNodes) {
+        if (stmt->type() != AST::LoadType::Stmt ||
+            stmt->loadAs<AST::StmtLoad>()->stmtType() != AST::StmtType::Data) {
+            continue;
+        }
+        const auto &declared = stmt->loadAs<AST::DataDeclLoad>();
+        if (!declared->isVar()) {
+            continue;
+        }
+        for (const Reference &ref : declared->refs()) {
+            if (module_->resource(ref) != nullptr) {
+                continue; // a second declaration of the name is reported where it is built
+            }
+            camel::core::module::Module::ResourceDecl resource;
+            resource.variable = true;
+            module_->declareResource(ref, std::move(resource));
+            if (exportedRefs_.contains(ref.toString())) {
+                module_->setResourceExported(ref);
+            }
         }
     }
     try {
@@ -976,6 +1032,33 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
     // program: in a sync block the initializer keeps its place in the block's order.
     node_ptr_t res = makeExec(false, true);
 
+    if (dataNodes->size() == 0) {
+        // `export let inf: float`: no right side. The value is the one the C++ module of the
+        // declaration registers under the name (design principles 6.4); the declaration is its
+        // type, and the graph builder reads the module.
+        if (refs.size() != 1 || typeNodes->size() != 1 || isVar) {
+            diags_->of(SemanticDiag::TupleUnpackingCountMismatch)
+                .at(ast->load()->tokenRange())
+                .commit();
+            throw BuildAbortException();
+        }
+        if (!validateIdent(refs[0].ident())) {
+            diags_->of(SemanticDiag::ReservedIdentifier).at(dataDeclLoad->tokenRange()).commit();
+            throw BuildAbortException();
+        }
+        Type *declaredType  = visitType(typeNodes->atAs<AST::TypeLoad>(0));
+        node_ptr_t nRefNode = tree_->makeNRef(refs[0].toString());
+        tree_->markNativeValue(nRefNode, declaredType);
+        setOriginFromOrigin(
+            context_,
+            nRefNode,
+            findBindingOrigin(context_, ast, 0),
+            camel::source::OriginKind::GctNode,
+            "gct.nref");
+        LEAVE("DataDecl");
+        return nRefNode;
+    }
+
     // The declaration binds one name, several names, or the elements of a tuple (the
     // parenthesized carrier). A struct or an array carrier is not in the language: the
     // parser refuses it, so no declaration reaches here with one.
@@ -1277,7 +1360,9 @@ bool Builder::resolveAmbientResource(
                     // in is half of its identity, and that is what the operator's own declaration
                     // and this clause are compared as (see resourceIdentities).
                     out.push_back(
-                        in.get() == module_.get() ? written : in->name() + "::" + written);
+                        in.get() == module_.get() && !decl->variable
+                            ? written
+                            : in->name() + (decl->variable ? ":" : "::") + written);
                     return true;
                 }
                 for (const Reference &member : decl->members) {
@@ -1634,7 +1719,6 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for TypeDecl");
     const auto &typeNode = ast->optAtAs<AST::TypeLoad>(0);
     Type *type;
-    ASSERT(typeNode, "TypeDecl must have a type");
     const auto &typeLoad = ast->loadAs<AST::TypeDeclLoad>();
     // A declaration in error declares nothing; uses of the name follow from that error.
     struct PoisonOnFailure {
@@ -1669,7 +1753,32 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
             : self(b), outer(std::exchange(b.fieldTagOwner_, owner)) {}
         ~FieldTagOwner() { self.fieldTagOwner_ = outer; }
     } fieldTagOwner(*this, declNode);
-    if (typeNode->loadAs<AST::TypeLoad>()->typeType() == AST::TypeType::Enum) {
+    if (!typeNode && !typeLoad->params().empty() && module_->name() == "types" &&
+        TypeCallType::isTypeFunction(typeLoad->ref().toString())) {
+        // `export type ElementOf<T>`: a primitive type function (design principles 5.6), declared
+        // here without a body; the compiler takes the type apart where `match type` cannot.
+        const string typeName = typeLoad->ref().toString();
+        struct TypeScopeGuard {
+            Builder &self;
+            scope_ptr_t<Reference, Type *> outer;
+            ~TypeScopeGuard() { self.typeScope_ = outer; }
+        } typeScopeGuard{*this, typeScope_};
+        pushScope();
+        const std::vector<Type *> parameters = bindTypeParameters(typeLoad.get(), ast, typeName);
+        type = TypeFunctionType::create(
+            typeName, typeLoad->params(), TypeCallType::create(typeName, parameters));
+    } else if (!typeNode) {
+        // `export type Graph`, `export type Txn<F>`: the type is provided by the C++ module of
+        // the same name, under this name (design principles 10.4), like a function without a
+        // body. Its identity is the module and the name.
+        type = camel::core::type::findNativeType(module_->name(), typeLoad->ref().toString());
+        if (type == nullptr) {
+            diags_->of(SemanticDiag::NativeTypeNotProvided)
+                .at(ast->load()->tokenRange())
+                .commit(typeLoad->ref().toString(), module_->name());
+            throw BuildAbortException();
+        }
+    } else if (typeNode->loadAs<AST::TypeLoad>()->typeType() == AST::TypeType::Enum) {
         // The name is in scope before the variants are read, so that a variant field can hold
         // the enum itself (`type Tree = enum { Node(Tree, Tree) }`).
         type = declareEnumType(typeNode, typeLoad.get());
@@ -2899,11 +3008,25 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
                 // `A = int`: the name as a constant, then the type (design principles 5.9).
                 const auto &named = argument->loadAs<AST::NamedTypeLoad>();
                 *res << tree_->makeData(std::make_shared<StringData>(named->getRef().toString()));
-                *res << tree_->makeType(visitType(argument->at(0)));
+                node_ptr_t namedType = tree_->makeType(visitType(argument->at(0)));
+                setOriginFromAst(
+                    context_,
+                    namedType,
+                    argument->at(0),
+                    camel::source::OriginKind::GctNode,
+                    "gct.type_application.argument");
+                *res << namedType;
                 continue;
             }
-            Type *type = visitType(argument);
-            *res << tree_->makeType(type);
+            Type *type          = visitType(argument);
+            node_ptr_t typeNode = tree_->makeType(type);
+            setOriginFromAst(
+                context_,
+                typeNode,
+                argument,
+                camel::source::OriginKind::GctNode,
+                "gct.type_application.argument");
+            *res << typeNode;
         }
         setOriginFromAst(
             context_,
@@ -5148,6 +5271,12 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     // (step 1) -- unless its condition is the pass applicability, in which case it
     // declares a pass and the pipeline reads it (design principles 9.3).
     const bool nativeDeclaration = ast->size() < 2;
+    if (!nativeDeclaration && funcType->hasWithRest()) {
+        diags_->of(SemanticDiag::WithPackNeedsNativeDeclaration)
+            .at(ast->atAs<AST::FuncTypeLoad>(0)->load()->tokenRange())
+            .commit(std::string(funcType->argNameAt(funcType->withTypesCount() - 1)));
+        throw BuildAbortException();
+    }
     // A `.cml` found beside a `.cmo` of the same name is that C++ module's *declaration*
     // module, in which the C++ operators are declared; it may also hold Camel definitions
     // (rule impl-kernel-site, 2026-10-23: "声明模块可以有函数体，`DeclarationModuleHasBody`
@@ -5313,6 +5442,9 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
         break;
     case AST::TypeType::Spec:
         res = visitSpecType(ast);
+        break;
+    case AST::TypeType::Match:
+        res = visitMatchTypeType(ast);
         break;
     case AST::TypeType::Ref:
         res = visitRefType(ast);
@@ -5657,11 +5789,39 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
     // The last `with` parameter that wrote a default: a later parameter without one is refused,
     // since a call that leaves the earlier ones out can then only give the others by name.
     std::string lastDefaultName;
-    for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(0)) {
+    const auto &withParams = *ast->atAs<AST::RepeatedLoad>(0);
+    for (size_t wi = 0; wi < withParams.size(); ++wi) {
+        const auto &paramPair = withParams[wi];
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
         const bool isVar     = paramLoad->isVar();
         const Reference &paramRef = paramLoad->getRef();
         const string &name        = paramRef.ident();
+        if (paramLoad->isRest()) {
+            // A pack among the `with` parameters (`with <..args>`): untyped and last, like
+            // the rest parameter of the ordinary ones. A lambda does not write one (the parser
+            // refuses it); a declaration with a body is refused where its body is known.
+            if (wi + 1 != withParams.size()) {
+                diags_->of(SemanticDiag::RestParameterNotLast)
+                    .at(paramLoad->tokenRange())
+                    .commit(name);
+                throw BuildAbortException();
+            }
+            if (paramPair->size() > 0) {
+                diags_->of(SemanticDiag::RestParameterTypeNotSupported)
+                    .at(paramLoad->tokenRange())
+                    .commit(name);
+                throw BuildAbortException();
+            }
+            if (!paramNames.insert(name).second) {
+                diags_->of(SemanticDiag::DuplicateParameter)
+                    .at(paramLoad->tokenRange())
+                    .commit(name);
+                throw BuildAbortException();
+            }
+            defaults.with.push_back({nullptr, camel::source::kInvalidOriginId});
+            factory.addWithRest(name);
+            continue;
+        }
         Type *type                = nullptr;
         {
             dimBindAllowed_ = signature;
@@ -5738,11 +5898,10 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
         if (paramLoad->isRest()) {
             // A rest parameter is untyped and last (design principles 5.5); it stands in the
             // signature as a `void` parameter that no call passes a value for.
-            if (!signature) {
-                // The parser admits `..` only in a declaration's own parameter list
-                // (`parseParentParams(true, true)`, the single call site in parser.cpp), so this
-                // is a compiler bug rather than anything a program can write.
-                ASSERT(false, "A rest parameter outside a function declaration.");
+            if (open && !signature) {
+                // The parser admits `..` in a declaration's parameter list and in a function
+                // type (`(..A) => R`), never in a lambda's.
+                ASSERT(false, "A rest parameter in a lambda.");
                 throw BuildAbortException();
             }
             if (pi + 1 != normParams.size()) {
@@ -5892,6 +6051,45 @@ void Builder::rejectDuplicateLiteralKeys(
 }
 
 /*
+MatchTypeType : Type subject, RepeatedLoad TypeCase ;
+A `match type` in a type position (design principles 5.6): a type of its own while the subject
+still has a type variable, the type of the case that selects the subject once it has not.
+*/
+Type *Builder::visitMatchTypeType(const AST::node_ptr_t &ast) {
+    ENTER("MatchTypeType");
+    Type *subject = visitType(ast->atAs<AST::TypeLoad>(0));
+    std::vector<MatchTypeArm> arms;
+    bool catchAll = false;
+    for (const auto &armAst : *ast->atAs<AST::RepeatedLoad>(1)) {
+        if (catchAll) {
+            // `#leaf` and `_` select every type, so a case after them selects nothing.
+            diags_->of(SemanticDiag::StaticMatchUnreachableCase)
+                .at(armAst->load()->tokenRange())
+                .commit("this case");
+            throw BuildAbortException();
+        }
+        MatchTypeArm arm;
+        for (const AST::TypeCasePattern &pattern : armAst->loadAs<AST::TypeCaseLoad>()->patterns()) {
+            const GCT::TypeCaseKind kind = static_cast<GCT::TypeCaseKind>(pattern.kind);
+            if (kind == GCT::TypeCaseKind::Identity) {
+                if (Type *identity = visitType(pattern.type)) {
+                    arm.identities.push_back(identity);
+                }
+                continue;
+            }
+            arm.shapes |= typeCaseBit(kind);
+            if (kind == GCT::TypeCaseKind::Leaf || kind == GCT::TypeCaseKind::Wildcard) {
+                catchAll = true;
+            }
+        }
+        arm.result = visitType(armAst->atAs<AST::TypeLoad>(0));
+        arms.push_back(std::move(arm));
+    }
+    LEAVE("MatchTypeType");
+    return MatchTypeType::create(subject, arms);
+}
+
+/*
 SpecType : Type base, RepeatedLoad typeOrData ;
 */
 Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
@@ -5971,8 +6169,22 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
                         types.size()));
             throw BuildAbortException();
         }
+        Type *applied = typeFunc->apply(types);
+        const bool concrete = std::none_of(types.begin(), types.end(), [](Type *argument) {
+            return containsTypeVar(argument);
+        });
+        if (concrete && containsTypeCall(applied)) {
+            // The arguments are concrete and the type function does not accept them.
+            std::string what = applied->toString();
+            std::string why  = "it is not defined for the type it is given";
+            describeUnevaluatedTypeCall(applied, what, why);
+            diags_->of(SemanticDiag::TypeFunctionNotApplicable)
+                .at(ast->load()->tokenRange())
+                .commit(what, why);
+            throw BuildAbortException();
+        }
         LEAVE("SpecType");
-        return typeFunc->apply(types);
+        return applied;
     }
     if (arguments.empty()) {
         LEAVE("SpecType");
@@ -6004,21 +6216,6 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
             }
             diag.commit(keyType->toString(), coll->toString(), problem);
             throw BuildAbortException();
-        }
-    }
-    if (base->isOtherType() && !static_cast<OtherType *>(base)->typeArguments()) {
-        // What the arguments of a module type mean is defined by the type, which sees
-        // concrete types only. A type whose arguments are plain types (Map, Set) takes
-        // variables like an array or a tuple does.
-        for (const TypeArgument &argument : arguments) {
-            if (argument.type != nullptr && containsTypeVar(argument.type)) {
-                diags_->of(SemanticDiag::InvalidTypeArgument)
-                    .at(ast->load()->tokenRange())
-                    .commit(
-                        base->toString(),
-                        "a type variable cannot be an argument of a module type");
-                throw BuildAbortException();
-            }
         }
     }
     std::string error;

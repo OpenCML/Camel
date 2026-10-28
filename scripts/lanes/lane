@@ -1,0 +1,42 @@
+#!/bin/bash
+# lane <name> sync | build | psrgen | test [plan...] | sh '<command>' | pull <relative-path>
+# Versioned copy of /usr/local/bin/lane in the camel-lanes container (docker cp it back after a change).
+# Sources live on the host under lanes/<name> (mounted at /hostlanes/<name>); the build tree is /work/lanes/<name>.
+set -u
+L=${1:?lane name}; shift; CMD=${1:?command}; shift
+D=/work/lanes/$L; H=/hostlanes/$L; LOG=/work/lanes/logs
+[ -d "$D" ] && [ -d "$H" ] || { echo "unknown lane $L"; exit 2; }
+export PATH=/opt/venv/bin:$PATH
+# The container tree is the host tree as git sees it: every file git tracks or would add (so a file that is
+# tracked but matches .gitignore, like the .cmo fixtures, arrives), without build output and the like, and
+# with .git itself, so a script that asks git (git ls-files) gets the host's answer, not a stale checkout's.
+sync_in() {
+  rsync -rlc --delete --filter=':- .gitignore' --exclude .git --exclude .husky/_ "$H/" "$D/" || return $?
+  git -c safe.directory='*' -C "$H" ls-files -ci --exclude-standard -z > /tmp/lane-$L.tracked-ignored 2>/dev/null
+  if [ -s /tmp/lane-$L.tracked-ignored ]; then
+    rsync -rlc --from0 --files-from=/tmp/lane-$L.tracked-ignored --ignore-missing-args "$H/" "$D/" || return $?
+  fi
+  # A lane whose .git is a file (a worktree) has no directory to copy; its git view stays absent.
+  if [ -d "$H/.git" ]; then rsync -rl --delete --exclude index.lock "$H/.git/" "$D/.git/" || return $?; fi
+}
+use_lane() { export CAMEL_HOME=$D/out/latest; export PATH=$CAMEL_HOME/bin:$PATH; cd "$D"; }
+ready() { [ -f $LOG/$L.ready ] || echo "waiting for the initial build of lane $L..."; while [ ! -f $LOG/$L.ready ]; do sleep 15; done; exec 8>/work/lanes/.lane-$L.lock; flock 8; }
+slot() { for s in 1 2; do exec 9>/work/lanes/.slot$s; flock -n 9 && return; done; echo "waiting for a build slot..."; exec 9>/work/lanes/.slot1; flock 9; }
+case $CMD in
+  sync) sync_in && echo synced ;;
+  psrgen) ready; sync_in; use_lane; grep -q \"psrgen\" package.json || { echo "psrgen: not needed any more (hand-written parser)"; echo "psrgen exit=0"; exit 0; }; npm run psrgen > $LOG/$L.psrgen.log 2>&1; rc=$?; tail -5 $LOG/$L.psrgen.log; echo "psrgen exit=$rc"; exit $rc ;;
+  build) ready; sync_in; use_lane; slot
+     ( ulimit -v 8000000; CMAKE_BUILD_PARALLEL_LEVEL=${JOBS:-6} npm run build ) > $LOG/$L.build.log 2>&1; rc=$?
+     sed 's/\x1b\[[0-9;]*m//g' $LOG/$L.build.log | grep -E "error|Error|FAILED|warning: unused" | head -60
+     tail -4 $LOG/$L.build.log; echo "build exit=$rc (full log: $LOG/$L.build.log)"; exit $rc ;;
+  test) ready; sync_in; use_lane
+     ( ulimit -v 12000000; node scripts/test.js "$@" ) > $LOG/$L.test.log 2>&1; rc=$?
+     sed 's/\x1b\[[0-9;]*m//g' $LOG/$L.test.log | grep -E "\[FAIL\]|SUMMARY" | tail -80
+     echo "test exit=$rc (full log: $LOG/$L.test.log)"; exit $rc ;;
+  sh) ready; sync_in; use_lane; flock -u 8; bash -c "$*" ;;
+  pull) P=${1:-}; P=${P#./}; P=${P%/}
+     case "$P" in ""|.|/*|*..*|.git|.git/*|build|build/*|out|out/*|node_modules|node_modules/*) echo "pull: refused path '${1:-}' (give a relative file or source directory)"; exit 2 ;; esac
+     [ -e "$D/$P" ] || { echo "pull: no such path $P"; exit 2; }
+     if [ -d "$D/$P" ]; then rsync -rlc --exclude .git --filter=':- .gitignore' "$D/$P/" "$H/$P/"; else rsync -lc "$D/$P" "$H/$P"; fi && echo "pulled $P" ;;
+  *) echo "unknown command $CMD"; exit 2 ;;
+esac

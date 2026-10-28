@@ -15,6 +15,7 @@
 #include "camel/core/type/intern.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/storage.h"
+#include "camel/core/type/typecall.h"
 #include "camel/core/type/text.h"
 #include "camel/utils/assert.h"
 
@@ -193,6 +194,10 @@ FunctionTypeFactory rebuildFunctionType(
         return result;
     };
     for (size_t i = 0; i < func->withTypesCount(); ++i) {
+        if (func->hasWithRest() && i + 1 == func->withTypesCount()) {
+            factory.addWithRest(paramNameOf(func, i, "__w", i));
+            continue;
+        }
         factory.addWithArg(
             paramNameOf(func, i, "__w", i),
             replaced(func->withTypeAt(i)),
@@ -527,6 +532,26 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
     default:
         break;
     }
+    if (type->code() == MatchTypeType::typeCode()) {
+        // A `match type` in a type position: with a concrete subject it is the result of the
+        // first case that selects the subject, by shape or by identity, and nothing else of it is
+        // looked at; with a type variable still in the subject it waits.
+        auto *match   = static_cast<MatchTypeType *>(type);
+        Type *subject = substituteTypeVars(match->subject(), bindings);
+        if (!containsTypeVar(subject)) {
+            const uint16_t shapes = typeShapeBits(subject);
+            for (size_t arm = 0; arm < match->armCount(); ++arm) {
+                bool selected = (match->armShapes(arm) & shapes) != 0;
+                for (Type *identity : match->armIdentities(arm)) {
+                    Type *pattern = substituteTypeVars(identity, bindings);
+                    selected |= !containsTypeVar(pattern) && typeEquals(subject, pattern);
+                }
+                if (selected) {
+                    return substituteTypeVars(match->armResult(arm), bindings);
+                }
+            }
+        }
+    }
     if (OtherType *applied = asTypeApplication(type)) {
         bool changed = false;
         std::vector<Type *> params;
@@ -535,9 +560,21 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
             params.push_back(substituteTypeVars(param, bindings));
             changed |= params.back() != param;
         }
-        return changed
-                   ? applied->cloneWithParams(std::span<Type *const>(params.data(), params.size()))
-                   : type;
+        if (!changed) {
+            return type;
+        }
+        const std::span<Type *const> arguments(params.data(), params.size());
+        if (type->code() == TypeCallType::typeCode() &&
+            std::none_of(params.begin(), params.end(), containsTypeVar)) {
+            // A type function whose arguments are all concrete is the type it computes (one it
+            // does not accept stays a call, and is reported where the type is used).
+            std::string error;
+            if (Type *computed = TypeCallType::evaluate(
+                    static_cast<TypeCallType *>(type)->name(), arguments, error)) {
+                return computed;
+            }
+        }
+        return applied->cloneWithParams(arguments);
     }
     // Primitive types, and module types whose arguments are not plain types: what those
     // arguments mean is the type's own business, so variables are not accepted among them in
@@ -835,6 +872,28 @@ bool unifyTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
         // this one writes none. A clause written in one argument is then not a requirement the
         // others have to keep, and the call's result promises no more than the arguments stated.
         Type *bound = findTypeBinding(bindings, var->name());
+        // A variable several arguments give takes the join of what they give (the relation of the
+        // mixed join): the element `void` of an empty literal constrains nothing, and of two types
+        // one enters the other, the one it enters is the solution (a named struct over the unnamed
+        // one with its fields; the wider element type of two arrays).
+        if (bound != nullptr && actual->code() != TypeCode::Void && !containsTypeVar(actual)) {
+            Type *joined = nullptr;
+            if (bound->code() == TypeCode::Void) {
+                joined = actual;
+            } else if (!bound->equals(actual) && !bound->assignableFrom(actual) &&
+                       actual->assignableFrom(bound)) {
+                joined = actual;
+            }
+            if (joined != nullptr) {
+                for (auto &[name, type] : bindings) {
+                    if (name == var->name()) {
+                        type = joined;
+                        break;
+                    }
+                }
+                return true;
+            }
+        }
         if (bound != nullptr && !sameTypeWithUnwrittenResources(bound, actual) &&
             sameTypeWithUnwrittenResources(actual, bound)) {
             for (auto &[name, type] : bindings) {

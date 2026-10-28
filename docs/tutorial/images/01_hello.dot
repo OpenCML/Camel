@@ -14,6 +14,7 @@ digraph GraphIR {
         N00 -> N01 [label="0|0", type="NORM"];
         N02 -> N03 [label="0|0", type="NORM"];
         N01 -> N03 [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
+        N01 -> N03 [label="SYNC", type="SYNC", style=solid, arrowhead=diamond];
     }
     O00 [label="EXIT", type="EXIT", style=dashed, shape=circle];
     N04 [label="Functio\nn(gr...", type="DATA", shape=circle, style=solid, value_type="() => int uses stdout", tooltip="Function(graph=main, tupleSlots=0)"];

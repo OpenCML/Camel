@@ -20,6 +20,7 @@
 #include "camel/core/tags.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/runtime/operator_instance.h"
 #include "camel/execute/pass/base.h"
 #include "camel/execute/pass/warnings.h"
 #include "camel/runtime/control.h"
@@ -356,7 +357,7 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     }
     if (armTail == kInvalidNodeRef) {
         for (gc_node_ref_t n : armNodes) {
-            if (!carriesOrdering(draft, n)) {
+            if (!carriesOrdering(draft, n, true)) {
                 continue;
             }
             bool followed = false;
@@ -599,12 +600,15 @@ bool foldFromTypes(
     GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots) {
     const auto *folder     = camel::core::OperatorTable::instance().typeFolder(operIdOf(draft, id));
     type::Type *resultType = draft.header(id)->dataType;
-    if (!folder || !resultType || !draft.withInputsOf(id).empty()) {
+    // The arguments as the operator's kernel reads them (with-arguments after the ordinary ones
+    // when it takes them so); an operator with other with-arguments is not folded.
+    const camel::runtime::KernelArguments arguments = camel::runtime::kernelArgumentsOf(draft, id);
+    if (!folder || !resultType || !arguments.with.empty()) {
         return false;
     }
     std::vector<type::Type *> types;
     std::vector<type::StaticArg> statics;
-    for (gc_node_ref_t in : draft.normInputsOf(id)) {
+    for (gc_node_ref_t in : arguments.norm) {
         const auto *h = draft.header(in);
         if (!h || !h->dataType) {
             return false;
@@ -717,11 +721,15 @@ size_t foldDraft(
                 // left as written, to fault with its position if the run reaches it, so the
                 // program behaves the same with and without the pass. The user is told once,
                 // where the expression is written (design principles 3.9).
-                raisePassWarning(
-                    ctx,
-                    camel::core::error::RuntimeDiag::ConstantExpressionFaults,
-                    draft.nodeOrigin(id),
-                    fault.what());
+                // `fail` is the exception: it states a fault on purpose, and the warning is for
+                // the accident.
+                if (body->uri() != ":op/fail") {
+                    raisePassWarning(
+                        ctx,
+                        camel::core::error::RuntimeDiag::ConstantExpressionFaults,
+                        draft.nodeOrigin(id),
+                        fault.what());
+                }
                 continue;
             } catch (...) {
                 continue; // leave the failure to be reported when the program runs
@@ -815,17 +823,31 @@ size_t cseDraft(GraphDraft &draft) {
         }
         return false;
     };
+    // Two expressions whose inputs differ only in the gates they pass through compute one value: a
+    // gate forwards the value it reads and changes nothing else (camel::runtime::ungated,
+    // camel/runtime/draft.h; docs/design/effects/edges.cn.md 4.6 and 5.3). The gate keeps its place
+    // and its wait either way, so this merges the computation and leaves the order it carried.
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         if (!isPureOper(draft, id) || isWrittenInPlace(draft, id) || readsVariable(id)) {
             continue;
         }
         const auto norm = draft.normInputsOf(id);
         const auto with = draft.withInputsOf(id);
+        std::vector<gc_node_ref_t> normKey;
+        std::vector<gc_node_ref_t> withKey;
+        normKey.reserve(norm.size());
+        withKey.reserve(with.size());
+        for (gc_node_ref_t in : norm) {
+            normKey.push_back(camel::runtime::ungated(draft, in));
+        }
+        for (gc_node_ref_t in : with) {
+            withKey.push_back(camel::runtime::ungated(draft, in));
+        }
         Key key{
             std::string(operUriOf(draft, id)),
             draft.header(id)->dataType,
-            std::vector<gc_node_ref_t>(norm.begin(), norm.end()),
-            std::vector<gc_node_ref_t>(with.begin(), with.end()),
+            std::move(normKey),
+            std::move(withKey),
             regions[id],
             camel::core::tag::permissionsOf(draft, id)};
         std::vector<gc_node_ref_t> &candidates = seen[std::move(key)];
@@ -860,18 +882,24 @@ size_t cseDraft(GraphDraft &draft) {
  * For a GATE with no users at all, check that erasing it loses no ordering: every node it
  * waits on is a pure value, or has another user through which it still reaches the exit.
  * Gates with control users do not need this check: replaceNode transfers their dependencies
- * to those users, including an effect whose only current successor is the gate.
+ * to those users, including an effect whose only current successor is the gate. A wait is read in
+ * either kind: a statement of a `sync` block is waited on through the sync edge, and one of those
+ * would be reached by nothing once the gate goes unless it has a user of its own.
  */
 bool gateInputsSurvive(const GraphDraft &draft, gc_node_ref_t gate) {
-    for (auto inputs :
-         {draft.normInputsOf(gate), draft.withInputsOf(gate), draft.ctrlInputsOf(gate)}) {
+    for (auto inputs : {draft.normInputsOf(gate),
+                        draft.withInputsOf(gate),
+                        draft.ctrlInputsOf(gate),
+                        draft.syncInputsOf(gate)}) {
         for (gc_node_ref_t in : inputs) {
             if (isValueOnly(draft, in)) {
                 continue;
             }
             size_t users = 0;
-            for (auto group :
-                 {draft.normUsersOf(in), draft.withUsersOf(in), draft.ctrlUsersOf(in)}) {
+            for (auto group : {draft.normUsersOf(in),
+                               draft.withUsersOf(in),
+                               draft.ctrlUsersOf(in),
+                               draft.syncUsersOf(in)}) {
                 for (gc_node_ref_t user : group) {
                     users += user != gate ? 1 : 0;
                 }
@@ -912,7 +940,7 @@ size_t dceDraft(GraphDraft &draft, bool valuesOnly = false) {
             const bool isDeadGate =
                 !valuesOnly && h && h->kind == GCNodeKind::Gate &&
                 (!draft.ctrlUsersOf(id).empty() || gateInputsSurvive(draft, id));
-            if ((isValueOnly(draft, id) || isJoin || isDeadGate) && draft.normUsersOf(id).empty() &&
+            if ((isDeadWhenUnread(draft, id) || isJoin || isDeadGate) && draft.normUsersOf(id).empty() &&
                 draft.withUsersOf(id).empty() && isReplaceable(draft, id)) {
                 replaceNode(draft, id, kInvalidNodeRef);
                 ++removed;
@@ -977,7 +1005,8 @@ OrderReductionPass::apply(const camel::runtime::Program *program, std::ostream &
 
 const camel::runtime::Program *simplifyGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    const OptimizeRewriteConfig &baseConfig, std::ostream &os, size_t maxRounds) {
+    const OptimizeRewriteConfig &baseConfig, std::ostream &os, size_t maxRounds,
+    GraphIRPass *caller) {
     // One growth budget for all rounds: each round unrolls a recursion with constant arguments
     // one level further, so a budget per round would only be reached after maxRounds of them.
     size_t growthSpent           = 0;
@@ -1022,12 +1051,12 @@ const camel::runtime::Program *simplifyGraph(
             mayMerge,
             config.checkScreens);
         // The algebraic stage is the pass itself: std::opt::algebra is the rules library's
-        // `rules::simplify` (`rules::simplify_strict` for safe_fp), so the laws are written once,
+        // `rules::simplify` (`rules::simplify strict=true` for safe_fp), so the laws are written once,
         // in stdlib/rules.cml. std::opt orders it after fold, as the library's corpus
         // measurements assume.
         const std::string algebraPass =
             config.safeFloatingPoint ? "std::opt::algebra safe_fp=true" : "std::opt::algebra";
-        const PassRunResult algebra = applyRegisteredPass(program, algebraPass, context, os);
+        const PassRunResult algebra = applyRegisteredPass(program, algebraPass, context, os, caller);
         if (algebra.program == nullptr) {
             return nullptr;
         }

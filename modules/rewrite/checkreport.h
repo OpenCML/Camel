@@ -29,20 +29,12 @@
  * it and `checkreport.cpp` prints it.
  */
 
-#include "camel/core/mm/alloc/allocator.h"
-#include "camel/core/rtdata/base.h"
-#include "camel/core/type/base.h"
-
 #include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
 
 namespace camel::rewritemod {
-
-namespace mm     = camel::core::mm;
-namespace rtdata = camel::core::rtdata;
-using camel::core::type::Type;
 
 /// The proposition kinds a verdict can be about: what the rule says about its two sides.
 inline constexpr const char *kPropositionEquality = "equality";
@@ -78,29 +70,7 @@ struct CheckRow {
     std::string render() const;
 };
 
-/// `CheckReport`: what `check` answers. It owns the rows, so the table stays readable after the
-/// call that made it, and the fixed rendering is a method of the table rather than a second copy
-/// of it kept beside.
-class CheckReportObject final : public rtdata::Object {
-  public:
-    static CheckReportObject *create(std::vector<CheckRow> rows, mm::IAllocator &allocator);
-
-    const std::vector<CheckRow> &rows() const { return rows_; }
-    /// The whole table, one row per line.
-    std::string text() const;
-
-    bool equals(const rtdata::Object *other, const Type *type, bool deep = false) const override;
-    rtdata::Object *
-    clone(mm::IAllocator &allocator, const Type *type, bool deep = false) const override;
-    void print(std::ostream &os, const Type *type) const override;
-    void onMoved() override {}
-    void updateRefs(const rtdata::Object::RefRelocator &relocate, const Type *type) override;
-    void finalize() noexcept override;
-
-    explicit CheckReportObject(std::vector<CheckRow> rows) : rows_(std::move(rows)) {}
-
-  private:
-    std::vector<CheckRow> rows_;
-};
+/// The whole table, one row per line.
+std::string renderRows(const std::vector<CheckRow> &rows);
 
 } // namespace camel::rewritemod

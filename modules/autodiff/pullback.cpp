@@ -246,28 +246,49 @@ bool holdsFunction(Type *type) {
     return false;
 }
 
-/// The value a chain of gates passes on. A gate orders a value after other nodes (an inlined
-/// call gates its arguments after what the call waited for); it does not change the value.
-gc_node_ref_t ungated(const GraphDraft &draft, gc_node_ref_t node) {
-    while (kindOf(draft, node) == GCNodeKind::Gate && !draft.normInputsOf(node).empty()) {
-        node = draft.normInputsOf(node).back();
-    }
-    return node;
-}
+/// The value a chain of gates passes on: camel::runtime::ungated (camel/runtime/draft.h), the same
+/// answer a comparison of two computations in the optimizer asks for.
+using camel::runtime::ungated;
 
 /// What `node` and the gates it passes through wait for, the gated value's own ordering included.
+/// A wait is read in either kind: a node of a `sync` block waits through the sync edge of the
+/// block's chain as well as through the control edge beside it
+/// (docs/design/effects/edges.cn.md 1, 4.6).
 std::vector<gc_node_ref_t> orderingOf(const GraphDraft &draft, gc_node_ref_t node) {
     std::vector<gc_node_ref_t> ctrl;
     while (true) {
-        for (gc_node_ref_t before : draft.ctrlInputsOf(node)) {
-            if (std::find(ctrl.begin(), ctrl.end(), before) == ctrl.end()) {
-                ctrl.push_back(before);
+        for (auto waits : {draft.ctrlInputsOf(node), draft.syncInputsOf(node)}) {
+            for (gc_node_ref_t before : waits) {
+                if (std::find(ctrl.begin(), ctrl.end(), before) == ctrl.end()) {
+                    ctrl.push_back(before);
+                }
             }
         }
         if (kindOf(draft, node) != GCNodeKind::Gate || draft.normInputsOf(node).empty()) {
             return ctrl;
         }
         node = draft.normInputsOf(node).back();
+    }
+}
+
+/// A node that stands for another takes the chain place of the one it replaces as well: a
+/// statement of a `sync` block is written after the statement before it through the sync edge, and
+/// a clone or a direct call that keeps only the control edge beside it leaves the block's chain
+/// broken (docs/design/effects/edges.cn.md 1, 4.6; docs/handover/README.cn.md 5.21 item 4).
+void takeSyncPlace(GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to) {
+    const auto inputs = copyOf(draft.syncInputsOf(from));
+    if (inputs.empty() || from == to) {
+        return;
+    }
+    if (const auto *header = draft.header(to); header != nullptr) {
+        draft.setNodeRuntimeFlags(
+            to,
+            static_cast<uint8_t>(header->runtimeFlags |
+                                 camel::runtime::kGCNodeFlagSyncStatement));
+    }
+    draft.setSyncInputs(to, inputs);
+    for (gc_node_ref_t user : copyOf(draft.syncUsersOf(from))) {
+        draft.replaceInput(rt::DraftEdgeKind::Sync, user, from, to);
     }
 }
 
@@ -1403,9 +1424,25 @@ const std::unordered_map<std::string, std::vector<GCGraph *>> &Engine::implBodie
     }
     implBodiesBuilt_ = true;
     const rt::Program *program = &inlining_.work();
+    // A body that is built on its own kernel (the scalar `exp` at `float` is `T(exp_kernel(x))`,
+    // and the kernel of that instance is the very `math:exp_d` the body calls) has no meaning
+    // beyond the atom: the kernel is the primitive operator there, and keeps its rule. Expanding
+    // such a call would expand the body's own call again.
+    const auto callsItsKernel = [](GCGraph *body, const std::string &uri) {
+        for (rt::gc_cnt_t id = 0; id < body->nodeCount(); ++id) {
+            const rt::GCNode *node = body->node(id);
+            if (node == nullptr || node->kind != rt::GCNodeKind::Oper) {
+                continue;
+            }
+            if (body->nodeBodyAs<rt::GCOperBody>(id)->uri() == uri) {
+                return true;
+            }
+        }
+        return false;
+    };
     for (GCGraph *body : program->implBodies()) {
         const std::string &uri = body->implKernelUri();
-        if (!uri.empty()) {
+        if (!uri.empty() && !callsItsKernel(body, uri)) {
             implBodies_[uri].push_back(body);
         }
     }
@@ -1500,6 +1537,7 @@ void ForwardRewrite::expandKernelBodies() {
         draft_.setWithInputs(direct, withInputs);
         draft_.setNormInputs(direct, normInputs);
         draft_.setCtrlInputs(direct, copyOf(draft_.ctrlInputsOf(id)));
+        takeSyncPlace(draft_, id, direct);
         draft_.replaceAllValueUses(id, direct);
         for (gc_node_ref_t user : copyOf(draft_.ctrlUsersOf(id))) {
             draft_.replaceInput(rt::DraftEdgeKind::Ctrl, user, id, direct);
@@ -2426,6 +2464,7 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
         }
     }
     draft_.setCtrlInputs(direct, ctrl);
+    takeSyncPlace(draft_, call, direct);
     draft_.replaceAllValueUses(call, direct);
     for (gc_node_ref_t user : copyOf(draft_.ctrlUsersOf(call))) {
         draft_.replaceInput(rt::DraftEdgeKind::Ctrl, user, call, direct);
@@ -2498,6 +2537,7 @@ void ForwardRewrite::rewriteClosureCall(
         }
     }
     draft_.setCtrlInputs(direct, ctrl);
+    takeSyncPlace(draft_, call, direct);
     draft_.replaceAllValueUses(call, direct);
     for (gc_node_ref_t user : copyOf(draft_.ctrlUsersOf(call))) {
         draft_.replaceInput(rt::DraftEdgeKind::Ctrl, user, call, direct);
@@ -3911,6 +3951,8 @@ void Backward::visitOper(gc_node_ref_t node) {
     for (gc_node_ref_t input : forward_.withInputsOf(node)) {
         withInputs.push_back(ref(input));
     }
+    // A rule reads the arguments as the kernel does (OperatorTraits::withAfterNorm).
+    camel::core::joinKernelArguments(uri, inputs, withInputs);
     // A rule that is given an active value through a with parameter must add a gradient for it;
     // a rule that ignores the parameter would leave the contribution silently absent, which is
     // the defect this check exists for. The count is per value, so another path that already

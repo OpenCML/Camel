@@ -16,7 +16,7 @@ func run(x: f64[2], s: f32): float {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0] as f64[], [2])
+    let x = reshape<[2]>([1.0, 2.0] as f64[])
     let s = f32(2)
     println(run(x, s))
     return 0

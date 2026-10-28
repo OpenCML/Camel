@@ -82,9 +82,6 @@ const std::string TypeDeclLoad::toString() const {
         }
         result += ">";
     }
-    if (!uri_.empty()) {
-        result += " [" + uri_ + "]";
-    }
     return result + docSuffix();
 }
 

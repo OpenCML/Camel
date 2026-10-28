@@ -11,7 +11,7 @@ func through(x: f32[..]): f32[..] { return consume(compute(x)) }
 func identity(x: f32[..]): (f32[..], f32[..]) { return (x, x) }
 func with_empty(x: f32[..]): (f32[..], f32[..]) { return (slice(x, 0, 0, 0), x + 2.0) }
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
+    let x = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     let gpu = download(run_preferred_resident<compute>(x))
     let cpu = compute(x)
     println(sum(abs(gpu.first - cpu.first)))

@@ -11,7 +11,7 @@ DivisionByZero at library.cml:13:36
 [-2]
 10
 DivisionByZero at library.cml:46:67
-InvalidArgument at array.cml:303:12
+InvalidArgument at array.cml:368:12
 InvalidNumberText at library.cml:50:72
 9
 4 4 23

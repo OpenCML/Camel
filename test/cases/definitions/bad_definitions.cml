@@ -5,7 +5,7 @@ import { softmax, abs, pow } from tensor
 
 /// Declared for tensor:exp: softmax's definition uses exp, so the two form a cycle.
 export func exp_through_softmax(x: f32[..]): f32[..] {
-    return softmax(x, -1) + x
+    return softmax<-1>(x) + x
 }
 
 /// Declared for tensor:abs: reaches its own operator.
@@ -34,7 +34,7 @@ let first_axis = 1
 /// Declared for tensor:matmul: it reads a value of the module's top level, so its graph takes
 /// its parameter and a capture, not exactly the declared parameters (task).
 export func captured(x: f32[..]): f32[..] {
-    return softmax(x, first_axis - 1)
+    return softmax<first_axis - 1>(x)
 }
 
 func default_axis(): int {
@@ -47,5 +47,5 @@ let call_axis = default_axis()
 
 /// Declared for tensor:pow: it reads a module-level value computed by a call.
 export func call_captured(x: f32[..], y: f32[..]): f32[..] {
-    return pow(x, y) + softmax(x, call_axis - 1)
+    return pow(x, y) + softmax<call_axis - 1>(x)
 }

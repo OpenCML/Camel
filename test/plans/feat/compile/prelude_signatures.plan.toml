@@ -1,0 +1,58 @@
+id = "compile.prelude_signatures"
+order = 341
+tier = "fast"
+tags = ["feat", "compile", "prelude", "rest"]
+desc = "The built-in functions are declared in the prelude (stdlib/prelude.cml): a lambda written for one takes its parameter types from the declaration, and a pack stands for the arguments a declaration leaves open (`with <..args>`, `(..A) => R`)."
+
+[[tests]]
+name = "untyped_lambdas_of_builtins"
+desc = "filter, map, foreach and reduce take lambdas that write no parameter types."
+kind = "behavior"
+case = "../../../cases/compile/prelude_signatures/untyped_lambdas.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = ["[2, 4]", "[10, 20, 30, 40]", "1", "2", "3", "4", "10", "[bb, ccc]", "[3.0, 5.0]"].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `untyped built-in lambdas changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "function_type_pack"
+desc = "A parameter of type `(..A) => R` takes functions with any parameter list."
+kind = "behavior"
+case = "../../../cases/compile/prelude_signatures/function_type_pack.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.normalized.stdout.trim() === ["1", "1"].join(String.fromCharCode(10)), `function type pack changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "with_pack_needs_native_declaration"
+desc = "A function with a body cannot write a pack among its `with` parameters."
+kind = "negative"
+case = "../../../cases/compile/prelude_signatures/with_pack_with_body.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["WithPackNeedsNativeDeclaration"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "binding_takes_the_join"
+desc = "A type variable several arguments give takes the join of what they give: an empty literal constrains nothing (`[]->append<1>` is an int array, `len([])` and `[]->contains<1>` work), a named struct wins over the unnamed one with its fields, and `concat` of two arrays takes the element type the other enters."
+kind = "behavior"
+case = "../../../cases/compile/binding_join/join.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_contains = ["[1] 2 8 0 false true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

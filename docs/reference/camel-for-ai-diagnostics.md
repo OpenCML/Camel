@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 211
+**Semantic — errors** (`SemanticDiag`) — 214
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -87,8 +87,8 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ArgumentsRejected` | Invalid call to '{0}' with argument types {1}: {2}. |
 | `ImmutablePassedToVarParam` | '{0}' is immutable and cannot be passed to a var parameter of '{1}'. |
 | `AssignmentTargetNotVariable` | The target of an assignment must be a variable, or a path from one. |
-| `ConstructNotSupported` | '{0}' is not supported: {1}. |
 | `InvalidTypeArgument` | The arguments of the type '{0}<...>' are not accepted: {1}. |
+| `NativeTypeNotProvided` | The type '{0}' is declared without a right side, so a C++ module has to provide it, and the module '{1}' registered no type of that name. |
 | `ArgumentNeedsConversion` | The call to '{0}' needs an explicit conversion: {1}. |
 | `ReturnNeedsConversion` | The returned value needs an explicit conversion to the function's declared return type '{0}': {1}. |
 | `ImportNameConflict` | The name '{0}' is imported from the modules '{1}' and '{2}' with {3}. |
@@ -114,7 +114,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `PartialApplicationRefused` | The context arguments <{0}> cannot be bound to '{1}' as a value: {2}. |
 | `ComprehensionSourceRefused` | The source of this list comprehension has type '{0}', which has no elements to take. |
 | `LogicalOperandNotBool` | The {1} side of '{0}' has type '{2}', not 'bool'. |
-| `ExportedVariable` | The variable '{0}' cannot be exported. |
 | `ModuleValueCycle` | The value '{0}' depends on itself: {1}. |
 | `CaptureAfterRecursiveCall` | The function '{1}' uses '{0}' only after it is called in its own recursion, where the call could not pass it. |
 | `AmbiguousName` | The name '{0}' is ambiguous here: {1}. |
@@ -217,6 +216,8 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `WhenPredicateAmbiguous` | The 'when' condition of '{0}' calls '{1}', and that name is ambiguous: it is imported from {2}. |
 | `NativeDeclarationIncomplete` | The body-less declaration '{0}' is incomplete: it has no result type. |
 | `NativeDeclarationNotLoaded` | The declaration '{0}' names the operator '{1}', which no loaded module implements. |
+| `NativeValueNotLoaded` | The declaration '{0}' has no right side, and no loaded module registers a value of that name. |
+| `NativeValueMismatch` | The declaration '{0}' says '{1}', but the module registers a value of type '{2}'. |
 | `NativeDeclarationOverlap` | Two declarations of '{0}' can take the same call: '{1}' and '{2}'. |
 | `WhenDeclarationOverlap` | Two declarations of '{0}' both apply to the type '{1}': '{2}' and '{3}'. |
 | `NativeDeclarationForeignOperator` | The declaration '{0}' names the operator '{1}', which another module declares. |
@@ -248,6 +249,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `CompOperandGenericWithoutType` | '..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type. |
 | `RangeStepZero` | The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers. |
 | `SliceStepZero` | The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are. |
+| `WithPackNeedsNativeDeclaration` | The pack '..{0}' among the 'with' parameters needs a declaration without a body. |
 | `ReducedPrecisionUnsupported` | The call of '{0}' cannot take a value of the reduced-precision element type '{1}'. |
 | `ImplOnBodylessDeclaration` | The body-less declaration '{0}' cannot carry '#impl({1})': it has no Camel body. |
 | `ImplKernelUnknown` | The '#impl' tag of '{0}' names '{1}', which is no body-less declaration. |
@@ -272,6 +274,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `FactJoinRequired` | The fact '{0}' writes no 'join'. |
 | `FactConstCaseTypeRequired` | The 'const' case '{0}' of the fact '{1}' writes no type. |
 | `FactCaseBindsNoVariable` | This case of the fact '{0}' names no variable. |
+| `TypeFunctionNotApplicable` | The type function '{0}' is not applicable: {1}. |
 
 **Semantic — warnings** (`SemanticDiag`) — 15
 

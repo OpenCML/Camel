@@ -11,9 +11,11 @@
 
 #pragma once
 
+#include "camel/core/module/module.h"
 #include "camel/runtime/node_ref.h"
 
 #include <string>
+#include <vector>
 
 
 
@@ -27,5 +29,10 @@ struct ExportedValue {
     /// The top-level declaration that binds it (opaque outside the graph builder).
     void *declaration = nullptr;
 };
+
+/// The declared signatures of the generic functions an entity holds, one per declaration, with the
+/// type variables as the declaration writes them; empty for an entity that holds none. For a
+/// reader that shows a signature (the language server's signature help).
+std::vector<std::string> genericSignaturesOf(const camel::core::module::Entity &entity);
 
 } // namespace camel::compile::gir

@@ -1,0 +1,19 @@
+/**
+ * Integer arrays divide as integers do: `int / int` is an `int`, truncated towards zero, and an
+ * array quotient is the scalar rule element by element (design principles 5.1: one semantics for
+ * scalars and arrays). Float arrays keep their quotient.
+ */
+import { new } from tensor
+
+func main(): int sync {
+    let a = new([7, 8, -9])
+    let b = new([2, 3, 2])
+    println(a / b)
+    println(a / 2)
+    println(20 / b)
+    println(new([-9223372036854775807 - 1]) / new([-1]))
+    println(new([1.0, 2.0]) / new([2.0, 4.0]))
+    println(f32(7) / f32(2))
+    println(new([7, 8, -9]) % new([2, 3, 2]))
+    return 0
+}

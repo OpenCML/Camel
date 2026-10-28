@@ -162,6 +162,7 @@ IndexedInstance IndexBuilder::finish(std::vector<ExprId> coords, WriteMode mode,
 
 InstantiateFn indexingFrom(IndexFn fn) {
     return [fn = std::move(fn)](const InstanceContext &cx) -> std::optional<IndexedInstance> {
+        // The call's arguments arrive in kernel order (joinKernelArguments), the statics aligned.
         if (!cx.with.empty()) {
             return std::nullopt;
         }

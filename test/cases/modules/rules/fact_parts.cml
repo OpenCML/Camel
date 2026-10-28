@@ -16,7 +16,7 @@
  * `report` prints the number of products before and after `apply`, and `main` the values, which
  * are the same before and after the rewrite.
  */
-import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 import { max } from math
 import { rewrite } from rewrite
 
@@ -39,12 +39,12 @@ func opText(n: Node): string {
     }
 }
 
-func nodesOf(p: Program, function: string): Node[] {
-    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+func nodesOf::<F>(p: F, function: string): Node[] {
+    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
-func mulsOf(p: Program, function: string): int {
+func mulsOf::<F>(p: F, function: string): int {
     let muls = nodesOf(p, function)->filter<(n: Node): bool => opText(n) == ':op/mul_l'>
     return loop total = 0 for n in muls do total + 1
 }
@@ -57,11 +57,11 @@ func two(x: int): int {
     return x * 2
 }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [mul_one_by_parts])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[mul_one_by_parts]>
 }
 
-export func report(p: Program): Program! sync {
+export func report::<F>(p: F): F! sync {
     println('one', mulsOf(p, 'one'), 'two', mulsOf(p, 'two'))
     return p
 }

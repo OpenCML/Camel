@@ -12,7 +12,7 @@ func loss(f: (t: f64[..]) => f64[..]): float {
 }
 
 func main(): int sync {
-    let x = reshape([0.5, 0.25, -0.35], [3])
+    let x = reshape<[3]>([0.5, 0.25, -0.35])
     println(grad(loss)<x>((t: f64[..]): f64[..] => tanh(t)))
     return 0
 }

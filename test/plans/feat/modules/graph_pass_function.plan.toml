@@ -1,0 +1,28 @@
+id = "modules.graph_pass_function"
+order = 929
+tier = "fast"
+tags = ["feat", "modules", "graph", "pass"]
+desc = "A pass written in Camel is a function transform (f: F) => F! (design principles 9.1): the pipeline offers it the root function of the program and goes on with the function it hands back; the snapshot of the program is not on the interface."
+
+[defaults]
+kind = "behavior"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "pass_over_function_keeps_the_program"
+desc = "A generic identity pass runs on the root function and the pipeline goes on: the program runs as before."
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "over_function::keep", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "42\n"
+
+[[tests]]
+name = "pass_over_function_error_stops_the_pipeline"
+desc = "A pass over a function that returns an error value stops the pipeline there, as any pass does."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "over_function::refuse", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_output_not_contains = ["42"]

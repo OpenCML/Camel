@@ -267,7 +267,7 @@ def ex(n: N, ind: int, top: bool = False) -> str:
     if k == "reduce":
         return wrap(f"{post(n.c[0])}->reduce<{arg(n.c[1])}, {arg(n.c[2])}>")
     if k == "slice":
-        return wrap(f"{post(n.c[0])}->slice<{arg(n.c[1])}, {arg(n.c[2])}>")
+        return wrap(f"({post(n.c[0])})[{arg(n.c[1])}:{arg(n.c[2])}]")
     if k == "contains":
         return wrap(f"{post(n.c[0])}->contains<{arg(n.c[1])}>")
     if k == "append":
@@ -342,9 +342,13 @@ def st(n: N, ind: int) -> list:
 
 def func_src(n: N, ind: int) -> list:
     pad = IND * ind
-    # No `sync` prefix on a declaration: it was retired with `wait` (design principles 3.3), and
-    # order comes from the `sync { }` of the body, which `block` writes. `syncfn` still says what
-    # the model knows about the function; it is no longer a spelling.
+    # The `sync` marker is the body's (`func f(): T sync { ... }`), never a prefix before `func`:
+    # the prefix form `sync func` is retired (design-principles-log 2.24, which 2.3 withdrew) and
+    # the front end refuses it as a token that fits nothing. Every function this generator marks
+    # `syncfn` has a sync body (generate.py), which is what carries the marker now.
+    body = n.c[0]
+    assert not n.a.get("syncfn") or (body.k == "blk" and body.a.get("sync")), \
+        "a function the model calls sync has a sync body"
     mods = "#macro " if n.a.get("macro") else ""
     head = f"{pad}{mods}func {n.a['name']}({params_src(n.a['params'])}): {type_src(n.a['ret'])} "
     lines = [head + block(body, ind)]

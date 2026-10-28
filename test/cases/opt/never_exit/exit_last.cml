@@ -1,0 +1,12 @@
+/**
+ * A sync main whose last statement is `exit(3)`, of type `never`: no pass drops the output
+ * before it, and the run ends with exit code 3.
+ */
+
+
+import { exit } from process
+
+func main(): int sync {
+    println('before')
+    exit(3)
+}

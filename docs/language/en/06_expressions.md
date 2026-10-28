@@ -109,8 +109,8 @@ func main(): int sync {
 ```cml
 func main(): int sync {
     let total = 1..6
-        ->map<(x: int): int => x * x>
-        ->filter<(x: int): bool => x % 2 == 1>
+        ->map<(x) => x * x>
+        ->filter<(x) => x % 2 == 1>
         ->reduce<(acc: int, x: int): int => acc + x, 0>
     println(`total = ${total}`)
     return 0
@@ -122,7 +122,7 @@ total = 35
 ```
 
 - A pipe `x -> f` over a `T?` or a `T!` carries a null or an error along, see [6.6](#66-operators-for-null-and-errors).
-- `f..g` is function composition: `(f..g)(x)` is `g(f(x))`, the same direction as the pipeline `x->f->g`; with integers on both sides `a..b` is the half-open interval, giving `int[]`, and a step is written `range(a, b, step)`. `for i in 0..n` is fused by the compiler and materialises no array. `..` binds tighter than `->`: `x->f..g` reads as `x->(f..g)`.
+- `f..g` is function composition: `(f..g)(x)` is `g(f(x))`, the same direction as the pipeline `x->f->g`; with integers on both sides `a..b` is the half-open interval, giving `int[]`, and a step is written `range(a, b, step)`. `for i in 0..n` is fused by the compiler and materialises no array. `..` binds looser than `+` and `-` (6.12): `1..n+1` is `1..(n+1)`, as it reads in other languages; it is also looser than `->`, so `x->f..g` reads as `(x->f)..g`; in a pipeline write `x->f->g`, which is the same function.
 
 ## 6.6 Operators for null and errors
 
@@ -175,7 +175,7 @@ The operators of the following sections (except `&&`, `||` and `as`) are calls o
 | Unary `-` | The four real numeric types, `c64`, `c128` | |
 | `~` | `int`, `i32` | Bitwise not: `~5` is `-6` |
 
-The two operands must have the same type. There are no bitwise and, or, xor or shift operators; use `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl` and `shr` of the `math` module.
+The two operands must have the same type. There are no bitwise and, or, xor or shift operators; use `bit_and`, `bit_or` and `bit_xor` of the `math` module and `x->shl<n>`, `x->shr<n>` (the count in angle brackets); the complement is `~x`.
 
 **Two places where mistakes are easy:**
 
@@ -400,6 +400,10 @@ Tuple patterns and struct patterns are not in the language: `case (...)` and `ca
 match type type {
     case struct => branch
     case array  => branch
+    case nullable => branch
+    case fallible => branch
+    case map    => branch
+    case set    => branch
     case tuple  => branch
     case func   => branch
     case #leaf  => branch
@@ -410,7 +414,7 @@ match type type {
 }
 ```
 
-- `struct` selects a structure; `tuple` selects an **ordinary** tuple; `array` selects every array type, whatever its elements (still a leaf for `#leaf` when no earlier case takes it); `func` selects a function type; `#leaf` selects every other type (scalars, `string`, arrays, functions, `T?`, `T!`, cells, ...). `struct` and `tuple` are the two shapes of an [R3 inner node](../../design/generic-structure/README.cn.md): `T?` and `T!` are tagged tuples and, like mutable cells, fall into `#leaf`, not `tuple`.
+- `struct` selects a structure; `tuple` selects an **ordinary** tuple; `array` selects every array type, whatever its elements (still a leaf for `#leaf` when no earlier case takes it); `func` selects a function type; `nullable` selects every `T?`, `fallible` every `T!`, `map` every map and `set` every set (each still a leaf for `#leaf` when no earlier case takes it); `#leaf` selects every other type (scalars, `string`, arrays, functions, `T?`, `T!`, cells, ...). `struct` and `tuple` are the two shapes of an [R3 inner node](../../design/generic-structure/README.cn.md): `T?` and `T!` are tagged tuples and, like mutable cells, fall into `#leaf`, not `tuple`.
 - A type written in the pattern is an **identity pattern**: `case int`, `case Json`, `case MyStruct`, `case T`. Identity is **exact**: `case float` does not select `int` (`float` and `f64` are the same type, and so are `int` and `i64`; `int` and `i32` are not); `case f32` does not select `f64`; `case MyStruct` selects the declared name, not another structure with the same fields; `case T` substitutes the binding of `T` at the instantiation, so it selects exactly that type. Shapes and identities share one case and one `|` (`case tuple | MyStruct`), judged in the order written: a type an earlier case already selects is `SemanticDiag::StaticMatchPatternCannotMatch` in a later identity pattern.
 - `_` selects everything, like `#leaf`, and is the fallback spelling; both must be the last case. `case struct | tuple` selects either shape. `case int` before `case #leaf` is normal; after `#leaf`/`_` it is `SemanticDiag::StaticMatchUnreachableCase`.
 - The type after `match type` is a type position: a `(` there is always the start of a type, so `match type () { ... }` matches the empty tuple type; a function type takes one more pair of parentheses, `match type ((x: int) => int) { ... }`. The pattern after `case` is a type position too, with the same rule: `case (int, int)` and `case ()` are tuples, and a function type is written `case ((x: int) => int)`.
@@ -418,6 +422,8 @@ match type type {
 - With no matching case the error is `SemanticDiag::StaticMatchNotExhaustive`; a case after `#leaf`/`_` is `SemanticDiag::StaticMatchUnreachableCase`. The construct compares concrete type names: `case int` or `case MyStruct` is part of it, and a scalar is named directly.
 - The selected branch becomes straight-line code at that position; the graph has no branch node. Its value is the value of the `match type`, and an empty branch has type `void`.
 - A generic function may omit its return type: each instance gets it from the selected branch (return-type inference). A recursive call that comes back to the **same type instance** while that instance's return type is still unknown reports `SemanticDiag::GenericInstantiationCycle`; recursion with strictly smaller type arguments finishes the child instance first as usual.
+
+**Type functions.** A type is also computed from a type (design principles 5.6): a type function is declared with `type`, `type F<T> = body`, and called `F<...>` where a type is written; its body is a type expression, and a `match type` whose cases give types is one: `type ElemOrSelf<T> = match type T { case array => ElementOf<T>  case _ => T }`. `types` declares the five that take a type apart or build one where `match type` cannot: `ElementOf<T>` is the element type of an array or a set, `PayloadOf<T>` the `U` of `U?` or `U!`, `KeyOf<T>` and `ValueOf<T>` the key and value types of a map, and `WithElement<A, E>` the array type `A` with its element type changed to `E` and its shape kept (the result of `f32(xs)` is `WithElement<A, f32>`). A call is a type like any other: `is_integer::<ElementOf<T>>()` is a type argument, and `func first::<T>(xs: T): ElementOf<T>` has a result type that is one. While `T` is a type variable the call waits; when the instance binds `T` it is replaced by the type it computes, and a type the function does not accept (`ElementOf<int>`, or a `match type` no case selects) is `SemanticDiag::TypeFunctionNotApplicable`, at the type when it is written with concrete arguments and at the call that makes the instance otherwise.
 
 ```cml
 func duplicate::<T>(t: T) {
@@ -606,7 +612,7 @@ A function type is written `(x: T) => R`, and the parameters must be named: `(x:
 
 **Where a parameter type comes from.** A lambda parameter whose type is not written takes it, and an omitted return type too, from the function type of the position the lambda stands in. There are three such positions:
 
-- An argument: a call of a function whose parameter is of function type, and a `with` argument in the same way.
+- An argument: a call of a function whose parameter is of function type, and a `with` argument in the same way. The built-in functions are the same: their signatures are written in the standard library's `stdlib/prelude.cml`, so the `x` of `xs->filter<(x) => x > 0>` and of `xs->foreach<(x) => println(x)>` is the element type of `xs`. A lambda written right after `->` takes the type of the value on its left (`x->(v) => v + 1`).
 
   <!-- camel-snippet: fragment: a call shown inside the block it would be written in -->
 
@@ -630,6 +636,16 @@ A function type is written `(x: T) => R`, and the parameters must be named: `(x:
   ```cml
   func adder(n: int): (x: int) => int {
       return (x) => x + n              // x: int, and the result is int
+  }
+  ```
+
+- The lambda after `->`: the parameter is the receiver, so its type is the receiver's, or the value taken out of a `T?` or a `T!` (the pipeline of 3.9):
+
+  ```cml
+  func main(): int sync {
+      let a = 5 -> (y) => y + 1                  // y: int
+      println(a)
+      return 0
   }
   ```
 
@@ -683,10 +699,10 @@ func main(): int sync {
 ```cml
 func main(): int sync {
     let xs = 1..6
-    println(xs->map<(x: int): int => x * x>)
-    println(xs->filter<(x: int): bool => x % 2 == 0>)
+    println(xs->map<(x) => x * x>)
+    println(xs->filter<(x) => x % 2 == 0>)
     println(xs->reduce<(acc: int, x: int): int => acc + x, 0>)
-    xs->filter<(x: int): bool => x > 3>->foreach<(x: int) => sync { println('item', x) }>
+    xs->filter<(x) => x > 3>->foreach<(x) => sync { println('item', x) }>
     return 0
 }
 ```
@@ -700,6 +716,44 @@ item 5
 ```
 
 If the element function of `foreach` is to produce side effects, its body must be a sync block (`=> sync { ... }`); for the reason see [4.3.2](04_execution_model.md#432-a-functions-behaviour-is-decided-by-the-function-itself). A function with `var` parameters cannot be handed to these operators.
+
+### 6.10.1 Fault isolation `attempt`
+
+Errors and faults are two different things: only an operation declared to return `T!` produces an error value; division by zero, an out-of-range subscript and too deep a recursion are faults: the program terminates with a location, and `!!` cannot catch one. `attempt` is a **function transform**: `attempt(f)` gives a function whose parameters are those of `f` and whose result type is the result of `f` plus `!`, and calling it is `attempt(f)(a, b)`. There is no `try`/`catch`: the boundary must be one function call and not a stretch of written text — the computation on the graph is evaluated on demand, moved by passes and run in parallel, and only the boundary of a subgraph is stable. A fault in that call (including everything it calls, directly or indirectly) becomes an error value at the boundary, to be handled with `!!`, by carrying it on with `->`, or with `match ... case error e`. Wrap any expression in a closure: `attempt(() => expr)()`. The value is a function value like any other: it can be passed on and written in angle brackets, `rows->map<attempt(parse_row)>`.
+
+```cml
+func risky(d: int): int { return 100 / d }
+
+func main(): int sync {
+    println(attempt(risky)(4) !! -1)
+    println(attempt(risky)(0) !! -1)
+    println(attempt(() => [1, 0, 4]->map<risky>)() !! [-1])
+    let r = attempt(risky)(0)
+    println(match r {
+        case error e => e.kind + ' at ' + e.location
+        case v => 'no fault'
+    })
+    return 0
+}
+```
+
+```text
+25
+-1
+[-1]
+DivisionByZero at main.cml:1:38
+```
+
+- Type: `f: (A...) => T` gives `(A...) => T!`; when `f` itself returns `U!` the result is `U!` (the error value it returns comes out unchanged). A function with `with` parameters or a `var` parameter cannot be handed in directly — the marked call passes no `with` argument and gives the parameters values — so use a closure.
+- **Three boundary rules**:
+  - **the result is finished inside the boundary**: the result of `f`, the fields of a struct and the elements of an array included, is evaluated completely inside it, and the faults in them count;
+  - **a stream is isolated pull by pull**: when `f` returns a stream, every pull happens inside the boundary, the element type becomes `T!..`, and a pull that faults hands out an error;
+  - **effects are not rolled back**: the effects that happened before the fault stay (lines printed, `var`s written, files written), and there are no transactions on the graph.
+- The `kind` of the error value is the name of the fault (such as `DivisionByZero`, `IndexOutOfRange` or `MaxRecursionDepthExceeded`), `message` is the message of the fault, and `location` is the `file:line:column` where it happened.
+- The boundary is that one call: the arguments are evaluated outside it.
+- `exit(n)` is not a fault and is not isolated; running out of memory and the errors of the compiler itself are not isolated either.
+- Under the parallel scheduler, when one element of a `map` faults, the elements already started run to the end and those not yet started do not start; `attempt` gives the error value after all that were started have finished.
+- On the graph the value holds a small graph of its own whose body is one `OPER` node (`:mark/isolate`), whose first input is the captured `f` and whose other inputs are the arguments. It is a marked call of a subgraph, so its structure does not change with what the subgraph contains. For the implementation and the questions still to be ruled see the [technical note](../../technical/33_fault_isolation.md).
 
 ## 6.11 Assignment
 
@@ -731,6 +785,7 @@ From lowest to highest:
 | 4b | `&` | Left-associative, both sides evaluated |
 | 5 | `==` `!=` `===` `!==` | Whole and element-wise comparison (see [6.7.3](#673-comparison)) |
 | 6 | `<` `>` `<=` `>=` | |
+| 6a | `..` | Range (between numbers) and function composition (between functions); looser than `+` and `-`, so `1..n+1` is `1..(n+1)` |
 | 7 | `+` `-` | Left-associative |
 | 8 | `*` `/` `%` `@` | Left-associative |
 | 8a | `^` | Right-associative, one level above the multiplicative operators |
@@ -738,7 +793,6 @@ From lowest to highest:
 | 10 | `as` | |
 | 10a | Unary `-` `!` `~` | Looser than `->` and `^`: `!xs->is_empty()` is `!(xs->is_empty())`, `-a->f` is `-(a->f)`, `-a ^ 2` is `-(a ^ 2)`; a literal and a name read alike (`-1->abs` is `-(1->abs)`; to negate first write `(-1)->abs`) |
 | 11 | `->` | Left-associative |
-| 12 | `..` | Range (between numbers) and function composition (between functions) |
 | 13 | Postfix: `.field`, `[subscript]`, `(arguments)`, `<with arguments>` | Must directly follow |
 
 `if` and `match` can appear wherever an expression is required; their arms extend to the end of the expression, so add parentheses when they are embedded in a larger expression.

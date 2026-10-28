@@ -654,17 +654,6 @@ void takeVjp(VjpBuilder &b, const VjpCall &call) {
 
 } // namespace
 
-// `t[idx]` with an int array over a rank-1 array of numbers is answered by the core's
-// `:op/idx_take` -- the element take. The adjoint of the element take is the same one `take`
-// has: `tensor:take_grad` scatters the gradient of each element taken back into its own
-// position, and for a rank-1 input that is the whole of it. Publishing the rule for the core's
-// URI keeps `xs[idx]` differentiable where the core answers it; the take that names a dimension
-// other than the first is the core's own scatter, which is what the rule answers a three-word
-// call with (design principles 5.4).
-void registerSubscriptTakeRule() {
-    camel::core::DerivativeRegistry::instance().setRule(":op/idx_take", &takeVjp);
-}
-
 std::vector<OpDef> layoutOps() {
     std::vector<OpDef> defs;
     defs.push_back(OpDef{
@@ -681,25 +670,31 @@ std::vector<OpDef> layoutOps() {
         .exports   = {"reshape"},
         .params    = {{"t", ParamKind::TensorLike}, {"shape", ParamKind::IntArray}},
         .resultDoc = "float[..]",
-        .infer     = reshapeInfer,
-        .kernel    = &reshapeKernel,
-        .traits    = {}});
+        .infer          = reshapeInfer,
+        .kernel         = &positionally<reshapeKernel>,
+        .traits         = {},
+        .withAfterNorm  = true,
+        .ordinaryParams = 1});
     defs.push_back(OpDef{
         .name      = "flatten",
         .exports   = {"flatten"},
         .params    = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int, true}},
         .resultDoc = "float[..]",
-        .infer     = flattenInfer,
-        .kernel    = &flattenKernel,
-        .traits    = {}});
+        .infer          = flattenInfer,
+        .kernel         = &positionally<flattenKernel>,
+        .traits         = {},
+        .withAfterNorm  = true,
+        .ordinaryParams = 1});
     defs.push_back(OpDef{
         .name      = "unsqueeze",
         .exports   = {"unsqueeze"},
         .params    = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int}},
         .resultDoc = "float[..]",
-        .infer     = unsqueezeInfer,
-        .kernel    = &unsqueezeKernel,
-        .traits    = {}});
+        .infer          = unsqueezeInfer,
+        .kernel         = &positionally<unsqueezeKernel>,
+        .traits         = {},
+        .withAfterNorm  = true,
+        .ordinaryParams = 1});
     defs.push_back(OpDef{
         .name      = "transpose",
         .exports   = {"transpose"},
@@ -713,18 +708,22 @@ std::vector<OpDef> layoutOps() {
         .exports   = {"permute"},
         .params    = {{"t", ParamKind::Tensor}, {"perm", ParamKind::IntArray}},
         .resultDoc = "float[..]",
-        .infer     = permuteInfer,
-        .kernel    = &permuteKernel,
-        .traits    = {}});
+        .infer          = permuteInfer,
+        .kernel         = &positionally<permuteKernel>,
+        .traits         = {},
+        .withAfterNorm  = true,
+        .ordinaryParams = 1});
     defs.push_back(OpDef{
         .name    = "concat",
         .exports = {"concat"},
         .params =
             {{"a", ParamKind::TensorLike}, {"b", ParamKind::TensorLike}, {"axis", ParamKind::Int}},
         .resultDoc = "float[..]",
-        .infer     = concatInfer,
-        .kernel    = &concatKernel,
-        .traits    = {}});
+        .infer          = concatInfer,
+        .kernel         = &positionally<concatKernel>,
+        .traits         = {},
+        .withAfterNorm  = true,
+        .ordinaryParams = 2});
     defs.push_back(OpDef{
         .name      = "take",
         .exports   = {"take"},

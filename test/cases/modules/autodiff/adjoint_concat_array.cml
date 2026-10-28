@@ -26,15 +26,15 @@ type Model = { w: float }
 with <m: Model>
 func loss(): float {
     let a = [m.w * 2.0]
-    let b = reshape([1.0, 2.0] as f64[], [2])
-    return float(sum(concat(a, b, 0)))
+    let b = reshape<[2]>([1.0, 2.0] as f64[])
+    return float(sum(concat<0>(a, b)))
 }
 
 with <w: float[]>
 func weighted_concat(): float {
-    let c = reshape([1.0, 2.0] as f64[], [2])
-    let d = reshape([0.0, 0.0, 3.0, 4.0] as f64[], [4])
-    let y = concat(c, w, 0)
+    let c = reshape<[2]>([1.0, 2.0] as f64[])
+    let d = reshape<[4]>([0.0, 0.0, 3.0, 4.0] as f64[])
+    let y = concat<0>(c, w)
     return float(sum(y * d))
 }
 

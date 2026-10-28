@@ -9,6 +9,7 @@
  */
 
 #include "../interop.h"
+#include "camel/core/array_convert.h"
 #include "../kernels/elementwise.h"
 #include "../kernels/layout.h"
 #include "catalog.h"
@@ -38,6 +39,24 @@ std::optional<StaticShape> shapeFromArg(const InferContext &ctx, size_t index) {
     return std::nullopt;
 }
 
+/// The element type a creation operator's call settled on (`OpDef::elementFromCall`): the
+/// result type its node carries.
+TypeCode resultElement(ArgsView &norm) {
+    const ArrayType *array = asArrayType(valueTypeOf(norm.resultType()));
+    return array != nullptr && array->elemType() != nullptr ? array->elemTypeCode()
+                                                            : TypeCode::Float32;
+}
+
+/// The result of an operator whose shape is argument 0 and whose element type is the call's.
+InferFn shapedInferFromCall() {
+    return [](const InferContext &ctx) -> std::optional<Type *> {
+        if (!ctx.callElement()) {
+            return std::nullopt;
+        }
+        return tensorOf(ctx.callElement(), shapeFromArg(ctx, 0));
+    };
+}
+
 InferFn shapedInfer(std::optional<TypeCode> dtype) {
     return [dtype](const InferContext &ctx) -> std::optional<Type *> {
         return tensorOf(dtype, shapeFromArg(ctx, 0));
@@ -57,7 +76,7 @@ std::optional<Type *> newInfer(const InferContext &ctx) { return tensorOf(ctx.fa
 slot_t zerosKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("zeros", [&] {
         return wrap(norm.resultType(),
-            createTensor(TypeCode::Float32, shapeArg(norm, 0), resultAllocator(), true));
+            createTensor(resultElement(norm), shapeArg(norm, 0), resultAllocator(), true));
     });
 }
 
@@ -65,7 +84,7 @@ slot_t onesKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("ones", [&] {
         return wrap(
             norm.resultType(),
-            k::full(TypeCode::Float32, shapeArg(norm, 0), 1.0, resultAllocator()));
+            k::full(resultElement(norm), shapeArg(norm, 0), 1.0, resultAllocator()));
     });
 }
 
@@ -126,12 +145,22 @@ std::optional<Type *> rangeInfer(const InferContext &) {
 slot_t eyeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel(
         "eye",
-        [&] { return wrap(norm.resultType(), k::eye(intArg(norm, 0), resultAllocator())); });
+        [&] {
+            Array *identity = k::eye(intArg(norm, 0), resultAllocator());
+            const TypeCode element = resultElement(norm);
+            if (element != identity->dtype()) {
+                identity = camel::core::convertArrayElements(identity, element, resultAllocator());
+            }
+            return wrap(norm.resultType(), identity);
+        });
 }
 
 std::optional<Type *> eyeInfer(const InferContext &ctx) {
+    if (!ctx.callElement()) {
+        return std::nullopt;
+    }
     const std::optional<int64_t> n = ctx.constInt(0);
-    return tensorOf(TypeCode::Float32, StaticShape{n, n});
+    return tensorOf(ctx.callElement(), StaticShape{n, n});
 }
 
 slot_t seedKernel(ArgsView &, ArgsView &norm, context::Context &) {
@@ -173,29 +202,23 @@ std::vector<OpDef> creationOps() {
         .kernel    = &newKernel,
         .traits    = {}});
     defs.push_back(OpDef{
-        .name      = "empty",
-        .exports   = {"empty"},
-        .params    = kShapeParam,
-        .resultDoc = "float[..]",
-        .infer     = shapedInfer(TypeCode::Float32),
-        .kernel    = &zerosKernel,
-        .traits    = {}});
+        .name            = "zeros",
+        .exports         = {"zeros"},
+        .params          = kShapeParam,
+        .resultDoc       = "T[..]",
+        .infer           = shapedInferFromCall(),
+        .kernel          = &zerosKernel,
+        .traits          = {},
+        .elementFromCall = true});
     defs.push_back(OpDef{
-        .name      = "zeros",
-        .exports   = {"zeros"},
-        .params    = kShapeParam,
-        .resultDoc = "float[..]",
-        .infer     = shapedInfer(TypeCode::Float32),
-        .kernel    = &zerosKernel,
-        .traits    = {}});
-    defs.push_back(OpDef{
-        .name      = "ones",
-        .exports   = {"ones"},
-        .params    = kShapeParam,
-        .resultDoc = "float[..]",
-        .infer     = shapedInfer(TypeCode::Float32),
-        .kernel    = &onesKernel,
-        .traits    = {}});
+        .name            = "ones",
+        .exports         = {"ones"},
+        .params          = kShapeParam,
+        .resultDoc       = "T[..]",
+        .infer           = shapedInferFromCall(),
+        .kernel          = &onesKernel,
+        .traits          = {},
+        .elementFromCall = true});
     defs.push_back(OpDef{
         .name      = "full",
         .exports   = {"full"},
@@ -238,13 +261,14 @@ std::vector<OpDef> creationOps() {
         .kernel    = &rangeKernel,
         .traits    = {}});
     defs.push_back(OpDef{
-        .name      = "eye",
-        .exports   = {"eye"},
-        .params    = {{"n", ParamKind::Int}},
-        .resultDoc = "float[..]",
-        .infer     = eyeInfer,
-        .kernel    = &eyeKernel,
-        .traits    = {}});
+        .name            = "eye",
+        .exports         = {"eye"},
+        .params          = {{"n", ParamKind::Int}},
+        .resultDoc       = "T[..]",
+        .infer           = eyeInfer,
+        .kernel          = &eyeKernel,
+        .traits          = {},
+        .elementFromCall = true});
     defs.push_back(OpDef{
         .name      = "seed",
         .exports   = {"seed"},

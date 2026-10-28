@@ -1,3 +1,0 @@
-/** Helper module: tries to export a `var`. */
-
-export var count = 0

@@ -24,9 +24,9 @@ func pair(x: float, y: float): (float, float) {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0], [2])
-    let m = { p0: reshape([0.5, 0.25], [2]) }
-    var acc = reshape([0.0, 0.0], [2])
+    let x = reshape<[2]>([1.0, 2.0])
+    let m = { p0: reshape<[2]>([0.5, 0.25]) }
+    var acc = reshape<[2]>([0.0, 0.0])
     let vg = with_grad(loss)<m>(x, acc)
     let d = vg.1
     println(

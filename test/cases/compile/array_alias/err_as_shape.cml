@@ -6,7 +6,7 @@
 import { ones } from tensor
 
 func main(): int sync {
-    let t: f32[..] = ones([2, 3])
+    let t: f32[..] = ones::<f32>([2, 3])
     let a = t as f32[3, 2]
     println(len(a))
     return 0

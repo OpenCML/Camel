@@ -287,6 +287,11 @@ void Builder::walkStaticBodyNames(
         if (!found && staticValueNamed(node->name()).has_value()) {
             found = true;
         }
+        // A type variable the instance binds is read as the conversion of its type (`T(x)`,
+        // resolveDRefNode): a case that is not selected must see it as the selected one does.
+        if (!found && camel::core::type::findTypeBinding(typeBindings_, node->name()) != nullptr) {
+            found = true;
+        }
         // The declaration-site check of a generic template is the one caller that reads a body
         // no instance has built, so a name a declaration of the module gives later in the source
         // is not a misspelling there: the module is one scope and the top level is built by
@@ -408,21 +413,16 @@ bool Builder::typeCaseMatches(Type *subject, const GCT::node_ptr_t &caseNode) co
     const uint16_t patterns = caseNode->typeCasePatterns();
     const bool isStruct     = subject->code() == TypeCode::Struct;
     const bool isTuple = subject->code() == TypeCode::Tuple && tree::isInternal(subject);
-    const bool isFunc  = subject->code() == TypeCode::Function;
-    const bool isArray = subject->code() == TypeCode::Array;
     if ((patterns & typeCaseBit(GCT::TypeCaseKind::Wildcard)) != 0) {
         return true;
     }
-    if (isArray && (patterns & typeCaseBit(GCT::TypeCaseKind::Array)) != 0) {
+    if ((patterns & extraTypeShapes(subject)) != 0) {
         return true;
     }
     if (isStruct && (patterns & typeCaseBit(GCT::TypeCaseKind::Struct)) != 0) {
         return true;
     }
     if (isTuple && (patterns & typeCaseBit(GCT::TypeCaseKind::Tuple)) != 0) {
-        return true;
-    }
-    if (isFunc && (patterns & typeCaseBit(GCT::TypeCaseKind::Func)) != 0) {
         return true;
     }
     if ((patterns & typeCaseBit(GCT::TypeCaseKind::Leaf)) != 0 && !isStruct && !isTuple) {
@@ -513,14 +513,11 @@ node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
                 const bool isStruct = pattern->code() == TypeCode::Struct;
                 const bool isTuple =
                     pattern->code() == TypeCode::Tuple && tree::isInternal(pattern);
-                const bool isFunc  = pattern->code() == TypeCode::Function;
-                const bool isArray = pattern->code() == TypeCode::Array;
                 const bool coveredByShape =
-                    (isArray && (earlierShapes & typeCaseBit(GCT::TypeCaseKind::Array)) != 0) ||
+                    (earlierShapes & extraTypeShapes(pattern)) != 0 ||
                     (isStruct &&
                      (earlierShapes & typeCaseBit(GCT::TypeCaseKind::Struct)) != 0) ||
-                    (isTuple && (earlierShapes & typeCaseBit(GCT::TypeCaseKind::Tuple)) != 0) ||
-                    (isFunc && (earlierShapes & typeCaseBit(GCT::TypeCaseKind::Func)) != 0);
+                    (isTuple && (earlierShapes & typeCaseBit(GCT::TypeCaseKind::Tuple)) != 0);
                 if (coveredByShape) {
                     diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
                         .atOrigin(caseNode->origin())

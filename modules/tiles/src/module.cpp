@@ -3,6 +3,7 @@
 
 // Public module boundary: function graphs are inspected, never traced by executing the body.
 
+#include "camel/core/type/native.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm/gen.h"
 #include "camel/core/mm/root_handle.h"
@@ -779,8 +780,9 @@ class TilesModule final : public BuiltinModule {
         // The exported `Device` is the name a program applies its own host type to
         // (`Device<f32[3]>`), so the host type of the object the name is bound to is never a
         // value's type: it is one tensor, and the spelling's argument replaces it.
-        exportType(
-            Reference("Device"),
+        camel::core::type::registerNativeType(
+            "tiles",
+            "Device",
             DeviceType::get(camel::core::type::ArrayType::openRank(
                 camel::core::type::Type::create(camel::core::type::TypeCode::Float32))));
         // `#gpu` is a standard tag of the core (design principles 13.4); `tiles::compile` reads

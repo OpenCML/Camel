@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "camel/runtime/rules.h"
+#include "camel/runtime/operator_instance.h"
 
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
@@ -92,13 +93,20 @@ class SideReader {
             const auto index = portIndex(ref);
             return index && isConstParam(*index);
         }
-        case GCNodeKind::Oper:
-            for (gc_node_ref_t in : graph_.normInputsOf(ref)) {
+        case GCNodeKind::Oper: {
+            const KernelArguments arguments = kernelArgumentsOf(graph_, ref);
+            for (gc_node_ref_t in : arguments.norm) {
                 if (!constantOnly(in)) {
                     return false;
                 }
             }
-            return graph_.withInputsOf(ref).empty() && graph_.ctrlInputsOf(ref).empty();
+            // A statement of a `sync` block is written after the one before it, and that is an order
+            // the rule layer may not step over: the block's chain is that order, whether it is named
+            // by a control edge or by the sync edge it is moving to
+            // (docs/design/effects/edges.cn.md 1, 4.6).
+            return arguments.with.empty() && graph_.ctrlInputsOf(ref).empty() &&
+                   graph_.syncPredsOf(ref).empty();
+        }
         default:
             return false;
         }
@@ -130,12 +138,16 @@ class SideReader {
             return patLiteral(graph_.staticSlots()[index], node->dataType());
         }
         case GCNodeKind::Oper: {
-            if (!graph_.withInputsOf(ref).empty() || !graph_.ctrlInputsOf(ref).empty()) {
+            // The arguments in kernel order: an operator that takes its with-arguments after the
+            // ordinary ones (`softmax<axis>(x)`) is the pattern `softmax(x, axis)`.
+            const KernelArguments arguments = kernelArgumentsOf(graph_, ref);
+            if (!arguments.with.empty() || !graph_.ctrlInputsOf(ref).empty() ||
+                !graph_.syncPredsOf(ref).empty()) {
                 fail("has an operator with a context argument or an order dependency");
             }
             const auto *body = graph_.nodeBodyAs<GCOperBody>(ref);
             std::vector<Pattern> args;
-            for (gc_node_ref_t in : graph_.normInputsOf(ref)) {
+            for (gc_node_ref_t in : arguments.norm) {
                 args.push_back(term(in));
             }
             if (right_ && constantOnly(ref)) {
@@ -155,7 +167,7 @@ class SideReader {
             fail(std::format("uses the operator '{}', which has no implementation", body.uri()));
         }
         std::vector<Type *> types;
-        for (gc_node_ref_t in : graph_.normInputsOf(ref)) {
+        for (gc_node_ref_t in : kernelArgumentsOf(graph_, ref).norm) {
             types.push_back(graph_.node(in)->dataType());
         }
         Type *resultType = graph_.node(ref)->dataType();

@@ -21,6 +21,6 @@ func total(s: int..): int {
 }
 
 func main(): int sync {
-    let (left, right) = stream::tee(count(3), 0)
+    let (left, right) = stream::tee<0>(count(3))
     return total(left) + total(right)
 }

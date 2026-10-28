@@ -6,7 +6,7 @@
 import { reshape, zeros, softmax, log_softmax, mean, relu, sigmoid, numel, random, seed } from tensor
 
 func elems(t: f32[..]): float[] {
-    let v = reshape(t, [numel(t)])
+    let v = reshape<[numel(t)]>(t)
     // `v[i]` is the element itself, so its type is the array's element
     // type `f32`. The list is `float[]` -- one text per element,
     // the shortest decimal that reads back to the same value -- so the conversion is written out.
@@ -20,16 +20,16 @@ func show(name: string, t: f32[..]): int sync {
 
 func main(): int sync {
     // NaN (0/0 at index 11), infinities (3e38 * 10 at 6 and 7), signed zeros, subnormals.
-    let base = reshape([1.5, -2.25, 0.0, -0.0, 1.0e-40, -1.0e-40, 3.0e38, -3.0e38, 88.7, -103.9, 0.5, 7.0] as f32[], [12])
-    let k = reshape([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 10.0, 10.0, 1.0, 1.0, 1.0, 1.0] as f32[], [12])
-    let z = reshape([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0] as f32[], [12])
+    let base = reshape<[12]>([1.5, -2.25, 0.0, -0.0, 1.0e-40, -1.0e-40, 3.0e38, -3.0e38, 88.7, -103.9, 0.5, 7.0] as f32[])
+    let k = reshape<[12]>([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 10.0, 10.0, 1.0, 1.0, 1.0, 1.0] as f32[])
+    let z = reshape<[12]>([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0] as f32[])
     let specials = base * k * (z / z)
-    let clean = reshape([0.3, -1.2, 0.5, 2.0, 1.1, 0.4, -0.7, 0.2, -0.5, 0.9, 1.3, -0.1] as f32[], [3, 4])
-    let large = reshape([1000.0, 1001.0, 999.5, -1000.0, 88.0, 89.0, -87.0, 0.0] as f32[], [2, 4])
+    let clean = reshape<[3, 4]>([0.3, -1.2, 0.5, 2.0, 1.1, 0.4, -0.7, 0.2, -0.5, 0.9, 1.3, -0.1] as f32[])
+    let large = reshape<[2, 4]>([1000.0, 1001.0, 999.5, -1000.0, 88.0, 89.0, -87.0, 0.0] as f32[])
     seed(7)
     let r = random([4, 5], -10.0, 10.0)
-    let cube = reshape(r, [2, 2, 5])
-    let empty = zeros([0, 4])
+    let cube = reshape<[2, 2, 5]>(r)
+    let empty = zeros::<f32>([0, 4])
 
     show("relu specials", relu(specials))
     show("relu random", relu(r))
@@ -37,27 +37,27 @@ func main(): int sync {
     show("sigmoid random", sigmoid(r))
     show("sigmoid large", sigmoid(large))
     show("softmax clean", softmax(clean))
-    show("softmax clean 0", softmax(clean, 0))
-    show("softmax clean -2", softmax(clean, -2))
-    show("softmax large", softmax(large, 1))
-    show("softmax random", softmax(r, 1))
-    show("softmax cube 1", softmax(cube, 1))
-    show("softmax cube 2", softmax(cube, 2))
-    show("softmax specials", softmax(reshape(specials, [3, 4]), 1))
-    show("softmax specials 0", softmax(reshape(specials, [3, 4]), 0))
-    show("softmax empty", softmax(empty, 1))
+    show("softmax clean 0", softmax<0>(clean))
+    show("softmax clean -2", softmax<-2>(clean))
+    show("softmax large", softmax<1>(large))
+    show("softmax random", softmax<1>(r))
+    show("softmax cube 1", softmax<1>(cube))
+    show("softmax cube 2", softmax<2>(cube))
+    show("softmax specials", softmax<1>(reshape<[3, 4]>(specials)))
+    show("softmax specials 0", softmax<0>(reshape<[3, 4]>(specials)))
+    show("softmax empty", softmax<1>(empty))
     show("log_softmax clean", log_softmax(clean))
-    show("log_softmax clean 0", log_softmax(clean, 0))
-    show("log_softmax large", log_softmax(large, 1))
-    show("log_softmax random", log_softmax(r, 1))
-    show("log_softmax random 0", log_softmax(r, 0))
-    show("log_softmax cube 1", log_softmax(cube, 1))
-    show("log_softmax specials", log_softmax(reshape(specials, [3, 4]), 1))
-    show("log_softmax empty", log_softmax(empty, 1))
+    show("log_softmax clean 0", log_softmax<0>(clean))
+    show("log_softmax large", log_softmax<1>(large))
+    show("log_softmax random", log_softmax<1>(r))
+    show("log_softmax random 0", log_softmax<0>(r))
+    show("log_softmax cube 1", log_softmax<1>(cube))
+    show("log_softmax specials", log_softmax<1>(reshape<[3, 4]>(specials)))
+    show("log_softmax empty", log_softmax<1>(empty))
     println(mean(clean))
     println(mean(r))
     println(mean(large))
     println(mean(specials))
-    println(mean(reshape(base, [3, 4])))
+    println(mean(reshape<[3, 4]>(base)))
     return 0
 }

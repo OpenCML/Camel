@@ -311,7 +311,7 @@ Tensor<f32>               // f32[..]
 
 ### 4.5 标准库与文档
 
-- `stdlib/signatures/globals.cml`：`map`/`filter`/`foreach`/`reduce` 的声明从 `T[]` 改为 `T[..]` 并在注释里写第一维规则（实际类型规则在 `globals.cpp`，见 P5）；`append`/`extend`/`slice`/`concat` 仍是 `T[]`（只对 rank 1 有意义）；`len` 从 `T[]` 改 `T[..]`。
+- `stdlib/prelude.cml`：`map`/`filter`/`foreach`/`reduce` 的声明从 `T[]` 改为 `T[..]` 并在注释里写第一维规则（实际类型规则在 `globals.cpp`，见 P5）；`append`/`extend`/`slice`/`concat` 仍是 `T[]`（只对 rank 1 有意义）；`len` 从 `T[]` 改 `T[..]`。
 - `stdlib/array.cml`：`sort` 家族与 `argsort` 改 `T[..]`；`sort_by` 等 `stdlib/array.cml` 的 Camel 实现保持 rank 1（下标切片落地后再泛化）。
 - `docs/language/08_top_level_and_grammar.md` 与 `en/`（76–77、201–202 行）的 `arrayType` 产生式、`constas` 说明；`docs/language/03_data_model.md` 的类型表加 `T[dims]`、`?`、`..s`、`Tensor` 别名。
 - `docs/stdlib-reference.md` 由 `scripts/stdlib-reference.mjs` 重新生成。
@@ -524,7 +524,7 @@ Array *rowCopy(mm::IAllocator &allocator, uint64_t row) const;
 
 ### 6.5 标准库
 
-`stdlib/signatures/globals.cml` 的 `map/filter/foreach/reduce` 文本在 P3 已改 `T[..]`；P5 补注释与用例。`stdlib/array.cml` 保持 rank 1（`sort_by`/`flat_map`/`zip`/`flatten` 不改）；`stdlib/array.cml` 的 `sort`/`argsort` 已改 `T[..]`。
+`stdlib/prelude.cml` 的 `map/filter/foreach/reduce` 文本在 P3 已改 `T[..]`；P5 补注释与用例。`stdlib/array.cml` 保持 rank 1（`sort_by`/`flat_map`/`zip`/`flatten` 不改）；`stdlib/array.cml` 的 `sort`/`argsort` 已改 `T[..]`。
 
 测试：`test/cases/compile/hof_multidim/*`（map 按行：rank 1 不变、rank 2 得 `U[d0]`、filter 行、foreach 行、reduce 行、sort 字典序、argsort、len、`int[m,n]` 与 `string[m,n]`、空维、1 行、1 列）、`test/plans/feat/compile/hof_multidim.plan.toml`；`feat/mm/hof_block_alloc` 加 rank 2 的分配计数。
 
@@ -559,10 +559,9 @@ Array *rowCopy(mm::IAllocator &allocator, uint64_t row) const;
 | `append`（`xs = xs + [v]`） | **是**（已落地） | `:struct/append_arr_in_place`（`setInPlaceForm` 声明），就地追加 | — |
 | `extend` | **是** | 复用操作数 0 的块，追加 | — |
 | `concat`（`xs = xs + ys`） | **是** | 结果以操作数 0 为底 | — |
-| `merge_sorted_arrays` | **是** | 从尾部合并进操作数 0 | — |
 | `filter` | **是** | 原地压缩，末尾收缩 | — |
 | `unique` | **是** | 原地压缩 | — |
-| `sort`/`insert_sort`/`quick_sort`/`merge_sort` | **是**（已落地） | `array` 的原地形式（`src/builtin/operators/array.cpp`） | — |
+| `sort` | **是**（已落地） | `array` 的原地形式（`src/builtin/operators/array.cpp`） | — |
 | `set_index`（`xs[i] = v`） | **是**（已落地） | `:op/set_index_in_place` | — |
 | `tail` | 不分配（视图） | 返回 `rowView`/偏移视图 | 不是"原地写"，而是不分配 |
 | `head` | 不分配 | 返回元素 | — |
@@ -599,7 +598,7 @@ let after = std::mem::blocks().allocs;
 println(after - before);             // 期望 0
 ```
 
-覆盖：`append`、`extend`、`concat`、`merge_sorted_arrays`、`filter`、`unique`、`sort` 家族（各一次）、`set_index`、张量逐元素一元与二元各一次（f32 与 f64 各一组）、`tail`（视图，0 次）。对照用例（**必须分配**）：`let ys = xs; xs = xs->sort()`（1 次——`take` 复制，再原地排序）、`map(xs, f)`（1 次输出）、`argsort`（1 次）。
+覆盖：`append`、`extend`、`concat`、`filter`、`unique`、`sort`（各一次）、`set_index`、张量逐元素一元与二元各一次（f32 与 f64 各一组）、`tail`（视图，0 次）。对照用例（**必须分配**）：`let ys = xs; xs = xs->sort()`（1 次——`take` 复制，再原地排序）、`map(xs, f)`（1 次输出）、`argsort`（1 次）。
 
 文件：`test/cases/feat/mm/dyn_in_place/*.cml`、`test/plans/feat/mm/dyn_in_place.plan.toml`。断言用打印的计数差，不用时间。
 
@@ -844,7 +843,7 @@ P4 是一个提交。如果评审或实施中发现它无法在合理时间内�
 | `modules/{nn,onnx,tiles,tree,autodiff}/**` | `asTensorType` → `asArrayType`/谓词 |
 | `src/execute/entry_args.{h,cpp}` | 加载器的"能否接"谓词 |
 | `src/builtin/executors/builtin.cpp`、`src/core/operator_table.cpp` | 原地注册与例外清单 |
-| `stdlib/signatures/globals.cml`、`stdlib/array.cml`（注释） | 签名与第一维 |
+| `stdlib/prelude.cml`、`stdlib/array.cml`（注释） | 签名与第一维 |
 | `docs/language/03_data_model.md`、`docs/language/08_top_level_and_grammar.md`（+`en/`）、`docs/diagnostics.md`、`docs/stdlib-reference.md`、`docs/performance/graph-store-baseline.md` | 文档 |
 | `test/tools/perfbaseline/baseline.py` | 张量程序 |
 | `test/plan-selection.json` | 新计划规则 |

@@ -34,7 +34,7 @@ func main(): int sync {
     'round total={}'->format<total>->println
     'round left={}'->format<loop s = 0.0 for v in x do s + float(sum(v * w))>->println
     'round right={}'->format<loop s = 0.0 for v in x do s + float(sum(w * v))>->println
-    'round zeros={}'->format<loop s = 0.0 for v in x do s + float(sum(v * zeros([4]) + 1.0))>->println
+    'round zeros={}'->format<loop s = 0.0 for v in x do s + float(sum(v * zeros::<f32>([4]) + 1.0))>->println
     'tensor tensor={}'->format<sum(x * w)>->println
     'tensor literal={}'->format<sum(x * 0.5)>->println
     'literal tensor={}'->format<sum(0.5 * x)>->println

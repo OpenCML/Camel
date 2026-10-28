@@ -45,7 +45,7 @@ func digest(m: Map<int, int>): int {
 }
 
 func digest_set(s: Set<string>): int {
-    return items(s)->reduce<(acc: int, k: string): int => (acc * 31 + len(k) * 7 + (if s->has<k> then 1 else 0)) % 1000003, len(s)>
+    return items(s)->reduce<(acc: int, k: string): int => (acc * 31 + len(k) * 7 + (if s->contains<k> then 1 else 0)) % 1000003, len(s)>
 }
 
 func main(): int sync {

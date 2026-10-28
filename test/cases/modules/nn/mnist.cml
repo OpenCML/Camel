@@ -19,14 +19,14 @@ let num_classes = 10
 func softmax(logits: f32[?, ?]): f32[?, ?] {
     let n = shape(logits)[0]
     let k = shape(logits)[1]
-    let row_max = max(logits, 1)
-    let row_max_2d = reshape(row_max, [n, 1])
-    let row_max_broadcast = row_max_2d @ ones([1, k])
+    let row_max = max<1>(logits)
+    let row_max_2d = reshape<[n, 1]>(row_max)
+    let row_max_broadcast = row_max_2d @ ones::<f32>([1, k])
     let stable = logits - row_max_broadcast
     let exp_logits = exp(stable)
-    let row_sums = sum(exp_logits, 1)
-    let row_sums_2d = reshape(row_sums, [n, 1])
-    let row_sums_broadcast = row_sums_2d @ ones([1, k])
+    let row_sums = sum<1>(exp_logits)
+    let row_sums_2d = reshape<[n, 1]>(row_sums)
+    let row_sums_broadcast = row_sums_2d @ ones::<f32>([1, k])
     return exp_logits / row_sums_broadcast
 }
 
@@ -72,8 +72,8 @@ func main(): int sync {
 
     let X = random([n_samples, n_features], 0.0, 1.0)
 
-    let ones_col = ones([n_samples, 1])
-    let X_bias = concat(X, ones_col, 1)
+    let ones_col = ones::<f32>([n_samples, 1])
+    let X_bias = concat<1>(X, ones_col)
     let n = shape(X_bias)[0]
     let d = shape(X_bias)[1]
 
@@ -81,14 +81,14 @@ func main(): int sync {
         return if i >= n then acc else sync {
             let label_idx = i % num_classes
             let row = (0..num_classes === label_idx) * 1.0
-            let row_2d = reshape(row, [1, num_classes])
-            let new_acc = if i == 0 then row_2d else concat(acc, row_2d, 0)
+            let row_2d = reshape<[1, num_classes]>(row)
+            let new_acc = if i == 0 then row_2d else concat<0>(acc, row_2d)
             return build_one_hot(i + 1, new_acc)
         }
     }
 
-    let y_onehot = build_one_hot(0, zeros([1, num_classes]))
-    var W = zeros([d, num_classes])
+    let y_onehot = build_one_hot(0, zeros::<f32>([1, num_classes]))
+    var W = zeros::<f32>([d, num_classes])
 
     println('Training softmax classifier (synthetic data)...')
     println('Samples:', n_samples, 'Features:', n_features, 'Classes:', num_classes)
@@ -98,8 +98,8 @@ func main(): int sync {
     let loss = cross_entropy_loss(probs, y_onehot)
     'Final Cross-Entropy Loss: {}'->format<loss>->println
 
-    let pred = argmax(X_bias @ W, 1)
-    let labels = argmax(y_onehot, 1)
+    let pred = argmax<1>(X_bias @ W)
+    let labels = argmax<1>(y_onehot)
     let correct = float(sum(pred === labels))
     let acc = correct / float(n)
     'Accuracy: {} / {} = {}'->format<correct, n, acc>->println

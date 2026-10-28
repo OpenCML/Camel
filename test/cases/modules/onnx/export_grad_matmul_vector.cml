@@ -22,13 +22,13 @@ func loss(x: f32[..]): float {
 func step(w: f32[..], v: f32[..], x: f32[..]): (f32[..], f32[..], f32[..]) {
     let m = { w: w, v: v }
     let vg = with_grad(loss)<m>(x)
-    return (reshape([f32(vg.0)], [1]), vg.1.w, vg.1.v)
+    return (reshape<[1]>([f32(vg.0)]), vg.1.w, vg.1.v)
 }
 
 func main(): int sync {
-    let w = reshape([0.5, 0.25, -1.0, 2.0, 1.5, -0.5] as f32[], [3, 2])
-    let v = reshape([1.0, -2.0, 0.5] as f32[], [3])
-    let x = reshape([0.3, -0.7] as f32[], [2])
+    let w = reshape<[3, 2]>([0.5, 0.25, -1.0, 2.0, 1.5, -0.5] as f32[])
+    let v = reshape<[3]>([1.0, -2.0, 0.5] as f32[])
+    let x = reshape<[2]>([0.3, -0.7] as f32[])
     let r = step(w, v, x)
     println(r.0)
     println(r.1)

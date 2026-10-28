@@ -4,8 +4,8 @@ import { reshape } from tensor
 import { inspect } from tiles
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
-    let b = reshape([0.5, 0.5, 0.5] as f32[], [3])
+    let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
+    let b = reshape<[3]>([0.5, 0.5, 0.5] as f32[])
     let f = (a: f32[..]): f32[..] => (loop y = a, n = 0 while n < 2 do (y + b, n + 1)).0
     println(inspect<f>(x))
     return 0

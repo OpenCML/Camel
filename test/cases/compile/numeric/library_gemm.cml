@@ -26,8 +26,8 @@ func relaxed::<T>(x: T[..], w: T[..]): T[..] when is_numeric::<T>() {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, -2.0, 3.0, 0.5, -1.5, 2.5], [2, 3])
-    let w = reshape([0.5, -1.0, 2.0, 1.0, -0.5, 0.25], [3, 2])
+    let x = reshape<[2, 3]>([1.0, -2.0, 3.0, 0.5, -1.5, 2.5])
+    let w = reshape<[3, 2]>([0.5, -1.0, 2.0, 1.0, -0.5, 0.25])
     'gemm plain={} reordered={} relaxed={}'->format<sum(plain(x, w)), sum(reordered(x, w)), sum(relaxed(x, w))>->println
     return 0
 }

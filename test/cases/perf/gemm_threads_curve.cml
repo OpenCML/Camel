@@ -59,7 +59,7 @@ func time_fast(round: int, label: string, a: f32[..], b: f32[..], reps: int): vo
     let started = now()
     let measured = loop i = 0, s = 0.0 while i < reps do {
         let product = fast(a, b)
-        return (i + 1, s + sum(product))
+        return (i + 1, s + float(sum(product)))
     }
     let elapsed = now() - started
     'gemm_threads_curve round={} t={} shape={} path=library ms={} checksum={}'->format<
@@ -71,7 +71,7 @@ func time_exact(round: int, label: string, a: f32[..], b: f32[..], reps: int): v
     let started = now()
     let measured = loop i = 0, s = 0.0 while i < reps do {
         let product = exact(a, b)
-        return (i + 1, s + sum(product))
+        return (i + 1, s + float(sum(product)))
     }
     let elapsed = now() - started
     'gemm_threads_curve round={} t={} shape={} path=canonical ms={} checksum={}'->format<
@@ -111,19 +111,19 @@ func curve_at(round: int, shapes: Shapes, t: int, reps: int): void sync {
 
 func main(rounds: int, reps: int): int sync {
     let shapes = {
-        cube_a: zeros([1024, 1024]) + 0.001,
-        cube_b: zeros([1024, 1024]) + 0.001,
-        forward_a: zeros([2048, 1024]) + 0.001,
-        forward_b: zeros([1024, 1024]) + 0.001,
-        up_b: zeros([1024, 2048]) + 0.001,
-        gradient_a: zeros([1024, 2048]) + 0.001,
-        gradient_b: zeros([2048, 1024]) + 0.001,
-        batch_a: zeros([4, 1024, 1024]) + 0.001,
-        batch_b: zeros([4, 1024, 1024]) + 0.001,
-        attention_q: zeros([32, 64, 64, 16]) + 0.001,
-        attention_k: zeros([32, 64, 16, 64]) + 0.001,
-        small_a: zeros([512, 256]) + 0.001,
-        small_b: zeros([256, 512]) + 0.001
+        cube_a: zeros::<f32>([1024, 1024]) + 0.001,
+        cube_b: zeros::<f32>([1024, 1024]) + 0.001,
+        forward_a: zeros::<f32>([2048, 1024]) + 0.001,
+        forward_b: zeros::<f32>([1024, 1024]) + 0.001,
+        up_b: zeros::<f32>([1024, 2048]) + 0.001,
+        gradient_a: zeros::<f32>([1024, 2048]) + 0.001,
+        gradient_b: zeros::<f32>([2048, 1024]) + 0.001,
+        batch_a: zeros::<f32>([4, 1024, 1024]) + 0.001,
+        batch_b: zeros::<f32>([4, 1024, 1024]) + 0.001,
+        attention_q: zeros::<f32>([32, 64, 64, 16]) + 0.001,
+        attention_k: zeros::<f32>([32, 64, 16, 64]) + 0.001,
+        small_a: zeros::<f32>([512, 256]) + 0.001,
+        small_b: zeros::<f32>([256, 512]) + 0.001
     }
     let done = loop round = 0 while round < rounds do sync {
         curve_at(round, shapes, 1, reps)

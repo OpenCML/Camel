@@ -15,7 +15,7 @@ var mutable = 2
 export let shared_value = 3
 
 type Alias = int
-type Handle = 'handle'
+export type Handle
 type Raw = string
 type Shape = enum { Circle(float), Rect { w: float, h: float }, Empty }
 

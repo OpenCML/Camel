@@ -315,7 +315,7 @@ std::string resourceClause(const FunctionType *fn, bool mangle) {
         }
     }
     for (const auto &use : sig.ambient) {
-        add(use.name);
+        add(sem::resourceDisplayName(use.name));
     }
     for (sem::ResourceClass cls : sig.anyOf) {
         add(std::format("any {}", sem::resourceClassName(cls)));
@@ -333,7 +333,8 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
     if (mangle) {
         parts.push_back(literal("F"));
         if (withCount > 0) {
-            parts.push_back(literal("W" + std::to_string(withCount)));
+            parts.push_back(literal((fn->hasWithRest() ? "X" : "") + std::string("W") +
+                                    std::to_string(withCount)));
             for (size_t i = 0; i < withCount; ++i) {
                 if (fn->withIsVarAt(i)) {
                     parts.push_back(literal("V"));
@@ -372,6 +373,13 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
         for (size_t i = 0; i < withCount; ++i) {
             if (i > 0) {
                 parts.push_back(literal(", "));
+            }
+            if (fn->hasWithRest() && i + 1 == withCount) {
+                parts.push_back(literal(".."));
+                if (fn->hasArgNames()) {
+                    parts.push_back(literal(std::string(fn->argNameAt(i))));
+                }
+                continue;
             }
             if (fn->withIsVarAt(i)) {
                 parts.push_back(literal("var "));
@@ -687,7 +695,7 @@ bool sameTypeWith(const Type *a, const Type *b, ResourceMatch resources) {
             const auto *rhs = static_cast<const FunctionType *>(right);
             if (lhs->withTypesCount() != rhs->withTypesCount() ||
                 lhs->normTypesCount() != rhs->normTypesCount() ||
-                lhs->hasRest() != rhs->hasRest() ||
+                lhs->hasRest() != rhs->hasRest() || lhs->hasWithRest() != rhs->hasWithRest() ||
                 lhs->constasIndices() != rhs->constasIndices()) {
                 return false;
             }

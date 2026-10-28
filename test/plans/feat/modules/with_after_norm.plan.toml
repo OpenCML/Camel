@@ -1,0 +1,42 @@
+id = "modules.with_after_norm"
+order = 369
+tier = "fast"
+tags = ["feat", "modules", "tensor", "with"]
+desc = "The configuration of a tensor operator is a with-argument (`reshape<[2, 3]>(x)`, `sum<0>(x)`): the graph keeps it on its own edge, the kernel, the derivative rule, the lowering and the index instance read it after the ordinary arguments"
+
+[[tests]]
+name = "with_after_norm.computed_input"
+desc = "reshape<shape> and sum<axis> on an input computed from the entry argument (so nothing is folded), and the gradient through both, on the four back ends."
+kind = "behavior"
+case = "../../../cases/modules/tensor/with_after_norm.cml"
+args = ["${case}", "--arg", "n=6", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]\n[5.0, 7.0, 9.0] [6.0, 15.0]\n[10.0, 14.0, 18.0, 10.0, 14.0, 18.0]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "creation.element_from_call"
+desc = "zeros, ones and eye take the element type the call writes (`zeros::<f64>`) or the position gives (`let a: f32[2, 2] = ones(...)`), on the four back ends."
+kind = "behavior"
+case = "../../../cases/modules/tensor/creation_element.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[[1.0, 1.0], [1.0, 1.0]] [0.0, 0.0, 0.0] [[1, 0], [0, 1]] [0.0, 0.0]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "creation.no_default_element"
+desc = "A creation call that states no element type and has no position to take one from is a compile error: there is no default element type."
+kind = "negative"
+case = "../../../cases/modules/tensor/creation_no_default.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000

@@ -42,7 +42,7 @@ func cell(xt: f32[..], h: f32[..]): f32[..] {
 /// One time step: update the hidden state only when the step's input is large.
 with <m: Gru, x: f32[..]>
 func gated(t: int, h: f32[..]): f32[..] {
-    let xt = reshape(slice(x, 1, t, t + 1), [shape(x)[0], shape(x)[2]])
+    let xt = reshape<[shape(x)[0], shape(x)[2]]>(slice(x, 1, t, t + 1))
     return if mean(abs(xt)) > 0.5 then cell<m>(xt, h) else h
 }
 
@@ -53,7 +53,7 @@ func run(t: int, steps: int, h: f32[..]): f32[..] {
 
 with <m: Gru>
 func forward(x: f32[..]): f32[..] {
-    let h = run<m, x>(0, shape(x)[1], zeros([shape(x)[0], shape(m.w_hr)[0]]))
+    let h = run<m, x>(0, shape(x)[1], zeros::<f32>([shape(x)[0], shape(m.w_hr)[0]]))
     return h @ m.fc_w + m.fc_b
 }
 
@@ -74,38 +74,34 @@ func step(m: Gru, x: f32[..]): (float, Gru) {
 
 func load(): Gru {
     return {
-        w_ir: reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25], [2, 3]),
-        w_iz: reshape([0.25, 0.5, -0.75, -0.5, 1.0, 0.5], [2, 3]),
-        w_in: reshape([0.75, -0.5, 0.5, 0.25, -1.0, 0.5], [2, 3]),
-        w_hr: reshape([0.5, 0.25, -0.25, -0.5, 0.75, 0.5, 0.25, -0.75, 1.0], [3, 3]),
-        w_hz: reshape([0.25, -0.5, 0.5, 0.75, 0.5, -1.0, 0.5, 0.25, -0.25], [3, 3]),
-        w_hn: reshape([-0.5, 0.5, 0.25, 0.5, -0.75, 1.0, 0.25, 0.5, -0.5], [3, 3]),
-        b_ir: reshape([0.1, 0.0, -0.1], [3]),
-        b_iz: reshape([0.0, 0.1, 0.2], [3]),
-        b_in: reshape([-0.1, 0.2, 0.0], [3]),
-        b_hr: reshape([0.1, 0.1, 0.0], [3]),
-        b_hz: reshape([0.0, -0.1, 0.1], [3]),
-        b_hn: reshape([0.2, 0.0, -0.2], [3]),
-        fc_w: reshape([0.5, -0.5, 1.0, 0.25, -0.75, 0.5], [3, 2]),
-        fc_b: reshape([0.3, -0.2], [2])
+        w_ir: reshape<[2, 3]>([0.5, -0.25, 0.75, 1.0, -0.5, 0.25]),
+        w_iz: reshape<[2, 3]>([0.25, 0.5, -0.75, -0.5, 1.0, 0.5]),
+        w_in: reshape<[2, 3]>([0.75, -0.5, 0.5, 0.25, -1.0, 0.5]),
+        w_hr: reshape<[3, 3]>([0.5, 0.25, -0.25, -0.5, 0.75, 0.5, 0.25, -0.75, 1.0]),
+        w_hz: reshape<[3, 3]>([0.25, -0.5, 0.5, 0.75, 0.5, -1.0, 0.5, 0.25, -0.25]),
+        w_hn: reshape<[3, 3]>([-0.5, 0.5, 0.25, 0.5, -0.75, 1.0, 0.25, 0.5, -0.5]),
+        b_ir: reshape<[3]>([0.1, 0.0, -0.1]),
+        b_iz: reshape<[3]>([0.0, 0.1, 0.2]),
+        b_in: reshape<[3]>([-0.1, 0.2, 0.0]),
+        b_hr: reshape<[3]>([0.1, 0.1, 0.0]),
+        b_hz: reshape<[3]>([0.0, -0.1, 0.1]),
+        b_hn: reshape<[3]>([0.2, 0.0, -0.2]),
+        fc_w: reshape<[3, 2]>([0.5, -0.5, 1.0, 0.25, -0.75, 0.5]),
+        fc_b: reshape<[2]>([0.3, -0.2])
     }
 }
 
 func input_a(): f32[..] {
-    return reshape(
-        [1.0, -1.0, 0.25, -0.25, 0.75, 0.5, 0.5, -0.5, -0.25, 0.25, -0.5, 1.0],
-        [2, 3, 2]
-    )
+    return reshape<[2, 3, 2]>(
+        [1.0, -1.0, 0.25, -0.25, 0.75, 0.5, 0.5, -0.5, -0.25, 0.25, -0.5, 1.0])
 }
 
 func do_run(m: Gru): int sync {
     let dump = get_env('DUMP') ?? ''
     let xa = input_a()
-    let xb = reshape(
-        [1.0, -0.75, 0.75, 1.0, -1.0, 0.75, 0.75, -1.0, 1.0, -0.75, 0.75, 1.0],
-        [2, 3, 2]
-    )
-    let x0 = zeros([2, 3, 2])
+    let xb = reshape<[2, 3, 2]>(
+        [1.0, -0.75, 0.75, 1.0, -1.0, 0.75, 0.75, -1.0, 1.0, -0.75, 0.75, 1.0])
+    let x0 = zeros::<f32>([2, 3, 2])
     save_params(m, dump + '/init')
     save_npy(xa, dump + '/xa.npy')
     save_npy(xb, dump + '/xb.npy')
@@ -113,9 +109,9 @@ func do_run(m: Gru): int sync {
     let la = step(m, xa)
     let lb = step(m, xb)
     let l0 = step(m, x0)
-    save_npy(reshape([la.0], [1]), dump + '/loss_a.npy')
-    save_npy(reshape([lb.0], [1]), dump + '/loss_b.npy')
-    save_npy(reshape([l0.0], [1]), dump + '/loss_0.npy')
+    save_npy(reshape<[1]>([la.0]), dump + '/loss_a.npy')
+    save_npy(reshape<[1]>([lb.0]), dump + '/loss_b.npy')
+    save_npy(reshape<[1]>([l0.0]), dump + '/loss_0.npy')
     save_params(la.1, dump + '/arm_a')
     save_params(lb.1, dump + '/arm_b')
     save_params(l0.1, dump + '/arm_0')

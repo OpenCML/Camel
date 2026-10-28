@@ -5,34 +5,34 @@ import { load_npy, save_npy, reshape, permute, sum, zeros } from tensor
 import { grad, vjp } from autodiff
 import { source, inspect, run_preferred_resident, download } from tiles
 import { get_env } from env
-let weights = reshape([1.0, -2.0, 3.0, -4.0, 5.0, -6.0] as f32[], [2, 3])
-func chained(x: f32[..]): f32[..] { return slice(permute(x, [2, 0, 1]), 0, 1, 4, 2) }
-func fixed(x: f32[2, 3, 4]): f32[..] { return permute(x, [2, 0, 1]) }
+let weights = reshape<[2, 3]>([1.0, -2.0, 3.0, -4.0, 5.0, -6.0] as f32[])
+func chained(x: f32[..]): f32[..] { return slice(permute<[2, 0, 1]>(x), 0, 1, 4, 2) }
+func fixed(x: f32[2, 3, 4]): f32[..] { return permute<[2, 0, 1]>(x) }
 with <axes: int[]>
-func configured(x: f32[2, 3, 4]): f32[..] { return permute(x, axes) }
-func rule(x: f32[..], dy: f32[..]): f32[..] { return reshape(dy, [3, 2]) }
+func configured(x: f32[2, 3, 4]): f32[..] { return permute<axes>(x) }
+func rule(x: f32[..], dy: f32[..]): f32[..] { return reshape<[3, 2]>(dy) }
 #vjp(rule)
 func mark(x: f32[..]): f32[..] { return x }
 with <x: f32[..]>
 func loss(): float {
-    return float(sum(mark(sum(x, 1)) * weights))
+    return float(sum(mark(sum<1>(x)) * weights))
 }
 with <x: f32[..]>
 func negative_loss(): float {
-    return float(sum(mark(sum(x, -2)) * weights))
+    return float(sum(mark(sum<-2>(x)) * weights))
 }
 with <x: f32[..]>
-func keep_loss(): float { return float(sum(sum(x, -2, true))) }
-func empty_rule(x: f32[..], dy: f32[..]): f32[..] { return reshape(dy, [3, 0]) }
+func keep_loss(): float { return float(sum(sum<-2, true>(x))) }
+func empty_rule(x: f32[..], dy: f32[..]): f32[..] { return reshape<[3, 0]>(dy) }
 #vjp(empty_rule)
 func empty_mark(x: f32[..]): f32[..] { return x }
 with <x: f32[..]>
-func empty_loss(): float { return float(sum(empty_mark(sum(x, 1)))) }
-func wide_rule(x: f32[..], dy: f32[..]): f32[..] { return reshape(dy, [4, 5, 2]) }
+func empty_loss(): float { return float(sum(empty_mark(sum<1>(x)))) }
+func wide_rule(x: f32[..], dy: f32[..]): f32[..] { return reshape<[4, 5, 2]>(dy) }
 #vjp(wide_rule)
 func wide_mark(x: f32[..]): f32[..] { return x }
 with <x: f32[..]>
-func wide_loss(): float { return float(sum(wide_mark(sum(x, 1)))) }
+func wide_loss(): float { return float(sum(wide_mark(sum<1>(x)))) }
 func main(): int sync {
     let folder = get_env('TILES_TEST_OUT') ?? ''
     let x = load_npy::<f32>(folder + '/x.npy') as f32[2, 3, 4]
@@ -45,7 +45,7 @@ func main(): int sync {
     save_npy(download(run_preferred_resident<configured<[2, 0, 1]>>(x)), folder + '/config_gpu0.npy')
     save_npy(download(run_preferred_resident<configured<[1, 2, 0]>>(x)), folder + '/config_gpu1.npy')
     save_npy(download(run_preferred_resident<configured<[2, 0, 1]>>(x)), folder + '/config_gpu2.npy')
-    let a = zeros([2, 4, 3])
+    let a = zeros::<f32>([2, 4, 3])
     // Bind each transform once, outside the wrapper: tiles::run specializes the wrapper's
     // graph, and a graph that still contains an autodiff operator cannot be lowered there.
     // The wrapper then calls the gradient function that was already built, whose graph Tiles
@@ -62,12 +62,12 @@ func main(): int sync {
     save_npy(download(run_preferred_resident<dn>(a)), folder + '/negative_gpu.npy')
     save_npy(dk(a), folder + '/keep_cpu.npy')
     save_npy(download(run_preferred_resident<dk>(a)), folder + '/keep_gpu.npy')
-    let e = zeros([0, 4, 2])
+    let e = zeros::<f32>([0, 4, 2])
     let de_grad = grad(empty_loss)
     let de = (v: f32[..]): f32[..] => de_grad<v>()
     save_npy(de(e), folder + '/empty_cpu.npy')
     save_npy(download(run_preferred_resident<de>(e)), folder + '/empty_gpu.npy')
-    let w = zeros([2, 3, 4, 5])
+    let w = zeros::<f32>([2, 3, 4, 5])
     let dw_grad = grad(wide_loss)
     let dw = (v: f32[..]): f32[..] => dw_grad<v>()
     save_npy(dw(w), folder + '/wide_cpu.npy')

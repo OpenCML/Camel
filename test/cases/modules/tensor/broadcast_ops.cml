@@ -5,8 +5,8 @@
 import { reshape, range, where, maximum, relu, sum, shape } from tensor
 
 func main(): int sync {
-    let col = reshape([1.0, 2.0, 3.0], [3, 1])
-    let row = reshape([10.0, 20.0], [2])
+    let col = reshape<[3, 1]>([1.0, 2.0, 3.0])
+    let row = reshape<[2]>([10.0, 20.0])
     let grid = col + row
     let mask = grid > 15.0
     let clipped = where(mask, grid, 0.0)

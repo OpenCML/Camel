@@ -27,7 +27,7 @@ func render(snake: Point[]): void sync {
 }
 
 func move_snake(snake: Point[], dir: string): Point[] {
-    let now_head = head(snake)
+    let now_head = snake[0]
     let new_head: Point = match dir {
         case 'w' => { x: now_head.x, y: now_head.y - 1 }  // Up
         case 'a' => { x: now_head.x - 1, y: now_head.y }  // Left
@@ -35,7 +35,7 @@ func move_snake(snake: Point[], dir: string): Point[] {
         case 'd' => { x: now_head.x + 1, y: now_head.y }  // Right
         case _ => now_head
     }
-    return concat([new_head], snake->slice<0, len(snake) - 1>)
+    return concat([new_head], snake[0:len(snake) - 1])
 }
 
 // Check if the snake hits the wall
@@ -47,7 +47,7 @@ func hit_wall(p: Point): bool {
 func game_loop(snake: Point[], dir: string, steps: int): void sync {
     render(snake)
     let new_snake = move_snake(snake, dir)
-    let now_head = head(new_snake)
+    let now_head = new_snake[0]
 
     if hit_wall(now_head) then sync {
         'Game over! You hit the wall after {} steps.'->format<steps>->println

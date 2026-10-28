@@ -9,7 +9,9 @@
 
 #include "camel/core/context/context.h"
 #include "camel/runtime/draft.h"
+#include "camel/runtime/graph.h"
 
+#include <algorithm>
 #include <functional>
 #include <string>
 #include <string_view>
@@ -21,6 +23,47 @@ namespace camel::passes::generic {
 
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GraphDraft;
+
+/// Hand a wait a removed node carried through a `sync` block's chain to a consumer, in the kind it
+/// had: a wait is copied kind for kind (docs/handover/README.cn.md 5.21 item 4), so a consumer that
+/// is itself a statement of the block follows the predecessor through the sync edge rather than
+/// through the control edge that names the same pair beside it. Written only where the chain can
+/// take it -- both ends are statements of the block, the consumer is not written after anything yet
+/// and the predecessor has no other follower, because a chain never forks
+/// (docs/design/effects/edges.cn.md 4.6). Returns whether the wait was written; a caller that gets
+/// `false` hands it on the way it did before.
+inline bool handOverSyncWait(GraphDraft &draft, gc_node_ref_t pred, gc_node_ref_t user) {
+    if (!draft.alive(pred) || !draft.alive(user) || pred == user) {
+        return false;
+    }
+    const auto *userHeader = draft.header(user);
+    if (userHeader == nullptr ||
+        (userHeader->runtimeFlags & camel::runtime::kGCNodeFlagSyncStatement) == 0) {
+        return false;
+    }
+    if (!draft.syncInputsOf(user).empty() || !draft.syncUsersOf(pred).empty() ||
+        draft.nodeRegion(pred) != draft.nodeRegion(user)) {
+        return false;
+    }
+    const auto mark = [&](gc_node_ref_t node) {
+        const auto *header = draft.header(node);
+        if (header != nullptr) {
+            draft.setNodeRuntimeFlags(
+                node,
+                static_cast<uint8_t>(header->runtimeFlags |
+                                     camel::runtime::kGCNodeFlagSyncStatement));
+        }
+    };
+    mark(pred);
+    mark(user);
+    const gc_node_ref_t only[1] = {pred};
+    draft.setSyncInputs(user, only);
+    const auto ctrl = draft.ctrlInputsOf(user);
+    if (std::ranges::find(ctrl, pred) == ctrl.end()) {
+        draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, user, pred);
+    }
+    return true;
+}
 
 /// The integer neutral elements (x + 0, 0 + x, x - 0, x * 1, 1 * x), the implementation of
 /// `std::opt::algebra neutral_only=true`. The algebraic laws themselves are the rules library's
@@ -39,12 +82,21 @@ std::string_view operUriOf(const GraphDraft &draft, gc_node_ref_t id);
 /// The operator an OPER node calls (camel/core/operator_table.h), or kNoOper for other nodes.
 camel::core::OperId operIdOf(const GraphDraft &draft, gc_node_ref_t id);
 
-/// True for an OPER node whose operator is registered as pure.
+/// True for an OPER node a pass may compute ahead of time or merge with an identical call: its
+/// operator is pure and foldable. Whether the node may also be dropped, moved or reordered is a
+/// different question, which only `nodeIsFreelySchedulable` (camel/runtime/graph.h) answers.
 bool isPureOper(const GraphDraft &draft, gc_node_ref_t id);
 
-/// True for nodes whose only observable result is their value: pure OPERs, static DATA, and
-/// CAST/COPY/ACCS/FILL.
+/// True for nodes whose only observable result is their value, so that a pass may arrange them
+/// anywhere: static DATA and the COPY/ACCS/FILL/CAST/OPER nodes that are freely schedulable (pure
+/// and unable to fault).
 bool isValueOnly(const GraphDraft &draft, gc_node_ref_t id);
+
+/// True for an unread node that may be removed: a value-only node, or a pure computation that
+/// may fault and sits on no chain -- nothing waits for it and it waits for nothing -- which never
+/// ran (design principles 3.1: a node runs if and only if this run uses it). A pure node that may
+/// fault and is on a `sync` chain stays: its fault is observable (3.4).
+bool isDeadWhenUnread(const GraphDraft &draft, gc_node_ref_t id);
 
 /// True unless `id` anchors the graph (exit, output, return, or a branch-arm head/tail).
 bool isReplaceable(const GraphDraft &draft, gc_node_ref_t id);
@@ -60,15 +112,6 @@ bool reaches(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to);
  * removes.
  */
 std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t id);
-
-/**
- * True for nodes that run in order with effects: calls, branches, effectful operators, and gates
- * or joins that wait on something -- on a control input, or on the sync edge the chain of a `sync`
- * block is written as (docs/design/effects/edges.cn.md 5.3). The chain of a block names its
- * statements with this predicate: the nodes it holds are the ones a rewrite may not step over
- * without handing their ordering on.
- */
-bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t id);
 
 /**
  * True when nothing the value of `id` is computed from reads a slot the program writes: walking up

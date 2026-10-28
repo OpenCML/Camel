@@ -52,7 +52,7 @@ std::optional<std::string_view> binaryOperatorGroup(std::string_view symbol);
 inline constexpr std::string_view kCompositionCall = "$comp::..";
 
 /// The operator of `fail<'Kind'>(message)` (design principles 3.9), declared in
-/// `stdlib/signatures/globals.cml` and built in as the group `fail`: the program's own premise
+/// `stdlib/prelude.cml` and built in as the group `fail`: the program's own premise
 /// check, whose call gives the bottom type `never`. A program never writes the URI; the builder
 /// reads the nodes of the calls back by it, for what a `fail` written as a statement of its own
 /// means (it is no effect, so nothing runs it where its value is not wanted) and for the

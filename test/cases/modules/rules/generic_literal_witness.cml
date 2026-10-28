@@ -10,7 +10,7 @@
  * `generic-rule-instantiation-set-and-predicate`, §3).
  */
 
-import { Graph, Node, NodeKind, Program, graphs, kind, name, nodes } from graph
+import { Graph, Node, NodeKind, kind, name, nodes, graphs_of } from graph
 import { Run, run, why_not } from rewrite
 import { is_integer } from types
 
@@ -20,24 +20,24 @@ import { is_integer } from types
 rule cancel_wide_addend::<T>(x: T) when is_integer::<T>() { x + 3000000000 - 3000000000 => x }
 
 /// The nodes of one function of the program, by the name of its graph.
-func nodesOf(p: Program, function: string): Node[] {
-    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+func nodesOf::<F>(p: F, function: string): Node[] {
+    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
 /// The parameter of a function: the value the question is asked at.
-func portOf(p: Program, function: string): Node {
+func portOf::<F>(p: F, function: string): Node {
     let ports = nodesOf(p, function)->filter<(n: Node): bool => kind(n) == NodeKind::Port>
     return ports[0]
 }
 
 /// The law applied once, then the question at the `int` parameter the law rewrote: the instance
 /// was made, and the answer says the rule fired there as `cancel_wide_addend<int>`.
-export func why_wide(p: Program): Program! sync {
+export func why_wide::<F>(p: F): F! sync {
     return match p->run<[cancel_wide_addend], explain: true> {
         case error e => { return e }
         case r => sync {
-            return match why_not(r, cancel_wide_addend, portOf(r.result, 'i64_wide')) {
+            return match r->why_not<cancel_wide_addend, portOf(r.result, 'i64_wide')> {
                 case error e => sync { println(e); return r.result }
                 case reason => sync { println(reason); return r.result }
             }
@@ -47,11 +47,11 @@ export func why_wide(p: Program): Program! sync {
 
 /// The same question at the `i32` parameter, where the body's literal does not fit: no instance
 /// could be made, and the answer repeats why.
-export func why_narrow(p: Program): Program! sync {
+export func why_narrow::<F>(p: F): F! sync {
     return match p->run<[cancel_wide_addend], explain: true> {
         case error e => { return e }
         case r => sync {
-            return match why_not(r, cancel_wide_addend, portOf(r.result, 'i32_zero')) {
+            return match r->why_not<cancel_wide_addend, portOf(r.result, 'i32_zero')> {
                 case error e => sync { println(e); return r.result }
                 case reason => sync { println(reason); return r.result }
             }

@@ -10,8 +10,8 @@ func add(a: f32[..], b: f32[..]): f32[..] {
 }
 
 func main(): int sync {
-    let a = ones([2, 3])
-    let b = ones([4, 3])
+    let a = ones::<f32>([2, 3])
+    let b = ones::<f32>([4, 3])
     'shape_error sum={}'->format<sum(add(a, b))>->println
     return 0
 }

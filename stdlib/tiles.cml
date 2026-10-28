@@ -23,6 +23,9 @@
  * the tests use) are in `stdlib/signatures/tiles.cml`.
  */
 
+/// A value that lives on a device, with the host type of what it holds: `Device<f32[3]>`.
+export type Device<T>
+
 /// The CUDA driver and the devices behind it, as one resource: every use of the device is a use
 /// of this.
 export resource driver

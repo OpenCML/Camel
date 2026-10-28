@@ -24,11 +24,11 @@ import { get_env } from env
 func run(t: int, steps: int, x: f32[..], h: f32[..]): f32[..] {
     let batch = shape(x)[0]
     let features = shape(x)[2]
-    return if t >= steps then h else run(t + 1, steps, x, h + reshape(slice(x, 1, t, t + 1), [batch, features]))
+    return if t >= steps then h else run(t + 1, steps, x, h + reshape<[batch, features]>(slice(x, 1, t, t + 1)))
 }
 
 func forward(x: f32[..]): f32[..] {
-    return run(0, shape(x)[1], x, zeros([shape(x)[0], shape(x)[2]]))
+    return run(0, shape(x)[1], x, zeros::<f32>([shape(x)[0], shape(x)[2]]))
 }
 
 func shrink(t: f32[..]): f32[..] {
@@ -74,7 +74,7 @@ func no_mode(): void! {
 }
 
 func main(): void! sync {
-    let x = ones([2, 3, 4])
+    let x = ones::<f32>([2, 3, 4])
     println(forward(x))
     let mode = get_env('MODE') ?? ''
     return if mode == 'static' then sync {

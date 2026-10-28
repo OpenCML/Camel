@@ -7,9 +7,9 @@ import { conv2d } from nn
 
 func main(): int sync {
     let values: f64[] = [1.0, 2.0, 3.0, 4.0]
-    let x = reshape(new(values), [1, 1, 2, 2])
-    let kernel = ones([1, 1, 1, 1])
-    let bias = ones([1])
+    let x = reshape<[1, 1, 2, 2]>(new(values))
+    let kernel = ones::<f32>([1, 1, 1, 1])
+    let bias = ones::<f32>([1])
     let y = conv2d(x, kernel, bias, 1, 0)
     println(sum(y))
     return 0

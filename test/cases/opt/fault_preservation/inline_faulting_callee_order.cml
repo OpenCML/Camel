@@ -1,0 +1,20 @@
+/**
+ * A pure callee that may fault runs after the effects its argument waited for. The body does not
+ * read the argument, so once it is inlined only an order edge keeps `7 / b` after `show`.
+ */
+
+
+func show(x: int): int sync {
+    println(x)
+    return 0
+}
+
+func divide(a: int, b: int): int {
+    return 7 / b
+}
+
+func main(): int sync {
+    println(1)
+    let shown = show(2)
+    return divide(shown, 0)
+}

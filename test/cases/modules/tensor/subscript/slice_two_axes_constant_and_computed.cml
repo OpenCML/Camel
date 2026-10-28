@@ -24,7 +24,7 @@ func cut(m: f32[2, 3], k: int): float {
 
 func main(): int sync {
     println('ran')
-    let m = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
+    let m = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     println(shape(m[0:2, 0:2]))
     println("value={}"->format<block(m[0:2, 0:2])>)
     println("computed={}"->format<cut(m, 2)>)

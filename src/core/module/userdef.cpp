@@ -109,6 +109,16 @@ bool UserDefinedModule::compile(CompileStage till) {
         CAMEL_LOG_INFO_S("Module", "Start compiling module '{}' from file '{}'.", name_, path_);
     }
 
+    if (stage_ == CompileStage::None) {
+        // The built-in signatures are read with every program (the prelude's declaration file): by
+        // the first module of the context that is compiled, whichever it is -- a session of the
+        // Python binding has no entry module.
+        if (const std::string broken = context_->checkPreludeDeclarations(); !broken.empty()) {
+            diagnostics_->of(SemanticDiag::ImportedModuleHasErrors).commit("prelude", broken);
+            return false;
+        }
+    }
+
     if (stage_ < CompileStage::AST) {
         if (!parser_->ast()) {
             camel::utils::phase::Scope phaseScope("parse", name_);
@@ -302,7 +312,8 @@ bool UserDefinedModule::declaresFunction(const std::string &name) const {
 
 UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
     const std::string &entryFunction, std::string &problem,
-    std::shared_ptr<camel::compile::gir::DraftGraphBuilder> &root) {
+    std::shared_ptr<camel::compile::gir::DraftGraphBuilder> &root,
+    camel::core::type::FunctionType *expected) {
     if (compiling_) {
         return ProgramStatus::Failed;
     }
@@ -399,13 +410,24 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
         return ProgramStatus::NoSuchFunction;
     }
     using Access = detail::EntityAccess;
-    if (Access::isGenericTemplate(*entity) || !Access::isGraphSet(*entity) ||
+    if (expected != nullptr) {
+        // A pass over the function `expected` is the instance of a generic function (design
+        // principles 9.1).
+        if (!Access::isGenericTemplate(*entity)) {
+            problem = std::format("'{}::{}' is not a generic function", name_, entryFunction);
+            return ProgramStatus::NotAFunction;
+        }
+    } else if (
+        Access::isGenericTemplate(*entity) || !Access::isGraphSet(*entity) ||
         !Access::graphSet(*entity) || Access::graphSet(*entity)->size() != 1) {
         problem = std::format("'{}::{}' is not one non-generic function", name_, entryFunction);
         return ProgramStatus::NotAFunction;
     }
-    if (!builder->buildLibraryEntry(shared_from_this(), entryFunction) ||
+    if (!builder->buildLibraryEntry(shared_from_this(), entryFunction, expected) ||
         diagnostics_->hasErrors()) {
+        if (!builder->libraryEntryProblem().empty()) {
+            problem = builder->libraryEntryProblem();
+        }
         return ProgramStatus::Failed;
     }
     root = builder->rootGraph();

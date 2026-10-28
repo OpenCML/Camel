@@ -62,13 +62,10 @@
 #     ^^^^^ meta.type.definition.camel entity.name.type.camel
 #           ^ keyword.operator.assignment.camel
 #             ^^^ support.type.primitive.camel
->type Handle = 'handle'
-#^^^^ meta.type.definition.camel storage.type.type.camel
-#     ^^^^^^ meta.type.definition.camel entity.name.type.camel
-#            ^ keyword.operator.assignment.camel
-#              ^ string.quoted.single.camel punctuation.definition.string.begin.camel
-#               ^^^^^^ string.quoted.single.camel
-#                     ^ string.quoted.single.camel punctuation.definition.string.end.camel
+>export type Handle
+#^^^^^^ keyword.control.import.camel
+#       ^^^^ meta.type.definition.camel storage.type.type.camel
+#            ^^^^^^ meta.type.definition.camel entity.name.type.camel
 >type Raw = string
 #^^^^ meta.type.definition.camel storage.type.type.camel
 #     ^^^ meta.type.definition.camel entity.name.type.camel

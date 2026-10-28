@@ -29,7 +29,9 @@
 #include "camel/core/type/collection.h"
 #include "camel/core/type/composite/stream.h"
 #include "camel/core/type/other.h"
+#include "camel/core/type/typecall.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cctype>
 #define DEBUG_LEVEL -1
@@ -312,6 +314,14 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         tmpl->outerBindings  = typeBindings_;
         tmpl->ownerGraph     = currGraph_;
         tmpl->module         = module_;
+        // The tags written before the declaration belong to it, as they do for a function that is
+        // not generic (a generic pass names the tags it reads).
+        if (!isOperator) {
+            const TagFacts tags = tagFactsOf(child, camel::core::tag::Func);
+            if (tags.declaration != camel::core::attr::kNoAttrs) {
+                camel::core::tag::attachToDeclaration(*module_, Reference(name), tags.declaration);
+            }
+        }
         tmpl->nodeScope      = nodeScope_;
         tmpl->graphScope     = graphScope_;
         tmpl->decoratedScope = decoratedScope_;
@@ -1132,6 +1142,21 @@ generic_template_ptr_t Builder::chooseGenericOverload(
     const std::vector<generic_template_ptr_t> &candidates, const std::vector<Argument> &withInputs,
     const std::vector<Argument> &normInputs, const type_vec_t &withTypes, const type_vec_t &normTypes,
     const GCT::node_ptr_t &call) {
+    // A candidate named by its signature -- which the siblings of one name share -- and by the
+    // condition it wrote, which is what tells two arms of that name apart (design principles 4.4:
+    // the call site lists the candidates with the conditions each of them holds under).
+    const auto describeCandidate = [](const generic_template_ptr_t &tmpl) {
+        std::string text = tmpl->name + ": " + tmpl->funcType->toString();
+        if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+            text += " — when " + when->text;
+        }
+        return text;
+    };
+    // The candidates whose parameters take the arguments and whose own `when` is false for the
+    // types those arguments bind: kept for the report a call that reaches no candidate at all
+    // gets, because a condition that does not hold is not a mismatch of types (design
+    // principles 4.4).
+    std::vector<std::string> unmetConditions;
     // Design principles 4.4 and 5.1: a call takes the one overload whose parameters accept its
     // arguments, with the argument types first exactly as they are, and then with the literals
     // entering the parameter types. Two that fit are an ambiguity, not a matter of the order
@@ -1197,6 +1222,27 @@ generic_template_ptr_t Builder::chooseGenericOverload(
             }
             return false;
         }
+        // The declaration's `when`, now that the arguments have bound its type variables: a
+        // false condition makes this declaration inapplicable, not erroneous, so it is not a fit
+        // and the call goes on to the other candidates (design principles 4.4).
+        if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+            std::unordered_map<std::string, data_ptr_t> withValues;
+            for (size_t i = 0; i < signature->withTypesCount() && i < withInputs.size(); ++i) {
+                data_ptr_t value = constantOfNode(withInputs[i].node);
+                if (value != nullptr) {
+                    withValues.emplace(std::string(signature->argNameAt(i)), value);
+                }
+            }
+            const WhenResult verdict =
+                evaluateWhenCondition(when->condition, signature, bindings, withValues, tmpl);
+            if (verdict.fails()) {
+                unmetConditions.push_back(describeCandidate(tmpl));
+                return false;
+            }
+            if (!verdict.holds()) {
+                reportWhenProblem(verdict, tmpl->name, when->condition);
+            }
+        }
         return true;
     };
     // A name with one generic function keeps it, and its own report when the arguments do not
@@ -1222,11 +1268,36 @@ generic_template_ptr_t Builder::chooseGenericOverload(
         listed.push_back(candidate->name + ": " + candidate->funcType->toString());
     }
     if (fits.size() > 1) {
+        // Two (or more) candidates the arguments fit and whose conditions hold: no declaration
+        // order chooses between them, so the call is ambiguous and the report names each
+        // candidate with the condition it wrote (design principles 4.4: "带 `when` 的候选都适用
+        // 时，调用处报歧义，列出两条候选与各自成立的条件"). Sorted, so that two files holding one
+        // program with the declarations in the two orders report one and the same diagnostic.
         std::vector<std::string> also;
+        also.reserve(fits.size());
         for (const auto &candidate : fits) {
-            also.push_back(candidate->name + ": " + candidate->funcType->toString());
+            also.push_back(describeCandidate(candidate));
         }
+        std::sort(also.begin(), also.end());
+        also.erase(std::unique(also.begin(), also.end()), also.end());
         rejectAmbiguousCall(candidates.front()->name, argTypes, also, call);
+    }
+    if (!unmetConditions.empty()) {
+        // Every candidate the arguments fit was made inapplicable by its own `when`: the call
+        // reports the conditions it could not meet rather than the overloads it did not match
+        // (design principles 4.4; questions-2026-10-23 `sorts-per-element-type` 1: "条件不满足与
+        // 类型不匹配分开报"). Sorted, for the reason the ambiguity above is sorted.
+        std::sort(unmetConditions.begin(), unmetConditions.end());
+        unmetConditions.erase(
+            std::unique(unmetConditions.begin(), unmetConditions.end()), unmetConditions.end());
+        yieldToPipe(call);
+        diags_->of(SemanticDiag::WhenConditionUnmet)
+            .atOrigin(call->origin())
+            .commit(
+                candidates.front()->name,
+                argTypes,
+                strutil::join(unmetConditions, "; ", [](const std::string &s) { return s; }));
+        throw BuildAbortException();
     }
     yieldToPipe(call);
     diags_->of(SemanticDiag::NoMatchingFunction)
@@ -2254,7 +2325,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         // is where the instance's types are known (rule impl-kernel-site). An instance
         // whose type has no executor keeps the body and runs it: the body is the semantics, so
         // the result is the same, and `std::profile` tells the two paths apart.
-        adoptImplKernel(tmpl, graph, funcType);
+        adoptImplKernel(tmpl, graph, funcType, bindings);
         // The instance takes the declaration's parameter defaults as they are: they are
         // constants, the same for every instance, and a call of the instance fills them.
         if (const auto found = defaults_.find(tmpl.get()); found != defaults_.end()) {
@@ -2349,7 +2420,18 @@ Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
             .commit(type->toString());
         throw BuildAbortException();
     }
-    return boundType(type);
+    Type *bound = boundType(type);
+    if (containsTypeCall(bound) && !containsTypeVar(bound)) {
+        // The variables are bound and the type function does not accept what they were bound to.
+        std::string what = bound->toString();
+        std::string why  = "it is not defined for its argument";
+        describeUnevaluatedTypeCall(bound, what, why);
+        diags_->of(SemanticDiag::TypeFunctionNotApplicable)
+            .atOrigin(at != nullptr ? at->origin() : 0)
+            .commit(what, why);
+        throw BuildAbortException();
+    }
+    return bound;
 }
 
 Type *Builder::visitTypeNode(const GCT::node_ptr_t &gct) {
@@ -2357,6 +2439,20 @@ Type *Builder::visitTypeNode(const GCT::node_ptr_t &gct) {
     Type *type = resolveTypeNode(gct->dataType(), gct);
     LEAVE("TYPE");
     return type;
+}
+
+} // namespace camel::compile::gir
+
+namespace camel::compile::gir {
+
+std::vector<std::string> genericSignaturesOf(const camel::core::module::Entity &entity) {
+    std::vector<std::string> signatures;
+    for (const generic_template_ptr_t &tmpl : genericTemplatesOfEntity(entity)) {
+        if (tmpl != nullptr && tmpl->funcType != nullptr) {
+            signatures.push_back(tmpl->funcType->toString());
+        }
+    }
+    return signatures;
 }
 
 } // namespace camel::compile::gir

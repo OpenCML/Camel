@@ -6,6 +6,6 @@ func f(x: f32[2, 3], w: f32[3, 5]): f32[..] {
     return g(x @ w)
 }
 func main(): int sync {
-    println(f(ones([2, 3]), ones([3, 5])))
+    println(f(ones::<f32>([2, 3]), ones::<f32>([3, 5])))
     return 0
 }

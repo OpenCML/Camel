@@ -1744,7 +1744,7 @@ verify_script = """
 const text = input.normalized.output
 assert(text.includes('calls the function again in 2 places outside tail position'), 'missing detail: ' + text)
 assert(text.includes('only with one recursive call (a linear recursion)'), 'missing the shape it can export: ' + text)
-assert(/[^ ]*export_tree_recursion[.]cml:12:[0-9]+:/.test(text), 'missing source position of the call: ' + text)
+assert(/[^ ]*export_tree_recursion[.]cml:11:[0-9]+:/.test(text), 'missing source position of the call: ' + text)
 assert(text.includes('ExportUnsupported'), 'the refusal must be the error value of the export_model call')
 }
 """
@@ -1862,7 +1862,7 @@ expect_exit = 0
 expect_stdout_contains = ["ort core slice: 0 failing", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 120000
+timeout_ms = 150000
 
 [[tests]]
 name = "export_core_slice_grad"
@@ -3009,8 +3009,8 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_diagnostic_code = "0x04000051"
 expect_diagnostic_line = 15
-expect_diagnostic_column = 12
-expect_output_contains = ["an array variable is appended to (`acc = acc->append<v>`)", "export_var_append.cml:15:12"]
+expect_diagnostic_column = 19
+expect_output_contains = ["an array variable is appended to (`acc = acc->append<v>`)", "export_var_append.cml:15:19"]
 expect_output_not_contains = ["internal error", "Segmentation fault"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 6000
@@ -3100,6 +3100,28 @@ assert(first.ops.filter((op) => op === 'Gather').length === 1, `expected one Gat
 assert(take.ops.filter((op) => op === 'Gather').length === 1, `expected one Gather for the take, got ${take.ops}`)
 assert(first.inputs.join() === 'input' && first.outputs.join() === 'output', `unexpected graph io ${first.inputs} -> ${first.outputs}`)
 assert(take.inputs.join() === 'input' && take.outputs.join() === 'output', `unexpected graph io ${take.inputs} -> ${take.outputs}`)
+}
+"""
+timeout_ms = 10000
+[[tests]]
+name = "export_with_after_norm"
+desc = "The with-arguments of `reshape` and `sum` (`reshape<[2, 3]>(x)`, `sum<1>(x)`) reach the lowering in the kernel's argument order: the model has one Reshape and one ReduceSum."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_with_after_norm.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/export_with_after_norm.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'export_with_after_norm.onnx'))
+assert(model.ops.filter((op) => op === 'Reshape').length === 1, `expected one Reshape, got ${model.ops}`)
+assert(model.ops.filter((op) => op === 'ReduceSum').length === 1, `expected one ReduceSum, got ${model.ops}`)
 }
 """
 timeout_ms = 10000

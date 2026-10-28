@@ -2357,7 +2357,14 @@ Value Builder::visitDataDecl(cst::DataDecl context, bool topLevel) {
         *dataDeclNode << typeListNode;
     }
 
-    *dataDeclNode << any2node(visitDataList(context->get<cst::DataList>()));
+    if (context->get<cst::DataList>()) {
+        *dataDeclNode << any2node(visitDataList(context->get<cst::DataList>()));
+    } else {
+        // `export let inf: float`: no right side, the value the C++ module supplies.
+        node_ptr_t none = createNodeAs<RepeatedLoad>("Data");
+        setNodeTokenRangeByContext(none, context);
+        *dataDeclNode << none;
+    }
     std::vector<camel::source::SemanticPart> parts;
     if (context->tok(TK::KwLet)) {
         parts.push_back(semanticPart(
@@ -2393,8 +2400,7 @@ Value Builder::visitDataDecl(cst::DataDecl context, bool topLevel) {
 
 /*
 typeDecl
-    : TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
-      (typeExpr | STRING)
+    : TYPE identRef ('<' identDef (',' identDef)* ','? ('>' | '>='))? ('=' typeExpr)?
     ;
 */
 /*
@@ -2455,15 +2461,9 @@ Value Builder::visitResourceClause(cst::ResourceClause context) {
 
 Value Builder::visitTypeDecl(cst::TypeDecl context) {
     ENTER("TypeDecl");
-    string uri;
     Reference ref = qualifyRef(value_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>())));
-    if (context->tok(TK::String)) {
-        uri = context->tok(TK::String)->text();
-        // Remove quotes from the string
-        uri = uri.substr(1, uri.size() - 2);
-    }
 
-    node_ptr_t typeDeclNode = createNodeAs<TypeDeclLoad>(ref, uri);
+    node_ptr_t typeDeclNode = createNodeAs<TypeDeclLoad>(ref);
     setNodeTokenRangeByContext(typeDeclNode, context);
     unwrapNodeAs<TypeDeclLoad>(typeDeclNode)->setDoc(docOf(context));
     if (!context->all<cst::IdentDef>().empty()) {
@@ -2617,8 +2617,10 @@ Value Builder::visitTupleParam(cst::TupleParam context) {
     for (const auto &identDef : context->all<cst::IdentDef>()) {
         names.push_back(identDef->text());
     }
-    // The name is internal: no program writes it, and the position makes it unique.
-    Reference ref("_tuple_" + std::to_string(context->begin()));
+    // The name is internal: no program writes it, and the count of such parameters before it in
+    // the file makes it unique. It does not depend on where the parameter is written, so a file
+    // formatted differently has the same tree.
+    Reference ref("_tuple_" + std::to_string(tupleParams_++));
     node_ptr_t namedPairNode = createNodeAs<NamedPairLoad>(ref);
     namedPairNode->loadAs<NamedPairLoad>()->setTupleNames(std::move(names));
     setNodeTokenRangeByContext(namedPairNode, context);
@@ -3151,19 +3153,22 @@ TypeCaseKind Builder::typeCaseKindOf(cst::TypeCasePattern pattern) {
     // A word that names no shape is told, where it is written, instead of being read as `_`.
     diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
         .at(rangeOf(pattern->firstToken(), pattern->lastToken()))
-        .commit(text, "it is not a shape word (struct, tuple, array, func, #leaf, _)");
+        .commit(text, "it is not a shape word (struct, tuple, array, func, nullable, fallible, map, set, #leaf, _)");
     return TypeCaseKind::Wildcard;
 }
 
-/*
-typeCase
-    : CASE typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
-    ;
-*/
-Value Builder::visitTypeCase(cst::TypeCase context) {
-    ENTER("TypeCase");
+template <class List> static std::vector<cst::TypeCasePattern> patternsOf(const List &list) {
+    std::vector<cst::TypeCasePattern> out;
+    for (const auto pattern : list) {
+        out.push_back(pattern);
+    }
+    return out;
+}
+
+std::vector<TypeCasePattern>
+Builder::typeCasePatternsOf(const std::vector<cst::TypeCasePattern> &written) {
     std::vector<TypeCasePattern> patterns;
-    for (const auto pattern : context->all<cst::TypeCasePattern>()) {
+    for (const auto pattern : written) {
         TypeCasePattern entry;
         // A pattern with a type child is an identity pattern (`case int`, `case T`); the
         // shape words carry no type.
@@ -3175,7 +3180,18 @@ Value Builder::visitTypeCase(cst::TypeCase context) {
         }
         patterns.push_back(std::move(entry));
     }
-    node_ptr_t caseNode = createNodeAs<TypeCaseLoad>(std::move(patterns));
+    return patterns;
+}
+
+/*
+typeCase
+    : CASE typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
+    ;
+*/
+Value Builder::visitTypeCase(cst::TypeCase context) {
+    ENTER("TypeCase");
+    node_ptr_t caseNode = createNodeAs<TypeCaseLoad>(
+        typeCasePatternsOf(patternsOf(context->all<cst::TypeCasePattern>())));
     setNodeTokenRangeByContext(caseNode, context);
     node_ptr_t bodyNode = any2node(visitBlockExpr(context->lastChild().node()));
     *caseNode << bodyNode;
@@ -5100,6 +5116,32 @@ Value Builder::visitRefType(cst::RefType context) {
     return res;
 }
 
+/*
+matchTypeType : 'match' 'type' typeExpr '{' typeArm* '}'
+typeArm       : 'case' typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
+The cases are the cases of `match type` over values, and each holds the type it gives.
+*/
+Value Builder::visitMatchTypeType(cst::MatchTypeType context) {
+    node_ptr_t res = createNodeAs<MatchTypeTypeLoad>();
+    setNodeTokenRangeByContext(res, context);
+    *res << any2node(visitType(context->type()));
+    node_ptr_t arms = createNodeAs<RepeatedLoad>("TypeCase");
+    setNodeTokenRangeByContext(arms, context);
+    for (const auto arm : context->all<cst::TypeArm>()) {
+        *arms << any2node(visitTypeArm(arm));
+    }
+    *res << arms;
+    return res;
+}
+
+Value Builder::visitTypeArm(cst::TypeArm context) {
+    node_ptr_t arm = createNodeAs<TypeCaseLoad>(
+        typeCasePatternsOf(patternsOf(context->all<cst::TypeCasePattern>())));
+    setNodeTokenRangeByContext(arm, context);
+    *arm << any2node(visitType(context->type()));
+    return arm;
+}
+
 Value Builder::visitTypeOfType(cst::TypeOfType context) {
     node_ptr_t res = createNodeAs<TypeExprLoad>(TypeOp::TypeOf);
     setNodeTokenRangeByContext(res, context);
@@ -5367,6 +5409,8 @@ Value Builder::visitType(syn::Node context) {
         return visitFuncType(cst::FuncType(context));
     case NK::TypeOfType:
         return visitTypeOfType(cst::TypeOfType(context));
+    case NK::MatchTypeType:
+        return visitMatchTypeType(cst::MatchTypeType(context));
     case NK::EnumType:
         return visitEnumType(cst::EnumType(context));
     default:

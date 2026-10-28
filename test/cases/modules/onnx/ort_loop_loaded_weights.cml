@@ -33,7 +33,7 @@ with <m: P>
 func step(x: f32[..]): (f32[..], int, float[..], f32[..]) {
     let (h, k) = walk<m>(x, 0)
     let g = with_grad(loss)<m>(x)
-    return (h, k, reshape([g.0], [1]), g.1.w)
+    return (h, k, reshape<[1]>([g.0]), g.1.w)
 }
 
 func main(): int sync {
@@ -41,7 +41,7 @@ func main(): int sync {
     let x = load_npy::<f32>('x.npy')
     let r = step<m>(x)
     save_npy(r.0, 'native_0.npy')
-    save_npy(reshape([r.1], [1]), 'native_1.npy')
+    save_npy(reshape<[1]>([r.1]), 'native_1.npy')
     save_npy(r.2, 'native_2.npy')
     save_npy(r.3, 'native_3.npy')
     let exported = if (get_env('ONNX_OUT') ?? '') != '' then sync {

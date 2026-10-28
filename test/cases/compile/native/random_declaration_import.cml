@@ -1,28 +1,31 @@
 /**
- * The declarations of `random` are what an importer sees: the generator functions take and give
- * their declared types, `randint` an `int`, `key` the module's `Key`, `split` a pair of keys,
- * `permutation` an `int[]`, and `choice`, `sample` and `shuffle` are generic declarations of the
- * element type of their array (`stdlib/random.cml`).
- * Every call reaches the C++ operator.
+ * The declarations of `random` are what an importer sees: `seed` and `next_key` are the two
+ * operators of the global stream, `key` gives the module's `Key`, and `choice`, `sample` and
+ * `shuffle` are generic declarations of the element type of their array, with the key a
+ * configuration (`stdlib/random.cml`). The keyed draws are pure; every call reaches its
+ * operator or its Camel definition.
  */
 
-import { Key, seed, rand, randn, randint, choice, sample, shuffle, key, split, permutation } from random
+import {
+    Key, seed, next_key, rand, randn, key, split, fold, randint, choice, sample, shuffle,
+    permutation, uniform
+} from random
 
 func main(): int sync {
     seed(42)
     let r = rand()
     let n = randn()
-    let i = randint(3, 3)
+    let k: Key = next_key()
     println(r >= 0.0 && r < 1.0)
     println(n > -10.0 && n < 10.0)
-    println(i)
-    println(choice(['solo']))
-    println(len(sample([1, 2, 3], 2)))
-    println(shuffle([7]))
-    let k: Key = key(42)
-    let (a, b) = split(k)
-    'key={} a={} b={}'->format<k, a, b>->println
-    let p: int[] = permutation(k, 4)
+    println(k->randint<3, 4>)
+    println(['solo']->choice<k>)
+    println(len([1, 2, 3]->sample<k, 2>))
+    println([7]->shuffle<k>)
+    let (a, b) = split(key(42))
+    'key={} a={} b={} folded={}'->format<key(42), a, b, fold(key(42), 1)>->println
+    let p: int[] = permutation(key(42), 4)
     println(p)
+    println(uniform::<f32>(key(42)) < f32(1.0))
     return 0
 }

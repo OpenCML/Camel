@@ -172,6 +172,25 @@ void Builder::addParamUse(BodyReach &walk, size_t index, sem::ResourceClass cls,
     found->mode = sem::uniteAccess(found->mode, mode);
 }
 
+std::optional<std::string>
+Builder::moduleVariableOf(const runtime::GraphDraft &draft, draft_node_ref_t port) const {
+    // A capture port stands for the node it captured, which may itself be a capture port of the
+    // function around: follow the chain to the cell, and ask whether it is a module's variable.
+    node_handle_t at = draft.ref(port);
+    for (size_t hops = 0; hops < 64; ++hops) {
+        if (const auto cell = moduleVariableResources_.find(at);
+            cell != moduleVariableResources_.end()) {
+            return cell->second;
+        }
+        const auto origin = captureOriginOf_.find(at);
+        if (origin == captureOriginOf_.end()) {
+            return std::nullopt;
+        }
+        at = origin->second;
+    }
+    return std::nullopt;
+}
+
 void Builder::addAmbientUse(BodyReach &walk, const std::string &name, sem::AccessMode mode) const {
     ResourceSignature &out = walk.reach;
     const auto found =
@@ -221,6 +240,10 @@ bool Builder::readCalleeSignature(BodyReach &walk, const runtime::GraphDraft &dr
             operand = norm[at];
         }
         if (walk.captured.contains(operand)) {
+            if (const auto variable = moduleVariableOf(draft, operand); variable.has_value()) {
+                addAmbientUse(walk, *variable, use.mode); // a variable of a module's top level
+                continue;
+            }
             return false; // a resource of the function around this one
         }
         const auto port = walk.ports.find(operand);
@@ -308,6 +331,11 @@ bool Builder::reachOfOper(DraftGraphBuilder *graph, const runtime::GraphDraft &d
             return false;
         }
         if (walk.captured.contains(inputs[at])) {
+            if (const auto variable = moduleVariableOf(draft, inputs[at]);
+                variable.has_value()) {
+                addAmbientUse(walk, *variable, access.mode); // a variable of a module's top level
+                continue;
+            }
             return false; // a resource of the function around this one
         }
         const auto port = walk.ports.find(inputs[at]);

@@ -39,7 +39,7 @@ func main(): int sync {
 
     // The other operators of the same signature source.
     println(numel(a))
-    println(dim(a, 0))
+    println(dim<0>(a))
     println(len(to_bytes(a)))
 
     // The declaration's own parameter: `t[0]` is the element type the call bound.
@@ -50,7 +50,7 @@ func main(): int sync {
     println(firstDim(ints))
 
     // The tensor spelling still fills the same names, so no existing program changed.
-    let t: f32[..] = ones([2, 3])
+    let t: f32[..] = ones::<f32>([2, 3])
     println(shape(t))
     return 0
 }

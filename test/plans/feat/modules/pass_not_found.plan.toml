@@ -240,12 +240,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "pass_absent_from_rewrite_declaration_module"
-desc = "rewrite::nosuchpass: `rewrite` is a declaration module and declares no pass function, so the diagnostic is the module-specific one instead of the generic unknown-pass answer; the program does not run and the global pass list is not printed."
+desc = "rewrite::nosuchpass: `rewrite` is a declaration module whose engines (`rewrite`, `saturate`, `extract`) have the type of a pass, so the diagnostic is the module-specific one and lists them; the program does not run and the global pass list is not printed."
 kind = "negative"
 case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "rewrite::nosuchpass", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["PassNotProvidedByModule", "Module 'rewrite' provides no pass 'nosuchpass'", "it provides no passes"]
+expect_output_contains = ["PassNotProvidedByModule", "Module 'rewrite' provides no pass 'nosuchpass'", "it provides the passes 'extract', 'rewrite', 'saturate'"]
 expect_output_not_contains = ["not found, available passes are", "2011"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 20000

@@ -1,0 +1,13 @@
+/**
+ * `fail` states a fault on purpose; the warning of the fold pass is for a constant expression
+ * that faults by accident (`1 / 0`). A function whose guard ends in `fail<'Kind'>(message)` is
+ * folded without it.
+ */
+func checked(x: int): int {
+    return if x < 0 then fail<'InvalidArgument'>('x is negative') else x + 1
+}
+
+func main(): int sync {
+    println(checked(2))
+    return 0
+}

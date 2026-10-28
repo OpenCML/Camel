@@ -50,9 +50,9 @@ func main(): int sync {
 | 模块 | 内容 |
 |---|---|
 | `str` | 字符串：按字节的切分、修剪、大小写、替换、查找、截取；按码点的计数、读取、编解码 |
-| `array` | 数组：`sort`、`merge_sort`、`quick_sort`、`insert_sort`、`merge_sorted_arrays`、`argsort`、`reverse`、`take`、`drop`、`unique`、`find`、`sum`、`min`、`max`、`sort_by`、`flat_map` 等（大部分是用 Camel 写的泛型函数，排序的内核是原生算子） |
+| `array` | 数组：`sort`、`argsort`、`reverse`、`take`、`drop`、`chunks`、`unique`、`find`、`find_index`、`sum`、`mean`、`min`、`max`、`argmax`、`argmin`、`sort_by`、`flat_map` 等（大部分是用 Camel 写的泛型函数，原生的只有 `argsort`、形状与布局的原子和排序、求和、最值的内核） |
 | `math` | 常量 `pi`、`e`、`inf`、`nan`（值）；初等函数、取整、`min`/`max`/`clamp`、`gcd`/`lcm`、进制转换、位运算 `bit_and` 等 |
-| `random` | 类型 `Key`；`seed`、`rand`、`randint`、`randn`、`choice`、`sample`、`shuffle`，以及纯的键式随机 `key`、`split`、`permutation` |
+| `random` | 类型 `Key`；纯的键式随机 `key`、`fold`、`split`、`uniform`、`normal`、`uniform`、`normal`、`randint`、`permutation`、`shuffle`、`choice`、`sample`（键是数据或配置：`k->randint<1, 7>`、`xs->shuffle<k>`）；全局流 `seed`、`next_key`（资源 `rng`）和便利函数 `rand`、`randn` |
 | `time` | `now`、`strftime`、`strptime` |
 | `fs` | `exists`、`is_file`、`is_dir`、`mkdir`、`mkdirs`、`remove`、`remove_dir`、`list_dir`、`read_text`、`write_text`、`append_text`、`file_size`、`read_chunk`、`read_bytes`、`write_bytes`、`append_bytes` |
 | `json` | 类型 `Json`；`encode`、`decode`、`decode_as`；`kind`、`is_null`、`get`、`as_bool`、`as_int`、`as_float`、`as_string`、`as_array`、`as_object` |
@@ -60,7 +60,7 @@ func main(): int sync {
 | `re` | `test` |
 | `hash` | `sha256` |
 | `this` | `zen` |
-| `statistics` | `mean`、`stdev`、`variance`、`median`、`quantile` |
+| `statistics` | `stdev`、`variance`、`median`、`quantile`（`mean` 在 `array`）；元素是浮点类型，答元素类型；元素不足是 `InvalidArgument` 故障 |
 | `para` | `unordered_foreach`、`unordered_reduce` |
 | `tensor`、`nn`、`autodiff`、`onnx` | 张量、网络层与优化器、求梯度、ONNX 导出；取行 `take`、`one_hot`，按目标类型重载的 `softmax_cross_entropy`（独热分布或整数类标） |
 | `python` | 嵌入 Python（需要构建时启用） |
@@ -160,7 +160,11 @@ func main(): int sync {
 
 导出的值就是公共 `__root__` 上的那个节点：导入方在顶层直接用它，在函数里经捕获端口取得它，不复制、不重新求值。没有被任何东西用到的导出值不求值（它的初始化表达式里有效应也不执行，被导入的模块里这也不给警告）。
 
-- **不能导出 `var`**：`export var count = 0` 是 `SemanticDiag::ExportedVariable`，定位在这个变量。导出读写它的函数（上面的 `counter`）。
+- **模块顶层的 `var` 是本模块的一个资源**（设计原则 3.5）：资源的名字就是这个变量，身份是模块加名字，与 `resource` 声明的资源相同。`export var count = 0` 导出这个资源，导入方读它、给它赋值，用的是同一个变量。
+  - 函数读它记为对这个资源的读，写它（包括 `v[i] = x`）记为写；由编译器推出，也可以写进 `uses`（`func bump(): int uses count sync`）。读写它的函数不是纯函数：`pure` 的函数读它是 `SemanticDiag::UsesPromiseViolated`，它的类型带着 `uses 模块::count`，`pure` 的参数不接受它。
+  - 读写是效应：在同步块里按书写顺序发生；在非同步的函数体里，作为语句写下、值又没人用的写不执行。
+  - 初值与顶层的 `let` 一样按依赖求值，在第一次读之前算好。
+  - 被求导的函数里，梯度需要经过它时被拒绝，与任何 `var` 相同。
 - 两条按名字的导入带来同名的值（或一个是值、一个是函数）是 `SemanticDiag::ImportNameConflict`；值不组成重载。
 
 ## 5.4 命名空间
@@ -190,7 +194,7 @@ func main(): int sync {
 
 - 命名空间不是一种对象：它是名字里的路径。声明在 `namespace A { namespace B { ... } }` 里的 `f` 叫 `A::B::f`；同一个命名空间可以写成几块。
 - **块内不带前缀的名字**：在命名空间里写的名字依次在所在的命名空间、外层的命名空间、模块顶层里找，取第一个找到的；类型也一样（`namespace Models { type Box = ...; func mk(): Box }`）。
-- **命名空间里可以有值**：`namespace Config { export let limit = 10 }`，用 `Config::limit`。它与模块顶层的 `let` 只差名字里的路径。`var` 可以写，不能导出。
+- **命名空间里可以有值**：`namespace Config { export let limit = 10 }`，用 `Config::limit`。它与模块顶层的 `let` 只差名字里的路径。`var` 可以写，也可以导出，是这个模块的资源。
 - **模块可以用自己的名字限定自己的东西**：`module shapes` 里写 `shapes::area` 与写 `area` 相同（文件名作为模块名时也一样）。
 - 命名空间可以与类型同名，于是 `类型::名字` 成为这个类型的构造函数与工具函数的惯用写法（`enum` 的变体就是这样：`Shape::Circle`、`Shape::Empty`）。
 - 在命名空间里导出的名字保留限定名：`namespace Tools { export func inc(...) }` 在别的模块里是 `模块::Tools::inc`，也可以 `import { inc } from 模块::Tools`。
@@ -231,7 +235,7 @@ func f(): int {
   import { trim, split, to_upper } from str
   import { sort_by, take } from array
 
-  let words = '  pear, fig ,apple '->trim->split<','>->map<(w: string) => trim(w)>
+  let words = '  pear, fig ,apple '->trim->split<','>->map<(w) => trim(w)>
   let shortest = words->sort_by<(w: string) => len(w)>->take<2>     // ['fig', 'pear']
   ```
 

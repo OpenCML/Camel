@@ -1,0 +1,13 @@
+/** `pure` promises that a call touches no resource, and a top-level `var` is one. */
+
+
+var cnt: int = 0
+
+func peek(): int pure {
+    return cnt
+}
+
+func main(): int sync {
+    println(peek())
+    return 0
+}

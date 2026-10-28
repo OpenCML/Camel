@@ -48,3 +48,8 @@
 
 - `unfold(state, step)` 是核心里唯一从（状态，步进函数）造出流的原语；若 `T..` 不能在 Camel 里用 lambda 造出，`unfold` 就是核心的一个原子（`stream:unfold`），本文件里的 Camel 体改为无体声明，其余全部不变。待验证点 1 因此成为核心项。
 - 同名函数（`map`、`filter`、`take`、`zip`）与前奏的数组版是一个重载集，不遮蔽（核心的跨模块重载规则，见 `std.notes.md` 修订）；待验证点 5 作废。
+
+## 接入时定下的（2026-10-27）
+
+- `tee` 是 Camel 函数，宽度是 `with` 参数：`s->tee<n>`，默认 8。两侧共用的缓冲放在被闭包写的变量里，原生核函数做不到返回共享可变状态的闭包，所以不设 `#op`。
+- 以流为状态的 `unfold(s, …)` 写法会被 `StreamCaptured` 拒：`unfold` 返回的闭包会持有这个流。`map`、`filter`、`chunks` 把上游流放进元组状态，经私有的 `advance` 推进。

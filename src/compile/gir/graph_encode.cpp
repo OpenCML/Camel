@@ -305,6 +305,20 @@ remapNodeRef(draft_node_ref_t sourceRef, const std::vector<draft_node_ref_t> &ma
     return mapped;
 }
 
+/// The mapping's place for a predecessor whose edge carries no liveness of its own, or
+/// `kInvalidNodeRef` when it has none: an order predecessor nothing else reaches is dead code and
+/// the runtime graph does not name it (see the note at the order and sync inputs below). The node
+/// being live is what `remapNodeRef` above is the seal for; this is the edge that may name a dead
+/// node and must not.
+draft_node_ref_t
+remapNodeRefIfMapped(draft_node_ref_t sourceRef, const std::vector<draft_node_ref_t> &mapping) {
+    if (sourceRef == runtime::kInvalidNodeRef) {
+        return runtime::kInvalidNodeRef;
+    }
+    ASSERT(sourceRef < mapping.size(), "Compile encode encountered an out-of-range node ref.");
+    return mapping[sourceRef];
+}
+
 class EncodeSession {
   public:
     EncodeSession(
@@ -414,6 +428,17 @@ class EncodeSession {
         for (size_t i = 1; i < sourceStaticSlots.size() && i < sourceStaticTypes.size(); ++i) {
             prepared.draft->appendStaticSlot(sourceStaticSlots[i], sourceStaticTypes[i]);
         }
+
+        // The front-end freeze dissolves a GATE that waits on nothing and has a value user: it is
+        // plain forwarding, and both places a graph is submitted dissolve it (the review of
+        // 2026-10-26, docs/handover/reviews/questions-2026-10-26-late.md, answer 3 -- "没有任何
+        // 等待、只有数据使用者的 GATE 就是纯转发，运行时提交与前端冻结都把它溶解掉"). The
+        // runtime commit already does it (src/runtime/draft_session.cpp, dissolveUnorderedGates);
+        // this is the freeze's half, so validateRuntimeGraphPayload below never sees such a gate.
+        // Whether an effect was dropped beside it is reportDroppedEffects' to say, not this
+        // structural check's. A gate that still waits -- on the sync chain's tail or on a control
+        // input -- and one with no value input are not this case and keep their node.
+        graph->draft().dissolveUnorderedGates();
 
         const std::vector<draft_node_ref_t> liveNodes = collectLiveDraftNodes(graph->draft());
         CAMEL_LOG_INFO_S(
@@ -583,10 +608,13 @@ class EncodeSession {
             // predecessor is live by definition (the statement before it is "used"), so it is
             // always there.
             auto remapLiveInputs = [&](std::span<const draft_node_ref_t> sourceInputs,
-                                       std::vector<draft_node_ref_t> &target) {
+                                       std::vector<draft_node_ref_t> &target,
+                                       bool predecessorMayBeDead) {
                 target.reserve(sourceInputs.size());
                 for (draft_node_ref_t input : sourceInputs) {
-                    const draft_node_ref_t mapped = remapNodeRef(input, sourceToPrepared);
+                    const draft_node_ref_t mapped = predecessorMayBeDead
+                                                        ? remapNodeRefIfMapped(input, sourceToPrepared)
+                                                        : remapNodeRef(input, sourceToPrepared);
                     if (mapped != runtime::kInvalidNodeRef) {
                         target.push_back(mapped);
                     }
@@ -595,8 +623,10 @@ class EncodeSession {
             remapInputs(graph->draft().normInputsOf(sourceId), pendingNormInputs.back());
             remapInputs(graph->draft().withInputsOf(sourceId), pendingWithInputs.back());
             remapInputs(graph->draft().ctrlInputsOf(sourceId), pendingCtrlInputs.back());
-            remapLiveInputs(graph->draft().orderInputsOf(sourceId), pendingOrderInputs.back());
-            remapLiveInputs(graph->draft().syncInputsOf(sourceId), pendingSyncInputs.back());
+            remapLiveInputs(
+                graph->draft().orderInputsOf(sourceId), pendingOrderInputs.back(), true);
+            remapLiveInputs(
+                graph->draft().syncInputsOf(sourceId), pendingSyncInputs.back(), false);
 
             sourceToPrepared[sourceId] = prepared.draft->addNode(init);
         }

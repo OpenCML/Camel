@@ -15,7 +15,7 @@
 | 名字 | 处理 | 理由 |
 |---|---|---|
 | `pi`、`e` | 改为 Camel 的 `export let` | 它们只是两个常量，不必由 C++ 导出（C++ 里的 `pi`、`e` 删掉，免得两份值）。类型 `float`；要 `f32` 写 `f32(pi)` |
-| `inf`、`nan` | 保留（C++ 值，`// value`） | 在 Camel 里写不出（`1.0 / 0.0` 是常量折叠的边界情形） |
+| `inf`、`nan` | 保留；写成不带右边的 `export let`（C++ 值） | 在 Camel 里写不出：浮点除以零是故障，`1.0 / 0.0` 不是可写的常量。原则 6.4：与不写体的 `func`、不写右边的 `type` 同一条规则 |
 | `sqrt`、`exp`、`expm1`、`log`、`log2`、`log10`、`log1p`、`sin`、`cos`、`tan`、`asin`、`acos`、`atan`、`sinh`、`cosh`、`tanh`、`floor`、`ceil`、`round`、`trunc` | 保留；各合并为一个泛型定义 | 见上；每个一行体，内核 `<name>_d` |
 | `pow`、`hypot`、`atan2` | 保留；同上，双参数 | |
 | `sqrt(i32/int)` | 删除 | 隐式转换 |

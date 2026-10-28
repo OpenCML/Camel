@@ -65,3 +65,8 @@ case = "../../../cases/tools/lsp/fstring.test.mjs"
 name = "lsp.namespaces"
 desc = "Namespace members by their full names (design principles 10.2): hover (functions, a nested namespace, a namespace written as a path, values), the outline, completion inside the namespace and after `N::` (labelled with the full name, written by the member's own)."
 case = "../../../cases/tools/lsp/namespaces.test.mjs"
+
+[[tests]]
+name = "lsp.module_identity"
+desc = "Entry self-qualification and native declarations both resolve using the source filename."
+case = "../../../cases/tools/lsp/module_identity.test.mjs"

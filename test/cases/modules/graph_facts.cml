@@ -1,5 +1,5 @@
 import { reshape } from tensor
-import { Node, Graph, current, graphs, name, nodes, effects, shape, permissions } from graph
+import { Node, Graph, name, nodes, effects, shape_text, permissions, graphs_of } from graph
 
 func quiet(x: int): int {
     return x * 2 + 1
@@ -15,7 +15,7 @@ func fragile(xs: int[]): int {
 }
 
 func grid(): f32[..] {
-    return reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
+    return reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
 }
 
 func describe(g: Graph): string {
@@ -23,7 +23,8 @@ func describe(g: Graph): string {
 }
 
 func withName(text: string): Graph[] {
-    return graphs(current())->filter<(g: Graph): bool => name(g) == text>
+    let all = concat(concat(graphs_of(quiet), graphs_of(loud)), concat(graphs_of(fragile), graphs_of(grid)))
+    return all->filter<(g: Graph): bool => name(g) == text>
 }
 
 func main(): int sync {
@@ -34,7 +35,7 @@ func main(): int sync {
     println(q.may_fault)
     println(l.external)
     println(f.may_fault)
-    println(nodes(withName('grid')[0])->map<(n: Node): string => shape(n) ?? '-'>)
+    println(nodes(withName('grid')[0])->map<(n: Node): string => shape_text(n) ?? '-'>)
     println(nodes(withName('quiet')[0])->map<(n: Node): int => permissions(n)>)
     return 0
 }

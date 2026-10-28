@@ -19,8 +19,8 @@ func total(s: int..): int {
 }
 
 func main(): int sync {
-    let (first, second) = stream::tee(count(3), 2)
-    let (third, fourth) = stream::tee(first, 2)
+    let (first, second) = stream::tee<2>(count(3))
+    let (third, fourth) = stream::tee<2>(first)
     println(total(second))
     println(total(third))
     println(total(fourth))

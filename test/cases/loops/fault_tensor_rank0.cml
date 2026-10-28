@@ -9,12 +9,12 @@
 import { zeros, reshape } from tensor
 
 func toShape::<T>(t: T[..], s: int[]): T[..] {
-    return reshape(t, s)
+    return reshape<s>(t)
 }
 
 func main(): int sync {
     let no: int[] = []
-    let s  = toShape(zeros([2]), no)
+    let s  = toShape(zeros::<f32>([2]), no)
     let n  = loop c = 0 for x in s do c + 1
     println(n)
     return 0

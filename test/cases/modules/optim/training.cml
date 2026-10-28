@@ -47,12 +47,12 @@ func loss(x: f32[..], labels: i64[..]): float {
 func model_at(): Mlp {
     return {
         l0: {
-            weight: reshape(f32(range(12)), [3, 4]) * 0.05 - 0.3,
-            bias: reshape(f32(range(4)), [4]) * 0.01
+            weight: reshape<[3, 4]>(f32(range(12))) * 0.05 - 0.3,
+            bias: reshape<[4]>(f32(range(4))) * 0.01
         },
         l1: {
-            weight: reshape(f32(range(16)), [4, 4]) * 0.05 - 0.4,
-            bias: reshape(f32(range(4)), [4]) * 0.01 + 0.02
+            weight: reshape<[4, 4]>(f32(range(16))) * 0.05 - 0.4,
+            bias: reshape<[4]>(f32(range(4))) * 0.01 + 0.02
         }
     }
 }
@@ -67,7 +67,7 @@ func drift(a: Mlp, b: Mlp): float {
 
 func main(steps: int): int sync {
     // A tiny deterministic batch: four samples of three features, four class ids.
-    let x = reshape(f32(range(12)), [4, 3]) * 0.125 - 0.5
+    let x = reshape<[4, 3]>(f32(range(12))) * 0.125 - 0.5
     let labels = int(range(4))
     let model = model_at()
     let loss_with_grad = with_grad(loss)

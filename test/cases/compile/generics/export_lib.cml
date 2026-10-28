@@ -21,7 +21,7 @@ export func inc(x: int): int {
 }
 
 export func rev::<T>(xs: T[]): T[] {
-    return if len(xs) <= 1 then keep(xs) else concat(rev(tail(xs)), [head(xs)])
+    return if len(xs) <= 1 then keep(xs) else concat(rev(xs[1:]), [xs[0]])
 }
 
 export func plus_helper::<T>(xs: T[]): int {

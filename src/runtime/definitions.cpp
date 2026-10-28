@@ -7,6 +7,7 @@
  */
 
 #include "camel/runtime/definitions.h"
+#include "camel/runtime/operator_instance.h"
 
 #include "camel/compile/gir/draft_graph_builder.h"
 #include "camel/compile/gir/encode.h"
@@ -250,9 +251,13 @@ DefinitionStore::library(const std::string &name, std::string &problem) {
 
 std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction(
     const std::string &moduleName, const std::string &functionName, std::string &problem,
-    std::optional<core::error::DiagLabel> *errorLocation, LibraryLookup *lookup) {
+    std::optional<core::error::DiagLabel> *errorLocation, LibraryLookup *lookup,
+    core::type::FunctionType *expected) {
     std::lock_guard lock(mutex_);
-    const std::string key = moduleName + "::" + functionName;
+    std::string key = moduleName + "::" + functionName;
+    if (expected != nullptr) {
+        key += "@" + std::to_string(reinterpret_cast<uintptr_t>(expected));
+    }
     if (auto it = functions_.find(key); it != functions_.end()) {
         problem = it->second.problem;
         if (lookup != nullptr) {
@@ -292,7 +297,7 @@ std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction
     std::shared_ptr<camel::compile::gir::DraftGraphBuilder> rootGraph;
     UserDefinedModule::ProgramStatus status = UserDefinedModule::ProgramStatus::Failed;
     try {
-        status = module->compileAsProgram(functionName, problem, rootGraph);
+        status = module->compileAsProgram(functionName, problem, rootGraph, expected);
     } catch (const core::error::DiagnosticsLimitExceededBaseException &) {
         // The compile stopped at the diagnostics limit of the context. In a `--timeit` context
         // that limit is the first error, which is a property of the iteration, not of the
@@ -320,7 +325,12 @@ std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction
         // failed instead of stitching that text into its message. A failure with no
         // position (an imported module that does not compile) keeps its reason in the message.
         auto location = firstErrorLocation(*module);
-        if (location) {
+        if (expected != nullptr && !problem.empty() && !location) {
+            // A generic pass has no instance for this program's function: its own reason.
+            problem = std::format(
+                "'{}::{}' cannot be applied to a function of type {}: {}", moduleName,
+                functionName, expected->normTypeAt(0)->toString(), problem);
+        } else if (location) {
             problem = std::format("its library '{}' does not compile", moduleName);
         } else {
             problem = std::format(
@@ -493,12 +503,10 @@ ExpandResult expandDefinition(
     // The arguments: the node's operands, by the declared binding, each of a type the
     // definition takes (an operator may accept more than its definition does: a softmax of an
     // integer tensor is not expanded). Checked before the draft is changed.
-    const std::vector<gc_node_ref_t> norm(
-        draft.normInputsOf(node).begin(),
-        draft.normInputsOf(node).end());
-    const std::vector<gc_node_ref_t> with(
-        draft.withInputsOf(node).begin(),
-        draft.withInputsOf(node).end());
+    // The operands in kernel order, which is the order a declared binding counts in.
+    const KernelArguments kernelArguments = kernelArgumentsOf(draft, node);
+    const std::vector<gc_node_ref_t> &norm = kernelArguments.norm;
+    const std::vector<gc_node_ref_t> &with = kernelArguments.with;
     const auto ports = definition->graph->normPorts();
     std::vector<std::optional<gc_node_ref_t>> bound;
     for (size_t i = 0; i < definition->definition.params.size(); ++i) {

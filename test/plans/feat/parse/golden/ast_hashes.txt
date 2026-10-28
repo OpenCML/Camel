@@ -1,7 +1,7 @@
 3f5dd9cac3ffa316 ok test/cases/parse/repeated_type_marks.cml
 1f4dbd326a3d6b30 ok test/cases/parse/constructs/comprehensions.cml
-40785e121ebb77ef ok test/cases/parse/constructs/constas.cml
-ceb680f613ea1735 ok test/cases/parse/constructs/constas_param.cml
+cc43fe6407f12477 ok test/cases/parse/constructs/constas.cml
+3ecc5266cedbcedb ok test/cases/parse/constructs/constas_param.cml
 faecc6419e79ddb9 ok test/cases/parse/constructs/enum.cml
 2a95cf1b305b7a8e ok test/cases/parse/constructs/fact.cml
 9ef3aac863271473 ok test/cases/parse/constructs/fstring.cml
@@ -86,7 +86,7 @@ b8addafb089f0cb0 ok probes/probe_d008.cml
 49ff2bb8398fd6f7 ok probes/probe_d009.cml
 88f619d1feb9c4c6 ok probes/probe_d010.cml
 2257a05109370dae ok probes/probe_d011.cml
-3cb9d3b431318410 ok probes/probe_d012.cml
+8174c5edba8ac4b8 no probes/probe_d012.cml
 f4de49be2b0fe9c9 ok probes/probe_d013.cml
 4af9d932fdf00658 ok probes/probe_d014.cml
 5ca64d38c1cae276 ok probes/probe_d015.cml
@@ -289,7 +289,7 @@ f5455dba1e5745cc ok probes/probe_s179.cml
 af027afe6b7fe7d7 ok probes/probe_s180.cml
 7b4310ec9fc7c323 ok probes/probe_s181.cml
 70bfffa12eca3484 ok probes/probe_s182.cml
-f0e58d309805676b ok probes/probe_s183.cml
+f7377e5f4c7cf8c5 no probes/probe_s183.cml
 35a0fb1931638eb0 ok probes/probe_s184.cml
 467b21ef1822dc85 ok probes/probe_s185.cml
 5f82009acecd42d0 ok probes/probe_s186.cml

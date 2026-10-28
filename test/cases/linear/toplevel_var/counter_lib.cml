@@ -1,0 +1,9 @@
+/** A module whose state is a top-level `var`: exported, it is a resource other modules read and write. */
+
+
+export var count = 0
+
+export func bump(): int sync {
+    count += 1
+    return count
+}

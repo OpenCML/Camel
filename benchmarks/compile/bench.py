@@ -775,7 +775,12 @@ def cmd_check(_args) -> int:
             # declaration in the standard library (see pass_loaded_modules/stdlib_declaration).
             loaded = r.get("modules_loaded", [])
             user = r.get("modules_user", [])
-            library = r.get("modules_library", [])
+            # The prelude (stdlib/prelude.cml: the declarations of the built-in functions) and the
+            # module it imports are compiled with every program, whatever the pipeline: they are
+            # not what a pass loaded on demand, so they are left out of that comparison.
+            always = ("prelude", "types")
+            library_all = r.get("modules_library", [])
+            library = [m for m in library_all if m not in always]
             counter = r.get("counters", {}).get("modules")
             if not loaded:
                 problems.append(f"{name}: the phase report names no module: {r.get('counters')}")
@@ -789,7 +794,7 @@ def cmd_check(_args) -> int:
             if sorted(user) != sorted(own):
                 problems.append(
                     f"{name}: the program's own modules are {own} ({len(own)}), but the run loaded "
-                    f"{len(loaded)} in total: own {user}; library {library}")
+                    f"{len(loaded)} in total: own {user}; library {library_all}")
             if r["pipeline"] == "passes":
                 demanded = r.get("pass_loaded", [])
                 if not library:

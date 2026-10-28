@@ -3,11 +3,11 @@ import { run_preferred_resident, download } from tiles
 
 func product(a: f32[..], b: f32[..]): f32[..] { return a @ b }
 func normalize(x: f32[..]): f32[..] {
-    let e = exp(x - max(x, 1, true))
-    return e / sum(e, 1, true)
+    let e = exp(x - max<1, true>(x))
+    return e / sum<1, true>(e)
 }
 func add(a: f32[..], b: f32[..]): f32[..] { return a + b }
-func flatten(x: f32[..]): f32[..] { return reshape(x, [6]) }
+func flatten(x: f32[..]): f32[..] { return reshape<[6]>(x) }
 func main(): int sync {
     seed(17)
     let a = random([17, 35], -1.0, 1.0)
@@ -19,7 +19,7 @@ func main(): int sync {
     println(sum(abs(download(run_preferred_resident<add>((x, bias))) - add(x, bias))))
     let changed = x + 2.0
     println(sum(abs(download(run_preferred_resident<add>((changed, bias))) - add(changed, bias))))
-    let small = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
+    let small = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     println(sum(abs(download(run_preferred_resident<flatten>(small)) - flatten(small))))
     return 0
 }

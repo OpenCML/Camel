@@ -7,12 +7,13 @@
  * values of the matched subgraph. A condition is pure: it reads the draft and answers whether the
  * rule applies to this match.
  */
-import { Program, Node, Graph, graphs, nodes, op, op_name, name, constant, type_of, type_name } from graph
+import { Node, Graph, nodes, op, op_name, name, constant, type_of, type_name, graphs_of } from graph
+import { nodes as sizeCost } from rules
 import { rewrite, saturate, extract } from rewrite
 
 /// Whether the node is the constant 0: a fact read of the draft.
 func isZeroConst(n: Node): bool {
-    return match constant(n, 0) {
+    return match constant::<int>(n) {
         case null => false
         case v => v == 0
     }
@@ -42,15 +43,15 @@ rule mul_sum_by_shape(x: int, y: int) when isAddNode(y) { x * y => y }
 rule int_double(x: int) when typeText(x) == 'int' { x + x => x * 2 }
 rule float_double(x: float) when typeText(x) == 'float' { x + x => x * 2.0 }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [add_zero_const, mul_sum_by_shape, int_double, float_double])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[add_zero_const, mul_sum_by_shape, int_double, float_double]>
 }
 
-export func saturated(p: Program): Program! {
-    let tabled = saturate(p, [add_zero_const, mul_sum_by_shape, int_double, float_double], 8)
+export func saturated::<F>(p: F): F! {
+    let tabled = p->saturate<[add_zero_const, mul_sum_by_shape, int_double, float_double], rounds: 8>
     return match tabled {
         case error e => tabled
-        case q => extract(q, 'nodes')
+        case q => q->extract<sizeCost>
     }
 }
 
@@ -61,19 +62,19 @@ func opText(n: Node): string {
     }
 }
 
-func nodesOf(p: Program, function: string): Node[] {
-    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+func nodesOf::<F>(p: F, function: string): Node[] {
+    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
-func countOf(p: Program, function: string, operator: string): int {
+func countOf::<F>(p: F, function: string, operator: string): int {
     return len(nodesOf(p, function)->filter<(n: Node): bool => opText(n) == operator>)
 }
 
 /// Prints the add and product counts of the functions of the target, so the tests can see what a
 /// condition let through and what it refused. The int rules use the 64-bit operators, the float
 /// ones the double operators.
-export func report(p: Program): Program! sync {
+export func report::<F>(p: F): F! sync {
     println('byConst', countOf(p, 'byConst', ':op/add_l'))
     println('notConst', countOf(p, 'notConst', ':op/add_l'))
     println('mulSum', countOf(p, 'mulSum', ':op/mul_l'), countOf(p, 'mulSum', ':op/add_l'))

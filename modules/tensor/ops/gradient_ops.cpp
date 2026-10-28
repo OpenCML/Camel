@@ -369,8 +369,10 @@ std::vector<OpDef> gradientOps() {
         .params        = {{"t", ParamKind::TensorLike}, {"axis", ParamKind::Int}},
         .resultDoc     = "int",
         .infer         = intScalar,
-        .kernel        = &dimKernel,
+        .kernel        = &positionally<dimKernel>,
         .traits        = {},
+        .withAfterNorm = true,
+        .ordinaryParams = 1,
         .foldFromTypes = [](const InferContext &ctx, mm::IAllocator &) -> std::optional<slot_t> {
             const auto shape = ctx.facts(0).shape;
             const auto axisArg = ctx.constInt(1);

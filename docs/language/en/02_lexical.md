@@ -17,7 +17,7 @@ This chapter describes the lexical structure of source code. The token table is 
   A next line that starts with `-`, `+`, `!`, `~`, `@`, `(`, `[`, `{`, a name, a literal or a statement keyword is a **new statement**. To write an addition or a subtraction on two lines, leave the operator at the end of the first (`a +`, then `b`); a line that starts with `+` is not a statement and gives `SyntaxDiag::LineStartsWithOperator`.
 - A `;` still separates statements on one line. Two statements on one line may also have nothing between them (the first ends where its expression cannot go on), but `;` is clearer.
 - **A call, a subscript or angle-bracket arguments must directly follow the expression before them**, with no whitespace in between: `f(1)`, `xs[0]`, `scale<3>`. `f (1)` is the two expressions `f` and `(1)`.
-- **Angle brackets and comparisons.** A `<` that touches a name, a literal, `)`, `]`, `}` or `>` before it opens an angle-bracket argument list; every other `<` is less-than. So **the comparison `<` needs a space before it**: `i < n`. `i<n` is read as "`i` with angle-bracket arguments", the parse then fails, and the diagnostic is `SyntaxDiag::ComparisonNeedsSpace`. `<=` is always the comparison (`<=>` is the two-way arrow of a rule declaration, see [8](08_top_level_and_grammar.md)). Inside an angle-bracket list (not inside a bracket or a block within it), a `>` that touches the token before it, or starts its line, closes the list; a `>` after a space is greater-than. `xs->filter<(x: int): bool => x > 1>` therefore reads as written, and `a<b<c>>` closes two lists. A closing `>` written after a space (`f<a, b >`) gives `SyntaxDiag::AngleCloseAfterSpace`. Outside angle brackets `>` is the comparison with or without a space.
+- **Angle brackets and comparisons.** A `<` that touches a name, a literal, `)`, `]`, `}` or `>` before it opens an angle-bracket argument list; every other `<` is less-than. So **the comparison `<` needs a space before it**: `i < n`. `i<n` is read as "`i` with angle-bracket arguments", the parse then fails, and the diagnostic is `SyntaxDiag::ComparisonNeedsSpace`. `<=` is always the comparison (`<=>` is the two-way arrow of a rule declaration, see [8](08_top_level_and_grammar.md)). Inside an angle-bracket list (not inside a bracket or a block within it), a `>` that touches the token before it, or starts its line, closes the list; a `>` after a space is greater-than. `xs->filter<(x) => x > 1>` therefore reads as written, and `a<b<c>>` closes two lists. A closing `>` written after a space (`f<a, b >`) gives `SyntaxDiag::AngleCloseAfterSpace`. Outside angle brackets `>` is the comparison with or without a space.
 - **A `<` after `::` opens a list too.** Type parameters and explicit type arguments are both written `::<…>` ([7.5](07_statements.md#75-generic-functions)): `func first::<T>(xs: T[]): T`, `first::<int>(xs)`, `let f = id::<int>`. `x::<y` is therefore not read as a comparison: a `<` after `::` (other than `<=`) always opens an angle-bracket argument list.
 - Source files are read as UTF-8.
 
@@ -82,6 +82,10 @@ The other way round, `func` and `type` among the position names are reserved wor
 | Type and pattern positions | `struct` | in a `match type` case pattern: names the shape of a struct |
 | Type and pattern positions | `tuple` | in a `match type` case pattern: names the shape of a tuple |
 | Type and pattern positions | `array` | in a `match type` case pattern: names the shape of an array |
+| Type and pattern positions | `nullable` | in a `match type` case pattern: names the shape of a `T?` |
+| Type and pattern positions | `fallible` | in a `match type` case pattern: names the shape of a `T!` |
+| Type and pattern positions | `map` | in a `match type` case pattern: names the shape of a map |
+| Type and pattern positions | `set` | in a `match type` case pattern: names the shape of a set |
 | Type and pattern positions | `leaf` | in a `match type` case pattern: the `leaf` after a `#` (`case #leaf =>`) |
 | Type and pattern positions | `error` | in a `case` pattern of a `match`: the error taken out of a failed `T!`, written as the two words `error e` |
 | Type and pattern positions | `fields` | in the head of a `static for` or a `static loop`: the `fields` after `in` (a type follows, and it walks names, types and tags) |
@@ -177,7 +181,7 @@ The other way round, `func` and `type` among the position names are reserved wor
 
 - **An octal digit is not an escape**: only a bare `\0` is the null byte. A `0` followed by another octal digit is an unknown escape, not a byte: `\01` is `\01`, `\012` is `\012`, and `\101` and `\8` are the same; each is kept as written and warns with `LexicalDiag::InvalidEscapeSequence` (one code and one message shape, with no diagnostic of its own for octal). `\x` with no hexadecimal digit and a `\u{...}` that is not a scalar value are still kept as written by the table above; they are not unknown escapes here.
 - `\$` is a `$` in a formatted string too. The one addition is `\${` (a dollar sign immediately followed by a left brace): in a formatted string it is the **structural escape** that writes a literal `${` and starts no interpolation, see [2.5.4.1](#2541-formatted-strings); an ordinary or a triple-quoted string has no `${` meaning, so `\${` there is the character escape `\$` followed by `{`, which is also `${`.
-- A string is a sequence of bytes. `len` gives the number of bytes: `len('héllo')` is 6, `len('中文')` is 6.
+- A string is valid UTF-8 text, and its length and subscripts count code points: `len('héllo')` is 5, `len('中文')` is 2; a sequence of bytes is `Bytes`.
 
 #### 2.5.4.1 Formatted strings
 

@@ -3,7 +3,7 @@
  * to count from the end).
  */
 
-func last_two(xs: int[], n: int): int[] { return xs->slice<n, len(xs)> }
+func last_two(xs: int[], n: int): int[] { return xs[n:len(xs)] }
 
 func main(): int sync {
     let xs = [10, 20, 30]

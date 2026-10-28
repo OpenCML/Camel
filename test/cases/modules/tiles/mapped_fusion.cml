@@ -2,7 +2,7 @@ import { random, seed, sum, abs, transpose, reshape } from tensor
 import { inspect, benchmark, run_preferred_resident, download } from tiles
 
 func pipeline(a: f32[..], b: f32[..]): f32[..] {
-    return reshape(slice(transpose((a + 1.0) * (b + 2.0)), 0, 1, 10, 2), [35])
+    return reshape<[35]>(slice(transpose((a + 1.0) * (b + 2.0)), 0, 1, 10, 2))
 }
 func forked(x: f32[..]): f32[..] {
     let t = transpose(x + 1.0)

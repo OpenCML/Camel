@@ -18,7 +18,7 @@ type TinyRnn = {
 
 with <model: TinyRnn>
 func rnn_loss(x0: f32[..], x1: f32[..], target: f32[..]): float {
-    let h0 = zeros([1, 2])
+    let h0 = zeros::<f32>([1, 2])
     let h1 = tanh((x0 @ model.wxh) + (h0 @ model.whh) + model.b)
     let h2 = tanh((x1 @ model.wxh) + (h1 @ model.whh) + model.b)
     let pred = (h2 @ model.why) + model.by
@@ -32,8 +32,8 @@ func init(): TinyRnn {
         wxh: full([2, 2], f32(0.1)),
         whh: full([2, 2], f32(0.1)),
         why: full([2, 1], f32(0.1)),
-        b: zeros([2]),
-        by: zeros([1])
+        b: zeros::<f32>([2]),
+        by: zeros::<f32>([1])
     }
 }
 

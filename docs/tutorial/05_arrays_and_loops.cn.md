@@ -13,7 +13,7 @@
 let xs = 1..11        // [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 ```
 
-数组是**值**，不是可以被别人改掉的容器：`concat(xs, [11])`、`xs->slice<0, 3>` 都返回新数组，`xs` 不变
+数组是**值**，不是可以被别人改掉的容器：`concat(xs, [11])`、`xs[0:3]` 都返回新数组，`xs` 不变
 （第 2 章）。索引越界是故障，程序带位置终止（第 7 章）。
 
 ## 高阶算子
@@ -26,8 +26,8 @@ let xs = 1..11        // [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 func main(): int sync {
     let xs = 1..11    // [1, ..., 10]
-    let squares = xs->map<(x: int): int => x * x>
-    let evens = squares->filter<(x: int): bool => x % 2 == 0>
+    let squares = xs->map<(x) => x * x>
+    let evens = squares->filter<(x) => x % 2 == 0>
     let total = evens->reduce<(acc: int, x: int): int => acc + x, 0>
 
     println(xs)
@@ -36,11 +36,11 @@ func main(): int sync {
     println(total)
 
     // Arrays are values: slice and concat return new arrays.
-    let ys = concat(xs->slice<0, 3>, [99])
-    println(ys, len(ys), head(ys))
+    let ys = concat(xs[0:3], [99])
+    println(ys, len(ys), ys[0])
 
     // foreach runs its function for each element, in order.
-    ['a', 'b', 'c']->foreach<(s: string) => sync { println('item', s) }>
+    ['a', 'b', 'c']->foreach<(s) => sync { println('item', s) }>
     return 0
 }
 ```
@@ -125,17 +125,17 @@ camel docs/tutorial/examples/05_loops.cml
 // Run: camel docs/tutorial/examples/05_map_order.cml
 //      camel docs/tutorial/examples/05_map_order.cml std::prl
 
-import { seed, randint } from random
+import { seed, randint, next_key } from random
 
 func main(): int sync {
     seed(42)
-    // Wrong tool: randint advances a hidden state, so each element depends on which ran first.
-    let drawn = 0..8->map<(i: int): int => randint(0, 99)>
+    // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
+    let drawn = 0..8->map<(i) => next_key()->randint<0, 100>>
     println(drawn)
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0]->slice<0, 0>>
+    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [next_key()->randint<0, 100>]), [0][0:0]>
     println(ordered)
     return 0
 }
@@ -146,8 +146,8 @@ camel docs/tutorial/examples/05_map_order.cml
 ```
 
 ```text
-[75, 63, 75, 13, 90, 9, 57, 37]
-[75, 63, 75, 13, 90, 9, 57, 37]
+[22, 72, 89, 99, 60, 96, 66, 2]
+[22, 72, 89, 99, 60, 96, 66, 2]
 ```
 
 在顺序执行的后端上（默认的 `std::nvm`，以及 `std::fvm`、`std::jit`），两行一样，每次运行都一样。
@@ -159,17 +159,17 @@ camel docs/tutorial/examples/05_map_order.cml
 // Run: camel docs/tutorial/examples/05_map_order.cml
 //      camel docs/tutorial/examples/05_map_order.cml std::prl
 
-import { seed, randint } from random
+import { seed, randint, next_key } from random
 
 func main(): int sync {
     seed(42)
-    // Wrong tool: randint advances a hidden state, so each element depends on which ran first.
-    let drawn = 0..8->map<(i: int): int => randint(0, 99)>
+    // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
+    let drawn = 0..8->map<(i) => next_key()->randint<0, 100>>
     println(drawn)
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0]->slice<0, 0>>
+    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [next_key()->randint<0, 100>]), [0][0:0]>
     println(ordered)
     return 0
 }
@@ -180,7 +180,7 @@ camel docs/tutorial/examples/05_map_order.cml std::prl
 ```
 
 换成并行调度 `std::prl`，第一行的顺序就不再有保证，每次运行可能不同；某一次运行的第一行是
-`[37, 75, 57, 63, 75, 13, 90, 9]`，第二行仍然是 `[75, 63, 75, 13, 90, 9, 57, 37]`。这是语言规定的行为
+`[66, 22, 96, 72, 89, 2, 99, 60]`，第二行仍然是 `[22, 72, 89, 99, 60, 96, 66, 2]`。这是语言规定的行为
 （设计原则 3.6），不是缺陷：正因为元素之间没有顺序，`map` 才能并行。规则很简单：**传给 `map`、`filter`
 的函数保持纯；必须按顺序做的事用 `foreach`、`reduce` 或 `loop`。**
 
@@ -199,7 +199,7 @@ import { any, flat_map, sort_by, take } from array
 // The words of one line: lower case, punctuation removed, empty pieces dropped.
 func words_of(line: string): string[] {
     let plain = line->to_lower->replace<',', ' '>->replace<'.', ' '>
-    return plain->split<' '>->filter<(w: string): bool => len(w) > 0>
+    return plain->split<' '>->filter<(w) => len(w) > 0>
 }
 
 // `counts` with one more for `w`, adding `w` when it is new.
@@ -221,8 +221,8 @@ func main(): int sync {
 
     // Cut the text into lines, and the lines into words.
     let lines = text->split<'\n'>
-        ->map<(l: string): string => trim(l)>
-        ->filter<(l: string): bool => len(l) > 0>
+        ->map<(l) => trim(l)>
+        ->filter<(l) => len(l) > 0>
     let words = lines->flat_map<words_of>
     println('lines:', len(lines), 'words:', len(words))
 

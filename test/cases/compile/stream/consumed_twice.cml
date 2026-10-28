@@ -1,7 +1,7 @@
 /**
  * A stream is read once on each execution path (design principles 5.4): a `for` over `s` and a
  * pull of `s` are two consumers of one stream, and the second is refused with the two places named.
- * To read one stream from two places, write `tee(s, n)` and consume each of the two streams once.
+ * To read one stream from two places, write `s->tee<n>` and consume each of the two streams once.
  */
 
 func count(n: int): int.. {

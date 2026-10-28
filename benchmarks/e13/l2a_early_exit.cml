@@ -48,28 +48,28 @@ func step(m: Mlp, x: float[..]): (float, Mlp) {
 
 func load(): Mlp {
     return {
-        w1: reshape([0.5, -0.25, 0.75, -1.0, -0.5, 0.25, 0.5, -0.75, 1.0, 0.5, -0.25, -0.25], [3, 4]),
-        b1: zeros([4]),
-        w2: reshape([0.4, -0.3, 0.2, 0.1, -0.2, 0.5, -0.4, 0.3, 0.3, 0.1, -0.1, 0.6, -0.5, -0.4, -0.3, -0.2], [4, 4]),
-        b2: reshape([0.5, 0.5, 0.5, 0.5], [4]),
-        w3: reshape([0.3, -0.2, 0.1, 0.4, 0.2, 0.5, -0.3, -0.1, -0.4, 0.1, 0.6, 0.2, 0.1, -0.5, 0.3, -0.3], [4, 4]),
-        b3: reshape([0.1, -0.1, 0.2, 0.0], [4]),
-        wo: reshape([0.5, -0.5, 1.0, 0.25, -0.75, 0.5, 0.25, -1.0], [4, 2]),
-        bo: reshape([0.2, -0.1], [2]),
-        we: reshape([1.0, 0.5, -0.5, 1.0, 0.75, -0.25, 0.0, 0.5], [4, 2]),
-        be: reshape([0.1, 0.2], [2])
+        w1: reshape<[3, 4]>([0.5, -0.25, 0.75, -1.0, -0.5, 0.25, 0.5, -0.75, 1.0, 0.5, -0.25, -0.25]),
+        b1: zeros::<f32>([4]),
+        w2: reshape<[4, 4]>([0.4, -0.3, 0.2, 0.1, -0.2, 0.5, -0.4, 0.3, 0.3, 0.1, -0.1, 0.6, -0.5, -0.4, -0.3, -0.2]),
+        b2: reshape<[4]>([0.5, 0.5, 0.5, 0.5]),
+        w3: reshape<[4, 4]>([0.3, -0.2, 0.1, 0.4, 0.2, 0.5, -0.3, -0.1, -0.4, 0.1, 0.6, 0.2, 0.1, -0.5, 0.3, -0.3]),
+        b3: reshape<[4]>([0.1, -0.1, 0.2, 0.0]),
+        wo: reshape<[4, 2]>([0.5, -0.5, 1.0, 0.25, -0.75, 0.5, 0.25, -1.0]),
+        bo: reshape<[2]>([0.2, -0.1]),
+        we: reshape<[4, 2]>([1.0, 0.5, -0.5, 1.0, 0.75, -0.25, 0.0, 0.5]),
+        be: reshape<[2]>([0.1, 0.2])
     }
 }
 
 func input_a(): float[..] {
-    return reshape([1.0, 2.0, -1.0, 0.5, -1.5, 2.0], [2, 3])
+    return reshape<[2, 3]>([1.0, 2.0, -1.0, 0.5, -1.5, 2.0])
 }
 
 func do_run(m: Mlp): int sync {
     let dump = get_env('DUMP') ?? ''
     let xa = input_a()
-    let xb = reshape([-0.5, -0.5, -0.5, -0.5, -0.5, -0.5], [2, 3])
-    let x0 = zeros([2, 3])
+    let xb = reshape<[2, 3]>([-0.5, -0.5, -0.5, -0.5, -0.5, -0.5])
+    let x0 = zeros::<f32>([2, 3])
     save_params(m, dump + '/init')
     save_npy(xa, dump + '/xa.npy')
     save_npy(xb, dump + '/xb.npy')
@@ -77,9 +77,9 @@ func do_run(m: Mlp): int sync {
     let la = step(m, xa)
     let lb = step(m, xb)
     let l0 = step(m, x0)
-    save_npy(reshape([la.0], [1]), dump + '/loss_a.npy')
-    save_npy(reshape([lb.0], [1]), dump + '/loss_b.npy')
-    save_npy(reshape([l0.0], [1]), dump + '/loss_0.npy')
+    save_npy(reshape<[1]>([la.0]), dump + '/loss_a.npy')
+    save_npy(reshape<[1]>([lb.0]), dump + '/loss_b.npy')
+    save_npy(reshape<[1]>([l0.0]), dump + '/loss_0.npy')
     save_params(la.1, dump + '/arm_a')
     save_params(lb.1, dump + '/arm_b')
     save_params(l0.1, dump + '/arm_0')

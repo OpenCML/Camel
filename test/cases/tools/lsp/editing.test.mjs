@@ -100,19 +100,17 @@ await withServer(async (ls) => {
         return complete(m, 'c')
     }
     items = await membersOf('import graph', 'graph')
-    check(labels(items).includes('program_of'), 'the exports of a module after `::`', labels(items).slice(0, 20))
-    check((items.find((i) => i.label === 'program_of') || {}).detail !== undefined,
-        'with their signatures', items.find((i) => i.label === 'program_of'))
-    // The two shapes side by side: `program_of` is computed in C++ (the type of a function value,
-    // which a declaration cannot state), and `constant` is declared in graph.cml per sample type.
-    // `sqrt` was the computed half until turned all of `math` into declarations.
-    const programOf = items.find((i) => i.label === 'program_of')
-    check(programOf !== undefined && programOf.detail.startsWith('(f: F)'),
-        'a computed member keeps the signature C++ computes', programOf)
+    check(labels(items).includes('graph_of'), 'the exports of a module after `::`', labels(items).slice(0, 20))
+    check((items.find((i) => i.label === 'graph_of') || {}).detail !== undefined,
+        'with their signatures', items.find((i) => i.label === 'graph_of'))
+    // Two declared members side by side: `graph_of` takes any function (`when is_function::<F>()`), and
+    // `constant` takes a node and answers the type its caller names as a type argument.
+    const graphOf = items.find((i) => i.label === 'graph_of')
+    check(graphOf !== undefined && graphOf.detail.startsWith('(f: F)'),
+        'a member declared over a type variable keeps its declared signature', graphOf)
     const constant = items.find((i) => i.label === 'constant')
-    check(constant !== undefined && constant.detail.startsWith('(n: Node, sample: i32) => i32?') &&
-        constant.detail.includes('(+5 overloads)'),
-        'a declared member carries its declared overloads', constant)
+    check(constant !== undefined && constant.detail.startsWith('(n: Node) => T?'),
+        'a member whose answer type is a type argument carries its declared signature', constant)
     // A module whose every name is declared: no `exportEntity` answers for it any more.
     items = await membersOf('import re', 're')
     checkEq(labels(items), ['Match', 'find', 'find_all', 'has_match', 'replace', 'replace_with', 'split', 'validate'], 'the members of a module that is all declarations')
@@ -127,9 +125,9 @@ await withServer(async (ls) => {
         })
         return r ? r.contents.value : null
     }
-    let h = await hoverMember('import graph', 'graph::program_of((x: float): float => x + 1.0)', 'graph::program_of', 7)
-    check(h !== null && h.includes('program_of: (f: F) => Program'),
-        'hover on a computed member of a migrated module', h)
+    let h = await hoverMember('import graph', 'graph::graph_of((x: float): float => x + 1.0)', 'graph::graph_of', 7)
+    check(h !== null && h.includes('graph_of: (f: F) => Graph'),
+        'hover on a member of a migrated module over a type variable', h)
     check(h.includes('Function of module `graph`'), 'naming the module it comes from', h)
     h = await hoverMember('import re', 're::has_match<"a">("b")', 're::has_match', 5)
     check(h !== null && h.includes('func has_match(text: string): bool'),
@@ -201,18 +199,18 @@ ${body}
     check(sh.signatures[0].label.startsWith('println: '), 'a library function', sh)
     m = edit(MAIN.replace('    return 0\n}', '    let z = (1, /*t*/2)\n    return 0\n}'))
     checkEq(await help(m, 't'), null, 'no signature help inside a tuple')
-    // A member of a migrated module: a computed signature and a declared one.
+    // A member of a migrated module: one over a type variable and one over plain types.
     m = edit(MAIN.replace('import { now } from time', 'import { now } from time\nimport graph')
-        .replace('    return 0\n}', '    let r = graph::program_of(/*m*/(x: float): float => x + 1.0)\n    return 0\n}'))
+        .replace('    return 0\n}', '    let r = graph::graph_of(/*m*/(x: float): float => x + 1.0)\n    return 0\n}'))
     sh = await help(m, 'm')
-    check(sh !== null && sh.signatures[0].label.includes('program_of: (f: F)'),
-        'signature help on a computed member of a migrated module', sh)
+    check(sh !== null && sh.signatures[0].label.includes('graph_of: (f: F)'),
+        'signature help on a member of a migrated module over a type variable', sh)
     checkEq(sh.activeParameter, 0, 'its first argument is active')
     m = edit(MAIN.replace('import { now } from time', 'import { now } from time\nimport math')
         .replace('    return 0\n}', '    let r = math::abs(/*m*/1)\n    return 0\n}'))
     sh = await help(m, 'm')
-    check(sh !== null && sh.signatures.some((s) => s.label.includes('abs: (x: i32) => i32')),
-        'signature help on a declared member of a migrated module', sh)
+    check(sh !== null && sh.signatures.some((s) => s.label.includes('abs: (x: T) => T')),
+        'signature help on a generic member of a migrated module, one signature per declaration', sh)
 
     // ---- rename ----
     edit(MAIN)

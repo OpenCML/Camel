@@ -5,7 +5,7 @@ digraph GraphIR {
             label="id<int>";
             F02 [label="ARGS", type="ARGS"];
             O02 [label="EXIT", type="EXIT"];
-            N00 [label="x", type="PORT"];
+            N00 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int"];
             F02 -> N00 [label="0", type="NORM_PORT"];
             N00 -> O02 [label="0", type="EXIT"];
         }
@@ -13,9 +13,9 @@ digraph GraphIR {
             label="apply<int, int>";
             F03 [label="ARGS", type="ARGS"];
             O03 [label="EXIT", type="EXIT"];
-            N01 [label="f", type="PORT"];
-            N02 [label="x", type="PORT"];
-            N03 [label="CALL", type="CALL", origin=180, span="0:60-0:63", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml"];
+            N01 [label="f", type="PORT", param_name="f", param_kind="normal", param_index="0", value_type="(x: int) => int"];
+            N02 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="1", value_type="int"];
+            N03 [label="CALL", type="CALL", origin=3183, span="0:53-0:57", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml", value_type="int"];
             F03 -> N01 [label="0", type="NORM_PORT"];
             F03 -> N02 [label="1", type="NORM_PORT"];
             N03 -> O03 [label="0", type="EXIT"];
@@ -26,9 +26,9 @@ digraph GraphIR {
             label="pair<int>";
             F04 [label="ARGS", type="ARGS"];
             O04 [label="EXIT", type="EXIT"];
-            N04 [label="x", type="PORT"];
-            N05 [label="(0, 0)", type="DATA"];
-            N06 [label="FILL", type="FILL", origin=186, span="2:40-2:46", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml"];
+            N04 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int"];
+            N05 [label="(0, 0)", type="DATA", value_type="(int, int)"];
+            N06 [label="(int, int)", type="FILL", origin=3189, span="2:38-2:44", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml", value_type="(int, int)"];
             F04 -> N04 [label="0", type="NORM_PORT"];
             N06 -> O04 [label="0", type="EXIT"];
             N04 -> N06 [label="0|0", type="WITH"];
@@ -36,29 +36,31 @@ digraph GraphIR {
             N05 -> N06 [label="0|0", type="NORM"];
         }
         O01 [label="EXIT", type="EXIT"];
-        N07 [label="3", type="DATA", origin=177, span="4:22-4:23", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml"];
-        N08 [label="Function(graph=id<int>, tupleSlots=0)", type="DATA", origin=178, span="1:0-1:36", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml"];
-        N09 [label="apply<int, int>", type="FUNC", origin=181, span="4:17-4:24", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml"];
-        N0A [label="[1, 2]", type="DATA", origin=184, span="4:26-4:32", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml"];
-        N0B [label="Function(graph=pair<int>, tupleSlots=0)", type="DATA", origin=185, span="2:0-2:48", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml"];
-        N0C [label=":mark/map_arr", type="OPER", origin=187, span="4:37-4:43", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml"];
-        N0D [label=":io/println", type="OPER", origin=188, span="4:4-4:11", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml"];
-        N0E [label="0", type="DATA", origin=189, span="5:11-5:12", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml"];
-        N0F [label="GATE", type="GATE"];
+        N07 [label="3", type="DATA", origin=3180, span="4:22-4:23", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml", value_type="int"];
+        N08 [label="Function(graph=id<int>, tupleSlots=0)", type="DATA", origin=3181, span="1:0-1:34", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml", value_type="(x: int) => int pure"];
+        N09 [label="apply<int, int>", type="FUNC", origin=3184, span="4:12-4:24", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml", value_type="int"];
+        N0A [label="[1, 2]", type="DATA", origin=3187, span="4:26-4:32", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml", value_type="int[]"];
+        N0B [label="Function(graph=pair<int>, tupleSlots=0)", type="DATA", origin=3188, span="2:0-2:46", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml", value_type="(x: int) => (int, int) pure"];
+        N0C [label=":mark/map_arr", type="OPER", origin=3190, span="4:37-4:43", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml", value_type="(int, int)[]"];
+        N0D [label=":io/println", type="OPER", origin=3191, span="4:4-4:11", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml", value_type="int"];
+        N0E [label="0", type="DATA", origin=3192, span="5:11-5:12", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml", value_type="int"];
+        N0F [label="GATE", type="GATE", value_type="int"];
         N0F -> O01 [label="0", type="EXIT"];
         N08 -> N09 [label="0|0", type="NORM"];
         N07 -> N09 [label="0|1", type="NORM"];
         N0B -> N0C [label="0|0", type="WITH"];
         N0A -> N0C [label="0|0", type="NORM"];
         N09 -> N0C [label="0|0", type="CTRL"];
+        N09 -> N0C [label="SYNC", type="SYNC"];
         N09 -> N0D [label="0|0", type="NORM"];
         N0C -> N0D [label="0|1", type="NORM"];
         N0E -> N0F [label="0|0", type="NORM"];
         N0D -> N0F [label="0|0", type="CTRL"];
+        N0D -> N0F [label="SYNC", type="SYNC"];
     }
     O00 [label="EXIT", type="EXIT"];
-    N10 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=173, span="3:0-6:1", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml"];
-    N11 [label="CALL", type="CALL"];
+    N10 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=3176, span="3:0-6:1", srcfile="<ROOT>/test/cases/consistency/generic_values/graph.cml", value_type="() => int"];
+    N11 [label="CALL", type="CALL", value_type="int"];
     N11 -> O00 [label="0", type="EXIT"];
     N10 -> N11 [label="0|0", type="WITH"];
 }

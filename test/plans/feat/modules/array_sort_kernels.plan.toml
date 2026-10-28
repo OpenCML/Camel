@@ -2,27 +2,28 @@ id = "modules.array_sort_kernels"
 order = 379
 tier = "fast"
 tags = ["feat", "modules", "stdlib", "profile"]
-desc = "The sorting family of `array` is one body-less declaration and one operator per element type (`array:sort_i` for `i32`, `array:sort_d` for `float`, ...), each taking that element type in its signature, so the element type is fixed where the executor is chosen and no executor reads an element type code. `std::profile` shows one row per element type and operator and no row for a sort as a whole; an element type with no declaration has no call to compile (SemanticDiag::NoMatchingFunction lists the four declarations, and a reduced-precision one is refused as ReducedPrecisionUnsupported); the when-armed spelling the module does not use is still refused by name where two conditions overlap, and two declarations of one element type are refused as a redeclaration."
+desc = "The sort of `array`: one Camel function over `argsort`, with a kernel per element type that does the same without the index array (`array:sort_i` for `i32`, `array:sort_d` for `float`, ...). The kernels give the same bits as the body, the compiler rewrites `v = v->sort` to their in-place forms, and `std::profile` shows one row per element type and form and no row for a sort as a whole."
 
-# The values, over every element type the sorts order (four) and every type `argsort` takes (six),
-# for every algorithm and for the in-place forms the compiler introduces for `v = v->sort`.
+# The values: the four element types the sort has a kernel for, the kernel against its body
+# `xs[argsort(xs)]`, the in-place forms the compiler introduces for `v = v->sort`, and the order of
+# floats (-0 below +0, every NaN last).
 
 [[tests]]
 name = "array_sort_kernels"
-desc = "The four element types the sorts order, for all four algorithms, `merge_sorted_arrays` and `argsort`: each call is bound to the element type of its own declaration (`let r_i: i32[] = sort(s_i)`, `let r_f: f32[] = sort(s_f)`, ...), so a call answered by another element type's declaration does not typecheck, and each result is the ordered array of its input. The four inputs are unchanged after the returning calls (design principles 11.3), and every in-place rebinding sorts the variable's own array. Alike on the four back ends."
+desc = "`sort` over the four element types it has a kernel for: each call is bound to the element type of its own declaration (`let r_i: i32[] = sort(s_i)`, ...), so a call answered by another element type's declaration does not typecheck; the result of each is the same array as the body `xs[argsort(xs)]` gives; the inputs are unchanged; the in-place rebindings sort the variable; and floats come out with -0 below +0 and the NaNs last, in the kernel and in the body alike."
 kind = "behavior"
 case = "../../../cases/modules/stdlib/array_sort_kernels.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_exact = "sort {} {} {} {} [1, 2, 3] [10, 20, 30] [1.5, 2.5, 3.5] [-2.5, 1.5, 3.5]\ninsert_sort {} {} {} {} [7, 8, 9] [70, 80, 90] [7.5, 8.5, 9.5] [-8.5, 7.5, 9.5]\nquick_sort {} {} {} {} [4, 5, 6] [40, 50, 60] [4.5, 5.5, 6.5] [-4.5, 5.5, 6.5]\nmerge_sort {} {} {} {} [1, 2, 3] [10, 20, 30] [1.5, 2.5, 3.5] [-3.5, 1.5, 2.5]\nmerge_sorted_arrays {} {} {} {} [1, 2, 3, 4] [10, 20, 30, 40] [1.5, 2.5, 3.5, 4.5] [-4.5, -3.5, -2.5, -1.5]\nargsort {} {} {} {} [1, 2, 0] [1, 2, 0] [1, 2, 0] [2, 1, 0]\nargsort_other {} {} [1, 0, 2] [1, 2, 0]\nunchanged {} {} {} {} [3, 1, 2] [30, 10, 20] [3.5, 1.5, 2.5] [3.5, 1.5, -2.5]\nsort_in_place {} {} {} {} [1, 2, 3] [10, 20, 30] [1.5, 2.5, 3.5] [-2.5, 1.5, 3.5]\ninsert_sort_in_place {} {} {} {} [7, 8, 9] [70, 80, 90] [7.5, 8.5, 9.5] [-8.5, 7.5, 9.5]\nquick_sort_in_place {} {} {} {} [4, 5, 6] [40, 50, 60] [4.5, 5.5, 6.5] [-4.5, 5.5, 6.5]\nmerge_sort_in_place {} {} {} {} [1, 2, 3] [10, 20, 30] [1.5, 2.5, 3.5] [-3.5, 1.5, 2.5]\n"
+expect_stdout_exact = "sort [1, 2, 3] [10, 20, 30] [1.5, 2.5, 3.5] [-2.5, 1.5, 3.5]\nbody [1, 2, 3] [10, 20, 30] [1.5, 2.5, 3.5] [-2.5, 1.5, 3.5]\ninput [3, 1, 2] [30, 10, 20] [3.5, 1.5, 2.5] [3.5, 1.5, -2.5]\nin_place [7, 8, 9] [70, 80, 90] [7.5, 8.5, 9.5] [-8.5, 7.5, 9.5]\nfloats [-1.0, -0.0, 0.0, 1.0, nan, nan] [-1.0, -0.0, 0.0, 1.0, nan, nan]\nf32 [-1.0, -0.0, 0.0, 1.0] [-1.0, -0.0, 0.0, 1.0]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
 name = "array_sort_kernels.paths"
-desc = "In that run `std::profile` counts each element type's own operator apart, for every algorithm and for the in-place form of each: exactly 42 `array:` rows, each run exactly once — sixteen returning operators (`sort`, `insert_sort`, `quick_sort`, `merge_sort` over i32, int, f32 and float), sixteen in-place forms, four `merge_sorted_arrays` and six `argsort` — and no row for a sort as a whole. A compiler that answered every element type from one declaration shows one row for all four calls of an algorithm; one that read the element type inside an executor could not show 42 rows each run once."
+desc = "In that run `std::profile` counts each element type's own operator apart: the returning form of the sort for `i32`, `int`, `f32` and `float` (once, once, twice, twice), the in-place form of each (once), and `argsort` for the same four (once, once, twice, twice) -- exactly those `array:` rows, so the element type is fixed where the executor is chosen and no row is a sort as a whole."
 kind = "behavior"
 case = "../../../cases/modules/stdlib/array_sort_kernels.cml"
 args = ["${case}", "std::profile top=0 json=\"${test_tmp}/profile.json\"", "std::nvm"]
@@ -33,35 +34,18 @@ async ({ input, assert }) => {
     const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
     const calls = Object.fromEntries(report.operator_rows.map(row => [row.uri, row.calls]))
     const shown = JSON.stringify(Object.fromEntries(Object.entries(calls).filter(([uri]) => uri.startsWith('array:'))))
-    // One operator per element type and algorithm, and one in-place form of each: the element type
-    // and the algorithm are both in the name, and the name is what picks the executor.
-    const expected = [
-        'array:sort_i', 'array:sort_l', 'array:sort_f', 'array:sort_d',
-        'array:insert_sort_i', 'array:insert_sort_l', 'array:insert_sort_f', 'array:insert_sort_d',
-        'array:quick_sort_i', 'array:quick_sort_l', 'array:quick_sort_f', 'array:quick_sort_d',
-        'array:merge_sort_i', 'array:merge_sort_l', 'array:merge_sort_f', 'array:merge_sort_d',
-        'array:sort_i_in_place', 'array:sort_l_in_place', 'array:sort_f_in_place', 'array:sort_d_in_place',
-        'array:insert_sort_i_in_place', 'array:insert_sort_l_in_place', 'array:insert_sort_f_in_place',
-        'array:insert_sort_d_in_place',
-        'array:quick_sort_i_in_place', 'array:quick_sort_l_in_place', 'array:quick_sort_f_in_place',
-        'array:quick_sort_d_in_place',
-        'array:merge_sort_i_in_place', 'array:merge_sort_l_in_place', 'array:merge_sort_f_in_place',
-        'array:merge_sort_d_in_place',
-        'array:merge_sorted_arrays_i', 'array:merge_sorted_arrays_l', 'array:merge_sorted_arrays_f',
-        'array:merge_sorted_arrays_d',
-        'array:argsort_i', 'array:argsort_l', 'array:argsort_f', 'array:argsort_d', 'array:argsort_b',
-        'array:argsort_s',
-    ]
-    for (const uri of expected) {
-        assert(calls[uri] === 1, `${uri} ran ${calls[uri]} times, not once: ${shown}`)
+    const expected = {
+        'array:sort_i': 1, 'array:sort_l': 1, 'array:sort_f': 2, 'array:sort_d': 2,
+        'array:sort_i_in_place': 1, 'array:sort_l_in_place': 1, 'array:sort_f_in_place': 1,
+        'array:sort_d_in_place': 1,
+        'array:argsort_i': 1, 'array:argsort_l': 1, 'array:argsort_f': 2, 'array:argsort_d': 2,
+    }
+    for (const [uri, count] of Object.entries(expected)) {
+        assert(calls[uri] === count, `${uri} ran ${calls[uri]} times, not ${count}: ${shown}`)
     }
     const rows = Object.keys(calls).filter((uri) => uri.startsWith('array:')).sort()
-    assert(JSON.stringify(rows) === JSON.stringify([...expected].sort()),
-        `the array rows are ${JSON.stringify(rows)}, expected exactly the 42 per element type: ${shown}`)
-    assert(input.normalized.stdout.includes('sort {} {} {} {} [1, 2, 3] [10, 20, 30] [1.5, 2.5, 3.5] [-2.5, 1.5, 3.5]'),
-        'the program changed')
-    assert(input.normalized.stdout.includes('merge_sort_in_place {} {} {} {} [1, 2, 3] [10, 20, 30] [1.5, 2.5, 3.5] [-3.5, 1.5, 2.5]'),
-        'the in-place run changed')
+    assert(rows.length === Object.keys(expected).length,
+        `the array rows are ${JSON.stringify(rows)}, expected exactly the ${Object.keys(expected).length}: ${shown}`)
 }
 """
 timeout_ms = 60000
@@ -70,15 +54,13 @@ timeout_ms = 60000
 
 [[tests]]
 name = "array_sort_no_declaration"
-desc = "`sort` over a `bool[]`: `argsort` has a declaration for that element type and the sorts have none, so the call has nothing to compile through and is refused with the four declarations the name does have, each naming its own element type — `SemanticDiag::NoMatchingFunction`, not a run-time refusal by an executor that read the element type code. The old spelling declared one generic `sort::<T>(xs: T[]): T[]` for every element type and refused the element type inside the C++ kernel."
+desc = "`sort` over a `c64[]`: a complex number has no order, so `sort`'s condition `is_ordered::<T>()` does not hold for the call and it is refused where it is written -- `SemanticDiag::WhenConditionUnmet`, naming the condition -- and not by an executor at run time."
 kind = "negative"
 case = "../../../cases/modules/stdlib/array_sort_no_declaration.cml"
 args = ["${case}"]
 expect_exit = 1
-# The name and the code are asserted as text, as the other `NoMatchingFunction` tests do: the
-# message carries the overload list, so the one-line form the diagnostic assertions parse is not
-# the line the annotation lands on.
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_sort_no_declaration.cml:18:17", "(bool[])", "<array:sort_i>: (xs: i32[]) => i32[]", "<array:sort_l>: (xs: int[]) => int[]", "<array:sort_f>: (xs: f32[]) => f32[]", "<array:sort_d>: (xs: float[]) => float[]"]
+expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
+expect_output_contains = ["array_sort_no_declaration.cml:13:17", "is_ordered::<T>()"]
 timeout_ms = 20000
 
 # ---- the spellings the family does not use are refused by name ----

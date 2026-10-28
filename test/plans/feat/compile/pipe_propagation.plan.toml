@@ -58,3 +58,14 @@ case = "../../../cases/compile/pipe_propagation/err_payload_mismatch.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+
+[[tests]]
+name = "pipe.lambda_takes_receiver_type"
+desc = "A lambda written in place after `->` that leaves its parameter's type out takes the receiver's type, or the type of the value taken out of a `T?` or a `T!`."
+kind = "behavior"
+case = "../../../cases/compile/pipe_propagation/lambda_takes_receiver_type.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "6 3 8 -1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

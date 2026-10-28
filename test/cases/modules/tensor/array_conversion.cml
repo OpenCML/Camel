@@ -1,0 +1,15 @@
+/**
+ * A type name applied to an array converts it elementwise, with no import: `float(xs)`, `f32(xs)`,
+ * `int(xs)`, and `T(xs)` in a generic function. It is the core's conversion, the same name as the
+ * scalar one: an array converts each element, and the program imports nothing for it.
+ */
+func widen::<T>(xs: T[]): float[] {
+    return float(xs)
+}
+
+func main(): int sync {
+    let xs = [1, 2, 3]
+    println(float(xs), f32(xs), widen(xs))
+    println(int([1.5, -2.5]), float([f32(1.5)]), f16([0.5, 2.0]))
+    return 0
+}

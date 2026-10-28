@@ -1,6 +1,6 @@
 import { random, seed, max, sum, abs } from tensor
 import { run_preferred_resident, download } from tiles
-func maximum(x: f32[..]): f32[..] { return max(x, -1) }
+func maximum(x: f32[..]): f32[..] { return max<-1>(x) }
 func main(): int sync {
     seed(71)
     let x = random([65537, 128], -1.0, 1.0)

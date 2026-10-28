@@ -110,18 +110,17 @@ func main(): int sync {
   | Form | Result |
   |---|---|
   | `len(xs)` | Length |
-  | `head(xs)`, `tail(xs)` | The first element (of an empty array: the fault `RuntimeDiag::IndexOutOfRange`, as for `xs[0]`); the array without its first element |
   | `last(xs)` | The last element (of an empty array: the fault `RuntimeDiag::IndexOutOfRange`). A negative subscript does not count from the end, so use this for the last element, not `xs[-1]` |
   | `a..b` | The interval `[a, a+1, ..., b-1]`; empty when `a >= b`. With a step write `range(a, b, step)` |
-  | `xs->slice<a, b>` | A new array of subscripts `a` to `b-1`. `a` and `b` are positions from 0 to the length; a bound outside the array (a negative one included) is the fault `RuntimeDiag::SliceOutOfRange`, as an index out of range is a fault. With both bounds inside the array and `b < a` the result is empty. To take "at most n" use `take` and `drop` of the `array` module, which cut by definition |
+  | `xs[a:b]` | A new array of subscripts `a` to `b-1`. `a` and `b` are positions from 0 to the length; a bound outside the array (a negative one included) is the fault `RuntimeDiag::SliceOutOfRange`, as an index out of range is a fault. With both bounds inside the array and `b < a` the result is empty. To take "at most n" use `take` and `drop` of the `array` module, which cut by definition |
   | `concat(xs, ys)` | Concatenation into a new array |
   | `xs->contains<v>` | Whether an element equals `v`, by the `==` of the element type (arrays, tuples and structs compare by content, see [6.7.3](06_expressions.md)) |
   | `zip(xs, ys)` | An array of `(x, y)` tuples; three or more arrays give tuples of that many elements (`zip(xs, ys, zs)`); the lengths must be equal |
   | `strs->join<sep>` | Joins a `string[]` into one string |
   | `map`, `filter`, `reduce`, `foreach` | See [6.10](06_expressions.md#610-higher-order-operators) |
-  | `xs->append<v>`, `xs->extend<ys>` | A **new array** with `v` (or the elements of `ys`) at the end; `xs` is unchanged. To append to a variable write `xs = xs->append<v>` (see 3.7) |
+  | `xs->append<v>` | A **new array** with `v` at the end; `xs` is unchanged. To append to a variable write `xs = xs->append<v>` (see 3.7); to join two arrays use `concat(xs, ys)` |
 
-- More array functions are in the `array` module, which has to be imported (`import { reverse, sum } from array`): `reverse`, `take`, `drop`, `enumerate`, `flatten`, `unique`, `index_of`, `find`, `any`, `all`, `count`, `sum`, `min`, `max`, `flat_map`, `sort_by`, `zip_with`; see the [standard library reference](../../stdlib-reference.md).
+- More array functions are in the `array` module, which has to be imported (`import { reverse, sum } from array`): `reverse`, `take`, `drop`, `enumerate`, `flatten`, `unique`, `index_of`, `find`, `find_index`, `any`, `all`, `count`, `chunks`, `sum`, `mean`, `min`, `max`, `argmax`, `argmin`, `flat_map`, `sort_by`, `zip_with`; see the [standard library reference](../../stdlib-reference.md).
 
 ### 3.3.2 Tuples
 
@@ -193,7 +192,7 @@ The remaining string functions are in the `str` module ([standard library refere
 import { split, trim, to_upper } from str
 
 func main(): int sync {
-    println('a, b ,c'->split<','>->map<(w: string): string => trim(w)>)
+    println('a, b ,c'->split<','>->map<(w) => trim(w)>)
     println('héllo'->to_upper, len('héllo'), 'héllo'[1], 'hello'[1])
     return 0
 }
@@ -350,7 +349,7 @@ func main(): int sync {
 | `get_or<k, d>(m)` | `V` | `d` when not found |
 | `put<k, v>(m)` | `Map<K, V>` | Replaces if the key already exists |
 | `remove<k>(m)`, `remove<x>(s)` | Same type | Contents unchanged when absent |
-| `has<k>(m)`, `has<x>(s)`, `contains<x>(s)` | `bool` | |
+| `has<k>(m)`, `contains<x>(s)` | `bool` | |
 | `len(m)`, `len(s)` | `int` | |
 | `keys(m)`, `values(m)`, `items(m)` | `K[]`, `V[]`, `(K, V)[]` | In key order |
 | `merge(m1, m2)` | `Map<K, V>` | For equal keys the one from `m2` is taken |

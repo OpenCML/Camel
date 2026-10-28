@@ -6,7 +6,7 @@
 import { zeros, sum } from tensor
 
 func main(): int sync {
-    let r = sum(zeros([2, 3]), 5)
+    let r = sum<5>(zeros::<f32>([2, 3]))
     println('unreachable')
     return 0
 }

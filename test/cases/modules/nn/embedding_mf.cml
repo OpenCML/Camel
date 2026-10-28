@@ -44,8 +44,8 @@ func train(model: EmbeddingMf, u: i64[..], i: i64[..], rating: float, steps: int
 
 func main(): int sync {
     let model = init()
-    let user_ids = reshape([1, 1], [2])
-    let item_ids = reshape([0, 1], [2])
+    let user_ids = reshape<[2]>([1, 1])
+    let item_ids = reshape<[2]>([0, 1])
     let rating = 1.0
 
     let before = model_loss<model>(user_ids, item_ids, rating)

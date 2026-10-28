@@ -604,7 +604,6 @@ class Program:
             self.show(
                 [
                     (f"{a}->contains<{kl}>", BOOL, k in sa),
-                    (f"{a}->has<{kl}>", BOOL, k in sa),
                     (f"is_subset({a}, {b})", BOOL, sa <= sb),
                     (f"is_subset(intersect({a}, {b}), {a})", BOOL, True),
                     (f"{a} == {b}", BOOL, sa == sb),

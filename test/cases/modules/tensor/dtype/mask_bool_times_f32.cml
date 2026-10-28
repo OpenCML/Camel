@@ -14,7 +14,7 @@ func masked(x: f32[4], mask: bool[4]): float {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, -2.0, 3.0, -4.0] as f32[], [4])
+    let x = reshape<[4]>([1.0, -2.0, 3.0, -4.0] as f32[])
     let mask = x > 0.0
     println(masked(x, mask))
     return 0

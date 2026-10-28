@@ -89,7 +89,7 @@ import { split, to_lower, trim } from str
 import { encode } from json
 
 func words_of(text: string): string[] {
-    return text->split<' '>->map<(w: string): string => to_lower(trim(w))>->filter<(w: string): bool => w != ''>
+    return text->split<' '>->map<(w) => to_lower(trim(w))>->filter<(w) => w != ''>
 }
 
 func tally(words: string[]): Map<string, int> {
@@ -144,7 +144,7 @@ import { split, to_lower, trim } from str
 import { encode } from json
 
 func words_of(text: string): string[] {
-    return text->split<' '>->map<(w: string): string => to_lower(trim(w))>->filter<(w: string): bool => w != ''>
+    return text->split<' '>->map<(w) => to_lower(trim(w))>->filter<(w) => w != ''>
 }
 
 func tally(path: string): Map<string, int> {

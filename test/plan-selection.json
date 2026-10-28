@@ -191,9 +191,10 @@
             "plans": ["feat/modules/tensor.plan.toml", "feat/modules/tensor", "feat/modules/threads.plan.toml", "feat/modules/index_semantics.plan.toml", "feat/modules/operator_semantics.plan.toml", "feat/compile/numeric_permissions.plan.toml", { "plan": "feat/modules/autodiff.plan.toml", "layer": true }]
         },
         {
-            "comment": "Keyed random: the random plan (named, so its slow std::cpp comparison runs) and the registry that lists it.",
-            "paths": ["modules/random/"],
-            "plans": ["feat/modules/random.plan.toml", "feat/modules/stdlib_registry.plan.toml"]
+            "comment": "Keyed random: the random plan, whose slow std::cpp comparison follows --tier (`layer`) so a change to a case does not run it in full, the reference plan that runs the Philox cases, and the registry that lists them.",
+            "paths": ["modules/random/", "test/cases/modules/random/"],
+            "layer": true,
+            "plans": ["feat/modules/random.plan.toml", "feat/modules/random_reference.plan.toml", "feat/modules/stdlib_registry.plan.toml"]
         },
         {
             "comment": "Graph values and passes, and the rewrite rules built on them.",
@@ -237,7 +238,7 @@
         },
         {
             "comment": "The declaration modules with no plan of their own: their cases live under test/cases/modules/std, which feat/modules/std.plan.toml runs, and their signatures are checked by the registry plan.",
-            "paths": ["modules/env/", "modules/fs/", "modules/hash/", "modules/process/", "modules/pyplot/", "modules/re/", "modules/sim/", "modules/statistics/", "modules/str/", "modules/this/", "modules/time/"],
+            "paths": ["modules/env/", "modules/fs/", "modules/hash/", "modules/process/", "modules/pyplot/", "modules/re/", "modules/sim/", "modules/str/", "modules/this/", "modules/time/"],
             "plans": ["feat/modules/std.plan.toml", "feat/modules/stdlib_registry.plan.toml"]
         },
         {

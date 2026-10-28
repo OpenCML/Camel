@@ -50,7 +50,8 @@ logicalAnd : or ('&&' or)*
 or         : and ('|' and)*
 and        : equality ('&' equality)*
 equality   : relational (('===' | '!==' | '==' | '!=') relational)*
-relational : additive (('<' | '>' | '<=' | '>=') additive)*
+relational : range (('<' | '>' | '<=' | '>=') range)*
+range      : additive ('..' additive)*
 additive   : multiplicative (('+' | '-') multiplicative)*
 multiplicative : power (('*' | '/' | '@' | '%') power)*
 power      : nullable ('^' power)?
@@ -58,8 +59,7 @@ nullable   : unary (('??' | '!!') dataExpr)?
 unary      : neg (as type)?
 neg        : ('-' | '!' | '~') negPower | link
 negPower   : ('-' | '!' | '~') negPower | link ('^' negPower)?
-link       : comp ('->' comp)*
-comp       : anno ('..' anno)*
+link       : anno ('->' anno)*
 anno       : primary ( '.'field | '[' subscript ']' | '(' arguments ')' | '<' with arguments '>' )*
 primary    : name | literal | '[' element, ... ']' | '{' key: value, ... '}' | '(' expression, ... ')' | lambda
 lambda     : modifier* ('<' parameters '>')? '(' parameters ')' (':' type)? '=>' blockExpr
@@ -71,7 +71,7 @@ Subscripts, arguments and `with` arguments must directly follow the expression b
 ## 8.4 Types
 
 ```
-typeDecl  : 'type' name ('<' parameters, ... '>')? '=' (type | enumBody)
+typeDecl  : 'type' name ('<' parameters, ... '>')? ('=' (type | enumBody))?
 typeExpr  : arrayType ('?' | '!')*
 arrayType : specType ('[' ']')*
 specType  : primaryType ('<' (type | const data), ... '>')?
@@ -132,8 +132,8 @@ dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
                      | 'let' '_' (':' typeList)? '=' dataList
 carrier            : identList | parentIdents
 typeDecl           : frontMatter? 'type' identRef
-                     ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
-                     (typeExpr | STRING)
+                     ('<' identDef (',' identDef)* ','? ('>' | '>='))?
+                     ('=' typeExpr)?
 resourceDecl       : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
 retStmt            : ('return' | 'yield') dataList
 modifiers          : 'sync'+
@@ -224,7 +224,10 @@ arrayDim           : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
 arrayDimItem       : '?' | '..' identDef? | dataExpr
 specType           : primaryType ('<' typeOrData (',' typeOrData)* '>')?
 typeOrData         : typeExpr | arrayDim | 'const' dataExpr
+matchTypeType      : 'match' 'type' typeExpr '{' typeArm* '}'
+typeArm            : 'case' typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
 primaryType        : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
+                     | matchTypeType
                      | 'typeof' dataExpr
 tupleType          : '(' typeList? ','? ')'
 structType         : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'

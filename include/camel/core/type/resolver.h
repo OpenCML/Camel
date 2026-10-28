@@ -103,6 +103,18 @@ class FuncTypeResolver {
     virtual FunctionType *declaredSignature() const { return nullptr; }
 
     /**
+     * Gives a rule whose result is computed the signature a declaration of it writes (the
+     * prelude's declaration file): the parameter types every call is held to, type variables and
+     * all, so an argument that needs them (a lambda with unwritten parameters) takes its types
+     * from them. The rule keeps computing its result. A rule that has a signature of its own
+     * ignores it.
+     */
+    virtual void graftDeclaredSignature(FunctionType *) {}
+    /// The signature given by graftDeclaredSignature, else null. It gives the arguments of a call
+    /// their expected types and nothing else: the rule still decides which calls it takes.
+    virtual FunctionType *graftedSignature() const { return nullptr; }
+
+    /**
      * The names this rule gives its parameters, the `with` ones first and the ordinary ones
      * after: what a named argument binds to (`len(x: xs)`). A rule whose signature is fixed
      * answers from it; a rule whose result follows its arguments has no signature object to
@@ -279,6 +291,12 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
         return this;
     }
     FunctionType *fixedSignature() const override { return fixed_; }
+    FunctionType *graftedSignature() const override { return declared_; }
+    void graftDeclaredSignature(FunctionType *signature) override {
+        if (fixed_ == nullptr) {
+            declared_ = signature;
+        }
+    }
 
     /// A rule that fixes its signature answers from it, as any fixed rule does. A rule whose
     /// result follows its arguments answers from the signature it writes, and only when that
@@ -316,7 +334,8 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
 
   private:
     std::string signature_;
-    FunctionType *fixed_ = nullptr;
+    FunctionType *fixed_    = nullptr;
+    FunctionType *declared_ = nullptr;
     var_declare_t withVars_, normVars_;
     ResolverFunc resolver_;
     /// The callback that also reads the call's constants; null for a rule whose result follows
@@ -360,6 +379,10 @@ class DeclaredFuncTypeResolver : public FuncTypeResolver {
         const type_vec_t &types, Type *expectedResult, const type_vec_t &with,
         const type_vec_t &norm, static_args_t normStatics) const override;
 
+    /// The types of the declaration's variables when the type the call is expected to give fixes
+    /// all of them (`load_tree::<T>(dir): T!` expected as `int!`); empty when it does not.
+    std::optional<type_vec_t> typesFromExpected(Type *expectedResult) const;
+
     std::string signature() const override { return funcType_->toString(); }
 
     bool varParameters(std::vector<bool> &with, std::vector<bool> &norm) const override {
@@ -374,7 +397,9 @@ class DeclaredFuncTypeResolver : public FuncTypeResolver {
 
     /// The signature as declared, closed (an operator's type is not a function still being
     /// built); null when the declaration has type variables, whose instances are not this rule.
-    FunctionType *fixedSignature() const override { return generic_ ? nullptr : funcType_; }
+    FunctionType *fixedSignature() const override {
+        return generic_ || core_ != nullptr ? nullptr : funcType_;
+    }
 
     /// The declaration's own type, the variables still in it: a family's parameters are the ones
     /// the rule writes, and a call that leaves one of their variables without a type is a
@@ -396,10 +421,16 @@ class DeclaredFuncTypeResolver : public FuncTypeResolver {
     size_t withCount() const { return funcType_->withTypesCount(); }
     size_t normCount() const { return funcType_->normTypesCount(); }
 
+    /// The names of the type variables a call's `::<...>` writes, in the order it writes them.
+    const std::vector<std::string> &bindableNames() const { return bindable_; }
+
   private:
     FunctionType *funcType_;
     /// The names of the type variables the declaration binds; empty for a fixed signature.
     std::vector<std::string> bindable_;
+    /// The same declaration without its packs, when it has any: what the fixed parameters are
+    /// matched against.
+    std::shared_ptr<DeclaredFuncTypeResolver> core_;
     bool generic_ = false;
 };
 

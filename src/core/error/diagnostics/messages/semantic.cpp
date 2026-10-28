@@ -221,19 +221,19 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::ConstructNotSupported,
-            {
-                "ConstructNotSupported",
-                "'{0}' is not supported: {1}.",
-                "The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet.",
-            },
-        },
-        {
             SemanticDiag::InvalidTypeArgument,
             {
                 "InvalidTypeArgument",
                 "The arguments of the type '{0}<...>' are not accepted: {1}.",
                 "What a type takes between '<' and '>' is defined by the type itself (a type argument, or a constant written 'const <data>'). An argument a type does not accept is an error; it is never ignored.",
+            },
+        },
+        {
+            SemanticDiag::NativeTypeNotProvided,
+            {
+                "NativeTypeNotProvided",
+                "The type '{0}' is declared without a right side, so a C++ module has to provide it, and the module '{1}' registered no type of that name.",
+                "A type written without '=' (`export type Graph`, `export type Txn<F>`) is the one a C++ module provides, as a function without a body is: its identity is the module and the name. Give the type its definition after '=', or check that the module registers it under this name.",
             },
         },
         {
@@ -434,14 +434,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "LogicalOperandNotBool",
                 "The {1} side of '{0}' has type '{2}', not 'bool'.",
                 "'&&' and '||' are branches on a 'bool': 'a && b' is 'if a then b else false', 'a || b' is 'if a then true else b'. The right side is evaluated only when the left side does not decide, both sides are 'bool', and neither operator can be overloaded. For logic that evaluates both sides (element-wise logic on tensors, an operator of a type of your own) use '&' and '|'.",
-            },
-        },
-        {
-            SemanticDiag::ExportedVariable,
-            {
-                "ExportedVariable",
-                "The variable '{0}' cannot be exported.",
-                "A 'var' of the top level of a module is read and written only by the module's own functions: export the functions that read and write it ('export func bump(): int sync {{ cnt += 1; return cnt }}'). A 'let' can be exported.",
             },
         },
         {
@@ -1261,6 +1253,22 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::NativeValueNotLoaded,
+            {
+                "NativeValueNotLoaded",
+                "The declaration '{0}' has no right side, and no loaded module registers a value of that name.",
+                "A value declared without a right side (`export let inf: float`) is supplied by the C++ module of the declaration, registered under the same name; import the module and check the name. A value written in Camel has its right side.",
+            },
+        },
+        {
+            SemanticDiag::NativeValueMismatch,
+            {
+                "NativeValueMismatch",
+                "The declaration '{0}' says '{1}', but the module registers a value of type '{2}'.",
+                "A value declared without a right side is the one the C++ module registers: write the type it registers, as a body-less function writes the signature of its operator.",
+            },
+        },
+        {
             SemanticDiag::NativeDeclarationOverlap,
             {
                 "NativeDeclarationOverlap",
@@ -1509,6 +1517,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::WithPackNeedsNativeDeclaration,
+            {
+                "WithPackNeedsNativeDeclaration",
+                "The pack '..{0}' among the 'with' parameters needs a declaration without a body.",
+                "A pack among the 'with' parameters stands for the arguments a call gives beyond the fixed ones, and only a declaration of a native operator, which takes them as they come, can use them. A function with a body names each 'with' parameter; write them out, or write the pack in a function type.",
+            },
+        },
+        {
             SemanticDiag::ReducedPrecisionUnsupported,
             {
                 "ReducedPrecisionUnsupported",
@@ -1569,7 +1585,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "StreamConsumedTwice",
                 "'{0}' is consumed twice: a stream is read once on each execution path.",
-                "A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The second consumer is here and the first is here. To read one stream from two places, write `tee(s, n)`: it gives two streams, each read once, and both see the same elements.",
+                "A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The second consumer is here and the first is here. To read one stream from two places, write `s->tee<n>`: it gives two streams, each read once, and both see the same elements.",
             },
         },
         {
@@ -1585,7 +1601,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TeeHintNotPositive",
                 "The `tee` width '{0}' is below 1.",
-                "`tee(s, n)` reads `s` once and gives two streams over the same elements, each read once (design principles 5.4). A side that runs ahead of the other buffers the elements the other has not read yet, and `n` says how wide that buffer is expected to be: it is a hint, so the executor grows the buffer rather than make a side wait, and a hint wider than the implementation's cap is clamped to it. What no buffer can be is narrower than the one element being handed over, so write `n` as 1 or more, or leave it out for the default of 8.",
+                "`s->tee<n>` reads `s` once and gives two streams over the same elements, each read once (design principles 5.4). A side that runs ahead of the other buffers the elements the other has not read yet, and `n` says how wide that buffer is expected to be: it is a hint, so the executor grows the buffer rather than make a side wait, and a hint wider than the implementation's cap is clamped to it. What no buffer can be is narrower than the one element being handed over, so write `n` as 1 or more, or leave it out for the default of 8.",
             },
         },
         {
@@ -1698,6 +1714,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "FactCaseBindsNoVariable",
                 "This case of the fact '{0}' names no variable.",
                 "The cases read how a value was built, and the parts they read are the variables their patterns name: `case x + y` binds the two operands, and the fact function is computed from them (rewrite design 7.5). A pattern that names no variable leaves the case with nothing to read, so the fact says nothing about the values it matches; bind a part with a name, or write `case _`, which is the last case and says what the fact is for a value no other case matched.",
+            },
+        },
+        {
+            SemanticDiag::TypeFunctionNotApplicable,
+            {
+                "TypeFunctionNotApplicable",
+                "The type function '{0}' is not applicable: {1}.",
+                "A type function computes a type from types at compile time (design principles 21): `ElementOf<T>` is the element of an array or a set, `PayloadOf<T>` the `U` of `U?` or `U!`, and `KeyOf<T>` and `ValueOf<T>` the key and value types of a map; a program writes its own with `type F<T> = ...`, whose body may be a `match type`. It is called with `F<...>` where a type is written, and it accepts only the types it is defined for.",
             },
         },
         {

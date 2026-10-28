@@ -113,22 +113,19 @@ class FuncDeclLoad : public StmtLoad {
 
 class TypeDeclLoad : public StmtLoad {
   public:
-    TypeDeclLoad(Reference ref, std::string uri = "")
-        : StmtLoad(StmtType::Type), ref_(ref), uri_(std::move(uri)) {}
+    TypeDeclLoad(Reference ref) : StmtLoad(StmtType::Type), ref_(ref) {}
 
     const Reference &ref() const { return ref_; }
     /// The parameters of a type function, `T` and `U` in `type Pair<T, U> = ...`; empty for
     /// an ordinary type declaration.
     const std::vector<std::string> &params() const { return params_; }
     void setParams(std::vector<std::string> params) { params_ = std::move(params); }
-    const std::string &uri() const { return uri_; }
 
     const std::string toString() const override;
     const std::string geneCode() const override;
 
   private:
     Reference ref_;
-    std::string uri_;
     std::vector<std::string> params_;
 };
 

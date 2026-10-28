@@ -29,7 +29,7 @@ func cell(xt: f32[..], h: f32[..]): f32[..] {
 
 with <m: Gru, x: f32[..]>
 func gated(t: int, h: f32[..]): f32[..] {
-    let xt = reshape(slice(x, 1, t, t + 1), [shape(x)[0], shape(x)[2]])
+    let xt = reshape<[shape(x)[0], shape(x)[2]]>(slice(x, 1, t, t + 1))
     return if mean(abs(xt)) > 0.5 then cell<m>(xt, h) else h
 }
 
@@ -40,7 +40,7 @@ func run(t: int, steps: int, h: f32[..]): f32[..] {
 
 with <m: Gru>
 func loss(x: f32[..]): float {
-    let h = run<m, x>(0, shape(x)[1], zeros([shape(x)[0], shape(m.w_hr)[0]]))
+    let h = run<m, x>(0, shape(x)[1], zeros::<f32>([shape(x)[0], shape(m.w_hr)[0]]))
     let y = h @ m.fc_w + m.fc_b
     return float(mean(y * y))
 }
@@ -51,25 +51,23 @@ func fwd(m: Gru, x: f32[..]): float {
 
 func main(): int sync {
     let m = {
-        w_ir: reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25] as f32[], [2, 3]),
-        w_iz: reshape([0.25, 0.5, -0.75, -0.5, 1.0, 0.5] as f32[], [2, 3]),
-        w_in: reshape([0.75, -0.5, 0.5, 0.25, -1.0, 0.5] as f32[], [2, 3]),
-        w_hr: reshape([0.5, 0.25, -0.25, -0.5, 0.75, 0.5, 0.25, -0.75, 1.0] as f32[], [3, 3]),
-        w_hz: reshape([0.25, -0.5, 0.5, 0.75, 0.5, -1.0, 0.5, 0.25, -0.25] as f32[], [3, 3]),
-        w_hn: reshape([-0.5, 0.5, 0.25, 0.5, -0.75, 1.0, 0.25, 0.5, -0.5] as f32[], [3, 3]),
-        b_ir: reshape([0.1, 0.0, -0.1] as f32[], [3]),
-        b_iz: reshape([0.0, 0.1, 0.2] as f32[], [3]),
-        b_in: reshape([-0.1, 0.2, 0.0] as f32[], [3]),
-        b_hr: reshape([0.1, 0.1, 0.0] as f32[], [3]),
-        b_hz: reshape([0.0, -0.1, 0.1] as f32[], [3]),
-        b_hn: reshape([0.2, 0.0, -0.2] as f32[], [3]),
-        fc_w: reshape([0.5, -0.5, 1.0, 0.25, -0.75, 0.5] as f32[], [3, 2]),
-        fc_b: reshape([0.3, -0.2] as f32[], [2])
+        w_ir: reshape<[2, 3]>([0.5, -0.25, 0.75, 1.0, -0.5, 0.25] as f32[]),
+        w_iz: reshape<[2, 3]>([0.25, 0.5, -0.75, -0.5, 1.0, 0.5] as f32[]),
+        w_in: reshape<[2, 3]>([0.75, -0.5, 0.5, 0.25, -1.0, 0.5] as f32[]),
+        w_hr: reshape<[3, 3]>([0.5, 0.25, -0.25, -0.5, 0.75, 0.5, 0.25, -0.75, 1.0] as f32[]),
+        w_hz: reshape<[3, 3]>([0.25, -0.5, 0.5, 0.75, 0.5, -1.0, 0.5, 0.25, -0.25] as f32[]),
+        w_hn: reshape<[3, 3]>([-0.5, 0.5, 0.25, 0.5, -0.75, 1.0, 0.25, 0.5, -0.5] as f32[]),
+        b_ir: reshape<[3]>([0.1, 0.0, -0.1] as f32[]),
+        b_iz: reshape<[3]>([0.0, 0.1, 0.2] as f32[]),
+        b_in: reshape<[3]>([-0.1, 0.2, 0.0] as f32[]),
+        b_hr: reshape<[3]>([0.1, 0.1, 0.0] as f32[]),
+        b_hz: reshape<[3]>([0.0, -0.1, 0.1] as f32[]),
+        b_hn: reshape<[3]>([0.2, 0.0, -0.2] as f32[]),
+        fc_w: reshape<[3, 2]>([0.5, -0.5, 1.0, 0.25, -0.75, 0.5] as f32[]),
+        fc_b: reshape<[2]>([0.3, -0.2] as f32[])
     }
-    let x = reshape(
-        [1.0, -1.0, 0.25, -0.25, 0.75, 0.5, 0.5, -0.5, -0.25, 0.25, -0.5, 1.0] as f32[],
-        [2, 3, 2]
-    )
+    let x = reshape<[2, 3, 2]>(
+        [1.0, -1.0, 0.25, -0.25, 0.75, 0.5, 0.5, -0.5, -0.25, 0.25, -0.5, 1.0] as f32[])
     let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(fwd, (m, x))
     println('exported')
     return 0

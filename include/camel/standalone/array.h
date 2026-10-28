@@ -148,6 +148,17 @@ template <typename T> T at(const Array<T> &xs, int64_t index, const Site &site) 
     return xs[static_cast<std::size_t>(index)];
 }
 
+/// A type name applied to an array (:op/atoi, :op/atol, :op/atof, :op/atod): every element converted
+/// by the C++ conversion, which is what the runtime's does (core/array_convert.h).
+template <typename To, typename From> Array<To> convertArray(const Array<From> &xs) {
+    Array<To> out;
+    out.reserve(xs.size());
+    for (const From &x : xs) {
+        out.push(static_cast<To>(x));
+    }
+    return out;
+}
+
 /// `xs->append<x>` (:struct/append_arr): a new array, `xs` followed by `x`.
 template <typename T> Array<T> append(Array<T> xs, std::type_identity_t<T> item) {
     xs.push(std::move(item));
@@ -180,6 +191,54 @@ Array<T> slice(const Array<T> &xs, int64_t start, int64_t end, const Site &site)
         for (int64_t i = start; i < end; ++i) {
             out.push(xs[static_cast<std::size_t>(i)]);
         }
+    }
+    return out;
+}
+
+/// `xs[a:b]`, `xs[a:b:s]`, `xs[:b]`, `xs[a:]`, `xs[::-1]` and `slice(xs, 0, a, b, s)` (:op/slice_sub)
+/// of a one-dimensional array, as struct.cpp's __slice_sub__ reads them: `written` says which
+/// bounds the program wrote (bit 1 the end, bit 2 the start), a step of 0 or an axis other than the
+/// first is InvalidArgument at `invalid` (values: "[]", what is wrong), and a bound that leaves the
+/// array is SliceOutOfRange at `outOfRange` (values: the start, the end, "an array", the length).
+template <typename T>
+Array<T> sliceSub(
+    const Array<T> &xs, int64_t axis, int64_t startRaw, int64_t endRaw, int64_t step,
+    int64_t written, const Site &outOfRange, const Site &invalid) {
+    if (axis != 0 && axis != -1) [[unlikely]] {
+        fault(invalid, {"[]", "a slice axis must be between 0 and 0, not " + std::to_string(axis)});
+    }
+    if (step == 0) [[unlikely]] {
+        fault(invalid, {"[]", "a slice step must not be 0"});
+    }
+    const auto extent     = static_cast<int64_t>(xs.size());
+    const bool wroteEnd   = (written & 1) != 0;
+    const bool wroteStart = (written & 2) != 0;
+    int64_t start         = 0;
+    int64_t count         = 0;
+    if (step > 0) {
+        start             = wroteStart ? startRaw : 0;
+        const int64_t end = wroteEnd ? endRaw : extent;
+        if (start < 0 || start > extent || end < 0 || end > extent) [[unlikely]] {
+            fault(
+                outOfRange,
+                {std::to_string(start), std::to_string(end), "an array", std::to_string(extent)});
+        }
+        count = start < end ? (end - start + step - 1) / step : 0;
+    } else {
+        start             = wroteStart ? startRaw : extent - 1;
+        const int64_t end = wroteEnd ? endRaw : -1;
+        if ((wroteStart && (start < 0 || start >= extent)) ||
+            (wroteEnd && (end < 0 || end > extent))) [[unlikely]] {
+            fault(
+                outOfRange,
+                {std::to_string(start), std::to_string(end), "an array", std::to_string(extent)});
+        }
+        count = start > end ? (start - end + (-step) - 1) / (-step) : 0;
+    }
+    Array<T> out;
+    out.reserve(static_cast<std::size_t>(count));
+    for (int64_t i = 0; i < count; ++i) {
+        out.push(xs[static_cast<std::size_t>(start + i * step)]);
     }
     return out;
 }

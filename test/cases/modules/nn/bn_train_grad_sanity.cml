@@ -16,30 +16,30 @@ type Inputs = { t: f32[..], g: f32[..], b: f32[..], rm: f32[..], rv: f32[..] }
 
 // The fixed loss weights: loss = sum(y * w), so dL/dy = w.
 func w(): f32[..] {
-    return reshape([
+    return reshape<[2, 2, 2, 2]>([
         0.5, -1.0, 0.25, 2.0, -0.75, 1.5, 0.125, -0.5, 1.0, 0.0, -2.0, 0.75, 0.5, 0.5, -0.25, 1.25
-    ] as f32[], [2, 2, 2, 2])
+    ] as f32[])
 }
 
 func x(): f32[..] {
-    return reshape([
+    return reshape<[2, 2, 2, 2]>([
         1.0, 0.5, -0.5, 2.0, 0.0, 1.5, -1.0, 0.25, 0.75, -0.25, 1.25, 0.5, -0.75, 0.0, 2.0, -0.5
-    ] as f32[], [2, 2, 2, 2])
+    ] as f32[])
 }
 
 // Per-channel mean over (batch, spatial) of a rank-4 NCHW tensor: [N,C,H,W] -> [C].
 func bmean(t: f32[..]): f32[..] {
-    return mean(mean(mean(t, 0), 1), 1)
+    return mean<1>(mean<1>(mean<0>(t)))
 }
 
 // The manual decomposition: biased batch variance for the normalize, UNBIASED (M/(M-1))
 // variance for the running variance, running <- (1-m)*running + m*batch_stat.
 func reference(t: f32[..], g: f32[..], b: f32[..], rm: f32[..], rv: f32[..], m: float, eps: float): (f32[..], f32[..], f32[..]) {
     let mu = bmean(t)
-    let xc = t - reshape(mu, [1, 2, 1, 1])
+    let xc = t - reshape<[1, 2, 1, 1]>(mu)
     let va = bmean(xc * xc)
-    let xhat = xc / reshape(sqrt(va + f32(eps)), [1, 2, 1, 1])
-    let y = xhat * reshape(g, [1, 2, 1, 1]) + reshape(b, [1, 2, 1, 1])
+    let xhat = xc / reshape<[1, 2, 1, 1]>(sqrt(va + f32(eps)))
+    let y = xhat * reshape<[1, 2, 1, 1]>(g) + reshape<[1, 2, 1, 1]>(b)
     let new_rm = f32(1.0 - m) * rm + f32(m) * mu
     let new_rv = f32(1.0 - m) * rv + f32(m) * va * f32(8.0 / 7.0)
     return (y, new_rm, new_rv)
@@ -56,10 +56,10 @@ func loss(): float {
 }
 
 func main(): int sync {
-    let g = reshape([1.2, 0.8] as f32[], [2])
-    let b = reshape([0.3, -0.2] as f32[], [2])
-    let rm = reshape([0.1, -0.4] as f32[], [2])
-    let rv = reshape([1.5, 0.9] as f32[], [2])
+    let g = reshape<[2]>([1.2, 0.8] as f32[])
+    let b = reshape<[2]>([0.3, -0.2] as f32[])
+    let rm = reshape<[2]>([0.1, -0.4] as f32[])
+    let rv = reshape<[2]>([1.5, 0.9] as f32[])
 
     let got = batch_norm_train(x(), g, b, rm, rv, 0.1, 0.00001)
     let ref = reference(x(), g, b, rm, rv, 0.1, 0.00001)
@@ -78,21 +78,21 @@ func main(): int sync {
     let dRvGrad = sum(abs(grads.rv))
 
     // Finite differences: gamma[0], beta[0], x[0,0,0,0] (h = 0.001).
-    let fdG0 = (loss_at(x(), reshape([1.201, 0.8] as f32[], [2]), b, rm, rv) - loss_at(x(), reshape([1.199, 0.8] as f32[], [2]), b, rm, rv)) / 0.002
-    let fdB0 = (loss_at(x(), g, reshape([0.301, -0.2] as f32[], [2]), rm, rv) - loss_at(x(), g, reshape([0.299, -0.2] as f32[], [2]), rm, rv)) / 0.002
-    let xp = reshape([
+    let fdG0 = (loss_at(x(), reshape<[2]>([1.201, 0.8] as f32[]), b, rm, rv) - loss_at(x(), reshape<[2]>([1.199, 0.8] as f32[]), b, rm, rv)) / 0.002
+    let fdB0 = (loss_at(x(), g, reshape<[2]>([0.301, -0.2] as f32[]), rm, rv) - loss_at(x(), g, reshape<[2]>([0.299, -0.2] as f32[]), rm, rv)) / 0.002
+    let xp = reshape<[2, 2, 2, 2]>([
         1.001, 0.5, -0.5, 2.0, 0.0, 1.5, -1.0, 0.25, 0.75, -0.25, 1.25, 0.5, -0.75, 0.0, 2.0, -0.5
-    ] as f32[], [2, 2, 2, 2])
-    let xm = reshape([
+    ] as f32[])
+    let xm = reshape<[2, 2, 2, 2]>([
         0.999, 0.5, -0.5, 2.0, 0.0, 1.5, -1.0, 0.25, 0.75, -0.25, 1.25, 0.5, -0.75, 0.0, 2.0, -0.5
-    ] as f32[], [2, 2, 2, 2])
+    ] as f32[])
     let fdX0 = (loss_at(xp, g, b, rm, rv) - loss_at(xm, g, b, rm, rv)) / 0.002
 
-    let g0 = sum(grads.g * reshape([1.0, 0.0] as f32[], [2]))
-    let b0 = sum(grads.b * reshape([1.0, 0.0] as f32[], [2]))
-    let x0 = sum(grads.t * reshape([
+    let g0 = sum(grads.g * reshape<[2]>([1.0, 0.0] as f32[]))
+    let b0 = sum(grads.b * reshape<[2]>([1.0, 0.0] as f32[]))
+    let x0 = sum(grads.t * reshape<[2, 2, 2, 2]>([
         1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-    ] as f32[], [2, 2, 2, 2]))
+    ] as f32[]))
 
     'bn_train_sanity fwd={} rm={} rv={}'->format<dY, dRm, dRv>->println
     'bn_train_sanity dx={} dg={} db={} rm_grad={} rv_grad={}'->format<dX, dG, dB, dRmGrad, dRvGrad>->println

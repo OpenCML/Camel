@@ -15,9 +15,9 @@ func loss(x: f32[..]): float {
 }
 
 func main(): int sync {
-    let x = zeros([8]) + 0.5
+    let x = zeros::<f32>([8]) + 0.5
     let model: Model = {
-        w: zeros([8]) + 2.0
+        w: zeros::<f32>([8]) + 2.0
     }
     let grad = with_grad(loss)
     let (value, gradient) = grad<{w: model.w}>(x)

@@ -13,6 +13,7 @@
 #include <unordered_set>
 
 #include "camel/core/context/context.h"
+#include "camel/core/type/resolver.h"
 
 #include "camel/core/global_config.h"
 #include "camel/core/mm.h"
@@ -715,6 +716,56 @@ Context::importModule(const std::string &rawModuleName, const module::Module *im
         reasonStr.pop_back();
     reasonStr += "\n";
     throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound).commit(rawModuleName, reasonStr);
+}
+
+void Context::claimBuiltinSignature(
+    const std::shared_ptr<camel::core::type::FuncTypeResolver> &rule,
+    camel::core::type::FunctionType *signature) {
+    for (auto &[claimed, signatures] : builtinClaims_) {
+        if (claimed == rule) {
+            signatures.push_back(signature);
+            return;
+        }
+    }
+    builtinClaims_.push_back({rule, {signature}});
+}
+
+std::string Context::checkPreludeDeclarations() {
+    if (preludeChecked_) {
+        return preludeProblem_;
+    }
+    preludeChecked_ = true;
+    for (const std::string &root : resolver_.searchRoots(std::string())) {
+        const fs::path file = camel::utils::pathFromUtf8(root) / "prelude.cml";
+        std::error_code ec;
+        if (!fs::is_regular_file(file, ec) || ec) {
+            continue;
+        }
+        const std::string path = camel::utils::pathToUtf8(file);
+        auto prelude = std::static_pointer_cast<UserDefinedModule>(
+            UserDefinedModule::fromFile("prelude", path, shared_from_this()));
+        preludeModule_ = prelude;
+        try {
+            prelude->compile(CompileStage::Declared);
+        } catch (...) {
+            // A file that does not parse is reported by its own diagnostics, below.
+            if (!prelude->diagnostics() || !prelude->diagnostics()->hasErrors()) {
+                throw;
+            }
+        }
+        if (prelude->diagnostics() && prelude->diagnostics()->hasErrors()) {
+            preludeProblem_ = path;
+        } else {
+            for (const auto &[rule, signatures] : builtinClaims_) {
+                if (signatures.size() == 1) {
+                    rule->graftDeclaredSignature(signatures.front());
+                }
+            }
+        }
+        builtinClaims_.clear();
+        return preludeProblem_;
+    }
+    return preludeProblem_;
 }
 
 std::string Context::importerDirectory(const module::Module *importer) const {

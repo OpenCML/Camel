@@ -4,7 +4,7 @@
 // without passing the check. A test that hand-lists the rules -- and all three check cases did --
 // makes that property drift silently: a rule is added to the library, the lists are not, and the
 // suite stays green while one law of the library is never checked at all. The folding lane measured
-// exactly that: `tensor_sigmoid_chain` was exported, used by the `rules::fusion` pass, and reached
+// exactly that: `array_sigmoid_chain` was exported, used by the `rules::fusion` pass, and reached
 // no `check` call, and the number of rules the check saw (68 of 69) was written down in a comment
 // instead of being asserted.
 //

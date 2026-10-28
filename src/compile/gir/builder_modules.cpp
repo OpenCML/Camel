@@ -411,7 +411,7 @@ std::string describeResources(
         }
     }
     for (const auto &use : signature.ambient) {
-        add(use.name);
+        add(camel::core::sem::resourceDisplayName(use.name));
     }
     for (camel::core::sem::ResourceClass cls : signature.anyOf) {
         add(std::format("any {}", camel::core::sem::resourceClassName(cls)));
@@ -439,6 +439,55 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
     if (uri.find(':') == std::string::npos) {
         diags_->of(SemanticDiag::InvalidOperatorURI).atOrigin(gct->origin()).commit(uri);
         throw BuildAbortException();
+    }
+    // The prelude's declaration file declares the built-in operators, whose rules the core
+    // computes: the declaration gives each rule it names the parameter types every call is held
+    // to, and declares nothing of its own. A `*` in the URI stands for the family of operators one
+    // declaration covers (`:op/*tol`: one per source type).
+    if (context_->preludeModule() != nullptr && unit_->module == context_->preludeModule()) {
+        const auto matches = [](const std::string &pattern, const std::string &candidate) {
+            const size_t star = pattern.find('*');
+            if (star == std::string::npos) {
+                return pattern == candidate;
+            }
+            return candidate.size() >= pattern.size() - 1 &&
+                   candidate.compare(0, star, pattern, 0, star) == 0 &&
+                   candidate.compare(
+                       candidate.size() - (pattern.size() - star - 1),
+                       std::string::npos,
+                       pattern,
+                       star + 1,
+                       std::string::npos) == 0;
+        };
+        bool claimed = false;
+        if (const auto builtins = context_->importModule("")) {
+            if (const auto entity = builtins->getNativeEntity(Reference(name));
+                entity.has_value() && entity->isOperGroup()) {
+                for (const auto &[ruleUri, rule] : entity->operGroup()->resolvers()) {
+                    if (rule != nullptr && matches(uri, ruleUri)) {
+                        context_->claimBuiltinSignature(rule, funcType);
+                        claimed = true;
+                    }
+                }
+            }
+        }
+        // A declaration of an operator no rule of the group has yet is the rule itself: its
+        // resolver is the declaration (design principles 6.4), and it joins the built-in group at
+        // export. The operator's kernel and facts must be there, as for any declaration.
+        const bool ownRule = !claimed && uri.find('*') == std::string::npos &&
+                             context_->execMgr().findWithoutImport(uri).has_value() &&
+                             camel::core::OperatorTable::instance().find(uri).has_value();
+        if (!claimed && !ownRule) {
+            diags_->of(SemanticDiag::NativeDeclarationNotLoaded)
+                .atOrigin(gct->origin())
+                .commit(name, uri);
+            throw BuildAbortException();
+        }
+        if (claimed) {
+            // Nothing is exported: the name is the built-in operator's own.
+            unit_->passDeclarations.insert(name);
+            return;
+        }
     }
     // The declaration is the signature of an operator of a loaded module: an operator no executor
     // answers cannot be called, and a mistake of the declaration (a wrong module, a typo) must be
@@ -684,6 +733,25 @@ void Builder::exportNativeOperators(const GCT::node_ptr_t &exportList) {
         // it marked private and the reference checker verifies its signature and its purity
         // against this registration, which is what a kernel nobody exported used to escape.
         const bool isExported = exported.contains(group.name);
+        if (context_->preludeModule() != nullptr && unit_->module == context_->preludeModule()) {
+            // The rules of the prelude join the built-in group of their name, which every module
+            // already holds.
+            const auto builtins = context_->importModule("");
+            const auto entity   = builtins ? builtins->getNativeEntity(ref) : std::nullopt;
+            if (!entity.has_value() || !entity->isOperGroup()) {
+                diags_->of(SemanticDiag::NativeDeclarationNotLoaded)
+                    .atOrigin(group.origin)
+                    .commit(group.name, group.rules.front().first);
+                throw BuildAbortException();
+            }
+            for (auto &[ruleUri, rule] : group.rules) {
+                entity->operGroup()->addRule(ruleUri, std::move(rule));
+            }
+            // The name is the built-in group's own: the module exports nothing under it.
+            unit_->passDeclarations.insert(group.name);
+            group.rules.clear();
+            continue;
+        }
         std::optional<camel::core::module::entity> existing;
         if (isExported) {
             existing = unit_->module->getNativeEntity(ref);
@@ -792,7 +860,8 @@ bool Builder::sameImplSignature(FunctionType *function, FunctionType *kernel) {
 
 Builder::RuleVerdict Builder::ruleVerdictForCall(
     const camel::core::type::resolver_ptr_t &rule, const std::string &name,
-    const type_vec_t &withTypes, const type_vec_t &normTypes, std::string *conditionText) {
+    const type_vec_t &withTypes, const type_vec_t &normTypes, std::string *conditionText,
+    const type_vec_t &explicitTypes) {
     const auto found = nativeRuleConditions_.find(rule.get());
     if (found == nativeRuleConditions_.end()) {
         // No condition: the rule applies wherever its signature does.
@@ -811,6 +880,11 @@ Builder::RuleVerdict Builder::ruleVerdictForCall(
     if (const auto *generic = dynamic_cast<const DeclaredFuncTypeResolver *>(rule.get());
         generic != nullptr) {
         declared = generic->funcType();
+        // The variables the call writes (`constant::<int>(n)`) are bound before the arguments are
+        // read: a variable only the result mentions has no other binding.
+        for (size_t i = 0; i < explicitTypes.size() && i < generic->bindableNames().size(); ++i) {
+            bindings.emplace_back(generic->bindableNames()[i], explicitTypes[i]);
+        }
         if (declared->withTypesCount() != withTypes.size() ||
             declared->normTypesCount() != normTypes.size()) {
             return RuleVerdict::NotThisRule;
@@ -843,16 +917,18 @@ Builder::RuleVerdict Builder::ruleVerdictForCall(
 
 bool Builder::declaredRuleApplies(
     const camel::core::type::resolver_ptr_t &rule, const std::string &name,
-    const type_vec_t &withTypes, const type_vec_t &normTypes) {
+    const type_vec_t &withTypes, const type_vec_t &normTypes, const type_vec_t &explicitTypes) {
     // The same question a call asks, with one answer instead of three. An `#impl` instance asks
     // it after checking that the rule's signature names the instance (sameImplSignature, or the
     // rule's own resolve), so the rule's parameters always take the instance's types and
     // NotThisRule cannot arise here.
-    return ruleVerdictForCall(rule, name, withTypes, normTypes) == RuleVerdict::Applies;
+    return ruleVerdictForCall(rule, name, withTypes, normTypes, nullptr, explicitTypes) ==
+           RuleVerdict::Applies;
 }
 
 void Builder::adoptImplKernel(
-    const generic_template_ptr_t &tmpl, const compile_graph_ptr_t &graph, FunctionType *funcType) {
+    const generic_template_ptr_t &tmpl, const compile_graph_ptr_t &graph, FunctionType *funcType,
+    const camel::core::type::type_bindings_t &bindings) {
     if (tmpl == nullptr || graph == nullptr || funcType == nullptr) {
         return;
     }
@@ -873,6 +949,7 @@ void Builder::adoptImplKernel(
     const type_vec_t normTypes(funcType->normTypesSpan().begin(), funcType->normTypesSpan().end());
     std::string uri;
     camel::core::type::resolver_ptr_t executor;
+    type_vec_t statedTypes;
     for (const auto &[ruleUri, resolver] : kernel.group->resolvers()) {
         if (FunctionType *fixed = resolver->fixedSignature(); fixed != nullptr) {
             if (sameImplSignature(funcType, fixed) &&
@@ -886,10 +963,29 @@ void Builder::adoptImplKernel(
         if (executor != nullptr) {
             continue;
         }
-        if (resolver->resolve(withTypes, normTypes).has_value() &&
-            declaredRuleApplies(resolver, kernel.name, withTypes, normTypes)) {
-            uri      = ruleUri;
-            executor = resolver;
+        bool takes = resolver->resolve(withTypes, normTypes).has_value();
+        type_vec_t stated;
+        if (!takes) {
+            // A variable only the result mentions is not read from the arguments: the instance's
+            // own type arguments state it.
+            if (const auto *declaredRule =
+                    dynamic_cast<const DeclaredFuncTypeResolver *>(resolver.get());
+                declaredRule != nullptr && !declaredRule->bindableNames().empty()) {
+                for (const std::string &variable : declaredRule->bindableNames()) {
+                    if (Type *type = findTypeBinding(bindings, variable); type != nullptr) {
+                        stated.push_back(type);
+                    }
+                }
+                takes = stated.size() == declaredRule->bindableNames().size() &&
+                        resolver
+                            ->resolveForCall(stated, funcType->exitType(), withTypes, normTypes, {})
+                            .has_value();
+            }
+        }
+        if (takes && declaredRuleApplies(resolver, kernel.name, withTypes, normTypes, stated)) {
+            uri         = ruleUri;
+            executor    = resolver;
+            statedTypes = stated;
         }
     }
     // The instance is a semantic body of its `#impl` function whether or not an executor was
@@ -907,6 +1003,7 @@ void Builder::adoptImplKernel(
     ImplKernel adopted;
     adopted.name  = kernel.name;
     adopted.uri   = uri;
+    adopted.types = statedTypes;
     adopted.group = OperatorGroup::create(
         kernel.group->name(),
         std::vector<std::pair<std::string, camel::core::type::resolver_ptr_t>>{
@@ -1068,7 +1165,20 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
                 adopted.name  = tag->kernel;
                 adopted.uri   = group->resolvers().front().first;
                 adopted.group = group;
-                implTemplateKernels_[genericTemplate.one().get()] = std::move(adopted);
+                // The template this very declaration made: a name with several generic
+                // declarations (`abs` for the reals and for each complex width) has a group, and
+                // the kernel belongs to the one that wrote the tag.
+                generic_template_ptr_t own = genericTemplate.one();
+                if (GenericGroup *templates = genericGroupOf(genericTemplate);
+                    templates != nullptr) {
+                    for (const generic_template_ptr_t &candidate : *templates) {
+                        if (candidate != nullptr && candidate->func == child) {
+                            own = candidate;
+                            break;
+                        }
+                    }
+                }
+                implTemplateKernels_[own.get()] = std::move(adopted);
                 continue;
             }
             if (funcType->hasConstas()) {
@@ -1258,22 +1368,6 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
         }
         if (auto value = unit_->values.find(name); value != unit_->values.end()) {
             TopLevelDeclaration &declaration = *value->second;
-            if (declaration.isVar) {
-                // Design principles 10.1: a `var` of the top level is written by the module's
-                // own functions only, which are exported instead.
-                camel::source::origin_id_t origin = gct->origin();
-                for (const auto &child : *declaration.gct) {
-                    if (child->type() == GCT::NodeKind::NREF && child->name() == name) {
-                        origin = child->origin();
-                    }
-                }
-                if (declaration.gct->type() == GCT::NodeKind::NREF) {
-                    origin = declaration.gct->origin();
-                }
-                diags_->of(SemanticDiag::ExportedVariable).atOrigin(origin).commit(name);
-                failed = true;
-                continue;
-            }
             // A value of the top level is a node of the root graph, which every module of the
             // program builds into: the importing module captures that very node, made when
             // a module first uses it (exportedValueNode).

@@ -20,31 +20,28 @@
 /// @example new([[1.0, 2.0], [3.0, 4.0]])
 export func new(values: float[..] | number[]): float[..]
 
-/// A tensor of the given extents; the allocation is zeroed, so it reads as `zeros` of the same
-/// shape.
+/// An array of the given extents whose elements are all 0. The element type is written
+/// (`zeros::<f32>([2, 3])`) or comes from the position of the call (`let x: f32[2, 3] =
+/// zeros([2, 3])`); there is no default.
 /// @pure
-/// @example empty([2, 3])
-export func empty(shape: int[]): f32[..]
+/// @example zeros::<f32>([2, 3])
+export func zeros::<T>(shape: int[]): T[..] when is_numeric::<T>()
 
-/// A tensor of `f32` zeros with the given extents.
+/// An array of the given extents whose elements are all 1; the element type is the call's, as for
+/// `zeros`.
 /// @pure
-/// @example zeros([2, 3])
-export func zeros(shape: int[]): f32[..]
-
-/// A tensor of `f32` ones with the given extents.
-/// @pure
-/// @example ones([2, 3])
-export func ones(shape: int[]): f32[..]
+/// @example ones::<f32>([2, 3])
+export func ones::<T>(shape: int[]): T[..] when is_numeric::<T>()
 
 /// A tensor of the given extents whose elements are all value; the element type is the value's.
 /// @pure
 /// @example full([2, 2], -1.0)
 export func full(shape: int[], value: number): float[..]
 
-/// The `f32` n by n identity matrix.
+/// The n by n identity matrix; the element type is the call's, as for `zeros`.
 /// @pure
-/// @example eye(2)
-export func eye(n: int): f32[..]
+/// @example eye::<f32>(2)
+export func eye::<T>(n: int): T[..] when is_numeric::<T>()
 
 /// The integer sequence start, start + step, ... below stop, as a rank-1 `int64` tensor: one
 /// argument is stop with start 0, step is 1 by default, and a step of 0 is a fault.
@@ -189,7 +186,7 @@ export func erf(t: float[..]): float[..]
 /// The elements in row-major order, in a new shape; one extent may be -1, which the element
 /// count fills.
 /// @pure
-/// @example reshape(new([1.0, 2.0, 3.0, 4.0]), [2, 2])
+/// @example reshape<[2, 2]>(new([1.0, 2.0, 3.0, 4.0]))
 export func reshape(t: float[..] | number[], shape: int[]): float[..]
 
 /// The elements in row-major order in two axes: the extents before axis multiplied into the
@@ -200,7 +197,7 @@ export func flatten(t: float[..], axis?: int): float[..]
 
 /// The elements unchanged, with an axis of extent 1 added at axis.
 /// @pure
-/// @example unsqueeze(new([1.0, 2.0]), 0)    // shape [1, 2]
+/// @example unsqueeze<0>(new([1.0, 2.0]))    // shape [1, 2]
 export func unsqueeze(t: float[..], axis: int): float[..]
 
 /// The last two axes swapped (a vector becomes a column, a matrix its transpose).
@@ -210,12 +207,12 @@ export func transpose(t: float[..]): float[..]
 
 /// The axes reordered as perm lists them.
 /// @pure
-/// @example permute(new([[1.0, 2.0], [3.0, 4.0]]), [1, 0])
+/// @example permute<[1, 0]>(new([[1.0, 2.0], [3.0, 4.0]]))
 export func permute(t: float[..], perm: int[]): float[..]
 
 /// a and b joined along axis; every other extent must agree.
 /// @pure
-/// @example concat(new([[1.0]]), new([[2.0]]), 0)    // shape [2, 1]
+/// @example concat<0>(new([[1.0]]), new([[2.0]]))    // shape [2, 1]
 export func concat(a: float[..] | number[], b: float[..] | number[], axis: int): float[..]
 
 /// The entries of the first axis that indices name, in that order.
@@ -249,7 +246,7 @@ export func sum::<T>(t: T[..]): T
 /// The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis with extent 1.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
-/// @example sum(new([[1.0, 2.0], [3.0, 4.0]]), 0)    // [4.0, 6.0]
+/// @example sum<0>(new([[1.0, 2.0], [3.0, 4.0]]))    // [4.0, 6.0]
 #op('tensor:sum_axis')
 export func sum(t: float[..], axis: int, keepdims?: bool): float[..]
 
@@ -267,7 +264,7 @@ export func mean::<T>(t: T[..]): T
 /// The same mean over one axis; keepdims keeps the axis with extent 1.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `DivisionByZero` when the axis is empty
-/// @example mean(new([[1.0, 2.0], [3.0, 4.0]]), 1)    // [1.5, 3.5]
+/// @example mean<1>(new([[1.0, 2.0], [3.0, 4.0]]))    // [1.5, 3.5]
 #op('tensor:mean_axis')
 export func mean(t: float[..], axis: int, keepdims?: bool): float[..]
 
@@ -275,7 +272,7 @@ export func mean(t: float[..], axis: int, keepdims?: bool): float[..]
 /// the same bits); keepdims keeps the axis with extent 1.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
-/// @example max(new([[1.0, 2.0], [3.0, 4.0]]), 0)    // [3.0, 4.0]
+/// @example max<0>(new([[1.0, 2.0], [3.0, 4.0]]))    // [3.0, 4.0]
 #op('tensor:max_axis')
 export func max(t: float[..], axis: int, keepdims?: bool): float[..]
 
@@ -283,7 +280,7 @@ export func max(t: float[..], axis: int, keepdims?: bool): float[..]
 /// axis with extent 1.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
-/// @example min(new([[1.0, 2.0], [3.0, 4.0]]), 1)    // [1.0, 3.0]
+/// @example min<1>(new([[1.0, 2.0], [3.0, 4.0]]))    // [1.0, 3.0]
 #op('tensor:min_axis')
 export func min(t: float[..], axis: int, keepdims?: bool): float[..]
 
@@ -291,7 +288,7 @@ export func min(t: float[..], axis: int, keepdims?: bool): float[..]
 /// NaN if there is one, +0 above -0, the earlier position on a tie.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
-/// @example argmax(new([[1.0, 2.0], [3.0, 4.0]]), 1)    // [1, 1]
+/// @example argmax<1>(new([[1.0, 2.0], [3.0, 4.0]]))    // [1, 1]
 #op('tensor:argmax_axis')
 export func argmax(t: float[..], axis: int, keepdims?: bool): int64[..]
 
@@ -299,7 +296,7 @@ export func argmax(t: float[..], axis: int, keepdims?: bool): int64[..]
 /// NaN if there is one, -0 below +0, the earlier position on a tie.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
-/// @example argmin(new([[1.0, 2.0], [3.0, 4.0]]), 0)    // [0, 0]
+/// @example argmin<0>(new([[1.0, 2.0], [3.0, 4.0]]))    // [0, 0]
 #op('tensor:argmin_axis')
 export func argmin(t: float[..], axis: int, keepdims?: bool): int64[..]
 
@@ -359,54 +356,6 @@ export func zeros_like(t: float[..]): float[..]
 export func ones_like(t: float[..]): float[..]
 
 // ---- conversion and display ----
-
-/// The conversion `i32` applied to every element of an array: the result has the input's extents and element type `i32`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
-/// @pure
-/// @example i32(new([1.0, 2.0]))
-#op('tensor:to_i32')
-export func i32(t: float[..] | number[]): i32[..]
-
-/// The conversion `i64` applied to every element of an array: the result has the input's extents and element type `int64`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
-/// @pure
-/// @example i64(new([1.0, 2.0]))
-#op('tensor:to_i64')
-export func i64(t: float[..] | number[]): int64[..]
-
-/// The conversion `int` applied to every element of an array: the result has the input's extents and element type `int64`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
-/// @pure
-/// @example int(new([1.0, 2.0]))
-#op('tensor:to_i64')
-export func int(t: float[..] | number[]): int64[..]
-
-/// The conversion `f32` applied to every element of an array: the result has the input's extents and element type `f32`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
-/// @pure
-/// @example f32(new([1.0, 2.0]))
-#op('tensor:to_f32')
-export func f32(t: float[..] | number[]): f32[..]
-
-/// The conversion `f64` applied to every element of an array: the result has the input's extents and element type `f64`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
-/// @pure
-/// @example f64(new([1.0, 2.0]))
-#op('tensor:to_f64')
-export func f64(t: float[..] | number[]): f64[..]
-
-/// The conversion `float` applied to every element of an array: the result has the input's extents and element type `f64`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
-/// @pure
-/// @example float(new([1.0, 2.0]))
-#op('tensor:to_f64')
-export func float(t: float[..] | number[]): f64[..]
-
-/// The conversion `bf16` applied to every element of an array: the result has the input's extents and element type `bf16`. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3). Reading a `bf16` or `f16` tensor into a wider type is exact. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
-/// @pure
-/// @example bf16(new([1.0, 2.0]))
-#op('tensor:to_bf16')
-export func bf16(t: float[..] | number[]): bf16[..]
-
-/// The conversion `f16` applied to every element of an array: the result has the input's extents and element type `f16`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
-/// @pure
-/// @example f16(new([1.0, 2.0]))
-#op('tensor:to_f16')
-export func f16(t: float[..] | number[]): f16[..]
 
 // `show` is declared: its result is fixed `void` and its umbrella parameter is two declarations
 // (a tensor, and any array). See `stdlib/tensor.cml`.

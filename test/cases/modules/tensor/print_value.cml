@@ -13,7 +13,7 @@ import { is_numeric } from types
 
 func forward(x: f32[..]): f32[..] {
     let s = shape(x)
-    return zeros([s[0]]) + 1.0
+    return zeros::<f32>([s[0]]) + 1.0
 }
 
 // The three helpers return the same string the value itself prints as, so the assertion side can
@@ -32,13 +32,13 @@ func by_declaration(label: string, xs: f32[][]): string sync {
 
 func main(): int sync {
     // A value the declaration does not type: an array parameter whose element type is unstated.
-    let rows = reshape([2.0, 0.0, 0.0, 2.0, 0.0, 0.0], [2, 3])
-    let a = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
-    let b = reshape([1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0], [3, 4])
-    println(probe("A", argmin(rows, 0, true)))
+    let rows = reshape<[2, 3]>([2.0, 0.0, 0.0, 2.0, 0.0, 0.0])
+    let a = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+    let b = reshape<[3, 4]>([1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0])
+    println(probe("A", argmin<0, true>(rows)))
     println(probe("B", tanh(a @ b)))
-    println(probe("C", reshape([3.0, 3.0], [2, 1])))
-    println(`D sum=${sum(forward(ones([2, 3])))}`)
+    println(probe("C", reshape<[2, 1]>([3.0, 3.0])))
+    println(`D sum=${sum(forward(ones::<f32>([2, 3])))}`)
 
     // Controls: a declaration that names the element type, and the rank-1 and rank-0 forms.
     let flat: float[] = [1.0, 2.0]

@@ -175,14 +175,15 @@ class EdgeChecker {
     /// and the passes that write order edges cannot drift: only a node the model lets a pass
     /// arrange freely -- pure *and* unable to fault (design principles 3.4) -- refuses one.
     bool isFreelySchedulable(gc_node_ref_t ref) const {
+        // Whether a conversion can fail depends on the types it converts between, and a pass that
+        // refines the types (specialization, inlining) can make a conversion that was ordered when
+        // it was written one that cannot fail. The order it was given then stays: dropping it is
+        // the passes' choice, and an edge on such a node is not a defect of the graph.
         const GCNode *node = graph_.node(ref);
-        if (node == nullptr) {
+        if (node != nullptr && node->kind == GCNodeKind::Cast) {
             return false;
         }
-        const GCOperBody *body =
-            node->kind == GCNodeKind::Oper ? graph_.nodeBodyAs<GCOperBody>(ref) : nullptr;
-        return nodeIsFreelySchedulable(
-            node->kind, body != nullptr ? body->oper : camel::core::kNoOper);
+        return nodeIsFreelySchedulable(graph_, ref);
     }
     /// The equivalences between nodes (the Tabled state): a graph validated as another state has
     /// none; in this one each names two nodes that compute a value of the same type, in the same

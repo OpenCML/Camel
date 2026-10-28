@@ -407,6 +407,15 @@ void Builder::buildTopLevelValue(TopLevelDeclaration &declaration) {
     try {
         (void)visit(declaration.gct);
         declaration.state = BuildState::Built;
+        if (declaration.isVar) {
+            for (const std::string &name : declaration.names) {
+                if (const auto cell = declaration.unit->nodeScope->get(name, false);
+                    cell.has_value()) {
+                    moduleVariableResources_[*cell] =
+                        declaration.unit->module->name() + ":" + name;
+                }
+            }
+        }
     } catch (...) {
         declaration.state = BuildState::Failed;
         for (const std::string &name : declaration.names) {
@@ -553,17 +562,23 @@ bool Builder::buildLibrary(const module_ptr_t &module) {
     return buildFrom(*it->second, false);
 }
 
-bool Builder::buildLibraryEntry(const module_ptr_t &module, const std::string &entryFunction) {
+bool Builder::buildLibraryEntry(
+    const module_ptr_t &module, const std::string &entryFunction, FunctionType *expected) {
     ensureRootGraph();
     const auto it = units_.find(module.get());
     if (it == units_.end()) {
         return false;
     }
     libraryEntryFunction_ = entryFunction;
+    libraryEntryExpected_ = expected;
     struct ClearEntryFunction {
         std::string &name;
-        ~ClearEntryFunction() { name.clear(); }
-    } clearEntryFunction{libraryEntryFunction_};
+        FunctionType *&expected;
+        ~ClearEntryFunction() {
+            name.clear();
+            expected = nullptr;
+        }
+    } clearEntryFunction{libraryEntryFunction_, libraryEntryExpected_};
     return buildFrom(*it->second, true);
 }
 

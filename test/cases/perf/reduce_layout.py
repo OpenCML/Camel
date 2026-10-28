@@ -32,14 +32,14 @@ Modes
               here is what makes a change to the *order* of a reduction fail loudly instead of
               being absorbed as a rounding difference.  The same program one round longer must
               print it too, so the result may not depend on how many rounds ran before it.
-              The three sum_to pins were re-recorded on 2026-10-26, when the author ruled that a
-              reduction returns its element type, accumulates in f64 and rounds once: they were
-              80.390660226 / 15571443.036040597 / 80.390715818, the unrounded f64 sums, and are
-              now 80.390663147 / 15571443.000000000 / 80.390716553 -- each the pinned value
-              rounded once to f32.  The template does not choose this: `float(sum(...))`,
-              `sum(...) as float` and the bare return all print the new value, so the move is the
-              accumulation type's and not a spelling's.  The other four probes are integer-exact
-              and did not move.
+              The three sum_to pins are the f64 sums of the f32 gradient the probe returns: the
+              probe declares `f32` and converts to f64 before the checksum's sum (the ruled
+              reduction returns its element type, so summing the f32 values in f64 is spelled
+              out), which gives 80.390660226 / 15571443.036040597 / 80.390715818.  They were
+              pinned to the same values rounded once to f32 for a while (2026-10-26), when the
+              checksum's own sum was the rounding one; the probe stopped doing that the same day,
+              and the pins were not moved back.  The other four probes are integer-exact and did
+              not move.
 
   ops     The measurement: the operator's ns per call and its share of the round, both from
           `std::profile`, `SAMPLES` runs a shape with the least contended round kept; the same shape
@@ -97,7 +97,7 @@ PROBES = [
         "calls": {"tensor:sum_to": 1},
         "note": "512x256 summed to [256]",
         "reference": "tensor:broadcast_like",
-        "check": "probe name=sum_to_leading reps=N check=80.390663147"
+        "check": "probe name=sum_to_leading reps=N check=80.390660226"
     },
     {
         "name": "sum_to_trailing",
@@ -111,7 +111,7 @@ PROBES = [
         "calls": {"tensor:sum_to": 1},
         "note": "512x256 summed to [512,1] along the trailing axis",
         "reference": "tensor:broadcast_like",
-        "check": "probe name=sum_to_trailing reps=N check=15571443.000000000"
+        "check": "probe name=sum_to_trailing reps=N check=15571443.036040597"
     },
     {
         "name": "sum_to_identity",
@@ -126,13 +126,13 @@ PROBES = [
         "alloc_per_call": 0.0,
         "note": "the floor: the call is the identity path",
         "reference": "tensor:broadcast_like",
-        "check": "probe name=sum_to_identity reps=N check=80.390716553"
+        "check": "probe name=sum_to_identity reps=N check=80.390715818"
     },
     {
         "name": "expand_axis",
         "with": "w: f32[512, 256]",
         "args": "",
-        "body": "sum(mean(w, -1, true))",
+        "body": "sum(mean<-1, true>(w))",
         "lets": ["let w0: f32[512, 256] = randn([512, 256], 0.0, 1.0) "
                  "as f32[512, 256]"],
         "calls": {"tensor:expand_axis": 1, "tensor:mean_axis": 1},
@@ -144,7 +144,7 @@ PROBES = [
         "name": "permute",
         "with": "w: f32[16, 32, 16, 16]",
         "args": "",
-        "body": "sum(permute(permute(w, [0, 2, 1, 3]), [0, 2, 1, 3]))",
+        "body": "sum(permute<[0, 2, 1, 3]>(permute<[0, 2, 1, 3]>(w)))",
         "lets": ["let w0: f32[16, 32, 16, 16] = randn([16, 32, 16, 16], 0.0, 1.0) "
                  "as f32[16, 32, 16, 16]"],
         "calls": {"tensor:permute": 2, "tensor:permute_inverse": 2},
@@ -168,7 +168,7 @@ PROBES = [
         "name": "sum_axis",
         "with": "w: f32[16, 16, 32, 32]",
         "args": "",
-        "body": "sum(sum(w, -1, true))",
+        "body": "sum(sum<-1, true>(w))",
         "lets": ["let w0: f32[16, 16, 32, 32] = randn([16, 16, 32, 32], 0.0, 1.0) "
                  "as f32[16, 16, 32, 32]"],
         "calls": {"tensor:sum_axis": 1},
@@ -205,7 +205,7 @@ func main(reps: int): int sync {{
         return (i + 1, {probe["call"]})
     }}
     let elapsed = now() - start
-    `probe name={probe["name"]} reps=${{reps}} check=${{sum(last):.9f}}`->println
+    `probe name={probe["name"]} reps=${{reps}} check=${{sum(f64(last)):.9f}}`->println
     `probe elapsed name={probe["name"]} reps=${{reps}} ms=${{elapsed * 1000.0:.6f}}`->println
     return 0
 }}

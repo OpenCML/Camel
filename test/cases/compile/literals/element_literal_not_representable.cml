@@ -10,7 +10,7 @@ func half(x: int[..]): f32[..] {
 }
 
 func main(): int sync {
-    let x = int(reshape([1.0, 2.0, 3.0, 4.0] as f32[], [4]))
+    let x = int(reshape<[4]>([1.0, 2.0, 3.0, 4.0] as f32[]))
     println(sum(half(x)))
     return 0
 }

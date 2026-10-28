@@ -8,8 +8,8 @@ func rows2(t: f32[?, ?]): int {
 }
 
 func main(): int sync {
-    var w = ones([2, 3])
-    w = ones([4, 5])
+    var w = ones::<f32>([2, 3])
+    w = ones::<f32>([4, 5])
     println(rows2(w))
     return 0
 }

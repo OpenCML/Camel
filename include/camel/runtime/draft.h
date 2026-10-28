@@ -571,14 +571,13 @@ class GraphDraft {
     void eraseNode(gc_node_ref_t id);
     /// The statements written directly after `id` follow what `id` followed: the block's chain
     /// closes over a node the graph loses (docs/design/effects/edges.cn.md 4, removing a node
-    /// splices the orderings that pass through it). While the control kind still exists the control
-    /// edge naming the same pair is written beside the sync edge, because the graph has to carry
-    /// the ordering in both kinds until the control edges go (src/runtime/graph_edges.cpp,
-    /// `checkSyncEdges` is what reads the sync edge back). A successor whose predecessor belongs to
-    /// another block heads its own block's chain instead: a sync edge never leaves the block it
-    /// joins (docs/design/effects/edges.cn.md 4.6). eraseNode calls this itself, so no erasure
-    /// leaves a hole; a rewrite that erases the node through its own path calls it before the edges
-    /// go.
+    /// splices the orderings that pass through it). The control edge names the same pair beside the
+    /// sync edge, so a consumer that reads only that kind keeps reading the chain
+    /// (src/runtime/graph_edges.cpp, `checkSyncEdges` is what reads the sync edge back). A
+    /// successor whose predecessor belongs to another block heads its own block's chain instead: a
+    /// sync edge never leaves the block it joins (docs/design/effects/edges.cn.md 4.6). eraseNode
+    /// calls this itself, so no erasure leaves a hole; a rewrite that erases the node through its
+    /// own path calls it before the edges go.
     void closeChainOver(gc_node_ref_t id);
     /// Hands the chain place `id` had in its block to `tail`: the statements written after `id` are
     /// written after `tail`, and `tail` is written after what `id` followed when it stands in no
@@ -915,12 +914,59 @@ class GraphDraft {
     std::vector<GraphId> ruleGraphs_;
 };
 
+/// The control region a node's code lies in: the innermost region that is an arm of a branch or a
+/// part of a loop, 0 for the graph's own frame. The regions that only annotate where a node came
+/// from (Inline, Block) are looked through, which is the notion the region rules and the layout use
+/// (camel/runtime/control_regions.h).
+uint32_t controlRegionOf(const GraphDraft &draft, gc_node_ref_t id);
+
+/// True when two nodes are statements of one `sync` block: the chain of a block joins its own
+/// statements (docs/design/effects/edges.cn.md 4.6), and the code a splice moved into a block is a
+/// statement of it (section 5.7), so the region that annotates the moved code (Inline) is looked
+/// through. Every other region separates blocks.
+bool sameSyncBlock(const GraphDraft &draft, gc_node_ref_t a, gc_node_ref_t b);
+
 /// The runtime node id every live node of `draft` takes when the draft is encoded, indexed by
 /// draft node id (`kInvalidNodeRef` for a node the draft erased, which no commitment keeps unless
 /// the draft keeps its ids). The commit drops the dead places and numbers the rest in order, so a
 /// step recorded with draft ids can name a node of the program the commit made (rewrite design
 /// 8.7, `explain`: a `Node` of the program finds the rewrite it was made by).
 std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphDraft &draft);
+
+/// `nodeIsFreelySchedulable` (camel/runtime/graph.h) asked of a node of a draft. `byShape` lets
+/// the shapes of the types decide for an elementwise operator (it cannot fail when every shape is
+/// fixed); only a question about one decision of one pass may ask it, never the question of
+/// whether a node takes an order edge, which must not change as types are refined.
+bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byShape = false);
+
+/// Whether a node carries the program's order instead of being a value a pass may compute for
+/// itself: a call runs a graph, a branch, join, sync or loop runs (or orders) what it holds, a gate
+/// waits -- for its control inputs, or for the sync edge the chain of a `sync` block is written as
+/// (docs/design/effects/edges.cn.md 5.3) -- and every other node that is not freely schedulable (an
+/// operator with an effect, one that may fault, one that must run where the program writes it, a
+/// conversion that can fail). The rewrite engine and the generic passes refuse to reorder, drop or
+/// recompute such a node.
+bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape = false);
+
+/// Whether a node is a pure computation that no statement waits for and that waits for none: an
+/// operator that may be recomputed, or a conversion, with no control, order or sync edge on either
+/// side. Nothing anchors it, so when nothing reads its value it is not run and not kept, even if it
+/// may fault (design principles 3.1: a node runs iff the run uses it); a node on a chain is a
+/// statement and stays.
+bool isUnanchoredPure(const GraphDraft &draft, gc_node_ref_t node);
+
+/// The value a chain of gates passes on: a GATE orders the value it reads after other nodes -- an
+/// inlined call gates its arguments after what the call waited for -- and changes nothing else
+/// (docs/design/effects/edges.cn.md 4.6 and 5.3). A question about that value is a question about
+/// what it forwards, which is what a comparison of two computations asks; the gate keeps its place
+/// and its wait either way, so the answer is about the value alone.
+inline gc_node_ref_t ungated(const GraphDraft &draft, gc_node_ref_t node) {
+    while (draft.header(node) != nullptr && draft.header(node)->kind == GCNodeKind::Gate &&
+           !draft.normInputsOf(node).empty()) {
+        node = draft.normInputsOf(node).back();
+    }
+    return node;
+}
 
 } // namespace camel::runtime
 

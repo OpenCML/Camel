@@ -42,6 +42,11 @@ namespace camel::compile {
 class SemanticRecorder;
 }
 
+namespace camel::core::type {
+class FuncTypeResolver;
+class FunctionType;
+} // namespace camel::core::type
+
 // Forward declarations for execute (avoid circular include with executor.h)
 class Executor;
 class ExecutorManager;
@@ -197,6 +202,34 @@ class Context : public std::enable_shared_from_this<Context> {
     /// other file as source). Kept apart from the lookup so a caller can name the directory the
     /// path was found in.
     module_ptr_t loadModuleFrom(const std::string &moduleName, const std::string &path, bool isCmo);
+
+  public:
+    /// The prelude's declaration file (`prelude.cml` of a module root) is the one source
+    /// of the built-in signatures, so it is read with every program: a file that does not parse
+    /// fails the compile with its own diagnostics, located in that file. Read once. A tree without
+    /// the file (a tool run without a standard library) has nothing to read.
+    /// Answers the path of the file when it has errors (they are in the context's module list),
+    /// and the empty string otherwise.
+    std::string checkPreludeDeclarations();
+    /// The module of the prelude's declaration file once it was read, else null: a dependency of
+    /// every program.
+    module_ptr_t preludeModule() const { return preludeModule_; }
+    /// A declaration of the prelude names the built-in rule `rule` and writes its signature. The
+    /// claims are applied once the whole file is read: a rule that exactly one declaration names
+    /// gets that declaration's signature for the parameters of its calls (an overload set, or a
+    /// family covered by several declarations, gets none of them).
+    void claimBuiltinSignature(
+        const std::shared_ptr<camel::core::type::FuncTypeResolver> &rule,
+        camel::core::type::FunctionType *signature);
+
+  private:
+    bool preludeChecked_ = false;
+    std::string preludeProblem_;
+    module_ptr_t preludeModule_;
+    std::vector<std::pair<
+        std::shared_ptr<camel::core::type::FuncTypeResolver>,
+        std::vector<camel::core::type::FunctionType *>>>
+        builtinClaims_;
 
     Context(const EntryConfig &entryConf, const error::DiagsConfig &diagConf);
 
@@ -455,11 +488,6 @@ class Context : public std::enable_shared_from_this<Context> {
     /** Called by loadCmoModule to retain a loaded .cmo handle and prevent unloading. */
     void addLoadedDll(const std::string &path, void *handle) { loadedDllHandles_[path] = handle; }
 
-    /// Import a module as `importer` does (design principles 10.2: its own directory, then the
-    /// module roots, then the standard library). `importer` is the module whose `import` this is;
-    /// null means the entry program, whose own directory is the entry file's directory, or a
-    /// program-level import (a pass library named on the command line, a definition) that stands
-    /// where the program does.
     module_ptr_t importModule(
         const std::string &rawModuleName, const module::Module *importer = nullptr);
     /// Whether a file for the module is found on the search paths, whether or not it can be

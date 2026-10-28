@@ -7,12 +7,12 @@ type ExplicitDeviceModel = { weight: Device<f32[..]>, block: (Device<f32[..]>, D
 func identity(p: Device<Model>): ExplicitDeviceModel { return p }
 func typed_upload::<P>(p: P): Device<P> sync { return upload(p) }
 with <p: Model>
-func loss(): float { return sum(p.weight * p.weight) + sum(p.block.0 * p.block.0) }
+func loss(): f32 { return sum(p.weight * p.weight) + sum(p.block.0 * p.block.0) }
 func descend(p: Model, g: Model): Model {
     return { weight: p.weight - g.weight * 0.01, block: (p.block.0 - g.block.0 * 0.01, p.block.1) }
 }
 func initialize(): Model {
-    return { weight: reshape([1.0, 2.0, 3.0] as f32[], [3]), block: (zeros([0, 2]), 1.0000000000000002) }
+    return { weight: reshape<[3]>([1.0, 2.0, 3.0] as f32[]), block: (zeros::<f32>([0, 2]), 1.0000000000000002) }
 }
 func main(): int sync {
     let p = initialize()
@@ -21,8 +21,8 @@ func main(): int sync {
     println(sum(abs(restored.weight - p.weight)))
     println(sum(restored.block.0))
     println(restored.block.1 - p.block.1)
-    let vg = (q: Model): (float, Model) => with_grad(loss)<q>()
-    let measured: (Device<float>, Device<Model>) = run_preferred_resident<vg>(resident)
+    let vg = (q: Model): (f32, Model) => with_grad(loss)<q>()
+    let measured: (Device<f32>, Device<Model>) = run_preferred_resident<vg>(resident)
     println(download(measured.0) - loss<p>())
     let updated: Device<Model> = run_preferred_resident<descend>((resident, measured.1))
     let actual: Model = download(updated)

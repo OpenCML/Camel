@@ -110,13 +110,13 @@ func main(): int sync {
     println(abs(bf16(-3.5)), abs(f16(-3.5)), abs(bf16(2.0)), abs(f16(2.0)))
 
     // ---- array::min and array::max over bf16[] and f16[] ----
-    println(min(smalls) ?? bf16(0.0), max(smalls) ?? bf16(0.0))
+    println(min(smalls), max(smalls))
 
     // The two zeros: the order of the elements decides between them, and only the f32 comparison
     // of widened values with the sign of zero rule gives -0 for the minimum and +0 for the
     // maximum, wherever in the array they sit.
-    let arraySmallest = min(zeros) ?? bf16(0.0)
-    let arrayLargest = max(zeros) ?? bf16(0.0)
+    let arraySmallest = min(zeros)
+    let arrayLargest = max(zeros)
     println(bitsOfBf16(arraySmallest)[0], bitsOfBf16(arraySmallest)[1])
     println(bitsOfBf16(arrayLargest)[0], bitsOfBf16(arrayLargest)[1])
     println(arraySmallest == arrayLargest, arraySmallest == bfNegZero, arrayLargest == bfPosZero)
@@ -124,17 +124,15 @@ func main(): int sync {
     // The same over f16, with the largest finite value of the type in the array: the answer is
     // that operand itself, so a rounding or a saturation of it moves these bytes.
     let f16s: f16[] = [5.0, 65504.0, -1.0]
-    let f16ArraySmallest = min(f16s) ?? f16(0.0)
-    let f16ArrayLargest = max(f16s) ?? f16(0.0)
+    let f16ArraySmallest = min(f16s)
+    let f16ArrayLargest = max(f16s)
     println(f16ArraySmallest, f16ArrayLargest)
     println(bitsOfF16(f16ArrayLargest)[0], bitsOfF16(f16ArrayLargest)[1])
 
-    // A one-element array is that element; an empty one is null and the result stays `T?`.
+    // A one-element array is that element (an empty one is a fault, pinned in array_reduction_faults).
     let single: bf16[] = [0.1]
-    let only = min(single) ?? bf16(0.0)
+    let only = min(single)
     println(only, bitsOfBf16(only)[0])
-    let empty: bf16[] = []
-    println(min(empty) == null, max(empty) == null, len(empty))
 
     //  ---- the other half of the same rule: a floating reduction accumulates in f64 ----
     // An f32 accumulator answers 0 for this one (2^24 + 1 rounds back to 2^24); the f64 one that

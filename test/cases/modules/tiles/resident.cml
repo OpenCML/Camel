@@ -6,13 +6,13 @@ func churn(x: f32[..], count: int): float {
         float(sum(abs(download(upload(x)) - x))) + churn(x + 1.0, count - 1)
 }
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
+    let x = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     let first = upload(x)
     let second = upload(x + 7.0)
     println(sum(abs(read(first) - x)))
     println(sum(abs(download(second) - (x + 7.0))))
     println(churn(x, 40))
     println(sum(abs(download(first) - x)))
-    println(sum(download(upload(zeros([0, 3])))))
+    println(sum(download(upload(zeros::<f32>([0, 3])))))
     return 0
 }

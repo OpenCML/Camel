@@ -24,7 +24,7 @@ func main(): int sync {
     save_npy(download(r.1), folder + '/pair1.npy')
     save_npy(download(r.2), folder + '/pair2.npy')
     save_npy(download(run_preferred_resident<identity>(r.1)), folder + '/identity.npy')
-    save_npy(download(run_preferred_resident<identity>(upload(zeros([0, 3])))), folder + '/empty.npy')
+    save_npy(download(run_preferred_resident<identity>(upload(zeros::<f32>([0, 3])))), folder + '/empty.npy')
     println('ASYNC_PUBLIC_COMPLETE')
     return 0
 }

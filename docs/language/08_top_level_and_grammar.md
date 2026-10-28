@@ -50,7 +50,8 @@ logicalAnd : or ('&&' or)*
 or         : and ('|' and)*
 and        : equality ('&' equality)*
 equality   : relational (('===' | '!==' | '==' | '!=') relational)*
-relational : additive (('<' | '>' | '<=' | '>=') additive)*
+relational : range (('<' | '>' | '<=' | '>=') range)*
+range      : additive ('..' additive)*
 additive   : multiplicative (('+' | '-') multiplicative)*
 multiplicative : power (('*' | '/' | '@' | '%') power)*
 power      : nullable ('^' power)?
@@ -58,8 +59,7 @@ nullable   : unary (('??' | '!!') dataExpr)?
 unary      : neg (as 类型)?
 neg        : ('-' | '!' | '~') negPower | link
 negPower   : ('-' | '!' | '~') negPower | link ('^' negPower)?
-link       : comp ('->' comp)*
-comp       : anno ('..' anno)*
+link       : anno ('->' anno)*
 anno       : primary ( '.'字段 | '[' 下标 ']' | '(' 实参 ')' | '<' with 实参 '>' )*
 primary    : 名字 | 字面量 | '[' 元素, ... ']' | '{' 键: 值, ... '}' | '(' 表达式, ... ')' | lambda
 lambda     : 修饰符* ('<' 形参 '>')? '(' 形参 ')' (':' 类型)? '=>' blockExpr
@@ -71,7 +71,7 @@ pattern    : 字面量 | '_' | null | error 名字 | 名字
 ## 8.4 类型
 
 ```
-typeDecl  : 'type' 名字 ('<' 参数, ... '>')? '=' (类型 | enumBody)
+typeDecl  : 'type' 名字 ('<' 参数, ... '>')? ('=' (类型 | enumBody))?
 typeExpr  : arrayType ('?' | '!')*
 arrayType : specType ('[' ']')*
 specType  : primaryType ('<' (类型 | const 数据), ... '>')?
@@ -132,8 +132,8 @@ dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
                      | 'let' '_' (':' typeList)? '=' dataList
 carrier            : identList | parentIdents
 typeDecl           : frontMatter? 'type' identRef
-                     ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
-                     (typeExpr | STRING)
+                     ('<' identDef (',' identDef)* ','? ('>' | '>='))?
+                     ('=' typeExpr)?
 resourceDecl       : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
 retStmt            : ('return' | 'yield') dataList
 modifiers          : 'sync'+
@@ -224,7 +224,10 @@ arrayDim           : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
 arrayDimItem       : '?' | '..' identDef? | dataExpr
 specType           : primaryType ('<' typeOrData (',' typeOrData)* '>')?
 typeOrData         : typeExpr | arrayDim | 'const' dataExpr
+matchTypeType      : 'match' 'type' typeExpr '{' typeArm* '}'
+typeArm            : 'case' typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
 primaryType        : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
+                     | matchTypeType
                      | 'typeof' dataExpr
 tupleType          : '(' typeList? ','? ')'
 structType         : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'

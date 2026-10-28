@@ -53,7 +53,7 @@ var count = 0
 
   结构体解构 `let { x, y } = p` 与数组解构 `let [a, b] = xs` 不在语言里：名字位置上的 `{` 或 `[` 是普通语法错误。用 `p.x`、`xs[0]`。
 - **`let _ = e` 有意丢弃 `e` 的值。** `_` 不是名字：它不绑定任何东西，所以同一个块里可以写任意多次，也不能读它。表达式与任何 `let` 的初值一样求值（在同步块里按顺序）。这是表明有意忽略一个 `T!` 的写法（[7.1](#71-表达式语句)）。只有这一种写法：`var _`、在多个名字中间写 `_` 都是语法错误。
-- 模块顶层的 `let` 是全局常量，顶层的 `var` 可以被函数读写，包括被导入的函数读写它所在模块的（[5.3](05_modules.md#53-导出)）。**顶层的声明与书写顺序无关，只看依赖**：`let area = pi * r * r` 可以写在 `let pi` 之前；顶层的值之间成环是 `SemanticDiag::ModuleValueCycle`（[5.6](05_modules.md#56-模块的加载)）。函数体里的局部 `let` 仍是先声明后使用。
+- 模块顶层的 `let` 是全局常量，顶层的 `var` 是本模块的一个资源，函数读它、写它，可以导出，也可以写进 `uses`（[5.3](05_modules.md#53-导出)）。**顶层的声明与书写顺序无关，只看依赖**：`let area = pi * r * r` 可以写在 `let pi` 之前；顶层的值之间成环是 `SemanticDiag::ModuleValueCycle`（[5.6](05_modules.md#56-模块的加载)）。函数体里的局部 `let` 仍是先声明后使用。
 
 ## 7.3 `return`
 
@@ -97,7 +97,7 @@ error InvalidAge: age is negative
 - 反过来读也成立：**签名正是那一个**的函数值就是 `T..`（`let s: int.. = step(3)`），别的签名不是，`T..` 也不会从别的值转过来。`T..` 与它的步进签名是同一个运行期值的两种写法，转换不搬动任何东西。
 - 消费就是按这个签名拉：`s()` 拉一个元素。流是值也是纯的，所以同一个流值拉两次得到同一个元素，**剩余部分要由消费者自己接住并往下传**——空流写成一开始就 `null` 的流（见 [7.3.1](#731-yield) 的空流）。
 - `s()` 不接受参数：步进签名是零参的，`s(1)` 是一条普通的不匹配报告。
-- 每条执行路径上，一个流值**至多有一个消费者**：`s()` 与 `for x in s` 都是消费，同一个值被两次读到是编译错误，诊断给出**两处使用的位置**并给出原语 `tee(s, n)` 的写法（它的实现还没落地）；分支的不同臂各消费一次**算一次**，因为一条路径只走其中一条臂（设计原则 5.4）。
+- 每条执行路径上，一个流值**至多有一个消费者**：`s()` 与 `for x in s` 都是消费，同一个值被两次读到是编译错误，诊断给出**两处使用的位置**并给出原语 `s->tee<n>` 的写法（它的实现还没落地）；分支的不同臂各消费一次**算一次**，因为一条路径只走其中一条臂（设计原则 5.4）。
 - 流直接写进 `for`：`for x in s` 的每一轮就是一次拉取，图上展开成已有的 `while`（没有新的节点种类、没有新的驱动、没有新的循环形式，后端看到的还是它一直看到的那个 LOOP 节点）。头的状态就是循环的状态；`x` 是这一轮那次拉取里的元素。每一轮**先判断条件、再取元素**，和数组同一个顺序：`for x in s while c` 先问 `c`，`c` 成立才调用步进函数，拉到 `null` 就结束——所以 `for line in read_lines(f) while n < 10` 不会读第 11 行。条件里没写 `sync` 的不纯调用和语句里一样不执行并给出警告。空流问一次 `c`、不拉取，一轮都不走，其值是初值（见 [7.3.1](#731-yield)）。
 
 ## 7.4 函数
@@ -155,7 +155,7 @@ func clamp(x: int): int {
 
 func main(): int sync {
     println(clamp<0, 10>(42))
-    println([-5, 3, 99]->map<(x: int): int => x->clamp<0, 10>>)
+    println([-5, 3, 99]->map<(x) => x->clamp<0, 10>>)
     return 0
 }
 ```
@@ -217,7 +217,7 @@ int 1 string a
 |---|---|
 | `sync` | 函数体是同步块（[4.3.3](04_execution_model.md#433-函数体的-sync函数修饰符)） |
 
-没有别的修饰符。C++ 实现的函数写成无函数体的 `export func` 声明（[6.4](../design-principles.cn.md)），只在模块内使用的辅助函数写成不导出的 `func`：`func` 本身就是模块私有。
+没有别的修饰符。C++ 实现的函数写成无函数体的 `export func` 声明（[6.4](../design-principles.cn.md)），C++ 提供的值是同一条规则，写成不带右边的 `export let inf: float`：它是 C++ 模块以 `inf` 为名登记的那个值，类型与登记的不一致是 `SemanticDiag::NativeValueMismatch`，没有这个名字的值是 `SemanticDiag::NativeValueNotLoaded`；只在模块内使用的辅助函数写成不导出的 `func`：`func` 本身就是模块私有。
 
 `#macro` 不是修饰符，是写在函数声明前的标准标签（[4.5](04_execution_model.md#45-macro-函数)）。
 
@@ -371,7 +371,8 @@ func main(): int sync {
 - **调用在编译期展开。** 带剩余参数的函数没有运行时的参数个数，因此不为它建实例图，也不生成调用结点；每个直接调用都把函数体展开在调用者的图里，固定形参绑定到实参结点，`ts` 绑定到剩下的结点。`ts` 可以是 0 个元素。
 - **`ts` 是编译期元组，不是值。** 它只有三种用法：`indices ts` 取位置表、`ts.[j]` 取一个元素、`..ts` 把元素展开成实参。三种用法都不为 `ts` 建 `FILL`，也不为元素建 `ACCS`。把 `ts` 本身放到需要运行期值的位置（打印、返回、赋给变量、作为普通实参）报 `SemanticDiag::StaticTupleEscapes`，不会悄悄物化成一个运行期元组；需要运行期元组时写元组字面量 `(a, b)`。
 - **剩余实参**写作 `..e`，且必须是调用实参表的最后一项。`e` 必须是编译期元组：元组字面量、元组推导式，或外层剩余函数的 `..ts`。运行时的元组值没有固定个数，是 `SemanticDiag::RestArgumentNotTuple`；`..e` 后面还有实参是 `SemanticDiag::RestArgumentNotLast`。
-- 剩余形参必须在最后（`SemanticDiag::RestParameterNotLast`），不能写类型（`SemanticDiag::RestParameterTypeNotSupported`），只能出现在函数声明里（lambda、函数类型和规则里写 `..` 是语法错误）。固定形参少给实参是 `SemanticDiag::RestArgumentsMismatch`。
+- 剩余形参必须在最后（`SemanticDiag::RestParameterNotLast`），不能写类型（`SemanticDiag::RestParameterTypeNotSupported`），只能出现在函数声明和函数类型里（lambda 和规则里写 `..` 是语法错误）。
+- **同一个写法也用在 `with` 参数和函数类型上。** `with <..args>` 表示 `with` 实参在固定的几个之后还可以再给任意多个、任意类型；`(..A) => R` 是形参表不限的函数类型，任何结果类型合适的函数都能放进去。`with <..args>` 只在没有函数体的声明里写（它声明一个由 C++ 实现的算子，`format`、`print` 就是这样在标准库的 `prelude.cml` 里声明自己的形状）；带函数体的函数写它是 `SemanticDiag::WithPackNeedsNativeDeclaration`。固定形参少给实参是 `SemanticDiag::RestArgumentsMismatch`。
 - 带剩余参数的函数**不是值**：不能赋给变量、作为实参或导出后当函数值用（`SemanticDiag::RestFunctionNeedsExpansion`），只能直接调用。调用可以跨模块：函数体仍然在声明它的模块里解析（和泛型实例一样），展开在调用者的图里；函数体里用到声明模块的顶层**值**时，那个值在调用者的图里没有结点，会报 `SemanticDiag::RestFunctionNeedsExpansion`，函数和它自己的实参不受影响。
 - `with` 实参命名泛型函数或一组重载时（`tree_map<twice>`、`tree_map<bump>`），调用在被调函数里按每处调用的实参类型解析它；这要求被调函数带剩余参数（实例在调用点展开），普通的泛型函数仍按参数类型选定一个函数值。
 
@@ -680,6 +681,15 @@ id
 - 右侧只能引用已经声明的类型，所以类型函数不能引用自身。
 - 可以 `export`，在别的模块里以 `模块::Pair<int>` 使用。
 - 模块类型的尖括号由该类型自己解释，实参可以是类型或 `const 数据`；数值数组的另一种拼写 `f32[2, 3]` 的尖括号由数组类型自己解释（形状实参不写 `const`：`f32[2, 3]` 报 `SemanticDiag::InvalidTypeArgument`）。
+
+**C++ 模块提供的类型，声明时不写右边**，与 C++ 提供的函数不写函数体是同一条规则（设计原则 6.4、10.4）：
+
+```text
+export type Graph
+export type Txn<F>
+```
+
+类型是模块按这个名字登记的那一个；它的身份是模块加名字，所以别的模块里同名的类型是另一个类型，模块没有登记的名字是 `SemanticDiag::NativeTypeNotProvided`。尖括号里列出这个类型接受的实参，实参是任何类型表达式，泛型声明里的类型变量也可以：`func same::<F>(t: Txn<F>): Txn<F>`。类型不用字符串来命名：`type X = 'text'` 是语法错误。
 
 类型表达式里没有类型运算：`A & B`、`A \ B`、`A + B`、`A ^ B` 这样的写法是普通的语法错误（`&`、`\`、`+`、`-`、`^` 在类型位置没有含义；它们是表达式里的运算符，所以 `x as T + U` 是 `(x as T) + U`）。`keyof` 与 `of` 不是关键字：`keyof T`、`名字 of T` 里的它们是普通的名字，写出来是语法错误。`typeof e` 是一个完整的类型，取表达式 `e` 的值的类型，在使用这个类型的位置由编译器展开；`typeof` 不能嵌在更大的类型里（`typeof(1)[]` 报 `SemanticDiag::TypeOfNotWholeType`），操作数没有值（`void`）时报 `SemanticDiag::TypeOfNotAValue`。
 

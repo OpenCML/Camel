@@ -31,7 +31,7 @@ func bench(round: int, label: string, m: int, n: int, k: int, a: f32[..], b: f32
     let started = now()
     let measured = loop i = 0, s = 0.0 while i < reps do {
         let product = exact(a, b)
-        return (i + 1, s + sum(product))
+        return (i + 1, s + float(sum(product)))
     }
     let ms = (now() - started) * 1000.0 / float(reps)
     let gflops = 2.0 * float(m) * float(n) * float(k) / (ms / 1000.0) / 1000000000.0
@@ -42,11 +42,11 @@ func bench(round: int, label: string, m: int, n: int, k: int, a: f32[..], b: f32
 /// The same product as broadcast-multiply-and-reduce: a temporary of m x k x n floats and a
 /// reduction, with none of the canonical kernel's blocking or packing.
 func bench_reference(round: int, m: int, n: int, k: int, a: f32[..], b: f32[..], reps: int): void sync {
-    let warm = sum(unsqueeze(a, 2) * unsqueeze(b, 0), 1)
+    let warm = sum<1>(unsqueeze<2>(a) * unsqueeze<0>(b))
     let started = now()
     let measured = loop i = 0, s = 0.0 while i < reps do {
-        let product = sum(unsqueeze(a, 2) * unsqueeze(b, 0), 1)
-        return (i + 1, s + sum(product))
+        let product = sum<1>(unsqueeze<2>(a) * unsqueeze<0>(b))
+        return (i + 1, s + float(sum(product)))
     }
     let ms = (now() - started) * 1000.0 / float(reps)
     let gflops = 2.0 * float(m) * float(n) * float(k) / (ms / 1000.0) / 1000000000.0
@@ -59,19 +59,19 @@ func main(rounds: int, reps: int): int sync {
     // the kernel rather than of the pool.
     set_num_threads(1)
     seed(7)
-    let a1 = zeros([256, 256]) + 0.001
-    let b1 = zeros([256, 64]) + 0.001
-    let a2 = zeros([256, 64]) + 0.001
-    let b2 = zeros([64, 256]) + 0.001
-    let a3 = zeros([512, 256]) + 0.001
-    let b3 = zeros([256, 512]) + 0.001
-    let a4 = zeros([512, 256]) + 0.001
-    let b4 = zeros([256, 768]) + 0.001
-    let a5 = zeros([512, 512]) + 0.001
-    let b5 = zeros([512, 256]) + 0.001
-    let a6 = zeros([32, 32]) + 0.001
-    let b6 = zeros([32, 16]) + 0.001
-    let reference = zeros([128, 128]) + 0.001
+    let a1 = zeros::<f32>([256, 256]) + 0.001
+    let b1 = zeros::<f32>([256, 64]) + 0.001
+    let a2 = zeros::<f32>([256, 64]) + 0.001
+    let b2 = zeros::<f32>([64, 256]) + 0.001
+    let a3 = zeros::<f32>([512, 256]) + 0.001
+    let b3 = zeros::<f32>([256, 512]) + 0.001
+    let a4 = zeros::<f32>([512, 256]) + 0.001
+    let b4 = zeros::<f32>([256, 768]) + 0.001
+    let a5 = zeros::<f32>([512, 512]) + 0.001
+    let b5 = zeros::<f32>([512, 256]) + 0.001
+    let a6 = zeros::<f32>([32, 32]) + 0.001
+    let b6 = zeros::<f32>([32, 16]) + 0.001
+    let reference = zeros::<f32>([128, 128]) + 0.001
     let done = loop round = 0 while round < rounds do sync {
         bench(round, '256x64x256', 256, 64, 256, a1, b1, 40 * reps)
         bench(round, '256x256x64', 256, 256, 64, a2, b2, 40 * reps)

@@ -425,9 +425,50 @@ Rules buildRules() {
         },
         false,
     };
+    // The slice of a one-dimensional array, whichever spelling wrote it (design principles 5.4):
+    // the six words are the value, the axis, the two bounds, the step and the mask of the bounds
+    // written, and a call that leaves the last two out stands for step 1 and "both written". A
+    // value with several dimensions or an open rank is not a flat run here: the bridge runs it.
+    r[":op/slice_sub"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (value == nullptr || value->anyRank() || value->rank() != 1 ||
+                c.normCount() < 4 || c.normCount() > 6) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::sliceSub({}, {}, {}, {}, {}, {}, {}, {})",
+                c.operand(0),
+                c.operand(1),
+                c.operand(2),
+                c.operand(3),
+                c.normCount() > 4 ? c.operand(4) : std::string("int64_t{1}"),
+                c.normCount() > 5 ? c.operand(5) : std::string("int64_t{3}"),
+                c.site(RuntimeDiag::SliceOutOfRange, marks(4)),
+                c.site(RuntimeDiag::InvalidArgument, marks(2)));
+        },
+        false,
+    };
+    // A type name applied to a one-dimensional numeric array converts every element. A value with
+    // several dimensions or an open rank is not a flat run here, and neither is bf16 or f16 (this
+    // back end has no such element type): those are refused, as the other array operators refuse.
+    for (const auto &[uri, element] : {std::pair<const char *, const char *>{":op/atoi", "int32_t"},
+                                      {":op/atol", "int64_t"},
+                                      {":op/atof", "float"},
+                                      {":op/atod", "double"}}) {
+        r[uri] = {
+            [element](OperatorCall &c) -> std::optional<std::string> {
+                const ArrayType *value = asArrayType(c.normType(0));
+                if (c.normCount() != 1 || value == nullptr || value->anyRank() ||
+                    value->rank() != 1) {
+                    return std::nullopt;
+                }
+                return std::format("rt::convertArray<{}>({})", element, c.operand(0));
+            },
+            true,
+        };
+    }
     r[":struct/len_arr"]      = runtimeFunction("length");
-    r[":struct/head_arr"]     = faultingFunction("head", RuntimeDiag::IndexOutOfRange, 3);
-    r[":struct/tail_arr"]     = runtimeFunction("tail");
     r[":struct/concat_arr"]   = runtimeFunction("concat");
     r[":struct/append_arr"]   = withArgument("append");
     // The loop-state form (Builder::markLoopStateInPlace): writing in place is an optimisation of
@@ -438,7 +479,6 @@ Rules buildRules() {
     // a block that another holder shares, so the copy itself has nothing to do (rt::append takes
     // the array by value).
     r[":struct/copy_arr"] = identity();
-    r[":struct/extend_arr"]   = withArgument("concat");
     r[":struct/contains_arr"] = withArgument("contains");
     r[":struct/zip"]          = {
         [](OperatorCall &c) -> std::optional<std::string> {
@@ -451,17 +491,6 @@ Rules buildRules() {
                 c.cppType(c.resultType()),
                 c.site(RuntimeDiag::InvalidArgument, marks(2)),
                 args);
-        },
-        false,
-    };
-    r[":struct/slice_arr"] = {
-        [](OperatorCall &c) -> std::optional<std::string> {
-            return std::format(
-                "rt::slice({}, {}, {}, {})",
-                c.norm(0).text,
-                c.with(0).text,
-                c.with(1).text,
-                c.site(RuntimeDiag::SliceOutOfRange, marks(4)));
         },
         false,
     };
@@ -496,47 +525,26 @@ Rules buildRules() {
     // ---- Modules with a standalone translation ----
     r["time:now"]         = runtimeFunction("now", false);
     r["env:get_env"]      = runtimeFunction("getEnv", false);
-    r["statistics:mean"]  = runtimeFunction("statisticsMean");
-    r["statistics:stdev"] = runtimeFunction("statisticsStdev");
-    // random draws as modules/random does, through camel/utils/random.h (standalone/random.h).
-    r["rand:seed"]    = runtimeFunction("randomSeed", false);
-    r["rand:rand"]    = runtimeFunction("randomUnit", false);
-    r["rand:randn"]   = runtimeFunction("randomNormal", false);
-    r["rand:randint"] = runtimeFunction("randomBetween", false);
-    r["rand:choice"]  = faultingFunction("randomChoice", RuntimeDiag::InvalidArgument, 2);
-    r["rand:sample"]  = faultingFunction("randomSample", RuntimeDiag::InvalidArgument, 2);
-    r["rand:shuffle"] = runtimeFunction("randomShuffle", false);
-    // Keyed random is pure, so these expressions may be inlined and shared (design principles
-    // 13.5): no generator, no state, the same bits as the interpreter.
-    r["rand:key"] = {
+    // The random module (modules/random): the global stream's two operators and the keyed
+    // primitive, through camel/utils/philox.h (standalone/random.h). Keyed random is pure, so its
+    // expressions may be inlined and shared (design principles 13.5).
+    r["rand:seed"]     = runtimeFunction("randomSeed", false);
+    r["rand:next_key"] = {
         [](OperatorCall &c) -> std::optional<std::string> {
-            return std::format(
-                "rt::randomKey<{}>({})", c.cppType(c.resultType()), c.operand(0));
-        },
-        true,
-    };
-    r["rand:split"] = {
-        [](OperatorCall &c) -> std::optional<std::string> {
-            const std::string tuple = c.cppType(c.resultType());
-            const std::string key = c.cppType(c.normType(0));
-            return std::format(
-                "rt::randomSplitKey<{}, {}>({})", tuple, key, c.norm(0).text);
-        },
-        true,
-    };
-    r["rand:permutation"] = {
-        [](OperatorCall &c) -> std::optional<std::string> {
-            const std::string array = c.cppType(c.resultType());
-            const std::string key = c.cppType(c.normType(0));
-            return std::format(
-                "rt::randomPermutationKey<{}, {}>({}, {}, {})",
-                array,
-                key,
-                c.norm(0).text,
-                c.operand(1),
-                c.site(RuntimeDiag::InvalidArgument, marks(2)));
+            return std::format("rt::randomNextKey<{}>()", c.cppType(c.resultType()));
         },
         false,
+    };
+    r["rand:philox"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            return std::format(
+                "rt::randomPhilox<{}, {}>({}, {})",
+                c.cppType(c.resultType()),
+                c.cppType(c.normType(0)),
+                c.norm(0).text,
+                c.operand(1));
+        },
+        true,
     };
     r["math:sqrt"]    = cmath("sqrt", true);
     for (const char *t : {"i", "l"}) {

@@ -4,10 +4,10 @@ func exact(a: f32[2, 3]): float {
     return float(sum(a))
 }
 func g(y: f32[6], n: int): float {
-    return exact(reshape(y, [n, 3]))
+    return exact(reshape<[n, 3]>(y))
 }
 func main(): int sync {
     println('ran')
-    println(g(reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [6]), 3))
+    println(g(reshape<[6]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]), 3))
     return 0
 }

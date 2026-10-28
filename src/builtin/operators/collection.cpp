@@ -237,168 +237,41 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
                       const MapType *map = mapWithKey(norm[0], norm[1]);
                       return map ? optional<Type *>(map->lookupType()) : nullopt;
                   })}}),
-        OperatorGroup::create(
-            "get",
-            {{":coll/map_get",
-              keyed(
-                  1,
-                  "<key: K> (m: Map<K, V>) => V?",
-                  [=](Type *coll, const type_vec_t &config) -> optional<Type *> {
-                      const MapType *map = mapWithKey(coll, config[0]);
-                      return map ? optional<Type *>(map->lookupType()) : nullopt;
-                  })}}),
-        OperatorGroup::create(
-            "get_or",
-            {{":coll/map_get_or",
-              keyed(
-                  2,
-                  "<key: K, fallback: V> (m: Map<K, V>) => V",
-                  [=](Type *coll, const type_vec_t &config) -> optional<Type *> {
-                      const MapType *map = mapWithKey(coll, config[0]);
-                      // The fallback stands at the map's value type: a value type written
-                      // without a resource clause takes the fallback's.
-                      if (map == nullptr ||
-                          !sameTypeWithUnwrittenResources(map->valueType(), config[1])) {
-                          return nullopt;
-                      }
-                      return map->valueType();
-                  })}}),
-        OperatorGroup::create(
-            "has",
-            {{":coll/has",
-              keyed(
-                  1,
-                  "<key: K> (c: Map<K, V> | Set<K>) => bool",
-                  [=](Type *coll, const type_vec_t &config) -> optional<Type *> {
-                      return boolIf(collWithKey(coll, config[0]) != nullptr);
-                  })}}),
+        // The rules of `get` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("get", {}),
+        // The rules of `get_or` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("get_or", {}),
+        // The rules of `has` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("has", {}),
         // `contains<x>(s)`, beside the array overload `contains<v>(xs)`.
-        OperatorGroup::create(
-            "contains",
-            {{":coll/set_contains",
-              keyed(
-                  1,
-                  "<value: T> (s: Set<T>) => bool",
-                  [=](Type *c, const type_vec_t &config) -> optional<Type *> {
-                      const CollectionType *coll = collWithKey(c, config[0]);
-                      return boolIf(coll != nullptr && !coll->isMap());
-                  })}}),
-        OperatorGroup::create(
-            "len",
-            {{":coll/len",
-              typed(
-                  0,
-                  1,
-                  // `x`, the name the string and array rules give their one parameter as well:
-                  // one position, one name (stdlib-conventions, the reference page of `len`).
-                  "(x: Map<K, V> | Set<T>) => int",
-                  [](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
-                      return asCollectionType(norm[0]) ? optional<Type *>(Type::Int64())
-                                                       : nullopt;
-                  })}}),
+        // The rules of `contains` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("contains", {}),
+        // The rules of `len` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("len", {}),
         // ======= New values =======
-        OperatorGroup::create(
-            "put",
-            {{":coll/map_put",
-              keyed(
-                  2,
-                  "<key: K, value: V> (m: Map<K, V>) => Map<K, V>",
-                  [=](Type *coll, const type_vec_t &config) -> optional<Type *> {
-                      const MapType *map = mapWithKey(coll, config[0]);
-                      // The value stands at the map's value type: a value type written
-                      // without a resource clause takes the value's.
-                      if (map == nullptr ||
-                          !sameTypeWithUnwrittenResources(map->valueType(), config[1])) {
-                          return nullopt;
-                      }
-                      return itself(map);
-                  })}}),
-        OperatorGroup::create(
-            "add",
-            {{":coll/set_add",
-              keyed(
-                  1,
-                  "<value: T> (s: Set<T>) => Set<T>",
-                  [=](Type *c, const type_vec_t &config) -> optional<Type *> {
-                      const CollectionType *coll = collWithKey(c, config[0]);
-                      return itself(coll != nullptr && !coll->isMap() ? coll : nullptr);
-                  })}}),
-        OperatorGroup::create(
-            "remove",
-            {{":coll/remove",
-              keyed(
-                  1,
-                  "<key: K> (c: Map<K, V> | Set<K>) => Map<K, V> | Set<K>",
-                  [=](Type *coll, const type_vec_t &config) -> optional<Type *> {
-                      return itself(collWithKey(coll, config[0]));
-                  })}}),
-        OperatorGroup::create(
-            "merge",
-            {{":coll/merge",
-              typed(
-                  0,
-                  2,
-                  "(m: Map<K, V>, other: Map<K, V>) => Map<K, V>",
-                  [=](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
-                      const CollectionType *coll = sameCollections(norm);
-                      return itself(coll != nullptr && coll->isMap() ? coll : nullptr);
-                  })}}),
-        OperatorGroup::create(
-            "union",
-            {{":coll/set_union", setOperation("(s: Set<T>, other: Set<T>) => Set<T>")}}),
-        OperatorGroup::create(
-            "intersect",
-            {{":coll/set_intersect", setOperation("(s: Set<T>, other: Set<T>) => Set<T>")}}),
-        OperatorGroup::create(
-            "difference",
-            {{":coll/set_difference", setOperation("(s: Set<T>, other: Set<T>) => Set<T>")}}),
-        OperatorGroup::create(
-            "is_subset",
-            {{":coll/set_is_subset",
-              typed(
-                  0,
-                  2,
-                  "(s: Set<T>, other: Set<T>) => bool",
-                  [=](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
-                      return boolIf(sameSets(norm) != nullptr);
-                  })}}),
+        // The rules of `put` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("put", {}),
+        // The rules of `add` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("add", {}),
+        // The rules of `remove` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("remove", {}),
+        // The rules of `merge` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("merge", {}),
+        // The rules of `union` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("union", {}),
+        // The rules of `intersect` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("intersect", {}),
+        // The rules of `difference` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("difference", {}),
+        // The rules of `is_subset` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("is_subset", {}),
         // ======= To arrays, in key order =======
-        OperatorGroup::create(
-            "keys",
-            {{":coll/keys",
-              typed(
-                  0,
-                  1,
-                  "(m: Map<K, V>) => K[]",
-                  [](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
-                      const MapType *map = asMapType(norm[0]);
-                      return map ? optional<Type *>(map->keyArrayType()) : nullopt;
-                  })}}),
-        OperatorGroup::create(
-            "values",
-            {{":coll/map_values",
-              typed(
-                  0,
-                  1,
-                  "(m: Map<K, V>) => V[]",
-                  [](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
-                      const MapType *map = asMapType(norm[0]);
-                      return map ? optional<Type *>(map->valueArrayType()) : nullopt;
-                  })}}),
-        OperatorGroup::create(
-            "items",
-            {{":coll/map_items", mapItems},
-             {":coll/set_items",
-              typed(
-                  0,
-                  1,
-                  // `m`, the name the map rule above gives its one parameter: both take the
-                  // collection to turn into an array.
-                  "(m: Set<T>) => T[]",
-                  [](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
-                      const SetType *set = asSetType(norm[0]);
-                      return set ? optional<Type *>(set->keyArrayType()) : nullopt;
-                  })}}),
+        // The rules of `keys` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("keys", {}),
+        // The rules of `values` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("values", {}),
+        // The rules of `items` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("items", {}),
         // The elements a `for` takes from a map: its (key, value) pairs in key order
         // (design principles 11.3). The loop builder converts a map to that array once; a
         // program does not write `__iter__` itself. A string adds its own overload

@@ -18,19 +18,19 @@ import { grad } from autodiff
 
 with <w: f64[..]>
 func skip_constant_array(): float {
-    let y = concat([2.0, 3.0], w, 0)
-    let c = reshape([1.0, 0.0, 2.0, 3.0], [4])
+    let y = concat<0>([2.0, 3.0], w)
+    let c = reshape<[4]>([1.0, 0.0, 2.0, 3.0])
     return float(sum(y * c))
 }
 
 with <xs: float[]>
 func active_array(): float {
-    let y = concat(xs, reshape([10.0, 20.0], [2]), 0)
+    let y = concat<0>(xs, reshape<[2]>([10.0, 20.0]))
     return float(sum(y))
 }
 
 func main(): int sync {
-    let w  = reshape([10.0, 20.0], [2])
+    let w  = reshape<[2]>([10.0, 20.0])
     let g  = grad(skip_constant_array)<w>()
     'concat_array_part sum={:.1f} sq={:.1f}'->format<sum(g), sum(g * g)>->println
     let xs = [1.0, 2.0]
@@ -41,6 +41,6 @@ func main(): int sync {
         gx[0],
         gx[1],
         d0 * d0 + d1 * d1,
-        sum(concat(xs, reshape([10.0, 20.0], [2]), 0))>->println
+        sum(concat<0>(xs, reshape<[2]>([10.0, 20.0])))>->println
     return 0
 }

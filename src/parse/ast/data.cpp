@@ -76,6 +76,14 @@ std::string to_string(TypeCaseKind kind) {
         return "func";
     case TypeCaseKind::Array:
         return "array";
+    case TypeCaseKind::Nullable:
+        return "nullable";
+    case TypeCaseKind::Fallible:
+        return "fallible";
+    case TypeCaseKind::Map:
+        return "map";
+    case TypeCaseKind::Set:
+        return "set";
     case TypeCaseKind::Identity:
         return "type";
     default:

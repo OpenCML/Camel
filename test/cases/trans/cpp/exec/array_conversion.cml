@@ -1,0 +1,11 @@
+/// A type name applied to a one-dimensional numeric array converts every element: to a float
+/// width or to an integer width, in the program std::cpp writes as in std::fvm.
+func main(): int sync {
+    let xs = [1, 2, 3]
+    let ys = [1.5, -2.5, 3.25]
+    println(float(xs), f32(xs), i32(xs), int(xs))
+    println(int(ys), i32(ys), f32(ys), float(f32(ys)))
+    let n = 2
+    println(float([n, n * n]), int([0.5 * float(n), 7.9]))
+    return 0
+}

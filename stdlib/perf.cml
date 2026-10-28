@@ -3,7 +3,8 @@
 
 import { now } from time
 import { sqrt } from math
-import { mean, stdev } from statistics
+import { mean } from array
+import { stdev } from statistics
 
 with <var result: float[], repeat: int>
 export func timeit(fn: () => void): void {
@@ -31,7 +32,7 @@ export func perfms(fn: () => void): (float, float) sync {
 
     // 95% 置信区间（Z 值 1.96）
     let z_value = 1.96
-    let margin_error = z_value * (std_dev / sqrt(repeat))
+    let margin_error = z_value * (std_dev / sqrt(float(repeat)))
 
     return (average, margin_error)
 }

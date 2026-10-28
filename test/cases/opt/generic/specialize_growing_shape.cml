@@ -5,7 +5,7 @@ import { new, concat, sum, shape } from tensor
 // every level. Specializing the callee on that type must stop: nothing in the types says where
 // the recursion ends.
 func grow(i: int, n: int, acc: f64[..]): f64[..] {
-    return if i >= n then acc else grow(i + 1, n, concat(acc, new([[1.0, 2.0]]), 0))
+    return if i >= n then acc else grow(i + 1, n, concat<0>(acc, new([[1.0, 2.0]])))
 }
 
 func main(): int sync {

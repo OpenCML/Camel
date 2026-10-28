@@ -4,6 +4,6 @@ func f(b: f64[3]): float {
 }
 func main(): int sync {
     println('ran')
-    println(f(reshape([1.0, 2.0, 3.0], [3])))
+    println(f(reshape<[3]>([1.0, 2.0, 3.0])))
     return 0
 }

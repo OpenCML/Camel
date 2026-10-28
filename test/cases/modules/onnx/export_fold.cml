@@ -20,12 +20,12 @@ func unroll(t: int, steps: int, h: f32[..]): f32[..] {
 with <l: Layer>
 func forward(x: f32[..]): f32[..] {
     let dims = shape(x)
-    return reshape(unroll<l>(0, 3, x), [dims[0] * dims[1]])
+    return reshape<[dims[0] * dims[1]]>(unroll<l>(0, 3, x))
 }
 
 func main(): int sync {
-    let l = { w: reshape([1.0, 0.0, 0.0, 1.0] as f32[], [2, 2]), b: reshape([0.5, -0.5] as f32[], [2]) }
-    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [3, 2])
+    let l = { w: reshape<[2, 2]>([1.0, 0.0, 0.0, 1.0] as f32[]), b: reshape<[2]>([0.5, -0.5] as f32[]) }
+    let x = reshape<[3, 2]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[..]): f32[..] => forward<l>(x), x)
     println('exported')
     return 0

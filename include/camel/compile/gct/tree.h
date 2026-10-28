@@ -292,6 +292,14 @@ class Tree {
     /// A call written with the pipe `x -> f` (design principles 3.9): its receiver, when it is a
     /// `T?` or a `T!` no overload takes as it is, is taken apart by the call.
     void markPipe(const Node *call) { pipeCalls_.insert(call); }
+    /// A value declared without a right side (`export let inf: float`): the value the C++ module of
+    /// the declaration registers under the name, of the type the declaration writes (design
+    /// principles 6.4). The NREF has no child; this is its type.
+    void markNativeValue(const Node *declaration, Type *type) { nativeValues_[declaration] = type; }
+    Type *nativeValueTypeOf(const Node *declaration) const {
+        const auto found = nativeValues_.find(declaration);
+        return found == nativeValues_.end() ? nullptr : found->second;
+    }
     bool isPipe(const Node *call) const { return pipeCalls_.contains(call); }
 
 
@@ -360,6 +368,7 @@ class Tree {
     std::unordered_map<const Node *, ParameterDefaults> parameterDefaults_;
     std::unordered_map<const Node *, std::vector<std::optional<std::string>>> argumentNames_;
     std::unordered_set<const Node *> pipeCalls_;
+    std::unordered_map<const Node *, Type *> nativeValues_;
 
     // Keyed by the data object: a composite literal's elements are converted from it, and a
     // nested literal keeps its own entry.

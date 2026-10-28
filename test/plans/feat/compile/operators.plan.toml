@@ -131,19 +131,30 @@ kind = "negative"
 case = "../../../cases/compile/operators/int_of_bool.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "int_of_bool.cml:7:16:", "(bool)"]
+expect_output_contains = ["SemanticDiag::WhenConditionUnmet", "int_of_bool.cml:7:16:", "(bool)"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
 name = "float_of_array"
-desc = "float of an array is rejected when compiled"
-kind = "negative"
+desc = "float of an array converts every element (the core's conversion of an array, no import): it is the array of floats, not an error"
+kind = "behavior"
 case = "../../../cases/compile/operators/float_of_array.cml"
 args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["[1.0]", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "float_of_struct"
+desc = "float of a value that is neither a number nor an array of numbers is rejected when compiled"
+kind = "negative"
+case = "../../../cases/compile/operators/float_of_struct.cml"
+args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "float_of_array.cml:7:18:", "(int[])"]
+expect_output_contains = ["SemanticDiag::WhenConditionUnmet", "float_of_struct.cml:8:18:", "({ a: int })"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

@@ -787,7 +787,8 @@ std::string Node::toString() const {
         bool first       = true;
         for (const TypeCaseKind kind :
              {TypeCaseKind::Struct, TypeCaseKind::Tuple, TypeCaseKind::Array, TypeCaseKind::Func,
-              TypeCaseKind::Leaf, TypeCaseKind::Wildcard}) {
+              TypeCaseKind::Nullable, TypeCaseKind::Fallible, TypeCaseKind::Map,
+              TypeCaseKind::Set, TypeCaseKind::Leaf, TypeCaseKind::Wildcard}) {
             if ((typeCasePatterns() & typeCaseBit(kind)) == 0) {
                 continue;
             }
@@ -805,6 +806,18 @@ std::string Node::toString() const {
                 break;
             case TypeCaseKind::Func:
                 text += "func";
+                break;
+            case TypeCaseKind::Nullable:
+                text += "nullable";
+                break;
+            case TypeCaseKind::Fallible:
+                text += "fallible";
+                break;
+            case TypeCaseKind::Map:
+                text += "map";
+                break;
+            case TypeCaseKind::Set:
+                text += "set";
                 break;
             case TypeCaseKind::Leaf:
                 text += "#leaf";

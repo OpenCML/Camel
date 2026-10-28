@@ -1,6 +1,5 @@
 /**
- * `array:sort` is declared with one array argument: a second one is refused at the call, and the
- * overload the message lists is the declaration's (bucket 1).
+ * `sort` is declared with one array argument: a second one is refused at the call.
  */
 
 import { sort } from array

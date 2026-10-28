@@ -5,6 +5,6 @@ func f(b: f32[3]): float {
 }
 func main(): int sync {
     let t = load_npy::<f32>(get_env('X') ?? '')
-    println(f(reshape(t, [3])))
+    println(f(reshape<[3]>(t)))
     return 0
 }

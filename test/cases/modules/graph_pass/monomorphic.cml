@@ -1,9 +1,8 @@
-import { Program } from graph
 import { nine, addOne } from libvals
 
 // A non-generic function of a Camel library: its body is built by the pass module's own
 // builder, and a direct call must return its value, not the zero of its type.
-export func show(p: Program): Program! sync {
+export func show::<F>(p: F): F! sync {
     println(nine())
     println(addOne(41))
     return p

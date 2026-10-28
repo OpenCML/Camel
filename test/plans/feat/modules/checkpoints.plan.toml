@@ -29,24 +29,24 @@ timeout_ms = 30000
 
 [[tests]]
 name = "unsupported_leaf_is_a_compile_error"
-desc = "A checkpoint leaf of a type no checkpoint can hold (an array of arrays) is refused when the program is compiled, with the path of the leaf."
+desc = "A checkpoint leaf of a type no checkpoint can hold (an array of arrays) is refused when the program is compiled: the condition `has_ckpt_form` of `save_tree` does not hold."
 kind = "negative"
 case = "../../../cases/modules/nn/checkpoint_unsupported_leaf.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_output_contains = ["tree leaf 'weights'", "cannot hold"]
+expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
+expect_output_contains = ["has_ckpt_form", "save_tree"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
 name = "unsupported_load_target_is_a_compile_error"
-desc = "The same for the type argument of load_tree: the path of the leaf is named."
+desc = "The same for the type argument of load_tree: `has_ckpt_form` of `load_tree` does not hold."
 kind = "negative"
 case = "../../../cases/modules/nn/checkpoint_unsupported_load.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_output_contains = ["tree leaf 'block.f'", "cannot hold"]
+expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
+expect_output_contains = ["has_ckpt_form", "load_tree"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

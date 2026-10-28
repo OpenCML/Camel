@@ -51,8 +51,17 @@ for g in graphs.values():
             assert isinstance(n["origin"], str) and n["origin"].isdigit()
     for e in g["edges"]:
         assert e["source"] in local and e["target"] in local
-        assert e["kind"] in ("normal", "context", "control")
-        assert e["sourceIndex"] >= 0 and e["targetIndex"] >= 0
+        # The edge kinds the graph IR defines (docs/design/effects/edges.cn.md 1): the data kinds
+        # by port role (normal/context), the sync edge that joins a `sync` block's statements, and
+        # the order edge that only orders. `control` is what the transition still writes beside a
+        # chain link's sync edge, and it goes away with it.
+        assert e["kind"] in ("normal", "context", "control", "sync", "order")
+        # A sync and an order edge carry no data: they name their two ends and no port, so the
+        # document has no port indices for them.
+        if e["kind"] in ("normal", "context", "control"):
+            assert e["sourceIndex"] >= 0 and e["targetIndex"] >= 0
+        else:
+            assert "sourceIndex" not in e and "targetIndex" not in e
 assert {"LOOP", "DATA", "OPER", "PORT"}.issubset(kinds)
 duplicate = subprocess.run([EXE, str(ROOT / "test/cases/trans/jgir_duplicate.cml"), "std::jgir"], cwd=ROOT, capture_output=True, text=True)
 assert duplicate.returncode == 0, duplicate.stderr
