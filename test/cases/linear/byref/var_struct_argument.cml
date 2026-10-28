@@ -1,0 +1,21 @@
+/**
+ * A `var` argument whose type is not the parameter's but which the parameter accepts both ways:
+ * the callee reads the caller's variable and writes into it, so a type the two accept each
+ * other's values for is the same variable seen as either type (docs/design-principles.cn.md 3.5).
+ * An unnamed struct and the named type whose fields it has are that pair, and the write the
+ * callee makes is a write of the caller's variable.
+ */
+
+type P = { x: int, y: int }
+
+func bump(var p: P): int {
+    p.x = p.x + 1
+    return p.x
+}
+
+func main(): int sync {
+    var s = { x: 1, y: 2 }
+    println(bump(s))
+    println(s.x)
+    return 0
+}

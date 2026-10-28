@@ -166,12 +166,13 @@ class Builder {
     // Named dimensions of type extents (design principles 5.4): a name denotes an extent, not a
     // type. A name is bound the first time it is written in the parameter types of the function
     // declaration being visited; later occurrences in the same signature use it, and the return
-    // type may use the names the parameters bound. `dimNames_` holds the names the signature
-    // binds (empty outside a signature); `boundDims_` holds the names already visited, so a
-    // second plain name binds as a reference, not a new dimension. `dimUses_` counts the
-    // occurrences in the parameter types so a name used only once can be suggested as `?`.
-    // `dimBindAllowed_` is true only while the parameter types are visited, so a name in a
-    // return type, in a body, or inside a nested function type is reported as unbound.
+    // type and the body may use the names the parameters bound. `dimNames_` holds the names the
+    // signature binds (empty outside a signature, and in the body of a nested declaration);
+    // `boundDims_` holds the names already visited, so a second plain name binds as a reference,
+    // not a new dimension. `dimUses_` counts the occurrences in the parameter types so a name
+    // used only once can be suggested as `?`. `dimBindAllowed_` is true only while the parameter
+    // types are visited, so a name in a return type or in a body that no parameter bound, or one
+    // inside a nested function type, is reported as unbound.
     std::shared_ptr<std::set<std::string>> dimNames_;
     std::shared_ptr<std::set<std::string>> boundDims_;
     std::shared_ptr<std::set<std::string>> dimPacks_;

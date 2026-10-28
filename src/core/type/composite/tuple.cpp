@@ -296,6 +296,19 @@ CastSafety TupleType::castSafetyFrom(Type *sourceType) const {
     // decided by structure, so `t as (int, int)` passes for `t: (int, int)`.
     if (equals(sourceType))
         return CastSafety::Safe;
+    if (cell_ && sourceType != nullptr && sourceType->code() == TypeCode::Tuple) {
+        const auto *source = static_cast<const TupleType *>(sourceType);
+        if (source->cell_) {
+            // A cell is one box, and a `var` argument is passed as the cell type the callee's
+            // port states. Two cell types whose content types accept each other's values are
+            // that one box seen as either type: nothing moves, and neither side can write a
+            // value the other cannot hold (design principles 3.5).
+            return typesPtr_[0]->assignableFrom(source->typesPtr_[0]) &&
+                           source->typesPtr_[0]->assignableFrom(typesPtr_[0])
+                       ? CastSafety::Safe
+                       : CastSafety::Forbidden;
+        }
+    }
     if (isTagged() && sourceType != nullptr) {
         // `null` is the literal of every nullable type.
         if (isNullable() && sourceType->code() == TypeCode::Void) {
@@ -324,6 +337,10 @@ slot_t TupleType::castSlotFrom(slot_t value, Type *sourceType) const {
     }
     if (equals(sourceType)) {
         return value; // a conversion to the value's own type does nothing
+    }
+    if (cell_ && sourceType != nullptr && sourceType->code() == TypeCode::Tuple &&
+        static_cast<const TupleType *>(sourceType)->cell_) {
+        return value; // one box: the conversion of a cell into another cell type moves nothing
     }
     if (!isTagged()) {
         return Type::castSlotFrom(value, sourceType);

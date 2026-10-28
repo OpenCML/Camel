@@ -389,3 +389,87 @@ assert(grow && grow.signature === '(xs: f32[n], k: int) => f32 pure', `grow is d
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "let_shape"
+desc = "The shape a declaration writes is the type of the value it binds (design principles 5.1, 5.4): `let x: f32[3] = [1.0, 2.0, 3.0]` is one `f32[3]`, so the call to a parameter that states that shape needs no conversion, and the literal keeps its three elements. An annotation that states less than the value does -- `f32[..]` is any number of dimensions, not one -- is the type of the name, and the value underneath keeps the shape it has: `len` of the two-by-two array is 2, not the 4 the array of its rows would answer."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/let_shape.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "3\n2\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "let_shape_on_the_graph"
+desc = "The graph of the same program: the literal under `f32[3]` is one DATA of `f32[3]`, not the `f32[]` its elements alone give it, and the two-by-two literal under `f32[..]` is a DATA of `f32[2, 2]` under a CAST to the declared type -- the annotation gives the name its type, and the conversion is checked when it runs."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/let_shape.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const lines = input.normalized.stdout.split(String.fromCharCode(10))
+  const data = (type) => lines.filter((l) => l.includes('type="DATA"') && l.includes(`value_type="${type}"`))
+  assert(data('f32[3]').length === 1, `no f32[3] literal: ${data('f32[3]').join(' | ')}`)
+  assert(data('f32[2, 2]').length === 1, `no f32[2, 2] literal: ${data('f32[2, 2]').join(' | ')}`)
+  const casts = lines.filter((l) => l.includes('type="CAST"') && l.includes('value_type="f32[..]"'))
+  assert(casts.length === 1, `no CAST to f32[..]: ${lines.filter((l) => l.includes('type="CAST"')).join(' | ')}`)
+  assert(data('f32[]').length === 0, `a literal kept the unknown shape: ${data('f32[]').join(' | ')}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "let_named_dimension"
+desc = "A dimension name a parameter type binds is in scope in the body (design principles 5.4): `let out: f32[n] = [1.0, 2.0, 3.0]` names the extent `xs` bound and takes that declared type, just as the return type writes it, so `ones` returns what the call's argument makes `n` and `len` is three."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/let_named_dimension.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "let_named_dimension_on_the_graph"
+desc = "The graph of the same program: the literal is a DATA of the shape its elements give it and a CAST to the declared `f32[n]` binds the name to that type -- a named dimension makes no instance, so the declaration's own graph states the extent the call supplies and the conversion is checked when it runs."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/let_named_dimension.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const lines = input.normalized.stdout.split(String.fromCharCode(10))
+  const casts = lines.filter((l) => l.includes('type="CAST"') && l.includes('value_type="f32[n]"'))
+  assert(casts.length === 1, `no CAST to f32[n]: ${lines.filter((l) => l.includes('type="CAST"')).join(' | ')}`)
+  const ports = lines.filter((l) => l.includes('value_type="f32[n]"'))
+  assert(ports.length >= 2, `the parameter and the binding are not f32[n]: ${ports.join(' | ')}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "err_dimension_name_other_body"
+desc = "The name is the binding signature's, not the module's: a second declaration writing `f32[n]` in its own body names nothing its own parameters bound, so it is refused at the annotation (design principles 5.4). Before this, a body's types were refused outright; the scope now reaches the body of the declaration that bound the name and no further."
+kind = "negative"
+case = "../../../../cases/compile/array_shape/err_dimension_name_other_body.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DimensionNameNotBound"
+expect_output_contains = ["'n'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_dimension_name_nested_body"
+desc = "A function declared in a body declares a signature of its own, and a name the enclosing body sees is not one of its parameters: `f32[n]` there is unbound (design principles 5.4). The scope of a signature's dimension names is its own body, so nesting does not widen it."
+kind = "negative"
+case = "../../../../cases/compile/array_shape/err_dimension_name_nested_body.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DimensionNameNotBound"
+expect_output_contains = ["'n'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
