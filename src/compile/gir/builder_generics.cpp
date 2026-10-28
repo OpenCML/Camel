@@ -1994,13 +1994,38 @@ void Builder::settleGenericOperatorArguments(
                 strutil::join(names, ", ", [](const std::string &n) { return n; }),
                 tmpl->name));
     };
+    // A name that has no type until a position of function type resolves it is not bound to a free
+    // type variable: the position `T` of `println(x: T, ..rest)` says nothing about which function
+    // the name stands for, so the name stays unsettled and is refused. A rule whose signature is
+    // not declared (a computed one) says nothing here, and the name is tried as before.
+    const auto positionTakesFunction = [&](bool with, size_t index) {
+        for (const auto &[uri, resolver] : ops->resolvers()) {
+            FunctionType *sig = resolver->fixedSignature();
+            if (sig == nullptr) {
+                sig = resolver->declaredSignature();
+            }
+            if (sig == nullptr) {
+                return true;
+            }
+            const size_t count = with ? sig->withTypesCount() : sig->normTypesCount();
+            const bool pack    = with ? sig->hasWithRest() : sig->hasRest();
+            if (index >= count - (pack ? 1 : 0)) {
+                continue; // a pack position, or no position of this rule: any type, free
+            }
+            Type *param = with ? sig->withTypeAt(index) : sig->normTypeAt(index);
+            if (param->code() != TypeCode::TypeVar) {
+                return true;
+            }
+        }
+        return false;
+    };
     for (size_t i = 0; i < withInputs.size(); ++i) {
-        if (isWaiting(withInputs[i])) {
+        if (isWaiting(withInputs[i]) && positionTakesFunction(true, i)) {
             settleOne(withInputs[i], withTypes[i]);
         }
     }
     for (size_t i = 0; i < normInputs.size(); ++i) {
-        if (isWaiting(normInputs[i])) {
+        if (isWaiting(normInputs[i]) && positionTakesFunction(false, i)) {
             settleOne(normInputs[i], normTypes[i]);
         }
     }

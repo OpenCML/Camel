@@ -178,9 +178,9 @@ kind = "negative"
 case = "../../../cases/compile/param_defaults/stdlib_no_place_for_name.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ParamArgumentCallee"
+expect_diagnostic_name = "SemanticDiag::ParamArgumentUnknown"
 expect_diagnostic_line = 9
-expect_output_contains = ["The argument 'fn' is given by name, and the signature of 'DREF: println' is not known where the call is written."]
+expect_output_contains = ["'fn' is not a parameter of"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

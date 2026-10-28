@@ -2095,68 +2095,14 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
             }),
         // ======= IO (built-in input/print/println/eprintln) ======
-        OperatorGroup::create(
-            "print",
-            {
-                {
-                    ":io/print",
-                    DynamicFuncTypeResolver::create(
-                        {{-1, {}}, {-1, {}}},
-                        "<fmt?: string> (x: T, ...rest: U...) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (with.size() > 0 && with[0]->code() != TypeCode::String) {
-                                return nullopt;
-                            }
-                            if (norm.size() < 1) {
-                                return Type::Void();
-                            }
-                            return norm[0];
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "println",
-            {
-                {
-                    ":io/println",
-                    DynamicFuncTypeResolver::create(
-                        {{-1, {}}, {-1, {}}},
-                        "<fmt?: string> (x: T, ...rest: U...) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (with.size() > 0 && with[0]->code() != TypeCode::String) {
-                                return nullopt;
-                            }
-                            if (norm.size() < 1) {
-                                return Type::Void();
-                            }
-                            return norm[0];
-                        }),
-                },
-            }),
+        // The rules of `print` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("print", {}),
+        // The rules of `println` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("println", {}),
         // `println` on the standard error stream, with the same declaration shape (the author's
         // rule on question 2: it is in the prelude, so no import).
-        OperatorGroup::create(
-            "eprintln",
-            {
-                {
-                    ":io/eprintln",
-                    DynamicFuncTypeResolver::create(
-                        {{-1, {}}, {-1, {}}},
-                        "<fmt?: string> (x: T, ...rest: U...) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (with.size() > 0 && with[0]->code() != TypeCode::String) {
-                                return nullopt;
-                            }
-                            if (norm.size() < 1) {
-                                return Type::Void();
-                            }
-                            return norm[0];
-                        }),
-                },
-            }),
+        // The rules of `eprintln` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("eprintln", {}),
         // ======= string =======
         // The rule of `format` is the declaration of stdlib/prelude.cml (`with <..args>`).
         OperatorGroup::create("format", {}),

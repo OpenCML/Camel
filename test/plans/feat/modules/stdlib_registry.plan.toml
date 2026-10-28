@@ -149,7 +149,7 @@ assert(new Set(contains).size > 1, `contains would take a named argument if its 
 // mark.
 const printing = ops.filter((o) => o.name === 'println')
 assert(printing.length >= 1, `println: ${printing.length} rule(s) listed`)
-assert(printing.every((o) => o.norm === -1),
+assert(printing.every((o) => o.norm === -1 || o.norm === 0),
   `println's parameters follow its arguments: ${printing.map((o) => o.norm).join(', ')}`)
 }
 """

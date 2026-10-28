@@ -6766,12 +6766,19 @@ The argument '{0}' is given by name, and the signature of '{1}' is not known whe
 Name one function, or give the arguments positionally.
 ```
 
-**Example** (`test/cases/compile/param_defaults/stdlib_no_place_for_name.cml`, run as `camel test/cases/compile/param_defaults/stdlib_no_place_for_name.cml`)
+**Example** (`test/cases/compile/param_defaults/overload_default_hole.cml`, run as `camel test/cases/compile/param_defaults/overload_default_hole.cml`)
 
 ```camel
+func f(a: int, b: int = 0): int {
+    return a * 10 + b
+}
+
+func f(a: int, b: int, c: int = 0): int {
+    return a * 100 + b * 10 + c
+}
+
 func main(): int sync {
-    println(fn: 'printf')
-    return 0
+    return f(a: 1, c: 3)
 }
 ```
 
