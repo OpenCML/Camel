@@ -5,10 +5,10 @@
  * the overload the refusal lists is the declaration's own signature with its type variable —
  * `stdlib/tensor.cml` is the source, not the C++ module.
  */
-import { new, numel } from tensor
+import { numel } from tensor
 
 func main(): int sync {
-    let t = new([[1.0, 2.0]])
+    let t = [[1.0, 2.0]] as float[1, 2]
     println(numel::<f32, int>(t))
     return 0
 }

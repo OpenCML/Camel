@@ -63,16 +63,6 @@ InferFn shapedInfer(std::optional<TypeCode> dtype) {
     };
 }
 
-slot_t newKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    return runKernel("new", [&] {
-        return wrap(
-            norm.resultType(),
-            tensorFromArray(norm.slot(0), norm.type(0), resultAllocator()));
-    });
-}
-
-std::optional<Type *> newInfer(const InferContext &ctx) { return tensorOf(ctx.facts(0)); }
-
 slot_t zerosKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("zeros", [&] {
         return wrap(norm.resultType(),
@@ -122,26 +112,6 @@ slot_t randnKernel(ArgsView &, ArgsView &norm, context::Context &) {
     });
 }
 
-slot_t rangeKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    return runKernel("range", [&] {
-        int64_t start = 0, stop = 0, step = 1;
-        if (norm.size() == 1) {
-            stop = intArg(norm, 0);
-        } else {
-            start = intArg(norm, 0);
-            stop  = intArg(norm, 1);
-            if (norm.size() == 3) {
-                step = intArg(norm, 2);
-            }
-        }
-        return wrap(norm.resultType(), k::arange(start, stop, step, resultAllocator()));
-    });
-}
-
-std::optional<Type *> rangeInfer(const InferContext &) {
-    return tensorOf(TypeCode::Int64, StaticShape{std::nullopt});
-}
-
 slot_t eyeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel(
         "eye",
@@ -170,37 +140,11 @@ slot_t seedKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 const std::vector<ParamSpec> kShapeParam = {{"shape", ParamKind::IntArray}};
 
-// new(values): an array's elements in a tensor of the inferred shape. Its argument may be a
-// numeric array or a tensor, and a numeric array is a tensor here (a tensor is a numeric array:
-// `isTensorType` is `isNumericArrayType`), so the gradient is the same value at the argument's
-// own type: `new` does not change the element type or the shape's meaning, so nothing is
-// converted and the gradient passes through, declared with the argument's type. A container the
-// module converts but cannot carry a gradient back into (an array of arrays, an array of records)
-// is refused by name while it depends on a differentiated parameter, and a constant one starts no
-// gradient flow, so the call that converts it is never visited (`hasTensorAdjoint`).
-void newVjp(VjpBuilder &b, const VjpCall &call) {
-    requireVjpInputs(call, 1, 1);
-    if (auto dy = b.gradientOf(call.output)) {
-        if (!hasTensorAdjoint(b, call, call.inputs[0], "its input")) {
-            return;
-        }
-        b.accumulateGradient(call.inputs[0], tensorCastTo(b, call.inputs[0], *dy));
-    }
-}
-
 } // namespace
 
 std::vector<OpDef> creationOps() {
     const OpTraits impure{.pure = false};
     std::vector<OpDef> defs;
-    defs.push_back(OpDef{
-        .name      = "new",
-        .exports   = {"new"},
-        .params    = {{"values", ParamKind::TensorLike}},
-        .resultDoc = "float[..]",
-        .infer     = newInfer,
-        .kernel    = &newKernel,
-        .traits    = {}});
     defs.push_back(OpDef{
         .name            = "zeros",
         .exports         = {"zeros"},
@@ -250,17 +194,6 @@ std::vector<OpDef> creationOps() {
         .kernel    = &randnKernel,
         .traits    = impure});
     defs.push_back(OpDef{
-        .name    = "range",
-        .exports = {"range"},
-        .params =
-            {{"start", ParamKind::Int},
-             {"stop", ParamKind::Int, true},
-             {"step", ParamKind::Int, true}},
-        .resultDoc = "int64[..]",
-        .infer     = rangeInfer,
-        .kernel    = &rangeKernel,
-        .traits    = {}});
-    defs.push_back(OpDef{
         .name            = "eye",
         .exports         = {"eye"},
         .params          = {{"n", ParamKind::Int}},
@@ -277,7 +210,6 @@ std::vector<OpDef> creationOps() {
         .infer     = [](const InferContext &) -> std::optional<Type *> { return Type::Void(); },
         .kernel    = &seedKernel,
         .traits    = impure});
-    setVjp(defs, "new", &newVjp);
     return defs;
 }
 

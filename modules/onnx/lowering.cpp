@@ -417,10 +417,6 @@ Value lowerNumel(const LowerContext &ctx) {
     return Value::symbolicScalar(ctx.emitter().node("Size", {ctx.input(0)}), type::Type::Int64());
 }
 
-Value lowerFlatten(const LowerContext &ctx) {
-    return ctx.emit("Flatten", {ctx.input(0)}, {intAttr("axis", ctx.constInt(1, 1))});
-}
-
 Value lowerUnsqueeze(const LowerContext &ctx) {
     const int64_t axis[] = {ctx.constInt(1)};
     return ctx.emit("Unsqueeze", {ctx.input(0), ctx.emitter().int64s(axis)});
@@ -1331,7 +1327,6 @@ LoweringRegistry::LoweringRegistry() {
     add("tensor:transpose", lowerTranspose);
     add("tensor:permute", lowerPermute);
     add("tensor:reshape", lowerReshape, 5);
-    add("tensor:flatten", lowerFlatten);
     add("tensor:unsqueeze", lowerUnsqueeze, 13);
     add("tensor:concat", lowerConcat);
     add("tensor:shape", lowerShape);

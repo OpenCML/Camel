@@ -7824,7 +7824,7 @@ func pick(flag: bool, whole: int[], real: f32[]): int[] {
 }
 
 func main(): int sync {
-    let picked = pick(true, new([1, 2, 3] as int[]), new([f32(1.0), f32(2.0), f32(3.0)]))
+    let picked = pick(true, [1, 2, 3] as int[], [f32(1.0), f32(2.0), f32(3.0)])
     return if picked[0] > 0 then 0 else 1
 }
 ```
@@ -9546,12 +9546,12 @@ Convert the value to a supported type before the call.
 // diagnostic naming the operator, the argument's element type and the set the kernel takes.
 // It is never narrowed to f32 (design principles 5.1, 13.1).
 
-import { new, reshape, ones, sum } from tensor
+import { reshape, ones, sum } from tensor
 import { conv2d } from nn
 
 func main(): int sync {
     let values: f64[] = [1.0, 2.0, 3.0, 4.0]
-    let x = reshape<[1, 1, 2, 2]>(new(values))
+    let x = reshape<[1, 1, 2, 2]>(values)
     let kernel = ones::<f32>([1, 1, 1, 1])
     let bias = ones::<f32>([1])
     let y = conv2d(x, kernel, bias, 1, 0)

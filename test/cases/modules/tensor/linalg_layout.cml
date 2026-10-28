@@ -2,7 +2,7 @@
  * Batched matmul with broadcasting, linear, layer_norm, permute, slice, flatten, unsqueeze.
  */
 
-import { reshape, range, ones, zeros, matmul, linear, layer_norm, permute, slice, flatten, unsqueeze, transpose, shape, sum } from tensor
+import { reshape, ones, zeros, matmul, linear, layer_norm, permute, slice, unsqueeze, transpose, shape, sum, dim } from tensor
 
 func main(): int sync {
     let a = reshape<[2, 3, 4]>(f32(0..24))
@@ -18,7 +18,7 @@ func main(): int sync {
     'linalg layernorm_sum={}'->format<sum(n)>->println
     let p = permute<[2, 0, 1]>(a)
     let s = slice(a, 2, 1, 4, 2)
-    let f = flatten(a)
+    let f = reshape<[dim<0>(a), -1]>(a)
     let u = unsqueeze<0>(transpose(a))
     'layout permute={} slice={} slice_sum={} flatten={} unsqueeze={}'->format<shape(p), shape(s), sum(s), shape(f), shape(u)>->println
     return 0

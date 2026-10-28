@@ -225,7 +225,6 @@ const std::unordered_map<std::string_view, OperatorSemantics> &declarations() {
                 layout("little-endian payload bits decoded exactly into row-major storage"));
         }
         t.emplace("reshape", layout("the elements in row-major order, in a new shape"));
-        t.emplace("flatten", layout("the elements in row-major order, as one axis"));
         t.emplace("unsqueeze", layout("the elements unchanged, with an axis of extent 1 added"));
         t.emplace("transpose", layout("the last two axes swapped"));
         t.emplace("permute", layout("the axes reordered"));

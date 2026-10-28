@@ -29,7 +29,7 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 7
 expect_stdout_starts_with = "before\n"
 
 [[tests]]
@@ -42,5 +42,5 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 7
 expect_stdout_starts_with = "before\n"

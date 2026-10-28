@@ -16,7 +16,7 @@
  * that carrying `change_precision` changes nothing here.
  */
 
-import { new, sum, multiply, to_bytes } from tensor
+import { sum, multiply, to_bytes } from tensor
 import { to_array } from bytes
 
 #[change_precision]
@@ -31,24 +31,24 @@ func narrowHalf(x: f32[..]): f16[..] {
 
 func main(): int sync {
     let tenthValue: f32[] = [0.1]
-    let tenth = narrow(new(tenthValue))
+    let tenth = narrow(tenthValue)
     println(len(to_bytes(tenth)))
     println(to_array(to_bytes(tenth)))
     let wide: f32[..] = f32(tenth)
     println(to_array(to_bytes(wide)))
-    println(to_array(to_bytes(new(tenthValue))))
-    let half = narrowHalf(new(tenthValue))
+    println(to_array(to_bytes(tenthValue)))
+    let half = narrowHalf(tenthValue)
     println(len(to_bytes(half)))
     println(to_array(to_bytes(half)))
 
     let pairValue: f32[] = [1.0, 0.00390625]
-    let pair = narrow(new(pairValue))
+    let pair = narrow(pairValue)
     println(len(to_bytes(pair)))
     println(to_array(to_bytes(sum<0, true>(pair))))
 
     let threeValue: f32[] = [3.0]
     let factorValue: f32[] = [1.0078125]
-    let product = multiply(narrow(new(threeValue)), narrow(new(factorValue)))
+    let product = multiply(narrow(threeValue), narrow(factorValue))
     println(len(to_bytes(product)))
     println(to_array(to_bytes(product)))
     return 0

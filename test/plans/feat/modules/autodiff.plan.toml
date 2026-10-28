@@ -2981,28 +2981,6 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
-name = "adjoint_new_array.runtime.nvm"
-desc = "`new(xs)` converts a numeric array into a tensor, and an array's tangent is the array of its elements' tangents (design principles 9.9), so the adjoint is the tensor's gradient read back in the array's order -- the identity, since `new` moves no element. The case asserts the gradient itself: `g` is printed element by element against [1.0, 1.0] for a sum, and `gw` against [2.0, 3.0, 4.0] for a weighted read of the tensor's elements. This case replaced `refuse_new_array`, which expected the refusal and the silent zero behind it. (grad built at run time)"
-kind = "behavior"
-case = "../../../cases/modules/autodiff/adjoint_new_array.cml"
-args = ["${case}", "${run_nvm}"]
-expect_exit = 0
-expect_stdout_exact = "adjoint_new_array g=[1.0, 1.0] gw=[2.0, 3.0, 4.0]\n"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 8000
-
-[[tests]]
-name = "adjoint_new_array.macro.fvm"
-desc = "The same new adjoint when std::macro builds the gradient ahead of time and the FastVM runs it: the tensor's gradient is read back into the array in the compiled gradient graph, not only in a graph built at run time."
-kind = "behavior"
-case = "../../../cases/modules/autodiff/adjoint_new_array.cml"
-args = ["${case}", "std::macro", "${run_fvm}"]
-expect_exit = 0
-expect_stdout_exact = "adjoint_new_array g=[1.0, 1.0] gw=[2.0, 3.0, 4.0]\n"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 8000
-
-[[tests]]
 name = "adjoint_cast_array.runtime.nvm"
 desc = "`cast` accepts a numeric array as well as a tensor, and an array's tangent is the array of its elements' tangents (design principles 9.9), so the adjoint of `f32(xs)` is the tensor's gradient cast back to the array's element type. The case asserts the gradient itself: `g` is printed element by element against [1.0, 1.0, 1.0] -- the array the rule used to drop and materialize as zeros -- and `gw` against [2.0, 3.0, 4.0]. This case replaced `refuse_cast_array`, which expected the refusal. (grad built at run time)"
 kind = "behavior"
@@ -3056,19 +3034,6 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
 expect_diagnostic_line = 25
 expect_output_contains = ["cannot differentiate operator 'tensor:reshape'", "no operator carries a tensor's gradient back into one", "type 'float[][]'"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-
-[[tests]]
-name = "refuse_container_new"
-desc = "`new(xs)` with `xs: float[][]` converts the container to a tensor by flattening it, and the container has no adjoint: the gradient would have to return as an array of arrays, which no operator of this module builds from a tensor's gradient. The call is refused by name, with the container's type, at the new call (line 21); `refuse_container_reshape` is the same refusal for `reshape`. A numeric array is a tensor and is not refused (`adjoint_new_array` asserts its adjoint), and a constant container is converted by the forward rule and never visited here. Without the refusal this program faulted in the kernels, which read the container as a tensor: \"Expected an array argument\", with no place in the source to point at. (grad built at run time)"
-kind = "negative"
-case = "../../../cases/modules/autodiff/refuse_container_new.cml"
-args = ["${case}", "${run_nvm}"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 20
-expect_output_contains = ["cannot differentiate operator 'tensor:new'", "no operator carries a tensor's gradient back into one", "type 'float[][]'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

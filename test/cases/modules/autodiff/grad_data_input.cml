@@ -3,7 +3,7 @@
 // converted to an integer without being refused. Only the first `with` parameter of `f` is
 // differentiated, so `scale` and `labels` carry no gradient to lose (design principles 9.9).
 import { grad } from autodiff
-import { new, sum } from tensor
+import { sum } from tensor
 
 with <w: float>
 func scaled(scale: float): float {
@@ -21,8 +21,8 @@ func main(): int sync {
     println(scaled<2.0>(3.0))
     println(grad(scaled)<2.0>(3.0))
 
-    let labels: i64[..] = new([[0, 1, 0]])
-    let w: f64[..] = new([[1.0, 2.0, 3.0]])
+    let labels = [[0, 1, 0]] as int[1, 3]
+    let w = [[1.0, 2.0, 3.0]] as float[1, 3]
     println(weighted<w>(labels))
     println(sum(grad(weighted)<w>(labels)))
     return 0
