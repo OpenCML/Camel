@@ -2,7 +2,7 @@ id = "consistency.unused_fallible"
 order = 364
 tier = "fast"
 tags = ["feat", "consistency", "compile", "fallible", "warnings"]
-desc = "A `T!` that is evaluated in a sync block and that nothing uses is a compile-time warning; `let _ = ...` drops it on purpose; a `main` without a declared return type ending in an error value is the same case (design principles 3.9)."
+desc = "A `T!` that nothing uses is a compile-time warning, in a sync block and outside one alike; `let _ = ...` drops it on purpose; a `main` without a declared return type ending in an error value is the same case (design principles 3.9)."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -60,13 +60,13 @@ expect_output_not_contains = ["UnusedFallibleValue"]
 
 [[tests]]
 name = "unused_fallible.outside_sync"
-desc = "Outside a sync block an unused value is not evaluated: no warning."
+desc = "A `let` whose name is never used, outside a sync block: what it would hold is a `T!`, so the error it may hold is lost there too, and the warning is UnusedFallibleValue. The statement it is does not run either, and the one warning says both."
 kind = "behavior"
 case = "../../../cases/consistency/unused_fallible/outside_sync.cml"
-args = ["${case}"]
+args = ["-E", "short", "${case}"]
 expect_exit = 0
 expect_stdout_starts_with = "1\n"
-expect_output_not_contains = ["UnusedFallibleValue"]
+expect_stderr_contains = ["name=SemanticDiag::UnusedFallibleValue"]
 
 [[tests]]
 name = "unused_fallible.if_arms"

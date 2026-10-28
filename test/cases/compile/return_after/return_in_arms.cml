@@ -1,0 +1,30 @@
+/**
+ * A `return` written in an arm of an `if` gives that arm's value, not the function's (design
+ * principles 5.1, language reference 7.3): `return 7` in the `then` arm and `return 9` in the
+ * `else` arm make the branch a choice between 7 and 9, and neither is an error. Nothing follows
+ * a `return` in these arms, so there is no statement the `return` leaves behind and no diagnostic.
+ */
+
+func pick(c: bool): int sync {
+    if c then {
+        return 7
+    } else {
+        return 9
+    }
+}
+
+func scaled(x: int): int {
+    if x > 10 then {
+        return x * 2
+    } else {
+        x + 1
+    }
+}
+
+func main(): int sync {
+    println(pick(true))
+    println(pick(false))
+    println(scaled(11))
+    println(scaled(1))
+    return 0
+}

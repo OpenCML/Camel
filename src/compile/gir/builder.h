@@ -661,6 +661,10 @@ class Builder {
     /// The EXEC that is the body of the function being built: its tags are the body region's
     /// (region 0), not a block region of their own.
     const GCT::Node *functionBody_ = nullptr;
+    /// The EXEC whose statements are being built: the body itself, or a block written inside it.
+    /// A `return` gives the value of the block it is written in (design principles 7.3), and only
+    /// the body's own `return` writes the value the function hands on.
+    const GCT::Node *currentBlock_ = nullptr;
     /// Sets currentAttrs_ for a scope and puts the previous value back at its end.
     struct AttrScope {
         camel::core::attr::AttrSetId &current;
@@ -2807,9 +2811,13 @@ class Builder {
         const GCT::node_ptr_t &expr, node_handle_t subject, const GCT::node_ptr_t &at,
         const char *construct);
     /// Warns about every `T!` that is evaluated in a body and that nothing takes
-    /// (UnusedFallibleValue): a statement of a sync block, the arm of an `if` without
-    /// `else`, and what a `main` without a declared return type ends with.
+    /// (UnusedFallibleValue): a statement of a body, a block's statement, the arm of an `if`
+    /// without `else`, and what a `main` without a declared return type ends with.
     void reportUnusedFallibleValues();
+    /// The `T!` values already reported as UnusedFallibleValue. A statement whose value is one of
+    /// them is answered by that warning alone, not by the warning for an effect that never runs as
+    /// well: one statement, one diagnostic.
+    std::unordered_set<node_handle_t> unusedFallibleValues_;
     /// Values dropped on purpose by `let _ = e`.
     std::unordered_set<node_handle_t> discardedValues_;
 

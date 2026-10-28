@@ -1,0 +1,16 @@
+/**
+ * An effect written as a statement of a `sync` body runs: it is on the chain, so nothing is
+ * reported -- not an unused value (it gives none that is a `T!`) and not an effect that is never
+ * executed (it is executed).
+ */
+
+func report(tag: string): int sync {
+    println(tag)
+    return 0
+}
+
+func main(): int sync {
+    report('first')
+    println('second')
+    return 0
+}

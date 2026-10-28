@@ -1,0 +1,90 @@
+id = "compile.unused_values"
+order = 413
+tier = "fast"
+tags = ["feat", "compile", "diagnostics", "negative", "unused"]
+desc = "A statement whose value nobody uses gives exactly one diagnostic, whatever the body it is written in: a statement whose value is a `T!` is UnusedFallibleValue, in a `sync` body and outside one alike (the error it may hold is lost either way, and the warning takes precedence over the one for a statement that does not run); an effect outside a `sync` body is EffectNotExecuted; a pure statement is UnusedPureResult. The `T!` statement of a body that is not `sync` was silent, and the same statement in a `sync` body of an effect-shaped callee was reported as an effect that never runs."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "unused_values.fallible_sync"
+desc = "A `T!` statement in a `sync` body: it runs, the value nothing takes is lost, and the one diagnostic is UnusedFallibleValue."
+kind = "negative"
+case = "../../../cases/compile/unused_values/fallible_sync.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "done\n"
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::UnusedFallibleValue', input.diagnostics[0].name)
+assert(input.diagnostics[0].line === 12 && input.diagnostics[0].column === 5, JSON.stringify(input.diagnostics[0]))
+"""
+
+[[tests]]
+name = "unused_values.fallible_body"
+desc = "The same `T!` statement in a body that is not `sync`: the call does not run, and its value is still a `T!` nothing takes. One diagnostic, UnusedFallibleValue -- not EffectNotExecuted as well."
+kind = "negative"
+case = "../../../cases/compile/unused_values/fallible_body.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "3\n"
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::UnusedFallibleValue', input.diagnostics[0].name)
+assert(input.diagnostics[0].line === 13 && input.diagnostics[0].column === 5, JSON.stringify(input.diagnostics[0]))
+"""
+
+[[tests]]
+name = "unused_values.effect_sync"
+desc = "An effect statement of a `sync` body runs: it is on the chain, so neither the unused-value warning nor EffectNotExecuted is reported, and both lines are printed in the order they are written."
+kind = "behavior"
+case = "../../../cases/compile/unused_values/effect_sync.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "first\nsecond\n"
+verify_script = """
+assert(input.diagnostics.length === 0, JSON.stringify(input.diagnostics))
+"""
+
+[[tests]]
+name = "unused_values.effect_body"
+desc = "An effect statement of a body that is not `sync` never runs: one diagnostic, EffectNotExecuted, and the call it names prints nothing."
+kind = "negative"
+case = "../../../cases/compile/unused_values/effect_body.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "4\n"
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::EffectNotExecuted', input.diagnostics[0].name)
+assert(input.diagnostics[0].line === 13 && input.diagnostics[0].column === 5, JSON.stringify(input.diagnostics[0]))
+assert(!input.normalized.stdout.includes('never printed'), input.stdout)
+"""
+
+[[tests]]
+name = "unused_values.pure_sync"
+desc = "A pure statement of a `sync` body whose value nobody uses: one diagnostic, the error UnusedPureResult."
+kind = "negative"
+case = "../../../cases/compile/unused_values/pure_sync.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::UnusedPureResult', input.diagnostics[0].name)
+assert(input.diagnostics[0].line === 9 && input.diagnostics[0].column === 5, JSON.stringify(input.diagnostics[0]))
+"""
+
+[[tests]]
+name = "unused_values.pure_body"
+desc = "The same pure statement in a body that is not `sync`: one diagnostic, the error UnusedPureResult."
+kind = "negative"
+case = "../../../cases/compile/unused_values/pure_body.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::UnusedPureResult', input.diagnostics[0].name)
+assert(input.diagnostics[0].line === 7 && input.diagnostics[0].column === 5, JSON.stringify(input.diagnostics[0]))
+"""

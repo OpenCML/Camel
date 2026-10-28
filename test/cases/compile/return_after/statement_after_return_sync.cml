@@ -1,0 +1,17 @@
+/**
+ * A statement written after the `return` of its block is never reached: the `return` gives the
+ * block's value (design principles 7.3), so the block has nothing left for the statement to add.
+ * The first such statement is told, and only it: the program is refused, and nothing is printed.
+ */
+
+func g(): int sync {
+    println('a')
+    return 2
+    println('b')
+    return 1
+}
+
+func main(): int sync {
+    println(g())
+    return 0
+}

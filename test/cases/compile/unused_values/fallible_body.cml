@@ -1,0 +1,20 @@
+/**
+ * The same statement in a body that is not `sync`: nothing depends on the value, so the call does
+ * not run -- and the value it would have given is a `T!` whose error nothing would see. The
+ * warning is still UnusedFallibleValue, and it is the only one: the statement is not reported
+ * as an effect that is not executed as well (design principles 3.9).
+ */
+
+func check_same(a: int, b: int): bool! {
+    return if a == b then true else error('Mismatch', 'not the same')
+}
+
+func probe(a: int, b: int): int {
+    check_same(a, b)
+    return 3
+}
+
+func main(): int sync {
+    println(probe(1, 2))
+    return 0
+}

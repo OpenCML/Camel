@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-295 diagnostics: 275 errors, 20 warnings. 15 carry a machine-applicable edit, 280 say why they carry none.
+296 diagnostics: 276 errors, 20 warnings. 15 carry a machine-applicable edit, 281 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -260,6 +260,7 @@ prints one entry.
 | `0x030001FE` | [SemanticDiag::TypeFunctionNotApplicable](#typefunctionnotapplicable) | Error | no |
 | `0x030001FF` | [SemanticDiag::ExtentNotADimension](#extentnotadimension) | Error | no |
 | `0x03000200` | [SemanticDiag::VarArgumentTypeMismatch](#varargumenttypemismatch) | Error | no |
+| `0x03000201` | [SemanticDiag::StatementAfterReturn](#statementafterreturn) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8480,6 +8481,42 @@ func main(): int sync {
 }
 ```
 
+### StatementAfterReturn
+
+`0x03000201` · Error · `SemanticDiag::StatementAfterReturn`
+
+**Fix**
+
+None: choice: the statement belongs before the 'return' or not at all, and which one is the intent
+
+**Message**
+
+```text
+This statement cannot run: the 'return' written before it gives the value of this block, so nothing after it in the block is reached.
+```
+
+**Help**
+
+```text
+A 'return e' is the value of the block it is written in -- a function body, a 'sync' block, or the arm of an 'if' or a 'match' -- and a statement written after it in that same block is never reached. Move the statement before the 'return', or delete it.
+```
+
+**Example** (`test/cases/compile/return_after/statement_after_return_sync.cml`, run as `camel -E short test/cases/compile/return_after/statement_after_return_sync.cml`)
+
+```camel
+func g(): int sync {
+    println('a')
+    return 2
+    println('b')
+    return 1
+}
+
+func main(): int sync {
+    println(g())
+    return 0
+}
+```
+
 ### IgnoredSideEffect
 
 `0x03100002` · Warn · `SemanticDiag::IgnoredSideEffect`
@@ -8623,13 +8660,17 @@ This value has type '{0}' and nothing uses it: an error it holds is lost{1}.
 A function that returns a 'T!' reports its failure through that value. Take the value apart with '!!', '->' or 'match', return it from a function that declares a 'T!', or drop it on purpose with 'let _ = ...'.
 ```
 
-**Example** (`test/cases/consistency/unused_fallible/main_undeclared.cml`, run as `camel -E short test/cases/consistency/unused_fallible/main_undeclared.cml`)
+**Example** (`test/cases/compile/unused_values/fallible_sync.cml`, run as `camel -E short test/cases/compile/unused_values/fallible_sync.cml`)
 
 ```camel
-// A `main` without a declared return type that ends in an error value: nothing takes it.
-func main() sync {
-    println('start')
-    parse_int('zz')
+func check_same(a: int, b: int): bool! {
+    return if a == b then true else error('Mismatch', 'not the same')
+}
+
+func main(): int sync {
+    check_same(1, 2)
+    println('done')
+    return 0
 }
 ```
 

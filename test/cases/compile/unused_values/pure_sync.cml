@@ -1,0 +1,12 @@
+/**
+ * A pure statement whose value nothing uses, inside a `sync` body: the operator changes nothing
+ * and returns a new value, so the statement is the error UnusedPureResult. It is the only
+ * diagnostic -- the statement is not an effect and it holds no `T!`.
+ */
+
+func main(): int sync {
+    let a = 1
+    a + 2
+    println(a)
+    return 0
+}

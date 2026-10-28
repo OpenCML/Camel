@@ -1,0 +1,17 @@
+/**
+ * Two `return`s handing a value to the same exit: the first one gives the graph's value, and the
+ * second is a statement the first leaves behind. It used to be built as well, without the
+ * conversion the declared `int!` asks for, and the node VM wrote the plain `int` where the
+ * declared type has its own shape: the program exited on a segmentation fault.
+ */
+
+func g(): int! {
+    return error('BadInput', 'nothing to give')
+    return 1
+}
+
+func main(): int sync {
+    let v: int! = g()
+    println(v !! -1)
+    return 0
+}

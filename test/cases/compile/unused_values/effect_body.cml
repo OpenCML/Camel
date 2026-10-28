@@ -1,0 +1,20 @@
+/**
+ * An effect written as a statement of a body that is not `sync`: nothing depends on it, so it
+ * never runs, and the warning says so (EffectNotExecuted). It is the only diagnostic for the
+ * statement -- its result is not a `T!` and it is not a pure value either.
+ */
+
+func report(tag: string): int sync {
+    println(tag)
+    return 0
+}
+
+func quiet(tag: string): int {
+    report(tag)
+    return 4
+}
+
+func main(): int sync {
+    println(quiet('never printed'))
+    return 0
+}
