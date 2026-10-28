@@ -272,6 +272,52 @@ OtherType *MatchTypeType::cloneWithParams(std::span<Type *const> params) const {
     return create(params[0], arms);
 }
 
+// ---- TypePackType ----
+
+TypeCode TypePackType::typeCode() {
+    static TypeCode code = registerOtherType("TypePack", TypeFlag::Auxiliary);
+    return code;
+}
+
+TypePackType *TypePackType::create(std::string_view name, Type *body) {
+    const std::string *text = TypeTable::instance().internText(name);
+    std::vector<uintptr_t> parts;
+    parts.reserve(2);
+    parts.push_back(reinterpret_cast<uintptr_t>(text));
+    parts.push_back(typeKeyWord(TypeTable::instance().canonical(body)));
+    Type *const bodyArg = body;
+    return static_cast<TypePackType *>(TypeTable::instance().internOther(
+        typeCode(), parts, [&]() -> Type * {
+            Type **params = OtherType::copyParams(std::span<Type *const>(&bodyArg, 1));
+            void *mem = mm::permSpace().alloc(sizeof(TypePackType), alignof(TypePackType));
+            ASSERT(mem != nullptr, "Failed to allocate TypePackType from permSpace");
+            return new (mem) TypePackType(text, 1, params);
+        }));
+}
+
+std::string TypePackType::toString() const { return ".." + body()->toString(); }
+
+std::string TypePackType::mangle() const {
+    return "PK" + std::to_string(name_->size()) + *name_ + "_" + body()->mangle();
+}
+
+Type *TypePackType::clone(bool) const { return const_cast<TypePackType *>(this); }
+
+bool TypePackType::equals(Type *type) const { return type == this; }
+
+bool TypePackType::assignableFrom(Type *sourceType) const { return sourceType == this; }
+
+// An expansion is not the type of any value of its own: it stands for the tuple substitution
+// builds from it, so nothing converts to it while it is still a node.
+CastSafety TypePackType::castSafetyFrom(Type *) const { return CastSafety::Forbidden; }
+
+OtherType *TypePackType::cloneWithParams(std::span<Type *const> params) const {
+    if (params.size() != 1 || params[0] == nullptr) {
+        return nullptr;
+    }
+    return create(*name_, params[0]);
+}
+
 bool describeUnevaluatedTypeCall(Type *type, std::string &what, std::string &why) {
     if (type == nullptr) {
         return false;
@@ -343,7 +389,8 @@ bool containsTypeCall(Type *type) {
     default:
         break;
     }
-    if (type->code() == TypeCallType::typeCode() || type->code() == MatchTypeType::typeCode()) {
+    if (type->code() == TypeCallType::typeCode() || type->code() == MatchTypeType::typeCode() ||
+        type->code() == TypePackType::typeCode()) {
         return true;
     }
     if (type->isOtherType()) {
