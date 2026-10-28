@@ -3433,6 +3433,31 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         .commit(displayNameOf(ops->name()), typeCodeToString(*reduced));
                     throw BuildAbortException();
                 }
+                // A function with a `var` parameter given to an operator that calls it with values:
+                // no rule takes it, and the reason is the parameter, not the operator's overloads.
+                for (const auto *inputs : {&withInputs, &normInputs}) {
+                    for (const Argument &input : *inputs) {
+                        Type *type = valueTypeOf(nodeTypeOf(input.node));
+                        if (type == nullptr || type->code() != TypeCode::Function) {
+                            continue;
+                        }
+                        const auto *func = tt::as_ptr<FunctionType>(type);
+                        bool takesVariable = false;
+                        for (size_t i = 0; i < func->normTypesCount(); ++i) {
+                            takesVariable = takesVariable || func->normIsVarAt(i);
+                        }
+                        if (takesVariable) {
+                            diags_->of(SemanticDiag::ArgumentsRejected)
+                                .atOrigin(input.expr->origin())
+                                .commit(
+                                    ops->name(),
+                                    type->toString(),
+                                    "an operator calls a function argument with values, and a "
+                                    "function with a var parameter must be given a variable");
+                            throw BuildAbortException();
+                        }
+                    }
+                }
                 std::string argTypesStr = std::format(
                     "<{}> ({})",
                     strutil::join(withInputTypes, ", ", [](Type *t) { return t->toString(); }),

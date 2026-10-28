@@ -3,7 +3,7 @@
 
 /**
  * The `tensor` module: multi-dimensional numeric arrays, their element type and extents, their
- * binary form, a NumPy file, and the module's worker threads and random generator.
+ * binary form, a NumPy file, and the module's worker threads.
  *
  * The declarations written here are the operators whose signature is fixed. The ones whose element
  * type or shape follows their arguments — elementwise arithmetic, the reshaping operators, the
@@ -135,12 +135,6 @@ export func gemm_library_threads(): int
 /// @pure
 /// @example gemm_library()
 export func gemm_library(): string
-
-/// Reseeds the module's random generator, which `random` and `randn` draw from.
-/// @effect writes the random generator
-/// @example seed(42)
-export func seed(seed: int): void
-export func seed(seed: i32): void
 
 // -----------------------------------------------------------------------------
 // Passes: functions the pipeline applies to the program

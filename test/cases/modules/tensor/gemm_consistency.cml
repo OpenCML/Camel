@@ -3,14 +3,13 @@
  * against a broadcast-multiply-and-reduce formulation of the same product.
  */
 
-import {
-    random, seed, unsqueeze, sum, abs, gemm_backend
-} from tensor
+import { unsqueeze, sum, abs, gemm_backend } from tensor
+import { next_key, seed, uniform } from random
 
 func main(): int sync {
     seed(11)
-    let a = random([70, 300], -1.0, 1.0)
-    let b = random([300, 37], -1.0, 1.0)
+    let a = (next_key()->uniform::<f32><shape: [70, 300]> * 2.0 - 1.0)
+    let b = (next_key()->uniform::<f32><shape: [300, 37]> * 2.0 - 1.0)
     let fast = a @ b
     let slow = sum<1>(unsqueeze<2>(a) * unsqueeze<0>(b))
     let err = sum(abs(fast - slow))

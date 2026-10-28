@@ -4,10 +4,10 @@
  * becoming a number is a conversion the program writes, and the report names it.
  */
 
-import { reshape, multiply, sum } from tensor
+import { reshape, sum } from tensor
 
 func scaled(x: f32[3], k: int[3]): float {
-    return float(sum(multiply(x, k)))
+    return float(sum((x * k)))
 }
 
 func main(): int sync {

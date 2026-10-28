@@ -1,7 +1,7 @@
 // Definitions the core must refuse when it builds them (test::definitions, src/passes/test/
 // definitions.h): each is declared there as the definition of a tensor operator.
 
-import { softmax, abs, pow } from tensor
+import { softmax, abs } from tensor
 
 /// Declared for tensor:exp: softmax's definition uses exp, so the two form a cycle.
 export func exp_through_softmax(x: f32[..]): f32[..] {
@@ -47,5 +47,5 @@ let call_axis = default_axis()
 
 /// Declared for tensor:pow: it reads a module-level value computed by a call.
 export func call_captured(x: f32[..], y: f32[..]): f32[..] {
-    return pow(x, y) + softmax<call_axis - 1>(x)
+    return (x ^ y) + softmax<call_axis - 1>(x)
 }

@@ -11,7 +11,8 @@
  * would fail it.
  */
 
-import { abs, max, randn, seed, sum } from tensor
+import { abs, max, sum } from tensor
+import { next_key, normal, seed } from random
 import { is_numeric } from types
 
 #strict
@@ -29,8 +30,8 @@ func max_abs(t: f32[..]): float {
 
 func main(): int sync {
     seed(20261023)
-    let a = randn([1024, 1024])
-    let b = randn([1024, 1024])
+    let a = next_key()->normal::<f32><shape: [1024, 1024]>
+    let b = next_key()->normal::<f32><shape: [1024, 1024]>
     let library = fast(a, b)
     let canonical = exact(a, b)
     let difference = max_abs(library - canonical)

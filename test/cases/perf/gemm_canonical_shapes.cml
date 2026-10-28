@@ -17,7 +17,8 @@
  *   camel -t 1 --arg rounds=3 --arg reps=1 test/cases/perf/gemm_canonical_shapes.cml tensor::fuse std::jit
  */
 
-import { seed, sum, unsqueeze, zeros, set_num_threads } from tensor
+import { sum, unsqueeze, zeros, set_num_threads } from tensor
+import { seed } from random
 import { now } from time
 
 /// The canonical algorithm: `#strict` withholds every permission, the library GEMM included.

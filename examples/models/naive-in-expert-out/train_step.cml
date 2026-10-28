@@ -22,7 +22,8 @@
 // model there (an empty string writes nothing).  The thread count is the command line's `-t 1`;
 // the program itself reads no environment variable.
 
-import { argmax, exp, gelu, log, mean, one_hot, permute, randn, reshape, seed, shape, sqrt as tensor_sqrt, sum, transpose } from tensor
+import { argmax, exp, gelu, log, mean, one_hot, permute, reshape, shape, sqrt as tensor_sqrt, sum, transpose } from tensor
+import { next_key, normal, seed } from random
 import { sqrt as scalar_sqrt } from math
 import { with_grad } from autodiff
 import { adam, adam_state, save_params } from nn
@@ -131,16 +132,16 @@ func loss(x: TokenStates, labels: i64[8, 16]): float {
 
 func init_block(std: float): Block {
     return {
-        norm1: randn([d_model], 1.0, 0.0) as f32[64],
-        wq: randn([d_model, d_model], 0.0, std) as f32[64, 64],
-        wk: randn([d_model, d_model], 0.0, std) as f32[64, 64],
-        wv: randn([d_model, d_model], 0.0, std) as f32[64, 64],
-        wo: randn([d_model, d_model], 0.0, std) as f32[64, 64],
-        norm2: randn([d_model], 1.0, 0.0) as f32[64],
-        w1: randn([d_model, d_ff], 0.0, std) as f32[64, 128],
-        b1: randn([d_ff], 0.0, std) as f32[128],
-        w2: randn([d_ff, d_model], 0.0, std) as f32[128, 64],
-        b2: randn([d_model], 0.0, std) as f32[64]
+        norm1: (next_key()->normal::<f32><shape: [d_model]> * 0.0 + 1.0) as f32[64],
+        wq: (next_key()->normal::<f32><shape: [d_model, d_model]> * f32(std)) as f32[64, 64],
+        wk: (next_key()->normal::<f32><shape: [d_model, d_model]> * f32(std)) as f32[64, 64],
+        wv: (next_key()->normal::<f32><shape: [d_model, d_model]> * f32(std)) as f32[64, 64],
+        wo: (next_key()->normal::<f32><shape: [d_model, d_model]> * f32(std)) as f32[64, 64],
+        norm2: (next_key()->normal::<f32><shape: [d_model]> * 0.0 + 1.0) as f32[64],
+        w1: (next_key()->normal::<f32><shape: [d_model, d_ff]> * f32(std)) as f32[64, 128],
+        b1: (next_key()->normal::<f32><shape: [d_ff]> * f32(std)) as f32[128],
+        w2: (next_key()->normal::<f32><shape: [d_ff, d_model]> * f32(std)) as f32[128, 64],
+        b2: (next_key()->normal::<f32><shape: [d_model]> * f32(std)) as f32[64]
     }
 }
 
@@ -148,8 +149,8 @@ func init_model(): Model {
     let std = 0.02
     return {
         blocks: [init_block(std), init_block(std)],
-        norm_f: randn([d_model], 1.0, 0.0) as f32[64],
-        head: randn([d_model, vocab], 0.0, std) as f32[64, 32]
+        norm_f: (next_key()->normal::<f32><shape: [d_model]> * 0.0 + 1.0) as f32[64],
+        head: (next_key()->normal::<f32><shape: [d_model, vocab]> * f32(std)) as f32[64, 32]
     }
 }
 
@@ -173,7 +174,7 @@ func main(bench: bool, init_dir: string, final_dir: string): int sync {
     // first `vocab` features of each position, so the task is deterministic and learnable.
     seed(42)
     let model = init_model()
-    let x: TokenStates = randn([batch, sequence, d_model], 0.0, 1.0) as TokenStates
+    let x: TokenStates = next_key()->normal::<f32><shape: [batch, sequence, d_model]> as TokenStates
     let labels: i64[8, 16] = argmax<-1>(slice(x, 2, 0, vocab))
 
     if init_dir != '' then {

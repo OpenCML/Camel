@@ -64,7 +64,6 @@ result may be any of them, and it has an external effect when its traits say so.
 | `fs:*`, `nn:save_params`, `tensor:load_npy`, `tensor:save_npy`, `ckpt:save_tree` | read or read-modify-write `fs`, external |
 | `ckpt:load_tree` | read `fs` and write `stderr`, external |
 | `rand:*` | write or read-modify-write `rng`, external |
-| `tensor:seed`, `tensor:random`, `tensor:randn` | write or read-modify-write `tensor:generator`, external |
 | `time:now`, `process:sleep` | read `clock`, external |
 | `time:strftime`, `time:strptime`, `env:get_env`, `env:get_cwd`, `process:user_name`, `process:cpu_count` | read `env`, external |
 | `process:exit` | read-modify-write `process`, external |

@@ -1,4 +1,5 @@
-import { random, seed, sum, max, abs, exp, reshape } from tensor
+import { sum, max, abs, exp, reshape } from tensor
+import { next_key, seed, uniform } from random
 import { run_preferred_resident, download } from tiles
 
 func product(a: f32[..], b: f32[..]): f32[..] { return a @ b }
@@ -10,12 +11,12 @@ func add(a: f32[..], b: f32[..]): f32[..] { return a + b }
 func flatten(x: f32[..]): f32[..] { return reshape<[6]>(x) }
 func main(): int sync {
     seed(17)
-    let a = random([17, 35], -1.0, 1.0)
-    let b = random([35, 23], -1.0, 1.0)
+    let a = (next_key()->uniform::<f32><shape: [17, 35]> * 2.0 - 1.0)
+    let b = (next_key()->uniform::<f32><shape: [35, 23]> * 2.0 - 1.0)
     println(sum(abs(download(run_preferred_resident<product>((a, b))) - product(a, b))))
-    let x = random([5, 257], -10.0, 10.0)
+    let x = (next_key()->uniform::<f32><shape: [5, 257]> * 20.0 - 10.0)
     println(sum(abs(download(run_preferred_resident<normalize>(x)) - normalize(x))))
-    let bias = random([1, 257], -1.0, 1.0)
+    let bias = (next_key()->uniform::<f32><shape: [1, 257]> * 2.0 - 1.0)
     println(sum(abs(download(run_preferred_resident<add>((x, bias))) - add(x, bias))))
     let changed = x + 2.0
     println(sum(abs(download(run_preferred_resident<add>((changed, bias))) - add(changed, bias))))
