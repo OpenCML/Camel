@@ -953,8 +953,20 @@ std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
         // them. The condition is recorded, and the call reported as one whose conditions are
         // unmet, only when no rule at all takes it.
         std::string condition;
+        // A variable only the result mentions was fixed by the type the call is expected to
+        // give: the condition is asked with it.
+        type_vec_t verdictTypes = explicitTypes;
+        if (explicitTypes.empty()) {
+            if (const auto *declared =
+                    dynamic_cast<const DeclaredFuncTypeResolver *>(resolver.get());
+                declared != nullptr && !declared->resolve(ruleWith, normTypes).has_value()) {
+                if (auto fromExpected = declared->typesFromExpected(expectedResult)) {
+                    verdictTypes = std::move(*fromExpected);
+                }
+            }
+        }
         const RuleVerdict verdict =
-            ruleVerdictForCall(resolver, ops->name(), ruleWith, normTypes, &condition, explicitTypes);
+            ruleVerdictForCall(resolver, ops->name(), ruleWith, normTypes, &condition, verdictTypes);
         if (verdict == RuleVerdict::ConditionUnmet) {
             unmet.emplace_back(resolver->signature(), std::move(condition));
             continue;
@@ -4115,9 +4127,9 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     }
 
     if (synced_) {
-        if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, targetNode)) {
-            linkNodes(LinkType::Ctrl, lastSyncedNode_, targetNode);
-        }
+        // The call is a statement of the block: the statement written before it follows into it by
+        // a sync edge (the control edge the kind names the same pair with goes beside it).
+        linkSyncStatement(lastSyncedNode_, targetNode);
         lastSyncedNode_ = targetNode;
         chainedNodes_.insert(targetNode);
     }

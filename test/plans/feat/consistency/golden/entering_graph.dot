@@ -5,12 +5,12 @@ digraph GraphIR {
             label="or_else";
             F02 [label="ARGS", type="ARGS"];
             O02 [label="EXIT", type="EXIT"];
-            N00 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int?"];
-            N01 [label="d", type="PORT", param_name="d", param_kind="normal", param_index="1", value_type="int"];
-            N02 [label=":op/tag_is_null", type="OPER", origin=91, span="0:46-0:48", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="bool"];
-            N03 [label=":op/tag_null_value", type="OPER", origin=95, span="0:46-0:48", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int"];
-            N04 [label="JOIN", type="JOIN", origin=97, span="0:46-0:48", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int"];
-            N05 [label="BRCH", type="BRCH", origin=96, span="0:46-0:48", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int"];
+            N00 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int?", origin=5, span="0:13-0:20", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml"];
+            N01 [label="d", type="PORT", param_name="d", param_kind="normal", param_index="1", value_type="int", origin=8, span="0:22-0:28", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml"];
+            N02 [label=":op/tag_is_null", type="OPER", origin=3110, span="0:46-0:48", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="bool"];
+            N03 [label=":op/tag_null_value", type="OPER", origin=3114, span="0:46-0:48", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int"];
+            N04 [label="JOIN", type="JOIN", origin=3116, span="0:46-0:48", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int"];
+            N05 [label="BRCH", type="BRCH", origin=3115, span="0:46-0:48", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int"];
             F02 -> N00 [label="0", type="NORM_PORT"];
             F02 -> N01 [label="1", type="NORM_PORT"];
             N04 -> O02 [label="0", type="EXIT"];
@@ -23,12 +23,12 @@ digraph GraphIR {
             N02 -> N05 [label="0|0", type="NORM"];
         }
         O01 [label="EXIT", type="EXIT"];
-        N06 [label="5", type="DATA", origin=99, span="2:12-2:13", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int"];
-        N07 [label="CAST", type="CAST", origin=102, span="3:20-3:29", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int?"];
-        N08 [label="0", type="DATA", origin=103, span="3:31-3:32", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int"];
-        N09 [label="or_else", type="FUNC", origin=104, span="3:12-3:33", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int"];
-        N0A [label=":io/println", type="OPER", origin=105, span="3:4-3:11", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int"];
-        N0B [label="0", type="DATA", origin=106, span="4:11-4:12", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int"];
+        N06 [label="5", type="DATA", origin=3118, span="2:12-2:13", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int"];
+        N07 [label="CAST", type="CAST", origin=3121, span="3:20-3:29", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int?"];
+        N08 [label="0", type="DATA", origin=3122, span="3:31-3:32", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int"];
+        N09 [label="or_else", type="FUNC", origin=3123, span="3:12-3:33", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int"];
+        N0A [label=":io/println", type="OPER", origin=3124, span="3:4-3:11", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int"];
+        N0B [label="0", type="DATA", origin=3125, span="4:11-4:12", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="int"];
         N0C [label="GATE", type="GATE", value_type="int"];
         N0C -> O01 [label="0", type="EXIT"];
         N06 -> N07 [label="0|0", type="NORM"];
@@ -37,9 +37,10 @@ digraph GraphIR {
         N09 -> N0A [label="0|0", type="NORM"];
         N0B -> N0C [label="0|0", type="NORM"];
         N0A -> N0C [label="0|0", type="CTRL"];
+        N0A -> N0C [label="SYNC", type="SYNC"];
     }
     O00 [label="EXIT", type="EXIT"];
-    N0D [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=98, span="1:0-5:1", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="() => int"];
+    N0D [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=3117, span="1:0-5:1", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="() => int uses stdout"];
     N0E [label="CALL", type="CALL", value_type="int"];
     N0E -> O00 [label="0", type="EXIT"];
     N0D -> N0E [label="0|0", type="WITH"];

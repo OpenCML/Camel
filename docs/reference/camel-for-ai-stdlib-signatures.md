@@ -19,28 +19,84 @@ Source: `docs/stdlib-reference.md`, generated from the declarations in `stdlib/*
 `node scripts/stdlib-reference.mjs --write`.
 
 <!-- camel-for-ai region: stdlib-signatures (generated from docs/stdlib-reference.md; node scripts/camel-for-ai.mjs --write) -->
-**`Built-in functions`** — no import — 63 name(s)
+**`Built-in functions`** — no import — 65 name(s)
 
 ```text
 std::mem::blocks: () => { allocs: int, frees: int, live: int, bytes: int }
-int: (x: S) => int when is_real::<S>() || is_string::<S>()
-i64: (x: S) => int when is_real::<S>() || is_string::<S>()
-i32: (x: S) => i32 when is_real::<S>() || is_string::<S>()
-float: (x: S) => float when is_real::<S>() || is_string::<S>()
-f64: (x: S) => float when is_real::<S>() || is_string::<S>()
-f32: (x: S) => f32 when is_real::<S>() || is_string::<S>()
-bf16: (x: S) => bf16 when is_real::<S>() || is_string::<S>()
-f16: (x: S) => f16 when is_real::<S>() || is_string::<S>()
-i32: (x: T[]) => i32[..] when is_numeric::<T>()
-i64: (x: T[]) => int[..] when is_numeric::<T>()
-int: (x: T[]) => int[..] when is_numeric::<T>()
-f32: (x: T[]) => f32[..] when is_numeric::<T>()
-f64: (x: T[]) => float[..] when is_numeric::<T>()
-float: (x: T[]) => float[..] when is_numeric::<T>()
-bf16: (x: T[]) => bf16[..] when is_numeric::<T>()
-f16: (x: T[]) => f16[..] when is_numeric::<T>()
-c64: (x: S) => c64 when is_real::<S>() || is_complex::<S>()
-c128: (x: S) => c128 when is_real::<S>() || is_complex::<S>()
+int: (x: i32) => int
+int: (x: int) => int
+int: (x: f32) => int
+int: (x: float) => int
+int: (x: string) => int
+int: (x: bf16) => int
+int: (x: f16) => int
+i64: (x: i32) => int
+i64: (x: int) => int
+i64: (x: f32) => int
+i64: (x: float) => int
+i64: (x: string) => int
+i64: (x: bf16) => int
+i64: (x: f16) => int
+i32: (x: i32) => i32
+i32: (x: int) => i32
+i32: (x: f32) => i32
+i32: (x: float) => i32
+i32: (x: string) => i32
+i32: (x: bf16) => i32
+i32: (x: f16) => i32
+float: (x: i32) => float
+float: (x: int) => float
+float: (x: f32) => float
+float: (x: float) => float
+float: (x: string) => float
+float: (x: bf16) => float
+float: (x: f16) => float
+f64: (x: i32) => float
+f64: (x: int) => float
+f64: (x: f32) => float
+f64: (x: float) => float
+f64: (x: string) => float
+f64: (x: bf16) => float
+f64: (x: f16) => float
+f32: (x: i32) => f32
+f32: (x: int) => f32
+f32: (x: f32) => f32
+f32: (x: float) => f32
+f32: (x: string) => f32
+f32: (x: bf16) => f32
+f32: (x: f16) => f32
+bf16: (x: i32) => bf16
+bf16: (x: int) => bf16
+bf16: (x: f32) => bf16
+bf16: (x: float) => bf16
+bf16: (x: bf16) => bf16
+bf16: (x: string) => bf16
+f16: (x: i32) => f16
+f16: (x: int) => f16
+f16: (x: f32) => f16
+f16: (x: float) => f16
+f16: (x: f16) => f16
+f16: (x: string) => f16
+i32: (x: A) => WithElement<A, i32> when is_compact_array::<A>()
+i64: (x: A) => WithElement<A, int> when is_compact_array::<A>()
+int: (x: A) => WithElement<A, int> when is_compact_array::<A>()
+f32: (x: A) => WithElement<A, f32> when is_compact_array::<A>()
+f64: (x: A) => WithElement<A, float> when is_compact_array::<A>()
+float: (x: A) => WithElement<A, float> when is_compact_array::<A>()
+bf16: (x: A) => WithElement<A, bf16> when is_compact_array::<A>()
+f16: (x: A) => WithElement<A, f16> when is_compact_array::<A>()
+c64: (x: i32) => c64
+c64: (x: int) => c64
+c64: (x: f32) => c64
+c64: (x: float) => c64
+c64: (x: c64) => c64
+c64: (x: c128) => c64
+c128: (x: i32) => c128
+c128: (x: int) => c128
+c128: (x: f32) => c128
+c128: (x: float) => c128
+c128: (x: c64) => c128
+c128: (x: c128) => c128
 string: (x: T) => string
 parse_int: (text: string) => int!
 parse_float: (text: string) => float!
@@ -51,9 +107,9 @@ eprintln: (x: T, ..rest) => T
 format: <..args> (fmt: string) => string
 join: <sep: string> (xs: string[]) => string
 len: (x: string) => int
-len: (x: T[..]) => int
+len: (x: A) => int when is_array::<A>()
 len: (x: Bytes) => int
-range: (start: int, end: int, step: int = 1) => int[]
+range: (start: int, end: int, step: int) => int[]
 last: (xs: T[]) => T
 slice: <axis: int, start: int, end: int, step: int = 1> (x: T[]) => T[]
 slice: <axis: int, start: int, end: int, step: int = 1> (x: string) => string
@@ -125,8 +181,8 @@ to_array: (content: Bytes) => int[]
 
 ```text
 tree_leaves: (tree: T) => L
-save_tree: (dir: string, tree: T, dataset_manifest_sha256?: string) => void
-load_tree: (dir: string, dataset_manifest_sha256?: string) => T!
+save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! uses fs when has_ckpt_form::<T>()
+load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! uses fs, stderr when has_ckpt_form::<T>()
 ```
 
 **`tree`** — import { ... } from tree — 4 name(s)
@@ -138,15 +194,14 @@ tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 tree_unzip: (r: R, s: S) => ?
 ```
 
-**`tensor`** — import { ... } from tensor — 68 name(s)
+**`tensor`** — import { ... } from tensor — 67 name(s)
 
 ```text
 new: (values: float[..] | number[]) => float[..]
-empty: (shape: int[]) => f32[..]
-zeros: (shape: int[]) => f32[..]
-ones: (shape: int[]) => f32[..]
+zeros: (shape: int[]) => T[..] when is_numeric::<T>()
+ones: (shape: int[]) => T[..] when is_numeric::<T>()
 full: (shape: int[], value: number) => float[..]
-eye: (n: int) => f32[..]
+eye: (n: int) => T[..] when is_numeric::<T>()
 range: (start: int, stop?: int, step?: int) => int64[..]
 random: (shape: int[], low: number, high: number) => f32[..]
 randn: (shape: int[], mean?: number, std?: number) => f32[..]
@@ -235,7 +290,7 @@ is_bool: () => bool
 is_plain: () => bool
 ```
 
-**`array`** — import { ... } from array — 35 name(s)
+**`array`** — import { ... } from array — 36 name(s)
 
 ```text
 reverse: (xs: T[]) => T[]
@@ -277,6 +332,7 @@ argsort: (keys: f16[]) => int[]
 argsort: (keys: bool[]) => int[]
 argsort: (keys: string[]) => int[]
 sort: (xs: T[]) => T[] when is_ordered::<T>()
+merge_sorted: (xs: T[], ys: T[]) => T[] when is_ordered::<T>()
 sort_by: <key: (x: T) => K> (xs: T[]) => T[] when is_ordered::<K>()
 flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
 zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]

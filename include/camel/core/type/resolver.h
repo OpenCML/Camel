@@ -379,6 +379,10 @@ class DeclaredFuncTypeResolver : public FuncTypeResolver {
         const type_vec_t &types, Type *expectedResult, const type_vec_t &with,
         const type_vec_t &norm, static_args_t normStatics) const override;
 
+    /// The types of the declaration's variables when the type the call is expected to give fixes
+    /// all of them (`load_tree::<T>(dir): T!` expected as `int!`); empty when it does not.
+    std::optional<type_vec_t> typesFromExpected(Type *expectedResult) const;
+
     std::string signature() const override { return funcType_->toString(); }
 
     bool varParameters(std::vector<bool> &with, std::vector<bool> &norm) const override {

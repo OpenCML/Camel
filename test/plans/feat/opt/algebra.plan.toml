@@ -742,7 +742,7 @@ verify_script = '''
 
 [[tests]]
 name = "order.graph"
-desc = "A law over data inputs fires on a product that carries a control input, and the writing that replaces it waits for what the product waited for: the rewritten products keep their control edges, so no computation crosses the effect's ordering (design principles 3.3, 3.4)."
+desc = "A law over data inputs fires on a product that carries a wait, and the writing that replaces it keeps what it waited for: each product's value is read only after the effect it is ordered after has happened -- the wait is an invariant of the value, not a shape, and a wait carried by the forwarding GATE the value passes through is that same wait (docs/design/effects/edges.cn.md 4.6 and 5.3), so no computation crosses the effect's ordering (design principles 3.3, 3.4)."
 kind = "behavior"
 case = "../../../cases/opt/generic/algebra_order.cml"
 args = ["${case}", "std::opt::inline", "std::opt::algebra", "std::jgir"]
@@ -751,17 +751,33 @@ verify_script = '''
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
  const nodes=g.nodes, edges=g.edges;
  const byId=id=>nodes.find(n=>n.id===id);
- const ctrlOf=n=>edges.filter(e=>e.target===n.id&&e.kind==='control').map(e=>byId(e.source));
+ // Every wait that orders `n` before it is read: its own waits in either kind (a `sync` block's
+ // chain is a sync edge, the control edge beside it the kind it used to be written as), the waits
+ // of the gates its value passes through, and the same again for those.
+ const orderedAfter=n=>{
+  const seen=new Set(), out=new Set(), work=[n];
+  while(work.length){
+   const cur=work.pop();
+   for(const e of edges.filter(e=>e.target===cur.id&&(e.kind==='control'||e.kind==='sync'))){
+    if(!seen.has(e.source)){seen.add(e.source);out.add(e.source);work.push(byId(e.source));}
+   }
+   for(const e of edges.filter(e=>e.target===cur.id&&e.kind==='normal')){
+    const src=byId(e.source);
+    if(src&&src.kind==='GATE'&&!seen.has(src.id)){seen.add(src.id);work.push(src);}
+   }
+  }
+  return [...out].map(byId);
+ };
  const muls=nodes.filter(n=>n.label===':op/mul_d');
  assert(muls.length===2,'the two scaled calls were not folded into products: '+muls.length);
  assert(!nodes.some(n=>n.label===':op/add_d'),'the doubled product was not folded');
  assert(nodes.some(n=>n.label==='0.2'),'coefficient 0.2 missing');
+ // The product is read only after the print it is ordered after, whichever kind carries the wait.
  for(const m of muls){
-  const waits=ctrlOf(m);
-  assert(waits.length>0,'the rewritten product lost its control input');
-  assert(waits.some(w=>w.label===':io/println'),'the rewritten product no longer waits for the effect it was ordered after');
+  const waits=orderedAfter(m);
+  assert(waits.some(w=>w.label===':io/println'),'the rewritten product is read before the effect it was ordered after');
  }
- assert(muls.some(m=>ctrlOf(m).some(w=>muls.includes(w))),'the control edge between the two calls was lost');
+ assert(muls.some(m=>orderedAfter(m).some(w=>muls.includes(w))),'the order between the two calls was lost');
 }
 '''
 

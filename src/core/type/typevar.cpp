@@ -872,6 +872,28 @@ bool unifyTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
         // this one writes none. A clause written in one argument is then not a requirement the
         // others have to keep, and the call's result promises no more than the arguments stated.
         Type *bound = findTypeBinding(bindings, var->name());
+        // A variable several arguments give takes the join of what they give (the relation of the
+        // mixed join): the element `void` of an empty literal constrains nothing, and of two types
+        // one enters the other, the one it enters is the solution (a named struct over the unnamed
+        // one with its fields; the wider element type of two arrays).
+        if (bound != nullptr && actual->code() != TypeCode::Void && !containsTypeVar(actual)) {
+            Type *joined = nullptr;
+            if (bound->code() == TypeCode::Void) {
+                joined = actual;
+            } else if (!bound->equals(actual) && !bound->assignableFrom(actual) &&
+                       actual->assignableFrom(bound)) {
+                joined = actual;
+            }
+            if (joined != nullptr) {
+                for (auto &[name, type] : bindings) {
+                    if (name == var->name()) {
+                        type = joined;
+                        break;
+                    }
+                }
+                return true;
+            }
+        }
         if (bound != nullptr && !sameTypeWithUnwrittenResources(bound, actual) &&
             sameTypeWithUnwrittenResources(actual, bound)) {
             for (auto &[name, type] : bindings) {

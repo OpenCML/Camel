@@ -3587,9 +3587,10 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     }
 
     if (synced_) {
-        if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, loopNode)) {
-            linkNodes(LinkType::Ctrl, lastSyncedNode_, loopNode);
-        }
+        // The loop is a statement of the block, like a call: the statement written before it
+        // follows into it by a sync edge (the control edge the kind names the same pair with goes
+        // beside it).
+        linkSyncStatement(lastSyncedNode_, loopNode);
         lastSyncedNode_ = loopNode;
         chainedNodes_.insert(loopNode);
     }
@@ -3989,9 +3990,10 @@ node_handle_t Builder::buildStreamLoop(
             {callees, origins, directWrites, gct->origin(), "The loop", "its body writes"});
     }
     if (synced_) {
-        if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, loopNode)) {
-            linkNodes(LinkType::Ctrl, lastSyncedNode_, loopNode);
-        }
+        // The loop is a statement of the block, like a call: the statement written before it
+        // follows into it by a sync edge (the control edge the kind names the same pair with goes
+        // beside it).
+        linkSyncStatement(lastSyncedNode_, loopNode);
         lastSyncedNode_ = loopNode;
         chainedNodes_.insert(loopNode);
     }
@@ -4074,7 +4076,13 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         }
         syncInputs.push_back(ctrlInput);
     }
-    if (!syncInputs.empty() && !nodeIsKind(resNode, runtime::GCNodeKind::Gate)) {
+    // The chain tail's sync edge may only sit on a value node this block alone owns
+    // (docs/design/effects/edges.cn.md 5.3): a node some other block already reaches by a sync edge
+    // -- the value of a body the call at this position expanded (5.7) -- is not this block's to
+    // wait on, so the wait is carried by a GATE of this block's own. An unread GATE stays either
+    // way: it is what keeps the edge, and the chain it ends, able to reach the graph's exit.
+    if (!syncInputs.empty() &&
+        (!nodeIsKind(resNode, runtime::GCNodeKind::Gate) || !syncInputsOf(resNode).empty())) {
         node_handle_t gatedValue = currGraph_->addGateNode(nodeTypeOf(resNode));
         linkNodes(LinkType::Norm, resNode, gatedValue);
         outputAnchor = gatedValue;
@@ -4085,7 +4093,15 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
                 *nodeDraftOf(outputAnchor),
                 nodeIdOf(ctrlInput),
                 nodeIdOf(outputAnchor))) {
-            linkNodes(LinkType::Ctrl, ctrlInput, outputAnchor);
+            if (ctrlInput == lastSyncedNode_) {
+                // The chain's tail: the statement the chain ends with reaches the value the graph
+                // hands on by a sync edge (docs/design/effects/edges.cn.md 5.3).
+                writeSyncStatement(ctrlInput, outputAnchor);
+            } else {
+                // The `var` modifier of the returned value: an edge that only orders stands in
+                // until the read is a data edge from the nearest write (design principles 3.5).
+                linkNodes(LinkType::Ctrl, ctrlInput, outputAnchor);
+            }
         }
     }
     if (activeStaticBody_ != nullptr) {

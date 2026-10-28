@@ -16,7 +16,9 @@
 #include "../tensor/ops/support.h"
 #include "../tensor/tensor.h"
 
+#include <algorithm>
 #include <cmath>
+#include <vector>
 #include <mutex>
 #include <numbers>
 
@@ -35,6 +37,10 @@ std::unordered_map<std::string, operator_t> getRandomOpsMap() {
         {"philox", __rand_philox__},
         {"uniform_array", __rand_uniform_array__},
         {"normal_array", __rand_normal_array__},
+        {"shuffle_i", __rand_shuffle_i__},
+        {"shuffle_l", __rand_shuffle_l__},
+        {"shuffle_f", __rand_shuffle_f__},
+        {"shuffle_d", __rand_shuffle_d__},
     };
 }
 
@@ -163,6 +169,40 @@ template <typename Value>
     return out;
 }
 
+/// `xs->shuffle<k>` for an array of numbers: `xs[permutation(k, len(xs))]`, with the permutation
+/// the positions ordered by one uniform draw each, the f64 `uniform` of the key folded with the
+/// position, ties in position order (stdlib/random.cml). The draws are made as the whole-array
+/// draw makes them and ordered together with their positions, and the elements are written
+/// straight to the result, so the permutation and the array of draws are never built: the result
+/// is the body's bit for bit, with 16 bytes of working memory for each element in place of 40.
+template <typename T> slot_t shuffleOf(ArgsView &with, ArgsView &norm) {
+    const philox::Key key = readKey(with.get<Struct *>(0));
+    ::Array *xs           = norm.get<::Array *>(0);
+    const auto *arrType   = tt::as_ptr<camel::core::type::ArrayType>(norm.type(0));
+    const size_t n        = xs->size();
+    ::Array *out          = ::Array::create(mm::autoSpace(), arrType, n);
+    if (n == 0) {
+        return toSlot(out);
+    }
+    struct Draw {
+        double value;
+        philox::u64 position;
+    };
+    std::vector<Draw> draws(n);
+    for (size_t i = 0; i < n; ++i) {
+        draws[i] = {uniformBits<double>(blockOf(foldKey(key, i), 0)), i};
+    }
+    std::sort(draws.begin(), draws.end(), [](const Draw &a, const Draw &b) {
+        return a.value < b.value || (a.value == b.value && a.position < b.position);
+    });
+    const T *from = xs->dataAs<T>();
+    T *to         = out->dataAs<T>();
+    for (size_t i = 0; i < n; ++i) {
+        to[i] = from[draws[i].position];
+    }
+    return toSlot(out);
+}
+
 } // namespace
 
 slot_t __rand_seed__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -224,4 +264,17 @@ slot_t __rand_normal_array__(ArgsView &with, ArgsView &norm, Context &ctx) {
             [&]<typename T>(uint64_t i) { return normalOf(foldKey(key, i)); });
         return tn::ops::wrap(norm.resultType(), out);
     });
+}
+
+slot_t __rand_shuffle_i__(ArgsView &with, ArgsView &norm, Context &) {
+    return shuffleOf<Int32>(with, norm);
+}
+slot_t __rand_shuffle_l__(ArgsView &with, ArgsView &norm, Context &) {
+    return shuffleOf<Int64>(with, norm);
+}
+slot_t __rand_shuffle_f__(ArgsView &with, ArgsView &norm, Context &) {
+    return shuffleOf<Float32>(with, norm);
+}
+slot_t __rand_shuffle_d__(ArgsView &with, ArgsView &norm, Context &) {
+    return shuffleOf<Float64>(with, norm);
 }

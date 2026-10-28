@@ -208,23 +208,8 @@ const std::vector<oper_group_ptr_t> &getTaggedOperatorGroups() {
         // arm. It is the fault of an operator, raised where the call is written and isolatable
         // by `attempt`; like every other computation it happens only where its value is wanted,
         // and it is no effect of its own.
-        OperatorGroup::create(
-            "fail",
-            {{":op/fail",
-              DynamicFuncTypeResolver::create(
-                  {{1, {false}}, {1, {false}}},
-                  "<Kind: string> (message: string) => never",
-                  [](const type_vec_t &with, const type_vec_t &norm) -> optional<Type *> {
-                      if (with.size() != 1 || norm.size() != 1) {
-                          return nullopt;
-                      }
-                      for (Type *type : {with[0], norm[0]}) {
-                          if (type == nullptr || type->code() != TypeCode::String) {
-                              return nullopt;
-                          }
-                      }
-                      return Type::Never();
-                  })}}),
+        // The rule of `fail` is the declaration of stdlib/prelude.cml.
+        OperatorGroup::create("fail", {}),
         // Fault isolation (design principles 3.9): `attempt(f)` is a function transform. It
         // gives the function whose parameters are `f`'s and whose result is `f`'s result plus
         // `!`; the builder makes that value and the marked call it holds is the node the
@@ -252,20 +237,10 @@ const std::vector<oper_group_ptr_t> &getTaggedOperatorGroups() {
                       -> optional<Type *> {
                       return camel::execute::resolveFaultIsolationType(with, norm);
                   })}}),
-        OperatorGroup::create(
-            "parse_int",
-            {{":op/parse_int",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{Type::String(), false}},
-                  TupleType::fallible(Type::Int64()))}}),
-        OperatorGroup::create(
-            "parse_float",
-            {{":op/parse_float",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{Type::String(), false}},
-                  TupleType::fallible(Type::Float64()))}}),
+        // The rule of `parse_int` is the declaration of stdlib/prelude.cml.
+        OperatorGroup::create("parse_int", {}),
+        // The rule of `parse_float` is the declaration of stdlib/prelude.cml.
+        OperatorGroup::create("parse_float", {}),
     };
     return groups;
 }

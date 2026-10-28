@@ -259,14 +259,20 @@ std::optional<FunctionType *> DeclaredFuncTypeResolver::resolve(
     // variable that no parameter stands a type at is another question, answered where it is
     // bound: a callback that gives nothing is a value of `void`, not an element type nobody
     // stated.
+    // A variable another argument states is fixed by that one (the join of the arguments that give
+    // it: the `void` of an empty literal constrains nothing); it is refused only when nothing
+    // else gives it a type.
+    std::vector<std::string> unstated;
     for (size_t i = 0; i < with.size(); ++i) {
-        if (!unstatedBindingOf(funcType_->withTypeAt(i), valueTypeOf(with[i])).empty()) {
-            return std::nullopt;
+        if (const auto name = unstatedBindingOf(funcType_->withTypeAt(i), valueTypeOf(with[i]));
+            !name.empty()) {
+            unstated.push_back(name);
         }
     }
     for (size_t i = 0; i < norm.size(); ++i) {
-        if (!unstatedBindingOf(funcType_->normTypeAt(i), valueTypeOf(norm[i])).empty()) {
-            return std::nullopt;
+        if (const auto name = unstatedBindingOf(funcType_->normTypeAt(i), valueTypeOf(norm[i]));
+            !name.empty()) {
+            unstated.push_back(name);
         }
     }
     type_bindings_t bindings;
@@ -285,27 +291,87 @@ std::optional<FunctionType *> DeclaredFuncTypeResolver::resolve(
             return std::nullopt;
         }
     }
+    for (const std::string &name : unstated) {
+        const Type *bound = findTypeBinding(bindings, name);
+        if (bound == nullptr || bound->code() == TypeCode::Void) {
+            return std::nullopt;
+        }
+    }
     auto *concrete = static_cast<FunctionType *>(substituteTypeVars(funcType_, bindings));
+    // An empty array literal (the element `void`) takes its element type from the position it
+    // stands in: it fits an array parameter of any element type.
+    const auto fits = [](Type *parameter, Type *argument) {
+        if (parameter->assignableFrom(argument)) {
+            return true;
+        }
+        return parameter->code() == TypeCode::Array && argument->code() == TypeCode::Array &&
+               static_cast<ArrayType *>(argument)->elemType()->code() == TypeCode::Void;
+    };
     for (size_t i = 0; i < with.size(); ++i) {
-        if (!concrete->withTypeAt(i)->assignableFrom(valueTypeOf(with[i]))) {
+        if (!fits(concrete->withTypeAt(i), valueTypeOf(with[i]))) {
             return std::nullopt;
         }
     }
     for (size_t i = 0; i < norm.size(); ++i) {
-        if (!concrete->normTypeAt(i)->assignableFrom(valueTypeOf(norm[i]))) {
+        if (!fits(concrete->normTypeAt(i), valueTypeOf(norm[i]))) {
             return std::nullopt;
         }
     }
     return concrete;
 }
 
+std::optional<type_vec_t> DeclaredFuncTypeResolver::typesFromExpected(Type *expectedResult) const {
+    if (!generic_ || expectedResult == nullptr || !funcType_->hasExitType()) {
+        return std::nullopt;
+    }
+    // Only a variable no parameter mentions is read from the result: the parameters fix the
+    // others, and a call whose arguments do not fit is refused by them, not rescued by the
+    // type it is expected to give.
+    std::vector<std::string> inParameters;
+    for (Type *param : funcType_->withTypesSpan()) {
+        collectTypeVars(param, inParameters);
+    }
+    for (Type *param : funcType_->normTypesSpan()) {
+        collectTypeVars(param, inParameters);
+    }
+    bool onlyInResult = false;
+    for (const std::string &name : bindable_) {
+        onlyInResult = onlyInResult ||
+                       std::find(inParameters.begin(), inParameters.end(), name) == inParameters.end();
+    }
+    if (!onlyInResult) {
+        return std::nullopt;
+    }
+    type_bindings_t found;
+    if (!bindTypeVars(funcType_->exitType(), expectedResult, found)) {
+        return std::nullopt;
+    }
+    type_vec_t written;
+    for (const std::string &name : bindable_) {
+        Type *bound = findTypeBinding(found, name);
+        if (bound == nullptr) {
+            return std::nullopt;
+        }
+        written.push_back(bound);
+    }
+    return written;
+}
+
 std::optional<FunctionType *> DeclaredFuncTypeResolver::resolveForCall(
     const type_vec_t &types, Type *expectedResult, const type_vec_t &with, const type_vec_t &norm,
     static_args_t normStatics) const {
-    (void)expectedResult;
     (void)normStatics;
     if (types.empty()) {
-        return resolve(with, norm);
+        if (auto instance = resolve(with, norm)) {
+            return instance;
+        }
+        // A variable only the result mentions (`load_tree::<T>(dir): T!`) is read from no
+        // argument: the type the call is expected to give fixes it, as it does for a generic
+        // function written in Camel.
+        if (const auto written = typesFromExpected(expectedResult)) {
+            return resolveForCall(*written, nullptr, with, norm, normStatics);
+        }
+        return std::nullopt;
     }
     // The call writes the declaration's own variables (`show::<f32>([])`): they are fixed by
     // position, the way a generic function's `::<...>` fixes its head parameters, and the

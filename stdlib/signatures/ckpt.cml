@@ -1,53 +1,16 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// Signatures of the native module ckpt: what a checkpoint saves (a parameter tree, a value made
-// of structs and tuples, design principles 13.5) and the directory that holds it. These
-// declarations are reference metadata.
+// The computed signature of the native module ckpt (reference metadata, not compiled): the one
+// operator whose result type follows its argument, so a declaration cannot state it.
+// `save_tree` and `load_tree` are declared in `stdlib/ckpt.cml`.
 //
 // `tree_leaves` is the one tree operation still native: the leaves are one flat tuple whose
 // length is the sum of the leaves of every field, which a Camel function cannot build (a tuple
-// value's elements cannot be spliced into a tuple being built). `save_tree` and `load_tree` are
-// the checkpoint operators that run. The other tree operations -- `tree_paths`, `tree_map`,
-// `tree_reduce` and `tree_unzip` -- are in the Camel tree library `stdlib/tree.cml`, and the
-// file of a leaf in a checkpoint is named by `tree_paths`' path.
+// value's elements cannot be spliced into a tuple being built). The other tree operations are in
+// the Camel tree library `stdlib/tree.cml`.
 
 /// The leaves of a tree, as a tuple.
 /// @pure
 /// @example tree_leaves({ a: 1, b: (2, 3) })    // (1, 2, 3)
 export func tree_leaves(tree: T): L
-
-/// Saves a tree to a directory, one file per leaf named by its path (`blocks.0.w.npy` for a
-/// tensor), with a manifest that records the types, sizes and SHA-256 sums and, when
-/// `dataset_manifest_sha256` is given, that hash of the data manifest. The directory is
-/// replaced as a whole or not at all: the new checkpoint is written and flushed into a
-/// temporary sibling and renamed into place, and the old directory is kept beside it as the
-/// hidden sibling `.<name>.ckpt-previous` (the destination's own directory name between a
-/// leading dot and `.ckpt-previous`) until that rename succeeds, so a failure puts the old
-/// directory back. A destination that does not exist is created; one that does is replaced; a
-/// symbolic link or a reparse point there is refused. If the process dies between the two
-/// renames, `load_tree` reads `.<name>.ckpt-previous` and the next `save_tree` restores it
-/// before replacing it. (A directory rename cannot replace a non-empty directory on Windows or
-/// POSIX, hence the two renames.) A leaf type a checkpoint cannot hold (anything but a tensor,
-/// `Bytes`, `string`, `bool`, `i32`, `int`, `f32`, `f64`) is a compile-time error that names
-/// the path. Only one writer may save to a directory at a time: concurrent `save_tree` calls
-/// for the same directory are not serialized (there is no lock file), so the contract is a
-/// single writer; one of two racing saves fails explicitly, and a reader still sees a complete
-/// checkpoint.
-/// @effect writes and replaces the directory
-/// @fails fault `FileSystemError` when the directory cannot be written or published
-/// @example save_tree('out/ckpt', { w: 1.0, step: 10 })
-export func save_tree(dir: string, tree: T, dataset_manifest_sha256?: string): void
-
-/// Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure,
-/// the types, the sizes and the SHA-256 sums first: a directory that does not fit T is a
-/// `CheckpointError` value, nothing is partly loaded. A `dataset_manifest_sha256` that differs
-/// from the one the checkpoint records is a warning on standard error, not an error. T is the
-/// explicit type argument or the
-/// expected type of the result. When a save was interrupted after moving the old directory
-/// aside, the complete `.<name>.ckpt-previous` sibling is read instead, with a warning on
-/// standard error; the next save restores it before replacing it.
-/// @effect reads the directory
-/// @fails error value `CheckpointError` when the directory does not hold a tree of the type T, or a file is missing or does not match its recorded sum
-/// @example load_tree::<{ w: float, step: int }>('out/ckpt') !! { w: 0.0, step: 0 }
-export func load_tree(dir: string, dataset_manifest_sha256?: string): T!

@@ -39,6 +39,11 @@ export type ElementOf<T>
 /// @example is_same::<PayloadOf<int!>, int>()    // true
 export type PayloadOf<T>
 
+/// The array type A with the element type E in place of its own, extents and rank kept; a type that
+/// is not an array is refused.
+/// @example is_same::<WithElement<int[2, 3], float>, float[2, 3]>()    // true
+export type WithElement<A, E>
+
 /// The key type of a map type; any other type is refused.
 /// @example is_same::<KeyOf<Map<string, int>>, string>()    // true
 export type KeyOf<T>

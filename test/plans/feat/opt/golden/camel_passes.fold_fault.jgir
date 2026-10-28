@@ -97,6 +97,11 @@
           "sourceIndex": 0,
           "target": "g1n7",
           "targetIndex": 0
+        },
+        {
+          "kind": "sync",
+          "source": "g1n6",
+          "target": "g1n7"
         }
       ],
       "exit": "g1n7",

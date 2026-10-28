@@ -38,7 +38,6 @@ tensor:cast_like,,1
 tensor:concat,1,
 tensor:dim,1,
 tensor:divide,1,
-tensor:empty,,
 tensor:erf,1,
 tensor:erf_grad,,1
 tensor:exp,1,

@@ -312,7 +312,9 @@ std::vector<type::Type *> OperatorTable::registeredTypes(std::string_view group)
     }
     std::vector<type::Type *> types;
     const auto add = [&types](type::Type *type) {
-        if (type == nullptr) {
+        if (type == nullptr || type == type::Type::Never()) {
+            // `never` is the result of an operator that does not return (`fail`): no value has it, so no
+            // rule is instantiated at it.
             return;
         }
         // A signature that still writes a type variable belongs to a *generic* resolver (a group

@@ -30,7 +30,7 @@ case $CMD in
      sed 's/\x1b\[[0-9;]*m//g' $LOG/$L.build.log | grep -E "error|Error|FAILED|warning: unused" | head -60
      tail -4 $LOG/$L.build.log; echo "build exit=$rc (full log: $LOG/$L.build.log)"; exit $rc ;;
   test) ready; sync_in; use_lane
-     ( ulimit -v 8000000; node scripts/test.js "$@" ) > $LOG/$L.test.log 2>&1; rc=$?
+     ( ulimit -v 12000000; node scripts/test.js "$@" ) > $LOG/$L.test.log 2>&1; rc=$?
      sed 's/\x1b\[[0-9;]*m//g' $LOG/$L.test.log | grep -E "\[FAIL\]|SUMMARY" | tail -80
      echo "test exit=$rc (full log: $LOG/$L.test.log)"; exit $rc ;;
   sh) ready; sync_in; use_lane; flock -u 8; bash -c "$*" ;;

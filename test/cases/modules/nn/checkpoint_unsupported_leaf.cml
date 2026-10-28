@@ -7,6 +7,6 @@ import { save_tree } from ckpt
 
 func main(): int sync {
     let rows: f64[][] = [[1.0, 2.0], [3.0, 4.0]]
-    save_tree('out/never', { weights: rows, step: 3 })
+    let _ = ({ weights: rows, step: 3 })->save_tree<'out/never'>
     return 0
 }

@@ -3,6 +3,6 @@ import { zeros, set_num_threads } from tensor
 import { save_tree } from ckpt
 func main(out: string): int sync {
     set_num_threads(1)
-    save_tree(out, zeros::<f32>([16777216]))
+    let _ = zeros::<f32>([16777216])->save_tree<out>
     return 0
 }

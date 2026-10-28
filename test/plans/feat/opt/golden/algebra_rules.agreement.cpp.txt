@@ -1,14 +1,14 @@
-add_zero nodes 4 edges 2 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 0
-zero_add nodes 4 edges 2 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 0
-sub_zero nodes 4 edges 2 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 0
-mul_one nodes 4 edges 2 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 0
-one_mul nodes 4 edges 2 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 0
-add_zero32 nodes 4 edges 2 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 0
-zero_add32 nodes 4 edges 2 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 0
-sub_zero32 nodes 4 edges 2 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 0
-mul_one32 nodes 4 edges 2 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 0
-one_mul32 nodes 4 edges 2 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 0
-main nodes 32 edges 21 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 10 tensor_add 0 tensor_mul 0
+add_zero nodes 4 edges 3 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 0
+zero_add nodes 4 edges 3 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 0
+sub_zero nodes 4 edges 3 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 0
+mul_one nodes 4 edges 3 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 0
+one_mul nodes 4 edges 3 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 0
+add_zero32 nodes 4 edges 3 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 0
+zero_add32 nodes 4 edges 3 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 0
+sub_zero32 nodes 4 edges 3 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 0
+mul_one32 nodes 4 edges 3 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 0
+one_mul32 nodes 4 edges 3 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 0
+main nodes 32 edges 31 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 10 tensor_add 0 tensor_mul 0
 3
 0
 4
