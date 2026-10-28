@@ -305,6 +305,20 @@ remapNodeRef(draft_node_ref_t sourceRef, const std::vector<draft_node_ref_t> &ma
     return mapped;
 }
 
+/// The mapping's place for a predecessor whose edge carries no liveness of its own, or
+/// `kInvalidNodeRef` when it has none: an order predecessor nothing else reaches is dead code and
+/// the runtime graph does not name it (see the note at the order and sync inputs below). The node
+/// being live is what `remapNodeRef` above is the seal for; this is the edge that may name a dead
+/// node and must not.
+draft_node_ref_t
+remapNodeRefIfMapped(draft_node_ref_t sourceRef, const std::vector<draft_node_ref_t> &mapping) {
+    if (sourceRef == runtime::kInvalidNodeRef) {
+        return runtime::kInvalidNodeRef;
+    }
+    ASSERT(sourceRef < mapping.size(), "Compile encode encountered an out-of-range node ref.");
+    return mapping[sourceRef];
+}
+
 class EncodeSession {
   public:
     EncodeSession(
@@ -594,10 +608,13 @@ class EncodeSession {
             // predecessor is live by definition (the statement before it is "used"), so it is
             // always there.
             auto remapLiveInputs = [&](std::span<const draft_node_ref_t> sourceInputs,
-                                       std::vector<draft_node_ref_t> &target) {
+                                       std::vector<draft_node_ref_t> &target,
+                                       bool predecessorMayBeDead) {
                 target.reserve(sourceInputs.size());
                 for (draft_node_ref_t input : sourceInputs) {
-                    const draft_node_ref_t mapped = remapNodeRef(input, sourceToPrepared);
+                    const draft_node_ref_t mapped = predecessorMayBeDead
+                                                        ? remapNodeRefIfMapped(input, sourceToPrepared)
+                                                        : remapNodeRef(input, sourceToPrepared);
                     if (mapped != runtime::kInvalidNodeRef) {
                         target.push_back(mapped);
                     }
@@ -606,8 +623,10 @@ class EncodeSession {
             remapInputs(graph->draft().normInputsOf(sourceId), pendingNormInputs.back());
             remapInputs(graph->draft().withInputsOf(sourceId), pendingWithInputs.back());
             remapInputs(graph->draft().ctrlInputsOf(sourceId), pendingCtrlInputs.back());
-            remapLiveInputs(graph->draft().orderInputsOf(sourceId), pendingOrderInputs.back());
-            remapLiveInputs(graph->draft().syncInputsOf(sourceId), pendingSyncInputs.back());
+            remapLiveInputs(
+                graph->draft().orderInputsOf(sourceId), pendingOrderInputs.back(), true);
+            remapLiveInputs(
+                graph->draft().syncInputsOf(sourceId), pendingSyncInputs.back(), false);
 
             sourceToPrepared[sourceId] = prepared.draft->addNode(init);
         }
