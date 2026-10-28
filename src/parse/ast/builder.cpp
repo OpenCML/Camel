@@ -2576,7 +2576,10 @@ Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
         isVar = true;
     }
     const bool isConst = context->has(TK::KwConst);
-    Reference ref(context->get<cst::IdentDef>()->text());
+    // `..ParamsOf<F>` in a function type's parameter list has no name: the pack is its type.
+    Reference ref(
+        context->get<cst::IdentDef>() ? std::string(context->get<cst::IdentDef>()->text())
+                                      : std::string("__pack"));
     node_ptr_t namedPairNode =
         createNodeAs<NamedPairLoad>(ref, isVar, isConst, isRest, isConstas);
     setNodeTokenRangeByContext(namedPairNode, context);

@@ -1311,6 +1311,7 @@ void ParserImpl::parseBracketedIdents(TK closer, NK kind) {
 
 /// keyParamPair : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)?
 ///              | '..' identDef (':' typeExpr)?
+///              | '..' typeExpr
 ///              | 'constas' identDef (':' typeExpr)?
 /// A rest parameter is written untyped and last in a function declaration's parameter list
 /// (design principles 5.5). A `constas` parameter is written first in that list and is a
@@ -1337,8 +1338,18 @@ void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas, bool angle
     }
     if (allowRest && cur_ == TK::DotDot) {
         bump();
-        parseIdentDef();
-        if (eat(TK::Colon)) {
+        // `..ts` (and `..P` in a function type) is a name; `..ParamsOf<F>` is a type expression,
+        // a pack written out in a function type's parameter list.
+        const bool plain =
+            cur_ == TK::Identifier &&
+            (peek(1) == TK::Colon || peek(1) == TK::Comma || peek(1) == TK::RParen ||
+             peek(1) == TK::Gt);
+        if (plain) {
+            parseIdentDef();
+            if (eat(TK::Colon)) {
+                parseType();
+            }
+        } else {
             parseType();
         }
         close(m, NK::KeyParamPair);

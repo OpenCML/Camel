@@ -20,6 +20,24 @@
 
 namespace camel::parse::syntax {
 
+/// Whether the `(` at the current token is closed by a `)` that `=>` follows: a function type whose
+/// parameter list starts with a pack written out (`(..ParamsOf<F>) => R`), not a tuple of packs.
+bool ParserImpl::parenClosesBeforeArrow() const {
+    int depth = 0;
+    for (uint32_t n = 0; n < 512; ++n) {
+        const TK kind = peek(n);
+        if (kind == TK::Eof) {
+            return false;
+        }
+        if (kind == TK::LParen) {
+            ++depth;
+        } else if (kind == TK::RParen && --depth == 0) {
+            return peek(n + 1) == TK::FatArrow;
+        }
+    }
+    return false;
+}
+
 /// Whether a type can start at the `n`-th token from the current one. A modifier does not: `sync`
 /// is a property of a block, and a function type has none (design principles 3.3).
 bool ParserImpl::typeStartsAt(uint32_t n) const {
@@ -284,6 +302,7 @@ void ParserImpl::parsePrimaryType() {
              (t1 == TK::RParen && peek(2) == TK::FatArrow) ||
              (t1 == TK::DotDot && peek(2) == TK::Identifier && peek(3) == TK::RParen &&
               peek(4) == TK::FatArrow) ||
+             (t1 == TK::DotDot && parenClosesBeforeArrow()) ||
              (t1 == TK::Comma && peek(2) == TK::RParen && peek(3) == TK::FatArrow))) {
             return parseFuncType();
         }

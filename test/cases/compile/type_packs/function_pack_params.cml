@@ -1,0 +1,27 @@
+/// A pack in a function type's parameter list: `(..P) => R` with `P` bound to a pack, `(..ParamsOf<F>)
+/// => R`, and `<..W>` for the `with` parameters. The types the design of the program transforms
+/// writes -- the swap of a function, its pullback and its vjp -- are compared with the function
+/// types written out, for a function of no parameter, of one and of three.
+import { ParamsOf, WithOf, ResultOf, is_same } from types
+
+type Tangent<T> = T
+type Swap<F> = (r: ResultOf<F>) => (..ParamsOf<F>)
+type Pullback<F> = (ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)
+type Vjp<F> = (..ParamsOf<F>) => (ResultOf<F>, Pullback<F>)
+type Weighted<F> = <..WithOf<F>> (..ParamsOf<F>) => ResultOf<F>
+
+type F0 = () => float
+type F1 = (a: int) => float
+type F3 = (a: int, b: string, c: bool) => float
+type W2 = <w: float, k: int> (a: int) => float
+
+func main(): int sync {
+    println(is_same::<Swap<F0>, (r: float) => ()>())
+    println(is_same::<Swap<F1>, (r: float) => (int,)>())
+    println(is_same::<Swap<F3>, (r: float) => (int, string, bool)>())
+    println(is_same::<Pullback<F3>, (ct: float) => (int, string, bool)>())
+    println(is_same::<Vjp<F0>, () => (float, (ct: float) => ())>())
+    println(is_same::<Vjp<F3>, (a: int, b: string, c: bool) => (float, (ct: float) => (int, string, bool))>())
+    println(is_same::<Weighted<W2>, W2>())
+    return 0
+}
