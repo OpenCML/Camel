@@ -1,15 +1,15 @@
-import { new, concat, sum, shape } from tensor
+import { concat, sum, shape } from tensor
 
 // Every level of the recursion passes a tensor one row longer than the one it received, so the
 // type of `acc` (which carries the shape once the first argument is a constant) is different at
 // every level. Specializing the callee on that type must stop: nothing in the types says where
 // the recursion ends.
 func grow(i: int, n: int, acc: f64[..]): f64[..] {
-    return if i >= n then acc else grow(i + 1, n, concat<0>(acc, new([[1.0, 2.0]])))
+    return if i >= n then acc else grow(i + 1, n, concat<0>(acc, [[1.0, 2.0]] as float[1, 2]))
 }
 
 func main(): int sync {
-    let t = grow(1, 12, new([[1.0, 2.0]]))
+    let t = grow(1, 12, [[1.0, 2.0]] as float[1, 2])
     println(shape(t))
     println(sum(t))
     return 0

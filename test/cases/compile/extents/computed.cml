@@ -5,11 +5,13 @@
 /// `(n + 2 * p - k) / s + 1`, with `n` the dimension of its argument (design principles 5.4). The
 /// dimension of an argument is known where the argument's type states it, as the parameter of
 /// `run` does.
-func window(constas w: int, x: f32[n]): f32[n - w + 1] {
+with <constas w: int>
+func window(x: f32[n]): f32[n - w + 1] {
     return [x[i] for i in 0..(len(x) - w + 1)]
 }
 
-func conv_len(constas k: int, constas s: int, constas p: int, x: f32[n]):
+with <constas k: int, constas s: int, constas p: int>
+func conv_len(x: f32[n]):
     f32[(n + 2 * p - k) / s + 1] {
     let m = (len(x) + 2 * p - k) / s + 1
     return [f32(i) for i in 0..m]
@@ -17,9 +19,9 @@ func conv_len(constas k: int, constas s: int, constas p: int, x: f32[n]):
 
 func run(x: f32[8]): int sync {
     // the lengths are known where the call is written
-    let y: f32[6] = window(3, x)
-    let z: f32[4] = conv_len(3, 2, 1, x)
-    let w: f32[8] = conv_len(3, 1, 1, x)
+    let y: f32[6] = window<3>(x)
+    let z: f32[4] = conv_len<3, 2, 1>(x)
+    let w: f32[8] = conv_len<3, 1, 1>(x)
     println(y, z, w)
     println(len(y), len(z), len(w))
     return 0

@@ -45,6 +45,35 @@ void sqrtVjp(camel::core::VjpBuilder &builder, const camel::core::VjpCall &call)
     }
 }
 
+// For y = erf(x), the VJP is dy * 2 / sqrt(pi) * exp(-x * x), in the primal's float width; erfc
+// is its negation.
+template <bool Complement>
+void erfVjp(camel::core::VjpBuilder &builder, const camel::core::VjpCall &call) {
+    using namespace camel::core;
+    using namespace camel::core::rtdata;
+    if (!camel::core::machineryTangentTypeOf(builder.nodeType(call.inputs[0]))) {
+        return;
+    }
+    if (auto dy = builder.gradientOf(call.output)) {
+        Type *type        = builder.nodeType(call.output);
+        const bool narrow = type->code() == TypeCode::Float32;
+        const char *mul   = narrow ? ":op/mul_f" : ":op/mul_d";
+        constexpr double kScale = 1.1283791670955126 * (Complement ? -1.0 : 1.0);
+        const auto x            = call.inputs[0];
+        const std::array<vjp_node_t, 2> squareInputs{x, x};
+        const auto square = builder.addOper(type, mul, squareInputs);
+        const std::array<vjp_node_t, 1> negInputs{square};
+        const auto negated = builder.addOper(type, narrow ? ":op/neg_f" : ":op/neg_d", negInputs);
+        const auto bell = builder.addOper(type, narrow ? "math:exp_f" : "math:exp_d", std::array<vjp_node_t, 1>{negated});
+        const auto scale =
+            builder.addStatic(narrow ? toSlot<Float32>(static_cast<Float32>(kScale)) : toSlot<Float64>(kScale), type);
+        const std::array<vjp_node_t, 2> scaled{*dy, scale};
+        const auto weighted = builder.addOper(type, mul, scaled);
+        const std::array<vjp_node_t, 2> product{weighted, bell};
+        builder.accumulateGradient(call.inputs[0], builder.addOper(type, mul, product));
+    }
+}
+
 } // namespace
 
 MathModule::MathModule(context_ptr_t ctx) : BuiltinModule("math", ctx) {
@@ -83,6 +112,12 @@ bool MathModule::load() {
     declareMathOperatorSemantics();
     camel::core::DerivativeRegistry::instance().setRule("math:sqrt", &sqrtVjp);
     camel::core::DerivativeRegistry::instance().setRule("math:sqrt_d", &sqrtVjp);
+    for (const char *uri : {"math:erf_f", "math:erf_d"}) {
+        camel::core::DerivativeRegistry::instance().setRule(uri, &erfVjp<false>);
+    }
+    for (const char *uri : {"math:erfc_f", "math:erfc_d"}) {
+        camel::core::DerivativeRegistry::instance().setRule(uri, &erfVjp<true>);
+    }
     loaded_ = true;
     return true;
 }

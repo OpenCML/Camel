@@ -10,7 +10,7 @@
  *
  *   elementwise   add subtract multiply divide maximum minimum, neg abs exp log sqrt rsqrt
  *                 relu: one Parallel dim per result axis, every operand broadcast to it
- *   layout        transpose permute reshape flatten unsqueeze broadcast_like expand_axis: a
+ *   layout        transpose permute reshape unsqueeze broadcast_like expand_axis: a
  *                 Unique write, each result element read from one element; and the core's own
  *                 slice node (`:op/slice_sub`), whose declaration this module publishes because
  *                 the read is a tensor's
@@ -105,7 +105,7 @@ std::vector<ExprId> delinearize(IndexBuilder &b, ExprId linear, const StaticShap
 
 /**
  * The coordinates in `in` of the element of `out` at the dims `dims`, when both shapes hold
- * the same elements in row-major order (reshape, flatten). When the two shapes are the same
+ * the same elements in row-major order (reshape). When the two shapes are the same
  * once their extent-1 axes are dropped, the map is affine (each remaining axis reads the
  * matching dim, an extent-1 axis 0); otherwise it linearizes the dims and delinearizes.
  */
@@ -567,39 +567,6 @@ std::optional<IndexedInstance> reshapeIndexing(const InferContext &ctx) {
 }
 
 /**
- * flatten(x, axis = 1) -> [d0 * ... * d(axis-1), d(axis) * ... * dn]: reshape's map, with the
- * input shape known and axis constant.
- */
-std::optional<IndexedInstance> flattenIndexing(const InferContext &ctx) {
-    const auto in   = shapeOf(ctx, 0);
-    const auto axis = ctx.has(1) ? ctx.constInt(1) : std::optional<int64_t>(1);
-    if (!in || !fullyKnown(*in) || !axis) {
-        return std::nullopt;
-    }
-    const auto r = static_cast<int64_t>(in->size());
-    if (*axis < -r || *axis > r) {
-        return std::nullopt;
-    }
-    const auto split = static_cast<size_t>(*axis < 0 ? *axis + r : *axis);
-    int64_t outer = 1, inner = 1;
-    for (size_t d = 0; d < in->size(); ++d) {
-        (d < split ? outer : inner) *= *(*in)[d];
-    }
-    const StaticShape out = {outer, inner};
-    IndexBuilder b;
-    for (size_t a = 0; a < in->size(); ++a) {
-        b.extent(0, a, (*in)[a]);
-    }
-    std::vector<ExprId> dims = {b.dim(b.derived("outer", outer, kNoExpr)),
-                                b.dim(b.derived("inner", inner, kNoExpr))};
-    b.instance.norm = {IndexBuilder::affine(reshapeCoords(b, *in, out, dims))};
-    if (ctx.has(1)) {
-        b.instance.norm.push_back(IndexBuilder::none());
-    }
-    return b.finish(dims);
-}
-
-/**
  * unsqueeze(x, axis): an axis of extent 1 inserted at `axis` (of the result's rank); x is read
  * at the other dims. Extents may be unknown.
  */
@@ -968,7 +935,6 @@ const std::unordered_map<std::string_view, Indexing> &indexings() {
         t.emplace("transpose", Indexing{transposeIndexing, {}});
         t.emplace("permute", Indexing{permuteIndexing, {}});
         t.emplace("reshape", Indexing{reshapeIndexing, {}});
-        t.emplace("flatten", Indexing{flattenIndexing, {}});
         t.emplace("unsqueeze", Indexing{unsqueezeIndexing, {}});
         t.emplace("broadcast_like", Indexing{broadcastLikeIndexing, {}});
         t.emplace("expand_axis", Indexing{expandAxisIndexing, {}});

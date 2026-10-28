@@ -198,6 +198,14 @@ FunctionTypeFactory rebuildFunctionType(
             factory.addWithRest(paramNameOf(func, i, "__w", i));
             continue;
         }
+        if (func->withIsConstasAt(i)) {
+            if (dropConstas) {
+                changed = true;
+                continue;
+            }
+            factory.addWithConstasArg(paramNameOf(func, i, "__w", i), replaced(func->withTypeAt(i)));
+            continue;
+        }
         factory.addWithArg(
             paramNameOf(func, i, "__w", i),
             replaced(func->withTypeAt(i)),

@@ -1,14 +1,15 @@
 /// An extent the constants of the call make negative is no dimension: the kernel (20) is wider than
 /// the padded input (8 + 2), so `(n + 2 * p - k) / s + 1` is -9, and the call is refused where it is
 /// written.
-func conv_len(constas k: int, constas s: int, constas p: int, x: f32[n]):
+with <constas k: int, constas s: int, constas p: int>
+func conv_len(x: f32[n]):
     f32[(n + 2 * p - k) / s + 1] {
     let m = (len(x) + 2 * p - k) / s + 1
     return [f32(i) for i in 0..m]
 }
 
 func run(x: f32[8]): int {
-    let z = conv_len(20, 1, 1, x)
+    let z = conv_len<20, 1, 1>(x)
     println(z)
     return 0
 }

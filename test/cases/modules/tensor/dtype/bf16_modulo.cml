@@ -31,29 +31,29 @@
  * as an f32 (`-0.0` and `7.3e-40` for the two lines below).
  */
 
-import { new, to_bytes } from tensor
+import { to_bytes } from tensor
 import { to_array } from bytes
 
 func main(): int sync {
     let bfLeftValue: bf16[] = [7.5, -7.5, 7.5, 1.0]
     let bfRightValue: bf16[] = [2.0, 2.0, -2.0, 4.0]
-    let bf = new(bfLeftValue) % new(bfRightValue)
+    let bf = bfLeftValue % bfRightValue
     println('bf16 values:', bf[0], bf[1], bf[2], bf[3])
     println('bf16 bytes:', len(to_bytes(bf)), to_array(to_bytes(bf)))
 
     let halfLeftValue: f16[] = [7.5, -7.5, 7.5, 1.0]
     let halfRightValue: f16[] = [2.0, 2.0, -2.0, 4.0]
-    let half = new(halfLeftValue) % new(halfRightValue)
+    let half = halfLeftValue % halfRightValue
     println('f16 values:', half[0], half[1], half[2], half[3])
     println('f16 bytes:', len(to_bytes(half)), to_array(to_bytes(half)))
 
     let wideLeftValue: f64[] = [-7.5]
     let wideRightValue: f64[] = [2.0]
-    println('f64 value:', (new(wideLeftValue) % new(wideRightValue))[0])
+    println('f64 value:', (wideLeftValue % wideRightValue)[0])
 
     let intLeftValue: i32[] = [-7]
     let intRightValue: i32[] = [2]
-    println('i32 value:', (new(intLeftValue) % new(intRightValue))[0])
-    println('mixed scalar:', (new(bfLeftValue) % 2.0)[1], (new(bfLeftValue) * 2.0)[0])
+    println('i32 value:', (intLeftValue % intRightValue)[0])
+    println('mixed scalar:', (bfLeftValue % 2.0)[1], (bfLeftValue * 2.0)[0])
     return 0
 }

@@ -956,7 +956,7 @@ void ParserImpl::parseWhenClause() {
 /// The part of funcDecl after its annotations; `m` marks where the declaration began.
 void ParserImpl::parseFuncDeclRest(size_t m) {
     if (eat(TK::KwWith)) {
-        parseAngledParams(true);
+        parseAngledParams(true, true);
     }
     eat(TK::KwExport);
     // `with <...> rule ...` (`rule tile_matmul(...)`, design principles 5.5): a rule writes the
@@ -1305,7 +1305,7 @@ void ParserImpl::parseBracketedIdents(TK closer, NK kind) {
 /// compile-time value, not a runtime parameter (design principles 5.4). A type written after a
 /// rest parameter, or left out of a `constas` one, is parsed so that the semantic stage can
 /// report it; the parameter lists of a lambda, a function type and a rule take neither.
-void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas) {
+void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas, bool angled) {
     const size_t m = mark();
     if (lambdaParams_ && cur_ == TK::LParen) {
         // A lambda parameter destructured as a tuple: `((a, b)) => ...`. The rule is the one of
@@ -1340,6 +1340,10 @@ void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas) {
         parseIdentDef();
         if (eat(TK::Colon)) {
             parseType();
+            // A `constas` parameter of the `with` list may default (`constas stride: int = 1`).
+            if (angled && eat(TK::Assign)) {
+                parseExpr();
+            }
         }
         close(m, NK::KeyParamPair);
         return;
@@ -1362,10 +1366,11 @@ void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas) {
 /// pairedParams : keyParamPair (',' keyParamPair)*
 void ParserImpl::parsePairedParams(TK closer, bool allowRest, bool allowConstas) {
     const size_t m = mark();
-    parseKeyParamPair(allowRest, allowConstas);
+    const bool angled = closer == TK::Gt;
+    parseKeyParamPair(allowRest, allowConstas, angled);
     while (cur_ == TK::Comma && peek(1) != closer && !panic_) {
         bump();
-        parseKeyParamPair(allowRest, allowConstas);
+        parseKeyParamPair(allowRest, allowConstas, angled);
     }
     close(m, NK::PairedParams);
 }
@@ -1400,7 +1405,7 @@ void ParserImpl::parseParentParams(bool allowRest, bool allowConstas) {
 
 /// angledParams : '<' pairedParams? ','? '>'
 /// The `<` of a parameter list need not touch anything (`with <T: type>`).
-void ParserImpl::parseAngledParams(bool allowRest) {
+void ParserImpl::parseAngledParams(bool allowRest, bool allowConstas) {
     if (cur_ != TK::Lt && cur_ != TK::LAngle) {
         unexpected({e(TK::Lt)});
         return;
@@ -1411,7 +1416,7 @@ void ParserImpl::parseAngledParams(bool allowRest) {
     {
         Scope scope(*this, false, open);
         if (cur_ != TK::Gt && cur_ != TK::Comma) {
-            parsePairedParams(TK::Gt, allowRest, false);
+            parsePairedParams(TK::Gt, allowRest, allowConstas);
         }
         eat(TK::Comma);
         if (!panic_ && cur_ != TK::Gt) {

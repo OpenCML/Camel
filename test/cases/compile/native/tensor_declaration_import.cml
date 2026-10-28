@@ -6,7 +6,7 @@
  * or the result's position) stays in C++ and is imported the same way.
  */
 
-import { new, reshape, shape, numel, dim, to_bytes, from_bytes, load_npy, save_npy, seed, set_num_threads, num_threads } from tensor
+import { reshape, shape, numel, dim, to_bytes, from_bytes, load_npy, save_npy, seed, set_num_threads, num_threads } from tensor
 
 // The file operators still type-check (this function is not called): `load_npy` writes the
 // element type the file holds, and the file's own element type is checked against it when the
@@ -17,14 +17,14 @@ func round_trip(t: f32[..], path: string): f32[..] sync {
 }
 
 func main(): int sync {
-    let t = new([[1.0, 2.0], [3.0, 4.0]] as f32[][])
+    let t = [[1.0, 2.0], [3.0, 4.0]] as f32[2, 2]
     let extents = shape(t)
     println(extents[0] * 10 + extents[1])
     println(numel(t))
     println(dim<1>(t))
     println(dim<i32(0)>(t))
     println(shape(reshape<[4]>(t))[0])
-    let encoded = to_bytes(new([1.0] as f32[]))
+    let encoded = to_bytes([1.0] as f32[])
     println(shape(from_bytes::<f32>(encoded, [1]))[0])
     set_num_threads(2)
     println(num_threads())

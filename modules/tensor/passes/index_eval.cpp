@@ -485,7 +485,7 @@ std::optional<Num> pointwise(std::string_view op, const std::vector<Num> &v, boo
 
 /// The operators whose Unique write copies the one value it reads.
 bool isMove(std::string_view op) {
-    for (std::string_view m : {"transpose", "permute", "reshape", "flatten", "unsqueeze",
+    for (std::string_view m : {"transpose", "permute", "reshape", "unsqueeze",
                                "broadcast_like", "expand_axis", "sum_to"}) {
         if (op == m) {
             return true;
@@ -890,17 +890,6 @@ Generator reshapeCases() {
     return [](Rng &rng) {
         const StaticShape s = randomShape(rng, static_cast<size_t>(rng.range(0, 4)));
         return Case{Arg::tensor(randomData(rng, pickDtype(rng), s)), Arg::intsArg(reshapeTarget(rng, s))};
-    };
-}
-
-Generator flattenCases() {
-    return [](Rng &rng) {
-        const size_t rank = static_cast<size_t>(rng.range(1, 4));
-        Case c{Arg::tensor(randomData(rng, pickDtype(rng), randomShape(rng, rank)))};
-        if (rng.chance(70)) {
-            c.push_back(Arg::integerArg(rng.range(-static_cast<int64_t>(rank), static_cast<int64_t>(rank))));
-        }
-        return c;
     };
 }
 
@@ -1329,7 +1318,6 @@ IndexEvalTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         {"tensor:transpose", transposeCases(), 60},
         {"tensor:permute", permuteCases(), 80},
         {"tensor:reshape", reshapeCases(), 100},
-        {"tensor:flatten", flattenCases(), 60},
         {"tensor:unsqueeze", unsqueezeCases(), 60},
         {"tensor:broadcast_like", broadcastLikeCases(), 80},
         {"tensor:expand_axis", expandAxisCases(), 80},

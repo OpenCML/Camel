@@ -1,0 +1,18 @@
+// Scalar erf and erfc pullbacks: 2 / sqrt(pi) * exp(-x * x) at 0.5 (0.878783), negated for erfc.
+// The differentiated value is the first `with` parameter.
+import { erf, erfc, round } from math
+import { grad } from autodiff
+
+with <x: float>
+func bell(): float { return erf(x) }
+with <x: float>
+func tail(): float { return erfc(x) }
+with <x: f32>
+func bell32(): f32 { return erf(x) }
+
+func main(): int sync {
+    println('erf={}'->format<round(grad(bell)<0.5>() * 1000000.0) / 1000000.0>)
+    println('erfc={}'->format<round(grad(tail)<0.5>() * 1000000.0) / 1000000.0>)
+    println('erf32={}'->format<round(float(grad(bell32)<f32(0.5)>()) * 1000.0) / 1000.0>)
+    return 0
+}

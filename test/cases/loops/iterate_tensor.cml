@@ -16,10 +16,10 @@ func countRows::<T>(t: T[..]): int when is_numeric::<T>() {
 }
 
 func main(): int sync {
-    let m       = new([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+    let m       = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]] as float[3, 2]
     let rows    = loop s = 0 for row in m do s + int(sum(row))
     let ranks   = loop c = 0 for row in m do c + (if len(shape(row)) == 1 then 1 else 0)
-    let v       = new([1.0, 2.0, 3.0])
+    let v       = [1.0, 2.0, 3.0] as float[]
     let scalar  = loop c = 0 for x in v do c + 1
     let vecsum  = loop s = 0 for x in v do s + int(x)
     let empty   = loop c = 7 for row in zeros::<f32>([0, 2]) do c + 1

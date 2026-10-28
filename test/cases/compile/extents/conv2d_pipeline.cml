@@ -1,0 +1,30 @@
+/// A convolution written as a pipeline: the weights are a runtime `with` parameter and the stride
+/// and the padding are `constas` parameters of the same list, so `input->conv2d_pipe<kernel, 2, 1>`
+/// gives all three in the angle brackets and the result has its static shape (design principles
+/// 5.4). A stride and a padding left out take their defaults.
+import { shape } from array
+import { zeros } from tensor
+
+with <kernel: f32[o, c, k, k], constas s: int = 1, constas p: int = 0>
+func conv2d_pipe(input: f32[b, c, h, w]):
+    f32[b, o, (h + 2 * p - k) / s + 1, (w + 2 * p - k) / s + 1] {
+    let sh = shape(input)
+    let ks = shape(kernel)
+    let oh = (sh[2] + 2 * p - ks[2]) / s + 1
+    let ow = (sh[3] + 2 * p - ks[3]) / s + 1
+    return zeros([sh[0], ks[0], oh, ow])
+}
+
+func run(input: f32[2, 3, 8, 8], kernel: f32[4, 3, 3, 3]): int sync {
+    let y: f32[2, 4, 4, 4] = input->conv2d_pipe<kernel, 2, 1>
+    let valid: f32[2, 4, 6, 6] = input->conv2d_pipe<kernel>
+    let striding: f32[2, 4, 3, 3] = input->conv2d_pipe<kernel, 2>
+    println(shape(y), shape(valid), shape(striding))
+    return 0
+}
+
+func main(): int sync {
+    let input = zeros::<f32>([2, 3, 8, 8])
+    let kernel = zeros::<f32>([4, 3, 3, 3])
+    return run(input as f32[2, 3, 8, 8], kernel as f32[4, 3, 3, 3])
+}

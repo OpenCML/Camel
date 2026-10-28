@@ -7,7 +7,7 @@ import nn
 
 func main(): int sync {
     let a = tensor::ones::<f32>([2, 2])
-    let b = tensor::new([[1.0, 2.0], [3.0, 4.0]])
+    let b = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
     let v = nn::sgd(tensor::zeros::<f32>([2, 2]), tensor::ones::<f32>([2, 2]), 0.5)
 
     let a0 = tensor::shape(a)[0]

@@ -12,14 +12,6 @@
 
 // ---- creation ----
 
-/// A tensor made of a nested number array (or of a tensor, copied into contiguous row-major
-/// storage); the element type follows the values: `float` for a float (design principles 5.1: a
-/// float literal's own type is `float`, which is `f64`), `int64` for an integer and `bool` for a
-/// boolean.
-/// @pure
-/// @example new([[1.0, 2.0], [3.0, 4.0]])
-export func new(values: float[..] | number[]): float[..]
-
 /// An array of the given extents whose elements are all 0. The element type is written
 /// (`zeros::<f32>([2, 3])`) or comes from the position of the call (`let x: f32[2, 3] =
 /// zeros([2, 3])`); there is no default.
@@ -43,18 +35,6 @@ export func full(shape: int[], value: number): float[..]
 /// @example eye::<f32>(2)
 export func eye::<T>(n: int): T[..] when is_numeric::<T>()
 
-/// The integer sequence start, start + step, ... below stop, as a rank-1 `int64` tensor: one
-/// argument is stop with start 0, step is 1 by default, and a step of 0 is a fault.
-///
-/// The interval of the language's own integers is written `a..b` (design principles 4.2), so a
-/// two-argument `range(a, b)` written without a module qualifier is the language's built-in
-/// interval and is refused: the two-parameter `range` is gone. This function is reached for one
-/// argument, for three, or by the qualified name `tensor::range(...)`.
-/// @pure
-/// @fails fault `RuntimeError` when stop and start leave a step of 0
-/// @example range(0, 10, 2)    // [0, 2, 4, 6, 8]
-export func range(start: int, stop?: int, step?: int): int64[..]
-
 // ---- random ----
 
 /// A tensor of `f32` values drawn uniformly from [low, high) with the given extents.
@@ -73,40 +53,40 @@ export func randn(shape: int[], mean?: number, std?: number): f32[..]
 /// a + b per element, with NumPy broadcasting: a scalar operand applies to every element, and
 /// the element type is the wider of the two (a float with an integer gives `f32`).
 /// @pure
-/// @example add(new([1.0, 2.0]), 1.0)    // [2.0, 3.0]
+/// @example add([1.0, 2.0] as float[], 1.0)    // [2.0, 3.0]
 export func add(lhs: float[..] | number, rhs: float[..] | number): float[..]
 
 /// a - b per element, with NumPy broadcasting.
 /// @pure
-/// @example subtract(new([1.0, 2.0]), 0.5)    // [0.5, 1.5]
+/// @example subtract([1.0, 2.0] as float[], 0.5)    // [0.5, 1.5]
 export func subtract(lhs: float[..] | number, rhs: float[..] | number): float[..]
 
 /// a * b per element, with NumPy broadcasting.
 /// @pure
-/// @example multiply(new([1.0, 2.0]), new([3.0, 4.0]))    // [3.0, 8.0]
+/// @example multiply([1.0, 2.0] as float[], [3.0, 4.0] as float[])    // [3.0, 8.0]
 export func multiply(lhs: float[..] | number, rhs: float[..] | number): float[..]
 
 /// a / b per element, with NumPy broadcasting; IEEE division: x / 0 is an infinity or NaN, not a
 /// fault.
 /// @pure
-/// @example divide(new([1.0, 2.0]), 2.0)    // [0.5, 1.0]
+/// @example divide([1.0, 2.0] as float[], 2.0)    // [0.5, 1.0]
 export func divide(lhs: float[..] | number, rhs: float[..] | number): float[..]
 
 /// a raised to b per element, with NumPy broadcasting.
 /// @pure
-/// @example pow(new([2.0, 3.0]), 2.0)    // [4.0, 9.0]
+/// @example pow([2.0, 3.0] as float[], 2.0)    // [4.0, 9.0]
 export func pow(lhs: float[..] | number, rhs: float[..] | number): float[..]
 
 /// IEEE 754-2019 maximum per element, with NumPy broadcasting: NaN on either side gives the
 /// canonical quiet NaN, and -0 is below +0.
 /// @pure
-/// @example maximum(new([1.0, -0.0]), 0.0)    // [1.0, 0.0]
+/// @example maximum([1.0, -0.0] as float[], 0.0)    // [1.0, 0.0]
 export func maximum(lhs: float[..] | number, rhs: float[..] | number): float[..]
 
 /// IEEE 754-2019 minimum per element, with NumPy broadcasting: NaN on either side gives the
 /// canonical quiet NaN, and -0 is below +0.
 /// @pure
-/// @example minimum(new([1.0, -0.0]), 0.0)    // [0.0, -0.0]
+/// @example minimum([1.0, -0.0] as float[], 0.0)    // [0.0, -0.0]
 export func minimum(lhs: float[..] | number, rhs: float[..] | number): float[..]
 
 /// a % b per element, with NumPy broadcasting: the language's remainder, the truncated one
@@ -116,74 +96,74 @@ export func minimum(lhs: float[..] | number, rhs: float[..] | number): float[..]
 /// once when it is stored. A divisor of zero gives NaN for a floating element type, as IEEE
 /// division does; an integer element type has the integer remainder.
 /// @pure
-/// @example mod(new([7.5, -7.5]), 2.0)    // [1.5, -1.5]
+/// @example mod([7.5, -7.5] as float[], 2.0)    // [1.5, -1.5]
 export func mod(lhs: float[..] | number, rhs: float[..] | number): float[..]
 
 /// lhs where cond holds, rhs elsewhere, broadcast to one shape; the element type is the wider of
 /// lhs and rhs.
 /// @pure
-/// @example where(new([true, false]), new([1.0, 2.0]), 0.0)    // [1.0, 0.0]
+/// @example where([true, false] as bool[], [1.0, 2.0] as float[], 0.0)    // [1.0, 0.0]
 export func where(cond: bool[..], lhs: float[..] | number, rhs: float[..] | number): float[..]
 
 /// -x per element: the sign flipped.
 /// @pure
-/// @example neg(new([1.0, -2.0]))    // [-1.0, 2.0]
+/// @example neg([1.0, -2.0] as float[])    // [-1.0, 2.0]
 export func neg(t: float[..]): float[..]
 
 /// |x| per element: the sign cleared.
 /// @pure
-/// @example abs(new([-1.5, 2.0]))    // [1.5, 2.0]
+/// @example abs([-1.5, 2.0] as float[])    // [1.5, 2.0]
 export func abs(t: float[..]): float[..]
 
 /// e^x per element, within 2 ulp, subnormal results included.
 /// @pure
-/// @example exp(new([0.0, 1.0]))    // [1.0, 2.7182817]
+/// @example exp([0.0, 1.0] as float[])    // [1.0, 2.7182817]
 export func exp(t: float[..]): float[..]
 
 /// ln x per element, within 2 ulp; NaN, +-inf, +-0 and negative x are exact (negative x gives
 /// NaN).
 /// @pure
-/// @example log(new([1.0, 2.7182817]))    // [0.0, 1.0]
+/// @example log([1.0, 2.7182817] as float[])    // [0.0, 1.0]
 export func log(t: float[..]): float[..]
 
 /// sqrt(x) per element, rounded once in `f32`.
 /// @pure
-/// @example sqrt(new([4.0, 9.0]))    // [2.0, 3.0]
+/// @example sqrt([4.0, 9.0] as float[])    // [2.0, 3.0]
 export func sqrt(t: float[..]): float[..]
 
 /// 1 / sqrt(x) per element: two steps, each rounded in `f32`.
 /// @pure
-/// @example rsqrt(new([4.0]))    // [0.5]
+/// @example rsqrt([4.0] as float[])    // [0.5]
 export func rsqrt(t: float[..]): float[..]
 
 /// The logistic function 1 / (1 + e^-x) per element.
 /// @pure
-/// @example sigmoid(new([0.0]))    // [0.5]
+/// @example sigmoid([0.0] as float[])    // [0.5]
 export func sigmoid(t: float[..]): float[..]
 
 /// The hyperbolic tangent per element.
 /// @pure
-/// @example tanh(new([0.0]))    // [0.0]
+/// @example tanh([0.0] as float[])    // [0.0]
 export func tanh(t: float[..]): float[..]
 
 /// maximum(x, +0) per element: NaN gives the canonical NaN, and -0 gives +0.
 /// @pure
-/// @example relu(new([-1.0, 2.0]))    // [0.0, 2.0]
+/// @example relu([-1.0, 2.0] as float[])    // [0.0, 2.0]
 export func relu(t: float[..]): float[..]
 
 /// The Gaussian error linear unit per element, computed as its normative definition in Camel.
 /// @pure
-/// @example gelu(new([0.0]))    // [0.0]
+/// @example gelu([0.0] as float[])    // [0.0]
 export func gelu(t: float[..]): float[..]
 
 /// The Gauss error function per element.
 /// @pure
-/// @example erf(new([0.0]))    // [0.0]
+/// @example erf([0.0] as float[])    // [0.0]
 export func erf(t: float[..]): float[..]
 
 /// The complementary error function 1 - erf(x) per element.
 /// @pure
-/// @example erfc(new([0.0]))    // [1.0]
+/// @example erfc([0.0] as float[])    // [1.0]
 export func erfc(t: float[..]): float[..]
 
 // ---- shape and reshaping ----
@@ -191,46 +171,40 @@ export func erfc(t: float[..]): float[..]
 /// The elements in row-major order, in a new shape; one extent may be -1, which the element
 /// count fills.
 /// @pure
-/// @example reshape<[2, 2]>(new([1.0, 2.0, 3.0, 4.0]))
+/// @example reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as float[])
 export func reshape(t: float[..] | number[], shape: int[]): float[..]
-
-/// The elements in row-major order in two axes: the extents before axis multiplied into the
-/// first, the rest into the second (axis 1 by default).
-/// @pure
-/// @example flatten(new([[1.0, 2.0], [3.0, 4.0]]))
-export func flatten(t: float[..], axis?: int): float[..]
 
 /// The elements unchanged, with an axis of extent 1 added at axis.
 /// @pure
-/// @example unsqueeze<0>(new([1.0, 2.0]))    // shape [1, 2]
+/// @example unsqueeze<0>([1.0, 2.0] as float[])    // shape [1, 2]
 export func unsqueeze(t: float[..], axis: int): float[..]
 
 /// The last two axes swapped (a vector becomes a column, a matrix its transpose).
 /// @pure
-/// @example transpose(new([[1.0, 2.0], [3.0, 4.0]]))
+/// @example transpose([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])
 export func transpose(t: float[..]): float[..]
 
 /// The axes reordered as perm lists them.
 /// @pure
-/// @example permute<[1, 0]>(new([[1.0, 2.0], [3.0, 4.0]]))
+/// @example permute<[1, 0]>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])
 export func permute(t: float[..], perm: int[]): float[..]
 
 /// a and b joined along axis; every other extent must agree.
 /// @pure
-/// @example concat<0>(new([[1.0]]), new([[2.0]]))    // shape [2, 1]
+/// @example concat<0>([[1.0]] as float[1, 1], [[2.0]] as float[1, 1])    // shape [2, 1]
 export func concat(a: float[..] | number[], b: float[..] | number[], axis: int): float[..]
 
 /// The entries of the first axis that indices name, in that order.
 /// @pure
 /// @fails fault `RuntimeError` when an index is outside the first axis
-/// @example take(new([[1.0], [2.0], [3.0]]), [2, 0])    // [[3.0], [1.0]]
+/// @example take([[1.0], [2.0], [3.0]] as float[3, 1], [2, 0])    // [[3.0], [1.0]]
 export func take(t: float[..], indices: int64[..] | number[]): float[..]
 
 /// Each label (an integer below classes) expanded to a row of classes with a 1 at its position:
 /// an `int64` tensor of shape [labels, classes].
 /// @pure
 /// @fails fault `IndexOutOfRange` when a label is outside [0, classes), and fault `InvalidArgument` when classes is negative
-/// @example one_hot(new([0, 2]), 3)    // [[1, 0, 0], [0, 0, 1]]
+/// @example one_hot([0, 2] as int[], 3)    // [[1, 0, 0], [0, 0, 1]]
 export func one_hot(labels: int64[..] | number[], classes: int): int64[..]
 
 // ---- reduction ----
@@ -245,13 +219,13 @@ export func one_hot(labels: int64[..] | number[], classes: int): int64[..]
 /// 5.1, 7.7), and that exact value is the answer — `int64` as it stands, `int32` truncated into
 /// its element type, `bool` as `int64`.
 /// @pure
-/// @example sum(new([[1.0, 2.0], [3.0, 4.0]]))    // 10.0
+/// @example sum([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // 10.0
 export func sum::<T>(t: T[..]): T
 
 /// The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis with extent 1.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
-/// @example sum<0>(new([[1.0, 2.0], [3.0, 4.0]]))    // [4.0, 6.0]
+/// @example sum<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [4.0, 6.0]
 #op('tensor:sum_axis')
 export func sum(t: float[..], axis: int, keepdims?: bool): float[..]
 
@@ -263,13 +237,13 @@ export func sum(t: float[..], axis: int, keepdims?: bool): float[..]
 /// is a fault.
 /// @pure
 /// @fails fault `DivisionByZero` when the tensor has no element
-/// @example mean(new([[1.0, 2.0], [3.0, 4.0]]))    // 2.5
+/// @example mean([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // 2.5
 export func mean::<T>(t: T[..]): T
 
 /// The same mean over one axis; keepdims keeps the axis with extent 1.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `DivisionByZero` when the axis is empty
-/// @example mean<1>(new([[1.0, 2.0], [3.0, 4.0]]))    // [1.5, 3.5]
+/// @example mean<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [1.5, 3.5]
 #op('tensor:mean_axis')
 export func mean(t: float[..], axis: int, keepdims?: bool): float[..]
 
@@ -277,7 +251,7 @@ export func mean(t: float[..], axis: int, keepdims?: bool): float[..]
 /// the same bits); keepdims keeps the axis with extent 1.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
-/// @example max<0>(new([[1.0, 2.0], [3.0, 4.0]]))    // [3.0, 4.0]
+/// @example max<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [3.0, 4.0]
 #op('tensor:max_axis')
 export func max(t: float[..], axis: int, keepdims?: bool): float[..]
 
@@ -285,7 +259,7 @@ export func max(t: float[..], axis: int, keepdims?: bool): float[..]
 /// axis with extent 1.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
-/// @example min<1>(new([[1.0, 2.0], [3.0, 4.0]]))    // [1.0, 3.0]
+/// @example min<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [1.0, 3.0]
 #op('tensor:min_axis')
 export func min(t: float[..], axis: int, keepdims?: bool): float[..]
 
@@ -293,7 +267,7 @@ export func min(t: float[..], axis: int, keepdims?: bool): float[..]
 /// NaN if there is one, +0 above -0, the earlier position on a tie.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
-/// @example argmax<1>(new([[1.0, 2.0], [3.0, 4.0]]))    // [1, 1]
+/// @example argmax<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [1, 1]
 #op('tensor:argmax_axis')
 export func argmax(t: float[..], axis: int, keepdims?: bool): int64[..]
 
@@ -301,7 +275,7 @@ export func argmax(t: float[..], axis: int, keepdims?: bool): int64[..]
 /// NaN if there is one, -0 below +0, the earlier position on a tie.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
-/// @example argmin<0>(new([[1.0, 2.0], [3.0, 4.0]]))    // [0, 0]
+/// @example argmin<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [0, 0]
 #op('tensor:argmin_axis')
 export func argmin(t: float[..], axis: int, keepdims?: bool): int64[..]
 
@@ -309,14 +283,14 @@ export func argmin(t: float[..], axis: int, keepdims?: bool): int64[..]
 /// definition in Camel, in `f32`.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
-/// @example softmax(new([[1.0, 1.0]]))    // [[0.5, 0.5]]
+/// @example softmax([[1.0, 1.0]] as float[1, 2])    // [[0.5, 0.5]]
 export func softmax(t: f32[..], axis?: int): f32[..]
 
 /// The log of the softmax over the axis (-1 by default), computed as its normative definition in
 /// Camel, in `f32`.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
-/// @example log_softmax(new([[1.0, 1.0]]))    // [[-0.6931472, -0.6931472]]
+/// @example log_softmax([[1.0, 1.0]] as float[1, 2])    // [[-0.6931472, -0.6931472]]
 export func log_softmax(t: f32[..], axis?: int): f32[..]
 
 /// The gradient of the softmax of y with the incoming gradient dy, over the axis (-1 by default).
@@ -338,7 +312,7 @@ export func layer_norm(x: f32[..], gamma: f32[..], beta: f32[..], eps?: number):
 /// b[k][j], acc) for k ascending, every fused multiply-add rounded once in `f32`.
 /// @pure
 /// @fails fault `TensorDimensionMismatch` when the inner extents do not agree
-/// @example matmul(new([[1.0, 2.0]]), new([[3.0], [4.0]]))    // [[11.0]]
+/// @example matmul([[1.0, 2.0]] as float[1, 2], [[3.0], [4.0]] as float[2, 1])    // [[11.0]]
 export func matmul(lhs: float[..], rhs: float[..]): float[..]
 
 /// The affine transform of x by a rank-2 weight [in, out] whose rows are the features of x, plus
@@ -352,12 +326,12 @@ export func linear(x: f32[..], weight: f32[..], bias?: f32[..]): f32[..]
 
 /// A tensor of zeros shaped and typed like t.
 /// @pure
-/// @example zeros_like(new([[1.0, 2.0]]))
+/// @example zeros_like([[1.0, 2.0]] as float[1, 2])
 export func zeros_like(t: float[..]): float[..]
 
 /// A tensor of ones shaped and typed like t.
 /// @pure
-/// @example ones_like(new([[1.0, 2.0]]))
+/// @example ones_like([[1.0, 2.0]] as float[1, 2])
 export func ones_like(t: float[..]): float[..]
 
 // ---- conversion and display ----
@@ -397,6 +371,6 @@ export func load_npy::<T>(path: string): T[..]
 /// needs no numeric permission.
 /// @pure
 /// @fails fault `TensorDimensionMismatch` when the number of bytes does not fit the shape and the element type
-/// @example from_bytes::<f32>(to_bytes(new([1.0, 2.0])), [2])
+/// @example from_bytes::<f32>(to_bytes([1.0, 2.0] as float[]), [2])
 #op('tensor:from_bytes_*')
 export func from_bytes::<T>(bytes: Bytes, shape: int[]): T[..] when is_plain::<T>()

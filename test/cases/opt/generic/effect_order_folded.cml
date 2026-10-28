@@ -6,7 +6,7 @@
  * call through nested branches must not grow the stack.
  */
 
-import { range, reshape, concat, zeros, show } from tensor
+import { reshape, concat, zeros, show } from tensor
 
 func count_down(i: int, acc: int): int sync {
     return if i <= 0 then acc else step(i, acc)

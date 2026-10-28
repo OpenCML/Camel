@@ -12,7 +12,7 @@
  * because different shapes are not equal.
  */
 
-import { new, log, sum } from tensor
+import { log, sum } from tensor
 
 func bareEq::<T>(a: T[..], b: T[..]): bool { return a == b }
 func writtenEq(a: f32[..], b: f32[..]): bool { return a == b }
@@ -21,9 +21,9 @@ func main(): int sync {
     // A scalar: `===` is `==`, and `!==` is `!=`.
     println('scalar', 1 === 1, 1 !== 2, 'a' === 'a')
 
-    let a = new([1.0, 2.0, 3.0])
-    let b = new([1.0, 2.0, 3.0])
-    let e = new([1.0, 2.0, 4.0])
+    let a = [1.0, 2.0, 3.0] as float[]
+    let b = [1.0, 2.0, 3.0] as float[]
+    let e = [1.0, 2.0, 4.0] as float[]
     println('a === b', a === b)
     println('a !== b', a !== b)
     println('a === e', a === e)
@@ -32,7 +32,7 @@ func main(): int sync {
     println('a < e', a < e)
 
     // Different shapes: `==` is false, an elementwise comparison of them is an error.
-    let c = new([1.0, 2.0])
+    let c = [1.0, 2.0] as float[]
     println('a == c', a == c)
 
     // The element type written or not: one answer either way.
