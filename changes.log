@@ -1,4 +1,14 @@
 [0.2.36]
+Changes:
+- 控制边与 sync 边收口：sync 边写在链的位置上，控制边并排保留；CSE 能看穿只做转发的 gate；读控制边的读者也读被捕获 cell 的 sync 边；交给消费者的链 wait 按它原本的种类交（sync 仍是 sync）；内联的链交接点挪到 capture 单元完成之后，`var` 的读和链交接都成立；一个 tile 区域的语句顺序由它的链承载，而不只是控制边；一条 order 边只在它的前驱有位置时才命名它；`ungated()` 收成一个函数；GIR 的两个版本都导出 sync 与 order 边。
+- 一个链的成员每个图只构建一次；一个等不到任何东西的转发 gate 由前端消解，不再冻结成内部错误。
+- 泛型重载按 `when` 选：候选的每个条件都会被读，被选中的那条按名字报出它自己的条件；一个文件里的 `import` 永远不会解析到它自己。
+- 一次写被捕获变量的调用，在位置期望 `void` 时被交给被调方自己的值，`void` 臂仍 join 到 `void`，版本只在读的那一侧物化。
+- 模块与类型：extent 变成表达式；tensor 库删掉 `flatten`、`range` 和 `new`；`constas` 参数进 `with` 列表；reshape 与按轴归约改用新的调用形式，benchmarks 与文档跟着改；native 的 merge 回来叫 `merge_sorted`；tensor、`nn`、`optim` 三个模块按所有者选择转给决策方。
+- 新增 `erf` 与 `erfc`；`..` 的优先级在语言文档里修正，语法块按生成器重出。
+- core 的 `idx_take` 只留一条求导规则；`ConstructNotSupported` 这个诊断码退役，循环与规则的上下文按今天的语言描述。
+- 修复：checkpoint 用例里失败的保存不再丢掉它的错误；device-tree 用例把 float 写进 f32 结果的对齐到元素类型；两个受声明影响的生成文件按其脚本重生成，`05_effect_order` 的 exemplar 用脚本重录而不是手改。
+- 这一批有十七个转交页往返（控制边的模型、纯值是否自带 wait、悬空的链尾、入口内联尺寸、内联自递归、tile 链成员、spliced body 等），作者答完或撤回的页已从树里删掉，`docs/handover/questions/` 目前是空的。
 
 [0.2.35]
 Changes:
