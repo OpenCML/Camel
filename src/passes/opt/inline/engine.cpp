@@ -20,6 +20,7 @@
 #include "../generic/rewrite.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/core/source/manager.h"
 #include "camel/passes/opt/inline.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
@@ -81,15 +82,67 @@ bool nodeCameFromInlineSplice(const GCGraph *graph, uint32_t region) {
     return false;
 }
 
+/// The source position `ref` is written at, as a key that tells it apart from other positions:
+/// the span its origin resolves to, or the origin itself when the span is not known, and 0 when the
+/// node has no origin. Spans and origins are ids of their own, so the high bit keeps them apart.
+uint64_t originKeyOf(
+    const GCGraph *graph, const camel::source::SourceContext *source, gc_node_ref_t ref) {
+    const uint64_t origin = graph->nodeOrigin(ref);
+    if (origin == 0) {
+        return 0;
+    }
+    if (source != nullptr) {
+        if (const auto *record = source->origin(origin);
+            record != nullptr && record->primarySpan != camel::source::kInvalidSpanId) {
+            return (uint64_t{1} << 63) | record->primarySpan;
+        }
+    }
+    return origin;
+}
+
 /// The function's own computation: the OPERs, the calls it makes and the structural nodes
 /// (BRCH/JOIN/LOOP/FUNC) it is made of. A constant (DATA), a parameter (PORT), a GATE and the
 /// bookkeeping an inline splice adds (a GATE per argument, a SYNC, the nodes of a function the
 /// splice copied in) are not counted. This is the measure of "how small is the function"
 /// (InlineRewriteConfig::smallSubgraphMaxComputeNodes) and what a message about a callee's size
-/// reports; the same function answers the same whatever the splice implementation does, and
-/// the count is the compute nodes of the function being inlined.
-size_t inlinedComputeNodeCount(const GCGraph *graph) {
+/// reports.
+///
+/// What the language writes as one operator is one computation, even where the front end builds it
+/// from several nodes at one source position: `a ?? b` is a tag_is_null, a tag_null_value and the
+/// branch and join that choose between them (camel/core/operator_table.h), and counting each of them
+/// made `main` of test/cases/modules/onnx/export_loop.cml -- three prints, one `??`, one export_model
+/// call -- read as nine and be refused as too big to inline, which stopped the export. The nodes of
+/// that lowering count once (the coalesce positions this function collects first); every other node
+/// counts for itself, so a function is measured by the compute nodes it is written as.
+///
+/// The count is read off the graph the round began with -- GraphDraft::calleeGraphOf answers the
+/// committed graph, not the draft -- so what a round splices or folds cannot move it: the same
+/// function answers the same twice in one round, and its answer changes only when a round commits a
+/// change to that function.
+size_t inlinedComputeNodeCount(
+    const GCGraph *graph, const camel::source::SourceContext *source) {
+    if (!graph) {
+        return 0;
+    }
+    // The source positions where `??` was lowered, whose nodes are one operation (see above).
+    std::unordered_set<uint64_t> coalesceSpans;
+    for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+        const auto *node = *it;
+        if (node == nullptr || node->kind != GCNodeKind::Oper) {
+            continue;
+        }
+        const auto *body = graph->nodeBodyAs<camel::runtime::GCOperBody>(it.ref());
+        if (body == nullptr ||
+            (body->oper != camel::core::oper::TagIsNull &&
+             body->oper != camel::core::oper::TagNullValue)) {
+            continue;
+        }
+        if (const uint64_t span = originKeyOf(graph, source, it.ref()); span != 0) {
+            coalesceSpans.insert(span);
+        }
+    }
     size_t count = 0;
+    std::unordered_set<uint64_t> counted; // the `??` groups already counted
     for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
         const auto *node = *it;
         if (!node) {
@@ -108,14 +161,22 @@ size_t inlinedComputeNodeCount(const GCGraph *graph) {
         if (nodeCameFromInlineSplice(graph, graph->nodeRegion(it.ref()))) {
             continue;
         }
+        if (!coalesceSpans.empty()) {
+            const uint64_t key = originKeyOf(graph, source, it.ref());
+            if (key != 0 && coalesceSpans.contains(key) && !counted.insert(key).second) {
+                continue; // the rest of the `??` written at that position
+            }
+        }
         count++;
     }
     return count;
 }
 
-bool isSmallRuntimeSubgraphForInline(const GCGraph *bodyGraph, const InlineRewriteConfig &config) {
+bool isSmallRuntimeSubgraphForInline(
+    const GCGraph *bodyGraph, const InlineRewriteConfig &config,
+    const camel::source::SourceContext *source) {
     return bodyGraph &&
-           inlinedComputeNodeCount(bodyGraph) <= config.smallSubgraphMaxComputeNodes;
+           inlinedComputeNodeCount(bodyGraph, source) <= config.smallSubgraphMaxComputeNodes;
 }
 
 /// Nodes of `graph` that inlining copies (all but constants and ports). This is what the copy
@@ -717,6 +778,10 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
     const OptimizeRewriteConfig &config, size_t growthBudget, size_t &growthSpent,
     std::vector<InlineDeclined> &declinedOut) {
     camel::runtime::RuntimeGraphDraftSession session(context, program);
+    // Where a node is written, so that the size of a function counts one source operation once
+    // however many nodes the front end built it from (see inlinedComputeNodeCount).
+    const camel::source::SourceContext *const source =
+        context ? context->sourceContext().get() : nullptr;
     bool changed              = false;
     size_t appliedInlineCount = 0;
     std::vector<DeclinedCall> declined;
@@ -923,7 +988,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                 const size_t copied = inlinedNodeCount(calleeGraph);
                 // How small the callee is: its own computation, not what a splice has added to
                 // its body (see inlinedComputeNodeCount). Reported with a call the engine leaves.
-                const size_t computed = inlinedComputeNodeCount(calleeGraph);
+                const size_t computed = inlinedComputeNodeCount(calleeGraph, source);
                 const size_t calls    = callBook.calls(calleeGraph);
                 const auto decline    = [&](InlineDecline why) {
                     declined.push_back(
@@ -960,7 +1025,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                 const bool acyclic = sccInfo.componentOf.contains(calleeGraph) &&
                                      !sccInfo.reachesRecursion.contains(calleeGraph);
                 const bool isSmall =
-                    isSmallRuntimeSubgraphForInline(calleeGraph, config.inlineConfig) ||
+                    isSmallRuntimeSubgraphForInline(calleeGraph, config.inlineConfig, source) ||
                     (acyclic && calls == 1) || (acyclic && returnsClosure(calleeGraph)) ||
                     (acyclic && calls > 1 &&
                      (calls - 1) * copied <= config.inlineConfig.duplicationBudgetNodes);
@@ -969,14 +1034,14 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                     "Inline probe '{}' -> '{}': small={} acyclic={} calls={} closure={}.",
                     nextGraph->name(),
                     calleeGraph->name(),
-                    isSmallRuntimeSubgraphForInline(calleeGraph, config.inlineConfig),
+                    isSmallRuntimeSubgraphForInline(calleeGraph, config.inlineConfig, source),
                     acyclic,
                     calls,
                     returnsClosure(calleeGraph));
                 const bool isArm = isDraftBranchArmHead(draft, id);
                 const bool suppressNonRecursiveArmInlining =
                     config.inlineConfig.inlineStrategy == InlineTargetStrategy::Hybrid &&
-                    isSmallRuntimeSubgraphForInline(nextGraph, config.inlineConfig) &&
+                    isSmallRuntimeSubgraphForInline(nextGraph, config.inlineConfig, source) &&
                     sccInfo.externallyCalledGraphs.contains(nextGraph) &&
                     !sccInfo.recursiveGraphs.contains(nextGraph);
                 if (suppressNonRecursiveArmInlining && isArm) {
