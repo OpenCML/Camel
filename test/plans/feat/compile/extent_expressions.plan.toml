@@ -1,0 +1,89 @@
+id = "compile.extent_expressions"
+order = 1005
+tier = "fast"
+tags = ["feat", "compile", "extents", "arrays"]
+desc = "An extent of a type is a linear form or an integer expression over the dimension names and the `int` parameters of the signature, evaluated at a call when the names are bound: the dimension of an argument, or the value of a parameter the call gives as a constant"
+
+[[tests]]
+name = "extent_expressions.values"
+desc = "`cut<2, 5>` has the static length `b - a`, `conv_len<3, 2, 1>` the length `(n + 2 * p - k) / s + 1` of a convolution's output, each assigned to a position that states the length; a stride that is not a constant leaves the extent unknown and the body decides the length. Four schedulers."
+kind = "behavior"
+case = "../../../cases/compile/extents/computed.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[3.0, 4.0, 5.0] [0.0, 1.0, 2.0, 3.0] [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]\n3 4 8\n4\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_expressions.cut_mismatch"
+desc = "A length known where the call is written is checked there: `x->cut<2, 5>` is `f32[3]`, so a position that asks for 4 is a DeclaredTypeMismatch (the call has the type `f32[3]`)."
+kind = "negative"
+case = "../../../cases/compile/extents/computed_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "extent_expressions.conv_mismatch"
+desc = "The output length of the convolution is evaluated from the argument's length and the constants of the call, `(8 + 2 * 1 - 3) / 2 + 1 = 4`, so a position that asks for 5 is a DeclaredTypeMismatch (the call has the type `f32[3]`)."
+kind = "negative"
+case = "../../../cases/compile/extents/computed_conv_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "extent_expressions.call_values"
+desc = "A call of a pure function in an extent (`f32[conv_out(n, k, s, p)]`) is run at build time when every name it reads is bound at the call, so `conv_len<3, 2, 1>(x)` has the static length 4 and `conv_len<3, 1, 1>(x)` the length 8; with a stride that is not a constant the extent is unknown. Four schedulers."
+kind = "behavior"
+case = "../../../cases/compile/extents/computed_call.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[0.0, 1.0, 2.0, 3.0] [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]\n4\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_expressions.call_mismatch"
+desc = "The call in the extent is run at build time: `conv_out(8, 3, 2, 1)` is 4, so a position that asks for 5 is a DeclaredTypeMismatch where the call is written."
+kind = "negative"
+case = "../../../cases/compile/extents/computed_call_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "extent_expressions.conv2d_shape"
+desc = "The output shape of a convolution written in the signature, `f32[b, o, (h + 2 * p - k) / s + 1, (w + 2 * p - k) / s + 1]`, with the dimensions from the arguments and the stride and padding from the constants of the call: the result is `f32[2, 4, 4, 4]` for stride 2 and `f32[2, 4, 8, 8]` for stride 1, each assigned to a position that states it. Four schedulers."
+kind = "behavior"
+case = "../../../cases/compile/extents/conv2d_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[2, 4, 4, 4] [2, 4, 8, 8]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_expressions.negative"
+desc = "An extent the constants of the call make negative is no dimension: a kernel of 20 over a padded input of 10 gives -9, and the call is ExtentNotADimension where it is written."
+kind = "negative"
+case = "../../../cases/compile/extents/computed_negative.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ExtentNotADimension"
+expect_output_contains = ["which is not a dimension"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

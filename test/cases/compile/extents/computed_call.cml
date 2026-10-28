@@ -1,0 +1,28 @@
+/// A call of a pure function may stand in an extent: `conv_out` computes the output length of a
+/// convolution, and the signature of `conv_len` writes `f32[conv_out(n, k, s, p)]`. The call is run
+/// at build time when every name it reads is bound at the call of `conv_len`, which gives the
+/// result its static length; with a name that is not a constant the extent stays unknown.
+func conv_out(n: int, k: int, s: int, p: int): int {
+    return (n + 2 * p - k) / s + 1
+}
+
+with <k: int, s: int, p: int>
+func conv_len(x: f32[n]): f32[conv_out(n, k, s, p)] {
+    let m = conv_out(len(x), k, s, p)
+    return [f32(i) for i in 0..m]
+}
+
+func run(x: f32[8]): int sync {
+    let z: f32[4] = conv_len<3, 2, 1>(x)
+    let w: f32[8] = conv_len<3, 1, 1>(x)
+    println(z, w)
+    let stride = len(x) / 4
+    let v = conv_len<3, stride, 1>(x)
+    println(len(v))
+    return 0
+}
+
+func main(): int sync {
+    let x: f32[8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+    return run(x as f32[8])
+}

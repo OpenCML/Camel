@@ -176,6 +176,10 @@ class Builder {
     std::shared_ptr<std::set<std::string>> boundDims_;
     std::shared_ptr<std::set<std::string>> dimPacks_;
     std::shared_ptr<std::map<std::string, size_t>> dimUses_;
+    // The `int` and `i32` parameters of the signature being visited: the return type may write one
+    // of them in an extent (`f32[(n - k) / stride + 1]`), and a call binds it to the argument when
+    // that is a constant. A name a parameter type binds as a dimension stays a dimension.
+    std::shared_ptr<std::set<std::string>> valueParams_;
     bool dimBindAllowed_ = false;
 
     // Where the value of what is being lowered goes, as far as the warning

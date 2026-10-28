@@ -1,0 +1,12 @@
+/// A length that is known where the call is written is checked there: `cut<2, 5>` is `f32[3]`.
+with <a: int, b: int>
+func cut(x: f32[]): f32[b - a] {
+    return x[a:b]
+}
+
+func main(): int sync {
+    let x: f32[8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+    let y: f32[4] = x->cut<2, 5>
+    println(y)
+    return 0
+}

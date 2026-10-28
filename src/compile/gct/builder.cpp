@@ -5698,15 +5698,18 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
         std::shared_ptr<std::set<std::string>> bound;
         std::shared_ptr<std::set<std::string>> packs;
         std::shared_ptr<std::map<std::string, size_t>> uses;
+        std::shared_ptr<std::set<std::string>> values;
         bool bind;
         explicit DimGuard(Builder &builder)
             : self(builder), names(builder.dimNames_), bound(builder.boundDims_),
-              packs(builder.dimPacks_), uses(builder.dimUses_), bind(builder.dimBindAllowed_) {}
+              packs(builder.dimPacks_), uses(builder.dimUses_), values(builder.valueParams_),
+              bind(builder.dimBindAllowed_) {}
         ~DimGuard() {
             self.dimNames_       = names;
             self.boundDims_      = bound;
             self.dimPacks_       = packs;
             self.dimUses_        = uses;
+            self.valueParams_    = values;
             self.dimBindAllowed_ = bind;
         }
     } dimGuard(*this);
@@ -5715,6 +5718,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
         boundDims_ = std::make_shared<std::set<std::string>>();
         dimPacks_  = std::make_shared<std::set<std::string>>();
         dimUses_   = std::make_shared<std::map<std::string, size_t>>();
+        valueParams_ = std::make_shared<std::set<std::string>>();
     }
     dimBindAllowed_ = false;
     if (signature) {
@@ -5749,6 +5753,31 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
                 (*dimUses_)[paramLoad->getRef().ident()] = 2;
             }
         }
+        // A parameter of type `int` or `i32`, with or ordinary, is a value the return type may
+        // write in an extent (`f32[n, (h - k) / stride + 1]`): a call binds the name to the
+        // argument when that is a constant, and where it is not the extent stays unknown (design
+        // principles 5.4). A name a parameter type writes is a dimension, whatever else is called
+        // that.
+        const auto integerParameters = [&](const AST::node_ptr_t &params) {
+            for (const auto &paramPair : *params) {
+                const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
+                if (paramLoad->isRest() || paramLoad->isVar() || paramLoad->isConstas() ||
+                    paramPair->size() == 0) {
+                    continue;
+                }
+                const AST::node_ptr_t &typeNode = paramPair->at(0);
+                if (typeNode->type() != AST::LoadType::Type ||
+                    typeNode->loadAs<AST::TypeLoad>()->typeType() != AST::TypeType::Ref) {
+                    continue;
+                }
+                const std::string written = typeNode->loadAs<AST::RefTypeLoad>()->ref().toString();
+                if (written == "int" || written == "i32") {
+                    valueParams_->insert(paramLoad->getRef().ident());
+                }
+            }
+        };
+        integerParameters(ast->at(0));
+        integerParameters(ast->at(1));
     }
 
     FunctionTypeFactory factory;
@@ -6273,6 +6302,50 @@ ExtentForm addExtents(const ExtentForm &a, const ExtentForm &b, int64_t sign) {
     return ExtentForm::linear(a.constant() + sign * b.constant(), std::move(terms));
 }
 
+/// The expression an extent stands for, so a non-linear operation can be built from linear ones.
+std::shared_ptr<const camel::core::type::ExtentExpr> exprOfExtent(const ExtentForm &form) {
+    using camel::core::type::ExtentExpr;
+    if (form.isComputed()) {
+        return form.expression();
+    }
+    std::shared_ptr<const ExtentExpr> sum;
+    for (const auto &[name, coefficient] : form.terms()) {
+        std::shared_ptr<const ExtentExpr> term = ExtentExpr::makeName(name);
+        if (coefficient != 1) {
+            term = ExtentExpr::make(
+                ExtentExpr::Op::Mul, ExtentExpr::makeConstant(coefficient), std::move(term));
+        }
+        sum = sum ? ExtentExpr::make(ExtentExpr::Op::Add, std::move(sum), std::move(term))
+                  : std::move(term);
+    }
+    if (!sum) {
+        return ExtentExpr::makeConstant(form.constant());
+    }
+    if (form.constant() != 0) {
+        sum = ExtentExpr::make(
+            ExtentExpr::Op::Add, std::move(sum), ExtentExpr::makeConstant(form.constant()));
+    }
+    return sum;
+}
+
+/// `lhs op rhs` where the result is no linear form: an expression, folded when both sides are
+/// constants.
+ExtentForm computedExtent(
+    camel::core::type::ExtentExpr::Op op, const ExtentForm &lhs, const ExtentForm &rhs) {
+    using camel::core::type::ExtentExpr;
+    if (lhs.isUnknown() || rhs.isUnknown()) {
+        return ExtentForm::unknown();
+    }
+    auto expr = ExtentExpr::make(op, exprOfExtent(lhs), exprOfExtent(rhs));
+    if (lhs.isConstant() && rhs.isConstant()) {
+        if (const auto value = expr->evaluate({})) {
+            return ExtentForm::constant(*value);
+        }
+        return ExtentForm::unknown();
+    }
+    return ExtentForm::computed(std::move(expr));
+}
+
 } // namespace
 
 std::shared_ptr<const std::vector<camel::core::type::ExtentForm>>
@@ -6350,9 +6423,15 @@ camel::core::type::ExtentForm Builder::visitExtent(const AST::node_ptr_t &ast) {
         }
         const std::string name = ref.ident();
         if (dimNames_ != nullptr && dimNames_->contains(name)) {
-            if (dimBindAllowed_ && dimUses_ != nullptr) {
+            // A use in the return type counts: the name relates the parameter that binds it to
+            // the result (`f32[n] -> f32[n + 1]`).
+            if (dimUses_ != nullptr) {
                 ++(*dimUses_)[name];
             }
+            return ExtentForm::linear({{name, 1}});
+        }
+        if (!dimBindAllowed_ && valueParams_ != nullptr && valueParams_->contains(name)) {
+            // An `int` parameter written in the return type: the call gives it its value.
             return ExtentForm::linear({{name, 1}});
         }
         if (dimBindAllowed_ && dimNames_ != nullptr) {
@@ -6372,32 +6451,70 @@ camel::core::type::ExtentForm Builder::visitExtent(const AST::node_ptr_t &ast) {
             .commit(ref.toString());
         throw BuildAbortException();
     }
+    case AST::DataType::ReservedExpr: {
+        // A call of a function in an extent: `f32[conv_out(n, k, s, p)]`. The function is run at
+        // build time when every name its arguments use is bound at a call (the pure functions
+        // the build-time evaluation folds); until then the extent is unknown.
+        if (ast->loadAs<AST::ReservedExprLoad>()->op() != AST::ReservedDataOp::Call) {
+            return report();
+        }
+        std::vector<std::string> names;
+        for (const auto &argument : *ast->atAs<AST::RepeatedLoad>(1)) {
+            const ExtentForm form = visitExtent(argument);
+            if (form.isUnknown()) {
+                return ExtentForm::unknown();
+            }
+            for (const std::string &name : form.usedNames()) {
+                if (std::find(names.begin(), names.end(), name) == names.end()) {
+                    names.push_back(name);
+                }
+            }
+        }
+        node_ptr_t call = visitData(ast);
+        return ExtentForm::computed(camel::core::type::ExtentExpr::makeCall(
+            std::shared_ptr<const void>(call, [](const void *) {}), std::move(names),
+            ast->load()->geneCode()));
+    }
     case AST::DataType::UnaryExpr: {
         const auto &unary = ast->loadAs<AST::UnaryExprLoad>();
         if (unary->op() != AST::UnaryDataOp::Neg) {
             return ExtentForm::unknown();
         }
-        return scaleExtent(visitExtent(ast->at(0)), -1);
+        const ExtentForm inner = visitExtent(ast->at(0));
+        if (inner.isComputed()) {
+            return ExtentForm::computed(camel::core::type::ExtentExpr::make(
+                camel::core::type::ExtentExpr::Op::Neg, inner.expression()));
+        }
+        return scaleExtent(inner, -1);
     }
     case AST::DataType::BinaryExpr: {
         const auto &binary   = ast->loadAs<AST::BinaryExprLoad>();
         const ExtentForm lhs = visitExtent(ast->at(0));
         const ExtentForm rhs = visitExtent(ast->at(1));
+        using Op             = camel::core::type::ExtentExpr::Op;
         switch (binary->op()) {
         case AST::BinaryDataOp::Add:
-            return addExtents(lhs, rhs, 1);
+            return lhs.isComputed() || rhs.isComputed() ? computedExtent(Op::Add, lhs, rhs)
+                                                        : addExtents(lhs, rhs, 1);
         case AST::BinaryDataOp::Sub:
-            return addExtents(lhs, rhs, -1);
+            return lhs.isComputed() || rhs.isComputed() ? computedExtent(Op::Sub, lhs, rhs)
+                                                        : addExtents(lhs, rhs, -1);
         case AST::BinaryDataOp::Mul:
-            // Linear over names means a constant multiple only; a product of two named
-            // dimensions is not linear and stays unknown (design principles 5.4).
-            if (lhs.isConstant() && !rhs.isUnknown()) {
-                return scaleExtent(rhs, lhs.constant());
+            // A constant multiple keeps the extent linear; the product of two named dimensions is
+            // an expression, evaluated once its names are bound (design principles 5.4).
+            if (!lhs.isComputed() && !rhs.isComputed()) {
+                if (lhs.isConstant() && !rhs.isUnknown()) {
+                    return scaleExtent(rhs, lhs.constant());
+                }
+                if (rhs.isConstant() && !lhs.isUnknown()) {
+                    return scaleExtent(lhs, rhs.constant());
+                }
             }
-            if (rhs.isConstant() && !lhs.isUnknown()) {
-                return scaleExtent(lhs, rhs.constant());
-            }
-            return ExtentForm::unknown();
+            return computedExtent(Op::Mul, lhs, rhs);
+        case AST::BinaryDataOp::Div:
+            return computedExtent(Op::Div, lhs, rhs);
+        case AST::BinaryDataOp::Mod:
+            return computedExtent(Op::Mod, lhs, rhs);
         default:
             return ExtentForm::unknown();
         }

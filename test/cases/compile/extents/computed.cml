@@ -1,0 +1,36 @@
+/// A parameter of type `int` may be named in the extents of the signature, and an extent may be an
+/// expression, not only a linear form: the call binds the name to the argument when it is a
+/// constant, and the result type is the extent evaluated. `cut` has the length `b - a`, and
+/// `conv_len` the length of the output of a convolution, `(n + 2 * p - k) / s + 1`, with `n` the
+/// dimension of its argument (design principles 5.4). The dimension of an argument is known where
+/// the argument's type states it, as the parameter of `run` does.
+with <a: int, b: int>
+func cut(x: f32[]): f32[b - a] {
+    return x[a:b]
+}
+
+with <k: int, s: int, p: int>
+func conv_len(x: f32[n]): f32[(n + 2 * p - k) / s + 1] {
+    let m = (len(x) + 2 * p - k) / s + 1
+    return [f32(i) for i in 0..m]
+}
+
+func run(x: f32[8]): int sync {
+    // the lengths are known where the call is written
+    let y: f32[3] = x->cut<2, 5>
+    let z: f32[4] = conv_len<3, 2, 1>(x)
+    let w: f32[8] = conv_len<3, 1, 1>(x)
+    println(y, z, w)
+    println(len(y), len(z), len(w))
+    // a value that is not a constant leaves the extent unknown: no static claim, and the length is
+    // whatever the kernel makes it
+    let stride = len(x) / 4
+    let v = conv_len<3, stride, 1>(x)
+    println(len(v))
+    return 0
+}
+
+func main(): int sync {
+    let x: f32[8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+    return run(x as f32[8])
+}
