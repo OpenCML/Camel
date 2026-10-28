@@ -2033,6 +2033,34 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
 
 [[tests]]
+name = "export_loop_for"
+desc = "The source's `for` loops export as one ONNX Loop each: `loop acc = x * 0.0 for v in x do acc + v` (the state is what the Loop carries and the tensor's length is its trip count) and `loop n = 0, acc = x * 0.0 for i in 0..int(sum(x)) do (n + i, acc + f32(i))` (an interval, whose two bounds the Loop's trip count and its round's element are computed from, with two state values). Both models, called with inputs of several lengths including none at all and an interval that gives no round, pass onnx.checker's full check with exactly one Loop, and on ONNX Runtime their outputs match the same loops written in NumPy and Camel's native run of the program. The export used to refuse a LOOP node ('write the loop as a tail-recursive function')."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_loop_node.py"
+args = ["${case}", "for"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["onnx::loop node for: PASS"]
+expect_output_not_contains = ["FAIL", "MISMATCH"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "export_loop_cond"
+desc = "The source's conditional loops export as one ONNX Loop each: a `while` whose data ends it (no trip count, so the condition on the values the loop starts from is the Loop's condition input and a loop that is over before its first round runs none) and a `for ... while` with a trip count and a condition and two state values (so the loop's value is a tuple). Both pass onnx.checker's full check with exactly one Loop, and on ONNX Runtime their outputs match the same loops written in NumPy and Camel's native run for inputs of several lengths, the counter as an int64."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_loop_node.py"
+args = ["${case}", "cond"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["onnx::loop node cond: PASS"]
+expect_output_not_contains = ["FAIL", "MISMATCH"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
 name = "ort_struct_loop"
 desc = "Tail recursions that CARRY a struct or tuple argument, exported as one ONNX Loop: the argument is flattened into one Loop state per leaf in the order of its fields, the body entry rebuilds the struct from those leaves, and the Loop's outputs are rebuilt into the struct the recursion returned. Four models: a struct of two tensors and a counter, the same as a tuple, a struct in a struct, and a struct of scalar leaves. Each passes onnx.checker's full check with exactly one Loop; on ONNX Runtime, for inputs on which the recursion stops after 0, 1 and several steps and at its maximum count, every output matches the recursion written in NumPy and Camel's native run (counters int64 and exact). The exporter used to refuse a carried tuple or struct ('pass the elements as separate arguments')."
 kind = "behavior"

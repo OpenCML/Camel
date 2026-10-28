@@ -548,7 +548,7 @@ for (const [file, expectedTarget] of [
     }
 }
 // test/cases/loops/ has no plan directory of its own: the file rule names the linear plan.
-const loopCase = plansForChanges(['test/cases/loops/onnx_refused.cml'])
+const loopCase = plansForChanges(['test/cases/loops/onnx_exported.cml'])
 if (!hasPlan(loopCase, 'feat/linear/loops.plan.toml')) {
     problems.push(
         `--changed: test/cases/loops/ selected ${loopCase ? loopCase.names.join(', ') : 'nothing'}`

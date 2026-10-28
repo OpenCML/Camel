@@ -1,0 +1,20 @@
+// A `loop` in a function exported to ONNX becomes one ONNX Loop (design principles 3.10). This
+// case used to pin the opposite -- the export refused a `loop` with "a 'loop' expression is not
+// exported to ONNX yet; write the loop as a tail-recursive function", and the two entries in
+// `linear.loops` asserted that refusal. The refusal was a "not implemented yet" diagnostic that
+// told a user to rewrite an idiomatic loop, which the rules forbid, so the ONNX Loop lowering
+// removed it; the entries now pin the export succeeding instead, checked by `onnx_exported.py`.
+import { reshape, tanh } from tensor
+import { export_model } from onnx
+import { get_env } from env
+
+func model(x: float[..], w: float[..]): float[..] {
+    return (loop h = x, k = 0 while k < 3 do (tanh(h @ w), k + 1)).0
+}
+
+func main(): void! sync {
+    let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0])
+    let w = reshape<[2, 2]>([0.5, -0.25, 0.1, 0.3])
+    println(model(x, w))
+    export_model<out: get_env('ONNX_OUT') ?? ''>((x: float[..], w: float[..]): float[..] => model(x, w), (x, w))
+}

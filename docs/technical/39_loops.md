@@ -250,8 +250,9 @@ the commit refuses a graph where they are not (`17_graph_rewrite_api_contracts.m
 function value it receives instead of calling it (Tiles' `run_preferred_resident`, `source`,
 `inspect`, `benchmark`; `onnx:export_model`; `autodiff:grad`, `with_grad`) declares
 `OperatorTraits::readsGraphs`. It sees a function's LOOP and its regions (`modules.tiles`
-`loop_structure_*`), and the ONNX export refuses it where it is written (`linear.loops`
-`loops.onnx_refused_prl`). autodiff differentiates a function's own LOOP node instead of
+`loop_structure_*`), and the ONNX export reads the LOOP as an ONNX `Loop` (`linear.loops`
+`loops.onnx_exported_prl`: the export sees the same LOOP whichever back end schedules the
+program). autodiff differentiates a function's own LOOP node instead of
 refusing it: the forward loop collects each round's residuals in its collection slots and the
 reverse pass is a loop over those arrays (section 3.2, `linear.loops`
 `loops.grad_through_loop_fvm`).
