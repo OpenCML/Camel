@@ -70,23 +70,32 @@ const std::unordered_map<core::OperId, std::string> &operations() {
     return result;
 }
 
-/// Whether the node stands in the chain of a `sync` block, either side of it: a statement of a block
-/// is reached by the chain written before it, and the chain ends at a value a reader takes.
-bool inSyncChain(const rt::GCGraph &graph, rt::gc_node_ref_t id) {
-    if (!graph.syncPredsOf(id).empty()) {
-        return true;
-    }
+/// The nodes the chain of a `sync` block holds, either side of it: every node a sync edge names, as
+/// the statement written before it or as the one written after. A block writes the order of its
+/// statements as a chain (docs/design/effects/edges.cn.md 1), so both ends of an edge are statements
+/// of that block -- the first statement of a block stands only before the next one and has no place
+/// in the chain itself, and it is a statement all the same.
+std::vector<char> chainMembers(const rt::GCGraph &graph) {
+    std::vector<char> member(graph.nodeCount(), 0);
     for (const rt::GCGraphSyncEdge &edge : graph.syncEdges()) {
-        if (edge.user == id) {
-            return true;
+        if (edge.user < member.size()) {
+            member[edge.user] = 1;
+        }
+        if (edge.pred < member.size()) {
+            member[edge.pred] = 1;
         }
     }
-    return false;
+    return member;
+}
+
+/// Whether the node is one the chain holds, read from the set `chainMembers` computed once per graph.
+inline bool inChain(const std::vector<char> &chain, rt::gc_node_ref_t id) {
+    return id < chain.size() && chain[id] != 0;
 }
 
 std::string eligibility(
     const rt::Program &graphs, const rt::GCGraph &graph, rt::gc_node_ref_t id,
-    rt::fact::FactStore &facts, bool device) {
+    rt::fact::FactStore &facts, const std::vector<char> &chain, bool device) {
     const auto *node = graph.node(id);
     // Whether the node is a statement of a block, ordered by the edges that order one. The order of
     // a `sync` block is its chain, so a node the chain reaches is a statement as much as one the
@@ -94,7 +103,7 @@ std::string eligibility(
     // where the node runs, not a reason to leave it on the host: the arm or the block the node is
     // written in is the segment that holds it (docs/design/gpu/plan.cn.md 2.5).
     const bool ordered = !graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty() ||
-                         inSyncChain(graph, id);
+                         inChain(chain, id);
     if (node->kind == rt::GCNodeKind::Loop) {
         if (ordered && !device)
             return "control_edge";
@@ -325,6 +334,8 @@ SegmentAnalysis analyzeRegions(
     std::vector<std::string> reasons(nodes.size());
     // Where each node runs (docs/design/gpu/plan.cn.md 2.5): the body, an arm of a BRCH, or a part of a LOOP.
     const rt::ControlRegions control(graph);
+    // The statements of the `sync` blocks, read once for the whole graph.
+    const std::vector<char> chain = chainMembers(graph);
     // The nodes of the condition and of the body of a loop are the loop's: a region that holds
     // the LOOP node holds them, and what they read from outside is read by the LOOP node.
     std::vector<bool> insideLoop(nodes.size(), false);
@@ -348,7 +359,7 @@ SegmentAnalysis analyzeRegions(
             continue;
         }
         const bool device  = scopes != nullptr && scopes->covers(graph, id);
-        reasons[id]        = eligibility(graphs, graph, id, facts, device);
+        reasons[id]        = eligibility(graphs, graph, id, facts, chain, device);
         nodes[id].eligible = reasons[id].empty();
         nodes[id].embedded =
             graph.node(id)->kind == rt::GCNodeKind::Data && graph.node(id)->dataIndex < 0;
@@ -378,7 +389,7 @@ SegmentAnalysis analyzeRegions(
         for (rt::gc_node_ref_t id = 0; id < graph.nodeCount(); ++id) {
             if (nodes[id].eligible || graph.node(id)->kind != rt::GCNodeKind::Accs ||
                 !graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty() ||
-                inSyncChain(graph, id) || !graph.withInputsOf(id).empty())
+                inChain(chain, id) || !graph.withInputsOf(id).empty())
                 continue;
             const auto inputs = graph.normInputsOf(id);
             if (inputs.size() != 1 || !nodes[inputs[0]].eligible)
