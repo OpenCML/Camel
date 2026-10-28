@@ -1,7 +1,8 @@
 /// The stride of a convolution is a `constas` parameter, the one way a value enters an extent: a
 /// stride that is only known when the program runs is not a constant, and is refused where the call
 /// is written (design principles 5.4).
-func conv_len(constas k: int, constas s: int, constas p: int, x: f32[n]):
+with <constas k: int, constas s: int, constas p: int>
+func conv_len(x: f32[n]):
     f32[(n + 2 * p - k) / s + 1] {
     let m = (len(x) + 2 * p - k) / s + 1
     return [f32(i) for i in 0..m]
@@ -9,7 +10,7 @@ func conv_len(constas k: int, constas s: int, constas p: int, x: f32[n]):
 
 func run(x: f32[8]): int {
     let stride = len(x) / 4
-    let v = conv_len(3, stride, 1, x)
+    let v = conv_len<3, stride, 1>(x)
     println(len(v))
     return 0
 }

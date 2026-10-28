@@ -119,6 +119,9 @@ void Builder::numberBodyPorts(BodyReach &walk, const runtime::GraphDraft &draft,
     for (size_t i = 0; i < withCount + type.normTypesCount(); ++i) {
         const bool isWith = i < withCount;
         if (isWith) {
+            if (type.withIsConstasAt(i)) {
+                continue; // not a runtime parameter
+            }
             if (withAt < withPorts.size()) {
                 walk.ports.emplace(withPorts[withAt++], index);
             }
@@ -412,7 +415,7 @@ void Builder::addVarParameters(BodyReach &walk, const FunctionType &type) const 
     size_t index           = 0;
     for (size_t i = 0; i < withCount + type.normTypesCount(); ++i) {
         const bool isWith = i < withCount;
-        if (!isWith && type.normIsConstasAt(i - withCount)) {
+        if (isWith ? type.withIsConstasAt(i) : type.normIsConstasAt(i - withCount)) {
             continue; // not a runtime parameter
         }
         const bool isVar = isWith ? type.withIsVarAt(i) : type.normIsVarAt(i - withCount);

@@ -6,7 +6,8 @@
 import { shape } from array
 import { zeros } from tensor
 
-func conv2d_shape(constas s: int, constas p: int, input: f32[b, c, h, w], kernel: f32[o, c, k, k]):
+with <constas s: int = 1, constas p: int = 0>
+func conv2d_shape(input: f32[b, c, h, w], kernel: f32[o, c, k, k]):
     f32[b, o, (h + 2 * p - k) / s + 1, (w + 2 * p - k) / s + 1] {
     let sh = shape(input)
     let ks = shape(kernel)
@@ -16,9 +17,10 @@ func conv2d_shape(constas s: int, constas p: int, input: f32[b, c, h, w], kernel
 }
 
 func run(input: f32[2, 3, 8, 8], kernel: f32[4, 3, 3, 3]): int sync {
-    let y: f32[2, 4, 4, 4] = conv2d_shape(2, 1, input, kernel)
-    let same: f32[2, 4, 8, 8] = conv2d_shape(1, 1, input, kernel)
-    println(shape(y), shape(same))
+    let y: f32[2, 4, 4, 4] = conv2d_shape<2, 1>(input, kernel)
+    let same: f32[2, 4, 8, 8] = conv2d_shape<1, 1>(input, kernel)
+    let unpadded: f32[2, 4, 6, 6] = conv2d_shape(input, kernel)
+    println(shape(y), shape(same), shape(unpadded))
     return 0
 }
 

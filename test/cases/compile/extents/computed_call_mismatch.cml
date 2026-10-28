@@ -4,14 +4,15 @@ func conv_out(n: int, k: int, s: int, p: int): int {
     return (n + 2 * p - k) / s + 1
 }
 
-func conv_len(constas k: int, constas s: int, constas p: int, x: f32[n]):
+with <constas k: int, constas s: int, constas p: int>
+func conv_len(x: f32[n]):
     f32[conv_out(n, k, s, p)] {
     let m = conv_out(len(x), k, s, p)
     return [f32(i) for i in 0..m]
 }
 
 func run(x: f32[8]): int {
-    let z: f32[5] = conv_len(3, 2, 1, x)
+    let z: f32[5] = conv_len<3, 2, 1>(x)
     println(z)
     return 0
 }

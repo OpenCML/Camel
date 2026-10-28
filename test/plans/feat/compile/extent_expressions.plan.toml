@@ -65,14 +65,14 @@ timeout_ms = 8000
 
 [[tests]]
 name = "extent_expressions.conv2d_shape"
-desc = "The output shape of a convolution written in the signature, `f32[b, o, (h + 2 * p - k) / s + 1, (w + 2 * p - k) / s + 1]`, with the dimensions from the arguments and the stride and padding from the `constas` parameters of the call: the result is `f32[2, 4, 4, 4]` for stride 2 and `f32[2, 4, 8, 8]` for stride 1, each assigned to a position that states it. Four schedulers."
+desc = "The output shape of a convolution written in the signature (the stride and the padding are `constas` parameters of the `with` list, with defaults), `f32[b, o, (h + 2 * p - k) / s + 1, (w + 2 * p - k) / s + 1]`, with the dimensions from the arguments and the stride and padding from the `constas` parameters of the call: the result is `f32[2, 4, 4, 4]` for stride 2 and `f32[2, 4, 8, 8]` for stride 1 and `f32[2, 4, 6, 6]` for the defaults, each assigned to a position that states it. Four schedulers."
 kind = "behavior"
 case = "../../../cases/compile/extents/conv2d_shape.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_exact = "[2, 4, 4, 4] [2, 4, 8, 8]\n"
+expect_stdout_exact = "[2, 4, 4, 4] [2, 4, 8, 8] [2, 4, 6, 6]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -98,3 +98,16 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ConstasValueNotConstant"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "extent_expressions.conv2d_pipeline"
+desc = "A convolution as a pipeline: the weights are a runtime `with` parameter and the stride and padding are `constas` parameters of the same list, so `input->conv2d_pipe<kernel, 2, 1>` has the static shape `f32[2, 4, 4, 4]`; a stride and a padding left out take their defaults (`f32[2, 4, 6, 6]`, and `f32[2, 4, 3, 3]` for stride 2 alone). Four schedulers."
+kind = "behavior"
+case = "../../../cases/compile/extents/conv2d_pipeline.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[2, 4, 4, 4] [2, 4, 6, 6] [2, 4, 3, 3]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

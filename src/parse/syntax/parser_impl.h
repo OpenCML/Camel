@@ -260,10 +260,10 @@ class ParserImpl {
     void parseIdentRef(NK kind);
     void parseIdentList();
     void parseBracketedIdents(TK closer, NK kind);
-    void parseKeyParamPair(bool allowRest, bool allowConstas);
+    void parseKeyParamPair(bool allowRest, bool allowConstas, bool angled = false);
     void parsePairedParams(TK closer, bool allowRest, bool allowConstas);
     void parseParentParams(bool allowRest = false, bool allowConstas = false);
-    void parseAngledParams(bool allowRest = false);
+    void parseAngledParams(bool allowRest = false, bool allowConstas = false);
     void parseEnumType();
     void parseEnumVariant();
     void parseEnumField();

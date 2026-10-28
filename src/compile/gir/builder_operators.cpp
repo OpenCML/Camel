@@ -2078,7 +2078,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     }
     const size_t restFixedCount =
         restTemplate != nullptr
-            ? restTemplate->funcType->normTypesCount() - 1 - restTemplate->funcType->constasCount()
+            ? restTemplate->funcType->normTypesCount() - 1 -
+                  restTemplate->funcType->normConstasCount()
             : 0;
     const size_t restDeclaredCount =
         restTemplate != nullptr ? restTemplate->funcType->normTypesCount() : 0;
