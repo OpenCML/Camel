@@ -3231,3 +3231,16 @@ assert(text.includes('wg [[16777217.0], [1.0], [0.0]]'), `the two rows were not 
 }
 """
 timeout_ms = 10000
+
+[[tests]]
+name = "loop_grad_closure_in_body"
+desc = "A closure built and called in a loop body whose value is the call: the region's result was the call the rewrite erased, and the tape builder read a node the graph no longer had (a segmentation fault in a build without assertions). A struct-to-struct closure, one reading the state with no parameter, a scalar-to-scalar one, and a scalar-to-struct one: three rounds of multiplication by 1, 2, 3 give 6 and a gradient of 6 each."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_closure_in_body.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_closure_in_body vg=(6.0, 6.0) reads=6.0 scalarIn=6.0 scalarOut=6.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
