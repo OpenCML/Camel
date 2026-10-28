@@ -125,13 +125,12 @@ reduce: <f: (acc: U, item: T) => U, initial: U> (xs: T[]) => U
 foreach: <f: (item: T) => void> (xs: T[]) => void
 fail: <Kind: string> (message: string) => never
 attempt: (f: F) => F!
-len: (x: Map<K, V>) => int
-len: (x: Set<T>) => int
+len: (x: C) => int when is_map::<C>() || is_set::<C>()
 get: <key: K> (m: Map<K, V>) => V?
 get_or: <key: K, fallback: V> (m: Map<K, V>) => V
 put: <key: K, value: V> (m: Map<K, V>) => Map<K, V>
 remove: <key: K> (c: Map<K, V>) => Map<K, V>
-remove: (c: Set<K>) => Set<K>
+remove: <key: K> (c: Set<K>) => Set<K>
 has: <key: K> (c: Map<K, V>) => bool
 keys: (m: Map<K, V>) => K[]
 values: (m: Map<K, V>) => V[]

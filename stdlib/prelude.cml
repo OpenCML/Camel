@@ -23,7 +23,7 @@
  * names (stdlib-conventions.cn.md, section 4).
  */
 
-import { ElementOf, WithElement, is_array, is_complex, is_numeric, is_real, is_same, is_string } from types
+import { ElementOf, WithElement, is_array, is_map, is_set, is_complex, is_numeric, is_real, is_same, is_string } from types
 
 // An array of numbers or booleans (the element types an array stores compactly): the argument the
 // elementwise conversions below take.
@@ -531,9 +531,7 @@ export func attempt::<F>(f: F): F!
 /// whose length is asked for, whatever its type.
 /// @example len([('a', 1), ('b', 2)] as Map<string, int>)    // 2
 #op(':coll/len')
-export func len::<K, V>(x: Map<K, V>): int
-#op(':coll/len')
-export func len::<T>(x: Set<T>): int
+export func len::<C>(x: C): int when is_map::<C>() || is_set::<C>()
 
 /// The value stored under key, or null when the map has no such key. `m[key]` is the same lookup.
 /// @example ([('a', 1)] as Map<string, int>)->get<'z'> ?? 0    // 0 when the map has no 'z'
@@ -559,6 +557,7 @@ export func put::<K, V>(m: Map<K, V>): Map<K, V>
 with <key: K>
 export func remove::<K, V>(c: Map<K, V>): Map<K, V>
 #op(':coll/remove')
+with <key: K>
 export func remove::<K>(c: Set<K>): Set<K>
 
 /// Whether a map has an entry of key. (A set is asked with `contains`.)
