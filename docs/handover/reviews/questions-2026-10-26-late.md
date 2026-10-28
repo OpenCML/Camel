@@ -663,3 +663,10 @@ H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program
 10. **`std::opt::fold` 算错常量区间的循环**（ICPC 生成语料，ef49a1d5d 复现）：`let v = loop v = 1 for i in 0..4 do v + 1` 解释器得 5；`std::opt std::nvm` 与 `std::opt::fold std::nvm` 都得 1。同步循环体里的打印也被丢掉。这是错值，排在所有缺陷的最前面。语料复现在 `Camel-Archive/ICPC2027/study/e2-generated/gn-suspect/`。修好后，把 progen 加上"常量区间循环"这一类程序，防止同类再犯。
 11. **`std::opt` 上的不确定挂起**：最小化后的 `branch_00017`，在 `std::macro std::opt std::nvm` 下 25 次里有 7 次超过 15 秒、CPU 占满；`std::macro std::nvm` 下 0 次。不确定性本身就说明有地方依赖未定义的顺序（哈希表遍历、指针比较）。先找出不确定的来源，再看为什么不收敛。程序在同一目录下。
 - 研究里的 S1（`var` 数组传给 `var f32[..]` 形参报内部错误，240 个生成程序里中了 17 个）就是第 2 条。
+12. **执行计划把臂读到的效应放到分支之前，选哪条臂都执行**（ECOOP 稿记作偏差 #1，`graph_runtime_support.cpp`）。违反原则 3.1"一个节点执行，当且仅当这次运行用到它"。
+    - 例：`let y = x->println->scale; return if verbose then y else x + 1.0`，`verbose` 为假时解释器、`std::fvm` 仍打印。
+    - 计划按 3.1 与 3.3 定：
+      - 只被一条臂读到、臂外没有同资源后继的效应与可能出故障的节点，下沉进那条臂；
+      - 被几条臂读到的，复制进每条臂；
+      - 臂外还有同资源后继的效应，留在原区域，由臂里的使用或后继中先到的一方触发，只执行一次（每个这样的节点一位"已执行"标记）。
+    - 验收：上例 `verbose` 为假时不打印；第 6 条的 F31 例子（臂外有 `println(3)`）仍打印 `1 3`；三个调度器与 `std::opt` 一致。
