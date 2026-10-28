@@ -206,13 +206,25 @@ bool isCellType(Type *type) {
 
 Type *typeOf(const GraphDraft &draft, gc_node_ref_t node) {
     const auto *header = draft.header(node);
-    ASSERT(header != nullptr, "autodiff: node lookup failed.");
+    if (header == nullptr) {
+        fail(
+            std::format(
+                "internal error: the transformation reads a value the graph no longer has (node "
+                "{}); report this program with the 'grad' call it contains.",
+                static_cast<size_t>(node)));
+    }
     return header->dataType;
 }
 
 GCNodeKind kindOf(const GraphDraft &draft, gc_node_ref_t node) {
     const auto *header = draft.header(node);
-    ASSERT(header != nullptr, "autodiff: node lookup failed.");
+    if (header == nullptr) {
+        fail(
+            std::format(
+                "internal error: the transformation reads a value the graph no longer has (node "
+                "{}); report this program with the 'grad' call it contains.",
+                static_cast<size_t>(node)));
+    }
     return header->kind;
 }
 
@@ -519,7 +531,7 @@ std::vector<gc_node_ref_t> externalInputsOf(const GraphDraft &draft, uint32_t re
     for (gc_node_ref_t id : nodes) {
         for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id)}) {
             for (gc_node_ref_t input : inputs) {
-                if (!seen.contains(input) && draft.header(input)->kind != GCNodeKind::Data &&
+                if (!seen.contains(input) && kindOf(draft, input) != GCNodeKind::Data &&
                     found.insert(input).second) {
                     externals.push_back(input);
                 }
@@ -2538,19 +2550,11 @@ void ForwardRewrite::rewriteClosureCall(
     }
     draft_.setCtrlInputs(direct, ctrl);
     takeSyncPlace(draft_, call, direct);
-    draft_.replaceAllValueUses(call, direct);
-    for (gc_node_ref_t user : copyOf(draft_.ctrlUsersOf(call))) {
-        draft_.replaceInput(rt::DraftEdgeKind::Ctrl, user, call, direct);
-    }
-    if (draft_.outputNode() == call) {
-        draft_.setOutputNode(direct);
-    }
-    if (draft_.exitNode() == call) {
-        draft_.setExitNode(direct);
-    }
-    if (draft_.returnNode() == call) {
-        draft_.setReturnNode(direct, draft_.returnKind());
-    }
+    // Everything that named the call names the direct call now: its users, the site records that
+    // already read its value, the graph's own result, and the region whose result it is (a loop
+    // body or an arm whose value is the closure call). `split` then carries the same uses to the
+    // value half of the pair.
+    redirectValue(call, direct);
     draft_.eraseNode(call);
     retarget(direct, plan);
     split(direct, plan, std::move(inputs));
@@ -4149,7 +4153,7 @@ const PullbackPlan &Engine::planForClosure(GCGraph *graph) {
     }
     std::vector<Type *> portTypes = portTypesOf(graph);
     for (gc_node_ref_t capture : copyOf(lifted->closureNodes())) {
-        Type *captured = lifted->header(capture)->dataType;
+        Type *captured = typeOf(*lifted, capture);
         lifted->removeClosureNode(capture);
         lifted->appendNormPort(capture);
         normParams.emplace_back(captured, false);
