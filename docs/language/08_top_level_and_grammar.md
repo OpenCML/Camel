@@ -50,7 +50,8 @@ logicalAnd : or ('&&' or)*
 or         : and ('|' and)*
 and        : equality ('&' equality)*
 equality   : relational (('===' | '!==' | '==' | '!=') relational)*
-relational : additive (('<' | '>' | '<=' | '>=') additive)*
+relational : range (('<' | '>' | '<=' | '>=') range)*
+range      : additive ('..' additive)*
 additive   : multiplicative (('+' | '-') multiplicative)*
 multiplicative : power (('*' | '/' | '@' | '%') power)*
 power      : nullable ('^' power)?
@@ -58,8 +59,7 @@ nullable   : unary (('??' | '!!') dataExpr)?
 unary      : neg (as 类型)?
 neg        : ('-' | '!' | '~') negPower | link
 negPower   : ('-' | '!' | '~') negPower | link ('^' negPower)?
-link       : comp ('->' comp)*
-comp       : anno ('..' anno)*
+link       : anno ('->' anno)*
 anno       : primary ( '.'字段 | '[' 下标 ']' | '(' 实参 ')' | '<' with 实参 '>' )*
 primary    : 名字 | 字面量 | '[' 元素, ... ']' | '{' 键: 值, ... '}' | '(' 表达式, ... ')' | lambda
 lambda     : 修饰符* ('<' 形参 '>')? '(' 形参 ')' (':' 类型)? '=>' blockExpr
@@ -160,16 +160,16 @@ logicalAndExpr     : orExpr ('&&' orExpr)*
 orExpr             : andExpr ('|' andExpr)*
 andExpr            : equalityExpr ('&' equalityExpr)*
 equalityExpr       : relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
-relationalExpr     : additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
+relationalExpr     : rangeExpr (('<' | '>' | '<=' | '>=') rangeExpr)*
+rangeExpr          : additiveExpr ('..' additiveExpr)*
 additiveExpr       : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
 multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
 unaryExpr          : negExpr ('as' typeExpr)?
-linkExpr           : compExpr ('->' compExpr)*
+linkExpr           : annoExpr ('->' annoExpr)*
 negExpr            : ('-' | '!' | '~') negPower | linkExpr
 negPower           : ('-' | '!' | '~') negPower | linkExpr ('^' negPower)?
-compExpr           : annoExpr ('..' annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
 accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']'))*

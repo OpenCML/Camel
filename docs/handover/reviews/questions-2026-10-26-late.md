@@ -584,3 +584,12 @@ H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program
   - `shape_unroll` 在 `std::opt::specialize` 下的调用目标表应是 `run$spec0 → run$spec1 → …`；
   - 整轮 `std::opt` 后，`forward` 里不再调基函数，或者能指出是预算用尽；
   - 四个调度器的值与解释器一致，这是硬条件。
+
+## 新任务：`..` 的优先级（负责人 2026-10-28 定）
+
+`..` 降到比较与加减之间（`docs/language/06_expressions.md` 6.12 第 6a 级，08 的文法已改）：`1..n+1` 是 `1..(n+1)`，`x->f..g` 是 `(x->f)..g`。由前端那条车道做，一笔提交：
+- **解析器**：`rangeExpr : additiveExpr ('..' additiveExpr)*` 放在 `relationalExpr` 下面，删掉 `compExpr`；格式化器同步。
+- **全仓库扫一遍**：依赖旧优先级的写法改掉，`stdlib/`、`examples/`、`test/cases/`、文档的代码块都在内。
+  - 主要两类：`x->f..g`，改写成 `x->f->g`；`a..b` 两边带 `->` 调用的，加括号或改写。
+  - 扫法是在新旧两种解析下比对语法树，只改树不同的地方，提交信息列出改了几处。
+- **用例**：`for i in 1..n+1` 迭代 `n` 次；`0..len(xs)-1`；`(f..g)(x)` 不变；`x->f..g` 报类型错误。
