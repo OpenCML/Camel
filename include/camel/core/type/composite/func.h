@@ -113,6 +113,15 @@ class FunctionTypeFactory {
         argNames_.push_back(ident);
     }
 
+    /// A `constas n: T` parameter of the `with` list (`with <constas stride: int = 1>`): the same
+    /// compile-time value, written in angle brackets so that a pipeline can give it
+    /// (`x->conv<w, 2, 1>`). Added among the `with` parameters, in the order they are written.
+    void addWithConstasArg(const std::string &ident, Type *type) {
+        constasIndices_.push_back(static_cast<uint16_t>(withTypes_.size()));
+        withTypes_.emplace_back(type, false);
+        argNames_.push_back(ident);
+    }
+
     bool hasConstas() const { return !constasIndices_.empty(); }
 
     /// Whether the signature records the parameter names given to addWithArg/addNormArg (the
@@ -206,6 +215,18 @@ class FunctionType : public CompositeType {
     /// all parameters, `with` parameters first), and whether a given parameter is one.
     bool hasConstas() const { return !constasIndices_.empty(); }
     size_t constasCount() const { return constasIndices_.size(); }
+    /// How many of them are written among the ordinary parameters, and how many among the `with`
+    /// ones.
+    size_t withConstasCount() const {
+        return std::count_if(constasIndices_.begin(), constasIndices_.end(), [&](uint16_t index) {
+            return index < withCount_;
+        });
+    }
+    size_t normConstasCount() const { return constasCount() - withConstasCount(); }
+    bool withIsConstasAt(size_t index) const {
+        ASSERT(index < withCount_, "Index out of range");
+        return isConstasAt(index);
+    }
     const std::vector<uint16_t> &constasIndices() const { return constasIndices_; }
     bool isConstasAt(size_t index) const {
         return std::find(constasIndices_.begin(), constasIndices_.end(), index) !=

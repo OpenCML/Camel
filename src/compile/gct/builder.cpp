@@ -1498,7 +1498,7 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
     size_t runtimeIndex    = 0;
     for (size_t i = 0; i < withCount + normCount; ++i) {
         const bool isWith = i < withCount;
-        if (!isWith && built->normIsConstasAt(i - withCount)) {
+        if (isWith ? built->withIsConstasAt(i) : built->normIsConstasAt(i - withCount)) {
             continue;
         }
         Parameter param;
@@ -5742,11 +5742,13 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
         // A `constas n: int` parameter is a value the signature uses, not a dimension the
         // types bind; its name is known to the types from the start. It is counted as used
         // twice so the one-use suggestion below belongs to dimension names only.
-        for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(1)) {
-            const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
-            if (paramLoad->isConstas()) {
-                dimNames_->insert(paramLoad->getRef().ident());
-                (*dimUses_)[paramLoad->getRef().ident()] = 2;
+        for (const size_t list : {size_t{0}, size_t{1}}) {
+            for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(list)) {
+                const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
+                if (paramLoad->isConstas()) {
+                    dimNames_->insert(paramLoad->getRef().ident());
+                    (*dimUses_)[paramLoad->getRef().ident()] = 2;
+                }
             }
         }
     }
@@ -5823,7 +5825,21 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             continue;
         }
         Type *type                = nullptr;
-        {
+        if (paramLoad->isConstas()) {
+            // A `constas` parameter of the `with` list is a value a call gives in angle brackets
+            // (design principles 5.4); it writes its type and may default.
+            if (!signature) {
+                ASSERT(false, "A constas parameter outside a function declaration.");
+                throw BuildAbortException();
+            }
+            if (paramPair->size() == 0) {
+                diags_->of(SemanticDiag::ConstasTypeRequired)
+                    .at(paramLoad->tokenRange())
+                    .commit(name);
+                throw BuildAbortException();
+            }
+            type = visitType(paramPair->at(0));
+        } else {
             dimBindAllowed_ = signature;
             type            = paramTypeOf(paramPair, name);
             dimBindAllowed_ = false;
@@ -5833,7 +5849,8 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
         // expression is lowered here, in the scope of the signature; GIR evaluates it where the
         // declaration is, once, when it builds the graph (visitFuncNode / visitDeclNode).
         node_ptr_t defaultExpr = nullptr;
-        const auto &dataNode   = paramPair->optAtAs<AST::DataLoad>(1);
+        const auto &dataNode =
+            paramPair->size() > 1 ? paramPair->optAtAs<AST::DataLoad>(1) : nullptr;
         if (dataNode) {
             defaultExpr     = visitData(dataNode);
             lastDefaultName = name;
@@ -5850,7 +5867,13 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             diags_->of(SemanticDiag::DuplicateParameter).at(paramLoad->tokenRange()).commit(name);
             throw BuildAbortException();
         }
-        factory.addWithArg(name, type, isVar, paramLoad->isConstas());
+        if (paramLoad->isConstas()) {
+            factory.addWithConstasArg(name, type);
+        } else {
+            // The query of a fact marks its `with` parameters `const`: the compiler must compute
+            // the argument, since it is part of which fact this is.
+            factory.addWithArg(name, type, isVar, paramLoad->isConst());
+        }
     }
 
     // Process normal parameters

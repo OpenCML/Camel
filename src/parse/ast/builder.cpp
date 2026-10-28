@@ -1441,10 +1441,10 @@ resolved where the fact's type is known.
 
 The declaration's `with` parameters are the arguments the query is written with
 (`depth<8>(x)`, and one with a default may be left out). They are copied onto the query function
-and marked `constas` there: the compiler must compute the argument, since the argument is part of
+and marked `const` there: the compiler must compute the argument, since the argument is part of
 which fact this is, and the engine computes and caches one fact per argument. Every function the
 declaration becomes carries them as well, so a case or a trailing clause names one and reads the
-value: on the query they are `constas`, and on the functions the engine calls they are plain
+value: on the query they are `const`, and on the functions the engine calls they are plain
 `with` parameters, which the engine fills with the arguments the query was written with.
 
 The head parameters are the parts of a value the query is written on
@@ -1570,7 +1570,7 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
         }
     }
     // The `with` parameters of the declaration, once per function that carries them: an expression
-    // tree is not shared between two declarations. On the query function they are `constas`, the
+    // tree is not shared between two declarations. On the query function they are `const`, the
     // mark that says "the compiler must compute this argument"; on the functions the engine calls
     // they are plain `with` parameters, because the engine passes the query's arguments to them as
     // the `with` arguments of the call, so a case names one and reads the value.
@@ -1590,7 +1590,7 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
             }
             const std::string paramName(pair->get<cst::IdentDef>()->text());
             node_ptr_t named = createNodeAs<NamedPairLoad>(
-                Reference(paramName), false, false, false, /*isConstas=*/asConstas);
+                Reference(paramName), false, /*isConst=*/asConstas, false, false);
             setNodeTokenRangeByContext(named, context);
             if (pair->type()) {
                 *named << any2node(visitType(pair->type()));
@@ -2586,6 +2586,13 @@ Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
         // refuses one; a `constas` needs one).
         if (context->type()) {
             *namedPairNode << any2node(visitType(context->type()));
+        }
+        // The default of a `constas` parameter of the `with` list.
+        if (isConstas && context->type() && context->expr()) {
+            node_ptr_t dataExprOptNode = createNodeAs<OptionalLoad>("DataExpr");
+            setNodeTokenRangeByContext(dataExprOptNode, context->expr());
+            *dataExprOptNode << any2node(visitExpr(context->expr()));
+            *namedPairNode << dataExprOptNode;
         }
     } else if (context->type()) {
         *namedPairNode << any2node(visitType(context->type()));

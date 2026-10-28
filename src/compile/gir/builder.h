@@ -1446,12 +1446,13 @@ class Builder {
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
         camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call,
         Type *expectedResult = nullptr);
-    /// Reads the values of the `constas` parameters of `signature` from the ordinary arguments
-    /// of the call (each written at its parameter's position), removes them from `normInputs`
-    /// (and `normTypes`, when given), and records the integer ones as the extent bindings they
+    /// Reads the values of the `constas` parameters of `signature` from the arguments of the call
+    /// (each written at its parameter's position, in the angle brackets or the parentheses),
+    /// removes them from `withInputs` and `normInputs` (and their types, when given), and records the integer ones as the extent bindings they
     /// stand for. `normTypes` may be null (a rest call has only the argument nodes).
     void takeConstasValues(
-        FunctionType *signature, std::vector<Argument> &normInputs,
+        FunctionType *signature, std::vector<Argument> &withInputs,
+        camel::core::type::type_vec_t *withTypes, std::vector<Argument> &normInputs,
         camel::core::type::type_vec_t *normTypes, const GCT::node_ptr_t &call,
         ConstasValues &constas, camel::core::type::ExtentValues &extents);
     /// A function written in place whose type still holds a type variable (the element

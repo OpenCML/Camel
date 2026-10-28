@@ -88,7 +88,7 @@ node_handle_t Builder::inlineRestCall(
     const size_t declaredNormCount = signature->normTypesCount();
     // The runtime parameters: the `constas` ones are compile-time values and are dropped from
     // the arguments below (design principles 5.4); the rest parameter is always last.
-    const size_t normCount  = declaredNormCount - signature->constasCount();
+    const size_t normCount  = declaredNormCount - signature->normConstasCount();
     ASSERT(signature->hasRest() && normCount > 0 && restBindings_.size() < 64,
            "A rest signature has its rest parameter last.");
     const size_t fixedCount = normCount - 1;
@@ -108,9 +108,15 @@ node_handle_t Builder::inlineRestCall(
             .commit(signature->toString(), "the with-arguments given at the call");
         throw BuildAbortException();
     }
+    if (signature->withConstasCount() > 0) {
+        diags_->of(SemanticDiag::ArgumentsMismatch)
+            .atOrigin(call->origin())
+            .commit(signature->toString(), "a rest function takes no 'constas' among its with parameters");
+        throw BuildAbortException();
+    }
     ConstasValues constas;
     ExtentValues extents;
-    takeConstasValues(signature, normInputs, nullptr, call, constas, extents);
+    takeConstasValues(signature, withInputs, nullptr, normInputs, nullptr, call, constas, extents);
     if (normInputs.size() < fixedCount) {
         diags_->of(SemanticDiag::RestArgumentsMismatch)
             .atOrigin(call->origin())

@@ -381,6 +381,9 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
                 }
                 continue;
             }
+            if (fn->withIsConstasAt(i)) {
+                parts.push_back(literal("constas "));
+            }
             if (fn->withIsVarAt(i)) {
                 parts.push_back(literal("var "));
             }
