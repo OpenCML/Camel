@@ -145,6 +145,7 @@ bracedIdents       : '{' identList? ','? '}'
 bracketIdents      : '[' identList? ','? ']'
 keyParamPair       : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)?
                      | '..' identDef (':' typeExpr)?
+                     | '..' typeExpr
                      | 'constas' identDef (':' typeExpr)?
 pairedParams       : keyParamPair (',' keyParamPair)*
 parentParams       : '(' pairedParams? ','? ')'

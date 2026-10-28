@@ -1041,9 +1041,13 @@ any Formatter::visitKeyParamPair(cst::KeyParamPair context) {
                     : context->tok(TK::KwVar)     ? "var "
                     : context->tok(TK::KwConst)   ? "const "
                                                   : "";
-    result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
     const auto &typeExpr = context->type();
     const auto &dataExpr = context->expr();
+    if (!context->get<cst::IdentDef>()) {
+        // `..ParamsOf<F>`: a pack written out in a function type's parameter list, no name.
+        return result + any_cast<string>(visitType(typeExpr));
+    }
+    result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
     // A lambda's parameter may leave its type out (design principles 5.9).
     if (typeExpr) {
         result += ": " + any_cast<string>(visitType(typeExpr));

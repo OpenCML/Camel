@@ -5790,6 +5790,26 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
         return Type::Void();
     };
 
+    // A function type's parameter written `..P` where `P` is a type variable, or `..E` for a type
+    // expression `E`, is a pack of parameters: one parameter for each member of the pack once it
+    // is known (design principles 5.6). A name that is no type variable keeps its meaning of
+    // "any parameter list". A declaration's own rest parameter is not one (it is typed
+    // `..xs: ..A`, below).
+    const auto packOf = [&](const AST::node_ptr_t &paramPair, const string &name) -> Type * {
+        if (open || signature) {
+            return nullptr;
+        }
+        if (paramPair->size() > 0) {
+            Type *written = visitType(paramPair->at(0));
+            return TypeCallType::isExpand(written) ? written : TypeCallType::makeExpand(written);
+        }
+        if (const auto bound = typeScope_->get(Reference(name));
+            bound.has_value() && (*bound)->code() == TypeCode::TypeVar) {
+            return TypeCallType::makeExpand(*bound);
+        }
+        return nullptr;
+    };
+
     // Process "with" parameters (context parameters)
     // Their types use the type variables the head declares (design principles 5.5), like the
     // ordinary parameters below.
@@ -5805,6 +5825,11 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
         const Reference &paramRef = paramLoad->getRef();
         const string &name        = paramRef.ident();
         if (paramLoad->isRest()) {
+            if (Type *pack = packOf(paramPair, name)) {
+                defaults.with.push_back({nullptr, camel::source::kInvalidOriginId});
+                factory.addWithArg(name + "_" + std::to_string(wi), pack, false);
+                continue;
+            }
             // A pack among the `with` parameters (`with <..args>`): untyped and last, like
             // the rest parameter of the ordinary ones. A lambda does not write one (the parser
             // refuses it); a declaration with a body is refused where its body is known.
@@ -5925,6 +5950,10 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             continue;
         }
         if (paramLoad->isRest()) {
+            if (Type *pack = packOf(paramPair, name)) {
+                factory.addNormArg(name + "_" + std::to_string(pi), pack, false);
+                continue;
+            }
             // A rest parameter is untyped and last (design principles 5.5); it stands in the
             // signature as a `void` parameter that no call passes a value for.
             if (open && !signature) {
@@ -6010,6 +6039,11 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
         pendingUnwrittenParams_ = std::move(unwrittenParams);
     }
     FunctionType *built = open ? static_cast<FunctionType *>(factory.buildOpen()) : factory.build();
+    if (!open && !signature) {
+        // A pack of parameters that is known already (`(..ParamsOf<F>) => R` for a written-out
+        // `F`) is its members.
+        built = static_cast<FunctionType *>(expandTypePacks(built));
+    }
     // A type parameter declared at the head and written nowhere in the signature is a name the
     // declaration never uses: no argument could give it a type, and the function could never be
     // instantiated (design principles 5.5).

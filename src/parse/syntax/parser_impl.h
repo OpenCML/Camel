@@ -261,6 +261,7 @@ class ParserImpl {
     void parseIdentList();
     void parseBracketedIdents(TK closer, NK kind);
     void parseKeyParamPair(bool allowRest, bool allowConstas, bool angled = false);
+    bool parenClosesBeforeArrow() const;
     void parsePairedParams(TK closer, bool allowRest, bool allowConstas);
     void parseParentParams(bool allowRest = false, bool allowConstas = false);
     void parseAngledParams(bool allowRest = false, bool allowConstas = false);

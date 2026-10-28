@@ -76,3 +76,16 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
+
+[[tests]]
+name = "type_packs.function_pack_params"
+desc = "A pack in a function type's parameter list: `(..ParamsOf<F>) => R`, `(..P) => R` and `<..WithOf<F>>` for the `with` parameters. `Swap<F>`, `Pullback<F>`, `Vjp<F>` and a re-assembled `Weighted<F>` are the function types written out, for a function of no parameter, of one (a pack of one member is the tuple `(int,)`) and of three."
+kind = "behavior"
+case = "../../../cases/compile/type_packs/function_pack_params.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
