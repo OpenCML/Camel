@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-296 diagnostics: 276 errors, 20 warnings. 15 carry a machine-applicable edit, 281 say why they carry none.
+297 diagnostics: 277 errors, 20 warnings. 15 carry a machine-applicable edit, 282 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -83,6 +83,7 @@ prints one entry.
 | `0x03000055` | [SemanticDiag::GenericInstantiationTooDeep](#genericinstantiationtoodeep) | Error | no |
 | `0x03000056` | [SemanticDiag::TypeFunctionArguments](#typefunctionarguments) | Error | no |
 | `0x03000057` | [SemanticDiag::GenericFunctionUnsupported](#genericfunctionunsupported) | Error | no |
+| `0x03000058` | [SemanticDiag::PackExpansionNeedsOnePack](#packexpansionneedsonepack) | Error | no |
 | `0x03000060` | [SemanticDiag::FunctionNameAsValue](#functionnameasvalue) | Error | no |
 | `0x03000072` | [SemanticDiag::TaggedTypeNesting](#taggedtypenesting) | Error | no |
 | `0x03000073` | [SemanticDiag::TaggedValueNotOpened](#taggedvaluenotopened) | Error | no |
@@ -2441,6 +2442,40 @@ func id::<T>(x: T): T {
 
 func main(): int sync {
     println(id(1))
+    return 0
+}
+```
+
+### PackExpansionNeedsOnePack
+
+`0x03000058` · Error · `SemanticDiag::PackExpansionNeedsOnePack`
+
+**Fix**
+
+None: choice: which pack the expansion ranges over, and which call binds it, is the writer's to decide
+
+**Message**
+
+```text
+The expansion '{0}' must range over exactly one pack: {1}.
+```
+
+**Help**
+
+```text
+A type expression written with '..' stands for one type per member of a pack, and the members come from one place: the rest parameter of the declaration, written '..xs: ..A', binds the pack 'A' to the types of the arguments a call leaves over (design principles 5.6). So the body of an expansion names that one pack, and the expansion is used where a call binds it.
+```
+
+**Example** (`test/cases/compile/rest_params/pack_expand_two_packs.cml`, run as `camel test/cases/compile/rest_params/pack_expand_two_packs.cml`)
+
+```camel
+// An expansion ranges over one pack: a body that names two of them writes one type per member
+// of which pack, and nothing in the declaration says which.
+func blend::<..A, ..B>(..xs: ..A): ..{left: A, right: B} {
+    return {left: xs.[0], right: xs.[1]}
+}
+
+func main(): int sync {
     return 0
 }
 ```

@@ -91,6 +91,17 @@ class FunctionTypeFactory {
         argNames_.push_back(ident);
     }
 
+    /// The same, for a rest parameter that writes the type of its members (`..xs: ..A`, design
+    /// principles 5.6). The slot carries that type instead of `void`: it is the expansion written
+    /// over the declaration's pack, and a call binds the pack to one type per argument left over,
+    /// which is what the body and the result type are expanded with. `hasRest` still tells the
+    /// parameter apart from an ordinary one.
+    void addRestArg(const std::string &ident, Type *memberType) {
+        hasRest_ = true;
+        normTypes_.emplace_back(memberType != nullptr ? memberType : Type::Void(), false);
+        argNames_.push_back(ident);
+    }
+
     /// The `with` parameters end in a pack (`with <..args>`): it stands for the `with` arguments
     /// a call gives beyond the fixed ones, of any types, and is added after every other `with`
     /// parameter as a `void` parameter no call passes a value for. Only a declaration without a

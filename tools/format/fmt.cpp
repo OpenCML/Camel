@@ -1979,7 +1979,7 @@ any Formatter::visitTypeList(cst::TypeList context) {
 
 /*
 typeParams
-    : '::' '<' identDef (',' identDef)* ','? '>'
+    : '::' '<' ('..'? identDef) (',' '..'? identDef)* ','? '>'
     ;
 */
 any Formatter::visitTypeParams(cst::TypeParams context) {
@@ -2056,8 +2056,9 @@ identDef : IDENTIFIER ;
 */
 any Formatter::visitIdentDef(cst::IdentDef context) {
     // The text of the node, not of an Identifier token: the `_` of `let _ = e` is a token of
-    // its own kind.
-    return context->text();
+    // its own kind. A type parameter written with `..` is a pack (`func zip::<..A>`, design
+    // principles 5.6): the mark is on the name and not a token of its own, so it is written here.
+    return (context->writtenAsPack() ? ".." : "") + context.text();
 }
 
 /*
@@ -2223,6 +2224,10 @@ any Formatter::dispatch(syn::Node context) {
         return context.text();
     case NK::ParenType:
         return "(" + any_cast<string>(visit(context.type())) + ")";
+    case NK::PackType:
+        // `..E`, one type expression written once for each member of a pack (design principles
+        // 5.6).
+        return ".." + any_cast<string>(visit(context.type()));
     case NK::TypeOfType:
         return "typeof " + any_cast<string>(visit(context.expr()));
     case NK::ShapeComp: {

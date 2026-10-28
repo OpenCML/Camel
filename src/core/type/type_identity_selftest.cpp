@@ -14,6 +14,8 @@
 #include "camel/core/type/intern.h"
 #include "camel/core/type/pure.h"
 #include "camel/core/type/text.h"
+#include "camel/core/type/typecall.h"
+#include "camel/core/type/typevar.h"
 
 #include <format>
 #include <span>
@@ -333,6 +335,93 @@ std::string debugRunTypeIdentitySelfTest() {
         Type *pair  = structOf({{"x", i}, {"y", f}});
         Type *again = structOf({{"x", i}, {"y", f}});
         require(isPureDataType(pair) && pureDataLayout(pair) == pureDataLayout(again), "a pure struct has two layouts");
+    }
+
+    // A pack expansion: `..E` is `E` written once for each member of a pack the call bound, and
+    // the type it makes is the tuple of those results (typecall.h TypePackType, the expansion in
+    // typevar.cpp). This is the shape a declaration with a pack parameter needs for its result
+    // type: `(..ElementOf<A>)[]` over three array types is the array of a three-member tuple,
+    // which is the type `zip` has today only in C++.
+    {
+        Type *packVar = TypeVarType::create("A", false);
+        Type *elementOfA =
+            TypeCallType::create("ElementOf", std::span<Type *const>(&packVar, 1));
+        TypePackType *expansion = TypePackType::create("A", elementOfA);
+        require(
+            expansion->toString() == "..ElementOf<A>",
+            "an expansion prints as '..' and its body: " + expansion->toString());
+        require(
+            TypePackType::create("A", elementOfA) == expansion,
+            "two expansions over one pack and one body are two objects");
+        require(
+            TypePackType::create("B", elementOfA) != expansion,
+            "expansions over different packs are one object");
+        require(containsTypeCall(expansion), "containsTypeCall does not see an expansion");
+        // While the pack is unbound the body still names it as a type variable, so the expansion
+        // is not a concrete type: that is what makes the node wait, as an application over an
+        // unbound variable waits.
+        require(
+            containsTypeVar(expansion),
+            "an unbound expansion counts as a concrete type");
+
+        type_pack_bindings_t packed;
+        packed.emplace_back(
+            "A",
+            std::vector<Type *>{ArrayType::create(i), ArrayType::create(s), ArrayType::create(f)});
+        Type *expanded = substituteTypeVars(expansion, {}, packed);
+        require(
+            expanded->toString() == "(int, string, float)",
+            "three members did not expand to a three-member tuple: " + show(expanded));
+        // The whole result type of `zip`'s new declaration: the tuple of elements, as an array.
+        Type *result = substituteTypeVars(ArrayType::create(expansion), {}, packed);
+        require(
+            result->toString() == "(int, string, float)[]",
+            "the array of the expanded tuple is not the declared result type: " + show(result));
+        require(sameCanonicalType(result, result), "the expanded result type has no identity");
+
+        // A pack bound to one member expands to a one-member tuple, not to that member: a written
+        // `..E` denotes a sequence of results, and how a parameter list reads a sequence is the
+        // declaration's business.
+        type_pack_bindings_t one;
+        one.emplace_back("A", std::vector<Type *>{ArrayType::create(i)});
+        Type *single = substituteTypeVars(expansion, {}, one);
+        require(
+            single->toString() == "(int,)",
+            "one member did not expand to a one-member tuple: " + show(single));
+        // A pack bound to nothing is an empty sequence, and its expansion is the empty tuple.
+        type_pack_bindings_t none;
+        none.emplace_back("A", std::vector<Type *>{});
+        require(
+            substituteTypeVars(expansion, {}, none)->toString() == "()",
+            "an empty pack did not expand to the empty tuple");
+        // A pack the table does not bind leaves the node waiting, exactly as an application over an
+        // unbound type variable does; its body is still substituted as far as the bindings reach.
+        require(
+            substituteTypeVars(expansion, {{"unused", i}}, packed) == expanded,
+            "an unrelated binding changed the expansion");
+        {
+            type_pack_bindings_t unrelated;
+            unrelated.emplace_back("B", std::vector<Type *>{ArrayType::create(i)});
+            Type *waiting = substituteTypeVars(expansion, {}, unrelated);
+            require(
+                waiting == expansion,
+                "an expansion waited over the wrong pack name: " + show(waiting));
+            // `..ElementOf<T>` with T bound and A unbound: the body moves, the node stays.
+            Type *packVarT = TypeVarType::create("T", false);
+            Type *overT = TypePackType::create(
+                "A", TypeCallType::create("ElementOf", std::span<Type *const>(&packVarT, 1)));
+            Type *moved = substituteTypeVars(overT, {{"T", ArrayType::create(i)}}, {});
+            require(
+                moved->toString() == "..int",
+                "an unbound expansion did not substitute its body: " + show(moved));
+        }
+        // A single-type binding of that name is not a pack, so the node still waits: the body is
+        // substituted by the ordinary binding and the expansion is not applied. A name is either
+        // a pack or a type variable, and which one it is belongs to the declaration.
+        require(
+            substituteTypeVars(expansion, {{"A", ArrayType::create(i)}})->code() ==
+                TypePackType::typeCode(),
+            "a single-type binding expanded a pack");
     }
 
     return std::format("{} types, {} pairs", types.size(), pairs);

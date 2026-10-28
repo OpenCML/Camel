@@ -938,18 +938,31 @@ void ParserImpl::parseTagRef() {
     close(m, NK::TagRef);
 }
 
-/// whenClause : IDENTIFIER logicalOrExpr
+/// whenClause : 'when' ('..' dataExpr | logicalOrExpr)
 /// The IDENTIFIER is the name `when`, read here only: a declaration's applicability condition,
 /// after its signature (design principles 4.4). It is evaluated when the declaration is
 /// instantiated, not when it is parsed, and a false condition makes the declaration
 /// inapplicable rather than erroneous. It follows the return type and the resource clause and
 /// precedes the body, so a body-less native declaration may carry one too.
+/// A condition written `..pred::<A>()` holds for every member of the pack its body names (design
+/// principles 5.6): the `..` is read here and kept as the rest-value marker the grammar already
+/// has for `..e`, so the tree holds what was written and the reader of the condition decides
+/// what the marker means in that place.
 /// The `funcDecl` production above gains this clause between `resourceClause` and `stmtBlock`;
 /// see the comment there.
 void ParserImpl::parseWhenClause() {
     const size_t m = mark();
     bump(); // `when`
-    parseExpr();
+    if (cur_ == TK::DotDot) {
+        const size_t cm = mark();
+        bump(); // `..`
+        if (!panic_) {
+            parseExpr();
+        }
+        close(cm, NK::RestValue);
+    } else {
+        parseExpr();
+    }
     close(m, NK::WhenClause);
 }
 
@@ -999,7 +1012,7 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
     close(m, NK::FuncDecl);
 }
 
-/// typeParams : '::' '<' identDef (',' identDef)* ','? '>'
+/// typeParams : '::' '<' ('..'? identDef) (',' '..'? identDef)* ','? '>'
 ///
 /// The type parameters of a generic declaration, written at its head right after the name
 /// (design principles 5.5): `func first::<T>(xs: T[]): T`. The spelling is the one a call site
@@ -1007,6 +1020,9 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
 /// visible in its head; without `::<...>` it is not generic. `rule` and `fact` declare theirs the
 /// same way. A dimension name still binds where a shape first writes it (5.4) and may be listed
 /// here too, which is why the list can name one.
+/// A parameter written with `..` is a pack and not one type (`func zip::<..A>`, design principles
+/// 5.6): a call binds it to one type per member. The `..` is not a token of the parameter's own
+/// node, so the name node carries kPackName instead.
 void ParserImpl::parseTypeParams() {
     const size_t m = mark();
     bump(); // `::`
@@ -1018,15 +1034,51 @@ void ParserImpl::parseTypeParams() {
     {
         Scope scope(*this, false);
         // `::<` at the end of the text: the name is reported, not read.
-        parseIdentDef();
-        while (!panic_ && eat(TK::Comma) && cur_ == TK::Identifier) {
+        bool pack = cur_ == TK::DotDot;
+        if (pack) {
+            bump();
+        }
+        {
+            const size_t nm = mark();
             parseIdentDef();
+            if (pack) {
+                markNameAsPack(nm);
+            }
+        }
+        while (!panic_ && eat(TK::Comma) &&
+               (cur_ == TK::Identifier || cur_ == TK::DotDot)) {
+            const bool packAgain = cur_ == TK::DotDot;
+            if (packAgain) {
+                bump();
+            }
+            const size_t nm = mark();
+            parseIdentDef();
+            if (packAgain) {
+                markNameAsPack(nm);
+            }
         }
     }
     if (!panic_ && !eat(TK::Gt)) {
         unexpected({e(TK::Comma), e(TK::Gt)});
     }
     close(m, NK::TypeParams);
+}
+
+/// Marks the IdentDef just closed as one written with `..`: the type parameter is a pack. `mark`
+/// is what mark() was before the name was read, so a name the parser could not read (and did not
+/// close) leaves nothing marked.
+void ParserImpl::markNameAsPack(size_t mark) {
+    if (stack_.size() != mark + 1) {
+        return;
+    }
+    const uint32_t word = stack_.back();
+    if ((word & Tree::kTokenBit) != 0) {
+        return;
+    }
+    if (tree_.nodes_[word].kind != NK::IdentDef) {
+        return;
+    }
+    tree_.nodes_[word].flags |= kPackName;
 }
 
 /// operatorName : IDENTIFIER (OPERATOR | '[' ']')

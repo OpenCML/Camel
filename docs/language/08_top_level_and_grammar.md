@@ -125,8 +125,8 @@ tagPositionName    : IDENTIFIER
 tagReaders         : identRef (',' identRef)* ','?
 tagUse             : '#' (tagRef | '[' (tagRef (',' tagRef)* ','?)? ']')
 tagRef             : identRef parentArgues?
-whenClause         : IDENTIFIER logicalOrExpr
-typeParams         : '::' '<' identDef (',' identDef)* ','? '>'
+whenClause         : 'when' ('..' dataExpr | logicalOrExpr)
+typeParams         : '::' '<' ('..'? identDef) (',' '..'? identDef)* ','? '>'
 operatorName       : IDENTIFIER (OPERATOR | '[' ']')
 dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
                      | 'let' '_' (':' typeList)? '=' dataList
@@ -227,9 +227,10 @@ typeOrData         : typeExpr | arrayDim | 'const' dataExpr
 matchTypeType      : 'match' 'type' typeExpr '{' typeArm* '}'
 typeArm            : 'case' typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
 primaryType        : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
-                     | matchTypeType
+                     | matchTypeType | packType
                      | 'typeof' dataExpr
 tupleType          : '(' typeList? ','? ')'
+packType           : '..' typeExpr
 structType         : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
 keyTypePair        : tagUse* identDef ':' typeExpr
 funcType           : angledParams? parentParams '=>' typeExpr resourceClause?

@@ -1,0 +1,9 @@
+// An expansion writes one type per member of a pack, and the members are the types a call
+// leaves over: a rest parameter that writes no type gives the pack none.
+func picked::<..A>(..xs): ..A {
+    return xs.[0]
+}
+
+func main(): int sync {
+    return picked(1)
+}

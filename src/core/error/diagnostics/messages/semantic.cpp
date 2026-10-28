@@ -333,6 +333,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::PackExpansionNeedsOnePack,
+            {
+                "PackExpansionNeedsOnePack",
+                "The expansion '{0}' must range over exactly one pack: {1}.",
+                "A type expression written with '..' stands for one type per member of a pack, and the members come from one place: the rest parameter of the declaration, written '..xs: ..A', binds the pack 'A' to the types of the arguments a call leaves over (design principles 5.6). So the body of an expansion names that one pack, and the expansion is used where a call binds it.",
+            },
+        },
+        {
             SemanticDiag::FunctionNameAsValue,
             {
                 "FunctionNameAsValue",

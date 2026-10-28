@@ -11,6 +11,9 @@
  *     where `match type` cannot (the library declares them without a body).
  *   - `MatchTypeType` is a `match type` in a type position: the subject, and for each case the
  *     shapes and identities it selects and the type it gives.
+ *   - `TypePackType` is `..E`, a type expression written once for each member of a pack variable
+ *     that `E` mentions: with the pack bound it is the tuple of what `E` becomes for each member,
+ *     and while the pack is unbound the node waits, as an application over a type variable does.
  *
  * While an argument or the subject is still a type variable the application stays a type of its
  * own, and the type-variable algebra descends through it like any other type application. When
@@ -110,8 +113,42 @@ class MatchTypeType final : public OtherType {
     std::vector<uint32_t> identityCounts_;
 };
 
-/// Whether a type computed from types (a primitive application or a `match type`) occurs
-/// anywhere in `type`.
+/// `..E` in a type position: `E` written once for each member of the pack variable named here.
+/// It is a type of its own while that pack is unbound, so the type-variable algebra descends
+/// through its body like any other type application; when the pack is bound, substitution
+/// replaces it by the tuple of one result per member, in binding order (see substituteTypeVars in
+/// typevar.h). A pack of one member therefore expands to a one-member tuple, not to its member:
+/// what a written `..E` denotes is a sequence of results, and how a parameter list reads a
+/// sequence is the declaration's business, not this node's.
+class TypePackType final : public OtherType {
+  public:
+    static TypeCode typeCode();
+    /// `..body`, over the pack variable `name`.
+    static TypePackType *create(std::string_view name, Type *body);
+
+    /// The pack variable this expansion ranges over.
+    const std::string &name() const { return *name_; }
+    /// The type expression written once per member.
+    Type *body() const { return params_[0]; }
+
+    bool typeArguments() const override { return true; }
+    std::string toString() const override;
+    std::string mangle() const override;
+    Type *clone(bool deep = false) const override;
+    bool equals(Type *type) const override;
+    bool assignableFrom(Type *sourceType) const override;
+    CastSafety castSafetyFrom(Type *sourceType) const override;
+    OtherType *cloneWithParams(std::span<Type *const> params) const override;
+
+  private:
+    TypePackType(const std::string *name, size_t paramCount, Type **params)
+        : OtherType(typeCode(), paramCount, params), name_(name) {}
+
+    const std::string *name_;
+};
+
+/// Whether a type computed from types (a primitive application, a `match type` or a pack
+/// expansion) occurs anywhere in `type`.
 bool containsTypeCall(Type *type);
 
 /// What stays unevaluated in `type` although its arguments are concrete, said for a diagnostic:

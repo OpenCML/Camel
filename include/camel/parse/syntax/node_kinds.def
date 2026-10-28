@@ -85,7 +85,7 @@ CAMEL_NODE(TypeList, Other)            // typeExpr (',' typeExpr)*
 CAMEL_NODE(IdentDef, Other)            // IDENTIFIER
 CAMEL_NODE(IdentRef, Other)            // (IDENTIFIER '::')* IDENTIFIER, where a name is required
 
-CAMEL_NODE(RestValue, Expr)            // '..' dataExpr (a rest argument, expanded at the call)
+CAMEL_NODE(RestValue, Expr)            // '..' dataExpr (a rest argument, expanded at the call; also a `when` condition written over every member)
 CAMEL_NODE(IfExpr, Expr)               // 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 CAMEL_NODE(MatchExpr, Expr)            // 'match' logicalOrExpr '{' matchCase+ '}'
 CAMEL_NODE(MatchTypeExpr, Expr)        // 'match' 'type' typeExpr '{' typeCase* '}'
@@ -129,6 +129,7 @@ CAMEL_NODE(SpecType, Type)             // primaryType '<' typeOrData (',' typeOr
 CAMEL_NODE(ConstData, Type)            // 'const' dataExpr (a typeOrData that is data)
 CAMEL_NODE(StructType, Type)           // '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
 CAMEL_NODE(RefType, Type)              // identRef, as a type
+CAMEL_NODE(PackType, Type)             // '..' typeExpr, once for each member of the pack the body names
 CAMEL_NODE(ParenType, Type)            // '(' typeExpr ')'
 CAMEL_NODE(TupleType, Type)            // '(' typeList? ','? ')'
 CAMEL_NODE(FuncType, Type)             // modifiers? angledParams? parentParams '=>' typeExpr resourceClause?

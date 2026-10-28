@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 217
+**Semantic — errors** (`SemanticDiag`) — 218
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -101,6 +101,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `GenericInstantiationTooDeep` | Instantiating the generic function '{0}' with {1} is refused: {2}. |
 | `TypeFunctionArguments` | The type function '{0}' cannot be used this way: {1}. |
 | `GenericFunctionUnsupported` | The generic function '{0}' cannot be {1}. |
+| `PackExpansionNeedsOnePack` | The expansion '{0}' must range over exactly one pack: {1}. |
 | `FunctionNameAsValue` | '{0}' is used as a value here, but it names {1}, not one function. |
 | `TaggedTypeNesting` | The type '{0}' marks '{1}' twice. |
 | `TaggedValueNotOpened` | A value of type '{0}' cannot be used here: {1}. |
