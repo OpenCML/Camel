@@ -632,3 +632,5 @@ H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program
      - 内联加折叠去掉了 `a` 的最后一个用处，`dce` 就把它删了；
      - 但它排在一个照样执行的 `println(2)` 前面，按规则仍该执行。
    - 修法方向：一个效应"有用处"是建图时就定下的事实，遍不得改变它。去掉一个有用处的效应的最后一个用处时，它仍由指向后继效应的顺序边保活。具体判据等负责人对 F28 的裁定，先写用例。
+7. **回归：`with_grad` 求导一个写模块顶层 `var` 的同步函数，报 `PassInternalError`**（ICPC 研究 c11d，ef49a1d5d；8394a0eaa 上能跑）。图上对 `f.fwd` 的调用，元组类型里多了一个 `var int`。复现与命令在 `Camel-Archive/ICPC2027/study/gn-migration/run-ef49a1d5d/SURPRISES.md`。
+   - 按原则 9.9，效应只在正向执行，顶层 `var` 是模块资源，不是被求导的参数。修到根上，并补回归用例。
