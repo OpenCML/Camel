@@ -148,7 +148,7 @@ for (const l of ops) {
 const total = lines.find((l) => l.startsWith('EVAL total '))
 assert(total, 'no total line')
 const t = Object.fromEntries(total.slice(11).split(' ').map((kv) => kv.split('=')))
-assert(t.operators === '32' && t.cases === t.agree && Number(t.cases) >= 2500 && Number(t.points) >= 30000, total)
+assert(t.operators === '31' && t.cases === t.agree && Number(t.cases) >= 2500 && Number(t.points) >= 30000, total)
 assert(t.unsound === '0' && t.mismatches === '0' && t.undeclared === '0', total)
 for (const [check, result] of [
   ['broadcast_unknown_both', 'none'], ['broadcast_unknown_vs_known', 'none'], ['show_broadcast_unknown_alone', 'instance'],

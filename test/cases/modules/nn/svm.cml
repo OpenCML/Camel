@@ -2,7 +2,7 @@
  * Support-vector-machine example used to exercise heavier tensor control flow, optimization updates, and prediction passes.
  */
 
-import { add, subtract, multiply, matmul, ones, zeros, sum, eye, transpose, show, pow, shape, concat, range, reshape, where } from tensor
+import { add, subtract, multiply, matmul, ones, zeros, sum, eye, transpose, show, pow, shape, concat, reshape, where } from tensor
 
 func svm_train(X: f32[..], y: f32[..], learning_rate: float, epochs: int, lambda: float): f32[..] sync {
     let m = shape(X)[0]

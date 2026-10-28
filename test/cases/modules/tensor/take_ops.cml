@@ -4,7 +4,7 @@
  * the first `with` parameter.
  */
 
-import { reshape, range, take, one_hot, shape, sum, abs } from tensor
+import { reshape, take, one_hot, shape, sum, abs } from tensor
 import { softmax_cross_entropy, softmax_cross_entropy_grad } from nn
 import { grad } from autodiff
 

@@ -122,26 +122,6 @@ slot_t randnKernel(ArgsView &, ArgsView &norm, context::Context &) {
     });
 }
 
-slot_t rangeKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    return runKernel("range", [&] {
-        int64_t start = 0, stop = 0, step = 1;
-        if (norm.size() == 1) {
-            stop = intArg(norm, 0);
-        } else {
-            start = intArg(norm, 0);
-            stop  = intArg(norm, 1);
-            if (norm.size() == 3) {
-                step = intArg(norm, 2);
-            }
-        }
-        return wrap(norm.resultType(), k::arange(start, stop, step, resultAllocator()));
-    });
-}
-
-std::optional<Type *> rangeInfer(const InferContext &) {
-    return tensorOf(TypeCode::Int64, StaticShape{std::nullopt});
-}
-
 slot_t eyeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel(
         "eye",
@@ -249,17 +229,6 @@ std::vector<OpDef> creationOps() {
         .infer     = shapedInfer(TypeCode::Float32),
         .kernel    = &randnKernel,
         .traits    = impure});
-    defs.push_back(OpDef{
-        .name    = "range",
-        .exports = {"range"},
-        .params =
-            {{"start", ParamKind::Int},
-             {"stop", ParamKind::Int, true},
-             {"step", ParamKind::Int, true}},
-        .resultDoc = "int64[..]",
-        .infer     = rangeInfer,
-        .kernel    = &rangeKernel,
-        .traits    = {}});
     defs.push_back(OpDef{
         .name            = "eye",
         .exports         = {"eye"},

@@ -2,7 +2,7 @@
  * Batched matmul with broadcasting, linear, layer_norm, permute, slice, flatten, unsqueeze.
  */
 
-import { reshape, range, ones, zeros, matmul, linear, layer_norm, permute, slice, unsqueeze, transpose, shape, sum, dim } from tensor
+import { reshape, ones, zeros, matmul, linear, layer_norm, permute, slice, unsqueeze, transpose, shape, sum, dim } from tensor
 
 func main(): int sync {
     let a = reshape<[2, 3, 4]>(f32(0..24))

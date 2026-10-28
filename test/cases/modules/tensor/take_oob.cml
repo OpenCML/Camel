@@ -1,4 +1,4 @@
-import { reshape, range, take } from tensor
+import { reshape, take } from tensor
 func main(): int sync {
     let t = reshape<[4, 3]>(0..12)
     let r = take(t, [4])
