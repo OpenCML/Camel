@@ -5858,9 +5858,22 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             Type *written = visitType(paramPair->at(0));
             return TypeCallType::isExpand(written) ? written : TypeCallType::makeExpand(written);
         }
-        if (const auto bound = typeScope_->get(Reference(name));
-            bound.has_value() && (*bound)->code() == TypeCode::TypeVar) {
-            return TypeCallType::makeExpand(*bound);
+        if (const auto bound = typeScope_->get(Reference(name)); bound.has_value()) {
+            return (*bound)->code() == TypeCode::TypeVar ? TypeCallType::makeExpand(*bound)
+                                                        : nullptr;
+        }
+        if (signatureVisit_ && !typeScope_->has(Reference(name), false)) {
+            // A name the declaration's head does not declare, written after `..` in a parameter
+            // list of its signature, is a pack bound at its first occurrence by the function the
+            // argument turns out to be, as a dimension name is bound by the first shape that
+            // writes it (design principles 5.4, 5.6).
+            Type *variable = TypeVarType::create(name, false);
+            typeScope_->insert(Reference(name), variable);
+            declaredTypeVars_.push_back(name);
+            if (headTypeVarTypes_) {
+                (*headTypeVarTypes_)[name] = variable;
+            }
+            return TypeCallType::makeExpand(variable);
         }
         return nullptr;
     };
