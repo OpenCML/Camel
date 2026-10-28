@@ -716,3 +716,11 @@ H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program
     - `std::jgir`（版本 1）导出 normal、context、control、sync 四种边，没有顺序边；`canonical=true`（版本 2）只有 normal、context、control，连 sync 也没有。
     - `docs/technical/gir-interchange.md` 两个版本都只写了三种边。
     - 修法：两个版本都导出 sync 与 order 边，canonical 版本把它们纳入等价判定；控制边删除后从两个版本里一起去掉。文档同步。归第 1 路（与边的重构同一片）。
+
+## 移交：张量翻转的剩余部分与前奏的收尾交还施工方（负责人 2026-10-28）
+
+决策者这边的车道只留难的部分：程序变换的类型（`ParamsOf`/`WithOf`/`ResultOf`、包展开）及其后续的设计与核心实现。下面这些交给你们，作为第 7 路，代码区在 `modules/tensor`、`stdlib/`、`src/builtin`，与前六路不重叠：
+- **张量翻转剩下的**：逐元素函数的导出、`nn` 与 `optim` 各族改成声明与新写法、残留的 `Tensor` 名字。决策者这边的车道交最后一笔（随机数改为带键）时，会附一份剩余清单，我转到这里。
+- **前奏声明的预编译缓存模块**：声明每次运行都要编译一遍，做成缓存模块，加载要快，同时修好 `startup.cost`。车道交最后一笔时会附它知道的情况。
+- **`slice` 改成声明**：维度表达式与 `constas` 已经落地（原则 5.4）。
+决策者照旧审这些改动的设计，返工照常写在这里。
