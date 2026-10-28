@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-294 diagnostics: 274 errors, 20 warnings. 15 carry a machine-applicable edit, 279 say why they carry none.
+295 diagnostics: 275 errors, 20 warnings. 15 carry a machine-applicable edit, 280 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -259,6 +259,7 @@ prints one entry.
 | `0x030001FD` | [SemanticDiag::NativeTypeNotProvided](#nativetypenotprovided) | Error | no |
 | `0x030001FE` | [SemanticDiag::TypeFunctionNotApplicable](#typefunctionnotapplicable) | Error | no |
 | `0x030001FF` | [SemanticDiag::ExtentNotADimension](#extentnotadimension) | Error | no |
+| `0x03000200` | [SemanticDiag::VarArgumentTypeMismatch](#varargumenttypemismatch) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8437,6 +8438,40 @@ func run(x: f32[8]): int {
 func main(): int sync {
     let x: f32[8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
     return run(x as f32[8])
+}
+```
+
+### VarArgumentTypeMismatch
+
+`0x03000200` · Error · `SemanticDiag::VarArgumentTypeMismatch`
+
+**Fix**
+
+None: choice: the variable has to be declared with the parameter's type, or a variable of that type passed
+
+**Message**
+
+```text
+The argument of '{0}' at the 'var' parameter '{1}' has type {3}, and a 'var' argument is read and written by the callee: it is accepted only when its type and the parameter's type {2} accept each other's values.
+```
+
+**Help**
+
+```text
+The callee reads the caller's variable and writes into it, so what it writes must be a value the variable can hold, and what the variable holds must be a value the callee can read. A type that leaves a shape open does not: '{2}' may be written with another shape, and the variable it stands for cannot hold one. Declare the variable with the parameter's type ('var a: {2} = ...'), or pass a variable of that type.
+```
+
+**Example** (`test/cases/linear/byref/var_argument_shape.cml`, run as `camel test/cases/linear/byref/var_argument_shape.cml`)
+
+```camel
+func count(var w: f32[..], v: f32): int {
+    return len(w)
+}
+
+func main(): int sync {
+    var a: f32[] = [1.0, 2.0, 3.0]
+    println(count(a, 0.0))
+    return 0
 }
 ```
 

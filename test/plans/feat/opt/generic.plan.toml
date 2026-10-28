@@ -1741,3 +1741,80 @@ expect_diagnostic_column = 13
 expect_output_contains = ["before", "conversion to 'f32[3, 2]' failed: the array has shape [2, 3]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "fold_constant_loop.reference"
+desc = "A loop over a constant range with a constant initial state iterates: the state of the previous round is what the body reads, so `loop v = 1 for i in 0..4 do v + 1` yields 5 (four rounds) and `loop s = 0 for x in [10, 20, 30] do s + x` yields 60. This is the reading every pass below must keep."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_constant_loop.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "counted 5\nsummed 60\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fold_constant_loop.fold_nvm"
+desc = "std::opt::fold keeps the rounds of a loop whose range and initial state are constants: folding the body's `v + 1` must use the state of the round it runs in, not the initial one, and must not end the loop early."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_constant_loop.cml"
+args = ["${case}", "std::opt::fold", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "counted 5\nsummed 60\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fold_constant_loop.simplify_nvm"
+desc = "std::opt keeps the rounds of a loop whose range and initial state are constants."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_constant_loop.cml"
+args = ["${case}", "std::opt", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "counted 5\nsummed 60\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fold_constant_loop.fold_fvm"
+desc = "The bytecode scheduler reads the loop std::opt::fold left the same way the node VM does."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_constant_loop.cml"
+args = ["${case}", "std::opt::fold", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "counted 5\nsummed 60\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fold_constant_loop_effect.reference"
+desc = "A sync body of a loop over a constant range runs once per round: four rounds print 1 2 3 4 and the loop yields 5."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_constant_loop_effect.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "round 1\nround 2\nround 3\nround 4\ncounted 5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fold_constant_loop_effect.fold_nvm"
+desc = "std::opt::fold keeps the prints of a loop whose range and initial state are constants: the effects of a round happen in every round, not once and not never."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_constant_loop_effect.cml"
+args = ["${case}", "std::opt::fold", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "round 1\nround 2\nround 3\nround 4\ncounted 5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fold_constant_loop_effect.simplify_nvm"
+desc = "std::opt keeps the prints of a loop whose range and initial state are constants."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_constant_loop_effect.cml"
+args = ["${case}", "std::opt", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "round 1\nround 2\nround 3\nround 4\ncounted 5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

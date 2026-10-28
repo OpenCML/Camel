@@ -1,0 +1,17 @@
+/**
+ * The dimension name a parameter type binds is in scope in the body: `let out: f32[n]` names the
+ * extent `xs` bound, as the return type does, and the binding takes that declared type (design
+ * principles 5.4). A named dimension makes no instance, so the graph holds the declaration
+ * itself, and the CAST to `f32[n]` states a shape the extent leaves to the call.
+ */
+
+func ones(xs: f32[n]): f32[n] {
+    let out: f32[n] = [1.0, 2.0, 3.0]
+    return out
+}
+
+func main(): int sync {
+    let v: f32[3] = [1.0, 2.0, 3.0]
+    println(len(ones(v)))
+    return 0
+}

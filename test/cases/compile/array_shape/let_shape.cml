@@ -1,0 +1,16 @@
+// The shape a declaration writes is the type of the value it binds. A literal of three elements
+// under `f32[3]` is one `f32[3]`, not the array of unknown shape its elements alone give it; an
+// annotation that states less than the value does -- `f32[..]`, any number of dimensions -- is
+// the type of the name, and the value keeps the shape it has underneath.
+
+func take3(v: f32[3]): int {
+    return len(v)
+}
+
+func main(): int sync {
+    let x: f32[3] = [1.0, 2.0, 3.0]
+    println(take3(x))
+    let y: f32[..] = [[1.0, 2.0], [3.0, 4.0]] as f32[2, 2]
+    println(len(y))
+    return 0
+}

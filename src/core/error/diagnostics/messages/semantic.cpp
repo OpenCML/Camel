@@ -253,6 +253,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::VarArgumentTypeMismatch,
+            {
+                "VarArgumentTypeMismatch",
+                "The argument of '{0}' at the 'var' parameter '{1}' has type {3}, and a 'var' argument is read and written by the callee: it is accepted only when its type and the parameter's type {2} accept each other's values.",
+                "The callee reads the caller's variable and writes into it, so what it writes must be a value the variable can hold, and what the variable holds must be a value the callee can read. A type that leaves a shape open does not: '{2}' may be written with another shape, and the variable it stands for cannot hold one. Declare the variable with the parameter's type ('var a: {2} = ...'), or pass a variable of that type.",
+            },
+        },
+        {
             SemanticDiag::ImportNameConflict,
             {
                 "ImportNameConflict",

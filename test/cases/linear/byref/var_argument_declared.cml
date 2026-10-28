@@ -1,0 +1,15 @@
+/**
+ * The same call with a variable declared with the parameter's own type: `f32[..]` is the type
+ * the callee writes, so the two accept each other's values and the call runs
+ * (docs/design-principles.cn.md 3.5, 5.4).
+ */
+
+func count(var w: f32[..], v: f32): int {
+    return len(w)
+}
+
+func main(): int sync {
+    var a: f32[..] = [1.0, 2.0, 3.0]
+    println(count(a, 0.0))
+    return 0
+}
