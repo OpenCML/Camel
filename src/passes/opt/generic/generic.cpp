@@ -819,21 +819,10 @@ size_t cseDraft(GraphDraft &draft) {
         }
         return false;
     };
-    // A gate forwards the value it reads: it orders that value after what it waits for and changes
-    // nothing else (gates.cpp, `bypassValueGate`). Two expressions whose inputs differ only in the
-    // gates they pass through compute one value, so the key names what an input forwards. The gate
-    // keeps its place and its wait either way -- docs/design/effects/edges.cn.md 5.3 keeps a GATE
-    // whose wait is a sync edge -- so this merges the computation and leaves the order it carried.
-    const auto forwarded = [&](gc_node_ref_t in) {
-        for (size_t step = 0; step < 32; ++step) {
-            const auto *inHeader = draft.header(in);
-            if (!inHeader || inHeader->kind != GCNodeKind::Gate || draft.normInputsOf(in).size() != 1) {
-                break;
-            }
-            in = draft.normInputsOf(in).front();
-        }
-        return in;
-    };
+    // Two expressions whose inputs differ only in the gates they pass through compute one value: a
+    // gate forwards the value it reads and changes nothing else (camel::runtime::ungated,
+    // camel/runtime/draft.h; docs/design/effects/edges.cn.md 4.6 and 5.3). The gate keeps its place
+    // and its wait either way, so this merges the computation and leaves the order it carried.
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         if (!isPureOper(draft, id) || isWrittenInPlace(draft, id) || readsVariable(id)) {
             continue;
@@ -845,10 +834,10 @@ size_t cseDraft(GraphDraft &draft) {
         normKey.reserve(norm.size());
         withKey.reserve(with.size());
         for (gc_node_ref_t in : norm) {
-            normKey.push_back(forwarded(in));
+            normKey.push_back(camel::runtime::ungated(draft, in));
         }
         for (gc_node_ref_t in : with) {
-            withKey.push_back(forwarded(in));
+            withKey.push_back(camel::runtime::ungated(draft, in));
         }
         Key key{
             std::string(operUriOf(draft, id)),

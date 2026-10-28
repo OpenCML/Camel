@@ -955,5 +955,18 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape =
 /// statement and stays.
 bool isUnanchoredPure(const GraphDraft &draft, gc_node_ref_t node);
 
+/// The value a chain of gates passes on: a GATE orders the value it reads after other nodes -- an
+/// inlined call gates its arguments after what the call waited for -- and changes nothing else
+/// (docs/design/effects/edges.cn.md 4.6 and 5.3). A question about that value is a question about
+/// what it forwards, which is what a comparison of two computations asks; the gate keeps its place
+/// and its wait either way, so the answer is about the value alone.
+inline gc_node_ref_t ungated(const GraphDraft &draft, gc_node_ref_t node) {
+    while (draft.header(node) != nullptr && draft.header(node)->kind == GCNodeKind::Gate &&
+           !draft.normInputsOf(node).empty()) {
+        node = draft.normInputsOf(node).back();
+    }
+    return node;
+}
+
 } // namespace camel::runtime
 
