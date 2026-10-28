@@ -79,6 +79,7 @@ enum class UnaryOp {
     Relu,
     Gelu, // tanh approximation
     Erf,
+    Erfc,
 };
 
 enum class BinaryOp {

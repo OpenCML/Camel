@@ -41,9 +41,11 @@ template <UnaryOp Op> inline float unaryF32(float x) {
         return kernels::relu(x); // maximum(x, +0): NaN stays NaN, -0 becomes +0
     } else if constexpr (Op == UnaryOp::Gelu) {
         return vmath::gelu(x);
-    } else {
-        static_assert(Op == UnaryOp::Erf);
+    } else if constexpr (Op == UnaryOp::Erf) {
         return std::erf(x);
+    } else {
+        static_assert(Op == UnaryOp::Erfc);
+        return std::erfc(x);
     }
 }
 
@@ -80,6 +82,8 @@ void CAMEL_UNARY_ENTRY(UnaryOp op, const float *src, float *dst, int64_t count) 
         return loop<UnaryOp::Gelu>(src, dst, count);
     case UnaryOp::Erf:
         return loop<UnaryOp::Erf>(src, dst, count);
+    case UnaryOp::Erfc:
+        return loop<UnaryOp::Erfc>(src, dst, count);
     }
 }
 

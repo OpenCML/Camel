@@ -1723,6 +1723,17 @@ The Gauss error function per element.
 - Pure.
 - Example: `erf(new([0.0]))` gives `[0.0]`
 
+#### `erfc`
+
+```camel
+erfc: (t: float[..]) => float[..]
+```
+
+The complementary error function 1 - erf(x) per element.
+
+- Pure.
+- Example: `erfc(new([0.0]))` gives `[1.0]`
+
 ### Shape and reshaping
 
 #### `reshape`
@@ -3415,6 +3426,27 @@ tanh: (x: T) => T when is_float::<T>()
 The hyperbolic tangent.
 
 - Example: `tanh(0.0)` gives `0`
+
+#### `erf`
+
+```camel
+erf: (x: T) => T when is_float::<T>()
+```
+
+The error function, 2 / sqrt(pi) times the integral of e^-t^2 from 0 to x.
+
+- Example: `erf(0.0)` gives `0`
+
+#### `erfc`
+
+```camel
+erfc: (x: T) => T when is_float::<T>()
+```
+
+The complementary error function, 1 - erf(x), without the cancellation of the subtraction for
+large x.
+
+- Example: `erfc(0.0)` gives `1`
 
 ### Rounding
 
