@@ -1741,6 +1741,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::StatementAfterReturn,
+            {
+                "StatementAfterReturn",
+                "This statement cannot run: the 'return' written before it gives the value of this block, so nothing after it in the block is reached.",
+                "A 'return e' is the value of the block it is written in -- a function body, a 'sync' block, or the arm of an 'if' or a 'match' -- and a statement written after it in that same block is never reached. Move the statement before the 'return', or delete it.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",

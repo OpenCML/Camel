@@ -1,0 +1,76 @@
+id = "compile.return_after"
+order = 412
+tier = "fast"
+tags = ["feat", "compile", "return", "diagnostics", "negative"]
+desc = "A `return` gives the value of the block it is written in (design principles 7.3), so a statement written after it in the same block is never reached: it is a compile-time error, `StatementAfterReturn`, at the first such statement. An arm's `return` keeps giving the arm's value, and a second `return` handing the same exit is refused instead of overwriting it -- under a declared `T!` it used to hand on a value of the wrong shape and crash the node VM."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "return_after.sync_body"
+desc = "`println('b')` after `return 2` in a `sync` body is never reached: it used to print, and `g()` gave the second `return`'s value. The program is refused, the diagnostic points at that one statement, and it is the only diagnostic -- the two `return`s after it are not reported one by one."
+kind = "negative"
+case = "../../../cases/compile/return_after/statement_after_return_sync.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::StatementAfterReturn', input.diagnostics[0].name)
+assert(input.diagnostics[0].code === '0x03000201', input.diagnostics[0].code)
+assert(input.diagnostics[0].line === 10 && input.diagnostics[0].column === 5, JSON.stringify(input.diagnostics[0]))
+assert(!input.normalized.stdout.split('\n').map((l) => l.trim()).includes('a'), input.stdout)
+assert(!input.normalized.stdout.split('\n').map((l) => l.trim()).includes('b'), input.stdout)
+"""
+
+[[tests]]
+name = "return_after.body"
+desc = "The same rule in a body that is not `sync`: the expression after `return y` is the statement the `return` leaves behind, and it is refused there -- not as an unused pure value, because it is never built."
+kind = "negative"
+case = "../../../cases/compile/return_after/statement_after_return_body.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::StatementAfterReturn', input.diagnostics[0].name)
+assert(input.diagnostics[0].line === 10 && input.diagnostics[0].column === 5, JSON.stringify(input.diagnostics[0]))
+"""
+
+[[tests]]
+name = "return_after.arms"
+desc = "A `return` in an arm of an `if` gives the arm's value -- 7, 9, 22 and 2 are printed -- and nothing follows it there, so there is no diagnostic at all."
+kind = "behavior"
+case = "../../../cases/compile/return_after/return_in_arms.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "7\n9\n22\n2\n"
+verify_script = """
+assert(input.diagnostics.length === 0, JSON.stringify(input.diagnostics))
+"""
+
+[[tests]]
+name = "return_after.second_return_fallible"
+desc = "Two `return`s handing the same exit under a declared `int!`: the second is the statement the first leaves behind. It used to be built without the conversion the declared type asks for, and the node VM crashed writing its slot; now the program is refused and it is the only diagnostic."
+kind = "negative"
+case = "../../../cases/compile/return_after/two_returns_fallible.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::StatementAfterReturn', input.diagnostics[0].name)
+assert(input.diagnostics[0].line === 10 && input.diagnostics[0].column === 5, JSON.stringify(input.diagnostics[0]))
+"""
+
+[[tests]]
+name = "return_after.nested_blocks"
+desc = "A `return` in a block that is itself a statement gives that block's value, not the function's: `sync { return 1 }` and `{ return 1 }` followed by `return 2` leave the function handing on 2, and a block that is the body's value hands on its own `return`'s value. Nothing is reported: a block's `return` is not a statement the function's `return` leaves behind."
+kind = "behavior"
+case = "../../../cases/compile/return_after/return_in_nested_blocks.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "2\n2\n1\n1\n"
+verify_script = """
+assert(input.diagnostics.length === 0, JSON.stringify(input.diagnostics))
+"""

@@ -1,4 +1,4 @@
-// Outside a sync block a value nothing uses is not evaluated at all: no error is lost.
+// Outside a sync block a `T!` whose value nothing uses still loses the error it may hold.
 func parse(s: string): int! {
     return parse_int(s)
 }

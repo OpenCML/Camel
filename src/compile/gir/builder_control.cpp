@@ -1339,11 +1339,12 @@ Type *Builder::tailPositionType() const {
 }
 
 Type *Builder::expectedExitTypeHere() const {
-    if (activeArm() != nullptr || activeStaticBody_ != nullptr) {
-        // Inside a branch arm, or the selected body of a `match type`, the value of a `return`
-        // is that construct's value, so its position is the one the construct stands at; the
-        // function's declared return type has nothing to do with it (design principles 5.1,
-        // language reference 7.3).
+    if (activeArm() != nullptr || activeStaticBody_ != nullptr ||
+        currentBlock_ != functionBody_) {
+        // Inside a branch arm, the selected body of a `match type`, or a block written inside a
+        // body, the value of a `return` is that construct's value, so its position is the one the
+        // construct stands at; the function's declared return type has nothing to do with it
+        // (design principles 5.1, language reference 7.3).
         return expectedValueType_;
     }
     return declaredExitTypeHere();
@@ -4120,6 +4121,12 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         arm->value  = resNode;
         arm->type   = isVoidGraphExitType(nodeTypeOf(resNode)) ? Type::Void() : nodeTypeOf(resNode);
         arm->returned = true;
+    } else if (currentBlock_ != functionBody_) {
+        // A `return` written in a block that is itself a statement gives that block's value, not
+        // the function's (design principles 7.3): the block hands it to whatever takes the block,
+        // and the statement it is gives it to what takes that. The function's exit is written by
+        // the `return` of its own body only, so a block's `return` never overwrites the value the
+        // function hands on.
     } else {
         checkDeclaredReturn(currGraph_, nodeTypeOf(resNode), gct->origin(), gct->at(0));
         if (!droppedGraphs_.contains(currGraph_.get())) {

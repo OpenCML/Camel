@@ -42,6 +42,7 @@ class EdgeChecker {
 
     std::vector<std::string> run() {
         checkNodeTypeIds();
+        checkReturnValueType();
         checkWritings();
         checkOrderEdges();
         checkSyncEdges();
@@ -77,6 +78,40 @@ class EdgeChecker {
             violations_.empty(),
             "A frozen graph names a type id that did not come from the type table's interning "
             "path (see typeIdOf in src/runtime/graph.cpp).");
+    }
+
+    /// The value a graph whose exit is a `T?` or a `T!` hands on is that tagged value. It is the
+    /// shape the value is boxed into, and it is what a second writing of the exit leaves out: the
+    /// second `return` writes its own value where the first wrote the boxed one, so the graph's
+    /// signature and its exit no longer agree, and a back end that reads the exit as the declared
+    /// type writes a slot of another shape -- the node VM crashed on exactly that. Refused here,
+    /// where the graph is frozen, so no back end is ever handed one. Any other exit type is left
+    /// to the builder: a function declared `void` hands on the value it computes, and the purity of
+    /// a function type is not a difference the value's shape shows.
+    void checkReturnValueType() {
+        const gc_node_ref_t returned = graph_.returnNodeRef();
+        if (returned == kInvalidNodeRef || graph_.returnKind() == GCReturnKind::None) {
+            return;
+        }
+        const GCNode *node                        = graph_.returnNode();
+        camel::core::type::FunctionType *funcType = graph_.funcType();
+        if (node == nullptr || funcType == nullptr || !funcType->hasExitType()) {
+            return;
+        }
+        camel::core::type::Type *declared = funcType->exitType();
+        camel::core::type::Type *actual   = node->dataType();
+        if (declared == nullptr || actual == nullptr || declared->equals(actual)) {
+            return;
+        }
+        if (camel::core::type::asTagged(declared) == nullptr) {
+            return;
+        }
+        violations_.push_back(
+            std::format(
+                "graph '{}': the value it hands on has type '{}', and the graph declares '{}'",
+                graph_.name(),
+                actual->toString(),
+                declared->toString()));
     }
 
     /// The other half of the structural rule of 4.6: a sync edge joins two statements one `sync`

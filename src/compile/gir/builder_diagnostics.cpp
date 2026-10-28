@@ -420,7 +420,11 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
             graph != rootGraph_ || (id < rootNodeOwners_.size() && rootNodeOwners_[id] == unit_)) {
             // On the root graph, the top level of the module being reported only: another
             // module's top-level value that this program does not use is not a mistake.
-            dropped.push_back(id);
+            // An effect whose value is a `T!` nothing takes is answered by the warning for the
+            // lost error (UnusedFallibleValue), which takes precedence over this one.
+            if (!unusedFallibleValues_.contains(draft.ref(id))) {
+                dropped.push_back(id);
+            }
         }
     }
     if (!report) {
@@ -945,10 +949,12 @@ camel::core::error::Diagnostics *Builder::userSink() {
 
 void Builder::reportUnusedFallibleValues() {
     // Design principles 3.9: a `T!` that is evaluated and that nothing takes is a warning,
-    // because the error it may hold is lost without a trace. On the graph "evaluated and
-    // not taken" is a node without a data user that something is ordered after: a statement
-    // of a sync block. (Outside a sync block a value nothing takes is not evaluated at all:
-    // design principles 3.1, which has its own warning, EffectNotExecuted.)
+    // because the error it may hold is lost without a trace. `evaluated` is the statement the value
+    // is: in a sync block the statements run, and outside one a statement whose value nothing takes
+    // does not run (design principles 3.1) -- and the error it would have given is lost either way,
+    // which is what this warning is about. The statement not running is what the other warning
+    // (EffectNotExecuted) is about, and this one takes precedence over it: one statement, one
+    // diagnostic.
     auto sourceContext = context_ ? context_->sourceContext() : nullptr;
     const auto warn =
         [&](const compile_graph_ptr_t &graph, node_handle_t node, Type *type, const char *remark) {
@@ -956,6 +962,7 @@ void Builder::reportUnusedFallibleValues() {
             if (origin == camel::source::kInvalidOriginId && sourceContext) {
                 origin = sourceContext->debugMap().graphOrigin(graph->graphId());
             }
+            unusedFallibleValues_.insert(node);
             diags_->of(SemanticDiag::UnusedFallibleValue)
                 .atOrigin(origin)
                 .commit(type->toString(), remark);
@@ -1038,12 +1045,19 @@ void Builder::reportUnusedFallibleValues() {
                 }
                 continue;
             }
-            if (!ordered || isExit(id) || !draft.normUsersOf(id).empty() ||
-                !draft.withUsersOf(id).empty() || discardedValues_.contains(node)) {
+            if (isExit(id) || !draft.normUsersOf(id).empty() ||
+                !draft.withUsersOf(id).empty() || discardedValues_.contains(node) ||
+                (!ordered && nodeIsKind(node, runtime::GCNodeKind::Join))) {
+                // A branch whose value nothing takes is answered where its arms end -- their
+                // exits are reported, and an `if` without `else` is answered above -- so what is
+                // reported here is the result of an evaluation: a call, an operator.
                 continue;
             }
             if (TupleType *type = fallibleTypeOf(graph, node)) {
-                warn(graph, node, type, "");
+                // A statement something is ordered after runs, in a sync block as anywhere else;
+                // one nothing depends on does not, and then the warning says both that the value
+                // is lost and that the statement that would have given it never runs.
+                warn(graph, node, type, ordered ? "" : " (nothing depends on it, so it does not run)");
             }
         }
     }
