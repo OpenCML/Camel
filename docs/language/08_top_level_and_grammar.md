@@ -228,10 +228,9 @@ typeOrData         : typeExpr | arrayDim | 'const' dataExpr
 matchTypeType      : 'match' 'type' typeExpr '{' typeArm* '}'
 typeArm            : 'case' typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
 primaryType        : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
-                     | matchTypeType | packType
+                     | matchTypeType
                      | 'typeof' dataExpr
 tupleType          : '(' typeList? ','? ')'
-packType           : '..' typeExpr
 structType         : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
 keyTypePair        : tagUse* identDef ':' typeExpr
 funcType           : angledParams? parentParams '=>' typeExpr resourceClause?

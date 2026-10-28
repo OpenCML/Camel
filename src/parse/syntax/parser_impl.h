@@ -406,9 +406,6 @@ class ParserImpl {
     void parseMatchTypeType();
     void parseTypeArm();
     void parsePrimaryType();
-    /// packType : '..' typeExpr. One type expression written once for each member of the pack its
-    /// body names (design principles 5.6).
-    void parsePackType();
     /// Marks the IdentDef just closed, if `mark` is what it was before the name was read, as one
     /// written with `..` (kPackName).
     void markNameAsPack(size_t mark);

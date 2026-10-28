@@ -79,6 +79,9 @@ void ParserImpl::parseType() {
     if (cur_ == TK::DotDot) {
         // `..E`: a type pack expanded, one member for each member of the packs `E` uses (design
         // principles 5.6). It is read where a type is, and the builder says where it may stand.
+        // The body is a whole type expression, so `..A[]` is the expansion of the array type
+        // `A[]` and not the array of `..A`: an expansion is one type, and an array of it is
+        // written `(..A)[]` or after a parenthesised body.
         bump();
         parseType();
         return close(m, NK::PackType);
@@ -256,7 +259,7 @@ void ParserImpl::parseTypeArm() {
 }
 
 /// primaryType : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
-///             | matchTypeType | packType
+///             | matchTypeType
 ///             | 'typeof' dataExpr
 /// tupleType   : '(' typeList? ','? ')'
 /// A `(` opens a function type when its head is that of a parameter list (`(name:`, `(var`, or
@@ -281,11 +284,6 @@ void ParserImpl::parsePrimaryType() {
         return parseEnumType();
     case TK::Lt:
         return parseFuncType();
-    case TK::DotDot:
-        // A type written with `..` before it: `..A`, `..ElementOf<A>`. At the head of a type
-        // expression there is no other reading of `..` -- the stream mark follows a type
-        // (parseType) and the dimension pack stands inside `[...]`.
-        return parsePackType();
     case TK::KwSync:
         // A function type has no modifiers: `sync` belongs to a block (design principles 3.3).
         return unexpected({SyntaxError::TypeExpression});
@@ -346,26 +344,6 @@ void ParserImpl::parsePrimaryType() {
     } else {
         unexpected({SyntaxError::TypeExpression});
     }
-}
-
-/// packType : '..' typeExpr
-///
-/// A type expression written once for each member of a pack (design principles 5.6): over the
-/// pack `A` a call bound to `(int[], string[])`, `..ElementOf<A>` is `(int, string)`. The pack
-/// the body ranges over is not written here: it is the one pack a declaration declares at its
-/// head (`func zip::<..A>`), and GCT works the name out from the body where the declaration's
-/// head is known.
-///
-/// The body is a whole type expression, so `..A[]` is the expansion of the array type `A[]` and
-/// not the array of `..A`: an expansion is one type, and an array of it is written `(..A)[]` or
-/// after a parenthesised body.
-void ParserImpl::parsePackType() {
-    const size_t m = mark();
-    bump(); // `..`
-    if (!panic_) {
-        parseType();
-    }
-    close(m, NK::PackType);
 }
 
 /// structType  : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
