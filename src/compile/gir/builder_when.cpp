@@ -2163,6 +2163,42 @@ data_ptr_t Builder::compileTimeExpression(const GCT::node_ptr_t &expression) {
         [this](const GCT::node_ptr_t &subject) { return staticLoopIntSequenceOf(subject); }, 0);
 }
 
+std::optional<int64_t> Builder::foldExtentCall(
+    const GCT::node_ptr_t &call, const camel::core::type::ExtentValues &values) {
+    if (call == nullptr) {
+        return std::nullopt;
+    }
+    const auto callResolver = [this](
+                                  const GCT::node_ptr_t &site,
+                                  const GCT::node_ptr_t &callee,
+                                  const std::vector<data_ptr_t> &arguments,
+                                  const std::function<data_ptr_t(const GCT::node_ptr_t &)> &eval,
+                                  const type_bindings_t &vars, size_t depth) {
+        return evaluateCallInsideBody(site, callee, arguments, eval, vars, depth);
+    };
+    const auto dataResolver = [&values](const std::string &name) -> data_ptr_t {
+        const auto at = values.find(name);
+        if (at == values.end()) {
+            return nullptr;
+        }
+        return std::make_shared<LongData>(at->second);
+    };
+    try {
+        const data_ptr_t result = GctConstantEvaluator::runExpression(
+            call, typeBindings_, dataResolver, callResolver,
+            [this](const GCT::node_ptr_t &subject) { return staticLoopIntSequenceOf(subject); },
+            0);
+        if (const auto integer = std::dynamic_pointer_cast<LongData>(result)) {
+            return integer->data();
+        }
+        if (const auto small = std::dynamic_pointer_cast<IntData>(result)) {
+            return small->data();
+        }
+    } catch (const EvalFailure &) {
+    }
+    return std::nullopt;
+}
+
 [[noreturn]] void Builder::reportFoldRefusal(
     const FoldedCall &folded, const GCT::node_ptr_t &origin) {
     const auto at = origin != nullptr ? origin->origin() : camel::source::kInvalidOriginId;
