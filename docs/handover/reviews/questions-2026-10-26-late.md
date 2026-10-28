@@ -620,3 +620,15 @@ H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program
   - `progen_check` 与求导相关计划全过；
   - 提交信息列出语料上闭包数的前后对照。
 - 排在当前丢打印与三个探针缺陷之后。
+6. **优化改变了哪些效应执行**（ECOOP 稿 F28 的追问，决策者在 ef49a1d5d 上复现）：
+   ```camel
+   func g(c: bool): int { let a = println(1); return if c then a else (println(2) - 1) }
+   func main(): int sync { println(g(false)); return 0 }
+   ```
+   - 解释器与 `std::fvm`、`std::jit` 打印 `1 2 1`；`std::opt std::nvm` 和 `std::opt::inline std::opt::fold std::opt::dce std::nvm` 打印 `2 1`，`println(1)` 没了。
+   - 违反原则 9.7"改写不改变哪些效应执行"。不管负责人对 F28 最后定哪条规则，优化后的输出都必须与解释器相同。
+   - 机制：
+     - 现在的执行规则是"有用处的效应，被用到，或同一资源上排在它后面的效应执行了，它就执行"；
+     - 内联加折叠去掉了 `a` 的最后一个用处，`dce` 就把它删了；
+     - 但它排在一个照样执行的 `println(2)` 前面，按规则仍该执行。
+   - 修法方向：一个效应"有用处"是建图时就定下的事实，遍不得改变它。去掉一个有用处的效应的最后一个用处时，它仍由指向后继效应的顺序边保活。具体判据等负责人对 F28 的裁定，先写用例。
