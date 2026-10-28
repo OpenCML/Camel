@@ -5338,6 +5338,54 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         LEAVE("FuncData");
         return funcNode;
     }
+    // The dimension names the signature's parameter types bound are in scope in the body: a type
+    // the body writes (`let out: f32[n] = ...`) names the extent those parameters bound, exactly
+    // as the return type does (design principles 5.4). They are this signature's names and
+    // nothing else: a name bound in another declaration is not visible here, and a nested
+    // declaration or a nested function type pushes a scope of its own, so these are not visible
+    // inside it either.
+    const std::shared_ptr<std::set<std::string>> enclosingNames = dimNames_;
+    struct BodyDimensionScope {
+        Builder &self;
+        std::shared_ptr<std::set<std::string>> outerNames;
+        std::shared_ptr<std::set<std::string>> outerPacks;
+        bool outerBindAllowed;
+        ~BodyDimensionScope() {
+            self.dimNames_       = std::move(outerNames);
+            self.dimPacks_       = std::move(outerPacks);
+            self.dimBindAllowed_ = outerBindAllowed;
+        }
+    } bodyDimensionScope{
+        *this,
+        std::exchange(dimNames_, std::make_shared<std::set<std::string>>()),
+        std::exchange(dimPacks_, std::make_shared<std::set<std::string>>()),
+        std::exchange(dimBindAllowed_, false)};
+    for (const bool declared : {false, true}) {
+        const std::span<Type *const> params = declared ? funcType->withTypesSpan()
+                                                       : funcType->normTypesSpan();
+        for (Type *param : params) {
+            if (param == nullptr) {
+                continue;
+            }
+            // The names the parameter type writes are the ones it bound: a shape naming a
+            // dimension, and the name of a pack (`f32[n, ..rest]`). A name the enclosing
+            // signature already had is not this one's: a lambda nested in a body names it from
+            // the outside, and its own body does not inherit it.
+            std::vector<ExtentForm> forms;
+            if (param->extentForms(forms)) {
+                for (const ExtentForm &form : forms) {
+                    for (const std::string &name : form.usedNames()) {
+                        if (enclosingNames == nullptr || !enclosingNames->contains(name)) {
+                            dimNames_->insert(name);
+                        }
+                    }
+                }
+            }
+            if (!param->packName().empty()) {
+                dimPacks_->insert(std::string(param->packName()));
+            }
+        }
+    }
     // The body of a function or lambda is a body of its own: its value is the function's
     // result, and its exits are the function's, wherever the function is written.
     const ValueUseScope valueUseScope(*this);
