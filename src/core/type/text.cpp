@@ -404,6 +404,10 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
             if (fn->hasArgNames()) {
                 parts.push_back(literal(std::string(fn->argNameAt(withCount + i))));
             }
+            if (fn->restPack() != nullptr) {
+                parts.push_back(literal(": .."));
+                pushChild(parts, fn->restPack(), "<null>");
+            }
             continue;
         }
         if (fn->normIsConstasAt(i)) {

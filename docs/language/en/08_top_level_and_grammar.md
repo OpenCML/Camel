@@ -126,7 +126,7 @@ tagReaders         : identRef (',' identRef)* ','?
 tagUse             : '#' (tagRef | '[' (tagRef (',' tagRef)* ','?)? ']')
 tagRef             : identRef parentArgues?
 whenClause         : IDENTIFIER logicalOrExpr
-typeParams         : '::' '<' identDef (',' identDef)* ','? '>'
+typeParams         : '::' '<' '..'? identDef (',' '..'? identDef)* ','? '>'
 operatorName       : IDENTIFIER (OPERATOR | '[' ']')
 dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
                      | 'let' '_' (':' typeList)? '=' dataList
@@ -218,7 +218,7 @@ loopExpr           : 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' 
 loopState          : identDef '=' logicalOrExpr
 loopFor            : 'for' identDef 'in' logicalOrExpr
 loopWhile          : 'while' logicalOrExpr
-typeExpr           : arrayType ('?' | '!' | '..')*
+typeExpr           : '..' typeExpr | arrayType ('?' | '!' | '..')*
 arrayType          : specType arrayDim+
 arrayDim           : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
 arrayDimItem       : '?' | '..' identDef? | dataExpr

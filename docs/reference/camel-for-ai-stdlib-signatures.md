@@ -117,7 +117,7 @@ slice: <axis: int, start: int, end: int, step: int = 1> (x: Bytes) => Bytes
 concat: (xs: T[], ys: T[]) => T[]
 contains: <value: T> (xs: T[]) => bool
 contains: <sub: string> (s: string) => bool
-zip: (xs: T[], ys: U[]) => (T, U)[]
+zip: (..xs: ..A) => (..ElementOf<A>)[] when ..is_array::<A>()
 append: <value: T> (xs: T[]) => T[]
 map: <f: (item: T) => U> (xs: T[]) => U[]
 filter: <f: (item: T) => bool> (xs: T[]) => T[]
@@ -193,15 +193,13 @@ tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 tree_unzip: (r: R, s: S) => ?
 ```
 
-**`tensor`** — import { ... } from tensor — 68 name(s)
+**`tensor`** — import { ... } from tensor — 65 name(s)
 
 ```text
-new: (values: float[..] | number[]) => float[..]
 zeros: (shape: int[]) => T[..] when is_numeric::<T>()
 ones: (shape: int[]) => T[..] when is_numeric::<T>()
 full: (shape: int[], value: number) => float[..]
 eye: (n: int) => T[..] when is_numeric::<T>()
-range: (start: int, stop?: int, step?: int) => int64[..]
 random: (shape: int[], low: number, high: number) => f32[..]
 randn: (shape: int[], mean?: number, std?: number) => f32[..]
 add: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
@@ -226,7 +224,6 @@ gelu: (t: float[..]) => float[..]
 erf: (t: float[..]) => float[..]
 erfc: (t: float[..]) => float[..]
 reshape: (t: float[..] | number[], shape: int[]) => float[..]
-flatten: (t: float[..], axis?: int) => float[..]
 unsqueeze: (t: float[..], axis: int) => float[..]
 transpose: (t: float[..]) => float[..]
 permute: (t: float[..], perm: int[]) => float[..]

@@ -70,6 +70,9 @@ std::string to_string(TypeOp op) {
     if (op == TypeOp::TypeOf) {
         return "typeof";
     }
+    if (op == TypeOp::Pack) {
+        return "..";
+    }
     ASSERT(false, "Unknown TypeOp");
     return "Unknown";
 }

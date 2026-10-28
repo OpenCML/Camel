@@ -1,0 +1,78 @@
+id = "compile.type_packs"
+order = 1006
+tier = "fast"
+tags = ["feat", "compile", "types", "packs"]
+desc = "Type packs (design principles 5.6): `ParamsOf<F>`, `WithOf<F>` and `ResultOf<F>` take a function type apart, `..E` in a tuple type is one member for each member of the packs it uses, a rest parameter typed `..xs: ..A` binds the pack `A` to the types of its arguments, and `when ..pred::<A>()` asks every member; `zip` is a declaration of the prelude written with them"
+
+[[tests]]
+name = "type_packs.function_parts"
+desc = "`(..ParamsOf<F>)` is the tuple of the ordinary parameters, `(..WithOf<F>)` of the `with` ones, `ResultOf<F>` the result type; a pack of one member is a tuple of one, not the member."
+kind = "behavior"
+case = "../../../cases/compile/type_packs/function_parts.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "true\ntrue\ntrue\nfalse\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "type_packs.zip_values"
+desc = "`zip(a, b)` and `zip(a, b, c)` are the declaration `zip::<..A>(..xs: ..A): (..ElementOf<A>)[] when ..is_array::<A>()` of the prelude: the result type has one element type for each array, and the values are the tuples. Four schedulers."
+kind = "behavior"
+case = "../../../cases/compile/type_packs/zip_values.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[(1, x), (2, y), (3, z)]\n[(1, x, 1.5), (2, y, 2.5), (3, z, 3.5)]\n3 3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "type_packs.rest_function"
+desc = "A function with a body takes a pack the same way: `firsts::<..A>(..xs: ..A): (..ElementOf<A>)` binds `A` to the types of the arrays it is given."
+kind = "behavior"
+case = "../../../cases/compile/type_packs/rest_function.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "(1, x)\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "type_packs.length_mismatch"
+desc = "`..` expands the packs it uses together: `(..(ParamsOf<F>, WithOf<F>))` for a function with one ordinary and two `with` parameters is a TypeFunctionNotApplicable that names both packs and their lengths where the type is used."
+kind = "negative"
+case = "../../../cases/compile/type_packs/length_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeFunctionNotApplicable"
+expect_output_contains = ["ParamsOf<F> has 1 member(s)", "WithOf<F> has 2 member(s)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "type_packs.zip_not_array"
+desc = "`when ..is_array::<A>()` asks every member of the pack: `zip([1, 2], 3)` has an argument that is not an array, so the one declaration of `zip` is inapplicable (WhenConditionUnmet)."
+kind = "negative"
+case = "../../../cases/compile/type_packs/zip_not_array.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "type_packs.rest_not_array"
+desc = "The `when` of a function with a body asks every member of the pack too: an argument that is not an array is a WhenConditionUnmet, not a failure inside the body."
+kind = "negative"
+case = "../../../cases/compile/type_packs/rest_not_array.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000

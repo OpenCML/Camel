@@ -31,7 +31,7 @@ enum class TypeType {
 /// (`A & B`, `A \ B`, `A + B`, `A ^ B`) and the older spelling of specialization had codes here;
 /// they are not in the language, so writing one where a type is expected is an ordinary syntax
 /// error and no load carries them.
-enum class TypeOp { TypeOf };
+enum class TypeOp { TypeOf, Pack };
 
 std::string to_string(TypeType type);
 std::string to_string(TypeOp op);

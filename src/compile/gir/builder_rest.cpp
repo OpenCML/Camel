@@ -11,6 +11,8 @@
  */
 
 #include "builder.h"
+#include "camel/core/type/typecall.h"
+#include "camel/utils/str.h"
 #include "builder_helpers.h"
 #include "builder_support.h"
 
@@ -273,6 +275,45 @@ node_handle_t Builder::inlineRestCall(
     for (size_t i = fixedCount; i < normInputs.size(); ++i) {
         restValues.push_back(normInputs[i].node);
         restTypes.push_back(valueTypeOf(nodeTypeOf(normInputs[i].node)));
+    }
+    // A rest parameter typed `..xs: ..A` binds `A` to the pack of the types it took, the same
+    // binding a call of a declaration without a body makes (DeclaredFuncTypeResolver).
+    if (Type *pack = signature->restPack()) {
+        bindings.emplace_back(
+            static_cast<camel::core::type::TypeVarType *>(pack)->name(),
+            camel::core::type::TypeCallType::makePack(restTypes));
+    }
+    // The declaration's `when`, now that the fixed arguments and the pack have their types: a
+    // false condition makes the function inapplicable (design principles 4.4).
+    if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+        std::unordered_map<std::string, data_ptr_t> withValues;
+        for (size_t i = 0; i < withCount; ++i) {
+            if (data_ptr_t value = constantOfNode(withInputs[i].node); value != nullptr) {
+                withValues.emplace(std::string(signature->argNameAt(i)), value);
+            }
+        }
+        const WhenResult verdict =
+            evaluateWhenCondition(when->condition, signature, bindings, withValues, tmpl);
+        if (verdict.fails()) {
+            yieldToPipe(call);
+            std::vector<Type *> all;
+            for (const Argument &input : withInputs) {
+                all.push_back(valueTypeOf(nodeTypeOf(input.node)));
+            }
+            for (const Argument &input : normInputs) {
+                all.push_back(valueTypeOf(nodeTypeOf(input.node)));
+            }
+            diags_->of(SemanticDiag::WhenConditionUnmet)
+                .atOrigin(call->origin())
+                .commit(
+                    tmpl->name,
+                    strutil::join(all, ", ", [](Type *t) { return t->toString(); }),
+                    tmpl->name + " — when " + when->text);
+            throw BuildAbortException();
+        }
+        if (!verdict.holds()) {
+            reportWhenProblem(verdict, tmpl->name, when->condition);
+        }
     }
     RestBinding rest;
     rest.name                 = restName;

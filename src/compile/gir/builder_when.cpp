@@ -24,6 +24,7 @@
  */
 
 #include "builder.h"
+#include "camel/core/type/typecall.h"
 #include "builder_support.h"
 
 #include "camel/compile/literal.h"
@@ -1202,10 +1203,61 @@ WhenResult Builder::whenOf(const WhenFrame &frame, const GCT::node_ptr_t &node) 
         return whenOfCall(frame, node);
     case GCT::NodeKind::DREF:
         return whenOfParameter(frame, node);
+    case GCT::NodeKind::SPRD:
+        return whenOfEvery(frame, node);
     default:
         return whenResultOf(
             WhenOutcome::NotEvaluable, {}, "the condition is not computed at compile time");
     }
+}
+
+WhenResult Builder::whenOfEvery(const WhenFrame &frame, const GCT::node_ptr_t &node) {
+    // The packs the frame binds: the variables a rest parameter typed `..xs: ..A` was bound to.
+    std::vector<std::pair<std::string, size_t>> packs;
+    for (const auto &[name, type] : frame.bindings) {
+        if (camel::core::type::TypeCallType::isPack(type)) {
+            packs.emplace_back(name, camel::core::type::TypeCallType::packMembers(type).size());
+        }
+    }
+    if (packs.empty()) {
+        if (frame.signature != nullptr && frame.signature->restPack() != nullptr) {
+            // The pack is the types of the arguments a call gives the rest parameter: at the
+            // declaration it is open, and only a call knows it.
+            return whenResultOf(
+                WhenOutcome::TypeNotConcrete, {}, "the pack is bound by the arguments of a call");
+        }
+        return whenResultOf(
+            WhenOutcome::NotEvaluable, {},
+            "`..` in a condition expands a type pack, and the declaration binds none");
+    }
+    for (const auto &[name, length] : packs) {
+        if (length != packs.front().second) {
+            std::string detail;
+            for (const auto &[other, count] : packs) {
+                detail += (detail.empty() ? "" : ", ") + other + " has " + std::to_string(count) +
+                          " member(s)";
+            }
+            return whenResultOf(
+                WhenOutcome::NotEvaluable, {},
+                "`..` expands packs of different lengths: " + detail);
+        }
+    }
+    for (size_t i = 0; i < packs.front().second; ++i) {
+        type_bindings_t each;
+        for (const auto &[name, type] : frame.bindings) {
+            each.emplace_back(
+                name,
+                camel::core::type::TypeCallType::isPack(type)
+                    ? camel::core::type::TypeCallType::packMembers(type)[i]
+                    : type);
+        }
+        const WhenFrame member{frame.signature, each, frame.withValues};
+        const WhenResult result = whenOf(member, node->at(0));
+        if (!result.holds()) {
+            return result;
+        }
+    }
+    return whenResultOf(WhenOutcome::Holds);
 }
 
 WhenResult Builder::whenOfBranch(const WhenFrame &frame, const GCT::node_ptr_t &node) {

@@ -127,6 +127,13 @@ bool containsTypeOf(Type *type);
 Type *substituteTypeVars(Type *type, const type_bindings_t &bindings);
 
 /**
+ * `type` with the type packs it writes expanded where they are known already: `(..ParamsOf<F>)`
+ * for a function type `F` that is written out has its members, with no variable to wait for. A
+ * pack that waits for a variable stays as it is. Returns `type` itself when nothing was expanded.
+ */
+Type *expandTypePacks(Type *type);
+
+/**
  * `type` with every named extent that `values` binds replaced by its value (`f32[n]`
  * with n = 4 is `f32[4]`). A `constas` parameter is not substituted: it is a
  * parameter, not an extent. Returns `type` itself when nothing in it was replaced.

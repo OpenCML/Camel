@@ -949,7 +949,15 @@ void ParserImpl::parseTagRef() {
 void ParserImpl::parseWhenClause() {
     const size_t m = mark();
     bump(); // `when`
-    parseExpr();
+    if (cur_ == TK::DotDot) {
+        // `..pred::<A>()`: the predicate holds for every member of the pack `A`.
+        const size_t every = mark();
+        bump();
+        parseExpr();
+        close(every, NK::RestValue);
+    } else {
+        parseExpr();
+    }
     close(m, NK::WhenClause);
 }
 
@@ -999,7 +1007,7 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
     close(m, NK::FuncDecl);
 }
 
-/// typeParams : '::' '<' identDef (',' identDef)* ','? '>'
+/// typeParams : '::' '<' '..'? identDef (',' '..'? identDef)* ','? '>'
 ///
 /// The type parameters of a generic declaration, written at its head right after the name
 /// (design principles 5.5): `func first::<T>(xs: T[]): T`. The spelling is the one a call site
@@ -1017,9 +1025,13 @@ void ParserImpl::parseTypeParams() {
     bump(); // `<`
     {
         Scope scope(*this, false);
-        // `::<` at the end of the text: the name is reported, not read.
+        // `::<` at the end of the text: the name is reported, not read. A name may be written
+        // `..A`: the variable is a pack, bound to the types of the arguments a rest parameter
+        // typed `..xs: ..A` takes.
+        eat(TK::DotDot);
         parseIdentDef();
-        while (!panic_ && eat(TK::Comma) && cur_ == TK::Identifier) {
+        while (!panic_ && eat(TK::Comma) && (cur_ == TK::Identifier || cur_ == TK::DotDot)) {
+            eat(TK::DotDot);
             parseIdentDef();
         }
     }

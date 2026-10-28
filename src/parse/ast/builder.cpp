@@ -5149,6 +5149,13 @@ Value Builder::visitTypeArm(cst::TypeArm context) {
     return arm;
 }
 
+Value Builder::visitPackType(cst::PackType context) {
+    node_ptr_t res = createNodeAs<TypeExprLoad>(TypeOp::Pack);
+    setNodeTokenRangeByContext(res, context);
+    *res << any2node(visitType(context->type()));
+    return res;
+}
+
 Value Builder::visitTypeOfType(cst::TypeOfType context) {
     node_ptr_t res = createNodeAs<TypeExprLoad>(TypeOp::TypeOf);
     setNodeTokenRangeByContext(res, context);
@@ -5416,6 +5423,8 @@ Value Builder::visitType(syn::Node context) {
         return visitFuncType(cst::FuncType(context));
     case NK::TypeOfType:
         return visitTypeOfType(cst::TypeOfType(context));
+    case NK::PackType:
+        return visitPackType(cst::PackType(context));
     case NK::MatchTypeType:
         return visitMatchTypeType(cst::MatchTypeType(context));
     case NK::EnumType:

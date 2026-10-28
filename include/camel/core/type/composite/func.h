@@ -85,9 +85,12 @@ class FunctionTypeFactory {
     /// left over at a call and is expanded there (design principles 5.5). It is added after
     /// every other ordinary parameter, as a `void` parameter that no call ever passes a value
     /// for; `hasRest` tells it apart from an ordinary `void` parameter.
-    void addRestArg(const std::string &ident) {
+    ///
+    /// A rest parameter written with a type, `..xs: ..A`, stands in the signature as the type
+    /// variable `A`, the pack the call binds to the types of the arguments left over.
+    void addRestArg(const std::string &ident, Type *pack = nullptr) {
         hasRest_ = true;
-        normTypes_.emplace_back(Type::Void(), false);
+        normTypes_.emplace_back(pack != nullptr ? pack : Type::Void(), false);
         argNames_.push_back(ident);
     }
 
@@ -207,6 +210,12 @@ class FunctionType : public CompositeType {
     /// Whether the last ordinary parameter is a rest parameter (`..ts`). Its type in this
     /// signature is `void`; the tuple of the arguments it receives is made at the call.
     bool hasRest() const { return hasRest_; }
+    /// The type variable a typed rest parameter (`..xs: ..A`) names, or nothing.
+    Type *restPack() const {
+        return hasRest_ && normCount_ > 0 && normTypeAt(normCount_ - 1)->code() == TypeCode::TypeVar
+                   ? normTypeAt(normCount_ - 1)
+                   : nullptr;
+    }
 
     /// Whether the last `with` parameter is a pack (`with <..args>`); its type here is `void`.
     bool hasWithRest() const { return hasWithRest_; }

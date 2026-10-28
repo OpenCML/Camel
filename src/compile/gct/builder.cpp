@@ -5551,6 +5551,12 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
         node_ptr_t expression = visitData(ast->at(0));
         res                   = TypeOfType::create(expression);
     } break;
+    case AST::TypeOp::Pack: {
+        // `..E`: a type pack expanded (design principles 5.6). Where it may stand -- an element
+        // of a tuple, the type of a rest parameter -- is checked there.
+        ASSERT(ast->size() == 1, "A pack expansion has its type as its only child.");
+        res = TypeCallType::makeExpand(visitType(ast->at(0)));
+    } break;
     }
 
     LEAVE("TypeExpr");
@@ -5662,7 +5668,7 @@ Type *Builder::visitTupleType(const AST::node_ptr_t &ast) {
         types.push_back(type);
     }
     // Create a TupleType object using the collected types
-    Type *tupleType = TupleType::create(types);
+    Type *tupleType = expandTypePacks(TupleType::create(types));
     LEAVE("TupleType");
     return tupleType;
 }
@@ -5933,11 +5939,22 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
                     .commit(name);
                 throw BuildAbortException();
             }
+            // A rest parameter is untyped, or typed with the pack variable its declaration
+            // declares (`..xs: ..A`, with `::<..A>` at the head): the call binds the variable to
+            // the types of the arguments the rest parameter takes.
+            Type *packVariable = nullptr;
             if (paramPair->size() > 0) {
-                diags_->of(SemanticDiag::RestParameterTypeNotSupported)
-                    .at(paramLoad->tokenRange())
-                    .commit(name);
-                throw BuildAbortException();
+                Type *written = visitType(paramPair->at(0));
+                if (TypeCallType::isExpand(written) &&
+                    static_cast<TypeCallType *>(written)->paramsSpan()[0]->code() ==
+                        TypeCode::TypeVar) {
+                    packVariable = static_cast<TypeCallType *>(written)->paramsSpan()[0];
+                } else {
+                    diags_->of(SemanticDiag::RestParameterTypeNotSupported)
+                        .at(paramLoad->tokenRange())
+                        .commit(name);
+                    throw BuildAbortException();
+                }
             }
             if (!paramNames.insert(name).second) {
                 diags_->of(SemanticDiag::DuplicateParameter)
@@ -5945,7 +5962,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
                     .commit(name);
                 throw BuildAbortException();
             }
-            factory.addRestArg(name);
+            factory.addRestArg(name, packVariable);
             continue;
         }
         const bool isVar = paramLoad->isVar();
@@ -6196,7 +6213,9 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
         const bool concrete = std::none_of(types.begin(), types.end(), [](Type *argument) {
             return containsTypeVar(argument);
         });
-        if (concrete && containsTypeCall(applied)) {
+        // A pack is what `ParamsOf<F>` computes, and the `..` around it is read by the type that
+        // holds it: it is reported where it is used bare, not here.
+        if (concrete && containsTypeCall(applied) && !TypeCallType::isPack(applied)) {
             // The arguments are concrete and the type function does not accept them.
             std::string what = applied->toString();
             std::string why  = "it is not defined for the type it is given";

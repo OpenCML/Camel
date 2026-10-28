@@ -7,6 +7,7 @@
  */
 
 #include "builder.h"
+#include "camel/core/type/typecall.h"
 #include "builder_support.h"
 #include "builder_helpers.h"
 
@@ -885,8 +886,13 @@ Builder::RuleVerdict Builder::ruleVerdictForCall(
         for (size_t i = 0; i < explicitTypes.size() && i < generic->bindableNames().size(); ++i) {
             bindings.emplace_back(generic->bindableNames()[i], explicitTypes[i]);
         }
+        // A rest parameter takes the arguments after the fixed ones; typed `..xs: ..A` it binds
+        // `A` to the pack of their types, which the condition can ask about with `..pred::<A>()`.
+        const size_t fixedNorm =
+            declared->normTypesCount() - (declared->hasRest() ? 1 : 0);
         if (declared->withTypesCount() != withTypes.size() ||
-            declared->normTypesCount() != normTypes.size()) {
+            (declared->hasRest() ? normTypes.size() < fixedNorm
+                                 : normTypes.size() != fixedNorm)) {
             return RuleVerdict::NotThisRule;
         }
         for (size_t i = 0; i < declared->withTypesCount(); ++i) {
@@ -894,10 +900,19 @@ Builder::RuleVerdict Builder::ruleVerdictForCall(
                 return RuleVerdict::NotThisRule;
             }
         }
-        for (size_t i = 0; i < declared->normTypesCount(); ++i) {
+        for (size_t i = 0; i < fixedNorm; ++i) {
             if (!unifyTypeVars(declared->normTypeAt(i), valueTypeOf(normTypes[i]), bindings)) {
                 return RuleVerdict::NotThisRule;
             }
+        }
+        if (Type *pack = declared->restPack()) {
+            std::vector<Type *> members;
+            for (size_t i = fixedNorm; i < normTypes.size(); ++i) {
+                members.push_back(valueTypeOf(normTypes[i]));
+            }
+            bindings.emplace_back(
+                static_cast<camel::core::type::TypeVarType *>(pack)->name(),
+                camel::core::type::TypeCallType::makePack(members));
         }
     }
     // A rule has no `with` arguments of its own where a call selects it, so a condition that

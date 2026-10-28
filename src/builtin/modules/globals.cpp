@@ -2189,31 +2189,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        OperatorGroup::create(
-            "zip",
-            {
-                {
-                    ":struct/zip",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {-1, {}}},
-                        "(...args: T[]) => (T, T, ...)[]",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm.size() < 2)
-                                return nullopt;
-                            for (const auto &t : norm) {
-                                if (t->code() != TypeCode::Array)
-                                    return nullopt;
-                            }
-                            type_vec_t tupleTypes;
-                            for (size_t i = 0; i < norm.size(); i++) {
-                                const auto &elemType = tt::as_ptr<ArrayType>(norm[i])->elemType();
-                                tupleTypes.push_back(elemType);
-                            }
-                            return ArrayType::create(TupleType::create(std::move(tupleTypes)));
-                        }),
-                },
-            }),
+        // The rules of `zip` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("zip", {}),
         // The rules of `last` are the declarations of stdlib/prelude.cml.
         OperatorGroup::create("last", {}),
         // The rules of `range` are the declarations of stdlib/prelude.cml.

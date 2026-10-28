@@ -229,6 +229,7 @@ class Builder {
     Value visitSpecType(syntax::cst::SpecType context);
     Value visitRefType(syntax::cst::RefType context);
     Value visitTypeOfType(syntax::cst::TypeOfType context);
+    Value visitPackType(syntax::cst::PackType context);
     Value visitMatchTypeType(syntax::cst::MatchTypeType context);
     Value visitTypeArm(syntax::cst::TypeArm context);
     Value visitStructType(syntax::cst::StructType context);
