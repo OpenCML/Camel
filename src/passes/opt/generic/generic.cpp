@@ -31,6 +31,7 @@
 #include <deque>
 #include <map>
 #include <optional>
+#include <unordered_set>
 #include <queue>
 #include <tuple>
 #include <vector>
@@ -359,6 +360,142 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     const auto inArm = [&](gc_node_ref_t n) {
         return std::ranges::find(armNodes, n) != armNodes.end();
     };
+    // The statements of the taken arm are the statements of this block once the branch is gone, and
+    // a block's statements are one chain (docs/design/effects/edges.cn.md 5.3). They do not always
+    // arrive as one: a splice lays the body it moved in inside the arm, so an arm that holds the code
+    // of more than one splice arrives as one fragment per body, each with its own head and tail, and
+    // only one of those fragments would take the branch's place -- the statements of the others would
+    // be reached by nothing and would stop running (2). The fragments are joined in the order they
+    // were laid out, skipping a join that would close the chain on itself: layout order is not
+    // dependency order, and a fragment that already waits on a later one is left where it is rather
+    // than made part of a cycle.
+    uint32_t armRegionId = 0;
+    for (uint32_t r = 1; r < draft.regionCount(); ++r) {
+        const auto &region = draft.region(r);
+        if (region.kind == camel::runtime::GCRegionKind::Arm && region.owner == brch &&
+            region.index == *arm) {
+            armRegionId = r;
+            break;
+        }
+    }
+    gc_node_ref_t armBlockNode = kInvalidNodeRef;
+    for (gc_node_ref_t n = 0; armBlockNode == kInvalidNodeRef && n < draft.nodeSlotCount(); ++n) {
+        if (draft.alive(n) && inArm(n) && draft.nodeRegion(n) == armRegionId) {
+            armBlockNode = n;
+        }
+    }
+    const auto inArmBlock = [&](gc_node_ref_t n) {
+        return inArm(n) && draft.alive(n) && n != join && armBlockNode != kInvalidNodeRef &&
+               camel::runtime::sameSyncBlock(draft, n, armBlockNode);
+    };
+    const auto markStatement = [&](gc_node_ref_t n) {
+        const camel::runtime::DraftNodeHeader *header = draft.header(n);
+        if (header != nullptr) {
+            draft.setNodeRuntimeFlags(
+                n, static_cast<uint8_t>(header->runtimeFlags | camel::runtime::kGCNodeFlagSyncStatement));
+        }
+    };
+    const auto chainTo = [&](gc_node_ref_t user, gc_node_ref_t pred) {
+        markStatement(user);
+        markStatement(pred);
+        const gc_node_ref_t only[1] = {pred};
+        draft.setSyncInputs(user, only);
+        camel::runtime::appendControlDependency(draft, pred, user);
+    };
+    // Does `from` wait on `target`, directly or through any edge kind? The chain is joined only where
+    // the answer is no; an exhausted walk answers yes, because not proving it free does not make it
+    // safe to join.
+    const auto waitsOn = [&](gc_node_ref_t from, gc_node_ref_t target) {
+        std::vector<gc_node_ref_t> work{from};
+        std::unordered_set<gc_node_ref_t> seen;
+        size_t budget = size_t{1} << 14;
+        while (!work.empty()) {
+            const gc_node_ref_t node = work.back();
+            work.pop_back();
+            if (node == target) {
+                return true;
+            }
+            if (!seen.insert(node).second) {
+                continue;
+            }
+            for (const auto &group :
+                 {draft.normInputsOf(node),
+                  draft.withInputsOf(node),
+                  draft.ctrlInputsOf(node),
+                  draft.syncInputsOf(node)}) {
+                for (gc_node_ref_t input : group) {
+                    if (budget == 0) {
+                        return true;
+                    }
+                    --budget;
+                    work.push_back(input);
+                }
+            }
+        }
+        return false;
+    };
+    gc_node_ref_t armChainHead = kInvalidNodeRef;
+    gc_node_ref_t armChainTail = kInvalidNodeRef;
+    {
+        std::vector<gc_node_ref_t> heads;
+        for (gc_node_ref_t n : armNodes) {
+            const camel::runtime::DraftNodeHeader *header = draft.header(n);
+            if (header == nullptr || !inArmBlock(n) ||
+                (header->runtimeFlags & camel::runtime::kGCNodeFlagSyncStatement) == 0) {
+                continue;
+            }
+            bool waits = false;
+            for (gc_node_ref_t pred : draft.syncInputsOf(n)) {
+                if (inArmBlock(pred)) {
+                    waits = true;
+                    break;
+                }
+            }
+            if (!waits) {
+                heads.push_back(n);
+            }
+        }
+        std::vector<gc_node_ref_t> tails;
+        bool joinable = heads.size() > 1;
+        for (gc_node_ref_t head : heads) {
+            gc_node_ref_t tail = head;
+            for (;;) {
+                gc_node_ref_t next = kInvalidNodeRef;
+                for (gc_node_ref_t user : draft.syncUsersOf(tail)) {
+                    if (!inArmBlock(user)) {
+                        continue;
+                    }
+                    if (next != kInvalidNodeRef) {
+                        joinable = false; // the fragment forks: it has no one tail
+                        break;
+                    }
+                    next = user;
+                }
+                if (!joinable || next == kInvalidNodeRef) {
+                    break;
+                }
+                tail = next;
+            }
+            if (!joinable) {
+                break;
+            }
+            tails.push_back(tail);
+        }
+        if (joinable && tails.size() == heads.size()) {
+            bool joined = true;
+            for (size_t i = 1; i < heads.size(); ++i) {
+                if (waitsOn(tails[i - 1], heads[i])) {
+                    joined = false;
+                    continue;
+                }
+                chainTo(heads[i], tails[i - 1]);
+            }
+            if (joined) {
+                armChainHead = heads.front();
+                armChainTail = tails.back();
+            }
+        }
+    }
     gc_node_ref_t armTail = kInvalidNodeRef;
     for (gc_node_ref_t pred : draft.syncInputsOf(result)) {
         if (inArm(pred)) {
@@ -382,6 +519,15 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
                 break;
             }
         }
+    }
+    // The chain the arm's fragments were joined into is what the branch's place is handed to: its
+    // tail is where the statements written after the branch follow, and its head is entered from
+    // where the branch stood.
+    const std::vector<gc_node_ref_t> joinChainPreds(
+        draft.syncInputsOf(join).begin(),
+        draft.syncInputsOf(join).end());
+    if (armChainTail != kInvalidNodeRef) {
+        armTail = armChainTail;
     }
     const auto &preds = brchPreds;
     const std::vector<gc_node_ref_t> brchCtrlUsers(
@@ -458,6 +604,17 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     // erases so that eraseNode's own chain closing finds no successor left to close over.
     if (armTail != kInvalidNodeRef && draft.alive(armTail) && draft.alive(join)) {
         draft.handChainPlaceTo(join, armTail);
+    }
+    // The joined chain's head stands where the branch stood: `handChainPlaceTo` gave the place to the
+    // chain's tail, which already waits on the fragment before it, so the entry is written here.
+    if (armChainHead != kInvalidNodeRef && draft.alive(armChainHead) &&
+        draft.syncInputsOf(armChainHead).empty()) {
+        for (gc_node_ref_t pred : joinChainPreds) {
+            if (pred != armChainHead && pred != join && draft.alive(pred)) {
+                chainTo(armChainHead, pred);
+                break;
+            }
+        }
     }
 
     draft.eraseNode(join);
