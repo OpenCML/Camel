@@ -389,3 +389,34 @@ assert(grow && grow.signature === '(xs: f32[n], k: int) => f32 pure', `grow is d
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "let_shape"
+desc = "The shape a declaration writes is the type of the value it binds (design principles 5.1, 5.4): `let x: f32[3] = [1.0, 2.0, 3.0]` is one `f32[3]`, so the call to a parameter that states that shape needs no conversion, and the literal keeps its three elements. An annotation that states less than the value does -- `f32[..]` is any number of dimensions, not one -- is the type of the name, and the value underneath keeps the shape it has: `len` of the two-by-two array is 2, not the 4 the array of its rows would answer."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/let_shape.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "3\n2\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "let_shape_on_the_graph"
+desc = "The graph of the same program: the literal under `f32[3]` is one DATA of `f32[3]`, not the `f32[]` its elements alone give it, and the two-by-two literal under `f32[..]` is a DATA of `f32[2, 2]` under a CAST to the declared type -- the annotation gives the name its type, and the conversion is checked when it runs."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/let_shape.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const lines = input.normalized.stdout.split(String.fromCharCode(10))
+  const data = (type) => lines.filter((l) => l.includes('type="DATA"') && l.includes(`value_type="${type}"`))
+  assert(data('f32[3]').length === 1, `no f32[3] literal: ${data('f32[3]').join(' | ')}`)
+  assert(data('f32[2, 2]').length === 1, `no f32[2, 2] literal: ${data('f32[2, 2]').join(' | ')}`)
+  const casts = lines.filter((l) => l.includes('type="CAST"') && l.includes('value_type="f32[..]"'))
+  assert(casts.length === 1, `no CAST to f32[..]: ${lines.filter((l) => l.includes('type="CAST"')).join(' | ')}`)
+  assert(data('f32[]').length === 0, `a literal kept the unknown shape: ${data('f32[]').join(' | ')}`)
+}
+"""
+timeout_ms = 8000

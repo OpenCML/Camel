@@ -221,6 +221,28 @@ const string ArrayData::toString() const {
     return str;
 }
 
+namespace {
+
+/// The shape a type states in constants (`f32[3]`, `f32[2, 2]`), which is the shape a literal
+/// can be the elements of. A shape left open (`f32[]`), written over a dimension name (`f32[n]`)
+/// or fixed only in part states none here: what those state is checked when the conversion runs.
+bool statedShapeOf(const ArrayType *type, std::vector<int64_t> &extents) {
+    const std::span<const ExtentForm> forms = type->extents();
+    if (forms.empty()) {
+        return false;
+    }
+    extents.clear();
+    for (const ExtentForm &form : forms) {
+        if (!form.isConstant()) {
+            return false;
+        }
+        extents.push_back(form.constant());
+    }
+    return true;
+}
+
+} // namespace
+
 data_ptr_t ArrayData::convertTo(Type *type) {
     if (type->equals(type_)) {
         return tt::as_shared<ArrayData>(shared_from_this());
@@ -231,6 +253,22 @@ data_ptr_t ArrayData::convertTo(Type *type) {
         // becomes the named type it enters, design principles 5.2).
         ArrayDataFactory f;
         f.setElemType(arrType->elemType());
+        // The shape a type states is part of the type: the elements of a literal are one array
+        // of that shape, not the array of unknown shape their element type alone gives them
+        // (`let x: f32[3] = [1.0, 2.0, 3.0]` is an `f32[3]`, design principles 5.1, 5.4). A
+        // shape the elements do not fill is not one this value can take, and the conversion
+        // has no answer: the declaration reports the literal it cannot make.
+        std::vector<int64_t> extents;
+        if (statedShapeOf(arrType, extents)) {
+            int64_t count = 1;
+            for (const int64_t extent : extents) {
+                count *= extent;
+            }
+            if (count != static_cast<int64_t>(data_.size())) {
+                return nullptr;
+            }
+            f.setExtents(extents);
+        }
         for (const auto &e : data_) {
             f.add(e);
         }

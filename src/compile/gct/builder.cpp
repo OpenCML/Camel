@@ -4415,11 +4415,18 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
                 rejectTextInLiteral(value->data(), type, value->origin())) {
                 throw BuildAbortException();
             }
-            if (data_ptr_t converted = value->data()->convertTo(type)) {
+            data_ptr_t converted = value->data()->convertTo(type);
+            if (converted != nullptr && converted->type()->equals(type)) {
                 return tree_->makeData(converted);
             }
-            reportLiteralCastFailure(diags_, ast->load()->tokenRange(), value->data(), type);
-            throw BuildAbortException();
+            if (converted == nullptr) {
+                reportLiteralCastFailure(diags_, ast->load()->tokenRange(), value->data(), type);
+                throw BuildAbortException();
+            }
+            // A conversion that comes back as another type is not what the declaration says:
+            // an `f32[..]` states less about the value than the value states itself, and the
+            // name takes the declared type through the annotation CAST below, which is the one
+            // place a declaration gives its value a type (design principles 5.1, 5.4).
         }
     }
     // Any other expression: an annotation CAST (see the declaration). An expression of the
