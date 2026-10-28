@@ -39,7 +39,7 @@ import { get_env } from env
 /// A row count from the data: every input the checker gives sums to 1, 2 or 4, so the reshape
 /// keeps its four elements and the extent of axis 0 is what the data says.
 func rows(x: f32[..]): f32[..] {
-    return reshape(x, [int(sum(x)), int(4.0 / sum(x))])
+    return reshape<[int(sum(x)), int(4.0 / sum(x))]>(x)
 }
 
 func both(x: f32[..]): f32[..] {
@@ -55,55 +55,55 @@ func runtimeStart(x: f32[..]): f32[..] {
 }
 
 func rank2(x: f32[..]): f32[..] {
-    return reshape(x, [2, 2])[1:2]
+    return reshape<[2, 2]>(x)[1:2]
 }
 
 func known(x: f32[..]): f32[..] {
-    return reshape(x, [4])[1:3]
+    return reshape<[4]>(x)[1:3]
 }
 
 func stepped(x: f32[..]): f32[..] {
-    return reshape(x, [4])[0:4:2]
+    return reshape<[4]>(x)[0:4:2]
 }
 
 /// Backward, both bounds written.
 func negBoth(x: f32[..]): f32[..] {
-    return reshape(x, [6])[5:1:-2]
+    return reshape<[6]>(x)[5:1:-2]
 }
 
 /// Forward, the same two bounds and the same positions read backwards.
 func posBoth(x: f32[..]): f32[..] {
-    return reshape(x, [6])[1:5:2]
+    return reshape<[6]>(x)[1:5:2]
 }
 
 /// Backward, the end not written.
 func negEnd(x: f32[..]): f32[..] {
-    return reshape(x, [4])[3::-2]
+    return reshape<[4]>(x)[3::-2]
 }
 
 /// Forward, the end not written.
 func posEnd(x: f32[..]): f32[..] {
-    return reshape(x, [4])[3::2]
+    return reshape<[4]>(x)[3::2]
 }
 
 /// Backward, neither bound written.
 func negAll(x: f32[..]): f32[..] {
-    return reshape(x, [6])[::-2]
+    return reshape<[6]>(x)[::-2]
 }
 
 /// Forward, neither bound written.
 func posAll(x: f32[..]): f32[..] {
-    return reshape(x, [6])[::2]
+    return reshape<[6]>(x)[::2]
 }
 
 /// Backward along the second axis of a rank-2 value, neither bound written.
 func negRank2(x: f32[..]): f32[..] {
-    return reshape(x, [2, 4])[:, ::-2]
+    return reshape<[2, 4]>(x)[:, ::-2]
 }
 
 /// Forward along that same axis.
 func posRank2(x: f32[..]): f32[..] {
-    return reshape(x, [2, 4])[:, ::2]
+    return reshape<[2, 4]>(x)[:, ::2]
 }
 
 /// Backward along an axis whose extent only the run knows.
@@ -113,18 +113,18 @@ func sweep(x: f32[..]): f32[..] {
 
 /// Backward by one: the reverse the library's `reverse` writes.
 func negOne(x: f32[..]): f32[..] {
-    return reshape(x, [6])[::-1]
+    return reshape<[6]>(x)[::-1]
 }
 
 /// Forward by one, the same two unwritten bounds.
 func posOne(x: f32[..]): f32[..] {
-    return reshape(x, [6])[:]
+    return reshape<[6]>(x)[:]
 }
 
 func main(): int sync {
-    let four = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [4])
-    let six = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [6])
-    let eight = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0] as f32[], [8])
+    let four = reshape<[4]>([1.0, 2.0, 3.0, 4.0] as f32[])
+    let six = reshape<[6]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
+    let eight = reshape<[8]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0] as f32[])
     let out = get_env('ONNX_OUT') ?? ''
     let mode = get_env('MODE') ?? ''
     if mode == 'open' then {

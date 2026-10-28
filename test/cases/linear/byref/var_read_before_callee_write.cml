@@ -16,7 +16,7 @@ func ignores(x: f64[..], var c: int): int sync {
 func steps(i: int, n: int, x: f64[..], var c: int): f64[..] sync {
     return if i >= n then x else sync {
         c += 1
-        let fresh = reshape([0.5, 0.5], [2])
+        let fresh = reshape<[2]>([0.5, 0.5])
         let r = steps(i + 1, n, fresh, c)
         r
     }
@@ -25,7 +25,7 @@ func steps(i: int, n: int, x: f64[..], var c: int): f64[..] sync {
 func f(var c: int): int sync {
     c += 1
     let snapshot = c + 0
-    let t = reshape([1.0, 2.0], [2])
+    let t = reshape<[2]>([1.0, 2.0])
     let r = ignores(t, c)
     return snapshot * 100 + r
 }
@@ -33,7 +33,7 @@ func f(var c: int): int sync {
 func g(var c: int): float sync {
     c += 1
     let snapshot = c + 0
-    let t = reshape([1.0, 2.0], [2])
+    let t = reshape<[2]>([1.0, 2.0])
     let y = steps(0, 3, t, c)
     return float(sum(y)) + float(snapshot % 4) * 100.0
 }

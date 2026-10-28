@@ -22,8 +22,8 @@ func first(pair: (f64[..], f64[..])): f64[..] {
 }
 
 func main(): int sync {
-    let l = { w: reshape([1.0, 0.0, 0.0, 1.0], [2, 2]), b: reshape([1.0, 1.0], [2]) }
-    let x = reshape([1.0, 2.0], [1, 2])
+    let l = { w: reshape<[2, 2]>([1.0, 0.0, 0.0, 1.0]), b: reshape<[2]>([1.0, 1.0]) }
+    let x = reshape<[1, 2]>([1.0, 2.0])
     let y = apply<l>(x)
     'covariance struct={} array={} tuple={}'->format<sum(y), total([x, y]), sum(first((y, x)))>->println
     return 0

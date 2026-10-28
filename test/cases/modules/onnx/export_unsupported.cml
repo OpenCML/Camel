@@ -9,7 +9,7 @@ import { export_model } from onnx
 import { get_env } from env
 
 func main(): void! sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
-    let target = reshape([0.0, 1.0, 1.0, 0.0], [2, 2])
+    let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0])
+    let target = reshape<[2, 2]>([0.0, 1.0, 1.0, 0.0])
     export_model<out: get_env('ONNX_OUT') ?? ''>((t: float[..]): float[..] => t * softmax_cross_entropy(t, target), x)
 }

@@ -32,7 +32,7 @@ type Block = {
 
 // RMSNorm over the last axis, the gain applied after the normalization.
 func rmsnorm(x: f32[..], g: f32[..]): f32[..] {
-    let scale = mean(x * x, -1, true)
+    let scale = mean<-1, true>(x * x)
     return x / sqrt(scale + 1e-6) * g
 }
 
@@ -44,7 +44,7 @@ func attention(x: f32[..]): f32[..] {
     let v = h @ block.wv
     // The scores of every position against every position, scaled by the square root of d.
     let scores = (q @ transpose(k)) / 2.8284271247461903
-    let weights = softmax(scores, -1)
+    let weights = softmax<-1>(scores)
     return (weights @ v) @ block.wo + x
 }
 

@@ -1,10 +1,10 @@
 import { concat, sum, ones } from tensor
 // Arms of different extents join to an unknown extent.
 func f(x: f32[3], c: bool): f32[3] {
-    return if c then x else slice(concat(x, x, 0), 0, 0, 3) * 2.0
+    return if c then x else slice(concat<0>(x, x), 0, 0, 3) * 2.0
 }
 func g(x: f32[3], c: bool): f32[3] {
-    return if c then x else concat(x, x, 0)
+    return if c then x else concat<0>(x, x)
 }
 func main(): int sync {
     println(sum(f(ones::<f32>([3]), false)))

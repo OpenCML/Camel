@@ -20,10 +20,10 @@ func shared_values(x: f32[2,3]): (f32[2,3], f32[2,3]) {
     return (y, y * y)
 }
 func constant_axis(x: f32[2,3]): f32[2,1] {
-    return sum(x, 1, true)
+    return sum<1, true>(x)
 }
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3]) as f32[2,3]
+    let x = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]) as f32[2,3]
     println(sum(chain(x)))
     println(sum(detour(x)))
     let p = shared_values(x)

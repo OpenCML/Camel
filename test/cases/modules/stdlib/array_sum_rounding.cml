@@ -70,8 +70,8 @@ func main(): int sync {
 
     // The tensor path over the same elements: sum(t, axis 1) keeps the element type f32 and
     // rounds once when it stores (reduce.cpp), so its bytes are the array path's bytes.
-    let tensorA = to_array(to_bytes(tensor_sum(reshape(new(a), [1, 1026]), 1, true)))
-    let tensorB = to_array(to_bytes(tensor_sum(reshape(new(b), [1, 4096]), 1, true)))
+    let tensorA = to_array(to_bytes(tensor_sum<1, true>(reshape<[1, 1026]>(new(a)))))
+    let tensorB = to_array(to_bytes(tensor_sum<1, true>(reshape<[1, 4096]>(new(b)))))
     let agreesA = sameBits(bitsOf(sumA), tensorA)
     let agreesB = sameBits(bitsOf(sumB), tensorB)
 

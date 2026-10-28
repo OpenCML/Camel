@@ -24,7 +24,7 @@ func fast::<T>(a: T[..], b: T[..]): T[..] when is_numeric::<T>() {
 }
 
 func max_abs(t: f32[..]): float {
-    return float(sum(max(max(abs(t), 0), 0)))
+    return float(sum(max<0>(max<0>(abs(t)))))
 }
 
 func main(): int sync {

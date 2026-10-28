@@ -36,6 +36,8 @@ struct KernelArguments {
     std::vector<gc_node_ref_t> with;
 };
 KernelArguments kernelArgumentsOf(const GCGraph &graph, gc_node_ref_t node);
+/// The same for a node of a graph being rewritten.
+KernelArguments kernelArgumentsOf(const class GraphDraft &draft, gc_node_ref_t node);
 
 /// The index semantics of the OPER node `node` of `graph`, or nullopt when the node is not an
 /// OPER, its operator declares none, or the facts at the node do not fix it (sem::instantiate).

@@ -56,7 +56,7 @@ func walk(h: f32[..], k: int): Run {
 }
 
 func main(): int sync {
-    let ex = reshape([1.0, -2.0, 0.5, 1.5] as f32[], [2, 2])
+    let ex = reshape<[2, 2]>([1.0, -2.0, 0.5, 1.5] as f32[])
     let _ = export_model<out: 'identity.onnx'>((x: f32[..]): Run => identity(x, 1), ex)
     let _ = export_model<out: 'reordered.onnx'>((x: f32[..]): Run => reordered(x, 1), ex)
     let _ = export_model<out: 'declared.onnx'>((x: f32[..]): Run => declared(x, 1), ex)

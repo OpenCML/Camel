@@ -670,26 +670,31 @@ std::vector<OpDef> layoutOps() {
         .exports   = {"reshape"},
         .params    = {{"t", ParamKind::TensorLike}, {"shape", ParamKind::IntArray}},
         .resultDoc = "float[..]",
-        .infer         = reshapeInfer,
-        .kernel        = &positionally<reshapeKernel>,
-        .traits        = {},
-        .withAfterNorm = true});
+        .infer          = reshapeInfer,
+        .kernel         = &positionally<reshapeKernel>,
+        .traits         = {},
+        .withAfterNorm  = true,
+        .ordinaryParams = 1});
     defs.push_back(OpDef{
         .name      = "flatten",
         .exports   = {"flatten"},
         .params    = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int, true}},
         .resultDoc = "float[..]",
-        .infer     = flattenInfer,
-        .kernel    = &flattenKernel,
-        .traits    = {}});
+        .infer          = flattenInfer,
+        .kernel         = &positionally<flattenKernel>,
+        .traits         = {},
+        .withAfterNorm  = true,
+        .ordinaryParams = 1});
     defs.push_back(OpDef{
         .name      = "unsqueeze",
         .exports   = {"unsqueeze"},
         .params    = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int}},
         .resultDoc = "float[..]",
-        .infer     = unsqueezeInfer,
-        .kernel    = &unsqueezeKernel,
-        .traits    = {}});
+        .infer          = unsqueezeInfer,
+        .kernel         = &positionally<unsqueezeKernel>,
+        .traits         = {},
+        .withAfterNorm  = true,
+        .ordinaryParams = 1});
     defs.push_back(OpDef{
         .name      = "transpose",
         .exports   = {"transpose"},
@@ -703,18 +708,22 @@ std::vector<OpDef> layoutOps() {
         .exports   = {"permute"},
         .params    = {{"t", ParamKind::Tensor}, {"perm", ParamKind::IntArray}},
         .resultDoc = "float[..]",
-        .infer     = permuteInfer,
-        .kernel    = &permuteKernel,
-        .traits    = {}});
+        .infer          = permuteInfer,
+        .kernel         = &positionally<permuteKernel>,
+        .traits         = {},
+        .withAfterNorm  = true,
+        .ordinaryParams = 1});
     defs.push_back(OpDef{
         .name    = "concat",
         .exports = {"concat"},
         .params =
             {{"a", ParamKind::TensorLike}, {"b", ParamKind::TensorLike}, {"axis", ParamKind::Int}},
         .resultDoc = "float[..]",
-        .infer     = concatInfer,
-        .kernel    = &concatKernel,
-        .traits    = {}});
+        .infer          = concatInfer,
+        .kernel         = &positionally<concatKernel>,
+        .traits         = {},
+        .withAfterNorm  = true,
+        .ordinaryParams = 2});
     defs.push_back(OpDef{
         .name      = "take",
         .exports   = {"take"},

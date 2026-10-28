@@ -10,6 +10,6 @@ import { reshape } from tensor
 import { export_model } from onnx
 
 func main(): void! sync {
-    let ex = reshape([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[], [2, 3])
+    let ex = reshape<[2, 3]>([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[])
     export_model<out: 'tmp/test/onnx/refusal_tuple_example.onnx'>((x: f32[2, 3]): f32[..] => x * 2.0, (ex,))
 }

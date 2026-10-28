@@ -6,7 +6,7 @@
 import { zeros, reshape } from tensor
 
 func main(): int sync {
-    let r = reshape(zeros::<f32>([2, 3]), [4, 2])
+    let r = reshape<[4, 2]>(zeros::<f32>([2, 3]))
     println('unreachable')
     return 0
 }

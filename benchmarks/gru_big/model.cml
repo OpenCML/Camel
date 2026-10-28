@@ -34,7 +34,7 @@ with <m: Gru, x: f32[..]>
 func run(t: int, steps: int, h: f32[..]): f32[..] {
     let batch = shape(x)[0]
     let features = shape(x)[2]
-    return if t >= steps then h else run<m, x>(t + 1, steps, cell<m>(reshape(slice(x, 1, t, t + 1), [batch, features]), h))
+    return if t >= steps then h else run<m, x>(t + 1, steps, cell<m>(reshape<[batch, features]>(slice(x, 1, t, t + 1)), h))
 }
 
 with <m: Gru>

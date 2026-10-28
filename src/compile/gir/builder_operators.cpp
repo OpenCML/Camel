@@ -998,7 +998,9 @@ std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
 std::optional<type_vec_t> Builder::withTypesCompletedFor(
     const std::string &uri, FunctionType *signature, const type_vec_t &withTypes,
     const std::vector<Argument> *withInputs) const {
-    const size_t arity = signature->withTypesCount();
+    // A pack among the `with` parameters takes whatever is written beyond the fixed ones, and
+    // is not a parameter a default could fill.
+    const size_t arity = signature->withTypesCount() - (signature->hasWithRest() ? 1 : 0);
     if (withTypes.size() > arity) {
         return withTypes; // too many: the rule says so itself
     }
@@ -3744,13 +3746,17 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             targetFuncType = targetOperator->funcType();
             // A result that the argument types fix (the shape of a tensor whose type carries
             // it) is a constant for the operators it is passed to, as a literal would be.
+            // The arguments in kernel order (joinKernelArguments), the statics aligned with them.
+            type_vec_t foldTypes     = normInputTypes;
+            type_vec_t foldWithTypes = withInputTypes;
+            camel::core::joinKernelArguments(targetOperator->uri(), foldTypes, foldWithTypes);
             if (const auto *folder =
                     camel::core::OperatorTable::instance().typeFolder(targetOperator->uri());
-                folder != nullptr && withInputs.empty()) {
+                folder != nullptr && foldWithTypes.empty()) {
                 Type *resultType = targetFuncType->exitType();
                 std::optional<slot_t> value;
                 try {
-                    value = (*folder)(normInputTypes, normStatics, camel::core::mm::autoSpace());
+                    value = (*folder)(foldTypes, normStatics, camel::core::mm::autoSpace());
                 } catch (const std::exception &) {
                     value = std::nullopt;
                 }

@@ -9,7 +9,7 @@
 import { zeros, reshape } from tensor
 
 func toShape::<T>(t: T[..], s: int[]): T[..] {
-    return reshape(t, s)
+    return reshape<s>(t)
 }
 
 func main(): int sync {

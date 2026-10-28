@@ -5,7 +5,7 @@
 import { reshape, shape, numel } from tensor
 
 func main(): int sync {
-    let b = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
+    let b = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as f32[])
     println(shape(b))
     println(numel(b))
     return 0

@@ -169,7 +169,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/pair_target.cml"
 args = ["${case}", "generic_pair_law::why_no_instance", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["pair_sum_self<string, string>` is the first", "operator '-' is not defined for these operand types"]
+expect_stdout_contains = ["pair_sum_self<string, i32>` is the first", "operator '+' is not defined for these operand types"]
 expect_output_not_contains = ["it takes 2 type parameter(s)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
@@ -226,7 +226,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/verify_report_instance.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["rows 2","row 0 | int_add_zero | int | Verdict::Sampled","row 1 | int_add_zero | i32 | Verdict::Sampled"]
+expect_stdout_contains = ["rows 2","row 0 | int_add_zero | i32 | Verdict::Sampled","row 1 | int_add_zero | int | Verdict::Sampled"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
@@ -272,7 +272,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/verify_translate.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["0 integer scalar int: (x + 0) = x, no premise yet", "1 integer scalar i32: (x + 0) = x, no premise yet", "2 beyond translation coverage: the property is over a whole tensor", ", coverage integer scalar int: (x + 0) = x, no premise yet", "rows 4", "0 beyond translation coverage: the element type 'f32' is not translated yet (the floating theory is S3)", "1 beyond translation coverage: the element type 'float' is not translated yet (the floating theory is S3)", "2 beyond translation coverage: the element type 'bf16' is not translated yet (the floating theory is S3)", "3 beyond translation coverage: the element type 'f16' is not translated yet (the floating theory is S3)"]
+expect_stdout_contains = ["0 integer scalar i32: (x + 0) = x, no premise yet", "1 integer scalar int: (x + 0) = x, no premise yet", "2 beyond translation coverage: the property is over a whole tensor", ", coverage integer scalar i32: (x + 0) = x, no premise yet", "rows 4", "0 beyond translation coverage: the element type 'f32' is not translated yet (the floating theory is S3)", "1 beyond translation coverage: the element type 'float' is not translated yet (the floating theory is S3)", "2 beyond translation coverage: the element type 'bf16' is not translated yet (the floating theory is S3)", "3 beyond translation coverage: the element type 'f16' is not translated yet (the floating theory is S3)"]
 expect_output_not_contains = ["proved "]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 40000

@@ -4,6 +4,6 @@ func tree(x: f32[?], n: int): f32[1] {
     return if n <= 1 then x else tree(slice(x, 0, 0, n / 2), n / 2) + tree(slice(x, 0, n / 2, n), n - n / 2)
 }
 func main(): int sync {
-    println(sum(tree(reshape([1.0, 2.0, 3.0, 4.0, 5.0], [5]), 5)))
+    println(sum(tree(reshape<[5]>([1.0, 2.0, 3.0, 4.0, 5.0]), 5)))
     return 0
 }

@@ -2158,22 +2158,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
             }),
         // ======= string =======
-        OperatorGroup::create(
-            "format",
-            {
-                {
-                    ":str/format",
-                    DynamicFuncTypeResolver::create(
-                        {{-1, {}}, {1, {false}}},
-                        "<...args: T...> (fmt: string) => string",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (!norm[0]->equals(Type::String()))
-                                return nullopt;
-                            return Type::String();
-                        }),
-                },
-            }),
+        // The rule of `format` is the declaration of stdlib/prelude.cml (`with <..args>`).
+        OperatorGroup::create("format", {}),
         // The rules of `join` are the declarations of stdlib/prelude.cml.
         OperatorGroup::create("join", {}),
         // ======= struct =======

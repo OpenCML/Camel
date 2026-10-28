@@ -9,10 +9,10 @@ import {
 } from nn
 
 func main(): int sync {
-    let logits = reshape([0.2, -0.1], [1, 2])
-    let target = reshape([1.0, 0.0], [1, 2])
-    let plus = reshape([0.201, -0.1], [1, 2])
-    let minus = reshape([0.199, -0.1], [1, 2])
+    let logits = reshape<[1, 2]>([0.2, -0.1])
+    let target = reshape<[1, 2]>([1.0, 0.0])
+    let plus = reshape<[1, 2]>([0.201, -0.1])
+    let minus = reshape<[1, 2]>([0.199, -0.1])
 
     let loss = softmax_cross_entropy(logits, target)
     let loss_plus = softmax_cross_entropy(plus, target)
@@ -21,7 +21,7 @@ func main(): int sync {
     // The mask is an untyped literal array, which is f64 here, and the gradient is f32: the
     // conversion is written, since a pair of two element types matches no arm (design principles
     // 5.1).
-    let grad0 = sum(f64(grad) * reshape([1.0, 0.0], [1, 2]))
+    let grad0 = sum(f64(grad) * reshape<[1, 2]>([1.0, 0.0]))
     let finite = (loss_plus - loss_minus) / 0.002
 
     'softmax_cross_entropy_sanity loss={} grad0={} finite={}'->format<loss, grad0, finite>->println

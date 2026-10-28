@@ -629,4 +629,21 @@ class OperatorTable {
     std::atomic<uint64_t> epoch_{0};
 };
 
+
+/**
+ * The one place the kernel's argument order is decided. An operator registered with
+ * `withAfterNorm` has a kernel that reads the ordinary arguments and then the with-arguments as one
+ * list; for it this moves `with` behind `norm` (types, nodes, constants alike) and leaves `with`
+ * empty. For every other operator both lists stay as they are. Every reader that hands arguments
+ * to a kernel, a derivative rule, a lowering, an index instance or a type rule calls this, or
+ * `kernelArgumentsOf` (runtime/operator_instance.h) for a node.
+ */
+template <typename T>
+void joinKernelArguments(std::string_view uri, std::vector<T> &norm, std::vector<T> &with) {
+    if (!with.empty() && OperatorTable::instance().withAfterNorm(uri)) {
+        norm.insert(norm.end(), with.begin(), with.end());
+        with.clear();
+    }
+}
+
 } // namespace camel::core

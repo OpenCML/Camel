@@ -19,6 +19,6 @@ func noisy(t: f32[..]): f32[..] sync {
 }
 
 func main(): void! sync {
-    let x = reshape([1.0, -2.0, 3.0, 0.5] as f32[], [4])
+    let x = reshape<[4]>([1.0, -2.0, 3.0, 0.5] as f32[])
     export_model<out: get_env('ONNX_OUT') ?? ''>((t: f32[..]): f32[..] => noisy(t), x)
 }

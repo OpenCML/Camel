@@ -10,6 +10,6 @@ func main(): int sync {
     println(to_array(to_bytes(new([9007199254740993, -2]))))
     println(to_array(to_bytes(new([true, false, true]))))
     println(len(to_bytes(zeros::<f32>([0, 2]))))
-    println(to_array(to_bytes(reshape(floats, [2, 2]))))
+    println(to_array(to_bytes(reshape<[2, 2]>(floats))))
     return 0
 }

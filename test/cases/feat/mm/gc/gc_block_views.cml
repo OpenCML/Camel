@@ -11,7 +11,7 @@ import { reshape, zeros, numel } from tensor
 
 func main(steps: int, temp: int): int sync {
     let a = zeros::<f32>([750000])
-    let b = reshape(a, [750000])
+    let b = reshape<[750000]>(a)
     let (iLeft, peak, total, x, y) = loop i = steps, peak = 0, total = 0, x = a, y = b while i > 0 do {
         let tmp = 0..temp
         let now = std::mem::blocks()

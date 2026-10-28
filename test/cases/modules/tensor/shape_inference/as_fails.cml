@@ -4,7 +4,7 @@ func h(a: f32[4]): float {
 }
 func main(): int sync {
     println('ran')
-    let t = reshape(load_npy::<f32>('test/cases/modules/tensor/shape_types/x3.npy'), [-1])
-    println(h(concat(t, t, 0) as f32[4]))
+    let t = reshape<[-1]>(load_npy::<f32>('test/cases/modules/tensor/shape_types/x3.npy'))
+    println(h(concat<0>(t, t) as f32[4]))
     return 0
 }

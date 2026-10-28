@@ -45,6 +45,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
 #include "camel/execute/executor.h"
+#include "camel/runtime/operator_instance.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/program.h"
@@ -2125,12 +2126,13 @@ class RefEvaluator {
     }
 
     RefValue operate(camel::runtime::gc_node_ref_t ref) {
-        if (!graph_.withInputsOf(ref).empty() || !graph_.ctrlInputsOf(ref).empty()) {
+        const camel::runtime::KernelArguments arguments = camel::runtime::kernelArgumentsOf(graph_, ref);
+        if (!arguments.with.empty() || !graph_.ctrlInputsOf(ref).empty()) {
             throw std::runtime_error("the reference cannot read an operator with a context argument");
         }
         const auto *body = graph_.nodeBodyAs<camel::runtime::GCOperBody>(ref);
         std::vector<RefValue> in;
-        for (camel::runtime::gc_node_ref_t input : graph_.normInputsOf(ref)) {
+        for (camel::runtime::gc_node_ref_t input : arguments.norm) {
             in.push_back(eval(input));
         }
         const std::string uri(body->uri());
@@ -3218,7 +3220,7 @@ std::vector<uint8_t> axisPortsOf(const camel::runtime::GCGraph &graph) {
         if (!takesAxisAt(uri, index)) {
             continue;
         }
-        const auto inputs = graph.normInputsOf(ref);
+        const auto inputs = camel::runtime::kernelArgumentsOf(graph, ref).norm;
         if (index >= inputs.size()) {
             continue;
         }

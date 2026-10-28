@@ -20,7 +20,7 @@ func shared_values(x: f32[2,3]): (f32[2,3], f32[2,3]) {
     return (y, y * y)
 }
 func constant_axis(x: f32[2,3]): f32[2,1] {
-    return sum(x, 1, true)
+    return sum<1, true>(x)
 }
 func main(): int sync {
     println(regions<chain>())

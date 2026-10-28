@@ -39,7 +39,7 @@ func kept(x: f32[3]): f32[3] {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println('pair {}'->format<inspect<pair>(x)>)
     println('empty {}'->format<inspect<empty>(x)>)
     println('accumulated {}'->format<inspect<accumulated>(x)>)

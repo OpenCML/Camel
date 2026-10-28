@@ -33,7 +33,7 @@ func main(): int sync {
     // Read at run time, so the gradient graphs stay general rather than folding to constants.
     let x = if (get_env('SECOND_ORDER_X') ?? '') == '' then 2.0 else 2.0
     'scalar d2={}'->format<grad(dcube)<x>()>->println
-    let t = reshape([1.0, -2.0, 0.5] as f32[], [3])
+    let t = reshape<[3]>([1.0, -2.0, 0.5] as f32[])
     println(grad(h)<t>())
     return 0
 }

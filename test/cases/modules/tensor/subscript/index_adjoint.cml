@@ -42,25 +42,25 @@ func columnTake(m: f32[2, 2], idx: int[2]): float {
 
 with <x: f32[..]>
 func columnSum(): float {
-    return firstColumn(reshape(x, [2, 2]))
+    return firstColumn(reshape<[2, 2]>(x))
 }
 
 with <x: f32[..]>
 func repeatedSum(): float {
-    return columnTake(reshape(x, [2, 2]), [1, 1])
+    return columnTake(reshape<[2, 2]>(x), [1, 1])
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
+    let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as f32[])
     let g = grad(columnSum)<x>()
     let h = grad(repeatedSum)<x>()
     'column value={:.1f} grad_sum={:.1f} grad_dot={:.1f}'->format<
         columnSum<x>(),
         sum(g),
-        sum(g * reshape([1.0, 0.0, 1.0, 0.0] as f32[], [2, 2]))>->println
+        sum(g * reshape<[2, 2]>([1.0, 0.0, 1.0, 0.0] as f32[]))>->println
     'take value={:.1f} grad_sum={:.1f} grad_dot={:.1f}'->format<
         repeatedSum<x>(),
         sum(h),
-        sum(h * reshape([0.0, 2.0, 0.0, 2.0] as f32[], [2, 2]))>->println
+        sum(h * reshape<[2, 2]>([0.0, 2.0, 0.0, 2.0] as f32[]))>->println
     return 0
 }

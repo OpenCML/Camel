@@ -8,11 +8,11 @@ import { export_model } from onnx
 import { get_env } from env
 
 func pack(x: f32[..]): float[..] {
-    return reshape([float(sum(x * 2.0)), 1.5, float(sum(x))], [3])
+    return reshape<[3]>([float(sum(x * 2.0)), 1.5, float(sum(x))])
 }
 
 func main(): int sync {
-    let x = reshape([1.0, -2.0, 3.0, 4.0] as f32[], [2, 2])
+    let x = reshape<[2, 2]>([1.0, -2.0, 3.0, 4.0] as f32[])
     println(pack(x))
     let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[..]): float[..] => pack(x), x)
     println('exported')

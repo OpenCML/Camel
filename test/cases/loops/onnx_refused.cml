@@ -8,8 +8,8 @@ func model(x: float[..], w: float[..]): float[..] {
 }
 
 func main(): void! sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
-    let w = reshape([0.5, -0.25, 0.1, 0.3], [2, 2])
+    let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0])
+    let w = reshape<[2, 2]>([0.5, -0.25, 0.1, 0.3])
     println(model(x, w))
     export_model<out: 'tmp/test/onnx/loop_refused.onnx'>((x: float[..], w: float[..]): float[..] => model(x, w), (x, w))
 }
