@@ -860,3 +860,4 @@ develop 上的 `787158b6f`、`c93b23046`、`2afc8aac5`、`066a1d1fb` 与 fsh-dev
 - **`..` 优先级（`25a29bab7`）**：照原则做了，可以。文法文档的冲突取 develop 的版本。
 
 **今后**：本页任何一项开工前，先在这里写一行"某某在做"；决策者派给自己车道的也一样。
+18. **`IgnoredSideEffect` 报在了会执行的写上**（ICPC 阅读题 R38-X，a159bb6d4）：非同步的 lambda 里有两次写，`total = total + v; count = count + 1`，两次都报 `IgnoredSideEffect`。但 `count = …` 是块的最后一条、即块的值，按 3.1 它被需要、会执行，输出也确实是 `0.0 3`。诊断应当只报 `total` 那一次。归第 2 路（诊断）。
