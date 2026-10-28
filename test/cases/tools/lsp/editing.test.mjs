@@ -59,7 +59,7 @@ await withServer(async (ls) => {
     checkEq(item('identity').documentation, 'Returns its argument.', 'and its documentation')
     check(item('norm2').detail.includes('(p: Point) => int'),
         'an imported function its signature', item('norm2'))
-    check(item('println').detail.includes('(x: T, ...rest: U...) => T'),
+    check(item('println').detail.includes('(x: T, ..rest) => T'),
         'a library function its signature', item('println'))
     checkEq(item('let').kind, 14, 'keywords are keywords')
     check(item('p').sortText < item('println').sortText, 'locals sort before library names')

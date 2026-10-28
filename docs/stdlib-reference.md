@@ -465,7 +465,9 @@ position of the call. `return error(...)` hands it out of a function declared `T
 #### `print`
 
 ```camel
+print: <fmt: string> (x: T, ..rest) => T
 print: (x: T, ..rest) => T
+print: () => void
 ```
 
 Writes the arguments, separated by spaces, without a line end, and gives back the first one
@@ -478,7 +480,9 @@ also without a line end.
 #### `println`
 
 ```camel
+println: <fmt: string> (x: T, ..rest) => T
 println: (x: T, ..rest) => T
+println: () => void
 ```
 
 Writes the arguments, separated by spaces, and a line end, and gives back the first one (so
@@ -491,7 +495,9 @@ one line end.
 #### `eprintln`
 
 ```camel
+eprintln: <fmt: string> (x: T, ..rest) => T
 eprintln: (x: T, ..rest) => T
+eprintln: () => void
 ```
 
 Writes the arguments, separated by spaces, and a line end, to standard error, and gives back

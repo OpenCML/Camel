@@ -74,7 +74,7 @@ await withServer(async (ls) => {
     h = await hover('pair.0', 1, 5)
     check(h.includes('(field) 0: int'), 'a tuple element shows its type', h)
     h = await hover('println')
-    check(h.includes('println: <fmt?: string> (x: T, ...rest: U...) => T') && h.includes('module `io`'),
+    check(h.includes('println: (x: T, ..rest) => T uses stdout') && h.includes('module `io`'),
         'a library function shows its signature and its module', h)
     h = await hover('double(sum)')
     check(h.includes('let double: (v: int) => int'), 'a function value shows its type', h)

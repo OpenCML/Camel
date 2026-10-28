@@ -1120,6 +1120,9 @@ class GCGraphManager {
     /// until the pass settles, so that the session's work table can still reach it; a graph no
     /// program binds by then is freed like any other.
     void noteUnbound(GCGraph *graph);
+    /// Takes `graph` out of the manager's books without destructing it: the memory of a graph
+    /// that was bound before it was built.
+    void forget(GCGraph *graph);
 
   private:
     friend class Program;

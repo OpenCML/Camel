@@ -180,7 +180,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ParamArgumentCallee"
 expect_diagnostic_line = 9
-expect_output_contains = ["The argument 'fn' is given by name, and the signature of 'DREF: println' is not known where the call is written."]
+expect_output_contains = ["The argument 'fn' is given by name, and the signature of 'println' is not known where the call is written."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
