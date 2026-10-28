@@ -2273,134 +2273,14 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
         // The rules of `contains` are the declarations of stdlib/prelude.cml.
         OperatorGroup::create("contains", {}),
         // ======= Marked Operators =======
-        OperatorGroup::create(
-            "map",
-            {
-                {
-                    ":mark/map_arr",
-                    withFixedSignature(
-                        DynamicFuncTypeResolver::create(
-                            {{1, {false}}, {1, {false}}},
-                            "<f: (item: T) => U> (xs: T[]) => U[]",
-                            [](const type_vec_t &with, const type_vec_t &norm)
-                                -> optional<Type *> {
-                                if (norm[0]->code() != TypeCode::Array)
-                                    return nullopt;
-                                const auto &arrType  = tt::as_ptr<ArrayType>(norm[0]);
-                                const auto &elemType = arrType->elemType();
-                                if (with[0]->code() != TypeCode::Function)
-                                    return nullopt;
-                                const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
-                                if (funcType->normTypesCount() != 1)
-                                    return nullopt;
-                                // An element stands at the callback's result, and the callback's
-                                // parameter stands at the element type: each takes the other
-                                // side's resources when its own clause is unwritten.
-                                if (!elementEntersParameter(
-                                        funcType->normTypeAt(0), elemType))
-                                    return nullopt;
-                                ASSERT(funcType->hasExitType(), "Function must have exit type");
-                                return ArrayType::create(funcType->exitType());
-                            }),
-                        mapRuleSignature()),
-                },
-            }),
-        OperatorGroup::create(
-            "filter",
-            {
-                {
-                    ":mark/filter_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {1, {false}}},
-                        "<f: (item: T) => bool> (xs: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                            // The predicate is the one with-argument (it was read at
-                            // index 1, past the end: every use of filter crashed).
-                            if (with[0]->code() != TypeCode::Function)
-                                return nullopt;
-                            const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
-                            if (funcType->normTypesCount() != 1)
-                                return nullopt;
-                            // An element stands at the predicate's parameter, which takes the
-                            // element's resources when its own clause is unwritten.
-                            if (!elementEntersParameter(
-                                    funcType->normTypeAt(0), arrType->elemType()))
-                                return nullopt;
-                            if (!funcType->hasExitType() ||
-                                !funcType->exitType()->equals(Type::Bool()))
-                                return nullopt;
-                            return arrType;
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "reduce",
-            {
-                {
-                    ":mark/reduce_arr",
-                    withFixedSignature(
-                        DynamicFuncTypeResolver::create(
-                            {{2, {false, false}}, {1, {false}}},
-                            "<f: (acc: U, item: T) => U, initial: U> (xs: T[]) => U",
-                            [](const type_vec_t &with, const type_vec_t &norm)
-                                -> optional<Type *> {
-                                if (norm[0]->code() != TypeCode::Array)
-                                    return nullopt;
-                                const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                                if (with[0]->code() != TypeCode::Function)
-                                    return nullopt;
-                                const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
-                                if (funcType->normTypesCount() < 2)
-                                    return nullopt;
-                                // The accumulator's parameter type is the result type, and the
-                                // elements, the initial value and the callback's result must all be
-                                // values of it. An unnamed struct value whose fields are that
-                                // type's fields in the same order is one (design principles 5.2);
-                                // the call converts it, as `enterStructParameters` does for the
-                                // initial value.
-                                Type *acc = funcType->normTypeAt(0);
-                                if (!funcType->normTypeAt(1)->assignableFrom(arrType->elemType()))
-                                    return nullopt;
-                                if (!acc->assignableFrom(with[1]))
-                                    return nullopt;
-                                if (!acc->assignableFrom(funcType->exitType()))
-                                    return nullopt;
-                                return acc;
-                            }),
-                        reduceRuleSignature()),
-                },
-            }),
-        OperatorGroup::create(
-            "foreach",
-            {
-                {
-                    ":mark/foreach_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {1, {false}}},
-                        "<f: (item: T) => void> (xs: T[]) => void",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                            if (with[0]->code() != TypeCode::Function)
-                                return nullopt;
-                            const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
-                            if (funcType->normTypesCount() != 1)
-                                return nullopt;
-                            // An element stands at the callback's parameter, which takes the
-                            // element's resources when its own clause is unwritten.
-                            if (!elementEntersParameter(
-                                    funcType->normTypeAt(0), arrType->elemType()))
-                                return nullopt;
-                            return Type::Void();
-                        }),
-                },
-            }),
+        // The rule of `map` is the declaration of stdlib/prelude.cml.
+        OperatorGroup::create("map", {}),
+        // The rule of `filter` is the declaration of stdlib/prelude.cml.
+        OperatorGroup::create("filter", {}),
+        // The rule of `reduce` is the declaration of stdlib/prelude.cml.
+        OperatorGroup::create("reduce", {}),
+        // The rule of `foreach` is the declaration of stdlib/prelude.cml.
+        OperatorGroup::create("foreach", {}),
         // ======= Diagnostics =======
         // `std::mem::blocks()`: the block counters as a struct, readable between two
         // operations (docs/design-principles 10.5; the allocation-count assertions). Declared
