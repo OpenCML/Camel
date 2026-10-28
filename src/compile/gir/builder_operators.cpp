@@ -998,7 +998,9 @@ std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
 std::optional<type_vec_t> Builder::withTypesCompletedFor(
     const std::string &uri, FunctionType *signature, const type_vec_t &withTypes,
     const std::vector<Argument> *withInputs) const {
-    const size_t arity = signature->withTypesCount();
+    // A pack among the `with` parameters takes whatever is written beyond the fixed ones, and
+    // is not a parameter a default could fill.
+    const size_t arity = signature->withTypesCount() - (signature->hasWithRest() ? 1 : 0);
     if (withTypes.size() > arity) {
         return withTypes; // too many: the rule says so itself
     }
