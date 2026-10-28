@@ -397,7 +397,9 @@ class DeclaredFuncTypeResolver : public FuncTypeResolver {
 
     /// The signature as declared, closed (an operator's type is not a function still being
     /// built); null when the declaration has type variables, whose instances are not this rule.
-    FunctionType *fixedSignature() const override { return generic_ ? nullptr : funcType_; }
+    FunctionType *fixedSignature() const override {
+        return generic_ || core_ != nullptr ? nullptr : funcType_;
+    }
 
     /// The declaration's own type, the variables still in it: a family's parameters are the ones
     /// the rule writes, and a call that leaves one of their variables without a type is a
@@ -426,6 +428,9 @@ class DeclaredFuncTypeResolver : public FuncTypeResolver {
     FunctionType *funcType_;
     /// The names of the type variables the declaration binds; empty for a fixed signature.
     std::vector<std::string> bindable_;
+    /// The same declaration without its packs, when it has any: what the fixed parameters are
+    /// matched against.
+    std::shared_ptr<DeclaredFuncTypeResolver> core_;
     bool generic_ = false;
 };
 

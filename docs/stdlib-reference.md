@@ -787,8 +787,7 @@ faults are those of a call of the value.
 #### `len`
 
 ```camel
-len: (x: Map<K, V>) => int
-len: (x: Set<T>) => int
+len: (x: C) => int when is_map::<C>() || is_set::<C>()
 ```
 
 The number of entries of a map or of elements of a set. The collection is `x`, the name the
@@ -831,7 +830,7 @@ A map with value stored under key; an existing entry of that key is replaced. m 
 
 ```camel
 remove: <key: K> (c: Map<K, V>) => Map<K, V>
-remove: (c: Set<K>) => Set<K>
+remove: <key: K> (c: Set<K>) => Set<K>
 ```
 
 A map without the entry of key, or a set without the element; a key or element that is not there changes nothing. The argument is unchanged.

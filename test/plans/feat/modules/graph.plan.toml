@@ -11,7 +11,7 @@ kind = "behavior"
 case = "../../../cases/modules/graph_types.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "true\nfalse\ntrue\nfalse\n0\n1\n2\nNodeKind::Oper\n"
+expect_stdout_exact = "true\nfalse\ntrue\nfalse\n0\n1\n47\nNodeKind::Oper\n"
 timeout_ms = 10000
 
 [[tests]]
@@ -21,7 +21,7 @@ kind = "behavior"
 case = "../../../cases/modules/graph_kinds.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "10\n[pick, total, kinds, main, __g_6__, __g_7__, __g_8__, __g_10__]\n[[NodeKind::Port, NodeKind::Port, NodeKind::Oper, NodeKind::Join, NodeKind::Brch, NodeKind::Oper, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Oper, NodeKind::Data, NodeKind::Data, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Oper, NodeKind::Oper], [NodeKind::Data, NodeKind::Func, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Gate], [NodeKind::Port, NodeKind::Data, NodeKind::Func], [NodeKind::Port, NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper]]\n"
+expect_stdout_exact = "10\n[pick, total, kinds, main, __g_51__, __g_52__, __g_53__, __g_55__]\n[[NodeKind::Port, NodeKind::Port, NodeKind::Oper, NodeKind::Join, NodeKind::Brch, NodeKind::Oper, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Oper, NodeKind::Data, NodeKind::Data, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Oper, NodeKind::Oper], [NodeKind::Data, NodeKind::Func, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Gate], [NodeKind::Port, NodeKind::Data, NodeKind::Func], [NodeKind::Port, NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper]]\n"
 timeout_ms = 10000
 
 [[tests]]
