@@ -1,0 +1,16 @@
+id = "trans.canonical_opt_export"
+order = 342
+tier = "fast"
+tags = ["feat", "trans", "dump", "json", "canonical", "opt"]
+
+[[tests]]
+name = "canonical_export_skips_non_function_static_slots"
+desc = "The canonical export after std::opt exits 0 and writes a parsable version 2 document for a program whose optimized graph has a captured-closure call with a literal argument. Before the fix the entry walk read that argument's static slot as a function pointer and dereferenced the integer, so the export segfaulted on 167 of the 2019 corpus programs (the one-line case is the reduction of examples/functions/closures.cml). The assertion is the contract, not a text match: exit status 0 and JSON that parses as the canonical document."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/trans/canonical_opt_export.py"
+# `${camel}` is the compiler of the build under test, named as an argument.
+args = ["${case}", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["canonical export after std::opt: PASS"]
+timeout_ms = 30000
