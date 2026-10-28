@@ -697,7 +697,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "InvalidExtentExpression",
                 "This is not a shape: the extents of a type written with dimension names are integers, bound names, or expressions over them ('f32[n, 3]').",
-                "Each extent is a non-negative integer, a dimension name bound by the signature, an integer parameter of the signature, or an expression over such names with `+`, `-`, `*`, `/`, `%` and calls of pure functions: 'n', 'n + 1', '2 * n', '(n + 2 * p - k) / s + 1', 'conv_out(n, k, s, p)'. An extent that depends on a name the call does not bind to a constant is unknown, and an unknown extent is written '?'.",
+                "Each extent is a non-negative integer, a dimension name bound by the signature, a `constas` parameter of the signature, or an expression over such names with `+`, `-`, `*`, `/`, `%` and calls of pure functions: 'n', 'n + 1', '2 * n', '(n + 2 * p - k) / s + 1', 'conv_out(n, k, s, p)'. An extent that depends on a name the call does not bind to a constant is unknown, and an unknown extent is written '?'.",
             },
         },
         {
@@ -705,7 +705,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "ExtentNotADimension",
                 "The extent '{0}' of this call is {1}, which is not a dimension.",
-                "An extent written with names is evaluated where a call binds every name it uses, to a dimension of an argument or to the constant the call gives a parameter of the signature. A value below zero describes no array, so the call is refused where it is written; to allow the case, make the signature's extent unknown (`?`) or give the call arguments that make it non-negative.",
+                "An extent written with names is evaluated where a call binds every name it uses, to a dimension of an argument or to the constant the call gives a `constas` parameter. A value below zero describes no array, so the call is refused where it is written; to allow the case, make the signature's extent unknown (`?`) or give the call arguments that make it non-negative.",
             },
         },
         {

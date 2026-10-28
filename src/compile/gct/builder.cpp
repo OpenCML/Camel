@@ -5698,18 +5698,15 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
         std::shared_ptr<std::set<std::string>> bound;
         std::shared_ptr<std::set<std::string>> packs;
         std::shared_ptr<std::map<std::string, size_t>> uses;
-        std::shared_ptr<std::set<std::string>> values;
         bool bind;
         explicit DimGuard(Builder &builder)
             : self(builder), names(builder.dimNames_), bound(builder.boundDims_),
-              packs(builder.dimPacks_), uses(builder.dimUses_), values(builder.valueParams_),
-              bind(builder.dimBindAllowed_) {}
+              packs(builder.dimPacks_), uses(builder.dimUses_), bind(builder.dimBindAllowed_) {}
         ~DimGuard() {
             self.dimNames_       = names;
             self.boundDims_      = bound;
             self.dimPacks_       = packs;
             self.dimUses_        = uses;
-            self.valueParams_    = values;
             self.dimBindAllowed_ = bind;
         }
     } dimGuard(*this);
@@ -5718,7 +5715,6 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
         boundDims_ = std::make_shared<std::set<std::string>>();
         dimPacks_  = std::make_shared<std::set<std::string>>();
         dimUses_   = std::make_shared<std::map<std::string, size_t>>();
-        valueParams_ = std::make_shared<std::set<std::string>>();
     }
     dimBindAllowed_ = false;
     if (signature) {
@@ -5753,31 +5749,6 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
                 (*dimUses_)[paramLoad->getRef().ident()] = 2;
             }
         }
-        // A parameter of type `int` or `i32`, with or ordinary, is a value the return type may
-        // write in an extent (`f32[n, (h - k) / stride + 1]`): a call binds the name to the
-        // argument when that is a constant, and where it is not the extent stays unknown (design
-        // principles 5.4). A name a parameter type writes is a dimension, whatever else is called
-        // that.
-        const auto integerParameters = [&](const AST::node_ptr_t &params) {
-            for (const auto &paramPair : *params) {
-                const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
-                if (paramLoad->isRest() || paramLoad->isVar() || paramLoad->isConstas() ||
-                    paramPair->size() == 0) {
-                    continue;
-                }
-                const AST::node_ptr_t &typeNode = paramPair->at(0);
-                if (typeNode->type() != AST::LoadType::Type ||
-                    typeNode->loadAs<AST::TypeLoad>()->typeType() != AST::TypeType::Ref) {
-                    continue;
-                }
-                const std::string written = typeNode->loadAs<AST::RefTypeLoad>()->ref().toString();
-                if (written == "int" || written == "i32") {
-                    valueParams_->insert(paramLoad->getRef().ident());
-                }
-            }
-        };
-        integerParameters(ast->at(0));
-        integerParameters(ast->at(1));
     }
 
     FunctionTypeFactory factory;
@@ -6428,10 +6399,6 @@ camel::core::type::ExtentForm Builder::visitExtent(const AST::node_ptr_t &ast) {
             if (dimUses_ != nullptr) {
                 ++(*dimUses_)[name];
             }
-            return ExtentForm::linear({{name, 1}});
-        }
-        if (!dimBindAllowed_ && valueParams_ != nullptr && valueParams_->contains(name)) {
-            // An `int` parameter written in the return type: the call gives it its value.
             return ExtentForm::linear({{name, 1}});
         }
         if (dimBindAllowed_ && dimNames_ != nullptr) {

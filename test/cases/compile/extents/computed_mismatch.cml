@@ -1,12 +1,12 @@
-/// A length that is known where the call is written is checked there: `cut<2, 5>` is `f32[3]`.
-with <a: int, b: int>
-func cut(x: f32[]): f32[b - a] {
-    return x[a:b]
+/// A length that is known where the call is written is checked there: `window(3, x)` over a
+/// `f32[8]` is `f32[6]`.
+func window(constas w: int, x: f32[n]): f32[n - w + 1] {
+    return [x[i] for i in 0..(len(x) - w + 1)]
 }
 
 func main(): int sync {
     let x: f32[8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
-    let y: f32[4] = x->cut<2, 5>
+    let y: f32[4] = window(3, x)
     println(y)
     return 0
 }

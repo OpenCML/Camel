@@ -3957,7 +3957,7 @@ This is not a shape: the extents of a type written with dimension names are inte
 **Help**
 
 ```text
-Each extent is a non-negative integer, a dimension name bound by the signature, an integer parameter of the signature, or an expression over such names with `+`, `-`, `*`, `/`, `%` and calls of pure functions: 'n', 'n + 1', '2 * n', '(n + 2 * p - k) / s + 1', 'conv_out(n, k, s, p)'. An extent that depends on a name the call does not bind to a constant is unknown, and an unknown extent is written '?'.
+Each extent is a non-negative integer, a dimension name bound by the signature, a `constas` parameter of the signature, or an expression over such names with `+`, `-`, `*`, `/`, `%` and calls of pure functions: 'n', 'n + 1', '2 * n', '(n + 2 * p - k) / s + 1', 'conv_out(n, k, s, p)'. An extent that depends on a name the call does not bind to a constant is unknown, and an unknown extent is written '?'.
 ```
 
 **Example** (`test/cases/compile/array_shape/err_negative.cml`, run as `camel test/cases/compile/array_shape/err_negative.cml`)
@@ -8417,7 +8417,7 @@ The extent '{0}' of this call is {1}, which is not a dimension.
 **Help**
 
 ```text
-An extent written with names is evaluated where a call binds every name it uses, to a dimension of an argument or to the constant the call gives a parameter of the signature. A value below zero describes no array, so the call is refused where it is written; to allow the case, make the signature's extent unknown (`?`) or give the call arguments that make it non-negative.
+An extent written with names is evaluated where a call binds every name it uses, to a dimension of an argument or to the constant the call gives a `constas` parameter. A value below zero describes no array, so the call is refused where it is written; to allow the case, make the signature's extent unknown (`?`) or give the call arguments that make it non-negative.
 ```
 
 **Example** (`test/cases/compile/extents/computed_negative.cml`, run as `camel test/cases/compile/extents/computed_negative.cml`)
@@ -8426,14 +8426,14 @@ An extent written with names is evaluated where a call binds every name it uses,
 /// An extent the constants of the call make negative is no dimension: the kernel (20) is wider than
 /// the padded input (8 + 2), so `(n + 2 * p - k) / s + 1` is -9, and the call is refused where it is
 /// written.
-with <k: int, s: int, p: int>
-func conv_len(x: f32[n]): f32[(n + 2 * p - k) / s + 1] {
+func conv_len(constas k: int, constas s: int, constas p: int, x: f32[n]):
+    f32[(n + 2 * p - k) / s + 1] {
     let m = (len(x) + 2 * p - k) / s + 1
     return [f32(i) for i in 0..m]
 }
 
 func run(x: f32[8]): int {
-    let z = conv_len<20, 1, 1>(x)
+    let z = conv_len(20, 1, 1, x)
     println(z)
     return 0
 }

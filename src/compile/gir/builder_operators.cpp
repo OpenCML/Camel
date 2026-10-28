@@ -2680,75 +2680,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     namedArgs.push_back({&inputs[i], &types, i, param, types[i]});
                 }
             };
-        // The names a parameter of type `int` shares with the extents of the signature
-        // (`with <stride: int>` ... `f32[(n - k) / stride + 1]`) are bound to the value of the
-        // argument when it is a constant here: a literal, or what the build-time evaluation
-        // reaches. Where it is not, the name stays unbound and the extent that uses it stays
-        // unknown (design principles 5.4, 5.11); the kernel checks the shape when it runs.
-        {
-            // The names the return type writes and no parameter type does: a name a parameter
-            // type writes is a dimension of an argument, even when a parameter of that name has
-            // another meaning.
-            std::set<std::string> used, inParameters;
-            const auto usedIn = [&](Type *type, std::set<std::string> &into) {
-                std::vector<ExtentForm> forms;
-                if (type != nullptr && type->extentForms(forms)) {
-                    for (const ExtentForm &form : forms) {
-                        for (const std::string &name : form.usedNames()) {
-                            into.insert(name);
-                        }
-                    }
-                }
-            };
-            for (size_t i = 0; i < funcType->withTypesCount(); ++i) {
-                usedIn(funcType->withTypeAt(i), inParameters);
-            }
-            for (size_t i = 0; i < funcType->normTypesCount(); ++i) {
-                usedIn(funcType->normTypeAt(i), inParameters);
-            }
-            if (funcType->hasExitType()) {
-                usedIn(funcType->exitType(), used);
-            }
-            for (const std::string &name : inParameters) {
-                used.erase(name);
-            }
-            const auto bindValues = [&](std::vector<Argument> &inputs, bool with) {
-                const size_t count = with ? funcType->withTypesCount() : funcType->normTypesCount();
-                for (size_t i = 0; i < inputs.size() && i < count; ++i) {
-                    const size_t nameIndex = (with ? 0 : funcType->withTypesCount()) + i;
-                    if (nameIndex >= funcType->argNamesCount() || inputs[i].node == nullptr ||
-                        inputs[i].left) {
-                        continue;
-                    }
-                    const std::string name(funcType->argNameAt(nameIndex));
-                    if (!used.contains(name)) {
-                        continue;
-                    }
-                    int64_t value = 0;
-                    const data_ptr_t data = constantOfNode(inputs[i].node);
-                    if (const auto integer = std::dynamic_pointer_cast<LongData>(data)) {
-                        value = integer->data();
-                    } else if (const auto small = std::dynamic_pointer_cast<IntData>(data)) {
-                        value = small->data();
-                    } else {
-                        continue;
-                    }
-                    const auto [at, inserted] = dimValues.emplace(name, value);
-                    if (!inserted && at->second != value) {
-                        diags_->of(SemanticDiag::DimensionMismatch)
-                            .atOrigin(inputs[i].expr->origin())
-                            .commit(
-                                "Argument " + name,
-                                std::to_string(value),
-                                "the dimensions the earlier arguments bound make it " +
-                                    std::to_string(at->second));
-                        throw BuildAbortException();
-                    }
-                }
-            };
-            bindValues(withInputs, true);
-            bindValues(normInputs, false);
-        }
         bindNamedExtents(withInputs, withInputTypes, true);
         bindNamedExtents(normInputs, normInputTypes, false);
         for (const NamedExtentArg &arg : namedArgs) {
@@ -2989,6 +2920,30 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             currGraph_->addDependencyGraph(targetGraph);
             targetNode     = createFuncDataNode(targetGraph, false, true);
             targetFuncType = targetGraph->funcType();
+            // The instance is one per `constas` value, and the extents those values fixed are in
+            // its type already; the dimensions of the arguments are not (the instance is shared by
+            // the calls that differ in them), so they are bound here and the result is refined
+            // below as it is for a function that is no instance (design principles 5.4).
+            for (const GenericInstance &instance : chosenTemplate->instances) {
+                if (instance.graph == targetGraph) {
+                    dimValues = instance.extents;
+                    break;
+                }
+            }
+            const auto bindInstance = [&](const type_vec_t &types, bool with) {
+                const size_t count =
+                    with ? targetFuncType->withTypesCount() : targetFuncType->normTypesCount();
+                for (size_t i = 0; i < types.size() && i < count; ++i) {
+                    Type *param = with ? targetFuncType->withTypeAt(i) : targetFuncType->normTypeAt(i);
+                    if (param == nullptr || types[i] == nullptr) {
+                        continue;
+                    }
+                    std::string unmatched;
+                    bindExtents(param, types[i], dimValues, dimPacks, unmatched);
+                }
+            };
+            bindInstance(withInputTypes, true);
+            bindInstance(normInputTypes, false);
         }
     } else if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
         const auto &drefTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);

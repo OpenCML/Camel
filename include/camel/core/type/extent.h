@@ -9,14 +9,16 @@
  *     func dense(x: f32[n, 3], w: f32[3, k])
  *         : f32[n, k]
  *
- * `constas n` binds the name where it first appears in a parameter type; later occurrences
- * write `n`. A dimension is a linear form: a constant plus integer multiples of names. That is
- * enough for `n`, `n + 1`, `2 * n` and `n - k`, whose equality can be decided; any other
- * expression (division, a product of two named dimensions, a call) is unknown.
+ * The first plain occurrence of a name in a parameter type binds it; later occurrences write the
+ * same dimension. A `constas n: int` parameter is the one way a value enters a type: its name is
+ * the constant the call gives it. An extent is a constant, a name, or an integer expression over
+ * names (`+`, `-`, `*`, `/`, `%`, a call of a pure function): a linear form when it is a constant
+ * plus integer multiples of names, whose equality can be decided, and `Computed` otherwise. An
+ * extent asks nothing of a shape until every name it uses is bound.
  *
  * Extents are compile-time data: they are checked against the actual argument types at a call,
- * but never become part of a runtime value, and they never make the compiler build a second
- * instance of the function.
+ * but never become part of a runtime value, and only a `constas` value makes the compiler build
+ * another instance of the function.
  */
 
 #pragma once

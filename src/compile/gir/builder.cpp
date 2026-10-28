@@ -1115,7 +1115,7 @@ void Builder::buildFuncBody(
     // too: the `n` of a `static for` and the value of an enclosing `constas` parameter are not
     // names of its body. Its own `constas` values (when it is an instance being built) are
     // bound below.
-    const size_t outerStaticValues = staticValueScopes_.size();
+    auto outerStaticValues = std::move(staticValueScopes_);
     staticValueScopes_.clear();
     try {
         registerGraphOrigin(context_, graph, gct, "gir.func.graph");
@@ -1247,7 +1247,7 @@ void Builder::buildFuncBody(
         staticDepth_             = outerStaticDepth;
         activeRestBody_          = outerRestBody;
         restBindings_.resize(outerRestBindings);
-        staticValueScopes_.resize(outerStaticValues);
+        staticValueScopes_ = std::move(outerStaticValues);
         leaveScope();
         throw e.during(
             std::format("compiling function '{}'", name.empty() ? graph->name() : name),
@@ -1260,7 +1260,7 @@ void Builder::buildFuncBody(
         staticDepth_             = outerStaticDepth;
         activeRestBody_          = outerRestBody;
         restBindings_.resize(outerRestBindings);
-        staticValueScopes_.resize(outerStaticValues);
+        staticValueScopes_ = std::move(outerStaticValues);
         leaveScope();
         throw;
     }
@@ -1268,7 +1268,7 @@ void Builder::buildFuncBody(
     staticDepth_      = outerStaticDepth;
     activeRestBody_   = outerRestBody;
     restBindings_.resize(outerRestBindings);
-    staticValueScopes_.resize(outerStaticValues);
+    staticValueScopes_ = std::move(outerStaticValues);
 }
 
 
