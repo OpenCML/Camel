@@ -1,0 +1,65 @@
+/**
+ * The source's structured loop (`loop ... do`, design principles 3.10) exported as an ONNX
+ * Loop: the state is what the Loop carries and the sequence is its trip count. `total` is a
+ * `for` over a tensor (one round per element), `sweep` a `for` over an interval (`for i in a..b`,
+ * whose rounds and element the compiler fuses), `halve` a `while` (no trip count, the data ends
+ * it), and `bounded` a `for ... while` (a trip count and a condition, whichever ends first) with
+ * two state values, so its loop's value is a tuple.
+ *
+ * The argument is one tensor of any length, exported with a dynamic axis 0 so that the trip
+ * count is the length the model is called with. Run by ort_loop_node.py: x.npy is read from the
+ * working directory, every model's native results are saved there, and the model named by MODEL
+ * is exported when ONNX_OUT is set.
+ */
+import { load_npy, reshape, save_npy, sum } from tensor
+import { export_model } from onnx
+import { get_env } from env
+
+// for: a tensor state, one round per element of the tensor.
+func total(x: f32[?]): f32[?] {
+    return loop acc = x * 0.0 for v in x do acc + v
+}
+
+// for over an interval: the rounds and the element are the interval's, nothing is enumerated.
+func sweep(x: f32[?]): (int, f32[?]) {
+    return loop n = 0, acc = x * 0.0 for i in 0..int(sum(x)) do (n + i, acc + f32(i))
+}
+
+// while: the state is the value and the round's data decides where the loop ends.
+func halve(x: f32[?]): f32[?] {
+    return loop h = x while float(sum(h * h)) > 1.0 do h * 0.5
+}
+
+// for ... while: a sequence and a condition, and two state values.
+func bounded(x: f32[?]): (f32[?], int) {
+    return loop t = x * 0.0, n = 0 for v in x while n < 5 do (t + v, n + 1)
+}
+
+func main(): int sync {
+    let x = (load_npy::<f32>('x.npy')) as f32[?]
+    save_npy(total(x), 'total_0.npy')
+    let (k, a) = sweep(x)
+    save_npy(reshape<[1]>([k]), 'sweep_0.npy')
+    save_npy(a, 'sweep_1.npy')
+    save_npy(halve(x), 'halve_0.npy')
+    let (t, n) = bounded(x)
+    save_npy(t, 'bounded_0.npy')
+    save_npy(reshape<[1]>([n]), 'bounded_1.npy')
+    let out   = get_env('ONNX_OUT') ?? ''
+    let which = get_env('MODEL') ?? ''
+    let exported = if out == '' then 0 else if which == 'total' then sync {
+        let _ = export_model<out: out, dynamic_axes: [0]>((x: f32[?]): f32[?] => total(x), (x))
+        1
+    } else if which == 'sweep' then sync {
+        let _ = export_model<out: out, dynamic_axes: [0]>((x: f32[?]): (int, f32[?]) => sweep(x), (x))
+        1
+    } else if which == 'halve' then sync {
+        let _ = export_model<out: out, dynamic_axes: [0]>((x: f32[?]): f32[?] => halve(x), (x))
+        1
+    } else sync {
+        let _ = export_model<out: out, dynamic_axes: [0]>((x: f32[?]): (f32[?], int) => bounded(x), (x))
+        1
+    }
+    println(exported)
+    return 0
+}
