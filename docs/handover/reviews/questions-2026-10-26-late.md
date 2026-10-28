@@ -724,3 +724,20 @@ H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program
 - **前奏声明的预编译缓存模块**：声明每次运行都要编译一遍，做成缓存模块，加载要快，同时修好 `startup.cost`。车道交最后一笔时会附它知道的情况。
 - **`slice` 改成声明**：维度表达式与 `constas` 已经落地（原则 5.4）。
 决策者照旧审这些改动的设计，返工照常写在这里。
+
+**第 7 路的张量剩余清单**（决策者这边的车道交最后一笔时列出；随机数已改为带键，逐元素函数已改为运算符）：
+1. **`nn` 族**（`modules/nn/tensor_ops.cpp` 与 `stdlib/`）：
+   - `sgd`、`adam` 改成声明；
+   - `softmax_cross_entropy` 按元素类型；
+   - 损失与层改成声明；
+   - 替换 `resultDoc = "Tensor"` 一类字符串，删掉被替换的条目。
+2. **`optim` 模块**：照 `docs/handover/stdlib/` 里的草案落地。
+3. **删除 `stdlib/signatures/tensor.cml`**，以及文档与用例里残留的 `Tensor` 名字（逐个 grep；`test/cases/perf` 的 `step_budget.py` 仍用旧的 `random`/`seed`/`Tensor`）。
+4. **比较运算的 OpDef**（`lt`、`le`、`gt`、`ge`、`strict_eq`、`strict_neq`，在 `elementwise_ops.cpp` 约 491–499 行的 `compareDef`）：查清是否还有导出，按运算符收口。
+
+**容易踩的地方**：
+- 解析器与折叠器拿到的静态值是普通参数在前、with 参数在后，一律用 `kernelArgumentsOf`、`joinKernelArguments`，不直接读边。
+- 标了 `withAfterNorm`、`elementFromCall` 的算子拒绝把配置写在圆括号里；元素类型来自 `::<T>` 或期望的结果类型。
+- 求导规则里的浮点常量按操作数的宽度建（`floatGradientAtWidth`），`pow` 曾因此在 f32 上出错。
+- `uniform::<T>` 返回维数未定的 `T[..]`，参数是 `f32[?, ?]` 的调用处要写 `as f32[?, ?]`。
+- 改了标准库或签名后，用 `node scripts/stdlib-reference.mjs --write --camel <camel>` 重新生成 `docs/stdlib-reference.md`。
