@@ -1,0 +1,15 @@
+// A sync body of a loop over a constant range runs once per round. The prints are the rounds of
+// the loop, and the value after the last statement of a round is the next state: four rounds print
+// 1 2 3 4 and the loop yields 5. Folding that loop must leave the prints where they are.
+func counted(): int sync {
+    let v = loop v = 1 for i in 0..4 do sync {
+        println('round', v)
+        v + 1
+    }
+    return v
+}
+
+func main(): int sync {
+    println('counted', counted())
+    return 0
+}
