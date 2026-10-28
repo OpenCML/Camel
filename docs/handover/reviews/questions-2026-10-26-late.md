@@ -554,3 +554,6 @@ H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program
    - 这是 H242 "`var` 读成数据边"那一步还没落地的表现，随那一步修。
    - `IgnoredSideEffect` 的提示文字（"不在同步块里，写不排在先前的使用之后"）描述的是旧模型，一起改。
    - `c01a`、`c01b` 的两种体都收成用例。
+4. **段错误：`with_grad` 求导一个在 `loop` 里建闭包的函数。** 复现：`Camel-Archive/ICPC2027/study/gn-migration/renderer-samples/gradient-crash/`，在该目录 `camel prog.cml`，加不加 `std::macro std::nvm` 都一样。打印 `@CALL 0` 后退出 139（`3e028e1a2` 上复现）。前向模式的同一程序能跑。
+   - 先缩到最小程序：`loop` 体里定义 lambda 并调用、读循环外的值，外面用 `with_grad` 求导。
+   - 从根上修：求导不支持某种形状时，要在编译期给出诊断；运行时无论如何不许崩。
