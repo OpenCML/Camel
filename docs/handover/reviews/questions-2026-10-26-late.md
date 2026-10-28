@@ -712,3 +712,7 @@ H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program
 - 实现层面的选择按原则自己定、先做，在提交信息里写明依据，决策者事后复核。
 - 只有原则没覆盖、或与原则冲突的才写问题页，写了也不停，转去做不依赖它的部分。
 - 语义层面今天定下的"依赖按区域计、分支与循环整体算"（原则 3.1、3.3）不会再变。
+13. **JSON 导出跟不上边的模型**（ECOOP 稿要用它对照 Lean 解释器）：
+    - `std::jgir`（版本 1）导出 normal、context、control、sync 四种边，没有顺序边；`canonical=true`（版本 2）只有 normal、context、control，连 sync 也没有。
+    - `docs/technical/gir-interchange.md` 两个版本都只写了三种边。
+    - 修法：两个版本都导出 sync 与 order 边，canonical 版本把它们纳入等价判定；控制边删除后从两个版本里一起去掉。文档同步。归第 1 路（与边的重构同一片）。
