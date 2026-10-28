@@ -980,6 +980,15 @@ class CanonicalDocument {
                     if (source == nullptr)
                         continue;
                     if (source->kind == GCNodeKind::Data && source->dataIndex < 0) {
+                        // Only a slot typed as a function names a graph. The walk from the exit
+                        // crosses every node that carries the entry chain, and the static area
+                        // holds the ordinary constants as well (a call's literal argument is a
+                        // Data node with a negative index), so the type has to be asked for the
+                        // way version 1 asks: a slot that is not a function is not a callee.
+                        const auto *slotType =
+                            camel::passes::gir::nodeStaticSlotType(root_, *source);
+                        if (slotType == nullptr || slotType->code() != type::TypeCode::Function)
+                            continue;
                         const auto slots   = root_->staticSlots();
                         const size_t index = static_cast<size_t>(-source->dataIndex);
                         if (index >= slots.size())
