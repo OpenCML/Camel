@@ -14,6 +14,9 @@
  *   andExpr         &                both sides evaluated        left
  *   equalityExpr    ===  !==  ==  !=                            left
  *   relationalExpr  <  >  <=  >=                                left
+ *   rangeExpr       ..                                          left; looser than `+` and `-`, tighter
+ *                                                               than the comparisons: `1..n+1` is
+ *                                                               `1..(n+1)`
  *   additiveExpr    +  -                                        left
  *   multiplicative  *  /  @  %                                  left
  *   powerExpr       ^                                           right
@@ -23,7 +26,6 @@
  *                                    operators: `-x->f` is `-(x->f)`, `!xs->is_empty()` is
  *                                    `!(xs->is_empty())`, `-x ^ 2` is `-(x ^ 2)`, `-a * b` is `(-a) * b`
  *   linkExpr        ->                                          left
- *   compExpr        ..                                          left
  *   annoExpr        [index]  (arguments)  <arguments>  .member   postfix, touching
  *   accessExpr      .member
  *   primaryData     name, literal, [array], {struct}, (tuple), lambda
@@ -203,14 +205,14 @@ void ParserImpl::parseEquality() {
     }
 }
 
-/// relationalExpr : additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
+/// relationalExpr : rangeExpr (('<' | '>' | '<=' | '>=') rangeExpr)*
 /// Rule 1. `<` is the comparison only as the token Lt (the lexer made a `<` that touches its
 /// left operand an LAngle, which the postfix loop of that operand takes). Directly inside an
 /// angle-bracket list a `>` closes the list when it touches the token before it or starts its
 /// line; after a space on the same line it is the comparison (`xs->filter<(x: int) => x > 1>`).
 void ParserImpl::parseRelational() {
     const size_t m = mark();
-    parseAdditive();
+    parseRange();
     bool any = false;
     while (!panic_) {
         if (cur_ == TK::Gt) {
@@ -224,11 +226,29 @@ void ParserImpl::parseRelational() {
             break;
         }
         bump();
-        parseAdditive();
+        parseRange();
         any = true;
     }
     if (any) {
         close(m, NK::RelationalExpr);
+    }
+}
+
+/// rangeExpr : additiveExpr ('..' additiveExpr)*
+/// The range of two numbers and the composition of two functions, one level: `1..n+1` is
+/// `1..(n+1)`, and `..` is looser than `->`, so `x->f..g` is `(x->f)..g` (`x->f->g` is the
+/// composition).
+void ParserImpl::parseRange() {
+    const size_t m = mark();
+    parseAdditive();
+    bool any = false;
+    while (cur_ == TK::DotDot && !panic_) {
+        bump();
+        parseAdditive();
+        any = true;
+    }
+    if (any) {
+        close(m, NK::RangeExpr);
     }
 }
 
@@ -328,14 +348,14 @@ void ParserImpl::parseUnary() {
     }
 }
 
-/// linkExpr : compExpr ('->' compExpr)*
+/// linkExpr : annoExpr ('->' annoExpr)*
 void ParserImpl::parseLink() {
     const size_t m = mark();
-    parseComp();
+    parseAnno();
     bool any = false;
     while (cur_ == TK::Arrow && !panic_) {
         bump();
-        parseComp();
+        parseAnno();
         any = true;
     }
     if (any) {
@@ -365,21 +385,6 @@ void ParserImpl::parseNeg(bool underMinus) {
         bump();
         parseNeg(true);
         close(m, NK::PowerExpr);
-    }
-}
-
-/// compExpr : annoExpr ('..' annoExpr)*
-void ParserImpl::parseComp() {
-    const size_t m = mark();
-    parseAnno();
-    bool any = false;
-    while (cur_ == TK::DotDot && !panic_) {
-        bump();
-        parseAnno();
-        any = true;
-    }
-    if (any) {
-        close(m, NK::CompExpr);
     }
 }
 

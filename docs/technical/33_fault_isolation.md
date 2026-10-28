@@ -495,7 +495,7 @@ func checked(x: int): int! { ... return error('Negative', ...) ... return 100 / 
   `attempt-parallel-first-fault`):* started elements run to their end, elements not yet
   started do not start, and of several faults the one of the smallest index is reported
   (section 3.6).
-- **`parallel-fault-lower-elements`.** `0..64->map<bad>` where every element faults
+- **`parallel-fault-lower-elements`.** `(0..64)->map<bad>` where every element faults
   and a worker happens to run element 40 first. Implemented: after that fault only the
   elements above 40 do not start; 0 to 39 still run, element 0 faults, and its fault is the
   one reported, as on the linear back ends, on every run. Alternative: start nothing at all

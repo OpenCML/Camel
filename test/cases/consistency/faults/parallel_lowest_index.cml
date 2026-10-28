@@ -8,7 +8,7 @@ func bad(x: int): int { return tbl()[x + 10] }
 
 func main(): int sync {
     println('before')
-    println(0..64->map<bad>)
+    println((0..64)->map<bad>)
     println('not reached')
     return 0
 }

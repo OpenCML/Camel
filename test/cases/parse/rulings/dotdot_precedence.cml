@@ -1,0 +1,27 @@
+// `..` sits between the comparisons and `+`/`-` (design principles 4.2, level 6a of the
+// precedence table): `1..n+1` is `1..(n+1)`, not `(1..n)+1`, and a negative bound is written
+// without parentheses (`-1..n` is `(-1)..n`). It is looser than `->`, so `3->inc..dbl` is
+// `(3->inc)..dbl`: a pipe does not swallow an operand into a composition, which is written
+// `x->f->g` or `(f..g)(x)`. The levels around it are pinned too: `!xs->contains<1>` is
+// `!(xs->contains(1))`, `-n->inc` is `-(n->inc)`, `-1->inc` is `-(1->inc)` and `(-1)->inc` is
+// `inc(-1)`, `-2 ^ 2` is `-(2 ^ 2)`, and `-n + 1` is `(-n) + 1`.
+
+func inc(x: int): int { return x + 1 }
+func dbl(x: int): int { return x * 2 }
+
+func main(): int sync {
+    let n = 3
+    let xs = [1, 2, 3]
+    println(1..n+1)
+    println(0..len(xs)+1)
+    println((-1)..n-1)
+    println(-1..n)
+    println((inc..dbl)(3))
+    println(3->inc->dbl)
+    println(!xs->contains<1>, !(xs->contains<1>))
+    println(-n->inc, (-n)->inc)
+    println(-1->inc, (-1)->inc)
+    println(2 ^ 2, -2 ^ 2)
+    println(-n + 1)
+    return 0
+}

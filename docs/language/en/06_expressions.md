@@ -108,7 +108,7 @@ func main(): int sync {
 
 ```cml
 func main(): int sync {
-    let total = 1..6
+    let total = (1..6)
         ->map<(x) => x * x>
         ->filter<(x) => x % 2 == 1>
         ->reduce<(acc: int, x: int): int => acc + x, 0>

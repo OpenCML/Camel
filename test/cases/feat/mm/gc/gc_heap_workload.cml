@@ -23,7 +23,7 @@ func map_one(xs: int[]): int[] sync {
 
 func main(): int sync {
     var boxes: Box[] = []
-    0..16->foreach<(i: int) => sync {
+    (0..16)->foreach<(i: int) => sync {
         let vals = [i, i + 1, i + 2]
         boxes = boxes->append<{ label: 'box{}'->format<i>, values: vals }>
         return null

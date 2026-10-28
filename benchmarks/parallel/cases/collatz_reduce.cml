@@ -14,7 +14,7 @@ func longer(a: (int, int), b: (int, int)): (int, int) {
 }
 
 func longest_in(lo: int, hi: int): (int, int) {
-    return lo..hi->reduce<
+    return (lo..hi)->reduce<
         (best: (int, int), n: int): (int, int) => longer(best, (n, collatz_steps(n, 0))),
         (lo, 0)
     >
@@ -22,7 +22,7 @@ func longest_in(lo: int, hi: int): (int, int) {
 
 func main(): int sync {
     let block = 5000
-    let results = 0..8->map<(i: int): (int, int) => longest_in(i * block + 1, (i + 1) * block + 1)>
+    let results = (0..8)->map<(i: int): (int, int) => longest_in(i * block + 1, (i + 1) * block + 1)>
     println(results)
     return 0
 }

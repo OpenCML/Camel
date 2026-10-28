@@ -117,7 +117,7 @@ func inc(x: int): int {
 }
 
 func main(): int sync {
-    let total = 1..6->map<inc>->reduce<(a: int, b: int): int => a + b, 0>
+    let total = (1..6)->map<inc>->reduce<(a: int, b: int): int => a + b, 0>
     println(total)
     return 0
 }
@@ -407,15 +407,15 @@ These two come from the sources the compiler itself reads, so they cannot drift 
  7  andExpr             &                                  repeat, left
  8  equalityExpr        === !== == !=                      repeat, left
  9  relationalExpr      < > <= >=                          repeat, left
-10  additiveExpr        + -                                repeat, left
-11  multiplicativeExpr  * / @ %                            repeat, left
-12  powerExpr           ^                                  right, one
-13  nullableExpr        ?? !!                              right (a whole expression on the right)
-14  unaryExpr           as                                 one
-15  linkExpr            ->                                 repeat, left
-16  negExpr             - ! ~                              prefix
-17  negPower            - ! ~ ^                            prefix, right
-18  compExpr            ..                                 repeat, left
+10  rangeExpr           ..                                 repeat, left
+11  additiveExpr        + -                                repeat, left
+12  multiplicativeExpr  * / @ %                            repeat, left
+13  powerExpr           ^                                  right, one
+14  nullableExpr        ?? !!                              right (a whole expression on the right)
+15  unaryExpr           as                                 one
+16  linkExpr            ->                                 repeat, left
+17  negExpr             - ! ~                              prefix
+18  negPower            - ! ~ ^                            prefix, right
 19  annoExpr            -                                  repeat, left
 ```
 
@@ -431,16 +431,16 @@ logicalAndExpr     : orExpr ('&&' orExpr)*
 orExpr             : andExpr ('|' andExpr)*
 andExpr            : equalityExpr ('&' equalityExpr)*
 equalityExpr       : relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
-relationalExpr     : additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
+relationalExpr     : rangeExpr (('<' | '>' | '<=' | '>=') rangeExpr)*
+rangeExpr          : additiveExpr ('..' additiveExpr)*
 additiveExpr       : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
 multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
 unaryExpr          : negExpr ('as' typeExpr)?
-linkExpr           : compExpr ('->' compExpr)*
+linkExpr           : annoExpr ('->' annoExpr)*
 negExpr            : ('-' | '!' | '~') negPower | linkExpr
 negPower           : ('-' | '!' | '~') negPower | linkExpr ('^' negPower)?
-compExpr           : annoExpr ('..' annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | memberAccess)*
 ```
 <!-- camel-for-ai end: precedence -->

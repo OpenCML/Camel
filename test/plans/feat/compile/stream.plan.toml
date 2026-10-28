@@ -18,7 +18,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.composition_uses"
-desc = "A composition is a function value like any other: `map<inc..dbl>` and `3->inc..dbl` (where `..` binds more tightly than `->`) give what the two calls written out give."
+desc = "A composition is a function value like any other: `map<inc..dbl>` and `3->(inc..dbl)` give what the two calls written out give. Beside `->` a composition keeps its parentheses, because `..` is looser than `->`: `3->inc..dbl` is `(3->inc)..dbl` and is refused where an `int` meets a function."
 kind = "behavior"
 case = "../../../cases/compile/stream/composition_uses.cml"
 args = ["${case}"]

@@ -7,7 +7,7 @@
  */
 
 #macro func total(n: int): int {
-    return 0..n->reduce<(acc: int, x: int): int => acc + x, 0>
+    return (0..n)->reduce<(acc: int, x: int): int => acc + x, 0>
 }
 
 func main(): int sync {

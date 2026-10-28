@@ -593,9 +593,9 @@ N09 -> N0A [label="0|0", type="NORM"];
 | 事实 | 符号 | 本次快照 |
 |---|---|---|
 | `..` / `?..` 的词法记号 | `include/camel/parse/syntax/token_kinds.def#QuestionDotDot` | 73（`DotDot`）、74（`Ellipsis`）、122（`QuestionDotDot`） |
-| 表达式的 `..` 层次 | `src/parse/syntax/parser_expr.cpp#ParserImpl::parseComp` | 360–373 |
+| 表达式的 `..` 层次 | `src/parse/syntax/parser_expr.cpp#ParserImpl::parseRange` | 237–253（`CompExpr` 逐层改名 `RangeExpr`，层次从 `linkExpr` 之下移到 `relationalExpr` 之下） |
 | 类型里的 `..` | `src/parse/syntax/parser_type.cpp#ParserImpl::parseArrayDim` | 155–188（`DotDot` 在 169） |
-| `..` / `?..` 的 AST → 诊断 | `src/parse/ast/builder.cpp#Builder::visitCompExpr` | 3617–3665（`..` 3625–3635，`?..` 3636–3645） |
+| `..` / `?..` 的 AST → 诊断 | `src/parse/ast/builder.cpp#Builder::visitRangeExpr` | 4025–4052（`?..` 已在 A1 删除） |
 | `CompExpr` 落图 | `src/compile/gct/builder.cpp#MacroCmp` | 2944–2949 |
 | 宏算子本体 | `src/builtin/operators/macro.cpp#__cmp__` | 12（`return NullSlot`） |
 | 算子 id | `include/camel/core/operator_table.h#MacroCmp` | 117（`= 19`，`:macro/cmp`） |

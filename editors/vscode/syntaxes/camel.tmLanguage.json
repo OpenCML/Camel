@@ -557,7 +557,7 @@
       ]
     },
     "pipe-target": {
-"comment": "linkExpr: compExpr ('->' compExpr)*. A name on the right is the function the left side is passed to.",
+"comment": "linkExpr: annoExpr ('->' annoExpr)*. A name on the right is the function the left side is passed to.",
       "match": "(->)\\s*((?:[A-Za-z_][A-Za-z_0-9]*::)*)([A-Za-z_][A-Za-z_0-9]*)\\b",
       "captures": {
         "1": { "name": "keyword.operator.pipe.camel" },

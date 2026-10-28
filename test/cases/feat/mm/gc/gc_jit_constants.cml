@@ -17,7 +17,7 @@ func count(n: int, acc: int): int {
 
 func label(i: int): string { return 'item-' + string(i) }
 
-func churn(n: int): int { return len(0..n->map<(i: int): string => label(i)>) }
+func churn(n: int): int { return len((0..n)->map<(i: int): string => label(i)>) }
 
 func main(): int sync {
     println(tag(50), count(50, 0))

@@ -33,8 +33,8 @@ func foldF32(xs: f32[]): f32 {
 }
 
 func main(): int sync {
-    let a = 0..1026->map<(i: int) => if i == 0 then f32(16777216.0) else f32(1.0)>
-    let c = 0..3->map<(i: int) => if i == 0 then f32(33554432.0) else f32(7.0)>
+    let a = (0..1026)->map<(i: int) => if i == 0 then f32(16777216.0) else f32(1.0)>
+    let c = (0..3)->map<(i: int) => if i == 0 then f32(33554432.0) else f32(7.0)>
 
     let ta = a
     let tc = c

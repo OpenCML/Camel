@@ -325,13 +325,13 @@ class ParserImpl {
     void parseLogicalAnd();
     void parseEquality();
     void parseRelational();
+    void parseRange();
     void parseAdditive();
     void parseMultiplicative();
     void parsePower();
     void parseNullable();
     void parseUnary();
     void parseLink();
-    void parseComp();
     void parseAnno();
     void parseAccess();
     void parsePrimary();

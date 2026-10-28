@@ -11,7 +11,7 @@ func elems(t: f32[..]): float[] {
     // `v[i]` is the element itself, so its type is the array's element
     // type `f32`. The list is `float[]` -- one text per element,
     // the shortest decimal that reads back to the same value -- so the conversion is written out.
-    return 0..numel(t)->map<(i: int): float => float(v[i])>
+    return (0..numel(t))->map<(i: int): float => float(v[i])>
 }
 
 func show(name: string, t: f32[..]): int sync {
