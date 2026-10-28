@@ -1,4 +1,4 @@
-import { new, from_bytes, to_bytes } from tensor
+import { from_bytes, to_bytes } from tensor
 import { from_array, to_array } from bytes
 import { save_tree, load_tree } from ckpt
 func original(): f32[..] {
@@ -22,7 +22,7 @@ func main(mode: int, dir: string): int sync {
     } else if mode == 4 then sync {
         // f32 is written, not assumed: an array of float literals is f64, and a typed restore
         // refuses a stored tensor of another element type instead of narrowing it.
-        let _ = (new([9.0] as f32[]))->save_tree<dir>
+        let _ = ([9.0] as f32[])->save_tree<dir>
         return 0
     } else if mode == 5 then sync {
         let loaded = dir->load_tree::<f32[..]> !! original()

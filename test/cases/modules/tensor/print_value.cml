@@ -8,7 +8,7 @@
  * declaration names the element type does not collapse to its first extent either.
  */
 
-import { ones, zeros, shape, numel, reshape, argmin, tanh, new, sum } from tensor
+import { ones, zeros, shape, numel, reshape, argmin, tanh, sum } from tensor
 import { is_numeric } from types
 
 func forward(x: f32[..]): f32[..] {

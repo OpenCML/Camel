@@ -38,7 +38,7 @@
 
 import { sum, min, max } from array
 import { is_nan, nan } from math
-import { new, to_bytes } from tensor
+import { to_bytes } from tensor
 import { to_array } from bytes
 
 /// The fold written with an f32 accumulator: every addition rounds. This is "round after every
@@ -61,14 +61,14 @@ func widened(xs: f32[]): f64[] {
 /// The four bytes of one f32 value, through a one-element f32 tensor.
 func bitsOf(value: f32): int[] {
     let one: f32[] = [value]
-    return to_array(to_bytes(new(one)))
+    return to_array(to_bytes(one))
 }
 
 /// The bytes of a one-element f32 array holding +0 or -0: the sign of a zero is not readable as a
 /// value, so the case compares the bytes.
 func zeroBits(negative: bool): int[] {
     let one: f32[] = [f32(if negative then -0.0 else 0.0)]
-    return to_array(to_bytes(new(one)))
+    return to_array(to_bytes(one))
 }
 
 func sameBits(a: int[], b: int[]): bool {
@@ -79,13 +79,13 @@ func sameBits(a: int[], b: int[]): bool {
 /// as a value either, and this type has no comparison of its own for it.
 func bitsOfBf16(value: bf16): int[] {
     let one: bf16[] = [value]
-    return to_array(to_bytes(new(one)))
+    return to_array(to_bytes(one))
 }
 
 /// The two bytes of one f16 value.
 func bitsOfF16(value: f16): int[] {
     let one: f16[] = [value]
-    return to_array(to_bytes(new(one)))
+    return to_array(to_bytes(one))
 }
 
 func main(): int sync {

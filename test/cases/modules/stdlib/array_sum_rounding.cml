@@ -21,7 +21,7 @@
  */
 
 import { sum as array_sum } from array
-import { new, reshape, sum as tensor_sum, to_bytes } from tensor
+import { reshape, sum as tensor_sum, to_bytes } from tensor
 import { to_array } from bytes
 
 /// The same elements widened to f64. `array_sum` over an f64 array accumulates in f64 (an f64
@@ -40,7 +40,7 @@ func foldF32(xs: f32[]): f32 {
 /// The four bytes of one f32 value, read back through a one-element f32 tensor.
 func bitsOf(value: f32): int[] {
     let one: f32[] = [value]
-    return to_array(to_bytes(new(one)))
+    return to_array(to_bytes(one))
 }
 
 func sameBits(a: int[], b: int[]): bool {
@@ -70,8 +70,8 @@ func main(): int sync {
 
     // The tensor path over the same elements: sum(t, axis 1) keeps the element type f32 and
     // rounds once when it stores (reduce.cpp), so its bytes are the array path's bytes.
-    let tensorA = to_array(to_bytes(tensor_sum<1, true>(reshape<[1, 1026]>(new(a)))))
-    let tensorB = to_array(to_bytes(tensor_sum<1, true>(reshape<[1, 4096]>(new(b)))))
+    let tensorA = to_array(to_bytes(tensor_sum<1, true>(reshape<[1, 1026]>(a))))
+    let tensorB = to_array(to_bytes(tensor_sum<1, true>(reshape<[1, 4096]>(b))))
     let agreesA = sameBits(bitsOf(sumA), tensorA)
     let agreesB = sameBits(bitsOf(sumB), tensorB)
 

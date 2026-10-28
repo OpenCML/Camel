@@ -7,15 +7,15 @@
  */
 
 
-import { new, sum, zeros } from tensor
+import { sum, zeros } from tensor
 
 func loss(w: f32[..], x: f32[..]): float {
     return loop s = 0.0 for v in x do s + float(sum(v * w + 0.5))
 }
 
 func main(): int sync {
-    let w = new([0.5, 1.5, 2.5, 3.5] as f32[])
-    let x = new([1.0, 2.0, 3.0, 4.0] as f32[])
+    let w = [0.5, 1.5, 2.5, 3.5] as f32[]
+    let x = [1.0, 2.0, 3.0, 4.0] as f32[]
     let total = loop a = 0.0 for i in 0..3 do a + loss(w, x)
     println(int(total))
     return 0

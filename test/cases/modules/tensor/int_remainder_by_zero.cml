@@ -1,9 +1,10 @@
 /** An integer array remainder by zero is a division-by-zero fault, as the scalar remainder is. */
-import { new } from tensor
+
+import tensor
 
 func main(): int sync {
     println('before')
-    println(new([7, 8, -9]) % new([1, 0, 2]))
+    println([7, 8, -9] as int[] % [1, 0, 2] as int[])
     println('not reached')
     return 0
 }

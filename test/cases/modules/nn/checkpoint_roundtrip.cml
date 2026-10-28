@@ -1,4 +1,4 @@
-import { new, zeros, to_bytes, sqrt } from tensor
+import { zeros, to_bytes, sqrt } from tensor
 import { from_array, to_array } from bytes
 import { save_tree, load_tree, tree_leaves } from ckpt
 import { tree_paths } from tree
@@ -14,10 +14,10 @@ type State = {
 func initial(): State {
     return {
         params: {
-            w: new([1.0, -2.0] as f32[]), odd: new([9007199254740993, -2]),
+            w: [1.0, -2.0] as f32[], odd: [9007199254740993, -2] as int[],
             empty: zeros::<f32>([2, 0])
         },
-        m: zeros::<f32>([2]), v: zeros::<f32>([2]), ema: new([1.0, -2.0] as f32[]),
+        m: zeros::<f32>([2]), v: zeros::<f32>([2]), ema: [1.0, -2.0] as f32[],
         step: 0, seed: 20261019, cursor: (3, 17), note: '中文 checkpoint',
         raw: from_array([0, 255, 128, 1]), enabled: true, gain: f32(-0.0), scale: -0.0
     }
@@ -46,7 +46,7 @@ func show(s: State): int sync {
     println(to_array(to_bytes(s.params.odd)))
     println(to_array(to_bytes(s.params.empty)))
     println((s.seed, s.cursor, s.note, to_array(s.raw), s.enabled))
-    println(to_array(to_bytes(new([float(s.gain), s.scale]))))
+    println(to_array(to_bytes([float(s.gain), s.scale])))
     return 0
 }
 func main(mode: int, dir: string): int sync {

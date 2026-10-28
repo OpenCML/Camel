@@ -10,6 +10,6 @@ func pick(flag: bool, whole: int[], real: f32[]): int[] {
 }
 
 func main(): int sync {
-    let picked = pick(true, new([1, 2, 3] as int[]), new([f32(1.0), f32(2.0), f32(3.0)]))
+    let picked = pick(true, [1, 2, 3] as int[], [f32(1.0), f32(2.0), f32(3.0)])
     return if picked[0] > 0 then 0 else 1
 }

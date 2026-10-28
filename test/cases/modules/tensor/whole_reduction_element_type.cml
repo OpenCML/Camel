@@ -15,7 +15,7 @@
  * sum itself, so the three widths are told apart by value and not only by the declaration.
  */
 
-import { new, sum, mean } from tensor
+import { sum, mean } from tensor
 
 /// The probe: an f32 tensor's whole-tensor sum is an f32, so returning it as one type-checks.
 func total(x: f32[..]): f32 {
@@ -66,11 +66,11 @@ func main(): int sync {
     let t64h = float(th)
 
     println("f32 sum")
-    println(total(new([1.0, 2.0, 3.0] as f32[])))
+    println(total([1.0, 2.0, 3.0] as f32[]))
     println("f32 mean")
-    println(meanOf(new([1.0, 2.0, 3.0] as f32[])))
+    println(meanOf([1.0, 2.0, 3.0] as f32[]))
     println("f64 sum")
-    println(totalF64(new([1.0, 2.0, 3.0])))
+    println(totalF64([1.0, 2.0, 3.0] as float[]))
     println("bf16 sum")
     println(totalBf16(tb))
     println("bf16 mean")

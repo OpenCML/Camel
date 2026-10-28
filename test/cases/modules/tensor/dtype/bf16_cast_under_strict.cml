@@ -10,7 +10,7 @@
  * for it to revoke in a conversion written here.
  */
 
-import { new, to_bytes } from tensor
+import { to_bytes } from tensor
 import { to_array } from bytes
 
 #[strict, change_precision]
@@ -20,7 +20,7 @@ func shrink(x: f32[..]): bf16[..] {
 
 func main(): int sync {
     let values: f32[] = [0.1]
-    let narrowed = shrink(new(values))
+    let narrowed = shrink(values)
     println(to_array(to_bytes(narrowed)))
     return 0
 }

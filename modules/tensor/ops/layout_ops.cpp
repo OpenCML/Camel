@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * Shape and data-movement operators: shape, reshape, flatten, unsqueeze,
+ * Shape and data-movement operators: shape, reshape, unsqueeze,
  * transpose, permute, concat.
  *
  * Static inference computes result shapes with the same helpers the kernels
@@ -138,39 +138,6 @@ std::optional<Type *> reshapeInfer(const InferContext &ctx) {
         shape.push_back(extent < 0 ? std::nullopt : std::optional<int64_t>(extent));
     }
     return tensorOf(in.dtype, std::move(shape));
-}
-
-// flatten(t, axis = 1): [d0 * ... * d(axis-1), d(axis) * ... * dn]
-Shape flattenShape(std::span<const int64_t> shape, int64_t axis) {
-    const auto a = static_cast<size_t>(axis < 0 ? axis + static_cast<int64_t>(shape.size()) : axis);
-    int64_t outer = 1, inner = 1;
-    for (size_t d = 0; d < shape.size(); ++d) {
-        (d < a ? outer : inner) *= shape[d];
-    }
-    return {outer, inner};
-}
-
-slot_t flattenKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    return runKernel("flatten", [&] {
-        Array *t    = tensorArg(norm, 0);
-        const int64_t axis = hasArg(norm, 1) ? intArg(norm, 1) : 1;
-        if (axis < -static_cast<int64_t>(t->rank()) || axis > static_cast<int64_t>(t->rank())) {
-            throw std::invalid_argument("flatten axis out of range");
-        }
-        return wrap(
-            norm.resultType(),
-            k::reshape(t, flattenShape(t->shapeSpan(), axis), resultAllocator()));
-    });
-}
-
-std::optional<Type *> flattenInfer(const InferContext &ctx) {
-    const TensorFacts in = ctx.facts(0);
-    const auto axis      = ctx.has(1) ? ctx.constInt(1) : std::optional<int64_t>(1);
-    if (fullyKnown(in.shape) && axis) {
-        return tensorOf(
-            in.dtype, knownShape(flattenShape(kernelExtents(*in.shape), *axis)));
-    }
-    return tensorOf(in.dtype, StaticShape{std::nullopt, std::nullopt});
 }
 
 // unsqueeze(t, axis)
@@ -531,7 +498,7 @@ void transposeVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
-/// reshape, flatten, unsqueeze: the gradient takes the input's shape back. `reshape` also
+/// reshape, unsqueeze: the gradient takes the input's shape back. `reshape` also
 /// accepts a numeric array, and a numeric array is a tensor here (a tensor is a numeric array:
 /// `isTensorType` is `isNumericArrayType`), so one rule answers for both spellings -- the array's
 /// adjoint is the input's shape and the tensor module has every operator for it (`tensor:shape`
@@ -676,16 +643,6 @@ std::vector<OpDef> layoutOps() {
         .withAfterNorm  = true,
         .ordinaryParams = 1});
     defs.push_back(OpDef{
-        .name      = "flatten",
-        .exports   = {"flatten"},
-        .params    = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int, true}},
-        .resultDoc = "float[..]",
-        .infer          = flattenInfer,
-        .kernel         = &positionally<flattenKernel>,
-        .traits         = {},
-        .withAfterNorm  = true,
-        .ordinaryParams = 1});
-    defs.push_back(OpDef{
         .name      = "unsqueeze",
         .exports   = {"unsqueeze"},
         .params    = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int}},
@@ -772,7 +729,6 @@ std::vector<OpDef> layoutOps() {
         .traits    = {}});
     setVjp(defs, "transpose", &transposeVjp);
     setVjp(defs, "reshape", &reshapeLikeVjp);
-    setVjp(defs, "flatten", &reshapeLikeVjp);
     setVjp(defs, "unsqueeze", &reshapeLikeVjp);
     setVjp(defs, "permute", &permuteVjp);
     setVjp(defs, "concat", &concatVjp);

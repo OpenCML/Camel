@@ -10,7 +10,7 @@
  * The model has both kinds of trainable leaf: two tensors and a float.
  */
 
-import { range } from tensor
+import tensor
 import { adam, adam_state } from nn
 
 type Model = {
@@ -23,13 +23,13 @@ func main(steps: int, lr: float): int sync {
     // Deterministic values with binary digits below the point: 0.0007 and 0.0011 are not
     // representable as float, so an f32 intermediate would move the result.
     let model = {
-        w: f32(range(6)) * 0.0007 - 0.002,
-        b: f32(range(2)) * 0.03 + 0.001,
+        w: f32((0..6)) * 0.0007 - 0.002,
+        b: f32((0..2)) * 0.03 + 0.001,
         scale: 0.25
     }
     let gradient = {
-        w: f32(range(6)) * 0.0011 - 0.003,
-        b: f32(range(2)) * -0.02 + 0.005,
+        w: f32((0..6)) * 0.0011 - 0.003,
+        b: f32((0..2)) * -0.02 + 0.005,
         scale: -0.5
     }
     let (trained, state, done) = loop m = model, s = adam_state(model), step = 0
