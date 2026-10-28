@@ -5,21 +5,6 @@ debug_tier = true # also selected by --tier debug (Debug build)
 tags = ["feat", "modules", "tensor", "diagnostics"]
 
 [[tests]]
-name = "add"
-desc = "A static shape conflict in `add` fails compilation at the call, naming both shapes."
-kind = "negative"
-case = "../../../../cases/modules/tensor/shape_diagnostics/add.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_diagnostic_line = 9
-expect_diagnostic_column = 16
-expect_output_contains = ["cannot broadcast extents 2 and 4"]
-expect_output_not_contains = ["unreachable"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 10000
-
-[[tests]]
 name = "op_plus"
 desc = "A static shape conflict in `op_plus` fails compilation at the call, naming both shapes."
 kind = "negative"
@@ -30,21 +15,6 @@ expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_diagnostic_line = 9
 expect_diagnostic_column = 36
 expect_output_contains = ["cannot broadcast extents 2 and 4"]
-expect_output_not_contains = ["unreachable"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 10000
-
-[[tests]]
-name = "multiply"
-desc = "A static shape conflict in `multiply` fails compilation at the call, naming both shapes."
-kind = "negative"
-case = "../../../../cases/modules/tensor/shape_diagnostics/multiply.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_diagnostic_line = 9
-expect_diagnostic_column = 21
-expect_output_contains = ["cannot broadcast extents 3 and 4"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

@@ -4,7 +4,8 @@
  */
 
 import { grad } from autodiff
-import { random, seed, sum, reshape, tanh } from tensor
+import { sum, reshape, tanh } from tensor
+import { next_key, seed, uniform } from random
 import { conv2d, max_pool2d, avg_pool2d, embedding, softmax_cross_entropy } from nn
 
 func check(name: string, f: <x: f32[..]> () => float, df: <x: f32[..]> () => f32[..], x: f32[..], v: f32[..]): int sync {
@@ -44,11 +45,11 @@ func xent(): float { return softmax_cross_entropy(z, labels()) }
 
 func main(): int sync {
     seed(9)
-    check("conv_input", conv_input, grad(conv_input), image(), random([1, 2, 4, 4], -1.0, 1.0))
-    check("conv_kernel", conv_kernel, grad(conv_kernel), kernel(), random([3, 2, 2, 2], -1.0, 1.0))
-    check("conv_bias", conv_bias, grad(conv_bias), bias(), random([3], -1.0, 1.0))
-    check("pools", pools, grad(pools), image(), random([1, 2, 4, 4], -1.0, 1.0))
-    check("embedding", embed, grad(embed), random([4, 3], -1.0, 1.0), random([4, 3], -1.0, 1.0))
-    check("cross_entropy", xent, grad(xent), random([3, 4], -1.0, 1.0), random([3, 4], -1.0, 1.0))
+    check("conv_input", conv_input, grad(conv_input), image(), (next_key()->uniform::<f32><shape: [1, 2, 4, 4]> * 2.0 - 1.0))
+    check("conv_kernel", conv_kernel, grad(conv_kernel), kernel(), (next_key()->uniform::<f32><shape: [3, 2, 2, 2]> * 2.0 - 1.0))
+    check("conv_bias", conv_bias, grad(conv_bias), bias(), (next_key()->uniform::<f32><shape: [3]> * 2.0 - 1.0))
+    check("pools", pools, grad(pools), image(), (next_key()->uniform::<f32><shape: [1, 2, 4, 4]> * 2.0 - 1.0))
+    check("embedding", embed, grad(embed), (next_key()->uniform::<f32><shape: [4, 3]> * 2.0 - 1.0), (next_key()->uniform::<f32><shape: [4, 3]> * 2.0 - 1.0))
+    check("cross_entropy", xent, grad(xent), (next_key()->uniform::<f32><shape: [3, 4]> * 2.0 - 1.0), (next_key()->uniform::<f32><shape: [3, 4]> * 2.0 - 1.0))
     return 0
 }

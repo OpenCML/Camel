@@ -263,7 +263,7 @@ for (const [uri, text] of Object.entries(expect)) {
 
 [[tests]]
 name = "resource_names"
-desc = "The resource set of the standard library is pinned: `camel inspect --ops` on a program that imports every module declaring a resource prints exactly these ambient and foreign names, so a later task cannot quietly rename one back. The names are the ones design principles 3.3 gives (`stdout`, `stderr`, `stdin`, `clock`, `env`, `fs`, plus the module's own `rng`, `tensor:generator`, `tensor:threads`, `tiles:driver`, `tiles:device`, `process`, and `rendezvous_point`, the meeting point of `test_support`); raw mode writes `stdin`, the one resource the terminal mode was merged into ."
+desc = "The resource set of the standard library is pinned: `camel inspect --ops` on a program that imports every module declaring a resource prints exactly these ambient and foreign names, so a later task cannot quietly rename one back. The names are the ones design principles 3.3 gives (`stdout`, `stderr`, `stdin`, `clock`, `env`, `fs`, plus the module's own `rng`, `tensor:threads`, `tiles:driver`, `tiles:device`, `process`, and `rendezvous_point`, the meeting point of `test_support`); raw mode writes `stdin`, the one resource the terminal mode was merged into ."
 kind = "behavior"
 case = "../../../cases/resources/names.cml"
 args = ["inspect", "--ops", "${case}"]
@@ -284,7 +284,7 @@ for (const op of ops) {
 }
 const expected = [
   'clock', 'env', 'fs', 'process:process', 'rendezvous_point', 'rng', 'stderr',
-  'stdin', 'stdout', 'tensor:generator', 'tensor:threads', 'tiles:device', 'tiles:driver',
+  'stdin', 'stdout', 'tensor:threads', 'tiles:device', 'tiles:driver',
 ]
 const got = [...names].sort()
 assert(got.length === expected.length, `expected ${expected.length} resources, got ${got.length}: ${got.join(', ')}`)
@@ -313,7 +313,6 @@ const expect = {
   'ckpt:load_tree': 'read ambient fs; write ambient stderr; external',
   'ckpt:save_tree': 'rmw ambient fs; external',
   'tensor:show': 'write ambient stdout; external',
-  'tensor:seed': 'write ambient tensor:generator; external',
   'nn:save_params': 'rmw ambient fs; external',
   'tiles:upload': 'rmw ambient tiles:driver; allocates foreign tiles:device; external',
 }

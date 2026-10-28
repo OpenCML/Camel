@@ -1,4 +1,5 @@
-import { ones, reshape, sum, abs, randn, seed, set_num_threads } from tensor
+import { ones, reshape, sum, abs, set_num_threads } from tensor
+import { next_key, normal, seed } from random
 import { inspect, run_preferred_resident, download } from tiles
 import { exit } from process
 
@@ -24,8 +25,8 @@ func main(run_gpu: bool): int sync {
         println('MIXED bf16_error={} fp32_error={} precision_difference={}'->format<mixed_error, strict_error, difference>)
         if mixed_error > 0.0001 || strict_error != 0.0 || difference < 1.0 then sync { exit(1) }
         seed(31415)
-        let left = randn([2, 1, 3, 5])
-        let right = randn([1, 4, 5, 7])
+        let left = next_key()->normal::<f32><shape: [2, 1, 3, 5]>
+        let right = next_key()->normal::<f32><shape: [1, 4, 5, 7]>
         let reference = strict(left, right)
         let relative = sum(abs(download(run_preferred_resident<mixed>((left, right))) - reference)) / sum(abs(reference))
         println('MIXED broadcast_relative_error={}'->format<relative>)

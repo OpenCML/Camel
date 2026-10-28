@@ -7,10 +7,10 @@
  * types: this one is not about the two widths of a float.
  */
 
-import { reshape, multiply, sum } from tensor
+import { reshape, sum } from tensor
 
 func masked(x: f32[4], mask: bool[4]): float {
-    return float(sum(multiply(x, mask)))
+    return float(sum((x * mask)))
 }
 
 func main(): int sync {

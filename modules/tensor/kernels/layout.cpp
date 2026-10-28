@@ -44,16 +44,6 @@ std::string shapeText(std::span<const int64_t> shape) {
     return text + "]";
 }
 
-std::mt19937_64 &rng() {
-    static std::mt19937_64 engine{std::random_device{}()};
-    return engine;
-}
-
-std::mutex &rngMutex() {
-    static std::mutex mutex;
-    return mutex;
-}
-
 } // namespace
 
 Shape resolveReshape(std::span<const int64_t> input, std::span<const int64_t> target) {
@@ -507,39 +497,6 @@ Array *eye(int64_t size, mm::IAllocator &allocator) {
         values[i * size + i] = 1.0f;
     }
     return out;
-}
-
-Array *
-randomUniform(std::span<const int64_t> shape, double low, double high, mm::IAllocator &allocator) {
-    if (low > high) {
-        std::swap(low, high);
-    }
-    Array *out = createTensor(TypeCode::Float32, shape, allocator);
-    const float lo = static_cast<float>(low), hi = static_cast<float>(high);
-    std::lock_guard guard(rngMutex());
-    float *values = out->dataAs<float>();
-    for (uint64_t i = 0; i < out->numel(); ++i) {
-        values[i] = camel::utils::random::uniformFloat(rng(), lo, hi);
-    }
-    return out;
-}
-
-Array *randomNormal(
-    std::span<const int64_t> shape, double mean, double stddev, mm::IAllocator &allocator) {
-    Array *out = createTensor(TypeCode::Float32, shape, allocator);
-    const float mu = static_cast<float>(mean), sigma = static_cast<float>(stddev);
-    camel::utils::random::NormalSource<float> normal;
-    std::lock_guard guard(rngMutex());
-    float *values = out->dataAs<float>();
-    for (uint64_t i = 0; i < out->numel(); ++i) {
-        values[i] = normal(rng(), mu, sigma);
-    }
-    return out;
-}
-
-void seedRandom(uint64_t seed) {
-    std::lock_guard guard(rngMutex());
-    rng().seed(seed);
 }
 
 } // namespace camel::tensor::kernels

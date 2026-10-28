@@ -1,4 +1,5 @@
-import { random, seed, exp, sum, mean, max, sqrt } from tensor
+import { exp, sum, mean, max, sqrt } from tensor
+import { next_key, seed, uniform } from random
 import { benchmark } from tiles
 func softmax(x: f32[..]): f32[..] {
     let e = exp(x - max<1, true>(x))
@@ -10,8 +11,8 @@ func layernorm(x: f32[..]): f32[..] {
 }
 func main(): int sync {
     seed(162)
-    let x = random([128,257], -3.0, 3.0)
-    let y = random([1024,1024], -3.0, 3.0)
+    let x = (next_key()->uniform::<f32><shape: [128,257]> * 6.0 - 3.0)
+    let y = (next_key()->uniform::<f32><shape: [1024,1024]> * 6.0 - 3.0)
     println(benchmark<softmax>(x))
     println(benchmark<softmax>(y))
     println(benchmark<layernorm>(x))

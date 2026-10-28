@@ -68,14 +68,4 @@ oneHot(std::span<const int64_t> labels, int64_t classes, mm::IAllocator &allocat
 Array *arange(int64_t start, int64_t stop, int64_t step, mm::IAllocator &allocator);
 Array *eye(int64_t size, mm::IAllocator &allocator);
 
-/// Uniform [low, high) float32 samples from the module RNG.
-Array *
-randomUniform(std::span<const int64_t> shape, double low, double high, mm::IAllocator &allocator);
-/// Normal(mean, std) float32 samples from the module RNG.
-Array *
-randomNormal(std::span<const int64_t> shape, double mean, double stddev, mm::IAllocator &allocator);
-/// Reseeds the module RNG. Until called, the RNG is seeded from std::random_device. The samples
-/// are drawn with camel/utils/random.h: after a seed they are the same on every platform.
-void seedRandom(uint64_t seed);
-
 } // namespace camel::tensor::kernels

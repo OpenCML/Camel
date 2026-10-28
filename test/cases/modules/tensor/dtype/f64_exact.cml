@@ -2,11 +2,11 @@
 // values, the 8-byte elements and the round trip through `to_bytes`/`from_bytes` are the evidence
 // that no creation, arithmetic, reduction or conversion narrows the element type.
 
-import { multiply, sum, mean, to_bytes, from_bytes } from tensor
+import { sum, mean, to_bytes, from_bytes } from tensor
 import { to_array } from bytes
 
 func scaled(x: f64[..], by: f64): f64[..] {
-    return multiply(x, by)
+    return (x * by)
 }
 
 func main(): int sync {

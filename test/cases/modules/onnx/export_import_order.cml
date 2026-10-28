@@ -5,14 +5,15 @@
  */
 
 import { export_model } from onnx
-import { random, ones, zeros, layer_norm, reshape, shape } from tensor
+import { ones, zeros, layer_norm, reshape, shape } from tensor
+import { next_key, uniform } from random
 import { get_env } from env
 
 func main(): int sync {
-    let w = random([8, 8], -1.0, 1.0)
+    let w = (next_key()->uniform::<f32><shape: [8, 8]> * 2.0 - 1.0)
     let g = ones::<f32>([8])
     let b = zeros::<f32>([8])
-    let x = random([2, 4, 8], -1.0, 1.0)
+    let x = (next_key()->uniform::<f32><shape: [2, 4, 8]> * 2.0 - 1.0)
     // reshape(.., shape(..)) needs the static rank of the layer_norm/matmul result.
     let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((t: f32[..]): f32[..] => reshape<shape(layer_norm(t, g, b) @ w)>(t), x)
     println('exported')

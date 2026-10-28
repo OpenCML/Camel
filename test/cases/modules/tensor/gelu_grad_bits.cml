@@ -25,7 +25,8 @@
  * one element.
  */
 
-import { gelu, random, seed, sum, to_bytes } from tensor
+import { gelu, sum, to_bytes } from tensor
+import { next_key, seed, uniform } from random
 import { grad } from autodiff
 import { sha256 } from hash
 
@@ -36,11 +37,11 @@ func loss(): float {
 
 func main(): int sync {
     seed(29)
-    let ffn = random([16, 32, 512], -8.0, 8.0)
+    let ffn = (next_key()->uniform::<f32><shape: [16, 32, 512]> * 16.0 - 8.0)
     'gelu_grad_bits ffn={}'->format<sha256(to_bytes(grad(loss)<ffn>()))>->println
-    let tail = random([7, 33, 5], -8.0, 8.0)
+    let tail = (next_key()->uniform::<f32><shape: [7, 33, 5]> * 16.0 - 8.0)
     'gelu_grad_bits tail={}'->format<sha256(to_bytes(grad(loss)<tail>()))>->println
-    let single = random([1], -8.0, 8.0)
+    let single = (next_key()->uniform::<f32><shape: [1]> * 16.0 - 8.0)
     'gelu_grad_bits single={}'->format<sha256(to_bytes(grad(loss)<single>()))>->println
     return 0
 }

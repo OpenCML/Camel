@@ -1,4 +1,5 @@
-import { random, seed, sum, abs, transpose, permute, dim, reshape, zeros } from tensor
+import { sum, abs, transpose, permute, dim, reshape, zeros } from tensor
+import { next_key, seed, uniform } from random
 import { run_preferred_resident, download } from tiles
 
 func trans(x: f32[..]): f32[..] { return transpose(x) }
@@ -16,7 +17,7 @@ func chain(x: f32[..]): f32[..] {
 func empty(x: f32[..]): f32[..] { return slice(x, 2, 7, 7) }
 func main(): int sync {
     seed(47)
-    let x = random([2, 3, 7], -5.0, 5.0)
+    let x = (next_key()->uniform::<f32><shape: [2, 3, 7]> * 10.0 - 5.0)
     println(sum(abs(download(run_preferred_resident<trans>(x)) - trans(x))))
     println(sum(abs(download(run_preferred_resident<axes>(x)) - axes(x))))
     println(sum(abs(download(run_preferred_resident<crop>(x)) - crop(x))))
