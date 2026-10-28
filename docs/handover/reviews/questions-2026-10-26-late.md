@@ -811,3 +811,27 @@ H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program
   - **看哪几列**：C3（模型在优化前后的图上结果相同），C1/C5（实现与模型一致）。
   - **用例**：`hand/` 里 24 个手写程序，第 14–17 条各有一个最小程序。
   - 修第 1 路的效应与边缺陷时，以这几列全过为准。第 13 条（导出带上顺序边）落地后，脚本改为直接比对导出里的顺序边，不再自己重建。
+
+**第 8 路的第 2、3 步说明**（决策者这边最后一条车道交活时列出）：
+1. **标签现在怎么读**：
+   - `tag vjp::<F>(rule: F) on func` 声明在 `stdlib/autodiff.cml`。`builder_tags.cpp`（约 343 行）把函数类型的标签参数存成图引用（`attr::graphRef`），`attachRuleGraphs` 把规则的图挂到声明它的图上，所以 `#vjp(rule)` 在这一侧已经是结构化的。
+   - 只给文本的是 `modules/graph/read.cpp` 464–470 行（`graph.tags` 返回 `attr::text(facts.tags)`）与 `camel/core/tags.h`（`factsOf`）。
+   - 求导引擎经 `DerivativeRegistry`（`pullback.cpp` 的 `findRule`）按算子 URI 找 C++ 规则，各模块按 URI 登记（`modules/math/module.cpp` 的 `sqrt`、`erf`）。
+2. **按结构读 `#jvp`/`#transpose`/`#vjp` 要动四处**：
+   - 标签声明（`jvp`、`transpose` 还没有）；
+   - `graph` 模块的读取（返回规则的图，不是文本）；
+   - `pullback.cpp`（除了 URI 登记，还要从算子 `#impl` 函数声明上的标签找规则）；
+   - 规则语言第二版的 `rule` 声明。
+3. **类型参数包（建 `Reinterp<F, H>` 前要知道的）**：
+   - 包是 `TypeCallType::makePack`（`$pack<…>`），`..E` 是 `$expand<E>`，都在 `typecall.{h,cpp}`。
+   - 展开在 `typevar.cpp`：`expandPack` 用线程局部的 `PackScope` 量长度，再逐个代入；发生在 `substituteTypeVars` 的元组分支，以及 `rebuildFunctionType` 的 `with` 与普通参数列表。
+   - 已经具体的类型由 `expandTypePacks` 展开，GCT 对元组和函数类型调用它。
+4. **包的限制**：
+   - 单个成员的包是一元组；
+   - 同一次展开里的包长度必须相同；
+   - 结构体字段与类型实参里没有 `..`；
+   - 包的叶子只能是包变量、`$pack` 字面量，或 `ParamsOf`/`WithOf` 的调用。
+5. **包的绑定只有一条路**：
+   - 没有函数体的声明（`DeclaredFuncTypeResolver::resolve`）与有函数体的剩余参数函数（`inlineRestCall`），都把包变量绑到 `makePack(剩余实参的类型)`；`ruleVerdictForCall` 对 `when` 的检查同理。
+   - 签名里函数类型参数列表中 `..` 后的未声明名字，在第一次出现处绑成包变量，与 `::<..P>` 声明的走同一条路。
+6. **剩余参数函数的 `when` 现在在调用处求值**：`whenOfEvery` 处理 `..pred::<A>()`。
