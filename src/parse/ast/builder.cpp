@@ -1089,7 +1089,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         const Reference sideRef = qualifyRef(Reference(name + suffix));
         node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(funcTypeNode, context);
-        unwrapNodeAs<FuncTypeLoad>(funcTypeNode)->setTypeParams(typeParams);
+        unwrapNodeAs<FuncTypeLoad>(funcTypeNode)->setTypeParamNames(typeParams);
         *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
         *funcTypeNode << constasParams(
             params ? any2node(visitParentParams(params)) : createNodeAs<RepeatedLoad>("NamedPair"));
@@ -1233,7 +1233,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         }
         node_ptr_t whenType = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(whenType, when);
-        unwrapNodeAs<FuncTypeLoad>(whenType)->setTypeParams(typeParams);
+        unwrapNodeAs<FuncTypeLoad>(whenType)->setTypeParamNames(typeParams);
         // The condition is a function of the rule's `with` parameters as the sides are, so it
         // reads them by name (`when m % tile == 0`) and they are `constas` parameters of it too.
         *whenType << createNodeAs<RepeatedLoad>("NamedPair");
@@ -1329,7 +1329,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         }
         node_ptr_t bindType = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(bindType, context);
-        unwrapNodeAs<FuncTypeLoad>(bindType)->setTypeParams({});
+        unwrapNodeAs<FuncTypeLoad>(bindType)->setTypeParamNames({});
         *bindType << any2node(visitAngledParams(withParams));
         *bindType << createNodeAs<RepeatedLoad>("NamedPair");
         node_ptr_t bindResult = createNodeAs<OptionalLoad>("Type");
@@ -1652,7 +1652,7 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
         const Reference fnRef = qualifyRef(Reference(fname));
         node_ptr_t funcType   = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(funcType, context);
-        unwrapNodeAs<FuncTypeLoad>(funcType)->setTypeParams(typeParams);
+        unwrapNodeAs<FuncTypeLoad>(funcType)->setTypeParamNames(typeParams);
         node_ptr_t withList = createNodeAs<RepeatedLoad>("NamedPair");
         setNodeTokenRangeByContext(withList, context);
         for (const auto &each : withParams) {
@@ -2109,12 +2109,13 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
     // The type parameters declared at the head (`func first::<T>(...)`, design principles 5.5).
     // They are the names the declaration's type variables are; the GCT builder puts them in
     // scope before it visits a parameter type, so one of them wins over a type of the same name.
+    // One written with `..` is a pack and not one type (`func zip::<..A>`, 5.6).
     if (const auto typeParams = context->get<cst::TypeParams>()) {
-        std::vector<std::string> names;
+        std::vector<TypeParam> params;
         for (const auto ident : typeParams->all<cst::IdentDef>()) {
-            names.emplace_back(ident->text());
+            params.emplace_back(ident->text(), ident->writtenAsPack());
         }
-        funcType->setTypeParams(std::move(names));
+        funcType->setTypeParams(std::move(params));
     }
 
     if (context->get<cst::AngledParams>()) {
@@ -5193,6 +5194,25 @@ Value Builder::visitTypeList(cst::TypeList context) {
 }
 
 /*
+packType
+    : '..' typeExpr
+    ;
+The body is the type expression written once for each member of the pack it names (design
+principles 5.6). The pack itself is not written here: GCT works its name out from the body,
+where the head of the declaration is known.
+*/
+Value Builder::visitPackType(cst::PackType context) {
+    ENTER("PackType");
+    node_ptr_t res = createNodeAs<PackTypeLoad>();
+    setNodeTokenRangeByContext(res, context);
+    if (context->type()) {
+        *res << any2node(visitType(context->type()));
+    }
+    LEAVE("PackType");
+    return res;
+}
+
+/*
 tupleType
     : '(' typeList? ','? ')'
     ;
@@ -5408,6 +5428,8 @@ Value Builder::visitType(syn::Node context) {
         return visitStructType(cst::StructType(context));
     case NK::RefType:
         return visitRefType(cst::RefType(context));
+    case NK::PackType:
+        return visitPackType(cst::PackType(context));
     case NK::ParenType:
         return visitType(context.type());
     case NK::TupleType:

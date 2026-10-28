@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-294 diagnostics: 274 errors, 20 warnings. 15 carry a machine-applicable edit, 279 say why they carry none.
+295 diagnostics: 275 errors, 20 warnings. 15 carry a machine-applicable edit, 280 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -83,6 +83,7 @@ prints one entry.
 | `0x03000055` | [SemanticDiag::GenericInstantiationTooDeep](#genericinstantiationtoodeep) | Error | no |
 | `0x03000056` | [SemanticDiag::TypeFunctionArguments](#typefunctionarguments) | Error | no |
 | `0x03000057` | [SemanticDiag::GenericFunctionUnsupported](#genericfunctionunsupported) | Error | no |
+| `0x03000058` | [SemanticDiag::PackExpansionNeedsOnePack](#packexpansionneedsonepack) | Error | no |
 | `0x03000060` | [SemanticDiag::FunctionNameAsValue](#functionnameasvalue) | Error | no |
 | `0x03000072` | [SemanticDiag::TaggedTypeNesting](#taggedtypenesting) | Error | no |
 | `0x03000073` | [SemanticDiag::TaggedValueNotOpened](#taggedvaluenotopened) | Error | no |
@@ -2442,6 +2443,28 @@ func main(): int sync {
     return 0
 }
 ```
+
+### PackExpansionNeedsOnePack
+
+`0x03000058` · Error · `SemanticDiag::PackExpansionNeedsOnePack`
+
+**Fix**
+
+None: choice: which pack the expansion ranges over, and which call binds it, is the writer's to decide
+
+**Message**
+
+```text
+The expansion '{0}' must range over exactly one pack: {1}.
+```
+
+**Help**
+
+```text
+A type expression written with '..' stands for one type per member of a pack, and the members come from one place: the rest parameter of the declaration, written '..xs: ..A', binds the pack 'A' to the types of the arguments a call leaves over (design principles 5.6). So the body of an expansion names that one pack, and the expansion is used where a call binds it.
+```
+
+*No example: no test small enough to show raises it.*
 
 ### FunctionNameAsValue
 

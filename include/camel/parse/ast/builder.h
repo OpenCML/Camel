@@ -236,6 +236,7 @@ class Builder {
     Value visitEnumPattern(syntax::cst::Pattern context, syntax::cst::IdentRef ref);
     Value visitTypeList(syntax::cst::TypeList context);
     Value visitTupleType(syntax::cst::TupleType context);
+    Value visitPackType(syntax::cst::PackType context);
     Value visitFuncType(syntax::cst::FuncType context);
     Value visitIdentDef(syntax::cst::IdentDef context);
     Value visitIdentRef(syntax::cst::IdentRef context);

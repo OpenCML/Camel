@@ -226,7 +226,9 @@ FunctionTypeFactory rebuildFunctionType(
         const std::string name =
             paramNameOf(func, func->withTypesCount() + i, "__n", i);
         if (func->hasRest() && i + 1 == func->normTypesCount()) {
-            factory.addRestArg(name);
+            // A rest parameter that writes the type of its members (`..xs: ..A`, design
+            // principles 5.6) keeps it, substituted like any other type.
+            factory.addRestArg(name, replaced(func->normTypeAt(i)));
             continue;
         }
         if (func->normIsConstasAt(i)) {

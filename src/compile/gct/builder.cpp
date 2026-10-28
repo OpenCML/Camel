@@ -5140,20 +5140,23 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         Builder &self;
         scope_ptr_t<Reference, Type *> outer;
         std::vector<std::string> outerVars;
+        std::vector<std::string> outerPacks;
         std::shared_ptr<std::unordered_map<std::string, Type *>> outerHead;
         std::unordered_set<std::string> outerWritten;
         bool outerSignatureVisit;
         ~TypeScopeGuard() {
-            self.typeScope_        = outer;
-            self.declaredTypeVars_ = std::move(outerVars);
-            self.headTypeVarTypes_ = std::move(outerHead);
-            self.writtenHeadVars_  = std::move(outerWritten);
-            self.signatureVisit_   = outerSignatureVisit;
+            self.typeScope_          = outer;
+            self.declaredTypeVars_   = std::move(outerVars);
+            self.declaredPackVars_   = std::move(outerPacks);
+            self.headTypeVarTypes_   = std::move(outerHead);
+            self.writtenHeadVars_    = std::move(outerWritten);
+            self.signatureVisit_     = outerSignatureVisit;
         }
     } typeScopeGuard{
         *this,
         typeScope_,
         std::exchange(declaredTypeVars_, {}),
+        std::exchange(declaredPackVars_, {}),
         std::move(headTypeVarTypes_),
         std::move(writtenHeadVars_),
         signatureVisit_};
@@ -5293,7 +5296,7 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         funcNode->setNativeDeclaration();
         tree_->setHeadTypeParams(
             funcNode,
-            ast->atAs<AST::FuncTypeLoad>(0)->loadAs<AST::FuncTypeLoad>()->typeParams());
+            ast->atAs<AST::FuncTypeLoad>(0)->loadAs<AST::FuncTypeLoad>()->typeParamNames());
         if (whenNode != nullptr) {
             tree_->setWhen(funcNode, {whenNode, funcData->whenText(), whenNode->origin()});
         }
@@ -5340,7 +5343,7 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     node_ptr_t funcNode = tree_->makeFunc(funcData->ref().toString());
     tree_->setHeadTypeParams(
         funcNode,
-        ast->atAs<AST::FuncTypeLoad>(0)->loadAs<AST::FuncTypeLoad>()->typeParams());
+        ast->atAs<AST::FuncTypeLoad>(0)->loadAs<AST::FuncTypeLoad>()->typeParamNames());
     *funcNode << typeNode << stmtsNode;
     if (whenNode != nullptr) {
         tree_->setWhen(funcNode, {whenNode, funcData->whenText(), whenNode->origin()});
@@ -5395,7 +5398,7 @@ node_ptr_t Builder::visitRefData(const AST::node_ptr_t &ast) {
 /*
 Type(TypeType type) :=
     StreamType | NullableType | TypeExpr | ArrayType | StructType | TupleType
-    | FuncType | SpecType | RefType | EnumType ;
+    | FuncType | SpecType | RefType | EnumType | PackType ;
 An `InferType` node never reaches this dispatch: it is the marker of a type left out of a
 lambda's parameter list, and the signature builders read it where it stands (design
 principles 5.9).
@@ -5445,6 +5448,9 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
         break;
     case AST::TypeType::Match:
         res = visitMatchTypeType(ast);
+        break;
+    case AST::TypeType::Pack:
+        res = visitPackType(ast);
         break;
     case AST::TypeType::Ref:
         res = visitRefType(ast);
@@ -5722,7 +5728,8 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
         // type nested in either, and the body all resolve them before any type of the module. A
         // name declared here therefore wins over a type of the same name, which is the point of
         // declaring it (design principles 5.5).
-        for (const std::string &name : typeLoad->typeParams()) {
+        for (const AST::TypeParam &param : typeLoad->typeParams()) {
+            const std::string &name = param.name();
             if (std::find(declaredTypeVars_.begin(), declaredTypeVars_.end(), name) !=
                 declaredTypeVars_.end()) {
                 diags_->of(SemanticDiag::TypeVariableRedeclared)
@@ -5735,6 +5742,11 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             declaredTypeVars_.push_back(name);
             if (headTypeVarTypes_) {
                 (*headTypeVarTypes_)[name] = occurrence;
+            }
+            if (param.pack()) {
+                // A pack (`..A`) is written only in an expansion, so it is recorded where an
+                // expansion can find the name its body names (visitPackType).
+                declaredPackVars_.push_back(name);
             }
         }
     }
@@ -5919,8 +5931,11 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             continue;
         }
         if (paramLoad->isRest()) {
-            // A rest parameter is untyped and last (design principles 5.5); it stands in the
-            // signature as a `void` parameter that no call passes a value for.
+            // A rest parameter is last and stands in the signature as a parameter no call passes
+            // a value for (design principles 5.5). It may write the type of the members it takes
+            // only as an expansion over the declaration's pack (`..xs: ..A`, 5.6): the pack is
+            // what the call binds per member, and a type the expansion does not range over says
+            // nothing about the arguments left over.
             if (open && !signature) {
                 // The parser admits `..` in a declaration's parameter list and in a function
                 // type (`(..A) => R`), never in a lambda's.
@@ -5933,11 +5948,16 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
                     .commit(name);
                 throw BuildAbortException();
             }
+            Type *restType = nullptr;
             if (paramPair->size() > 0) {
-                diags_->of(SemanticDiag::RestParameterTypeNotSupported)
-                    .at(paramLoad->tokenRange())
-                    .commit(name);
-                throw BuildAbortException();
+                Type *written = visitType(paramPair->at(0));
+                if (written == nullptr || written->code() != TypePackType::typeCode()) {
+                    diags_->of(SemanticDiag::RestParameterTypeNotSupported)
+                        .at(paramLoad->tokenRange())
+                        .commit(name);
+                    throw BuildAbortException();
+                }
+                restType = written;
             }
             if (!paramNames.insert(name).second) {
                 diags_->of(SemanticDiag::DuplicateParameter)
@@ -5945,7 +5965,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
                     .commit(name);
                 throw BuildAbortException();
             }
-            factory.addRestArg(name);
+            factory.addRestArg(name, restType);
             continue;
         }
         const bool isVar = paramLoad->isVar();
@@ -6110,6 +6130,52 @@ Type *Builder::visitMatchTypeType(const AST::node_ptr_t &ast) {
     }
     LEAVE("MatchTypeType");
     return MatchTypeType::create(subject, arms);
+}
+
+/*
+PackType : Type body ;
+`..body`, the body written once for each member of a pack (design principles 5.6). The pack is
+not written where the expansion stands: it is the one head parameter of the enclosing declaration
+that was declared with `..` and that the body names, because a declaration has one pack to write
+an expansion over. A body naming none, or more than one, is reported here, where the head is
+known.
+*/
+Type *Builder::visitPackType(const AST::node_ptr_t &ast) {
+    ENTER("PackType");
+    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad for PackType");
+    Type *body = ast->size() > 0 ? visitType(ast->atAs<AST::TypeLoad>(0)) : nullptr;
+    if (body == nullptr) {
+        LEAVE("PackType");
+        return Type::Void();
+    }
+    std::vector<std::string> named;
+    collectTypeVars(body, named);
+    std::vector<std::string> packs;
+    for (const std::string &name : named) {
+        if (std::find(declaredPackVars_.begin(), declaredPackVars_.end(), name) !=
+            declaredPackVars_.end()) {
+            packs.push_back(name);
+        }
+    }
+    if (packs.size() != 1) {
+        std::string declared;
+        for (const std::string &name : declaredPackVars_) {
+            declared += (declared.empty() ? "" : ", ") + std::string("..") + name;
+        }
+        diags_->of(SemanticDiag::PackExpansionNeedsOnePack)
+            .at(ast->load()->tokenRange())
+            .commit(
+                ".." + body->toString(),
+                declared.empty()
+                    ? std::string("this declaration's head declares no pack")
+                    : "its head declares " + declared + ", and the body names " +
+                          (named.empty() ? std::string("none of them") : named.front()));
+        LEAVE("PackType");
+        throw BuildAbortException();
+    }
+    Type *res = TypePackType::create(packs.front(), body);
+    LEAVE("PackType");
+    return res;
 }
 
 /*

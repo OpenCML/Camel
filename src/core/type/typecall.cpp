@@ -353,6 +353,21 @@ bool describeUnevaluatedTypeCall(Type *type, std::string &what, std::string &why
         }
         return false;
     }
+    if (type->code() == TypePackType::typeCode()) {
+        // `..E` is one type per member of a pack (design principles 5.6), so it is a type only
+        // where the pack is bound: in a signature it waits for the call that binds it, and a node
+        // still here was written where no call bound its pack. A body that names a computation
+        // which failed is the cause, and is described first.
+        const auto *pack = static_cast<TypePackType *>(type);
+        if (describeUnevaluatedTypeCall(pack->body(), what, why)) {
+            return true;
+        }
+        what = ".." + (pack->body() != nullptr ? pack->body()->toString() : std::string("?"));
+        why  = "the pack '" + std::string(pack->name()) +
+              "' has no members here: the types of an expansion are the arguments a call leaves "
+              "over";
+        return true;
+    }
     if (type->isOtherType()) {
         for (Type *param : static_cast<OtherType *>(type)->paramsSpan()) {
             if (describeUnevaluatedTypeCall(param, what, why)) {

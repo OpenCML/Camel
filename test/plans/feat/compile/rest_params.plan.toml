@@ -2,7 +2,7 @@ id = "compile.rest_params"
 order = 340
 tier = "fast"
 tags = ["feat", "compile", "generics", "rest"]
-desc = "Rest parameters (design principles 5.5): `..ts` is the last parameter, a call expands the body in place, and `..e` passes the elements of a compile-time tuple."
+desc = "Rest parameters (design principles 5.5): `..ts` is the last parameter, a call expands the body in place, and `..e` passes the elements of a compile-time tuple. A rest parameter that writes its type (`..xs: ..A`) declares the pack of the head, which each call binds (5.6)."
 
 [[tests]]
 name = "rest_params"
@@ -41,6 +41,26 @@ const calls = body.filter((line) => line.includes('type="CALL"'))
 assert(calls.length === 0, `the rest call was not expanded: ${calls[0]}`)
 const staticNodes = body.filter((line) => /type="(SFOR|SLOOP|SACC|SCCS)"/.test(line))
 assert(staticNodes.length === 0, `a static node was left in the graph: ${staticNodes[0]}`)
+}
+"""
+timeout_ms = 8000
+
+# An expansion that no call binds the pack for is refused where it is used
+# (`SemanticDiag::PackExpansionNeedsOnePack`). No program below fails that way: the pack of a
+# declaration whose rest parameter writes it is bound by every call, and one whose rest parameter
+# writes no type has no expansion to complain about, so the reference shows no example of it.
+[[tests]]
+name = "rest_parameter_pack"
+desc = "A rest parameter that writes its type declares the pack of the head (`func both::<..A>(..xs: ..A)`): each call binds one type per argument left over, and a type written `..A` is those types in order."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/pack_expand.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = ["1 x", "y 2"].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `pack expansion changed: ${input.normalized.stdout}`)
 }
 """
 timeout_ms = 8000

@@ -17,6 +17,7 @@
 #include "camel/core/data/composite/tuple.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/typecall.h"
 
 #include <algorithm>
 
@@ -26,6 +27,41 @@ namespace camel::compile::gir {
 
 using namespace camel::core::error;
 using namespace camel::core::type;
+
+namespace {
+/// Whether the type still holds an expansion (`..E`, design principles 5.6) that nothing bound.
+/// An expansion the call bound is expanded away (substituteTypeVars), so a node still here has no
+/// members to write: the result type was written over a pack the call gave nothing.
+bool holdsPackExpansion(Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    if (type->code() == TypePackType::typeCode()) {
+        return true;
+    }
+    switch (type->code()) {
+    case TypeCode::Array:
+        return holdsPackExpansion(static_cast<ArrayType *>(type)->elemType());
+    case TypeCode::Tuple:
+        for (Type *member : static_cast<TupleType *>(type)->types()) {
+            if (holdsPackExpansion(member)) {
+                return true;
+            }
+        }
+        return false;
+    default:
+        break;
+    }
+    if (type->isOtherType()) {
+        for (Type *param : static_cast<OtherType *>(type)->paramsSpan()) {
+            if (holdsPackExpansion(param)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+} // namespace
 
 const Builder::RestBinding *Builder::restBindingNamed(const std::string &name) const {
     // A local of the same name shadows the rest parameter, exactly as a parameter does.
@@ -274,6 +310,19 @@ node_handle_t Builder::inlineRestCall(
         restValues.push_back(normInputs[i].node);
         restTypes.push_back(valueTypeOf(nodeTypeOf(normInputs[i].node)));
     }
+    // A rest parameter that writes the type of its members (`..xs: ..A`, design principles 5.6)
+    // declares a pack, and this call is what binds it: the members are the types of the arguments
+    // left over, in order. The signature's result type is written over that pack, so it is one
+    // type per member here, and nothing of the pack is left for a later call to decide.
+    type_pack_bindings_t packs;
+    Type *declaredRest =
+        declaredNormCount > 0 ? signature->normTypeAt(declaredNormCount - 1) : nullptr;
+    if (signature->hasRest() && declaredRest != nullptr &&
+        declaredRest->code() == TypePackType::typeCode()) {
+        const auto *packed = static_cast<TypePackType *>(declaredRest);
+        packs.emplace_back(std::string(packed->name()), restTypes);
+    }
+
     RestBinding rest;
     rest.name                 = restName;
     rest.tuple.type           = TupleType::create(std::move(restTypes));
@@ -283,8 +332,20 @@ node_handle_t Builder::inlineRestCall(
 
     Type *exitType = signature->hasExitType()
                          ? substituteExtentValues(
-                               substituteTypeVars(signature->exitType(), bindings), extents)
+                               substituteTypeVars(signature->exitType(), bindings, packs), extents)
                          : nullptr;
+    if (exitType != nullptr && holdsPackExpansion(exitType)) {
+        // The result type is written over a pack nothing bound: the declaration declares one at
+        // its head without a rest parameter that gives it members, so this call has no types to
+        // write the expansion with.
+        std::string what = exitType->toString();
+        std::string why  = "the call leaves no argument for the pack to range over";
+        describeUnevaluatedTypeCall(exitType, what, why);
+        diags_->of(SemanticDiag::PackExpansionNeedsOnePack)
+            .atOrigin(call->origin())
+            .commit(what, why);
+        throw BuildAbortException();
+    }
     if (exitType != nullptr && containsTypeVar(exitType)) {
         diags_->of(SemanticDiag::GenericArgumentsMismatch)
             .atOrigin(call->origin())

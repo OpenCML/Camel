@@ -159,7 +159,8 @@ FunctionType *closedSignature(FunctionType *declared) {
     for (size_t i = 0; i < declared->normTypesCount(); ++i) {
         const std::string name(declared->argNameAt(declared->withTypesCount() + i));
         if (declared->hasRest() && i + 1 == declared->normTypesCount()) {
-            factory.addRestArg(name);
+            // The rest parameter keeps the type it writes (`..xs: ..A`, design principles 5.6).
+            factory.addRestArg(name, declared->normTypeAt(i));
             continue;
         }
         factory.addNormArg(name, declared->normTypeAt(i), declared->normIsVarAt(i));

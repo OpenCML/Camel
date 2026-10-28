@@ -24,7 +24,25 @@ enum class TypeType {
     Infer,
     Ref,
     Enum,
-    Match
+    Match,
+    Pack
+};
+
+/// One type parameter of a declaration's head (`::<T, ..A>`): its name and whether it was
+/// written with `..`, which makes it a pack and not one type (design principles 5.6). A pack is
+/// bound by a call to one type per member, and a type expression written `..E` over it is `E`
+/// written once per member.
+class TypeParam {
+  public:
+    TypeParam(std::string name, bool pack) : name_(std::move(name)), pack_(pack) {}
+
+    const std::string &name() const { return name_; }
+    bool pack() const { return pack_; }
+    std::string toString() const { return (pack_ ? ".." : "") + name_; }
+
+  private:
+    std::string name_;
+    bool pack_;
 };
 
 /// What a `TypeExprLoad` does, and `typeof` is the only one left. The reserved type operators
@@ -152,6 +170,17 @@ class TupleTypeLoad : public TypeLoad {
     const std::string geneCode() const override;
 };
 
+/// `..E` in a type position: `E` written once for each member of a pack (design principles 5.6).
+/// The child is the body. The pack the body ranges over is not written at the use: it is the one
+/// pack the declaration declares at its head, and GCT works the name out from the body, where
+/// that head is known.
+class PackTypeLoad : public TypeLoad {
+  public:
+    PackTypeLoad() : TypeLoad(TypeType::Pack) {}
+    const std::string toString() const override { return "PackType"; }
+    const std::string geneCode() const override;
+};
+
 class StructTypeLoad : public TypeLoad {
   public:
     StructTypeLoad() : TypeLoad(TypeType::Struct) {}
@@ -169,19 +198,38 @@ class FuncTypeLoad : public TypeLoad {
     void setUri(const std::string &uri) { uri_ = uri; }
     const ModifierSet &modifiers() const { return modifiers_; }
     void setModifiers(const ModifierSet &modifiers) { modifiers_ = modifiers; }
-    /// The type parameters a declaration declares at its head (design principles 5.5):
-    /// `T` and `U` in `func first::<T, U>(xs: T[]): U`. Empty for an ordinary function type
-    /// and for a declaration that is not generic.
-    const std::vector<std::string> &typeParams() const { return typeParams_; }
-    void setTypeParams(std::vector<std::string> typeParams) {
+    /// The type parameters a declaration declares at its head (design principles 5.5, 5.6):
+    /// `T` and `U` in `func first::<T, U>(xs: T[]): U`, and a pack `..A` in
+    /// `func zip::<..A>(..xs: ..A): (..ElementOf<A>)[]`. Empty for an ordinary function type and
+    /// for a declaration that is not generic.
+    const std::vector<TypeParam> &typeParams() const { return typeParams_; }
+    void setTypeParams(std::vector<TypeParam> typeParams) {
         typeParams_ = std::move(typeParams);
+    }
+    /// The same, for a head written without a pack (`rule`, `fact` and a pass declare single
+    /// type parameters only).
+    void setTypeParamNames(std::vector<std::string> names) {
+        typeParams_.clear();
+        typeParams_.reserve(names.size());
+        for (std::string &name : names) {
+            typeParams_.emplace_back(std::move(name), false);
+        }
+    }
+    /// The names of the head parameters, pack or not, in the order they were written.
+    std::vector<std::string> typeParamNames() const {
+        std::vector<std::string> names;
+        names.reserve(typeParams_.size());
+        for (const TypeParam &param : typeParams_) {
+            names.push_back(param.name());
+        }
+        return names;
     }
     const std::string geneCode() const override;
 
   private:
     ModifierSet modifiers_;
     std::string uri_;
-    std::vector<std::string> typeParams_;
+    std::vector<TypeParam> typeParams_;
 };
 
 /// The resources a function type publishes (design effects plan 3.1): `pure` says a call
