@@ -1737,18 +1737,6 @@ count fills.
 - Pure.
 - Example: `reshape<[2, 2]>(new([1.0, 2.0, 3.0, 4.0]))`
 
-#### `flatten`
-
-```camel
-flatten: (t: float[..], axis?: int) => float[..]
-```
-
-The elements in row-major order in two axes: the extents before axis multiplied into the
-first, the rest into the second (axis 1 by default).
-
-- Pure.
-- Example: `flatten(new([[1.0, 2.0], [3.0, 4.0]]))`
-
 #### `unsqueeze`
 
 ```camel

@@ -189,12 +189,6 @@ export func erf(t: float[..]): float[..]
 /// @example reshape<[2, 2]>(new([1.0, 2.0, 3.0, 4.0]))
 export func reshape(t: float[..] | number[], shape: int[]): float[..]
 
-/// The elements in row-major order in two axes: the extents before axis multiplied into the
-/// first, the rest into the second (axis 1 by default).
-/// @pure
-/// @example flatten(new([[1.0, 2.0], [3.0, 4.0]]))
-export func flatten(t: float[..], axis?: int): float[..]
-
 /// The elements unchanged, with an axis of extent 1 added at axis.
 /// @pure
 /// @example unsqueeze<0>(new([1.0, 2.0]))    // shape [1, 2]

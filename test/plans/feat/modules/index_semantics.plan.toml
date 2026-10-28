@@ -140,7 +140,7 @@ const out = input.normalized.stdout
 const lines = out.split('\n')
 assert(!out.includes('EVAL_MISMATCH'), lines.filter((l) => l.startsWith('EVAL_MISMATCH')).join(' | '))
 const ops = lines.filter((l) => l.startsWith('EVAL op='))
-assert(ops.length === 32, `${ops.length} operators evaluated`)
+assert(ops.length === 31, `${ops.length} operators evaluated`)
 for (const l of ops) {
   const f = Object.fromEntries(l.slice(5).split(' ').map((kv) => kv.split('=')))
   assert(f.cases === f.agree && f.unsound === '0' && Number(f.cases) >= 40, `${f.op}: ${l}`)

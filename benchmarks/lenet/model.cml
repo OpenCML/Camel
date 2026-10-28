@@ -4,7 +4,7 @@
  * -> Flatten -> Linear(400,120) -> ReLU -> Linear(120,84) -> ReLU -> Linear(84,10).
  */
 
-import { relu, flatten, mean } from tensor
+import { relu, reshape, dim, mean } from tensor
 import { grad, with_grad } from autodiff
 import { conv2d, max_pool2d, sgd, save_params } from nn
 import { get_env } from env
@@ -24,7 +24,7 @@ with <m: LeNet>
 func forward(x: f32[..]): f32[..] {
     let c1 = max_pool2d(relu(conv2d(x, m.conv1_w, m.conv1_b, 1, 2)), 2)
     let c2 = max_pool2d(relu(conv2d(c1, m.conv2_w, m.conv2_b)), 2)
-    let f1 = relu(flatten(c2) @ m.fc1_w + m.fc1_b)
+    let f1 = relu(reshape<[dim<0>(c2), -1]>(c2) @ m.fc1_w + m.fc1_b)
     let f2 = relu(f1 @ m.fc2_w + m.fc2_b)
     return f2 @ m.fc3_w + m.fc3_b
 }

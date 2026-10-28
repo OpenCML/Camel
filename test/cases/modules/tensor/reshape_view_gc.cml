@@ -5,12 +5,12 @@
  * moved without it would print different sums.
  */
 
-import { reshape, flatten, unsqueeze, new, sum, concat } from tensor
+import { reshape, unsqueeze, new, sum, concat, dim } from tensor
 
 // A fresh owner every call: only the returned view keeps it alive.
 func make_view(i: int): f32[..] {
     let base = new([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[][]) * f32(i)
-    return unsqueeze<0>(reshape<[6]>(flatten(reshape<[3, 2]>(base))))
+    return unsqueeze<0>(reshape<[6]>(reshape<[3, 2]>(base)))
 }
 
 func spin(i: int, n: int, acc: f32[..]): f32[..] {

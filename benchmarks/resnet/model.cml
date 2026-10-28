@@ -5,7 +5,7 @@
  * pool (two chained axis means), linear 512->10. x[16,3,32,32].
  */
 
-import { relu, mean, flatten } from tensor
+import { relu, mean, reshape, dim } from tensor
 import { grad, with_grad } from autodiff
 import { conv2d, sgd, save_params } from nn
 import { get_env } from env
@@ -43,7 +43,8 @@ func forward(x: f32[..]): f32[..] {
     let h2 = block(block_ds(h1, m.b21_c1_w, m.b21_c1_b, m.b21_c2_w, m.b21_c2_b, m.b21_ds_w, m.b21_ds_b), m.b22_c1_w, m.b22_c1_b, m.b22_c2_w, m.b22_c2_b)
     let h3 = block(block_ds(h2, m.b31_c1_w, m.b31_c1_b, m.b31_c2_w, m.b31_c2_b, m.b31_ds_w, m.b31_ds_b), m.b32_c1_w, m.b32_c1_b, m.b32_c2_w, m.b32_c2_b)
     let h4 = block(block_ds(h3, m.b41_c1_w, m.b41_c1_b, m.b41_c2_w, m.b41_c2_b, m.b41_ds_w, m.b41_ds_b), m.b42_c1_w, m.b42_c1_b, m.b42_c2_w, m.b42_c2_b)
-    let g = flatten(mean<2>(mean<2>(h4)))
+    let pooled = mean<2>(mean<2>(h4))
+    let g = reshape<[dim<0>(pooled), -1]>(pooled)
     return g @ m.fc_w + m.fc_b
 }
 
