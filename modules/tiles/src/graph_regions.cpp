@@ -69,14 +69,32 @@ const std::unordered_map<core::OperId, std::string> &operations() {
     }();
     return result;
 }
+
+/// Whether the node stands in the chain of a `sync` block, either side of it: a statement of a block
+/// is reached by the chain written before it, and the chain ends at a value a reader takes.
+bool inSyncChain(const rt::GCGraph &graph, rt::gc_node_ref_t id) {
+    if (!graph.syncPredsOf(id).empty()) {
+        return true;
+    }
+    for (const rt::GCGraphSyncEdge &edge : graph.syncEdges()) {
+        if (edge.user == id) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::string eligibility(
     const rt::Program &graphs, const rt::GCGraph &graph, rt::gc_node_ref_t id,
     rt::fact::FactStore &facts, bool device) {
     const auto *node = graph.node(id);
-    // Whether the node is a statement of a block, ordered by control edges. Inside a device
-    // scope that ordering is where the node runs, not a reason to leave it on the host: the arm
-    // or the block the node is written in is the segment that holds it (docs/design/gpu/plan.cn.md 2.5).
-    const bool ordered = !graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty();
+    // Whether the node is a statement of a block, ordered by the edges that order one. The order of
+    // a `sync` block is its chain, so a node the chain reaches is a statement as much as one the
+    // control kind names (docs/design/effects/edges.cn.md 1). Inside a device scope that ordering is
+    // where the node runs, not a reason to leave it on the host: the arm or the block the node is
+    // written in is the segment that holds it (docs/design/gpu/plan.cn.md 2.5).
+    const bool ordered = !graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty() ||
+                         inSyncChain(graph, id);
     if (node->kind == rt::GCNodeKind::Loop) {
         if (ordered && !device)
             return "control_edge";
@@ -360,7 +378,7 @@ SegmentAnalysis analyzeRegions(
         for (rt::gc_node_ref_t id = 0; id < graph.nodeCount(); ++id) {
             if (nodes[id].eligible || graph.node(id)->kind != rt::GCNodeKind::Accs ||
                 !graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty() ||
-                !graph.withInputsOf(id).empty())
+                inSyncChain(graph, id) || !graph.withInputsOf(id).empty())
                 continue;
             const auto inputs = graph.normInputsOf(id);
             if (inputs.size() != 1 || !nodes[inputs[0]].eligible)
