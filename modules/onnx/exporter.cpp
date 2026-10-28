@@ -648,6 +648,14 @@ void Evaluator::refuseEffects(GCGraph *root) {
                     }
                 }
             }
+            // The statement written before this one in a `sync` block orders it and carries "used"
+            // with that order (docs/design/effects/edges.cn.md 1.5), whether or not a control edge
+            // still names the same pair: an effect no value reaches is found along it too.
+            for (const auto &edge : g->syncPredsOf(ref)) {
+                if (edge.user == ref && seen.insert(edge.pred).second) {
+                    work.push_back(edge.pred);
+                }
+            }
         }
     }
 }
