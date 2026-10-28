@@ -246,14 +246,9 @@ bool holdsFunction(Type *type) {
     return false;
 }
 
-/// The value a chain of gates passes on. A gate orders a value after other nodes (an inlined
-/// call gates its arguments after what the call waited for); it does not change the value.
-gc_node_ref_t ungated(const GraphDraft &draft, gc_node_ref_t node) {
-    while (kindOf(draft, node) == GCNodeKind::Gate && !draft.normInputsOf(node).empty()) {
-        node = draft.normInputsOf(node).back();
-    }
-    return node;
-}
+/// The value a chain of gates passes on: camel::runtime::ungated (camel/runtime/draft.h), the same
+/// answer a comparison of two computations in the optimizer asks for.
+using camel::runtime::ungated;
 
 /// What `node` and the gates it passes through wait for, the gated value's own ordering included.
 /// A wait is read in either kind: a node of a `sync` block waits through the sync edge of the
