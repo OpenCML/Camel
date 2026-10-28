@@ -1420,8 +1420,8 @@ GCGraph *expanded = session.commit(/*detached=*/true);
 import { Tensor, reshape, relu, maximum, minimum, max } from tensor
 
 func pick(mask: float[], vals: float[]): float[..] {
-    let m = reshape(mask, [len(mask)])
-    return (m / m) * reshape(vals, [len(vals)])      // mask 为 0 的位置是 0/0 = NaN
+    let m = reshape<[len(mask)]>(mask)
+    return (m / m) * reshape<[len(vals)]>(vals)      // mask 为 0 的位置是 0/0 = NaN
 }
 
 func main(): int sync {
@@ -1434,8 +1434,8 @@ func main(): int sync {
     println(minimum(a, b))
     println(max(pick([1.0, 0.0, 1.0], [1.0, 1.0, 3.0]), 0))
     println(max(pick([0.0, 1.0, 1.0], [1.0, 1.0, 3.0]), 0))
-    println(max(reshape([0.0, nz], [2]), 0))
-    println(max(reshape([nz, 0.0], [2]), 0))
+    println(max(reshape<[2]>([0.0, nz]), 0))
+    println(max(reshape<[2]>([nz, 0.0]), 0))
     return 0
 }
 ```

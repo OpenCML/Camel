@@ -117,7 +117,7 @@ func forward(x: f32[..], s: BnStats): (f32[..], BnStats) {""")
             args += f", m.{nm}_ds_w, m.{nm}_ds_b, m.{nm}_ds_bn_g, m.{nm}_ds_bn_b, s.{nm}_ds_bn_rm, s.{nm}_ds_bn_rv"
         p(f"    let r_{nm} = {helper}({prev}, {args})")
         prev = f"r_{nm}.0"
-    p(f"    let g = flatten(mean(mean({prev}, 2), 2))")
+    p(f"    let g = flatten(mean<2>(mean<2>({prev})))")
     p("    let y = g @ m.fc_w + m.fc_b")
     stats_fields = []
     i_stem = BN_NAMES.index("stem")
