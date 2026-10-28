@@ -815,6 +815,58 @@ Type *substituteExtentValues(Type *type, const ExtentValues &values, const Exten
     return type;
 }
 
+namespace {
+
+/// A parameter list of a function type that holds a pack of parameters (`..P`, the member
+/// `$expand<P>` of the list with `P` a type variable) against the parameters of an actual function
+/// type: the positions before and after the pack are matched in pairs by `pair`, and the ones
+/// between are the members `P` is bound to. A list without a pack is matched position by position.
+/// False when the counts cannot agree or `pair` refuses a pair.
+template <typename Pair>
+bool matchParameterList(
+    std::span<Type *const> want, std::span<Type *const> have, type_bindings_t &bindings,
+    Pair &&pair) {
+    size_t at = want.size();
+    for (size_t i = 0; i < want.size(); ++i) {
+        if (TypeCallType::isExpand(want[i]) &&
+            static_cast<TypeCallType *>(want[i])->paramsSpan()[0]->code() == TypeCode::TypeVar) {
+            at = i;
+            break;
+        }
+    }
+    if (at == want.size()) {
+        if (want.size() != have.size()) {
+            return false;
+        }
+        bool ok = true;
+        for (size_t i = 0; i < want.size(); ++i) {
+            ok = pair(want[i], have[i]) && ok;
+        }
+        return ok;
+    }
+    const size_t fixed = want.size() - 1;
+    if (have.size() < fixed) {
+        return false;
+    }
+    bool ok = true;
+    for (size_t i = 0; i < at; ++i) {
+        ok = pair(want[i], have[i]) && ok;
+    }
+    const size_t after = want.size() - at - 1;
+    for (size_t i = 0; i < after; ++i) {
+        ok = pair(want[at + 1 + i], have[have.size() - after + i]) && ok;
+    }
+    const std::string &name =
+        static_cast<TypeVarType *>(static_cast<TypeCallType *>(want[at])->paramsSpan()[0])->name();
+    if (findTypeBinding(bindings, name) == nullptr) {
+        const std::vector<Type *> members(have.begin() + at, have.end() - after);
+        bindings.emplace_back(name, TypeCallType::makePack(members));
+    }
+    return ok;
+}
+
+} // namespace
+
 bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
     if (pattern == nullptr || actual == nullptr) {
         return true;
@@ -898,19 +950,10 @@ bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
     case TypeCode::Function: {
         auto *want = static_cast<FunctionType *>(pattern);
         auto *have = static_cast<FunctionType *>(actual);
-        if (want->withTypesCount() != have->withTypesCount() ||
-            want->normTypesCount() != have->normTypesCount()) {
+        const auto pair = [&](Type *w, Type *h) { return bindTypeVars(w, h, bindings); };
+        if (!matchParameterList(want->withTypesSpan(), have->withTypesSpan(), bindings, pair) ||
+            !matchParameterList(want->normTypesSpan(), have->normTypesSpan(), bindings, pair)) {
             return false;
-        }
-        for (size_t i = 0; i < want->withTypesCount(); ++i) {
-            if (!bindTypeVars(want->withTypeAt(i), have->withTypeAt(i), bindings)) {
-                return false;
-            }
-        }
-        for (size_t i = 0; i < want->normTypesCount(); ++i) {
-            if (!bindTypeVars(want->normTypeAt(i), have->normTypeAt(i), bindings)) {
-                return false;
-            }
         }
         if (want->hasExitType() && have->hasExitType()) {
             return bindTypeVars(want->exitType(), have->exitType(), bindings);
@@ -1126,17 +1169,11 @@ bool unifyTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
     case TypeCode::Function: {
         auto *want = static_cast<FunctionType *>(pattern);
         auto *have = static_cast<FunctionType *>(actual);
-        if (want->withTypesCount() != have->withTypesCount() ||
-            want->normTypesCount() != have->normTypesCount()) {
+        const auto pair = [&](Type *w, Type *h) { return unifyTypeVars(w, h, bindings); };
+        if (!matchParameterList(want->withTypesSpan(), have->withTypesSpan(), bindings, pair)) {
             return false;
         }
-        bool ok = true;
-        for (size_t i = 0; i < want->withTypesCount(); ++i) {
-            ok = unifyTypeVars(want->withTypeAt(i), have->withTypeAt(i), bindings) && ok;
-        }
-        for (size_t i = 0; i < want->normTypesCount(); ++i) {
-            ok = unifyTypeVars(want->normTypeAt(i), have->normTypeAt(i), bindings) && ok;
-        }
+        bool ok = matchParameterList(want->normTypesSpan(), have->normTypesSpan(), bindings, pair);
         if (want->hasExitType() && have->hasExitType()) {
             ok = unifyTypeVars(want->exitType(), have->exitType(), bindings) && ok;
         }

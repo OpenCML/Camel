@@ -89,3 +89,16 @@ expect_exit = 0
 expect_stdout_exact = "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "type_packs.function_pack_binding"
+desc = "A pack in a function type's parameter list is bound by the function the argument is, declared at the head (`::<..P>`) or by its first occurrence (`..A`, as a dimension name is bound by the first shape that writes it); the result type written over it gives the function back with the parameters it had. Four schedulers."
+kind = "behavior"
+case = "../../../cases/compile/type_packs/function_pack_binding.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "3 7\n7 7\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
