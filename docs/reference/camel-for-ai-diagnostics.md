@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 215
+**Semantic — errors** (`SemanticDiag`) — 216
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -91,6 +91,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `NativeTypeNotProvided` | The type '{0}' is declared without a right side, so a C++ module has to provide it, and the module '{1}' registered no type of that name. |
 | `ArgumentNeedsConversion` | The call to '{0}' needs an explicit conversion: {1}. |
 | `ReturnNeedsConversion` | The returned value needs an explicit conversion to the function's declared return type '{0}': {1}. |
+| `VarArgumentTypeMismatch` | The argument of '{0}' at the 'var' parameter '{1}' has type {3}, and a 'var' argument is read and written by the callee: it is accepted only when its type and the parameter's type {2} accept each other's values. |
 | `ImportNameConflict` | The name '{0}' is imported from the modules '{1}' and '{2}' with {3}. |
 | `FeatureNotSupported` | The feature '{0}' is not supported yet. |
 | `TypeVariableRedeclared` | The type parameter '{0}' is declared twice at the head of this declaration. |

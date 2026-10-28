@@ -54,6 +54,7 @@ enum class SemanticDiag : uint32_t {
     NativeTypeNotProvided   = 0x0001FD,
     ArgumentNeedsConversion = 0x000021,
     ReturnNeedsConversion   = 0x000022,
+    VarArgumentTypeMismatch = 0x000200,
     // 0x000023: empty. The number is not reused.
     // 0x000025: empty. The number is not reused.
     // 0x000026: empty. The number is not reused.

@@ -1,0 +1,17 @@
+// A function declared in a body declares a signature of its own, and the names this body sees
+// are not its own: `inner` writes `f32[n]` with no parameter of its own writing `n`, so it is
+// unbound there.
+
+func outer(xs: f32[n]): int {
+    let out: f32[n] = xs
+    func inner(): int {
+        let y: f32[n] = out
+        return len(y)
+    }
+    return inner()
+}
+
+func main(): int sync {
+    println(outer([1.0, 2.0]))
+    return 0
+}

@@ -1,0 +1,17 @@
+// A name belongs to the signature that bound it: `other` writes `f32[n]` in its own body, and
+// none of its parameters wrote that name, so it is unbound there rather than `n` of `ones`.
+
+func ones(xs: f32[n]): f32[n] {
+    let out: f32[n] = [1.0, 2.0, 3.0]
+    return out
+}
+
+func other(): int {
+    let y: f32[n] = [1.0, 2.0, 3.0]
+    return len(y)
+}
+
+func main(): int sync {
+    println(len(ones([1.0])))
+    return other()
+}
