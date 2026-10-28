@@ -1386,20 +1386,6 @@ under the same sections (design principles 6.4).
 
 ### Creation
 
-#### `new`
-
-```camel
-new: (values: float[..] | number[]) => float[..]
-```
-
-A tensor made of a nested number array (or of a tensor, copied into contiguous row-major
-storage); the element type follows the values: `float` for a float (design principles 5.1: a
-float literal's own type is `float`, which is `f64`), `int64` for an integer and `bool` for a
-boolean.
-
-- Pure.
-- Example: `new([[1.0, 2.0], [3.0, 4.0]])`
-
 #### `zeros`
 
 ```camel
@@ -1484,7 +1470,7 @@ a + b per element, with NumPy broadcasting: a scalar operand applies to every el
 the element type is the wider of the two (a float with an integer gives `f32`).
 
 - Pure.
-- Example: `add(new([1.0, 2.0]), 1.0)` gives `[2.0, 3.0]`
+- Example: `add([1.0, 2.0] as float[], 1.0)` gives `[2.0, 3.0]`
 
 #### `subtract`
 
@@ -1495,7 +1481,7 @@ subtract: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
 a - b per element, with NumPy broadcasting.
 
 - Pure.
-- Example: `subtract(new([1.0, 2.0]), 0.5)` gives `[0.5, 1.5]`
+- Example: `subtract([1.0, 2.0] as float[], 0.5)` gives `[0.5, 1.5]`
 
 #### `multiply`
 
@@ -1506,7 +1492,7 @@ multiply: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
 a * b per element, with NumPy broadcasting.
 
 - Pure.
-- Example: `multiply(new([1.0, 2.0]), new([3.0, 4.0]))` gives `[3.0, 8.0]`
+- Example: `multiply([1.0, 2.0] as float[], [3.0, 4.0] as float[])` gives `[3.0, 8.0]`
 
 #### `divide`
 
@@ -1518,7 +1504,7 @@ a / b per element, with NumPy broadcasting; IEEE division: x / 0 is an infinity 
 fault.
 
 - Pure.
-- Example: `divide(new([1.0, 2.0]), 2.0)` gives `[0.5, 1.0]`
+- Example: `divide([1.0, 2.0] as float[], 2.0)` gives `[0.5, 1.0]`
 
 #### `pow`
 
@@ -1529,7 +1515,7 @@ pow: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
 a raised to b per element, with NumPy broadcasting.
 
 - Pure.
-- Example: `pow(new([2.0, 3.0]), 2.0)` gives `[4.0, 9.0]`
+- Example: `pow([2.0, 3.0] as float[], 2.0)` gives `[4.0, 9.0]`
 
 #### `maximum`
 
@@ -1541,7 +1527,7 @@ IEEE 754-2019 maximum per element, with NumPy broadcasting: NaN on either side g
 canonical quiet NaN, and -0 is below +0.
 
 - Pure.
-- Example: `maximum(new([1.0, -0.0]), 0.0)` gives `[1.0, 0.0]`
+- Example: `maximum([1.0, -0.0] as float[], 0.0)` gives `[1.0, 0.0]`
 
 #### `minimum`
 
@@ -1553,7 +1539,7 @@ IEEE 754-2019 minimum per element, with NumPy broadcasting: NaN on either side g
 canonical quiet NaN, and -0 is below +0.
 
 - Pure.
-- Example: `minimum(new([1.0, -0.0]), 0.0)` gives `[0.0, -0.0]`
+- Example: `minimum([1.0, -0.0] as float[], 0.0)` gives `[0.0, -0.0]`
 
 #### `mod`
 
@@ -1569,7 +1555,7 @@ once when it is stored. A divisor of zero gives NaN for a floating element type,
 division does; an integer element type has the integer remainder.
 
 - Pure.
-- Example: `mod(new([7.5, -7.5]), 2.0)` gives `[1.5, -1.5]`
+- Example: `mod([7.5, -7.5] as float[], 2.0)` gives `[1.5, -1.5]`
 
 #### `where`
 
@@ -1581,7 +1567,7 @@ lhs where cond holds, rhs elsewhere, broadcast to one shape; the element type is
 lhs and rhs.
 
 - Pure.
-- Example: `where(new([true, false]), new([1.0, 2.0]), 0.0)` gives `[1.0, 0.0]`
+- Example: `where([true, false] as bool[], [1.0, 2.0] as float[], 0.0)` gives `[1.0, 0.0]`
 
 #### `neg`
 
@@ -1592,7 +1578,7 @@ neg: (t: float[..]) => float[..]
 -x per element: the sign flipped.
 
 - Pure.
-- Example: `neg(new([1.0, -2.0]))` gives `[-1.0, 2.0]`
+- Example: `neg([1.0, -2.0] as float[])` gives `[-1.0, 2.0]`
 
 #### `abs`
 
@@ -1603,7 +1589,7 @@ abs: (t: float[..]) => float[..]
 |x| per element: the sign cleared.
 
 - Pure.
-- Example: `abs(new([-1.5, 2.0]))` gives `[1.5, 2.0]`
+- Example: `abs([-1.5, 2.0] as float[])` gives `[1.5, 2.0]`
 
 #### `exp`
 
@@ -1614,7 +1600,7 @@ exp: (t: float[..]) => float[..]
 e^x per element, within 2 ulp, subnormal results included.
 
 - Pure.
-- Example: `exp(new([0.0, 1.0]))` gives `[1.0, 2.7182817]`
+- Example: `exp([0.0, 1.0] as float[])` gives `[1.0, 2.7182817]`
 
 #### `log`
 
@@ -1626,7 +1612,7 @@ ln x per element, within 2 ulp; NaN, +-inf, +-0 and negative x are exact (negati
 NaN).
 
 - Pure.
-- Example: `log(new([1.0, 2.7182817]))` gives `[0.0, 1.0]`
+- Example: `log([1.0, 2.7182817] as float[])` gives `[0.0, 1.0]`
 
 #### `sqrt`
 
@@ -1637,7 +1623,7 @@ sqrt: (t: float[..]) => float[..]
 sqrt(x) per element, rounded once in `f32`.
 
 - Pure.
-- Example: `sqrt(new([4.0, 9.0]))` gives `[2.0, 3.0]`
+- Example: `sqrt([4.0, 9.0] as float[])` gives `[2.0, 3.0]`
 
 #### `rsqrt`
 
@@ -1648,7 +1634,7 @@ rsqrt: (t: float[..]) => float[..]
 1 / sqrt(x) per element: two steps, each rounded in `f32`.
 
 - Pure.
-- Example: `rsqrt(new([4.0]))` gives `[0.5]`
+- Example: `rsqrt([4.0] as float[])` gives `[0.5]`
 
 #### `sigmoid`
 
@@ -1659,7 +1645,7 @@ sigmoid: (t: float[..]) => float[..]
 The logistic function 1 / (1 + e^-x) per element.
 
 - Pure.
-- Example: `sigmoid(new([0.0]))` gives `[0.5]`
+- Example: `sigmoid([0.0] as float[])` gives `[0.5]`
 
 #### `tanh`
 
@@ -1670,7 +1656,7 @@ tanh: (t: float[..]) => float[..]
 The hyperbolic tangent per element.
 
 - Pure.
-- Example: `tanh(new([0.0]))` gives `[0.0]`
+- Example: `tanh([0.0] as float[])` gives `[0.0]`
 
 #### `relu`
 
@@ -1681,7 +1667,7 @@ relu: (t: float[..]) => float[..]
 maximum(x, +0) per element: NaN gives the canonical NaN, and -0 gives +0.
 
 - Pure.
-- Example: `relu(new([-1.0, 2.0]))` gives `[0.0, 2.0]`
+- Example: `relu([-1.0, 2.0] as float[])` gives `[0.0, 2.0]`
 
 #### `gelu`
 
@@ -1692,7 +1678,7 @@ gelu: (t: float[..]) => float[..]
 The Gaussian error linear unit per element, computed as its normative definition in Camel.
 
 - Pure.
-- Example: `gelu(new([0.0]))` gives `[0.0]`
+- Example: `gelu([0.0] as float[])` gives `[0.0]`
 
 #### `erf`
 
@@ -1703,7 +1689,7 @@ erf: (t: float[..]) => float[..]
 The Gauss error function per element.
 
 - Pure.
-- Example: `erf(new([0.0]))` gives `[0.0]`
+- Example: `erf([0.0] as float[])` gives `[0.0]`
 
 ### Shape and reshaping
 
@@ -1717,7 +1703,7 @@ The elements in row-major order, in a new shape; one extent may be -1, which the
 count fills.
 
 - Pure.
-- Example: `reshape<[2, 2]>(new([1.0, 2.0, 3.0, 4.0]))`
+- Example: `reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as float[])`
 
 #### `unsqueeze`
 
@@ -1728,7 +1714,7 @@ unsqueeze: (t: float[..], axis: int) => float[..]
 The elements unchanged, with an axis of extent 1 added at axis.
 
 - Pure.
-- Example: `unsqueeze<0>(new([1.0, 2.0]))` gives `shape [1, 2]`
+- Example: `unsqueeze<0>([1.0, 2.0] as float[])` gives `shape [1, 2]`
 
 #### `transpose`
 
@@ -1739,7 +1725,7 @@ transpose: (t: float[..]) => float[..]
 The last two axes swapped (a vector becomes a column, a matrix its transpose).
 
 - Pure.
-- Example: `transpose(new([[1.0, 2.0], [3.0, 4.0]]))`
+- Example: `transpose([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])`
 
 #### `permute`
 
@@ -1750,7 +1736,7 @@ permute: (t: float[..], perm: int[]) => float[..]
 The axes reordered as perm lists them.
 
 - Pure.
-- Example: `permute<[1, 0]>(new([[1.0, 2.0], [3.0, 4.0]]))`
+- Example: `permute<[1, 0]>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])`
 
 #### `concat`
 
@@ -1761,7 +1747,7 @@ concat: (a: float[..] | number[], b: float[..] | number[], axis: int) => float[.
 a and b joined along axis; every other extent must agree.
 
 - Pure.
-- Example: `concat<0>(new([[1.0]]), new([[2.0]]))` gives `shape [2, 1]`
+- Example: `concat<0>([[1.0]] as float[1, 1], [[2.0]] as float[1, 1])` gives `shape [2, 1]`
 
 #### `take`
 
@@ -1773,7 +1759,7 @@ The entries of the first axis that indices name, in that order.
 
 - Pure.
 - Failure: fault `RuntimeError` when an index is outside the first axis.
-- Example: `take(new([[1.0], [2.0], [3.0]]), [2, 0])` gives `[[3.0], [1.0]]`
+- Example: `take([[1.0], [2.0], [3.0]] as float[3, 1], [2, 0])` gives `[[3.0], [1.0]]`
 
 #### `one_hot`
 
@@ -1786,7 +1772,7 @@ an `int64` tensor of shape [labels, classes].
 
 - Pure.
 - Failure: fault `IndexOutOfRange` when a label is outside [0, classes), and fault `InvalidArgument` when classes is negative.
-- Example: `one_hot(new([0, 2]), 3)` gives `[[1, 0, 0], [0, 0, 1]]`
+- Example: `one_hot([0, 2] as int[], 3)` gives `[[1, 0, 0], [0, 0, 1]]`
 
 #### `shape`
 
@@ -1797,7 +1783,7 @@ shape: (t: T[..]) => int[] when is_numeric::<T>()
 The extents of a tensor, in order.
 
 - Pure.
-- Example: `shape(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[2, 2]`
+- Example: `shape([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[2, 2]`
 
 #### `numel`
 
@@ -1842,7 +1828,7 @@ summed exactly in `int64`, wrapping on overflow as integer arithmetic does (desi
 its element type, `bool` as `int64`.
 
 - Pure.
-- Example: `sum(new([[1.0, 2.0], [3.0, 4.0]]))` gives `10.0`
+- Example: `sum([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `10.0`
 
 #### `sum`
 
@@ -1854,7 +1840,7 @@ The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis wit
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank.
-- Example: `sum<0>(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[4.0, 6.0]`
+- Example: `sum<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[4.0, 6.0]`
 
 #### `mean`
 
@@ -1871,7 +1857,7 @@ is a fault.
 
 - Pure.
 - Failure: fault `DivisionByZero` when the tensor has no element.
-- Example: `mean(new([[1.0, 2.0], [3.0, 4.0]]))` gives `2.5`
+- Example: `mean([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `2.5`
 
 #### `mean`
 
@@ -1883,7 +1869,7 @@ The same mean over one axis; keepdims keeps the axis with extent 1.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `DivisionByZero` when the axis is empty.
-- Example: `mean<1>(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[1.5, 3.5]`
+- Example: `mean<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[1.5, 3.5]`
 
 #### `max`
 
@@ -1896,7 +1882,7 @@ the same bits); keepdims keeps the axis with extent 1.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
-- Example: `max<0>(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[3.0, 4.0]`
+- Example: `max<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[3.0, 4.0]`
 
 #### `min`
 
@@ -1909,7 +1895,7 @@ axis with extent 1.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
-- Example: `min<1>(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[1.0, 3.0]`
+- Example: `min<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[1.0, 3.0]`
 
 #### `argmax`
 
@@ -1922,7 +1908,7 @@ NaN if there is one, +0 above -0, the earlier position on a tie.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
-- Example: `argmax<1>(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[1, 1]`
+- Example: `argmax<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[1, 1]`
 
 #### `argmin`
 
@@ -1935,7 +1921,7 @@ NaN if there is one, -0 below +0, the earlier position on a tie.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
-- Example: `argmin<0>(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[0, 0]`
+- Example: `argmin<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[0, 0]`
 
 #### `softmax`
 
@@ -1948,7 +1934,7 @@ definition in Camel, in `f32`.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank.
-- Example: `softmax(new([[1.0, 1.0]]))` gives `[[0.5, 0.5]]`
+- Example: `softmax([[1.0, 1.0]] as float[1, 2])` gives `[[0.5, 0.5]]`
 
 #### `log_softmax`
 
@@ -1961,7 +1947,7 @@ Camel, in `f32`.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank.
-- Example: `log_softmax(new([[1.0, 1.0]]))` gives `[[-0.6931472, -0.6931472]]`
+- Example: `log_softmax([[1.0, 1.0]] as float[1, 2])` gives `[[-0.6931472, -0.6931472]]`
 
 #### `softmax_grad`
 
@@ -2001,7 +1987,7 @@ b[k][j], acc) for k ascending, every fused multiply-add rounded once in `f32`.
 
 - Pure.
 - Failure: fault `TensorDimensionMismatch` when the inner extents do not agree.
-- Example: `matmul(new([[1.0, 2.0]]), new([[3.0], [4.0]]))` gives `[[11.0]]`
+- Example: `matmul([[1.0, 2.0]] as float[1, 2], [[3.0], [4.0]] as float[2, 1])` gives `[[11.0]]`
 
 #### `linear`
 
@@ -2027,7 +2013,7 @@ zeros_like: (t: float[..]) => float[..]
 A tensor of zeros shaped and typed like t.
 
 - Pure.
-- Example: `zeros_like(new([[1.0, 2.0]]))`
+- Example: `zeros_like([[1.0, 2.0]] as float[1, 2])`
 
 #### `ones_like`
 
@@ -2038,7 +2024,7 @@ ones_like: (t: float[..]) => float[..]
 A tensor of ones shaped and typed like t.
 
 - Pure.
-- Example: `ones_like(new([[1.0, 2.0]]))`
+- Example: `ones_like([[1.0, 2.0]] as float[1, 2])`
 
 ### Conversion and display
 
@@ -2070,7 +2056,7 @@ show: (t: A[..]) => void
 Prints t to the console, in the module's layout.
 
 - With effects: writes the console.
-- Example: `show(new([[1.0, 2.0]]))`
+- Example: `show([[1.0, 2.0]] as float[1, 2])`
 
 ### Binary form
 
@@ -2092,7 +2078,7 @@ needs no numeric permission.
 
 - Pure.
 - Failure: fault `TensorDimensionMismatch` when the number of bytes does not fit the shape and the element type.
-- Example: `from_bytes::<f32>(to_bytes(new([1.0, 2.0])), [2])`
+- Example: `from_bytes::<f32>(to_bytes([1.0, 2.0] as float[]), [2])`
 
 #### `to_bytes`
 
@@ -2106,7 +2092,7 @@ one byte an element for a `bool` tensor, four for an `f32` one and eight for an 
 one.
 
 - Pure.
-- Example: `to_bytes(new([1.0, 2.0]))` gives `[0, 0, 128, 63, 0, 0, 0, 64]`
+- Example: `to_bytes([1.0, 2.0] as float[])` gives `[0, 0, 128, 63, 0, 0, 0, 64]`
 
 #### `save_npy`
 
@@ -6075,7 +6061,7 @@ created when missing.
 
 - With effects: writes files under `dir`.
 - Failure: fault `RuntimeError` when the directory cannot be created or a leaf cannot be written.
-- Example (a fragment, not compiled): `save_params({ w: new([1.0, 2.0]), b: new([0.0]) }, 'checkpoints/step-1')`
+- Example (a fragment, not compiled): `save_params({ w: [1.0, 2.0] as float[], b: [0.0] as float[] }, 'checkpoints/step-1')`
 - Why it is not compiled: the example builds its tensors with `new` from the `tensor` module, which this page does not import
 
 <a id="optim"></a>

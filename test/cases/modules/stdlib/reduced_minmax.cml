@@ -59,18 +59,18 @@
 
 import { abs, max as math_max, min as math_min } from math
 import { max, min, sum } from array
-import { new, to_bytes } from tensor
+import { to_bytes } from tensor
 import { to_array } from bytes
 
 /// The little-endian bytes of one element of a one-element tensor of T.
 func bitsOfBf16(value: bf16): int[] {
     let one: bf16[] = [value]
-    return to_array(to_bytes(new(one)))
+    return to_array(to_bytes(one))
 }
 
 func bitsOfF16(value: f16): int[] {
     let one: f16[] = [value]
-    return to_array(to_bytes(new(one)))
+    return to_array(to_bytes(one))
 }
 
 func main(): int sync {

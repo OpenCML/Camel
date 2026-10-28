@@ -11,7 +11,7 @@
  * so the rounding happens once, on the stored element.
  */
 
-import { new, reshape, sum, to_bytes } from tensor
+import { reshape, sum, to_bytes } from tensor
 import { to_array } from bytes
 
 #[change_precision]
@@ -21,7 +21,7 @@ func narrow(x: f32[..]): bf16[..] {
 
 func main(): int sync {
     let rows: f32[] = [16777216.0, 1.0, -16777216.0, 3.0, 0.0078125, 0.0]
-    let matrix = reshape<[2, 3]>(narrow(new(rows)))
+    let matrix = reshape<[2, 3]>(narrow(rows))
     let reduced = sum<1, true>(matrix)
     println(len(to_bytes(reduced)))
     println(to_array(to_bytes(reduced)))

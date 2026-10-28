@@ -6,7 +6,7 @@
  */
 
 import { grad } from autodiff
-import { new, random, seed, sum, mean, max, min, exp, log, sqrt, rsqrt, sigmoid, tanh, relu, gelu, erf, abs, neg, maximum, minimum, where, softmax, log_softmax, layer_norm, matmul, linear, transpose, reshape, unsqueeze, permute, concat, pow, dim } from tensor
+import { random, seed, sum, mean, max, min, exp, log, sqrt, rsqrt, sigmoid, tanh, relu, gelu, erf, abs, neg, maximum, minimum, where, softmax, log_softmax, layer_norm, matmul, linear, transpose, reshape, unsqueeze, permute, concat, pow, dim } from tensor
 
 func check(name: string, f: <x: f32[..]> () => float, df: <x: f32[..]> () => f32[..], x: f32[..], v: f32[..]): int sync {
     let h = 0.001
@@ -21,13 +21,13 @@ func check(name: string, f: <x: f32[..]> () => float, df: <x: f32[..]> () => f32
 }
 
 // ---- weights
-func w34(): f32[..] { return new([[0.3, -1.2, 0.5, 2.0], [1.1, 0.4, -0.7, 0.2], [-0.5, 0.9, 1.3, -0.1]] as f32[][]) }
-func w4(): f32[..] { return new([0.7, -0.3, 1.5, 0.2] as f32[]) }
-func w3(): f32[..] { return new([1.0, -2.0, 0.5] as f32[]) }
-func w31(): f32[..] { return new([[2.0], [3.0], [1.5]] as f32[][]) }
-func w5(): f32[..] { return new([0.4, -0.8, 1.2, 0.3, -0.6] as f32[]) }
-func w5b(): f32[..] { return new([-0.2, 0.5, 0.9, -1.1, 0.7] as f32[]) }
-func w45(): f32[..] { return new([[0.2, -0.1, 0.4, 0.3, -0.5], [0.6, 0.1, -0.2, 0.8, 0.3], [-0.3, 0.5, 0.2, -0.4, 0.9], [0.1, 0.7, -0.6, 0.2, 0.4]] as f32[][]) }
+func w34(): f32[..] { return [[0.3, -1.2, 0.5, 2.0], [1.1, 0.4, -0.7, 0.2], [-0.5, 0.9, 1.3, -0.1]] as f32[3, 4] }
+func w4(): f32[..] { return [0.7, -0.3, 1.5, 0.2] as f32[] }
+func w3(): f32[..] { return [1.0, -2.0, 0.5] as f32[] }
+func w31(): f32[..] { return [[2.0], [3.0], [1.5]] as f32[3, 1] }
+func w5(): f32[..] { return [0.4, -0.8, 1.2, 0.3, -0.6] as f32[] }
+func w5b(): f32[..] { return [-0.2, 0.5, 0.9, -1.1, 0.7] as f32[] }
+func w45(): f32[..] { return [[0.2, -0.1, 0.4, 0.3, -0.5], [0.6, 0.1, -0.2, 0.8, 0.3], [-0.3, 0.5, 0.2, -0.4, 0.9], [0.1, 0.7, -0.6, 0.2, 0.4]] as f32[4, 5] }
 
 // ---- elementwise
 with <x: f32[..]>

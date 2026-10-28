@@ -1,4 +1,4 @@
-import { new, concat, sum, shape } from tensor
+import { concat, sum, shape } from tensor
 
 // The growing-shape recursion of specialize_growing_shape.cml with the level bound at 24 instead
 // of 12. The type-only specialization of the callee stops on its own types, not on how many levels
@@ -6,11 +6,11 @@ import { new, concat, sum, shape } from tensor
 // does not move -- are the same here. The two cases are read together by the `bounded` entries of
 // test/plans/feat/opt/generic.plan.toml.
 func grow(i: int, n: int, acc: f64[..]): f64[..] {
-    return if i >= n then acc else grow(i + 1, n, concat<0>(acc, new([[1.0, 2.0]])))
+    return if i >= n then acc else grow(i + 1, n, concat<0>(acc, [[1.0, 2.0]] as float[1, 2]))
 }
 
 func main(): int sync {
-    let t = grow(1, 24, new([[1.0, 2.0]]))
+    let t = grow(1, 24, [[1.0, 2.0]] as float[1, 2])
     println(shape(t))
     println(sum(t))
     return 0

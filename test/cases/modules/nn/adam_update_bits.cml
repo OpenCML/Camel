@@ -10,7 +10,7 @@
  * The model has both kinds of trainable leaf: two tensors and a float.
  */
 
-import {  } from tensor
+import tensor
 import { adam, adam_state } from nn
 
 type Model = {

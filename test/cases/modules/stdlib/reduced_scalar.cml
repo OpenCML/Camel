@@ -50,7 +50,7 @@
  */
 
 import { sum } from array
-import { new, to_bytes } from tensor
+import { to_bytes } from tensor
 import { to_array } from bytes
 
 /// The little-endian bytes of one element of a one-element tensor of `T`. The helper is written
@@ -58,12 +58,12 @@ import { to_array } from bytes
 /// variable as its target, which is a declaration of its own and not what this case is about.
 func bitsOfBf16(value: bf16): int[] {
     let one: bf16[] = [value]
-    return to_array(to_bytes(new(one)))
+    return to_array(to_bytes(one))
 }
 
 func bitsOfF16(value: f16): int[] {
     let one: f16[] = [value]
-    return to_array(to_bytes(new(one)))
+    return to_array(to_bytes(one))
 }
 
 /// One rounding of an f32 tensor into bf16 or f16: the same elements the literal and the written
@@ -105,8 +105,8 @@ func main(): int sync {
     // rounding is one, and it is the store rounding of the element type, not the f32 one.
     let tenth: f32[] = [0.1]
     let widenedTenth = tenth->map<(x: f32) => bf16(x)>
-    println(to_array(to_bytes(bf16(new(tenth)))))
-    println(to_array(to_bytes(f16(new(tenth)))))
+    println(to_array(to_bytes(bf16(tenth))))
+    println(to_array(to_bytes(f16(tenth))))
     println(widenedTenth[0], bitsOfBf16(widenedTenth[0])[0], bitsOfBf16(widenedTenth[0])[1], string(widenedTenth[0]))
     println(bitsOfBf16(0.1)[0], bitsOfBf16(0.1)[1])
     println(bitsOfF16(0.1)[0], bitsOfF16(0.1)[1])
@@ -154,8 +154,8 @@ func main(): int sync {
     // The same elements through the tensor path: the two bytes are the ones above, which is what
     // "the array reduction and the tensor reduction agree bit for bit" means.
     let rows: f32[] = [16777216.0, 1.0, -16777216.0]
-    println(to_array(to_bytes(narrowed(new(rows)))))
-    println(to_array(to_bytes(halved(new(tenth)))))
+    println(to_array(to_bytes(narrowed(rows))))
+    println(to_array(to_bytes(halved(tenth))))
 
     // ---- the text of one of these values, read back as the same element ----
     //
