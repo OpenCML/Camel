@@ -765,3 +765,99 @@ H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program
   - `startup.cost` 量的是整个进程的 CPU，四条命令的上限是 12、18、95、90 ms（10-23 定，约为安静时中位数的 2.5 倍）。一行、不导入任何模块的程序，原来中位数 7 ms，现在约 52 ms，估计是上限的三倍。`declaration.cost` 的上限是每条声明 60 µs，前奏约 135 µs。两者都还没在这棵树上实测，先跑一次确认。
   - **第五个陷阱**：带参数包的规则，它的 `DeclaredFuncTypeResolver`（`core_`）从签名建出，缓存存签名时要保留 `hasRest`、`hasWithRest`。
   - 缓存只能往这些共享的组对象里填，不能换掉组对象。
+
+## 移交：程序变换交给施工方，作为第 8 路（负责人 2026-10-28）
+
+决策者这边的车道在交完"函数类型里的参数包"之后全部停下，施工交还给你们；决策者只做设计、裁定与复核。
+- **依据**：设计稿 `docs/design/program-transforms/README.cn.md`（原则 5.6、9.9）。
+- **已经落地的**：第 1 步的类型。`ParamsOf`/`WithOf`/`ResultOf`、参数包与 `..` 展开、`when ..pred`、`zip` 改为声明；函数类型参数列表里的参数包随最后一笔交上来。
+- **你们从第 2 步开始，按设计稿第 6 节的顺序**：
+  - 第 2 步：`#jvp`、`#transpose`、`#vjp` 能按结构读出，先给标量数学函数一族写规则；
+  - 第 3 步：`reinterp`；
+  - 第 4 步：`split`；
+  - 第 5 步：`transpose` 与库里的 `vjp`、`grad`、`with_grad`，全过后删除 `pullback.cpp`；
+  - 第 6 步：Camel 参考实现；
+  - 第 7 步：导出改写为 `reinterp`。
+- **代码区**：`modules/autodiff`、`stdlib/`、`graph` 模块，与第 1 路的边重构有交界。第 3 步开工前先与第 1 路对齐区域与边的表示。
+- **设计稿第 7 节的三项待定**：线性参数怎么标、元层读图的写法、规则集作为值的类型。开工到那里时按原则先定、写明依据，决策者复核；拿不准的写问题页，但不停下。
+- 车道交最后一笔时附的说明，我转到这一节下面。
+
+## 复核：第 10 条的修法（386c0f605）——返工
+
+结果对了，但修在了症状上。
+- **现在的做法**：折叠绕开区间的那对边界，理由是执行计划从那个 `FILL` 的形式里读边界（`exec_plan.cpp` 的 `boundSlotsOf`），换成同值的常量元组循环就一轮都不跑。
+- **为什么要返工**："一个纯值的写法决定程序行为"，这本身就是缺陷：常量元组与 `FILL` 是同一个值，任何遍都可能把它换掉，折叠只是第一个撞上的。
+- **改法**：
+  - 执行计划从边界对这个**值**读两个边界，常量与 `FILL` 都接受；
+  - 去掉 `intervalPairs` 这道豁免，让折叠照常进行；
+  - `GCGraph::intervalBoundsOf` 同理。
+- **验收**：原用例不变；再加一条，用 `std::opt::cse` 或规则改写把边界对换成别的等值写法，循环照常执行。
+
+第 2、8 条与"维度名在自己的函数体里可见"三笔看过，可以。
+
+## ECOOP 一致性研究发现的四个缺陷（决策者在 ef49a1d5d 上逐个复现）
+
+174 个程序对照 Lean 模型导出的解释器。程序与重现方法见 `Camel-Archive/ECOOP2027/study/conformance/README.md`。
+14. **最严重：建图时同一资源的效应之间没有顺序边**（原则 3.3"同一资源自动有序"，以及 3.1 表格那一行）。
+    - 例：`func main(): int { let x = println(9); let y = println(0); return if x > 100 then y else x }`，不优化就打印 `0 9`，应为 `9 0`。
+    - 只有 `var` 读写、间接调用、同步链内联会建顺序边，`println` 这类环境资源（stdout）从不建。
+    - 修在建图器：同一函数体内，用到同一资源的效应之间按书写顺序建顺序边（相邻即可，靠传递性）；资源取函数推出的 `uses`。归第 1 路，优先级与第 10 条同级。
+15. **`std::opt::dce` 删掉同步语句里嵌在纯计算下的效应**：`sync { let x = println(5) - 1; return 7 }`，不优化打印 `5`，`dce` 之后什么都没有。同步块直接写着的语句里的效应一定发生（3.4），不论它在表达式的哪一层。
+16. **`std::opt::inline` 丢掉实参里的效应**：`h(5, println(9))`，`h` 不读第二个参数。不优化打印 `9`，内联后什么都没有。调用用到它的全部端口，内联时实参的效应照样执行。
+17. **顺序边进入了区域**：有 39 条从分支外的读接到臂里的写的顺序边。按 3.3 的约定，它们要接在臂的所属 `BRCH` 上。结果仍然有序，但违反了顺序边不进入区域这条不变量。归第 1 路。
+- 第 6 条（折叠常量选择子丢掉分支用到的效应）就是研究里的 A 类，验收照旧。第 14–17 条都加进一致性验收：优化前后、各调度器的输出与解释器一致。
+- **一致性回归门槛**：ECOOP 的对照脚本在 `Camel-Archive/ECOOP2027/study/conformance/`（`run_all.py --n 150`；`--skip-impl` 复用已导出的图）。
+  - **依赖**：容器里的一个固定构建（路径在 `impl.py`，改成参数）；Lean 解释器（`ECOOP2027/lean` 下 `lake build camel-run`，Lean 4.35 加 Mathlib）。
+  - **看哪几列**：C3（模型在优化前后的图上结果相同），C1/C5（实现与模型一致）。
+  - **用例**：`hand/` 里 24 个手写程序，第 14–17 条各有一个最小程序。
+  - 修第 1 路的效应与边缺陷时，以这几列全过为准。第 13 条（导出带上顺序边）落地后，脚本改为直接比对导出里的顺序边，不再自己重建。
+
+**第 8 路的第 2、3 步说明**（决策者这边最后一条车道交活时列出）：
+1. **标签现在怎么读**：
+   - `tag vjp::<F>(rule: F) on func` 声明在 `stdlib/autodiff.cml`。`builder_tags.cpp`（约 343 行）把函数类型的标签参数存成图引用（`attr::graphRef`），`attachRuleGraphs` 把规则的图挂到声明它的图上，所以 `#vjp(rule)` 在这一侧已经是结构化的。
+   - 只给文本的是 `modules/graph/read.cpp` 464–470 行（`graph.tags` 返回 `attr::text(facts.tags)`）与 `camel/core/tags.h`（`factsOf`）。
+   - 求导引擎经 `DerivativeRegistry`（`pullback.cpp` 的 `findRule`）按算子 URI 找 C++ 规则，各模块按 URI 登记（`modules/math/module.cpp` 的 `sqrt`、`erf`）。
+2. **按结构读 `#jvp`/`#transpose`/`#vjp` 要动四处**：
+   - 标签声明（`jvp`、`transpose` 还没有）；
+   - `graph` 模块的读取（返回规则的图，不是文本）；
+   - `pullback.cpp`（除了 URI 登记，还要从算子 `#impl` 函数声明上的标签找规则）；
+   - 规则语言第二版的 `rule` 声明。
+3. **类型参数包（建 `Reinterp<F, H>` 前要知道的）**：
+   - 包是 `TypeCallType::makePack`（`$pack<…>`），`..E` 是 `$expand<E>`，都在 `typecall.{h,cpp}`。
+   - 展开在 `typevar.cpp`：`expandPack` 用线程局部的 `PackScope` 量长度，再逐个代入；发生在 `substituteTypeVars` 的元组分支，以及 `rebuildFunctionType` 的 `with` 与普通参数列表。
+   - 已经具体的类型由 `expandTypePacks` 展开，GCT 对元组和函数类型调用它。
+4. **包的限制**：
+   - 单个成员的包是一元组；
+   - 同一次展开里的包长度必须相同；
+   - 结构体字段与类型实参里没有 `..`；
+   - 包的叶子只能是包变量、`$pack` 字面量，或 `ParamsOf`/`WithOf` 的调用。
+5. **包的绑定只有一条路**：
+   - 没有函数体的声明（`DeclaredFuncTypeResolver::resolve`）与有函数体的剩余参数函数（`inlineRestCall`），都把包变量绑到 `makePack(剩余实参的类型)`；`ruleVerdictForCall` 对 `when` 的检查同理。
+   - 签名里函数类型参数列表中 `..` 后的未声明名字，在第一次出现处绑成包变量，与 `::<..P>` 声明的走同一条路。
+6. **剩余参数函数的 `when` 现在在调用处求值**：`whenOfEvery` 处理 `..pred::<A>()`。
+7. **补一处位置**：模式函数类型的参数列表里有包变量时，在 `typevar.cpp` 的 `matchParameterList` 里匹配，`bindTypeVars` 与 `unifyTypeVars` 都经过它。C++ 规则（`sqrt`、`erf`、`erfc`，以及 `modules/tensor/ops` 里张量的那些）在 Camel 规则落地后删除。
+
+## 返工：内联的大小按源码位置合并计数（f5307db14）
+
+- **问题一：让优化依赖源码位置**：同一源码位置上的节点只算一次。源码的排版、宏展开、内联拼进来的函数体，都会改变哪些节点算作"同一位置"，优化结果就会随与语义无关的东西变化。这类耦合不允许。
+- **问题二：没有按裁定修**：entry-inline-size-threshold 的裁定是"只有一个调用处、且自身不在递归环里的函数，不论大小都内联"，入口与其他函数一样。现在的改法只让 `export_loop.cml` 过了，`main_reaches_loop.cml`（三个 `??`）照样被拒，导出照样失败。
+- **修法**：
+  - 撤掉按源码位置合并计数，大小仍按计算节点数。
+  - 按裁定改两条豁免：`calls == 1` 与 `returnsClosure` 的条件从"到达不了递归"改成"自身不在递归环里"。
+  - "大小在同一轮内取已提交的图、两次探测结果相同"这一部分可以保留。
+- **验收**：`export_loop.cml` 与 `main_reaches_loop.cml` 都能导出，后者那条拒绝改成成功；提交信息列出因这条改动多内联的函数。
+
+## 撞车：参数包实现了两份（决策者 2026-10-28）
+
+develop 上的 `787158b6f`、`c93b23046`、`2afc8aac5`、`066a1d1fb` 与 fsh-dev 上决策者车道的 `97ed2e6ce`、`23704647e`、`49236df44` 是同一项（程序变换第 1 步：参数包、`..E`、`when ..pred`），各自实现了一遍。合并在 9 个文件上冲突（`typevar.{h,cpp}`、`resolver.cpp`、`text.cpp`、`builder_rest.cpp`、gct `builder.cpp`、`parser.cpp` 与两份文法文档）。
+- **责任在决策者**：派活前没在这里登记第 1 步归谁。
+- **以 fsh-dev 那份为底**：它覆盖得更全，包括 `ParamsOf`/`WithOf`/`ResultOf`、`zip` 改为声明、函数类型参数列表里的包（`(..P) => R`，第一次出现即绑定）、`when ..pred`，且没函数体的声明与有函数体的剩余参数函数只有一条绑定路径。它的说明在本页"第 8 路的第 2、3 步说明"一节。
+- **你们那份里它没有的，移植过去，其余删掉**：比如 `func both::<..A>(..xs: ..A): ..A` 这种结果类型直接写成包的形式；两次成员顺序不同的调用是两个结果类型；`2afc8aac5` 的两处诊断。不留两套表示。
+- **做法**：
+  - 把 fsh-dev 合进 develop，冲突按上面的取舍解决；
+  - 两边的用例（`compile.type_packs`、`compile/rest_params/*`）都保留，全过；
+  - 提交信息列出从你们那份移植了什么、删了什么。
+- **`..` 优先级（`25a29bab7`）**：照原则做了，可以。文法文档的冲突取 develop 的版本。
+
+**今后**：本页任何一项开工前，先在这里写一行"某某在做"；决策者派给自己车道的也一样。
+18. **`IgnoredSideEffect` 报在了会执行的写上**（ICPC 阅读题 R38-X，a159bb6d4）：非同步的 lambda 里有两次写，`total = total + v; count = count + 1`，两次都报 `IgnoredSideEffect`。但 `count = …` 是块的最后一条、即块的值，按 3.1 它被需要、会执行，输出也确实是 `0.0 3`。诊断应当只报 `total` 那一次。归第 2 路（诊断）。

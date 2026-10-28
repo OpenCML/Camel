@@ -24,8 +24,7 @@ enum class TypeType {
     Infer,
     Ref,
     Enum,
-    Match,
-    Pack
+    Match
 };
 
 /// One type parameter of a declaration's head (`::<T, ..A>`): its name and whether it was
@@ -49,7 +48,7 @@ class TypeParam {
 /// (`A & B`, `A \ B`, `A + B`, `A ^ B`) and the older spelling of specialization had codes here;
 /// they are not in the language, so writing one where a type is expected is an ordinary syntax
 /// error and no load carries them.
-enum class TypeOp { TypeOf };
+enum class TypeOp { TypeOf, Pack };
 
 std::string to_string(TypeType type);
 std::string to_string(TypeOp op);
@@ -170,17 +169,8 @@ class TupleTypeLoad : public TypeLoad {
     const std::string geneCode() const override;
 };
 
-/// `..E` in a type position: `E` written once for each member of a pack (design principles 5.6).
-/// The child is the body. The pack the body ranges over is not written at the use: it is the one
-/// pack the declaration declares at its head, and GCT works the name out from the body, where
-/// that head is known.
-class PackTypeLoad : public TypeLoad {
-  public:
-    PackTypeLoad() : TypeLoad(TypeType::Pack) {}
-    const std::string toString() const override { return "PackType"; }
-    const std::string geneCode() const override;
-};
-
+/// `..E` in a type position is a `TypeExprLoad` with `TypeOp::Pack`: `E` written once for each
+/// member of a pack (design principles 5.6).
 class StructTypeLoad : public TypeLoad {
   public:
     StructTypeLoad() : TypeLoad(TypeType::Struct) {}

@@ -107,16 +107,6 @@ Type *findTypeBinding(const type_bindings_t &bindings, const std::string &name) 
     return nullptr;
 }
 
-const std::vector<Type *> *findTypePackBinding(
-    const type_pack_bindings_t &packs, const std::string &name) {
-    for (const auto &[bound, members] : packs) {
-        if (bound == name) {
-            return &members;
-        }
-    }
-    return nullptr;
-}
-
 // ---- TypeFunctionType ----
 
 TypeFunctionType::TypeFunctionType(
@@ -185,18 +175,92 @@ std::string paramNameOf(const FunctionType *func, size_t argIndex, const char *p
                                             : prefix + std::to_string(i);
 }
 
+// ---- type packs ----
+//
+// `..E` in a type (a tuple's elements, a function's parameters) is one member for each element of
+// the packs `E` uses. The packs are read in two passes over `E` with a scope open: the first only
+// measures them (every pack variable bound to a pack, and every `ParamsOf<F>` that computes one,
+// reports its length and stands for its first member), the second substitutes `E` once for each
+// index (those same places stand for the member at the index).
+namespace {
+
+struct PackScope {
+    bool measure = true;
+    size_t index = 0;
+    std::vector<std::pair<std::string, size_t>> seen;
+};
+
+thread_local PackScope *gPackScope = nullptr;
+
+Type *packMemberFor(PackScope &scope, const std::string &name, Type *pack) {
+    const auto members = TypeCallType::packMembers(pack);
+    const bool known   = std::any_of(scope.seen.begin(), scope.seen.end(), [&](const auto &entry) {
+        return entry.first == name;
+    });
+    if (!known) {
+        scope.seen.emplace_back(name, members.size());
+    }
+    if (scope.measure) {
+        return members.empty() ? Type::Void() : members.front();
+    }
+    return scope.index < members.size() ? members[scope.index] : Type::Void();
+}
+
+enum class Expansion { Done, Keep, Mismatch };
+
+/// The members `..E` stands for, appended to `out`. `Keep`: no pack is known in `E` yet (a
+/// variable still waits for its binding), and the expansion stays as it is. `Mismatch`: the packs
+/// have different lengths, and `mismatch` is the type that says so.
+Expansion expandPack(
+    Type *expand, const type_bindings_t &bindings, std::vector<Type *> &out, Type *&mismatch) {
+    Type *pattern = static_cast<TypeCallType *>(expand)->paramsSpan()[0];
+    PackScope measure;
+    PackScope *outer = gPackScope;
+    gPackScope       = &measure;
+    substituteTypeVars(pattern, bindings);
+    gPackScope = outer;
+    if (measure.seen.empty()) {
+        return Expansion::Keep;
+    }
+    const size_t length = measure.seen.front().second;
+    const bool same     = std::all_of(measure.seen.begin(), measure.seen.end(), [&](const auto &e) {
+        return e.second == length;
+    });
+    if (!same) {
+        std::string text = "..";
+        text += pattern->toString() + "|";
+        for (size_t i = 0; i < measure.seen.size(); ++i) {
+            text += (i == 0 ? "" : ", ") + measure.seen[i].first + " has " +
+                    std::to_string(measure.seen[i].second) + " member(s)";
+        }
+        mismatch = TypeCallType::makeLengthMismatch(text);
+        return Expansion::Mismatch;
+    }
+    for (size_t i = 0; i < length; ++i) {
+        PackScope each;
+        each.measure = false;
+        each.index   = i;
+        gPackScope   = &each;
+        out.push_back(substituteTypeVars(pattern, bindings));
+        gPackScope = outer;
+    }
+    return Expansion::Done;
+}
+
+} // namespace
+
 /// A factory holding `func` with the variables (and, when `extents` is not null, the named
 /// extents) replaced; `changed` tells whether anything was. A `constas` parameter is part of the
 /// declaration's identity, not a runtime argument: it is dropped when `dropConstas` says the
 /// function itself is being instantiated (the call binds its value), and kept otherwise, so a
 /// function type written inside a substituted type keeps its own value parameter.
 FunctionTypeFactory rebuildFunctionType(
-    FunctionType *func, const type_bindings_t &bindings, const type_pack_bindings_t &packs,
-    const ExtentValues *extents, bool dropConstas, bool &changed) {
+    FunctionType *func, const type_bindings_t &bindings, const ExtentValues *extents,
+    bool dropConstas, bool &changed) {
     FunctionTypeFactory factory;
     factory.setHasCompileInfo(func->hasArgNames());
     const auto replaced = [&](Type *type) {
-        Type *result = substituteTypeVars(type, bindings, packs);
+        Type *result = substituteTypeVars(type, bindings);
         if (extents != nullptr) {
             result = substituteExtentValues(result, *extents);
         }
@@ -207,6 +271,22 @@ FunctionTypeFactory rebuildFunctionType(
         if (func->hasWithRest() && i + 1 == func->withTypesCount()) {
             factory.addWithRest(paramNameOf(func, i, "__w", i));
             continue;
+        }
+        if (TypeCallType::isExpand(func->withTypeAt(i))) {
+            std::vector<Type *> members;
+            Type *mismatch = nullptr;
+            const Expansion result = expandPack(func->withTypeAt(i), bindings, members, mismatch);
+            if (result != Expansion::Keep) {
+                changed = true;
+                if (result == Expansion::Mismatch) {
+                    members.push_back(mismatch);
+                }
+                for (size_t k = 0; k < members.size(); ++k) {
+                    factory.addWithArg(
+                        paramNameOf(func, i, "__w", i) + "_" + std::to_string(k), members[k], false);
+                }
+                continue;
+            }
         }
         if (func->withIsConstasAt(i)) {
             if (dropConstas) {
@@ -226,8 +306,6 @@ FunctionTypeFactory rebuildFunctionType(
         const std::string name =
             paramNameOf(func, func->withTypesCount() + i, "__n", i);
         if (func->hasRest() && i + 1 == func->normTypesCount()) {
-            // A rest parameter that writes the type of its members (`..xs: ..A`, design
-            // principles 5.6) keeps it, substituted like any other type.
             factory.addRestArg(name, replaced(func->normTypeAt(i)));
             continue;
         }
@@ -239,6 +317,21 @@ FunctionTypeFactory rebuildFunctionType(
             }
             factory.addConstasArg(name, replaced(func->normTypeAt(i)));
             continue;
+        }
+        if (TypeCallType::isExpand(func->normTypeAt(i))) {
+            std::vector<Type *> members;
+            Type *mismatch = nullptr;
+            const Expansion result = expandPack(func->normTypeAt(i), bindings, members, mismatch);
+            if (result != Expansion::Keep) {
+                changed = true;
+                if (result == Expansion::Mismatch) {
+                    members.push_back(mismatch);
+                }
+                for (size_t k = 0; k < members.size(); ++k) {
+                    factory.addNormArg(name + "_" + std::to_string(k), members[k], false);
+                }
+                continue;
+            }
         }
         factory.addNormArg(name, replaced(func->normTypeAt(i)), func->normIsVarAt(i));
     }
@@ -476,23 +569,50 @@ bool containsTypeOf(Type *type) {
     return false;
 }
 
-Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
-    return substituteTypeVars(type, bindings, type_pack_bindings_t{});
+Type *expandTypePacks(Type *type) {
+    // Nothing is bound; the placeholder only keeps the substitution from returning at once.
+    static const type_bindings_t kNothingBound{{"$unbound", nullptr}};
+    return substituteTypeVars(type, kNothingBound);
 }
 
-Type *substituteTypeVars(
-    Type *type, const type_bindings_t &bindings, const type_pack_bindings_t &packs) {
-    if (type == nullptr || (bindings.empty() && packs.empty())) {
+Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
+    if (type == nullptr || bindings.empty()) {
         return type;
+    }
+    if (gPackScope != nullptr && TypeCallType::isPack(type)) {
+        // A pack written out (what `ParamsOf<F>` computed): it stands for the member at the index
+        // of the expansion that reads it.
+        return packMemberFor(*gPackScope, type->toString(), type);
+    }
+    if (TypeCallType::isExpand(type)) {
+        // `..E` where a whole type stands, and not as an element of a tuple: the one type per
+        // member that `E` makes, as the tuple they make it (design principles 5.6). A pack of one
+        // member is a one-member tuple, and an empty pack the empty tuple. A pack nothing bound
+        // yet leaves the node waiting, with its body substituted as far as `bindings` reach.
+        Type *body        = static_cast<TypeCallType *>(type)->paramsSpan()[0];
+        std::vector<Type *> members;
+        Type *mismatch         = nullptr;
+        const Expansion result = expandPack(type, bindings, members, mismatch);
+        if (result == Expansion::Keep) {
+            Type *moved = substituteTypeVars(body, bindings);
+            return moved == body ? type : TypeCallType::makeExpand(moved);
+        }
+        if (result == Expansion::Mismatch) {
+            members.push_back(mismatch);
+        }
+        return TupleType::create(std::move(members));
     }
     switch (type->code()) {
     case TypeCode::TypeVar: {
         Type *bound = findTypeBinding(bindings, asVar(type)->name());
+        if (bound != nullptr && gPackScope != nullptr && TypeCallType::isPack(bound)) {
+            return packMemberFor(*gPackScope, asVar(type)->name(), bound);
+        }
         return bound != nullptr ? bound : type;
     }
     case TypeCode::Array: {
         auto *array = static_cast<ArrayType *>(type);
-        Type *elem  = substituteTypeVars(array->elemType(), bindings, packs);
+        Type *elem  = substituteTypeVars(array->elemType(), bindings);
         // The shape belongs to the type: substituting the element type keeps the dimensions,
         // the pack and the open rank.
         return elem == array->elemType() ? type : array->withElementType(elem);
@@ -501,7 +621,7 @@ Type *substituteTypeVars(
         // `T..` with `T` bound is the stream of what `T` became: the element type is what the
         // stream's type is keyed by, so this is the whole of the substitution.
         auto *stream = static_cast<StreamType *>(type);
-        Type *elem   = substituteTypeVars(stream->elemType(), bindings, packs);
+        Type *elem   = substituteTypeVars(stream->elemType(), bindings);
         return elem == stream->elemType() ? type : StreamType::create(elem);
     }
     case TypeCode::Tuple: {
@@ -510,7 +630,18 @@ Type *substituteTypeVars(
         std::vector<Type *> types;
         types.reserve(tuple->size());
         for (Type *elem : tuple->types()) {
-            types.push_back(substituteTypeVars(elem, bindings, packs));
+            if (TypeCallType::isExpand(elem)) {
+                Type *mismatch         = nullptr;
+                const Expansion result = expandPack(elem, bindings, types, mismatch);
+                if (result == Expansion::Mismatch) {
+                    types.push_back(mismatch);
+                }
+                if (result != Expansion::Keep) {
+                    changed = true;
+                    continue;
+                }
+            }
+            types.push_back(substituteTypeVars(elem, bindings));
             changed |= types.back() != elem;
         }
         if (!changed) {
@@ -535,14 +666,14 @@ Type *substituteTypeVars(
             std::vector<Type *> args;
             args.reserve(record->typeArgCount());
             for (Type *arg : record->typeArgs()) {
-                args.push_back(substituteTypeVars(arg, bindings, packs));
+                args.push_back(substituteTypeVars(arg, bindings));
                 changed |= args.back() != arg;
             }
             return changed ? StructType::get(record->decl(), args) : type;
         }
         StructTypeFactory factory;
         for (size_t i = 0; i < record->size(); ++i) {
-            Type *field = substituteTypeVars(record->typeAt(i), bindings, packs);
+            Type *field = substituteTypeVars(record->typeAt(i), bindings);
             changed |= field != record->typeAt(i);
             factory.add(std::string(record->fieldName(i)), field);
         }
@@ -550,51 +681,29 @@ Type *substituteTypeVars(
     }
     case TypeCode::Function: {
         bool changed = false;
-        FunctionTypeFactory factory = rebuildFunctionType(
-            static_cast<FunctionType *>(type), bindings, packs, nullptr, false, changed);
+        FunctionTypeFactory factory =
+            rebuildFunctionType(static_cast<FunctionType *>(type), bindings, nullptr, false, changed);
         return changed ? factory.build() : type;
     }
     default:
         break;
-    }
-    if (type->code() == TypePackType::typeCode()) {
-        // `..E` written over a pack variable: one result per member of the pack, as the tuple
-        // those results make, which is what a type position that reads a sequence wants. A pack
-        // the table does not bind leaves the node waiting, its body substituted as far as the
-        // ordinary bindings reach, exactly as an application over an unbound variable does.
-        auto *pack = static_cast<TypePackType *>(type);
-        const std::vector<Type *> *members = findTypePackBinding(packs, pack->name());
-        if (members == nullptr) {
-            Type *body = substituteTypeVars(pack->body(), bindings, packs);
-            return body == pack->body() ? type : TypePackType::create(pack->name(), body);
-        }
-        std::vector<Type *> expanded;
-        expanded.reserve(members->size());
-        for (Type *member : *members) {
-            // The member takes the pack variable's place in the body, beside the bindings the
-            // call made: `..ElementOf<A>` over `A = (int[], string[])` is `(int, string)`.
-            type_bindings_t perMember = bindings;
-            perMember.emplace_back(pack->name(), member);
-            expanded.push_back(substituteTypeVars(pack->body(), perMember, packs));
-        }
-        return TupleType::create(expanded);
     }
     if (type->code() == MatchTypeType::typeCode()) {
         // A `match type` in a type position: with a concrete subject it is the result of the
         // first case that selects the subject, by shape or by identity, and nothing else of it is
         // looked at; with a type variable still in the subject it waits.
         auto *match   = static_cast<MatchTypeType *>(type);
-        Type *subject = substituteTypeVars(match->subject(), bindings, packs);
+        Type *subject = substituteTypeVars(match->subject(), bindings);
         if (!containsTypeVar(subject)) {
             const uint16_t shapes = typeShapeBits(subject);
             for (size_t arm = 0; arm < match->armCount(); ++arm) {
                 bool selected = (match->armShapes(arm) & shapes) != 0;
                 for (Type *identity : match->armIdentities(arm)) {
-                    Type *pattern = substituteTypeVars(identity, bindings, packs);
+                    Type *pattern = substituteTypeVars(identity, bindings);
                     selected |= !containsTypeVar(pattern) && typeEquals(subject, pattern);
                 }
                 if (selected) {
-                    return substituteTypeVars(match->armResult(arm), bindings, packs);
+                    return substituteTypeVars(match->armResult(arm), bindings);
                 }
             }
         }
@@ -604,7 +713,7 @@ Type *substituteTypeVars(
         std::vector<Type *> params;
         params.reserve(applied->paramCount());
         for (Type *param : applied->paramsSpan()) {
-            params.push_back(substituteTypeVars(param, bindings, packs));
+            params.push_back(substituteTypeVars(param, bindings));
             changed |= params.back() != param;
         }
         if (!changed) {
@@ -618,6 +727,9 @@ Type *substituteTypeVars(
             std::string error;
             if (Type *computed = TypeCallType::evaluate(
                     static_cast<TypeCallType *>(type)->name(), arguments, error)) {
+                if (gPackScope != nullptr && TypeCallType::isPack(computed)) {
+                    return packMemberFor(*gPackScope, type->toString(), computed);
+                }
                 return computed;
             }
         }
@@ -632,9 +744,7 @@ Type *substituteTypeVars(
 OpenFunctionType *instantiateFunctionType(
     FunctionType *type, const type_bindings_t &bindings, const ExtentValues *extents) {
     bool changed = false;
-    return rebuildFunctionType(
-               type, bindings, type_pack_bindings_t{}, extents, extents != nullptr, changed)
-        .buildOpen();
+    return rebuildFunctionType(type, bindings, extents, extents != nullptr, changed).buildOpen();
 }
 
 Type *substituteExtentValues(Type *type, const ExtentValues &values, const ExtentPacks &packs) {
@@ -706,9 +816,7 @@ Type *substituteExtentValues(Type *type, const ExtentValues &values, const Exten
     case TypeCode::Function: {
         bool changed = false;
         FunctionTypeFactory factory =
-            rebuildFunctionType(
-                static_cast<FunctionType *>(type), {}, type_pack_bindings_t{}, &values, false,
-                changed);
+            rebuildFunctionType(static_cast<FunctionType *>(type), {}, &values, false, changed);
         return changed ? factory.build() : type;
     }
     default:
@@ -724,6 +832,58 @@ Type *substituteExtentValues(Type *type, const ExtentValues &values, const Exten
     }
     return type;
 }
+
+namespace {
+
+/// A parameter list of a function type that holds a pack of parameters (`..P`, the member
+/// `$expand<P>` of the list with `P` a type variable) against the parameters of an actual function
+/// type: the positions before and after the pack are matched in pairs by `pair`, and the ones
+/// between are the members `P` is bound to. A list without a pack is matched position by position.
+/// False when the counts cannot agree or `pair` refuses a pair.
+template <typename Pair>
+bool matchParameterList(
+    std::span<Type *const> want, std::span<Type *const> have, type_bindings_t &bindings,
+    Pair &&pair) {
+    size_t at = want.size();
+    for (size_t i = 0; i < want.size(); ++i) {
+        if (TypeCallType::isExpand(want[i]) &&
+            static_cast<TypeCallType *>(want[i])->paramsSpan()[0]->code() == TypeCode::TypeVar) {
+            at = i;
+            break;
+        }
+    }
+    if (at == want.size()) {
+        if (want.size() != have.size()) {
+            return false;
+        }
+        bool ok = true;
+        for (size_t i = 0; i < want.size(); ++i) {
+            ok = pair(want[i], have[i]) && ok;
+        }
+        return ok;
+    }
+    const size_t fixed = want.size() - 1;
+    if (have.size() < fixed) {
+        return false;
+    }
+    bool ok = true;
+    for (size_t i = 0; i < at; ++i) {
+        ok = pair(want[i], have[i]) && ok;
+    }
+    const size_t after = want.size() - at - 1;
+    for (size_t i = 0; i < after; ++i) {
+        ok = pair(want[at + 1 + i], have[have.size() - after + i]) && ok;
+    }
+    const std::string &name =
+        static_cast<TypeVarType *>(static_cast<TypeCallType *>(want[at])->paramsSpan()[0])->name();
+    if (findTypeBinding(bindings, name) == nullptr) {
+        const std::vector<Type *> members(have.begin() + at, have.end() - after);
+        bindings.emplace_back(name, TypeCallType::makePack(members));
+    }
+    return ok;
+}
+
+} // namespace
 
 bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
     if (pattern == nullptr || actual == nullptr) {
@@ -808,19 +968,10 @@ bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
     case TypeCode::Function: {
         auto *want = static_cast<FunctionType *>(pattern);
         auto *have = static_cast<FunctionType *>(actual);
-        if (want->withTypesCount() != have->withTypesCount() ||
-            want->normTypesCount() != have->normTypesCount()) {
+        const auto pair = [&](Type *w, Type *h) { return bindTypeVars(w, h, bindings); };
+        if (!matchParameterList(want->withTypesSpan(), have->withTypesSpan(), bindings, pair) ||
+            !matchParameterList(want->normTypesSpan(), have->normTypesSpan(), bindings, pair)) {
             return false;
-        }
-        for (size_t i = 0; i < want->withTypesCount(); ++i) {
-            if (!bindTypeVars(want->withTypeAt(i), have->withTypeAt(i), bindings)) {
-                return false;
-            }
-        }
-        for (size_t i = 0; i < want->normTypesCount(); ++i) {
-            if (!bindTypeVars(want->normTypeAt(i), have->normTypeAt(i), bindings)) {
-                return false;
-            }
         }
         if (want->hasExitType() && have->hasExitType()) {
             return bindTypeVars(want->exitType(), have->exitType(), bindings);
@@ -1036,17 +1187,11 @@ bool unifyTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
     case TypeCode::Function: {
         auto *want = static_cast<FunctionType *>(pattern);
         auto *have = static_cast<FunctionType *>(actual);
-        if (want->withTypesCount() != have->withTypesCount() ||
-            want->normTypesCount() != have->normTypesCount()) {
+        const auto pair = [&](Type *w, Type *h) { return unifyTypeVars(w, h, bindings); };
+        if (!matchParameterList(want->withTypesSpan(), have->withTypesSpan(), bindings, pair)) {
             return false;
         }
-        bool ok = true;
-        for (size_t i = 0; i < want->withTypesCount(); ++i) {
-            ok = unifyTypeVars(want->withTypeAt(i), have->withTypeAt(i), bindings) && ok;
-        }
-        for (size_t i = 0; i < want->normTypesCount(); ++i) {
-            ok = unifyTypeVars(want->normTypeAt(i), have->normTypeAt(i), bindings) && ok;
-        }
+        bool ok = matchParameterList(want->normTypesSpan(), have->normTypesSpan(), bindings, pair);
         if (want->hasExitType() && have->hasExitType()) {
             ok = unifyTypeVars(want->exitType(), have->exitType(), bindings) && ok;
         }

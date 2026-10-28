@@ -1,0 +1,15 @@
+/// `..` expands the packs it uses together, so they must have the same length: `Mix<F>` pairs the
+/// ordinary parameters of `F` with its `with` parameters, and `Weighted` has one of the first and
+/// two of the second.
+import { ParamsOf, WithOf } from types
+
+type Mix<F> = (..(ParamsOf<F>, WithOf<F>))
+type Weighted = <w: float, k: int> (a: int) => bool
+
+func f(x: Mix<Weighted>): int {
+    return 0
+}
+
+func main(): int sync {
+    return 0
+}

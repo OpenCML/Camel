@@ -145,6 +145,7 @@ bracedIdents       : '{' identList? ','? '}'
 bracketIdents      : '[' identList? ','? ']'
 keyParamPair       : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)?
                      | '..' identDef (':' typeExpr)?
+                     | '..' typeExpr
                      | 'constas' identDef (':' typeExpr)?
 pairedParams       : keyParamPair (',' keyParamPair)*
 parentParams       : '(' pairedParams? ','? ')'
@@ -218,7 +219,7 @@ loopExpr           : 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' 
 loopState          : identDef '=' logicalOrExpr
 loopFor            : 'for' identDef 'in' logicalOrExpr
 loopWhile          : 'while' logicalOrExpr
-typeExpr           : arrayType ('?' | '!' | '..')*
+typeExpr           : '..' typeExpr | arrayType ('?' | '!' | '..')*
 arrayType          : specType arrayDim+
 arrayDim           : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
 arrayDimItem       : '?' | '..' identDef? | dataExpr

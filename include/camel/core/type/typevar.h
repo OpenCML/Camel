@@ -60,18 +60,6 @@ using type_bindings_t = std::vector<std::pair<std::string, Type *>>;
 /// The type bound to `name`, or nullptr.
 Type *findTypeBinding(const type_bindings_t &bindings, const std::string &name);
 
-/// The variables a call bound to a sequence of types rather than to one: `..A` given three
-/// arguments in a declaration that writes a pack. It is a table of its own beside
-/// `type_bindings_t` because only a declaration with a pack has one, and a substitution that
-/// knows no pack stays exactly what it was.
-using type_pack_bindings_t = std::vector<std::pair<std::string, std::vector<Type *>>>;
-
-/// The sequence of types bound to `name`, or nullptr when no pack of that name was bound. A pack
-/// bound to nothing is an empty sequence, not an absent one: it is what a call with no member
-/// over that pack gives, and an expansion over it is the empty tuple.
-const std::vector<Type *> *findTypePackBinding(
-    const type_pack_bindings_t &packs, const std::string &name);
-
 class TypeFunctionType : public Type {
   public:
     static TypeFunctionType *
@@ -139,14 +127,11 @@ bool containsTypeOf(Type *type);
 Type *substituteTypeVars(Type *type, const type_bindings_t &bindings);
 
 /**
- * The same substitution with the packs a call bound beside the single types. A pack expansion
- * (`..E`, TypePackType) is replaced by the tuple of what `E` becomes for each member of the pack
- * it names, one result per member in binding order; a pack the table does not bind leaves the
- * node waiting, its body substituted as far as the ordinary bindings reach. A pack of `n`
- * members therefore expands to an `n`-member tuple, and an empty pack to the empty tuple.
+ * `type` with the type packs it writes expanded where they are known already: `(..ParamsOf<F>)`
+ * for a function type `F` that is written out has its members, with no variable to wait for. A
+ * pack that waits for a variable stays as it is. Returns `type` itself when nothing was expanded.
  */
-Type *substituteTypeVars(
-    Type *type, const type_bindings_t &bindings, const type_pack_bindings_t &packs);
+Type *expandTypePacks(Type *type);
 
 /**
  * `type` with every named extent that `values` binds replaced by its value (`f32[n]`

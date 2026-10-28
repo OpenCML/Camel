@@ -361,7 +361,7 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
  */
 class DeclaredFuncTypeResolver : public FuncTypeResolver {
   public:
-    explicit DeclaredFuncTypeResolver(FunctionType *declared);
+    explicit DeclaredFuncTypeResolver(FunctionType *declared, std::string pack = {});
 
     static resolver_ptr_t create(FunctionType *declared) {
         return std::make_unique<DeclaredFuncTypeResolver>(declared);
@@ -424,6 +424,10 @@ class DeclaredFuncTypeResolver : public FuncTypeResolver {
     /// The names of the type variables a call's `::<...>` writes, in the order it writes them.
     const std::vector<std::string> &bindableNames() const { return bindable_; }
 
+    /// The type variable the rest parameter is typed with (`..xs: ..A`): a call binds it to the
+    /// pack of the types of the arguments the rest parameter takes. Empty when it is untyped.
+    const std::string &packName() const { return pack_; }
+
   private:
     FunctionType *funcType_;
     /// The names of the type variables the declaration binds; empty for a fixed signature.
@@ -431,6 +435,7 @@ class DeclaredFuncTypeResolver : public FuncTypeResolver {
     /// The same declaration without its packs, when it has any: what the fixed parameters are
     /// matched against.
     std::shared_ptr<DeclaredFuncTypeResolver> core_;
+    std::string pack_;
     bool generic_ = false;
 };
 

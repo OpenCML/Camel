@@ -680,7 +680,7 @@ string.
 #### `zip`
 
 ```camel
-zip: (xs: T[], ys: U[]) => (T, U)[]
+zip: (..xs: ..A) => (..ElementOf<A>)[] when ..is_array::<A>()
 ```
 
 Two arrays combined element by element into pairs. They must have the same length.

@@ -11,13 +11,14 @@
  */
 
 #include "builder.h"
+#include "camel/core/type/typecall.h"
+#include "camel/utils/str.h"
 #include "builder_helpers.h"
 #include "builder_support.h"
 
 #include "camel/core/data/composite/tuple.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/tuple.h"
-#include "camel/core/type/typecall.h"
 
 #include <algorithm>
 
@@ -30,13 +31,13 @@ using namespace camel::core::type;
 
 namespace {
 /// Whether the type still holds an expansion (`..E`, design principles 5.6) that nothing bound.
-/// An expansion the call bound is expanded away (substituteTypeVars), so a node still here has no
+/// An expansion a call bound is expanded away (substituteTypeVars), so a node still here has no
 /// members to write: the result type was written over a pack the call gave nothing.
 bool holdsPackExpansion(Type *type) {
     if (type == nullptr) {
         return false;
     }
-    if (type->code() == TypePackType::typeCode()) {
+    if (TypeCallType::isExpand(type)) {
         return true;
     }
     switch (type->code()) {
@@ -310,19 +311,45 @@ node_handle_t Builder::inlineRestCall(
         restValues.push_back(normInputs[i].node);
         restTypes.push_back(valueTypeOf(nodeTypeOf(normInputs[i].node)));
     }
-    // A rest parameter that writes the type of its members (`..xs: ..A`, design principles 5.6)
-    // declares a pack, and this call is what binds it: the members are the types of the arguments
-    // left over, in order. The signature's result type is written over that pack, so it is one
-    // type per member here, and nothing of the pack is left for a later call to decide.
-    type_pack_bindings_t packs;
-    Type *declaredRest =
-        declaredNormCount > 0 ? signature->normTypeAt(declaredNormCount - 1) : nullptr;
-    if (signature->hasRest() && declaredRest != nullptr &&
-        declaredRest->code() == TypePackType::typeCode()) {
-        const auto *packed = static_cast<TypePackType *>(declaredRest);
-        packs.emplace_back(std::string(packed->name()), restTypes);
+    // A rest parameter typed `..xs: ..A` binds `A` to the pack of the types it took, the same
+    // binding a call of a declaration without a body makes (DeclaredFuncTypeResolver).
+    if (Type *pack = signature->restPack()) {
+        bindings.emplace_back(
+            static_cast<camel::core::type::TypeVarType *>(pack)->name(),
+            camel::core::type::TypeCallType::makePack(restTypes));
     }
-
+    // The declaration's `when`, now that the fixed arguments and the pack have their types: a
+    // false condition makes the function inapplicable (design principles 4.4).
+    if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+        std::unordered_map<std::string, data_ptr_t> withValues;
+        for (size_t i = 0; i < withCount; ++i) {
+            if (data_ptr_t value = constantOfNode(withInputs[i].node); value != nullptr) {
+                withValues.emplace(std::string(signature->argNameAt(i)), value);
+            }
+        }
+        const WhenResult verdict =
+            evaluateWhenCondition(when->condition, signature, bindings, withValues, tmpl);
+        if (verdict.fails()) {
+            yieldToPipe(call);
+            std::vector<Type *> all;
+            for (const Argument &input : withInputs) {
+                all.push_back(valueTypeOf(nodeTypeOf(input.node)));
+            }
+            for (const Argument &input : normInputs) {
+                all.push_back(valueTypeOf(nodeTypeOf(input.node)));
+            }
+            diags_->of(SemanticDiag::WhenConditionUnmet)
+                .atOrigin(call->origin())
+                .commit(
+                    tmpl->name,
+                    strutil::join(all, ", ", [](Type *t) { return t->toString(); }),
+                    tmpl->name + " — when " + when->text);
+            throw BuildAbortException();
+        }
+        if (!verdict.holds()) {
+            reportWhenProblem(verdict, tmpl->name, when->condition);
+        }
+    }
     RestBinding rest;
     rest.name                 = restName;
     rest.tuple.type           = TupleType::create(std::move(restTypes));
@@ -332,7 +359,7 @@ node_handle_t Builder::inlineRestCall(
 
     Type *exitType = signature->hasExitType()
                          ? substituteExtentValues(
-                               substituteTypeVars(signature->exitType(), bindings, packs), extents)
+                               substituteTypeVars(signature->exitType(), bindings), extents)
                          : nullptr;
     if (exitType != nullptr && holdsPackExpansion(exitType)) {
         // The result type is written over a pack nothing bound: the declaration declares one at

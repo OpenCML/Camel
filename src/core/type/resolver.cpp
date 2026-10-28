@@ -6,10 +6,12 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/typecall.h"
 #include "camel/core/type/typevar.h"
 #include "camel/utils/assert.h"
 
 #include <cctype>
+#include <type_traits>
 
 using namespace camel::core::type;
 
@@ -159,8 +161,7 @@ FunctionType *closedSignature(FunctionType *declared) {
     for (size_t i = 0; i < declared->normTypesCount(); ++i) {
         const std::string name(declared->argNameAt(declared->withTypesCount() + i));
         if (declared->hasRest() && i + 1 == declared->normTypesCount()) {
-            // The rest parameter keeps the type it writes (`..xs: ..A`, design principles 5.6).
-            factory.addRestArg(name, declared->normTypeAt(i));
+            factory.addRestArg(name, declared->restPack());
             continue;
         }
         factory.addNormArg(name, declared->normTypeAt(i), declared->normIsVarAt(i));
@@ -249,8 +250,11 @@ bool camel::core::type::namesOfSignatureText(
     return true;
 }
 
-DeclaredFuncTypeResolver::DeclaredFuncTypeResolver(FunctionType *declared)
-    : funcType_(closedSignature(declared)) {
+DeclaredFuncTypeResolver::DeclaredFuncTypeResolver(FunctionType *declared, std::string pack)
+    : funcType_(closedSignature(declared)), pack_(std::move(pack)) {
+    if (pack_.empty() && funcType_->restPack() != nullptr) {
+        pack_ = static_cast<TypeVarType *>(funcType_->restPack())->name();
+    }
     for (Type *param : funcType_->withTypesSpan()) {
         collectBindableTypeVars(param, bindable_);
     }
@@ -258,9 +262,12 @@ DeclaredFuncTypeResolver::DeclaredFuncTypeResolver(FunctionType *declared)
         collectBindableTypeVars(param, bindable_);
     }
     collectBindableTypeVars(funcType_->exitType(), bindable_);
+    // The pack variable is bound by the arguments of the rest parameter, not written by a call
+    // and not read from a fixed parameter.
+    bindable_.erase(std::remove(bindable_.begin(), bindable_.end(), pack_), bindable_.end());
     generic_ = !bindable_.empty();
     if (funcType_->hasRest() || funcType_->hasWithRest()) {
-        core_ = std::make_shared<DeclaredFuncTypeResolver>(withoutPacks(funcType_));
+        core_ = std::make_shared<DeclaredFuncTypeResolver>(withoutPacks(funcType_), pack_);
     }
 }
 
@@ -294,7 +301,17 @@ std::optional<FunctionType *> DeclaredFuncTypeResolver::resolve(
                               : "__n" + std::to_string(i),
                 i < fixedNorm ? (*fixed)->normTypeAt(i) : valueTypeOf(norm[i]), false);
         }
-        factory.setExitType((*fixed)->exitType());
+        Type *exit = (*fixed)->exitType();
+        if (!pack_.empty()) {
+            // The pack is the types of the arguments the rest parameter took.
+            std::vector<Type *> members;
+            for (size_t i = fixedNorm; i < norm.size(); ++i) {
+                members.push_back(valueTypeOf(norm[i]));
+            }
+            const type_bindings_t bound{{pack_, TypeCallType::makePack(members)}};
+            exit = substituteTypeVars(exit, bound);
+        }
+        factory.setExitType(exit);
         factory.setResources((*fixed)->resources());
         return factory.build();
     }

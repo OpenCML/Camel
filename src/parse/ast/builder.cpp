@@ -2577,7 +2577,10 @@ Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
         isVar = true;
     }
     const bool isConst = context->has(TK::KwConst);
-    Reference ref(context->get<cst::IdentDef>()->text());
+    // `..ParamsOf<F>` in a function type's parameter list has no name: the pack is its type.
+    Reference ref(
+        context->get<cst::IdentDef>() ? std::string(context->get<cst::IdentDef>()->text())
+                                      : std::string("__pack"));
     node_ptr_t namedPairNode =
         createNodeAs<NamedPairLoad>(ref, isVar, isConst, isRest, isConstas);
     setNodeTokenRangeByContext(namedPairNode, context);
@@ -5150,6 +5153,13 @@ Value Builder::visitTypeArm(cst::TypeArm context) {
     return arm;
 }
 
+Value Builder::visitPackType(cst::PackType context) {
+    node_ptr_t res = createNodeAs<TypeExprLoad>(TypeOp::Pack);
+    setNodeTokenRangeByContext(res, context);
+    *res << any2node(visitType(context->type()));
+    return res;
+}
+
 Value Builder::visitTypeOfType(cst::TypeOfType context) {
     node_ptr_t res = createNodeAs<TypeExprLoad>(TypeOp::TypeOf);
     setNodeTokenRangeByContext(res, context);
@@ -5191,25 +5201,6 @@ Value Builder::visitTypeList(cst::TypeList context) {
     }
     LEAVE("TypeList");
     return repeatNode;
-}
-
-/*
-packType
-    : '..' typeExpr
-    ;
-The body is the type expression written once for each member of the pack it names (design
-principles 5.6). The pack itself is not written here: GCT works its name out from the body,
-where the head of the declaration is known.
-*/
-Value Builder::visitPackType(cst::PackType context) {
-    ENTER("PackType");
-    node_ptr_t res = createNodeAs<PackTypeLoad>();
-    setNodeTokenRangeByContext(res, context);
-    if (context->type()) {
-        *res << any2node(visitType(context->type()));
-    }
-    LEAVE("PackType");
-    return res;
 }
 
 /*

@@ -123,7 +123,7 @@ slice: <axis: int, start: int, end: int, step: int = 1> (x: Bytes) => Bytes
 concat: (xs: T[], ys: T[]) => T[]
 contains: <value: T> (xs: T[]) => bool
 contains: <sub: string> (s: string) => bool
-zip: (xs: T[], ys: U[]) => (T, U)[]
+zip: (..xs: ..A) => (..ElementOf<A>)[] when ..is_array::<A>()
 append: <value: T> (xs: T[]) => T[]
 map: <f: (item: T) => U> (xs: T[]) => U[]
 filter: <f: (item: T) => bool> (xs: T[]) => T[]

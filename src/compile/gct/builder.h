@@ -398,10 +398,6 @@ class Builder {
     Type *visitRefType(const AST::node_ptr_t &ast);
     Type *visitSpecType(const AST::node_ptr_t &ast);
     Type *visitMatchTypeType(const AST::node_ptr_t &ast);
-    /// `..E`: one type expression written once for each member of a pack. The pack is the one
-    /// head parameter written with `..` that the body names; a body that names none, or more
-    /// than one, is reported here.
-    Type *visitPackType(const AST::node_ptr_t &ast);
     /// The extents of one `[...]` as linear forms (design principles 5.4). An unknown extent
     /// (`?`, or the empty `[]`) is `ExtentForm::unknown()`; nullptr with a diagnostic reported.
     std::shared_ptr<const std::vector<camel::core::type::ExtentForm>>

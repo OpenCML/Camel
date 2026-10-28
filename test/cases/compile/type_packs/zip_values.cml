@@ -1,0 +1,14 @@
+/// `zip` is a declaration of the prelude, `zip::<..A>(..xs: ..A): (..ElementOf<A>)[] when
+/// ..is_array::<A>()`: the pack `A` is the types of the arrays it is given, and the result is the
+/// array of tuples with one element type for each of them.
+func main(): int sync {
+    let a = [1, 2, 3]
+    let b = ['x', 'y', 'z']
+    let c = [1.5, 2.5, 3.5]
+    println(zip(a, b))
+    println(zip(a, b, c))
+    let pairs: (int, string)[] = zip(a, b)
+    let triples: (int, string, float)[] = zip(a, b, c)
+    println(len(pairs), len(triples))
+    return 0
+}

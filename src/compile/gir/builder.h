@@ -1853,6 +1853,9 @@ class Builder {
     WhenResult whenOf(const WhenFrame &frame, const GCT::node_ptr_t &node);
     /// `&&`, `||` and a conditional expression.
     WhenResult whenOfBranch(const WhenFrame &frame, const GCT::node_ptr_t &node);
+    /// `..pred::<A>()`: the condition holds for every member of the pack `A` is bound to (and of
+    /// the other packs the frame binds, which must have the same length).
+    WhenResult whenOfEvery(const WhenFrame &frame, const GCT::node_ptr_t &node);
     WhenResult whenOfCall(const WhenFrame &frame, const GCT::node_ptr_t &node);
     /// `p::<T>(...)`: a predicate of the library, resolved where the declaration is written.
     WhenResult whenOfPredicateCall(const WhenFrame &frame, const GCT::node_ptr_t &node);

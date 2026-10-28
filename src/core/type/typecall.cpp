@@ -6,6 +6,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/type/collection.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/text.h"
@@ -25,7 +26,11 @@ TypeCode TypeCallType::typeCode() {
 namespace {
 
 constexpr std::string_view kTypeFunctions[] = {
-    "ElementOf", "PayloadOf", "KeyOf", "ValueOf", "WithElement"};
+    "ElementOf", "PayloadOf", "KeyOf", "ValueOf", "WithElement", "ParamsOf", "WithOf", "ResultOf"};
+
+constexpr std::string_view kPackName   = "$pack";
+constexpr std::string_view kExpandName = "$expand";
+constexpr std::string_view kLengthsTag = "$lengths:";
 
 } // namespace
 
@@ -52,6 +57,37 @@ Type *TypeCallType::evaluate(
         return nullptr;
     }
     Type *type = arguments.front();
+    if (name == "ParamsOf" || name == "WithOf" || name == "ResultOf") {
+        if (type->code() != TypeCode::Function) {
+            error = type->toString() + " is not a function type";
+            return nullptr;
+        }
+        const auto *function = static_cast<const FunctionType *>(type);
+        if (name == "ResultOf") {
+            if (!function->hasExitType() || function->exitType() == nullptr) {
+                error = type->toString() + " has no result type yet";
+                return nullptr;
+            }
+            return function->exitType();
+        }
+        // The parameters a call passes: the `constas` values are not among them, and a rest
+        // parameter or a `with` pack stands for none that is known.
+        std::vector<Type *> members;
+        const bool withList = name == "WithOf";
+        const size_t count  = withList ? function->withTypesCount() : function->normTypesCount();
+        for (size_t i = 0; i < count; ++i) {
+            if (withList ? function->hasWithRest() && i + 1 == count
+                         : function->hasRest() && i + 1 == count) {
+                error = type->toString() + " has a parameter pack, whose members are not known";
+                return nullptr;
+            }
+            if (withList ? function->withIsConstasAt(i) : function->normIsConstasAt(i)) {
+                continue;
+            }
+            members.push_back(withList ? function->withTypeAt(i) : function->normTypeAt(i));
+        }
+        return makePack(members);
+    }
     if (name == "ElementOf") {
         if (type->code() == TypeCode::Array) {
             return static_cast<ArrayType *>(type)->elemType();
@@ -82,6 +118,34 @@ Type *TypeCallType::evaluate(
     return nullptr;
 }
 
+TypeCallType *TypeCallType::makePack(std::span<Type *const> members) {
+    return create(kPackName, members);
+}
+
+TypeCallType *TypeCallType::makeExpand(Type *pattern) {
+    Type *const arguments[] = {pattern};
+    return create(kExpandName, arguments);
+}
+
+TypeCallType *TypeCallType::makeLengthMismatch(const std::string &description) {
+    return create(std::string(kLengthsTag) + description, {});
+}
+
+bool TypeCallType::isPack(const Type *type) {
+    return type != nullptr && type->code() == typeCode() &&
+           static_cast<const TypeCallType *>(type)->name() == kPackName;
+}
+
+bool TypeCallType::isExpand(const Type *type) {
+    return type != nullptr && type->code() == typeCode() &&
+           static_cast<const TypeCallType *>(type)->name() == kExpandName;
+}
+
+std::span<Type *const> TypeCallType::packMembers(const Type *type) {
+    return isPack(type) ? static_cast<const TypeCallType *>(type)->paramsSpan()
+                        : std::span<Type *const>{};
+}
+
 TypeCallType *TypeCallType::create(std::string_view name, std::span<Type *const> arguments) {
     const std::string *text = TypeTable::instance().internText(name);
     std::vector<uintptr_t> parts;
@@ -100,7 +164,13 @@ TypeCallType *TypeCallType::create(std::string_view name, std::span<Type *const>
 }
 
 std::string TypeCallType::toString() const {
-    std::string text = *name_ + "<";
+    if (*name_ == kExpandName) {
+        return ".." + (params_[0] != nullptr ? params_[0]->toString() : std::string("?"));
+    }
+    if (name_->starts_with(kLengthsTag)) {
+        return name_->substr(kLengthsTag.size());
+    }
+    std::string text = (*name_ == kPackName ? std::string("pack") : *name_) + "<";
     for (size_t i = 0; i < paramCount_; ++i) {
         text += (i > 0 ? ", " : "") + (params_[i] != nullptr ? params_[i]->toString() : "?");
     }
@@ -272,52 +342,6 @@ OtherType *MatchTypeType::cloneWithParams(std::span<Type *const> params) const {
     return create(params[0], arms);
 }
 
-// ---- TypePackType ----
-
-TypeCode TypePackType::typeCode() {
-    static TypeCode code = registerOtherType("TypePack", TypeFlag::Auxiliary);
-    return code;
-}
-
-TypePackType *TypePackType::create(std::string_view name, Type *body) {
-    const std::string *text = TypeTable::instance().internText(name);
-    std::vector<uintptr_t> parts;
-    parts.reserve(2);
-    parts.push_back(reinterpret_cast<uintptr_t>(text));
-    parts.push_back(typeKeyWord(TypeTable::instance().canonical(body)));
-    Type *const bodyArg = body;
-    return static_cast<TypePackType *>(TypeTable::instance().internOther(
-        typeCode(), parts, [&]() -> Type * {
-            Type **params = OtherType::copyParams(std::span<Type *const>(&bodyArg, 1));
-            void *mem = mm::permSpace().alloc(sizeof(TypePackType), alignof(TypePackType));
-            ASSERT(mem != nullptr, "Failed to allocate TypePackType from permSpace");
-            return new (mem) TypePackType(text, 1, params);
-        }));
-}
-
-std::string TypePackType::toString() const { return ".." + body()->toString(); }
-
-std::string TypePackType::mangle() const {
-    return "PK" + std::to_string(name_->size()) + *name_ + "_" + body()->mangle();
-}
-
-Type *TypePackType::clone(bool) const { return const_cast<TypePackType *>(this); }
-
-bool TypePackType::equals(Type *type) const { return type == this; }
-
-bool TypePackType::assignableFrom(Type *sourceType) const { return sourceType == this; }
-
-// An expansion is not the type of any value of its own: it stands for the tuple substitution
-// builds from it, so nothing converts to it while it is still a node.
-CastSafety TypePackType::castSafetyFrom(Type *) const { return CastSafety::Forbidden; }
-
-OtherType *TypePackType::cloneWithParams(std::span<Type *const> params) const {
-    if (params.size() != 1 || params[0] == nullptr) {
-        return nullptr;
-    }
-    return create(*name_, params[0]);
-}
-
 bool describeUnevaluatedTypeCall(Type *type, std::string &what, std::string &why) {
     if (type == nullptr) {
         return false;
@@ -325,6 +349,15 @@ bool describeUnevaluatedTypeCall(Type *type, std::string &what, std::string &why
     const auto concrete = [](Type *t) { return !containsTypeVar(t); };
     if (type->code() == TypeCallType::typeCode()) {
         const auto *call = static_cast<TypeCallType *>(type);
+        if (call->name().starts_with(kLengthsTag)) {
+            // The tag holds the expansion, then `|`, then the lengths of the packs it expands.
+            const std::string text = call->toString();
+            const size_t bar       = text.find('|');
+            what                   = text.substr(0, bar);
+            why = "the packs it expands have different lengths (" +
+                  (bar == std::string::npos ? std::string() : text.substr(bar + 1)) + ")";
+            return true;
+        }
         // An argument that is itself a computation which failed is the cause.
         for (Type *argument : call->paramsSpan()) {
             if (describeUnevaluatedTypeCall(argument, what, why)) {
@@ -332,6 +365,17 @@ bool describeUnevaluatedTypeCall(Type *type, std::string &what, std::string &why
             }
         }
         if (std::all_of(call->paramsSpan().begin(), call->paramsSpan().end(), concrete)) {
+            if (TypeCallType::isPack(call)) {
+                what = call->toString();
+                why  = "a type pack is a list of types, and `..` writes its members where a type "
+                       "list is";
+                return true;
+            }
+            if (TypeCallType::isExpand(call)) {
+                what = call->toString();
+                why  = "`..` expands a type pack, and the type after it uses none";
+                return true;
+            }
             std::string error;
             if (TypeCallType::evaluate(call->name(), call->paramsSpan(), error) == nullptr) {
                 what = call->toString();
@@ -352,21 +396,6 @@ bool describeUnevaluatedTypeCall(Type *type, std::string &what, std::string &why
             return true;
         }
         return false;
-    }
-    if (type->code() == TypePackType::typeCode()) {
-        // `..E` is one type per member of a pack (design principles 5.6), so it is a type only
-        // where the pack is bound: in a signature it waits for the call that binds it, and a node
-        // still here was written where no call bound its pack. A body that names a computation
-        // which failed is the cause, and is described first.
-        const auto *pack = static_cast<TypePackType *>(type);
-        if (describeUnevaluatedTypeCall(pack->body(), what, why)) {
-            return true;
-        }
-        what = ".." + (pack->body() != nullptr ? pack->body()->toString() : std::string("?"));
-        why  = "the pack '" + std::string(pack->name()) +
-              "' has no members here: the types of an expansion are the arguments a call leaves "
-              "over";
-        return true;
     }
     if (type->isOtherType()) {
         for (Type *param : static_cast<OtherType *>(type)->paramsSpan()) {
@@ -404,8 +433,7 @@ bool containsTypeCall(Type *type) {
     default:
         break;
     }
-    if (type->code() == TypeCallType::typeCode() || type->code() == MatchTypeType::typeCode() ||
-        type->code() == TypePackType::typeCode()) {
+    if (type->code() == TypeCallType::typeCode() || type->code() == MatchTypeType::typeCode()) {
         return true;
     }
     if (type->isOtherType()) {

@@ -404,13 +404,9 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
             if (fn->hasArgNames()) {
                 parts.push_back(literal(std::string(fn->argNameAt(withCount + i))));
             }
-            // A rest parameter that writes the type of its members (`..xs: ..A`, design
-            // principles 5.6) prints it; an untyped one stands in the signature as `void` and
-            // has nothing to print.
-            Type *restSlot = fn->normTypeAt(i);
-            if (restSlot != nullptr && restSlot->code() != TypeCode::Void) {
-                parts.push_back(literal(": "));
-                pushChild(parts, restSlot, "<null>");
+            if (fn->restPack() != nullptr) {
+                parts.push_back(literal(": .."));
+                pushChild(parts, fn->restPack(), "<null>");
             }
             continue;
         }

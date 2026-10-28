@@ -60,8 +60,6 @@ std::string to_string(TypeType type) {
         return "Ref";
     case TypeType::Match:
         return "Match";
-    case TypeType::Pack:
-        return "Pack";
     default:
         ASSERT(false, "Unknown TypeType");
         return "Unknown";
@@ -71,6 +69,9 @@ std::string to_string(TypeType type) {
 std::string to_string(TypeOp op) {
     if (op == TypeOp::TypeOf) {
         return "typeof";
+    }
+    if (op == TypeOp::Pack) {
+        return "..";
     }
     ASSERT(false, "Unknown TypeOp");
     return "Unknown";
@@ -141,8 +142,6 @@ const std::string EnumTypeLoad::geneCode() const {
 }
 
 const std::string TupleTypeLoad::geneCode() const { return "()"; }
-
-const std::string PackTypeLoad::geneCode() const { return ".."; }
 
 const std::string FuncTypeLoad::geneCode() const {
     std::string result = "";

@@ -5843,23 +5843,14 @@ No candidate of '{0}' applies to ({1}): every candidate's 'when' condition is fa
 A 'when' that is false makes its declaration inapplicable, not erroneous, and the call goes on to the other candidates. Pass an argument or a type that satisfies a condition, or write another overload for this call.
 ```
 
-**Example** (`test/cases/compile/when/not_applicable.cml`, run as `camel test/cases/compile/when/not_applicable.cml`)
+**Example** (`test/cases/compile/type_packs/zip_not_array.cml`, run as `camel test/cases/compile/type_packs/zip_not_array.cml`)
 
 ```camel
-func is_float::<T>(): bool {
-    return match type T {
-        case float | f32 => true
-        case _ => false
-    }
-}
-
-/// The condition asks about int, so this overload never applies here.
-func needs_float(x: float): float when is_float::<int>() {
-    return x
-}
-
+/// `when ..is_array::<A>()` asks every member of the pack: an argument that is not an array makes
+/// the declaration inapplicable, and `zip` has no other.
 func main(): int sync {
-    return int(needs_float(1.0))
+    println(zip([1, 2], 3))
+    return 0
 }
 ```
 
@@ -8421,18 +8412,22 @@ The type function '{0}' is not applicable: {1}.
 A type function computes a type from types at compile time (design principles 21): `ElementOf<T>` is the element of an array or a set, `PayloadOf<T>` the `U` of `U?` or `U!`, and `KeyOf<T>` and `ValueOf<T>` the key and value types of a map; a program writes its own with `type F<T> = ...`, whose body may be a `match type`. It is called with `F<...>` where a type is written, and it accepts only the types it is defined for.
 ```
 
-**Example** (`test/cases/modules/types/type_function_not_applicable.cml`, run as `camel test/cases/modules/types/type_function_not_applicable.cml`)
+**Example** (`test/cases/compile/type_packs/length_mismatch.cml`, run as `camel test/cases/compile/type_packs/length_mismatch.cml`)
 
 ```camel
-/// A type function that does not accept the type it is given is refused where the instance is made.
-import { is_integer, ElementOf } from types
+/// `..` expands the packs it uses together, so they must have the same length: `Mix<F>` pairs the
+/// ordinary parameters of `F` with its `with` parameters, and `Weighted` has one of the first and
+/// two of the second.
+import { ParamsOf, WithOf } from types
 
-func element_is_integer::<T>(): bool {
-    return is_integer::<ElementOf<T>>()
+type Mix<F> = (..(ParamsOf<F>, WithOf<F>))
+type Weighted = <w: float, k: int> (a: int) => bool
+
+func f(x: Mix<Weighted>): int {
+    return 0
 }
 
 func main(): int sync {
-    println(element_is_integer::<int>())
     return 0
 }
 ```

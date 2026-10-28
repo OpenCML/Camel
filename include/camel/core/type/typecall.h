@@ -11,9 +11,6 @@
  *     where `match type` cannot (the library declares them without a body).
  *   - `MatchTypeType` is a `match type` in a type position: the subject, and for each case the
  *     shapes and identities it selects and the type it gives.
- *   - `TypePackType` is `..E`, a type expression written once for each member of a pack variable
- *     that `E` mentions: with the pack bound it is the tuple of what `E` becomes for each member,
- *     and while the pack is unbound the node waits, as an application over a type variable does.
  *
  * While an argument or the subject is still a type variable the application stays a type of its
  * own, and the type-variable algebra descends through it like any other type application. When
@@ -48,6 +45,20 @@ class TypeCallType final : public OtherType {
     evaluate(std::string_view name, std::span<Type *const> arguments, std::string &error);
 
     const std::string &name() const { return *name_; }
+
+    /// Type packs (design principles 5.6, program transforms): a pack is the application
+    /// `$pack<T1, T2, ...>` of its members, what `ParamsOf<F>` and `WithOf<F>` compute and what a
+    /// pack variable (`A` of `::<..A>`) is bound to; `..E` written in a type is the application
+    /// `$expand<E>`, which becomes one member per element of the packs `E` uses when they are
+    /// bound (substituteTypeVars). `$lengths:...` is what an expansion becomes when the packs it
+    /// uses have different lengths, and stays so to be reported where the type is used.
+    static TypeCallType *makePack(std::span<Type *const> members);
+    static TypeCallType *makeExpand(Type *pattern);
+    static TypeCallType *makeLengthMismatch(const std::string &description);
+    static bool isPack(const Type *type);
+    static bool isExpand(const Type *type);
+    /// The members of a pack, or of nothing when `type` is not one.
+    static std::span<Type *const> packMembers(const Type *type);
 
     bool typeArguments() const override { return true; }
     std::string toString() const override;
@@ -113,42 +124,8 @@ class MatchTypeType final : public OtherType {
     std::vector<uint32_t> identityCounts_;
 };
 
-/// `..E` in a type position: `E` written once for each member of the pack variable named here.
-/// It is a type of its own while that pack is unbound, so the type-variable algebra descends
-/// through its body like any other type application; when the pack is bound, substitution
-/// replaces it by the tuple of one result per member, in binding order (see substituteTypeVars in
-/// typevar.h). A pack of one member therefore expands to a one-member tuple, not to its member:
-/// what a written `..E` denotes is a sequence of results, and how a parameter list reads a
-/// sequence is the declaration's business, not this node's.
-class TypePackType final : public OtherType {
-  public:
-    static TypeCode typeCode();
-    /// `..body`, over the pack variable `name`.
-    static TypePackType *create(std::string_view name, Type *body);
-
-    /// The pack variable this expansion ranges over.
-    const std::string &name() const { return *name_; }
-    /// The type expression written once per member.
-    Type *body() const { return params_[0]; }
-
-    bool typeArguments() const override { return true; }
-    std::string toString() const override;
-    std::string mangle() const override;
-    Type *clone(bool deep = false) const override;
-    bool equals(Type *type) const override;
-    bool assignableFrom(Type *sourceType) const override;
-    CastSafety castSafetyFrom(Type *sourceType) const override;
-    OtherType *cloneWithParams(std::span<Type *const> params) const override;
-
-  private:
-    TypePackType(const std::string *name, size_t paramCount, Type **params)
-        : OtherType(typeCode(), paramCount, params), name_(name) {}
-
-    const std::string *name_;
-};
-
-/// Whether a type computed from types (a primitive application, a `match type` or a pack
-/// expansion) occurs anywhere in `type`.
+/// Whether a type computed from types (a primitive application or a `match type`) occurs
+/// anywhere in `type`.
 bool containsTypeCall(Type *type);
 
 /// What stays unevaluated in `type` although its arguments are concrete, said for a diagnostic:

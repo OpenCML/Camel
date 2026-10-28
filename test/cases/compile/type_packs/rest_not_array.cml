@@ -1,0 +1,11 @@
+/// The `when` of a function with a body asks every member of the pack too.
+import { ElementOf, is_array } from types
+
+func firsts::<..A>(..xs: ..A): (..ElementOf<A>) when ..is_array::<A>() {
+    return ( static for j in indices xs => xs.[j][0] )
+}
+
+func main(): int sync {
+    println(firsts([1, 2], 3))
+    return 0
+}

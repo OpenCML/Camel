@@ -20,6 +20,24 @@
 
 namespace camel::parse::syntax {
 
+/// Whether the `(` at the current token is closed by a `)` that `=>` follows: a function type whose
+/// parameter list starts with a pack written out (`(..ParamsOf<F>) => R`), not a tuple of packs.
+bool ParserImpl::parenClosesBeforeArrow() const {
+    int depth = 0;
+    for (uint32_t n = 0; n < 512; ++n) {
+        const TK kind = peek(n);
+        if (kind == TK::Eof) {
+            return false;
+        }
+        if (kind == TK::LParen) {
+            ++depth;
+        } else if (kind == TK::RParen && --depth == 0) {
+            return peek(n + 1) == TK::FatArrow;
+        }
+    }
+    return false;
+}
+
 /// Whether a type can start at the `n`-th token from the current one. A modifier does not: `sync`
 /// is a property of a block, and a function type has none (design principles 3.3).
 bool ParserImpl::typeStartsAt(uint32_t n) const {
@@ -37,7 +55,7 @@ bool ParserImpl::typeStartsAt(uint32_t n) const {
     }
 }
 
-/// typeExpr : arrayType ('?' | '!' | '..')*
+/// typeExpr : '..' typeExpr | arrayType ('?' | '!' | '..')*
 /// A mark is `?` (may be null), `!` (may have failed) or `..` (the type is a stream). The marks
 /// are read left to right and each one wraps what is written before it, with no special case
 /// `T?..` is `(T?)..`, the stream of a nullable `T`, and
@@ -58,6 +76,13 @@ void ParserImpl::parseType() {
         return;
     }
     const size_t m = mark();
+    if (cur_ == TK::DotDot) {
+        // `..E`: a type pack expanded, one member for each member of the packs `E` uses (design
+        // principles 5.6). It is read where a type is, and the builder says where it may stand.
+        bump();
+        parseType();
+        return close(m, NK::PackType);
+    }
     parseArrayType();
     bool any    = false;
     bool stream = false;
@@ -282,6 +307,7 @@ void ParserImpl::parsePrimaryType() {
              (t1 == TK::RParen && peek(2) == TK::FatArrow) ||
              (t1 == TK::DotDot && peek(2) == TK::Identifier && peek(3) == TK::RParen &&
               peek(4) == TK::FatArrow) ||
+             (t1 == TK::DotDot && parenClosesBeforeArrow()) ||
              (t1 == TK::Comma && peek(2) == TK::RParen && peek(3) == TK::FatArrow))) {
             return parseFuncType();
         }
@@ -292,8 +318,10 @@ void ParserImpl::parsePrimaryType() {
             Scope scope(*this, false);
             if (cur_ != TK::RParen && cur_ != TK::Comma) {
                 const size_t lm = mark();
+                // `(..E)` is a tuple of the members `E` stands for, not a parenthesised type.
+                const bool pack = cur_ == TK::DotDot;
                 parseType();
-                if (cur_ == TK::RParen) {
+                if (cur_ == TK::RParen && !pack) {
                     parenthesized = true;
                 } else {
                     while (cur_ == TK::Comma && peek(1) != TK::RParen && !panic_) {

@@ -229,6 +229,7 @@ class Builder {
     Value visitSpecType(syntax::cst::SpecType context);
     Value visitRefType(syntax::cst::RefType context);
     Value visitTypeOfType(syntax::cst::TypeOfType context);
+    Value visitPackType(syntax::cst::PackType context);
     Value visitMatchTypeType(syntax::cst::MatchTypeType context);
     Value visitTypeArm(syntax::cst::TypeArm context);
     Value visitStructType(syntax::cst::StructType context);
@@ -236,7 +237,6 @@ class Builder {
     Value visitEnumPattern(syntax::cst::Pattern context, syntax::cst::IdentRef ref);
     Value visitTypeList(syntax::cst::TypeList context);
     Value visitTupleType(syntax::cst::TupleType context);
-    Value visitPackType(syntax::cst::PackType context);
     Value visitFuncType(syntax::cst::FuncType context);
     Value visitIdentDef(syntax::cst::IdentDef context);
     Value visitIdentRef(syntax::cst::IdentRef context);
