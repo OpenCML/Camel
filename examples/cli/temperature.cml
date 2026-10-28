@@ -25,7 +25,7 @@ func row(value: float, unit: string): string {
 // Prints `steps` rows, starting at `value` and going up by one degree per row.
 func main(value: float, unit: string, steps: int): int sync {
     let u = unit->trim->to_upper
-    let rows = 0..steps->map<(i: int): string => row(value + float(i), u)>
+    let rows = (0..steps)->map<(i: int): string => row(value + float(i), u)>
     println(rows->join<'\n'>)
     return 0
 }

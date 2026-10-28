@@ -27,7 +27,7 @@ func main(): int sync {
     seed(s)
 
     'Generating {} values (seed={})...'->format<n, s>->println
-    let arr = 0..n->shuffle<next_key()>
+    let arr = (0..n)->shuffle<next_key()>
 
     'First {} values (unsorted):'->format<m>->println
     arr[0:m]->println

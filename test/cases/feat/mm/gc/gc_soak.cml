@@ -16,7 +16,7 @@ type Rec = {
 func word(i: int, j: int): string { return 'w' + string(i) + '-' + string(j) }
 
 func window(i: int): Rec {
-    return { id: i, tag: 'step' + string(i), words: 0..48->map<(j: int): string => word(i, j)> }
+    return { id: i, tag: 'step' + string(i), words: (0..48)->map<(j: int): string => word(i, j)> }
 }
 
 func weight(r: Rec): int {
@@ -24,7 +24,7 @@ func weight(r: Rec): int {
 }
 
 func table(n: int): int[][] {
-    return 0..n->map<(i: int): int[] => [i, i + 1, i + 2, i + 3]>
+    return (0..n)->map<(i: int): int[] => [i, i + 1, i + 2, i + 3]>
 }
 
 func run(keep: int[][], prev: Rec, left: int, total: int): int {

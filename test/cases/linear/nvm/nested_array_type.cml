@@ -13,7 +13,7 @@ func second_row_head(u: float[][]): float {
 }
 
 func grid(n: int): int[][] {
-    return 0..n->map<(i: int): int[] => 0..n->map<(j: int): int => i * 10 + j>>
+    return (0..n)->map<(i: int): int[] => (0..n)->map<(j: int): int => i * 10 + j>>
 }
 
 func last(plane: int[][]): int {

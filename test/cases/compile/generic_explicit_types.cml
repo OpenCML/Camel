@@ -1,6 +1,6 @@
 func id::<T>(x: T): T { return x }
 with <n: int>
-func repeat::<T>(x: T): T[] { return 0..n->map<(i: int): T => x> }
+func repeat::<T>(x: T): T[] { return (0..n)->map<(i: int): T => x> }
 func empty::<T>(): T[] { let xs: T[] = []; return xs }
 func returned(): int[] { return empty() }
 func length(xs: int[]): int { return len(xs) }

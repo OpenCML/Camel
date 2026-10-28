@@ -4,7 +4,7 @@
  */
 
 func round(n: int, k: int): int {
-    return 0..n
+    return (0..n)
         ->map<(i: int): (int, int) => (i, i * k)>
         ->map<(p: (int, int)): int[] => [p.0, p.1, p.0 + p.1]>
         ->filter<(xs: int[]): bool => xs[2] % 3 != 0>

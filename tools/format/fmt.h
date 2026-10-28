@@ -792,7 +792,7 @@ class Formatter {
 
     std::any visitLinkExpr(cst::LinkExpr context);
 
-    std::any visitCompExpr(cst::CompExpr context);
+    std::any visitRangeExpr(cst::RangeExpr context);
 
     std::any visitAnnoExpr(cst::AnnoExpr context);
 

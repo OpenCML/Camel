@@ -114,10 +114,10 @@ func main(): int sync {
 
     // 200 elements with the largest first: the accumulator keeps element 0 while 200 reads go
     // through the view ring.
-    let many = 0..200->map<(i: int): (int, int) => (200 - i, i)>
+    let many = (0..200)->map<(i: int): (int, int) => (200 - i, i)>
     println(bestMany(many))
     println(identityMany(many))
-    let manyQ: Q[] = 0..200->map<(i: int): Q => { ok: i % 2 == 0, y: 200 - i }>
+    let manyQ: Q[] = (0..200)->map<(i: int): Q => { ok: i % 2 == 0, y: 200 - i }>
     println(bestManyQ(manyQ))
     return 0
 }

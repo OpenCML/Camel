@@ -10,6 +10,6 @@ func safe(a: int, b: int): int {
 func main(): int sync {
     println(safe(10, 0))
     println(safe(10, 5))
-    println(0..4->map<(b: int): int => safe(12, b)>)
+    println((0..4)->map<(b: int): int => safe(12, b)>)
     return 0
 }

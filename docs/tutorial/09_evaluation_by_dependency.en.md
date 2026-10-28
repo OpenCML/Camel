@@ -205,7 +205,7 @@ func collatz_steps(n: int, steps: int): int {
 
 // The start value in [lo, hi) with the longest sequence, as (start, steps).
 func longest_in(lo: int, hi: int): (int, int) {
-    return lo..hi->reduce<
+    return (lo..hi)->reduce<
         (best: (int, int), n: int): (int, int) => longer(best, (n, collatz_steps(n, 0))),
         (lo, 0)
     >
@@ -218,7 +218,7 @@ func longer(a: (int, int), b: (int, int)): (int, int) {
 func main(): int sync {
     // Eight independent blocks of 2000 start values; each block is one element of the map.
     let block = 2000
-    let results = 0..8->map<(i: int): (int, int) => longest_in(i * block + 1, (i + 1) * block + 1)>
+    let results = (0..8)->map<(i: int): (int, int) => longest_in(i * block + 1, (i + 1) * block + 1)>
 
     println(results)
     let best = results->reduce<longer, (1, 0)>

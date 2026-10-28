@@ -3936,7 +3936,7 @@ Value Builder::visitUnaryExpr(syn::Node context) {
 
 /*
 linkExpr
-    : compExpr ('->' compExpr)*
+    : annoExpr ('->' annoExpr)*
     ;
 */
 Value Builder::visitLinkExpr(cst::LinkExpr context) {
@@ -4019,12 +4019,12 @@ Value Builder::visitLinkExpr(cst::LinkExpr context) {
 }
 
 /*
-compExpr
-    : annoExpr ('..' annoExpr)*
+rangeExpr
+    : additiveExpr ('..' additiveExpr)*
     ;
 */
-Value Builder::visitCompExpr(cst::CompExpr context) {
-    ENTER("CompExpr");
+Value Builder::visitRangeExpr(cst::RangeExpr context) {
+    ENTER("RangeExpr");
     node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
     for (size_t i = 1; i < context->exprs().size(); i++) {
         string strOp        = context->child(i * 2 - 1)->text();
@@ -4048,7 +4048,7 @@ Value Builder::visitCompExpr(cst::CompExpr context) {
             });
         lhsNode = dataNode;
     }
-    LEAVE("CompExpr");
+    LEAVE("RangeExpr");
     return lhsNode;
 }
 
@@ -5383,8 +5383,8 @@ Value Builder::visitExpr(syn::Node context) {
         return visitUnaryExpr(context);
     case NK::LinkExpr:
         return visitLinkExpr(cst::LinkExpr(context));
-    case NK::CompExpr:
-        return visitCompExpr(cst::CompExpr(context));
+    case NK::RangeExpr:
+        return visitRangeExpr(cst::RangeExpr(context));
     case NK::AnnoExpr:
         return visitAnnoExpr(cst::AnnoExpr(context));
     case NK::AccessExpr:

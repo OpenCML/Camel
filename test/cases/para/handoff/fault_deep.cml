@@ -21,7 +21,7 @@ func risky(i: int): int {
 }
 
 func row(round: int): int[] {
-    return 0..16->map<(i: int): int => risky(i) + round>
+    return (0..16)->map<(i: int): int => risky(i) + round>
 }
 
 // Reads [1, 2, 3][k] after n levels: out of range for k >= 3, and the message names k.
@@ -35,18 +35,18 @@ func late(i: int): int {
 }
 
 func main(): int sync {
-    0..30->foreach<(round: int) => sync {
+    (0..30)->foreach<(round: int) => sync {
         let r = attempt(row)(round)
         let line = match r {
             case error e => e.message
             case v => 'no fault'
         }
         // a recursion to the same depth right after the fault, on whichever thread
-        let again = 0..16->map<(i: int): int => down(i + 40, 4)>
+        let again = (0..16)->map<(i: int): int => down(i + 40, 4)>
         if round % 10 == 0 then println(format<line, again[15]>('{} / {}'))
     }>
     println('before')
-    println(0..16->map<late>)
+    println((0..16)->map<late>)
     println('not reached')
     return 0
 }

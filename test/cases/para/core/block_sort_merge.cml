@@ -19,12 +19,12 @@ func main(): int sync {
 
     seed(s)
     'Generating {} shuffled integers...'->format<n>->println
-    let arr = 0..n->shuffle<next_key()>
+    let arr = (0..n)->shuffle<next_key()>
 
     'Sorting {} independent blocks with {} items each...'->format<blocks, block_size>->println
     let start = now()
 
-    let chunks = 0..blocks->map<(i: int): int[] => {
+    let chunks = (0..blocks)->map<(i: int): int[] => {
         let lo = i * block_size
         let hi = (i + 1) * block_size
         return sort_block(arr, lo, hi)

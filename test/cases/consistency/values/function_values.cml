@@ -20,6 +20,6 @@ func main(): int sync {
     println(add3(1))
     println(compose(add3, add10)(1))
     println(twice(twice(add3))(0))
-    println(0..5->map<twice(add10)>)
+    println((0..5)->map<twice(add10)>)
     return 0
 }

@@ -6,8 +6,8 @@
  */
 
 func main(): int sync {
-    let total = 0..2000->reduce<(acc: int, cur: int): int => (acc * 31 + cur) % 1000003, 7>
+    let total = (0..2000)->reduce<(acc: int, cur: int): int => (acc * 31 + cur) % 1000003, 7>
     println(total)
-    0..5->foreach<(i: int) => sync { println('step', i) }>
+    (0..5)->foreach<(i: int) => sync { println('step', i) }>
     return 0
 }

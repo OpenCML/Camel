@@ -14,6 +14,6 @@ func main(): int sync {
     println(scale<3>(7))
     println(7->scale<3>)
     println(7->scale<3>->clamp<0, 10>)
-    println((-2)..3->map<(x: int): int => x->scale<4>->clamp<-3, 3>>)
+    println(((-2)..3)->map<(x: int): int => x->scale<4>->clamp<-3, 3>>)
     return 0
 }

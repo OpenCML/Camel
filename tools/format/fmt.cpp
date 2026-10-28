@@ -1622,17 +1622,17 @@ any Formatter::visitUnaryExpr(syn::Node context) {
 
 /*
 linkExpr
-    : compExpr ('->' compExpr)*
+    : annoExpr ('->' annoExpr)*
     ;
 */
 any Formatter::visitLinkExpr(cst::LinkExpr context) { return formatBiOpsList(context, false); }
 
 /*
-compExpr
-    : annoExpr ('..' annoExpr)*
+rangeExpr
+    : additiveExpr ('..' additiveExpr)*
     ;
 */
-any Formatter::visitCompExpr(cst::CompExpr context) { return formatBiOpsList(context, false); }
+any Formatter::visitRangeExpr(cst::RangeExpr context) { return formatBiOpsList(context, false); }
 
 /*
 annoExpr
@@ -2187,7 +2187,7 @@ any Formatter::dispatch(syn::Node context) {
         return formatBiOpsList(context, true);
         CAMEL_FORMAT(NullableExpr)
         CAMEL_FORMAT(LinkExpr)
-        CAMEL_FORMAT(CompExpr)
+        CAMEL_FORMAT(RangeExpr)
         CAMEL_FORMAT(AnnoExpr)
         CAMEL_FORMAT(AccessExpr)
         CAMEL_FORMAT(Literal)

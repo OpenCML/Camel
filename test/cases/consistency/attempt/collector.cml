@@ -9,7 +9,7 @@
 import { get_env } from env
 
 func build(i: int, d: int): string[] {
-    let xs = 0..20->map<(x: int): string => format<x + i>('item {}')>
+    let xs = (0..20)->map<(x: int): string => format<x + i>('item {}')>
     let n = 100 / d
     return xs->map<(s: string): string => s + format<n>(' / {}')>
 }

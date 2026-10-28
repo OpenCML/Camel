@@ -5,7 +5,7 @@
 
 func main(): int sync {
     var total = 0
-    0..8->foreach<(x: int) => sync {
+    (0..8)->foreach<(x: int) => sync {
         total = total + 12 / (3 - x)
         println(total)
     }>

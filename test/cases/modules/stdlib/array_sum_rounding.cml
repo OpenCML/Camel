@@ -48,8 +48,8 @@ func sameBits(a: int[], b: int[]): bool {
 }
 
 func main(): int sync {
-    let a = 0..1026->map<(i: int) => if i == 0 then f32(16777216.0) else f32(1.0)>
-    let b = 0..4096
+    let a = (0..1026)->map<(i: int) => if i == 0 then f32(16777216.0) else f32(1.0)>
+    let b = (0..4096)
                 ->map<(i: int) => if i == 0 then f32(16777216.0)
                                   else if i % 2 == 0 then f32(1.0) else f32(0.5)>
 

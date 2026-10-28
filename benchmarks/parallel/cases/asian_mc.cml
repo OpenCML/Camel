@@ -7,7 +7,7 @@ func main(): int sync {
     let workers = 16
     let paths_per_worker = 5000
     let steps = 256
-    let prices = 0..workers
+    let prices = (0..workers)
         ->map<(i: int): float => asian_call_price(paths_per_worker, steps, 20260309 + i * 7919)>
     let total = prices->reduce<(acc: float, cur: float): float => acc + cur, 0.0>
     println(format<total>('Sum of worker prices = {:.6f}'))
