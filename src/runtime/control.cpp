@@ -12,6 +12,11 @@
 namespace camel::runtime {
 namespace {
 
+/// Removing one control edge can make the next one provable -- a target's own list is read again,
+/// and a walk stops at the nodes a boundary protects -- so one graph is swept until a sweep adds
+/// nothing. The count is a guard, not a budget: a graph settles in a couple of sweeps.
+constexpr size_t kMaxControlSweeps = 8;
+
 bool isBoundary(const GraphDraft &draft, gc_node_ref_t id) {
     const auto *h = draft.header(id);
     return !h || h->kind == GCNodeKind::Brch || h->kind == GCNodeKind::Join;
@@ -159,91 +164,129 @@ size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork) {
             protectedNode[id] || isBoundary(draft, id) || h->kind == GCNodeKind::Loop;
     }
     maxWork = std::min(maxWork, 8 * (slots + edges));
-    // Epochs avoid clearing graph-sized scratch arrays for every target. Mandatory value
-    // inputs seed the walk directly; CTRL inputs seed only their parents, so a control edge
-    // cannot prove itself. JOIN arm values are alternatives, never mandatory predecessors:
-    // a walk may reach a completed JOIN/LOOP as its endpoint but cannot walk through it.
+    // Epochs avoid clearing graph-sized scratch arrays for every target. Mandatory value inputs
+    // seed the walk directly; CTRL inputs seed only their parents, so a control edge cannot prove
+    // itself. JOIN arm values are alternatives, never mandatory predecessors: a walk may reach a
+    // completed JOIN/LOOP as its endpoint but cannot walk through it.
+    //
+    // The sweep runs twice, for two readings of the graph. The first is the value-path reduction the
+    // pass has always made. The second reads the sync edge as an ordering of its own: it is the edge
+    // a statement of a `sync` block waits through, and it carries "used" with that order, so the
+    // control edge the builder writes beside it says nothing more
+    // (docs/design/effects/edges.cn.md 1.5). The kinds that still read the control kind themselves
+    // keep theirs -- the GATE, whose wait it is, and the call, whose predecessors the inline splice
+    // hands to the body through it -- until those paths are on the sync edge too. An order edge
+    // proves nothing here: it orders without carrying "used", and a control edge is also how the
+    // runtime keeps its predecessor alive.
     std::vector<size_t> candidate(slots, 0), seen(slots, 0), redundant(slots, 0);
-    for (gc_node_ref_t target = 0; target < slots && maxWork; ++target) {
-        if (protectedNode[target] || draft.ctrlInputsOf(target).empty()) {
-            continue;
-        }
-        const bool hasValues =
-            !draft.normInputsOf(target).empty() || !draft.withInputsOf(target).empty();
-        if (!hasValues && draft.ctrlInputsOf(target).size() == 1) {
-            continue;
-        }
-        const size_t epoch = static_cast<size_t>(target) + 1;
-        std::vector<gc_node_ref_t> roots;
-        for (auto pred : draft.ctrlInputsOf(target)) {
-            if (candidate[pred] != epoch) {
-                candidate[pred] = epoch;
-                roots.push_back(pred);
-            }
-        }
-        size_t localWork = std::min<size_t>(256, maxWork);
-        std::vector<gc_node_ref_t> work;
-        const auto expand = [&](gc_node_ref_t node) {
-            if (protectedNode[node]) {
-                return;
-            }
-            for (auto inputs :
-                 {draft.normInputsOf(node), draft.withInputsOf(node), draft.ctrlInputsOf(node)}) {
-                for (auto pred : inputs) {
-                    if (!localWork) {
+    size_t epoch = 0;
+    const auto reduce = [&](bool readSync) {
+        for (size_t sweep = 0; sweep < kMaxControlSweeps && maxWork; ++sweep) {
+            const size_t removedBefore = removed;
+            for (gc_node_ref_t target = 0; target < slots && maxWork; ++target) {
+                if (protectedNode[target] || draft.ctrlInputsOf(target).empty()) {
+                    continue;
+                }
+                const auto *targetHeader = draft.header(target);
+                if (readSync && targetHeader != nullptr &&
+                    (targetHeader->kind == GCNodeKind::Gate ||
+                     targetHeader->kind == GCNodeKind::Func ||
+                     targetHeader->kind == GCNodeKind::Call)) {
+                    continue;
+                }
+                // A wait is given up only where the node waits for more than one thing: the lone
+                // control edge of a statement records what it waits for, and the change that stops
+                // writing the control kind beside a sync edge takes that one, not this one.
+                if (readSync && draft.ctrlInputsOf(target).size() < 2) {
+                    continue;
+                }
+                const bool hasValues =
+                    !draft.normInputsOf(target).empty() || !draft.withInputsOf(target).empty();
+                const bool hasSync = readSync && !draft.syncInputsOf(target).empty();
+                if (!hasValues && !hasSync && draft.ctrlInputsOf(target).size() == 1) {
+                    continue;
+                }
+                const size_t thisEpoch = ++epoch;
+                std::vector<gc_node_ref_t> roots;
+                for (auto pred : draft.ctrlInputsOf(target)) {
+                    if (candidate[pred] != thisEpoch) {
+                        candidate[pred] = thisEpoch;
+                        roots.push_back(pred);
+                    }
+                }
+                size_t localWork = std::min<size_t>(256, maxWork);
+                std::vector<gc_node_ref_t> work;
+                const auto push = [&](auto inputs) {
+                    for (auto pred : inputs) {
+                        if (!localWork) {
+                            return;
+                        }
+                        --localWork;
+                        --maxWork;
+                        work.push_back(pred);
+                    }
+                };
+                const auto expand = [&](gc_node_ref_t node) {
+                    if (protectedNode[node]) {
                         return;
                     }
-                    --localWork;
-                    --maxWork;
-                    work.push_back(pred);
+                    push(draft.normInputsOf(node));
+                    push(draft.withInputsOf(node));
+                    push(draft.ctrlInputsOf(node));
+                    if (readSync) {
+                        push(draft.syncInputsOf(node));
+                    }
+                };
+                push(draft.normInputsOf(target));
+                push(draft.withInputsOf(target));
+                if (readSync) {
+                    push(draft.syncInputsOf(target));
+                }
+                for (auto root : roots) {
+                    expand(root);
+                }
+                while (!work.empty()) {
+                    const auto node = work.back();
+                    work.pop_back();
+                    if (seen[node] == thisEpoch) {
+                        continue;
+                    }
+                    seen[node]    = thisEpoch;
+                    const auto *h = draft.header(node);
+                    const bool completedBoundary =
+                        h &&
+                        (h->kind == GCNodeKind::Join || h->kind == GCNodeKind::Loop);
+                    if (candidate[node] == thisEpoch &&
+                        (!protectedNode[node] || completedBoundary)) {
+                        redundant[node] = thisEpoch;
+                    }
+                    expand(node);
+                }
+                std::vector<gc_node_ref_t> keep;
+                for (auto root : roots) {
+                    if (redundant[root] != thisEpoch) {
+                        keep.push_back(root);
+                    }
+                }
+                // GATEs require a CTRL input even if a value path already orders them. With no
+                // value seed, an empty frontier instead indicates a malformed cycle; preserve
+                // diagnostics.
+                if (keep.empty() &&
+                    (draft.header(target)->kind == GCNodeKind::Gate || !hasValues)) {
+                    keep.push_back(roots.back());
+                }
+                if (keep.size() < draft.ctrlInputsOf(target).size()) {
+                    removed += draft.ctrlInputsOf(target).size() - keep.size();
+                    draft.setCtrlInputs(target, keep);
                 }
             }
-        };
-        for (auto inputs : {draft.normInputsOf(target), draft.withInputsOf(target)}) {
-            for (auto pred : inputs) {
-                if (!localWork) {
-                    break;
-                }
-                --localWork;
-                --maxWork;
-                work.push_back(pred);
+            if (removed == removedBefore) {
+                break;
             }
         }
-        for (auto root : roots) {
-            expand(root);
-        }
-        while (!work.empty()) {
-            const auto node = work.back();
-            work.pop_back();
-            if (seen[node] == epoch) {
-                continue;
-            }
-            seen[node]    = epoch;
-            const auto *h = draft.header(node);
-            const bool completedBoundary =
-                h &&
-                (h->kind == GCNodeKind::Join || h->kind == GCNodeKind::Loop);
-            if (candidate[node] == epoch && (!protectedNode[node] || completedBoundary)) {
-                redundant[node] = epoch;
-            }
-            expand(node);
-        }
-        std::vector<gc_node_ref_t> keep;
-        for (auto root : roots) {
-            if (redundant[root] != epoch) {
-                keep.push_back(root);
-            }
-        }
-        // GATEs require a CTRL input even if a value path already orders them. With no value
-        // seed, an empty frontier instead indicates a malformed cycle; preserve diagnostics.
-        if (keep.empty() && (draft.header(target)->kind == GCNodeKind::Gate || !hasValues)) {
-            keep.push_back(roots.back());
-        }
-        if (keep.size() < draft.ctrlInputsOf(target).size()) {
-            removed += draft.ctrlInputsOf(target).size() - keep.size();
-            draft.setCtrlInputs(target, keep);
-        }
-    }
+    };
+    reduce(false);
+    reduce(true);
     return removed;
 }
 
@@ -312,3 +355,4 @@ size_t reduceOrderDependencies(GraphDraft &draft, size_t maxWork) {
 }
 
 } // namespace camel::runtime
+

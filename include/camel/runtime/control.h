@@ -25,9 +25,12 @@ std::vector<gc_node_ref_t> controlFrontier(
 bool appendControlDependency(
     GraphDraft &draft, gc_node_ref_t predecessor, gc_node_ref_t user, size_t maxWork = 32);
 
-/// Removes CTRL edges implied by mandatory data/control paths. Branch boundaries and arm
+/// Removes CTRL edges implied by mandatory data paths, and the ones a `sync` block's chain already
+/// orders for the kinds that no longer read the control kind themselves. Branch boundaries and arm
 /// anchors are retained; JOIN/LOOP results may prove completion but their interiors are not
-/// traversed. Work is limited per target, per graph size, and by maxWork; zero disables analysis.
+/// traversed. One sweep can expose a proof the next one makes (a target's own list is read again),
+/// so a graph is swept until a sweep changes nothing. Work is limited per target, per graph size,
+/// and by maxWork; zero disables analysis.
 size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork = 250000);
 
 /// The transitive reduction over ORDER edges: an order edge A -> C goes away when a path of order
