@@ -1321,6 +1321,14 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
         synced_         = gct->synced();
         lastSyncedNode_ = {};
     }
+    // The block whose statements are built here: a block written inside a body is a block of its
+    // own, and a `return` in it gives its value, not the function's (design principles 7.3).
+    struct BlockScope {
+        const GCT::Node *&slot;
+        const GCT::Node *outer;
+        BlockScope(const GCT::Node *&s, const GCT::Node *block) : slot(s), outer(s) { slot = block; }
+        ~BlockScope() { slot = outer; }
+    } blockScope(currentBlock_, gct);
     registerGenericTemplates(gct);
     node_handle_t res{};
     // A statement in error is skipped and the following ones are still checked, so that one
@@ -1367,6 +1375,10 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
     // belong to in statementsAfterFail_ (nothing when the block has met no `fail` yet, or the
     // entry the last one opened).
     std::optional<size_t> afterFailEntry;
+    // Whether this block has met a `return` of its own. A `return` gives the value of the block it
+    // is written in (design principles 7.3), so a statement written after it in this block is never
+    // reached, and the block has nothing left for it to give.
+    bool returned = false;
     // A block that is itself a statement whose value nothing takes drops the value of its last
     // statement too.
     const bool valueDropped = gct == unusedStatement_ || droppedBodies_.contains(gct);
@@ -1375,6 +1387,16 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
         StatementState before(*this);
         try {
             const auto &child = gct->at(i);
+            // A statement written after the `return` of this block is never reached, and it is told
+            // so once, at the first one: the `return` before it gives the block's value, and no
+            // statement after it in the block has anything to add to that. Nothing after it is
+            // built either -- the block's value is already written, and a second `return` reaching
+            // the same exit is a graph no back end may be handed. A scope the lowering introduced
+            // (`gct->operands()`) is not a block of statements and has none.
+            if (returned && !gct->operands()) {
+                diags_->of(SemanticDiag::StatementAfterReturn).atOrigin(child->origin()).commit();
+                break;
+            }
             // Every statement but the last is one whose value nothing takes, and the last one
             // too when the block's value is dropped. The scopes the lowering introduced
             // (operands of a literal, the names of a declaration) have no statements; a sync
@@ -1405,6 +1427,10 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
                 result = visit(child);
             }
             unusedStatement_ = nullptr;
+            if (!gct->operands() && child->type() == GCT::NodeKind::EXIT &&
+                child->exitType() == ExitType::Return) {
+                returned = true;
+            }
             if (result.has_value() && result.type() == typeid(StaticTuple)) {
                 // A build-time tuple is the block's value only as a runtime tuple: a tail
                 // comprehension materializes here, and an unused one is held to the same
@@ -1466,8 +1492,6 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
         // it after the block's last expression (a `return` has already done this for the
         // graph's exit). Without this the chain of a block ending in a plain value was not
         // reachable from anything and the block's effects were dropped.
-        const bool returned =
-            gct->size() > 0 && gct->at(gct->size() - 1)->type() == GCT::NodeKind::EXIT;
         if (synced_ && !returned && res != nullptr && sameGraph(res, currGraph_) &&
             valueNeedsSyncEdge(res, lastSyncedNode_)) {
             node_handle_t gate = currGraph_->addGateNode(nodeTypeOf(res));

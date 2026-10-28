@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-294 diagnostics: 274 errors, 20 warnings. 15 carry a machine-applicable edit, 279 say why they carry none.
+295 diagnostics: 275 errors, 20 warnings. 15 carry a machine-applicable edit, 280 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -259,6 +259,7 @@ prints one entry.
 | `0x030001FD` | [SemanticDiag::NativeTypeNotProvided](#nativetypenotprovided) | Error | no |
 | `0x030001FE` | [SemanticDiag::TypeFunctionNotApplicable](#typefunctionnotapplicable) | Error | no |
 | `0x030001FF` | [SemanticDiag::ExtentNotADimension](#extentnotadimension) | Error | no |
+| `0x03000200` | [SemanticDiag::StatementAfterReturn](#statementafterreturn) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8442,6 +8443,42 @@ func run(x: f32[8]): int {
 func main(): int sync {
     let x: f32[8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
     return run(x as f32[8])
+}
+```
+
+### StatementAfterReturn
+
+`0x03000200` · Error · `SemanticDiag::StatementAfterReturn`
+
+**Fix**
+
+None: choice: the statement belongs before the 'return' or not at all, and which one is the intent
+
+**Message**
+
+```text
+This statement cannot run: the 'return' written before it gives the value of this block, so nothing after it in the block is reached.
+```
+
+**Help**
+
+```text
+A 'return e' is the value of the block it is written in -- a function body, a 'sync' block, or the arm of an 'if' or a 'match' -- and a statement written after it in that same block is never reached. Move the statement before the 'return', or delete it.
+```
+
+**Example** (`test/cases/compile/return_after/statement_after_return_sync.cml`, run as `camel -E short test/cases/compile/return_after/statement_after_return_sync.cml`)
+
+```camel
+func g(): int sync {
+    println('a')
+    return 2
+    println('b')
+    return 1
+}
+
+func main(): int sync {
+    println(g())
+    return 0
 }
 ```
 

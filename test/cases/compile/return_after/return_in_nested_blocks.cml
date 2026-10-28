@@ -1,0 +1,34 @@
+/**
+ * A `return` written in a block that is itself a statement gives that block's value, not the
+ * function's (design principles 7.3): `sync { return 1 }` in a `sync` body and `{ return 1 }` in a
+ * body are statements whose value is dropped, so the body goes on and its own `return` is what the
+ * function hands on. When such a block is the body's value, its `return` is that value.
+ */
+
+func after_sync_block(): int sync {
+    sync { return 1 }
+    return 2
+}
+
+func after_block(): int sync {
+    {
+        return 1
+    }
+    return 2
+}
+
+func only_sync_block(): int sync {
+    sync { return 1 }
+}
+
+func only_block(): int sync {
+    { return 1 }
+}
+
+func main(): int sync {
+    println(after_sync_block())
+    println(after_block())
+    println(only_sync_block())
+    println(only_block())
+    return 0
+}
