@@ -883,3 +883,4 @@ develop 上的 `787158b6f`、`c93b23046`、`2afc8aac5`、`066a1d1fb` 与 fsh-dev
 第 2、3、8、9、10 条确实已修，常量区间循环的值也对。
 
 **规矩**：提交信息只写这笔提交里代码与用例实际改了什么；合并进来的复核页文字不是改动，不写成已完成。发版说明照提交信息写，写错会直接传到用户那里。请把上面这些仍按待办处理，第 14 条最优先。
+19. **优化后的规范导出段错误**（ECOOP 语料，2019 个程序里 167 个段错误、8 个报错；决策者在 `3893201dd` 上复现）：`camel examples/functions/closures.cml std::opt std::jgir canonical=true` 退出 139。同一程序不优化的规范导出、版本 1 导出、`std::opt std::nvm` 执行都正常，所以崩溃在规范导出读优化后图的那一段，很可能与优化后留下的闭包或特化副本有关。清单见 `Camel-Archive/ECOOP2027/study/conformance/corpus_results.csv`（`opt_reason` 为 segmentation fault 的行）。归第 1 路，与第 13 条（导出带上 sync、order 边）一起改。验收：这 175 个程序的优化后规范导出全部成功，并能被 `std::jgir` 的读取方读回。
