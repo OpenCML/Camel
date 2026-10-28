@@ -88,6 +88,7 @@ FunctionType *Builder::signatureForArgumentContext(node_handle_t target, size_t 
         };
         FunctionType *same = nullptr;
         bool mixed         = false;
+        bool packSkipped   = false;
         for (const auto &[uri, resolver] : ops->resolvers()) {
             // A rule the module declares gives its parameters, a generic declaration too; a rule
             // whose signature is computed has none of its own (design principles 6.4: the
@@ -102,7 +103,10 @@ FunctionType *Builder::signatureForArgumentContext(node_handle_t target, size_t 
             // A rest parameter takes arguments of any types and is expanded at the call: it is
             // not a position an argument is held to a type at.
             if (fixed != nullptr && (fixed->hasRest() || fixed->hasWithRest())) {
-                fixed = nullptr;
+                // Its parameters are not a list of positions: the set has no one signature to
+                // name them by, whichever other form it has.
+                packSkipped = true;
+                fixed       = nullptr;
             }
             if (fixed == nullptr || fixed->withTypesCount() < withWritten) {
                 continue;
@@ -113,7 +117,7 @@ FunctionType *Builder::signatureForArgumentContext(node_handle_t target, size_t 
                 mixed = true;
             }
         }
-        if (same != nullptr && !mixed) {
+        if (same != nullptr && !mixed && !packSkipped) {
             return same;
         }
     }
