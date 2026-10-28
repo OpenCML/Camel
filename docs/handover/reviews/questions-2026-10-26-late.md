@@ -741,3 +741,23 @@ H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program
 - 求导规则里的浮点常量按操作数的宽度建（`floatGradientAtWidth`），`pow` 曾因此在 f32 上出错。
 - `uniform::<T>` 返回维数未定的 `T[..]`，参数是 `f32[?, ?]` 的调用处要写 `as f32[?, ?]`。
 - 改了标准库或签名后，用 `node scripts/stdlib-reference.mjs --write --camel <camel>` 重新生成 `docs/stdlib-reference.md`。
+
+**第 7 路的前奏缓存说明**（决策者这边的车道交最后一笔时列出）：
+- **现在每次运行都编译前奏**：`Context::checkPreludeDeclarations`（`src/core/context/context.cpp`）在一个上下文的第一个模块编译时，把 `stdlib/prelude.cml` 编到 `CompileStage::Declared`，`types` 是它唯一的依赖。别的标准库模块随导入付同样的解析、GCT、声明开销。
+- **开销**（`camel --time-phases`，只有一行 `println(1)` 的程序）：总计约 69 ms，编译 46 ms，其中：
+  - 前奏解析 2.6 ms；
+  - GCT 11.6 ms；
+  - **声明 29.9 ms**，主要在 `Builder::declareNativeOperator` 与随后的 `exportNativeOperators`：约 330 条声明逐条与同名的其他声明查重叠，带 `when` 的成对求值；
+  - 用户程序本身约 1.5 ms。
+
+  缓存要存下解析器与 `nativeRuleConditions_`（`when` 子句在声明单元的 GCT 里），或者直接恢复各组的状态。
+- **声明会动的全局状态**：
+  - 内建组（`OperatorGroup::addRule` 按 URI 与组发布到 `OperatorTable`）；
+  - `registerNativeType("prelude", "Error")`；
+  - 带 `#reads` 标签登记的泛型模板。
+
+  前奏必须在第一个用户模块的函数体建之前编完，因为用户模块构造时就取了内建组的引用，这些组对象是共享的；这也是 C++ 里还留着空的组的原因。
+- **两个陷阱**：
+  - 用例打印的图编号（`__g_N__`、`id(graph_of(p))`）随前奏占用的编号变化；缓存恢复时若不占这些编号，`graph.plan.toml` 的两处与示例 05、08 会再变一次。
+  - `registeredTypes` 的顺序跟着规则的发布顺序走，`rules.plan.toml` 里三处 `int`/`i32` 的顺序依赖它，缓存必须按稳定的顺序发布。
+- **验收**：一行程序的编译时间里，前奏部分接近零；`startup.cost` 转绿；上面两处编号与顺序不变。
