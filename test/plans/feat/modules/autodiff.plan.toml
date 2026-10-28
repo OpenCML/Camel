@@ -2595,6 +2595,17 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
+name = "math_erf.macro.nvm"
+desc = "Scalar erf and erfc pullbacks for float and f32: 2 / sqrt(pi) * exp(-x * x) at 0.5, negated for erfc."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/math_erf.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["erf=0.878783", "erfc=-0.878783", "erf32=0.879"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "grad_refuse_no_with"
 desc = "Refused at compile time with NotDifferentiable: the function has no `with` parameter."
 kind = "negative"
