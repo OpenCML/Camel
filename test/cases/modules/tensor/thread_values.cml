@@ -10,7 +10,8 @@
  * expected relation is exact equality, with no tolerance.
  */
 
-import { num_threads, randn, seed, sum, to_bytes } from tensor
+import { num_threads, sum, to_bytes } from tensor
+import { next_key, normal, seed } from random
 import { sha256 } from hash
 
 func main(expected: int): int sync {
@@ -19,8 +20,8 @@ func main(expected: int): int sync {
     }
 
     seed(20261023)
-    let x = randn([2048, 128], 0.0, 1.0)
-    let y = randn([128, 128], 0.0, 1.0)
+    let x = next_key()->normal::<f32><shape: [2048, 128]>
+    let y = next_key()->normal::<f32><shape: [128, 128]>
     let columns = sum<0>(x)
     let product = x @ y
     'reduction={}'->format<sha256(to_bytes(columns))>->println

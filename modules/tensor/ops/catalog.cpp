@@ -32,9 +32,6 @@ void declareResourcesAndDefinitions() {
     table.declareResources(
         "tensor",
         {
-            {"seed", externalAmbient("tensor:generator", AccessMode::Write)},
-            {"random", externalAmbient("tensor:generator", AccessMode::ReadModifyWrite)},
-            {"randn", externalAmbient("tensor:generator", AccessMode::ReadModifyWrite)},
             {"show", externalAmbient("stdout", AccessMode::Write)},
             {"load_npy", externalAmbient("fs", AccessMode::Read)},
             {"save_npy", externalAmbient("fs", AccessMode::ReadModifyWrite)},

@@ -8,13 +8,14 @@
  * not name.
  */
 
-import { reshape, randn } from tensor
+import { reshape } from tensor
+import { next_key, normal } from random
 import { export_model } from onnx
 import { get_env } from env
 
 func main(): int sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0])
-    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((t: float[..]): float[..] => t + randn([2, 2]), x)
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((t: float[..]): float[..] => t + next_key()->normal::<f32><shape: [2, 2]>, x)
     println('unreachable')
     return 0
 }

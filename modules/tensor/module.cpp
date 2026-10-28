@@ -66,7 +66,6 @@ constexpr std::string_view kDeclaredOperators[] = {
     "num_threads",
     "numel",
     "save_npy",
-    "seed",
     "set_num_threads",
     "shape",
     "show",

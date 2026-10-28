@@ -9,10 +9,8 @@
 // Uses synthetic data for pipeline validation.
 
 
-import {
-    argmax, concat, exp, log, max, ones, random, range, reshape, shape, sum,
-    transpose, zeros
-} from tensor
+import { argmax, concat, exp, log, max, ones, range, reshape, shape, sum, transpose, zeros } from tensor
+import { next_key, uniform } from random
 
 let num_classes = 10
 
@@ -70,7 +68,7 @@ func main(): int sync {
     let lr = 0.1
     let its = 300
 
-    let X = random([n_samples, n_features], 0.0, 1.0)
+    let X = next_key()->uniform::<f32><shape: [n_samples, n_features]> as f32[?, ?]
 
     let ones_col = ones::<f32>([n_samples, 1])
     let X_bias = concat<1>(X, ones_col)

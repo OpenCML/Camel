@@ -11,7 +11,7 @@ tags = ["feat", "modules", "showcase", "naive-in-expert-out"]
 
 [[tests]]
 name = "train_step.loss"
-desc = "Sixteen fixed-seed steps of the naive Transformer: the loss falls from 3.4656 to 1.5680, the same on std::nvm, std::fvm and std::jit."
+desc = "Sixteen fixed-seed steps of the naive Transformer: the loss falls from 3.4889 to 1.5522, the same on std::nvm, std::fvm and std::jit."
 case = "../../../../examples/models/naive-in-expert-out/train_step.cml"
 args = ["-t", "1", "${case}", "${backend}", "--arg", "bench=false", "--arg", "init_dir=", "--arg", "final_dir="]
 backends = ["nvm", "fvm", "jit"]
@@ -26,12 +26,12 @@ const init = Number(match(/naive init loss=([0-9.eE+-]+)/, out)[1])
 const found = [...out.matchAll(/naive step=[0-9]+ loss=([0-9.eE+-]+)/g)].map(m => Number(m[1]))
 assert(found.length === 16, `expected 16 step losses, got ${found.length}`)
 assert(found.every(Number.isFinite), 'a step loss is not finite')
-assert(approx(init, 3.465590829, 1e-5), `initial loss changed: ${init}`)
+assert(approx(init, 3.488922596, 1e-5), `initial loss changed: ${init}`)
 assert(approx(found[0], init, 1e-9), `the first step must evaluate the same loss: ${found[0]} vs ${init}`)
 assert(found[15] < found[0] - 1.0, `the loss did not fall: ${found[0]} -> ${found[15]}`)
-assert(approx(found[15], 1.710085423, 1e-5), `step 15 loss changed: ${found[15]}`)
+assert(approx(found[15], 1.693685889, 1e-5), `step 15 loss changed: ${found[15]}`)
 const final = Number(match(/naive final steps=16 loss=([0-9.eE+-]+)/, out)[1])
-assert(approx(final, 1.568042986, 1e-5), `final loss changed: ${final}`)
+assert(approx(final, 1.552196264, 1e-5), `final loss changed: ${final}`)
 }
 """
 timeout_ms = 60000

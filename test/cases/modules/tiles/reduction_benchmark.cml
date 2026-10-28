@@ -1,4 +1,5 @@
-import { exp, sum, random, seed } from tensor
+import { exp, sum } from tensor
+import { next_key, seed, uniform } from random
 import { benchmark } from tiles
 func rows(x: f32[..], b: f32[..]): f32[..] {
     return sum<1>(exp((x + b) * 0.5))
@@ -8,10 +9,10 @@ func row_affine(x: f32[..], b: f32[..]): f32[..] {
 }
 func main(): int sync {
     seed(112)
-    println(benchmark<rows>((random([4, 513], -1.0, 1.0), random([1, 513], -1.0, 1.0))))
-    println(benchmark<rows>((random([512, 1025], -1.0, 1.0), random([1, 1025], -1.0, 1.0))))
-    println(benchmark<rows>((random([4096, 65], -1.0, 1.0), random([1, 65], -1.0, 1.0))))
-    println(benchmark<row_affine>((random([512, 1025], -1.0, 1.0), random([1, 1025], -1.0, 1.0))))
-    println(benchmark<row_affine>((random([4096, 65], -1.0, 1.0), random([1, 65], -1.0, 1.0))))
+    println(benchmark<rows>(((next_key()->uniform::<f32><shape: [4, 513]> * 2.0 - 1.0), (next_key()->uniform::<f32><shape: [1, 513]> * 2.0 - 1.0))))
+    println(benchmark<rows>(((next_key()->uniform::<f32><shape: [512, 1025]> * 2.0 - 1.0), (next_key()->uniform::<f32><shape: [1, 1025]> * 2.0 - 1.0))))
+    println(benchmark<rows>(((next_key()->uniform::<f32><shape: [4096, 65]> * 2.0 - 1.0), (next_key()->uniform::<f32><shape: [1, 65]> * 2.0 - 1.0))))
+    println(benchmark<row_affine>(((next_key()->uniform::<f32><shape: [512, 1025]> * 2.0 - 1.0), (next_key()->uniform::<f32><shape: [1, 1025]> * 2.0 - 1.0))))
+    println(benchmark<row_affine>(((next_key()->uniform::<f32><shape: [4096, 65]> * 2.0 - 1.0), (next_key()->uniform::<f32><shape: [1, 65]> * 2.0 - 1.0))))
     return 0
 }

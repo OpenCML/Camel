@@ -35,19 +35,6 @@ export func full(shape: int[], value: number): float[..]
 /// @example eye::<f32>(2)
 export func eye::<T>(n: int): T[..] when is_numeric::<T>()
 
-// ---- random ----
-
-/// A tensor of `f32` values drawn uniformly from [low, high) with the given extents.
-/// @effect reads and advances the random generator
-/// @example random([2, 2], 0.0, 1.0)
-export func random(shape: int[], low: number, high: number): f32[..]
-
-/// A tensor of `f32` values drawn from the normal distribution with the given mean (0 by
-/// default) and standard deviation (1 by default), with the given extents.
-/// @effect reads and advances the random generator
-/// @example randn([2, 3])
-export func randn(shape: int[], mean?: number, std?: number): f32[..]
-
 // ---- elementwise ----
 
 /// a + b per element, with NumPy broadcasting: a scalar operand applies to every element, and

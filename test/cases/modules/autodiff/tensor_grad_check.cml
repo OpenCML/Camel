@@ -6,7 +6,8 @@
  */
 
 import { grad } from autodiff
-import { random, seed, sum, mean, max, min, exp, log, sqrt, rsqrt, sigmoid, tanh, relu, gelu, erf, abs, neg, maximum, minimum, where, softmax, log_softmax, layer_norm, matmul, linear, transpose, reshape, unsqueeze, permute, concat, pow, dim } from tensor
+import { sum, mean, max, min, exp, log, sqrt, rsqrt, sigmoid, tanh, relu, gelu, erf, abs, neg, maximum, minimum, where, softmax, log_softmax, layer_norm, matmul, linear, transpose, reshape, unsqueeze, permute, concat, pow, dim } from tensor
+import { next_key, seed, uniform } from random
 
 func check(name: string, f: <x: f32[..]> () => float, df: <x: f32[..]> () => f32[..], x: f32[..], v: f32[..]): int sync {
     let h = 0.001
@@ -92,15 +93,15 @@ func pieces(): float {
 }
 
 func main(): int sync {
-    seed(5)
-    let x = random([3, 4], -1.0, 1.0)
-    let v = random([3, 4], -1.0, 1.0)
-    let x4 = random([4], -1.0, 1.0)
-    let v4 = random([4], -1.0, 1.0)
-    let x45 = random([4, 5], -1.0, 1.0)
-    let v45 = random([4, 5], -1.0, 1.0)
-    let x5 = random([5], -1.0, 1.0)
-    let v5 = random([5], -1.0, 1.0)
+    seed(6)
+    let x = (next_key()->uniform::<f32><shape: [3, 4]> * 2.0 - 1.0)
+    let v = (next_key()->uniform::<f32><shape: [3, 4]> * 2.0 - 1.0)
+    let x4 = (next_key()->uniform::<f32><shape: [4]> * 2.0 - 1.0)
+    let v4 = (next_key()->uniform::<f32><shape: [4]> * 2.0 - 1.0)
+    let x45 = (next_key()->uniform::<f32><shape: [4, 5]> * 2.0 - 1.0)
+    let v45 = (next_key()->uniform::<f32><shape: [4, 5]> * 2.0 - 1.0)
+    let x5 = (next_key()->uniform::<f32><shape: [5]> * 2.0 - 1.0)
+    let v5 = (next_key()->uniform::<f32><shape: [5]> * 2.0 - 1.0)
     check("arith", arith, grad(arith), x, v)
     check("bcast_rhs", bcast_rhs, grad(bcast_rhs), x4, v4)
     check("powers", powers, grad(powers), x, v)

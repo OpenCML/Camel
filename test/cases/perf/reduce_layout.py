@@ -35,7 +35,7 @@ Modes
               The three sum_to pins are the f64 sums of the f32 gradient the probe returns: the
               probe declares `f32` and converts to f64 before the checksum's sum (the ruled
               reduction returns its element type, so summing the f32 values in f64 is spelled
-              out), which gives 80.390660226 / 15571443.036040597 / 80.390715818.  They were
+              out), which gives -121.360386491 / 73537.346552022 / -121.360349109 for the inputs the keyed draws of seed 11 make (80.390660226 / 15571443.036040597 / 80.390715818 for the old module generator).  They were
               pinned to the same values rounded once to f32 for a while (2026-10-26), when the
               checksum's own sum was the rounding one; the probe stopped doing that the same day,
               and the pins were not moved back.  The other four probes are integer-exact and did
@@ -91,49 +91,49 @@ PROBES = [
         "with": "b: f32[256]",
         "args": "x: f32[512, 256]",
         "body": "sum(x * b)",
-        "lets": ["let x: f32[512, 256] = randn([512, 256], 0.0, 1.0) "
+        "lets": ["let x: f32[512, 256] = next_key()->normal::<f32><shape: [512, 256]> "
                  "as f32[512, 256]",
-                 "let w0: f32[256] = randn([256], 0.0, 1.0) as f32[256]"],
+                 "let w0: f32[256] = next_key()->normal::<f32><shape: [256]> as f32[256]"],
         "calls": {"tensor:sum_to": 1},
         "note": "512x256 summed to [256]",
         "reference": "tensor:broadcast_like",
-        "check": "probe name=sum_to_leading reps=N check=80.390660226"
+        "check": "probe name=sum_to_leading reps=N check=-121.360386491"
     },
     {
         "name": "sum_to_trailing",
         "with": "s: f32[512, 1]",
         "args": "x: f32[512, 256]",
         "body": "sum(x / s)",
-        "lets": ["let x: f32[512, 256] = randn([512, 256], 0.0, 1.0) "
+        "lets": ["let x: f32[512, 256] = next_key()->normal::<f32><shape: [512, 256]> "
                  "as f32[512, 256]",
-                 "let w0: f32[512, 1] = randn([512, 1], 0.0, 1.0) "
+                 "let w0: f32[512, 1] = next_key()->normal::<f32><shape: [512, 1]> "
                  "as f32[512, 1]"],
         "calls": {"tensor:sum_to": 1},
         "note": "512x256 summed to [512,1] along the trailing axis",
         "reference": "tensor:broadcast_like",
-        "check": "probe name=sum_to_trailing reps=N check=15571443.036040597"
+        "check": "probe name=sum_to_trailing reps=N check=73537.346552022"
     },
     {
         "name": "sum_to_identity",
         "with": "b: f32[512, 256]",
         "args": "x: f32[512, 256]",
         "body": "sum(x * b)",
-        "lets": ["let x: f32[512, 256] = randn([512, 256], 0.0, 1.0) "
+        "lets": ["let x: f32[512, 256] = next_key()->normal::<f32><shape: [512, 256]> "
                  "as f32[512, 256]",
-                 "let w0: f32[512, 256] = randn([512, 256], 0.0, 1.0) "
+                 "let w0: f32[512, 256] = next_key()->normal::<f32><shape: [512, 256]> "
                  "as f32[512, 256]"],
         "calls": {"tensor:sum_to": 1},
         "alloc_per_call": 0.0,
         "note": "the floor: the call is the identity path",
         "reference": "tensor:broadcast_like",
-        "check": "probe name=sum_to_identity reps=N check=80.390715818"
+        "check": "probe name=sum_to_identity reps=N check=-121.360349109"
     },
     {
         "name": "expand_axis",
         "with": "w: f32[512, 256]",
         "args": "",
         "body": "sum(mean<-1, true>(w))",
-        "lets": ["let w0: f32[512, 256] = randn([512, 256], 0.0, 1.0) "
+        "lets": ["let w0: f32[512, 256] = next_key()->normal::<f32><shape: [512, 256]> "
                  "as f32[512, 256]"],
         "calls": {"tensor:expand_axis": 1, "tensor:mean_axis": 1},
         "note": "the mean's VJP spreads [512,1] back over [512,256]",
@@ -145,7 +145,7 @@ PROBES = [
         "with": "w: f32[16, 32, 16, 16]",
         "args": "",
         "body": "sum(permute<[0, 2, 1, 3]>(permute<[0, 2, 1, 3]>(w)))",
-        "lets": ["let w0: f32[16, 32, 16, 16] = randn([16, 32, 16, 16], 0.0, 1.0) "
+        "lets": ["let w0: f32[16, 32, 16, 16] = next_key()->normal::<f32><shape: [16, 32, 16, 16]> "
                  "as f32[16, 32, 16, 16]"],
         "calls": {"tensor:permute": 2, "tensor:permute_inverse": 2},
         "note": "split_heads and merge_heads, forward and back",
@@ -157,7 +157,7 @@ PROBES = [
         "with": "w: f32[16, 16, 32, 32]",
         "args": "",
         "body": "sum(transpose(w))",
-        "lets": ["let w0: f32[16, 16, 32, 32] = randn([16, 16, 32, 32], 0.0, 1.0) "
+        "lets": ["let w0: f32[16, 16, 32, 32] = next_key()->normal::<f32><shape: [16, 16, 32, 32]> "
                  "as f32[16, 16, 32, 32]"],
         "calls": {"tensor:transpose": 2},
         "note": "the attention product's right operand, forward and back",
@@ -169,7 +169,7 @@ PROBES = [
         "with": "w: f32[16, 16, 32, 32]",
         "args": "",
         "body": "sum(sum<-1, true>(w))",
-        "lets": ["let w0: f32[16, 16, 32, 32] = randn([16, 16, 32, 32], 0.0, 1.0) "
+        "lets": ["let w0: f32[16, 16, 32, 32] = next_key()->normal::<f32><shape: [16, 16, 32, 32]> "
                  "as f32[16, 16, 32, 32]"],
         "calls": {"tensor:sum_axis": 1},
         "note": "the softmax denominator",
@@ -178,7 +178,7 @@ PROBES = [
     },
 ]
 
-IMPORTS = "import { mean, permute, randn, seed, sum, transpose } from tensor"
+IMPORTS = "import { mean, permute, sum, transpose } from tensor\nimport { next_key, normal, seed } from random"
 
 
 def program(probe: dict, reps: int) -> str:

@@ -1,4 +1,5 @@
-import { reshape, random, seed, exp, relu, sum, abs } from tensor
+import { reshape, exp, relu, sum, abs } from tensor
+import { next_key, seed, uniform } from random
 import { inspect, run_preferred_resident, download } from tiles
 func pipeline(x: f32[..], b: f32[..]): f32[..] {
     return exp(relu((x + b) * 0.5 - 0.25))
@@ -9,8 +10,8 @@ func fork(x: f32[..], b: f32[..]): f32[..] {
 }
 func main(): int sync {
     seed(35)
-    let x = random([7, 259], -1.0, 1.0)
-    let b = random([1, 259], -1.0, 1.0)
+    let x = (next_key()->uniform::<f32><shape: [7, 259]> * 2.0 - 1.0)
+    let b = (next_key()->uniform::<f32><shape: [1, 259]> * 2.0 - 1.0)
     println(inspect<pipeline>((x, b)))
     println(sum(abs(download(run_preferred_resident<pipeline>((x, b))) - pipeline(x, b))))
     println(inspect<fork>((x, b)))

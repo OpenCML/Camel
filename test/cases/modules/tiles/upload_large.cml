@@ -1,9 +1,10 @@
-import { random, seed, sum, abs } from tensor
+import { sum, abs } from tensor
+import { next_key, seed, uniform } from random
 import { run_preferred_resident, download } from tiles
 func twice(x: f32[..]): f32[..] { return x + x }
 func main(): int sync {
     seed(73)
-    let x = random([8388736], -1.0, 1.0)
+    let x = (next_key()->uniform::<f32><shape: [8388736]> * 2.0 - 1.0)
     let expected = twice(x)
     println(sum(abs(download(run_preferred_resident<twice>(x)) - expected)))
     println(sum(abs(download(run_preferred_resident<twice>(x)) - expected)))

@@ -1376,7 +1376,7 @@ leaf of `tree` at a leaf of the reference is a tuple of the same length.
 ## `tensor`: multi-dimensional numeric arrays
 
 The `tensor` module: multi-dimensional numeric arrays, their element type and extents, their
-binary form, a NumPy file, and the module's worker threads and random generator.
+binary form, a NumPy file, and the module's worker threads.
 
 The declarations written here are the operators whose signature is fixed. The ones whose element
 type or shape follows their arguments — elementwise arithmetic, the reshaping operators, the
@@ -1432,31 +1432,6 @@ The n by n identity matrix; the element type is the call's, as for `zeros`.
 
 - Pure.
 - Example: `eye::<f32>(2)`
-
-### Random
-
-#### `random`
-
-```camel
-random: (shape: int[], low: number, high: number) => f32[..]
-```
-
-A tensor of `f32` values drawn uniformly from [low, high) with the given extents.
-
-- With effects: reads and advances the random generator.
-- Example: `random([2, 2], 0.0, 1.0)`
-
-#### `randn`
-
-```camel
-randn: (shape: int[], mean?: number, std?: number) => f32[..]
-```
-
-A tensor of `f32` values drawn from the normal distribution with the given mean (0 by
-default) and standard deviation (1 by default), with the given extents.
-
-- With effects: reads and advances the random generator.
-- Example: `randn([2, 3])`
 
 ### Elementwise
 
@@ -2180,18 +2155,6 @@ CBLAS, otherwise the canonical kernel's name, which is what the path forwards to
 
 - Pure.
 - Example: `gemm_library()`
-
-#### `seed`
-
-```camel
-seed: (seed: int) => void
-seed: (seed: i32) => void
-```
-
-Reseeds the module's random generator, which `random` and `randn` draw from.
-
-- With effects: writes the random generator.
-- Example: `seed(42)`
 
 <a id="types"></a>
 

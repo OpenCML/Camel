@@ -2,7 +2,8 @@
  * Linear-regression training loop used to exercise tensor algebra, gradient updates, and mutable-weight iteration.
  */
 
-import { concat, ones, random, shape, sum, transpose, zeros } from tensor
+import { concat, ones, shape, sum, transpose, zeros } from tensor
+import { next_key, uniform } from random
 
 func mean_squared_error(y_pred: f32[?, ?], y_true: f32[?, ?]): float {
     let residuals = y_pred - y_true
@@ -57,7 +58,7 @@ func main(): int sync {
     let num_samples = 4
     let num_features = 2
 
-    let X = random([num_samples, num_features], 0.0, 10.0)
+    let X = (next_key()->uniform::<f32><shape: [num_samples, num_features]> * 10.0) as f32[?, ?]
     let y = ones::<f32>([num_samples, 1])
     var w = zeros::<f32>([num_features + 1, 1]) // +1 for bias term
 
