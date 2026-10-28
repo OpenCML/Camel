@@ -37,8 +37,8 @@ func step(body: <m: M> () => float, m: M): f32[3] sync {
 
 func main(): int sync {
     let m = {
-        p0: reshape([0.5, 0.25, 2.0] as f32[], [3]),
-        x: reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3]),
+        p0: reshape<[3]>([0.5, 0.25, 2.0] as f32[]),
+        x: reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]),
     }
     let gradient = step(loss, m)
     println("gradient {}"->format<gradient>)

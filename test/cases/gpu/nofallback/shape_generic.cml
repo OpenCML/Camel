@@ -12,6 +12,6 @@ func square(x: f32[..]): f32[..] {
 }
 
 func main() {
-    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println(sum(download(run_preferred_resident<square>(x))))
 }

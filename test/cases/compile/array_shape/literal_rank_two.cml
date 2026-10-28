@@ -8,7 +8,7 @@ func main(): int sync {
     let b: f32[2, 2] = [[1.0, 2.0], [3.0, 4.0]]
     println(shape(b))
     println(numel(b))
-    println(dim(b, 0))
-    println(dim(b, 1))
+    println(dim<0>(b))
+    println(dim<1>(b))
     return 0
 }

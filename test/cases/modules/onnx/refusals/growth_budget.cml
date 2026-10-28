@@ -13,6 +13,6 @@ func double(t: float[..]): float[..] {
 }
 
 func main(): int sync {
-    let _ = export_model<out: 'tmp/test/onnx/refusal_growth_budget.onnx'>(double, reshape([1.0, 2.0], [2]))
+    let _ = export_model<out: 'tmp/test/onnx/refusal_growth_budget.onnx'>(double, reshape<[2]>([1.0, 2.0]))
     return 0
 }

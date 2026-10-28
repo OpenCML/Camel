@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "camel/runtime/writings.h"
+#include "camel/runtime/operator_instance.h"
 #include "camel/runtime/reachable.h"
 
 #include "camel/core/operator_table.h"
@@ -1497,8 +1498,9 @@ bool DraftWritings::matchFrom(
                     p.oper) {
                 return false;
             }
-            const auto inputs = draft_.normInputsOf(candidate);
-            if (inputs.size() != p.args.size() || !draft_.withInputsOf(candidate).empty()) {
+            const KernelArguments arguments = kernelArgumentsOf(draft_, candidate);
+            const auto &inputs              = arguments.norm;
+            if (inputs.size() != p.args.size() || !arguments.with.empty()) {
                 return false;
             }
             if (swapped && (inputs.size() != 2 || !declaredCommutative(p.oper, h->dataType))) {
@@ -2328,12 +2330,13 @@ RuleMiss DraftWritings::whyNot(const Rule &rule, gc_node_ref_t node) {
                 return std::format(
                     "{} is {}, which no rewrite may read", where, nodeText(draft_, at));
             }
-            const auto inputs = draft_.normInputsOf(at);
-            if (inputs.size() != p.args.size() || !draft_.withInputsOf(at).empty()) {
+            const KernelArguments arguments = kernelArgumentsOf(draft_, at);
+            const auto &inputs              = arguments.norm;
+            if (inputs.size() != p.args.size() || !arguments.with.empty()) {
                 return std::format(
                     "{} is {}: it has {} value input(s){} where the pattern writes {} operand(s)",
                     where, nodeText(draft_, at), inputs.size(),
-                    draft_.withInputsOf(at).empty() ? "" : " and with-inputs", p.args.size());
+                    arguments.with.empty() ? "" : " and with-inputs", p.args.size());
             }
             const auto attempt =
                 [&](bool swapped, Binds &trial) -> std::optional<std::string> {

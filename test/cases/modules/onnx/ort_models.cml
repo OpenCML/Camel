@@ -22,12 +22,12 @@ func gate(t: f32[..]): f32[..] {
 func forward(x: f32[..], w: f32[..]): f32[..] {
     let n = shape(x)[0]
     let h = zeros::<f32>([n, shape(w)[1]]) + x @ w
-    return reshape(h, [n * shape(w)[1]])
+    return reshape<[n * shape(w)[1]]>(h)
 }
 
 func main(): int sync {
 let x = load_npy::<f32>(get_env('X') ?? '')
-    let w = reshape([1.0, 0.0, 2.0, 0.0, 1.0, -1.0] as f32[], [2, 3])
+    let w = reshape<[2, 3]>([1.0, 0.0, 2.0, 0.0, 1.0, -1.0] as f32[])
     let isGate = (get_env('MODEL') ?? '') == 'gate'
     let y = if isGate then gate(x) else forward(x, w)
     save_npy(y, get_env('Y') ?? '')

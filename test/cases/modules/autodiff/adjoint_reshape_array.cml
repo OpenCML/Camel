@@ -26,14 +26,14 @@ type Model = { w: float }
 with <m: Model>
 func loss(): float {
     let a = [m.w * 2.0, m.w * 3.0]
-    let t = reshape(a, [2])
+    let t = reshape<[2]>(a)
     return float(sum(t))
 }
 
 with <w: float[]>
 func weighted_reshape(): float {
-    let s = reshape(w, [2, 2])
-    let c = reshape([2.0, 3.0, 5.0, 7.0] as f64[], [2, 2])
+    let s = reshape<[2, 2]>(w)
+    let c = reshape<[2, 2]>([2.0, 3.0, 5.0, 7.0] as f64[])
     return float(sum(s * c))
 }
 

@@ -186,7 +186,7 @@ export func erf(t: float[..]): float[..]
 /// The elements in row-major order, in a new shape; one extent may be -1, which the element
 /// count fills.
 /// @pure
-/// @example reshape(new([1.0, 2.0, 3.0, 4.0]), [2, 2])
+/// @example reshape<[2, 2]>(new([1.0, 2.0, 3.0, 4.0]))
 export func reshape(t: float[..] | number[], shape: int[]): float[..]
 
 /// The elements in row-major order in two axes: the extents before axis multiplied into the
@@ -197,7 +197,7 @@ export func flatten(t: float[..], axis?: int): float[..]
 
 /// The elements unchanged, with an axis of extent 1 added at axis.
 /// @pure
-/// @example unsqueeze(new([1.0, 2.0]), 0)    // shape [1, 2]
+/// @example unsqueeze<0>(new([1.0, 2.0]))    // shape [1, 2]
 export func unsqueeze(t: float[..], axis: int): float[..]
 
 /// The last two axes swapped (a vector becomes a column, a matrix its transpose).
@@ -207,12 +207,12 @@ export func transpose(t: float[..]): float[..]
 
 /// The axes reordered as perm lists them.
 /// @pure
-/// @example permute(new([[1.0, 2.0], [3.0, 4.0]]), [1, 0])
+/// @example permute<[1, 0]>(new([[1.0, 2.0], [3.0, 4.0]]))
 export func permute(t: float[..], perm: int[]): float[..]
 
 /// a and b joined along axis; every other extent must agree.
 /// @pure
-/// @example concat(new([[1.0]]), new([[2.0]]), 0)    // shape [2, 1]
+/// @example concat<0>(new([[1.0]]), new([[2.0]]))    // shape [2, 1]
 export func concat(a: float[..] | number[], b: float[..] | number[], axis: int): float[..]
 
 /// The entries of the first axis that indices name, in that order.
@@ -246,7 +246,7 @@ export func sum::<T>(t: T[..]): T
 /// The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis with extent 1.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
-/// @example sum(new([[1.0, 2.0], [3.0, 4.0]]), 0)    // [4.0, 6.0]
+/// @example sum<0>(new([[1.0, 2.0], [3.0, 4.0]]))    // [4.0, 6.0]
 #op('tensor:sum_axis')
 export func sum(t: float[..], axis: int, keepdims?: bool): float[..]
 
@@ -264,7 +264,7 @@ export func mean::<T>(t: T[..]): T
 /// The same mean over one axis; keepdims keeps the axis with extent 1.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `DivisionByZero` when the axis is empty
-/// @example mean(new([[1.0, 2.0], [3.0, 4.0]]), 1)    // [1.5, 3.5]
+/// @example mean<1>(new([[1.0, 2.0], [3.0, 4.0]]))    // [1.5, 3.5]
 #op('tensor:mean_axis')
 export func mean(t: float[..], axis: int, keepdims?: bool): float[..]
 
@@ -272,7 +272,7 @@ export func mean(t: float[..], axis: int, keepdims?: bool): float[..]
 /// the same bits); keepdims keeps the axis with extent 1.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
-/// @example max(new([[1.0, 2.0], [3.0, 4.0]]), 0)    // [3.0, 4.0]
+/// @example max<0>(new([[1.0, 2.0], [3.0, 4.0]]))    // [3.0, 4.0]
 #op('tensor:max_axis')
 export func max(t: float[..], axis: int, keepdims?: bool): float[..]
 
@@ -280,7 +280,7 @@ export func max(t: float[..], axis: int, keepdims?: bool): float[..]
 /// axis with extent 1.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
-/// @example min(new([[1.0, 2.0], [3.0, 4.0]]), 1)    // [1.0, 3.0]
+/// @example min<1>(new([[1.0, 2.0], [3.0, 4.0]]))    // [1.0, 3.0]
 #op('tensor:min_axis')
 export func min(t: float[..], axis: int, keepdims?: bool): float[..]
 
@@ -288,7 +288,7 @@ export func min(t: float[..], axis: int, keepdims?: bool): float[..]
 /// NaN if there is one, +0 above -0, the earlier position on a tie.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
-/// @example argmax(new([[1.0, 2.0], [3.0, 4.0]]), 1)    // [1, 1]
+/// @example argmax<1>(new([[1.0, 2.0], [3.0, 4.0]]))    // [1, 1]
 #op('tensor:argmax_axis')
 export func argmax(t: float[..], axis: int, keepdims?: bool): int64[..]
 
@@ -296,7 +296,7 @@ export func argmax(t: float[..], axis: int, keepdims?: bool): int64[..]
 /// NaN if there is one, -0 below +0, the earlier position on a tie.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
-/// @example argmin(new([[1.0, 2.0], [3.0, 4.0]]), 0)    // [0, 0]
+/// @example argmin<0>(new([[1.0, 2.0], [3.0, 4.0]]))    // [0, 0]
 #op('tensor:argmin_axis')
 export func argmin(t: float[..], axis: int, keepdims?: bool): int64[..]
 

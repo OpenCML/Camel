@@ -1,20 +1,20 @@
 import { random, seed, exp, sum, mean, max, sqrt, abs, reshape } from tensor
 import { inspect, run_preferred_resident, download } from tiles
 func softmax(x: f32[..]): f32[..] {
-    let e = exp(x - max(x, 1, true))
-    return e / sum(e, 1, true)
+    let e = exp(x - max<1, true>(x))
+    return e / sum<1, true>(e)
 }
 func normalize(x: f32[..], scale: f32[..], bias: f32[..]): f32[..] {
-    let centered = x - mean(x, 1, true)
-    let variance = mean(centered * centered, 1, true)
+    let centered = x - mean<1, true>(x)
+    let variance = mean<1, true>(centered * centered)
     return centered / sqrt(variance + 0.00001) * scale + bias
 }
 func reused(x: f32[..]): f32[..] {
-    let centered = x - mean(x, 1, true)
+    let centered = x - mean<1, true>(x)
     return centered + centered * centered
 }
 func ordered_fallback(x: f32[..]): f32[..] {
-    return x * 0.0 + sum(x, 1, true)
+    return x * 0.0 + sum<1, true>(x)
 }
 func main(): int sync {
     seed(161)
@@ -35,7 +35,7 @@ func main(): int sync {
     println(sum(abs(download(run_preferred_resident<softmax>(narrow)) - softmax(narrow))))
     let wide = random([2,2049], -1.0, 1.0)
     println(sum(abs(download(run_preferred_resident<reused>(wide)) - reused(wide))))
-    let cancellation = reshape([1267650600228229401496703205376.0, 1.0, -1267650600228229401496703205376.0, 1.0] as f32[], [1,4])
+    let cancellation = reshape<[1,4]>([1267650600228229401496703205376.0, 1.0, -1267650600228229401496703205376.0, 1.0] as f32[])
     println(sum(download(run_preferred_resident<ordered_fallback>(cancellation))))
     println(sum(abs(download(run_preferred_resident<ordered_fallback>(cancellation)) - ordered_fallback(cancellation))))
     return 0

@@ -6,7 +6,7 @@ import { new, concat, sum, shape } from tensor
 // does not move -- are the same here. The two cases are read together by the `bounded` entries of
 // test/plans/feat/opt/generic.plan.toml.
 func grow(i: int, n: int, acc: f64[..]): f64[..] {
-    return if i >= n then acc else grow(i + 1, n, concat(acc, new([[1.0, 2.0]]), 0))
+    return if i >= n then acc else grow(i + 1, n, concat<0>(acc, new([[1.0, 2.0]])))
 }
 
 func main(): int sync {

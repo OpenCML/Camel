@@ -21,7 +21,7 @@ func main(expected: int): int sync {
     seed(20261023)
     let x = randn([2048, 128], 0.0, 1.0)
     let y = randn([128, 128], 0.0, 1.0)
-    let columns = sum(x, 0)
+    let columns = sum<0>(x)
     let product = x @ y
     'reduction={}'->format<sha256(to_bytes(columns))>->println
     'product={}'->format<sha256(to_bytes(product))>->println

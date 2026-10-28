@@ -2,6 +2,6 @@ import { max } from array
 import { reshape } from tensor
 
 func main(): int sync {
-    println(reshape([] as float[], [0, 2])->max<0>)
+    println(reshape<[0, 2]>([] as float[])->max<0>)
     return 0
 }

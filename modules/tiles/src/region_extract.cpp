@@ -10,6 +10,7 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/loop.h"
+#include "camel/runtime/operator_instance.h"
 #include "tiles/internal/graph_values.h"
 #include "tiles/internal/regions.h"
 #include <optional>
@@ -190,7 +191,7 @@ RegionDraft extractRegion(const rt::GCGraph &source, const Segment &region) {
         // graph does not copy them: a region holds the code, not the place in a chain, and the
         // call node the pass writes where the member was takes that place (docs/design/gpu/plan.cn.md 2.5).
         require(
-            node->kind == rt::GCNodeKind::Loop || source.withInputsOf(ref).empty(),
+            node->kind == rt::GCNodeKind::Loop || rt::kernelArgumentsOf(source, ref).with.empty(),
             "context arguments in region");
         std::vector<rt::gc_node_ref_t> inputs;
         for (auto input : source.normInputsOf(ref))

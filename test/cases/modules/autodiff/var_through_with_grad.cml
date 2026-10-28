@@ -18,8 +18,8 @@ func loss(x: f64[..], var cnt: int): float sync {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0], [2])
-    let m = { p0: reshape([0.5, 0.25], [2]) }
+    let x = reshape<[2]>([1.0, 2.0])
+    let m = { p0: reshape<[2]>([0.5, 0.25]) }
     var cnt = 0
     let a = loss<m>(x, cnt)
     println("plain call: value {} cnt {}"->format<a, cnt>)

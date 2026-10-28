@@ -27,12 +27,12 @@ func model(w: f32[..], x: f32[..]): (f32[..], int, float[..], f32[..]) {
     let m = { w: w }
     let (h, k) = walk<m>(x, 0)
     let g = with_grad(loss)<m>(x)
-    return (h, k, reshape([g.0], [1]), g.1.w)
+    return (h, k, reshape<[1]>([g.0]), g.1.w)
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
-    let w = reshape([0.5, -0.25, 0.1, 0.3] as f32[], [2, 2])
+    let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as f32[])
+    let w = reshape<[2, 2]>([0.5, -0.25, 0.1, 0.3] as f32[])
     let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((w: f32[..], x: f32[..]): (f32[..], int, float[..], f32[..]) => model(w, x), (w, x))
     println('exported')
     return 0

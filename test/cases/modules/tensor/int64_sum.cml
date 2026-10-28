@@ -4,13 +4,13 @@
 import { reshape, sum, mean } from tensor
 
 func main(): int sync {
-    let big = reshape([9007199254740993, 1, 1], [3])
-    let wrap = reshape([9223372036854775807, 1, 5, -5], [2, 2])
+    let big = reshape<[3]>([9007199254740993, 1, 1])
+    let wrap = reshape<[2, 2]>([9223372036854775807, 1, 5, -5])
     println(sum(big))
     println(mean(big))
-    println(sum(big, 0))
-    println(sum(wrap, 0))
+    println(sum<0>(big))
+    println(sum<0>(wrap))
     println(sum(wrap))
-    println(mean(wrap, 0))
+    println(mean<0>(wrap))
     return 0
 }

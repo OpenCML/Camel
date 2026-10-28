@@ -75,19 +75,19 @@ type Model = {
 
 // RMSNorm over the last axis.  The epsilon is the usual one, not a numerical trick.
 func rmsnorm(x: TokenStates, gain: f32[64]): TokenStates {
-    let scale = mean(x * x, -1, true)
+    let scale = mean<-1, true>(x * x)
     return x / tensor_sqrt(scale + 1e-6) * gain
 }
 
 /// [B, S, D] -> [B, H, S, D / H]: head i owns the feature columns [i * Dh, (i + 1) * Dh).
 func split_heads(t: TokenStates): HeadStates {
-    return permute(reshape(t, [batch, sequence, n_heads, d_head]), [0, 2, 1, 3])
+    return permute<[0, 2, 1, 3]>(reshape<[batch, sequence, n_heads, d_head]>(t))
         as HeadStates
 }
 
 /// [B, H, S, Dh] -> [B, S, H * Dh].
 func merge_heads(t: HeadStates): TokenStates {
-    return reshape(permute(t, [0, 2, 1, 3]), [batch, sequence, d_model])
+    return reshape<[batch, sequence, d_model]>(permute<[0, 2, 1, 3]>(t))
         as TokenStates
 }
 
@@ -100,7 +100,7 @@ func block_forward(b: Block, x: TokenStates): TokenStates {
     let v = split_heads(h @ b.wv)
     // The scale is 1 / sqrt(d_head), not a literal chosen for one width.
     let scores: Scores = (q @ transpose(k)) / attention_scale
-    let p = exp(scores) / sum(exp(scores), -1, true)
+    let p = exp(scores) / sum<-1, true>(exp(scores))
     let attended = merge_heads(p @ v) @ b.wo
     let y = x + attended
     let f: FeedForward = gelu(rmsnorm(y, b.norm2) @ b.w1 + b.b1)
@@ -119,14 +119,13 @@ func logits(m: Model, x: TokenStates): Logits {
 with <m: Model>
 func loss(x: TokenStates, labels: i64[8, 16]): float {
     let z = logits(m, x)
-    let p = exp(z) / sum(exp(z), -1, true)
+    let p = exp(z) / sum<-1, true>(exp(z))
     // one_hot reads a rank-1 index tensor, so flatten the labels and restore the position grid.
-    let oh = reshape(one_hot(reshape(labels, [batch * sequence]), vocab),
-                     [batch, sequence, vocab])
+    let oh = reshape<[batch, sequence, vocab]>(one_hot(reshape<[batch * sequence]>(labels), vocab))
     // `oh` is int64 and `p` is f32: the product's numeric promotion gives f32.  There is no dtype
     // conversion written as a type (`f32(oh)` and `oh as f32[...]` are both refused), so this is
     // the typed form available today; no stringly `cast` is needed.
-    let picked = sum(log(p) * oh, -1)
+    let picked = sum<-1>(log(p) * oh)
     return -float(mean(picked))
 }
 
@@ -175,7 +174,7 @@ func main(bench: bool, init_dir: string, final_dir: string): int sync {
     seed(42)
     let model = init_model()
     let x: TokenStates = randn([batch, sequence, d_model], 0.0, 1.0) as TokenStates
-    let labels: i64[8, 16] = argmax(slice(x, 2, 0, vocab), -1)
+    let labels: i64[8, 16] = argmax<-1>(slice(x, 2, 0, vocab))
 
     if init_dir != '' then {
         save_params({ model: model, x: x, labels: labels }, init_dir)

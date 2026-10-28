@@ -7,7 +7,7 @@ import { reshape, one_hot, sum, abs } from tensor
 import { softmax_cross_entropy, softmax_cross_entropy_grad } from nn
 
 func main(): int sync {
-    let logits = reshape([1.0, 2.0, 3.0, 0.5, -1.0, 0.0], [2, 3])
+    let logits = reshape<[2, 3]>([1.0, 2.0, 3.0, 0.5, -1.0, 0.0])
     let labels = [1, 0]
     let hot = one_hot(labels, 3)
 

@@ -9,6 +9,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/runtime/control_regions.h"
+#include "camel/runtime/operator_instance.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop.h"
@@ -86,7 +87,9 @@ std::string eligibility(
         return "node_kind";
     if (ordered && !device)
         return "control_edge";
-    if (!graph.withInputsOf(id).empty())
+    // The with-arguments of an operator whose kernel takes them after the ordinary ones are
+    // operands like the others (`sum<1>(x)` is the kernel's `(x, 1)`).
+    if (!rt::kernelArgumentsOf(graph, id).with.empty())
         return "context_arguments";
     auto &table      = core::OperatorTable::instance();
     const auto oper  = graph.nodeBodyAs<rt::GCOperBody>(id)->oper;
@@ -124,7 +127,7 @@ std::string eligibility(
         .permissions = permissions,
         .semantic    = 0,
         .indexing    = inst};
-    const auto inputs = graph.normInputsOf(id);
+    const auto inputs = rt::kernelArgumentsOf(graph, id).norm;
     if (inputs.size() != inst.norm.size())
         return "operand_arity";
     for (size_t i = 0; i < inputs.size(); ++i) {

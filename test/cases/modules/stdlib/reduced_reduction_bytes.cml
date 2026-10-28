@@ -21,8 +21,8 @@ func narrow(x: f32[..]): bf16[..] {
 
 func main(): int sync {
     let rows: f32[] = [16777216.0, 1.0, -16777216.0, 3.0, 0.0078125, 0.0]
-    let matrix = reshape(narrow(new(rows)), [2, 3])
-    let reduced = sum(matrix, 1, true)
+    let matrix = reshape<[2, 3]>(narrow(new(rows)))
+    let reduced = sum<1, true>(matrix)
     println(len(to_bytes(reduced)))
     println(to_array(to_bytes(reduced)))
     return 0

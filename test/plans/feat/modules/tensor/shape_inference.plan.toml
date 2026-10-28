@@ -36,7 +36,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentNeedsConversion"
 expect_diagnostic_line = 7
 expect_diagnostic_column = 17
-expect_output_contains = ["argument 1 ('reshape(x, [n, 3])', for parameter 'a') has type 'f32[?, 3]', which is less exact than 'f32[2, 3]'", "'reshape(x, [n, 3]) as f32[2, 3]'"]
+expect_output_contains = ["argument 1 ('reshape<[n, 3]>(x)', for parameter 'a') has type 'f32[?, 3]', which is less exact than 'f32[2, 3]'", "'(reshape<[n, 3]>(x)) as f32[2, 3]'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -47,7 +47,7 @@ kind = "behavior"
 case = "../../../../cases/modules/tensor/shape_inference/computed_extent_run_time.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["ran", "reshape changes tensor element count: [6] -> [3, 3]", "computed_extent_run_time.cml:7:18"]
+expect_output_contains = ["ran", "reshape changes tensor element count: [6] -> [3, 3]", "computed_extent_run_time.cml:7:25"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -197,7 +197,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ReturnNeedsConversion"
 expect_diagnostic_line = 7
 expect_diagnostic_column = 5
-expect_output_contains = ["the value ('if c then x else concat(x, x, 0)') has type 'f32[]', which is less exact than 'f32[3]'", "'(if c then x else concat(x, x, 0)) as f32[3]'"]
+expect_output_contains = ["the value ('if c then x else concat<0>(x, x)') has type 'f32[]', which is less exact than 'f32[3]'", "'(if c then x else concat<0>(x, x)) as f32[3]'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

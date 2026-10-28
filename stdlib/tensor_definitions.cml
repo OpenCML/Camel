@@ -30,9 +30,9 @@ export func softmax(x: f32[..], axis: int): f32[..] {
     if numel(x) == 0 then {
         return x
     } else {
-        let m = max(x, axis, true)
+        let m = max<axis, true>(x)
         let e = exp(x - m)
-        return e / sum(e, axis, true)
+        return e / sum<axis, true>(e)
     }
 }
 
@@ -43,8 +43,8 @@ export func log_softmax(x: f32[..], axis: int): f32[..] {
     if numel(x) == 0 then {
         return x
     } else {
-        let d = x - max(x, axis, true)
-        return d - log(sum(exp(d), axis, true))
+        let d = x - max<axis, true>(x)
+        return d - log(sum<axis, true>(exp(d)))
     }
 }
 

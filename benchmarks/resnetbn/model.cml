@@ -107,7 +107,7 @@ func forward(x: f32[..], s: BnStats): (f32[..], BnStats) {
     let r_b32 = block(r_b31.0, m.b32_c1_w, m.b32_c1_b, m.b32_c1_bn_g, m.b32_c1_bn_b, s.b32_c1_bn_rm, s.b32_c1_bn_rv, m.b32_c2_w, m.b32_c2_b, m.b32_c2_bn_g, m.b32_c2_bn_b, s.b32_c2_bn_rm, s.b32_c2_bn_rv)
     let r_b41 = block_ds(r_b32.0, m.b41_c1_w, m.b41_c1_b, m.b41_c1_bn_g, m.b41_c1_bn_b, s.b41_c1_bn_rm, s.b41_c1_bn_rv, m.b41_c2_w, m.b41_c2_b, m.b41_c2_bn_g, m.b41_c2_bn_b, s.b41_c2_bn_rm, s.b41_c2_bn_rv, m.b41_ds_w, m.b41_ds_b, m.b41_ds_bn_g, m.b41_ds_bn_b, s.b41_ds_bn_rm, s.b41_ds_bn_rv)
     let r_b42 = block(r_b41.0, m.b42_c1_w, m.b42_c1_b, m.b42_c1_bn_g, m.b42_c1_bn_b, s.b42_c1_bn_rm, s.b42_c1_bn_rv, m.b42_c2_w, m.b42_c2_b, m.b42_c2_bn_g, m.b42_c2_bn_b, s.b42_c2_bn_rm, s.b42_c2_bn_rv)
-    let g = flatten(mean(mean(r_b42.0, 2), 2))
+    let g = flatten(mean<2>(mean<2>(r_b42.0)))
     let y = g @ m.fc_w + m.fc_b
     return (y, {
         stem_bn_rm: r_stem.1, stem_bn_rv: r_stem.2,

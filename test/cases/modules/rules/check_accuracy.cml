@@ -23,17 +23,17 @@ rule worse_log1p(x: float) {
 
 #requires(refine_accuracy)
 rule softmax_vector(x: f32[3], const axis: int) {
-    log(softmax(x, axis)) => log_softmax(x, axis)
+    log(softmax<axis>(x)) => log_softmax<axis>(x)
 }
 
 #requires(refine_accuracy)
 rule softmax_matrix(x: f32[2, 3], const axis: int) {
-    log(softmax(x, axis)) => log_softmax(x, axis)
+    log(softmax<axis>(x)) => log_softmax<axis>(x)
 }
 
 #requires(refine_accuracy)
 rule softmax_axis2(x: f32[2, 2, 2], const axis: int) {
-    log(softmax(x, axis)) => log_softmax(x, axis)
+    log(softmax<axis>(x)) => log_softmax<axis>(x)
 }
 
 func main(): int sync {

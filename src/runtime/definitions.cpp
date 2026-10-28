@@ -7,6 +7,7 @@
  */
 
 #include "camel/runtime/definitions.h"
+#include "camel/runtime/operator_instance.h"
 
 #include "camel/compile/gir/draft_graph_builder.h"
 #include "camel/compile/gir/encode.h"
@@ -502,12 +503,10 @@ ExpandResult expandDefinition(
     // The arguments: the node's operands, by the declared binding, each of a type the
     // definition takes (an operator may accept more than its definition does: a softmax of an
     // integer tensor is not expanded). Checked before the draft is changed.
-    const std::vector<gc_node_ref_t> norm(
-        draft.normInputsOf(node).begin(),
-        draft.normInputsOf(node).end());
-    const std::vector<gc_node_ref_t> with(
-        draft.withInputsOf(node).begin(),
-        draft.withInputsOf(node).end());
+    // The operands in kernel order, which is the order a declared binding counts in.
+    const KernelArguments kernelArguments = kernelArgumentsOf(draft, node);
+    const std::vector<gc_node_ref_t> &norm = kernelArguments.norm;
+    const std::vector<gc_node_ref_t> &with = kernelArguments.with;
     const auto ports = definition->graph->normPorts();
     std::vector<std::optional<gc_node_ref_t>> bound;
     for (size_t i = 0; i < definition->definition.params.size(); ++i) {

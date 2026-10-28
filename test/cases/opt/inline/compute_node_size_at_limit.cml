@@ -21,7 +21,7 @@ func spin(n: int): int sync {
 }
 
 func main(): int sync {
-    let _ = export_model<out: 'tmp/test/onnx/compute_node_size_at_limit.onnx'>(double, reshape([1.0, 2.0], [2]))
+    let _ = export_model<out: 'tmp/test/onnx/compute_node_size_at_limit.onnx'>(double, reshape<[2]>([1.0, 2.0]))
     let x = cpu_count()
     println(x)
     println(x)

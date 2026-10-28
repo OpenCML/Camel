@@ -3732,13 +3732,17 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             targetFuncType = targetOperator->funcType();
             // A result that the argument types fix (the shape of a tensor whose type carries
             // it) is a constant for the operators it is passed to, as a literal would be.
+            // The arguments in kernel order (joinKernelArguments), the statics aligned with them.
+            type_vec_t foldTypes     = normInputTypes;
+            type_vec_t foldWithTypes = withInputTypes;
+            camel::core::joinKernelArguments(targetOperator->uri(), foldTypes, foldWithTypes);
             if (const auto *folder =
                     camel::core::OperatorTable::instance().typeFolder(targetOperator->uri());
-                folder != nullptr && withInputs.empty()) {
+                folder != nullptr && foldWithTypes.empty()) {
                 Type *resultType = targetFuncType->exitType();
                 std::optional<slot_t> value;
                 try {
-                    value = (*folder)(normInputTypes, normStatics, camel::core::mm::autoSpace());
+                    value = (*folder)(foldTypes, normStatics, camel::core::mm::autoSpace());
                 } catch (const std::exception &) {
                     value = std::nullopt;
                 }

@@ -47,8 +47,8 @@ func main(): int sync {
     // The same three elements through the tensor reduction, on one row: the two paths must agree
     // bit for bit, so the two bytes are the bf16 1.0 the array answer above is.
     let rowElements: bf16[] = [16777216.0, 1.0, -16777216.0]
-    let matrix = reshape(new(rowElements) as bf16[..], [1, 3])
-    println(to_array(to_bytes(tensor_sum(matrix, 1, true))))
+    let matrix = reshape<[1, 3]>(new(rowElements) as bf16[..])
+    println(to_array(to_bytes(tensor_sum<1, true>(matrix))))
 
     let tied: bf16[] = [1.0, 0.00390625]
     let tiedTotal = sum(tied)

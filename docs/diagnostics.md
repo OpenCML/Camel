@@ -2065,10 +2065,10 @@ func exact(a: f32[2, 3]): float {
     return float(sum(a))
 }
 func f(x: f32[?, 3], n: int): float {
-    return exact(reshape(x, [n, 3]))
+    return exact(reshape<[n, 3]>(x))
 }
 func main(): int sync {
-    println(f(reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3]), 2))
+    println(f(reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]), 2))
     return 0
 }
 ```
@@ -9136,7 +9136,7 @@ Check the shapes of all operands involved in the operation and ensure they are c
 import { zeros, reshape } from tensor
 
 func toShape::<T>(t: T[..], s: int[]): T[..] {
-    return reshape(t, s)
+    return reshape<s>(t)
 }
 
 func main(): int sync {
@@ -9506,7 +9506,7 @@ import { conv2d } from nn
 
 func main(): int sync {
     let values: f64[] = [1.0, 2.0, 3.0, 4.0]
-    let x = reshape(new(values), [1, 1, 2, 2])
+    let x = reshape<[1, 1, 2, 2]>(new(values))
     let kernel = ones::<f32>([1, 1, 1, 1])
     let bias = ones::<f32>([1])
     let y = conv2d(x, kernel, bias, 1, 0)
@@ -10023,8 +10023,8 @@ func product(a: f32[..], b: f32[..]): f32[..] {
 }
 
 func main() {
-    let a = reshape([1.0, 2.0, 3.0] as f32[], [3])
-    let b = reshape([1.0, 1.0, 1.0] as f32[], [3])
+    let a = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
+    let b = reshape<[3]>([1.0, 1.0, 1.0] as f32[])
     println(download(run_preferred_resident<product>((a, b))))
 }
 ```
@@ -10116,12 +10116,12 @@ func step_host(m: M): f32[3] sync {
 
 func main(): int sync {
     let m = {
-        p0: reshape([0.5, 0.25, 2.0] as f32[], [3]),
-        x: reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3]),
+        p0: reshape<[3]>([0.5, 0.25, 2.0] as f32[]),
+        x: reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]),
     }
     let in_scope = step(m)
     let outside = step_host(m)
-    let expected = reshape([5.0, 7.0, 9.0] as f32[], [3])
+    let expected = reshape<[3]>([5.0, 7.0, 9.0] as f32[])
     let zero = sum(expected - expected)
     println("in_scope {}"->format<in_scope>)
     println("outside {}"->format<outside>)
@@ -10161,7 +10161,7 @@ func noisy(x: f32[..]): f32[..] sync {
     return x + x
 }
 func main(): int sync {
-    let x = reshape([1.0, 2.0] as f32[], [2])
+    let x = reshape<[2]>([1.0, 2.0] as f32[])
     println(source<noisy>(x))
     return 0
 }
@@ -10214,7 +10214,7 @@ func pair(x: f32[3]): f32[3] {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println(benchmark<pair>(x))
     return 0
 }

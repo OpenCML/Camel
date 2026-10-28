@@ -3,18 +3,18 @@
 import { reshape, argmax, argmin } from tensor
 
 func main(): int sync {
-    let tie = reshape([1.0, 3.0, 3.0, -2.0, -2.0], [5])
-    let z = reshape([1.0, 0.0, 1.0, 0.0], [4])
-    let nan = reshape([1.0, 5.0, 1.0, -9.0], [4]) * (z / z + 1.0)
-    let zeros = reshape([-0.0, 0.0, -0.0, 0.0], [4])
-    let zeros2 = reshape([0.0, -0.0, 0.0], [3])
-    let ints = reshape([3, 7, 7, 1, 1], [5])
-    let rows = reshape([2.0, -0.0, 0.0, 2.0, 0.0, -0.0], [2, 3])
-    println(argmax(tie, 0)); println(argmin(tie, 0))
-    println(argmax(nan, 0)); println(argmin(nan, 0))
-    println(argmax(zeros, 0)); println(argmin(zeros, 0))
-    println(argmax(zeros2, 0)); println(argmin(zeros2, 0))
-    println(argmax(ints, 0)); println(argmin(ints, 0))
-    println(argmax(rows, 1)); println(argmin(rows, 1)); println(argmin(rows, 0, true))
+    let tie = reshape<[5]>([1.0, 3.0, 3.0, -2.0, -2.0])
+    let z = reshape<[4]>([1.0, 0.0, 1.0, 0.0])
+    let nan = reshape<[4]>([1.0, 5.0, 1.0, -9.0]) * (z / z + 1.0)
+    let zeros = reshape<[4]>([-0.0, 0.0, -0.0, 0.0])
+    let zeros2 = reshape<[3]>([0.0, -0.0, 0.0])
+    let ints = reshape<[5]>([3, 7, 7, 1, 1])
+    let rows = reshape<[2, 3]>([2.0, -0.0, 0.0, 2.0, 0.0, -0.0])
+    println(argmax<0>(tie)); println(argmin<0>(tie))
+    println(argmax<0>(nan)); println(argmin<0>(nan))
+    println(argmax<0>(zeros)); println(argmin<0>(zeros))
+    println(argmax<0>(zeros2)); println(argmin<0>(zeros2))
+    println(argmax<0>(ints)); println(argmin<0>(ints))
+    println(argmax<1>(rows)); println(argmin<1>(rows)); println(argmin<0, true>(rows))
     return 0
 }

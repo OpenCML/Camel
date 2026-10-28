@@ -2,7 +2,7 @@ import { load_npy, save_npy, sum } from tensor
 import { inspect, run_preferred_resident, download } from tiles
 import { get_env } from env
 func centered(x: f32[..]): f32[..] {
-    return x * 1.0 - sum(x, 1, true)
+    return x * 1.0 - sum<1, true>(x)
 }
 func main(): int sync {
     let folder = get_env('TILES_TEST_OUT') ?? ''

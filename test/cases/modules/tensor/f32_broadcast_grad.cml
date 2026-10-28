@@ -26,8 +26,8 @@ func loss(): float sync {
 
 func main(): int sync {
     let m = {
-        p0: reshape([0.1, 0.3, 0.7] as f32[], [3]),
-        x: reshape([0.7, 0.2, 0.9, 0.4, 0.6, 0.1] as f32[], [2, 3]),
+        p0: reshape<[3]>([0.1, 0.3, 0.7] as f32[]),
+        x: reshape<[2, 3]>([0.7, 0.2, 0.9, 0.4, 0.6, 0.1] as f32[]),
     }
     let vg = with_grad(loss)<m>()
     let g = vg.1

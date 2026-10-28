@@ -6,7 +6,7 @@ func loss(): float { return -(float(sum(x * x)) + float(sum(x)) * 2.0 - 1.0) / 3
 func loss_value(x: f32[..]): float { return loss<x>() }
 func arithmetic(a: float, b: float): float { return (a + b) * 2.0 - a / b }
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println(download(run_preferred_resident<loss_value>(x)) - loss<x>())
     let vg = (v: f32[..]): (float, f32[..]) => with_grad(loss)<v>()
     let cpu = vg(x)

@@ -12,12 +12,12 @@ import { get_env } from env
 func forward(x: f32[..], w: f32[..]): f32[..] {
     let n = shape(x)[0]
     let h = zeros::<f32>([n, shape(w)[1]]) + x @ w
-    return reshape(h, [n * shape(w)[1]])
+    return reshape<[n * shape(w)[1]]>(h)
 }
 
 func main(): int sync {
-    let w = reshape([1.0, 0.0, 2.0, 0.0, 1.0, -1.0] as f32[], [2, 3])
-    let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
+    let w = reshape<[2, 3]>([1.0, 0.0, 2.0, 0.0, 1.0, -1.0] as f32[])
+    let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as f32[])
     let _ = export_model<out: get_env('ONNX_OUT') ?? '', dynamic_axes: [0]>((t: f32[..]): f32[..] => forward(t, w), x)
     let ops = supported_operators()
     'exported supported={}'->format<len(ops)>->println

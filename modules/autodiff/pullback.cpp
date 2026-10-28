@@ -3956,12 +3956,8 @@ void Backward::visitOper(gc_node_ref_t node) {
     for (gc_node_ref_t input : forward_.withInputsOf(node)) {
         withInputs.push_back(ref(input));
     }
-    // A rule of an operator whose kernel takes its with-arguments after the ordinary ones reads
-    // them as one list, as the kernel does (OperatorTraits::withAfterNorm).
-    if (camel::core::OperatorTable::instance().withAfterNorm(uri)) {
-        inputs.insert(inputs.end(), withInputs.begin(), withInputs.end());
-        withInputs.clear();
-    }
+    // A rule reads the arguments as the kernel does (OperatorTraits::withAfterNorm).
+    camel::core::joinKernelArguments(uri, inputs, withInputs);
     // A rule that is given an active value through a with parameter must add a gradient for it;
     // a rule that ignores the parameter would leave the contribution silently absent, which is
     // the defect this check exists for. The count is per value, so another path that already

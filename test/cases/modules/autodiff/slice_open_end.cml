@@ -17,14 +17,14 @@ import { grad } from autodiff
 with <x: f32[..]>
 func open_end(): float {
     let s = x[3:]
-    let w = reshape([2.0, 3.0] as f32[], [2])
+    let w = reshape<[2]>([2.0, 3.0] as f32[])
     return float(sum(s * w))
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0] as f32[], [5])
+    let x = reshape<[5]>([1.0, 2.0, 3.0, 4.0, 5.0] as f32[])
     let g = grad(open_end)<x>()
-    let c = reshape([0.0, 0.0, 0.0, 1.0, 2.0] as f32[], [5])
+    let c = reshape<[5]>([0.0, 0.0, 0.0, 1.0, 2.0] as f32[])
     'slice_open_end dot={:.1f} sq={:.1f} sum={:.1f}'->format<sum(g * c), sum(g * g), sum(g)>->println
     return 0
 }

@@ -14,7 +14,7 @@ func step(d: float): float sync {
 }
 
 func main(): int sync {
-    var w = reshape([0.0, 0.0], [2])
+    var w = reshape<[2]>([0.0, 0.0])
     let r = step<w>(0.5)
     println('{} {}'->format<r, sum(w)>)
     return 0

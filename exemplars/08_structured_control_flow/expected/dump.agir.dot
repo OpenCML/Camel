@@ -59,9 +59,9 @@ digraph GraphIR {
             N12 -> N13 [label="0|0", type="NORM"];
         }
         O01 [label="EXIT", type="EXIT"];
-        N14 [label="[1.0, -2.0, 3.0, 0.5]", type="DATA", origin=<ORIGIN>, span="20:20-20:50", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="f32[]"];
-        N15 [label="[4]", type="DATA", origin=<ORIGIN>, span="20:52-20:55", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="int[]"];
-        N16 [label="tensor:reshape", type="OPER", origin=<ORIGIN>, span="20:12-20:19", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="f32[4]"];
+        N14 [label="[4]", type="DATA", origin=<ORIGIN>, span="20:20-20:23", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="int[]"];
+        N15 [label="[1.0, -2.0, 3.0, 0.5]", type="DATA", origin=<ORIGIN>, span="20:25-20:55", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="f32[]"];
+        N16 [label="tensor:reshape", type="OPER", origin=<ORIGIN>, span="20:19-20:24", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="f32[4]"];
         N17 [label="gate", type="FUNC", origin=<ORIGIN>, span="21:12-21:19", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="f32[4]"];
         N18 [label="0", type="DATA", origin=<ORIGIN>, span="22:39-22:40", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="int"];
         N19 [label=":op/idx_arr", type="OPER", role="scalar-boundary", origin=<ORIGIN>, span="22:38-22:39", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="f32"];
@@ -90,8 +90,8 @@ digraph GraphIR {
         N30 [label="0", type="DATA", origin=<ORIGIN>, span="25:11-25:12", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="int"];
         N31 [label="GATE", type="GATE", value_type="int"];
         N31 -> O01 [label="0", type="EXIT"];
-        N14 -> N16 [label="0|0", type="NORM"];
-        N15 -> N16 [label="0|1", type="NORM"];
+        N14 -> N16 [label="0|0", type="WITH"];
+        N15 -> N16 [label="0|0", type="NORM"];
         N16 -> N17 [label="0|0", type="NORM"];
         N17 -> N19 [label="0|0", type="NORM"];
         N18 -> N19 [label="0|1", type="NORM"];
