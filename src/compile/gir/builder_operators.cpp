@@ -16,6 +16,7 @@
 #include "camel/core/operator_names.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/composite/stream.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/runtime/control.h"
@@ -2305,11 +2306,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     }
     // A variable passed to a `var` parameter is the variable's cell, and the callee's port holds
     // `cell` of what the parameter declares. The cell is written through every reference to it
-    // (TupleType::assignableFrom), so its content type is the parameter's: the argument's value
-    // type is what the parameter has to take, and the ordinary report below refuses a call whose
-    // cell does not fit. The parameter's type is a type of its own (an array with its element type
-    // written, `T[..]` for a generic head), so there is no wider spelling of the same value to
-    // hand the cell here.
+    // (TupleType::assignableFrom), so its content type must be the parameter's: the argument is
+    // accepted only when each content type accepts the other's values, and a pair that is not
+    // one type is handed over as the parameter's cell (passArgument), which is the same box
+    // (TupleType::castSafetyFrom). The parameter's type is a type of its own (an array with its
+    // element type written, `T[..]` for a generic head), so there is no wider spelling of the
+    // same value to hand the cell here.
 
     // A `with` argument may be written by name, and a `with` parameter may have a default
     // (design principles 4.4). The binding puts the arguments in the declaration's order and
@@ -4003,13 +4005,49 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         bool readsVersion = false;
     };
     // The node to link and, at a `var` position, the variable the callee writes (if any).
-    const auto passArgument = [&](const Argument &arg, bool isVar) {
+    const auto passArgument = [&](const Argument &arg, bool isVar, Type *param,
+                                  const std::string &paramLabel) {
         if (!isVar) {
             return Passed{
                 arg.early != nullptr ? arg.early : valueOf(arg.node), node_handle_t{}, LinkType::Norm};
         }
         requireMutableArgument(arg, calleeLabel);
+        // A `var` parameter is two-way: the callee reads the caller's variable and writes into
+        // it, so the argument is accepted only when each side's type accepts the other's values
+        // (design principles 3.5). A shape one side leaves open is not such a pair: a
+        // `var w: f32[..]` may write a two-dimensional array into a variable that holds an
+        // `f32[]`, and the caller's type never said it could hold one.
+        if (param != nullptr) {
+            Type *have = valueTypeOf(nodeTypeOf(arg.node));
+            if (have == nullptr || !param->assignableFrom(have) || !have->assignableFrom(param)) {
+                diags_->of(SemanticDiag::VarArgumentTypeMismatch)
+                    .atOrigin(arg.expr->origin())
+                    .commit(
+                        calleeLabel,
+                        paramLabel,
+                        param->toString(),
+                        have != nullptr ? have->toString() : std::string("void"));
+                throw BuildAbortException();
+            }
+        }
         const bool named = isVariable(arg.node);
+        // The cell the port states: a cell of the parameter's type. Two cell types whose content
+        // types accept each other are one box (type/composite/tuple: the conversion moves
+        // nothing), so the callee still writes the one cell the caller's variable is, and the
+        // edge carries the type the callee's port says.
+        const auto asParameterCell = [&](node_handle_t cell) {
+            if (param == nullptr || nodeTypeOf(cell) == nullptr) {
+                return cell;
+            }
+            Type *wanted = TupleType::cell(param);
+            if (nodeTypeOf(cell)->equals(wanted)) {
+                return cell;
+            }
+            node_handle_t converted = currGraph_->addCastNode(wanted);
+            linkNodes(LinkType::Norm, cell, converted);
+            registerNodeOrigin(context_, converted, arg.expr, "gir.cast");
+            return converted;
+        };
         if (takesVariables) {
             // `s.x = e`, `arr[0] = e`, `f() = e`: the target is a temporary, and the store
             // would be lost without a trace.
@@ -4035,10 +4073,10 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             if (named && targetOperator == nullptr) {
                 if (node_handle_t version = valueVersionOf(variable);
                     version != nullptr && inSameRegion(version, targetNode)) {
-                    return Passed{version, variable, LinkType::Norm, true};
+                    return Passed{asParameterCell(version), variable, LinkType::Norm, true};
                 }
             }
-            return Passed{variable, variable, LinkType::Norm};
+            return Passed{asParameterCell(variable), variable, LinkType::Norm};
         }
         return Passed{
             arg.early != nullptr ? arg.early : valueOf(arg.node),
@@ -4050,16 +4088,40 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     // by value and to a `var` parameter (`f(c, c)`) is read before the call, not after it.
     std::vector<Passed> passed;
     bool hasVarArgument = false;
+    // What a `var` position says about the argument: the parameter's type, and the name the
+    // signature gives it, which the diagnostic uses (`with` parameters first, as written).
+    const auto argLabel = [&](bool with, size_t index) {
+        const size_t nameIndex = (with ? 0 : targetFuncType->withTypesCount()) + index;
+        return nameIndex < targetFuncType->argNamesCount()
+                   ? std::string(targetFuncType->argNameAt(nameIndex))
+                   : std::to_string(index + 1);
+    };
+    const auto varParameterOf = [&](size_t index, bool with) {
+        if (with) {
+            if (index >= targetFuncType->withTypesCount()) {
+                return std::pair<Type *, std::string>{nullptr, std::string()};
+            }
+            return std::pair<Type *, std::string>{
+                targetFuncType->withTypeAt(index), argLabel(with, index)};
+        }
+        if (index >= targetFuncType->normTypesCount()) {
+            return std::pair<Type *, std::string>{nullptr, std::string()};
+        }
+        return std::pair<Type *, std::string>{
+            targetFuncType->normTypeAt(index), argLabel(with, index)};
+    };
     for (size_t i = 0; i < withInputs.size(); i++) {
         bool isVar = i < targetFuncType->withTypesCount() && targetFuncType->withIsVarAt(i);
-        Passed arg = passArgument(withInputs[i], isVar);
+        const auto param = varParameterOf(i, true);
+        Passed arg = passArgument(withInputs[i], isVar, param.first, param.second);
         arg.link   = LinkType::With;
         passed.push_back(arg);
         hasVarArgument |= isVar;
     }
     for (size_t i = 0; i < normInputs.size(); i++) {
         bool isVar = i < targetFuncType->normTypesCount() && targetFuncType->normIsVarAt(i);
-        Passed arg = passArgument(normInputs[i], isVar);
+        const auto param = varParameterOf(i, false);
+        Passed arg = passArgument(normInputs[i], isVar, param.first, param.second);
         arg.link   = LinkType::Norm;
         passed.push_back(arg);
         hasVarArgument |= isVar;

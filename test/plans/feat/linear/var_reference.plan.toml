@@ -3984,3 +3984,37 @@ async ({ input, assert }) => {
     assert(u.plan_by_array_count === 0, `the array's own count answered where the graph ordered the read: ${JSON.stringify(u)}`)
 }
 """
+
+[[tests]]
+name = "var_struct_argument"
+desc = "A `var` argument is read and written by the callee, so it is accepted when each side's type accepts the other's values: an unnamed struct value and the named type whose fields it has are that pair, and the write `bump` makes into its parameter is a write of the caller's variable, which the caller sees afterwards (design principles 3.5). Before this, such a call was accepted by the type check and then broke the runtime graph's edge invariant, which reported an internal error."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_struct_argument.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "2\n2\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "var_argument_declared"
+desc = "The variable declared with the parameter's own type, `f32[..]`, is the type the callee writes: the two accept each other's values and the call runs (design principles 3.5, 5.4)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_argument_declared.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "var_argument_shape"
+desc = "A `var` parameter of type `f32[..]` may write an array of any shape into the caller's variable, so an `f32[]` variable is not an argument for it: the value the callee may write is one the variable cannot hold. The call is refused where the argument is written, and the repair the hint names is a variable declared with the parameter's type -- before this, the call was accepted by the type check and the shape reached the runtime graph, which reported an internal error instead (design principles 3.5, 5.1)."
+kind = "negative"
+case = "../../../cases/linear/byref/var_argument_shape.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::VarArgumentTypeMismatch"
+expect_output_contains = ["a 'var' argument is read and written by the callee", "var a: f32[..]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
