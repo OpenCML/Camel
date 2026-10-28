@@ -660,3 +660,6 @@ H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program
    - **第 9 条的两个用例**（`Camel-Archive/ICPC2027/study/read-items/programs/R40-gn-W.gn`、`R29-gn-W.gn`）都在**同步**函数体里，丢掉的是一次纯的、返回 `T!` 的调用（`check_same(a, b)`、`validate(x)`）。
      - R40 没有任何诊断，R29 报的是 `EffectNotExecuted`（被调函数是纯的，这条也不对）；
      - 两者都应当是 `UnusedFallibleValue`，即原则 3.9 第 240 行"同步块里一个 `T!` 的值没有被使用，是编译期警告"。
+10. **`std::opt::fold` 算错常量区间的循环**（ICPC 生成语料，ef49a1d5d 复现）：`let v = loop v = 1 for i in 0..4 do v + 1` 解释器得 5；`std::opt std::nvm` 与 `std::opt::fold std::nvm` 都得 1。同步循环体里的打印也被丢掉。这是错值，排在所有缺陷的最前面。语料复现在 `Camel-Archive/ICPC2027/study/e2-generated/gn-suspect/`。修好后，把 progen 加上"常量区间循环"这一类程序，防止同类再犯。
+11. **`std::opt` 上的不确定挂起**：最小化后的 `branch_00017`，在 `std::macro std::opt std::nvm` 下 25 次里有 7 次超过 15 秒、CPU 占满；`std::macro std::nvm` 下 0 次。不确定性本身就说明有地方依赖未定义的顺序（哈希表遍历、指针比较）。先找出不确定的来源，再看为什么不收敛。程序在同一目录下。
+- 研究里的 S1（`var` 数组传给 `var f32[..]` 形参报内部错误，240 个生成程序里中了 17 个）就是第 2 条。
