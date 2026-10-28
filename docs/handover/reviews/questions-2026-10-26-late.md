@@ -488,3 +488,9 @@ H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program
 - **改法**：`calls == 1` 与 `returnsClosure` 两条豁免的条件，从"到达不了递归"改为"自身不在递归环里"（`!sccInfo.recursiveGraphs.contains(calleeGraph)`，且仍要求已在调用图分析里）。`calls > 1` 的复制预算那条保留 `acyclic`：那里确实在复制，复制出去的递归调用会让后续展开成倍增长。
 - **验收**：`pass_export_loop` 转绿；`InlineDecline` 的统计里，因这条改动多内联的函数列进提交信息；`std::opt` 的形状快照按"形状可以重录"处理，任何输出变化都要修。
 - 6 格是哪个遍削掉的、`Arm` 里那一格是谁放的，与这条无关，不用再量。
+
+## 返工：`modules/tiles/src/graph_regions.cpp` 的 `inSyncChain`（6be4596fc）
+
+- **漏判链首**：`syncPredsOf(id)` 本身就是 `user == id` 的那一段，循环里再比 `edge.user == id` 是同一件事，查了两遍。一个块的第一条语句只当别人的前驱、自己没有前驱，所以没被认出来。本意的"either side"要比的是 `edge.pred == id`。
+- **复杂度**：每个节点都扫一遍全图的 sync 边，是 O(N·E)。改成每张图算一次"在链上的节点"集合（遍历 `syncEdges()`，user 与 pred 都放进去），判断时查集合。
+- 补一条用例：设备作用域里只有一条效应语句的块，或块的第一条语句是那个要分段的节点。修好前它会被留在主机上。
