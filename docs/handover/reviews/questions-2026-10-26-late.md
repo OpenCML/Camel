@@ -835,3 +835,4 @@ H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program
    - 没有函数体的声明（`DeclaredFuncTypeResolver::resolve`）与有函数体的剩余参数函数（`inlineRestCall`），都把包变量绑到 `makePack(剩余实参的类型)`；`ruleVerdictForCall` 对 `when` 的检查同理。
    - 签名里函数类型参数列表中 `..` 后的未声明名字，在第一次出现处绑成包变量，与 `::<..P>` 声明的走同一条路。
 6. **剩余参数函数的 `when` 现在在调用处求值**：`whenOfEvery` 处理 `..pred::<A>()`。
+7. **补一处位置**：模式函数类型的参数列表里有包变量时，在 `typevar.cpp` 的 `matchParameterList` 里匹配，`bindTypeVars` 与 `unifyTypeVars` 都经过它。C++ 规则（`sqrt`、`erf`、`erfc`，以及 `modules/tensor/ops` 里张量的那些）在 Camel 规则落地后删除。
