@@ -48,7 +48,7 @@ func main(): int sync {
     println(result.0 - 33554436.0)
     println(sum(abs(result.1 - (exact + 1.0))))
     println(result.2 - 1.0000000000000002)
-    println(download(run_preferred_resident<total>(zeros([0]))))
+    println(download(run_preferred_resident<total>(zeros::<f32>([0]))))
     println(inspect<mixed>(exact))
     println(benchmark<vg>(x))
     return 0

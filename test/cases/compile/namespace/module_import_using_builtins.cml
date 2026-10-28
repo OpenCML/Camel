@@ -6,8 +6,8 @@ import tensor
 using namespace tensor
 
 func main(): int sync {
-    let a = ones([2, 2])
-    let b = ones([2, 2])
+    let a = ones::<f32>([2, 2])
+    let b = ones::<f32>([2, 2])
     let a0 = shape(a)[0]
     let b1 = shape(b)[1]
     'module_import_using_builtins shape={} {}'->format<a0, b1>->println

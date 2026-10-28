@@ -3,6 +3,6 @@ func pair(a: f32[n], b: f32[n]): float {
     return float(sum(a)) + float(sum(b))
 }
 func main(): int sync {
-    println(pair(ones([3]), ones([4])))
+    println(pair(ones::<f32>([3]), ones::<f32>([4])))
     return 0
 }

@@ -142,6 +142,12 @@ inline std::span<const draft_node_ref_t> ctrlInputsOf(node_handle_t node) {
     return nodeDraftOf(node)->ctrlInputsOf(node.id);
 }
 
+/// The statement this one is written directly after in the same `sync` block, if any
+/// (docs/design/effects/edges.cn.md 1.5).
+inline std::span<const draft_node_ref_t> syncInputsOf(node_handle_t node) {
+    return nodeDraftOf(node)->syncInputsOf(node.id);
+}
+
 inline std::span<const draft_node_ref_t> normUsersOf(node_handle_t node) {
     return nodeDraftOf(node)->normUsersOf(node.id);
 }

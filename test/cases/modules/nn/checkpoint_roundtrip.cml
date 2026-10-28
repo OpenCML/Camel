@@ -15,9 +15,9 @@ func initial(): State {
     return {
         params: {
             w: new([1.0, -2.0] as f32[]), odd: new([9007199254740993, -2]),
-            empty: zeros([2, 0])
+            empty: zeros::<f32>([2, 0])
         },
-        m: zeros([2]), v: zeros([2]), ema: new([1.0, -2.0] as f32[]),
+        m: zeros::<f32>([2]), v: zeros::<f32>([2]), ema: new([1.0, -2.0] as f32[]),
         step: 0, seed: 20261019, cursor: (3, 17), note: '中文 checkpoint',
         raw: from_array([0, 255, 128, 1]), enabled: true, gain: f32(-0.0), scale: -0.0
     }
@@ -77,9 +77,14 @@ func main(mode: int, dir: string): int sync {
         println(tree_leaves(tree_paths(initial())))
         return 0
     } else if mode == 7 then sync {
-        // Replace an existing checkpoint as a whole and read the new content back.
-        let _ = (advance(initial(), 5))->save_tree<dir, 'dataset-v1'>
-        return show(dir->load_tree::<State> !! initial())
+        // Replace an existing checkpoint as a whole and read the new content back. A save that
+        // fails is an error value rather than a fault, so it has to be carried to the program
+        // boundary here: discarding it would let a failed save look like a success.
+        let saved = (advance(initial(), 5))->save_tree<dir, 'dataset-v1'>
+        return match saved {
+            case error e => sync { println(e); return 1 }
+            case _ => sync { return show(dir->load_tree::<State> !! initial()) }
+        }
     } else if mode == 8 then show(advance(initial(), 5))
     else if mode == 9 then sync {
         // A different tree replaces every leaf, not only the ones with the same names.

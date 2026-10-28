@@ -22,7 +22,7 @@ func main(): int sync {
     let v       = new([1.0, 2.0, 3.0])
     let scalar  = loop c = 0 for x in v do c + 1
     let vecsum  = loop s = 0 for x in v do s + int(x)
-    let empty   = loop c = 7 for row in zeros([0, 2]) do c + 1
+    let empty   = loop c = 7 for row in zeros::<f32>([0, 2]) do c + 1
     let nested  = loop s = 0 for row in m do s + (loop t = 0 for x in row do t + int(x))
     println(rows, ranks, scalar, vecsum, empty, nested, countRows(m))
     return 0

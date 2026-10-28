@@ -482,16 +482,23 @@ inline bool nodeTakesAnOrder(node_handle_t node) {
     return !camel::runtime::nodeIsFreelySchedulable(*nodeDraftOf(node), nodeIdOf(node));
 }
 
-inline bool shouldAddSyncCtrlLink(node_handle_t from, node_handle_t to) {
-    // Only the exact, local skip: the predecessor is already a direct data input of the target,
-    // so the edge would say nothing new. This is not a count of control users and cannot be one.
-    // Whether a value is shared -- whether the storage of the value a variable holds may be
-    // reused by an update -- is decided by the execution plan from the graph itself: a read that
-    // keeps the value ends the proof (`:var/get`), a read that cannot (`:var/peek`) leaves it
-    // standing, and a control edge carries order, not a use (design principles 3.3, 3.4). The
-    // transitive reduction over such edges lives in `std::opt::order`; measured that adding or
-    // removing one changes no decision.
+/// Whether an edge that says "after" and not "value" says anything at all: two different nodes of
+/// one graph, and one is not already the other's data input. Only the exact, local skip: the
+/// predecessor is already a direct data input of the target, so the edge would say nothing new.
+/// This is not a count of users and cannot be one. Whether a value is shared -- whether the storage
+/// of the value a variable holds may be reused by an update -- is decided by the execution plan
+/// from the graph itself: a read that keeps the value ends the proof (`:var/get`), a read that
+/// cannot (`:var/peek`) leaves it standing, and an edge that only orders carries no use (design
+/// principles 3.3, 3.4). The transitive reduction over such edges lives in `std::opt::order`;
+/// measured that adding or removing one changes no decision.
+inline bool chainEdgeSaysSomething(node_handle_t from, node_handle_t to) {
     return linkCheek(from, to) && !hasDirectDataDependency(from, to);
+}
+
+/// Whether the chain of the block being built has to name this pair: the same question the chain
+/// sites ask under the name the design writes them under (docs/design/effects/plan.cn.md 5.5).
+inline bool shouldAddSyncCtrlLink(node_handle_t from, node_handle_t to) {
+    return chainEdgeSaysSomething(from, to);
 }
 
 /// Whether `value` already reads what `producer` produced: the producer is a direct data input of
@@ -546,6 +553,35 @@ inline void markSyncStatement(node_handle_t node) {
     const draft_node_ref_t id = nodeIdOf(node);
     draft->setNodeRuntimeFlags(
         id, static_cast<uint8_t>(draft->header(id)->runtimeFlags | runtime::kGCNodeFlagSyncStatement));
+}
+
+/// One link of a `sync` block's chain: a statement follows the one written before it by a sync edge,
+/// which carries "used" as well as the order (docs/design/effects/edges.cn.md 1), and the control
+/// edge the kind names the same pair with, which is what every consumer of the chain that reads only
+/// that kind still reads. Both are written as one pair so that no consumer of the chain reads less
+/// than it did; the inline splice writes them the same way (src/runtime/draft.cpp, `setSyncInputs`).
+///
+/// Both ends are marked as statements of one block, which is what the seal check reads back
+/// (src/runtime/graph_edges.cpp, `checkSyncEdges`). The caller has already decided the edge says
+/// something: this is the raw pair, and a chain that reaches a node the graph hands on asks it even
+/// when that node reads the tail (there the wait *is* the only thing that reaches the node).
+inline void writeSyncStatement(node_handle_t from, node_handle_t to) {
+    markSyncStatement(from);
+    markSyncStatement(to);
+    linkNodes(LinkType::Sync, from, to);
+    linkNodes(LinkType::Ctrl, from, to);
+}
+
+/// A link of the chain between two statements of a `sync` block, written only if it says something
+/// (`chainEdgeSaysSomething`). What is not here: the edge that orders a `var` write and the read of
+/// it. The read has no data edge from the write yet, and an edge that only orders would leave it
+/// with the value from before the write (Builder::orderAfterLastWriter, builder_expr.cpp) -- that
+/// pair waits until the read is a data edge from the nearest write.
+inline void linkSyncStatement(node_handle_t from, node_handle_t to) {
+    if (!chainEdgeSaysSomething(from, to)) {
+        return;
+    }
+    writeSyncStatement(from, to);
 }
 
 inline camel::source::SemanticPart semanticPart(

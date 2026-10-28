@@ -51,6 +51,7 @@ digraph GraphIR {
             N0D -> N0C [label="0|0", type="NORM"];
             N0B -> N0C [label="0|1", type="NORM"];
             N09 -> N0C [label="0|0", type="CTRL"];
+            N09 -> N0C [label="SYNC", type="SYNC"];
             N07 -> N0D [label="1|0", type="NORM"];
             N07 -> N0E [label="2|0", type="NORM"];
             N0C -> N0E [label="0|1", type="NORM"];
@@ -59,11 +60,13 @@ digraph GraphIR {
             N10 -> N0F [label="0|0", type="NORM"];
             N08 -> N0F [label="1|1", type="NORM"];
             N0E -> N0F [label="0|0", type="CTRL"];
+            N0E -> N0F [label="SYNC", type="SYNC"];
             N0E -> N10 [label="0|0", type="NORM"];
             N09 -> N11 [label="0|0", type="NORM"];
             N0F -> N11 [label="0|1", type="NORM"];
             N11 -> N12 [label="0|0", type="NORM"];
             N11 -> N12 [label="0|0", type="CTRL"];
+            N11 -> N12 [label="SYNC", type="SYNC"];
         }
         subgraph cluster_F05 {
             label="apart";
@@ -102,15 +105,19 @@ digraph GraphIR {
         N19 -> N1A [label="0|0", type="NORM"];
         N1A -> N1B [label="0|0", type="NORM"];
         N1B -> N1C [label="0|0", type="CTRL"];
+        N1B -> N1C [label="SYNC", type="SYNC"];
         N1C -> N1D [label="0|0", type="NORM"];
         N1E -> N1F [label="0|0", type="NORM"];
         N1D -> N1F [label="0|0", type="CTRL"];
+        N1D -> N1F [label="SYNC", type="SYNC"];
         N1F -> N20 [label="0|0", type="NORM"];
         N21 -> N22 [label="0|0", type="NORM"];
         N20 -> N22 [label="0|0", type="CTRL"];
+        N20 -> N22 [label="SYNC", type="SYNC"];
         N22 -> N23 [label="0|0", type="NORM"];
         N24 -> N25 [label="0|0", type="NORM"];
         N23 -> N25 [label="0|0", type="CTRL"];
+        N23 -> N25 [label="SYNC", type="SYNC"];
     }
     O00 [label="EXIT", type="EXIT"];
     N26 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="34:0-40:1", srcfile="<ROOT>/test/cases/opt/camel_passes/cse_subject.cml", value_type="() => int uses stdout"];

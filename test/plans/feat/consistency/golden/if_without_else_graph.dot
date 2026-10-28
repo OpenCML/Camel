@@ -2,13 +2,13 @@ digraph GraphIR {
     subgraph cluster_F01 {
         label="main";
         O01 [label="EXIT", type="EXIT"];
-        N00 [label="true", type="DATA", origin=55, span="1:16-1:20", srcfile="<ROOT>/test/cases/consistency/if_without_else/as_statement_graph.cml", value_type="bool"];
-        N01 [label="JOIN", type="JOIN", origin=57, span="2:4-2:37", srcfile="<ROOT>/test/cases/consistency/if_without_else/as_statement_graph.cml", value_type="void"];
-        N02 [label="BRCH", type="BRCH", origin=56, span="2:4-2:37", srcfile="<ROOT>/test/cases/consistency/if_without_else/as_statement_graph.cml", value_type="int"];
-        N03 [label="checking", type="DATA", origin=60, span="2:26-2:36", srcfile="<ROOT>/test/cases/consistency/if_without_else/as_statement_graph.cml", value_type="string"];
-        N04 [label=":io/println", type="OPER", origin=61, span="2:18-2:25", srcfile="<ROOT>/test/cases/consistency/if_without_else/as_statement_graph.cml", value_type="string"];
+        N00 [label="true", type="DATA", origin=3074, span="1:16-1:20", srcfile="<ROOT>/test/cases/consistency/if_without_else/as_statement_graph.cml", value_type="bool"];
+        N01 [label="JOIN", type="JOIN", origin=3076, span="2:4-2:37", srcfile="<ROOT>/test/cases/consistency/if_without_else/as_statement_graph.cml", value_type="void"];
+        N02 [label="BRCH", type="BRCH", origin=3075, span="2:4-2:37", srcfile="<ROOT>/test/cases/consistency/if_without_else/as_statement_graph.cml", value_type="int"];
+        N03 [label="checking", type="DATA", origin=3079, span="2:26-2:36", srcfile="<ROOT>/test/cases/consistency/if_without_else/as_statement_graph.cml", value_type="string"];
+        N04 [label=":io/println", type="OPER", origin=3080, span="2:18-2:25", srcfile="<ROOT>/test/cases/consistency/if_without_else/as_statement_graph.cml", value_type="string"];
         N05 [label="null", type="DATA", value_type="void"];
-        N06 [label="0", type="DATA", origin=62, span="3:11-3:12", srcfile="<ROOT>/test/cases/consistency/if_without_else/as_statement_graph.cml", value_type="int"];
+        N06 [label="0", type="DATA", origin=3081, span="3:11-3:12", srcfile="<ROOT>/test/cases/consistency/if_without_else/as_statement_graph.cml", value_type="int"];
         N07 [label="GATE", type="GATE", value_type="int"];
         N07 -> O01 [label="0", type="EXIT"];
         N04 -> N01 [label="0|0", type="WITH"];
@@ -19,9 +19,10 @@ digraph GraphIR {
         N02 -> N04 [label="0|0", type="CTRL"];
         N06 -> N07 [label="0|0", type="NORM"];
         N01 -> N07 [label="0|0", type="CTRL"];
+        N01 -> N07 [label="SYNC", type="SYNC"];
     }
     O00 [label="EXIT", type="EXIT"];
-    N08 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=54, span="0:0-4:1", srcfile="<ROOT>/test/cases/consistency/if_without_else/as_statement_graph.cml", value_type="() => int"];
+    N08 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=3073, span="0:0-4:1", srcfile="<ROOT>/test/cases/consistency/if_without_else/as_statement_graph.cml", value_type="() => int uses stdout"];
     N09 [label="CALL", type="CALL", value_type="int"];
     N09 -> O00 [label="0", type="EXIT"];
     N08 -> N09 [label="0|0", type="WITH"];

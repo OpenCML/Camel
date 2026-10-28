@@ -4,6 +4,6 @@ func only_return(x: f32[..]): f32[n] {
     return x as f32[?]
 }
 func main(): int sync {
-    println(only_return(ones([3])))
+    println(only_return(ones::<f32>([3])))
     return 0
 }

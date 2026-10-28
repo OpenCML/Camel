@@ -37,11 +37,11 @@ func declined_loss(x: f32[..]): float {
 }
 
 func main(steps: int, rows: int, d: int, lr: float, fused: int): int sync {
-    let x = zeros([rows, d]) + 0.001
+    let x = zeros::<f32>([rows, d]) + 0.001
     let model: Model = {
-        w: zeros([d]) + 1.5,
-        a: zeros([rows, d]) + 0.001,
-        u: zeros([d, d / 8]) + 0.01
+        w: zeros::<f32>([d]) + 1.5,
+        a: zeros::<f32>([rows, d]) + 0.001,
+        u: zeros::<f32>([d, d / 8]) + 0.01
     }
     'perf fusion_step rows={} d={} steps={} fused={}'->format<rows, d, steps, fused>->println
     let grad_fused = with_grad(fused_loss)

@@ -14,10 +14,10 @@ func run(t: int, steps: int, x: f32[..], h: f32[..]): f32[..] {
 }
 
 func forward(x: f32[..]): f32[..] {
-    return run(0, shape(x)[1], x, zeros([shape(x)[0], shape(x)[2]]))
+    return run(0, shape(x)[1], x, zeros::<f32>([shape(x)[0], shape(x)[2]]))
 }
 
 func main(): int sync {
-    println(forward(ones([2, 3, 4])))
+    println(forward(ones::<f32>([2, 3, 4])))
     return 0
 }

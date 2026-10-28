@@ -28,8 +28,8 @@ func revoked(a: f32[..], b: f32[..]): f32[..] { return a @ b }
 func canonical(a: f32[..], b: f32[..]): f32[..] { return a @ b }
 
 func main(): int sync {
-    let left = ones([8, 8]) * 1.00390625
-    let right = ones([8, 8])
+    let left = ones::<f32>([8, 8]) * 1.00390625
+    let right = ones::<f32>([8, 8])
     let grantedPlan = inspect<granted>((left, right))
     let revokedPlan = inspect<revoked>((left, right))
     let canonicalPlan = inspect<canonical>((left, right))

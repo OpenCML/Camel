@@ -6,9 +6,9 @@ import tensor
 import nn
 
 func main(): int sync {
-    let a = tensor::ones([2, 2])
+    let a = tensor::ones::<f32>([2, 2])
     let b = tensor::new([[1.0, 2.0], [3.0, 4.0]])
-    let v = nn::sgd(tensor::zeros([2, 2]), tensor::ones([2, 2]), 0.5)
+    let v = nn::sgd(tensor::zeros::<f32>([2, 2]), tensor::ones::<f32>([2, 2]), 0.5)
 
     let a0 = tensor::shape(a)[0]
     let b1 = tensor::shape(b)[1]

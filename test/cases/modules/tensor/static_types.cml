@@ -9,7 +9,7 @@
  *  - a call whose result declares `f32[?, ?]` enters the cell `w`: the cell's element type is `f32`
  *    and so is the value's, and the extents are what widen, at the same rank;
  *  - the cell keeps its rank, so a value of another rank gets a binding of its own: `g` holds
- *    `ones([5])`, and this case reads it.
+ *    `ones::<f32>([5])`, and this case reads it.
  */
 
 import {
@@ -21,13 +21,13 @@ func grow(t: f32[?, ?]): f32[?, ?] {
 }
 
 func pick(flag: bool): f32[?, ?] {
-    return if flag then zeros([2, 2]) else ones([3, 2])
+    return if flag then zeros::<f32>([2, 2]) else ones::<f32>([3, 2])
 }
 
 func main(): int sync {
-    var w = zeros([2, 1])
+    var w = zeros::<f32>([2, 1])
     w = grow(w)
-    var g = ones([5])
+    var g = ones::<f32>([5])
     seed(7)
     let r1 = random([4], 0.0, 1.0)
     seed(7)

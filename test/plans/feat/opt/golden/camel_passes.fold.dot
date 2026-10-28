@@ -16,6 +16,7 @@ digraph GraphIR {
             N07 -> N03 [label="0|0", type="NORM"];
             N04 -> N05 [label="0|0", type="NORM"];
             N03 -> N05 [label="0|0", type="CTRL"];
+            N03 -> N05 [label="SYNC", type="SYNC"];
         }
         subgraph cluster_F03 {
             label="compare";
@@ -30,6 +31,7 @@ digraph GraphIR {
             N0D -> N0A [label="0|0", type="NORM"];
             N0B -> N0C [label="0|0", type="NORM"];
             N0A -> N0C [label="0|0", type="CTRL"];
+            N0A -> N0C [label="SYNC", type="SYNC"];
         }
         subgraph cluster_F04 {
             label="live";
@@ -52,6 +54,7 @@ digraph GraphIR {
             N12 -> N13 [label="0|0", type="NORM"];
             N14 -> N15 [label="0|0", type="NORM"];
             N13 -> N15 [label="0|0", type="CTRL"];
+            N13 -> N15 [label="SYNC", type="SYNC"];
         }
         O01 [label="EXIT", type="EXIT"];
         N16 [label="chain", type="FUNC", origin=<ORIGIN>, span="38:12-38:19", srcfile="<ROOT>/test/cases/opt/camel_passes/fold_subject.cml", value_type="int"];
@@ -66,12 +69,15 @@ digraph GraphIR {
         N1E -> O01 [label="0", type="EXIT"];
         N16 -> N17 [label="0|0", type="NORM"];
         N17 -> N18 [label="0|0", type="CTRL"];
+        N17 -> N18 [label="SYNC", type="SYNC"];
         N18 -> N19 [label="0|0", type="NORM"];
         N1A -> N1B [label="0|0", type="NORM"];
         N19 -> N1B [label="0|0", type="CTRL"];
+        N19 -> N1B [label="SYNC", type="SYNC"];
         N1B -> N1C [label="0|0", type="NORM"];
         N1D -> N1E [label="0|0", type="NORM"];
         N1C -> N1E [label="0|0", type="CTRL"];
+        N1C -> N1E [label="SYNC", type="SYNC"];
     }
     O00 [label="EXIT", type="EXIT"];
     N1F [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="37:0-42:1", srcfile="<ROOT>/test/cases/opt/camel_passes/fold_subject.cml", value_type="() => int uses stdout"];

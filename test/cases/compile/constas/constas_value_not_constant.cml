@@ -5,7 +5,7 @@ func total(constas n: int, x: f32[n]): float {
 }
 
 func use(m: int): float {
-    return total(m, ones([3]))
+    return total(m, ones::<f32>([3]))
 }
 
 func main(): int sync {

@@ -14,7 +14,7 @@ func main(): int sync {
     println(sum(abs(download(run_preferred_resident<pair>((d, x))) - (x + x))))
     println(sum(abs(download(run_preferred_resident<pair>((d, d))) - (x + x))))
     println(sum(abs(download(run_preferred_resident<aggregate>({a: d, b: (x, d)})) - (x + x * x))))
-    println(sum(download(run_preferred_resident<identity>(upload(zeros([0, 3]))))))
+    println(sum(download(run_preferred_resident<identity>(upload(zeros::<f32>([0, 3]))))))
     println(sum(abs(download(d) - x)))
     println(inspect<square>(d))
     return 0

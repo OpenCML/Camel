@@ -7,7 +7,7 @@ func exact(a: f32[2, 3]): float {
     return float(sum(a))
 }
 func f(x: f32[?, 3], n: int): float {
-    return rows(zeros([n, 3]) + 1.0) + rows(reshape(x, [n, 3]))
+    return rows(zeros::<f32>([n, 3]) + 1.0) + rows(reshape(x, [n, 3]))
 }
 // With every extent of the input known, one computed extent has only one value that fits.
 func g(y: f32[6], n: int): float {

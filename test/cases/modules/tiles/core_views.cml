@@ -45,7 +45,7 @@ func main(): int sync {
     save_npy(download(run_preferred_resident<configured<[2, 0, 1]>>(x)), folder + '/config_gpu0.npy')
     save_npy(download(run_preferred_resident<configured<[1, 2, 0]>>(x)), folder + '/config_gpu1.npy')
     save_npy(download(run_preferred_resident<configured<[2, 0, 1]>>(x)), folder + '/config_gpu2.npy')
-    let a = zeros([2, 4, 3])
+    let a = zeros::<f32>([2, 4, 3])
     // Bind each transform once, outside the wrapper: tiles::run specializes the wrapper's
     // graph, and a graph that still contains an autodiff operator cannot be lowered there.
     // The wrapper then calls the gradient function that was already built, whose graph Tiles
@@ -62,12 +62,12 @@ func main(): int sync {
     save_npy(download(run_preferred_resident<dn>(a)), folder + '/negative_gpu.npy')
     save_npy(dk(a), folder + '/keep_cpu.npy')
     save_npy(download(run_preferred_resident<dk>(a)), folder + '/keep_gpu.npy')
-    let e = zeros([0, 4, 2])
+    let e = zeros::<f32>([0, 4, 2])
     let de_grad = grad(empty_loss)
     let de = (v: f32[..]): f32[..] => de_grad<v>()
     save_npy(de(e), folder + '/empty_cpu.npy')
     save_npy(download(run_preferred_resident<de>(e)), folder + '/empty_gpu.npy')
-    let w = zeros([2, 3, 4, 5])
+    let w = zeros::<f32>([2, 3, 4, 5])
     let dw_grad = grad(wide_loss)
     let dw = (v: f32[..]): f32[..] => dw_grad<v>()
     save_npy(dw(w), folder + '/wide_cpu.npy')

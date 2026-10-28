@@ -12,9 +12,9 @@ func bump(var w: f32[], d: f32): float sync {
 }
 
 func main(): int sync {
-    var t = ones([2])
+    var t = ones::<f32>([2])
     let a = t
-    let u = ones([2])
+    let u = ones::<f32>([2])
     t += u
     println(sum(t), sum(a))
     t -= u

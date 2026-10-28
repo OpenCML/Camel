@@ -10,11 +10,11 @@ import { zeros, ones } from tensor
 import { get_env } from env
 
 func pick(flag: bool): f32[..] {
-    return if flag then zeros([2, 3]) else ones([3, 2])
+    return if flag then zeros::<f32>([2, 3]) else ones::<f32>([3, 2])
 }
 
 func main(): int sync {
-    let w = ones([3, 4])
+    let w = ones::<f32>([3, 4])
     println(pick((get_env('FLAG') ?? '') == 'true') @ w)
     return 0
 }

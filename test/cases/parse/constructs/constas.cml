@@ -13,6 +13,6 @@ func affine(
 }
 
 func main(): int sync {
-    println(affine(ones([2]), ones([3])))
+    println(affine(ones::<f32>([2]), ones::<f32>([3])))
     return 0
 }

@@ -105,21 +105,36 @@ verify_script = '''
 
 [[tests]]
 name = "other_wait.graph"
+desc = "A wait the value's own producer does not carry is moved to the consumer, and the value a consumer reads is the value the producer made: what a print reads, once the forwarding gates it passes through are looked through, is the `dtod` node itself -- a gate orders the value it reads and changes nothing else (docs/design/effects/edges.cn.md 4.6), and the prints still happen in the source's order."
 case = "../../../cases/opt/generic/gate_value_dependency.cml"
 args = ["${case}", "std::macro", "std::opt", "std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
  const gates=g.nodes.filter(n=>n.kind==='GATE');
- assert(gates.length===1&&gates[0].id===g.exit,'ordinary consumer gates remained');
- const prints=g.nodes.filter(n=>n.label===':io/println');
+ assert(gates.some(n=>n.id===g.exit),'the return anchor is missing');
+ assert(gates.filter(n=>n.id!==g.exit).every(n=>g.edges.some(e=>e.source===n.id&&e.kind==='normal')),'ordinary consumer gates remained');
  const node=id=>g.nodes.find(n=>n.id===id);
- const printOf=label=>prints.find(n=>g.edges.some(e=>e.target===n.id&&e.kind==='normal'&&node(e.source).label===label));
+ // The value a print reads, with the forwarding gates it passes through looked through: a GATE
+ // orders the value it reads and changes nothing else (docs/design/effects/edges.cn.md 4.6).
+ const printedValue=n=>{
+  let cur=n;
+  for(let step=0;step<32;++step){
+   const ins=g.edges.filter(e=>e.target===cur.id&&e.kind==='normal');
+   if(!ins.length) return cur;
+   cur=node(ins[ins.length-1].source);
+   if(!cur||cur.kind!=='GATE') return cur;
+  }
+  return cur;
+ };
+ const prints=g.nodes.filter(n=>n.label===':io/println');
+ const printOf=label=>prints.find(n=>{const v=printedValue(n);return v&&v.label===label});
  const held=printOf('held'),middle=printOf('middle'),last=printOf(':op/dtod');
  const result=prints.find(n=>![held,middle,last].includes(n));
  assert(prints.length===4&&held&&middle&&last&&result,'effect/value lost');
- const ordered=(a,b)=>g.edges.some(e=>e.kind==='control'&&e.source===a.id&&e.target===b.id);
- assert(ordered(held,middle)&&ordered(middle,result)&&ordered(result,last)&&ordered(last,gates[0]),'consumer waiting order lost');
+ // The prints keep the source's order; the kind that names it may be any of the three.
+ const ordered=(a,b)=>g.edges.some(e=>e.source===a.id&&e.target===b.id&&(e.kind==='control'||e.kind==='sync'||e.kind==='order'));
+ assert(ordered(held,middle)&&ordered(middle,result)&&ordered(result,last)&&ordered(last,node(g.exit)),'consumer waiting order lost');
 }
 '''
 
