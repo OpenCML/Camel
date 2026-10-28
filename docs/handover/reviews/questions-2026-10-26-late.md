@@ -557,3 +557,7 @@ H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program
 4. **段错误：`with_grad` 求导一个在 `loop` 里建闭包的函数。** 复现：`Camel-Archive/ICPC2027/study/gn-migration/renderer-samples/gradient-crash/`，在该目录 `camel prog.cml`，加不加 `std::macro std::nvm` 都一样。打印 `@CALL 0` 后退出 139（`3e028e1a2` 上复现）。前向模式的同一程序能跑。
    - 先缩到最小程序：`loop` 体里定义 lambda 并调用、读循环外的值，外面用 `with_grad` 求导。
    - 从根上修：求导不支持某种形状时，要在编译期给出诊断；运行时无论如何不许崩。
+5. **ONNX 导出拒绝 `loop`**（`modules/onnx/exporter.cpp` 的 `loopRefusalText`）：诊断写着 "not exported to ONNX yet; write the loop as a tail-recursive function"。这是"尚未实现"式诊断，叫用户为了导出改写成非惯用的写法，正好是规则不允许的过渡状态。
+   - 尾递归已经能导出成 ONNX `Loop`，所以 `LOOP` 节点直接翻成 `Loop`（状态即循环携带值，`for` 的范围即行程计数），复用同一套发射代码。
+   - 拒绝和那段提示删除。
+   - 用例：`for` 循环与带条件的循环各一条，导出后用 onnxruntime 对照解释器的结果。
