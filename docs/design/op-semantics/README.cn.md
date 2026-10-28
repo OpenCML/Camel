@@ -1432,10 +1432,10 @@ func main(): int sync {
     println(maximum(a, b))
     println(maximum(b, a))
     println(minimum(a, b))
-    println(max(pick([1.0, 0.0, 1.0], [1.0, 1.0, 3.0]), 0))
-    println(max(pick([0.0, 1.0, 1.0], [1.0, 1.0, 3.0]), 0))
-    println(max(reshape<[2]>([0.0, nz]), 0))
-    println(max(reshape<[2]>([nz, 0.0]), 0))
+    println(max<0>(pick([1.0, 0.0, 1.0], [1.0, 1.0, 3.0])))
+    println(max<0>(pick([0.0, 1.0, 1.0], [1.0, 1.0, 3.0])))
+    println(max<0>(reshape<[2]>([0.0, nz])))
+    println(max<0>(reshape<[2]>([nz, 0.0])))
     return 0
 }
 ```
