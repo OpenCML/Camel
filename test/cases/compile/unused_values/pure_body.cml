@@ -1,0 +1,14 @@
+/**
+ * The same pure statement in a body that is not `sync`: the operator still changes nothing, so
+ * the value it returns is dropped for nothing, and the error is UnusedPureResult there too.
+ */
+
+func twice(a: int): int {
+    a + 2
+    return a
+}
+
+func main(): int sync {
+    println(twice(1))
+    return 0
+}

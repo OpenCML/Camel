@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 215
+**Semantic — errors** (`SemanticDiag`) — 216
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -276,6 +276,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `FactConstCaseTypeRequired` | The 'const' case '{0}' of the fact '{1}' writes no type. |
 | `FactCaseBindsNoVariable` | This case of the fact '{0}' names no variable. |
 | `TypeFunctionNotApplicable` | The type function '{0}' is not applicable: {1}. |
+| `StatementAfterReturn` | This statement cannot run: the 'return' written before it gives the value of this block, so nothing after it in the block is reached. |
 
 **Semantic — warnings** (`SemanticDiag`) — 15
 

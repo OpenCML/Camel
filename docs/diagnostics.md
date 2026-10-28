@@ -8625,13 +8625,17 @@ This value has type '{0}' and nothing uses it: an error it holds is lost{1}.
 A function that returns a 'T!' reports its failure through that value. Take the value apart with '!!', '->' or 'match', return it from a function that declares a 'T!', or drop it on purpose with 'let _ = ...'.
 ```
 
-**Example** (`test/cases/consistency/unused_fallible/main_undeclared.cml`, run as `camel -E short test/cases/consistency/unused_fallible/main_undeclared.cml`)
+**Example** (`test/cases/compile/unused_values/fallible_sync.cml`, run as `camel -E short test/cases/compile/unused_values/fallible_sync.cml`)
 
 ```camel
-// A `main` without a declared return type that ends in an error value: nothing takes it.
-func main() sync {
-    println('start')
-    parse_int('zz')
+func check_same(a: int, b: int): bool! {
+    return if a == b then true else error('Mismatch', 'not the same')
+}
+
+func main(): int sync {
+    check_same(1, 2)
+    println('done')
+    return 0
 }
 ```
 
