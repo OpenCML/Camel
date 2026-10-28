@@ -73,8 +73,8 @@ func step(w: f32[..], x: f32[..]): (float[..], f32[..], float[..], f32[..], floa
     let d = with_grad(loss_d)<m>(x)
     let (h, k) = walk<m>(x, 0)
     return (
-        reshape([a.0], [1]), a.1.w, reshape([b.0], [1]), b.1.w,
-        reshape([c.0], [1]), c.1.w, reshape([d.0], [1]), d.1.w, k
+        reshape<[1]>([a.0]), a.1.w, reshape<[1]>([b.0]), b.1.w,
+        reshape<[1]>([c.0]), c.1.w, reshape<[1]>([d.0]), d.1.w, k
     )
 }
 
@@ -90,7 +90,7 @@ func main(): int sync {
     save_npy(r.5, 'native_5.npy')
     save_npy(r.6, 'native_6.npy')
     save_npy(r.7, 'native_7.npy')
-    save_npy(reshape([r.8], [1]), 'native_8.npy')
+    save_npy(reshape<[1]>([r.8]), 'native_8.npy')
     let exported = if (get_env('ONNX_OUT') ?? '') != '' then sync {
         let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(
             (w: f32[..], x: f32[..]): (float[..], f32[..], float[..], f32[..], float[..], f32[..], float[..], f32[..], int) => step(w, x),

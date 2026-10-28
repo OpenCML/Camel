@@ -15,7 +15,7 @@ func plain(): float {
 }
 
 func main(): int sync {
-    let x = reshape([1.0] as f32[], [1])
+    let x = reshape<[1]>([1.0] as f32[])
     println(grad(plain)<(x, 'a')>())
     return 0
 }

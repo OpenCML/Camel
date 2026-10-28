@@ -18,14 +18,14 @@ func forward(x: f32[..], w: Weights): f32[..] {
 
 func weights(): Weights {
     return {
-        hidden: reshape([0.5, -0.25, 0.1, 0.3, 0.2, -0.4] as f32[], [2, 3]),
-        out: reshape([1.0, -1.0, 0.5] as f32[], [3, 1])
+        hidden: reshape<[2, 3]>([0.5, -0.25, 0.1, 0.3, 0.2, -0.4] as f32[]),
+        out: reshape<[3, 1]>([1.0, -1.0, 0.5] as f32[])
     }
 }
 
 func main(): int sync {
     let w = weights()
-    let x = reshape([1.0, 2.0, 0.5, -1.0] as f32[], [2, 2])       // two samples with two features
+    let x = reshape<[2, 2]>([1.0, 2.0, 0.5, -1.0] as f32[])       // two samples with two features
     println(forward(x, w))
 
     // The runner's per-test scratch directory (the translate test names the file with the pass's

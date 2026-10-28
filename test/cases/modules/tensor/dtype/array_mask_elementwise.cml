@@ -32,9 +32,9 @@ func agreement(x: f32[..], y: f32[..]): float {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, -2.0, 3.0, -4.0] as f32[], [4])
-    let none = reshape([0.0, 1.0, 0.0, 1.0] as f32[], [4])
-    let all = reshape([1.0, 1.0, 1.0, 1.0] as f32[], [4])
+    let x = reshape<[4]>([1.0, -2.0, 3.0, -4.0] as f32[])
+    let none = reshape<[4]>([0.0, 1.0, 0.0, 1.0] as f32[])
+    let all = reshape<[4]>([1.0, 1.0, 1.0, 1.0] as f32[])
     println(count_hits(x, none))
     println(count_hits_selected(x, none))
     println(count_hits(x, all))

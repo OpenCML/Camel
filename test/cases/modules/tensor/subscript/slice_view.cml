@@ -6,7 +6,7 @@
 import { reshape, shape, sum } from tensor
 
 func main(): int sync {
-    let b = reshape([1.0, 2.0, 3.0, 4.0], [4])
+    let b = reshape<[4]>([1.0, 2.0, 3.0, 4.0])
     println(shape(b[1:3]))
     println(sum(b[1:3]))
     println(shape(b[:2]))

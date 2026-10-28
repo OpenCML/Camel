@@ -28,7 +28,7 @@ func cell(xt: f32[..], h: f32[..]): f32[..] {
 
 with <m: Gru, x: f32[..]>
 func gated(t: int, h: f32[..]): f32[..] {
-    let xt = reshape(slice(x, 1, t, t + 1), [shape(x)[0], shape(x)[2]])
+    let xt = reshape<[shape(x)[0], shape(x)[2]]>(slice(x, 1, t, t + 1))
     return if mean(abs(xt)) > 0.5 then cell<m>(xt, h) else h
 }
 
@@ -61,7 +61,7 @@ func loaded(dir: string): Gru {
 
 func main(): int sync {
     let r = step(loaded(get_env('PARAMS') ?? ''), load_npy::<f32>(get_env('X') ?? ''))
-    save_npy(reshape([r.0], [1]), (get_env('OUT') ?? '') + '/loss.npy')
+    save_npy(reshape<[1]>([r.0]), (get_env('OUT') ?? '') + '/loss.npy')
     save_params(r.1, (get_env('OUT') ?? '') + '/params')
     println('ran')
     return 0

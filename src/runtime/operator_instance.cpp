@@ -7,6 +7,7 @@
 
 #include "camel/runtime/operator_instance.h"
 
+#include "camel/runtime/draft.h"
 #include "camel/runtime/reachable.h"
 
 #include "camel/core/node_attrs.h"
@@ -60,15 +61,17 @@ std::optional<slot_t> staticValueOf(const GCGraph &graph, gc_node_ref_t ref) {
     }
     if (!isPlainScalar(n->dataType())) {
         const auto &table = core::OperatorTable::instance();
-        for (gc_node_ref_t user : graph.normOutputsOf(ref)) {
-            const GCNode *u = graph.node(user);
-            if (u->kind != GCNodeKind::Oper ||
-                !table.mayBeRecomputed(graph.nodeBodyAs<GCOperBody>(user)->oper)) {
-                return std::nullopt;
+        // Every reader recomputes the value from the constant, so the constant is not shared with a
+        // reader that must see it as it is. A with-argument of an operator that takes it after
+        // the ordinary ones is such a reader's operand like any other.
+        for (const auto users : {graph.normOutputsOf(ref), graph.withOutputsOf(ref)}) {
+            for (gc_node_ref_t user : users) {
+                const GCNode *u = graph.node(user);
+                if (u->kind != GCNodeKind::Oper ||
+                    !table.mayBeRecomputed(graph.nodeBodyAs<GCOperBody>(user)->oper)) {
+                    return std::nullopt;
+                }
             }
-        }
-        if (!graph.withOutputsOf(ref).empty()) {
-            return std::nullopt;
         }
     }
     return graph.staticArea()->get<slot_t>(static_cast<size_t>(-n->dataIndex));
@@ -77,17 +80,25 @@ std::optional<slot_t> staticValueOf(const GCGraph &graph, gc_node_ref_t ref) {
 } // namespace
 
 KernelArguments kernelArgumentsOf(const GCGraph &graph, gc_node_ref_t node) {
-    KernelArguments out;
     const auto norm = graph.normInputsOf(node);
     const auto with = graph.withInputsOf(node);
-    out.norm.assign(norm.begin(), norm.end());
-    const bool joined = graph.node(node)->kind == GCNodeKind::Oper &&
-                        core::OperatorTable::instance().withAfterNorm(
-                            graph.nodeBodyAs<GCOperBody>(node)->uri());
-    if (joined) {
-        out.norm.insert(out.norm.end(), with.begin(), with.end());
-    } else {
-        out.with.assign(with.begin(), with.end());
+    KernelArguments out{{norm.begin(), norm.end()}, {with.begin(), with.end()}};
+    if (graph.node(node)->kind == GCNodeKind::Oper) {
+        core::joinKernelArguments(graph.nodeBodyAs<GCOperBody>(node)->uri(), out.norm, out.with);
+    }
+    return out;
+}
+
+KernelArguments kernelArgumentsOf(const GraphDraft &draft, gc_node_ref_t node) {
+    const auto norm = draft.normInputsOf(node);
+    const auto with = draft.withInputsOf(node);
+    KernelArguments out{{norm.begin(), norm.end()}, {with.begin(), with.end()}};
+    const DraftNodeHeader *header = draft.header(node);
+    if (header != nullptr && header->kind == GCNodeKind::Oper) {
+        core::joinKernelArguments(
+            reinterpret_cast<const GCOperBody *>(draft.payloadOf(node).data())->uri(),
+            out.norm,
+            out.with);
     }
     return out;
 }
@@ -114,6 +125,9 @@ std::optional<core::sem::IndexedInstance> instanceOf(const GCGraph &graph, gc_no
         with.push_back(t);
         statics.emplace_back(staticValueOf(graph, in));
     }
+    // The instance is asked about the arguments in kernel order; the statics are the norm ones
+    // and then the with ones, so they line up with it.
+    core::joinKernelArguments(graph.nodeBodyAs<GCOperBody>(node)->uri(), norm, with);
     return core::sem::instantiate(
         graph.nodeBodyAs<GCOperBody>(node)->oper,
         core::sem::InstanceContext{.norm = norm, .with = with, .statics = statics});

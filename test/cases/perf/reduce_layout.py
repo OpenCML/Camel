@@ -132,7 +132,7 @@ PROBES = [
         "name": "expand_axis",
         "with": "w: f32[512, 256]",
         "args": "",
-        "body": "sum(mean(w, -1, true))",
+        "body": "sum(mean<-1, true>(w))",
         "lets": ["let w0: f32[512, 256] = randn([512, 256], 0.0, 1.0) "
                  "as f32[512, 256]"],
         "calls": {"tensor:expand_axis": 1, "tensor:mean_axis": 1},
@@ -144,7 +144,7 @@ PROBES = [
         "name": "permute",
         "with": "w: f32[16, 32, 16, 16]",
         "args": "",
-        "body": "sum(permute(permute(w, [0, 2, 1, 3]), [0, 2, 1, 3]))",
+        "body": "sum(permute<[0, 2, 1, 3]>(permute<[0, 2, 1, 3]>(w)))",
         "lets": ["let w0: f32[16, 32, 16, 16] = randn([16, 32, 16, 16], 0.0, 1.0) "
                  "as f32[16, 32, 16, 16]"],
         "calls": {"tensor:permute": 2, "tensor:permute_inverse": 2},
@@ -168,7 +168,7 @@ PROBES = [
         "name": "sum_axis",
         "with": "w: f32[16, 16, 32, 32]",
         "args": "",
-        "body": "sum(sum(w, -1, true))",
+        "body": "sum(sum<-1, true>(w))",
         "lets": ["let w0: f32[16, 16, 32, 32] = randn([16, 16, 32, 32], 0.0, 1.0) "
                  "as f32[16, 16, 32, 32]"],
         "calls": {"tensor:sum_axis": 1},

@@ -45,6 +45,7 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/runtime/operator_instance.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/facts.h"
 #include "camel/runtime/graph.h"
@@ -188,6 +189,11 @@ struct Source {
             return reinterpret_cast<const camel::runtime::GCOperBody *>(bytes.data())->oper;
         }
         return graph->nodeBodyAs<camel::runtime::GCOperBody>(ref)->oper;
+    }
+    /// The arguments of an operator node as its kernel reads them (kernelArgumentsOf).
+    std::vector<gc_node_ref_t> kernelInputs(gc_node_ref_t ref) const {
+        return draft ? camel::runtime::kernelArgumentsOf(*draft, ref).norm
+                     : camel::runtime::kernelArgumentsOf(*graph, ref).norm;
     }
     std::vector<gc_node_ref_t> normInputs(gc_node_ref_t ref) const {
         const auto inputs = draft ? draft->normInputsOf(ref) : graph->normInputsOf(ref);
@@ -351,7 +357,7 @@ bool matchNode(
         if (!sameFamily(pattern.oper, frame.source.operOf(ref))) {
             return false;
         }
-        const auto inputs = frame.source.normInputs(ref);
+        const auto inputs = frame.source.kernelInputs(ref);
         if (inputs.size() != pattern.args.size()) {
             return false;
         }
@@ -596,7 +602,8 @@ NodePattern compilePattern(
         return pattern;
     }
     case GCNodeKind::Oper: {
-        if (!graph.withInputsOf(ref).empty() || !graph.ctrlInputsOf(ref).empty()) {
+        const camel::runtime::KernelArguments arguments = camel::runtime::kernelArgumentsOf(graph, ref);
+        if (!arguments.with.empty() || !graph.ctrlInputsOf(ref).empty()) {
             err::throwRuntimeFault(
                 err::RuntimeDiag::InvalidArgument,
                 "fact.pattern",
@@ -604,7 +611,7 @@ NodePattern compilePattern(
         }
         pattern.kind = NodePattern::Kind::Op;
         pattern.oper = graph.nodeBodyAs<camel::runtime::GCOperBody>(ref)->oper;
-        for (gc_node_ref_t input : graph.normInputsOf(ref)) {
+        for (gc_node_ref_t input : arguments.norm) {
             pattern.args.push_back(
                 compilePattern(graph, input, constParams, portTypes, ports));
         }

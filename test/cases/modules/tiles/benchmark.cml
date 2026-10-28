@@ -4,11 +4,11 @@ func pipeline(x: f32[..], b: f32[..]): f32[..] {
     return exp(relu((x + b) * 0.5 - 0.25))
 }
 func normalize(x: f32[..]): f32[..] {
-    let e = exp(x - max(x, 1, true))
-    return e / sum(e, 1, true)
+    let e = exp(x - max<1, true>(x))
+    return e / sum<1, true>(e)
 }
 func product(x: f32[..], y: f32[..]): f32[..] { return x @ y }
-func maximum(x: f32[..]): f32[..] { return max(x, -1) }
+func maximum(x: f32[..]): f32[..] { return max<-1>(x) }
 func main(): int sync {
     seed(61)
     let x = random([1024, 1024], -1.0, 1.0)

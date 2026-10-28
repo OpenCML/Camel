@@ -19,9 +19,9 @@ import { with_grad } from autodiff
 import { export_model } from onnx
 
 func affine(x: f32[2, 3]): f32[..] {
-    let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3]) as f32[2, 3]
-    let k = reshape([0.5, -0.5, 0.25, -0.25, 1.5, -1.5] as f32[], [6]) as f32[?]
-    return x * w + reshape(k, [2, 3])
+    let w = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]) as f32[2, 3]
+    let k = reshape<[6]>([0.5, -0.5, 0.25, -0.25, 1.5, -1.5] as f32[]) as f32[?]
+    return x * w + reshape<[2, 3]>(k)
 }
 
 func checked(x: f32[..]): f32[..] {
@@ -32,7 +32,7 @@ func checked(x: f32[..]): f32[..] {
 
 with <x: f32[..]>
 func loss(): float {
-    let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3]) as f32[2, 3]
+    let w = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]) as f32[2, 3]
     let y = (x * x) as f32[2, 3]
     return float(sum(y * w))
 }
@@ -42,7 +42,7 @@ func step(x: f32[..]): (float, f32[..]) {
 }
 
 func main(): int sync {
-    let ex = reshape([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[], [2, 3]) as f32[2, 3]
+    let ex = reshape<[2, 3]>([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[]) as f32[2, 3]
     let _ = export_model<out: 'affine.onnx'>(affine, ex)
     let _ = export_model<out: 'checked.onnx'>(checked, ex)
     let _ = export_model<out: 'step.onnx'>(step, ex)

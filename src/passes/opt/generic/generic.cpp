@@ -20,6 +20,7 @@
 #include "camel/core/tags.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/runtime/operator_instance.h"
 #include "camel/execute/pass/base.h"
 #include "camel/execute/pass/warnings.h"
 #include "camel/runtime/control.h"
@@ -599,12 +600,15 @@ bool foldFromTypes(
     GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots) {
     const auto *folder     = camel::core::OperatorTable::instance().typeFolder(operIdOf(draft, id));
     type::Type *resultType = draft.header(id)->dataType;
-    if (!folder || !resultType || !draft.withInputsOf(id).empty()) {
+    // The arguments as the operator's kernel reads them (with-arguments after the ordinary ones
+    // when it takes them so); an operator with other with-arguments is not folded.
+    const camel::runtime::KernelArguments arguments = camel::runtime::kernelArgumentsOf(draft, id);
+    if (!folder || !resultType || !arguments.with.empty()) {
         return false;
     }
     std::vector<type::Type *> types;
     std::vector<type::StaticArg> statics;
-    for (gc_node_ref_t in : draft.normInputsOf(id)) {
+    for (gc_node_ref_t in : arguments.norm) {
         const auto *h = draft.header(in);
         if (!h || !h->dataType) {
             return false;

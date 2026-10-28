@@ -68,9 +68,11 @@ export func numel::<T>(t: T[..]): int when is_numeric::<T>()
 /// The extent of one axis; a negative axis counts from the last one (`-1` is the last axis).
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
-/// @example dim(new([[1.0, 2.0], [3.0, 4.0]]), 1)    // 2
-export func dim::<T>(t: T[..], axis: int): int when is_numeric::<T>()
-export func dim::<T>(t: T[..], axis: i32): int when is_numeric::<T>()
+/// @example dim<1>(zeros::<f32>([2, 2]))    // 2
+with <axis: int>
+export func dim::<T>(t: T[..]): int when is_numeric::<T>()
+with <axis: i32>
+export func dim::<T>(t: T[..]): int when is_numeric::<T>()
 
 // ---- binary form ----
 

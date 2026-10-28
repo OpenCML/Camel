@@ -83,7 +83,7 @@ class Gen:
         return self.let(f"{f}({v})", f"{f}({v})")
 
     def stage_lambda(self, v: str) -> str:
-        s = self.let(f"mean({v}, 0, true) * 1.3", f"{v}.mean(0, keepdims=True) * 1.3")
+        s = self.let(f"mean<0, true>({v}) * 1.3", f"{v}.mean(0, keepdims=True) * 1.3")
         g = self.name("g")
         c1, p1 = self.unary("p")
         self.body_c.append(f"    let {g} = (p: f32[..]): f32[..] => {{\n        let q = {c1}\n        tanh(q * {s}) + {s}\n    }}")
@@ -110,9 +110,9 @@ class Gen:
             return self.let(f"if float(sum({v})) > 0.1 then {fa}({v}) else {fb}({v})", f"{fa}({v}) if {v}.sum() > 0.1 else {fb}({v})")
         # arms return a tuple whose second component also depends on the argument
         self.helpers_c.append(
-            f"func {fa}(y: f32[..]): (f32[..], f32[..]) {{\n    let t = {c1}\n    return (t, tanh(mean(t, 0, true)))\n}}\n")
+            f"func {fa}(y: f32[..]): (f32[..], f32[..]) {{\n    let t = {c1}\n    return (t, tanh(mean<0, true>(t)))\n}}\n")
         self.helpers_c.append(
-            f"func {fb}(y: f32[..]): (f32[..], f32[..]) {{\n    let t = {c2}\n    return (t * 0.5, mean(y, 0, true))\n}}\n")
+            f"func {fb}(y: f32[..]): (f32[..], f32[..]) {{\n    let t = {c2}\n    return (t * 0.5, mean<0, true>(y))\n}}\n")
         self.helpers_p.append(f"def {fa}(y):\n    t = {p1}\n    return (t, np.tanh(t.mean(0, keepdims=True)))\n")
         self.helpers_p.append(f"def {fb}(y):\n    t = {p2}\n    return (t * 0.5, y.mean(0, keepdims=True))\n")
         a, b = self.name("pa"), self.name("pb")
@@ -158,7 +158,7 @@ def main() -> int:
             source = (
                 "import { mean, reshape, save_npy, sigmoid, sum, tanh } from tensor\n"
                 "import { grad } from autodiff\n\n" + "\n".join(camel) + "\nfunc main(): int sync {\n"
-                "    let xs: f32[] = [0.3, -0.2, 0.7]\n" + "    let x = reshape(xs, [3])\n"
+                "    let xs: f32[] = [0.3, -0.2, 0.7]\n" + "    let x = reshape<[3]>(xs)\n"
                 + "".join(f"    save_npy(grad(loss{j})<x>(), 'g{k}_{j}.npy')\n" for j in range(args.losses))
                 + "    return 0\n}\n")
             (work / f"p{k}.cml").write_text(source, encoding="utf-8")

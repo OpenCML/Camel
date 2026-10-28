@@ -7,14 +7,14 @@ import {
 } from tensor
 
 func main(): int sync {
-    let t = reshape([1.0, 5.0, 2.0, 4.0, 3.0, 6.0], [2, 3])
-    let rows = sum(t, 1)
-    let cols = sum(t, 0, true)
-    let colMax = max(t, 0)
-    let best = argmax(t, -1)
+    let t = reshape<[2, 3]>([1.0, 5.0, 2.0, 4.0, 3.0, 6.0])
+    let rows = sum<1>(t)
+    let cols = sum<0, true>(t)
+    let colMax = max<0>(t)
+    let best = argmax<-1>(t)
     'reduce rows={} cols_shape={} mean={}'->format<sum(rows), shape(cols), mean(t)>->println
-    'reduce colmax_sum={} argmax_sum={} mean_axis_sum={}'->format<sum(colMax), sum(best), sum(mean(t, 1))>->println
-    let p = softmax(t, 0)
+    'reduce colmax_sum={} argmax_sum={} mean_axis_sum={}'->format<sum(colMax), sum(best), sum(mean<1>(t))>->println
+    let p = softmax<0>(t)
     let lp = log_softmax(t)
     'reduce softmax0_sum={} logsoftmax_expsum={}'->format<sum(p), sum(exp(lp))>->println
     return 0

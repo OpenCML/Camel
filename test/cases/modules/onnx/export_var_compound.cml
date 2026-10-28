@@ -23,7 +23,7 @@ func forward(x: f32[..]): f32[..] sync {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, -2.0, 3.0, 4.0] as f32[], [2, 2])
+    let x = reshape<[2, 2]>([1.0, -2.0, 3.0, 4.0] as f32[])
     println(forward(x))
     let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[..]): f32[..] => forward(x), x)
     println('exported')

@@ -9,9 +9,9 @@ func main(): int sync {
     let b = eye::<f32>(2)
     let c = matmul(a, b)
     let d = add(c, 2.0)
-    let e = concat([[1.0, 2.0]], [[3.0, 4.0]], 0)
+    let e = concat<0>([[1.0, 2.0]], [[3.0, 4.0]])
     let f = transpose(e)
-    let g = reshape(concat([[1.0, 2.0]], [[3.0, 4.0]], 0), [4])
+    let g = reshape<[4]>(concat<0>([[1.0, 2.0]], [[3.0, 4.0]]))
 
     if shape(d)[0] != 2 then {
         return 1

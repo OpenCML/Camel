@@ -16,7 +16,7 @@ func gate(t: f32[4]): f32[4] {
 }
 
 func main(): int sync {
-    let y = gate(reshape([1.0, -2.0, 3.0, 0.5] as f32[], [4]))
+    let y = gate(reshape<[4]>([1.0, -2.0, 3.0, 0.5] as f32[]))
     'gate={}'->format<y[0]>->println
     return 0
 }

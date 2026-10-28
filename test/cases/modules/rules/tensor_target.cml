@@ -42,7 +42,7 @@ func i64_distribute(a: i64[..], b: i64[..], c: i64[..]): i64[..] {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println(combine(x))
     println(combine_mixed(x))
     println(combine_mixed_granted(x))
@@ -51,11 +51,11 @@ func main(): int sync {
     println(one(x), one_other(x), one_mixed(x), one_mixed_granted(x))
     println(neutral(x))
     println(inexact(x), inexact_one(x))
-    let t = reshape([576460752303423489, 2, 3], [3])
+    let t = reshape<[3]>([576460752303423489, 2, 3])
     println(i64_self(t))
-    let a = reshape([2, 3, 4], [3])
-    let b = reshape([1, 2, 3], [3])
-    let c = reshape([5, 6, 7], [3])
+    let a = reshape<[3]>([2, 3, 4])
+    let b = reshape<[3]>([1, 2, 3])
+    let c = reshape<[3]>([5, 6, 7])
     println(i64_distribute(a, b, c))
     return 0
 }

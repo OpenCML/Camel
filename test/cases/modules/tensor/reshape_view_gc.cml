@@ -10,21 +10,21 @@ import { reshape, flatten, unsqueeze, new, sum, concat } from tensor
 // A fresh owner every call: only the returned view keeps it alive.
 func make_view(i: int): f32[..] {
     let base = new([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[][]) * f32(i)
-    return unsqueeze(reshape(flatten(reshape(base, [3, 2])), [6]), 0)
+    return unsqueeze<0>(reshape<[6]>(flatten(reshape<[3, 2]>(base))))
 }
 
 func spin(i: int, n: int, acc: f32[..]): f32[..] {
     return if i >= n then acc else sync {
         let v = make_view(i)
         // A view of a view reads the same owner.
-        let w = reshape(v, [2, 3])
-        return spin(i + 1, n, concat(acc, reshape(w, [1, 6]), 0))
+        let w = reshape<[2, 3]>(v)
+        return spin(i + 1, n, concat<0>(acc, reshape<[1, 6]>(w)))
     }
 }
 
 func main(): int sync {
     let rows = spin(1, 40, make_view(0))
     println('rows {} total {}'->format<rows, sum(rows)>)
-    println('last {}'->format<reshape(rows, [240])>)
+    println('last {}'->format<reshape<[240]>(rows)>)
     return 0
 }

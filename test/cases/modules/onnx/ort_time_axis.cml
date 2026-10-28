@@ -10,7 +10,7 @@ import { export_model } from onnx
 import { get_env } from env
 
 func at(x: f32[..], t: int): f32[..] {
-    return reshape(slice(x, 1, t, t + 1), [shape(x)[0], shape(x)[2]])
+    return reshape<[shape(x)[0], shape(x)[2]]>(slice(x, 1, t, t + 1))
 }
 
 func scan(t: int, steps: int, x: f32[..], h: f32[..]): f32[..] {

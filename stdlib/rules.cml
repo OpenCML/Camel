@@ -329,7 +329,7 @@ export rule array_combine_one_mixed::<T>(x: T[..], const c: T)
 /// its log, and a probability that rounds to zero gives -inf where the true log-softmax is finite.
 #requires(refine_accuracy)
 export rule array_log_softmax_of_softmax(x: f32[..], const axis: int) {
-    log_array(softmax(x, axis)) => log_softmax(x, axis)
+    log_array(softmax<axis>(x)) => log_softmax<axis>(x)
 }
 
 /// The floating widths whose scalar `log`, `exp`, `log1p` and `expm1` are operators of the graph

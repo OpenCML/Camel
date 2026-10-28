@@ -10,7 +10,7 @@ func scale(x: f32[3], a: float): f32[3] {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
     println(sum(scale(x, 2.0)))
     return 0
 }

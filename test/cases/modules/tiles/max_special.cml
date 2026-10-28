@@ -17,10 +17,10 @@ func sample(i: int): f32 {
         else if row == 6 then nan
         else (if col == 1 || col == width - 1 then 9.0 else -2.0))
 }
-func maximum(x: f32[..]): f32[..] { return max(x, -1) }
+func maximum(x: f32[..]): f32[..] { return max<-1>(x) }
 func main(): int sync {
     let width = int(get_env('TILES_TEST_WIDTH') ?? '')
-    let x = reshape(0..(8 * width)->map<sample<width>>, [8, width])
+    let x = reshape<[8, width]>(0..(8 * width)->map<sample<width>>)
     println(inspect<maximum>(x))
     save_npy(maximum(x), (get_env('TILES_TEST_OUT') ?? '') + '/cpu.npy')
     save_npy(download(run_preferred_resident<maximum>(x)), (get_env('TILES_TEST_OUT') ?? '') + '/gpu.npy')

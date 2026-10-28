@@ -74,11 +74,11 @@ func tree_at(words: f32[..]): Tree {
     let vocab = shape(words)[2]
     return Tree::Node(
         Tree::Node(
-            Tree::Leaf(reshape(slice(words, 1, 0, 1), [1, vocab])),
-            Tree::Leaf(reshape(slice(words, 1, 1, 2), [1, vocab]))),
+            Tree::Leaf(reshape<[1, vocab]>(slice(words, 1, 0, 1))),
+            Tree::Leaf(reshape<[1, vocab]>(slice(words, 1, 1, 2)))),
         Tree::Node(
-            Tree::Leaf(reshape(slice(words, 1, 2, 3), [1, vocab])),
-            Tree::Leaf(reshape(slice(words, 1, 3, 4), [1, vocab]))))
+            Tree::Leaf(reshape<[1, vocab]>(slice(words, 1, 2, 3))),
+            Tree::Leaf(reshape<[1, vocab]>(slice(words, 1, 3, 4)))))
 }
 
 func load_model(data: string): Params {
@@ -121,7 +121,7 @@ func accuracy(words: f32[..], labels: f32[..]): float {
             // count adds up (design principles 4.2). A mask is not a number, so they are read as the
             // numbers they stand for once the conversion is written, at the element type of the
             // count they are added to (design principles 5.1).
-            let hits = argmax(hidden @ p.wout + p.bout, 1) === argmax(target, 1)
+            let hits = argmax<1>(hidden @ p.wout + p.bout) === argmax<1>(target)
             let hit: float[..] = float(hits)
             (count + sum(hit), index + 1)
         }

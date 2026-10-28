@@ -463,7 +463,7 @@ kind = "behavior"
 case = "../../../cases/modules/graph_facts.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "false\nfalse\ntrue\ntrue\n[f32 [?], int [?], f32 [2, 3]]\n[0, 0, 0, 0, 0]\n"
+expect_stdout_exact = "false\nfalse\ntrue\ntrue\n[int [?], f32 [?], f32 [2, 3]]\n[0, 0, 0, 0, 0]\n"
 timeout_ms = 10000
 
 # Written (`var`) slots: both passes leave the nodes whose value may be written in place alone.

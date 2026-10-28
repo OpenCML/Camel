@@ -19,7 +19,7 @@ func model(x: float[..]): (float[..], int) {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
+    let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0])
     let r = model(x)
     println(r.1)
     let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: float[..]): (float[..], int) => model(x), (x))

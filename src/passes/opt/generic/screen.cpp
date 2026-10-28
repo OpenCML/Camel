@@ -126,7 +126,8 @@ bool mayFold(const GCGraph &graph) {
             if (std::ranges::all_of(with, isConstant) && std::ranges::all_of(norm, isConstant)) {
                 return true; // all arguments are constants
             }
-            if (with.empty() && table.typeFolder(graph.nodeBodyAs<GCOperBody>(ref)->oper)) {
+            if ((with.empty() || table.withAfterNorm(graph.nodeBodyAs<GCOperBody>(ref)->uri())) &&
+                table.typeFolder(graph.nodeBodyAs<GCOperBody>(ref)->oper)) {
                 return true; // the argument types may fix the result
             }
             break;

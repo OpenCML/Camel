@@ -56,11 +56,11 @@ func loss(): float sync {
 
 func main(): int sync {
     let m = {
-        p0: reshape([0.5, 0.25, 2.0] as f64[], [3]),
-        x: reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f64[], [2, 3]),
+        p0: reshape<[3]>([0.5, 0.25, 2.0] as f64[]),
+        x: reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f64[]),
     }
-    let b = reshape([0.5, 0.25, 2.0, 0.5, 0.25, 2.0] as f64[], [2, 3])
-    let c = reshape([5.0, 7.0, 9.0] as f64[], [3])
+    let b = reshape<[2, 3]>([0.5, 0.25, 2.0, 0.5, 0.25, 2.0] as f64[])
+    let c = reshape<[3]>([5.0, 7.0, 9.0] as f64[])
     let vg = with_grad(loss)<m>()
     let g = vg.1
     let gx = g.x
@@ -69,10 +69,10 @@ func main(): int sync {
     // The same loss on a pair whose sums separate the two accumulators: 2^24 + 1 is exact in
     // f64 and rounds back to 2^24 in f32, and the large values sit in the third column.
     let mw = {
-        p0: reshape([1.0, 16777216.0, 1.0] as f64[], [3]),
-        x: reshape([16777216.0, 1.0, 1.0, 1.0, 1.0, 16777216.0] as f64[], [2, 3]),
+        p0: reshape<[3]>([1.0, 16777216.0, 1.0] as f64[]),
+        x: reshape<[2, 3]>([16777216.0, 1.0, 1.0, 1.0, 1.0, 16777216.0] as f64[]),
     }
-    let wc = reshape([16777217.0, 2.0, 16777217.0] as f64[], [3])
+    let wc = reshape<[3]>([16777217.0, 2.0, 16777217.0] as f64[])
     let wvg = with_grad(loss)<mw>()
     let wp = wvg.1.p0
 

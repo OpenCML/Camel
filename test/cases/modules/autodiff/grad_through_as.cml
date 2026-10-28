@@ -10,21 +10,21 @@ import { grad, with_grad } from autodiff
 
 with <x: f32[..]>
 func loss(): float {
-    let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3]) as f32[2, 3]
+    let w = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]) as f32[2, 3]
     let y = (x * x) as f32[2, 3]
     let z = y as f32[?, 3]
     return float(sum(z * w))
 }
 
 func report(name: string, g: f32[..], x: f32[..]): int sync {
-    let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
+    let w = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     let err = sum(abs(g - x * w * 2.0))
     println('{} {}'->format<name, if err < 0.00001 then 'ok' else 'FAIL'>)
     return 0
 }
 
 func main(): int sync {
-    let x = reshape([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[], [2, 3]) as f32[2, 3]
+    let x = reshape<[2, 3]>([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[]) as f32[2, 3]
     report('grad', grad(loss)<x>(), x)
     let (v, g) = with_grad(loss)<x>()
     report('with_grad', g, x)

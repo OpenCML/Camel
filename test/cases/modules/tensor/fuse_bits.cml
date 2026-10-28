@@ -10,9 +10,9 @@ import { reshape, relu, to_bytes, sum } from tensor
 import { to_array } from bytes
 
 func main(): int sync {
-    let x = reshape([1.0, -2.0, 3.0, 0.5, -1.5, 2.5] as f32[], [2, 3])
-    let w = reshape([0.5, -1.0, 2.0, 1.0, -0.5, 0.25] as f32[], [3, 2])
-    let b = reshape([5.0, -0.2] as f32[], [2])
+    let x = reshape<[2, 3]>([1.0, -2.0, 3.0, 0.5, -1.5, 2.5] as f32[])
+    let w = reshape<[3, 2]>([0.5, -1.0, 2.0, 1.0, -0.5, 0.25] as f32[])
+    let b = reshape<[2]>([5.0, -0.2] as f32[])
     let affine = x @ w + b
     let activated = relu(affine)
     println(to_array(to_bytes(affine)))

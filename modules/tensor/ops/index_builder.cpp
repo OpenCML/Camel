@@ -160,20 +160,14 @@ IndexedInstance IndexBuilder::finish(std::vector<ExprId> coords, WriteMode mode,
     return std::move(instance);
 }
 
-InstantiateFn indexingFrom(IndexFn fn, bool withAfterNorm) {
-    return [fn = std::move(fn), withAfterNorm](
-               const InstanceContext &cx) -> std::optional<IndexedInstance> {
-        if (!cx.with.empty() && !withAfterNorm) {
+InstantiateFn indexingFrom(IndexFn fn) {
+    return [fn = std::move(fn)](const InstanceContext &cx) -> std::optional<IndexedInstance> {
+        // The call's arguments arrive in kernel order (joinKernelArguments), the statics aligned.
+        if (!cx.with.empty()) {
             return std::nullopt;
         }
-        // The kernel's argument list: the ordinary arguments, then the with-arguments of an
-        // operator that takes them so; the statics are aligned with it.
-        std::vector<type::Type *> all(cx.norm.begin(), cx.norm.end());
-        if (withAfterNorm) {
-            all.insert(all.end(), cx.with.begin(), cx.with.end());
-        }
-        const StaticFacts facts(all, cx.statics);
-        return fn(InferContext(all, facts.constants, facts.partials));
+        const StaticFacts facts(cx.norm, cx.statics);
+        return fn(InferContext(cx.norm, facts.constants, facts.partials));
     };
 }
 

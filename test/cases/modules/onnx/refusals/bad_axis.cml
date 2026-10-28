@@ -7,6 +7,6 @@ import { reshape } from tensor
 import { export_model } from onnx
 
 func main(): int sync {
-    let _ = export_model<out: 'tmp/test/onnx/refusal_axis.onnx', dynamic_axes: [5]>((t: float[..]): float[..] => t * 2.0, reshape([1.0, 2.0], [2]))
+    let _ = export_model<out: 'tmp/test/onnx/refusal_axis.onnx', dynamic_axes: [5]>((t: float[..]): float[..] => t * 2.0, reshape<[2]>([1.0, 2.0]))
     return 0
 }

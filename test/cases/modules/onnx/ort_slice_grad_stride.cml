@@ -33,14 +33,14 @@ func loss(): f32 {
 func step(w: f32[6], x: f32[6], a: f32[2, 4], b: f32[2, 4]): (f32[..], f32[..], f32[..]) {
     let m = { w: w, x: x, a: a, b: b }
     let vg = with_grad(loss)<m>()
-    return (reshape([f32(vg.0)], [1]), vg.1.x, vg.1.b)
+    return (reshape<[1]>([f32(vg.0)]), vg.1.x, vg.1.b)
 }
 
 func main(): int sync {
-    let w = reshape([0.5, 0.25, -1.0, 2.0, 1.5, -0.5] as f32[], [6])
-    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [6])
-    let a = reshape([1.0, 2.0, 3.0, 4.0, -1.0, -2.0, -3.0, -4.0] as f32[], [2, 4])
-    let b = reshape([0.5, 1.5, 2.5, 3.5, -0.5, -1.5, -2.5, -3.5] as f32[], [2, 4])
+    let w = reshape<[6]>([0.5, 0.25, -1.0, 2.0, 1.5, -0.5] as f32[])
+    let x = reshape<[6]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
+    let a = reshape<[2, 4]>([1.0, 2.0, 3.0, 4.0, -1.0, -2.0, -3.0, -4.0] as f32[])
+    let b = reshape<[2, 4]>([0.5, 1.5, 2.5, 3.5, -0.5, -1.5, -2.5, -3.5] as f32[])
     let r = step(w, x, a, b)
     println(r.0)
     println(r.1)
