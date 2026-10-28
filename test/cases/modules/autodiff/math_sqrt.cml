@@ -20,8 +20,8 @@ func main(): int sync {
     println('sqrt32={}'->format<with_grad(root32)<f32(4.0)>()>)
     println('repeated={}'->format<grad(repeated)<9.0>()>)
     println('integer={}'->format<grad(integer_root)<3.0>(4)>)
-    let w = reshape([1.0, 2.0] as f32[], [2])
-    let x = reshape([3.0, 4.0] as f32[], [2])
+    let w = reshape<[2]>([1.0, 2.0] as f32[])
+    let x = reshape<[2]>([3.0, 4.0] as f32[])
     println('weighted={}'->format<with_grad(weighted)<w>(x, 4.0)>)
     return 0
 }

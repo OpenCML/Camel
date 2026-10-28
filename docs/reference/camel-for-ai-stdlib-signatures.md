@@ -125,13 +125,12 @@ reduce: <f: (acc: U, item: T) => U, initial: U> (xs: T[]) => U
 foreach: <f: (item: T) => void> (xs: T[]) => void
 fail: <Kind: string> (message: string) => never
 attempt: (f: F) => F!
-len: (x: Map<K, V>) => int
-len: (x: Set<T>) => int
+len: (x: C) => int when is_map::<C>() || is_set::<C>()
 get: <key: K> (m: Map<K, V>) => V?
 get_or: <key: K, fallback: V> (m: Map<K, V>) => V
 put: <key: K, value: V> (m: Map<K, V>) => Map<K, V>
 remove: <key: K> (c: Map<K, V>) => Map<K, V>
-remove: (c: Set<K>) => Set<K>
+remove: <key: K> (c: Set<K>) => Set<K>
 has: <key: K> (c: Map<K, V>) => bool
 keys: (m: Map<K, V>) => K[]
 values: (m: Map<K, V>) => V[]
@@ -236,8 +235,8 @@ take: (t: float[..], indices: int64[..] | number[]) => float[..]
 one_hot: (labels: int64[..] | number[], classes: int) => int64[..]
 shape: (t: T[..]) => int[] when is_numeric::<T>()
 numel: (t: T[..]) => int when is_numeric::<T>()
-dim: (t: T[..], axis: int) => int when is_numeric::<T>()
-dim: (t: T[..], axis: i32) => int when is_numeric::<T>()
+dim: <axis: int> (t: T[..]) => int when is_numeric::<T>()
+dim: <axis: i32> (t: T[..]) => int when is_numeric::<T>()
 sum: (t: T[..]) => T
 sum: (t: float[..], axis: int, keepdims?: bool) => float[..]
 mean: (t: T[..]) => T

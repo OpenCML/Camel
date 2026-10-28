@@ -15,6 +15,6 @@ func step(x: f32[..]): f32[..] {
 }
 
 func main() {
-    let x = reshape([1.0, 2.0] as f32[], [2])
+    let x = reshape<[2]>([1.0, 2.0] as f32[])
     println(step(x))
 }

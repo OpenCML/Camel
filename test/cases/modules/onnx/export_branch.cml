@@ -18,7 +18,7 @@ func gate(t: f32[..]): f32[..] {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, -2.0, 3.0, 0.5] as f32[], [4])
+    let x = reshape<[4]>([1.0, -2.0, 3.0, 0.5] as f32[])
     let y = gate(x)
     'camel gate={} {} {} {}'->format<y[0], y[1], y[2], y[3]>->println
     let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((t: f32[..]): f32[..] => gate(t), x)

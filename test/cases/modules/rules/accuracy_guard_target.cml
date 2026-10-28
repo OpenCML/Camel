@@ -11,12 +11,12 @@ func multiplied(x: f32[..]): f32[..] {
 }
 
 func mismatched(a: f32[..], b: f32[..]): f32[..] {
-    return log(exp(a) / sum(exp(b), -1, true))
+    return log(exp(a) / sum<-1, true>(exp(b)))
 }
 
 func main(): int sync {
-    let x = reshape([0.3, -1.2, 0.5, 2.0] as f32[], [2, 2])
-    let y = reshape([2.0, 0.5, -1.0, 0.25] as f32[], [2, 2])
+    let x = reshape<[2, 2]>([0.3, -1.2, 0.5, 2.0] as f32[])
+    let y = reshape<[2, 2]>([2.0, 0.5, -1.0, 0.25] as f32[])
     println('multiplied sum', sum(multiplied(x)))
     println('mismatched sum', sum(mismatched(x, y)))
     return 0

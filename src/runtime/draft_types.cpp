@@ -86,6 +86,8 @@ std::optional<type::Type *> operResultType(const GraphDraft &draft, gc_node_ref_
     for (gc_node_ref_t in : draft.withInputsOf(id)) {
         statics.push_back(staticSlotOf(draft, in));
     }
+    // The arguments in kernel order, the statics aligned with them.
+    camel::core::joinKernelArguments(body->uri(), norm, with);
     for (type::Type *t : with) {
         if (!t) {
             return std::nullopt;

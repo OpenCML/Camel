@@ -119,6 +119,12 @@ class OpDefResolver final : public FuncTypeResolver {
     std::optional<FunctionType *> resolveForCall(
         const type_vec_t &types, Type *expectedResult, const type_vec_t &with,
         const type_vec_t &norm, static_args_t normStatics) const override {
+        // A call the program writes puts the configuration in angle brackets; the same operator
+        // in the ordinary list is how a pass or a derivative rule builds a node, and those are
+        // resolved by resolveWith, not here.
+        if (def_->withAfterNorm && def_->ordinaryParams != 0 && norm.size() > def_->ordinaryParams) {
+            return std::nullopt;
+        }
         if (!def_->elementFromCall) {
             return types.empty() ? resolveFor(with, norm, normStatics, std::nullopt) : std::nullopt;
         }
@@ -242,7 +248,7 @@ void OpRegistry::add(std::string_view protocol, std::vector<OpDef> defs) {
                     core::sem::OperatorKey::of(uri, semantics.key.major, semantics.key.minor);
             }
             if (def.index) {
-                semantics.indexing = indexingFrom(def.index, def.withAfterNorm);
+                semantics.indexing = indexingFrom(def.index);
             }
             try {
                 camel::core::OperatorTable::instance().declareSemantics(uri, std::move(semantics));

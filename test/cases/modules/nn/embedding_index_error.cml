@@ -11,8 +11,8 @@ import {
 } from nn
 
 func main(): int sync {
-    let table = reshape([0.1, 0.2, 0.3, 0.4], [2, 2])
-    let indices = reshape([0, 2], [2])
+    let table = reshape<[2, 2]>([0.1, 0.2, 0.3, 0.4])
+    let indices = reshape<[2]>([0, 2])
     let gathered = embedding(table, indices)
     'embedding_index_error gathered_sum={}'->format<sum(gathered)>->println
     return 0

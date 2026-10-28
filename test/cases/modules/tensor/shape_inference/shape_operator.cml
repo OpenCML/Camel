@@ -7,14 +7,14 @@ func three(a: f32[3]): float {
     return float(sum(a))
 }
 func f(x: f32[2, 3], y: f32[6]): float {
-    let a = reshape(y, shape(x))
+    let a = reshape<shape(x)>(y)
     let b = zeros::<f32>(shape(x)) + x
-    let c = ones::<f32>([dim(x, 1)])
+    let c = ones::<f32>([dim<1>(x)])
     return six(a) + six(b) + three(c)
 }
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
-    let y = reshape([1.0, 1.0, 1.0, 1.0, 1.0, 1.0] as f32[], [6])
+    let x = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
+    let y = reshape<[6]>([1.0, 1.0, 1.0, 1.0, 1.0, 1.0] as f32[])
     println(f(x, y))
     return 0
 }

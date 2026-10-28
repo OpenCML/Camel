@@ -26,13 +26,13 @@ type Block = {
 /// [B, S, D] -> [B, H, S, D / H]
 func split_heads(t: f32[..], heads: int): f32[..] {
     let dims = shape(t)
-    return permute(reshape(t, [dims[0], dims[1], heads, dims[2] / heads]), [0, 2, 1, 3])
+    return permute<[0, 2, 1, 3]>(reshape<[dims[0], dims[1], heads, dims[2] / heads]>(t))
 }
 
 /// [B, H, S, Dh] -> [B, S, H * Dh]
 func merge_heads(t: f32[..]): f32[..] {
     let dims = shape(t)
-    return reshape(permute(t, [0, 2, 1, 3]), [dims[0], dims[2], dims[1] * dims[3]])
+    return reshape<[dims[0], dims[2], dims[1] * dims[3]]>(permute<[0, 2, 1, 3]>(t))
 }
 
 with <m: Block>

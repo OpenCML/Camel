@@ -787,8 +787,7 @@ faults are those of a call of the value.
 #### `len`
 
 ```camel
-len: (x: Map<K, V>) => int
-len: (x: Set<T>) => int
+len: (x: C) => int when is_map::<C>() || is_set::<C>()
 ```
 
 The number of entries of a map or of elements of a set. The collection is `x`, the name the
@@ -831,7 +830,7 @@ A map with value stored under key; an existing entry of that key is replaced. m 
 
 ```camel
 remove: <key: K> (c: Map<K, V>) => Map<K, V>
-remove: (c: Set<K>) => Set<K>
+remove: <key: K> (c: Set<K>) => Set<K>
 ```
 
 A map without the entry of key, or a set without the element; a key or element that is not there changes nothing. The argument is unchanged.
@@ -1746,7 +1745,7 @@ The elements in row-major order, in a new shape; one extent may be -1, which the
 count fills.
 
 - Pure.
-- Example: `reshape(new([1.0, 2.0, 3.0, 4.0]), [2, 2])`
+- Example: `reshape<[2, 2]>(new([1.0, 2.0, 3.0, 4.0]))`
 
 #### `flatten`
 
@@ -1769,7 +1768,7 @@ unsqueeze: (t: float[..], axis: int) => float[..]
 The elements unchanged, with an axis of extent 1 added at axis.
 
 - Pure.
-- Example: `unsqueeze(new([1.0, 2.0]), 0)` gives `shape [1, 2]`
+- Example: `unsqueeze<0>(new([1.0, 2.0]))` gives `shape [1, 2]`
 
 #### `transpose`
 
@@ -1791,7 +1790,7 @@ permute: (t: float[..], perm: int[]) => float[..]
 The axes reordered as perm lists them.
 
 - Pure.
-- Example: `permute(new([[1.0, 2.0], [3.0, 4.0]]), [1, 0])`
+- Example: `permute<[1, 0]>(new([[1.0, 2.0], [3.0, 4.0]]))`
 
 #### `concat`
 
@@ -1802,7 +1801,7 @@ concat: (a: float[..] | number[], b: float[..] | number[], axis: int) => float[.
 a and b joined along axis; every other extent must agree.
 
 - Pure.
-- Example: `concat(new([[1.0]]), new([[2.0]]), 0)` gives `shape [2, 1]`
+- Example: `concat<0>(new([[1.0]]), new([[2.0]]))` gives `shape [2, 1]`
 
 #### `take`
 
@@ -1854,15 +1853,15 @@ The number of elements in a tensor: the product of its extents.
 #### `dim`
 
 ```camel
-dim: (t: T[..], axis: int) => int when is_numeric::<T>()
-dim: (t: T[..], axis: i32) => int when is_numeric::<T>()
+dim: <axis: int> (t: T[..]) => int when is_numeric::<T>()
+dim: <axis: i32> (t: T[..]) => int when is_numeric::<T>()
 ```
 
 The extent of one axis; a negative axis counts from the last one (`-1` is the last axis).
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank.
-- Example: `dim(new([[1.0, 2.0], [3.0, 4.0]]), 1)` gives `2`
+- Example: `dim<1>(zeros::<f32>([2, 2]))` gives `2`
 
 ### Reduction
 
@@ -1895,7 +1894,7 @@ The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis wit
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank.
-- Example: `sum(new([[1.0, 2.0], [3.0, 4.0]]), 0)` gives `[4.0, 6.0]`
+- Example: `sum<0>(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[4.0, 6.0]`
 
 #### `mean`
 
@@ -1924,7 +1923,7 @@ The same mean over one axis; keepdims keeps the axis with extent 1.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `DivisionByZero` when the axis is empty.
-- Example: `mean(new([[1.0, 2.0], [3.0, 4.0]]), 1)` gives `[1.5, 3.5]`
+- Example: `mean<1>(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[1.5, 3.5]`
 
 #### `max`
 
@@ -1937,7 +1936,7 @@ the same bits); keepdims keeps the axis with extent 1.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
-- Example: `max(new([[1.0, 2.0], [3.0, 4.0]]), 0)` gives `[3.0, 4.0]`
+- Example: `max<0>(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[3.0, 4.0]`
 
 #### `min`
 
@@ -1950,7 +1949,7 @@ axis with extent 1.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
-- Example: `min(new([[1.0, 2.0], [3.0, 4.0]]), 1)` gives `[1.0, 3.0]`
+- Example: `min<1>(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[1.0, 3.0]`
 
 #### `argmax`
 
@@ -1963,7 +1962,7 @@ NaN if there is one, +0 above -0, the earlier position on a tie.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
-- Example: `argmax(new([[1.0, 2.0], [3.0, 4.0]]), 1)` gives `[1, 1]`
+- Example: `argmax<1>(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[1, 1]`
 
 #### `argmin`
 
@@ -1976,7 +1975,7 @@ NaN if there is one, -0 below +0, the earlier position on a tie.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
-- Example: `argmin(new([[1.0, 2.0], [3.0, 4.0]]), 0)` gives `[0, 0]`
+- Example: `argmin<0>(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[0, 0]`
 
 #### `softmax`
 

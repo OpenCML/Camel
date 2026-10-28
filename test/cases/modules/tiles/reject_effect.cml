@@ -5,7 +5,7 @@ func noisy(x: f32[..]): f32[..] sync {
     return x + x
 }
 func main(): int sync {
-    let x = reshape([1.0, 2.0] as f32[], [2])
+    let x = reshape<[2]>([1.0, 2.0] as f32[])
     println(source<noisy>(x))
     return 0
 }

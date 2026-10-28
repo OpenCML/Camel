@@ -1,10 +1,10 @@
 import { exp, sum, random, seed } from tensor
 import { benchmark } from tiles
 func rows(x: f32[..], b: f32[..]): f32[..] {
-    return sum(exp((x + b) * 0.5), 1)
+    return sum<1>(exp((x + b) * 0.5))
 }
 func row_affine(x: f32[..], b: f32[..]): f32[..] {
-    return (sum(exp((x + b) * 0.5), 1) + 1.0) * 0.25
+    return (sum<1>(exp((x + b) * 0.5)) + 1.0) * 0.25
 }
 func main(): int sync {
     seed(112)

@@ -47,18 +47,16 @@ func totalOf(v: f32[2, 3]): float {
 }
 
 func main(): int sync {
-    let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
+    let w = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     let d = grad(total)<w>()
-    let v = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
+    let v = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     let e = 1.0 / 1024.0
-    let plus = reshape(
+    let plus = reshape<[2, 3]>(
         [1.0009765625, 2.001953125, 3.0029296875, 4.00390625, 5.0048828125,
-         6.005859375] as f32[],
-        [2, 3])
-    let minus = reshape(
+         6.005859375] as f32[])
+    let minus = reshape<[2, 3]>(
         [0.9990234375, 1.998046875, 2.9970703125, 3.99609375, 4.9951171875,
-         5.994140625] as f32[],
-        [2, 3])
+         5.994140625] as f32[])
     let fd = (totalOf(plus) - totalOf(minus)) / (2.0 * e)
     let dot = float(sum(d * v))
     let gap = if fd > dot then fd - dot else dot - fd

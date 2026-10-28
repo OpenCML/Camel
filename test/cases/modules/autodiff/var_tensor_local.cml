@@ -16,8 +16,8 @@ func loss(x: f64[..]): float sync {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0], [2])
-    let m = { p0: reshape([0.5, 0.25], [2]) }
+    let x = reshape<[2]>([1.0, 2.0])
+    let m = { p0: reshape<[2]>([0.5, 0.25]) }
     let vg = with_grad(loss)<m>(x)
     println("value {} grad {}"->format<vg.0, sum(vg.1.p0)>)
     return 0

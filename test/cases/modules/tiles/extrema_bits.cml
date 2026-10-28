@@ -5,7 +5,7 @@ func hi(a: f32[..], b: f32[..]): f32[..] { return maximum(a, b) }
 func lo(a: f32[..], b: f32[..]): f32[..] { return minimum(a, b) }
 func positive(a: f32[..]): f32[..] { return relu(a) }
 func fused(a: f32[..], b: f32[..]): f32[..] { return relu(minimum(maximum(a, b), b)) }
-func rows(a: f32[..]): f32[..] { return max(a, -1) }
+func rows(a: f32[..]): f32[..] { return max<-1>(a) }
 func main(): int sync {
     let folder = get_env('TILES_TEST_OUT') ?? ''
     let a = load_npy::<f32>(folder + '/a.npy') as f32[..]
@@ -20,7 +20,7 @@ func main(): int sync {
     save_npy(download(run_preferred_resident<positive>(a)), folder + '/relu_gpu.npy')
     save_npy(fused(a,b), folder + '/fused_cpu.npy')
     save_npy(download(run_preferred_resident<fused>((a,b))), folder + '/fused_gpu.npy')
-    let single = reshape(a, [8, 1])
+    let single = reshape<[8, 1]>(a)
     save_npy(rows(single), folder + '/single_cpu.npy')
     save_npy(download(run_preferred_resident<rows>(single)), folder + '/single_gpu.npy')
     let r = load_npy::<f32>(folder + '/rows.npy') as f32[..]

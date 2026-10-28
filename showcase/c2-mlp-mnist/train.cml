@@ -68,7 +68,7 @@ func load_model(data: string): Mlp {
 // Validation: the loss over all rows at once and the fraction classified correctly.
 func evaluate(m: Mlp, x: f32[..], labels: int[..]): (float, float) {
     let value = logits<m>(x)
-    let correct = float(sum(argmax(value, 1) === labels))
+    let correct = float(sum(argmax<1>(value) === labels))
     return (float(softmax_cross_entropy(value, labels)), float(correct) / float(shape(x)[0]))
 }
 

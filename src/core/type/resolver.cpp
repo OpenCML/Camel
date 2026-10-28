@@ -148,11 +148,39 @@ FunctionType *closedSignature(FunctionType *declared) {
     ASSERT(declared->hasExitType(), "A declared operator has a result type");
     FunctionTypeFactory factory;
     for (size_t i = 0; i < declared->withTypesCount(); ++i) {
+        if (declared->hasWithRest() && i + 1 == declared->withTypesCount()) {
+            factory.addWithRest(std::string(declared->argNameAt(i)));
+            continue;
+        }
         factory.addWithArg(
             std::string(declared->argNameAt(i)), declared->withTypeAt(i),
             declared->withIsVarAt(i));
     }
     for (size_t i = 0; i < declared->normTypesCount(); ++i) {
+        const std::string name(declared->argNameAt(declared->withTypesCount() + i));
+        if (declared->hasRest() && i + 1 == declared->normTypesCount()) {
+            factory.addRestArg(name);
+            continue;
+        }
+        factory.addNormArg(name, declared->normTypeAt(i), declared->normIsVarAt(i));
+    }
+    factory.setExitType(declared->exitType());
+    factory.setResources(declared->resources());
+    return factory.build();
+}
+
+/// The signature without its packs: the parameters a call writes by name, which are what the
+/// arguments are matched against.
+FunctionType *withoutPacks(FunctionType *declared) {
+    FunctionTypeFactory factory;
+    const size_t withCount = declared->withTypesCount() - (declared->hasWithRest() ? 1 : 0);
+    const size_t normCount = declared->normTypesCount() - (declared->hasRest() ? 1 : 0);
+    for (size_t i = 0; i < withCount; ++i) {
+        factory.addWithArg(
+            std::string(declared->argNameAt(i)), declared->withTypeAt(i),
+            declared->withIsVarAt(i));
+    }
+    for (size_t i = 0; i < normCount; ++i) {
         factory.addNormArg(
             std::string(declared->argNameAt(declared->withTypesCount() + i)),
             declared->normTypeAt(i), declared->normIsVarAt(i));
@@ -230,10 +258,45 @@ DeclaredFuncTypeResolver::DeclaredFuncTypeResolver(FunctionType *declared)
     }
     collectBindableTypeVars(funcType_->exitType(), bindable_);
     generic_ = !bindable_.empty();
+    if (funcType_->hasRest() || funcType_->hasWithRest()) {
+        core_ = std::make_shared<DeclaredFuncTypeResolver>(withoutPacks(funcType_));
+    }
 }
 
 std::optional<FunctionType *> DeclaredFuncTypeResolver::resolve(
     const type_vec_t &with, const type_vec_t &norm) const {
+    if (core_ != nullptr) {
+        // A pack takes the arguments written beyond the fixed ones, of any types, and the
+        // instance is the signature with one parameter for each of them, as a call with that
+        // many arguments would write it.
+        const size_t fixedWith = core_->funcType_->withTypesCount();
+        const size_t fixedNorm = core_->funcType_->normTypesCount();
+        if ((funcType_->hasWithRest() ? with.size() < fixedWith : with.size() != fixedWith) ||
+            (funcType_->hasRest() ? norm.size() < fixedNorm : norm.size() != fixedNorm)) {
+            return std::nullopt;
+        }
+        const auto fixed = core_->resolve(
+            type_vec_t(with.begin(), with.begin() + fixedWith),
+            type_vec_t(norm.begin(), norm.begin() + fixedNorm));
+        if (!fixed.has_value()) {
+            return std::nullopt;
+        }
+        FunctionTypeFactory factory;
+        for (size_t i = 0; i < with.size(); ++i) {
+            factory.addWithArg(
+                i < fixedWith ? std::string((*fixed)->argNameAt(i)) : "__w" + std::to_string(i),
+                i < fixedWith ? (*fixed)->withTypeAt(i) : valueTypeOf(with[i]), false);
+        }
+        for (size_t i = 0; i < norm.size(); ++i) {
+            factory.addNormArg(
+                i < fixedNorm ? std::string((*fixed)->argNameAt(fixedWith + i))
+                              : "__n" + std::to_string(i),
+                i < fixedNorm ? (*fixed)->normTypeAt(i) : valueTypeOf(norm[i]), false);
+        }
+        factory.setExitType((*fixed)->exitType());
+        factory.setResources((*fixed)->resources());
+        return factory.build();
+    }
     if (with.size() != funcType_->withTypesCount() || norm.size() != funcType_->normTypesCount()) {
         return std::nullopt; // reject
     }

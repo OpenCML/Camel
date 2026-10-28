@@ -151,6 +151,11 @@ struct OpDef {
     /// list, and the kernel is wrapped by `positionally` (support.h). The graph keeps the
     /// with-argument on its own edge.
     bool withAfterNorm = false;
+    /// With `withAfterNorm`: how many of the parameters are ordinary arguments of a call the
+    /// program writes; the others are written in angle brackets. A call that writes them in
+    /// parentheses is refused (the passes and the derivative rules build nodes with them in the
+    /// ordinary list, and those are not calls).
+    size_t ordinaryParams = 0;
     /// The element type of the result is not in the arguments: the call writes it
     /// (`zeros::<f32>(shape)`) or the position gives it (`let x: f32[2, 3] = zeros(...)`), and a
     /// call that does neither is refused (design principles 5.1: no default element type).

@@ -28,12 +28,12 @@ func step(m: Mlp, x: f32[..]): (float, Mlp) {
 
 func main(): int sync {
     let m = {
-        w1: reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25], [2, 3]),
-        b1: reshape([0.1, 0.0, -0.1], [3]),
-        w2: reshape([1.0, -1.0, 0.5], [3, 1]),
-        b2: reshape([0.2], [1])
+        w1: reshape<[2, 3]>([0.5, -0.25, 0.75, 1.0, -0.5, 0.25]),
+        b1: reshape<[3]>([0.1, 0.0, -0.1]),
+        w2: reshape<[3, 1]>([1.0, -1.0, 0.5]),
+        b2: reshape<[1]>([0.2])
     }
-    let x = reshape([1.0, 2.0, -1.0, 0.5], [2, 2])
+    let x = reshape<[2, 2]>([1.0, 2.0, -1.0, 0.5])
     let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x))
     println('exported step')
     return 0

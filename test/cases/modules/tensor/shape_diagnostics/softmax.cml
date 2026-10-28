@@ -6,7 +6,7 @@
 import { zeros, softmax } from tensor
 
 func main(): int sync {
-    let r = softmax(zeros::<f32>([2, 3]), 4)
+    let r = softmax<4>(zeros::<f32>([2, 3]))
     println('unreachable')
     return 0
 }

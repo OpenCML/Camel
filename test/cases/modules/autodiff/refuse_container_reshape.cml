@@ -22,7 +22,7 @@ import { grad } from autodiff
 
 with <xs: float[][]>
 func loss(): float {
-    return float(sum(reshape(xs, [4])))
+    return float(sum(reshape<[4]>(xs)))
 }
 
 func main(): int sync {

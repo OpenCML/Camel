@@ -7,14 +7,14 @@ import {
 } from tensor
 
 func main(): int sync {
-    let logits = reshape([0.2, -0.1], [1, 2])
-    let dy = reshape([1.0, -0.5], [1, 2])
-    let plus = reshape([0.201, -0.1], [1, 2])
-    let minus = reshape([0.199, -0.1], [1, 2])
+    let logits = reshape<[1, 2]>([0.2, -0.1])
+    let dy = reshape<[1, 2]>([1.0, -0.5])
+    let plus = reshape<[1, 2]>([0.201, -0.1])
+    let minus = reshape<[1, 2]>([0.199, -0.1])
 
     let probs = softmax(logits)
     let grad = softmax_grad(probs, dy)
-    let grad0 = sum(grad * reshape([1.0, 0.0], [1, 2]))
+    let grad0 = sum(grad * reshape<[1, 2]>([1.0, 0.0]))
     let score_plus = sum(softmax(plus) * dy)
     let score_minus = sum(softmax(minus) * dy)
     let finite = (score_plus - score_minus) / 0.002

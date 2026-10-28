@@ -44,9 +44,9 @@ digraph GraphIR {
             N0B -> N0C [label="0|1", type="NORM"];
         }
         O01 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-        N0D [label="[1.0, -\n2.0,...", type="DATA", shape=circle, style=solid, value_type="f32[]", origin=<ORIGIN>, span="18:25-18:55", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="[1.0, -2.0, 3.0, 0.5]\nmain::node#n0"];
-        N0E [label="[4]", type="DATA", shape=circle, style=solid, value_type="int[]", origin=<ORIGIN>, span="18:57-18:60", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="[4]\nmain::node#n1"];
-        N0F [label="tensor:\nreshape", type="OPER", shape=diamond, style=solid, value_type="f32[4]", origin=<ORIGIN>, span="18:17-18:24", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="tensor:reshape\nmain::node#n2"];
+        N0D [label="[4]", type="DATA", shape=circle, style=solid, value_type="int[]", origin=<ORIGIN>, span="18:25-18:28", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="[4]\nmain::node#n0"];
+        N0E [label="[1.0, -\n2.0,...", type="DATA", shape=circle, style=solid, value_type="f32[]", origin=<ORIGIN>, span="18:30-18:60", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="[1.0, -2.0, 3.0, 0.5]\nmain::node#n1"];
+        N0F [label="tensor:\nreshape", type="OPER", shape=diamond, style=solid, value_type="f32[4]", origin=<ORIGIN>, span="18:24-18:29", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="tensor:reshape\nmain::node#n2"];
         N10 [label="gate", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, value_type="f32[4]", origin=<ORIGIN>, span="18:12-18:62", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="gate\nmain::node#n3"];
         N11 [label="0", type="DATA", shape=circle, style=solid, value_type="int", origin=<ORIGIN>, span="19:24-19:25", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="0\nmain::node#n4"];
         N12 [label=":op/i\ndx_arr", type="OPER", shape=diamond, style="filled,solid", value_type="f32", origin=<ORIGIN>, span="19:23-19:24", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", fillcolor="#fff2cc", role="scalar-boundary", tooltip=":op/idx_arr\nmain::node#n5\nrole scalar-boundary: tensor -> host f32"];
@@ -56,8 +56,8 @@ digraph GraphIR {
         N16 [label="0", type="DATA", shape=circle, style=solid, value_type="int", origin=<ORIGIN>, span="20:11-20:12", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="0\nmain::node#n9"];
         N17 [label="GATE", type="GATE", shape=diamond, style=dashed, value_type="int", tooltip="GATE\nmain::node#n9"];
         N17 -> O01 [label="0", type="EXIT", style=solid];
-        N0D -> N0F [label="0|0", type="NORM"];
-        N0E -> N0F [label="0|1", type="NORM"];
+        N0D -> N0F [label="0|0", type="WITH", style=dashed];
+        N0E -> N0F [label="0|0", type="NORM"];
         N0F -> N10 [label="0|0", type="NORM"];
         N10 -> N12 [label="0|0", type="NORM"];
         N11 -> N12 [label="0|1", type="NORM"];

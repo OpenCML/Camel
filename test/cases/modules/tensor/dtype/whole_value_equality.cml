@@ -20,8 +20,8 @@ func mask_as_array(x: f32[..], y: f32[..]) {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, -2.0] as f32[], [2])
-    let y = reshape([1.0, 2.0] as f32[], [2])
+    let x = reshape<[2]>([1.0, -2.0] as f32[])
+    let y = reshape<[2]>([1.0, 2.0] as f32[])
     println(same_everywhere(x, y))
     mask_as_array(x, y)
     return 0

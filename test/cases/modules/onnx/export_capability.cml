@@ -15,7 +15,7 @@ func counts(t: f32[..]): int[..] {
 }
 
 func main(): void! sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
+    let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as f32[])
     println(counts(x))
     let _ = export_model<out: get_env('ONNX_OUT_UNCHECKED') ?? '', dynamic_axes: [], target: 'none'>(counts, x)
     println('written without the check')

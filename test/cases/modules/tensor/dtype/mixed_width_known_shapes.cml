@@ -12,8 +12,8 @@ func both(x: f64[2], y: f32[2]): float {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0] as f64[], [2])
-    let y = reshape([1.0, 2.0] as f32[], [2])
+    let x = reshape<[2]>([1.0, 2.0] as f64[])
+    let y = reshape<[2]>([1.0, 2.0] as f32[])
     println(both(x, y))
     return 0
 }

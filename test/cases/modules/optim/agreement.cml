@@ -128,7 +128,7 @@ func mismatches(drifts: float[]): int {
 func main(steps: int): int sync {
     let model = model_at()
     let tensors = tensors_at()
-    let x = reshape(f32(range(6)), [6]) * 0.125 - 0.5
+    let x = reshape<[6]>(f32(range(6))) * 0.125 - 0.5
     let loss_with_grad = with_grad(loss)
     var failures = 0
 

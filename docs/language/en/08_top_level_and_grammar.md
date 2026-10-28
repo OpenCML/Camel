@@ -50,7 +50,8 @@ logicalAnd : or ('&&' or)*
 or         : and ('|' and)*
 and        : equality ('&' equality)*
 equality   : relational (('===' | '!==' | '==' | '!=') relational)*
-relational : additive (('<' | '>' | '<=' | '>=') additive)*
+relational : range (('<' | '>' | '<=' | '>=') range)*
+range      : additive ('..' additive)*
 additive   : multiplicative (('+' | '-') multiplicative)*
 multiplicative : power (('*' | '/' | '@' | '%') power)*
 power      : nullable ('^' power)?
@@ -58,8 +59,7 @@ nullable   : unary (('??' | '!!') dataExpr)?
 unary      : neg (as type)?
 neg        : ('-' | '!' | '~') negPower | link
 negPower   : ('-' | '!' | '~') negPower | link ('^' negPower)?
-link       : comp ('->' comp)*
-comp       : anno ('..' anno)*
+link       : anno ('->' anno)*
 anno       : primary ( '.'field | '[' subscript ']' | '(' arguments ')' | '<' with arguments '>' )*
 primary    : name | literal | '[' element, ... ']' | '{' key: value, ... '}' | '(' expression, ... ')' | lambda
 lambda     : modifier* ('<' parameters '>')? '(' parameters ')' (':' type)? '=>' blockExpr

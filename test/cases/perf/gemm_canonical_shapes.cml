@@ -42,10 +42,10 @@ func bench(round: int, label: string, m: int, n: int, k: int, a: f32[..], b: f32
 /// The same product as broadcast-multiply-and-reduce: a temporary of m x k x n floats and a
 /// reduction, with none of the canonical kernel's blocking or packing.
 func bench_reference(round: int, m: int, n: int, k: int, a: f32[..], b: f32[..], reps: int): void sync {
-    let warm = sum(unsqueeze(a, 2) * unsqueeze(b, 0), 1)
+    let warm = sum<1>(unsqueeze<2>(a) * unsqueeze<0>(b))
     let started = now()
     let measured = loop i = 0, s = 0.0 while i < reps do {
-        let product = sum(unsqueeze(a, 2) * unsqueeze(b, 0), 1)
+        let product = sum<1>(unsqueeze<2>(a) * unsqueeze<0>(b))
         return (i + 1, s + float(sum(product)))
     }
     let ms = (now() - started) * 1000.0 / float(reps)

@@ -16,8 +16,8 @@ func helper(a: f32[2, 2], b: f32[2]): f32[2] {
 }
 
 func main(): int sync {
-    let a = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
-    let b = reshape([1.0, 2.0] as f32[], [2])
+    let a = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as f32[])
+    let b = reshape<[2]>([1.0, 2.0] as f32[])
     println(sum(step(a, b)))
     return 0
 }

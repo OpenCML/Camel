@@ -11,8 +11,8 @@ func scaled(x: f32[3], k: int[3]): float {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
-    let k = reshape([2, 3, 4] as int[], [3])
+    let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
+    let k = reshape<[3]>([2, 3, 4] as int[])
     println(scaled(x, k))
     return 0
 }

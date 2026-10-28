@@ -32,23 +32,23 @@ func step(m: Mlp, x: float[..]): (float, Mlp) {
 
 func load(): Mlp {
     return {
-        w1: reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25], [2, 3]),
-        b1: reshape([0.1, 0.0, -0.1], [3]),
-        w2: reshape([1.0, -1.0, 0.5], [3, 1]),
-        b2: reshape([0.2], [1])
+        w1: reshape<[2, 3]>([0.5, -0.25, 0.75, 1.0, -0.5, 0.25]),
+        b1: reshape<[3]>([0.1, 0.0, -0.1]),
+        w2: reshape<[3, 1]>([1.0, -1.0, 0.5]),
+        b2: reshape<[1]>([0.2])
     }
 }
 
 func do_export(m: Mlp): int sync {
-    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, reshape([1.0, 2.0, -1.0, 0.5], [2, 2])))
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, reshape<[2, 2]>([1.0, 2.0, -1.0, 0.5])))
     println('exported')
     return 0
 }
 
 func do_run(m: Mlp): int sync {
     // arm A (large loss, s>1) and arm B (small loss, s<=1) — same weights, two inputs.
-    let xa = reshape([1.0, 2.0, -1.0, 0.5], [2, 2])
-    let xb = reshape([0.01, 0.02, -0.01, 0.03], [2, 2])
+    let xa = reshape<[2, 2]>([1.0, 2.0, -1.0, 0.5])
+    let xb = reshape<[2, 2]>([0.01, 0.02, -0.01, 0.03])
     let la = step(m, xa)
     let lb = step(m, xb)
     'loss_a={} loss_b={}'->format<la.0, lb.0>->println

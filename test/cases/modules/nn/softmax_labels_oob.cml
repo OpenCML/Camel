@@ -7,7 +7,7 @@ import { reshape } from tensor
 import { softmax_cross_entropy } from nn
 
 func main(): int sync {
-    let logits = reshape([1.0, 2.0, 3.0, 0.5, -1.0, 0.0], [2, 3])
+    let logits = reshape<[2, 3]>([1.0, 2.0, 3.0, 0.5, -1.0, 0.0])
     let loss = softmax_cross_entropy(logits, [0, -1])
     return 0
 }

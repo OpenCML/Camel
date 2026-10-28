@@ -122,7 +122,7 @@ total = 35
 ```
 
 - A pipe `x -> f` over a `T?` or a `T!` carries a null or an error along, see [6.6](#66-operators-for-null-and-errors).
-- `f..g` is function composition: `(f..g)(x)` is `g(f(x))`, the same direction as the pipeline `x->f->g`; with integers on both sides `a..b` is the half-open interval, giving `int[]`, and a step is written `range(a, b, step)`. `for i in 0..n` is fused by the compiler and materialises no array. `..` binds tighter than `->`: `x->f..g` reads as `x->(f..g)`.
+- `f..g` is function composition: `(f..g)(x)` is `g(f(x))`, the same direction as the pipeline `x->f->g`; with integers on both sides `a..b` is the half-open interval, giving `int[]`, and a step is written `range(a, b, step)`. `for i in 0..n` is fused by the compiler and materialises no array. `..` binds looser than `+` and `-` (6.12): `1..n+1` is `1..(n+1)`, as it reads in other languages; it is also looser than `->`, so `x->f..g` reads as `(x->f)..g`; in a pipeline write `x->f->g`, which is the same function.
 
 ## 6.6 Operators for null and errors
 
@@ -785,6 +785,7 @@ From lowest to highest:
 | 4b | `&` | Left-associative, both sides evaluated |
 | 5 | `==` `!=` `===` `!==` | Whole and element-wise comparison (see [6.7.3](#673-comparison)) |
 | 6 | `<` `>` `<=` `>=` | |
+| 6a | `..` | Range (between numbers) and function composition (between functions); looser than `+` and `-`, so `1..n+1` is `1..(n+1)` |
 | 7 | `+` `-` | Left-associative |
 | 8 | `*` `/` `%` `@` | Left-associative |
 | 8a | `^` | Right-associative, one level above the multiplicative operators |
@@ -792,7 +793,6 @@ From lowest to highest:
 | 10 | `as` | |
 | 10a | Unary `-` `!` `~` | Looser than `->` and `^`: `!xs->is_empty()` is `!(xs->is_empty())`, `-a->f` is `-(a->f)`, `-a ^ 2` is `-(a ^ 2)`; a literal and a name read alike (`-1->abs` is `-(1->abs)`; to negate first write `(-1)->abs`) |
 | 11 | `->` | Left-associative |
-| 12 | `..` | Range (between numbers) and function composition (between functions) |
 | 13 | Postfix: `.field`, `[subscript]`, `(arguments)`, `<with arguments>` | Must directly follow |
 
 `if` and `match` can appear wherever an expression is required; their arms extend to the end of the expression, so add parentheses when they are embedded in a larger expression.

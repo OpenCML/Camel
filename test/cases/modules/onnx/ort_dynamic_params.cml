@@ -19,21 +19,21 @@ type P = { w: f32[..], b: f32[..] }
 with <m: P>
 func loss(x: f32[..]): float {
     let h = tanh(x @ transpose(m.w) + m.b)
-    return float(sum(mean(h * h, 0)))
+    return float(sum(mean<0>(h * h)))
 }
 
 func step(w: f32[..], b: f32[..], x: f32[..]): (float[..], f32[..], f32[..]) {
     let m = { w: w, b: b }
     let vg = with_grad(loss)<m>(x)
-    return (reshape([vg.0], [1]), vg.1.w, vg.1.b)
+    return (reshape<[1]>([vg.0]), vg.1.w, vg.1.b)
 }
 
 func main(): int sync {
     let mode = get_env('MODE') ?? ''
     return if mode == 'export' then sync {
-        let w = reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25, 0.125, 0.375, -0.625] as f32[], [3, 3])
-        let b = reshape([0.1, -0.2, 0.3] as f32[], [3])
-        let x = reshape([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9] as f32[], [3, 3])
+        let w = reshape<[3, 3]>([0.5, -0.25, 0.75, 1.0, -0.5, 0.25, 0.125, 0.375, -0.625] as f32[])
+        let b = reshape<[3]>([0.1, -0.2, 0.3] as f32[])
+        let x = reshape<[3, 3]>([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9] as f32[])
         let _ = export_model<out: get_env('ONNX_OUT') ?? '', dynamic_axes: [0]>((w: f32[..], b: f32[..], x: f32[..]): (float[..], f32[..], f32[..]) => step(w, b, x), (w, b, x))
         println('exported')
         return 0

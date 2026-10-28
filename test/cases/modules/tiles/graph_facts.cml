@@ -8,11 +8,11 @@ func dynamic(x: f32[..]): f32[..] {
 }
 with <ax: int>
 func axis(x: f32[2,3]): f32[..] {
-    return x + sum(x, ax, true)
+    return x + sum<ax, true>(x)
 }
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2,3]) as f32[2,3]
-    let y = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [4,1])
+    let x = reshape<[2,3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]) as f32[2,3]
+    let y = reshape<[4,1]>([1.0, 2.0, 3.0, 4.0] as f32[])
     println(inspect<fixed>(x))
     println(inspect<fixed>(x))
     println(inspect<dynamic>(x))

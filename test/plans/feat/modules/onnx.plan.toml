@@ -3009,8 +3009,8 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_diagnostic_code = "0x04000051"
 expect_diagnostic_line = 15
-expect_diagnostic_column = 12
-expect_output_contains = ["an array variable is appended to (`acc = acc->append<v>`)", "export_var_append.cml:15:12"]
+expect_diagnostic_column = 19
+expect_output_contains = ["an array variable is appended to (`acc = acc->append<v>`)", "export_var_append.cml:15:19"]
 expect_output_not_contains = ["internal error", "Segmentation fault"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 6000

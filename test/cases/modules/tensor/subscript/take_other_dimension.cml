@@ -22,7 +22,7 @@ func taken(m: f32[2, 3], idx: int[3]): float {
 
 func main(): int sync {
     println('ran')
-    let m = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
+    let m = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
     println(shape(m[:, [1, 1, 0]]))
     println("value={}"->format<taken(m, [1, 1, 0])>)
     return 0

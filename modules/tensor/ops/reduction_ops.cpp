@@ -99,9 +99,10 @@ template <k::ReduceOp Op> OpDef reduceAxisDef(std::string_view name, std::string
              {"keepdims", ParamKind::Bool, true}},
         .resultDoc = "float[..]",
         .infer     = reduceAxisInfer(Op),
-        .kernel        = &positionally<reduceAxisKernel<Op>>,
-        .traits        = {},
-        .withAfterNorm = true,
+        .kernel         = &positionally<reduceAxisKernel<Op>>,
+        .traits         = {},
+        .withAfterNorm  = true,
+        .ordinaryParams = 1,
     };
 }
 
@@ -475,17 +476,21 @@ std::vector<OpDef> reductionOps() {
         .exports   = {"softmax"},
         .params    = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int, true}},
         .resultDoc = "float[..]",
-        .infer     = softmaxInfer,
-        .kernel    = &softmaxKernel,
-        .traits    = {}});
+        .infer          = softmaxInfer,
+        .kernel         = &positionally<softmaxKernel>,
+        .traits         = {},
+        .withAfterNorm  = true,
+        .ordinaryParams = 1});
     defs.push_back(OpDef{
         .name      = "log_softmax",
         .exports   = {"log_softmax"},
         .params    = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int, true}},
         .resultDoc = "float[..]",
-        .infer     = softmaxInfer,
-        .kernel    = &logSoftmaxKernel,
-        .traits    = {}});
+        .infer          = softmaxInfer,
+        .kernel         = &positionally<logSoftmaxKernel>,
+        .traits         = {},
+        .withAfterNorm  = true,
+        .ordinaryParams = 1});
     defs.push_back(OpDef{
         .name    = "softmax_grad",
         .exports = {"softmax_grad"},

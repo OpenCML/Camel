@@ -13,6 +13,6 @@ func loss(): float {
 }
 
 func main(): int sync {
-    println(grad(loss)<reshape([0.5, 0.25, -0.35], [3])>())
+    println(grad(loss)<reshape<[3]>([0.5, 0.25, -0.35])>())
     return 0
 }

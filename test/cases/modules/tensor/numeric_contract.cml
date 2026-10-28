@@ -23,36 +23,36 @@ func main(): int sync {
     println(maximum(b, a))
     println(minimum(a, b))
     println(minimum(b, a))
-    println(max(pick([1.0, 0.0, 1.0], [1.0, 1.0, 3.0]), 0))
-    println(max(pick([0.0, 1.0, 1.0], [1.0, 1.0, 3.0]), 0))
-    println(min(pick([1.0, 0.0, 1.0], [1.0, 1.0, 3.0]), 0))
-    println(min(pick([0.0, 1.0, 1.0], [1.0, 1.0, 3.0]), 0))
-    println(max(f32([0.0, nz]), 0))
-    println(max(f32([nz, 0.0]), 0))
-    println(min(f32([0.0, nz]), 0))
-    println(min(f32([nz, 0.0]), 0))
+    println(max<0>(pick([1.0, 0.0, 1.0], [1.0, 1.0, 3.0])))
+    println(max<0>(pick([0.0, 1.0, 1.0], [1.0, 1.0, 3.0])))
+    println(min<0>(pick([1.0, 0.0, 1.0], [1.0, 1.0, 3.0])))
+    println(min<0>(pick([0.0, 1.0, 1.0], [1.0, 1.0, 3.0])))
+    println(max<0>(f32([0.0, nz])))
+    println(max<0>(f32([nz, 0.0])))
+    println(min<0>(f32([0.0, nz])))
+    println(min<0>(f32([nz, 0.0])))
 
     // matmul: one fused multiply-add per step. (1 + 2^-12)^2 - 1 is 2^-11 + 2^-24 exactly;
     // rounding the product first loses the 2^-24.
     let u = f32([-1.0, 1.000244140625])
-    let v = reshape(f32([1.0, 1.000244140625]), [2, 1])
+    let v = reshape<[2, 1]>(f32([1.0, 1.000244140625]))
     'matmul fma_step={}'->format<sum(u @ v)>->println
     // matmul: one chain over the whole of k. 2^24 followed by 511 ones stays 2^24 when every
     // one is added to the running sum; summing the ones in blocks first gives more.
-    let col = concat(full([1, 1], f32(16777216.0)), ones::<f32>([511, 1]), 0)
+    let col = concat<0>(full([1, 1], f32(16777216.0)), ones::<f32>([511, 1]))
     'matmul chain={}'->format<sum(ones::<f32>([1, 512]) @ col)>->println
 
     // softmax agrees with exp(x - max) / sum(exp(x - max)).
-    let x = reshape(f32([0.5, -1.25, 3.0, 2.0, 0.125, -7.0, 1.0, 9.5]), [2, 4])
-    let m = max(x, 1, true)
+    let x = reshape<[2, 4]>(f32([0.5, -1.25, 3.0, 2.0, 0.125, -7.0, 1.0, 9.5]))
+    let m = max<1, true>(x)
     let e = exp(x - m)
-    let defined = e / sum(e, 1, true)
-    'softmax equal={}'->format<sum(abs(softmax(x, 1) - defined))>->println
+    let defined = e / sum<1, true>(e)
+    'softmax equal={}'->format<sum(abs(softmax<1>(x) - defined))>->println
     // A NaN anywhere in the axis makes the whole axis NaN (how a NaN prints depends on its sign).
     // Counting the NaNs would go through `s != s`, a bool[]: bool is not numeric, so `sum` refuses
     // it (design principles 5.4), and `cast` takes an array or a number[]. The axis itself is the
     // observable that says the same thing, so it is printed.
-    let s = softmax(pick([1.0, 0.0, 1.0], [1.0, 2.0, 3.0]), 0)
+    let s = softmax<0>(pick([1.0, 0.0, 1.0], [1.0, 2.0, 3.0]))
     'softmax axis={}'->format<s>->println
     return 0
 }

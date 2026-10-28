@@ -47,11 +47,11 @@ func select(): float { return float(sum((maximum(x, x * 0.2) + minimum(x, w4()) 
 
 // ---- reductions
 with <x: f32[..]>
-func reduce_axes(): float { return float(sum(sum(x, 1) * w3())) + float(sum(sum(x, 0, true) * w4())) + float(mean(x)) * 3.0 + float(sum(mean(x, 1) * w3())) }
+func reduce_axes(): float { return float(sum(sum<1>(x) * w3())) + float(sum(sum<0, true>(x) * w4())) + float(mean(x)) * 3.0 + float(sum(mean<1>(x) * w3())) }
 with <x: f32[..]>
-func extrema(): float { return float(sum(max(x, 1) * w3())) + float(sum(min(x, 0, true) * w4())) }
+func extrema(): float { return float(sum(max<1>(x) * w3())) + float(sum(min<0, true>(x) * w4())) }
 with <x: f32[..]>
-func soft(): float { return float(sum(softmax(x) * w34())) + float(sum(softmax(x, 0) * w34())) + float(sum(log_softmax(x) * w34())) }
+func soft(): float { return float(sum(softmax(x) * w34())) + float(sum(softmax<0>(x) * w34())) + float(sum(log_softmax(x) * w34())) }
 with <x: f32[..]>
 func norm_x(): float { return float(sum(layer_norm(x, w4() + 1.0, w4()) * w34())) }
 with <g: f32[..]>
@@ -65,7 +65,7 @@ func mm_lhs(): float { return float(sum(matmul(x, w45()) * w5())) }
 with <w: f32[..]>
 func mm_rhs(): float { return float(sum(matmul(w34(), w) * matmul(w34(), w45()))) }
 with <w: f32[..]>
-func mm_batch_rhs(): float { return float(sum(matmul(reshape(concat(w34(), w34() * 2.0, 0), [2, 3, 4]), w))) }
+func mm_batch_rhs(): float { return float(sum(matmul(reshape<[2, 3, 4]>(concat<0>(w34(), w34() * 2.0)), w))) }
 with <x: f32[..]>
 func mm_vec(): float { return float(sum(matmul(x, w45()) * w5b())) + float(sum(matmul(w34(), x) * w3())) }
 with <x: f32[..]>
@@ -77,15 +77,15 @@ func lin_bias(): float { return float(sum(tanh(linear(w34(), w45(), b)) * matmul
 with <x: f32[..]>
 func layout(): float {
     let t = transpose(x) * transpose(w34())
-    let r = reshape(x, [2, 6]) * reshape(w34(), [2, 6])
-    let u = unsqueeze(x, 0) * 2.0
-    let p = permute(reshape(x, [3, 2, 2]), [2, 0, 1]) * permute(reshape(w34(), [3, 2, 2]), [2, 0, 1])
-    return float(sum(t)) + float(sum(r)) + float(sum(flatten(u) * reshape(w34(), [1, 12]))) + float(sum(p))
+    let r = reshape<[2, 6]>(x) * reshape<[2, 6]>(w34())
+    let u = unsqueeze<0>(x) * 2.0
+    let p = permute<[2, 0, 1]>(reshape<[3, 2, 2]>(x)) * permute<[2, 0, 1]>(reshape<[3, 2, 2]>(w34()))
+    return float(sum(t)) + float(sum(r)) + float(sum(flatten(u) * reshape<[1, 12]>(w34()))) + float(sum(p))
 }
 with <x: f32[..]>
 func pieces(): float {
-    let c = concat(x, x * x, 0) * concat(w34(), w34(), 0)
-    let d = concat(x, w34(), 1)
+    let c = concat<0>(x, x * x) * concat<0>(w34(), w34())
+    let d = concat<1>(x, w34())
     let s = slice(x, 1, 1, 4) * slice(w34(), 1, 0, 3)
     let e = slice(x, 0, 0, 3, 2)
     return float(sum(c)) + float(sum(d * d)) + float(sum(s)) + float(sum(e * e))
