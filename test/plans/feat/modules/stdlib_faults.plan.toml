@@ -145,7 +145,7 @@ name = "stdlib.fault.clamp_bounds"
 desc = "clamp whose lower bound is above the upper one: the fault of `clamp`, located in the library at its `fail` in stdlib/math.cml."
 case = "../../../cases/modules/stdlib/fault_clamp_bounds.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 470
+expect_diagnostic_line = 495
 
 [[tests]]
 name = "stdlib.fault.clamp_bounds.opt"
@@ -154,14 +154,14 @@ case = "../../../cases/modules/stdlib/fault_clamp_bounds.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 470
+expect_diagnostic_line = 495
 
 [[tests]]
 name = "stdlib.fault.clamp_nan"
 desc = "clamp with a NaN bound: the fault of `clamp`, located in the library at its `fail` in stdlib/math.cml."
 case = "../../../cases/modules/stdlib/fault_clamp_nan.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 470
+expect_diagnostic_line = 495
 
 [[tests]]
 name = "stdlib.fault.clamp_nan.opt"
@@ -170,14 +170,14 @@ case = "../../../cases/modules/stdlib/fault_clamp_nan.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 470
+expect_diagnostic_line = 495
 
 [[tests]]
 name = "stdlib.fault.gcd_overflow"
 desc = "gcd of the smallest integer, which has no positive counterpart: the fault of `gcd`, located in the library at its `fail` in stdlib/math.cml."
 case = "../../../cases/modules/stdlib/fault_gcd_overflow.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 552
+expect_diagnostic_line = 577
 
 [[tests]]
 name = "stdlib.fault.gcd_overflow.opt"
@@ -186,14 +186,14 @@ case = "../../../cases/modules/stdlib/fault_gcd_overflow.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 552
+expect_diagnostic_line = 577
 
 [[tests]]
 name = "stdlib.fault.lcm_overflow"
 desc = "lcm that does not fit the integer type: the fault of `lcm`, located in the library at its `fail` in stdlib/math.cml."
 case = "../../../cases/modules/stdlib/fault_lcm_overflow.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 568
+expect_diagnostic_line = 593
 
 [[tests]]
 name = "stdlib.fault.lcm_overflow.opt"
@@ -202,7 +202,7 @@ case = "../../../cases/modules/stdlib/fault_lcm_overflow.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 568
+expect_diagnostic_line = 593
 
 [[tests]]
 name = "stdlib.fault.quantile_range"

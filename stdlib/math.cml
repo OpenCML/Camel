@@ -134,6 +134,16 @@ func tanh_kernel::<T>(x: T): T when is_same::<T, f32>()
 #op('math:tanh_d')
 func tanh_kernel::<T>(x: T): T when is_same::<T, float>()
 
+#op('math:erf_f')
+func erf_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:erf_d')
+func erf_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:erfc_f')
+func erfc_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:erfc_d')
+func erfc_kernel::<T>(x: T): T when is_same::<T, float>()
+
 #op('math:floor_f')
 func floor_kernel::<T>(x: T): T when is_same::<T, f32>()
 #op('math:floor_d')
@@ -401,6 +411,21 @@ export func cosh::<T>(x: T): T when is_float::<T>() {
 #impl(tanh_kernel)
 export func tanh::<T>(x: T): T when is_float::<T>() {
     return T(tanh_kernel(float(x)))
+}
+
+/// The error function, 2 / sqrt(pi) times the integral of e^-t^2 from 0 to x.
+/// @example erf(0.0)    // 0
+#impl(erf_kernel)
+export func erf::<T>(x: T): T when is_float::<T>() {
+    return T(erf_kernel(float(x)))
+}
+
+/// The complementary error function, 1 - erf(x), without the cancellation of the subtraction for
+/// large x.
+/// @example erfc(0.0)    // 1
+#impl(erfc_kernel)
+export func erfc::<T>(x: T): T when is_float::<T>() {
+    return T(erfc_kernel(float(x)))
 }
 
 // ---- rounding ----

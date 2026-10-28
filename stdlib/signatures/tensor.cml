@@ -181,6 +181,11 @@ export func gelu(t: float[..]): float[..]
 /// @example erf(new([0.0]))    // [0.0]
 export func erf(t: float[..]): float[..]
 
+/// The complementary error function 1 - erf(x) per element.
+/// @pure
+/// @example erfc(new([0.0]))    // [1.0]
+export func erfc(t: float[..]): float[..]
+
 // ---- shape and reshaping ----
 
 /// The elements in row-major order, in a new shape; one extent may be -1, which the element

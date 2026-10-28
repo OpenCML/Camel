@@ -32,6 +32,7 @@
 #include "camel/core/type/other.h"
 
 #include <algorithm>
+#include <set>
 #include <atomic>
 #include <cctype>
 #define DEBUG_LEVEL -1
@@ -1887,6 +1888,21 @@ void Builder::yieldToPipe(const GCT::node_ptr_t &call) {
 }
 
 node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
+    // A call written in an extent of a signature is run by this build (foldExtentCall).
+    struct ExtentCallScope {
+        camel::core::type::ExtentCallEvaluator previous;
+        explicit ExtentCallScope(Builder &self)
+            : previous(camel::core::type::extentCallEvaluator()) {
+            camel::core::type::extentCallEvaluator() =
+                [&self](const std::shared_ptr<const void> &call,
+                        const camel::core::type::ExtentValues &values) {
+                    return self.foldExtentCall(
+                        const_cast<GCT::Node *>(static_cast<const GCT::Node *>(call.get())),
+                        values);
+                };
+        }
+        ~ExtentCallScope() { camel::core::type::extentCallEvaluator() = std::move(previous); }
+    } extentCallScope(*this);
     if (GCT::Tree::of(gct)->isPipe(gct) && (pipe_ == nullptr || pipe_->call != gct)) {
         return visitPipeLink(gct, nullptr);
     }
@@ -2906,6 +2922,30 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             currGraph_->addDependencyGraph(targetGraph);
             targetNode     = createFuncDataNode(targetGraph, false, true);
             targetFuncType = targetGraph->funcType();
+            // The instance is one per `constas` value, and the extents those values fixed are in
+            // its type already; the dimensions of the arguments are not (the instance is shared by
+            // the calls that differ in them), so they are bound here and the result is refined
+            // below as it is for a function that is no instance (design principles 5.4).
+            for (const GenericInstance &instance : chosenTemplate->instances) {
+                if (instance.graph == targetGraph) {
+                    dimValues = instance.extents;
+                    break;
+                }
+            }
+            const auto bindInstance = [&](const type_vec_t &types, bool with) {
+                const size_t count =
+                    with ? targetFuncType->withTypesCount() : targetFuncType->normTypesCount();
+                for (size_t i = 0; i < types.size() && i < count; ++i) {
+                    Type *param = with ? targetFuncType->withTypeAt(i) : targetFuncType->normTypeAt(i);
+                    if (param == nullptr || types[i] == nullptr) {
+                        continue;
+                    }
+                    std::string unmatched;
+                    bindExtents(param, types[i], dimValues, dimPacks, unmatched);
+                }
+            };
+            bindInstance(withInputTypes, true);
+            bindInstance(normInputTypes, false);
         }
     } else if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
         const auto &drefTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
@@ -4147,6 +4187,19 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             bool hasNames = !namedExit->packName().empty();
             for (const ExtentForm &form : forms) {
                 hasNames |= form.hasNames();
+            }
+            // An extent the call's constants make negative is no dimension: the call is refused
+            // where it is written, not left to fault when the kernel runs.
+            for (const ExtentForm &form : forms) {
+                if (!form.hasNames()) {
+                    continue;
+                }
+                if (const auto value = form.evaluate(dimValues); value.has_value() && *value < 0) {
+                    diags_->of(SemanticDiag::ExtentNotADimension)
+                        .atOrigin(gct->origin())
+                        .commit(form.toString(), std::to_string(*value));
+                    throw BuildAbortException();
+                }
             }
             Type *actualExit = valueTypeOf(nodeTypeOf(targetNode));
             Type *refined =

@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 214
+**Semantic — errors** (`SemanticDiag`) — 215
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -146,7 +146,8 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `DimensionNameNotBound` | The dimension name '{0}' is not bound by any parameter of this signature. |
 | `DimensionNameAlreadyBound` | The dimension name '{0}' is already bound; write '{0}' here. |
 | `DimensionMismatch` | {0} has extent {1}, but {2}. |
-| `InvalidExtentExpression` | This is not a shape: the extents of a type written with dimension names are integers, bound names, or linear expressions over them ('f32[n, 3]'). |
+| `InvalidExtentExpression` | This is not a shape: the extents of a type written with dimension names are integers, bound names, or expressions over them ('f32[n, 3]'). |
+| `ExtentNotADimension` | The extent '{0}' of this call is {1}, which is not a dimension. |
 | `NotDifferentiable` | The function cannot be differentiated: {0}. |
 | `TagNotAtPosition` | The tag '{0}' may not be written at a {1}: it is declared for {2}. |
 | `TagUndeclared` | No tag '{0}' is declared. |

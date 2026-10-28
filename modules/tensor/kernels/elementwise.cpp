@@ -550,6 +550,9 @@ void runUnaryF64(UnaryOp op, const double *src, double *dst, int64_t count) {
             case UnaryOp::Erf:
                 dst[i] = std::erf(x);
                 break;
+            case UnaryOp::Erfc:
+                dst[i] = std::erfc(x);
+                break;
             }
         }
     });

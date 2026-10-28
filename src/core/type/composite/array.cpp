@@ -16,6 +16,7 @@
 #include "camel/utils/log.h"
 
 #include <algorithm>
+#include <functional>
 #include <numeric>
 #include <span>
 #include <stdexcept>
@@ -69,6 +70,11 @@ std::vector<ExtentForm> canonicalShape(std::span<const ExtentForm> forms) {
         for (const ExtentForm &form : forms) {
             key.push_back(static_cast<int64_t>(form.kind()));
             key.push_back(form.constant());
+            if (form.isComputed()) {
+                // An expression is part of the shape's identity as it is written.
+                key.push_back(
+                    static_cast<int64_t>(std::hash<std::string>{}(form.expression()->toString())));
+            }
             std::vector<std::pair<size_t, int64_t>> terms;
             for (const auto &[name, coefficient] : form.terms()) {
                 const auto at = std::find(names.begin(), names.end(), name) - names.begin();
@@ -327,6 +333,8 @@ std::string ArrayType::shapeMangle() const {
             shape += std::to_string(form.constant());
         } else if (form.isUnknown()) {
             shape += "?";
+        } else if (form.isComputed()) {
+            shape += "E" + std::to_string(std::hash<std::string>{}(form.expression()->toString()));
         } else {
             shape += "L" + std::string(form.constant() < 0 ? "m" : "") +
                      std::to_string(form.constant() < 0 ? -form.constant() : form.constant());

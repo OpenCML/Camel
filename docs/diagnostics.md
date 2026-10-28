@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-293 diagnostics: 273 errors, 20 warnings. 15 carry a machine-applicable edit, 278 say why they carry none.
+294 diagnostics: 274 errors, 20 warnings. 15 carry a machine-applicable edit, 279 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -258,6 +258,7 @@ prints one entry.
 | `0x030001FC` | [SemanticDiag::NativeValueMismatch](#nativevaluemismatch) | Error | no |
 | `0x030001FD` | [SemanticDiag::NativeTypeNotProvided](#nativetypenotprovided) | Error | no |
 | `0x030001FE` | [SemanticDiag::TypeFunctionNotApplicable](#typefunctionnotapplicable) | Error | no |
+| `0x030001FF` | [SemanticDiag::ExtentNotADimension](#extentnotadimension) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -3950,13 +3951,13 @@ None: choice: the repair is a decision only the writer can make
 **Message**
 
 ```text
-This is not a shape: the extents of a type written with dimension names are integers, bound names, or linear expressions over them ('f32[n, 3]').
+This is not a shape: the extents of a type written with dimension names are integers, bound names, or expressions over them ('f32[n, 3]').
 ```
 
 **Help**
 
 ```text
-Each extent is a non-negative integer, a dimension name bound by the signature, or a linear expression over such names: 'n', 'n + 1', '2 * n', 'n - k'. A dimension that is not linear is unknown, and an unknown extent is written '?'.
+Each extent is a non-negative integer, a dimension name bound by the signature, a `constas` parameter of the signature, or an expression over such names with `+`, `-`, `*`, `/`, `%` and calls of pure functions: 'n', 'n + 1', '2 * n', '(n + 2 * p - k) / s + 1', 'conv_out(n, k, s, p)'. An extent that depends on a name the call does not bind to a constant is unknown, and an unknown extent is written '?'.
 ```
 
 **Example** (`test/cases/compile/array_shape/err_negative.cml`, run as `camel test/cases/compile/array_shape/err_negative.cml`)
@@ -8396,6 +8397,50 @@ func element_is_integer::<T>(): bool {
 func main(): int sync {
     println(element_is_integer::<int>())
     return 0
+}
+```
+
+### ExtentNotADimension
+
+`0x030001FF` · Error · `SemanticDiag::ExtentNotADimension`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The extent '{0}' of this call is {1}, which is not a dimension.
+```
+
+**Help**
+
+```text
+An extent written with names is evaluated where a call binds every name it uses, to a dimension of an argument or to the constant the call gives a `constas` parameter. A value below zero describes no array, so the call is refused where it is written; to allow the case, make the signature's extent unknown (`?`) or give the call arguments that make it non-negative.
+```
+
+**Example** (`test/cases/compile/extents/computed_negative.cml`, run as `camel test/cases/compile/extents/computed_negative.cml`)
+
+```camel
+/// An extent the constants of the call make negative is no dimension: the kernel (20) is wider than
+/// the padded input (8 + 2), so `(n + 2 * p - k) / s + 1` is -9, and the call is refused where it is
+/// written.
+func conv_len(constas k: int, constas s: int, constas p: int, x: f32[n]):
+    f32[(n + 2 * p - k) / s + 1] {
+    let m = (len(x) + 2 * p - k) / s + 1
+    return [f32(i) for i in 0..m]
+}
+
+func run(x: f32[8]): int {
+    let z = conv_len(20, 1, 1, x)
+    println(z)
+    return 0
+}
+
+func main(): int sync {
+    let x: f32[8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+    return run(x as f32[8])
 }
 ```
 

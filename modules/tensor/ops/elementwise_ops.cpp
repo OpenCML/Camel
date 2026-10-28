@@ -36,7 +36,7 @@ constexpr std::string_view compareName(k::CompareOp op) {
 
 constexpr std::string_view unaryName(k::UnaryOp op) {
     constexpr std::string_view names[] =
-        {"neg", "abs", "exp", "log", "sqrt", "rsqrt", "sigmoid", "tanh", "relu", "gelu", "erf"};
+        {"neg", "abs", "exp", "log", "sqrt", "rsqrt", "sigmoid", "tanh", "relu", "gelu", "erf", "erfc"};
     return names[static_cast<size_t>(op)];
 }
 
@@ -460,6 +460,13 @@ void erfVjp(VjpBuilder &b, const VjpCall &call) {
     });
 }
 
+// erfc' = -erf': the gradient of erf with dy negated.
+void erfcVjp(VjpBuilder &b, const VjpCall &call) {
+    unaryRule(b, call, [&](vjp_node_t dy, vjp_node_t x, vjp_node_t) {
+        return addTensorOper(b, "tensor:erf_grad", {x, addTensorOper(b, "tensor:neg", {dy})});
+    });
+}
+
 // where(cond, lhs, rhs): each branch value receives dy where it was selected.
 void whereVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 3, 3);
@@ -509,6 +516,7 @@ std::vector<OpDef> elementwiseOps() {
     defs.push_back(unaryDef<k::UnaryOp::Relu>("relu", {"relu"}));
     defs.push_back(unaryDef<k::UnaryOp::Gelu>("gelu", {"gelu"}));
     defs.push_back(unaryDef<k::UnaryOp::Erf>("erf", {"erf"}));
+    defs.push_back(unaryDef<k::UnaryOp::Erfc>("erfc", {"erfc"}));
 
     defs.push_back(OpDef{
         .name    = "where",
@@ -540,6 +548,7 @@ std::vector<OpDef> elementwiseOps() {
     setVjp(defs, "relu", &reluVjp);
     setVjp(defs, "gelu", &geluVjp);
     setVjp(defs, "erf", &erfVjp);
+    setVjp(defs, "erfc", &erfcVjp);
     setVjp(defs, "where", &whereVjp);
     // Comparisons are locally constant.
     for (std::string_view name : {"lt", "le", "gt", "ge", "strict_eq", "strict_neq"}) {

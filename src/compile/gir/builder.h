@@ -1975,6 +1975,11 @@ class Builder {
     /// The value of an expression the compiler can compute at build time. Throws when it cannot
     /// (the evaluator's failure type is internal to builder_when.cpp).
     data_ptr_t compileTimeExpression(const GCT::node_ptr_t &expression);
+    /// The value of a call written in an extent (`conv_out(n, k, s, p)`) with the names it reads
+    /// bound to `values`: the call is run at build time like any folded call. Nothing when the
+    /// build-time evaluation refuses it.
+    std::optional<int64_t> foldExtentCall(
+        const GCT::node_ptr_t &call, const camel::core::type::ExtentValues &values);
     /// Reports a refusal at `origin`, naming `folded.call`. Never returns.
     [[noreturn]] void reportFoldRefusal(const FoldedCall &folded, const GCT::node_ptr_t &origin);
 

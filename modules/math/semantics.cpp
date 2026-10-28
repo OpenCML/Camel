@@ -192,6 +192,8 @@ constexpr BoundedRow kUnaryBounded[] = {
     {"sinh", 4.0f, true, "sinh x per element, within 4 ulp; NaN, +-inf and +-0 exact"},
     {"cosh", 4.0f, true, "cosh x per element, within 4 ulp; NaN and +-inf exact"},
     {"tanh", 4.0f, true, "tanh x per element, within 4 ulp; NaN, +-inf and +-0 exact"},
+    {"erf", 4.0f, true, "erf x per element, within 4 ulp; NaN, +-inf and +-0 exact"},
+    {"erfc", 4.0f, true, "erfc x per element, within 4 ulp; NaN and +-inf exact"},
     // 2 ulp: the standard library target for log.
     {"log",
      2.0f,

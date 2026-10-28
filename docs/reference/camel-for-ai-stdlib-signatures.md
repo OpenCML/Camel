@@ -193,7 +193,7 @@ tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 tree_unzip: (r: R, s: S) => ?
 ```
 
-**`tensor`** — import { ... } from tensor — 67 name(s)
+**`tensor`** — import { ... } from tensor — 68 name(s)
 
 ```text
 new: (values: float[..] | number[]) => float[..]
@@ -224,6 +224,7 @@ tanh: (t: float[..]) => float[..]
 relu: (t: float[..]) => float[..]
 gelu: (t: float[..]) => float[..]
 erf: (t: float[..]) => float[..]
+erfc: (t: float[..]) => float[..]
 reshape: (t: float[..] | number[], shape: int[]) => float[..]
 flatten: (t: float[..], axis?: int) => float[..]
 unsqueeze: (t: float[..], axis: int) => float[..]
@@ -354,7 +355,7 @@ collect: (s: T..) => T[]
 tee: <n: int = 8> (s: T..) => (T.., T..)
 ```
 
-**`math`** — import { ... } from math — 48 name(s)
+**`math`** — import { ... } from math — 50 name(s)
 
 ```text
 pi: float
@@ -381,6 +382,8 @@ atan2: (y: T, x: T) => T when is_float::<T>()
 sinh: (x: T) => T when is_float::<T>()
 cosh: (x: T) => T when is_float::<T>()
 tanh: (x: T) => T when is_float::<T>()
+erf: (x: T) => T when is_float::<T>()
+erfc: (x: T) => T when is_float::<T>()
 floor: (x: T) => T when is_float::<T>()
 ceil: (x: T) => T when is_float::<T>()
 round: (x: T) => T when is_float::<T>()
