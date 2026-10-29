@@ -1,0 +1,33 @@
+合并 `lane-jax` 进 develop（`96f20a391`）：`map` 的批处理合同 + JAX 差距清单页 + 六条用例
+
+**这棵树合并了什么**：`50fe2ba60` 说清 `map` 一次批什么（一个数组、它唯一那一维、结果按位置；第二个数组、选/命名轴、没有数组处的批都不算），`map` 的说明与 `docs/stdlib-reference.md` 的重生成页**同源**；`2ef6a6317` 把 JAX 面向面钉成 6 条用例（fast 层 `modules.jax_alignment`）。合并提交 `6a8ccd436`，`96f20a391` 在其上是文档一笔（+4 行，只改计划页）。净变化 10 文件 +467/−2，加那 4 行文档。
+
+**闸门**（`-Plan all -Tier fast -Jobs 8`，主机 88，本机 0 构建）：sha `96f20a391`；build stamp **`96f20a391（clean）/ 1217 source files / fingerprint f18a19bad89a`**，`dirty=false / dirtyCount 0 / dirtyPaths []`；`total 7794 / pass 7790 / fail 0 / skip 2 / known 2`，**新红 0、`snapshot differs 0`**，对上基线 7783 / 0 / 2（**+11**：2 正例×3 后端 + 4 负例 + 1 poison 变体），`RUN_EXIT=0`（wall 315.3 s，build 5.4 s）。同一台机器上 `6a8ccd436` 的读数逐项相同。
+
+**车道的 stamp 是脏的**：车道宿主检出的 `build-info.json` 是 `dirty: true, dirtyCount 4`、footprint `…_cd4bbb259_dirty`，复用它会测量一棵脏树。按指示先 `-Clean` 丢掉该检出，闸门全新 clone = 全量重建，新 stamp 才 `dirty=false`。
+
+**正例原始输出**（nvm / fvm / `std::jit` 三后端逐字相同，EXIT=0）：
+
+```
+jax_batching axis0
+[0.0, 1.0, 4.0]
+jax_batching struct
+[2.0, 4.0, 6.0]
+```
+
+```
+jax_derivatives
+4.0
+(4.0, 4.0)
+4.0
+```
+
+**负例原始输出**（各 EXIT=1，`SemanticDiag::UnresolvedReference` 0x0300000B 点名）：`Unresolved reference: 'vmap'.` / `'jvp'.` / `'vjp'.` / `'checkpoint'.`
+
+**两条环境红，都证明不是本批引入**：① `stdlib-declarations --check` 本机 exit 2 是 **stamp 守卫拒绝**（无本树构建，install 不是本树的），闸门内跑；② `check-doc-snippets` 本机 2 条红是 **Windows 路径前缀**（`--> D:<file>:4:15` vs `--> <file>:4:15`），**在基线 `6fa6e2d18` 上逐字复现**。
+
+**裁定（作者）：栏位有意省略要页面自己说**。`questions-2026-10-30-jax.md` 的逐项五栏（名称/语义/我们现在/JAX 的行为/差在哪）**只有 J1–J8 齐全**；J9–J13 是"已有、本页不动"项，J10–J13 只记名称+差在哪，J9 另记"我们现在"与"JAX 的行为"，J14 是组合项记语义+我们现在+差在哪。这些**是省略，不是漏写**，页面现在自己写明，并写明"哪条要动先补齐它的栏"。§6 同时标明每条问题依据哪一项（Q1→J1+J2、Q2→J3+J4+J5、Q3→J6、Q4→J8、Q5→J7、Q6→J2），并敢写**六条没有一条依赖 J9–J13 的数据**——硬挂一个看起来完整的对应关系是编的。
+
+**文档检查**：`stdlib-reference --verify-doc` 与 `diagnostics-catalog --verify-doc` 均 up to date（重生成页确是脚本产物）；`check-doc-links --all` 361 篇 0 断链；`check-doc-pass-forms` 352 处 PASS；`check-std-includes` 1107 文件；`diagnostics-catalog --check` 298 codes。
+
+**推送**：`6fa6e2d18..96f20a391 → develop` 快进、无 force；`6a8ccd436` 已核为 `origin/develop` 祖先；主检出 pull --ff-only 到 `96f20a391`，干净。
