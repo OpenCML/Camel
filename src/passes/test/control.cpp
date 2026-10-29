@@ -313,6 +313,12 @@ void syncChainOrdering() {
             draft.orderInputsOf(user).size() == 1 && draft.orderInputsOf(user).front() == next,
             "the pass dropped the order the chain does not give");
     }
+    // The block above is what keeps the reduction from falling back to order edges alone, and the
+    // way back is one line: move `walk(draft.syncUsersOf(from))` in src/runtime/control.cpp back
+    // inside `if (readsEveryKind)` and this check fails with "the pass did not read the sync chain",
+    // which turns `control.topology` and `control.test_pass_runs_when_named`
+    // (test/plans/feat/opt/control.plan.toml) red -- 4 cases, 2 fail; restore the line and the plan
+    // is 4 green. A check nobody has seen fail is a check nobody knows is load-bearing.
 }
 /// The two readings of one order reduction. A document is compared by the order a program holds,
 /// so an ordering edge whose two ends a data path already orders says nothing and is dropped
