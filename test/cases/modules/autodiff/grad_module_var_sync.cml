@@ -1,0 +1,31 @@
+/**
+ * The four things that meet in this program: a `sync` function, a module-level `var` the function
+ * writes, a derivative taken of that function, and the optimizer ahead of the scheduler.
+ *
+ * The write is an effect, so it runs once in the forward pass; the versions the call hands on are
+ * resource state, not gradient, so the value and the gradient are the plain ones (9.0 and 6.0 at
+ * w = 3, x = 1) and the counter reads 1 after the call. Every one of the four is needed for the
+ * defect this pins: with `std::opt` ahead of the scheduler the forward pass used to print its line
+ * and then the process died with a segmentation fault, on every scheduler, while the same program
+ * printed `(9.0, 6.0)` without the optimizer. The exact output is asserted, so a crash (no exit,
+ * no output), a lost effect (counter 0) and a wrong gradient are all red; the plan runs it on the
+ * four back ends, with and without `std::opt`, and under `std::macro` + `std::opt`.
+ */
+import { grad, with_grad } from autodiff
+
+var calls: int = 0
+
+with <w: float>
+func f(x: float): float sync {
+    println('f body runs')
+    calls = calls + 1
+    return w * w * x
+}
+
+func main(): int sync {
+    let vg = with_grad(f)<3.0>(1.0)
+    println(vg.0)
+    println(vg.1)
+    println(calls)
+    return 0
+}
