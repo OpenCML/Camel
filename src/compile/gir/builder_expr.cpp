@@ -484,10 +484,14 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
         // The chain orders the calls that used the variable before this write. A read is not on
         // the chain, so the write is ordered after it by an order edge: the read has to see the
         // value as it was before the write changes it (docs/design/effects/edges.cn.md 5.5).
+        // An order the read's value already carries to the write over the data path is not
+        // written again: `x = x + 1` and the `x += 1` that is the same thing hand the read's
+        // value to the operator the write stores, so the write runs after the read already
+        // (design principles 2.1, 3.5).
         for (const VariableUse &use : uses) {
             if (use.isRead && sameGraph(use.node, currGraph_) && linkCheek(use.node, exit) &&
                 nodeTakesAnOrder(use.node) && nodeTakesAnOrder(exit) &&
-                !hasDirectDataDependency(use.node, exit)) {
+                !hasDirectDataDependency(use.node, exit) && !dataPathReaches(use.node, exit)) {
                 linkNodes(LinkType::Order, use.node, exit);
             }
         }

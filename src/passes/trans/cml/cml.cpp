@@ -1048,6 +1048,13 @@ class CmlPrinter {
         gc_node_ref_t tail = camel::execute::resolveRuntimeTailValueRef(graph_);
         bool tailPrintedAsStatement = false;
 
+        // A block with no chain of its own runs the write it yields only because the value is
+        // taken from that write: the source ends such a body with the write, and `return v` after
+        // it would hand the same value on while leaving the write behind a value that reaches
+        // nothing, so the write would not run at all (design principles 3.4). The write the exit's
+        // gate waits on is then the block's last statement.
+        const gc_node_ref_t valueWrite = blockValueWrite(tail);
+
         // A local copy: printing a lambda or a region switches the printer to another graph and
         // back, and that replaces `topo_` while this loop walks it.
         const std::vector<gc_node_ref_t> order = topo_;
@@ -1061,6 +1068,9 @@ class CmlPrinter {
                 continue;
             }
             processNode(ref, tail, true, tailPrintedAsStatement);
+        }
+        if (valueWrite != camel::runtime::kInvalidNodeRef) {
+            tailPrintedAsStatement = true;
         }
 
         if (!isRoot_ && tail != camel::runtime::kInvalidNodeRef && !tailPrintedAsStatement) {
@@ -1183,16 +1193,53 @@ class CmlPrinter {
         return false;
     }
 
-    /// Whether the source wrote a `sync` block around this region's statements. A branch or loop
-    /// links its region to the owner with a control edge, so that edge does not count; a `sync`
-    /// block orders one statement after another, which is a control edge between two nodes of
-    /// the same region.
+    /// The write whose value the block yields, when the block has no chain to run it: the gate at
+    /// the exit hands the block's value on and waits on that write. `kInvalidNodeRef` otherwise --
+    /// a block with a chain runs its statements anyway, and a value that is no write's value has
+    /// nothing behind it.
+    gc_node_ref_t blockValueWrite(gc_node_ref_t tail) const {
+        if (tail == camel::runtime::kInvalidNodeRef || regionNeedsSync(0)) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        const gc_node_ref_t exitRef = graph_->exitNodeRef();
+        if (exitRef == camel::runtime::kInvalidNodeRef || graph_->node(exitRef) == nullptr ||
+            graph_->node(exitRef)->kind != camel::runtime::GCNodeKind::Gate) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        bool handsTail = false;
+        for (const gc_node_ref_t input : graph_->normInputsOf(exitRef)) {
+            handsTail = handsTail || input == tail;
+        }
+        if (!handsTail) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        for (const gc_node_ref_t input : graph_->ctrlInputsOf(exitRef)) {
+            const camel::runtime::GCNode *node = graph_->node(input);
+            if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Oper ||
+                control_->controlOf(input) != 0) {
+                continue;
+            }
+            if (graph_->nodeBodyAs<camel::runtime::GCOperBody>(input)->uri().starts_with(
+                    ":op/assn")) {
+                return input;
+            }
+        }
+        return camel::runtime::kInvalidNodeRef;
+    }
+
+    /// Whether the source wrote a `sync` block around this region's statements. A `sync` block
+    /// orders one statement after another, which is the sync edge the builder writes between the
+    /// two (the control edge it writes beside that one is a wait of the same pair, and a value
+    /// handed on behind a gate to make a write run has that wait alone: that is no block's chain,
+    /// and printing it as one would make the block's reads settle as the reads of a chain
+    /// (Builder::markNonRetainingReads) and print a graph the source did not write).
     bool regionNeedsSync(uint32_t region) const {
         for (const gc_node_ref_t ref : topo_) {
             if (graph_->node(ref) == nullptr || control_->controlOf(ref) != region) {
                 continue;
             }
-            for (const gc_node_ref_t source : graph_->ctrlInputsOf(ref)) {
+            for (const camel::runtime::GCGraphSyncEdge &edge : graph_->syncPredsOf(ref)) {
+                const gc_node_ref_t source = edge.pred;
                 if (graph_->node(source) != nullptr && control_->controlOf(source) == region) {
                     return true;
                 }
