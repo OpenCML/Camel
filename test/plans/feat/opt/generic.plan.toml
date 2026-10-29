@@ -1818,6 +1818,170 @@ expect_exit = 0
 expect_stdout_exact = "round 1\nround 2\nround 3\nround 4\ncounted 5\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "interval_bounds_constant.reference"
+desc = "A loop over the interval `0..4` does its four rounds and prints them: 0 1 2 3, the state 4."
+kind = "behavior"
+case = "../../../cases/opt/generic/interval_bounds_constant.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "round 0\nround 1\nround 2\nround 3\ncounted 4\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "interval_bounds_constant.opt_nvm"
+desc = "Folding the pair of an interval's constant bounds does not cost the loop its rounds: the node VM reads the bounds from the constant and prints the same 0 1 2 3 and 4."
+kind = "behavior"
+case = "../../../cases/opt/generic/interval_bounds_constant.cml"
+args = ["${case}", "std::opt", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "round 0\nround 1\nround 2\nround 3\ncounted 4\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "interval_bounds_constant.opt_fvm"
+desc = "The bytecode interpreter reads the folded pair's bounds as the node VM does."
+kind = "behavior"
+case = "../../../cases/opt/generic/interval_bounds_constant.cml"
+args = ["${case}", "std::opt", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "round 0\nround 1\nround 2\nround 3\ncounted 4\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "interval_bounds_constant.opt_jit"
+desc = "The JIT-enabled bytecode interpreter reads the folded pair's bounds as the node VM does."
+kind = "behavior"
+case = "../../../cases/opt/generic/interval_bounds_constant.cml"
+args = ["${case}", "std::opt", "${run_jit}"]
+expect_exit = 0
+expect_stdout_exact = "round 0\nround 1\nround 2\nround 3\ncounted 4\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "interval_bounds_constant.opt_taskflow"
+desc = "The parallel task scheduler reads the folded pair's bounds as the node VM does."
+kind = "behavior"
+case = "../../../cases/opt/generic/interval_bounds_constant.cml"
+args = ["${case}", "std::opt", "${run_prl}"]
+expect_exit = 0
+expect_stdout_exact = "round 0\nround 1\nround 2\nround 3\ncounted 4\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "interval_bounds_constant.pair_as_fill"
+desc = "Before any pass the interval's two bounds are the tuple FILL the front end builds."
+kind = "behavior"
+case = "../../../cases/opt/generic/interval_bounds_constant.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+    const doc = JSON.parse(input.normalized.stdout)
+    const graph = doc.graphs.find(g => g.name === 'counted')
+    assert(graph, 'the graph of `counted` is missing')
+    const fills = graph.nodes.filter(n => n.kind === 'FILL')
+    assert(fills.length === 1, `expected the pair of bounds as one FILL, got ${JSON.stringify(fills.map(n => n.label))}`)
+    const constants = graph.nodes.filter(n => n.kind === 'DATA' && n.label === '(0, 4)')
+    assert(constants.length === 0, 'the pair of bounds is a constant before any pass')
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "interval_bounds_constant.pair_folded"
+desc = "std::opt folds the pair of the interval's constant bounds into the constant holding the same two integers: the FILL is gone, `(0, 4)` is a DATA node, and the loop runs its rounds from that value (the other entries)."
+kind = "behavior"
+case = "../../../cases/opt/generic/interval_bounds_constant.cml"
+args = ["${case}", "std::opt", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+    const doc = JSON.parse(input.normalized.stdout)
+    const graph = doc.graphs.find(g => g.name === 'counted')
+    assert(graph, 'the graph of `counted` is missing')
+    const fills = graph.nodes.filter(n => n.kind === 'FILL')
+    assert(fills.length === 0, `folding left the pair of bounds as a FILL: ${JSON.stringify(fills.map(n => n.label))}`)
+    const constants = graph.nodes.filter(n => n.kind === 'DATA' && n.label === '(0, 4)')
+    assert(constants.length === 1, `the pair of bounds is not the constant (0, 4): ${JSON.stringify(graph.nodes.map(n => [n.kind, n.label]))}`)
+    assert(graph.nodes.some(n => n.kind === 'LOOP'), 'the loop is gone')
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "interval_bounds_constant.opt_cml"
+desc = "A loop whose pair of bounds folding made a constant is printed back as the interval, not as the constant tuple: `std::cml` reads the bounds from the pair as a value too."
+kind = "behavior"
+case = "../../../cases/opt/generic/interval_bounds_constant.cml"
+args = ["${case}", "std::opt::fold", "std::cml"]
+expect_exit = 0
+expect_stdout_contains = ["for i in 0..4", "counted"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "interval_bounds_computed.reference"
+desc = "A loop over an interval whose bounds are computed does the rounds of [0, n + 2): 0 1 2 3, the state 32 for n = 2."
+kind = "behavior"
+case = "../../../cases/opt/generic/interval_bounds_computed.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "round 0\nround 1\nround 2\nround 3\ncounted 32\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "interval_bounds_computed.opt_nvm"
+desc = "With bounds the graph computes, std::opt leaves the computation and the loop reads the two integers from the values it writes: the node VM prints the same rounds and state."
+kind = "behavior"
+case = "../../../cases/opt/generic/interval_bounds_computed.cml"
+args = ["${case}", "std::opt", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "round 0\nround 1\nround 2\nround 3\ncounted 32\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "interval_bounds_computed.opt_fvm"
+desc = "The bytecode interpreter reads computed bounds as the node VM does."
+kind = "behavior"
+case = "../../../cases/opt/generic/interval_bounds_computed.cml"
+args = ["${case}", "std::opt", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "round 0\nround 1\nround 2\nround 3\ncounted 32\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "interval_bounds_computed.opt_jit"
+desc = "The JIT-enabled bytecode interpreter reads computed bounds as the node VM does."
+kind = "behavior"
+case = "../../../cases/opt/generic/interval_bounds_computed.cml"
+args = ["${case}", "std::opt", "${run_jit}"]
+expect_exit = 0
+expect_stdout_exact = "round 0\nround 1\nround 2\nround 3\ncounted 32\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "interval_bounds_computed.opt_taskflow"
+desc = "The parallel task scheduler reads computed bounds as the node VM does."
+kind = "behavior"
+case = "../../../cases/opt/generic/interval_bounds_computed.cml"
+args = ["${case}", "std::opt", "${run_prl}"]
+expect_exit = 0
+expect_stdout_exact = "round 0\nround 1\nround 2\nround 3\ncounted 32\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
 [[tests]]
 name = "hang_branch_00017.reference"
 desc = "The corpus program std::opt hung on (`branch_00017`, Kogler7/Camel-Archive, ICPC2027/study/e2-generated/gn-suspect/S3-opt-hang) does its five calls: a loop over a constant range runs its four rounds and the branch whose test is a constant takes its `else` arm, so every call yields 0.020604834. This is the reading the passes below must keep."

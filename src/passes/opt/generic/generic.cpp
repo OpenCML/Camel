@@ -1130,46 +1130,9 @@ bool foldFromTypes(
     return true;
 }
 
-/**
- * The nodes that are the pair of an interval's two bounds, the sequence of a loop the compiler
- * fuses (design principles 4.2: `for i in 0..n` builds no array of its elements). The graph states
- * that form twice: the LOOP node records it, and its first Norm input is the tuple FILL whose
- * payload names the two bound positions -- `GCGraph::intervalBoundsOf` reads the bounds there, and
- * the execution plan takes their two slots from that FILL (exec_plan.cpp, boundSlotsOf). The pair
- * is a form and not only a value: a constant holding the same two integers leaves a loop that
- * still says Interval with no pair behind it, so no round of it runs at all -- `loop v = 1 for i in
- * 0..4 do v + 1` printed 1 and lost the prints of its body. A pure computation may be arranged
- * freely only where nothing observable follows from the arrangement (design principles 3.4), so
- * these FILLs stay as written.
- */
-std::vector<uint8_t> intervalPairs(const GraphDraft &draft) {
-    std::vector<uint8_t> pairs(draft.nodeSlotCount(), 0);
-    for (gc_node_ref_t id = 0; id < pairs.size(); ++id) {
-        const auto *h = draft.header(id);
-        if (!h || h->kind != GCNodeKind::Loop ||
-            draft.payloadOf(id).size() < sizeof(camel::runtime::GCLoopRef)) {
-            continue;
-        }
-        const auto *loop =
-            reinterpret_cast<const camel::runtime::GCLoopRef *>(draft.payloadOf(id).data());
-        if (loop->iterableForm != camel::core::LoopIterableForm::Interval) {
-            continue;
-        }
-        const auto norm = draft.normInputsOf(id);
-        if (!norm.empty()) {
-            const gc_node_ref_t pair = camel::runtime::ungated(draft, norm.front());
-            if (pair < pairs.size()) {
-                pairs[pair] = 1;
-            }
-        }
-    }
-    return pairs;
-}
-
 size_t foldDraft(
     GraphDraft &draft, camel::core::context::Context &ctx,
     std::deque<camel::core::mm::RootHandle> &roots, size_t constantBudget) {
-    const std::vector<uint8_t> intervalPair = intervalPairs(draft);
     size_t folded = 0;
     for (bool changed = true; changed;) {
         changed = false;
@@ -1197,12 +1160,10 @@ size_t foldDraft(
                 }
                 continue;
             }
-            // A tuple, struct or array built from constants is a constant -- unless it is the pair
-            // of an interval's bounds, which is a form the loop it belongs to is read by.
+            // A tuple, struct or array built from constants is a constant.
             if (const auto *h = draft.header(id);
                 h && h->kind == GCNodeKind::Fill && isFoldable(draft, id)) {
-                const bool pair = id < intervalPair.size() && intervalPair[id];
-                if (!pair && foldStaticFill(draft, id, roots, constantBudget)) {
+                if (foldStaticFill(draft, id, roots, constantBudget)) {
                     ++folded;
                     changed = true;
                 }
