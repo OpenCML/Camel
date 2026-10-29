@@ -715,7 +715,10 @@ call does is what f does.
 map: <f: (item: T) => U> (xs: T[]) => U[]
 ```
 
-f applied to every element; the calls have no order among them.
+f applied to every element; the calls have no order among them. One call batches one array,
+along the one axis that array has, and the result is by position: a function of one value
+becomes a function of an array of them, and of nothing else. Batching a second array, choosing
+or naming the axis, and applying the batch where no array is written yet are not this function.
 
 - Example: `[1, 2, 3]->map<(x) => x * 2>` gives `[2, 4, 6]`
 
