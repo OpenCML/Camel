@@ -1,0 +1,11 @@
+合并 fsh5 进 develop（`99d32e963`）：4 笔里只有 12 行文档，其余两个合并是空合并
+
+**fsh-dev 领先的 4 笔，逐笔定性**：`bef328f59`、`0d6c6b3be` 是**空合并**（两个父提交都已在 develop 里，净变化 0）；`931a5516f`（复核 +6 行）与 `e59323496`（21:30 催办 +6 行）是**真内容**，都只改 `docs/handover/reviews/questions-2026-10-29.md`。整批净新增 12 行，合并后树与 `origin/fsh-dev` 逐字节一致。
+
+**新规矩（作者裁定）：状态表不再单独开分支或合并，随各自代码提交改那一行。** 本批（`99d32e963`）是**最后一次**单独合并状态表；此后各路改表就跟着自己那一笔代码提交走，不另开分支、不另做合并、也不为表单独提交。
+
+**另外两条新裁定**：graph-store v2 方向确认，按计划继续（运行时图的源位置按 `GraphId` 查）；规则的差分执行保留为常设回归测试，但**不是**第 15 条要的形式化验证——第 15 条照 5.27 转 Z3（许可映射与 `when`/`fact` 作前提，逐条给 `proved`/`refuted`/`unknown(原因)`）。
+
+**闸门**（`-Plan all -Tier fast -Jobs 8`，在主机 88 上跑，本机 0 构建）：sha `99d32e963d`；build stamp `99d32e963d（clean）/ 1216 source files / fingerprint 2c5dbb70ce12`；`total 7765 / pass 7761 / fail 0 / skip 2 / known 2`，新红 0、`snapshot differs 0`，对上基线 7765 / 0 / 2，`RUN_EXIT=0`（wall 281.4 s）。
+
+**代码检查**：冲突标记 0 处；`diagnostics-catalog --check` 298 codes 通过；`check-grammar --check` 126 productions / 29 contextual keywords 通过；`diagnostics-catalog --verify-doc` 与 `stdlib-reference --verify-doc` 均 up to date；`check-doc-links --all` 0 坏链 / 358 篇。
