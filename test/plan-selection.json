@@ -307,6 +307,11 @@
             "plans": ["feat/gate/plan_inventory.plan.toml", "feat/gate/case_ledger.plan.toml"]
         },
         {
+            "comment": "The conformance matrix: gate.conformance runs the checker over the recorded readings, so a change to the checker, to the manifest or to a case must run that plan. The cases and the manifest live under test/conformance, outside test/cases, where no case directory rule reaches them.",
+            "paths": ["scripts/check-conformance.mjs", "test/conformance/"],
+            "plans": ["feat/gate/conformance.plan.toml"]
+        },
+        {
             "comment": "The other build/dev scripts (build.js, format.js, collect-out.js, ...): every plan runs the binary they build, but no plan reads them. Smoke is the smallest check that the toolchain still produces a working camel. scripts/perf-gate.mjs is covered here too: smoke does not run a perf plan.",
             "paths": ["scripts/"],
             "plans": ["smoke"]
