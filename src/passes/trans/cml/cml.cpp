@@ -232,6 +232,13 @@ std::string intervalOperand(const Expr &value, int minimum) {
     return text;
 }
 
+/// A bound of an interval the graph holds as a constant: the integer itself, parenthesised when it
+/// is negative for the reason `intervalOperand` gives.
+std::string intervalConstantOperand(int64_t value) {
+    const std::string text = std::to_string(value);
+    return value < 0 ? "(" + text + ")" : text;
+}
+
 std::string functionNameOf(const GCGraph *graph) {
     if (graph == nullptr) {
         return {};
@@ -1759,6 +1766,16 @@ class CmlPrinter {
                 iterable = std::format(
                     "{}..{}", intervalOperand(expression(bounds->first), kIntervalPrecedence),
                     intervalOperand(expression(bounds->second), kIntervalPrecedence + 1));
+            } else if (interval) {
+                // The pair of bounds is a value: a pass may have written it as the constant
+                // holding the same two integers, and the source form is still the interval
+                // (GCGraph::intervalPairValuesOf).
+                const auto values = view.graph().intervalPairValuesOf(sequence);
+                iterable          = values.has_value()
+                                        ? std::format(
+                                              "{}..{}", intervalConstantOperand(values->first),
+                                              intervalConstantOperand(values->second))
+                                        : expression(sequence).text;
             } else {
                 iterable = expression(sequence).text;
             }
