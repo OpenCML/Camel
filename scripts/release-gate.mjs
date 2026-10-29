@@ -116,6 +116,12 @@ const STATIC_CHECKS = [
     // tree's binary, so it takes the install the gate picked like the two checkers above.
     { name: 'conformance: each recorded reading holds before and after optimization', args: ['scripts/check-conformance.mjs'], camel: true },
     { name: 'std includes: no header borrowed through another header', args: ['scripts/check-std-includes.mjs'] },
+    // The rule library decided by an SMT solver: every rule's two sides under the premise its
+    // numeric licence stands for. The solver is an optional dependency, so the checker prints a
+    // SKIPPED banner naming what to install and still exits zero; that banner is in this layer's
+    // output, so a machine without one records that no proof was taken instead of the gate
+    // reporting a proof it never took.
+    { name: 'rule library: every rule holds under its own numeric licence', args: ['scripts/rule-proofs.mjs'] },
 ]
 
 // The command line of one static check, with the install this gate found when the check reads one.
