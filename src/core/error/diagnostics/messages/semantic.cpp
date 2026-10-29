@@ -1761,7 +1761,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "IgnoredSideEffect",
                 "{0} is not in a sync block, and {1}.",
-                "Put it in a sync block ('sync {{ ... }}', or a function body 'func f(): T sync {{ ... }}'): only then is the write ordered after the earlier uses of the variable. Without one, the write runs only if the variable is read afterwards.",
+                "Put it in a sync block ('sync {{ ... }}', or a function body 'func f(): T sync {{ ... }}'): the block runs whether or not anything needs it, so the write runs with it. A write outside one is ordered after the reads written before it all the same, but it runs only if something reads the variable afterwards.",
             },
         },
         {

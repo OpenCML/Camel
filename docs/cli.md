@@ -448,7 +448,7 @@ A warning (a `[Warn]` diagnostic) does not stop a program. The table lists the c
 | Name | Code | Where | Meaning |
 |---|---|---|---|
 | `SemanticDiag::EffectNotExecuted` | `0x03100004` | the call, assignment or branch | It has side effects but nothing depends on it and it is not in a sync block, so it never runs. Legal (evaluation is driven by dependencies); reported so that a forgotten `sync` is seen. One warning per dropped chain (`println(log(1))` reports the `println`). Never reported inside a sync block |
-| `SemanticDiag::IgnoredSideEffect` | `0x03100002` | the call or branch | It writes a variable (a `var` argument, or a captured variable) and is not in a sync block: it is not ordered after earlier uses of the variable |
+| `SemanticDiag::IgnoredSideEffect` | `0x03100002` | the call or branch | It writes a variable (a `var` argument, or a captured variable) and is not in a sync block: the write is ordered after the reads written before it, but nothing runs it, so it runs only if something reads the variable afterwards |
 | `RuntimeDiag::PassesNeverRun` | `0x0410000F` | no source position (a command-line matter) | Passes are written after a pass that consumes the graph; they will not run. Printed with the program's warnings (the last element of the stderr array in JSON mode) |
 | `RuntimeDiag::ConstantExpressionFaults` | `0x04100015` | the expression | `std::opt::fold` (also inside `std::opt`) met an expression whose operands are all constants and whose evaluation faults (`1 / 0`). It is not folded: the program behaves the same with and without the pass, and the fault is reported with its position if the run reaches the expression. Printed on stderr when the pass has run, once per expression, before the next pass |
 
