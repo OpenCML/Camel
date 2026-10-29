@@ -53,6 +53,37 @@ export function lineOf(file, needle, nth = 1) {
     throw new Error(`occurrence ${nth} of ${JSON.stringify(needle)} not found in ${file}`)
 }
 
+/**
+ * A 1-based line of a file that holds no statement: its first blank line, or -- when it has none --
+ * the blank line after its last one. Read from the file rather than written into a test, so a
+ * fixture whose header changes does not turn a line that had no code into one that has.
+ */
+export function lineWithoutCode(file) {
+    const lines = fs.readFileSync(file, 'utf8').split('\n')
+    const blank = lines.findIndex((line) => line.trim() === '')
+    return blank >= 0 ? blank + 1 : lines.length + 1
+}
+
+/** The 1-based line and column of the `nth` occurrence of `needle` in a file. */
+export function positionOf(file, needle, nth = 1) {
+    const lines = fs.readFileSync(file, 'utf8').split('\n')
+    let seen = 0
+    for (let i = 0; i < lines.length; i++) {
+        let from = 0
+        for (;;) {
+            const column = lines[i].indexOf(needle, from)
+            if (column < 0) {
+                break
+            }
+            if (++seen === nth) {
+                return { line: i + 1, column: column + 1 }
+            }
+            from = column + needle.length
+        }
+    }
+    throw new Error(`occurrence ${nth} of ${JSON.stringify(needle)} not found in ${file}`)
+}
+
 let failures = 0
 let checks = 0
 
