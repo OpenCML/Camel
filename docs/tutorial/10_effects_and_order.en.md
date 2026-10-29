@@ -231,7 +231,7 @@ warning[SemanticDiag::IgnoredSideEffect]: The call of '<__assn__>: (var int, int
     |
  9 |     c = 5
     |     ^^^^^
-help: Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'): only then is the write ordered after the earlier uses of the variable. Without one, the write runs only if the variable is read afterwards.
+help: Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'): the block runs whether or not anything needs it, so the write runs with it. A write outside one is ordered after the reads written before it all the same, but it runs only if something reads the variable afterwards.
 
 warning[SemanticDiag::EffectNotExecuted]: The assignment has side effects but is never executed: nothing depends on it and it is not in a sync block.
    --> docs/tutorial/examples/10_write_nobody_reads.cml:9:7
@@ -246,7 +246,7 @@ help: Evaluation is driven by dependencies: outside a sync block an expression w
 
 Both functions print `1`: the read takes the version from before the write, and the write is read by nobody. The
 difference is the guarantee -- the write inside the sync block **certainly happens**, and after the reads written before
-it; for the write outside one, the compiler can only tell you that it is unordered
+it; for the write outside one, the compiler can only tell you that nothing runs it
 (`SemanticDiag::IgnoredSideEffect`), and since nothing reads the variable afterwards, the whole write does not run
 (`SemanticDiag::EffectNotExecuted`).
 
