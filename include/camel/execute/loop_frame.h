@@ -67,6 +67,16 @@ inline LoopShape loopShapeOf(const camel::runtime::ExecLoop &loop) {
     };
 }
 
+/// The integer one bound of an interval iterable has: the constant the plan holds, or the value
+/// the graph computed, read from its slot (ExecLoop::IntervalBound).
+CAMEL_ALWAYS_INLINE int64_t intervalBoundValue(
+    camel::core::context::Frame &frame, const camel::runtime::ExecLoop::IntervalBound &bound) {
+    if (bound.isConstant) {
+        return bound.value;
+    }
+    return camel::core::rtdata::fromSlot<int64_t>(frame.get<slot_t>(bound.slot));
+}
+
 /// The j-th value of the running state: the loop's tuple, or — when the plan keeps the state as
 /// its components — the body slot the component is computed in (ExecLoop::stateComponents).
 CAMEL_ALWAYS_INLINE slot_t loopStateComponent(
@@ -168,8 +178,8 @@ inline bool loopTest(camel::core::context::Frame &frame, const camel::runtime::E
             // count is the difference of two 64-bit integers taken unsigned, so an interval of
             // any two integers has a well-defined number of elements; the element itself cannot
             // overflow, because it is below `to` when the round is below that count.
-            const int64_t from = fromSlot<int64_t>(frame.get<slot_t>(loop.intervalFromSlot));
-            const int64_t to   = fromSlot<int64_t>(frame.get<slot_t>(loop.intervalToSlot));
+            const int64_t from = detail::intervalBoundValue(frame, loop.intervalFrom);
+            const int64_t to   = detail::intervalBoundValue(frame, loop.intervalTo);
             const uint64_t elements =
                 to > from ? static_cast<uint64_t>(to) - static_cast<uint64_t>(from) : uint64_t{0};
             if (static_cast<uint64_t>(round) >= elements) {

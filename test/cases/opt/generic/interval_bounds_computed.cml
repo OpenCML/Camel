@@ -1,0 +1,18 @@
+// The bounds of the interval are computed rather than written as literals: the loop takes its two
+// integers from the values the program worked out, so the pair of bounds is not a constant and
+// folding leaves the computation in place. The rounds are still the rounds of [0, n + 2), and the
+// state is the one the previous round produced: with n = 2 the rounds print 0 1 2 3 and the state
+// goes 2, 4, 8, 16, 32.
+func counted(n: int): int sync {
+    let v = loop v = n for i in 0..(n + 2) do sync {
+        println('round', i)
+        v * 2
+    }
+    return v
+}
+
+func main(): int sync {
+    let n = 2
+    println('counted', counted(n))
+    return 0
+}

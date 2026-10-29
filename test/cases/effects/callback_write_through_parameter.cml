@@ -1,0 +1,28 @@
+/**
+ * A callback writes a `var` it captured, and the call that runs it is a statement of the block that
+ * writes it: the call counts as a write of that variable there, so a read written before the call
+ * keeps the value from before it and a read written after it takes the value the call made
+ * (design principles 3.3, 3.5).
+ *
+ * The variable is reached only through a parameter of function type that writes no resource clause:
+ * the resources of that parameter are the ones of the value handed to it at this instantiation, so
+ * the write has to be recorded where the value is given. A local variable and a variable of the
+ * module are both here, the second one read through the capture the body makes of it.
+ */
+
+var counter = 7;
+
+func apply(f: (x: int) => void, v: int) {
+    f(v)
+}
+
+func main(): int sync {
+    var local = 1
+    let localBefore = local
+    let counterBefore = counter
+    apply((x: int) => { local = x * 10 }, 4)
+    apply((x: int) => { counter = x * 10 }, 5)
+    println(localBefore, local)
+    println(counterBefore, counter)
+    return 0
+}

@@ -30,17 +30,46 @@ gc_data_idx_t dataIndexOf(const GCGraph &graph, gc_node_ref_t ref) {
     return node->dataIndex;
 }
 
-/// The two slots of the pair of integers that is the sequence of a loop that iterates an
-/// interval (`camel::core::LoopIterableForm::Interval`): the tuple FILL the front end built for
-/// the two bounds of `for i in a..b` (GCGraph::intervalBoundsOf, which orders the two bounds by
-/// the FILL's payload). Nothing when `ref` is not such a pair.
-std::optional<std::pair<gc_data_idx_t, gc_data_idx_t>> boundSlotsOf(
-    const GCGraph &graph, gc_node_ref_t ref) {
-    const auto bounds = graph.intervalBoundsOf(ref);
-    if (!bounds.has_value()) {
-        return std::nullopt;
+/// One bound of the pair of integers that is the sequence of a loop that iterates an interval
+/// (`camel::core::LoopIterableForm::Interval`): the bound's integer, and where the plan reads it
+/// (ExecLoop::IntervalBound).
+using IntervalBound = ExecLoop::IntervalBound;
+
+/// The bound a node of the pair stands for. A bound the graph computes is the slot the node
+/// writes; one nothing computes -- the constant the front end wrote, or the constant a pass folded
+/// a computation into -- is the value itself, which the plan reads without a frame slot.
+IntervalBound boundOf(const GCGraph &graph, gc_node_ref_t ref) {
+    const GCNode *node = graph.node(ref);
+    const auto *type   = node == nullptr ? nullptr : node->dataType();
+    if (node != nullptr && node->kind == GCNodeKind::Data && node->dataIndex < 0 &&
+        type != nullptr && type->code() == camel::core::type::TypeCode::Int64) {
+        const auto slots   = graph.staticSlots();
+        const size_t index = static_cast<size_t>(-static_cast<int64_t>(node->dataIndex));
+        if (index != 0 && index < slots.size() && slots[index] != NullSlot) {
+            return IntervalBound{
+                .slot       = 0,
+                .value      = camel::core::rtdata::fromSlot<int64_t>(slots[index]),
+                .isConstant = true};
+        }
     }
-    return std::pair{dataIndexOf(graph, bounds->first), dataIndexOf(graph, bounds->second)};
+    return IntervalBound{.slot = dataIndexOf(graph, ref), .value = 0, .isConstant = false};
+}
+
+/// The two bounds of the interval, in order: the pair is a value, so the FILL the front end builds
+/// for `for i in a..b` and the constant holding the same two integers (a pass may fold the pair)
+/// are read alike (GCGraph::intervalBoundsOf, intervalPairValuesOf). Nothing when `ref` is not
+/// such a pair.
+std::optional<std::pair<IntervalBound, IntervalBound>> intervalBoundsOf(
+    const GCGraph &graph, gc_node_ref_t ref) {
+    if (const auto pair = graph.intervalBoundsOf(ref)) {
+        return std::pair{boundOf(graph, pair->first), boundOf(graph, pair->second)};
+    }
+    if (const auto values = graph.intervalPairValuesOf(ref)) {
+        return std::pair{
+            IntervalBound{.slot = 0, .value = values->first, .isConstant = true},
+            IntervalBound{.slot = 0, .value = values->second, .isConstant = true}};
+    }
+    return std::nullopt;
 }
 
 } // namespace
@@ -257,28 +286,31 @@ void buildLoopTables(const GCGraph &graph, ExecPlan &plan) {
                 // is ever built (`for i in a..b`, design principles 4.2).
                 loop.intervalIterates = true;
                 // The pair is read where the iterable is, behind the gates that order it after
-                // statements (line above): the pass that keeps the pair unwraps those the same way.
-                const auto bounds = boundSlotsOf(graph, valueBehindGates(graph, norm.front()));
+                // statements (line above). A bound of it that is a constant is read as that
+                // constant; one the graph computes is read from its slot.
+                const auto bounds = intervalBoundsOf(graph, valueBehindGates(graph, norm.front()));
                 // A loop that iterates an interval and has no pair of bounds behind it is a graph
-                // the front end never builds and no pass may make: the two slots it would read are
-                // not there, and reading them anyway takes the trip count of the loop from whatever
-                // the frame happens to hold -- a wrong number of rounds, or a number so large that
-                // the run never ends, on one machine and not on another. It is reported instead
-                // (main.cpp prints an exception from here as the compiler's own defect), because
-                // ASSERT is compiled out of a release build and the alternative is that read.
+                // the front end never builds and no pass may make: the two integers it would read
+                // are not there, and reading them anyway takes the trip count of the loop from
+                // whatever the frame happens to hold -- a wrong number of rounds, or a number so
+                // large that the run never ends, on one machine and not on another. It is reported
+                // instead (main.cpp prints an exception from here as the compiler's own defect),
+                // because ASSERT is compiled out of a release build and the alternative is that
+                // read.
                 if (!bounds.has_value()) {
                     throw std::runtime_error(
                         std::format(
                             "Runtime graph '{}' iterates an interval with no pair of bounds behind "
-                            "node {} ({}): the two bounds of `for i in a..b` are the FILL the loop "
-                            "node reads first, and a pass removed it. This is a defect of the "
-                            "compiler, not an error of the program.",
+                            "node {} ({}): the two bounds of `for i in a..b` are the pair the loop "
+                            "node reads first -- a FILL or the constant holding the same two "
+                            "integers -- and a pass removed it. This is a defect of the compiler, "
+                            "not an error of the program.",
                             graph.name(),
                             ref,
                             graph.nodeOrigin(ref)));
                 }
-                loop.intervalFromSlot = bounds->first;
-                loop.intervalToSlot   = bounds->second;
+                loop.intervalFrom = bounds->first;
+                loop.intervalTo   = bounds->second;
             }
         }
         const auto results = graph.withInputsOf(ref);
