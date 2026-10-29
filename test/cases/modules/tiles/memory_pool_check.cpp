@@ -148,6 +148,17 @@ void testBookkeeping() {
             afterTrim.freed == beforeTrim.freed + MemoryPool::kMaxIdleEntries,
         "trim did not free exactly the idle blocks and advance its counter");
     std::cout << "tiles pool: rounding, best fit, caps and trim counters passed\n";
+    // The two high-water marks a bound is read against: the working set is what the run held at
+    // once -- forty blocks, more than the pool is allowed to keep -- and the idle high-water is the
+    // pool's own footprint, which is the cap and not the run's ask.
+    require(
+        capped.peakLiveBlocks == MemoryPool::kMaxIdleEntries + 8 &&
+            capped.peakLiveBytes == (MemoryPool::kMaxIdleEntries + 8) * 256,
+        "the live high-water is not the working set the run asked for");
+    require(
+        capped.peakIdleBytes == MemoryPool::kMaxIdleEntries * 256,
+        "the idle high-water is not what the pool was allowed to keep");
+    std::cout << "tiles pool: working-set and idle high-water passed\n";
 }
 
 void testBudgetLimits() {
