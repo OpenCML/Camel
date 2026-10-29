@@ -41,4 +41,14 @@ size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork = 250000);
 /// Work is bounded by maxWork; zero disables analysis.
 size_t reduceOrderDependencies(GraphDraft &draft, size_t maxWork = 250000);
 
+/// The same reduction read with every edge that orders, for a reader that compares programs and
+/// not graphs: a `sync` or an `order` edge goes away when a path of at least two data, sync,
+/// order or control edges already orders its two ends inside the region that holds it. That is
+/// the order a document keeps, because two programs are equivalent by the order that no other
+/// path implies (docs/technical/gir-interchange.md, "Canonical documents"); a graph a pass edits
+/// keeps the reading above. Sync edges are candidates here too: a chain link whose predecessor a
+/// data path already reaches says nothing the path does not. The walk and its budget are the ones
+/// `reduceOrderDependencies` makes; work is bounded by maxWork, and zero disables analysis.
+size_t reduceDocumentOrdering(GraphDraft &draft, size_t maxWork = 250000);
+
 } // namespace camel::runtime

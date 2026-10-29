@@ -15,6 +15,10 @@
  *    ancestor, because an inlined body is not a different program (design principles 2.5);
  *  - node kinds, ordered inputs by kind and target slot, operator identity (the semantics key,
  *    not the URI spelling), payloads, and sorted tag sets;
+ *  - the ordering edges (`sync` and `order`) reduced to the part of the order that no data path or
+ *    other ordering path already implies, because that is what equivalence is defined on: two
+ *    programs are equivalent when no order one has can be derived in the other. The control waits
+ *    are written as the graph holds them; they are the edges a document still reads whole.
  *  - types as a structural table, with every named declaration an atom of its own, so that two
  *    declarations with equal fields stay two types;
  *  - static values by value: a number by its bits, a string by its bytes, an array element by
@@ -50,11 +54,14 @@
 #include "camel/core/type/enum.h"
 #include "camel/passes/trans/gir_metadata.h"
 #include "camel/passes/trans/json/gir.h"
+#include "camel/runtime/control.h"
+#include "camel/runtime/draft.h"
 #include "camel/runtime/reachable.h"
 
 #include <algorithm>
 #include <bit>
 #include <format>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <sstream>
 #include <unordered_map>
@@ -188,6 +195,55 @@ class CanonicalDocument {
         auto found = at->second.find(ref);
         return found == at->second.end() ? nullptr : &found->second;
     }
+
+    // ---- ordering edges ------------------------------------------------------------------
+
+    /// A graph's sync and order edges as the document writes them, per node.
+    struct Ordering {
+        std::unordered_map<gc_node_ref_t, std::vector<gc_node_ref_t>> sync;
+        std::unordered_map<gc_node_ref_t, std::vector<gc_node_ref_t>> order;
+    };
+
+    static const std::vector<gc_node_ref_t> &edgesOfNode(
+        const std::unordered_map<gc_node_ref_t, std::vector<gc_node_ref_t>> &edges,
+        gc_node_ref_t ref) {
+        static const std::vector<gc_node_ref_t> none;
+        auto found = edges.find(ref);
+        return found == edges.end() ? none : found->second;
+    }
+
+    /// The document's ordering edges of one graph, computed once per export.
+    ///
+    /// They are the graph's own, reduced: a `sync` or `order` edge goes away when a path of the
+    /// graph's edges that order (data, sync, order and the control waits) already orders its two
+    /// ends inside the region that holds it. Equivalence is defined on that order and not on the
+    /// edges that spell it, which is why `x += 1` and its split form, whose graphs differ only in
+    /// an order edge a data path implies, write one document. The reduction is `std::opt::order`'s
+    /// own (camel::runtime::reduceDocumentOrdering): read on a decoded draft, so nothing here
+    /// decides what "already ordered" means a second time.
+    const Ordering &orderingOf(GCGraph *graph) {
+        auto found = orderings_.find(graph);
+        if (found != orderings_.end())
+            return found->second;
+        Ordering &ordering = orderings_[graph];
+        std::unique_ptr<GraphDraft> draft = GraphDraft::decode(program_, graph);
+        // A graph holding writings is a state of a rewrite, not a program: its nodes are the
+        // several writings of one value and no draft of it may be edited.
+        if (draft->writings().empty())
+            reduceDocumentOrdering(*draft);
+        for (gc_node_ref_t id = 0; id < draft->nodeSlotCount(); ++id) {
+            if (draft->header(id) == nullptr)
+                continue;
+            const gc_node_ref_t node = draft->sourceRefOf(id);
+            for (gc_node_ref_t pred : draft->syncInputsOf(id))
+                ordering.sync[node].push_back(draft->sourceRefOf(pred));
+            for (gc_node_ref_t pred : draft->orderInputsOf(id))
+                ordering.order[node].push_back(draft->sourceRefOf(pred));
+        }
+        return ordering;
+    }
+
+    std::unordered_map<const GCGraph *, Ordering> orderings_;
 
     /// The canonical region of an original region: annotation regions (Inline, Block) are not
     /// part of equivalence, so a node or region inside one belongs to the nearest ancestor that
@@ -777,6 +833,13 @@ class CanonicalDocument {
         add("normal", graph->normInputsOf(ref));
         add("context", graph->withInputsOf(ref));
         add("control", graph->ctrlInputsOf(ref));
+        // The two ordering edges are not ports and have no role (edges.cn.md 1.5), so what they
+        // carry is the kind and, as the slot, their place in the graph's own list. They are the
+        // reduced ones: what equivalence is defined on is the order no data path or other
+        // ordering path already implies (docs/technical/gir-interchange.md).
+        const Ordering &ordering = orderingOf(graph);
+        add("sync", edgesOfNode(ordering.sync, ref));
+        add("order", edgesOfNode(ordering.order, ref));
         return inputs;
     }
 
