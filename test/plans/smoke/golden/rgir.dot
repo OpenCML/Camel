@@ -60,6 +60,7 @@ digraph GraphIR {
         N10 -> N11 [label="0|0", type="CTRL"];
         N10 -> N11 [label="SYNC", type="SYNC"];
         N11 -> N12 [label="0|0", type="CTRL"];
+        N10 -> N12 [label="ORDER", type="ORDER"];
         N11 -> N12 [label="SYNC", type="SYNC"];
         N12 -> N13 [label="0|0", type="NORM"];
         N10 -> N13 [label="0|1", type="NORM"];
@@ -68,6 +69,7 @@ digraph GraphIR {
         N13 -> N15 [label="0|2", type="WITH"];
         N14 -> N15 [label="0|0", type="NORM"];
         N15 -> N16 [label="0|0", type="NORM"];
+        N0F -> N16 [label="ORDER", type="ORDER"];
         N17 -> N18 [label="0|0", type="NORM"];
         N16 -> N18 [label="0|0", type="CTRL"];
         N16 -> N18 [label="SYNC", type="SYNC"];

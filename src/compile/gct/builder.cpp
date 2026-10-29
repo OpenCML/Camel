@@ -1498,7 +1498,7 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
     size_t runtimeIndex    = 0;
     for (size_t i = 0; i < withCount + normCount; ++i) {
         const bool isWith = i < withCount;
-        if (!isWith && built->normIsConstasAt(i - withCount)) {
+        if (isWith ? built->withIsConstasAt(i) : built->normIsConstasAt(i - withCount)) {
             continue;
         }
         Parameter param;
@@ -4415,11 +4415,18 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
                 rejectTextInLiteral(value->data(), type, value->origin())) {
                 throw BuildAbortException();
             }
-            if (data_ptr_t converted = value->data()->convertTo(type)) {
+            data_ptr_t converted = value->data()->convertTo(type);
+            if (converted != nullptr && converted->type()->equals(type)) {
                 return tree_->makeData(converted);
             }
-            reportLiteralCastFailure(diags_, ast->load()->tokenRange(), value->data(), type);
-            throw BuildAbortException();
+            if (converted == nullptr) {
+                reportLiteralCastFailure(diags_, ast->load()->tokenRange(), value->data(), type);
+                throw BuildAbortException();
+            }
+            // A conversion that comes back as another type is not what the declaration says:
+            // an `f32[..]` states less about the value than the value states itself, and the
+            // name takes the declared type through the annotation CAST below, which is the one
+            // place a declaration gives its value a type (design principles 5.1, 5.4).
         }
     }
     // Any other expression: an annotation CAST (see the declaration). An expression of the
@@ -5140,20 +5147,23 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         Builder &self;
         scope_ptr_t<Reference, Type *> outer;
         std::vector<std::string> outerVars;
+        std::vector<std::string> outerPacks;
         std::shared_ptr<std::unordered_map<std::string, Type *>> outerHead;
         std::unordered_set<std::string> outerWritten;
         bool outerSignatureVisit;
         ~TypeScopeGuard() {
-            self.typeScope_        = outer;
-            self.declaredTypeVars_ = std::move(outerVars);
-            self.headTypeVarTypes_ = std::move(outerHead);
-            self.writtenHeadVars_  = std::move(outerWritten);
-            self.signatureVisit_   = outerSignatureVisit;
+            self.typeScope_          = outer;
+            self.declaredTypeVars_   = std::move(outerVars);
+            self.declaredPackVars_   = std::move(outerPacks);
+            self.headTypeVarTypes_   = std::move(outerHead);
+            self.writtenHeadVars_    = std::move(outerWritten);
+            self.signatureVisit_     = outerSignatureVisit;
         }
     } typeScopeGuard{
         *this,
         typeScope_,
         std::exchange(declaredTypeVars_, {}),
+        std::exchange(declaredPackVars_, {}),
         std::move(headTypeVarTypes_),
         std::move(writtenHeadVars_),
         signatureVisit_};
@@ -5293,7 +5303,7 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         funcNode->setNativeDeclaration();
         tree_->setHeadTypeParams(
             funcNode,
-            ast->atAs<AST::FuncTypeLoad>(0)->loadAs<AST::FuncTypeLoad>()->typeParams());
+            ast->atAs<AST::FuncTypeLoad>(0)->loadAs<AST::FuncTypeLoad>()->typeParamNames());
         if (whenNode != nullptr) {
             tree_->setWhen(funcNode, {whenNode, funcData->whenText(), whenNode->origin()});
         }
@@ -5331,6 +5341,54 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         LEAVE("FuncData");
         return funcNode;
     }
+    // The dimension names the signature's parameter types bound are in scope in the body: a type
+    // the body writes (`let out: f32[n] = ...`) names the extent those parameters bound, exactly
+    // as the return type does (design principles 5.4). They are this signature's names and
+    // nothing else: a name bound in another declaration is not visible here, and a nested
+    // declaration or a nested function type pushes a scope of its own, so these are not visible
+    // inside it either.
+    const std::shared_ptr<std::set<std::string>> enclosingNames = dimNames_;
+    struct BodyDimensionScope {
+        Builder &self;
+        std::shared_ptr<std::set<std::string>> outerNames;
+        std::shared_ptr<std::set<std::string>> outerPacks;
+        bool outerBindAllowed;
+        ~BodyDimensionScope() {
+            self.dimNames_       = std::move(outerNames);
+            self.dimPacks_       = std::move(outerPacks);
+            self.dimBindAllowed_ = outerBindAllowed;
+        }
+    } bodyDimensionScope{
+        *this,
+        std::exchange(dimNames_, std::make_shared<std::set<std::string>>()),
+        std::exchange(dimPacks_, std::make_shared<std::set<std::string>>()),
+        std::exchange(dimBindAllowed_, false)};
+    for (const bool declared : {false, true}) {
+        const std::span<Type *const> params = declared ? funcType->withTypesSpan()
+                                                       : funcType->normTypesSpan();
+        for (Type *param : params) {
+            if (param == nullptr) {
+                continue;
+            }
+            // The names the parameter type writes are the ones it bound: a shape naming a
+            // dimension, and the name of a pack (`f32[n, ..rest]`). A name the enclosing
+            // signature already had is not this one's: a lambda nested in a body names it from
+            // the outside, and its own body does not inherit it.
+            std::vector<ExtentForm> forms;
+            if (param->extentForms(forms)) {
+                for (const ExtentForm &form : forms) {
+                    for (const std::string &name : form.usedNames()) {
+                        if (enclosingNames == nullptr || !enclosingNames->contains(name)) {
+                            dimNames_->insert(name);
+                        }
+                    }
+                }
+            }
+            if (!param->packName().empty()) {
+                dimPacks_->insert(std::string(param->packName()));
+            }
+        }
+    }
     // The body of a function or lambda is a body of its own: its value is the function's
     // result, and its exits are the function's, wherever the function is written.
     const ValueUseScope valueUseScope(*this);
@@ -5340,7 +5398,7 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     node_ptr_t funcNode = tree_->makeFunc(funcData->ref().toString());
     tree_->setHeadTypeParams(
         funcNode,
-        ast->atAs<AST::FuncTypeLoad>(0)->loadAs<AST::FuncTypeLoad>()->typeParams());
+        ast->atAs<AST::FuncTypeLoad>(0)->loadAs<AST::FuncTypeLoad>()->typeParamNames());
     *funcNode << typeNode << stmtsNode;
     if (whenNode != nullptr) {
         tree_->setWhen(funcNode, {whenNode, funcData->whenText(), whenNode->origin()});
@@ -5395,7 +5453,7 @@ node_ptr_t Builder::visitRefData(const AST::node_ptr_t &ast) {
 /*
 Type(TypeType type) :=
     StreamType | NullableType | TypeExpr | ArrayType | StructType | TupleType
-    | FuncType | SpecType | RefType | EnumType ;
+    | FuncType | SpecType | RefType | EnumType | PackType ;
 An `InferType` node never reaches this dispatch: it is the marker of a type left out of a
 lambda's parameter list, and the signature builders read it where it stands (design
 principles 5.9).
@@ -5551,6 +5609,46 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
         node_ptr_t expression = visitData(ast->at(0));
         res                   = TypeOfType::create(expression);
     } break;
+    case AST::TypeOp::Pack: {
+        // `..E`: a type expression written once for each member of a pack (design principles 5.6).
+        // The pack is not written where the expansion stands. It is either one of the head
+        // parameters of the enclosing declaration that was written with `..`, or a pack the body
+        // computes (`..ParamsOf<F>`, a pack written out); what the body may not do is name two
+        // different head packs, since then nothing says which one it ranges over. Anything else
+        // that leaves the expansion without members is reported where a call would bind it.
+        ASSERT(ast->size() == 1, "A pack expansion has its type as its only child.");
+        Type *body = visitType(ast->at(0));
+        if (body == nullptr) {
+            res = Type::Void();
+            break;
+        }
+        std::vector<std::string> named;
+        collectTypeVars(body, named);
+        std::vector<std::string> packs;
+        for (const std::string &name : named) {
+            if (std::find(declaredPackVars_.begin(), declaredPackVars_.end(), name) !=
+                declaredPackVars_.end()) {
+                packs.push_back(name);
+            }
+        }
+        if (packs.size() > 1) {
+            std::string declared;
+            for (const std::string &name : declaredPackVars_) {
+                declared += (declared.empty() ? "" : ", ") + std::string("..") + name;
+            }
+            std::string wrote;
+            for (const std::string &name : named) {
+                wrote += (wrote.empty() ? "" : ", ") + name;
+            }
+            diags_->of(SemanticDiag::PackExpansionNeedsOnePack)
+                .at(ast->load()->tokenRange())
+                .commit(
+                    ".." + body->toString(),
+                    "its head declares " + declared + ", and the body names " + wrote);
+            throw BuildAbortException();
+        }
+        res = TypeCallType::makeExpand(body);
+    } break;
     }
 
     LEAVE("TypeExpr");
@@ -5662,7 +5760,7 @@ Type *Builder::visitTupleType(const AST::node_ptr_t &ast) {
         types.push_back(type);
     }
     // Create a TupleType object using the collected types
-    Type *tupleType = TupleType::create(types);
+    Type *tupleType = expandTypePacks(TupleType::create(types));
     LEAVE("TupleType");
     return tupleType;
 }
@@ -5722,7 +5820,8 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
         // type nested in either, and the body all resolve them before any type of the module. A
         // name declared here therefore wins over a type of the same name, which is the point of
         // declaring it (design principles 5.5).
-        for (const std::string &name : typeLoad->typeParams()) {
+        for (const AST::TypeParam &param : typeLoad->typeParams()) {
+            const std::string &name = param.name();
             if (std::find(declaredTypeVars_.begin(), declaredTypeVars_.end(), name) !=
                 declaredTypeVars_.end()) {
                 diags_->of(SemanticDiag::TypeVariableRedeclared)
@@ -5736,17 +5835,24 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             if (headTypeVarTypes_) {
                 (*headTypeVarTypes_)[name] = occurrence;
             }
+            if (param.pack()) {
+                // A pack (`..A`) is written only in an expansion, so it is recorded where an
+                // expansion can find the name its body names (the `TypeOp::Pack` case).
+                declaredPackVars_.push_back(name);
+            }
         }
     }
     if (signature) {
         // A `constas n: int` parameter is a value the signature uses, not a dimension the
         // types bind; its name is known to the types from the start. It is counted as used
         // twice so the one-use suggestion below belongs to dimension names only.
-        for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(1)) {
-            const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
-            if (paramLoad->isConstas()) {
-                dimNames_->insert(paramLoad->getRef().ident());
-                (*dimUses_)[paramLoad->getRef().ident()] = 2;
+        for (const size_t list : {size_t{0}, size_t{1}}) {
+            for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(list)) {
+                const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
+                if (paramLoad->isConstas()) {
+                    dimNames_->insert(paramLoad->getRef().ident());
+                    (*dimUses_)[paramLoad->getRef().ident()] = 2;
+                }
             }
         }
     }
@@ -5782,6 +5888,39 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
         return Type::Void();
     };
 
+    // A function type's parameter written `..P` where `P` is a type variable, or `..E` for a type
+    // expression `E`, is a pack of parameters: one parameter for each member of the pack once it
+    // is known (design principles 5.6). A name that is no type variable keeps its meaning of
+    // "any parameter list". A declaration's own rest parameter is not one (it is typed
+    // `..xs: ..A`, below).
+    const auto packOf = [&](const AST::node_ptr_t &paramPair, const string &name) -> Type * {
+        if (open || signature) {
+            return nullptr;
+        }
+        if (paramPair->size() > 0) {
+            Type *written = visitType(paramPair->at(0));
+            return TypeCallType::isExpand(written) ? written : TypeCallType::makeExpand(written);
+        }
+        if (const auto bound = typeScope_->get(Reference(name)); bound.has_value()) {
+            return (*bound)->code() == TypeCode::TypeVar ? TypeCallType::makeExpand(*bound)
+                                                        : nullptr;
+        }
+        if (signatureVisit_ && !typeScope_->has(Reference(name), false)) {
+            // A name the declaration's head does not declare, written after `..` in a parameter
+            // list of its signature, is a pack bound at its first occurrence by the function the
+            // argument turns out to be, as a dimension name is bound by the first shape that
+            // writes it (design principles 5.4, 5.6).
+            Type *variable = TypeVarType::create(name, false);
+            typeScope_->insert(Reference(name), variable);
+            declaredTypeVars_.push_back(name);
+            if (headTypeVarTypes_) {
+                (*headTypeVarTypes_)[name] = variable;
+            }
+            return TypeCallType::makeExpand(variable);
+        }
+        return nullptr;
+    };
+
     // Process "with" parameters (context parameters)
     // Their types use the type variables the head declares (design principles 5.5), like the
     // ordinary parameters below.
@@ -5797,6 +5936,11 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
         const Reference &paramRef = paramLoad->getRef();
         const string &name        = paramRef.ident();
         if (paramLoad->isRest()) {
+            if (Type *pack = packOf(paramPair, name)) {
+                defaults.with.push_back({nullptr, camel::source::kInvalidOriginId});
+                factory.addWithArg(name + "_" + std::to_string(wi), pack, false);
+                continue;
+            }
             // A pack among the `with` parameters (`with <..args>`): untyped and last, like
             // the rest parameter of the ordinary ones. A lambda does not write one (the parser
             // refuses it); a declaration with a body is refused where its body is known.
@@ -5823,7 +5967,21 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             continue;
         }
         Type *type                = nullptr;
-        {
+        if (paramLoad->isConstas()) {
+            // A `constas` parameter of the `with` list is a value a call gives in angle brackets
+            // (design principles 5.4); it writes its type and may default.
+            if (!signature) {
+                ASSERT(false, "A constas parameter outside a function declaration.");
+                throw BuildAbortException();
+            }
+            if (paramPair->size() == 0) {
+                diags_->of(SemanticDiag::ConstasTypeRequired)
+                    .at(paramLoad->tokenRange())
+                    .commit(name);
+                throw BuildAbortException();
+            }
+            type = visitType(paramPair->at(0));
+        } else {
             dimBindAllowed_ = signature;
             type            = paramTypeOf(paramPair, name);
             dimBindAllowed_ = false;
@@ -5833,7 +5991,8 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
         // expression is lowered here, in the scope of the signature; GIR evaluates it where the
         // declaration is, once, when it builds the graph (visitFuncNode / visitDeclNode).
         node_ptr_t defaultExpr = nullptr;
-        const auto &dataNode   = paramPair->optAtAs<AST::DataLoad>(1);
+        const auto &dataNode =
+            paramPair->size() > 1 ? paramPair->optAtAs<AST::DataLoad>(1) : nullptr;
         if (dataNode) {
             defaultExpr     = visitData(dataNode);
             lastDefaultName = name;
@@ -5850,7 +6009,13 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             diags_->of(SemanticDiag::DuplicateParameter).at(paramLoad->tokenRange()).commit(name);
             throw BuildAbortException();
         }
-        factory.addWithArg(name, type, isVar, paramLoad->isConstas());
+        if (paramLoad->isConstas()) {
+            factory.addWithConstasArg(name, type);
+        } else {
+            // The query of a fact marks its `with` parameters `const`: the compiler must compute
+            // the argument, since it is part of which fact this is.
+            factory.addWithArg(name, type, isVar, paramLoad->isConst());
+        }
     }
 
     // Process normal parameters
@@ -5896,6 +6061,10 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             continue;
         }
         if (paramLoad->isRest()) {
+            if (Type *pack = packOf(paramPair, name)) {
+                factory.addNormArg(name + "_" + std::to_string(pi), pack, false);
+                continue;
+            }
             // A rest parameter is untyped and last (design principles 5.5); it stands in the
             // signature as a `void` parameter that no call passes a value for.
             if (open && !signature) {
@@ -5910,11 +6079,22 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
                     .commit(name);
                 throw BuildAbortException();
             }
+            // A rest parameter is untyped, or typed with the pack variable its declaration
+            // declares (`..xs: ..A`, with `::<..A>` at the head): the call binds the variable to
+            // the types of the arguments the rest parameter takes.
+            Type *packVariable = nullptr;
             if (paramPair->size() > 0) {
-                diags_->of(SemanticDiag::RestParameterTypeNotSupported)
-                    .at(paramLoad->tokenRange())
-                    .commit(name);
-                throw BuildAbortException();
+                Type *written = visitType(paramPair->at(0));
+                if (TypeCallType::isExpand(written) &&
+                    static_cast<TypeCallType *>(written)->paramsSpan()[0]->code() ==
+                        TypeCode::TypeVar) {
+                    packVariable = static_cast<TypeCallType *>(written)->paramsSpan()[0];
+                } else {
+                    diags_->of(SemanticDiag::RestParameterTypeNotSupported)
+                        .at(paramLoad->tokenRange())
+                        .commit(name);
+                    throw BuildAbortException();
+                }
             }
             if (!paramNames.insert(name).second) {
                 diags_->of(SemanticDiag::DuplicateParameter)
@@ -5922,7 +6102,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
                     .commit(name);
                 throw BuildAbortException();
             }
-            factory.addRestArg(name);
+            factory.addRestArg(name, packVariable);
             continue;
         }
         const bool isVar = paramLoad->isVar();
@@ -5970,6 +6150,11 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
         pendingUnwrittenParams_ = std::move(unwrittenParams);
     }
     FunctionType *built = open ? static_cast<FunctionType *>(factory.buildOpen()) : factory.build();
+    if (!open && !signature) {
+        // A pack of parameters that is known already (`(..ParamsOf<F>) => R` for a written-out
+        // `F`) is its members.
+        built = static_cast<FunctionType *>(expandTypePacks(built));
+    }
     // A type parameter declared at the head and written nowhere in the signature is a name the
     // declaration never uses: no argument could give it a type, and the function could never be
     // instantiated (design principles 5.5).
@@ -6173,7 +6358,9 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
         const bool concrete = std::none_of(types.begin(), types.end(), [](Type *argument) {
             return containsTypeVar(argument);
         });
-        if (concrete && containsTypeCall(applied)) {
+        // A pack is what `ParamsOf<F>` computes, and the `..` around it is read by the type that
+        // holds it: it is reported where it is used bare, not here.
+        if (concrete && containsTypeCall(applied) && !TypeCallType::isPack(applied)) {
             // The arguments are concrete and the type function does not accept them.
             std::string what = applied->toString();
             std::string why  = "it is not defined for the type it is given";
@@ -6273,6 +6460,50 @@ ExtentForm addExtents(const ExtentForm &a, const ExtentForm &b, int64_t sign) {
     return ExtentForm::linear(a.constant() + sign * b.constant(), std::move(terms));
 }
 
+/// The expression an extent stands for, so a non-linear operation can be built from linear ones.
+std::shared_ptr<const camel::core::type::ExtentExpr> exprOfExtent(const ExtentForm &form) {
+    using camel::core::type::ExtentExpr;
+    if (form.isComputed()) {
+        return form.expression();
+    }
+    std::shared_ptr<const ExtentExpr> sum;
+    for (const auto &[name, coefficient] : form.terms()) {
+        std::shared_ptr<const ExtentExpr> term = ExtentExpr::makeName(name);
+        if (coefficient != 1) {
+            term = ExtentExpr::make(
+                ExtentExpr::Op::Mul, ExtentExpr::makeConstant(coefficient), std::move(term));
+        }
+        sum = sum ? ExtentExpr::make(ExtentExpr::Op::Add, std::move(sum), std::move(term))
+                  : std::move(term);
+    }
+    if (!sum) {
+        return ExtentExpr::makeConstant(form.constant());
+    }
+    if (form.constant() != 0) {
+        sum = ExtentExpr::make(
+            ExtentExpr::Op::Add, std::move(sum), ExtentExpr::makeConstant(form.constant()));
+    }
+    return sum;
+}
+
+/// `lhs op rhs` where the result is no linear form: an expression, folded when both sides are
+/// constants.
+ExtentForm computedExtent(
+    camel::core::type::ExtentExpr::Op op, const ExtentForm &lhs, const ExtentForm &rhs) {
+    using camel::core::type::ExtentExpr;
+    if (lhs.isUnknown() || rhs.isUnknown()) {
+        return ExtentForm::unknown();
+    }
+    auto expr = ExtentExpr::make(op, exprOfExtent(lhs), exprOfExtent(rhs));
+    if (lhs.isConstant() && rhs.isConstant()) {
+        if (const auto value = expr->evaluate({})) {
+            return ExtentForm::constant(*value);
+        }
+        return ExtentForm::unknown();
+    }
+    return ExtentForm::computed(std::move(expr));
+}
+
 } // namespace
 
 std::shared_ptr<const std::vector<camel::core::type::ExtentForm>>
@@ -6350,7 +6581,9 @@ camel::core::type::ExtentForm Builder::visitExtent(const AST::node_ptr_t &ast) {
         }
         const std::string name = ref.ident();
         if (dimNames_ != nullptr && dimNames_->contains(name)) {
-            if (dimBindAllowed_ && dimUses_ != nullptr) {
+            // A use in the return type counts: the name relates the parameter that binds it to
+            // the result (`f32[n] -> f32[n + 1]`).
+            if (dimUses_ != nullptr) {
                 ++(*dimUses_)[name];
             }
             return ExtentForm::linear({{name, 1}});
@@ -6372,32 +6605,70 @@ camel::core::type::ExtentForm Builder::visitExtent(const AST::node_ptr_t &ast) {
             .commit(ref.toString());
         throw BuildAbortException();
     }
+    case AST::DataType::ReservedExpr: {
+        // A call of a function in an extent: `f32[conv_out(n, k, s, p)]`. The function is run at
+        // build time when every name its arguments use is bound at a call (the pure functions
+        // the build-time evaluation folds); until then the extent is unknown.
+        if (ast->loadAs<AST::ReservedExprLoad>()->op() != AST::ReservedDataOp::Call) {
+            return report();
+        }
+        std::vector<std::string> names;
+        for (const auto &argument : *ast->atAs<AST::RepeatedLoad>(1)) {
+            const ExtentForm form = visitExtent(argument);
+            if (form.isUnknown()) {
+                return ExtentForm::unknown();
+            }
+            for (const std::string &name : form.usedNames()) {
+                if (std::find(names.begin(), names.end(), name) == names.end()) {
+                    names.push_back(name);
+                }
+            }
+        }
+        node_ptr_t call = visitData(ast);
+        return ExtentForm::computed(camel::core::type::ExtentExpr::makeCall(
+            std::shared_ptr<const void>(call, [](const void *) {}), std::move(names),
+            ast->load()->geneCode()));
+    }
     case AST::DataType::UnaryExpr: {
         const auto &unary = ast->loadAs<AST::UnaryExprLoad>();
         if (unary->op() != AST::UnaryDataOp::Neg) {
             return ExtentForm::unknown();
         }
-        return scaleExtent(visitExtent(ast->at(0)), -1);
+        const ExtentForm inner = visitExtent(ast->at(0));
+        if (inner.isComputed()) {
+            return ExtentForm::computed(camel::core::type::ExtentExpr::make(
+                camel::core::type::ExtentExpr::Op::Neg, inner.expression()));
+        }
+        return scaleExtent(inner, -1);
     }
     case AST::DataType::BinaryExpr: {
         const auto &binary   = ast->loadAs<AST::BinaryExprLoad>();
         const ExtentForm lhs = visitExtent(ast->at(0));
         const ExtentForm rhs = visitExtent(ast->at(1));
+        using Op             = camel::core::type::ExtentExpr::Op;
         switch (binary->op()) {
         case AST::BinaryDataOp::Add:
-            return addExtents(lhs, rhs, 1);
+            return lhs.isComputed() || rhs.isComputed() ? computedExtent(Op::Add, lhs, rhs)
+                                                        : addExtents(lhs, rhs, 1);
         case AST::BinaryDataOp::Sub:
-            return addExtents(lhs, rhs, -1);
+            return lhs.isComputed() || rhs.isComputed() ? computedExtent(Op::Sub, lhs, rhs)
+                                                        : addExtents(lhs, rhs, -1);
         case AST::BinaryDataOp::Mul:
-            // Linear over names means a constant multiple only; a product of two named
-            // dimensions is not linear and stays unknown (design principles 5.4).
-            if (lhs.isConstant() && !rhs.isUnknown()) {
-                return scaleExtent(rhs, lhs.constant());
+            // A constant multiple keeps the extent linear; the product of two named dimensions is
+            // an expression, evaluated once its names are bound (design principles 5.4).
+            if (!lhs.isComputed() && !rhs.isComputed()) {
+                if (lhs.isConstant() && !rhs.isUnknown()) {
+                    return scaleExtent(rhs, lhs.constant());
+                }
+                if (rhs.isConstant() && !lhs.isUnknown()) {
+                    return scaleExtent(lhs, rhs.constant());
+                }
             }
-            if (rhs.isConstant() && !lhs.isUnknown()) {
-                return scaleExtent(lhs, rhs.constant());
-            }
-            return ExtentForm::unknown();
+            return computedExtent(Op::Mul, lhs, rhs);
+        case AST::BinaryDataOp::Div:
+            return computedExtent(Op::Div, lhs, rhs);
+        case AST::BinaryDataOp::Mod:
+            return computedExtent(Op::Mod, lhs, rhs);
         default:
             return ExtentForm::unknown();
         }

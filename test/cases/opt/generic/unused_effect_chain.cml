@@ -1,0 +1,11 @@
+/**
+ * A `sync` block's value that nothing reads still runs the effects of the statement that computes
+ * it. The block's value is the chain's tail and reading a value runs its producer
+ * (docs/design/effects/edges.cn.md 2), so the statement `let r = ...` runs both prints in written
+ * order even though `r` is discarded and its value is the constant 10.
+ */
+
+func main(): int sync {
+    let r = (println(5) + println(6)) - 1
+    return 0
+}

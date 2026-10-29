@@ -46,6 +46,20 @@ class TypeCallType final : public OtherType {
 
     const std::string &name() const { return *name_; }
 
+    /// Type packs (design principles 5.6, program transforms): a pack is the application
+    /// `$pack<T1, T2, ...>` of its members, what `ParamsOf<F>` and `WithOf<F>` compute and what a
+    /// pack variable (`A` of `::<..A>`) is bound to; `..E` written in a type is the application
+    /// `$expand<E>`, which becomes one member per element of the packs `E` uses when they are
+    /// bound (substituteTypeVars). `$lengths:...` is what an expansion becomes when the packs it
+    /// uses have different lengths, and stays so to be reported where the type is used.
+    static TypeCallType *makePack(std::span<Type *const> members);
+    static TypeCallType *makeExpand(Type *pattern);
+    static TypeCallType *makeLengthMismatch(const std::string &description);
+    static bool isPack(const Type *type);
+    static bool isExpand(const Type *type);
+    /// The members of a pack, or of nothing when `type` is not one.
+    static std::span<Type *const> packMembers(const Type *type);
+
     bool typeArguments() const override { return true; }
     std::string toString() const override;
     std::string mangle() const override;

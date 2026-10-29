@@ -108,7 +108,7 @@ func main(): int sync {
 
 ```cml
 func main(): int sync {
-    let total = 1..6
+    let total = (1..6)
         ->map<(x) => x * x>
         ->filter<(x) => x % 2 == 1>
         ->reduce<(acc: int, x: int): int => acc + x, 0>
@@ -424,6 +424,8 @@ match type 类型 {
 - 泛型函数的返回类型可以省略，由每个实例选中的分支推出（返回类型推断）。如果递归调用回到**同一个类型实例**、而该实例的返回类型还没有推出，报 `SemanticDiag::GenericInstantiationCycle`；递归到严格更小的类型参数则照常先完成子实例。
 
 **类型函数。** 类型也可以由类型算出（设计原则 5.6）：类型函数用 `type` 声明，`type F<T> = 体`，在类型位置写成 `F<...>` 调用；函数体是类型表达式，各 case 给出类型的 `match type` 也是：`type ElemOrSelf<T> = match type T { case array => ElementOf<T>  case _ => T }`。`types` 声明了五个 `match type` 取不出或造不出的部分：`ElementOf<T>` 是数组或集合的元素类型，`PayloadOf<T>` 是 `U?` 或 `U!` 里的 `U`，`KeyOf<T>` 与 `ValueOf<T>` 是映射的键类型与值类型，`WithElement<A, E>` 是把数组类型 `A` 的元素类型换成 `E`、形状不变的数组类型（`f32(xs)` 的结果就是 `WithElement<A, f32>`）。调用本身就是一个类型，和别的类型一样用：`is_integer::<ElementOf<T>>()` 里它是类型实参，`func first::<T>(xs: T): ElementOf<T>` 里它是结果类型。`T` 还是类型变量时调用等着；实例绑定 `T` 之后，调用被它算出的类型取代。函数不接受的类型（`ElementOf<int>`，或没有 case 选中的 `match type`）是 `SemanticDiag::TypeFunctionNotApplicable`：参数是具体类型时在类型写出处报，否则在造出实例的调用处报。
+
+**类型包。** `ParamsOf<F>`、`WithOf<F>` 是函数类型的普通参数与 `with` 参数，作为一个类型包；`ResultOf<F>` 是返回类型。`..` 写在类型表达式前，对包的每个成员各展开一次：`(..ParamsOf<F>)` 是 `F` 的参数组成的元组，`(..ElementOf<A>)` 是 `A` 的每个成员取元素类型。用到几个包，它们的长度必须相同，否则是 `SemanticDiag::TypeFunctionNotApplicable`，信息里写出每个包与它的长度。声明头写 `::<..A>`，rest 形参写成 `..xs: ..A`，调用把 `A` 绑定为 rest 实参类型组成的包；`when ..pred::<A>()` 表示包的每个成员都满足 `pred`。`zip` 就是这样声明的：`zip::<..A>(..xs: ..A): (..ElementOf<A>)[] when ..is_array::<A>()`。
 
 ```cml
 func duplicate::<T>(t: T) {

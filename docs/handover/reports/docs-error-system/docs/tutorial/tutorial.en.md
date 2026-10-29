@@ -28,25 +28,25 @@ Contents:
 [Where to go next](#where-to-go-next)
 
 Chapters already written to the new outline (Chinese and English together, each on its own page):
-[1 Five minutes to see the graph](01_five_minutes.en.md) ·
-[2 Values, types and `let`](02_values_and_let.en.md) ·
-[3 Functions and pipes](03_functions_and_pipes.en.md) ·
-[4 Branches and `match`](04_branches_and_match.en.md) ·
-[5 Arrays and loops](05_arrays_and_loops.en.md) ·
-[6 Structs, tuples, maps and sets](06_aggregates.en.md) ·
+[1 Five minutes to see the graph](../../../../../tutorial/01_five_minutes.en.md) ·
+[2 Values, types and `let`](../../../../../tutorial/02_values_and_let.en.md) ·
+[3 Functions and pipes](../../../../../tutorial/03_functions_and_pipes.en.md) ·
+[4 Branches and `match`](../../../../../tutorial/04_branches_and_match.en.md) ·
+[5 Arrays and loops](../../../../../tutorial/05_arrays_and_loops.en.md) ·
+[6 Structs, tuples, maps and sets](../../../../../tutorial/06_aggregates.en.md) ·
 [7 Missing and failing](07_missing_and_failure.en.md) ·
-[8 Modules, the standard library, and a small tool](08_modules_and_stdlib.en.md) ·
-[9 Evaluation by dependency](09_evaluation_by_dependency.en.md) ·
-[10 Effects and order](10_effects_and_order.en.md) ·
-[18 Teaching the compiler a law](17_teaching_a_law.en.md)
+[8 Modules, the standard library, and a small tool](../../../../../tutorial/08_modules_and_stdlib.en.md) ·
+[9 Evaluation by dependency](../../../../../tutorial/09_evaluation_by_dependency.en.md) ·
+[10 Effects and order](../../../../../tutorial/10_effects_and_order.en.md) ·
+[18 Teaching the compiler a law](../../../../../tutorial/17_teaching_a_law.en.md)
 
 ---
 
 ## 1. Your first program
 
-First get the `camel` executable: build it from source by following [setup.en.md](../setup.en.md), and add `out/latest/bin` to your `PATH`. Once `camel --version` prints a version, you are ready to start.
+First get the `camel` executable: build it from source by following [setup.en.md](../../../../../setup.en.md), and add `out/latest/bin` to your `PATH`. Once `camel --version` prints a version, you are ready to start.
 
-[`examples/01_hello.cml`](examples/01_hello.cml):
+[`examples/01_hello.cml`](../../../../../tutorial/examples/01_hello.cml):
 
 ```cml
 
@@ -71,7 +71,7 @@ Hello, Camel!
 
 ## 2. Values and types
 
-[`examples/02_values.cml`](examples/02_values.cml):
+[`examples/02_values.cml`](../../../../../tutorial/examples/02_values.cml):
 
 ```cml
 
@@ -125,7 +125,7 @@ Key points:
 
 ## 3. Functions
 
-[`examples/03_functions.cml`](examples/03_functions.cml):
+[`examples/03_functions.cml`](../../../../../tutorial/examples/03_functions.cml):
 
 ```cml
 
@@ -173,7 +173,7 @@ func main(): int sync {
 
 ## 4. Branches and match
 
-[`examples/04_branches.cml`](examples/04_branches.cml):
+[`examples/04_branches.cml`](../../../../../tutorial/examples/04_branches.cml):
 
 ```cml
 
@@ -218,7 +218,7 @@ A B D
 
 ### The easiest trap to fall into: `return` in a block
 
-In the graph, each arm of a branch is a subgraph of its own. So **a `return` written in the block of an arm gives the value of that branch; it does not leave the function**. [`examples/04_block_return.cml`](examples/04_block_return.cml):
+In the graph, each arm of a branch is a subgraph of its own. So **a `return` written in the block of an arm gives the value of that branch; it does not leave the function**. [`examples/04_block_return.cml`](../../../../../tutorial/examples/04_block_return.cml):
 
 ```cml
 
@@ -260,7 +260,7 @@ There is no "early return" in Camel. Make the branch the last expression of the 
 
 ## 5. Arrays and higher-order operators
 
-[`examples/05_arrays.cml`](examples/05_arrays.cml):
+[`examples/05_arrays.cml`](../../../../../tutorial/examples/05_arrays.cml):
 
 ```cml
 
@@ -302,7 +302,7 @@ item c
 
 ### Counter-example: do not put stateful calls in the element function of `map`
 
-There is **no agreed order of execution** between the elements of a `map`. When the element function is pure this does not matter; once it calls something stateful, the result depends on which element is computed first. [`examples/05_map_order.cml`](examples/05_map_order.cml) demonstrates this with the random number generator (each call of `randint` advances the hidden state by one step):
+There is **no agreed order of execution** between the elements of a `map`. When the element function is pure this does not matter; once it calls something stateful, the result depends on which element is computed first. [`examples/05_map_order.cml`](../../../../../tutorial/examples/05_map_order.cml) demonstrates this with the random number generator (each call of `randint` advances the hidden state by one step):
 
 ```cml
 
@@ -346,7 +346,7 @@ This is where Camel differs most from other languages, and it is worth reading s
 
 In most languages, statements run one after another. In Camel, by default, **evaluation is driven by dependencies**: an expression is evaluated because someone needs its result. Expressions that do not depend on each other have no order and can run in parallel.
 
-This has a consequence: **outside a sync block, a call whose result nobody uses does not run**, even if it has side effects. [`examples/06_unused_effect.cml`](examples/06_unused_effect.cml):
+This has a consequence: **outside a sync block, a call whose result nobody uses does not run**, even if it has side effects. [`examples/06_unused_effect.cml`](../../../../../tutorial/examples/06_unused_effect.cml):
 
 ```cml
 
@@ -382,7 +382,7 @@ Only `1` is printed. The return value `1` of `greet` does not depend on that `pr
 
 ### 6.2 Sync blocks
 
-A `sync` written before a block makes it a sync block: **the statements it writes directly** run in the order they are written, as if the compiler had added control edges between adjacent statements. [`examples/06_sync_block.cml`](examples/06_sync_block.cml) changes only the body of `greet` into a sync block:
+A `sync` written before a block makes it a sync block: **the statements it writes directly** run in the order they are written, as if the compiler had added control edges between adjacent statements. [`examples/06_sync_block.cml`](../../../../../tutorial/examples/06_sync_block.cml) changes only the body of `greet` into a sync block:
 
 <!-- camel-snippet: compile-only: the fence is the changed function only; the text block is the output of examples/06_sync_block.cml -->
 
@@ -400,7 +400,7 @@ hello from greet
 
 In a sync block it does not matter what you call or whether it has side effects, because there is already an order. Input and output are written in sync blocks.
 
-**A sync block does not inherit inward.** It orders only the statements it writes directly: the branch arms, loop bodies and nested blocks written inside it follow their own spelling, and to synchronise one of them, write `sync` there ([design principles 3.4](../design-principles.en.md#34-sync-blocks)). This is the same rule as "a function's behaviour is decided by the function itself" in the next section, one level in:
+**A sync block does not inherit inward.** It orders only the statements it writes directly: the branch arms, loop bodies and nested blocks written inside it follow their own spelling, and to synchronise one of them, write `sync` there ([design principles 3.4](../../../../../design-principles.en.md#34-sync-blocks)). This is the same rule as "a function's behaviour is decided by the function itself" in the next section, one level in:
 
 ```cml
 func f(c: bool): int sync {
@@ -413,7 +413,7 @@ The `if` itself is on the sync chain, its arm is not: the arm is evaluated by de
 
 ### 6.3 A function's behaviour is decided by the function itself
 
-The body of `main` is a sync block, so will a `println` inside a function it calls run? No. A function is compiled into a subgraph of its own, and a call only places that subgraph node into a larger graph; it does not change its structure. [`examples/06_callee_decides.cml`](examples/06_callee_decides.cml):
+The body of `main` is a sync block, so will a `println` inside a function it calls run? No. A function is compiled into a subgraph of its own, and a call only places that subgraph node into a larger graph; it does not change its structure. [`examples/06_callee_decides.cml`](../../../../../tutorial/examples/06_callee_decides.cml):
 
 ```cml
 
@@ -438,7 +438,7 @@ The two calls of `log` did run in order (`b` is 3), but `println(x)` belongs to 
 
 ### 6.4 `sync` and the function body
 
-When `sync` is written in the **function body** position (`func g(): int sync { ... }`), it modifies the block that is the function body: the statements of the block execute in the order they are written. A function body without `sync` is not a sync block, and effects such as `println` in it do not run (evaluation by dependency). [`examples/06_sync_body.cml`](examples/06_sync_body.cml):
+When `sync` is written in the **function body** position (`func g(): int sync { ... }`), it modifies the block that is the function body: the statements of the block execute in the order they are written. A function body without `sync` is not a sync block, and effects such as `println` in it do not run (evaluation by dependency). [`examples/06_sync_body.cml`](../../../../../tutorial/examples/06_sync_body.cml):
 
 ```cml
 
@@ -467,7 +467,7 @@ A `sync` written before a lambda (`sync (x: int) => ...`) is a different use: it
 
 ### 6.5 `var`, references and order
 
-In Camel every value is passed by reference. Writing `var` before a parameter means that the function will modify it; the modification is a write to the caller's variable. Passing a `let` to a `var` parameter is a compile-time error ([`examples/06_let_to_var.cml`](examples/06_let_to_var.cml)):
+In Camel every value is passed by reference. Writing `var` before a parameter means that the function will modify it; the modification is a write to the caller's variable. Passing a `let` to a `var` parameter is a compile-time error ([`examples/06_let_to_var.cml`](../../../../../tutorial/examples/06_let_to_var.cml)):
 
 ```text
 error[SemanticDiag::ImmutablePassedToVarParam]: 'k' is immutable and cannot be passed to a var parameter of 'bump'.
@@ -479,7 +479,7 @@ help: Only a variable declared with 'var' (or a var parameter) can be modified. 
       'var', or bind the new value to a new name.
 ```
 
-Once there are mutable variables, there is a question of order: which write must a read come after? The answer is the sync block: the statements written in one sync block execute in the order they are written, so two writes and a later read have a determined order. [`examples/06_var_order.cml`](examples/06_var_order.cml):
+Once there are mutable variables, there is a question of order: which write must a read come after? The answer is the sync block: the statements written in one sync block execute in the order they are written, so two writes and a later read have a determined order. [`examples/06_var_order.cml`](../../../../../tutorial/examples/06_var_order.cml):
 
 ```cml
 
@@ -514,7 +514,7 @@ The everyday advice is simple: write computation as `let`s and pure functions; p
 
 ## 7. Closures and function values
 
-[`examples/07_closures.cml`](examples/07_closures.cml):
+[`examples/07_closures.cml`](../../../../../tutorial/examples/07_closures.cml):
 
 ```cml
 
@@ -559,7 +559,7 @@ func main(): int sync {
 
 ## 8. Generics
 
-[`examples/08_generics.cml`](examples/08_generics.cml):
+[`examples/08_generics.cml`](../../../../../tutorial/examples/08_generics.cml):
 
 ```cml
 
@@ -666,7 +666,7 @@ error DivByZero: the divisor is zero
   - `match` with `case error e` (`e.kind`, `e.message`, `e.location`) and `case v`.
 - On the graph all three are a branch, with a one-bit tag on the value as the condition, the same structure as `if`.
 
-**Errors and faults are two different things.** Division by zero, an index out of range and recursion that runs too deep are faults, not error values: the program terminates with a position, and `!!` cannot catch them. [`examples/09_fault.cml`](examples/09_fault.cml) reads `xs[5]`:
+**Errors and faults are two different things.** Division by zero, an index out of range and recursion that runs too deep are faults, not error values: the program terminates with a position, and `!!` cannot catch them. [`examples/09_fault.cml`](../../../../../tutorial/examples/09_fault.cml) reads `xs[5]`:
 
 ```text
 before
@@ -682,7 +682,7 @@ When your own function finds that its caller broke a precondition, `fail<'Invali
 
 ## 10. Nullable values
 
-A value of type **`T?`** is either `null` or a `T`. [`examples/10_nullable.cml`](examples/10_nullable.cml):
+A value of type **`T?`** is either `null` or a `T`. [`examples/10_nullable.cml`](../../../../../tutorial/examples/10_nullable.cml):
 
 ```cml
 
@@ -722,7 +722,7 @@ null
 
 ## 11. Maps and sets
 
-`Map<K, V>` and `Set<T>` are built-in types. There are no dedicated literals: write an array, then convert it with `as`. [`examples/11_collections.cml`](examples/11_collections.cml):
+`Map<K, V>` and `Set<T>` are built-in types. There are no dedicated literals: write an array, then convert it with `as`. [`examples/11_collections.cml`](../../../../../tutorial/examples/11_collections.cml):
 
 ```cml
 
@@ -759,7 +759,7 @@ func main(): int sync {
 
 ## 12. Modules and the standard library
 
-[`examples/shapes.cml`](examples/shapes.cml) is a library module; it marks the names visible from outside with `export`:
+[`examples/shapes.cml`](../../../../../tutorial/examples/shapes.cml) is a library module; it marks the names visible from outside with `export`:
 
 ```cml
 
@@ -776,7 +776,7 @@ export func area(w: float, h: float): float {
 }
 ```
 
-[`examples/12_modules.cml`](examples/12_modules.cml) uses it and the standard module `math`:
+[`examples/12_modules.cml`](../../../../../tutorial/examples/12_modules.cml) uses it and the standard module `math`:
 
 ```cml
 
@@ -804,7 +804,7 @@ func main(): int sync {
 
 ### The standard library
 
-The modules that come with Camel are `str` (strings), `array` (arrays), `math`, `statistics`, `random`, `time`, `fs`, `json`, `process`, `env`, `re`, `hash`, `para`, `this`, the tensor family `tensor`, `nn`, `autodiff`, `onnx`, and `python`, which embeds Python ([language reference 5.2.1](../language/en/05_modules.md#521-modules-provided-with-camel)). The [standard library reference](../stdlib-reference.md) lists the functions of the first fourteen modules one by one: signature, whether it is pure, behaviour on failure, examples. [`examples/12_stdlib.cml`](examples/12_stdlib.cml):
+The modules that come with Camel are `str` (strings), `array` (arrays), `math`, `statistics`, `random`, `time`, `fs`, `json`, `process`, `env`, `re`, `hash`, `para`, `this`, the tensor family `tensor`, `nn`, `autodiff`, `onnx`, and `python`, which embeds Python ([language reference 5.2.1](../../../../../language/en/05_modules.md#521-modules-provided-with-camel)). The [standard library reference](../../../../../stdlib-reference.md) lists the functions of the first fourteen modules one by one: signature, whether it is pure, behaviour on failure, examples. [`examples/12_stdlib.cml`](../../../../../tutorial/examples/12_stdlib.cml):
 
 ```cml
 
@@ -866,7 +866,7 @@ Pure operators can be evaluated ahead of time, merged and removed by optimisatio
 
 ## 13. Looking at the graph
 
-Up to here we have kept saying "a function is a subgraph, a call is a node". Now let us see it with our own eyes. [`examples/13_graph.cml`](examples/13_graph.cml):
+Up to here we have kept saying "a function is a subgraph, a call is a node". Now let us see it with our own eyes. [`examples/13_graph.cml`](../../../../../tutorial/examples/13_graph.cml):
 
 ```cml
 
@@ -938,7 +938,7 @@ If you have Graphviz installed, `camel ... std::rgir | dot -Tsvg -o graph.svg` g
 
 ## 14. Changing the passes
 
-`std::rgir` is a **pass**. Camel models compilation, optimisation, execution and export all as transformations of the graph, and what you write after the file name is the passes to run, in order. The same source, with a different set of passes, does a different thing. Using [`examples/14_passes.cml`](examples/14_passes.cml):
+`std::rgir` is a **pass**. Camel models compilation, optimisation, execution and export all as transformations of the graph, and what you write after the file name is the passes to run, in order. The same source, with a different set of passes, does a different thing. Using [`examples/14_passes.cml`](../../../../../tutorial/examples/14_passes.cml):
 
 ```cml
 
@@ -998,7 +998,7 @@ A few rules:
 
 ## 15. Tensors and exporting a model
 
-Tensors come from the `tensor` module. [`examples/15_tensor.cml`](examples/15_tensor.cml):
+Tensors come from the `tensor` module. [`examples/15_tensor.cml`](../../../../../tutorial/examples/15_tensor.cml):
 
 ```cml
 
@@ -1023,7 +1023,7 @@ func main(): int sync {
 [3, 2]
 ```
 
-**A minimal model.** In its true form, a Camel program expresses only computation: `main` is the model, and its parameters are the inputs of the model. [`examples/15_model.cml`](examples/15_model.cml):
+**A minimal model.** In its true form, a Camel program expresses only computation: `main` is the model, and its parameters are the inputs of the model. [`examples/15_model.cml`](../../../../../tutorial/examples/15_model.cml):
 
 ```cml
 
@@ -1037,7 +1037,7 @@ func main(x: f32[2, 3]): f32[..] {
 
 `main` prints nothing and has no `sync`: it is pure. The type of the parameter `x` states the element type and the shape.
 
-**Running it**: the values of the parameters are given on the command line, and a tensor comes from a `.npy` file ([`examples/x.npy`](examples/x.npy) is `[[1, -2, 3], [-4, -5, 6]]`); the value that `main` returns is printed to standard output:
+**Running it**: the values of the parameters are given on the command line, and a tensor comes from a `.npy` file ([`examples/x.npy`](../../../../../tutorial/examples/x.npy) is `[[1, -2, 3], [-4, -5, 6]]`); the value that `main` returns is printed to standard output:
 
 ```bash
 camel docs/tutorial/examples/15_model.cml --arg x=docs/tutorial/examples/x.npy
@@ -1059,11 +1059,11 @@ onnx::export: wrote model.onnx
 
 The resulting `model.onnx` has one input `x` of shape `[2, 3]` and one output `output`; feeding the same `x.npy` to it with ONNX Runtime gives the same `[[2.], [0.]]`.
 
-The export pass translates whatever it can translate, and where it cannot (the program has effects such as printing or reading files) it reports an error and points to the location. A program that needs to time things and print as well as export should instead call `onnx.export_model` inside the program to export one of its own functions ([cli.md](../cli.md), "ONNX export as a pass (`onnx::export`)").
+The export pass translates whatever it can translate, and where it cannot (the program has effects such as printing or reading files) it reports an error and points to the location. A program that needs to time things and print as well as export should instead call `onnx.export_model` inside the program to export one of its own functions ([cli.md](../../../../../cli.md), "ONNX export as a pass (`onnx::export`)").
 
 ## 16. Taking gradients
 
-Automatic differentiation is a library built on top of the pass mechanism: `grad(f)` rewrites the graph of `f` into the graph of its derivative. The first `with` parameter of `f` is the weight it differentiates; ordinary parameters are data. [`examples/16_grad.cml`](examples/16_grad.cml):
+Automatic differentiation is a library built on top of the pass mechanism: `grad(f)` rewrites the graph of `f` into the graph of its derivative. The first `with` parameter of `f` is the weight it differentiates; ordinary parameters are data. [`examples/16_grad.cml`](../../../../../tutorial/examples/16_grad.cml):
 
 ```cml
 
@@ -1097,12 +1097,12 @@ camel docs/tutorial/examples/16_grad.cml std::macro
 - `with_grad(f)` returns the value together with the gradient. In a loop, bind the transform once and call it with the weights: `let loss_with_grad = with_grad(loss)`, then `let (l, g) = loss_with_grad<model>(x, y)` inside the loop.
 - `grad` is a macro operator. The `std::macro` in the pipeline expands it into the graph of the derivative before anything runs, and the optimisation passes after it can go on to optimise that graph. This is a precondition of this library, not a constraint of the language.
 - The function being differentiated is written as pure data flow with `let`; when a gradient would have to pass through reads and writes of a `var`, it is rejected outright. When the first `with` parameter is a `var`, has no tangent, or the function has no `with` parameter, compilation fails with `SemanticDiag::NotDifferentiable` naming the reason.
-- One training step is "gradient + update": the weights of the model are written as `with` parameters, `grad(loss)<model>(x, y)` differentiates with respect to the weights, and `sgd` from the `nn` module gives the updated weights. For a complete example see [`examples/ml/train_linear.cml`](../../examples/ml/train_linear.cml).
+- One training step is "gradient + update": the weights of the model are written as `with` parameters, `grad(loss)<model>(x, y)` differentiates with respect to the weights, and `sgd` from the `nn` module gives the updated weights. For a complete example see [`examples/ml/train_linear.cml`](../../../../../../examples/ml/train_linear.cml).
 
 ## Where to go next
 
-- [Examples](../../examples/README.md): short programs organised by task — JSON, files, word-frequency counting, sorting, command-line tools, parallelism, simulation, training.
+- [Examples](../../../../../../examples/README.md): short programs organised by task — JSON, files, word-frequency counting, sorting, command-line tools, parallelism, simulation, training.
 - [Language reference](../language/en/README.md): the precise rules for every construct.
-- [Standard library reference](../stdlib-reference.md): every function of every module.
-- [Command line](../cli.md): all options, passes, diagnostic formats, resource limits; `camel --explain <diagnostic name>` explains one diagnostic.
-- [Design principles](../design-principles.en.md): why the language is the way it is.
+- [Standard library reference](../../../../../stdlib-reference.md): every function of every module.
+- [Command line](../../../../../cli.md): all options, passes, diagnostic formats, resource limits; `camel --explain <diagnostic name>` explains one diagnostic.
+- [Design principles](../../../../../design-principles.en.md): why the language is the way it is.

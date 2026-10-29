@@ -1,0 +1,21 @@
+// A loop over a constant range with a constant initial state still iterates: the state on the
+// right of `do` is the one the previous round produced, so `v` goes 1, 2, 3, 4 and the loop
+// yields 5. Folding must not take the initial value for the carried one (it gave 1), and it must
+// not stop the loop after one round (that would give 2).
+func counted(): int {
+    let v = loop v = 1 for i in 0..4 do v + 1
+    return v
+}
+
+// The same with a state that is not a loop counter, so nothing about the bound can be taken for
+// the state.
+func summed(): int {
+    let s = loop s = 0 for x in [10, 20, 30] do s + x
+    return s
+}
+
+func main(): int sync {
+    println('counted', counted())
+    println('summed', summed())
+    return 0
+}

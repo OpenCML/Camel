@@ -1,0 +1,123 @@
+id = "opt.effects_kept"
+order = 335
+tier = "fast"
+tags = ["feat", "opt", "effects", "inline", "dce", "fold"]
+desc = "A pass never changes which effects run: an effect inside a statement, in an argument the callee never reads, and outside a branch whose other arm is taken"
+
+# The effects a program has are decided by the program, not by a pass (design principles 9.7): what
+# the program's statements, arguments and branch arms read, runs -- on every back end, and through
+# the whole optimizer as well as through the one pass that used to drop it.
+#
+#   dce_effect_under_pure_arithmetic  the effect inside a statement stays when the statement's value
+#                                     is unread (3.4)
+#   inline_argument_effect            an argument's effect stays when the callee never reads the
+#                                     parameter (3.4)
+#   fold_keeps_arm_effect             a value the dropped arm read from outside keeps running: the
+#                                     branch is used as a whole (3.1)
+#   branch_keeps_outer_effect         the same, with the branch's value read by an arithmetic whose
+#                                     other operand is an effect
+#
+# Each entry compares the pass against the same program with no pass at all, on all four back ends.
+
+[defaults]
+kind = "behavior"
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "dce_effect_under_pure_arithmetic.reference"
+desc = "No pass: the statement of the `sync` block prints `5`, and the function returns 7."
+case = "../../../cases/opt/effects/dce_effect_under_pure_arithmetic.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 7
+expect_stdout_exact = "5\n"
+
+[[tests]]
+name = "dce_effect_under_pure_arithmetic.dce"
+desc = "`std::opt::dce` drops the unread subtraction: the print it holds stays."
+case = "../../../cases/opt/effects/dce_effect_under_pure_arithmetic.cml"
+args = ["${case}", "std::opt::dce", "${backend}"]
+expect_exit = 7
+expect_stdout_exact = "5\n"
+
+[[tests]]
+name = "dce_effect_under_pure_arithmetic.opt"
+desc = "The same program through the whole optimizer."
+case = "../../../cases/opt/effects/dce_effect_under_pure_arithmetic.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 7
+expect_stdout_exact = "5\n"
+
+[[tests]]
+name = "inline_argument_effect.reference"
+desc = "No pass: `first` returns the 5 it reads, and the argument's `9` is printed before it."
+case = "../../../cases/opt/effects/inline_argument_effect.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 5
+expect_stdout_exact = "9\n"
+
+[[tests]]
+name = "inline_argument_effect.inline"
+desc = "`std::opt::inline` binds no use to the parameter the callee never reads; the argument's effect stays."
+case = "../../../cases/opt/effects/inline_argument_effect.cml"
+args = ["${case}", "std::opt::inline", "${backend}"]
+expect_exit = 5
+expect_stdout_exact = "9\n"
+
+[[tests]]
+name = "inline_argument_effect.opt"
+desc = "The same program through the whole optimizer."
+case = "../../../cases/opt/effects/inline_argument_effect.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 5
+expect_stdout_exact = "9\n"
+
+[[tests]]
+name = "fold_keeps_arm_effect.reference"
+desc = "No pass: `println(1)` runs because the branch uses it as a whole, then the taken arm prints `2`."
+case = "../../../cases/opt/effects/fold_keeps_arm_effect.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "1\n2\n1\n"
+
+[[tests]]
+name = "fold_keeps_arm_effect.fold_after_inline"
+desc = "Inlining makes the condition constant and the fold takes the other arm; the print the dropped arm read stays."
+case = "../../../cases/opt/effects/fold_keeps_arm_effect.cml"
+args = ["${case}", "std::opt::inline", "std::opt::fold", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "1\n2\n1\n"
+
+[[tests]]
+name = "fold_keeps_arm_effect.opt"
+desc = "The same program through the whole optimizer."
+case = "../../../cases/opt/effects/fold_keeps_arm_effect.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "1\n2\n1\n"
+
+[[tests]]
+name = "branch_keeps_outer_effect.reference"
+desc = "No pass: both calls print `1` before the `3` written after the branch."
+case = "../../../cases/opt/effects/branch_keeps_outer_effect.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "1\n3\n4\n1\n3\n3\n"
+
+[[tests]]
+name = "branch_keeps_outer_effect.fold_after_inline"
+desc = "The second call's condition is constant after inlining; the effect the dropped arm read still runs."
+case = "../../../cases/opt/effects/branch_keeps_outer_effect.cml"
+args = ["${case}", "std::opt::inline", "std::opt::fold", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "1\n3\n4\n1\n3\n3\n"
+
+[[tests]]
+name = "branch_keeps_outer_effect.opt"
+desc = "The same program through the whole optimizer."
+case = "../../../cases/opt/effects/branch_keeps_outer_effect.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "1\n3\n4\n1\n3\n3\n"

@@ -123,6 +123,13 @@ struct MemoryPolicy {
 struct PoolStats {
     size_t idleEntries   = 0;
     size_t idleBytes     = 0;
+    // The high-water marks. `peakLive*` is the working set: the most blocks and bytes this pool has
+    // had checked out at one moment, which is what a bound has to hold. `peakIdleBytes` is the
+    // pool's own footprint: the most it has held idle. A cap that adapts (docs/design/gpu/plan.cn.md
+    // G3-3) is read against these two and not against a fixed budget.
+    size_t peakLiveBlocks = 0;
+    size_t peakLiveBytes  = 0;
+    size_t peakIdleBytes  = 0;
     uint64_t checkouts   = 0;
     uint64_t reuses      = 0;
     uint64_t allocations = 0;
@@ -196,6 +203,14 @@ class MemoryPool {
     std::array<Block, kMaxIdleEntries> idle_{};
     size_t idleCount_ = 0;
     size_t idleBytes_ = 0;
+    // The working set and the two high-water marks it and `idleBytes_` have reached. Guarded by
+    // `mutex_`: a checkout adds to the set, a release takes from it whichever way it goes, and both
+    // already take that lock.
+    size_t liveBlocks_     = 0;
+    size_t liveBytes_      = 0;
+    size_t peakLiveBlocks_ = 0;
+    size_t peakLiveBytes_  = 0;
+    size_t peakIdleBytes_  = 0;
     std::atomic<uint64_t> checkouts_{0}, reuses_{0}, allocations_{0}, cached_{0}, freed_{0},
         trims_{0}, oomRetries_{0}, abandoned_{0};
 };

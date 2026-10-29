@@ -52,6 +52,12 @@ struct InlineRewriteConfig {
 /// default of the `growth_budget` parameter every pass built on the rewrite engine declares.
 inline constexpr size_t kDefaultGrowthBudgetNodes = 4096;
 
+/// Bytes of constants folding may put into a graph. Folding replaces a computation by the value it
+/// produces, which is compile-time memory bought for run time; past this size the value is not
+/// worth holding and the computation stays (generic.cpp, constantBytesOf). It is the default of
+/// the `constant_budget` parameter of the passes that fold, `std::opt` and `std::opt::fold`.
+inline constexpr size_t kDefaultConstantBudgetBytes = 8u * 1024u * 1024u;
+
 /// The growth budget of one pass built on the rewrite engine. `nodes` is what the pass may copy;
 /// `written` says the pipeline wrote the `growth_budget` parameter (as against the default), and
 /// `passName` is the pass that owns it. A later pass that has to explain a call the engine left
@@ -118,6 +124,14 @@ struct OptimizeRewriteConfig {
     bool enableDevirtualization = true;
     bool enableSpecialization   = true;
     bool enableInlining         = true;
+    /// Bind the function value a function-typed argument holds into the copy of the callee, and
+    /// bind nothing else: no constant argument and no refined parameter type. The copy's call of
+    /// that parameter is then a direct call of the one function the argument can be. Off, every
+    /// GC-managed argument stays dynamic (an object's identity is observable); on, the copies are
+    /// one per (callee, function) pair and no recursion is unrolled on a constant, which is what
+    /// lets the pass that turns this on run without a growth budget. A function value has no
+    /// identity (design principles 5.2), so binding it changes only which calls are known.
+    bool specializeOnFunctionValues = false;
     /// Bound on growth. Specializing a call copies its callee and inlining copies it into the
     /// caller; with constant arguments the two unroll a recursion one level per round
     /// (`fib(15)` becomes its whole call tree). Once the pass has copied this many nodes,
@@ -126,6 +140,11 @@ struct OptimizeRewriteConfig {
     /// still count, so the bound is also a bound on the work of the pass. The pass declares it
     /// as the `growth_budget` parameter (see GrowthBudget).
     GrowthBudget growthBudget{};
+    /// Bytes of constants the fold stage may materialize. A folded value above it is left as the
+    /// computation that builds it: the program means the same, it is only not reduced to a
+    /// constant (see kDefaultConstantBudgetBytes and generic.cpp, constantBytesOf). The passes
+    /// declare it as the `constant_budget` parameter.
+    size_t constantBudgetBytes = kDefaultConstantBudgetBytes;
     /// The nodes already copied, for a driver that runs the engine several times against one
     /// budget (std::opt). Null: each run of the engine has the whole budget.
     size_t *growthSpentNodes = nullptr;

@@ -1,0 +1,39 @@
+/**
+ * A differentiated function that calls a function writing module-level `var`s: the write is an
+ * effect, so it runs in the forward pass only, and the versions the call hands on are resource
+ * state, not gradient. Building the derivative used to break the graph's edge invariants: the
+ * call of the forward graph was typed with the module variable's version as an extra component,
+ * so `with_grad` failed with an internal error. The value and the gradient here are what the
+ * plain (undifferentiated) function gives; the counters show the effect ran once per forward
+ * pass, and reading a counter after the call reads the version it handed on.
+ */
+import { grad, with_grad } from autodiff
+
+var calls: int = 0
+var total: int = 0
+
+with <m: float>
+func bump(x: float): float sync {
+    calls = calls + 1
+    total = total + 2
+    return m * x
+}
+
+with <m: float>
+func loss(x: float): float sync {
+    let a = bump<m>(x)
+    let seen = calls
+    return a * 2.0 + a + float(seen)
+}
+
+func main(): int sync {
+    let vg = with_grad(loss)<3.0>(2.0)
+    println(calls)
+    println(total)
+    println(vg.0)
+    println(vg.1)
+    let g = grad(loss)<3.0>(2.0)
+    println(calls)
+    println(g)
+    return 0
+}

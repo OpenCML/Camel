@@ -3,7 +3,7 @@
 
 /**
  * The `tensor` module: multi-dimensional numeric arrays, their element type and extents, their
- * binary form, a NumPy file, and the module's worker threads and random generator.
+ * binary form, a NumPy file, and the module's worker threads.
  *
  * The declarations written here are the operators whose signature is fixed. The ones whose element
  * type or shape follows their arguments — elementwise arithmetic, the reshaping operators, the
@@ -57,7 +57,7 @@ import { is_numeric, is_plain } from types
 
 /// The extents of a tensor, in order.
 /// @pure
-/// @example shape(new([[1.0, 2.0], [3.0, 4.0]]))    // [2, 2]
+/// @example shape([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [2, 2]
 export func shape::<T>(t: T[..]): int[] when is_numeric::<T>()
 
 /// The number of elements in a tensor: the product of its extents.
@@ -81,7 +81,7 @@ export func dim::<T>(t: T[..]): int when is_numeric::<T>()
 /// one byte an element for a `bool` tensor, four for an `f32` one and eight for an `f64` or `c64`
 /// one.
 /// @pure
-/// @example to_bytes(new([1.0, 2.0]))    // [0, 0, 128, 63, 0, 0, 0, 64]
+/// @example to_bytes([1.0, 2.0] as float[])    // [0, 0, 128, 63, 0, 0, 0, 64]
 export func to_bytes::<T>(t: T[..]): Bytes when is_plain::<T>()
 
 /// Writes a tensor to a NumPy `.npy` file, replacing it.
@@ -94,7 +94,7 @@ export func save_npy::<T>(t: T[..], path: string): void when is_numeric::<T>()
 
 /// Prints t to the console, in the module's layout.
 /// @effect writes the console
-/// @example show(new([[1.0, 2.0]]))
+/// @example show([[1.0, 2.0]] as float[1, 2])
 export func show::<A>(t: A[..]): void
 
 // ---- module state ----
@@ -135,12 +135,6 @@ export func gemm_library_threads(): int
 /// @pure
 /// @example gemm_library()
 export func gemm_library(): string
-
-/// Reseeds the module's random generator, which `random` and `randn` draw from.
-/// @effect writes the random generator
-/// @example seed(42)
-export func seed(seed: int): void
-export func seed(seed: i32): void
 
 // -----------------------------------------------------------------------------
 // Passes: functions the pipeline applies to the program

@@ -700,8 +700,6 @@ slot_t NodeVMSchedPass::call(
                 [[fallthrough]];
             case GCNodeKind::Data:
                 [[fallthrough]];
-            case GCNodeKind::Sync:
-                [[fallthrough]];
             case GCNodeKind::Gate:
                 break;
 

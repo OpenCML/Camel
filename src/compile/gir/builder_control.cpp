@@ -1339,11 +1339,12 @@ Type *Builder::tailPositionType() const {
 }
 
 Type *Builder::expectedExitTypeHere() const {
-    if (activeArm() != nullptr || activeStaticBody_ != nullptr) {
-        // Inside a branch arm, or the selected body of a `match type`, the value of a `return`
-        // is that construct's value, so its position is the one the construct stands at; the
-        // function's declared return type has nothing to do with it (design principles 5.1,
-        // language reference 7.3).
+    if (activeArm() != nullptr || activeStaticBody_ != nullptr ||
+        currentBlock_ != functionBody_) {
+        // Inside a branch arm, the selected body of a `match type`, or a block written inside a
+        // body, the value of a `return` is that construct's value, so its position is the one the
+        // construct stands at; the function's declared return type has nothing to do with it
+        // (design principles 5.1, language reference 7.3).
         return expectedValueType_;
     }
     return declaredExitTypeHere();
@@ -2770,6 +2771,7 @@ void Builder::linkArmEntries(const std::vector<arm_ptr_t> &arms, node_handle_t b
         const auto inArm = [&](draft_node_ref_t id) {
             return draft.alive(id) && draft.regionWithin(draft.nodeRegion(id), arm->region);
         };
+        node_handle_t entry{};
         for (draft_node_ref_t id = arm->firstNode; id < end; ++id) {
             if (!draft.alive(id) || draft.nodeRegion(id) != arm->region) {
                 continue;
@@ -2793,6 +2795,35 @@ void Builder::linkArmEntries(const std::vector<arm_ptr_t> &arms, node_handle_t b
             if (!computed && linkCheek(brchNode, node)) {
                 linkNodes(LinkType::Ctrl, brchNode, node);
             }
+            // The entry of the arm's chain: the first statement of the arm's own region -- the
+            // draft numbers its nodes in the order they are written -- that follows nothing and
+            // that the arm's own code follows. A node that already follows something is a later
+            // link of that chain, and a node the arm does not follow is no statement of it.
+            if (entry != nullptr || !draft.syncInputsOf(id).empty()) {
+                continue;
+            }
+            for (draft_node_ref_t user : draft.syncUsersOf(id)) {
+                if (draft.alive(user) && draft.regionWithin(draft.nodeRegion(user), arm->region)) {
+                    entry = node;
+                    break;
+                }
+            }
+        }
+        // The arm is a `sync` chain of its own, and the branch is the statement written before it:
+        // the arm runs only when it is entered, so the BRCH is the chain predecessor of the arm's
+        // first statement and not only the node its entries wait for (docs/design/effects/
+        // edges.cn.md 1.5, 5.7). The control edge is written beside it for as long as the chain of
+        // a block is carried as control edges too; a chain never forks, so an arm that already
+        // enters its chain from something keeps that place and no second predecessor is written.
+        if (entry == nullptr || !syncInputsOf(entry).empty() || !linkCheek(brchNode, entry)) {
+            continue;
+        }
+        markSyncStatement(brchNode);
+        markSyncStatement(entry);
+        linkNodes(LinkType::Sync, brchNode, entry);
+        const auto ctrlInputs = ctrlInputsOf(entry);
+        if (std::ranges::find(ctrlInputs, nodeIdOf(brchNode)) == ctrlInputs.end()) {
+            linkNodes(LinkType::Ctrl, brchNode, entry);
         }
     }
 }
@@ -4120,6 +4151,12 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         arm->value  = resNode;
         arm->type   = isVoidGraphExitType(nodeTypeOf(resNode)) ? Type::Void() : nodeTypeOf(resNode);
         arm->returned = true;
+    } else if (currentBlock_ != functionBody_) {
+        // A `return` written in a block that is itself a statement gives that block's value, not
+        // the function's (design principles 7.3): the block hands it to whatever takes the block,
+        // and the statement it is gives it to what takes that. The function's exit is written by
+        // the `return` of its own body only, so a block's `return` never overwrites the value the
+        // function hands on.
     } else {
         checkDeclaredReturn(currGraph_, nodeTypeOf(resNode), gct->origin(), gct->at(0));
         if (!droppedGraphs_.contains(currGraph_.get())) {

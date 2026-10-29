@@ -1,0 +1,113 @@
+id = "compile.extent_expressions"
+order = 1005
+tier = "fast"
+tags = ["feat", "compile", "extents", "arrays"]
+desc = "An extent of a type is a linear form or an integer expression over the dimension names and the `constas` parameters of the signature, evaluated at a call when the names are bound: the dimension of an argument, or the constant a call gives a `constas` parameter (the one way a value enters a type)"
+
+[[tests]]
+name = "extent_expressions.values"
+desc = "`window(3, x)` has the static length `n - w + 1`, `conv_len(3, 2, 1, x)` the length `(n + 2 * p - k) / s + 1` of a convolution's output, each assigned to a position that states the length. Four schedulers."
+kind = "behavior"
+case = "../../../cases/compile/extents/computed.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[1.0, 2.0, 3.0, 4.0, 5.0, 6.0] [0.0, 1.0, 2.0, 3.0] [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]\n6 4 8\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_expressions.window_mismatch"
+desc = "A length known where the call is written is checked there: `window(3, x)` over a `f32[8]` is `f32[6]`, so a position that asks for 4 is a DeclaredTypeMismatch."
+kind = "negative"
+case = "../../../cases/compile/extents/computed_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "extent_expressions.conv_mismatch"
+desc = "The output length of the convolution is evaluated from the argument's length and the `constas` values of the call, `(8 + 2 * 1 - 3) / 2 + 1 = 4`, so a position that asks for 5 is a DeclaredTypeMismatch (the call has the type `f32[4]`)."
+kind = "negative"
+case = "../../../cases/compile/extents/computed_conv_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "extent_expressions.call_values"
+desc = "A call of a pure function in an extent (`f32[conv_out(n, k, s, p)]`) is run at build time when every name it reads is bound at the call, so `conv_len(3, 2, 1, x)` has the static length 4 and `conv_len(3, 1, 1, x)` the length 8. Four schedulers."
+kind = "behavior"
+case = "../../../cases/compile/extents/computed_call.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[0.0, 1.0, 2.0, 3.0] [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_expressions.call_mismatch"
+desc = "The call in the extent is run at build time: `conv_out(8, 3, 2, 1)` is 4, so a position that asks for 5 is a DeclaredTypeMismatch where the call is written."
+kind = "negative"
+case = "../../../cases/compile/extents/computed_call_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "extent_expressions.conv2d_shape"
+desc = "The output shape of a convolution written in the signature (the stride and the padding are `constas` parameters of the `with` list, with defaults), `f32[b, o, (h + 2 * p - k) / s + 1, (w + 2 * p - k) / s + 1]`, with the dimensions from the arguments and the stride and padding from the `constas` parameters of the call: the result is `f32[2, 4, 4, 4]` for stride 2 and `f32[2, 4, 8, 8]` for stride 1 and `f32[2, 4, 6, 6]` for the defaults, each assigned to a position that states it. Four schedulers."
+kind = "behavior"
+case = "../../../cases/compile/extents/conv2d_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[2, 4, 4, 4] [2, 4, 8, 8] [2, 4, 6, 6]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_expressions.negative"
+desc = "An extent the `constas` values of the call make negative is no dimension: a kernel of 20 over a padded input of 10 gives -9, and the call is ExtentNotADimension where it is written."
+kind = "negative"
+case = "../../../cases/compile/extents/computed_negative.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ExtentNotADimension"
+expect_output_contains = ["which is not a dimension"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "extent_expressions.runtime_stride"
+desc = "The stride of a convolution is a `constas` parameter, the one way a value enters an extent: a stride only known when the program runs is a ConstasValueNotConstant where the call is written."
+kind = "negative"
+case = "../../../cases/compile/extents/computed_runtime_stride.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstasValueNotConstant"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "extent_expressions.conv2d_pipeline"
+desc = "A convolution as a pipeline: the weights are a runtime `with` parameter and the stride and padding are `constas` parameters of the same list, so `input->conv2d_pipe<kernel, 2, 1>` has the static shape `f32[2, 4, 4, 4]`; a stride and a padding left out take their defaults (`f32[2, 4, 6, 6]`, and `f32[2, 4, 3, 3]` for stride 2 alone). Four schedulers."
+kind = "behavior"
+case = "../../../cases/compile/extents/conv2d_pipeline.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[2, 4, 4, 4] [2, 4, 6, 6] [2, 4, 3, 3]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

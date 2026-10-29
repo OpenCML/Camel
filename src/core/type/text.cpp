@@ -381,6 +381,9 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
                 }
                 continue;
             }
+            if (fn->withIsConstasAt(i)) {
+                parts.push_back(literal("constas "));
+            }
             if (fn->withIsVarAt(i)) {
                 parts.push_back(literal("var "));
             }
@@ -400,6 +403,10 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
             parts.push_back(literal(".."));
             if (fn->hasArgNames()) {
                 parts.push_back(literal(std::string(fn->argNameAt(withCount + i))));
+            }
+            if (fn->restPack() != nullptr) {
+                parts.push_back(literal(": .."));
+                pushChild(parts, fn->restPack(), "<null>");
             }
             continue;
         }

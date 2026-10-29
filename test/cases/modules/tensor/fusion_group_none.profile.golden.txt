@@ -66,6 +66,22 @@ compilation - self time by phase
  declare tensor <time>
  parse autodiff <time>
  gct autodiff <time>
+ resolve types <time>
+ resolve graph <time>
+ cmo_load graph <time>
+ resolve rewrite <time>
+ cmo_load rewrite <time>
+ parse graph <time>
+ gct graph <time>
+ resolve types <time>
+ (counting) <time>
+ declare graph <time>
+ parse rewrite <time>
+ gct rewrite <time>
+ resolve graph <time>
+ resolve types <time>
+ (counting) <time>
+ declare rewrite <time>
  (counting) <time>
  declare autodiff <time>
  (counting) <time>

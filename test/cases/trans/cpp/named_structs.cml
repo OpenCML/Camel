@@ -23,7 +23,7 @@ func main(): int sync {
     println(ps->map<(p: Point): int => p.x - p.y>)
     println(ps, w)
     var acc: Point[] = []
-    0..3->foreach<(i: int) => sync {
+    (0..3)->foreach<(i: int) => sync {
         acc = acc->append<{ x: i, y: 10 - i }>
         return null
     }>

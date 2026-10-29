@@ -79,9 +79,9 @@
             "plans": ["smoke", "feat/linear", "feat/para", "feat/trans"]
         },
         {
-            "comment": "The optimization passes and the rewrite rule library they run: the opt plans, the pass dumps that print their effect, the rewrite-rule plan, and feat/compile for the module registration and operator declarations a rewrite-module change can break. stdlib/rules.cml is the data these passes run, so it selects the same set. `feat/opt` is a directory target, so `--tier fast` keeps its fast plans and filters the slow progen plan (progen is never selected by a rule).",
-            "paths": ["src/passes/opt/", "stdlib/rules.cml", "modules/rewrite/"],
-            "plans": ["smoke", "feat/opt", "feat/trans/pass_dump.plan.toml", "feat/modules/rules.plan.toml", "feat/compile"]
+            "comment": "The optimization passes and the rewrite rule library they run: the opt plans, the pass dumps that print their effect, the rewrite-rule plan, and feat/compile for the module registration and operator declarations a rewrite-module change can break. stdlib/rules.cml is the data these passes run, so it selects the same set. `feat/opt` is a directory target, so `--tier fast` keeps its fast plans and filters the slow progen plan (progen is never selected by a rule). The rule library's own SMT check is selected here too: it reads stdlib/rules.cml, so a rule that stops holding under its licence is reported by the change that edited it.",
+            "paths": ["src/passes/opt/", "stdlib/rules.cml", "modules/rewrite/", "scripts/rule-proofs.mjs"],
+            "plans": ["smoke", "feat/opt", "feat/trans/pass_dump.plan.toml", "feat/modules/rules.plan.toml", "feat/compile", "feat/modules/rules_proofs.plan.toml"]
         },
         {
             "comment": "The profiler pass: its own plan runs without a CUDA device (the host fallback), so it is safe from an ordinary change.",
@@ -159,14 +159,14 @@
             "plans": ["smoke", "feat/compile", "feat/trans", "feat/linear"]
         },
         {
-            "comment": "Tiles, the module: the CPU plan, the three GPU plans (all slow, so they are named as plan files and run in full even under --tier fast), the profile plan, and the DDPM plan whose training cases are written against tiles. A module change can invalidate every consumer, and the GPU plans are what no directory rule could reach before.",
+            "comment": "Tiles, the module: the CPU plan, the three GPU plans (all slow, so they are named as plan files and run in full even under --tier fast), the profile and reading plans, and the DDPM plan whose training cases are written against tiles. A module change can invalidate every consumer, and the GPU plans are what no directory rule could reach before.",
             "paths": ["modules/tiles/"],
-            "plans": ["feat/modules/tiles.plan.toml", "gpu/tiles.plan.toml", "gpu/tiles_rows.plan.toml", "gpu/tiles_transfer.plan.toml", "gpu/profile.plan.toml", "feat/modules/ddpm_primitives.plan.toml"]
+            "plans": ["feat/modules/tiles.plan.toml", "gpu/tiles.plan.toml", "gpu/tiles_rows.plan.toml", "gpu/tiles_transfer.plan.toml", "gpu/profile.plan.toml", "gpu/reading.plan.toml", "feat/modules/ddpm_primitives.plan.toml"]
         },
         {
-            "comment": "A tiles case: the CPU plan is the directory mirror, and the DDPM and profile plans read some of these cases. The three GPU plans are slow (88 tests) and are added only for the cases they name (`ownCases`): a case edit cannot invalidate a GPU plan that does not run it, which is what kept a one-case edit running a whole GPU plan in full. The GPU plan that shares a case with a fast plan is recorded in `slowCaseOwners`.",
+            "comment": "A tiles case: the CPU plan is the directory mirror, and the DDPM, profile and reading plans read some of these cases. The three GPU plans are slow (88 tests) and are added only for the cases they name (`ownCases`): a case edit cannot invalidate a GPU plan that does not run it, which is what kept a one-case edit running a whole GPU plan in full. The GPU plan that shares a case with a fast plan is recorded in `slowCaseOwners`.",
             "paths": ["test/cases/modules/tiles/", "test/cases/gpu/"],
-            "plans": ["feat/modules/tiles.plan.toml", "feat/modules/ddpm_primitives.plan.toml", "gpu/profile.plan.toml", { "plan": "gpu/tiles.plan.toml", "ownCases": true }, { "plan": "gpu/tiles_rows.plan.toml", "ownCases": true }, { "plan": "gpu/tiles_transfer.plan.toml", "ownCases": true }]
+            "plans": ["feat/modules/tiles.plan.toml", "feat/modules/ddpm_primitives.plan.toml", "gpu/profile.plan.toml", "gpu/reading.plan.toml", { "plan": "gpu/tiles.plan.toml", "ownCases": true }, { "plan": "gpu/tiles_rows.plan.toml", "ownCases": true }, { "plan": "gpu/tiles_transfer.plan.toml", "ownCases": true }]
         },
         {
             "comment": "The ONNX exporter. `layer` is true because the plan's four slow cases are ONNX Runtime and PyTorch comparisons: under --tier fast the fast exporter tests run and those are filtered; --tier all runs them. `feat/trans` holds the dumps that print the exported graph. `onnx_with_forms` pins the three call forms of `export_model`'s `with` list (only `out`; `out` with `target`; `out` with `dynamic_axes`), one case under `test/cases/modules/onnx/with_forms/` each.",
@@ -307,6 +307,11 @@
             "plans": ["feat/gate/plan_inventory.plan.toml", "feat/gate/case_ledger.plan.toml"]
         },
         {
+            "comment": "The conformance matrix: gate.conformance runs the checker over the recorded readings, so a change to the checker, to the manifest or to a case must run that plan. The cases and the manifest live under test/conformance, outside test/cases, where no case directory rule reaches them.",
+            "paths": ["scripts/check-conformance.mjs", "test/conformance/"],
+            "plans": ["feat/gate/conformance.plan.toml"]
+        },
+        {
             "comment": "The other build/dev scripts (build.js, format.js, collect-out.js, ...): every plan runs the binary they build, but no plan reads them. Smoke is the smallest check that the toolchain still produces a working camel. scripts/perf-gate.mjs is covered here too: smoke does not run a perf plan.",
             "paths": ["scripts/"],
             "plans": ["smoke"]
@@ -435,6 +440,20 @@
             "comment": "The formatted-print case is shared by the consistency plan and the cpp dumps, but its own directory resolves to feat/trans/cpp.plan.toml, which does not run print_formats: name the plan whose test it is.",
             "paths": ["test/cases/trans/cpp/exec/print_formats.cml"],
             "plans": ["feat/consistency/print_formats.plan.toml"]
+        },
+        {
+            "comment": "The tuple-expansion program whose splice refuses to move a statement: its own directory resolves to feat/compile/static_expansion.plan.toml, which does not run opt.sync_chain, so that plan would be one --changed can never reach. Name the plan whose test it is.",
+            "paths": ["test/cases/compile/static_expansion/static_tuple_indices.cml"],
+            "plans": ["feat/opt/sync_chain.plan.toml"]
+        },
+        {
+            "comment": "The three programs the splice left forked: their own directories resolve to feat/consistency, feat/compile/stream and feat/linear, none of which runs opt.splice_place. Name the plan whose tests they are.",
+            "paths": [
+                "test/cases/consistency/partial_application/var_parameter.cml",
+                "test/cases/compile/stream/tee_result_is_tuple.cml",
+                "test/cases/linear/jit/perf_fib_smoke.cml"
+            ],
+            "plans": ["feat/opt/splice_place.plan.toml"]
         },
         {
             "comment": "The compiler benchmark's smoke test (benchmarks/compile/bench.py) is feat/tools/compile_bench: a change to its case must select the plan that runs it. The rest of benchmarks/ stays the manual perf layer, as the rule-less allowlist says.",

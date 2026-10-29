@@ -132,9 +132,6 @@ std::string nodeText(const GraphDraft &draft, gc_node_ref_t id) {
                     : std::string("oper");
         break;
     }
-    case GCNodeKind::Sync:
-        text += "sync";
-        break;
     case GCNodeKind::Gate:
         text += "gate";
         break;

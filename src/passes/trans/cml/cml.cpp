@@ -232,6 +232,13 @@ std::string intervalOperand(const Expr &value, int minimum) {
     return text;
 }
 
+/// A bound of an interval the graph holds as a constant: the integer itself, parenthesised when it
+/// is negative for the reason `intervalOperand` gives.
+std::string intervalConstantOperand(int64_t value) {
+    const std::string text = std::to_string(value);
+    return value < 0 ? "(" + text + ")" : text;
+}
+
 std::string functionNameOf(const GCGraph *graph) {
     if (graph == nullptr) {
         return {};
@@ -381,7 +388,6 @@ class CmlPrinter {
                 return;
             }
             if (node->kind == camel::runtime::GCNodeKind::Gate ||
-                node->kind == camel::runtime::GCNodeKind::Sync ||
                 node->kind == camel::runtime::GCNodeKind::Copy) {
                 const auto inputs = root->normInputsOf(ref);
                 if (inputs.empty()) {
@@ -862,10 +868,6 @@ class CmlPrinter {
                             effect = true;
                             break;
                         }
-                        if (node->kind == camel::runtime::GCNodeKind::Sync) {
-                            effect = true;
-                            break;
-                        }
                         if (node->kind == camel::runtime::GCNodeKind::Oper) {
                             const std::string_view uri =
                                 candidate->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri();
@@ -1048,6 +1050,13 @@ class CmlPrinter {
         gc_node_ref_t tail = camel::execute::resolveRuntimeTailValueRef(graph_);
         bool tailPrintedAsStatement = false;
 
+        // A block with no chain of its own runs the write it yields only because the value is
+        // taken from that write: the source ends such a body with the write, and `return v` after
+        // it would hand the same value on while leaving the write behind a value that reaches
+        // nothing, so the write would not run at all (design principles 3.4). The write the exit's
+        // gate waits on is then the block's last statement.
+        const gc_node_ref_t valueWrite = blockValueWrite(tail);
+
         // A local copy: printing a lambda or a region switches the printer to another graph and
         // back, and that replaces `topo_` while this loop walks it.
         const std::vector<gc_node_ref_t> order = topo_;
@@ -1061,6 +1070,9 @@ class CmlPrinter {
                 continue;
             }
             processNode(ref, tail, true, tailPrintedAsStatement);
+        }
+        if (valueWrite != camel::runtime::kInvalidNodeRef) {
+            tailPrintedAsStatement = true;
         }
 
         if (!isRoot_ && tail != camel::runtime::kInvalidNodeRef && !tailPrintedAsStatement) {
@@ -1108,6 +1120,15 @@ class CmlPrinter {
         body.closeIndent = outerIndent;
         body.tailIndent  = indent_;
         body.sync        = regionNeedsSync(region);
+        // A region whose value is the value its last write wrote, with no chain of its own to run
+        // that write: the write is the region's last statement, as `printStatements` prints it for
+        // a body. `return <value>` there would hand the value on behind no wait at all and leave
+        // the write behind a value that reaches nothing (see `regionValueWrite`).
+        const gc_node_ref_t valueWrite =
+            region == 0 ? blockValueWrite(tail) : regionValueWrite(region, tail);
+        if (valueWrite != camel::runtime::kInvalidNodeRef) {
+            tailPrintedAsStatement = true;
+        }
         if (!functionBody && regionReturnsValue(region) && !tailPrintedAsStatement) {
             // A region whose value is a gate with ordering in front of it was written as an
             // explicit `return`; a bare last expression yields the value without that gate.
@@ -1150,9 +1171,6 @@ class CmlPrinter {
         return text;
     }
 
-    /// Whether the source wrote a `sync` block around this region's statements. A branch or loop
-    /// links its region to the owner with a control edge, so that edge does not count; a `sync`
-    /// block orders one statement after another, which is a control edge between two nodes of
     /// Whether the source ended this region with an explicit `return`: the region yields a gate
     /// that orders the returned value after the statements before it.
     bool regionReturnsValue(uint32_t region) const {
@@ -1183,16 +1201,90 @@ class CmlPrinter {
         return false;
     }
 
-    /// Whether the source wrote a `sync` block around this region's statements. A branch or loop
-    /// links its region to the owner with a control edge, so that edge does not count; a `sync`
-    /// block orders one statement after another, which is a control edge between two nodes of
-    /// the same region.
+    /// The write whose value the block yields, when the block has no chain to run it: the gate at
+    /// the exit hands the block's value on and waits on that write. `kInvalidNodeRef` otherwise --
+    /// a block with a chain runs its statements anyway, and a value that is no write's value has
+    /// nothing behind it.
+    gc_node_ref_t blockValueWrite(gc_node_ref_t tail) const {
+        if (tail == camel::runtime::kInvalidNodeRef || regionNeedsSync(0)) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        const gc_node_ref_t exitRef = graph_->exitNodeRef();
+        if (exitRef == camel::runtime::kInvalidNodeRef || graph_->node(exitRef) == nullptr ||
+            graph_->node(exitRef)->kind != camel::runtime::GCNodeKind::Gate) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        bool handsTail = false;
+        for (const gc_node_ref_t input : graph_->normInputsOf(exitRef)) {
+            handsTail = handsTail || input == tail;
+        }
+        if (!handsTail) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        return assignmentHandingOn(exitRef, 0, tail);
+    }
+
+    /// The assignment a block hands a value on behind: one of `gate`'s control inputs is a write
+    /// of `region` whose value is the one `gate` carries. That is the GATE the builder puts in
+    /// front of the value an assignment stands for, so that the write runs where nothing else
+    /// reads the version it made (design principles 3.5, 3.4): the source's block ended with the
+    /// write and the block's value is what that write wrote. `kInvalidNodeRef` otherwise.
+    gc_node_ref_t assignmentHandingOn(
+        gc_node_ref_t gate, uint32_t region, gc_node_ref_t value) const {
+        for (const gc_node_ref_t input : graph_->ctrlInputsOf(gate)) {
+            const camel::runtime::GCNode *node = graph_->node(input);
+            if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Oper ||
+                control_->controlOf(input) != region) {
+                continue;
+            }
+            if (!graph_->nodeBodyAs<camel::runtime::GCOperBody>(input)->uri().starts_with(
+                    ":op/assn")) {
+                continue;
+            }
+            const auto written = graph_->normInputsOf(input);
+            if (written.size() == 2 && written[1] == value) {
+                return input;
+            }
+        }
+        return camel::runtime::kInvalidNodeRef;
+    }
+
+    /// The write whose value a region hands on, when the region has no chain of its own: the
+    /// region's result is that same GATE, and the source's region ended with the write. Printing
+    /// the value back as `return <value>` would hand it on behind no wait at all, leaving the
+    /// write behind a value that reaches nothing, so the write would not run (design principles
+    /// 3.4); the write is the region's last statement instead, as `blockValueWrite` prints it for
+    /// a block with no chain.
+    gc_node_ref_t regionValueWrite(uint32_t region, gc_node_ref_t tail) const {
+        if (tail == camel::runtime::kInvalidNodeRef || regionNeedsSync(region)) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        const camel::runtime::GCNode *gate = graph_->node(tail);
+        if (gate == nullptr || gate->kind != camel::runtime::GCNodeKind::Gate) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        const auto values = graph_->normInputsOf(tail);
+        if (values.size() != 1) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        return assignmentHandingOn(tail, region, values.front());
+    }
+
+    /// Whether the source wrote a `sync` block around this region's statements: the answer is
+    /// decided by the sync edge. A `sync` block orders one statement after another, which is the
+    /// sync edge the builder writes between the two (`syncPredsOf`, docs/design/effects/edges.cn.md
+    /// 1.5); a branch or loop links its region to the owner with a control edge, so that edge says
+    /// nothing here. A value handed on behind a gate to make a write run waits through the control
+    /// kind alone: that is no block's chain, and printing it as one would make the block's reads
+    /// settle as the reads of a chain (Builder::markNonRetainingReads) and print a graph the
+    /// source did not write.
     bool regionNeedsSync(uint32_t region) const {
         for (const gc_node_ref_t ref : topo_) {
             if (graph_->node(ref) == nullptr || control_->controlOf(ref) != region) {
                 continue;
             }
-            for (const gc_node_ref_t source : graph_->ctrlInputsOf(ref)) {
+            for (const camel::runtime::GCGraphSyncEdge &edge : graph_->syncPredsOf(ref)) {
+                const gc_node_ref_t source = edge.pred;
                 if (graph_->node(source) != nullptr && control_->controlOf(source) == region) {
                     return true;
                 }
@@ -1266,7 +1358,6 @@ class CmlPrinter {
         switch (node->kind) {
         case camel::runtime::GCNodeKind::Port:
         case camel::runtime::GCNodeKind::Gate:
-        case camel::runtime::GCNodeKind::Sync:
         case camel::runtime::GCNodeKind::Copy:
         case camel::runtime::GCNodeKind::Brch:
             return;
@@ -1494,8 +1585,7 @@ class CmlPrinter {
             return {found->second, 100};
         }
         case camel::runtime::GCNodeKind::Copy:
-        case camel::runtime::GCNodeKind::Gate:
-        case camel::runtime::GCNodeKind::Sync: {
+        case camel::runtime::GCNodeKind::Gate: {
             const auto inputs = graph_->normInputsOf(ref);
             if (inputs.empty()) {
                 return {"()", 100};
@@ -1669,6 +1759,16 @@ class CmlPrinter {
                 iterable = std::format(
                     "{}..{}", intervalOperand(expression(bounds->first), kIntervalPrecedence),
                     intervalOperand(expression(bounds->second), kIntervalPrecedence + 1));
+            } else if (interval) {
+                // The pair of bounds is a value: a pass may have written it as the constant
+                // holding the same two integers, and the source form is still the interval
+                // (GCGraph::intervalPairValuesOf).
+                const auto values = view.graph().intervalPairValuesOf(sequence);
+                iterable          = values.has_value()
+                                        ? std::format(
+                                              "{}..{}", intervalConstantOperand(values->first),
+                                              intervalConstantOperand(values->second))
+                                        : expression(sequence).text;
             } else {
                 iterable = expression(sequence).text;
             }

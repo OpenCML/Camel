@@ -85,7 +85,7 @@ CAMEL_NODE(TypeList, Other)            // typeExpr (',' typeExpr)*
 CAMEL_NODE(IdentDef, Other)            // IDENTIFIER
 CAMEL_NODE(IdentRef, Other)            // (IDENTIFIER '::')* IDENTIFIER, where a name is required
 
-CAMEL_NODE(RestValue, Expr)            // '..' dataExpr (a rest argument, expanded at the call)
+CAMEL_NODE(RestValue, Expr)            // '..' dataExpr (a rest argument, expanded at the call; also a `when` condition written over every member)
 CAMEL_NODE(IfExpr, Expr)               // 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 CAMEL_NODE(MatchExpr, Expr)            // 'match' logicalOrExpr '{' matchCase+ '}'
 CAMEL_NODE(MatchTypeExpr, Expr)        // 'match' 'type' typeExpr '{' typeCase* '}'
@@ -101,15 +101,15 @@ CAMEL_NODE(LogicalAndExpr, Expr)       // orExpr ('&&' orExpr)*
 CAMEL_NODE(OrExpr, Expr)               // andExpr ('|' andExpr)*
 CAMEL_NODE(AndExpr, Expr)              // equalityExpr ('&' equalityExpr)*
 CAMEL_NODE(EqualityExpr, Expr)         // relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
-CAMEL_NODE(RelationalExpr, Expr)       // additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
+CAMEL_NODE(RelationalExpr, Expr)       // rangeExpr (('<' | '>' | '<=' | '>=') rangeExpr)*
 CAMEL_NODE(AdditiveExpr, Expr)         // multiplicativeExpr (('+' | '-') multiplicativeExpr)*
 CAMEL_NODE(MultiplicativeExpr, Expr)   // powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 CAMEL_NODE(PowerExpr, Expr)            // nullableExpr ('^' powerExpr)?; also the operand of a prefix operator
 CAMEL_NODE(NullableExpr, Expr)         // unaryExpr (('??' | '!!') dataExpr)?
 CAMEL_NODE(CastExpr, Expr)             // linkExpr ('as' | 'is') typeExpr
 CAMEL_NODE(UnaryExpr, Expr)            // ('!' | '~') linkExpr, '-' negPower
-CAMEL_NODE(LinkExpr, Expr)             // negExpr ('->' compExpr)*
-CAMEL_NODE(CompExpr, Expr)             // annoExpr ('..' annoExpr)*
+CAMEL_NODE(LinkExpr, Expr)             // negExpr ('->' annoExpr)*
+CAMEL_NODE(RangeExpr, Expr)            // additiveExpr ('..' additiveExpr)*
 CAMEL_NODE(AnnoExpr, Expr)             // accessExpr (indices | parentArgues | structData | angledValues | typeArguments | memberAccess)*
 CAMEL_NODE(AccessExpr, Expr)           // primaryData ('.' (IDENTIFIER | INTEGER | REAL))*
 CAMEL_NODE(RefData, Expr)              // identRef, as an operand
@@ -129,6 +129,7 @@ CAMEL_NODE(SpecType, Type)             // primaryType '<' typeOrData (',' typeOr
 CAMEL_NODE(ConstData, Type)            // 'const' dataExpr (a typeOrData that is data)
 CAMEL_NODE(StructType, Type)           // '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
 CAMEL_NODE(RefType, Type)              // identRef, as a type
+CAMEL_NODE(PackType, Type)             // '..' typeExpr, once for each member of the pack the body names
 CAMEL_NODE(ParenType, Type)            // '(' typeExpr ')'
 CAMEL_NODE(TupleType, Type)            // '(' typeList? ','? ')'
 CAMEL_NODE(FuncType, Type)             // modifiers? angledParams? parentParams '=>' typeExpr resourceClause?

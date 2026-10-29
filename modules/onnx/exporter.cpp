@@ -14,6 +14,7 @@
 #include "../tensor/ops/registry.h"
 #include "../tensor/ops/support.h"
 #include "../tensor/tensor.h"
+#include "../tensor/type.h"
 #include "capability.h"
 #include "emitter.h"
 #include "lowering.h"
@@ -43,6 +44,7 @@
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/loop.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/assert.h"
 
@@ -335,9 +337,17 @@ class Evaluator {
     using LoopBody = std::function<std::pair<std::optional<std::string>, std::vector<Value>>(
         const Value &iter, const std::vector<Value> &state)>;
     using HoleCall = std::function<Value(size_t leaf, const std::vector<Value> &args)>;
+    /// `firstCond` is the condition the Loop checks before its first round, computed outside the
+    /// body on the values it starts from; without one the Loop runs the body at least once (a
+    /// recursion's body decides there whether it recursed, and is run once more at the final
+    /// state). A LOOP node checks its condition the way the source does -- before each round --
+    /// and passes its own (see evalLoopNode).
     std::vector<Value> emitLoop(
         Activation &act, const std::optional<std::string> &trip, const std::vector<Value> &init,
-        const LoopBody &body);
+        const LoopBody &body, const std::optional<std::string> &firstCond = std::nullopt);
+    /// The source's LOOP node (design principles 3.10), emitted as an ONNX Loop through emitLoop:
+    /// the state is what the Loop carries, the sequence is the trip count (see evalLoopNode).
+    Value evalLoopNode(Activation &act, gc_node_ref_t ref);
     Value translateLinear(Activation &act, GCGraph *fn, std::vector<Value> args);
     Value
     linearBody(const LinearFrame &f, std::span<const Value> state, size_t arm, const Value *hole);
@@ -411,19 +421,6 @@ Value Evaluator::translate(GCGraph *graph, std::span<const Value> inputs) {
 /// A graph or function name worth showing: compiler-generated ones (lambdas, branch arms,
 /// specializations of them) mean nothing in the source; the source position says more.
 bool isSourceName(std::string_view name) { return !name.empty() && !name.starts_with("__"); }
-
-/// How the export refuses a LOOP node: the translation of a LOOP to an ONNX Loop is the next
-/// step (design principles 3.10), so it is refused where it is written instead of being lowered
-/// to a recursion the export would have to recover again. The translation reports it when a
-/// LOOP node reaches it (evalNode); refuseLoopNodes reports the same text before the export
-/// simplifies the function.
-std::string loopRefusalText(const GCGraph &graph) {
-    const std::string what =
-        "a 'loop' expression is not exported to ONNX yet; write the loop as a "
-        "tail-recursive function, which is exported as an ONNX Loop";
-    const std::string name = graph.name().substr(0, graph.name().find('$'));
-    return isSourceName(name) ? std::format("in '{}': {}", name, what) : what;
-}
 
 /// "file:line:column" of `origin`, or nothing when the origin has no source position.
 std::string sourceLocationOf(
@@ -651,6 +648,14 @@ void Evaluator::refuseEffects(GCGraph *root) {
                     }
                 }
             }
+            // The statement written before this one in a `sync` block orders it and carries "used"
+            // with that order (docs/design/effects/edges.cn.md 1.5), whether or not a control edge
+            // still names the same pair: an effect no value reaches is found along it too.
+            for (const auto &edge : g->syncPredsOf(ref)) {
+                if (edge.user == ref && seen.insert(edge.pred).second) {
+                    work.push_back(edge.pred);
+                }
+            }
         }
     }
 }
@@ -862,10 +867,9 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
     case GCNodeKind::Call:
         return evalIndirectCall(act, ref);
     case GCNodeKind::Loop:
-        // A LOOP node maps one to one onto an ONNX Loop (design principles 3.10); that
-        // translation is the next step. Until then the export refuses it where it is written
-        // rather than lowering it to a recursion it would have to recover again.
-        throw ExportError(loopRefusalText(*g));
+        // The source's structured loop is an ONNX Loop (design principles 3.10): its state is
+        // what the Loop carries, its sequence is the trip count (see evalLoopNode).
+        return evalLoopNode(act, ref);
     default:
         unsupported(
             act,
@@ -2281,7 +2285,7 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
 
 std::vector<Value> Evaluator::emitLoop(
     Activation &act, const std::optional<std::string> &trip, const std::vector<Value> &init,
-    const LoopBody &body) {
+    const LoopBody &body, const std::optional<std::string> &firstCond) {
     if (init.empty()) {
         unsupported(act, "a recursion changes none of its values: it never ends, or it is no loop");
     }
@@ -2353,9 +2357,10 @@ std::vector<Value> Evaluator::emitLoop(
     bodyGraph.outputs = std::move(outputs);
     std::vector<std::string> loopInputs{
         trip ? *trip : std::string(),
-        emitter_.operand(
-            Value::constant(rtdata::toSlot<bool>(true), type::Type::Bool()),
-            TypeCode::Bool)};
+        firstCond ? *firstCond
+                  : emitter_.operand(
+                        Value::constant(rtdata::toSlot<bool>(true), type::Type::Bool()),
+                        TypeCode::Bool)};
     for (size_t k = 0; k < init.size(); ++k) {
         for (const Value &leaf : initLeaves[k]) {
             loopInputs.push_back(emitter_.operand(leaf, factsOf(leaf).dtype));
@@ -2378,6 +2383,238 @@ std::vector<Value> Evaluator::emitLoop(
         finals.push_back(rebuildValue(init[k], leafValues, next));
     }
     return finals;
+}
+
+// ---------------------------------------------------------------- the LOOP node of the source
+//
+// A LOOP node is the source's structured loop (design principles 3.10): a state, the sequence it
+// iterates or the condition it stops on (or both), and two regions of the graph it is written in.
+// It is an ONNX Loop for the same reason a tail recursion is one -- the state is what the Loop
+// carries -- so it is emitted by emitLoop() above, the code the recursion path already uses. What
+// is computed here is only what an ONNX Loop takes besides the state:
+//
+//   * the trip count. `for x in xs` over an array is the length of its first dimension (a
+//     constant when the shape states it, Shape + Gather on it otherwise); `for i in a..b` is
+//     b - a; a `while` has none, its condition ends it;
+//   * the round's element. `for x in xs` takes element r of the array at round r (Gather along
+//     the first axis, which is the element the interpreter takes); `for i in a..b` takes the
+//     position a + r itself;
+//   * the condition of `while` and `for ... while`: the source checks the condition of a round
+//     before that round's body, and an ONNX Loop checks its condition input before its first
+//     round and the body's condition output before the next one. So the condition region is
+//     evaluated twice: once on the values the loop starts from, which is the Loop's condition
+//     input, and inside the body on the state the round produced, which is the state the next
+//     round starts from;
+//   * the body: the body region with its ports bound to the element and the state, giving the
+//     next state.
+//
+// A loop that collects a value every round is refused: no source writes one (only a graph
+// producer does, camel/runtime/loop.h), and what it would take is the Loop's scan outputs.
+
+/// The values a round of a loop gives the body's result: the state itself when the loop carries
+/// one value, the tuple's components when it carries several (camel/runtime/loop.h).
+std::vector<Value> loopNextState(const Value &result, size_t components) {
+    if (components == 1) {
+        return {result};
+    }
+    if (result.isAggregate()) {
+        return result.fields;
+    }
+    if (result.isConstant() && result.ty && result.slot != NullSlot &&
+        (result.ty->code() == TypeCode::Tuple || result.ty->code() == TypeCode::Struct)) {
+        return elementsOf(result.slot, result.ty);
+    }
+    return {};
+}
+
+/// The element a round of a loop over an array gives the body: a Camel scalar for a numeric
+/// element, a tensor for an element that has a shape. `sequence` is what the array is known
+/// about: when it states its shape the element is that shape with the iterated axis dropped,
+/// which the element type alone does not say when the array's rank is open (`f32[..]`).
+Value elementValueOf(
+    const std::string &name, type::Type *elementType, const TensorFacts &sequence) {
+    if (elementType == nullptr) {
+        return Value::symbolic(name, std::nullopt, std::nullopt);
+    }
+    switch (elementType->code()) {
+    case TypeCode::Bool:
+    case TypeCode::Int32:
+    case TypeCode::Int64:
+    case TypeCode::Float32:
+    case TypeCode::Float64:
+        return Value::symbolicScalar(name, elementType);
+    default:
+        break;
+    }
+    TensorFacts facts = tensor::tensorFactsOf(elementType);
+    if (!facts.shape && sequence.shape && !sequence.shape->empty()) {
+        facts.shape =
+            tensor::StaticShape(sequence.shape->begin() + 1, sequence.shape->end());
+    }
+    return Value::symbolic(name, facts.dtype, facts.shape);
+}
+
+/// A rank-0 int64 constant, the form `Shape` is read and a Loop's trip count is written in.
+std::string int64ScalarOperand(Emitter &emitter, int64_t value) {
+    return emitter.operand(
+        Value::constant(rtdata::toSlot<rtdata::Int64>(value), type::Type::Int64()),
+        TypeCode::Int64);
+}
+
+Value Evaluator::evalLoopNode(Activation &act, gc_node_ref_t ref) {
+    GCGraph *g                          = act.graph;
+    const camel::runtime::LoopView loop = camel::runtime::loopOf(programOf(g), *g, ref);
+    if (loop.collectionCount() != 0) {
+        unsupported(
+            act,
+            "a loop that collects a value every round is not exported to ONNX yet: its value "
+            "holds the arrays the rounds are collected into, which are the Loop's scan outputs");
+    }
+    const size_t states = loop.stateCount();
+    std::vector<Value> init(states);
+    for (size_t j = 0; j < states; ++j) {
+        init[j] = eval(act, loop.initialState(j));
+    }
+    // A Loop carries tensors, scalars, and tuples or structs of them: what a recursion carries,
+    // checked the same way (emitLoop checks the shapes of each round).
+    for (size_t j = 0; j < states; ++j) {
+        std::vector<Value> leaves;
+        if (!carriableLeaves(init[j], leaves)) {
+            unsupported(
+                act,
+                std::format(
+                    "state {} of the loop is {}, and a Loop carries tensors and scalars and "
+                    "tuples and structs of them",
+                    j + 1,
+                    carriedKind(init[j])));
+        }
+    }
+    // What the regions read from outside the loop is the model's own: translated before the
+    // body, so their nodes stay outside the Loop's body graph (a constant is an initializer of
+    // the model, visible from the body anyway).
+    for (gc_node_ref_t outside : loop.externalInputs()) {
+        (void)eval(act, outside);
+    }
+
+    // The sequence, the trip count it stands for and the element it gives each round.
+    std::optional<Value> sequence;
+    bool interval = false;
+    std::optional<std::string> trip;
+    std::vector<Value> bounds;
+    if (const auto iterable = loop.iterable()) {
+        sequence.emplace(eval(act, *iterable));
+        interval = g->loopIterableFormOf(ref) == camel::core::LoopIterableForm::Interval;
+        if (interval) {
+            // `for i in a..b` carries the pair of its bounds, not an array of the elements.
+            if (sequence->isAggregate()) {
+                bounds = sequence->fields;
+            } else if (sequence->isConstant() && sequence->ty && sequence->slot != NullSlot) {
+                bounds = elementsOf(sequence->slot, sequence->ty);
+            }
+            if (bounds.size() != 2) {
+                unsupported(act, "the interval of a 'for' loop is not written as its two bounds");
+            }
+            trip = emitter_.node(
+                "Sub",
+                {emitter_.operand(bounds[1], TypeCode::Int64),
+                 emitter_.operand(bounds[0], TypeCode::Int64)},
+                {},
+                "loop_trip");
+        } else {
+            const TensorFacts facts = factsOf(*sequence);
+            if (facts.shape && !facts.shape->empty() && (*facts.shape)[0].has_value()) {
+                trip = int64ScalarOperand(emitter_, *(*facts.shape)[0]);
+            } else {
+                const std::string shape =
+                    emitter_.node("Shape", {emitter_.operand(*sequence)}, {}, "loop_shape");
+                trip = emitter_.node(
+                    "Gather",
+                    {shape, int64ScalarOperand(emitter_, 0)},
+                    {Attribute::makeInt("axis", 0)},
+                    "loop_trip");
+            }
+        }
+    }
+
+    // The condition of the first round, on the values the loop starts from: an ONNX Loop checks
+    // its condition input before it runs the body, and the source checks the condition of a
+    // round before that round's body (design principles 3.10), so a loop whose condition is
+    // false from the start runs no round at all.
+    std::optional<std::string> firstCond;
+    if (loop.condRegion() != 0) {
+        Activation guard;
+        guard.graph = g;
+        guard.ports = act.ports;
+        guard.memo  = act.memo;
+        guard.memo.emplace_back();
+        for (size_t j = 0; j < states; ++j) {
+            guard.ports.emplace(loop.condStateParam(j), init[j]);
+        }
+        guard.ports.emplace(
+            loop.roundPort(),
+            Value::symbolicScalar(int64ScalarOperand(emitter_, 0), type::Type::Int64()));
+        firstCond = emitter_.operand(eval(guard, loop.condResult()), TypeCode::Bool);
+    }
+
+    const LoopBody body = [&](const Value &iter, const std::vector<Value> &state)
+        -> std::pair<std::optional<std::string>, std::vector<Value>> {
+        // The round's graph is the loop's own graph (its regions are parts of it): the ports
+        // are what the state and the element are bound to, and a memo layer of its own keeps
+        // what the round computes inside the body graph.
+        Activation round;
+        round.graph = g;
+        round.ports = act.ports;
+        round.memo  = act.memo;
+        round.memo.emplace_back();
+        if (const auto elementPort = loop.bodyElementParam()) {
+            Value element;
+            if (interval) {
+                element = Value::symbolicScalar(
+                    emitter_.node(
+                        "Add",
+                        {emitter_.operand(bounds[0], TypeCode::Int64),
+                         emitter_.operand(iter, TypeCode::Int64)},
+                        {},
+                        "loop_element"),
+                    type::Type::Int64());
+            } else {
+                const std::string name = emitter_.node(
+                    "Gather",
+                    {emitter_.operand(*sequence), emitter_.operand(iter, TypeCode::Int64)},
+                    {Attribute::makeInt("axis", 0)},
+                    "loop_element");
+                element = elementValueOf(name, g->node(*elementPort)->dataType(), factsOf(*sequence));
+            }
+            round.ports.emplace(*elementPort, std::move(element));
+        }
+        for (size_t j = 0; j < states; ++j) {
+            round.ports.emplace(loop.bodyStateParam(j), state[j]);
+        }
+        round.ports.emplace(loop.roundPort(), iter);
+        const Value result = eval(round, loop.nextState());
+        std::vector<Value> next = loopNextState(result, states);
+        if (next.empty()) {
+            unsupported(act, "the body of a loop does not give one value per state value");
+        }
+        // The condition the next round is checked with: the source's condition on the state this
+        // round produced, which is the state the next round starts from.
+        std::optional<std::string> cont;
+        if (loop.condRegion() != 0) {
+            for (size_t j = 0; j < states; ++j) {
+                round.ports.insert_or_assign(loop.condStateParam(j), next[j]);
+            }
+            cont = emitter_.operand(eval(round, loop.condResult()), TypeCode::Bool);
+        }
+        return {cont, std::move(next)};
+    };
+
+    const std::vector<Value> finals = emitLoop(act, trip, init, body, firstCond);
+    if (!loop.valueIsTuple()) {
+        return finals.front();
+    }
+    // Several state values: the loop's value is their tuple, which is what its consumers read
+    // component by component (a struct state is one component, rebuilt as its own type).
+    return Value::aggregate(loop.valueType(), finals);
 }
 
 namespace {
@@ -4496,6 +4733,10 @@ OptimizeRewriteConfig exportRewriteConfig() {
     // large for the runtime representation fails at commit.
     config.growthBudget.nodes         = std::numeric_limits<size_t>::max();
     config.inlineConfig.maxOwnerNodes = std::numeric_limits<size_t>::max();
+    // The same for the size of a folded constant: a model's weights are constants the file has to
+    // hold anyway, so an export that had to leave a large one as a computation would refuse the
+    // program (constant_budget belongs to the pass on the pipeline, like growth_budget).
+    config.constantBudgetBytes = std::numeric_limits<size_t>::max();
     return config;
 }
 
@@ -4754,42 +4995,12 @@ void refuseUnendedUnrolling(
         ExportError::Kind::Other);
 }
 
-/// Refuses a LOOP node before the export simplifies the bound function (translatePrepared).
-///
-/// The translation itself refuses a LOOP node where it is written (evalNode), but the export
-/// simplifies the function first, and that simplification can rewrite or unroll the graphs
-/// around the loop before the translation sees it. Refusing here keeps the exporter's
-/// diagnosis, at the loop, before any of that.
-///
-/// No pass removes a LOOP node (it runs its graphs, which may have effects), so a loop of the
-/// bound function still reaches the translation; the refusal is the same one, only reported
-/// earlier.
-void refuseLoops(
-    core::context::Context &ctx, const camel::runtime::Program &program, GCGraph *root) {
-    for (GCGraph *graph : camel::runtime::collectReachableGraphs(program, root)) {
-        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
-            if (*it == nullptr || (*it)->kind != GCNodeKind::Loop) {
-                continue;
-            }
-            const uint64_t origin = graph->nodeOrigin(it.ref());
-            throw ExportError(
-                loopRefusalText(*graph),
-                sourceLocationOf(ctx.sourceContext(), origin),
-                origin);
-        }
-    }
-}
-
 Model translatePrepared(
     core::context::Context &ctx, Emitter &emitter, const camel::runtime::Program *program,
     std::span<const Value> inputs, std::unordered_map<slot_t, std::string> names,
     const ExportOptions &options, Preparation preparation) {
     const auto context = ctx.shared_from_this();
     GCGraph *root      = program->root();
-    // A LOOP is refused before the simplification below, which can fail on the graphs of a
-    // function a loop is part of (see refuseLoops) and would then report its own failure
-    // instead of the loop.
-    refuseLoops(ctx, *program, root);
     std::ostringstream log;
     // The pass entry (ShapesOnly): the preceding passes simplified the program without two
     // things only the export knows: the shapes of the examples (binding their types above

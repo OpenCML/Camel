@@ -1041,9 +1041,13 @@ any Formatter::visitKeyParamPair(cst::KeyParamPair context) {
                     : context->tok(TK::KwVar)     ? "var "
                     : context->tok(TK::KwConst)   ? "const "
                                                   : "";
-    result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
     const auto &typeExpr = context->type();
     const auto &dataExpr = context->expr();
+    if (!context->get<cst::IdentDef>()) {
+        // `..ParamsOf<F>`: a pack written out in a function type's parameter list, no name.
+        return result + any_cast<string>(visitType(typeExpr));
+    }
+    result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
     // A lambda's parameter may leave its type out (design principles 5.9).
     if (typeExpr) {
         result += ": " + any_cast<string>(visitType(typeExpr));
@@ -1622,17 +1626,17 @@ any Formatter::visitUnaryExpr(syn::Node context) {
 
 /*
 linkExpr
-    : compExpr ('->' compExpr)*
+    : annoExpr ('->' annoExpr)*
     ;
 */
 any Formatter::visitLinkExpr(cst::LinkExpr context) { return formatBiOpsList(context, false); }
 
 /*
-compExpr
-    : annoExpr ('..' annoExpr)*
+rangeExpr
+    : additiveExpr ('..' additiveExpr)*
     ;
 */
-any Formatter::visitCompExpr(cst::CompExpr context) { return formatBiOpsList(context, false); }
+any Formatter::visitRangeExpr(cst::RangeExpr context) { return formatBiOpsList(context, false); }
 
 /*
 annoExpr
@@ -1979,7 +1983,7 @@ any Formatter::visitTypeList(cst::TypeList context) {
 
 /*
 typeParams
-    : '::' '<' identDef (',' identDef)* ','? '>'
+    : '::' '<' ('..'? identDef) (',' '..'? identDef)* ','? '>'
     ;
 */
 any Formatter::visitTypeParams(cst::TypeParams context) {
@@ -2056,8 +2060,9 @@ identDef : IDENTIFIER ;
 */
 any Formatter::visitIdentDef(cst::IdentDef context) {
     // The text of the node, not of an Identifier token: the `_` of `let _ = e` is a token of
-    // its own kind.
-    return context->text();
+    // its own kind. A type parameter written with `..` is a pack (`func zip::<..A>`, design
+    // principles 5.6): the mark is on the name and not a token of its own, so it is written here.
+    return (context->writtenAsPack() ? ".." : "") + context.text();
 }
 
 /*
@@ -2186,7 +2191,7 @@ any Formatter::dispatch(syn::Node context) {
         return formatBiOpsList(context, true);
         CAMEL_FORMAT(NullableExpr)
         CAMEL_FORMAT(LinkExpr)
-        CAMEL_FORMAT(CompExpr)
+        CAMEL_FORMAT(RangeExpr)
         CAMEL_FORMAT(AnnoExpr)
         CAMEL_FORMAT(AccessExpr)
         CAMEL_FORMAT(Literal)
@@ -2223,6 +2228,10 @@ any Formatter::dispatch(syn::Node context) {
         return context.text();
     case NK::ParenType:
         return "(" + any_cast<string>(visit(context.type())) + ")";
+    case NK::PackType:
+        // `..E`, one type expression written once for each member of a pack (design principles
+        // 5.6).
+        return ".." + any_cast<string>(visit(context.type()));
     case NK::TypeOfType:
         return "typeof " + any_cast<string>(visit(context.expr()));
     case NK::ShapeComp: {

@@ -1,0 +1,23 @@
+// A branch whose two arms each write a variable, and whose value is the value that write wrote:
+// the write runs because the value the arm hands on waits on it, behind a GATE of its own (design
+// principles 3.4, 3.5). The value is the write's, so the arm ends with the write -- `return
+// <value>` would hand the value on behind no wait at all and leave the write behind a value that
+// reaches nothing, so the write would not run.
+func picked_sync(c: bool): int sync {
+    var t = 3
+    if c then { t += 1 } else { t -= 1 }
+    return t
+}
+
+// The same branch in a body that is not a sync block: the arm's value is still the write's value,
+// and `t = t + 1` builds the graph `t += 1` builds.
+func picked_plain(c: bool): int {
+    var t = 3
+    if c then { t = t + 1 } else { t = t - 1 }
+    return t
+}
+
+func main(): int sync {
+    println(picked_sync(true), picked_sync(false), picked_plain(true), picked_plain(false))
+    return 0
+}

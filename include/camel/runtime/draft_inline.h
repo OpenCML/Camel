@@ -45,8 +45,17 @@ DraftInlineResult inlineCallableInDraft(
 /// compiler error naming the function -- never a truncated shape.
 inline constexpr size_t kTypeSpecializationFixedPointGuard = 4096;
 
+/// With `functionValuesOnly`, the call is specialized on the function value a function-typed
+/// argument holds and on nothing else: that parameter becomes that function in the copy, the
+/// calls of it inside the copy are direct calls once devirtualization has run there, and no
+/// constant argument or refined parameter type is bound. This is what defunctionalization needs
+/// and an optimizer does not: one copy per (callee, function) pair, and no recursion unrolled on
+/// a constant. Off, a GC-managed argument stays dynamic, as every other one does (an object's
+/// identity is observable); a function value has no identity (design principles 5.2), so binding
+/// it changes nothing but which calls are known.
 bool specializeDirectFuncInDraft(
-    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId);
+    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId,
+    bool functionValuesOnly = false);
 /// Rewrites a CALL into a direct FUNC when its callee is known: a static Function (its static
 /// captures bound into a specialization), or a closure built in this graph by FILL, whose graph
 /// is lifted so that the captures become trailing norm arguments. With `unwrapGatedCallee` a

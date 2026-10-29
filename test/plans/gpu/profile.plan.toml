@@ -63,11 +63,17 @@ timeout_ms = 60000
 # The device side: a region run through `tiles`, whose kernels, bytes and waits the report counts.
 # On a machine without a CUDA device the same program runs on the host and the counters stay 0, so
 # the test asserts the shape of the report, not the numbers.
+#
+# The card is the runner's to pick, not device 0: on a host other people share, the lowest ordinal
+# is often the one someone else has filled, and the run would then die holding "no free memory for
+# a context" against a program that is fine. A host with no idle card skips this test by name; a
+# card that is chosen and then runs out of memory is still this test's own failure.
 [[tests]]
 name = "device_region.nvm"
 kind = "behavior"
 case = "../../cases/gpu/profile/device_region.cml"
 args = ["${case}", "std::profile", "std::nvm"]
+cuda_free_device = true
 expect_exit = 0
 expect_stdout_contains = ["PROFILE camel", "tiles:run_preferred_resident", "device kernels"]
 timeout_ms = 120000

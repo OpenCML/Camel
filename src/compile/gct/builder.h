@@ -140,6 +140,11 @@ class Builder {
     bool openSignature_    = false;
     bool typeFunctionBase_ = false;
     std::vector<std::string> declaredTypeVars_;
+    // The head parameters of the declaration being visited that were written with `..`: they are
+    // packs, not one type each (`func zip::<..A>`, design principles 5.6). A pack has no
+    // occurrence of its own in the signature: it is written only in a `..` expansion, and GCT
+    // works the name of that expansion out from the one pack variable its body names.
+    std::vector<std::string> declaredPackVars_;
 
     // The head names written somewhere in the signature being visited. A name declared at the
     // head but written nowhere is 'unused'; one written only where type construction drops it
@@ -166,12 +171,13 @@ class Builder {
     // Named dimensions of type extents (design principles 5.4): a name denotes an extent, not a
     // type. A name is bound the first time it is written in the parameter types of the function
     // declaration being visited; later occurrences in the same signature use it, and the return
-    // type may use the names the parameters bound. `dimNames_` holds the names the signature
-    // binds (empty outside a signature); `boundDims_` holds the names already visited, so a
-    // second plain name binds as a reference, not a new dimension. `dimUses_` counts the
-    // occurrences in the parameter types so a name used only once can be suggested as `?`.
-    // `dimBindAllowed_` is true only while the parameter types are visited, so a name in a
-    // return type, in a body, or inside a nested function type is reported as unbound.
+    // type and the body may use the names the parameters bound. `dimNames_` holds the names the
+    // signature binds (empty outside a signature, and in the body of a nested declaration);
+    // `boundDims_` holds the names already visited, so a second plain name binds as a reference,
+    // not a new dimension. `dimUses_` counts the occurrences in the parameter types so a name
+    // used only once can be suggested as `?`. `dimBindAllowed_` is true only while the parameter
+    // types are visited, so a name in a return type or in a body that no parameter bound, or one
+    // inside a nested function type, is reported as unbound.
     std::shared_ptr<std::set<std::string>> dimNames_;
     std::shared_ptr<std::set<std::string>> boundDims_;
     std::shared_ptr<std::set<std::string>> dimPacks_;

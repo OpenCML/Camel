@@ -8,15 +8,19 @@ number is accepted.
 
 Modes
 
-  count    The guard.  One profiled run of the step, three rounds, and the operator call counts of
-           a round must equal CALLS_PER_STEP below.  A change that doubles a product, adds a pass
-           over the parameters or reorders the graph so backward stops running fails here, on a
-           count rather than on a duration: no timing is asserted.
+  count    The guard.  Two profiled runs of the step, three rounds and four, whose difference is
+           one round: the work a run does once (the weights' initialisation, the data, the
+           optimizer's state) is subtracted instead of being divided by the round count, and the
+           operator call counts of that round must equal CALLS_PER_STEP below.  A change that
+           doubles a product, adds a pass over the parameters or reorders the graph so backward
+           stops running fails here, on a count rather than on a duration: no timing is asserted.
 
   elementwise
            The guard for the element-wise kernels: every element-wise operator of the step
            allocates exactly one allocator block per call, the output.  A kernel that materializes
-           an intermediate allocates more; a count of blocks, not a duration.
+           an intermediate allocates more; a count of blocks, not a duration.  The rows are the
+           same difference of two runs, so start-up work is not averaged into the step's per-call
+           bytes.
 
   budget   The perf case.  Measures the step's CPU time (two run lengths, so the start-up
            cancels), profiles the step and its two phases (forward; forward + backward; full), and
@@ -346,38 +350,72 @@ def row_alloc_per_step(doc: dict) -> dict[str, float]:
 # The count guard
 
 
+def profiled_step(program: Path, steps: int, phase: str = "full") -> dict:
+    """One profiled run of the step at this many rounds."""
+    program.write_text(generate(CELL, steps, phase=phase), encoding="utf-8")
+    return profile(program)
+
+
+def one_round_rows(shorter: dict, longer: dict) -> dict[str, dict]:
+    """The operator rows of one round: the longer run's rows less the shorter run's.
+
+    The two runs differ only in the loop's round count, so every call a run makes once -- the
+    weights' initialisation, the data, the optimizer's state -- cancels, and what is left is
+    exactly one round of the step. Dividing a run's totals by the round count instead charges
+    that start-up work to every round: the weights are built by `normal * std` and
+    `normal * 0.0 + 1.0` since the random module's draw took the scale out of the call, which is
+    22 multiplies and 5 adds once per program and none of them the step's (the old `randn(shape,
+    mean, std)` did that arithmetic inside the one call it made). The guard is on the step, so
+    the start-up work is subtracted rather than pinned.
+    """
+    before = {row["uri"]: row for row in shorter["operator_rows"]}
+    rows = {}
+    for row in longer["operator_rows"]:
+        once = before.get(row["uri"], {})
+        rows[row["uri"]] = {
+            "uri": row["uri"],
+            "calls": row["calls"] - once.get("calls", 0),
+            "ns": row["ns"] - once.get("ns", 0),
+            "alloc_calls": row.get("alloc_calls", 0) - once.get("alloc_calls", 0),
+            "alloc_blocks": row.get("alloc_blocks", 0) - once.get("alloc_blocks", 0),
+            "alloc_bytes": row.get("alloc_bytes", 0) - once.get("alloc_bytes", 0),
+        }
+    return {uri: row for uri, row in rows.items() if row["calls"]}
+
+
 def counts_mode() -> int:
     failures = []
     with tempfile.TemporaryDirectory() as t:
         program = Path(t) / "step.cml"
-        source = generate(CELL, 3)
-        program.write_text(source, encoding="utf-8")
-        doc = profile(program)
-        config = config_line(doc["_stdout"])
+        short = profiled_step(program, 3)
+        long = profiled_step(program, 4)
+        config = config_line(long["_stdout"])
         expected = {"batch": 16, "sequence": 32, "d_model": 256, "heads": 16, "d_ff": 512,
                     "vocab": 32, "blocks": 2, "params": 1059584}
         if config != expected:
             failures.append(f"the program ran {config}, not the d=256 cell")
-        rounds = doc["step"]["rounds"]
-        rows = {row["uri"]: row for row in doc["operator_rows"]}
+        rounds = long["step"]["rounds"] - short["step"]["rounds"]
+        if rounds != 1:
+            failures.append(f"the two runs differ by {rounds} rounds, not the one the difference "
+                            "is read as")
+        rows = one_round_rows(short, long)
         for uri, calls in sorted(CALLS_PER_STEP.items()):
             row = rows.get(uri)
             if row is None:
-                failures.append(f"{uri}: no calls at all")
+                failures.append(f"{uri}: no calls in a round")
                 continue
             actual = row["calls"] / rounds
             if abs(actual - calls) > 1e-9:
                 failures.append(f"{uri}: {actual:g} calls per step, expected {calls}")
         # The backward half is separable, and that is what makes the budget's forward/backward
         # split a measurement rather than an assignment.
-        program.write_text(generate(CELL, 3, phase="forward"), encoding="utf-8")
-        forward_doc = profile(program)
-        forward_rows = {row["uri"]: row for row in forward_doc["operator_rows"]}
+        forward_short = profiled_step(program, 3, phase="forward")
+        forward_long = profiled_step(program, 4, phase="forward")
+        forward_rows = one_round_rows(forward_short, forward_long)
         for uri in ("tensor:matmul_grad_lhs", "tensor:matmul_grad_rhs", "nn:adam"):
             if forward_rows.get(uri, {}).get("calls"):
                 failures.append(f"the forward-only build still calls {uri}")
-        matmuls = forward_rows.get("tensor:matmul", {}).get("calls", 0) / \
-            forward_doc["step"]["rounds"]
+        matmuls = forward_rows.get("tensor:matmul", {}).get("calls", 0) / rounds
         if abs(matmuls - 17) > 1e-9:
             failures.append(f"the forward-only build issues {matmuls:g} matmuls per step, "
                             "expected 17")
@@ -397,7 +435,7 @@ def counts_mode() -> int:
                                 f"CALLS_PER_STEP pins {pinned}")
         print(f"count: element-wise shape tables cover "
               f"{sum(elementwise_call_totals().values())} calls per step")
-        print(f"count: {len(rows)} operator rows, {doc['step']['operators_per_round']:.3f} "
+        print(f"count: {len(rows)} operator rows, {long['step']['operators_per_round']:.3f} "
               f"operator calls per round, {sum(CALLS_PER_STEP.values())} pinned by this case")
         for uri in sorted(set(rows) - set(CALLS_PER_STEP)):
             print(f"count: unpinned {uri} {rows[uri]['calls']} calls "
@@ -427,15 +465,20 @@ def elementwise_mode() -> int:
     The second half of the same property is that the block is the output and not something else of
     the same count: the payload the allocator recorded has to be 4 bytes times the elements the
     shape table claims for that operator.  That is what holds the table to the program -- the call
-    counts `count` pins say how many calls there are, this says how big each one is.
+    counts `count` pins say how many calls there are, this says how big each one is.  The rows are
+    the difference of two runs (three rounds and four), so the weights' start-up arithmetic is not
+    averaged into the step's per-call bytes.
     """
     failures = []
     with tempfile.TemporaryDirectory() as t:
         program = Path(t) / "step.cml"
-        program.write_text(generate(CELL, 3), encoding="utf-8")
-        doc = profile(program)
-        rounds = doc["step"]["rounds"]
-        rows = {row["uri"]: row for row in doc["operator_rows"]}
+        short = profiled_step(program, 3)
+        long = profiled_step(program, 4)
+        rounds = long["step"]["rounds"] - short["step"]["rounds"]
+        if rounds != 1:
+            failures.append(f"the two runs differ by {rounds} rounds, not the one the difference "
+                            "is read as")
+        rows = one_round_rows(short, long)
         for uri in sorted(CALLS_PER_STEP):
             if uri not in ELEMENTWISE:
                 continue

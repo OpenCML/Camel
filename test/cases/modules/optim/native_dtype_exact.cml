@@ -24,7 +24,7 @@
  * tangent has the element type of the parameter it belongs to.
  */
 
-import { numel, new, sum, to_bytes } from tensor
+import { numel, sum, to_bytes } from tensor
 import { to_array } from bytes
 import { adam as native_adam, adam_state, sgd as native_sgd } from nn
 import { adam, constant, init, update } from optim
@@ -47,8 +47,8 @@ func total(): float {
 
 func main(): int sync {
     let model: Leaves = {
-        wide: new([16777217.0, 1.0] as f64[]),
-        narrow: new([f32(16777217.0), f32(1.0)])
+        wide: [16777217.0, 1.0] as f64[],
+        narrow: [f32(16777217.0), f32(1.0)]
     }
     let total_with_grad = with_grad(total)
     let (value, gradient) = total_with_grad<model>()

@@ -1,0 +1,31 @@
+/// The output shape of a convolution, written in the signature: the batch, the output channels and
+/// the two spatial lengths `(h + 2 * p - k) / s + 1` and `(w + 2 * p - k) / s + 1`, where `h`, `w`,
+/// `k`, `c`, `b` and `o` are dimensions of the arguments and the stride `s` and the padding `p` are
+/// `constas` parameters of the call. Where the call is written the result has its static shape, so a position
+/// that states it is checked (design principles 5.4).
+import { shape } from array
+import { zeros } from tensor
+
+with <constas s: int = 1, constas p: int = 0>
+func conv2d_shape(input: f32[b, c, h, w], kernel: f32[o, c, k, k]):
+    f32[b, o, (h + 2 * p - k) / s + 1, (w + 2 * p - k) / s + 1] {
+    let sh = shape(input)
+    let ks = shape(kernel)
+    let oh = (sh[2] + 2 * p - ks[2]) / s + 1
+    let ow = (sh[3] + 2 * p - ks[3]) / s + 1
+    return zeros([sh[0], ks[0], oh, ow])
+}
+
+func run(input: f32[2, 3, 8, 8], kernel: f32[4, 3, 3, 3]): int sync {
+    let y: f32[2, 4, 4, 4] = conv2d_shape<2, 1>(input, kernel)
+    let same: f32[2, 4, 8, 8] = conv2d_shape<1, 1>(input, kernel)
+    let unpadded: f32[2, 4, 6, 6] = conv2d_shape(input, kernel)
+    println(shape(y), shape(same), shape(unpadded))
+    return 0
+}
+
+func main(): int sync {
+    let input = zeros::<f32>([2, 3, 8, 8])
+    let kernel = zeros::<f32>([4, 3, 3, 3])
+    return run(input as f32[2, 3, 8, 8], kernel as f32[4, 3, 3, 3])
+}

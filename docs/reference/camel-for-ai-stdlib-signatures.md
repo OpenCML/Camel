@@ -101,9 +101,15 @@ string: (x: T) => string
 parse_int: (text: string) => int!
 parse_float: (text: string) => float!
 error: (kind: string, message: string) => Error
+print: <fmt: string> (x: T, ..rest) => T
 print: (x: T, ..rest) => T
+print: () => void
+println: <fmt: string> (x: T, ..rest) => T
 println: (x: T, ..rest) => T
+println: () => void
+eprintln: <fmt: string> (x: T, ..rest) => T
 eprintln: (x: T, ..rest) => T
+eprintln: () => void
 format: <..args> (fmt: string) => string
 join: <sep: string> (xs: string[]) => string
 len: (x: string) => int
@@ -117,7 +123,7 @@ slice: <axis: int, start: int, end: int, step: int = 1> (x: Bytes) => Bytes
 concat: (xs: T[], ys: T[]) => T[]
 contains: <value: T> (xs: T[]) => bool
 contains: <sub: string> (s: string) => bool
-zip: (xs: T[], ys: U[]) => (T, U)[]
+zip: (..xs: ..A) => (..ElementOf<A>)[] when ..is_array::<A>()
 append: <value: T> (xs: T[]) => T[]
 map: <f: (item: T) => U> (xs: T[]) => U[]
 filter: <f: (item: T) => bool> (xs: T[]) => T[]
@@ -193,27 +199,16 @@ tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 tree_unzip: (r: R, s: S) => ?
 ```
 
-**`tensor`** — import { ... } from tensor — 67 name(s)
+**`tensor`** — import { ... } from tensor — 55 name(s)
 
 ```text
-new: (values: float[..] | number[]) => float[..]
 zeros: (shape: int[]) => T[..] when is_numeric::<T>()
 ones: (shape: int[]) => T[..] when is_numeric::<T>()
 full: (shape: int[], value: number) => float[..]
 eye: (n: int) => T[..] when is_numeric::<T>()
-range: (start: int, stop?: int, step?: int) => int64[..]
-random: (shape: int[], low: number, high: number) => f32[..]
-randn: (shape: int[], mean?: number, std?: number) => f32[..]
-add: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-subtract: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-multiply: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-divide: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-pow: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
 maximum: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
 minimum: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-mod: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
 where: (cond: bool[..], lhs: float[..] | number, rhs: float[..] | number) => float[..]
-neg: (t: float[..]) => float[..]
 abs: (t: float[..]) => float[..]
 exp: (t: float[..]) => float[..]
 log: (t: float[..]) => float[..]
@@ -224,8 +219,8 @@ tanh: (t: float[..]) => float[..]
 relu: (t: float[..]) => float[..]
 gelu: (t: float[..]) => float[..]
 erf: (t: float[..]) => float[..]
+erfc: (t: float[..]) => float[..]
 reshape: (t: float[..] | number[], shape: int[]) => float[..]
-flatten: (t: float[..], axis?: int) => float[..]
 unsqueeze: (t: float[..], axis: int) => float[..]
 transpose: (t: float[..]) => float[..]
 permute: (t: float[..], perm: int[]) => float[..]
@@ -234,8 +229,8 @@ take: (t: float[..], indices: int64[..] | number[]) => float[..]
 one_hot: (labels: int64[..] | number[], classes: int) => int64[..]
 shape: (t: T[..]) => int[] when is_numeric::<T>()
 numel: (t: T[..]) => int when is_numeric::<T>()
-dim: (t: T[..], axis: int) => int when is_numeric::<T>()
-dim: (t: T[..], axis: i32) => int when is_numeric::<T>()
+dim: <axis: int> (t: T[..]) => int when is_numeric::<T>()
+dim: <axis: i32> (t: T[..]) => int when is_numeric::<T>()
 sum: (t: T[..]) => T
 sum: (t: float[..], axis: int, keepdims?: bool) => float[..]
 mean: (t: T[..]) => T
@@ -264,8 +259,6 @@ gemm_backend: () => string
 gemm_threads: () => int
 gemm_library_threads: () => int
 gemm_library: () => string
-seed: (seed: int) => void
-seed: (seed: i32) => void
 ```
 
 **`types`** — import { ... } from types — 16 name(s)
@@ -354,7 +347,7 @@ collect: (s: T..) => T[]
 tee: <n: int = 8> (s: T..) => (T.., T..)
 ```
 
-**`math`** — import { ... } from math — 48 name(s)
+**`math`** — import { ... } from math — 50 name(s)
 
 ```text
 pi: float
@@ -381,6 +374,8 @@ atan2: (y: T, x: T) => T when is_float::<T>()
 sinh: (x: T) => T when is_float::<T>()
 cosh: (x: T) => T when is_float::<T>()
 tanh: (x: T) => T when is_float::<T>()
+erf: (x: T) => T when is_float::<T>()
+erfc: (x: T) => T when is_float::<T>()
 floor: (x: T) => T when is_float::<T>()
 ceil: (x: T) => T when is_float::<T>()
 round: (x: T) => T when is_float::<T>()
@@ -586,7 +581,7 @@ arity_probe: <tag: int, extra: int[] = []> (f: F, example: E) => int when is_fun
 zen: () => string
 ```
 
-**`graph`** — import { ... } from graph — 38 name(s)
+**`graph`** — import { ... } from graph — 42 name(s)
 
 ```text
 graph_of: (f: F) => Graph when is_function::<F>()
@@ -610,6 +605,10 @@ type_of: (n: Node) => TypeRef?
 type_name: (t: TypeRef) => string
 callee: (n: Node) => Graph?
 tags: (n: Node) => string
+declaration_tags: (g: Graph) => Tag[]
+tag_name: (t: Tag) => string
+tag_graphs: (t: Tag) => Graph[]
+rule_of: (g: Graph, name: string) => Graph?
 origin: (n: Node) => int
 constant: (n: Node) => T? when is_ordered::<T>()
 region_of: (n: Node) => Region
@@ -733,12 +732,22 @@ update: (opt: Sgd, params: P, grads: G, state: SgdState) => (P, SgdState)
 update: (opt: Adam, params: P, grads: G, state: AdamState<P>) => (P, AdamState<P>)
 ```
 
-**`autodiff`** — import { ... } from autodiff — 3 name(s)
+**`autodiff`** — import { ... } from autodiff — 13 name(s)
 
 ```text
 grad: (f: F) => Gradient<F> when is_function::<F>()
 with_grad: (f: F) => ValueAndGradient<F> when is_function::<F>()
 stop_gradient: (x: T) => T pure
+add_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+sub_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+mul_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+div_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+neg_tangent: (x: T, dx: T) => T when is_float::<T>()
+add_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+sub_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+mul_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+div_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+neg_cotangent: (x: T, ct: T) => T when is_float::<T>()
 ```
 
 **`sim`** — import { ... } from sim — 2 name(s)

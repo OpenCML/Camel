@@ -1,0 +1,44 @@
+id = "opt.sync_chain"
+order = 331
+tier = "fast"
+tags = ["feat", "opt", "control"]
+
+# A block's statements are one chain (docs/design/effects/edges.cn.md 5.3), and the splice that
+# writes the code of an inlined body into the caller's chain (`resolvePlaceForks`,
+# src/runtime/draft_inline.cpp) resolves a statement's place again once that code is in. It moves a
+# statement that follows one a second statement of the block also follows to the end of the chain
+# growing from it, and refuses the move when that end waits on the statement being moved: the move
+# would put the graph on a cycle of inputs. `static_tuple_indices.cml` is a program the refusal
+# happens on -- the build-time tuple expansion splices a body whose chain end waits on the statement
+# written after it. What is locked here is that refusing is the right answer there: the statements
+# keep the order they were written in, the graph the pass freezes is still one chain, and the values
+# are the ones the program computed without the pass.
+
+[defaults]
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/static_tuple_indices.cml"
+expect_exit = 0
+expect_stdout_exact = "6\n0\n17\n0 1\n9 10\n2\n"
+backends = ["nvm", "fvm", "jit"]
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "static_tuple_indices.reference"
+desc = "The values with nothing but the executor: what the program computes, which the refusal is measured against."
+args = ["${case}", "${backend}"]
+
+[[tests]]
+name = "static_tuple_indices.opt"
+desc = "`std::opt` inlines and splices the expansion, and the splice refuses to move a statement whose chain end waits on it; the statements keep the order they were written in and the values do not change."
+args = ["${case}", "std::opt", "${backend}"]
+
+[[tests]]
+name = "static_tuple_indices.opt_twice"
+desc = "The same graph through the pass twice: the second round finds no fork to resolve, because the first left none."
+args = ["${case}", "std::opt", "std::opt", "${backend}"]
+
+[[tests]]
+name = "static_tuple_indices.opt_inline"
+desc = "`std::opt::inline` alone splices the same bodies and reaches the same refusal."
+args = ["${case}", "std::opt::inline", "${backend}"]

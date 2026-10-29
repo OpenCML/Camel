@@ -128,7 +128,6 @@ class DraftGraphBuilder {
     /// Makes the OPER node `node` call `op` instead, an overload with the same parameters and
     /// result type (the node's inputs, outputs and slot are kept).
     void retargetOperNode(runtime::DraftNodeRef node, const oper_idx_ptr_t &op);
-    runtime::DraftNodeRef addSyncNode();
     runtime::DraftNodeRef addGateNode(camel::core::type::Type *type);
     runtime::DraftNodeRef addDrefNode(DrefTarget target);
     void link(

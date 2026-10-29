@@ -206,18 +206,81 @@ bool isCellType(Type *type) {
 
 Type *typeOf(const GraphDraft &draft, gc_node_ref_t node) {
     const auto *header = draft.header(node);
-    ASSERT(header != nullptr, "autodiff: node lookup failed.");
+    if (header == nullptr) {
+        fail(
+            std::format(
+                "internal error: the transformation reads a value the graph no longer has (node "
+                "{}); report this program with the 'grad' call it contains.",
+                static_cast<size_t>(node)));
+    }
     return header->dataType;
 }
 
 GCNodeKind kindOf(const GraphDraft &draft, gc_node_ref_t node) {
     const auto *header = draft.header(node);
-    ASSERT(header != nullptr, "autodiff: node lookup failed.");
+    if (header == nullptr) {
+        fail(
+            std::format(
+                "internal error: the transformation reads a value the graph no longer has (node "
+                "{}); report this program with the 'grad' call it contains.",
+                static_cast<size_t>(node)));
+    }
     return header->kind;
 }
 
 std::vector<gc_node_ref_t> copyOf(std::span<const gc_node_ref_t> refs) {
     return {refs.begin(), refs.end()};
+}
+
+/// The types of the versions a call hands on after the callee's value: one for each captured
+/// variable whose bit the call's write mask has, in the order the mask names them
+/// (`callValueTypeOf`). A call that writes none has none, and a call that hands on the value
+/// alone has no tuple to read them from.
+std::vector<Type *> callVersionsOf(Type *callValueType, uint32_t writtenCaptures) {
+    std::vector<Type *> versions;
+    if (writtenCaptures == 0 || callValueType == nullptr ||
+        callValueType->code() != TypeCode::Tuple) {
+        return versions;
+    }
+    const auto *tuple = static_cast<const TupleType *>(callValueType);
+    for (size_t i = 1; i < tuple->size(); ++i) {
+        versions.push_back(tuple->typeAt(i));
+    }
+    return versions;
+}
+
+/// Whether `node` reads a version a call handed on: an access node that takes a component past
+/// the callee's value (callValueTypeOf).
+bool readsCallVersion(const GraphDraft &draft, gc_node_ref_t node) {
+    if (kindOf(draft, node) != GCNodeKind::Accs) {
+        return false;
+    }
+    const auto payload = draft.payloadOf(node);
+    if (payload.size() < sizeof(rt::GCAccsBody)) {
+        return false;
+    }
+    const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
+    return accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value >= 1;
+}
+
+/// The projection of `node`'s value: the access node that takes component `index` of it, or
+/// `kInvalidNodeRef` when nothing projects that component. A call has at most one of them per
+/// component (the builder caches the access node it makes for a call's value).
+gc_node_ref_t componentProjectionOf(const GraphDraft &draft, gc_node_ref_t node, uint32_t index) {
+    for (gc_node_ref_t user : draft.normUsersOf(node)) {
+        if (kindOf(draft, user) != GCNodeKind::Accs) {
+            continue;
+        }
+        const auto payload = draft.payloadOf(user);
+        if (payload.size() < sizeof(rt::GCAccsBody)) {
+            continue;
+        }
+        const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
+        if (accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value == index) {
+            return user;
+        }
+    }
+    return kInvalidNodeRef;
 }
 
 std::optional<slot_t> staticValue(const GraphDraft &draft, gc_node_ref_t node) {
@@ -519,7 +582,7 @@ std::vector<gc_node_ref_t> externalInputsOf(const GraphDraft &draft, uint32_t re
     for (gc_node_ref_t id : nodes) {
         for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id)}) {
             for (gc_node_ref_t input : inputs) {
-                if (!seen.contains(input) && draft.header(input)->kind != GCNodeKind::Data &&
+                if (!seen.contains(input) && kindOf(draft, input) != GCNodeKind::Data &&
                     found.insert(input).second) {
                     externals.push_back(input);
                 }
@@ -878,8 +941,13 @@ class ForwardRewrite {
     /// The function `callee` computes when it applies one of autodiff's own macros (grad,
     /// with_grad, vjp) to static functions, else nullptr.
     ::Function *macroCallee(gc_node_ref_t callee);
-    /// Makes `node` return `plan`'s (value, pullback) and splits the pair for its users.
-    void split(gc_node_ref_t node, const PullbackPlan &plan, std::vector<gc_node_ref_t> inputs);
+    /// Makes `node` return `plan`'s (value, pullback) and splits the pair for its users. A call
+    /// that writes captured variables hands on their new versions after its value
+    /// (callValueTypeOf): `versions` of them, which follow the pair then and stay what the users
+    /// that read one of them name (design principles 3.5, 9.9).
+    void split(
+        gc_node_ref_t node, const PullbackPlan &plan, std::vector<gc_node_ref_t> inputs,
+        size_t versions = 0);
     /// Gives a LOOP node collection slots for what its body's pullback reads, and records it as a
     /// call site whose pullback is the synthesized reverse loop (design principles 3.10, 9.9).
     void rewriteLoop(gc_node_ref_t loop);
@@ -894,7 +962,17 @@ class ForwardRewrite {
     /// graph's own result is `value` where it was `node`. Shared with rewriteLoop, which makes
     /// the loop's value the state alone (the tapes are not part of what its users see).
     void redirectValue(gc_node_ref_t node, gc_node_ref_t value);
-    void retarget(gc_node_ref_t func, const PullbackPlan &plan);
+    /// `redirectValue` for a call whose value is the pair followed by the new versions of the
+    /// captured variables it wrote: the users that named the callee's value name `pair`, whose
+    /// first component is that value, and a user that read one of the versions keeps reading it
+    /// on the call, where component k is still version k.
+    void redirectCallValue(gc_node_ref_t call, gc_node_ref_t pair, gc_node_ref_t value);
+    /// The part of `redirectValue` that moves the graph's own anchors (its result, exit, return,
+    /// the regions that ended in the node) and the site records from `node` to `value`.
+    void redirectAnchors(gc_node_ref_t node, gc_node_ref_t value);
+    /// Points `func` at the forward graph of `plan` and returns the number of new versions of
+    /// captured variables the call hands on after its value (0 when it writes none of them).
+    size_t retarget(gc_node_ref_t func, const PullbackPlan &plan);
 
     Engine &engine_;
     GraphDraft &draft_;
@@ -1618,14 +1696,50 @@ void ForwardRewrite::run() {
     }
 }
 
-void ForwardRewrite::retarget(gc_node_ref_t func, const PullbackPlan &plan) {
+size_t ForwardRewrite::retarget(gc_node_ref_t func, const PullbackPlan &plan) {
+    // The call keeps handing on the new version of each captured variable it writes: the effect
+    // runs in the forward pass only, and what it writes is resource state (design principles
+    // 3.5, 9.9). Only the value those versions follow changes, into the (value, pullback) pair.
+    const std::vector<Type *> versions =
+        callVersionsOf(typeOf(draft_, func), draft_.funcWriteMaskOf(func));
+    Type *valueType = plan.forwardValueType;
+    if (!versions.empty()) {
+        std::vector<Type *> parts{valueType};
+        parts.insert(parts.end(), versions.begin(), versions.end());
+        valueType = TupleType::create(std::move(parts));
+    }
     draft_.setCalleeGraph(func, plan.forward);
-    draft_.setNodeDataType(func, plan.forwardValueType);
-    draft_.setNodeDataIndex(func, draft_.allocateRuntimeSlot(plan.forwardValueType));
+    draft_.setNodeDataType(func, valueType);
+    draft_.setNodeDataIndex(func, draft_.allocateRuntimeSlot(valueType));
+    return versions.size();
 }
 
 void ForwardRewrite::redirectValue(gc_node_ref_t node, gc_node_ref_t value) {
     draft_.replaceAllValueUses(node, value);
+    redirectAnchors(node, value);
+}
+
+void ForwardRewrite::redirectCallValue(
+    gc_node_ref_t call, gc_node_ref_t pair, gc_node_ref_t value) {
+    // A read of a version keeps naming the call: component k of the call's value is still
+    // version k, since only the callee's value before the versions became the pair. Every other
+    // use of the call's value named that value, and a call that hands versions on has a tuple
+    // value: its users project it, and the projection takes the pair now, whose component 0 is
+    // the value it named.
+    for (gc_node_ref_t user : copyOf(draft_.normUsersOf(call))) {
+        if (!readsCallVersion(draft_, user)) {
+            draft_.replaceInput(rt::DraftEdgeKind::Data, user, call, pair, rt::PortRole::Normal);
+        }
+    }
+    for (gc_node_ref_t user : copyOf(draft_.withUsersOf(call))) {
+        if (!readsCallVersion(draft_, user)) {
+            draft_.replaceInput(rt::DraftEdgeKind::Data, user, call, pair, rt::PortRole::Context);
+        }
+    }
+    redirectAnchors(call, value);
+}
+
+void ForwardRewrite::redirectAnchors(gc_node_ref_t node, gc_node_ref_t value) {
     // Call sites recorded earlier name their inputs by node. A site whose input is this call
     // (a call rewritten before the call that produces its argument: closure calls are, and a
     // direct call may be) must follow the value to the new node, or the gradient it sends
@@ -1662,14 +1776,35 @@ void ForwardRewrite::redirectValue(gc_node_ref_t node, gc_node_ref_t value) {
 }
 
 void ForwardRewrite::split(
-    gc_node_ref_t node, const PullbackPlan &plan, std::vector<gc_node_ref_t> inputs) {
+    gc_node_ref_t node, const PullbackPlan &plan, std::vector<gc_node_ref_t> inputs,
+    size_t versions) {
     if (part_ != 0) {
         draft_.setInsertRegion(part_);
     }
-    const gc_node_ref_t value = draft_.addAccsNode(plan.valueType, 0u);
-    redirectValue(node, value);
-    draft_.setNormInputs(value, std::span<const gc_node_ref_t>(&node, 1));
-    const gc_node_ref_t pullback = addAccs(draft_, plan.pullbackType, node, 1);
+    // The call's value is the (value, pullback) pair, then the new version of each captured
+    // variable it wrote. The pair is what the gradient reads; the users of the call keep naming
+    // the callee's value, which is the pair's first component, and the versions keep their
+    // places after it.
+    gc_node_ref_t pair = node;
+    gc_node_ref_t value;
+    if (versions == 0) {
+        value = draft_.addAccsNode(plan.valueType, 0u);
+        redirectValue(node, value);
+        draft_.setNormInputs(value, std::span<const gc_node_ref_t>(&node, 1));
+    } else {
+        // The tangent of the call's value accumulates on the node that projects it, and a fresh
+        // node holding the same value would take none of it: the projection the graph already
+        // has becomes the value node.
+        value = componentProjectionOf(draft_, node, 0);
+        if (value == kInvalidNodeRef) {
+            value = draft_.addAccsNode(plan.valueType, 0u);
+        }
+        pair = draft_.addAccsNode(plan.forwardValueType, 0u);
+        redirectCallValue(node, pair, value);
+        draft_.setNormInputs(pair, std::span<const gc_node_ref_t>(&node, 1));
+        draft_.setNormInputs(value, std::span<const gc_node_ref_t>(&pair, 1));
+    }
+    const gc_node_ref_t pullback = addAccs(draft_, plan.pullbackType, pair, 1);
     if (part_ != 0) {
         draft_.setInsertRegion(0);
     }
@@ -2538,22 +2673,14 @@ void ForwardRewrite::rewriteClosureCall(
     }
     draft_.setCtrlInputs(direct, ctrl);
     takeSyncPlace(draft_, call, direct);
-    draft_.replaceAllValueUses(call, direct);
-    for (gc_node_ref_t user : copyOf(draft_.ctrlUsersOf(call))) {
-        draft_.replaceInput(rt::DraftEdgeKind::Ctrl, user, call, direct);
-    }
-    if (draft_.outputNode() == call) {
-        draft_.setOutputNode(direct);
-    }
-    if (draft_.exitNode() == call) {
-        draft_.setExitNode(direct);
-    }
-    if (draft_.returnNode() == call) {
-        draft_.setReturnNode(direct, draft_.returnKind());
-    }
+    // Everything that named the call names the direct call now: its users, the site records that
+    // already read its value, the graph's own result, and the region whose result it is (a loop
+    // body or an arm whose value is the closure call). `split` then carries the same uses to the
+    // value half of the pair.
+    redirectValue(call, direct);
     draft_.eraseNode(call);
-    retarget(direct, plan);
-    split(direct, plan, std::move(inputs));
+    const size_t versions = retarget(direct, plan);
+    split(direct, plan, std::move(inputs), versions);
     if (part_ != 0) {
         draft_.setInsertRegion(savedInsert);
     }
@@ -2666,8 +2793,8 @@ void ForwardRewrite::rewriteCall(gc_node_ref_t call) {
                 portTypes.size()));
     }
     const PullbackPlan &plan = engine_.planFor(callee);
-    retarget(call, plan);
-    split(call, plan, std::move(inputs));
+    const size_t versions      = retarget(call, plan);
+    split(call, plan, std::move(inputs), versions);
 }
 
 void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
@@ -3795,7 +3922,6 @@ void Backward::visit(gc_node_ref_t node) {
     case GCNodeKind::Data:
     case GCNodeKind::Port:
     case GCNodeKind::Brch:
-    case GCNodeKind::Sync:
         return;
     case GCNodeKind::Func:
         // Calls the forward rewrite left alone take no differentiable input: constants. Unless
@@ -4149,7 +4275,7 @@ const PullbackPlan &Engine::planForClosure(GCGraph *graph) {
     }
     std::vector<Type *> portTypes = portTypesOf(graph);
     for (gc_node_ref_t capture : copyOf(lifted->closureNodes())) {
-        Type *captured = lifted->header(capture)->dataType;
+        Type *captured = typeOf(*lifted, capture);
         lifted->removeClosureNode(capture);
         lifted->appendNormPort(capture);
         normParams.emplace_back(captured, false);

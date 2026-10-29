@@ -166,7 +166,7 @@ const both = (name, cls, sensitive, ulp) => {
 // Bounded: the standard library target is 2 ulp for exp and log; the other transcendentals
 // declare the conservative 4 ulp (the source of each bound is in modules/math/semantics.cpp).
 for (const name of ['exp', 'log']) both(name, 'bounded', APPROX, 2)
-for (const name of ['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh',
+for (const name of ['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh', 'erf', 'erfc',
                     'log2', 'log10', 'log1p', 'expm1']) both(name, 'bounded', APPROX, 4)
 for (const name of ['atan2', 'pow', 'hypot']) both(name, 'bounded', APPROX, 4)
 // pow(1, NaN) is 1 and hypot(+inf, NaN) is +inf by the C standard: NaN is not propagated.

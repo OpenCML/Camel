@@ -64,6 +64,8 @@ CAMEL_MATH_FN(atan)
 CAMEL_MATH_FN(sinh)
 CAMEL_MATH_FN(cosh)
 CAMEL_MATH_FN(tanh)
+CAMEL_MATH_FN(erf)
+CAMEL_MATH_FN(erfc)
 CAMEL_MATH_FN(log)
 CAMEL_MATH_FN(log2)
 CAMEL_MATH_FN(log10)
@@ -255,6 +257,8 @@ std::unordered_map<std::string, operator_t> getMathNumericOpsMap() {
     both("sinh", __math_sinh__);
     both("cosh", __math_cosh__);
     both("tanh", __math_tanh__);
+    both("erf", __math_erf__);
+    both("erfc", __math_erfc__);
     both("log", __math_log__);
     both("log2", __math_log2__);
     both("log10", __math_log10__);

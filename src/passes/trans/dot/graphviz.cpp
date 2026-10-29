@@ -39,7 +39,6 @@ string recordShape(const camel::runtime::GCNode &record) {
     case camel::runtime::GCNodeKind::Join:
     case camel::runtime::GCNodeKind::Call:
     case camel::runtime::GCNodeKind::Oper:
-    case camel::runtime::GCNodeKind::Sync:
     case camel::runtime::GCNodeKind::Gate:
         return "diamond";
     case camel::runtime::GCNodeKind::Func:
@@ -52,7 +51,6 @@ string recordShape(const camel::runtime::GCNode &record) {
 
 string recordStyle(const camel::runtime::GCNode &record) {
     switch (record.kind) {
-    case camel::runtime::GCNodeKind::Sync:
     case camel::runtime::GCNodeKind::Gate:
         return "dashed";
     default:

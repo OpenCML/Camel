@@ -6,7 +6,8 @@ printed source must compile to a graph isomorphic to the original. This case pin
 
   * round trip through the canonical version 2 document (`test/tools/cml_roundtrip.py`) for the
     straight-line corpus (the module-value capture in `linear.cml`, a small call program, and
-    `hello`), for branches (`if`, `match`, nested branches, a `return` in an arm), for loops
+    `hello`), for branches (`if`, `match`, nested branches, a `return` in an arm, and an arm whose
+    value is the value its write wrote, `arm_write.cml`), for loops
     (`for`, `while`, `for ... while`, two states, a struct state, a body with effects), for the
     interval `a..b` in the sequence of a `for` and in a value position (`interval.cml`: the loop is
     fused by the compiler and its graph holds the two bounds, so the printed source has to spell
@@ -16,7 +17,8 @@ printed source must compile to a graph isomorphic to the original. This case pin
     for a `var` parameter, and for a body whose value is a write's value (`write_value.cml`: the
     tail `return v` and the implicit `v` are one graph, so each round trips);
   * execution: the printed program prints the same stdout and exits with the same status as the
-    original;
+    original, on all four back ends for `arm_write.cml` (a write in an arm's value position is what
+    makes the write run) and on `std::nvm` for the rest;
   * determinism: printing the same program twice gives byte-identical source;
   * source names survive: every named node in the source graph appears in the recompiled graph
     and in the printed text, captured names included; the only new names are the printer's
@@ -52,6 +54,7 @@ TMP = Path(tempfile.mkdtemp(prefix="cml-contract-"))
 CORPUS = [
     CML / "linear.cml",
     CML / "branch.cml",
+    CML / "arm_write.cml",
     CML / "loop.cml",
     CML / "interval.cml",
     CML / "closure.cml",
@@ -61,6 +64,12 @@ CORPUS = [
     CASES / "trans/jgir_duplicate.cml",
     CASES / "linear/nvm/hello.cml",
 ]
+# The back ends every program runs on when the plan runs them all. `std::nvm` is the one the corpus
+# runs on by default; a case whose graph is about a statement running at all (`arm_write.cml`: the
+# value an arm hands on is what keeps its write alive) runs on all four, because a back end that
+# read the value without the wait would drop the write.
+BACKENDS = ("std::nvm", "std::fvm", "std::fastvm::jit", "std::taskflow")
+FOUR_BACKENDS = {"arm_write"}
 # The printer's temporaries, and a parameter name it has to invent.
 GENERATED = re.compile(r"^(cml|p|w)\d+$")
 # The compiler names a lambda's graph after its own id; recompiling may allocate another id.
@@ -73,6 +82,7 @@ SOURCE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 # assert that the program was reached through the construct it exists to pin.
 MARKERS = {
     "branch": ["if ", "else ", "match ", "case "],
+    "arm_write": ["if ", "else "],
     "loop": ["loop ", "for ", "while ", "sync {"],
     "interval": ["..", "for ", "while ", "let "],
     "closure": ["=>", "sync", "offset", "base"],
@@ -80,6 +90,11 @@ MARKERS = {
     "var_param": ["var "],
     "write_value": ["var "],
 }
+# What the printed text must not spell, per corpus program: the defect each case pins. An arm whose
+# value is the value its write wrote ends with the write; a `return <temp>` there hands the value on
+# behind no wait at all, so the write is left behind a value that reaches nothing and does not run,
+# which is a different graph from the one the source built.
+NOT_MARKERS = {"arm_write": ["return cml"]}
 VERDICTS = 0
 
 
@@ -113,9 +128,9 @@ def compare(left, right):
     assert done.stdout.startswith("EQUAL:"), done.stdout
 
 
-def run_source(source):
-    """What the program does: its stdout and its exit status."""
-    done = invoke(EXE, source, "std::nvm")
+def run_source(source, backend="std::nvm"):
+    """What the program does: its stdout and its exit status, on one back end."""
+    done = invoke(EXE, source, backend)
     return done.stdout, done.returncode
 
 
@@ -187,9 +202,25 @@ def check_round_trip(source):
         original_run,
         printed_run,
     )
+    if source.stem in FOUR_BACKENDS:
+        # One program, one answer: every back end runs the printed program exactly as it runs the
+        # original, byte for byte, and the back ends agree with each other.
+        for backend in BACKENDS:
+            original_on = run_source(source, backend)
+            printed_on = run_source(printed_path, backend)
+            assert original_on == printed_on, (
+                source.name,
+                backend,
+                "the printed program does not run like the original",
+                original_on,
+                printed_on,
+            )
+            assert original_on == original_run, (source.name, backend, original_on, original_run)
 
     for marker in MARKERS.get(source.stem, []):
         assert marker in printed, (source.name, marker)
+    for marker in NOT_MARKERS.get(source.stem, []):
+        assert marker not in printed, (source.name, marker)
 
 
 def check_refusal(source, diagnostic, passes=("std::cml",), contains=()):

@@ -348,6 +348,14 @@ class GraphDraft {
     /// metadata: it says nothing about the graph's content, so it does not invalidate it.
     const std::string &implKernelUri() const { return implKernelUri_; }
     void setImplKernelUri(std::string uri) { implKernelUri_ = std::move(uri); }
+    /// The facts of the declaration this graph is (design principles 6.2), as the interned
+    /// attribute set the module keeps for it (`camel/core/node_attrs.h`, `attr::AttrSetId`; 0 for
+    /// a graph that is not a declaration). Cold metadata like `implKernelUri`: it says nothing
+    /// about the graph's content, so it does not invalidate it. It is what a pass reads a
+    /// declaration's facts through the function it was given (`#jvp(rule)` names a graph, a
+    /// numeric permission is a flag), without the module that declared the function.
+    uint32_t declarationFacts() const { return declarationFacts_; }
+    void setDeclarationFacts(uint32_t facts) { declarationFacts_ = facts; }
     camel::core::type::FunctionType *funcType() const { return funcType_; }
     /// The names the function captures, in capture order (GCGraph::captureNames).
     std::span<const camel::core::SymId> captureNames() const { return captureNames_; }
@@ -509,6 +517,13 @@ class GraphDraft {
         ++mutations_;
         closureType_ = closureType;
     }
+    /// Gives the static area this layout, slot for slot; the values in `staticSlots()` stay as they
+    /// are. A rewrite that retypes what a constant stands for changes the layout here and not the
+    /// value (camel/runtime/retype.h), which is why the two are set apart.
+    void setStaticSlotTypes(std::span<camel::core::type::Type *const> slotTypes) {
+        ++mutations_;
+        staticSlotTypes_.assign(slotTypes.begin(), slotTypes.end());
+    }
 
     gc_node_ref_t addNode(const DraftNodeInit &init);
     gc_node_ref_t
@@ -564,7 +579,6 @@ class GraphDraft {
     gc_node_ref_t addOperNode(
         camel::core::type::Type *type, operator_t op, std::string_view uri,
         gc_slot_idx_t dataIndex = 0);
-    gc_node_ref_t addSyncNode();
     gc_node_ref_t addGateNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t addDrefNode(camel::core::type::Type *type = nullptr, gc_slot_idx_t dataIndex = 0);
 
@@ -852,6 +866,7 @@ class GraphDraft {
     GraphId typeSpecializationRoot_            = kInvalidGraphId;
     uint8_t flags_                             = 0;
     std::string implKernelUri_;
+    uint32_t declarationFacts_ = 0; // see declarationFacts()
     camel::core::type::FunctionType *funcType_ = nullptr;
     std::vector<camel::core::SymId> captureNames_;
     // The frame layout, by slot. It becomes a tuple type only when the draft is encoded, inside

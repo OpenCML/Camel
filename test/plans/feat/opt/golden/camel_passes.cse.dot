@@ -56,7 +56,6 @@ digraph GraphIR {
             N07 -> N0E [label="2|0", type="NORM"];
             N0C -> N0E [label="0|1", type="NORM"];
             N0A -> N0E [label="ORDER", type="ORDER"];
-            N0D -> N0E [label="ORDER", type="ORDER"];
             N10 -> N0F [label="0|0", type="NORM"];
             N08 -> N0F [label="1|1", type="NORM"];
             N0E -> N0F [label="0|0", type="CTRL"];
@@ -107,14 +106,17 @@ digraph GraphIR {
         N1B -> N1C [label="0|0", type="CTRL"];
         N1B -> N1C [label="SYNC", type="SYNC"];
         N1C -> N1D [label="0|0", type="NORM"];
+        N1B -> N1D [label="ORDER", type="ORDER"];
         N1E -> N1F [label="0|0", type="NORM"];
         N1D -> N1F [label="0|0", type="CTRL"];
         N1D -> N1F [label="SYNC", type="SYNC"];
         N1F -> N20 [label="0|0", type="NORM"];
+        N1D -> N20 [label="ORDER", type="ORDER"];
         N21 -> N22 [label="0|0", type="NORM"];
         N20 -> N22 [label="0|0", type="CTRL"];
         N20 -> N22 [label="SYNC", type="SYNC"];
         N22 -> N23 [label="0|0", type="NORM"];
+        N20 -> N23 [label="ORDER", type="ORDER"];
         N24 -> N25 [label="0|0", type="NORM"];
         N23 -> N25 [label="0|0", type="CTRL"];
         N23 -> N25 [label="SYNC", type="SYNC"];

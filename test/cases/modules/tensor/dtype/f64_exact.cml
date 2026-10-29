@@ -2,20 +2,20 @@
 // values, the 8-byte elements and the round trip through `to_bytes`/`from_bytes` are the evidence
 // that no creation, arithmetic, reduction or conversion narrows the element type.
 
-import { new, multiply, sum, mean, to_bytes, from_bytes } from tensor
+import { sum, mean, to_bytes, from_bytes } from tensor
 import { to_array } from bytes
 
 func scaled(x: f64[..], by: f64): f64[..] {
-    return multiply(x, by)
+    return (x * by)
 }
 
 func main(): int sync {
     let numbers: f64[] = [16777217.0]
-    let t = new(numbers)
+    let t = numbers
     println(sum(t))
     println(sum(scaled(t, 2.0)))
     let spread: f64[] = [16777217.0, 1.0, 0.0, 2.0]
-    println(mean(new(spread)))
+    println(mean(spread))
     println(len(to_bytes(t)))
     println(to_array(to_bytes(t)))
     let back: f64[..] = from_bytes(to_bytes(t), [1])

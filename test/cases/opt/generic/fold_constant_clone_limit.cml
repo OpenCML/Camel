@@ -1,0 +1,18 @@
+/**
+ * The array an interval converts to is a constant `std::opt` folds, and the next commit clones a
+ * constant per graph it encodes. With the block space at 24 MB one copy of 2,000,000 ints fits
+ * (15 MB) and two do not, so the commit runs out of memory while it clones the second and the
+ * run reports it. The graphs that commit had bound and not built are given back as memory: the
+ * teardown must not destruct what no constructor ever wrote.
+ *
+ * The plan names `constant_budget=100000000` for `std::opt`: the case is about a folded constant
+ * big enough that one copy fits the block space and two do not, and the pass's default budget is
+ * below that size on purpose (a value that large does not repay the memory folding spends on it).
+ */
+
+func main(): int sync {
+    let n = 2000000
+    let a: int[] = 0..n
+    println(len(a))
+    return 0
+}

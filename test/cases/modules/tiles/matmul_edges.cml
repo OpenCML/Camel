@@ -3,8 +3,8 @@ import { run_preferred_resident, download } from tiles
 func product(a: f32[..], b: f32[..]): f32[..] { return a @ b }
 func value(i: int): f32 { return f32(float((i % 17) - 8) / 8.0) }
 func check(m: int, k: int, n: int): float {
-    let a = reshape<[m,k]>(0..(m * k)->map<value>)
-    let b = reshape<[k,n]>(0..(k * n)->map<value>)
+    let a = reshape<[m,k]>((0..(m * k))->map<value>)
+    let b = reshape<[k,n]>((0..(k * n))->map<value>)
     return float(sum(abs(download(run_preferred_resident<product>((a,b))) - product(a,b))))
 }
 func main(): int sync {

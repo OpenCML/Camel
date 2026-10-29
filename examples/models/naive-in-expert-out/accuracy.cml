@@ -7,7 +7,7 @@
 // The Python script accuracy.py measures bf16 and fp64; this program measures the f32 tensor
 // type the language has today, so the two agree on where the naive form breaks.
 
-import { exp, log, log_softmax, new, one_hot, reshape, softmax, sum, transpose, zeros } from tensor
+import { exp, log, log_softmax, one_hot, reshape, softmax, sum, transpose, zeros } from tensor
 import { is_inf, is_nan } from math
 import { softmax_cross_entropy } from nn
 
@@ -22,7 +22,7 @@ func naive_log_softmax(x: f32[..]): f32[..] {
 
 func naive_cross_entropy(logits: f32[..], labels: int): float {
     let p = naive_softmax(logits)
-    let picked = float(sum(log(p) * f32(one_hot(new([labels]), 8))))
+    let picked = float(sum(log(p) * f32(one_hot([labels], 8))))
     return -picked
 }
 
@@ -35,7 +35,7 @@ func main(): int sync {
     // is the first one whose exp becomes zero.  The scan prints every probed value.
     let softmax_values = [85.0, 88.0, 89.0, 90.0, 100.0, 1000.0]
     let _ = loop n = 0 for m in softmax_values do sync {
-        let x = new([m, 0.0])
+        let x = [m, 0.0]
         let bad = !finite(sum(naive_softmax(x)))
         let ok = finite(sum(softmax(x)))
         'accuracy camel softmax m={} naive_bad={} stable_finite={}'->format<m, bad, ok>->println
@@ -44,7 +44,7 @@ func main(): int sync {
 
     let underflow_values = [90.0, 93.0, 100.0, 103.0, 104.0, 105.0, 1000.0]
     let _ = loop n = 0 for m in underflow_values do sync {
-        let x = new([0.0 - m, -1.0 - m])
+        let x = [0.0 - m, -1.0 - m]
         let bad = !finite(sum(naive_softmax(x)))
         let ok = finite(sum(softmax(x)))
         'accuracy camel softmax_underflow m={} naive_bad={} stable_finite={}'->format<m, bad, ok>->println
@@ -52,7 +52,7 @@ func main(): int sync {
     }
 
     let _ = loop n = 0 for m in underflow_values do sync {
-        let x = new([0.0 - m, -1.0 - m])
+        let x = [0.0 - m, -1.0 - m]
         let bad = !finite(sum(naive_log_softmax(x)))
         let ok = finite(sum(log_softmax(x)))
         'accuracy camel log_softmax m={} naive_bad={} stable_finite={}'->format<m, bad, ok>->println
@@ -63,15 +63,15 @@ func main(): int sync {
     let _ = loop n = 0 for k in offsets do sync {
         let logits = zeros::<f32>([1, 8]) + k
         let bad = !finite(naive_cross_entropy(logits, 0))
-        let ok = finite(softmax_cross_entropy(logits, new([0])))
+        let ok = finite(softmax_cross_entropy(logits, [0] as int[]))
         'accuracy camel cross_entropy_offset k={} naive_bad={} expert_finite={}'->format<k, bad, ok>->println
         return n + 1
     }
 
     let _ = loop n = 0 for m in underflow_values do sync {
-        let logits = zeros::<f32>([1, 8]) - f32(one_hot(new([0]), 8)) * m
+        let logits = zeros::<f32>([1, 8]) - f32(one_hot([0] as int[], 8)) * m
         let bad = !finite(naive_cross_entropy(logits, 0))
-        let ok = finite(softmax_cross_entropy(logits, new([0])))
+        let ok = finite(softmax_cross_entropy(logits, [0] as int[]))
         'accuracy camel cross_entropy_true_class m={} naive_bad={} expert_finite={}'->format<m, bad, ok>->println
         return n + 1
     }

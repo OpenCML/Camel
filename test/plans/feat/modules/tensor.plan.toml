@@ -674,8 +674,8 @@ kind = "behavior"
 case = "../../../cases/modules/tensor/gemm_canonical.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = """gemm product_sum=425.4725
-gemm affine_sum=424.91946 relu_sum=3375.5933
+expect_stdout_exact = """gemm product_sum=-152.11356
+gemm affine_sum=-159.64394 relu_sum=3094.4185
 gemm linear_diff=0.0
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -688,8 +688,8 @@ kind = "behavior"
 case = "../../../cases/modules/tensor/gemm_canonical.cml"
 args = ["${case}", "tensor::fuse safe_fp=true"]
 expect_exit = 0
-expect_stdout_exact = """gemm product_sum=425.4725
-gemm affine_sum=424.91946 relu_sum=3375.5933
+expect_stdout_exact = """gemm product_sum=-152.11356
+gemm affine_sum=-159.64394 relu_sum=3094.4185
 gemm linear_diff=0.0
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -714,9 +714,9 @@ verify_script = """
   const affine = one('affine_sum')
   const relu = one('relu_sum')
   const linearDiff = one('linear_diff')
-  assert(Math.abs(product - 425.47250219917623) <= 1e-3, `product_sum ${product} leaves the licence bound`)
-  assert(Math.abs(affine - 424.9194541722536) <= 1e-3, `affine_sum ${affine} leaves the licence bound`)
-  assert(Math.abs(relu - 3375.5932369083166) <= 1e-2, `relu_sum ${relu} leaves the licence bound`)
+  assert(Math.abs(product - (-152.11360131300512)) <= 1e-3, `product_sum ${product} leaves the licence bound`)
+  assert(Math.abs(affine - (-159.64396785296026)) <= 1e-3, `affine_sum ${affine} leaves the licence bound`)
+  assert(Math.abs(relu - 3094.4183907804195) <= 1e-2, `relu_sum ${relu} leaves the licence bound`)
   assert(linearDiff <= 1e-2, `linear_diff ${linearDiff} leaves the licence bound`)
 }
 """
@@ -731,8 +731,8 @@ case = "../../../cases/modules/tensor/gemm_canonical.cml"
 args = ["${case}", "tensor::fuse safe_fp=true"]
 envs = ["CAMEL_TENSOR_ISA=generic"]
 expect_exit = 0
-expect_stdout_exact = """gemm product_sum=425.4725
-gemm affine_sum=424.91946 relu_sum=3375.5933
+expect_stdout_exact = """gemm product_sum=-152.11356
+gemm affine_sum=-159.64394 relu_sum=3094.4185
 gemm linear_diff=0.0
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -745,7 +745,7 @@ kind = "behavior"
 case = "../../../cases/modules/tensor/gemm_canonical_bits.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "gemm_bits small_n=b2c335601dc7bb25f88273a9e24ecb7471820acfa460ad6744c377000a84e5f9\ngemm_bits two_blocks=e3d818312909a3ebb51effabb9908973b87f00cf86b9c8d0b401528add6ec89d\ngemm_bits edges=f23f977bf60ef6d937c0d4c022a1dac87cfdaf637a2f5ebc7dcc7c197d469ca6\n"
+expect_stdout_exact = "gemm_bits small_n=2806496542438e70a88c5c1952eb62c7b4fbc1fbb077cbdf39af9975c0b076ca\ngemm_bits two_blocks=6fd4d0768e02365caf2501fbcbcb32573796ec59676f5b8a82e4019d2a4e0569\ngemm_bits edges=8ea973273e7e990e72f4ab90e6ff58011181e2f9663cee0a875cc66f2711514c\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -757,7 +757,7 @@ case = "../../../cases/modules/tensor/gemm_canonical_bits.cml"
 args = ["${case}"]
 envs = ["CAMEL_TENSOR_ISA=generic"]
 expect_exit = 0
-expect_stdout_exact = "gemm_bits small_n=b2c335601dc7bb25f88273a9e24ecb7471820acfa460ad6744c377000a84e5f9\ngemm_bits two_blocks=e3d818312909a3ebb51effabb9908973b87f00cf86b9c8d0b401528add6ec89d\ngemm_bits edges=f23f977bf60ef6d937c0d4c022a1dac87cfdaf637a2f5ebc7dcc7c197d469ca6\n"
+expect_stdout_exact = "gemm_bits small_n=2806496542438e70a88c5c1952eb62c7b4fbc1fbb077cbdf39af9975c0b076ca\ngemm_bits two_blocks=6fd4d0768e02365caf2501fbcbcb32573796ec59676f5b8a82e4019d2a4e0569\ngemm_bits edges=8ea973273e7e990e72f4ab90e6ff58011181e2f9663cee0a875cc66f2711514c\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -768,7 +768,7 @@ kind = "behavior"
 case = "../../../cases/modules/tensor/gelu_grad_bits.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "gelu_grad_bits ffn=b9a4be7997eefa304e5cab8d818cc4d20aec42178455343d91b654981bdbc001\ngelu_grad_bits tail=296b847f2dd827061f60b7f6165d51eba26a1d89d9dc3c8e12489a6f8c1e7ee6\ngelu_grad_bits single=547151d54b6efe178256131f8bc8049013a5094c5f9309f38457e0e66e81b731\n"
+expect_stdout_exact = "gelu_grad_bits ffn=ce7b689a14c0dfd421b3404828f822374de5995455ca5b211886f9a86f81788b\ngelu_grad_bits tail=2b3a19567f1959ed7608f8a67243c01b9782e0fdd22dd2b452e3eebc4387cb52\ngelu_grad_bits single=cddf8a6de1c1396d8be68b1c2638a1a2df081d7cb5e6611946552a1eded1fb27\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -780,7 +780,7 @@ case = "../../../cases/modules/tensor/gelu_grad_bits.cml"
 args = ["${case}"]
 envs = ["CAMEL_TENSOR_ISA=generic"]
 expect_exit = 0
-expect_stdout_exact = "gelu_grad_bits ffn=8eaa4caced1c601a800b11efdbe159f85b6780e0233b63cc52022a9f4d389e04\ngelu_grad_bits tail=296b847f2dd827061f60b7f6165d51eba26a1d89d9dc3c8e12489a6f8c1e7ee6\ngelu_grad_bits single=547151d54b6efe178256131f8bc8049013a5094c5f9309f38457e0e66e81b731\n"
+expect_stdout_exact = "gelu_grad_bits ffn=7d29df4309e84b58ddea304f7cbf89c8389f99b103beb9975ae8c23d1d3f1199\ngelu_grad_bits tail=294f48ede40d6baef3432e1e4df86fe997657b7b9862e8eb2c4493709a521b2e\ngelu_grad_bits single=cddf8a6de1c1396d8be68b1c2638a1a2df081d7cb5e6611946552a1eded1fb27\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

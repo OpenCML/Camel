@@ -215,6 +215,7 @@ struct PreparedGraph {
     void *memory     = nullptr;
     size_t bytes     = 0;
     GCGraph *runtime = nullptr;
+    bool constructed = false;
 };
 
 std::vector<draft_node_ref_t> collectLiveDraftNodes(const GraphDraft &draft) {
@@ -340,20 +341,49 @@ class EncodeSession {
                 preparedById_.emplace(prepared.source->graphId(), &prepared);
             }
         }
-        preallocateRuntimeGraphs();
-        for (auto &prepared : prepared_) {
-            program_.bind(prepared.draft->id(), prepared.runtime);
+        try {
+            preallocateRuntimeGraphs();
+            for (auto &prepared : prepared_) {
+                program_.bind(prepared.draft->id(), prepared.runtime);
+            }
+            program_.setRoot(resolvePreparedGraph(rootGraph_)->runtime);
+            for (auto &prepared : prepared_) {
+                patchPreparedFuncPayloads(prepared);
+            }
+            for (auto &prepared : prepared_) {
+                CAMEL_LOG_INFO_S(
+                    "GIREncode", "Finalize runtime graph '{}'.", prepared.source->name());
+                finalizeRuntimeGraph(prepared);
+                prepared.constructed = true;
+            }
+            for (auto &prepared : prepared_) {
+                camel::runtime::validateRuntimeGraphCalls(program_, prepared.runtime);
+            }
+        } catch (...) {
+            // The program was bound to graphs before they were built; a failure (the graph space
+            // at its limit) must not leave it holding memory that is no graph.
+            abandon();
+            throw;
         }
-        program_.setRoot(resolvePreparedGraph(rootGraph_)->runtime);
+    }
+
+    /// Undoes what a failed run bound: the program holds nothing, the memory of a graph that was
+    /// never built goes back to its space, and the graphs that were built are left to the
+    /// collector (nothing binds them).
+    void abandon() noexcept {
+        std::vector<GCGraph *> raw;
         for (auto &prepared : prepared_) {
-            patchPreparedFuncPayloads(prepared);
+            if (prepared.runtime != nullptr && !prepared.constructed) {
+                raw.push_back(prepared.runtime);
+            }
         }
+        program_.abandonConstruction(raw);
         for (auto &prepared : prepared_) {
-            CAMEL_LOG_INFO_S("GIREncode", "Finalize runtime graph '{}'.", prepared.source->name());
-            finalizeRuntimeGraph(prepared);
-        }
-        for (auto &prepared : prepared_) {
-            camel::runtime::validateRuntimeGraphCalls(program_, prepared.runtime);
+            if (prepared.memory != nullptr && !prepared.constructed) {
+                camel::core::mm::graphSpace().free(prepared.memory);
+                prepared.memory  = nullptr;
+                prepared.runtime = nullptr;
+            }
         }
     }
 
@@ -414,6 +444,10 @@ class EncodeSession {
         // the only link from a direct call of the function (one OPER of that kernel) back to
         // its Camel body.
         prepared.draft->setImplKernelUri(graph->draft().implKernelUri());
+        // The facts of the declaration the graph is (design principles 6.2): cold metadata that
+        // stays with the graph, so a pass reads `#jvp(rule)` through the function it was given
+        // instead of the module that declares it.
+        prepared.draft->setDeclarationFacts(graph->draft().declarationFacts());
         CAMEL_LOG_INFO_S("GIREncode", "Prepare compile graph '{}'.", graph->name());
         prepared.draft->setId(freshIds_ ? freshIds_->allocate() : graph->graphId());
         prepared.draft->setFuncType(graph->funcType());

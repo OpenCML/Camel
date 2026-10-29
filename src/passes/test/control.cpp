@@ -269,7 +269,7 @@ void syncChainOrdering() {
     // control input at all (5.3).
     {
         GraphDraft draft;
-        const auto tail  = draft.addSyncNode();
+        const auto tail  = node(draft);
         const auto value = node(draft);
         const auto gate  = draft.addGateNode(camel::core::type::Type::Float32());
         draft.setNormInputs(gate, std::span<const gc_node_ref_t>(&value, 1));
@@ -285,7 +285,7 @@ void syncChainOrdering() {
     // it stands in, not only through the control edge it used to be written as.
     {
         GraphDraft draft;
-        const auto tail  = draft.addSyncNode();
+        const auto tail  = node(draft);
         const auto value = node(draft);
         const auto plain = draft.addNode(DraftNodeInit{.kind = GCNodeKind::Copy});
         draft.setNormInputs(plain, std::span<const gc_node_ref_t>(&value, 1));
@@ -296,6 +296,72 @@ void syncChainOrdering() {
         check(
             std::ranges::find(sources, tail) != sources.end(),
             "the walk did not follow the sync chain");
+    }
+    // The order reduction reads the chain too: two order edges meet in one node and the chain
+    // already orders one of the two ends before the other, so the edge that spells it says nothing
+    // (docs/design/effects/edges.cn.md 5.4). Reading order edges alone, the pass finds nothing.
+    {
+        GraphDraft draft;
+        const auto head = node(draft);
+        const auto next = node(draft);
+        check(draft.setSyncPredecessor(next, head), "a node did not take a sync predecessor");
+        const auto user             = node(draft);
+        const gc_node_ref_t ordered[] = {head, next};
+        draft.setOrderInputs(user, ordered);
+        check(reduceOrderDependencies(draft) == 1, "the pass did not read the sync chain");
+        check(
+            draft.orderInputsOf(user).size() == 1 && draft.orderInputsOf(user).front() == next,
+            "the pass dropped the order the chain does not give");
+    }
+    // The block above is what keeps the reduction from falling back to order edges alone, and the
+    // way back is one line: move `walk(draft.syncUsersOf(from))` in src/runtime/control.cpp back
+    // inside `if (readsEveryKind)` and this check fails with "the pass did not read the sync chain",
+    // which turns `control.topology` and `control.test_pass_runs_when_named`
+    // (test/plans/feat/opt/control.plan.toml) red -- 4 cases, 2 fail; restore the line and the plan
+    // is 4 green. A check nobody has seen fail is a check nobody knows is load-bearing.
+}
+/// The two readings of one order reduction. A document is compared by the order a program holds,
+/// so an ordering edge whose two ends a data path already orders says nothing and is dropped
+/// (`reduceDocumentOrdering`, the canonical export). A graph a pass edits keeps it: the data path
+/// there is a path the pass may still rewrite, so the edge is the conservative answer
+/// (`reduceOrderDependencies`, `std::opt::order`). Both readings are one walk with one criterion;
+/// what differs is which edges order and which are candidates.
+void documentOrdering() {
+    // An `order` edge a data path covers: the document drops it, the pass keeps it.
+    {
+        GraphDraft draft;
+        const auto read = node(draft), step = node(draft);
+        draft.setNormInputs(step, std::span<const gc_node_ref_t>(&read, 1));
+        const auto write = node(draft);
+        draft.setNormInputs(write, std::span<const gc_node_ref_t>(&step, 1));
+        draft.setOrderInputs(write, std::span<const gc_node_ref_t>(&read, 1));
+        check(reduceOrderDependencies(draft) == 0, "the pass dropped a single order edge");
+        check(reduceDocumentOrdering(draft) == 1, "a data path did not cover an order edge");
+        check(draft.orderInputsOf(write).empty(), "the covered order edge was kept");
+    }
+    // A `sync` edge a data path covers: a document reads the chain link the same way, and the pass
+    // never considers a sync edge.
+    {
+        GraphDraft draft;
+        const auto first = node(draft), step = node(draft);
+        draft.setNormInputs(step, std::span<const gc_node_ref_t>(&first, 1));
+        const auto next = node(draft);
+        draft.setNormInputs(next, std::span<const gc_node_ref_t>(&step, 1));
+        check(draft.setSyncPredecessor(next, first), "a node did not take a sync predecessor");
+        check(reduceOrderDependencies(draft) == 0, "the pass touched a sync edge");
+        check(reduceDocumentOrdering(draft) == 1, "a data path did not cover a sync edge");
+        check(draft.syncInputsOf(next).empty(), "the covered sync edge was kept");
+    }
+    // What nothing implies stays, and a pair two kinds spell is one ordering rather than two: the
+    // builder writes a control wait beside the sync link it makes, and neither covers the other.
+    {
+        GraphDraft draft;
+        const auto first = node(draft), second = node(draft, {first});
+        check(draft.setSyncPredecessor(second, first), "a node did not take a sync predecessor");
+        check(reduceDocumentOrdering(draft) == 0, "a direct pair was reduced away");
+        check(
+            draft.syncInputsOf(second).size() == 1 && draft.ctrlInputsOf(second).size() == 1,
+            "one pair lost one of the kinds that spell it");
     }
 }
 } // namespace
@@ -312,6 +378,7 @@ ControlTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
     forwardingGateConsumers();
     manyReaders();
     syncChainOrdering();
+    documentOrdering();
     os << "CONTROL topology, budgets, branches, dense chain: PASS\n";
     return program;
 }

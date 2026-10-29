@@ -373,7 +373,16 @@ Precedence, most specific first:
    there are several differentiable inputs). When the transform meets a call to a
    function that has a rule, it uses the rule instead of differentiating the body.
    A rule must be a static function of the program: a graph reference cannot
-   carry a closure.
+   carry a closure. The declaration's facts also travel with the function's
+   graph as cold metadata (`GCGraph::declarationFacts`, set by the builder beside
+   `attachRuleGraphs`), which is what a pass reads: `graph::declaration_tags`
+   lists the facts that name a function, `tag_name` names one, `tag_graphs` gives
+   what its arguments name, and `rule_of(g, name)` answers the graph written for
+   one transformation — `jvp` (forward mode), `transpose` (a linear function),
+   `vjp` (reverse mode). A declaration may write all three
+   (`#jvp(rule) #transpose(rule) #vjp(rule)` on one function), and
+   `graph::tags`, which reads attributes as text, is no way to find a rule: a
+   declaration fact is on no node (`attr::fateOf`).
 2. **Operator rules registered by packages.** Keyed by operator URI, for
    operators defined outside `tensor`/`nn`.
 3. **Builtin operator rules.** `OpDef::vjp`, already in place, written against

@@ -311,12 +311,12 @@ import { seed, randint, next_key } from random
 func main(): int sync {
     seed(42)
     // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
-    let drawn = 0..8->map<(i) => next_key()->randint<0, 100>>
+    let drawn = (0..8)->map<(i) => next_key()->randint<0, 100>>
     println(drawn)
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [next_key()->randint<0, 100>]), [0][0:0]>
+    let ordered = (0..8)->reduce<(acc: int[], i: int): int[] => concat(acc, [next_key()->randint<0, 100>]), [0][0:0]>
     println(ordered)
     return 0
 }
@@ -507,7 +507,7 @@ func main(): int sync {
 
 `twice` 的函数体是同步块，两次 `bump` 与 `return c` 按书写顺序执行。几点补充：
 
-- 不在同步块里的写入，与此前的读取之间没有顺序；编译器给出 `SemanticDiag::IgnoredSideEffect` 警告。
+- 不在同步块里的写仍排在它之前写着的读之后（读看到的是写在它之前的那次写的值），但它不保证执行：之后没有人读该变量时它不执行；编译器给出 `SemanticDiag::IgnoredSideEffect` 警告。
 - 写入之后如果没有任何地方再读这个变量，这次修改不执行——还是按依赖求值。
 
 日常的建议很简单：计算写成 `let` 与纯函数；输入输出放进同步块；`var` 留给确实需要原地更新的少数地方。

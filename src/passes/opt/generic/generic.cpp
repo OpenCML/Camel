@@ -14,7 +14,9 @@
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/operator_traits.h"
+#include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/tags.h"
@@ -31,6 +33,7 @@
 #include <deque>
 #include <map>
 #include <optional>
+#include <unordered_set>
 #include <queue>
 #include <tuple>
 #include <vector>
@@ -89,6 +92,123 @@ class StaticArgsView final : public ArgsView {
     std::vector<slot_t> slots_;
     std::vector<type::Type *> types_;
 };
+
+/// Whether a fold left no value at all. A lowering applied to the case its tag does not select
+/// returns the zero slot (tagged.cpp), and a member the constant does not have reads as one: that
+/// is no value of a type that has no null. Materializing it would put a constant where the type
+/// promises an object, and a later fold would read the empty slot as that object -- `kind(v)` of
+/// a failed `Json!`, in the match arm the tag does not take, read a document at a null pointer.
+bool holdsNoValue(slot_t value, type::Type *type) {
+    return value == NullSlot && type != nullptr && type::isGCTraced(type->code()) &&
+           type::asNullable(type) == nullptr;
+}
+
+/// What a constant's own shape costs on top of the bytes of its elements: the object header and
+/// the table of extents and strides an array carries, the header of a tuple, a struct or a string.
+/// Counted so that a value made of many small pieces is not free of charge.
+constexpr size_t kConstantShapeOverheadBytes = 4 * sizeof(slot_t);
+
+/// How deep the walk below follows a value's members. A constant that shares a member with itself
+/// (or a value whose contents this estimate does not know) ends here instead of walking forever.
+constexpr size_t kConstantEstimateDepth = 8;
+
+/**
+ * The bytes a value takes once it is a constant of the graph: its elements (count x element size)
+ * plus the shape that describes them (kConstantShapeOverheadBytes). Folding replaces a computation
+ * by the value it produces, so this is the compile-time memory that buys the run time; a value past
+ * the pass's budget is not worth it and stays the computation that builds it. The estimate stops
+ * once it passes `stopAt` -- the caller only asks whether the value fits, never how big it is --
+ * and so neither allocates nor walks a large value whole.
+ *
+ * It counts what the value occupies, not what it costs to build: an array of a hundred million
+ * `int` is 800 MB here, as it would be in the graph.
+ */
+size_t constantBytesOf(
+    slot_t value, const type::Type *type, size_t stopAt, size_t depth = 0) {
+    if (value == NullSlot || type == nullptr || !type::isGCTraced(type->code())) {
+        return sizeof(slot_t);
+    }
+    const auto *object = camel::core::rtdata::fromSlot<const camel::core::rtdata::Object *>(value);
+    if (object == nullptr || stopAt == 0 || depth >= kConstantEstimateDepth) {
+        return 0;
+    }
+    const auto fits = [&](size_t taken) { return taken < stopAt ? stopAt - taken : 0; };
+    size_t bytes    = kConstantShapeOverheadBytes;
+    switch (type->code()) {
+    case type::TypeCode::Array: {
+        const auto *array = static_cast<const Array *>(object);
+        // The elements, plus the extent and stride table the rank adds to the header.
+        bytes += sizeof(Array) + array->rank() * 2 * sizeof(int64_t) +
+                 array->byteSize();
+        // An element that is a reference is one slot, which the element bytes above already
+        // count; the objects the slots point at are counted here.
+        if (array->isSlots() && array->elemType() != nullptr &&
+            type::isGCTraced(array->elemType()->code())) {
+            for (uint64_t i = 0; i < array->numel() && bytes < stopAt; ++i) {
+                bytes += constantBytesOf(
+                    array->getSlot(i), array->elemType(), fits(bytes), depth + 1);
+            }
+        }
+        break;
+    }
+    case type::TypeCode::Tuple: {
+        const auto *tuple     = static_cast<const Tuple *>(object);
+        const auto *tupleType = static_cast<const type::TupleType *>(type);
+        bytes += sizeof(Tuple) + tuple->size() * sizeof(slot_t);
+        for (size_t i = 0; i < tuple->size() && i < tupleType->size() && bytes < stopAt; ++i) {
+            const type::Type *field = tupleType->typeAt(i);
+            if (field != nullptr && type::isGCTraced(field->code())) {
+                bytes += constantBytesOf(tuple->slotAt(i), field, fits(bytes), depth + 1);
+            }
+        }
+        break;
+    }
+    case type::TypeCode::Struct: {
+        const auto *record     = static_cast<const Struct *>(object);
+        const auto *structType = static_cast<const type::StructType *>(type);
+        bytes += sizeof(Struct) + record->size() * sizeof(slot_t);
+        for (size_t i = 0; i < record->size() && i < structType->size() && bytes < stopAt; ++i) {
+            const type::Type *field = structType->typeAt(i);
+            if (field != nullptr && type::isGCTraced(field->code())) {
+                bytes += constantBytesOf(record->slotAt(i), field, fits(bytes), depth + 1);
+            }
+        }
+        break;
+    }
+    case type::TypeCode::String: {
+        const auto *text = static_cast<const String *>(object);
+        bytes += sizeof(String) + text->size() + 1;
+        break;
+    }
+    case type::TypeCode::Complex64:
+    case type::TypeCode::Complex128: {
+        // Two parts, the wider of the two types: a number is not a container.
+        bytes += 2 * sizeof(double);
+        break;
+    }
+    default:
+        // A closure, a stream, an enumeration or a module type: this estimate does not know what
+        // its contents are, so it counts the header and not the members.
+        break;
+    }
+    return bytes;
+}
+
+/**
+ * Whether a folded value may be put into the graph as a constant. A value above the pass's
+ * `constant_budget` is left as the computation that builds it: not truncated and not refused, so
+ * the program means the same and runs the same, only with that computation still in it. A budget
+ * of 0 materializes nothing at all, like `growth_budget`'s 0 copying nothing.
+ *
+ * The question is asked after the operator ran, because its result's size is not known before: a
+ * value too large for the budget still costs the one allocation that built it (and, for an
+ * operator whose type does not carry the extents, the pass cannot know earlier). What the budget
+ * bounds is what the graph keeps, which is what the program would carry and what the export
+ * would write; the value itself is dropped here and collected as garbage.
+ */
+bool fitsConstantBudget(slot_t value, type::Type *type, size_t budget) {
+    return constantBytesOf(value, type, budget) < budget;
+}
 
 /// Static DATA, seen through GATEs or a JOIN whose arms all forward the same scalar bits.
 /// This proves a value, not permission to discard its producer: replaceNode retains ordering.
@@ -277,6 +397,133 @@ branchArmNodes(const GraphDraft &draft, gc_node_ref_t brch, size_t armCount) {
  * the JOIN's users read the taken arm's result, and the taken arm runs after what the BRCH ran
  * after. Returns false (and changes nothing) for shapes it does not handle.
  */
+/// The statements of one block are one chain (docs/design/effects/edges.cn.md 5.3), but they do not
+/// always arrive as one: a splice lays the body it moved in inside the arm of a branch, and a prune
+/// moves that arm's code back out, so a block collects the code of several bodies with one head and
+/// one tail of its own each. The fragments are joined here, in the order they were laid out, skipping
+/// a join that would close the chain on itself: layout order is not dependency order, and a fragment
+/// that already waits on a later one is left where it is rather than made part of a cycle. Returns
+/// the head and the tail of the chain the block's statements make, or two invalid refs when they do
+/// not make one.
+std::pair<gc_node_ref_t, gc_node_ref_t>
+joinBlockFragments(GraphDraft &draft, gc_node_ref_t anchor) {
+    const std::pair<gc_node_ref_t, gc_node_ref_t> none{kInvalidNodeRef, kInvalidNodeRef};
+    if (anchor == kInvalidNodeRef || !draft.alive(anchor)) {
+        return none;
+    }
+    const auto inBlock = [&](gc_node_ref_t n) {
+        return draft.alive(n) && camel::runtime::sameSyncBlock(draft, n, anchor);
+    };
+    std::vector<gc_node_ref_t> heads;
+    for (gc_node_ref_t n = 0; n < draft.nodeSlotCount(); ++n) {
+        const camel::runtime::DraftNodeHeader *header = draft.header(n);
+        if (header == nullptr || !draft.alive(n) ||
+            (header->runtimeFlags & camel::runtime::kGCNodeFlagSyncStatement) == 0 ||
+            !camel::runtime::sameSyncBlock(draft, n, anchor)) {
+            continue;
+        }
+        bool waits = false;
+        for (gc_node_ref_t pred : draft.syncInputsOf(n)) {
+            if (inBlock(pred)) {
+                waits = true;
+                break;
+            }
+        }
+        if (!waits) {
+            heads.push_back(n);
+        }
+    }
+    if (heads.empty()) {
+        return none;
+    }
+    std::vector<gc_node_ref_t> tails;
+    bool joinable = true;
+    for (gc_node_ref_t head : heads) {
+        gc_node_ref_t tail = head;
+        for (;;) {
+            gc_node_ref_t next = kInvalidNodeRef;
+            for (gc_node_ref_t user : draft.syncUsersOf(tail)) {
+                if (!inBlock(user)) {
+                    continue;
+                }
+                if (next != kInvalidNodeRef) {
+                    joinable = false; // the fragment forks: it has no one tail
+                    break;
+                }
+                next = user;
+            }
+            if (!joinable || next == kInvalidNodeRef) {
+                break;
+            }
+            tail = next;
+        }
+        if (!joinable) {
+            break;
+        }
+        tails.push_back(tail);
+    }
+    if (!joinable || tails.size() != heads.size()) {
+        return none;
+    }
+    // Does `from` wait on `target`, directly or through any edge kind? A join is written only where
+    // the answer is no; an exhausted walk answers yes, because not proving it free does not make the
+    // join safe.
+    const auto waitsOn = [&](gc_node_ref_t from, gc_node_ref_t target) {
+        std::vector<gc_node_ref_t> work{from};
+        std::unordered_set<gc_node_ref_t> seen;
+        size_t budget = size_t{1} << 14;
+        while (!work.empty()) {
+            const gc_node_ref_t node = work.back();
+            work.pop_back();
+            if (node == target) {
+                return true;
+            }
+            if (!seen.insert(node).second) {
+                continue;
+            }
+            for (const auto &group :
+                 {draft.normInputsOf(node),
+                  draft.withInputsOf(node),
+                  draft.ctrlInputsOf(node),
+                  draft.syncInputsOf(node)}) {
+                for (gc_node_ref_t input : group) {
+                    if (budget == 0) {
+                        return true;
+                    }
+                    --budget;
+                    work.push_back(input);
+                }
+            }
+        }
+        return false;
+    };
+    const auto markStatement = [&](gc_node_ref_t n) {
+        const camel::runtime::DraftNodeHeader *header = draft.header(n);
+        if (header != nullptr) {
+            draft.setNodeRuntimeFlags(
+                n,
+                static_cast<uint8_t>(header->runtimeFlags |
+                                     camel::runtime::kGCNodeFlagSyncStatement));
+        }
+    };
+    bool joined = true;
+    for (size_t i = 1; i < heads.size(); ++i) {
+        if (waitsOn(tails[i - 1], heads[i])) {
+            joined = false;
+            continue;
+        }
+        markStatement(heads[i]);
+        markStatement(tails[i - 1]);
+        const gc_node_ref_t only[1] = {tails[i - 1]};
+        draft.setSyncInputs(heads[i], only);
+        camel::runtime::appendControlDependency(draft, tails[i - 1], heads[i]);
+    }
+    if (!joined) {
+        return none;
+    }
+    return {heads.front(), tails.back()};
+}
+
 bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     const auto arm = staticArmOf(draft, brch);
     if (!arm) {
@@ -349,6 +596,48 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     const auto inArm = [&](gc_node_ref_t n) {
         return std::ranges::find(armNodes, n) != armNodes.end();
     };
+    // The statements of the taken arm are the statements of this block once the branch is gone, and a
+    // block's statements are one chain (docs/design/effects/edges.cn.md 5.3). They do not always
+    // arrive as one, so the fragments the arm brings are joined before the branch's place is handed
+    // over: only one of them would take the place, and the statements of the others would be reached
+    // by nothing and would stop running (2).
+    gc_node_ref_t armBlockNode = kInvalidNodeRef;
+    for (uint32_t r = 1; armBlockNode == kInvalidNodeRef && r < draft.regionCount(); ++r) {
+        const auto &region = draft.region(r);
+        if (region.kind != camel::runtime::GCRegionKind::Arm || region.owner != brch ||
+            region.index != *arm) {
+            continue;
+        }
+        for (gc_node_ref_t n = 0; n < draft.nodeSlotCount(); ++n) {
+            if (draft.alive(n) && inArm(n) && draft.nodeRegion(n) == r) {
+                armBlockNode = n;
+                break;
+            }
+        }
+    }
+    const auto markStatement = [&](gc_node_ref_t n) {
+        const camel::runtime::DraftNodeHeader *header = draft.header(n);
+        if (header != nullptr) {
+            draft.setNodeRuntimeFlags(
+                n,
+                static_cast<uint8_t>(header->runtimeFlags |
+                                     camel::runtime::kGCNodeFlagSyncStatement));
+        }
+    };
+    const auto chainTo = [&](gc_node_ref_t user, gc_node_ref_t pred) {
+        markStatement(user);
+        markStatement(pred);
+        const gc_node_ref_t only[1] = {pred};
+        draft.setSyncInputs(user, only);
+        camel::runtime::appendControlDependency(draft, pred, user);
+    };
+    gc_node_ref_t armChainHead = kInvalidNodeRef;
+    gc_node_ref_t armChainTail = kInvalidNodeRef;
+    if (armBlockNode != kInvalidNodeRef) {
+        const auto chain  = joinBlockFragments(draft, armBlockNode);
+        armChainHead      = chain.first;
+        armChainTail      = chain.second;
+    }
     gc_node_ref_t armTail = kInvalidNodeRef;
     for (gc_node_ref_t pred : draft.syncInputsOf(result)) {
         if (inArm(pred)) {
@@ -372,6 +661,15 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
                 break;
             }
         }
+    }
+    // The chain the arm's fragments were joined into is what the branch's place is handed to: its
+    // tail is where the statements written after the branch follow, and its head is entered from
+    // where the branch stood.
+    const std::vector<gc_node_ref_t> joinChainPreds(
+        draft.syncInputsOf(join).begin(),
+        draft.syncInputsOf(join).end());
+    if (armChainTail != kInvalidNodeRef) {
+        armTail = armChainTail;
     }
     const auto &preds = brchPreds;
     const std::vector<gc_node_ref_t> brchCtrlUsers(
@@ -449,6 +747,81 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     if (armTail != kInvalidNodeRef && draft.alive(armTail) && draft.alive(join)) {
         draft.handChainPlaceTo(join, armTail);
     }
+    // The joined chain's head stands where the branch stood: `handChainPlaceTo` gave the place to the
+    // chain's tail, which already waits on the fragment before it, so the entry is written here. The
+    // predecessor a head arrives with can be the branch itself -- the builder enters an arm's chain
+    // from its BRCH -- and the BRCH is one of the nodes erased below, so that place is not one the
+    // head keeps: the branch's own place, the one its tail was handed, takes that slot instead.
+    const auto erasedByBranch = [&](gc_node_ref_t n) { return n == brch || n == join || removed(n); };
+    if (armChainHead != kInvalidNodeRef && draft.alive(armChainHead)) {
+        bool entered = false;
+        for (gc_node_ref_t pred : draft.syncInputsOf(armChainHead)) {
+            entered = entered || !erasedByBranch(pred);
+        }
+        if (!entered) {
+            for (gc_node_ref_t pred : joinChainPreds) {
+                if (pred != armChainHead && pred != join && draft.alive(pred) &&
+                    !removed(pred)) {
+                    chainTo(armChainHead, pred);
+                    break;
+                }
+            }
+        }
+    }
+
+    // What the arms that go away read from outside themselves. A branch is used as a whole: it uses
+    // every value its arms read from outside (design principles 3.1), so an effect written outside
+    // the branch runs when the branch runs, whichever arm is taken (3.3). Dropping the arm must not
+    // drop the effect with it (9.7); the nodes are read before the arms are erased, because the
+    // reads are the only thing that names them.
+    std::vector<gc_node_ref_t> outsideReads;
+    {
+        std::vector<gc_node_ref_t> work;
+        for (size_t i = 0; i < regions.size(); ++i) {
+            if (i == *arm) {
+                continue;
+            }
+            for (gc_node_ref_t n : regions[i]) {
+                for (auto group : {draft.normInputsOf(n),
+                                   draft.withInputsOf(n),
+                                   draft.ctrlInputsOf(n),
+                                   draft.syncInputsOf(n)}) {
+                    work.insert(work.end(), group.begin(), group.end());
+                }
+            }
+        }
+        // An arm's code is what its value reads, and an arm whose code is one value read from
+        // outside (an arm written as a name: `if c then a else 0`) has no node of its own in the
+        // region at all: the JOIN reads it through the with-port of that arm.
+        const auto joinValues = draft.withInputsOf(join);
+        for (size_t i = 0; i < regions.size() && i < joinValues.size(); ++i) {
+            if (i != *arm) {
+                work.push_back(joinValues[i]);
+            }
+        }
+        std::vector<bool> queued(draft.nodeSlotCount(), false);
+        while (!work.empty()) {
+            const gc_node_ref_t n = work.back();
+            work.pop_back();
+            if (n >= queued.size() || n == brch || n == join || !draft.alive(n) ||
+                queued[n]) {
+                continue;
+            }
+            queued[n] = true;
+            // What an arm reads is read through the arm's own code as well: the code goes away and
+            // what it read from outside is what has to keep running.
+            if (removed(n)) {
+                for (auto group : {draft.normInputsOf(n),
+                                   draft.withInputsOf(n),
+                                   draft.ctrlInputsOf(n),
+                                   draft.syncInputsOf(n)}) {
+                    work.insert(work.end(), group.begin(), group.end());
+                }
+                continue;
+            }
+            outsideReads.push_back(n);
+        }
+    }
 
     draft.eraseNode(join);
     draft.eraseNode(brch);
@@ -457,12 +830,107 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
             draft.eraseNode(n);
         }
     }
+    // An effect among those reads that only the dropped arm used runs where the branch stood, before
+    // the code that took its place: the branch used it, so it happens whether or not that arm is
+    // taken, and it is the arm's code that runs when the arm is the taken one. The wait is written
+    // on the first thing the surviving code runs -- the taken arm's chain head, or the node that
+    // stands at the branch's place, or the effect the code after the branch reaches first.
+    {
+        std::vector<gc_node_ref_t> lost;
+        for (gc_node_ref_t read : outsideReads) {
+            if (!draft.alive(read)) {
+                continue;
+            }
+            bool stillRead = false;
+            for (auto group : {draft.normUsersOf(read),
+                               draft.withUsersOf(read),
+                               draft.ctrlUsersOf(read),
+                               draft.syncUsersOf(read)}) {
+                stillRead = stillRead || !group.empty();
+            }
+            if (stillRead) {
+                continue;
+            }
+            if (camel::runtime::carriesOrdering(draft, read, true)) {
+                lost.push_back(read);
+                continue;
+            }
+            for (gc_node_ref_t source : orderedSources(draft, read)) {
+                if (std::ranges::find(lost, source) == lost.end()) {
+                    lost.push_back(source);
+                }
+            }
+        }
+        std::vector<gc_node_ref_t> targets;
+        const auto addTarget = [&](gc_node_ref_t n) {
+            if (!draft.alive(n) || std::ranges::find(lost, n) != lost.end()) {
+                return;
+            }
+            if (camel::runtime::carriesOrdering(draft, n, true)) {
+                if (std::ranges::find(targets, n) == targets.end()) {
+                    targets.push_back(n);
+                }
+                return;
+            }
+            for (gc_node_ref_t source : orderedSources(draft, n)) {
+                if (source != n && std::ranges::find(lost, source) == lost.end() &&
+                    std::ranges::find(targets, source) == targets.end()) {
+                    targets.push_back(source);
+                }
+            }
+        };
+        if (armChainHead != kInvalidNodeRef) {
+            addTarget(armChainHead);
+        }
+        addTarget(result);
+        for (gc_node_ref_t user : joinValueUsers) {
+            addTarget(user);
+        }
+        if (targets.empty()) {
+            // Nothing after the branch carries an order (a branch folded to a constant nothing
+            // reads): the wait goes on what reads the branch's place, so the effect still runs
+            // where the branch stood.
+            for (gc_node_ref_t user : joinValueUsers) {
+                if (draft.alive(user) && std::ranges::find(lost, user) == lost.end() &&
+                    std::ranges::find(targets, user) == targets.end()) {
+                    targets.push_back(user);
+                }
+            }
+            const auto *resultHeader =
+                result == kInvalidNodeRef ? nullptr : draft.header(result);
+            if (targets.empty() && resultHeader != nullptr &&
+                resultHeader->kind != GCNodeKind::Data &&
+                std::ranges::find(lost, result) == lost.end()) {
+                targets.push_back(result);
+            }
+        }
+        for (gc_node_ref_t source : lost) {
+            for (gc_node_ref_t target : targets) {
+                // The wait is written only between two nodes that are neither ahead of the other.
+                // A place that reads the effect already runs after it -- it is the effect's own
+                // argument, a gate the effect passes on, or the code the effect calls -- so there
+                // is nothing to order there, and writing the edge would close a cycle of inputs.
+                if (isComputedAfter(draft, target, source) ||
+                    isComputedAfter(draft, source, target)) {
+                    continue;
+                }
+                camel::runtime::appendControlDependency(draft, source, target);
+            }
+        }
+    }
     // Gates that waited only on the branch now wait on nothing; commit dissolves them.
+    //
+    // What is not done here: joining the block's fragments a second time, now that the arm's code is
+    // code of this block. Reading the fragments of a block the arm was just merged into takes the
+    // statements of a `var` that was captured and written in the same block for fragments of one
+    // chain, and joining them reorders writes the capture rules keep apart (`var_capture`,
+    // `captured_write_order`). The arm's fragments are joined above, where the block is still the
+    // arm's own and the statements are the arm's.
     return true;
 }
 
 /// Replaces an element access on a constant tuple or struct by the element's value.
-bool foldStaticAccess(GraphDraft &draft, gc_node_ref_t id) {
+bool foldStaticAccess(GraphDraft &draft, gc_node_ref_t id, size_t constantBudget) {
     const auto sources = draft.normInputsOf(id);
     if (sources.size() != 1) {
         return false;
@@ -490,6 +958,12 @@ bool foldStaticAccess(GraphDraft &draft, gc_node_ref_t id) {
     } else {
         return false;
     }
+    if (holdsNoValue(value, result)) {
+        return false;
+    }
+    if (!fitsConstantBudget(value, result, constantBudget)) {
+        return false; // the element is a value of its own, and one too large to hold
+    }
     // The element is reachable from the constant it was read from, which the graph keeps.
     replaceFoldResult(draft, id, draft.materializeStaticValue(value, result));
     return true;
@@ -497,7 +971,8 @@ bool foldStaticAccess(GraphDraft &draft, gc_node_ref_t id) {
 
 /// Replaces a FILL whose template and values are all constants by the object it builds.
 bool foldStaticFill(
-    GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots) {
+    GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots,
+    size_t constantBudget) {
     const auto sources = draft.normInputsOf(id);
     type::Type *result = draft.header(id)->dataType;
     if (sources.size() != 1 || !result || !type::isGCTraced(result->code())) {
@@ -520,6 +995,14 @@ bool foldStaticFill(
         }
         slots.push_back(value->first);
     }
+    // The template carries the shape of the object the fill builds, and its own type is the one
+    // that describes that shape, so its size is the size the constant would have. One above the
+    // budget is not made at all: folding buys run time with compile-time memory, which a value
+    // this large does not repay.
+    if (!fitsConstantBudget(source->first, source->second ? source->second : result,
+                            constantBudget)) {
+        return false;
+    }
     auto *object = camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(source->first)
                        ->clone(camel::core::mm::autoSpace(), result, false);
     // Keep the object alive until commit moves it into the graph's static area.
@@ -541,7 +1024,8 @@ bool foldStaticFill(
  * graph, to fail with its own located error when the program runs.
  */
 bool foldStaticCast(
-    GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots) {
+    GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots,
+    size_t constantBudget) {
     const auto sources = draft.normInputsOf(id);
     type::Type *target = draft.header(id)->dataType;
     if (sources.size() != 1 || !target || !draft.withInputsOf(id).empty()) {
@@ -549,6 +1033,11 @@ bool foldStaticCast(
     }
     const auto source = staticValueOf(draft, sources[0]);
     if (!source || !source->second) {
+        return false;
+    }
+    // A conversion of a value above the budget is not made: the conversion of a large array copies
+    // it, and the copy is a constant as large as the source.
+    if (!fitsConstantBudget(source->first, source->second, constantBudget)) {
         return false;
     }
     const type::CastSafety safety = target->castSafetyFrom(source->second);
@@ -581,6 +1070,10 @@ bool foldStaticCast(
     } catch (...) {
         return false; // the conversion fails: left to be reported when the program runs
     }
+    if (type::isGCTraced(target->code()) && result != NullSlot && result != source->first &&
+        !fitsConstantBudget(result, target, constantBudget)) {
+        return false; // the conversion succeeded but its value is too large to hold
+    }
     if (type::isGCTraced(target->code()) && result != NullSlot && result != source->first) {
         // Keep a value the conversion made alive until commit moves it into the static area.
         roots.emplace_back(
@@ -597,7 +1090,8 @@ bool foldStaticCast(
 /// Replaces a pure operator by the constant its argument types fix, through the operator's
 /// registered type folder. Returns false when there is none or the types do not fix the result.
 bool foldFromTypes(
-    GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots) {
+    GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots,
+    size_t constantBudget) {
     const auto *folder     = camel::core::OperatorTable::instance().typeFolder(operIdOf(draft, id));
     type::Type *resultType = draft.header(id)->dataType;
     // The arguments as the operator's kernel reads them (with-arguments after the ordinary ones
@@ -618,8 +1112,11 @@ bool foldFromTypes(
         statics.push_back(value ? std::optional<slot_t>(value->first) : std::nullopt);
     }
     const auto result = (*folder)(types, statics, camel::core::mm::autoSpace());
-    if (!result) {
+    if (!result || holdsNoValue(*result, resultType)) {
         return false;
+    }
+    if (!fitsConstantBudget(*result, resultType, constantBudget)) {
+        return false; // the value is above the budget: the computation that builds it stays
     }
     if (type::isGCTraced(resultType->code()) && *result != NullSlot) {
         // Keep the value alive until commit moves it into the graph's static area.
@@ -635,7 +1132,7 @@ bool foldFromTypes(
 
 size_t foldDraft(
     GraphDraft &draft, camel::core::context::Context &ctx,
-    std::deque<camel::core::mm::RootHandle> &roots) {
+    std::deque<camel::core::mm::RootHandle> &roots, size_t constantBudget) {
     size_t folded = 0;
     for (bool changed = true; changed;) {
         changed = false;
@@ -657,7 +1154,7 @@ size_t foldDraft(
                     replaceFoldResult(draft, id, value);
                     ++folded;
                     changed = true;
-                } else if (foldStaticAccess(draft, id)) {
+                } else if (foldStaticAccess(draft, id, constantBudget)) {
                     ++folded;
                     changed = true;
                 }
@@ -666,7 +1163,7 @@ size_t foldDraft(
             // A tuple, struct or array built from constants is a constant.
             if (const auto *h = draft.header(id);
                 h && h->kind == GCNodeKind::Fill && isFoldable(draft, id)) {
-                if (foldStaticFill(draft, id, roots)) {
+                if (foldStaticFill(draft, id, roots, constantBudget)) {
                     ++folded;
                     changed = true;
                 }
@@ -675,7 +1172,7 @@ size_t foldDraft(
             // A conversion of a constant is a constant, when the conversion succeeds.
             if (const auto *h = draft.header(id);
                 h && h->kind == GCNodeKind::Cast && isFoldable(draft, id)) {
-                if (foldStaticCast(draft, id, roots)) {
+                if (foldStaticCast(draft, id, roots, constantBudget)) {
                     ++folded;
                     changed = true;
                 }
@@ -695,7 +1192,7 @@ size_t foldDraft(
                 }
                 // Not all arguments are constants, but their types may fix the result (e.g. the
                 // shape of a tensor whose type carries it).
-                if (foldFromTypes(draft, id, roots)) {
+                if (foldFromTypes(draft, id, roots, constantBudget)) {
                     ++folded;
                     changed = true;
                 }
@@ -735,6 +1232,17 @@ size_t foldDraft(
                 continue; // leave the failure to be reported when the program runs
             }
             if (!foldable) {
+                continue;
+            }
+            if (holdsNoValue(result, resultType)) {
+                // The lowering returned the zero slot for the case its tag does not select: no
+                // constant goes where the type promises an object (see holdsNoValue).
+                continue;
+            }
+            if (!fitsConstantBudget(result, resultType, constantBudget)) {
+                // The value is above what the pass may materialize: the computation that builds
+                // it stays in the graph (design principles 9.6). It is not truncated and not
+                // refused -- the program means the same, only less folded.
                 continue;
             }
             if (resultType && type::isGCTraced(resultType->code()) && result != NullSlot) {
@@ -925,22 +1433,19 @@ size_t dceDraft(GraphDraft &draft, bool valuesOnly = false) {
                 changed = true;
                 continue;
             }
-            // A SYNC only joins control; replaceNode hands its predecessors to its users, which
-            // keeps every ordering it expressed.
             // A GATE only forwards its value once its control inputs ran. When no node reads the
-            // value it is a SYNC that also depends on a value, and it goes the same way: the
+            // value it is a wait that also depends on a value, and it goes the same way: the
             // nodes that wait on it wait on what it waited on instead (its control inputs and
             // the ordered nodes its value came from). Keeping such a GATE because other nodes
             // wait on it kept its value alive for nothing: a closure that is only called
             // through a branch stayed read by the dead GATE, and the export could not split
             // that call across the branch. A GATE that nothing uses at all stays when it is the
             // only way something it waits on reaches the exit.
-            const auto *h     = draft.header(id);
-            const bool isJoin = !valuesOnly && h && h->kind == GCNodeKind::Sync;
+            const auto *h          = draft.header(id);
             const bool isDeadGate =
                 !valuesOnly && h && h->kind == GCNodeKind::Gate &&
                 (!draft.ctrlUsersOf(id).empty() || gateInputsSurvive(draft, id));
-            if ((isDeadWhenUnread(draft, id) || isJoin || isDeadGate) && draft.normUsersOf(id).empty() &&
+            if ((isDeadWhenUnread(draft, id) || isDeadGate) && draft.normUsersOf(id).empty() &&
                 draft.withUsersOf(id).empty() && isReplaceable(draft, id)) {
                 replaceNode(draft, id, kInvalidNodeRef);
                 ++removed;
@@ -960,7 +1465,9 @@ ConstantFoldPass::apply(const camel::runtime::Program *program, std::ostream &) 
         context_,
         program,
         "std::opt::fold",
-        [&](GraphDraft &draft) { return foldDraft(draft, *context_, roots); },
+        [&](GraphDraft &draft) {
+            return foldDraft(draft, *context_, roots, constantBudgetBytes_);
+        },
         nullptr,
         nullptr,
         mayFold);
@@ -1036,7 +1543,9 @@ const camel::runtime::Program *simplifyGraph(
             context,
             program,
             "std::opt::fold",
-            [&](GraphDraft &draft) { return foldDraft(draft, *context, roots); },
+            [&](GraphDraft &draft) {
+                return foldDraft(draft, *context, roots, config.constantBudgetBytes);
+            },
             &folded,
             &memo,
             mayFold,

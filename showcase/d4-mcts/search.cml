@@ -55,7 +55,7 @@ func full(board: int[]): bool {
 // The empty places, in ascending order.  Expansion takes them in this order and a tie between
 // two children is broken by it, so the order is part of what the search reports.
 func empty_places(board: int[]): int[] {
-    return 0..9->filter<(place: int): bool => board[place] == 0>
+    return (0..9)->filter<(place: int): bool => board[place] == 0>
 }
 
 // The moves a node offers: the empty places, or none when the game is over -- a complete line or
@@ -282,7 +282,7 @@ func node_count(node: Node): int {
 // == entry ==
 // A position is written as nine characters: `.` for an empty place, `X` and `O` for the marks.
 func board_of(text: string): int[] {
-    return 0..9->map<(place: int): int => mark_of(text[place])>
+    return (0..9)->map<(place: int): int => mark_of(text[place])>
 }
 
 func mark_of(character: string): int {

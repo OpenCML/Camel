@@ -938,25 +938,38 @@ void ParserImpl::parseTagRef() {
     close(m, NK::TagRef);
 }
 
-/// whenClause : IDENTIFIER logicalOrExpr
+/// whenClause : 'when' ('..' dataExpr | logicalOrExpr)
 /// The IDENTIFIER is the name `when`, read here only: a declaration's applicability condition,
 /// after its signature (design principles 4.4). It is evaluated when the declaration is
 /// instantiated, not when it is parsed, and a false condition makes the declaration
 /// inapplicable rather than erroneous. It follows the return type and the resource clause and
 /// precedes the body, so a body-less native declaration may carry one too.
+/// A condition written `..pred::<A>()` holds for every member of the pack its body names (design
+/// principles 5.6): the `..` is read here and kept as the rest-value marker the grammar already
+/// has for `..e`, so the tree holds what was written and the reader of the condition decides
+/// what the marker means in that place.
 /// The `funcDecl` production above gains this clause between `resourceClause` and `stmtBlock`;
 /// see the comment there.
 void ParserImpl::parseWhenClause() {
     const size_t m = mark();
     bump(); // `when`
-    parseExpr();
+    if (cur_ == TK::DotDot) {
+        const size_t cm = mark();
+        bump(); // `..`
+        if (!panic_) {
+            parseExpr();
+        }
+        close(cm, NK::RestValue);
+    } else {
+        parseExpr();
+    }
     close(m, NK::WhenClause);
 }
 
 /// The part of funcDecl after its annotations; `m` marks where the declaration began.
 void ParserImpl::parseFuncDeclRest(size_t m) {
     if (eat(TK::KwWith)) {
-        parseAngledParams(true);
+        parseAngledParams(true, true);
     }
     eat(TK::KwExport);
     // `with <...> rule ...` (`rule tile_matmul(...)`, design principles 5.5): a rule writes the
@@ -999,7 +1012,7 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
     close(m, NK::FuncDecl);
 }
 
-/// typeParams : '::' '<' identDef (',' identDef)* ','? '>'
+/// typeParams : '::' '<' ('..'? identDef) (',' '..'? identDef)* ','? '>'
 ///
 /// The type parameters of a generic declaration, written at its head right after the name
 /// (design principles 5.5): `func first::<T>(xs: T[]): T`. The spelling is the one a call site
@@ -1007,6 +1020,9 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
 /// visible in its head; without `::<...>` it is not generic. `rule` and `fact` declare theirs the
 /// same way. A dimension name still binds where a shape first writes it (5.4) and may be listed
 /// here too, which is why the list can name one.
+/// A parameter written with `..` is a pack and not one type (`func zip::<..A>`, design principles
+/// 5.6): a call binds it to one type per member. The `..` is not a token of the parameter's own
+/// node, so the name node carries kPackName instead.
 void ParserImpl::parseTypeParams() {
     const size_t m = mark();
     bump(); // `::`
@@ -1018,15 +1034,51 @@ void ParserImpl::parseTypeParams() {
     {
         Scope scope(*this, false);
         // `::<` at the end of the text: the name is reported, not read.
-        parseIdentDef();
-        while (!panic_ && eat(TK::Comma) && cur_ == TK::Identifier) {
+        bool pack = cur_ == TK::DotDot;
+        if (pack) {
+            bump();
+        }
+        {
+            const size_t nm = mark();
             parseIdentDef();
+            if (pack) {
+                markNameAsPack(nm);
+            }
+        }
+        while (!panic_ && eat(TK::Comma) &&
+               (cur_ == TK::Identifier || cur_ == TK::DotDot)) {
+            const bool packAgain = cur_ == TK::DotDot;
+            if (packAgain) {
+                bump();
+            }
+            const size_t nm = mark();
+            parseIdentDef();
+            if (packAgain) {
+                markNameAsPack(nm);
+            }
         }
     }
     if (!panic_ && !eat(TK::Gt)) {
         unexpected({e(TK::Comma), e(TK::Gt)});
     }
     close(m, NK::TypeParams);
+}
+
+/// Marks the IdentDef just closed as one written with `..`: the type parameter is a pack. `mark`
+/// is what mark() was before the name was read, so a name the parser could not read (and did not
+/// close) leaves nothing marked.
+void ParserImpl::markNameAsPack(size_t mark) {
+    if (stack_.size() != mark + 1) {
+        return;
+    }
+    const uint32_t word = stack_.back();
+    if ((word & Tree::kTokenBit) != 0) {
+        return;
+    }
+    if (tree_.nodes_[word].kind != NK::IdentDef) {
+        return;
+    }
+    tree_.nodes_[word].flags |= kPackName;
 }
 
 /// operatorName : IDENTIFIER (OPERATOR | '[' ']')
@@ -1299,13 +1351,14 @@ void ParserImpl::parseBracketedIdents(TK closer, NK kind) {
 
 /// keyParamPair : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)?
 ///              | '..' identDef (':' typeExpr)?
+///              | '..' typeExpr
 ///              | 'constas' identDef (':' typeExpr)?
 /// A rest parameter is written untyped and last in a function declaration's parameter list
 /// (design principles 5.5). A `constas` parameter is written first in that list and is a
 /// compile-time value, not a runtime parameter (design principles 5.4). A type written after a
 /// rest parameter, or left out of a `constas` one, is parsed so that the semantic stage can
 /// report it; the parameter lists of a lambda, a function type and a rule take neither.
-void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas) {
+void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas, bool angled) {
     const size_t m = mark();
     if (lambdaParams_ && cur_ == TK::LParen) {
         // A lambda parameter destructured as a tuple: `((a, b)) => ...`. The rule is the one of
@@ -1325,8 +1378,18 @@ void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas) {
     }
     if (allowRest && cur_ == TK::DotDot) {
         bump();
-        parseIdentDef();
-        if (eat(TK::Colon)) {
+        // `..ts` (and `..P` in a function type) is a name; `..ParamsOf<F>` is a type expression,
+        // a pack written out in a function type's parameter list.
+        const bool plain =
+            cur_ == TK::Identifier &&
+            (peek(1) == TK::Colon || peek(1) == TK::Comma || peek(1) == TK::RParen ||
+             peek(1) == TK::Gt);
+        if (plain) {
+            parseIdentDef();
+            if (eat(TK::Colon)) {
+                parseType();
+            }
+        } else {
             parseType();
         }
         close(m, NK::KeyParamPair);
@@ -1340,6 +1403,10 @@ void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas) {
         parseIdentDef();
         if (eat(TK::Colon)) {
             parseType();
+            // A `constas` parameter of the `with` list may default (`constas stride: int = 1`).
+            if (angled && eat(TK::Assign)) {
+                parseExpr();
+            }
         }
         close(m, NK::KeyParamPair);
         return;
@@ -1362,10 +1429,11 @@ void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas) {
 /// pairedParams : keyParamPair (',' keyParamPair)*
 void ParserImpl::parsePairedParams(TK closer, bool allowRest, bool allowConstas) {
     const size_t m = mark();
-    parseKeyParamPair(allowRest, allowConstas);
+    const bool angled = closer == TK::Gt;
+    parseKeyParamPair(allowRest, allowConstas, angled);
     while (cur_ == TK::Comma && peek(1) != closer && !panic_) {
         bump();
-        parseKeyParamPair(allowRest, allowConstas);
+        parseKeyParamPair(allowRest, allowConstas, angled);
     }
     close(m, NK::PairedParams);
 }
@@ -1400,7 +1468,7 @@ void ParserImpl::parseParentParams(bool allowRest, bool allowConstas) {
 
 /// angledParams : '<' pairedParams? ','? '>'
 /// The `<` of a parameter list need not touch anything (`with <T: type>`).
-void ParserImpl::parseAngledParams(bool allowRest) {
+void ParserImpl::parseAngledParams(bool allowRest, bool allowConstas) {
     if (cur_ != TK::Lt && cur_ != TK::LAngle) {
         unexpected({e(TK::Lt)});
         return;
@@ -1411,7 +1479,7 @@ void ParserImpl::parseAngledParams(bool allowRest) {
     {
         Scope scope(*this, false, open);
         if (cur_ != TK::Gt && cur_ != TK::Comma) {
-            parsePairedParams(TK::Gt, allowRest, false);
+            parsePairedParams(TK::Gt, allowRest, allowConstas);
         }
         eat(TK::Comma);
         if (!panic_ && cur_ != TK::Gt) {

@@ -278,8 +278,6 @@ void DraftGraphBuilder::retargetOperNode(runtime::DraftNodeRef node, const oper_
     registerOperTarget(node, op);
 }
 
-runtime::DraftNodeRef DraftGraphBuilder::addSyncNode() { return ref(draft_->addSyncNode()); }
-
 runtime::DraftNodeRef DraftGraphBuilder::addGateNode(camel::core::type::Type *type) {
     return ref(draft_->addGateNode(type));
 }

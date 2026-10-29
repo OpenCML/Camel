@@ -7,13 +7,14 @@
  * product on a library GEMM (7.3); gemm_canonical.library pins the licence bound for that path.
  */
 
-import { random, seed, sum, abs, relu, linear } from tensor
+import { sum, abs, relu, linear } from tensor
+import { next_key, seed, uniform } from random
 
 func main(): int sync {
     seed(5)
-    let a = random([33, 600], -1.0, 1.0)
-    let b = random([600, 29], -1.0, 1.0)
-    let bias = random([29], -1.0, 1.0)
+    let a = (next_key()->uniform::<f32><shape: [33, 600]> * 2.0 - 1.0)
+    let b = (next_key()->uniform::<f32><shape: [600, 29]> * 2.0 - 1.0)
+    let bias = (next_key()->uniform::<f32><shape: [29]> * 2.0 - 1.0)
     let p = a @ b
     'gemm product_sum={}'->format<sum(p)>->println
     'gemm affine_sum={} relu_sum={}'->format<sum(a @ b + bias), sum(relu(a @ b + bias))>->println

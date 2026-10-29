@@ -232,12 +232,11 @@ bool mayRemoveDead(const GCGraph &graph) {
             valueUsers[ref] > 0 && !joinOrBrchUser[ref]) {
             return true;
         }
-        // What nothing reads: a SYNC, a GATE or a value computed for nothing.
+        // What nothing reads: a GATE or a value computed for nothing.
         if (valueUsers[ref] != 0) {
             continue;
         }
         switch (node->kind) {
-        case GCNodeKind::Sync:
         case GCNodeKind::Gate:
         case GCNodeKind::Cast:
         case GCNodeKind::Copy:
@@ -267,8 +266,8 @@ bool mayReduceOrder(const GCGraph &graph) {
     }
     for (auto it = graph.nodes().begin(); it != graph.nodes().end(); ++it) {
         const gc_node_ref_t ref = it.ref();
-        // Several order edges meeting in one node: one of them may be implied by a path through
-        // the others (docs/design/effects/edges.cn.md 5.4). The pass reads the same condition.
+        // Several order edges meeting in one node: one of them may be implied by a path of order
+        // and sync edges (docs/design/effects/edges.cn.md 5.4). The pass reads the same condition.
         if (graph.orderPredsOf(ref).size() >= 2) {
             return true;
         }

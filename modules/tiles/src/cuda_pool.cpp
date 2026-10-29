@@ -105,9 +105,16 @@ MemoryPool::Block MemoryPool::checkout(size_t bytes) {
         cached = takeIdleLocked(wanted);
     }
     ++checkouts_;
-    if (cached.handle)
-        return cached;
-    return allocate(wanted);
+    Block result = cached.handle ? cached : allocate(wanted);
+    {
+        // The block is part of the working set from here until `release`.
+        std::lock_guard lock(mutex_);
+        ++liveBlocks_;
+        liveBytes_ += result.capacity;
+        peakLiveBlocks_ = std::max(peakLiveBlocks_, liveBlocks_);
+        peakLiveBytes_  = std::max(peakLiveBytes_, liveBytes_);
+    }
+    return result;
 }
 bool MemoryPool::absorbLocked(Block block) noexcept {
     if (disabled_ || policy_.maxEntries == 0 || policy_.idleBytes == 0 ||
@@ -116,6 +123,7 @@ bool MemoryPool::absorbLocked(Block block) noexcept {
         return false;
     idle_[idleCount_++] = block;
     idleBytes_ += block.capacity;
+    peakIdleBytes_ = std::max(peakIdleBytes_, idleBytes_);
     ++cached_;
     return true;
 }
@@ -143,6 +151,10 @@ void MemoryPool::release(Block block) noexcept {
         return;
     {
         std::lock_guard lock(mutex_);
+        // The block leaves the working set here, whichever way the rest of this function sends it
+        // (cached, freed, or abandoned while reuse is disabled).
+        liveBlocks_ = liveBlocks_ ? liveBlocks_ - 1 : 0;
+        liveBytes_  = liveBytes_ > block.capacity ? liveBytes_ - block.capacity : 0;
         if (absorbLocked(block))
             return;
         if (disabled_) {
@@ -188,6 +200,9 @@ PoolStats MemoryPool::stats() const {
         std::lock_guard lock(mutex_);
         result.idleEntries = idleCount_;
         result.idleBytes   = idleBytes_;
+        result.peakLiveBlocks = peakLiveBlocks_;
+        result.peakLiveBytes  = peakLiveBytes_;
+        result.peakIdleBytes  = peakIdleBytes_;
         result.disabled    = disabled_;
     }
     result.checkouts   = checkouts_;

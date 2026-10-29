@@ -296,6 +296,27 @@ CastSafety TupleType::castSafetyFrom(Type *sourceType) const {
     // decided by structure, so `t as (int, int)` passes for `t: (int, int)`.
     if (equals(sourceType))
         return CastSafety::Safe;
+    // A type that still holds the `Ref` placeholder is not one a value can have, so nothing is
+    // converted to or from it: the conversion refuses it here for the reason
+    // TupleType::assignableFrom states, instead of asking whether the member types fit (which
+    // that comparison cannot answer).
+    if (!resolved() || (sourceType != nullptr && sourceType->code() == TypeCode::Tuple &&
+                        !static_cast<const TupleType *>(sourceType)->resolved())) {
+        return CastSafety::Forbidden;
+    }
+    if (cell_ && sourceType != nullptr && sourceType->code() == TypeCode::Tuple) {
+        const auto *source = static_cast<const TupleType *>(sourceType);
+        if (source->cell_) {
+            // A cell is one box, and a `var` argument is passed as the cell type the callee's
+            // port states. Two cell types whose content types accept each other's values are
+            // that one box seen as either type: nothing moves, and neither side can write a
+            // value the other cannot hold (design principles 3.5).
+            return typesPtr_[0]->assignableFrom(source->typesPtr_[0]) &&
+                           source->typesPtr_[0]->assignableFrom(typesPtr_[0])
+                       ? CastSafety::Safe
+                       : CastSafety::Forbidden;
+        }
+    }
     if (isTagged() && sourceType != nullptr) {
         // `null` is the literal of every nullable type.
         if (isNullable() && sourceType->code() == TypeCode::Void) {
@@ -325,6 +346,10 @@ slot_t TupleType::castSlotFrom(slot_t value, Type *sourceType) const {
     if (equals(sourceType)) {
         return value; // a conversion to the value's own type does nothing
     }
+    if (cell_ && sourceType != nullptr && sourceType->code() == TypeCode::Tuple &&
+        static_cast<const TupleType *>(sourceType)->cell_) {
+        return value; // one box: the conversion of a cell into another cell type moves nothing
+    }
     if (!isTagged()) {
         return Type::castSlotFrom(value, sourceType);
     }
@@ -350,6 +375,15 @@ bool TupleType::assignableFrom(Type *sourceType) const {
     }
     const TupleType &other = static_cast<const TupleType &>(*sourceType);
     if (size_ != other.size_ || cell_ != other.cell_ || tag_ != other.tag_) {
+        return false;
+    }
+    // A type that still holds the `Ref` placeholder is not one a value can have (design
+    // principles 5.1: every value has a determined type, and no type is undetermined after
+    // compilation). `resolved()` names that state, and `resolve` is what turns it into a type
+    // from the computed elements of a literal. Nothing is assignable to it and it is assignable
+    // to nothing, so the answer is `false` -- not a comparison of the placeholder with a member
+    // type, which the primitive comparison cannot answer and asserts on.
+    if (!resolved() || !other.resolved()) {
         return false;
     }
     if (cell_) {

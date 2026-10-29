@@ -54,6 +54,7 @@ enum class SemanticDiag : uint32_t {
     NativeTypeNotProvided   = 0x0001FD,
     ArgumentNeedsConversion = 0x000021,
     ReturnNeedsConversion   = 0x000022,
+    VarArgumentTypeMismatch = 0x000200,
     // 0x000023: empty. The number is not reused.
     // 0x000025: empty. The number is not reused.
     // 0x000026: empty. The number is not reused.
@@ -70,6 +71,7 @@ enum class SemanticDiag : uint32_t {
     GenericInstantiationTooDeep = 0x000055,
     TypeFunctionArguments       = 0x000056,
     GenericFunctionUnsupported  = 0x000057,
+    PackExpansionNeedsOnePack   = 0x000058,
     // Functions as values.
     FunctionNameAsValue = 0x000060,
     // Nullable and fallible values (design principles 3.8;
@@ -145,6 +147,7 @@ enum class SemanticDiag : uint32_t {
     DimensionNameAlreadyBound = 0x000142,
     DimensionMismatch         = 0x000143,
     InvalidExtentExpression   = 0x000144,
+    ExtentNotADimension       = 0x0001FF,
     // Automatic differentiation (design principles 9.9): 0x150 and up.
     NotDifferentiable = 0x000150,
     // Tags (design principles 6.2): 0x160 and up.
@@ -460,6 +463,7 @@ enum class SemanticDiag : uint32_t {
     /// A case whose pattern names no variable.
     FactCaseBindsNoVariable   = 0x0001F8,
     TypeFunctionNotApplicable = 0x0001FE,
+    StatementAfterReturn      = 0x000201,
 
     // Warnings
     IgnoredSideEffect = 0x100002,

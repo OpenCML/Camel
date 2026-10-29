@@ -107,7 +107,8 @@ enum class GCNodeKind : uint8_t {
     Bind = 9, // reserved, see above
     Func = 10,
     Oper = 11,
-    Sync = 12,
+    // 12 was the SYNC node, deleted: a statement's place in its `sync` block is a sync edge, and
+    // the node it used to need is not part of the model (docs/design/effects/edges.cn.md 5.3).
     Gate = 13,
     Dref = 14, // build-time only, see above
     // A loop (design principles 3.10; docs/design/graph-model 3.5, the LOOP card):
@@ -654,6 +655,13 @@ class GCGraph : public camel::core::rtdata::Object {
     /// finds the body from the OPER at a call site through it, instead of the kernel's own
     /// derivative or lowering rule, which is execution and not meaning.
     const std::string &implKernelUri() const;
+    /// The facts of the declaration this graph is (design principles 6.2): the interned attribute
+    /// set the module keeps for it (`camel/core/node_attrs.h`), 0 for a graph that is not a
+    /// declaration. A declaration fact stays on the declaration (no node carries one: `#vjp(rule)`
+    /// names a graph and `attr::fateOf` records that it is not a node attribute), so this is what
+    /// a pass reads it through — the function it was given, without the module that declares it.
+    /// Cold metadata: it says nothing about the graph's content.
+    uint32_t declarationFacts() const;
     /// The graph this one is written in, invalid for a root graph.
     GraphId outerGraphId() const { return outerGraphId_; }
     /// The graph's revision (graph facts, camel/runtime/facts.h): a process-wide number. A
@@ -778,6 +786,11 @@ class GCGraph : public camel::core::rtdata::Object {
         }
         return std::pair{*from, *to};
     }
+    /// The two integers of the interval pair `intervalBoundsOf` reads, when a pass wrote that pair
+    /// as the constant holding the same two values instead of the FILL that builds it: the pair is
+    /// the value, not the form, so a loop's bounds are read the same from either. The first bound
+    /// first. Nothing when `ref` is not such a constant.
+    std::optional<std::pair<int64_t, int64_t>> intervalPairValuesOf(gc_node_ref_t ref) const;
     gc_node_ref_t matchedJoinOutputOf(gc_node_ref_t ref) const;
 
     /// The payload of node `ref` as a `Body` (see the payload structs above). The node must
@@ -1120,6 +1133,9 @@ class GCGraphManager {
     /// until the pass settles, so that the session's work table can still reach it; a graph no
     /// program binds by then is freed like any other.
     void noteUnbound(GCGraph *graph);
+    /// Takes `graph` out of the manager's books without destructing it: the memory of a graph
+    /// that was bound before it was built.
+    void forget(GCGraph *graph);
 
   private:
     friend class Program;

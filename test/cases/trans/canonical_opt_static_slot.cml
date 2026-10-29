@@ -1,0 +1,6 @@
+// The canonical export walks back from the root's exit to the graph its entry call names. Once
+// std::opt has inlined that call into the root, the walk crosses the body's calls, and the literal
+// argument of one of them is a Data node in the same static area as the function values. Reading
+// that slot as a function pointer crashed the export on 167 corpus programs; a slot whose type is
+// not a function is not a callee.
+func main(): int { let n = 3; let fs = [(x: int): int => x + n]; return fs[0](4) }

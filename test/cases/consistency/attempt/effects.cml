@@ -27,7 +27,7 @@ func main(): int sync {
     println(total)
     var seen = 0
     let c = attempt(() => sync {
-        0..6->foreach<(x: int) => sync {
+        (0..6)->foreach<(x: int) => sync {
             seen = seen + 12 / (3 - x)
             println(seen)
         }>

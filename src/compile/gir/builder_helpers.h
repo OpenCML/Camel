@@ -459,6 +459,60 @@ inline bool hasDirectDataDependency(node_handle_t lhs, node_handle_t rhs) {
            std::ranges::find(withInputsOf(lhs), rhsId) != withInputsOf(lhs).end();
 }
 
+/// Whether `from` already reaches `to` over data edges, directly or through the nodes between them:
+/// `to` reads what `from` produced, so it is computed after it, and an edge that only says "after"
+/// says nothing new. This is the transitive form of `hasDirectDataDependency`, and the question a
+/// read before a write asks: `x = x + 1` and `x += 1` both hand the read's value to the operator the
+/// write stores, so both are ordered already and neither is given a second edge (design principles
+/// 2.1). The transitive reduction over the edges that remain is `std::opt::order`'s.
+inline bool dataPathReaches(node_handle_t from, node_handle_t to) {
+    if (!from || !to || from == to || nodeGraphOf(from) != nodeGraphOf(to)) {
+        return false;
+    }
+    const draft_node_ref_t target = nodeIdOf(from);
+    std::vector<draft_node_ref_t> pending{nodeIdOf(to)};
+    std::set<draft_node_ref_t> seen;
+    while (!pending.empty()) {
+        const draft_node_ref_t id = pending.back();
+        pending.pop_back();
+        if (id == target) {
+            return true;
+        }
+        if (!seen.insert(id).second) {
+            continue;
+        }
+        const node_handle_t node = nodeDraftOf(to)->ref(id);
+        for (const auto inputs : {normInputsOf(node), withInputsOf(node)}) {
+            for (draft_node_ref_t input : inputs) {
+                pending.push_back(input);
+            }
+        }
+    }
+    return false;
+}
+
+/// Whether `node` owns a control region -- a `BRCH` or a `LOOP` whose arm or part is a region of
+/// this graph -- and so stands on the outside for what runs inside it (docs/design/effects/
+/// edges.cn.md 4.6): the region runs as a whole with its owner, so an order that would reach a node
+/// of the region is written on the owner instead. Such a node computes nothing itself, but an order
+/// edge on it says something, which is why it is not "a pure node nothing orders".
+inline bool nodeStandsForItsRegion(node_handle_t node) {
+    if (node == nullptr) {
+        return false;
+    }
+    const runtime::GCNodeKind kind = nodeKindOf(node);
+    if (kind != runtime::GCNodeKind::Brch && kind != runtime::GCNodeKind::Loop) {
+        return false;
+    }
+    const runtime::GraphDraft *draft = nodeDraftOf(node);
+    for (uint32_t region = 1; region < draft->regionCount(); ++region) {
+        if (draft->region(region).owner == nodeIdOf(node)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /// Whether the model lets an order edge sit on this node (docs/design/effects/edges.cn.md 4.6):
 /// an order edge only orders, and its two ends are effects or nodes that may fault, so a node the
 /// model lets a pass arrange freely -- pure and unable to fault (design principles 3.4) -- carries
@@ -469,6 +523,11 @@ inline bool hasDirectDataDependency(node_handle_t lhs, node_handle_t rhs) {
 inline bool nodeTakesAnOrder(node_handle_t node) {
     if (node == nullptr) {
         return false;
+    }
+    // A region's owner carries the order of what its region holds, and the order the region as a
+    // whole has with the code around it is written on it (Builder::rehomeOrderEdges).
+    if (nodeStandsForItsRegion(node)) {
+        return true;
     }
     const runtime::GCNodeKind kind = nodeKindOf(node);
     if (kind == runtime::GCNodeKind::Oper) {
@@ -556,10 +615,12 @@ inline void markSyncStatement(node_handle_t node) {
 }
 
 /// One link of a `sync` block's chain: a statement follows the one written before it by a sync edge,
-/// which carries "used" as well as the order (docs/design/effects/edges.cn.md 1), and the control
-/// edge the kind names the same pair with, which is what every consumer of the chain that reads only
-/// that kind still reads. Both are written as one pair so that no consumer of the chain reads less
-/// than it did; the inline splice writes them the same way (src/runtime/draft.cpp, `setSyncInputs`).
+/// which carries "used" as well as the order (docs/design/effects/edges.cn.md 1). The link is decided
+/// by that sync edge -- what a `sync` block wrote is read back from `syncPredsOf` -- and the control
+/// edge the kind names the same pair with is written beside it only for a consumer that still reads
+/// that kind; nothing is judged by it. Both are written as one pair so that no consumer of the chain
+/// reads less than it did; the inline splice writes them the same way (src/runtime/draft.cpp,
+/// `setSyncInputs`).
 ///
 /// Both ends are marked as statements of one block, which is what the seal check reads back
 /// (src/runtime/graph_edges.cpp, `checkSyncEdges`). The caller has already decided the edge says

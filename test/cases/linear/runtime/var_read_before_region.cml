@@ -1,0 +1,78 @@
+/**
+ * A read of a `var` made before a loop or a branch arm is the value the variable had at that
+ * point, not the one the region left there (design principles 3.5: a read sees the write before
+ * it -- the wrong write here was the one written after the read). A `var` read and write are
+ * versions, and the version a read takes before the first write is the value `:var/new` was given,
+ * so the writes the region makes after the read cannot be what it sees; a read made after the
+ * region still reads what the region left in the cell.
+ *
+ * Expected output:
+ *   0 2      a `while` loop's body writes the variable; the read made before the loop stays 0
+ *   0 3      the same with an interval loop whose value is not used
+ *   0 5 1    a branch arm writes the variable; the read made before the branch stays 0
+ *   7 7      nothing writes it: the read before the loop and the read after it agree
+ *   a abb    a value type, not an int: the read before the loop keeps the old string
+ */
+
+func while_loop(): int sync {
+    var z = 0
+    let before = z
+    loop i = 0 while i < 2 do sync {
+        z = z + 1
+        i + 1
+    }
+    println(before, z)
+    return 0
+}
+
+func interval_loop(): int sync {
+    var z = 0
+    let before = z
+    loop i = 0 for k in 0..3 do sync {
+        z = z + 1
+        i + 1
+    }
+    println(before, z)
+    return 0
+}
+
+func arm(): int sync {
+    var v = 0
+    let before = v
+    let r = if true then sync {
+        v = v + 5
+        1
+    } else 0
+    println(before, v, r)
+    return 0
+}
+
+func nothing_written(): int sync {
+    var n = 7
+    let before = n
+    loop i = 0 while i < 2 do sync {
+        i + 1
+    }
+    println(before, n)
+    return 0
+}
+
+func text(): int sync {
+    var s = "a"
+    let before = s
+    loop i = 0 while i < 2 do sync {
+        s = s + "b"
+        i + 1
+    }
+    println(before, s)
+    return 0
+}
+
+func main(): int sync {
+    while_loop()
+    interval_loop()
+    arm()
+    nothing_written()
+    text()
+    return 0
+}

@@ -20,13 +20,13 @@ func mergesort(arr: int[]): int[] {
 }
 
 func checksum(arr: int[]): int {
-    return 0..len(arr)->map<(i: int): int => arr[i] * (i + 1)>->reduce<(a: int, b: int): int => a + b, 0>
+    return (0..len(arr))->map<(i: int): int => arr[i] * (i + 1)>->reduce<(a: int, b: int): int => a + b, 0>
 }
 
 func main(): int sync {
     seed(7)
-    let data = 0..96->shuffle<next_key()>
-    let sums = 0..12->map<(k: int): int => {
+    let data = (0..96)->shuffle<next_key()>
+    let sums = (0..12)->map<(k: int): int => {
         let part = data[k * 8:96]
         return checksum(mergesort(part))
     }>

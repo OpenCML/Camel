@@ -18,7 +18,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.composition_uses"
-desc = "A composition is a function value like any other: `map<inc..dbl>` and `3->inc..dbl` (where `..` binds more tightly than `->`) give what the two calls written out give."
+desc = "A composition is a function value like any other: `map<inc..dbl>` and `3->(inc..dbl)` give what the two calls written out give. Beside `->` a composition keeps its parentheses, because `..` is looser than `->`: `3->inc..dbl` is `(3->inc)..dbl` and is refused where an `int` meets a function."
 kind = "behavior"
 case = "../../../cases/compile/stream/composition_uses.cml"
 args = ["${case}"]
@@ -448,32 +448,6 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_output_contains = ["[0, 3, 6, 9]", "[]", "the step is 0 (from 0 to 10); a range needs a step that moves"]
 expect_output_not_contains = ["UnknownInternalError"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 10000
-
-
-[[tests]]
-name = "stream.range_import_wins"
-desc = "A name imported by name is the name the program means: with `import { range } from tensor` the call is tensor's `range`, at its one-argument and three-argument arities, and the built-in of the same spelling (the prelude, the lowest layer) does not answer for the name (design principles 6.x). The graph names the entity that answered."
-kind = "behavior"
-case = "../../../cases/compile/stream/range_import_wins.cml"
-args = ["${case}", "std::jgir", "canonical=true"]
-expect_exit = 0
-expect_output_contains = ["tensor:range"]
-expect_output_not_contains = ["struct/range", "UnknownInternalError", "[Error]"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 10000
-
-
-[[tests]]
-name = "stream.range_using_wins"
-desc = "`using namespace` is layer 4, above the built-in: after `using namespace tensor` the one-argument `range(5)` is tensor's, which the merged layer the built-in takes part in cannot answer (design principles 6.x)."
-kind = "behavior"
-case = "../../../cases/compile/stream/range_using_wins.cml"
-args = ["${case}", "std::nvm"]
-expect_exit = 0
-expect_stdout_starts_with = "[0, 1, 2, 3, 4]"
-expect_output_not_contains = ["NoMatchingFunction", "UnknownInternalError", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 

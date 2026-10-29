@@ -998,13 +998,79 @@ Builder::genericValueFor(node_handle_t node, Type *expected, const GCT::node_ptr
 }
 
 void Builder::takeConstasValues(
-    FunctionType *signature, std::vector<Argument> &normInputs, type_vec_t *normTypes,
-    const GCT::node_ptr_t &call, ConstasValues &constas, ExtentValues &extents) {
+    FunctionType *signature, std::vector<Argument> &withInputs, type_vec_t *withTypes,
+    std::vector<Argument> &normInputs, type_vec_t *normTypes, const GCT::node_ptr_t &call,
+    ConstasValues &constas, ExtentValues &extents) {
     const size_t withCount     = signature->withTypesCount();
     const size_t declaredCount = signature->normTypesCount();
-    // The arguments are written one per parameter, `constas` values included, so the parameter
-    // of argument `i` is ordinary parameter `i`. A rest call has more arguments than that: the
-    // ones after the fixed parameters are the rest parameter's and are kept.
+    // The value of one argument written at the position of a `constas` parameter: a literal, a
+    // compile-time value handed on from another node (the `n` of a `static for`, a `constas`
+    // forwarded to another `constas`, the `j` of `indices`), or a call of a pure function that
+    // reduces to one. Anything else is refused where the argument is written.
+    const auto take = [&](Argument &argument, const std::string &name, Type *declared) {
+        const GCT::node_ptr_t &expr = argument.expr;
+        Type *valueType =
+            argument.node != nullptr ? valueTypeOf(nodeTypeOf(argument.node)) : nullptr;
+        data_ptr_t data =
+            expr != nullptr && expr->type() == GCT::NodeKind::DATA ? expr->data() : nullptr;
+        if (data == nullptr && argument.node != nullptr) {
+            data = constantOfNode(argument.node);
+        }
+        if (data == nullptr && valueType != nullptr && argument.node != nullptr) {
+            if (const StaticArg constant = staticArgOf(argument.node); constant.value) {
+                data = dataOfStaticValue(valueType, *constant.value);
+            }
+        }
+        if (data == nullptr && expr != nullptr && expr->type() == GCT::NodeKind::LINK) {
+            // A call of a pure function with constant arguments is a constant, and this place
+            // needs one: a call that does not reduce to one is refused by its own name
+            // (design principles 5.1, 6.5), not as a value without a constant.
+            const FoldedCall folded = foldConstantCall(expr);
+            if (folded.data != nullptr) {
+                data = folded.data;
+            } else if (folded.refusal != FoldRefusal::NotAProgramCall) {
+                reportFoldRefusal(folded, expr);
+            }
+        }
+        if (data == nullptr || valueType == nullptr) {
+            diags_->of(SemanticDiag::ConstasValueNotConstant)
+                .atOrigin(expr != nullptr && expr->origin() != 0 ? expr->origin() : call->origin())
+                .commit(name, declared->toString());
+            throw BuildAbortException();
+        }
+        ConstasValue value;
+        value.type      = declared;
+        value.valueType = valueType;
+        value.data      = data;
+        value.node      = argument.node;
+        constas[name]   = std::move(value);
+        if (auto extent = constasExtentOf(data); extent.has_value()) {
+            extents[name] = *extent;
+        }
+    };
+    // The `with` arguments are complete when they get here (a default fills the ones a call
+    // leaves out), written one per parameter; the ordinary arguments are written one per
+    // parameter too, `constas` values included, so the parameter of argument `i` is parameter
+    // `i` of its list. A rest call has more ordinary arguments than that: the ones after the
+    // fixed parameters are the rest parameter's and are kept.
+    if (withTypes != nullptr || withCount > 0) {
+        std::vector<Argument> runtimeWith;
+        type_vec_t runtimeWithTypes;
+        for (size_t i = 0; i < withInputs.size(); ++i) {
+            if (i < withCount && signature->withIsConstasAt(i)) {
+                take(withInputs[i], std::string(signature->argNameAt(i)), signature->withTypeAt(i));
+                continue;
+            }
+            runtimeWith.push_back(std::move(withInputs[i]));
+            if (withTypes != nullptr && i < withTypes->size()) {
+                runtimeWithTypes.push_back((*withTypes)[i]);
+            }
+        }
+        withInputs = std::move(runtimeWith);
+        if (withTypes != nullptr) {
+            *withTypes = std::move(runtimeWithTypes);
+        }
+    }
     std::vector<Argument> runtimeInputs;
     type_vec_t runtimeTypes;
     runtimeInputs.reserve(normInputs.size());
@@ -1027,48 +1093,7 @@ void Builder::takeConstasValues(
             diags_->of(SemanticDiag::ConstasArgumentMissing).atOrigin(call->origin()).commit(name);
             throw BuildAbortException();
         }
-        Argument &argument          = normInputs[i];
-        const GCT::node_ptr_t &expr = argument.expr;
-        Type *valueType =
-            argument.node != nullptr ? valueTypeOf(nodeTypeOf(argument.node)) : nullptr;
-        data_ptr_t data =
-            expr != nullptr && expr->type() == GCT::NodeKind::DATA ? expr->data() : nullptr;
-        if (data == nullptr && argument.node != nullptr) {
-            // A compile-time value handed on from another node: the `n` of a `static for`, a
-            // `constas` forwarded to another `constas`, the `j` of `indices`.
-            data = constantOfNode(argument.node);
-        }
-        if (data == nullptr && valueType != nullptr && argument.node != nullptr) {
-            if (const StaticArg constant = staticArgOf(argument.node); constant.value) {
-                data = dataOfStaticValue(valueType, *constant.value);
-            }
-        }
-        if (data == nullptr && expr != nullptr && expr->type() == GCT::NodeKind::LINK) {
-            // A call of a pure function with constant arguments is a constant, and this place
-            // needs one: a call that does not reduce to one is refused by its own name
-            // (design principles 5.1, 6.5), not as a value without a constant.
-            const FoldedCall folded = foldConstantCall(expr);
-            if (folded.data != nullptr) {
-                data = folded.data;
-            } else if (folded.refusal != FoldRefusal::NotAProgramCall) {
-                reportFoldRefusal(folded, expr);
-            }
-        }
-        if (data == nullptr || valueType == nullptr) {
-            diags_->of(SemanticDiag::ConstasValueNotConstant)
-                .atOrigin(expr != nullptr && expr->origin() != 0 ? expr->origin() : call->origin())
-                .commit(name, signature->normTypeAt(i)->toString());
-            throw BuildAbortException();
-        }
-        ConstasValue value;
-        value.type      = signature->normTypeAt(i);
-        value.valueType = valueType;
-        value.data      = data;
-        value.node      = argument.node;
-        constas[name]   = std::move(value);
-        if (auto extent = constasExtentOf(data); extent.has_value()) {
-            extents[name] = *extent;
-        }
+        take(normInputs[i], name, signature->normTypeAt(i));
     }
     for (size_t i = declaredCount; i < normInputs.size(); ++i) {
         keep(i);
@@ -1178,7 +1203,7 @@ generic_template_ptr_t Builder::chooseGenericOverload(
                 return false;
             }
         }
-        const size_t params = signature->normTypesCount() - signature->constasCount();
+        const size_t params = signature->normTypesCount() - signature->normConstasCount();
         if (params != normTypes.size()) {
             return false;
         }
@@ -1319,13 +1344,14 @@ compile_graph_ptr_t Builder::instantiateForCall(
     std::vector<Argument> &normInputs, type_vec_t &withTypes, type_vec_t &normTypes,
     const GCT::node_ptr_t &call, Type *expectedResult) {
     FunctionType *signature = tmpl->funcType;
-    const size_t withCount  = signature->withTypesCount();
+    // A `constas n: T` parameter is bound by an argument written at its position, in the angle
+    // brackets or the parentheses: a compile-time constant, not a runtime one. It selects the
+    // instance and is then dropped from the call's inputs (design principles 5.4). A declaration
+    // may have any number of them, in any position.
+    const size_t declaredWithCount = signature->withTypesCount();
+    const size_t withCount         = declaredWithCount - signature->withConstasCount();
     const size_t declaredNormCount = signature->normTypesCount();
-    // A `constas n: T` parameter is bound by an ordinary argument written at its position: a
-    // compile-time constant, not a runtime one. It selects the instance and is then dropped
-    // from the call's inputs (design principles 5.4). A declaration may have any number of
-    // them, in any position.
-    const size_t normCount = declaredNormCount - signature->constasCount();
+    const size_t normCount         = declaredNormCount - signature->normConstasCount();
     // The ordinary parameter of each runtime argument: the `constas` parameters are not ones.
     std::vector<size_t> runtimeIndices;
     runtimeIndices.reserve(normCount);
@@ -1334,8 +1360,17 @@ compile_graph_ptr_t Builder::instantiateForCall(
             runtimeIndices.push_back(i);
         }
     }
+    std::vector<size_t> runtimeWithIndices;
+    for (size_t i = 0; i < declaredWithCount; ++i) {
+        if (!signature->withIsConstasAt(i)) {
+            runtimeWithIndices.push_back(i);
+        }
+    }
+    // The parameter of the runtime argument `i`, over all the declared parameters (`with` ones
+    // first): the `constas` parameters are not runtime arguments and have none.
     const auto signatureIndexAt = [&](size_t i) {
-        return i < withCount ? i : withCount + runtimeIndices[i - withCount];
+        return i < withCount ? runtimeWithIndices[i]
+                             : declaredWithCount + runtimeIndices[i - withCount];
     };
     // The arguments that name a generic function themselves: they have no type yet.
     std::vector<generic_template_ptr_t> waiting(withCount + normCount);
@@ -1362,11 +1397,12 @@ compile_graph_ptr_t Builder::instantiateForCall(
             .commit(tmpl->name, argTypesStr(), why, tmpl->name + ": " + signature->toString());
         throw BuildAbortException();
     };
-    if (withCount != withTypes.size()) {
+    if (declaredWithCount != withTypes.size()) {
         // Every argument written in the parentheses (`take(xs, 2)`): say which parameters
         // are with-parameters and how the call is written.
-        if (withTypes.empty() && normCount > 0 && withCount + declaredNormCount == normTypes.size() &&
-            signature->argNamesCount() >= withCount + declaredNormCount) {
+        if (withTypes.empty() && normCount > 0 &&
+            declaredWithCount + declaredNormCount == normTypes.size() &&
+            signature->argNamesCount() >= declaredWithCount + declaredNormCount) {
             const auto names = [&](size_t from, size_t count) {
                 std::string out;
                 for (size_t i = 0; i < count; ++i) {
@@ -1374,7 +1410,7 @@ compile_graph_ptr_t Builder::instantiateForCall(
                 }
                 return out;
             };
-            const std::string withs = names(0, withCount), norms = [&] {
+            const std::string withs = names(0, declaredWithCount), norms = [&] {
                 std::string out;
                 for (size_t i = 0; i < normCount; ++i) {
                     out += (i == 0 ? "" : ", ") +
@@ -1395,7 +1431,7 @@ compile_graph_ptr_t Builder::instantiateForCall(
         reject(
             std::format(
                 "it takes {} with-argument(s) and {} were given",
-                withCount,
+                declaredWithCount,
                 withTypes.size()));
     }
     if (declaredNormCount != normTypes.size()) {
@@ -1405,7 +1441,7 @@ compile_graph_ptr_t Builder::instantiateForCall(
             diags_->of(SemanticDiag::ConstasArgumentMissing)
                 .atOrigin(call->origin())
                 .commit(std::string(
-                    signature->argNameAt(withCount + normTypes.size())));
+                    signature->argNameAt(declaredWithCount + normTypes.size())));
             throw BuildAbortException();
         }
         reject(std::format(
@@ -1413,7 +1449,8 @@ compile_graph_ptr_t Builder::instantiateForCall(
     }
     ConstasValues constas;
     ExtentValues extents;
-    takeConstasValues(signature, normInputs, &normTypes, call, constas, extents);
+    takeConstasValues(
+        signature, withInputs, &withTypes, normInputs, &normTypes, call, constas, extents);
     const auto inputAt      = [&](size_t i) -> Argument      &{
         return i < withCount ? withInputs[i] : normInputs[i - withCount];
     };
@@ -1428,8 +1465,9 @@ compile_graph_ptr_t Builder::instantiateForCall(
     // A parameter by its position among all parameters (`with` ones first), with the `constas`
     // values of the call applied to the extents it writes.
     const auto patternAt = [&](size_t i) {
-        Type *pattern = i < withCount ? signature->withTypeAt(i)
-                                      : signature->normTypeAt(signatureIndexAt(i) - withCount);
+        const size_t at = signatureIndexAt(i);
+        Type *pattern   = at < declaredWithCount ? signature->withTypeAt(at)
+                                                 : signature->normTypeAt(at - declaredWithCount);
         return substituteExtentValues(pattern, extents);
     };
     const auto actualAt = [&](size_t i) { return valueTypeOf(typeAt(i)); };
@@ -1667,14 +1705,18 @@ compile_graph_ptr_t Builder::instantiateForCall(
     }
     // A `constas` value is held to the type of its parameter like any other argument; its type
     // may still name a variable another argument bound (design principles 5.4).
-    for (size_t i = 0; i < declaredNormCount; ++i) {
-        if (!signature->normIsConstasAt(i)) {
+    for (size_t p = 0; p < declaredWithCount + declaredNormCount; ++p) {
+        const bool inWith = p < declaredWithCount;
+        if (inWith ? !signature->withIsConstasAt(p)
+                   : !signature->normIsConstasAt(p - declaredWithCount)) {
             continue;
         }
-        const std::string name(signature->argNameAt(withCount + i));
+        const std::string name(signature->argNameAt(p));
         ConstasValue &value = constas.at(name);
+        Type *declaredType = inWith ? signature->withTypeAt(p)
+                                    : signature->normTypeAt(p - declaredWithCount);
         Type *wanted =
-            substituteTypeVars(substituteExtentValues(signature->normTypeAt(i), extents), bindings);
+            substituteTypeVars(substituteExtentValues(declaredType, extents), bindings);
         if (containsTypeVar(wanted)) {
             reject(std::format(
                 "the 'constas' parameter '{}' leaves a type variable without a type", name));
@@ -1704,7 +1746,13 @@ compile_graph_ptr_t Builder::instantiateForCall(
         for (size_t i = 0; i < withCount && i < withInputs.size(); ++i) {
             data_ptr_t value = constantOfNode(withInputs[i].node);
             if (value != nullptr) {
-                withValues.emplace(std::string(signature->argNameAt(i)), value);
+                withValues.emplace(std::string(signature->argNameAt(runtimeWithIndices[i])), value);
+            }
+        }
+        for (size_t i = 0; i < declaredWithCount; ++i) {
+            if (signature->withIsConstasAt(i)) {
+                const std::string name(signature->argNameAt(i));
+                withValues.emplace(name, constas.at(name).data);
             }
         }
         const WhenResult verdict =
@@ -1994,13 +2042,38 @@ void Builder::settleGenericOperatorArguments(
                 strutil::join(names, ", ", [](const std::string &n) { return n; }),
                 tmpl->name));
     };
+    // A name that has no type until a position of function type resolves it is not bound to a free
+    // type variable: the position `T` of `println(x: T, ..rest)` says nothing about which function
+    // the name stands for, so the name stays unsettled and is refused. A rule whose signature is
+    // not declared (a computed one) says nothing here, and the name is tried as before.
+    const auto positionTakesFunction = [&](bool with, size_t index) {
+        for (const auto &[uri, resolver] : ops->resolvers()) {
+            FunctionType *sig = resolver->fixedSignature();
+            if (sig == nullptr) {
+                sig = resolver->declaredSignature();
+            }
+            if (sig == nullptr) {
+                return true;
+            }
+            const size_t count = with ? sig->withTypesCount() : sig->normTypesCount();
+            const bool pack    = with ? sig->hasWithRest() : sig->hasRest();
+            if (index >= count - (pack ? 1 : 0)) {
+                continue; // a pack position, or no position of this rule: any type, free
+            }
+            Type *param = with ? sig->withTypeAt(index) : sig->normTypeAt(index);
+            if (param->code() != TypeCode::TypeVar) {
+                return true;
+            }
+        }
+        return false;
+    };
     for (size_t i = 0; i < withInputs.size(); ++i) {
-        if (isWaiting(withInputs[i])) {
+        if (isWaiting(withInputs[i]) && positionTakesFunction(true, i)) {
             settleOne(withInputs[i], withTypes[i]);
         }
     }
     for (size_t i = 0; i < normInputs.size(); ++i) {
-        if (isWaiting(normInputs[i])) {
+        if (isWaiting(normInputs[i]) && positionTakesFunction(false, i)) {
             settleOne(normInputs[i], normTypes[i]);
         }
     }
@@ -2132,12 +2205,13 @@ compile_graph_ptr_t Builder::instantiateGeneric(
     // The `constas` values in the order the declaration writes them, for the instance name
     // and the label of a diagnostic reported in the instance.
     std::string constasValues, constasText;
-    for (size_t i = 0; i < tmpl->funcType->normTypesCount(); ++i) {
-        if (!tmpl->funcType->normIsConstasAt(i)) {
+    const size_t withParams = tmpl->funcType->withTypesCount();
+    for (size_t i = 0; i < withParams + tmpl->funcType->normTypesCount(); ++i) {
+        if (i < withParams ? !tmpl->funcType->withIsConstasAt(i)
+                           : !tmpl->funcType->normIsConstasAt(i - withParams)) {
             continue;
         }
-        const std::string name(tmpl->funcType->argNameAt(
-            tmpl->funcType->withTypesCount() + i));
+        const std::string name(tmpl->funcType->argNameAt(i));
         const auto found = constas.find(name);
         if (found == constas.end()) {
             continue;

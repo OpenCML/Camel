@@ -1,0 +1,17 @@
+/**
+ * The error function and its complement, written as any program writes them (`import math`):
+ * `erf(0.5)`, `erf(-1.0)` and `erfc(2.0)` to three decimals against Python's `math.erf` and
+ * `math.erfc` (0.520, -0.843, 0.005), and the same values in `f32`.
+ */
+import { erf, erfc, round } from math
+
+func main(): int sync {
+    let a = 0.5
+    let b = -1.0
+    let c = 2.0
+    println(round(erf(a) * 1000.0) / 1000.0, round(erf(b) * 1000.0) / 1000.0)
+    println(round(erfc(c) * 1000.0) / 1000.0)
+    let x: f32 = 0.5
+    println(round(float(erf(x)) * 1000.0) / 1000.0)
+    return 0
+}

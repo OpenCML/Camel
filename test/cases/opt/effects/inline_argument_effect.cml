@@ -1,0 +1,13 @@
+/**
+ * A call uses the argument it is given where it is written, and an argument's effect happens there
+ * (design principles 3.4): `println(9)` prints `9` although `first` never reads its second
+ * parameter. Inlining the call may not drop the effect with the port nothing read (9.7).
+ */
+
+func first(a: int, b: int): int {
+    return a
+}
+
+func main(): int {
+    return first(5, println(9))
+}

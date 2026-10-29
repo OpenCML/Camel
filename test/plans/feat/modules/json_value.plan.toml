@@ -345,3 +345,39 @@ expect_exit = 0
 expect_stdout_starts_with = "300 [r0, r1, r2] t"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+
+[[tests]]
+name = "json.kind.failed.export"
+desc = "A match over a `Json!` that failed, exported after std::opt: the arm that would look into the document is the case the tag does not select, and folding it early leaves no document to look into. The export succeeds and its document parses; the fold used to materialize that absence as a null Json constant and `kind` read it through a null pointer."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_kind_failed.cml"
+args = ["${case}", "std::opt", "std::jgir", "canonical=true"]
+expect_exit = 0
+expect_output_not_contains = ["Segmentation fault", "core dumped"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const doc = JSON.parse(input.normalized.stdout)
+assert(doc.format === 'camel.gir', `not a GIR document: ${String(doc.format)}`)
+const ids = (g) => new Set(g.nodes.map((n) => n.id))
+for (const g of doc.graphs) {
+  assert(g.id && ids(g).has(g.exit), `graph ${g.id} exits at ${String(g.exit)}, which is not one of its nodes`)
+}
+const strings = doc.graphs.flatMap((g) => g.nodes)
+  .filter((n) => n.value && n.value.k === 'string')
+  .map((n) => String.fromCharCode(...n.value.bytes))
+assert(strings.includes('error') && strings.includes('object'), `the export does not hold the two arms of the match: ${strings.join(', ')}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "json.kind.failed.run"
+desc = "The same program run: the failed document takes the error case and the other case's `kind` is never reached, so the print is 'error object'."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_kind_failed.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_starts_with = "error object"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

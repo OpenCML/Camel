@@ -465,7 +465,9 @@ position of the call. `return error(...)` hands it out of a function declared `T
 #### `print`
 
 ```camel
+print: <fmt: string> (x: T, ..rest) => T
 print: (x: T, ..rest) => T
+print: () => void
 ```
 
 Writes the arguments, separated by spaces, without a line end, and gives back the first one
@@ -478,7 +480,9 @@ also without a line end.
 #### `println`
 
 ```camel
+println: <fmt: string> (x: T, ..rest) => T
 println: (x: T, ..rest) => T
+println: () => void
 ```
 
 Writes the arguments, separated by spaces, and a line end, and gives back the first one (so
@@ -491,7 +495,9 @@ one line end.
 #### `eprintln`
 
 ```camel
+eprintln: <fmt: string> (x: T, ..rest) => T
 eprintln: (x: T, ..rest) => T
+eprintln: () => void
 ```
 
 Writes the arguments, separated by spaces, and a line end, to standard error, and gives back
@@ -674,7 +680,7 @@ string.
 #### `zip`
 
 ```camel
-zip: (xs: T[], ys: U[]) => (T, U)[]
+zip: (..xs: ..A) => (..ElementOf<A>)[] when ..is_array::<A>()
 ```
 
 Two arrays combined element by element into pairs. They must have the same length.
@@ -1375,7 +1381,7 @@ leaf of `tree` at a leaf of the reference is a tuple of the same length.
 ## `tensor`: multi-dimensional numeric arrays
 
 The `tensor` module: multi-dimensional numeric arrays, their element type and extents, their
-binary form, a NumPy file, and the module's worker threads and random generator.
+binary form, a NumPy file, and the module's worker threads.
 
 The declarations written here are the operators whose signature is fixed. The ones whose element
 type or shape follows their arguments — elementwise arithmetic, the reshaping operators, the
@@ -1384,20 +1390,6 @@ axis forms of a reduction — cannot be written as a declaration; they are imple
 under the same sections (design principles 6.4).
 
 ### Creation
-
-#### `new`
-
-```camel
-new: (values: float[..] | number[]) => float[..]
-```
-
-A tensor made of a nested number array (or of a tensor, copied into contiguous row-major
-storage); the element type follows the values: `float` for a float (design principles 5.1: a
-float literal's own type is `float`, which is `f64`), `int64` for an integer and `bool` for a
-boolean.
-
-- Pure.
-- Example: `new([[1.0, 2.0], [3.0, 4.0]])`
 
 #### `zeros`
 
@@ -1446,107 +1438,7 @@ The n by n identity matrix; the element type is the call's, as for `zeros`.
 - Pure.
 - Example: `eye::<f32>(2)`
 
-#### `range`
-
-```camel
-range: (start: int, stop?: int, step?: int) => int64[..]
-```
-
-The integer sequence start, start + step, ... below stop, as a rank-1 `int64` tensor: one
-argument is stop with start 0, step is 1 by default, and a step of 0 is a fault.
-
-The interval of the language's own integers is written `a..b` (design principles 4.2), so a
-two-argument `range(a, b)` written without a module qualifier is the language's built-in
-interval and is refused: the two-parameter `range` is gone. This function is reached for one
-argument, for three, or by the qualified name `tensor::range(...)`.
-
-- Pure.
-- Failure: fault `RuntimeError` when stop and start leave a step of 0.
-- Example: `range(0, 10, 2)` gives `[0, 2, 4, 6, 8]`
-
-### Random
-
-#### `random`
-
-```camel
-random: (shape: int[], low: number, high: number) => f32[..]
-```
-
-A tensor of `f32` values drawn uniformly from [low, high) with the given extents.
-
-- With effects: reads and advances the random generator.
-- Example: `random([2, 2], 0.0, 1.0)`
-
-#### `randn`
-
-```camel
-randn: (shape: int[], mean?: number, std?: number) => f32[..]
-```
-
-A tensor of `f32` values drawn from the normal distribution with the given mean (0 by
-default) and standard deviation (1 by default), with the given extents.
-
-- With effects: reads and advances the random generator.
-- Example: `randn([2, 3])`
-
 ### Elementwise
-
-#### `add`
-
-```camel
-add: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-```
-
-a + b per element, with NumPy broadcasting: a scalar operand applies to every element, and
-the element type is the wider of the two (a float with an integer gives `f32`).
-
-- Pure.
-- Example: `add(new([1.0, 2.0]), 1.0)` gives `[2.0, 3.0]`
-
-#### `subtract`
-
-```camel
-subtract: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-```
-
-a - b per element, with NumPy broadcasting.
-
-- Pure.
-- Example: `subtract(new([1.0, 2.0]), 0.5)` gives `[0.5, 1.5]`
-
-#### `multiply`
-
-```camel
-multiply: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-```
-
-a * b per element, with NumPy broadcasting.
-
-- Pure.
-- Example: `multiply(new([1.0, 2.0]), new([3.0, 4.0]))` gives `[3.0, 8.0]`
-
-#### `divide`
-
-```camel
-divide: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-```
-
-a / b per element, with NumPy broadcasting; IEEE division: x / 0 is an infinity or NaN, not a
-fault.
-
-- Pure.
-- Example: `divide(new([1.0, 2.0]), 2.0)` gives `[0.5, 1.0]`
-
-#### `pow`
-
-```camel
-pow: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-```
-
-a raised to b per element, with NumPy broadcasting.
-
-- Pure.
-- Example: `pow(new([2.0, 3.0]), 2.0)` gives `[4.0, 9.0]`
 
 #### `maximum`
 
@@ -1558,7 +1450,7 @@ IEEE 754-2019 maximum per element, with NumPy broadcasting: NaN on either side g
 canonical quiet NaN, and -0 is below +0.
 
 - Pure.
-- Example: `maximum(new([1.0, -0.0]), 0.0)` gives `[1.0, 0.0]`
+- Example: `maximum([1.0, -0.0] as float[], 0.0)` gives `[1.0, 0.0]`
 
 #### `minimum`
 
@@ -1570,23 +1462,7 @@ IEEE 754-2019 minimum per element, with NumPy broadcasting: NaN on either side g
 canonical quiet NaN, and -0 is below +0.
 
 - Pure.
-- Example: `minimum(new([1.0, -0.0]), 0.0)` gives `[0.0, -0.0]`
-
-#### `mod`
-
-```camel
-mod: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-```
-
-a % b per element, with NumPy broadcasting: the language's remainder, the truncated one
-(`camel::utils::remainder`), so the result takes the sign of the left operand and nothing is
-floored — a negative a and a positive b give a negative result. On a floating element type it
-is `fmod`, in the element type's own precision: a bf16 or f16 array computes in f32 and rounds
-once when it is stored. A divisor of zero gives NaN for a floating element type, as IEEE
-division does; an integer element type has the integer remainder.
-
-- Pure.
-- Example: `mod(new([7.5, -7.5]), 2.0)` gives `[1.5, -1.5]`
+- Example: `minimum([1.0, -0.0] as float[], 0.0)` gives `[0.0, -0.0]`
 
 #### `where`
 
@@ -1598,18 +1474,7 @@ lhs where cond holds, rhs elsewhere, broadcast to one shape; the element type is
 lhs and rhs.
 
 - Pure.
-- Example: `where(new([true, false]), new([1.0, 2.0]), 0.0)` gives `[1.0, 0.0]`
-
-#### `neg`
-
-```camel
-neg: (t: float[..]) => float[..]
-```
-
--x per element: the sign flipped.
-
-- Pure.
-- Example: `neg(new([1.0, -2.0]))` gives `[-1.0, 2.0]`
+- Example: `where([true, false] as bool[], [1.0, 2.0] as float[], 0.0)` gives `[1.0, 0.0]`
 
 #### `abs`
 
@@ -1620,7 +1485,7 @@ abs: (t: float[..]) => float[..]
 |x| per element: the sign cleared.
 
 - Pure.
-- Example: `abs(new([-1.5, 2.0]))` gives `[1.5, 2.0]`
+- Example: `abs([-1.5, 2.0] as float[])` gives `[1.5, 2.0]`
 
 #### `exp`
 
@@ -1631,7 +1496,7 @@ exp: (t: float[..]) => float[..]
 e^x per element, within 2 ulp, subnormal results included.
 
 - Pure.
-- Example: `exp(new([0.0, 1.0]))` gives `[1.0, 2.7182817]`
+- Example: `exp([0.0, 1.0] as float[])` gives `[1.0, 2.7182817]`
 
 #### `log`
 
@@ -1643,7 +1508,7 @@ ln x per element, within 2 ulp; NaN, +-inf, +-0 and negative x are exact (negati
 NaN).
 
 - Pure.
-- Example: `log(new([1.0, 2.7182817]))` gives `[0.0, 1.0]`
+- Example: `log([1.0, 2.7182817] as float[])` gives `[0.0, 1.0]`
 
 #### `sqrt`
 
@@ -1654,7 +1519,7 @@ sqrt: (t: float[..]) => float[..]
 sqrt(x) per element, rounded once in `f32`.
 
 - Pure.
-- Example: `sqrt(new([4.0, 9.0]))` gives `[2.0, 3.0]`
+- Example: `sqrt([4.0, 9.0] as float[])` gives `[2.0, 3.0]`
 
 #### `rsqrt`
 
@@ -1665,7 +1530,7 @@ rsqrt: (t: float[..]) => float[..]
 1 / sqrt(x) per element: two steps, each rounded in `f32`.
 
 - Pure.
-- Example: `rsqrt(new([4.0]))` gives `[0.5]`
+- Example: `rsqrt([4.0] as float[])` gives `[0.5]`
 
 #### `sigmoid`
 
@@ -1676,7 +1541,7 @@ sigmoid: (t: float[..]) => float[..]
 The logistic function 1 / (1 + e^-x) per element.
 
 - Pure.
-- Example: `sigmoid(new([0.0]))` gives `[0.5]`
+- Example: `sigmoid([0.0] as float[])` gives `[0.5]`
 
 #### `tanh`
 
@@ -1687,7 +1552,7 @@ tanh: (t: float[..]) => float[..]
 The hyperbolic tangent per element.
 
 - Pure.
-- Example: `tanh(new([0.0]))` gives `[0.0]`
+- Example: `tanh([0.0] as float[])` gives `[0.0]`
 
 #### `relu`
 
@@ -1698,7 +1563,7 @@ relu: (t: float[..]) => float[..]
 maximum(x, +0) per element: NaN gives the canonical NaN, and -0 gives +0.
 
 - Pure.
-- Example: `relu(new([-1.0, 2.0]))` gives `[0.0, 2.0]`
+- Example: `relu([-1.0, 2.0] as float[])` gives `[0.0, 2.0]`
 
 #### `gelu`
 
@@ -1709,7 +1574,7 @@ gelu: (t: float[..]) => float[..]
 The Gaussian error linear unit per element, computed as its normative definition in Camel.
 
 - Pure.
-- Example: `gelu(new([0.0]))` gives `[0.0]`
+- Example: `gelu([0.0] as float[])` gives `[0.0]`
 
 #### `erf`
 
@@ -1720,7 +1585,18 @@ erf: (t: float[..]) => float[..]
 The Gauss error function per element.
 
 - Pure.
-- Example: `erf(new([0.0]))` gives `[0.0]`
+- Example: `erf([0.0] as float[])` gives `[0.0]`
+
+#### `erfc`
+
+```camel
+erfc: (t: float[..]) => float[..]
+```
+
+The complementary error function 1 - erf(x) per element.
+
+- Pure.
+- Example: `erfc([0.0] as float[])` gives `[1.0]`
 
 ### Shape and reshaping
 
@@ -1734,19 +1610,7 @@ The elements in row-major order, in a new shape; one extent may be -1, which the
 count fills.
 
 - Pure.
-- Example: `reshape<[2, 2]>(new([1.0, 2.0, 3.0, 4.0]))`
-
-#### `flatten`
-
-```camel
-flatten: (t: float[..], axis?: int) => float[..]
-```
-
-The elements in row-major order in two axes: the extents before axis multiplied into the
-first, the rest into the second (axis 1 by default).
-
-- Pure.
-- Example: `flatten(new([[1.0, 2.0], [3.0, 4.0]]))`
+- Example: `reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as float[])`
 
 #### `unsqueeze`
 
@@ -1757,7 +1621,7 @@ unsqueeze: (t: float[..], axis: int) => float[..]
 The elements unchanged, with an axis of extent 1 added at axis.
 
 - Pure.
-- Example: `unsqueeze<0>(new([1.0, 2.0]))` gives `shape [1, 2]`
+- Example: `unsqueeze<0>([1.0, 2.0] as float[])` gives `shape [1, 2]`
 
 #### `transpose`
 
@@ -1768,7 +1632,7 @@ transpose: (t: float[..]) => float[..]
 The last two axes swapped (a vector becomes a column, a matrix its transpose).
 
 - Pure.
-- Example: `transpose(new([[1.0, 2.0], [3.0, 4.0]]))`
+- Example: `transpose([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])`
 
 #### `permute`
 
@@ -1779,7 +1643,7 @@ permute: (t: float[..], perm: int[]) => float[..]
 The axes reordered as perm lists them.
 
 - Pure.
-- Example: `permute<[1, 0]>(new([[1.0, 2.0], [3.0, 4.0]]))`
+- Example: `permute<[1, 0]>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])`
 
 #### `concat`
 
@@ -1790,7 +1654,7 @@ concat: (a: float[..] | number[], b: float[..] | number[], axis: int) => float[.
 a and b joined along axis; every other extent must agree.
 
 - Pure.
-- Example: `concat<0>(new([[1.0]]), new([[2.0]]))` gives `shape [2, 1]`
+- Example: `concat<0>([[1.0]] as float[1, 1], [[2.0]] as float[1, 1])` gives `shape [2, 1]`
 
 #### `take`
 
@@ -1802,7 +1666,7 @@ The entries of the first axis that indices name, in that order.
 
 - Pure.
 - Failure: fault `RuntimeError` when an index is outside the first axis.
-- Example: `take(new([[1.0], [2.0], [3.0]]), [2, 0])` gives `[[3.0], [1.0]]`
+- Example: `take([[1.0], [2.0], [3.0]] as float[3, 1], [2, 0])` gives `[[3.0], [1.0]]`
 
 #### `one_hot`
 
@@ -1815,7 +1679,7 @@ an `int64` tensor of shape [labels, classes].
 
 - Pure.
 - Failure: fault `IndexOutOfRange` when a label is outside [0, classes), and fault `InvalidArgument` when classes is negative.
-- Example: `one_hot(new([0, 2]), 3)` gives `[[1, 0, 0], [0, 0, 1]]`
+- Example: `one_hot([0, 2] as int[], 3)` gives `[[1, 0, 0], [0, 0, 1]]`
 
 #### `shape`
 
@@ -1826,7 +1690,7 @@ shape: (t: T[..]) => int[] when is_numeric::<T>()
 The extents of a tensor, in order.
 
 - Pure.
-- Example: `shape(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[2, 2]`
+- Example: `shape([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[2, 2]`
 
 #### `numel`
 
@@ -1871,7 +1735,7 @@ summed exactly in `int64`, wrapping on overflow as integer arithmetic does (desi
 its element type, `bool` as `int64`.
 
 - Pure.
-- Example: `sum(new([[1.0, 2.0], [3.0, 4.0]]))` gives `10.0`
+- Example: `sum([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `10.0`
 
 #### `sum`
 
@@ -1883,7 +1747,7 @@ The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis wit
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank.
-- Example: `sum<0>(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[4.0, 6.0]`
+- Example: `sum<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[4.0, 6.0]`
 
 #### `mean`
 
@@ -1900,7 +1764,7 @@ is a fault.
 
 - Pure.
 - Failure: fault `DivisionByZero` when the tensor has no element.
-- Example: `mean(new([[1.0, 2.0], [3.0, 4.0]]))` gives `2.5`
+- Example: `mean([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `2.5`
 
 #### `mean`
 
@@ -1912,7 +1776,7 @@ The same mean over one axis; keepdims keeps the axis with extent 1.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `DivisionByZero` when the axis is empty.
-- Example: `mean<1>(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[1.5, 3.5]`
+- Example: `mean<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[1.5, 3.5]`
 
 #### `max`
 
@@ -1925,7 +1789,7 @@ the same bits); keepdims keeps the axis with extent 1.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
-- Example: `max<0>(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[3.0, 4.0]`
+- Example: `max<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[3.0, 4.0]`
 
 #### `min`
 
@@ -1938,7 +1802,7 @@ axis with extent 1.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
-- Example: `min<1>(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[1.0, 3.0]`
+- Example: `min<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[1.0, 3.0]`
 
 #### `argmax`
 
@@ -1951,7 +1815,7 @@ NaN if there is one, +0 above -0, the earlier position on a tie.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
-- Example: `argmax<1>(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[1, 1]`
+- Example: `argmax<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[1, 1]`
 
 #### `argmin`
 
@@ -1964,7 +1828,7 @@ NaN if there is one, -0 below +0, the earlier position on a tie.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
-- Example: `argmin<0>(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[0, 0]`
+- Example: `argmin<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[0, 0]`
 
 #### `softmax`
 
@@ -1977,7 +1841,7 @@ definition in Camel, in `f32`.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank.
-- Example: `softmax(new([[1.0, 1.0]]))` gives `[[0.5, 0.5]]`
+- Example: `softmax([[1.0, 1.0]] as float[1, 2])` gives `[[0.5, 0.5]]`
 
 #### `log_softmax`
 
@@ -1990,7 +1854,7 @@ Camel, in `f32`.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank.
-- Example: `log_softmax(new([[1.0, 1.0]]))` gives `[[-0.6931472, -0.6931472]]`
+- Example: `log_softmax([[1.0, 1.0]] as float[1, 2])` gives `[[-0.6931472, -0.6931472]]`
 
 #### `softmax_grad`
 
@@ -2030,7 +1894,7 @@ b[k][j], acc) for k ascending, every fused multiply-add rounded once in `f32`.
 
 - Pure.
 - Failure: fault `TensorDimensionMismatch` when the inner extents do not agree.
-- Example: `matmul(new([[1.0, 2.0]]), new([[3.0], [4.0]]))` gives `[[11.0]]`
+- Example: `matmul([[1.0, 2.0]] as float[1, 2], [[3.0], [4.0]] as float[2, 1])` gives `[[11.0]]`
 
 #### `linear`
 
@@ -2056,7 +1920,7 @@ zeros_like: (t: float[..]) => float[..]
 A tensor of zeros shaped and typed like t.
 
 - Pure.
-- Example: `zeros_like(new([[1.0, 2.0]]))`
+- Example: `zeros_like([[1.0, 2.0]] as float[1, 2])`
 
 #### `ones_like`
 
@@ -2067,7 +1931,7 @@ ones_like: (t: float[..]) => float[..]
 A tensor of ones shaped and typed like t.
 
 - Pure.
-- Example: `ones_like(new([[1.0, 2.0]]))`
+- Example: `ones_like([[1.0, 2.0]] as float[1, 2])`
 
 ### Conversion and display
 
@@ -2099,7 +1963,7 @@ show: (t: A[..]) => void
 Prints t to the console, in the module's layout.
 
 - With effects: writes the console.
-- Example: `show(new([[1.0, 2.0]]))`
+- Example: `show([[1.0, 2.0]] as float[1, 2])`
 
 ### Binary form
 
@@ -2121,7 +1985,7 @@ needs no numeric permission.
 
 - Pure.
 - Failure: fault `TensorDimensionMismatch` when the number of bytes does not fit the shape and the element type.
-- Example: `from_bytes::<f32>(to_bytes(new([1.0, 2.0])), [2])`
+- Example: `from_bytes::<f32>(to_bytes([1.0, 2.0] as float[]), [2])`
 
 #### `to_bytes`
 
@@ -2135,7 +1999,7 @@ one byte an element for a `bool` tensor, four for an `f32` one and eight for an 
 one.
 
 - Pure.
-- Example: `to_bytes(new([1.0, 2.0]))` gives `[0, 0, 128, 63, 0, 0, 0, 64]`
+- Example: `to_bytes([1.0, 2.0] as float[])` gives `[0, 0, 128, 63, 0, 0, 0, 64]`
 
 #### `save_npy`
 
@@ -2223,18 +2087,6 @@ CBLAS, otherwise the canonical kernel's name, which is what the path forwards to
 
 - Pure.
 - Example: `gemm_library()`
-
-#### `seed`
-
-```camel
-seed: (seed: int) => void
-seed: (seed: i32) => void
-```
-
-Reseeds the module's random generator, which `random` and `randn` draw from.
-
-- With effects: writes the random generator.
-- Example: `seed(42)`
 
 <a id="types"></a>
 
@@ -3414,6 +3266,27 @@ tanh: (x: T) => T when is_float::<T>()
 The hyperbolic tangent.
 
 - Example: `tanh(0.0)` gives `0`
+
+#### `erf`
+
+```camel
+erf: (x: T) => T when is_float::<T>()
+```
+
+The error function, 2 / sqrt(pi) times the integral of e^-t^2 from 0 to x.
+
+- Example: `erf(0.0)` gives `0`
+
+#### `erfc`
+
+```camel
+erfc: (x: T) => T when is_float::<T>()
+```
+
+The complementary error function, 1 - erf(x), without the cancellation of the subtraction for
+large x.
+
+- Example: `erfc(0.0)` gives `1`
 
 ### Rounding
 
@@ -5100,6 +4973,63 @@ The attributes of the node as text (empty when there are none).
 - Example (a fragment, not compiled): `tags(n)`
 - Why it is not compiled: n is a node of the surrounding pass
 
+### The tags a declaration writes
+
+A tag whose argument is a function (`#jvp(rule)`, `#transpose(rule)`, `#vjp(rule)`) is a fact
+about the declaration a pass needs the function of, not text about it: `declaration_tags` reads
+it back by structure, and `rule_of` names the one a transform asks for.
+
+#### `declaration_tags`
+
+```camel
+declaration_tags: (g: Graph) => Tag[]
+```
+
+The tags written on the declaration of the function of this graph whose argument is a
+function, in the order of their names; empty for a graph that is no declaration (a lambda) and
+for a declaration that writes none. The declaration's facts travel with the graph, so a pass
+reads them without the module that declares the function.
+
+- Example (a fragment, not compiled): `declaration_tags(graph_of(f))`
+- Why it is not compiled: pass is the surrounding pass and f the function it received
+
+#### `tag_name`
+
+```camel
+tag_name: (t: Tag) => string
+```
+
+The name of the tag as the program writes it (`jvp`, `vjp`); the qualified name when the tag is
+not declared any more.
+
+- Example (a fragment, not compiled): `tag_name(t)` gives `'jvp'`
+- Why it is not compiled: t is a tag read from a declaration
+
+#### `tag_graphs`
+
+```camel
+tag_graphs: (t: Tag) => Graph[]
+```
+
+The graphs the tag's arguments name, in the order written: `#jvp(mul_jvp)` names one.
+
+- Example (a fragment, not compiled): `tag_graphs(t)`
+- Why it is not compiled: t is a tag read from a declaration
+
+#### `rule_of`
+
+```camel
+rule_of: (g: Graph, name: string) => Graph?
+```
+
+The rule the declaration of `g` writes for the transformation `name`: `jvp` is forward mode,
+`transpose` the rule of a linear function, and `vjp` the rule that gives the pullback directly.
+Null when the declaration writes none, when it writes that tag twice, and when what the tag
+names is not a function. The name is the one the program writes, or its qualified spelling.
+
+- Example (a fragment, not compiled): `rule_of(graph_of(f), 'vjp')`
+- Why it is not compiled: pass is the surrounding pass and f the function it received
+
 #### `origin`
 
 ```camel
@@ -6104,7 +6034,7 @@ created when missing.
 
 - With effects: writes files under `dir`.
 - Failure: fault `RuntimeError` when the directory cannot be created or a leaf cannot be written.
-- Example (a fragment, not compiled): `save_params({ w: new([1.0, 2.0]), b: new([0.0]) }, 'checkpoints/step-1')`
+- Example (a fragment, not compiled): `save_params({ w: [1.0, 2.0] as float[], b: [0.0] as float[] }, 'checkpoints/step-1')`
 - Why it is not compiled: the example builds its tensors with `new` from the `tensor` module, which this page does not import
 
 <a id="optim"></a>
@@ -6280,8 +6210,12 @@ not known when they run to a run-time refusal. `vjp` is reverse mode for a resul
 scalar (it gives the result and the pullback from the cotangent of the result to the gradient),
 and `jvp` is forward mode (the result and its tangent along a direction); both land with the
 autodiff lane, not before they work.
-`stop_gradient` marks a value as a constant, and a custom derivative of a function is the tag
-`#vjp(rule)` on its declaration.
+
+`stop_gradient` marks a value as a constant. A transform's local rules are the tags on a
+declaration and the `rule` declarations below: the tags give a function's own rules
+(`#jvp(rule)` forward, `#transpose(rule)` for a linear function, `#vjp(rule)` the pullback) and
+are read back by structure (`graph::rule_of`); a primitive's rules are the rules whose pattern
+is the primitive, one family at a time, starting with the scalar arithmetic.
 
 #### `grad`
 
@@ -6318,6 +6252,123 @@ Gives its argument unchanged and cuts the gradient at this point: a value passed
 argument's own type.
 
 - Example: `stop_gradient(3.0)` gives `3.0`
+
+### The local rules of the scalar arithmetic
+
+One law, written once: the pattern names the primitive and the right side what the transform
+makes of it. Forward mode's right side is "the tangents of the arguments => the tangent of the
+result", linear in the tangents; a linear primitive's transpose's right side is "the cotangent
+of the result => the cotangent of the argument that carries the data". The value the primitive
+was given is a value here, not a constant of the rule, so `mul_t` is also the transpose of
+`x * 3`.
+
+Each right side is the named function below it, so the tangent a transform produces is a value
+a program can call and compare with the derivative it claims, and the library keeps one writing
+of the mathematics (design principles: one law, one writing).
+
+A constant of a graph and a reference to a parameter are not primitives: a constant has no
+tangent and a parameter's tangent is its own, so a transform lifts the first to a zero tangent
+and passes the second through, without a rule.
+
+#### `add_tangent`
+
+```camel
+add_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+```
+
+The tangent of `x + w` along `(dx, dw)`: `dx + dw`.
+
+- Example: `add_tangent(3.0, 5.0, 1.0, 0.0)` gives `1.0`
+
+#### `sub_tangent`
+
+```camel
+sub_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+```
+
+The tangent of `x - w` along `(dx, dw)`: `dx - dw`.
+
+- Example: `sub_tangent(3.0, 5.0, 1.0, 0.0)` gives `1.0`
+
+#### `mul_tangent`
+
+```camel
+mul_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+```
+
+The tangent of `x * w` along `(dx, dw)`: `dx * w + x * dw`.
+
+- Example: `mul_tangent(3.0, 5.0, 1.0, 0.0)` gives `5.0`
+
+#### `div_tangent`
+
+```camel
+div_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+```
+
+The tangent of `x / w` along `(dx, dw)`: `dx / w - x * dw / (w * w)`.
+
+- Example: `div_tangent(6.0, 4.0, 1.0, 0.0)` gives `0.25`
+
+#### `neg_tangent`
+
+```camel
+neg_tangent: (x: T, dx: T) => T when is_float::<T>()
+```
+
+The tangent of `-x` along `dx`: `-dx`.
+
+- Example: `neg_tangent(3.0, 1.0)` gives `-1.0`
+
+#### `add_cotangent`
+
+```camel
+add_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+```
+
+The cotangent of `x` in `x + c`: the cotangent of the sum, unchanged.
+
+- Example: `add_cotangent(3.0, 5.0, 2.0)` gives `2.0`
+
+#### `sub_cotangent`
+
+```camel
+sub_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+```
+
+The cotangent of `x` in `x - c`: the cotangent of the difference, unchanged.
+
+- Example: `sub_cotangent(3.0, 5.0, 2.0)` gives `2.0`
+
+#### `mul_cotangent`
+
+```camel
+mul_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+```
+
+The cotangent of `x` in `x * c`: `ct * c`.
+
+- Example: `mul_cotangent(3.0, 5.0, 2.0)` gives `10.0`
+
+#### `div_cotangent`
+
+```camel
+div_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+```
+
+The cotangent of `x` in `x / c`: `ct / c`.
+
+- Example: `div_cotangent(6.0, 4.0, 2.0)` gives `0.5`
+
+#### `neg_cotangent`
+
+```camel
+neg_cotangent: (x: T, ct: T) => T when is_float::<T>()
+```
+
+The cotangent of `x` in `-x`: `-ct`.
+
+- Example: `neg_cotangent(3.0, 2.0)` gives `-2.0`
 
 <a id="sim"></a>
 

@@ -476,22 +476,64 @@ void Builder::setModifier(node_handle_t input, node_handle_t modifier) {
 
 void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throughCallee) {
     // `A(i); modify(i); B(i)` gives A -> modify -> B (design principles log 2.6). The second half
-    // follows from setModifier. The first is the sync block's chain when the write is in one: a
-    // sync body orders its statements. A write outside a sync block is not ordered after earlier
-    // users; they stay pending for the next write.
+    // follows from setModifier. The first half is the read this write meets: every read takes the
+    // version the write before it produced, and a read written before the first write reads the
+    // cell `:var/new` made (docs/design/effects/edges.cn.md 5.6). So the writes written after a
+    // read are ordered after it, and that holds whether the write is a statement of a `sync`
+    // block or not: where a read is written is what decides the value it sees, and a body that is
+    // not synchronised does not move a read past a write written below it.
     auto &uses = pendingUsesOf(variable);
-    if (synced_) {
-        // The chain orders the calls that used the variable before this write. A read is not on
-        // the chain, so the write is ordered after it by an order edge: the read has to see the
-        // value as it was before the write changes it (docs/design/effects/edges.cn.md 5.5).
+    {
+        // A read is not on a sync chain, so the write is ordered after it by an order edge: the
+        // read has to see the value as it was before the write changes it (docs/design/effects/
+        // edges.cn.md 5.6). An order the read's value already carries to the write over the data
+        // path is not written again: `x = x + 1` and the `x += 1` that is the same thing hand the
+        // read's value to the operator the write stores, so the write runs after the read already
+        // (design principles 2.1, 3.5).
+        //
+        // A write that is a region itself -- the JOIN a branch's arms write to, or a LOOP -- takes
+        // the read as a control input instead, the way it takes the last write of its parts
+        // (mergeArmVariables links an arm's writer to the JOIN as a control input). A region is
+        // laid out as one piece: what its regions read from outside and what the region node
+        // itself is ordered by come before its parts, and everything the region node is ordered
+        // after comes last (src/execute/graph_runtime_support.cpp, the JOIN and LOOP blocks), so
+        // an order edge into the region node would run the read after the writes it has to see the
+        // cell before. A read this write cannot be ordered against -- a read in the region around
+        // the write, with the write in an arm or a loop body -- stays pending: the write that
+        // meets it is the region's own, and the region can order it.
+        std::vector<VariableUse> pending;
+        const camel::runtime::GCNodeKind exitKind = nodeKindOf(exit);
+        const bool regionExit = exitKind == camel::runtime::GCNodeKind::Join ||
+                                exitKind == camel::runtime::GCNodeKind::Loop;
         for (const VariableUse &use : uses) {
-            if (use.isRead && sameGraph(use.node, currGraph_) && linkCheek(use.node, exit) &&
-                nodeTakesAnOrder(use.node) && nodeTakesAnOrder(exit) &&
-                !hasDirectDataDependency(use.node, exit)) {
-                linkNodes(LinkType::Order, use.node, exit);
+            if (!use.isRead || !sameGraph(use.node, currGraph_)) {
+                // An operation that used the variable itself -- a call that captured it and wrote
+                // nothing, the JOIN of a branch that touched it -- is not ordered by a write: it
+                // stays pending so that the next write meets it, and a region merges it around
+                // its own (pendingUsesOf, mergeArmVariables). A `sync` block orders it with the
+                // chain already, which is why it is not kept there.
+                if (!synced_) {
+                    pending.push_back(use);
+                }
+                continue;
             }
+            if (regionExit) {
+                if (!hasDirectDataDependency(use.node, exit) &&
+                    !dataPathReaches(use.node, exit)) {
+                    linkNodes(LinkType::Ctrl, use.node, exit);
+                    continue;
+                }
+                pending.push_back(use);
+                continue;
+            }
+            if (nodeTakesAnOrder(use.node) && nodeTakesAnOrder(exit) &&
+                !hasDirectDataDependency(use.node, exit) && !dataPathReaches(use.node, exit)) {
+                linkNodes(LinkType::Order, use.node, exit);
+                continue;
+            }
+            pending.push_back(use);
         }
-        uses.clear();
+        uses = std::move(pending);
     }
     // A store is one of the cell's known users (collapseNonEscapingVariableReads): a user the builder
     // did not record -- a:var/take, a call handed the `var` -- makes the cell escape.

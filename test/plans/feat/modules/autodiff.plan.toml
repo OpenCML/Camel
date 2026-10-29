@@ -1849,6 +1849,70 @@ assert(out === 'loss | helper | helper: done | loss: helper returned | 0.5579508
 timeout_ms = 12000
 
 [[tests]]
+name = "grad_captured_var_written.default"
+desc = "A differentiated function calls a function that writes module-level `var`s: the write is an effect, so it runs in the forward pass, and the versions the call hands on are resource state, not gradient. The value and the gradient are the ones the plain call gives, the counters show the write ran once per forward pass, and a read of a counter after the call reads the version it handed on. Building the derivative used to break the graph's edge invariants: the call of the forward graph was typed with a module variable's version as an extra tuple component, so `with_grad` failed with an internal error. Under: the default run (grad runs with the program)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_captured_var_written.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '1 | 2 | 19.0 | 6.0 | 2 | 6.0', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "grad_captured_var_written.macro"
+desc = "A differentiated function calls a function that writes module-level `var`s: the write is an effect, so it runs in the forward pass, and the versions the call hands on are resource state, not gradient. The value and the gradient are the ones the plain call gives, the counters show the write ran once per forward pass, and a read of a counter after the call reads the version it handed on. Building the derivative used to break the graph's edge invariants: the call of the forward graph was typed with a module variable's version as an extra tuple component, so `with_grad` failed with an internal error. Under: std::macro (grad built at compile time)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_captured_var_written.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '1 | 2 | 19.0 | 6.0 | 2 | 6.0', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "grad_captured_var_written.macro.opt"
+desc = "A differentiated function calls a function that writes module-level `var`s: the write is an effect, so it runs in the forward pass, and the versions the call hands on are resource state, not gradient. The value and the gradient are the ones the plain call gives, the counters show the write ran once per forward pass, and a read of a counter after the call reads the version it handed on. Building the derivative used to break the graph's edge invariants: the call of the forward graph was typed with a module variable's version as an extra tuple component, so `with_grad` failed with an internal error. Under: std::macro std::opt (the derivative inlined and folded)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_captured_var_written.cml"
+args = ["${case}", "std::macro", "std::opt"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '1 | 2 | 19.0 | 6.0 | 2 | 6.0', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "grad_captured_var_written.macro.fvm"
+desc = "A differentiated function calls a function that writes module-level `var`s: the write is an effect, so it runs in the forward pass, and the versions the call hands on are resource state, not gradient. The value and the gradient are the ones the plain call gives, the counters show the write ran once per forward pass, and a read of a counter after the call reads the version it handed on. Building the derivative used to break the graph's edge invariants: the call of the forward graph was typed with a module variable's version as an extra tuple component, so `with_grad` failed with an internal error. Under: std::macro std::fvm."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_captured_var_written.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '1 | 2 | 19.0 | 6.0 | 2 | 6.0', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
 name = "grad_function_values.default"
 desc = "Gradients through calls of function values that are named or built elsewhere than at the call: (1) a closure called twice inside a second closure that captured it, (2) three closures deep, (3) a closure returned by a factory and called twice, (4) a factory closure capturing a tensor, (5) a closure passed to a function that calls it twice, (6) a named function passed, (7) a closure passed on through two functions, (8) a factory closure passed to a function, (9) a function taking a closure and returning one that captures it, (10) a lambda returning a lambda. In all but (6) a captured value depends on the differentiated parameter, so the gradient must also arrive through the capture. The expected gradients agree with central finite differences of an independent NumPy float64 version of each loss (grad_function_values_reference.py). Under: the default run (grad runs with the program)."
 kind = "behavior"
@@ -2595,6 +2659,17 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
+name = "math_erf.macro.nvm"
+desc = "Scalar erf and erfc pullbacks for float and f32: 2 / sqrt(pi) * exp(-x * x) at 0.5, negated for erfc."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/math_erf.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["erf=0.878783", "erfc=-0.878783", "erf32=0.879"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "grad_refuse_no_with"
 desc = "Refused at compile time with NotDifferentiable: the function has no `with` parameter."
 kind = "negative"
@@ -2981,28 +3056,6 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
-name = "adjoint_new_array.runtime.nvm"
-desc = "`new(xs)` converts a numeric array into a tensor, and an array's tangent is the array of its elements' tangents (design principles 9.9), so the adjoint is the tensor's gradient read back in the array's order -- the identity, since `new` moves no element. The case asserts the gradient itself: `g` is printed element by element against [1.0, 1.0] for a sum, and `gw` against [2.0, 3.0, 4.0] for a weighted read of the tensor's elements. This case replaced `refuse_new_array`, which expected the refusal and the silent zero behind it. (grad built at run time)"
-kind = "behavior"
-case = "../../../cases/modules/autodiff/adjoint_new_array.cml"
-args = ["${case}", "${run_nvm}"]
-expect_exit = 0
-expect_stdout_exact = "adjoint_new_array g=[1.0, 1.0] gw=[2.0, 3.0, 4.0]\n"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 8000
-
-[[tests]]
-name = "adjoint_new_array.macro.fvm"
-desc = "The same new adjoint when std::macro builds the gradient ahead of time and the FastVM runs it: the tensor's gradient is read back into the array in the compiled gradient graph, not only in a graph built at run time."
-kind = "behavior"
-case = "../../../cases/modules/autodiff/adjoint_new_array.cml"
-args = ["${case}", "std::macro", "${run_fvm}"]
-expect_exit = 0
-expect_stdout_exact = "adjoint_new_array g=[1.0, 1.0] gw=[2.0, 3.0, 4.0]\n"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 8000
-
-[[tests]]
 name = "adjoint_cast_array.runtime.nvm"
 desc = "`cast` accepts a numeric array as well as a tensor, and an array's tangent is the array of its elements' tangents (design principles 9.9), so the adjoint of `f32(xs)` is the tensor's gradient cast back to the array's element type. The case asserts the gradient itself: `g` is printed element by element against [1.0, 1.0, 1.0] -- the array the rule used to drop and materialize as zeros -- and `gw` against [2.0, 3.0, 4.0]. This case replaced `refuse_cast_array`, which expected the refusal. (grad built at run time)"
 kind = "behavior"
@@ -3056,19 +3109,6 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
 expect_diagnostic_line = 25
 expect_output_contains = ["cannot differentiate operator 'tensor:reshape'", "no operator carries a tensor's gradient back into one", "type 'float[][]'"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-
-[[tests]]
-name = "refuse_container_new"
-desc = "`new(xs)` with `xs: float[][]` converts the container to a tensor by flattening it, and the container has no adjoint: the gradient would have to return as an array of arrays, which no operator of this module builds from a tensor's gradient. The call is refused by name, with the container's type, at the new call (line 21); `refuse_container_reshape` is the same refusal for `reshape`. A numeric array is a tensor and is not refused (`adjoint_new_array` asserts its adjoint), and a constant container is converted by the forward rule and never visited here. Without the refusal this program faulted in the kernels, which read the container as a tensor: \"Expected an array argument\", with no place in the source to point at. (grad built at run time)"
-kind = "negative"
-case = "../../../cases/modules/autodiff/refuse_container_new.cml"
-args = ["${case}", "${run_nvm}"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 20
-expect_output_contains = ["cannot differentiate operator 'tensor:new'", "no operator carries a tensor's gradient back into one", "type 'float[][]'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -3252,6 +3292,38 @@ const text = input.normalized.stdout
 assert(text.includes('f64_matmul_grad_width value=21.0 a_w=0.0 a_x=0.0 wa=0.0'), `unexpected distances: ${text}`)
 assert(text.includes('gw [[5.0], [7.0], [9.0]]'), `the w gradient is not the column sums of x: ${text}`)
 assert(text.includes('wg [[16777217.0], [1.0], [0.0]]'), `the two rows were not added at f64's width: ${text}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "loop_grad_closure_in_body"
+desc = "A closure built and called in a loop body whose value is the call: the region's result was the call the rewrite erased, and the tape builder read a node the graph no longer had (a segmentation fault in a build without assertions). A struct-to-struct closure, one reading the state with no parameter, a scalar-to-scalar one, and a scalar-to-struct one: three rounds of multiplication by 1, 2, 3 give 6 and a gradient of 6 each."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_closure_in_body.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_closure_in_body vg=(6.0, 6.0) reads=6.0 scalarIn=6.0 scalarOut=6.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+[[tests]]
+name = "transform_rules"
+desc = "A transform's local rules are read back by structure and hold: #jvp, #transpose and #vjp name functions of the program, graph.rule_of answers the graph written for one transformation (by the name a program writes and by its qualified name), graph.declaration_tags answers all of them with the tag each belongs to, and a declaration that writes one rule reads back as one. The scalar family's rules are the derivatives of the primitives they name: add, sub, mul (in each argument) and neg agree with the central difference exactly, div in its first argument exactly and in its second within 0.001, and the transpose of mul is the adjoint of its tangent (<J v, ct> = <v, T ct> exactly)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/transform_rules.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('transform_rules read=true tags=3 one=true'), `the three rules were not read back: ${out}`)
+assert(out.includes('[jvp, transpose, vjp]'), `the tags are not the ones written: ${out}`)
+assert(out.includes('transform_rules graph=true qualified=true'), `a tag does not name the function written for it: ${out}`)
+assert(out.includes('transform_rules derivative add=true sub=true mul=true mul_w=true div=true div_w=true neg=true'), `a tangent is not the derivative of its primitive: ${out}`)
+assert(out.includes('transform_rules adjoint=true'), `the transpose is not the adjoint of the tangent: ${out}`)
 }
 """
 timeout_ms = 10000

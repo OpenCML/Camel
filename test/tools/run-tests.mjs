@@ -10,7 +10,14 @@ import { fileURLToPath } from 'url'
 import { parseTomlFile } from './toml-lite.mjs'
 import { compareGirDotIsomorphic } from './gir-dot.mjs'
 import { applyNormalizers } from './normalizers.mjs'
-import { CUDA_HIDDEN, CUDA_VISIBLE_DEVICES, hidesCudaDevices, pythonEntryPoints } from './cuda-visibility.mjs'
+import {
+    CUDA_HIDDEN,
+    CUDA_VISIBLE_DEVICES,
+    declaredVisibility,
+    hidesCudaDevices,
+    pythonEntryPoints
+} from './cuda-visibility.mjs'
+import { CUDA_DEVICE_ORDER, PCI_BUS_ID, chooseFreeDevice } from './free-device.mjs'
 import { RUN_DIRS_KEPT, SCRATCH_DIR, formatRetention, pruneRunnerOutput, runnerOutputPath } from './runner-output.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -61,6 +68,7 @@ const PLAN_FIELDS = new Set([
 const TEST_FIELDS = new Set([
     'name', 'desc', 'kind', 'case', 'args', 'envs', 'tool', 'timeout_ms', 'cpu_budget_ms', 'verify_timeout_ms',
     'skip_unless', 'skip_unless_timeout_ms', 'parallel', 'tier', 'sweep', 'cuda_devices',
+    'cuda_free_device',
     'known_fail', 'known_fail_note', 'failure_note',
     'backends', 'backends_agree', 'compare_to', 'compare_fields',
     'golden', 'snapshot_stream', 'snapshot_compare', 'normalizers',
@@ -192,6 +200,7 @@ function validatePlanSchema(doc, planPath) {
         checkFieldType(planPath, entry, 'expect_stdout', where, 'string')
         checkFieldType(planPath, entry, 'perf_budget_platform', where, 'string')
         checkFieldType(planPath, entry, 'cuda_devices', where, 'boolean')
+        checkFieldType(planPath, entry, 'cuda_free_device', where, 'boolean')
         checkFieldType(planPath, entry, 'cpu_budget_ms', where, 'number')
         // A CPU budget is the test's cost bound and the timeout is only its liveness bound, so the
         // two are declared together: a test that states a budget and leaves the timeout at the
@@ -1004,6 +1013,49 @@ function hideCudaDevicesFrom(env, test) {
 }
 
 /**
+ * Give a child the one card this test was chosen to run on. Called before a test's own `envs`, so a
+ * test that names the variable itself keeps its value, and after `hideCudaDevicesFrom`, so a test
+ * that asked for a card is not left with an empty list. `CUDA_DEVICE_ORDER` travels with it because
+ * the ordinal is `nvidia-smi`'s: CUDA orders devices fastest-first by default, which is not the
+ * order the number came from on a host whose cards differ.
+ */
+function applyCudaDevice(env, test) {
+    if (!test.__cudaDevice) return env
+    env[CUDA_DEVICE_ORDER] = PCI_BUS_ID
+    env[CUDA_VISIBLE_DEVICES] = String(test.__cudaDevice.ordinal)
+    return env
+}
+
+/**
+ * Pick the card a `cuda_free_device = true` test runs on, once, before anything of its test starts.
+ * Returns the reason to skip, or null when the test may run -- with a card, or with no card to give
+ * it. A test that writes `CUDA_VISIBLE_DEVICES` itself has made the decision and is left alone,
+ * by the same rule that keeps the runner from overruling a `cuda_devices` test's environment.
+ *
+ * The three answers of the host are kept apart on purpose (`test/tools/free-device.mjs`): cards
+ * that are all occupied skip the test with their numbers named, a card that is idle is handed to
+ * the child, and a host that lists no card at all leaves the test to run as it always did. Only
+ * the middle-of-those-negative case is a skip, so an out-of-memory error inside a run that was
+ * given a card stays that test's own failure.
+ */
+async function selectCudaDeviceFor(test) {
+    if (test.cuda_free_device !== true || test.__cudaDevice) return null
+    if (declaredVisibility(test) !== null) return null
+    const chosen = await chooseFreeDevice()
+    if (chosen.kind === 'device') {
+        test.__cudaDevice = {
+            ordinal: chosen.ordinal,
+            uuid: chosen.uuid,
+            usedMib: chosen.usedMiB,
+            totalMib: chosen.totalMiB
+        }
+        return null
+    }
+    if (chosen.kind === 'busy') return chosen.reason
+    return null
+}
+
+/**
  * A test's precondition: `skip_unless` is a command (same variable expansion as `args`) run from
  * the repository root before the test. A non-zero exit skips the test, reporting the command's
  * output as the reason; the test is then neither passed nor failed. Use it only for conditions
@@ -1021,6 +1073,10 @@ async function checkPrecondition(test, sharedVars, scratch, scratchRelative) {
     // skip is a silent loss of coverage, not a red (docs/test-plans.md, "CUDA visibility").
     const env = { ...process.env, CAMEL_TEST_TMPDIR: scratch }
     if (pythonEntryPoints(test).precondition) hideCudaDevicesFrom(env, test)
+    // The precondition is the test's own question about the host, so it is asked with the card the
+    // test will be given: a probe that answered "no device" against the card another tenant filled
+    // would skip the very test this card was chosen for.
+    applyCudaDevice(env, test)
     const proc = await runProcess(cmd, args, {
         cwd: REPO_ROOT,
         // The precondition writes where the test would: a dataset downloaded for it lands in
@@ -1553,6 +1609,9 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     env.CAMEL_TEST_TMPDIR = scratch
     // Before the test's own `envs`: a value the test writes for itself wins over the default.
     if (pythonEntryPoints(test).tool) hideCudaDevicesFrom(env, test)
+    // The card this test was chosen to run on, when it did not name one: before its own `envs`, so
+    // a test that writes `CUDA_VISIBLE_DEVICES` itself still wins.
+    applyCudaDevice(env, test)
     for (const entry of test.envs || []) {
         const text = expandTextTokens(entry, scope)
         const eq = text.indexOf('=')
@@ -1637,6 +1696,9 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         cpuBudgetMs,
         cpuMs: cpuBudgetMs === null ? null : cpuReading.cpuMs,
         cpuReason: cpuBudgetMs === null ? null : cpuReading.reason,
+        // The card the runner chose for this test, if it chose one: which card a GPU test ran on
+        // is what makes its result readable later, and it is not derivable from the output.
+        cudaDevice: test.__cudaDevice || null,
     }
 
     if (test.kind === 'benchmark' && raw.stdout) {
@@ -1785,6 +1847,9 @@ function writeLogFiles(plan, test, result, status, logDir) {
                 // at all, and this says why (NO_CPU_TIME_SKIP) instead of leaving a pass that looks
                 // like a judged one.
                 margin_skipped: result.marginSkipped ?? null,
+                // The card this test was given when it did not name one (`cuda_free_device`):
+                // ordinal, uuid and the memory reading the choice came from.
+                cuda_device: result.cudaDevice ?? null,
                 plan_path: test.__planPath,
                 test_tmp: result.testTmpRelative || null,
             },
@@ -2648,7 +2713,18 @@ async function executePlans(plans, options, sharedVars, logDir) {
                     scratch = createTestScratchDir(entry.test)
                     clock.scratchAt = performance.now()
                     const scratchRelative = path.relative(REPO_ROOT, scratch).split(path.sep).join('/')
+                    // The host checks begin here: the card selection and the `skip_unless` probe
+                    // are both questions about the machine, and they are counted as such.
                     clock.probeAt = performance.now()
+                    // The card goes before the probe: the probe is this test's own question about
+                    // the host, and it must be asked against the card the test will get.
+                    const deviceSkip = await selectCudaDeviceFor(entry.test)
+                    if (deviceSkip) {
+                        probes.release(1)
+                        probeHeld = false
+                        entry.outcome = { status: 'skip', reason: deviceSkip }
+                        return
+                    }
                     const skipReason = await checkPrecondition(entry.test, sharedVars, scratch, scratchRelative)
                     clock.preconditionAt = performance.now()
                     probes.release(1)
@@ -2665,6 +2741,13 @@ async function executePlans(plans, options, sharedVars, logDir) {
                     scratch = createTestScratchDir(entry.test)
                     clock.scratchAt = performance.now()
                     const scratchRelative = path.relative(REPO_ROOT, scratch).split(path.sep).join('/')
+                    // A serial test (or one with no probe) picks its card inside its own slot:
+                    // nothing may run next to a serial test, and the selection is a child process.
+                    const deviceSkip = await selectCudaDeviceFor(entry.test)
+                    if (deviceSkip) {
+                        entry.outcome = { status: 'skip', reason: deviceSkip }
+                        return
+                    }
                     // The mark is only taken for a test that has a precondition: `performance.now()`
                     // around a call that returns at once is a rounding artefact (0.1 ms) on
                     // thousands of tests, not a probe, and it would be counted as one.

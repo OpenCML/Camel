@@ -9,7 +9,11 @@
  *  - the types agree along the edges: what a node produces has the type its readers need.
  *    The rules are the ones the compiler's own graphs satisfy, node kind by node kind (see
  *    checkNode); a rewrite that breaks one has built a graph that a back end would run on the
- *    wrong slot type.
+ *    wrong slot type;
+ *  - a block's statements are one chain (docs/design/effects/edges.cn.md 5.3): each statement
+ *    follows one other of its block and one statement follows it. A statement with two predecessors
+ *    or with two statements after it is a chain that forks, which is no chain -- the layout walks
+ *    one of them and the other is reached by nothing.
  *
  * Violations are collected; the commit fails with all of them, named by graph and node.
  */
@@ -24,9 +28,11 @@
 #include "camel/runtime/program.h"
 #include "camel/utils/assert.h"
 
+#include <algorithm>
 #include <format>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace camel::runtime {
@@ -42,9 +48,11 @@ class EdgeChecker {
 
     std::vector<std::string> run() {
         checkNodeTypeIds();
+        checkReturnValueType();
         checkWritings();
         checkOrderEdges();
         checkSyncEdges();
+        checkSyncChainForks();
         findCycle();
         for (auto it = graph_.nodes().begin(); it != graph_.nodes().end(); ++it) {
             checkNode(it.ref(), **it);
@@ -79,12 +87,47 @@ class EdgeChecker {
             "path (see typeIdOf in src/runtime/graph.cpp).");
     }
 
+    /// The value a graph whose exit is a `T?` or a `T!` hands on is that tagged value. It is the
+    /// shape the value is boxed into, and it is what a second writing of the exit leaves out: the
+    /// second `return` writes its own value where the first wrote the boxed one, so the graph's
+    /// signature and its exit no longer agree, and a back end that reads the exit as the declared
+    /// type writes a slot of another shape -- the node VM crashed on exactly that. Refused here,
+    /// where the graph is frozen, so no back end is ever handed one. Any other exit type is left
+    /// to the builder: a function declared `void` hands on the value it computes, and the purity of
+    /// a function type is not a difference the value's shape shows.
+    void checkReturnValueType() {
+        const gc_node_ref_t returned = graph_.returnNodeRef();
+        if (returned == kInvalidNodeRef || graph_.returnKind() == GCReturnKind::None) {
+            return;
+        }
+        const GCNode *node                        = graph_.returnNode();
+        camel::core::type::FunctionType *funcType = graph_.funcType();
+        if (node == nullptr || funcType == nullptr || !funcType->hasExitType()) {
+            return;
+        }
+        camel::core::type::Type *declared = funcType->exitType();
+        camel::core::type::Type *actual   = node->dataType();
+        if (declared == nullptr || actual == nullptr || declared->equals(actual)) {
+            return;
+        }
+        if (camel::core::type::asTagged(declared) == nullptr) {
+            return;
+        }
+        violations_.push_back(
+            std::format(
+                "graph '{}': the value it hands on has type '{}', and the graph declares '{}'",
+                graph_.name(),
+                actual->toString(),
+                declared->toString()));
+    }
+
     /// The other half of the structural rule of 4.6: a sync edge joins two statements one `sync`
     /// block writes directly -- or the block's chain tail to the block's value -- and nothing else.
     /// The builder records that fact on each node it chains (kGCNodeFlagSyncStatement), so the
     /// check is: both ends are such a node, they are not the same node and not a node a rewrite
     /// removed, and one statement is written directly after one other (the tail that reaches the
-    /// block's value is the one node that two sync edges leave).
+    /// block's value is the one node that two sync edges leave). The other direction -- one
+    /// statement two statements follow -- is `checkSyncChainForks` below.
     void checkSyncEdges() {
         if (!graph_.hasSyncEdges()) {
             return;
@@ -135,6 +178,96 @@ class EdgeChecker {
         }
     }
 
+    /// The block a statement is written in: the innermost region that holds code of its own, with the
+    /// region an inline splice gave the code it moved looked through -- that code is the code of the
+    /// block it was moved into (docs/design/effects/edges.cn.md 5.7), which is exactly what
+    /// `statementRegionOf` reads back on the draft (src/runtime/draft.cpp, beside
+    /// `sameSyncBlock`). Nothing else is looked through: a region that holds code of its own -- an
+    /// arm, a part of a loop, a block written as a statement -- separates blocks, and its chain is
+    /// its own.
+    uint32_t controlBlockOf(gc_node_ref_t ref) const {
+        uint32_t region = graph_.nodeRegion(ref);
+        while (region != 0) {
+            const GCRegion *enclosing = graph_.region(region);
+            if (enclosing == nullptr || enclosing->kind != GCRegionKind::Inline) {
+                break;
+            }
+            region = enclosing->parent;
+        }
+        return region;
+    }
+
+    /// The other half of 5.3, and the one a splice can break: a block's statements are one chain,
+    /// so one statement follows one other at most *and* one statement follows it. `checkSyncEdges`
+    /// reads the first half back; this is the second. Two statements of one block following the
+    /// same statement is a chain that forks, which is no chain: the layout takes one of the two and
+    /// the other is reached by nothing, so its work does not happen and a program that prints twice
+    /// prints once.
+    ///
+    /// What counts is the chain 5.3 and 3.4 make. A node the model lets a pass arrange freely is not
+    /// on the chain at all (3.4: a sync block orders its effects, and a node that is pure and cannot
+    /// fault has no order to keep), so an edge forking there is nothing to report. A GATE is where a
+    /// chain's tail hands its value on (5.3) -- an end of the chain, not a continuation of it --
+    /// and a value that several nested blocks hand on is reached from the one tail by one GATE each.
+    ///
+    /// The splice resolves a statement's place again once the body's code is in
+    /// (`resolvePlaceForks`, src/runtime/draft_inline.cpp) and moves a statement that finds itself
+    /// following one a second statement follows to the end of the chain growing from it. The move is
+    /// refused when that end waits on the statement being moved -- moving it would put the graph on
+    /// a cycle of inputs -- and the fork then stands: the splice has no other place to put the
+    /// statement, so the graph it would leave is one the model does not have. No such graph is
+    /// frozen: this names the statement the two follow, which is where the defect is looked for,
+    /// instead of leaving a chain the layout may walk one way and silently drop the other.
+    void checkSyncChainForks() {
+        if (!graph_.hasSyncEdges()) {
+            return;
+        }
+        std::unordered_map<gc_node_ref_t, std::vector<gc_node_ref_t>> followers;
+        for (const GCGraphSyncEdge &edge : graph_.syncEdges()) {
+            if (!graph_.containsNodeRef(edge.user) || !graph_.containsNodeRef(edge.pred)) {
+                continue; // reported by checkSyncEdges
+            }
+            const GCNode *user = graph_.node(edge.user);
+            const GCNode *pred = graph_.node(edge.pred);
+            if (user->kind == GCNodeKind::Dead || pred->kind == GCNodeKind::Dead) {
+                continue; // reported by checkSyncEdges
+            }
+            if ((user->flags & kGCNodeFlagSyncStatement) == 0 ||
+                (pred->flags & kGCNodeFlagSyncStatement) == 0) {
+                continue; // reported by checkSyncEdges
+            }
+            if (controlBlockOf(edge.user) != controlBlockOf(edge.pred)) {
+                continue; // not one block's chain, which checkSyncEdges does not allow either
+            }
+            if (user->kind == GCNodeKind::Gate) {
+                continue; // the chain's end, not its continuation
+            }
+            if (isFreelySchedulable(edge.user)) {
+                continue; // not a statement of a chain at all (3.4)
+            }
+            followers[edge.pred].push_back(edge.user);
+        }
+        for (const auto &[pred, users] : followers) {
+            if (users.size() < 2) {
+                continue;
+            }
+            std::string named;
+            for (gc_node_ref_t user : users) {
+                if (!named.empty()) {
+                    named += ", ";
+                }
+                named += std::to_string(user);
+            }
+            violations_.push_back(
+                std::format(
+                    "graph '{}': sync chain forks at node {}: statements {} follow it, and a "
+                    "block's statements are one chain (docs/design/effects/edges.cn.md 5.3)",
+                    graph_.name(),
+                    pred,
+                    named));
+        }
+    }
+
     /// The rule the design has the seal check enforce (docs/design/effects/edges.cn.md 4.6): an
     /// order edge only orders, and only something that has an order can carry one.
     void checkOrderEdges() {
@@ -165,10 +298,94 @@ class EdgeChecker {
                 bad("orders a node after itself");
                 continue;
             }
-            if (isFreelySchedulable(edge.user)) {
+            if (isFreelySchedulable(edge.user) && !standsForItsRegion(edge.user)) {
                 bad("is on a pure node, which nothing orders");
             }
+            if (const uint32_t region = crossedControlRegion(edge.pred, edge.user); region != 0) {
+                bad(std::format(
+                    "enters region {}; an arm or a part of a loop runs as a whole, so the order it "
+                    "has with the code around it is written on the node that owns the region "
+                    "(docs/design/effects/edges.cn.md 4.6)",
+                    region));
+            }
         }
+    }
+
+    /// The control region an order edge would cross, 0 when it crosses none. An order edge orders
+    /// two nodes that both run, and an arm or a part of a loop runs as a whole with the node that
+    /// owns it: the order such a region has with the code around it is an order on the owner (the
+    /// `BRCH` or the `LOOP`), never one that reaches inside the region (docs/design/effects/
+    /// edges.cn.md 4.6; the builder puts them there in Builder::rehomeOrderEdges). A region that only
+    /// records where code came from -- an inlined body, a tagged block -- is looked through: it
+    /// holds no execution of its own (section 5.8).
+    uint32_t crossedControlRegion(gc_node_ref_t pred, gc_node_ref_t user) const {
+        const std::vector<uint32_t> predChain = controlRegionChain(pred);
+        const std::vector<uint32_t> userChain = controlRegionChain(user);
+        size_t common                          = 0;
+        while (common < predChain.size() && common < userChain.size() &&
+               predChain[common] == userChain[common]) {
+            ++common;
+        }
+        if (common == predChain.size() && common == userChain.size()) {
+            return 0; // both ends are in the one control region that holds them
+        }
+        // A node inside a deeper region stands for the owner of the first region the two ends do
+        // not share; the owner is where the edge belongs. Any other end is where it is.
+        const auto movedInside = [&](gc_node_ref_t end, const std::vector<uint32_t> &chain) {
+            if (common >= chain.size()) {
+                return false;
+            }
+            const GCRegion *region = graph_.region(chain[common]);
+            return region != nullptr && region->owner != end;
+        };
+        if (movedInside(pred, predChain)) {
+            return predChain[common];
+        }
+        if (movedInside(user, userChain)) {
+            return userChain[common];
+        }
+        return 0;
+    }
+
+    /// The control regions a node runs with, outermost first: the arms and the parts of a loop.
+    std::vector<uint32_t> controlRegionChain(gc_node_ref_t ref) const {
+        std::vector<uint32_t> chain;
+        for (uint32_t region = graph_.nodeRegion(ref); region != 0;) {
+            const GCRegion *record = graph_.region(region);
+            if (record == nullptr) {
+                break;
+            }
+            if (record->kind == GCRegionKind::Arm || record->kind == GCRegionKind::LoopCond ||
+                record->kind == GCRegionKind::LoopBody) {
+                chain.push_back(region);
+            }
+            region = record->parent;
+        }
+        std::reverse(chain.begin(), chain.end());
+        return chain;
+    }
+
+    /// Whether a node owns a control region of this graph, and so stands on the outside for what
+    /// runs inside it (docs/design/effects/edges.cn.md 4.6): an arm or a part of a loop runs as a
+    /// whole with the node that owns it, so the order the region has with the code around it is an
+    /// order on that node -- the `BRCH` or the `LOOP` -- and not one that reaches inside the region.
+    /// Such a node computes nothing itself, and still carries an order edge, which is why the rule
+    /// "a pure node carries none" reads it out here.
+    bool standsForItsRegion(gc_node_ref_t ref) const {
+        const GCNode *node = graph_.node(ref);
+        if (node == nullptr) {
+            return false;
+        }
+        if (node->kind != GCNodeKind::Brch && node->kind != GCNodeKind::Loop) {
+            return false;
+        }
+        for (uint32_t region = 1; region < graph_.regionCount(); ++region) {
+            const GCRegion *record = graph_.region(region);
+            if (record != nullptr && record->owner == ref) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// The rule of 4.6's third clause, read off the shared classification so that the seal check

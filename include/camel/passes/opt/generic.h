@@ -13,7 +13,7 @@
  *                   inputs;
  *   std::opt::algebra combines local scalar arithmetic, with optional safe_fp mode;
  *   std::opt::dce   removes pure operator (and value-only) nodes whose results
- *                   are unused, SYNC control joins, and GATEs used only for control;
+ *                   are unused, and GATEs used only for control;
  *                   also bypasses non-anchor GATEs by transferring waits to mandatory users,
  *                   within an edge-growth budget;
  *                   their ordering is transferred to their control users.
@@ -39,12 +39,21 @@
 #pragma once
 
 #include "camel/execute/pass/opt.h"
+#include "camel/passes/opt/config.h"
 
 class ConstantFoldPass : public RuntimeGraphRewritePass {
   public:
-    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    explicit ConstantFoldPass(
+        const camel::core::context::context_ptr_t &ctx,
+        size_t constantBudgetBytes = kDefaultConstantBudgetBytes)
+        : RuntimeGraphRewritePass(ctx), constantBudgetBytes_(constantBudgetBytes) {}
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
+
+  private:
+    /// Bytes of constants this pass may materialize (kDefaultConstantBudgetBytes, and the
+    /// `constant_budget` parameter the pass declares).
+    size_t constantBudgetBytes_;
 };
 
 class CommonSubexpressionPass : public RuntimeGraphRewritePass {
@@ -95,9 +104,11 @@ class DeadCodePass : public RuntimeGraphRewritePass {
 };
 
 /// std::opt::order: the transitive reduction over a graph's ordering edges (docs/design/effects/
-/// edges.cn.md 5.4). It reduces ORDER edges today and keeps reducing CTRL edges until the
-/// control-edge kind is gone; the commit that removes that kind drops the half here and the CTRL
-/// assertions of test/cases/opt/control_contract.py.
+/// edges.cn.md 5.4). An order edge A -> C goes away when a path of order edges or of one `sync`
+/// block's chain already orders the two ends; sync edges themselves are never dropped. The
+/// control-edge kind is still in the graph, so until it is removed the pass also drops the CTRL
+/// edges a data, sync or control path already orders; the commit that removes that kind drops that
+/// half and the CTRL assertions of test/cases/opt/control_contract.py.
 class OrderReductionPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;

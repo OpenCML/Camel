@@ -70,13 +70,7 @@ camel::source::origin_id_t resolveOriginFromSite(
         }
     }
 
-    if (site.runtimeGraph) {
-        auto origin = debugMap.runtimeGraphOrigin(reinterpret_cast<uintptr_t>(site.runtimeGraph));
-        if (origin != camel::source::kInvalidOriginId) {
-            return origin;
-        }
-    }
-
+    // A site names the node that was running; a graph has no position of its own to fall back to.
     return sourceContext->currentRuntimeOrigin();
 }
 
@@ -192,17 +186,13 @@ RuntimeErrorReporter::describe(const RuntimeFault &fault, const ExecutionSite &s
 }
 
 ExecutionSite makeGraphExecutionSite(
-    camel::source::source_context_ptr_t sourceContext, camel::runtime::GCGraph *graph,
+    camel::source::source_context_ptr_t /*sourceContext*/, camel::runtime::GCGraph *graph,
     size_t frameDepth, std::string taskLabel) {
     ExecutionSite site;
     site.kind         = ExecutionSiteKind::Unknown;
     site.runtimeGraph = graph;
     site.frameDepth   = frameDepth;
     site.taskLabel    = std::move(taskLabel);
-    if (graph && sourceContext) {
-        site.cachedOrigin =
-            sourceContext->debugMap().runtimeGraphOrigin(reinterpret_cast<uintptr_t>(graph));
-    }
     return site;
 }
 

@@ -6,7 +6,7 @@
  * operator survives.
  */
 
-import { relu, mean, reshape, flatten, new } from tensor
+import { relu, mean, reshape, dim } from tensor
 import { with_grad } from autodiff
 import { conv2d, batch_norm_train, sgd } from nn
 import { export_model } from onnx
@@ -30,7 +30,7 @@ func forward(x: float[..], s: BnStats): (float[..], BnStats) {
     // does the value the batch norm answers, while this model works in f64: each is converted
     // where it is stored or meets the model's weights (design principles 7.4: the element type is
     // exact, and a conversion is written).
-    return (float(flatten(g)) @ m.fc_w + m.fc_b, {
+    return (float(reshape<[dim<0>(g), -1]>(g)) @ m.fc_w + m.fc_b, {
         bn1_rm: float(r1.1), bn1_rv: float(r1.2),
         bn2_rm: float(r2.1), bn2_rv: float(r2.2)
     })
@@ -50,35 +50,35 @@ func step(m: CnnBn, s: BnStats, x: float[..]): (float, CnnBn, BnStats) {
 
 func main(): int sync {
     let m = {
-        conv1_w: reshape<[2, 1, 3, 3]>(new([
+        conv1_w: reshape<[2, 1, 3, 3]>([
             0.3, -0.2, 0.1, 0.4, -0.5, 0.2, 0.1, 0.6, -0.3,
-            -0.1, 0.2, 0.5, -0.4, 0.3, -0.2, 0.2, -0.6, 0.4])),
-        conv1_b: new([0.1, -0.1]),
-        bn1_g: new([1.1, 0.9]),
-        bn1_b: new([0.05, -0.1]),
-        conv2_w: reshape<[2, 2, 3, 3]>(new([
+            -0.1, 0.2, 0.5, -0.4, 0.3, -0.2, 0.2, -0.6, 0.4] as float[]),
+        conv1_b: [0.1, -0.1] as float[],
+        bn1_g: [1.1, 0.9] as float[],
+        bn1_b: [0.05, -0.1] as float[],
+        conv2_w: reshape<[2, 2, 3, 3]>([
             0.2, 0.1, -0.3, 0.5, -0.1, 0.4, -0.2, 0.3, 0.1,
             -0.4, 0.2, 0.6, 0.1, -0.5, 0.3, 0.2, -0.1, -0.2,
             0.1, -0.3, 0.2, -0.2, 0.4, -0.6, 0.5, 0.1, 0.3,
-            -0.1, 0.5, -0.4, 0.2, 0.3, -0.2, 0.6, -0.3, 0.1])),
-        conv2_b: new([0.2, 0.0]),
-        bn2_g: new([0.8, 1.2]),
-        bn2_b: new([-0.15, 0.1]),
-        fc_w: reshape<[2, 2]>(new([0.5, -0.5, 0.25, -0.75])),
-        fc_b: new([0.1, -0.2])
+            -0.1, 0.5, -0.4, 0.2, 0.3, -0.2, 0.6, -0.3, 0.1] as float[]),
+        conv2_b: [0.2, 0.0] as float[],
+        bn2_g: [0.8, 1.2] as float[],
+        bn2_b: [-0.15, 0.1] as float[],
+        fc_w: reshape<[2, 2]>([0.5, -0.5, 0.25, -0.75] as float[]),
+        fc_b: [0.1, -0.2] as float[]
     }
     let s = {
-        bn1_rm: new([0.2, -0.3]),
-        bn1_rv: new([1.4, 0.8]),
-        bn2_rm: new([-0.1, 0.15]),
-        bn2_rv: new([0.9, 1.1])
+        bn1_rm: [0.2, -0.3] as float[],
+        bn1_rv: [1.4, 0.8] as float[],
+        bn2_rm: [-0.1, 0.15] as float[],
+        bn2_rv: [0.9, 1.1] as float[]
     }
-    let x = reshape<[1, 1, 5, 5]>(new([
+    let x = reshape<[1, 1, 5, 5]>([
         0.5, -0.3, 0.2, 0.7, -0.1,
         0.4, 0.1, -0.6, 0.3, 0.2,
         -0.2, 0.6, 0.5, -0.4, 0.1,
         0.3, -0.5, 0.4, 0.2, -0.7,
-        0.1, 0.2, -0.1, 0.6, 0.4]))
+        0.1, 0.2, -0.1, 0.6, 0.4] as float[])
     let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, s, x))
     println('exported')
     return 0

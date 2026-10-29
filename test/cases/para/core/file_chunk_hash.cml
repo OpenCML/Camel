@@ -30,7 +30,7 @@ func main(): int sync {
     'File size: {} bytes, chunks: {}, chunk size: {} bytes'->format<total_size, chunks, chunk_size>->println
 
     let start = now()
-    let chunk_hashes = 0..chunks->map<(i: int): string => {
+    let chunk_hashes = (0..chunks)->map<(i: int): string => {
         let offset = i * chunk_size
         let remain = total_size - offset
         let size = if remain <= 0 then 0 else if remain < chunk_size then remain else chunk_size

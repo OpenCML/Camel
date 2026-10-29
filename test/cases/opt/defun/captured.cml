@@ -1,0 +1,23 @@
+/**
+ * A form the pass leaves as written: a closure, which is a function value with the values it
+ * captured. The program's results must not change (a guess about which function a call reaches
+ * would change which effects run), and the pass says which graph still holds the closure and which
+ * function it is a closure of.
+ */
+
+func apply(f: (x: int) => int, x: int): int {
+    return f(x)
+}
+
+func plus_one(x: int): int {
+    return x + 1
+}
+
+func main(): int sync {
+    let k = 10
+    let with_k = (x: int) => x + k
+    let captured = apply(with_k, 5)
+    let named = apply(plus_one, 5)
+    'CAPTURED captured={} named={}'->format<captured, named>->println
+    return 0
+}

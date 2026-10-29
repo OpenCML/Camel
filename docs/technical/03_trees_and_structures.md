@@ -39,12 +39,12 @@
 
 **StmtBlock** 含 `sync`、`{`、**StmtList**、`}`。**StmtList** 中每个 **Stmt** 可以是：
 
-- **DataExpr**（表达式语句）：从 **WaitExpr** → **AssignExpr** → **LogicalOrExpr** → … → **LinkExpr** → **CompExpr** → **AnnoExpr** → **AccessExpr**。
+- **DataExpr**（表达式语句）：从 **WaitExpr** → **AssignExpr** → **LogicalOrExpr** → … → **LinkExpr** → **AnnoExpr** → **AccessExpr**。
   - **AccessExpr** 可包含 **PrimaryData**（如 **IdentRef**：`println`）及 **ParentArgues**（`(`、**ArgumentList**、`)`）。
   - **ArgumentList** 内为 **IndexValues** / **IndexValue**，其 **DataExpr** 再递归同一表达式层次，最终到 **Literal**（如 `'Hello, Camel!'`）。
 - **RetStmt**：`return` + **DataList**，**DataList** 中同样是 **DataExpr** 的递归下降直到 **Literal**（如 `0`）。
 
-表达式在 CST 中按**优先级**展开为长链：**WaitExpr** → **AssignExpr** → **LogicalOrExpr** → **LogicalAndExpr** → **EqualityExpr** → **RelationalExpr** → **AdditiveExpr** → **MultiplicativeExpr** → **NullableExpr** → **UnaryExpr** → **LinkExpr** → **CompExpr** → **AnnoExpr** → **AccessExpr** → **PrimaryData** / **Literal** 等。每一层对应文法中的一个规则，便于解析但不直接用于语义分析。
+表达式在 CST 中按**优先级**展开为长链：**WaitExpr** → **AssignExpr** → **LogicalOrExpr** → **LogicalAndExpr** → **EqualityExpr** → **RelationalExpr** → **RangeExpr** → **AdditiveExpr** → **MultiplicativeExpr** → **NullableExpr** → **UnaryExpr** → **LinkExpr** → **AnnoExpr** → **AccessExpr** → **PrimaryData** / **Literal** 等。每一层对应文法中的一个规则，便于解析但不直接用于语义分析。
 
 ### 2.4 类型在 CST 中的形式
 

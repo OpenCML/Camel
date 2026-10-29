@@ -11,6 +11,8 @@
  */
 
 #include "builder.h"
+#include "camel/core/type/typecall.h"
+#include "camel/utils/str.h"
 #include "builder_helpers.h"
 #include "builder_support.h"
 
@@ -26,6 +28,41 @@ namespace camel::compile::gir {
 
 using namespace camel::core::error;
 using namespace camel::core::type;
+
+namespace {
+/// Whether the type still holds an expansion (`..E`, design principles 5.6) that nothing bound.
+/// An expansion a call bound is expanded away (substituteTypeVars), so a node still here has no
+/// members to write: the result type was written over a pack the call gave nothing.
+bool holdsPackExpansion(Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    if (TypeCallType::isExpand(type)) {
+        return true;
+    }
+    switch (type->code()) {
+    case TypeCode::Array:
+        return holdsPackExpansion(static_cast<ArrayType *>(type)->elemType());
+    case TypeCode::Tuple:
+        for (Type *member : static_cast<TupleType *>(type)->types()) {
+            if (holdsPackExpansion(member)) {
+                return true;
+            }
+        }
+        return false;
+    default:
+        break;
+    }
+    if (type->isOtherType()) {
+        for (Type *param : static_cast<OtherType *>(type)->paramsSpan()) {
+            if (holdsPackExpansion(param)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+} // namespace
 
 const Builder::RestBinding *Builder::restBindingNamed(const std::string &name) const {
     // A local of the same name shadows the rest parameter, exactly as a parameter does.
@@ -88,7 +125,7 @@ node_handle_t Builder::inlineRestCall(
     const size_t declaredNormCount = signature->normTypesCount();
     // The runtime parameters: the `constas` ones are compile-time values and are dropped from
     // the arguments below (design principles 5.4); the rest parameter is always last.
-    const size_t normCount  = declaredNormCount - signature->constasCount();
+    const size_t normCount  = declaredNormCount - signature->normConstasCount();
     ASSERT(signature->hasRest() && normCount > 0 && restBindings_.size() < 64,
            "A rest signature has its rest parameter last.");
     const size_t fixedCount = normCount - 1;
@@ -108,9 +145,15 @@ node_handle_t Builder::inlineRestCall(
             .commit(signature->toString(), "the with-arguments given at the call");
         throw BuildAbortException();
     }
+    if (signature->withConstasCount() > 0) {
+        diags_->of(SemanticDiag::ArgumentsMismatch)
+            .atOrigin(call->origin())
+            .commit(signature->toString(), "a rest function takes no 'constas' among its with parameters");
+        throw BuildAbortException();
+    }
     ConstasValues constas;
     ExtentValues extents;
-    takeConstasValues(signature, normInputs, nullptr, call, constas, extents);
+    takeConstasValues(signature, withInputs, nullptr, normInputs, nullptr, call, constas, extents);
     if (normInputs.size() < fixedCount) {
         diags_->of(SemanticDiag::RestArgumentsMismatch)
             .atOrigin(call->origin())
@@ -268,6 +311,45 @@ node_handle_t Builder::inlineRestCall(
         restValues.push_back(normInputs[i].node);
         restTypes.push_back(valueTypeOf(nodeTypeOf(normInputs[i].node)));
     }
+    // A rest parameter typed `..xs: ..A` binds `A` to the pack of the types it took, the same
+    // binding a call of a declaration without a body makes (DeclaredFuncTypeResolver).
+    if (Type *pack = signature->restPack()) {
+        bindings.emplace_back(
+            static_cast<camel::core::type::TypeVarType *>(pack)->name(),
+            camel::core::type::TypeCallType::makePack(restTypes));
+    }
+    // The declaration's `when`, now that the fixed arguments and the pack have their types: a
+    // false condition makes the function inapplicable (design principles 4.4).
+    if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+        std::unordered_map<std::string, data_ptr_t> withValues;
+        for (size_t i = 0; i < withCount; ++i) {
+            if (data_ptr_t value = constantOfNode(withInputs[i].node); value != nullptr) {
+                withValues.emplace(std::string(signature->argNameAt(i)), value);
+            }
+        }
+        const WhenResult verdict =
+            evaluateWhenCondition(when->condition, signature, bindings, withValues, tmpl);
+        if (verdict.fails()) {
+            yieldToPipe(call);
+            std::vector<Type *> all;
+            for (const Argument &input : withInputs) {
+                all.push_back(valueTypeOf(nodeTypeOf(input.node)));
+            }
+            for (const Argument &input : normInputs) {
+                all.push_back(valueTypeOf(nodeTypeOf(input.node)));
+            }
+            diags_->of(SemanticDiag::WhenConditionUnmet)
+                .atOrigin(call->origin())
+                .commit(
+                    tmpl->name,
+                    strutil::join(all, ", ", [](Type *t) { return t->toString(); }),
+                    tmpl->name + " — when " + when->text);
+            throw BuildAbortException();
+        }
+        if (!verdict.holds()) {
+            reportWhenProblem(verdict, tmpl->name, when->condition);
+        }
+    }
     RestBinding rest;
     rest.name                 = restName;
     rest.tuple.type           = TupleType::create(std::move(restTypes));
@@ -279,6 +361,18 @@ node_handle_t Builder::inlineRestCall(
                          ? substituteExtentValues(
                                substituteTypeVars(signature->exitType(), bindings), extents)
                          : nullptr;
+    if (exitType != nullptr && holdsPackExpansion(exitType)) {
+        // The result type is written over a pack nothing bound: the declaration declares one at
+        // its head without a rest parameter that gives it members, so this call has no types to
+        // write the expansion with.
+        std::string what = exitType->toString();
+        std::string why  = "the call leaves no argument for the pack to range over";
+        describeUnevaluatedTypeCall(exitType, what, why);
+        diags_->of(SemanticDiag::PackExpansionNeedsOnePack)
+            .atOrigin(call->origin())
+            .commit(what, why);
+        throw BuildAbortException();
+    }
     if (exitType != nullptr && containsTypeVar(exitType)) {
         diags_->of(SemanticDiag::GenericArgumentsMismatch)
             .atOrigin(call->origin())

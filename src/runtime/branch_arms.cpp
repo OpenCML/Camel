@@ -64,8 +64,6 @@ std::string_view kindName(GCNodeKind kind) {
         return "FUNC";
     case GCNodeKind::Oper:
         return "OPER";
-    case GCNodeKind::Sync:
-        return "SYNC";
     case GCNodeKind::Gate:
         return "GATE";
     case GCNodeKind::Dref:

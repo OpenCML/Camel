@@ -11,6 +11,13 @@ atom), tag atoms -- that keeps node kinds, inputs by kind and target slot, opera
 payloads, attributes, region kind/parent/owner/index/ports/params/result and static values by
 value.
 
+The ordering edges are the one exception to "by kind and target slot", and deliberately so:
+`control`, `sync` and `order` all say "the predecessor runs first", and the two documents are
+compared by the order they hold, one edge per ordered pair, whatever kind spells it. That is
+what equivalence means here -- the order no data path or other ordering path already implies --
+and the dump writes the `sync` and `order` edges already reduced (docs/technical/
+gir-interchange.md, "Canonical documents").
+
 The document itself is produced by `std::jgir canonical=true`
 (`docs/technical/gir-interchange.md`, "Canonical documents"). This checker is independent of
 the dump: it reads only the JSON. Names, origins and node numbers are not in the document, so
@@ -33,6 +40,9 @@ from collections import Counter, defaultdict
 
 FORMAT = "camel.gir"
 VERSION = 2
+# The kinds that say "the predecessor runs first" (docs/design/effects/edges.cn.md 1). They are
+# compared as one relation, the ordered pairs, because that is what equivalence is defined on.
+ORDERING_KINDS = ("control", "sync", "order")
 DEFAULT_MAX_NODES = 20000
 DEFAULT_MAX_STEPS = 200000
 
@@ -173,6 +183,21 @@ class Document:
     def _node_ref(self, gid, node):
         return "NULL" if node is None else f"N:{gid}:{node}"
 
+    def _ordering(self, vid, target, seen):
+        """One edge for one ordered pair, whichever kinds spell it.
+
+        `control`, `sync` and `order` all say "the predecessor runs first", and a document is
+        compared by that order: two programs are equivalent when no order one of them has can be
+        derived in the other, not when they spell it with the same kinds. A pair that carries
+        two of the kinds -- the builder writes a control wait beside the sync link it makes --
+        is one ordering, so the label carries no kind and no slot, and a repeated pair is one
+        edge (docs/technical/gir-interchange.md, "Canonical documents").
+        """
+        if target in seen:
+            return
+        seen.add(target)
+        self.edge(vid, target, "in:ordering")
+
     def _region_ref(self, gid, region):
         return f"B:{gid}" if not region else f"R:{gid}:{region}"
 
@@ -209,12 +234,13 @@ class Document:
         self.edge(f"G:{gid}", vid, "node")
         self.edge(vid, f"T:{node['type']}", "type")
         self.edge(vid, self._region_ref(gid, node.get("region")), "region")
+        ordering = set()
         for item in node.get("inputs") or []:
-            self.edge(
-                vid,
-                self._node_ref(gid, item.get("source")),
-                f"in:{item.get('kind')}:{item.get('slot')}",
-            )
+            target = self._node_ref(gid, item.get("source"))
+            if item.get("kind") in ORDERING_KINDS:
+                self._ordering(vid, target, ordering)
+                continue
+            self.edge(vid, target, f"in:{item.get('kind')}:{item.get('slot')}")
         if "param" in node:
             self.V[vid]["param"] = [node["param"].get("kind"), node["param"].get("index")]
         if "attrs" in node:

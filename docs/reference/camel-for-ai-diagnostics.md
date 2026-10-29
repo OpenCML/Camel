@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 214
+**Semantic — errors** (`SemanticDiag`) — 218
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -91,6 +91,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `NativeTypeNotProvided` | The type '{0}' is declared without a right side, so a C++ module has to provide it, and the module '{1}' registered no type of that name. |
 | `ArgumentNeedsConversion` | The call to '{0}' needs an explicit conversion: {1}. |
 | `ReturnNeedsConversion` | The returned value needs an explicit conversion to the function's declared return type '{0}': {1}. |
+| `VarArgumentTypeMismatch` | The argument of '{0}' at the 'var' parameter '{1}' has type {3}, and a 'var' argument is read and written by the callee: it is accepted only when its type and the parameter's type {2} accept each other's values. |
 | `ImportNameConflict` | The name '{0}' is imported from the modules '{1}' and '{2}' with {3}. |
 | `FeatureNotSupported` | The feature '{0}' is not supported yet. |
 | `TypeVariableRedeclared` | The type parameter '{0}' is declared twice at the head of this declaration. |
@@ -100,6 +101,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `GenericInstantiationTooDeep` | Instantiating the generic function '{0}' with {1} is refused: {2}. |
 | `TypeFunctionArguments` | The type function '{0}' cannot be used this way: {1}. |
 | `GenericFunctionUnsupported` | The generic function '{0}' cannot be {1}. |
+| `PackExpansionNeedsOnePack` | The expansion '{0}' must range over exactly one pack: {1}. |
 | `FunctionNameAsValue` | '{0}' is used as a value here, but it names {1}, not one function. |
 | `TaggedTypeNesting` | The type '{0}' marks '{1}' twice. |
 | `TaggedValueNotOpened` | A value of type '{0}' cannot be used here: {1}. |
@@ -146,7 +148,8 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `DimensionNameNotBound` | The dimension name '{0}' is not bound by any parameter of this signature. |
 | `DimensionNameAlreadyBound` | The dimension name '{0}' is already bound; write '{0}' here. |
 | `DimensionMismatch` | {0} has extent {1}, but {2}. |
-| `InvalidExtentExpression` | This is not a shape: the extents of a type written with dimension names are integers, bound names, or linear expressions over them ('f32[n, 3]'). |
+| `InvalidExtentExpression` | This is not a shape: the extents of a type written with dimension names are integers, bound names, or expressions over them ('f32[n, 3]'). |
+| `ExtentNotADimension` | The extent '{0}' of this call is {1}, which is not a dimension. |
 | `NotDifferentiable` | The function cannot be differentiated: {0}. |
 | `TagNotAtPosition` | The tag '{0}' may not be written at a {1}: it is declared for {2}. |
 | `TagUndeclared` | No tag '{0}' is declared. |
@@ -275,6 +278,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `FactConstCaseTypeRequired` | The 'const' case '{0}' of the fact '{1}' writes no type. |
 | `FactCaseBindsNoVariable` | This case of the fact '{0}' names no variable. |
 | `TypeFunctionNotApplicable` | The type function '{0}' is not applicable: {1}. |
+| `StatementAfterReturn` | This statement cannot run: the 'return' written before it gives the value of this block, so nothing after it in the block is reached. |
 
 **Semantic — warnings** (`SemanticDiag`) — 15
 
@@ -333,9 +337,10 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `DeviceNotSelected` | No device to run '{0}' on: {1}. |
 | `GpuScopeMacroNotExpanded` | `#gpu` scope '{0}': {1} is a macro operator no pass has expanded, so the derived graph does not exist when the scope is compiled; put the pass '{2}' before this one. |
 
-**Run time and passes — warnings** (`RuntimeDiag`) — 3
+**Run time and passes — warnings** (`RuntimeDiag`) — 4
 
 | `PassesNeverRun` | Pass '{0}' consumes the graph, so {1} written after it will not run. |
 | `ConstantExpressionFaults` | This constant expression faults whenever it is evaluated ({0}); it is not folded. |
 | `TranslationLinksRuntime` | std::cpp has no standalone translation of {0}: the program it writes calls the Camel runtime there and is built with libcamel. |
+| `DefunctionalizationIncomplete` | Defunctionalization left {0} as written. |
 <!-- camel-for-ai end: diagnostics -->

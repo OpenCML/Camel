@@ -24,6 +24,15 @@ export func nop::<F>(f: F): F! when is_function::<F>()
 /// the passes that follow.
 export func macro::<F>(f: F): F! when is_function::<F>()
 
+/// Lowers the calls made through function values into direct calls, ahead of the passes that
+/// follow: a call through a parameter whose call site passes a function the program can name
+/// becomes a call of that function, and a call of a closure built in the same graph becomes a call
+/// of its body with the captured values as arguments. A value it cannot name at the call site is
+/// left as it is, and the graph that still calls it is reported by a warning. It takes no
+/// parameters: one copy is made per (function, value) pair and nothing else grows, so it always
+/// completes.
+export func defunctionalize::<F>(f: F): F! when is_function::<F>()
+
 // -----------------------------------------------------------------------------
 // Dumps and translations of the graph
 // -----------------------------------------------------------------------------
@@ -234,6 +243,10 @@ with <
     /// Nodes specialization and inlining may copy before the remaining calls are left as calls;
     /// 0 stops them (design principles 9.6).
     growth_budget: int = 4096,
+    /// Bytes of constants folding may materialize in a graph. Folding buys run time with
+    /// compile-time memory, which a large value does not repay: a value above this is left as the
+    /// computation that builds it (design principles 9.6); 0 materializes none.
+    constant_budget: int = 8388608,
     /// Test of the generic passes' screens: give the graphs they skip to the pass anyway and
     /// fail if it rewrites one.
     check_screens: bool = false
@@ -270,6 +283,11 @@ with <growth_budget: int = 4096>
 export func specialize::<F>(f: F): F! when is_function::<F>()
 
 /// Constant folding.
+with <
+    /// Bytes of constants this pass may materialize in a graph; a value above it is left as the
+    /// computation that builds it (design principles 9.6); 0 materializes none.
+    constant_budget: int = 8388608
+>
 export func fold::<F>(f: F): F! when is_function::<F>()
 
 /// Algebraic simplification (the laws of stdlib/rules.cml, under the strict numeric policy when

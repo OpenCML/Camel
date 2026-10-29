@@ -1,0 +1,10 @@
+/**
+ * The same shape with a block value that is not a constant: `x` is a parameter, so no pass can
+ * reduce `(println(5) + println(6)) - x` to a literal. The value is still discarded, and both
+ * prints still run in written order.
+ */
+
+func main(x: int): int sync {
+    let r = (println(5) + println(6)) - x
+    return 0
+}

@@ -19,7 +19,10 @@
  * Hidden is the default because a test that measures what the CPU does must not depend on who
  * else is on the host, and because a test that wants a device is a different, deliberate thing:
  * it says so with `cuda_devices = true`, in its own entry or in the plan's `[defaults]`, and the
- * runner then leaves the machine's `CUDA_VISIBLE_DEVICES` exactly as it found it.
+ * runner then leaves the machine's `CUDA_VISIBLE_DEVICES` exactly as it found it -- or with
+ * `cuda_free_device = true`, where the runner names one idle card of its own choosing instead
+ * (`test/tools/free-device.mjs`). Either way the child sees a device it was given, not a list of
+ * cards that answers to whoever else is on the host.
  *
  * This must not be copied onto a test that really uses a device (56.3): it hides the card, it
  * does not free it, and a device test that adopted it would stop telling "there is no device"
@@ -56,9 +59,13 @@ export function declaredVisibility(test) {
     return null
 }
 
-/** Whether the test declares that its Python child wants the machine's devices. */
+/**
+ * Whether the test declares that its child wants a device. `cuda_free_device` is the same promise
+ * written more strictly -- "one idle card, the runner picks it" -- so it declares too: the child is
+ * handed a card by the runner, and hiding the cards from it would leave it measuring the CPU.
+ */
 export function declaresDevices(test) {
-    return test.cuda_devices === true
+    return test.cuda_devices === true || test.cuda_free_device === true
 }
 
 /**

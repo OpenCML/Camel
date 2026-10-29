@@ -1,4 +1,5 @@
-import { random, seed, exp, sum, mean, max, sqrt, abs, reshape } from tensor
+import { exp, sum, mean, max, sqrt, abs, reshape } from tensor
+import { next_key, seed, uniform } from random
 import { inspect, run_preferred_resident, download } from tiles
 func softmax(x: f32[..]): f32[..] {
     let e = exp(x - max<1, true>(x))
@@ -18,22 +19,22 @@ func ordered_fallback(x: f32[..]): f32[..] {
 }
 func main(): int sync {
     seed(161)
-    let x = random([5, 257], -3.0, 3.0)
-    let scale = random([1,257], 0.5, 1.5)
-    let bias = random([257], -0.1, 0.1)
+    let x = (next_key()->uniform::<f32><shape: [5, 257]> * 6.0 - 3.0)
+    let scale = (next_key()->uniform::<f32><shape: [1,257]> + 0.5)
+    let bias = (next_key()->uniform::<f32><shape: [257]> * 0.2 - 0.1)
     println(inspect<softmax>(x))
     println(inspect<normalize>((x, scale, bias)))
     println(inspect<reused>(x))
     println(sum(abs(download(run_preferred_resident<softmax>(x)) - softmax(x))))
     println(sum(abs(download(run_preferred_resident<normalize>((x,scale,bias))) - normalize(x,scale,bias))))
     println(sum(abs(download(run_preferred_resident<reused>(x)) - reused(x))))
-    let small = random([1,3], -3.0, 3.0)
+    let small = (next_key()->uniform::<f32><shape: [1,3]> * 6.0 - 3.0)
     println(sum(abs(download(run_preferred_resident<softmax>(small)) - softmax(small))))
-    let tail = random([65537,2], -1.0, 1.0)
+    let tail = (next_key()->uniform::<f32><shape: [65537,2]> * 2.0 - 1.0)
     println(sum(abs(download(run_preferred_resident<reused>(tail)) - reused(tail))))
-    let narrow = random([3,1], -1.0, 1.0)
+    let narrow = (next_key()->uniform::<f32><shape: [3,1]> * 2.0 - 1.0)
     println(sum(abs(download(run_preferred_resident<softmax>(narrow)) - softmax(narrow))))
-    let wide = random([2,2049], -1.0, 1.0)
+    let wide = (next_key()->uniform::<f32><shape: [2,2049]> * 2.0 - 1.0)
     println(sum(abs(download(run_preferred_resident<reused>(wide)) - reused(wide))))
     let cancellation = reshape<[1,4]>([1267650600228229401496703205376.0, 1.0, -1267650600228229401496703205376.0, 1.0] as f32[])
     println(sum(download(run_preferred_resident<ordered_fallback>(cancellation))))

@@ -3,7 +3,7 @@
  * 5.4): no wrap-around for a negative index.
  */
 
-import { reshape, range, take } from tensor
+import { reshape, take } from tensor
 
 func pick(t: i64[..], i: int): i64[..] {
     return take(t, int([i]))

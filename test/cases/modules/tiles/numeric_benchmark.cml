@@ -1,4 +1,5 @@
-import { random, seed } from tensor
+import tensor
+import { next_key, seed, uniform } from random
 import { benchmark } from tiles
 func strict_chain(x: f32[..], w: f32[..], b: f32[..]): f32[..] {
     let a0 = x * w + b
@@ -23,9 +24,9 @@ func contracted_chain(x: f32[..], w: f32[..], b: f32[..]): f32[..] {
 }
 func main(): int sync {
     seed(731)
-    let x = random([1024, 1024], 0.0, 1.0)
-    let w = random([1, 1024], 0.25, 0.75)
-    let b = random([1, 1024], 0.1, 0.2)
+    let x = next_key()->uniform::<f32><shape: [1024, 1024]>
+    let w = (next_key()->uniform::<f32><shape: [1, 1024]> * 0.5 + 0.25)
+    let b = (next_key()->uniform::<f32><shape: [1, 1024]> * 0.1 + 0.1)
     println(benchmark<strict_chain>((x,w,b)))
     println(benchmark<contracted_chain>((x,w,b)))
     return 0

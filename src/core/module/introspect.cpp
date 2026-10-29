@@ -154,8 +154,11 @@ void collectOperators(
                 auto *declared =
                     dynamic_cast<type::DeclaredFuncTypeResolver *>(resolver.get())) {
                 // A body-less declaration: the written signature says the parameter counts.
-                d.withCount = static_cast<int>(declared->withCount());
-                d.normCount = static_cast<int>(declared->normCount());
+                // A list that ends in a pack follows its arguments: -1, as a computed rule's does.
+                d.withCount =
+                    declared->funcType()->hasWithRest() ? -1 : static_cast<int>(declared->withCount());
+                d.normCount =
+                    declared->funcType()->hasRest() ? -1 : static_cast<int>(declared->normCount());
             }
             if (const auto id = traits.lookup(uri)) {
                 d.semantics = traits.semantics(*id);

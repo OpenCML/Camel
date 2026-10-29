@@ -139,12 +139,12 @@ import { seed, randint, next_key } from random
 func main(): int sync {
     seed(42)
     // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
-    let drawn = 0..8->map<(i) => next_key()->randint<0, 100>>
+    let drawn = (0..8)->map<(i) => next_key()->randint<0, 100>>
     println(drawn)
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [next_key()->randint<0, 100>]), [0][0:0]>
+    let ordered = (0..8)->reduce<(acc: int[], i: int): int[] => concat(acc, [next_key()->randint<0, 100>]), [0][0:0]>
     println(ordered)
     return 0
 }
@@ -174,12 +174,12 @@ import { seed, randint, next_key } from random
 func main(): int sync {
     seed(42)
     // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
-    let drawn = 0..8->map<(i) => next_key()->randint<0, 100>>
+    let drawn = (0..8)->map<(i) => next_key()->randint<0, 100>>
     println(drawn)
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [next_key()->randint<0, 100>]), [0][0:0]>
+    let ordered = (0..8)->reduce<(acc: int[], i: int): int[] => concat(acc, [next_key()->randint<0, 100>]), [0][0:0]>
     println(ordered)
     return 0
 }

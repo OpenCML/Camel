@@ -1,0 +1,63 @@
+{
+  "about": "The conformance matrix: for each program, the result the specification says it has, compared with the implementation on the unoptimized pipeline and after std::opt. A reading is what the named principle says the program prints and returns; it is never copied from what the implementation happened to print. See README.md for the columns and their coverage.",
+  "backends": ["nvm", "fvm", "jit", "prl"],
+  "optimized": ["std::opt"],
+  "cases": [
+    {
+      "name": "same_resource_order",
+      "case": "test/cases/linear/runtime/same_resource_order.cml",
+      "reading": "9\n0\n",
+      "exit": 9,
+      "principle": "3.3, the effects that run on one resource run in written order",
+      "what": "Two println calls on stdout are written one after the other; the first prints 9 before the second prints 0, and main returns the first."
+    },
+    {
+      "name": "same_resource_order_call",
+      "case": "test/cases/linear/runtime/same_resource_order_call.cml",
+      "reading": "1\n2\n3\n",
+      "exit": 123,
+      "principle": "3.3, a call is one effect on the resources its callee reaches",
+      "what": "A call whose callee prints keeps its place between the println calls written beside it."
+    },
+    {
+      "name": "dce_effect_under_pure_arithmetic",
+      "case": "test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml",
+      "reading": "5\n",
+      "exit": 7,
+      "principle": "3.4, the effects of the statements a sync block writes happen",
+      "what": "The statement of a sync block prints 5 whether or not anything reads its value; dropping the unread subtraction may not drop the print."
+    },
+    {
+      "name": "inline_argument_effect",
+      "case": "test/cases/opt/effects/inline_argument_effect.cml",
+      "reading": "9\n",
+      "exit": 5,
+      "principle": "3.4, an argument is used where the call is written",
+      "what": "The argument println(9) runs although the callee never reads that parameter; inlining may not drop it with the unused port."
+    },
+    {
+      "name": "fold_keeps_arm_effect",
+      "case": "test/cases/opt/effects/fold_keeps_arm_effect.cml",
+      "reading": "1\n2\n1\n",
+      "exit": 0,
+      "principle": "3.1 and 9.7, what the program uses runs, and a rewrite keeps it",
+      "what": "The effect the dropped arm read from outside keeps running after the branch is folded."
+    },
+    {
+      "name": "branch_keeps_outer_effect",
+      "case": "test/cases/opt/effects/branch_keeps_outer_effect.cml",
+      "reading": "1\n3\n4\n1\n3\n3\n",
+      "exit": 0,
+      "principle": "3.1 and 9.7, the same, with the branch's value read by an arithmetic whose other operand is an effect",
+      "what": "Both calls print 1 before the 3 written after the branch, through the fold as well as without it."
+    },
+    {
+      "name": "unused_effect_not_executed",
+      "case": "test/conformance/cases/unused_effect_not_executed.cml",
+      "reading": "",
+      "exit": 0,
+      "principle": "3.1, an effect nothing uses does not run",
+      "what": "An effect whose result nothing uses is not executed, before or after optimization; a pass that runs it adds output the program does not have."
+    }
+  ]
+}

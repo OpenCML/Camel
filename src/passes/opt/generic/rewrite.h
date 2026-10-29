@@ -24,6 +24,58 @@ namespace camel::passes::generic {
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GraphDraft;
 
+/// Whether `node` is computed after `wanted`: whether what `node` reads -- its value, `with`,
+/// control and sync inputs, walked back through the nodes on the way -- reaches `wanted`. An edge
+/// that ordered `wanted` after such a node would put the graph on a cycle of inputs, which the seal
+/// check refuses (docs/design/graph-store 5.4), so a wait may only be written on a node that does
+/// not read what waits.
+inline bool isComputedAfter(
+    const GraphDraft &draft, gc_node_ref_t node, gc_node_ref_t wanted, size_t maxWork = 8192) {
+    if (node == wanted || wanted == camel::runtime::kInvalidNodeRef) {
+        return true;
+    }
+    std::vector<gc_node_ref_t> work;
+    std::vector<bool> seen(draft.nodeSlotCount(), false);
+    for (auto group : {draft.normInputsOf(node),
+                       draft.withInputsOf(node),
+                       draft.ctrlInputsOf(node),
+                       draft.syncInputsOf(node)}) {
+        work.insert(work.end(), group.begin(), group.end());
+    }
+    while (!work.empty() && maxWork > 0) {
+        const gc_node_ref_t n = work.back();
+        work.pop_back();
+        if (n == wanted) {
+            return true;
+        }
+        if (n >= seen.size() || seen[n] || draft.header(n) == nullptr) {
+            continue;
+        }
+        seen[n] = true;
+        for (auto group : {draft.normInputsOf(n),
+                           draft.withInputsOf(n),
+                           draft.ctrlInputsOf(n),
+                           draft.syncInputsOf(n)}) {
+            for (gc_node_ref_t input : group) {
+                --maxWork;
+                work.push_back(input);
+            }
+        }
+    }
+    return false;
+}
+
+/// Records on `node` that a `sync` block wrote it as a statement, which is what a sync edge has to
+/// join at both ends (docs/design/effects/edges.cn.md 4.6).
+inline void markSyncStatement(GraphDraft &draft, gc_node_ref_t node) {
+    const auto *header = draft.header(node);
+    if (header != nullptr) {
+        draft.setNodeRuntimeFlags(
+            node,
+            static_cast<uint8_t>(header->runtimeFlags | camel::runtime::kGCNodeFlagSyncStatement));
+    }
+}
+
 /// Hand a wait a removed node carried through a `sync` block's chain to a consumer, in the kind it
 /// had: a wait is copied kind for kind (docs/handover/README.cn.md 5.21 item 4), so a consumer that
 /// is itself a statement of the block follows the predecessor through the sync edge rather than
@@ -45,15 +97,7 @@ inline bool handOverSyncWait(GraphDraft &draft, gc_node_ref_t pred, gc_node_ref_
         draft.nodeRegion(pred) != draft.nodeRegion(user)) {
         return false;
     }
-    const auto mark = [&](gc_node_ref_t node) {
-        const auto *header = draft.header(node);
-        if (header != nullptr) {
-            draft.setNodeRuntimeFlags(
-                node,
-                static_cast<uint8_t>(header->runtimeFlags |
-                                     camel::runtime::kGCNodeFlagSyncStatement));
-        }
-    };
+    const auto mark = [&](gc_node_ref_t node) { markSyncStatement(draft, node); };
     mark(pred);
     mark(user);
     const gc_node_ref_t only[1] = {pred};

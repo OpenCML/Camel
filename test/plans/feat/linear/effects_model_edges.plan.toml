@@ -130,8 +130,6 @@ desc = "docs/design/effects/edges.cn.md 1 and 5.4: ordering between two executio
 kind = "behavior"
 case = "../../../cases/linear/runtime/effects_model_edges.cml"
 backends = ["gir"]
-known_fail = ["gir"]
-known_fail_note = "The graph edge restructure's construction part and the `std::opt::ctrl` -> `std::opt::order` change: no site in the tree passes `LinkType::Order`, so the builder cannot make an order edge; the write/read ordering is Ctrl (which orders *and* carries used, so it cannot be read as one thing or the other), and the only order edges in a graph come from the inliner and the relink paths (src/runtime/draft_inline.cpp#appendOrderDependency)."
 args = ["${case}", "${run_gir}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -212,8 +210,9 @@ function readNodes(text) {
 """
 timeout_ms = 10000
 
-# 5.3 also deletes the SYNC node. No entry here asserts it: the measurement of this lane found no
-# program in the fast layer whose graph holds one. The only production site left is one branch of
-# the draft inline splice (src/runtime/draft_inline.cpp, a spliced body with more than one
-# executable entry root), and no case in test/ reaches it -- no golden file carries a SYNC node
-# either. The deletion is therefore a deletion of unreachable code plus 30 consumer cases.
+# 5.3 also deletes the SYNC node, and it is gone: the kind, the graph module's two registrations of
+# it, the splice that built one for a body with several executable entry roots (each root takes the
+# call's predecessors itself now), and every switch, arm and comment that branched on it. No entry
+# here asserts its absence: the measurement that preceded the deletion found no program in the fast
+# layer whose graph held one, and no golden file carried one, so the deletion was unreachable code
+# plus the cases that named the kind.

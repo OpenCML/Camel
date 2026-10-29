@@ -1,0 +1,18 @@
+/**
+ * A `Json!` that failed, matched (design principles 11.2): the arm that would look into the
+ * document belongs to the case the tag does not select, so `std::opt` may evaluate it early but
+ * may not turn the absence of a document into a constant one. `kind` of the payload would then
+ * read a document through a null pointer while the pass folds.
+ */
+
+import { Json, decode, kind } from json
+
+func report(j: Json): int sync {
+    let bad = decode('{"a": ')
+    println(match bad { case error e => 'error' case v => kind(v) }, kind(j))
+    return 0
+}
+
+func main(): int sync {
+    return decode('{"a":1}')->report !! 1
+}

@@ -1,0 +1,23 @@
+/**
+ * A small program with `float` values, for the graph rebuild primitive: the plan rebuilds its
+ * graphs with every `float` replaced by `int` (test::retype_f64_i64) and runs the result on four
+ * back ends.
+ *
+ * What it prints is deliberately a value the substitution does not touch: the numbers of the
+ * program are the same bits read as another type after the rebuild, and reading them is the
+ * rewrite's business, not the type swap's (camel/runtime/retype.h). So the four back ends have to
+ * print the same bytes here, and exactly the bytes the program prints without the pass, while the
+ * rebuilt graphs -- the static `float` constants, the `*` of `twice`, the call and its signature --
+ * all run.
+ */
+
+func twice(x: float): float {
+    return x * 2.0
+}
+
+func main(): int sync {
+    let a: float = 1.5
+    let c = twice(a)
+    println("retype kept the graph; printed value=", 1 + 1)
+    return 0
+}

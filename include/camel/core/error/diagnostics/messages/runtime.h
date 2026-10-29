@@ -100,9 +100,10 @@ enum class RuntimeDiag : uint32_t {
     // names the pass to put before this one.
     GpuScopeMacroNotExpanded = 0x0001A9,
     // Warnings (severity bits = Warn).
-    PassesNeverRun           = 0x10000F,
-    ConstantExpressionFaults = 0x100015,
-    TranslationLinksRuntime  = 0x100016,
+    PassesNeverRun                = 0x10000F,
+    ConstantExpressionFaults      = 0x100015,
+    TranslationLinksRuntime       = 0x100016,
+    DefunctionalizationIncomplete = 0x100017,
 };
 
 constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }

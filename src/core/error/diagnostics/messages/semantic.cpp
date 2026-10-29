@@ -253,6 +253,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::VarArgumentTypeMismatch,
+            {
+                "VarArgumentTypeMismatch",
+                "The argument of '{0}' at the 'var' parameter '{1}' has type {3}, and a 'var' argument is read and written by the callee: it is accepted only when its type and the parameter's type {2} accept each other's values.",
+                "The callee reads the caller's variable and writes into it, so what it writes must be a value the variable can hold, and what the variable holds must be a value the callee can read. A type that leaves a shape open does not: '{2}' may be written with another shape, and the variable it stands for cannot hold one. Declare the variable with the parameter's type ('var a: {2} = ...'), or pass a variable of that type.",
+            },
+        },
+        {
             SemanticDiag::ImportNameConflict,
             {
                 "ImportNameConflict",
@@ -322,6 +330,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "GenericFunctionUnsupported",
                 "The generic function '{0}' cannot be {1}.",
                 "A decorator is applied where the declaration is: '@d func f' is 'let f = d(f0)', and d takes the function as its value (design principles 6.1). A function that declares type parameters is instantiated where a call fixes them (design principles 5.5); a decorated declaration fixes none, so the decorator has no instance to take.",
+            },
+        },
+        {
+            SemanticDiag::PackExpansionNeedsOnePack,
+            {
+                "PackExpansionNeedsOnePack",
+                "The expansion '{0}' must range over exactly one pack: {1}.",
+                "A type expression written with '..' stands for one type per member of a pack, and the members come from one place: the rest parameter of the declaration, written '..xs: ..A', binds the pack 'A' to the types of the arguments a call leaves over (design principles 5.6). So the body of an expansion names that one pack, and the expansion is used where a call binds it.",
             },
         },
         {
@@ -696,8 +712,16 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::InvalidExtentExpression,
             {
                 "InvalidExtentExpression",
-                "This is not a shape: the extents of a type written with dimension names are integers, bound names, or linear expressions over them ('f32[n, 3]').",
-                "Each extent is a non-negative integer, a dimension name bound by the signature, or a linear expression over such names: 'n', 'n + 1', '2 * n', 'n - k'. A dimension that is not linear is unknown, and an unknown extent is written '?'.",
+                "This is not a shape: the extents of a type written with dimension names are integers, bound names, or expressions over them ('f32[n, 3]').",
+                "Each extent is a non-negative integer, a dimension name bound by the signature, a `constas` parameter of the signature, or an expression over such names with `+`, `-`, `*`, `/`, `%` and calls of pure functions: 'n', 'n + 1', '2 * n', '(n + 2 * p - k) / s + 1', 'conv_out(n, k, s, p)'. An extent that depends on a name the call does not bind to a constant is unknown, and an unknown extent is written '?'.",
+            },
+        },
+        {
+            SemanticDiag::ExtentNotADimension,
+            {
+                "ExtentNotADimension",
+                "The extent '{0}' of this call is {1}, which is not a dimension.",
+                "An extent written with names is evaluated where a call binds every name it uses, to a dimension of an argument or to the constant the call gives a `constas` parameter. A value below zero describes no array, so the call is refused where it is written; to allow the case, make the signature's extent unknown (`?`) or give the call arguments that make it non-negative.",
             },
         },
         {
@@ -1725,11 +1749,19 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::StatementAfterReturn,
+            {
+                "StatementAfterReturn",
+                "This statement cannot run: the 'return' written before it gives the value of this block, so nothing after it in the block is reached.",
+                "A 'return e' is the value of the block it is written in -- a function body, a 'sync' block, or the arm of an 'if' or a 'match' -- and a statement written after it in that same block is never reached. Move the statement before the 'return', or delete it.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",
                 "{0} is not in a sync block, and {1}.",
-                "Put it in a sync block ('sync {{ ... }}', or a function body 'func f(): T sync {{ ... }}'): only then is the write ordered after the earlier uses of the variable. Without one, the write runs only if the variable is read afterwards.",
+                "Put it in a sync block ('sync {{ ... }}', or a function body 'func f(): T sync {{ ... }}'): the block runs whether or not anything needs it, so the write runs with it. A write outside one is ordered after the reads written before it all the same, but it runs only if something reads the variable afterwards.",
             },
         },
         {

@@ -1075,8 +1075,13 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
                 *list << named;
             }
         }
-        for (size_t i = 0; i < ownParams->size(); ++i) {
-            *list << ownParams->at(i);
+        // The rule's own parameters follow the `with` ones. They come from `ownParams`, a list
+        // the caller builds to hand them over and keeps nothing else of, so each one is taken
+        // out of it before it is attached: a node belongs to the container that lists it and to
+        // no other (tree.h, `operator<<`), and the pair `visitPairedParams` attached to
+        // `ownParams` still has that list as its parent here.
+        while (!ownParams->empty()) {
+            *list << ownParams->takeAt(0);
         }
         return list;
     };
@@ -1089,7 +1094,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         const Reference sideRef = qualifyRef(Reference(name + suffix));
         node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(funcTypeNode, context);
-        unwrapNodeAs<FuncTypeLoad>(funcTypeNode)->setTypeParams(typeParams);
+        unwrapNodeAs<FuncTypeLoad>(funcTypeNode)->setTypeParamNames(typeParams);
         *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
         *funcTypeNode << constasParams(
             params ? any2node(visitParentParams(params)) : createNodeAs<RepeatedLoad>("NamedPair"));
@@ -1233,7 +1238,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         }
         node_ptr_t whenType = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(whenType, when);
-        unwrapNodeAs<FuncTypeLoad>(whenType)->setTypeParams(typeParams);
+        unwrapNodeAs<FuncTypeLoad>(whenType)->setTypeParamNames(typeParams);
         // The condition is a function of the rule's `with` parameters as the sides are, so it
         // reads them by name (`when m % tile == 0`) and they are `constas` parameters of it too.
         *whenType << createNodeAs<RepeatedLoad>("NamedPair");
@@ -1329,7 +1334,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         }
         node_ptr_t bindType = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(bindType, context);
-        unwrapNodeAs<FuncTypeLoad>(bindType)->setTypeParams({});
+        unwrapNodeAs<FuncTypeLoad>(bindType)->setTypeParamNames({});
         *bindType << any2node(visitAngledParams(withParams));
         *bindType << createNodeAs<RepeatedLoad>("NamedPair");
         node_ptr_t bindResult = createNodeAs<OptionalLoad>("Type");
@@ -1441,10 +1446,10 @@ resolved where the fact's type is known.
 
 The declaration's `with` parameters are the arguments the query is written with
 (`depth<8>(x)`, and one with a default may be left out). They are copied onto the query function
-and marked `constas` there: the compiler must compute the argument, since the argument is part of
+and marked `const` there: the compiler must compute the argument, since the argument is part of
 which fact this is, and the engine computes and caches one fact per argument. Every function the
 declaration becomes carries them as well, so a case or a trailing clause names one and reads the
-value: on the query they are `constas`, and on the functions the engine calls they are plain
+value: on the query they are `const`, and on the functions the engine calls they are plain
 `with` parameters, which the engine fills with the arguments the query was written with.
 
 The head parameters are the parts of a value the query is written on
@@ -1570,7 +1575,7 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
         }
     }
     // The `with` parameters of the declaration, once per function that carries them: an expression
-    // tree is not shared between two declarations. On the query function they are `constas`, the
+    // tree is not shared between two declarations. On the query function they are `const`, the
     // mark that says "the compiler must compute this argument"; on the functions the engine calls
     // they are plain `with` parameters, because the engine passes the query's arguments to them as
     // the `with` arguments of the call, so a case names one and reads the value.
@@ -1590,7 +1595,7 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
             }
             const std::string paramName(pair->get<cst::IdentDef>()->text());
             node_ptr_t named = createNodeAs<NamedPairLoad>(
-                Reference(paramName), false, false, false, /*isConstas=*/asConstas);
+                Reference(paramName), false, /*isConst=*/asConstas, false, false);
             setNodeTokenRangeByContext(named, context);
             if (pair->type()) {
                 *named << any2node(visitType(pair->type()));
@@ -1652,7 +1657,7 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
         const Reference fnRef = qualifyRef(Reference(fname));
         node_ptr_t funcType   = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(funcType, context);
-        unwrapNodeAs<FuncTypeLoad>(funcType)->setTypeParams(typeParams);
+        unwrapNodeAs<FuncTypeLoad>(funcType)->setTypeParamNames(typeParams);
         node_ptr_t withList = createNodeAs<RepeatedLoad>("NamedPair");
         setNodeTokenRangeByContext(withList, context);
         for (const auto &each : withParams) {
@@ -2109,12 +2114,13 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
     // The type parameters declared at the head (`func first::<T>(...)`, design principles 5.5).
     // They are the names the declaration's type variables are; the GCT builder puts them in
     // scope before it visits a parameter type, so one of them wins over a type of the same name.
+    // One written with `..` is a pack and not one type (`func zip::<..A>`, 5.6).
     if (const auto typeParams = context->get<cst::TypeParams>()) {
-        std::vector<std::string> names;
+        std::vector<TypeParam> params;
         for (const auto ident : typeParams->all<cst::IdentDef>()) {
-            names.emplace_back(ident->text());
+            params.emplace_back(ident->text(), ident->writtenAsPack());
         }
-        funcType->setTypeParams(std::move(names));
+        funcType->setTypeParams(std::move(params));
     }
 
     if (context->get<cst::AngledParams>()) {
@@ -2576,7 +2582,10 @@ Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
         isVar = true;
     }
     const bool isConst = context->has(TK::KwConst);
-    Reference ref(context->get<cst::IdentDef>()->text());
+    // `..ParamsOf<F>` in a function type's parameter list has no name: the pack is its type.
+    Reference ref(
+        context->get<cst::IdentDef>() ? std::string(context->get<cst::IdentDef>()->text())
+                                      : std::string("__pack"));
     node_ptr_t namedPairNode =
         createNodeAs<NamedPairLoad>(ref, isVar, isConst, isRest, isConstas);
     setNodeTokenRangeByContext(namedPairNode, context);
@@ -2586,6 +2595,13 @@ Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
         // refuses one; a `constas` needs one).
         if (context->type()) {
             *namedPairNode << any2node(visitType(context->type()));
+        }
+        // The default of a `constas` parameter of the `with` list.
+        if (isConstas && context->type() && context->expr()) {
+            node_ptr_t dataExprOptNode = createNodeAs<OptionalLoad>("DataExpr");
+            setNodeTokenRangeByContext(dataExprOptNode, context->expr());
+            *dataExprOptNode << any2node(visitExpr(context->expr()));
+            *namedPairNode << dataExprOptNode;
         }
     } else if (context->type()) {
         *namedPairNode << any2node(visitType(context->type()));
@@ -3928,7 +3944,7 @@ Value Builder::visitUnaryExpr(syn::Node context) {
 
 /*
 linkExpr
-    : compExpr ('->' compExpr)*
+    : annoExpr ('->' annoExpr)*
     ;
 */
 Value Builder::visitLinkExpr(cst::LinkExpr context) {
@@ -4011,12 +4027,12 @@ Value Builder::visitLinkExpr(cst::LinkExpr context) {
 }
 
 /*
-compExpr
-    : annoExpr ('..' annoExpr)*
+rangeExpr
+    : additiveExpr ('..' additiveExpr)*
     ;
 */
-Value Builder::visitCompExpr(cst::CompExpr context) {
-    ENTER("CompExpr");
+Value Builder::visitRangeExpr(cst::RangeExpr context) {
+    ENTER("RangeExpr");
     node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
     for (size_t i = 1; i < context->exprs().size(); i++) {
         string strOp        = context->child(i * 2 - 1)->text();
@@ -4040,7 +4056,7 @@ Value Builder::visitCompExpr(cst::CompExpr context) {
             });
         lhsNode = dataNode;
     }
-    LEAVE("CompExpr");
+    LEAVE("RangeExpr");
     return lhsNode;
 }
 
@@ -5142,6 +5158,13 @@ Value Builder::visitTypeArm(cst::TypeArm context) {
     return arm;
 }
 
+Value Builder::visitPackType(cst::PackType context) {
+    node_ptr_t res = createNodeAs<TypeExprLoad>(TypeOp::Pack);
+    setNodeTokenRangeByContext(res, context);
+    *res << any2node(visitType(context->type()));
+    return res;
+}
+
 Value Builder::visitTypeOfType(cst::TypeOfType context) {
     node_ptr_t res = createNodeAs<TypeExprLoad>(TypeOp::TypeOf);
     setNodeTokenRangeByContext(res, context);
@@ -5356,8 +5379,8 @@ Value Builder::visitExpr(syn::Node context) {
         return visitUnaryExpr(context);
     case NK::LinkExpr:
         return visitLinkExpr(cst::LinkExpr(context));
-    case NK::CompExpr:
-        return visitCompExpr(cst::CompExpr(context));
+    case NK::RangeExpr:
+        return visitRangeExpr(cst::RangeExpr(context));
     case NK::AnnoExpr:
         return visitAnnoExpr(cst::AnnoExpr(context));
     case NK::AccessExpr:
@@ -5401,6 +5424,8 @@ Value Builder::visitType(syn::Node context) {
         return visitStructType(cst::StructType(context));
     case NK::RefType:
         return visitRefType(cst::RefType(context));
+    case NK::PackType:
+        return visitPackType(cst::PackType(context));
     case NK::ParenType:
         return visitType(context.type());
     case NK::TupleType:

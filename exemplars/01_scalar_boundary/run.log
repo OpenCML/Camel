@@ -72,6 +72,7 @@ digraph GraphIR {
         N11 -> N14 [label="SYNC", type="SYNC"];
         N14 -> N15 [label="0|0", type="NORM"];
         N15 -> N16 [label="0|0", type="NORM"];
+        N11 -> N16 [label="ORDER", type="ORDER"];
         N17 -> N18 [label="0|0", type="NORM"];
         N16 -> N18 [label="0|0", type="CTRL"];
         N16 -> N18 [label="SYNC", type="SYNC"];

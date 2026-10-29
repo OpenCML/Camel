@@ -10,7 +10,11 @@
 
 #include "camel/passes/test/chunks.h"
 
+#include "camel/passes/test/anchor.h"
 #include "camel/runtime/draft_session.h"
+
+using camel::passes::test::anchorNode;
+using camel::passes::test::blankNode;
 
 const camel::runtime::Program *
 ChunksTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
@@ -27,7 +31,7 @@ ChunksTestPass::apply(const camel::runtime::Program *program, std::ostream &os) 
     // A node nothing reads, after the others.
     RuntimeGraphDraftSession session(context_, program);
     GraphDraft &draft          = session.edit(largest);
-    const gc_node_ref_t edited = draft.addSyncNode();
+    const gc_node_ref_t edited = blankNode(draft);
     const Program *next = session.commit();
 
     const GCGraph *after = next->graph(largest->id());

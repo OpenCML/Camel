@@ -70,6 +70,9 @@ std::string to_string(TypeOp op) {
     if (op == TypeOp::TypeOf) {
         return "typeof";
     }
+    if (op == TypeOp::Pack) {
+        return "..";
+    }
     ASSERT(false, "Unknown TypeOp");
     return "Unknown";
 }
@@ -148,7 +151,7 @@ const std::string FuncTypeLoad::geneCode() const {
     if (!typeParams_.empty()) {
         result += "::<";
         for (size_t i = 0; i < typeParams_.size(); ++i) {
-            result += (i > 0 ? ", " : "") + typeParams_[i];
+            result += (i > 0 ? ", " : "") + typeParams_[i].toString();
         }
         result += "> ";
     }

@@ -80,6 +80,18 @@ void Program::noteAll() {
 }
 
 void GCGraphManager::freeGraph(GCGraph *graph) {
+    // A graph-space block can be in the manager's books before it is a graph: an encoder binds
+    // the memory a graph is built in, then builds it (graph_encode.cpp, a draft session), and a
+    // run that ends while it builds -- the graph or the block space at its limit -- leaves the
+    // blocks it had bound but not reached as memory with nothing built in it. The constructor is
+    // what writes a graph's id (GCGraph::GCGraph), and no graph carries GraphId::Invalid, so a
+    // block that names no graph is memory to give back, not an object to destruct: destructing it
+    // dispatches through a vtable that was never written (a segmentation fault after the
+    // out-of-memory diagnostic, which is the error the run was reporting).
+    if (!isValid(graph->id())) {
+        mm::graphSpace().free(graph);
+        return;
+    }
     delete graph->debug_;
     graph->releaseNodeChunks();
     graph->~GCGraph();
@@ -111,6 +123,25 @@ void GCGraphManager::noteGraph(GCGraph *graph) {
     std::lock_guard lock(mutex_);
     graphs_.insert(graph);
     unbound_.erase(graph);
+}
+
+void GCGraphManager::forget(GCGraph *graph) {
+    std::lock_guard lock(mutex_);
+    graphs_.erase(graph);
+    unbound_.erase(graph);
+}
+
+void Program::abandonConstruction(std::span<GCGraph *const> unconstructed) {
+    if (manager_ != nullptr) {
+        for (GCGraph *graph : unconstructed) {
+            manager_->forget(graph);
+        }
+    }
+    byId_.clear();
+    own_.clear();
+    count_ = 0;
+    root_  = nullptr;
+    ++version_;
 }
 
 void GCGraphManager::noteUnbound(GCGraph *graph) {

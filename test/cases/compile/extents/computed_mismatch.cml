@@ -1,0 +1,17 @@
+/// A length that is known where the call is written is checked there: `x->window<3>` over a
+/// `f32[8]` is `f32[6]`.
+with <constas w: int>
+func window(x: f32[n]): f32[n - w + 1] {
+    return [x[i] for i in 0..(len(x) - w + 1)]
+}
+
+func run(x: f32[8]): int {
+    let y: f32[4] = x->window<3>
+    println(y)
+    return 0
+}
+
+func main(): int sync {
+    let x: f32[8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+    return run(x as f32[8])
+}

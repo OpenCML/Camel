@@ -661,6 +661,10 @@ class Builder {
     /// The EXEC that is the body of the function being built: its tags are the body region's
     /// (region 0), not a block region of their own.
     const GCT::Node *functionBody_ = nullptr;
+    /// The EXEC whose statements are being built: the body itself, or a block written inside it.
+    /// A `return` gives the value of the block it is written in (design principles 7.3), and only
+    /// the body's own `return` writes the value the function hands on.
+    const GCT::Node *currentBlock_ = nullptr;
     /// Sets currentAttrs_ for a scope and puts the previous value back at its end.
     struct AttrScope {
         camel::core::attr::AttrSetId &current;
@@ -1277,6 +1281,16 @@ class Builder {
     /// and a pass that judges every built body (the stream rule) judges it once, counts its readers
     /// once and asks about its loops once.
     void registerBuiltBody(const compile_graph_ptr_t &graph);
+    /// Puts the order edges of a finished body on the control regions that hold their ends
+    /// (docs/design/effects/edges.cn.md 4.6: an order edge never enters a region): an arm and a
+    /// part of a loop run as a whole with the node that owns them, so a node inside a region stands
+    /// on the outside for the region's owner -- the `BRCH` or the `LOOP` -- and an order edge
+    /// written across the border is written on that node instead. An edge whose two ends are two
+    /// arms of one branch says nothing (they never both run) and is dropped, and an edge the data
+    /// path already carries is dropped as the sites that write them already decide. Run over the
+    /// whole body, because a region's owner is known only once the branch or the loop that owns it
+    /// is there.
+    void rehomeOrderEdges(const compile_graph_ptr_t &graph);
     // A captured variable as the current graph sees it at a call or branch: the node of the
     // current graph that holds it, and the variable itself (its origin).
     struct CapturedUse {
@@ -1446,12 +1460,13 @@ class Builder {
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
         camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call,
         Type *expectedResult = nullptr);
-    /// Reads the values of the `constas` parameters of `signature` from the ordinary arguments
-    /// of the call (each written at its parameter's position), removes them from `normInputs`
-    /// (and `normTypes`, when given), and records the integer ones as the extent bindings they
+    /// Reads the values of the `constas` parameters of `signature` from the arguments of the call
+    /// (each written at its parameter's position, in the angle brackets or the parentheses),
+    /// removes them from `withInputs` and `normInputs` (and their types, when given), and records the integer ones as the extent bindings they
     /// stand for. `normTypes` may be null (a rest call has only the argument nodes).
     void takeConstasValues(
-        FunctionType *signature, std::vector<Argument> &normInputs,
+        FunctionType *signature, std::vector<Argument> &withInputs,
+        camel::core::type::type_vec_t *withTypes, std::vector<Argument> &normInputs,
         camel::core::type::type_vec_t *normTypes, const GCT::node_ptr_t &call,
         ConstasValues &constas, camel::core::type::ExtentValues &extents);
     /// A function written in place whose type still holds a type variable (the element
@@ -1848,6 +1863,9 @@ class Builder {
     WhenResult whenOf(const WhenFrame &frame, const GCT::node_ptr_t &node);
     /// `&&`, `||` and a conditional expression.
     WhenResult whenOfBranch(const WhenFrame &frame, const GCT::node_ptr_t &node);
+    /// `..pred::<A>()`: the condition holds for every member of the pack `A` is bound to (and of
+    /// the other packs the frame binds, which must have the same length).
+    WhenResult whenOfEvery(const WhenFrame &frame, const GCT::node_ptr_t &node);
     WhenResult whenOfCall(const WhenFrame &frame, const GCT::node_ptr_t &node);
     /// `p::<T>(...)`: a predicate of the library, resolved where the declaration is written.
     WhenResult whenOfPredicateCall(const WhenFrame &frame, const GCT::node_ptr_t &node);
@@ -1975,6 +1993,11 @@ class Builder {
     /// The value of an expression the compiler can compute at build time. Throws when it cannot
     /// (the evaluator's failure type is internal to builder_when.cpp).
     data_ptr_t compileTimeExpression(const GCT::node_ptr_t &expression);
+    /// The value of a call written in an extent (`conv_out(n, k, s, p)`) with the names it reads
+    /// bound to `values`: the call is run at build time like any folded call. Nothing when the
+    /// build-time evaluation refuses it.
+    std::optional<int64_t> foldExtentCall(
+        const GCT::node_ptr_t &call, const camel::core::type::ExtentValues &values);
     /// Reports a refusal at `origin`, naming `folded.call`. Never returns.
     [[noreturn]] void reportFoldRefusal(const FoldedCall &folded, const GCT::node_ptr_t &origin);
 
@@ -2231,6 +2254,11 @@ class Builder {
     // The captured variables of `callee` as nodes of the current graph, which becomes a
     // caller of `callee`.
     std::vector<CapturedUse> capturedUsesOf(const compile_graph_ptr_t &callee);
+    // The graph of the function `node` stands for as a value: the body of a closure (a FILL of a
+    // static function), a function value that captured nothing, or one behind a COPY. Null for a
+    // value whose function is only known at run time (a parameter of the function being built, a
+    // function value the program computes) -- nothing of it can be read where it is written.
+    compile_graph_ptr_t functionValueGraphOf(node_handle_t node) const;
     // What a direct call of `callee` hands on: the callee's return value, then the new version
     // of each captured variable the callee writes, in the callee's capture order. `written` is
     // the mask of that table: bit k of the callee's k-th capture, which is where
@@ -2317,6 +2345,15 @@ class Builder {
     // function's resources are read from. This reports nothing: it runs before the module-by-module
     // reporting begins.
     void measureInferredResources();
+    // Once every body is built and measured: orders the effects that reach one resource by the
+    // order they are written in (design principles 3.3, "同一资源自动有序"), with one order edge
+    // between two adjacent effects on it. It runs after measureInferredResources because a call's
+    // resources are the set its callee settled at (an operator's are its own declaration's), which
+    // is not known while the caller is being built. Only the block an effect is written in is
+    // ordered: an effect in an arm and one outside it are separated by a region, and the ordering
+    // across a region is the branch's, not this pair's.
+    void orderEffectsOnOneResource();
+    void orderEffectsOnOneResourceIn(DraftGraphBuilder *graph);
     // Then holds each declaration of the current module to the clause it wrote: `uses` is an
     // upper bound and `pure` promises the empty set, so a body that reaches past its clause is
     // UsesPromiseViolated at the declaration. Reported with the other per-module diagnostics,
@@ -2801,9 +2838,13 @@ class Builder {
         const GCT::node_ptr_t &expr, node_handle_t subject, const GCT::node_ptr_t &at,
         const char *construct);
     /// Warns about every `T!` that is evaluated in a body and that nothing takes
-    /// (UnusedFallibleValue): a statement of a sync block, the arm of an `if` without
-    /// `else`, and what a `main` without a declared return type ends with.
+    /// (UnusedFallibleValue): a statement of a body, a block's statement, the arm of an `if`
+    /// without `else`, and what a `main` without a declared return type ends with.
     void reportUnusedFallibleValues();
+    /// The `T!` values already reported as UnusedFallibleValue. A statement whose value is one of
+    /// them is answered by that warning alone, not by the warning for an effect that never runs as
+    /// well: one statement, one diagnostic.
+    std::unordered_set<node_handle_t> unusedFallibleValues_;
     /// Values dropped on purpose by `let _ = e`.
     std::unordered_set<node_handle_t> discardedValues_;
 

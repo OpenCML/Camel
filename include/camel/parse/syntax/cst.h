@@ -230,6 +230,10 @@ class Node {
 
     /// Whether the node covers no token at all (possible only in a text with errors).
     bool empty() const { return (tree_->data(id_).flags & 1) != 0; }
+    /// Whether the name was written with a `..` before it: a type parameter that is a pack
+    /// (`func zip::<..A>`, design principles 5.6) and not one type. The `..` is not a token of
+    /// the name's node, so the mark is what a reader of the name has to go by.
+    bool writtenAsPack() const { return (tree_->data(id_).flags & 2) != 0; }
     size_t childCount() const { return tree_->data(id_).childCount; }
     Child child(size_t index) const {
         const NodeData &d = tree_->data(id_);

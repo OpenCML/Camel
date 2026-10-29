@@ -36,7 +36,7 @@ constexpr std::string_view compareName(k::CompareOp op) {
 
 constexpr std::string_view unaryName(k::UnaryOp op) {
     constexpr std::string_view names[] =
-        {"neg", "abs", "exp", "log", "sqrt", "rsqrt", "sigmoid", "tanh", "relu", "gelu", "erf"};
+        {"neg", "abs", "exp", "log", "sqrt", "rsqrt", "sigmoid", "tanh", "relu", "gelu", "erf", "erfc"};
     return names[static_cast<size_t>(op)];
 }
 
@@ -340,7 +340,7 @@ void powVjp(VjpBuilder &b, const VjpCall &call) {
     if (auto dy = b.gradientOf(call.output)) {
         const vjp_node_t lhs = call.inputs[0], rhs = call.inputs[1];
         const vjp_node_t lowered =
-            addTensorOper(b, "tensor:subtract", {rhs, b.addStaticFloat(1.0)});
+            addTensorOper(b, "tensor:subtract", {rhs, floatGradientAtWidth(b, rhs, b.addStaticFloat(1.0))});
         const vjp_node_t slope = addTensorOper(
             b,
             "tensor:multiply",
@@ -460,6 +460,13 @@ void erfVjp(VjpBuilder &b, const VjpCall &call) {
     });
 }
 
+// erfc' = -erf': the gradient of erf with dy negated.
+void erfcVjp(VjpBuilder &b, const VjpCall &call) {
+    unaryRule(b, call, [&](vjp_node_t dy, vjp_node_t x, vjp_node_t) {
+        return addTensorOper(b, "tensor:erf_grad", {x, addTensorOper(b, "tensor:neg", {dy})});
+    });
+}
+
 // where(cond, lhs, rhs): each branch value receives dy where it was selected.
 void whereVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 3, 3);
@@ -475,18 +482,18 @@ void whereVjp(VjpBuilder &b, const VjpCall &call) {
 
 std::vector<OpDef> elementwiseOps() {
     std::vector<OpDef> defs;
-    defs.push_back(binaryDef<k::BinaryOp::Add>("add", {"__add__", "add"}));
-    defs.push_back(binaryDef<k::BinaryOp::Sub>("subtract", {"__sub__", "subtract"}));
-    defs.push_back(binaryDef<k::BinaryOp::Mul>("multiply", {"__mul__", "multiply"}));
-    defs.push_back(binaryDef<k::BinaryOp::Div>("divide", {"__div__", "divide"}));
-    defs.push_back(binaryDef<k::BinaryOp::Pow>("pow", {"__pow__", "pow"}));
+    defs.push_back(binaryDef<k::BinaryOp::Add>("add", {"__add__"}));
+    defs.push_back(binaryDef<k::BinaryOp::Sub>("subtract", {"__sub__"}));
+    defs.push_back(binaryDef<k::BinaryOp::Mul>("multiply", {"__mul__"}));
+    defs.push_back(binaryDef<k::BinaryOp::Div>("divide", {"__div__"}));
+    defs.push_back(binaryDef<k::BinaryOp::Pow>("pow", {"__pow__"}));
     defs.push_back(binaryDef<k::BinaryOp::Max>("maximum", {"maximum"}));
     defs.push_back(binaryDef<k::BinaryOp::Min>("minimum", {"minimum"}));
     // `%` over numeric arrays. It is the element type's own operator, applied elementwise: a
     // bf16 or f16 array computes in f32 and rounds once, the same path as + - * / and pow, so
     // reduced precision is not a reason to refuse it (design principles 7.3). Two scalars never
     // reach this definition (binaryInfer), so the scalar `%` is unchanged.
-    defs.push_back(binaryDef<k::BinaryOp::Mod>("mod", {"__mod__", "mod"}));
+    defs.push_back(binaryDef<k::BinaryOp::Mod>("mod", {"__mod__"}));
 
     defs.push_back(compareDef<k::CompareOp::Less>("lt", {"__lt__"}));
     defs.push_back(compareDef<k::CompareOp::LessEqual>("le", {"__le__"}));
@@ -498,7 +505,7 @@ std::vector<OpDef> elementwiseOps() {
     defs.push_back(compareDef<k::CompareOp::Equal>("strict_eq", {"__strict_eq__"}));
     defs.push_back(compareDef<k::CompareOp::NotEqual>("strict_neq", {"__strict_neq__"}));
 
-    defs.push_back(unaryDef<k::UnaryOp::Neg>("neg", {"__neg__", "neg"}));
+    defs.push_back(unaryDef<k::UnaryOp::Neg>("neg", {"__neg__"}));
     defs.push_back(unaryDef<k::UnaryOp::Abs>("abs", {"abs"}));
     defs.push_back(unaryDef<k::UnaryOp::Exp>("exp", {"exp"}));
     defs.push_back(unaryDef<k::UnaryOp::Log>("log", {"log"}));
@@ -509,6 +516,7 @@ std::vector<OpDef> elementwiseOps() {
     defs.push_back(unaryDef<k::UnaryOp::Relu>("relu", {"relu"}));
     defs.push_back(unaryDef<k::UnaryOp::Gelu>("gelu", {"gelu"}));
     defs.push_back(unaryDef<k::UnaryOp::Erf>("erf", {"erf"}));
+    defs.push_back(unaryDef<k::UnaryOp::Erfc>("erfc", {"erfc"}));
 
     defs.push_back(OpDef{
         .name    = "where",
@@ -540,6 +548,7 @@ std::vector<OpDef> elementwiseOps() {
     setVjp(defs, "relu", &reluVjp);
     setVjp(defs, "gelu", &geluVjp);
     setVjp(defs, "erf", &erfVjp);
+    setVjp(defs, "erfc", &erfcVjp);
     setVjp(defs, "where", &whereVjp);
     // Comparisons are locally constant.
     for (std::string_view name : {"lt", "le", "gt", "ge", "strict_eq", "strict_neq"}) {

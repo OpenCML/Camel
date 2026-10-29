@@ -1,6 +1,8 @@
 // A composition is a function value like any other: it goes in the angle brackets of a
-// higher-order call (`map<inc..dbl>`, the spelling `rules::fusion` needs) and behind `->`, where
-// `..` binds more tightly than `->`: `3->inc..dbl` is `3->(inc..dbl)`, not `(3->inc)..dbl`.
+// higher-order call (`map<inc..dbl>`, the spelling `rules::fusion` needs). Beside `->` it needs
+// its parentheses, because `..` is looser than `->`: `3->inc..dbl` is `(3->inc)..dbl`, which
+// composes an `int` with `dbl` and is refused, so the pipe spelling of this composition is
+// `3->(inc..dbl)`.
 
 func inc(x: int): int { return x + 1 }
 func dbl(x: int): int { return x * 2 }
@@ -8,6 +10,6 @@ func dbl(x: int): int { return x * 2 }
 func main(): int sync {
     let xs = [1, 2, 3]
     println(xs->map<inc..dbl>)
-    println(3->inc..dbl)
+    println(3->(inc..dbl))
     return 0
 }

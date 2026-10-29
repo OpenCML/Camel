@@ -312,7 +312,12 @@ export func error(kind: string, message: string): Error
 /// also without a line end.
 /// @example print('a', 1)    // a 1
 #op(':io/print')
+with <fmt: string>
 export func print::<T>(x: T, ..rest): T
+#op(':io/print')
+export func print::<T>(x: T, ..rest): T
+#op(':io/print')
+export func print(): void
 
 /// Writes the arguments, separated by spaces, and a line end, and gives back the first one (so
 /// that the write can be part of the data flow). The other arguments may each have a type of
@@ -320,7 +325,12 @@ export func print::<T>(x: T, ..rest): T
 /// one line end.
 /// @example println('a', 1)    // a 1
 #op(':io/println')
+with <fmt: string>
 export func println::<T>(x: T, ..rest): T
+#op(':io/println')
+export func println::<T>(x: T, ..rest): T
+#op(':io/println')
+export func println(): void
 
 /// Writes the arguments, separated by spaces, and a line end, to standard error, and gives back
 /// the first one (so that the write can be part of the data flow). The other arguments may each
@@ -328,7 +338,12 @@ export func println::<T>(x: T, ..rest): T
 /// arguments put in and one line end.
 /// @example eprintln('a', 1)    // a 1
 #op(':io/eprintln')
+with <fmt: string>
 export func eprintln::<T>(x: T, ..rest): T
+#op(':io/eprintln')
+export func eprintln::<T>(x: T, ..rest): T
+#op(':io/eprintln')
+export func eprintln(): void
 
 // ---- strings ----
 
@@ -447,7 +462,7 @@ export func contains(s: string): bool
 /// @fails fault `InvalidArgument` when the lengths differ
 /// @example zip([1, 2], ['a', 'b'])    // [(1, 'a'), (2, 'b')]
 #op(':struct/zip')
-export func zip::<T, U>(xs: T[], ys: U[]): (T, U)[]
+export func zip::<..A>(..xs: ..A): (..ElementOf<A>)[] when ..is_array::<A>()
 
 /// A new array: the elements of xs, then value. xs is unchanged; to add to a variable, bind it
 /// to the result: `acc = acc->append<4>` (as a statement, that form grows the array in place

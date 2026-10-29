@@ -31,17 +31,17 @@ func bad(x: int): int {
 
 func main(): int sync {
     println('before')
-    let ys = attempt(() => 0..48->map<work>)() !! [-1]
+    let ys = attempt(() => (0..48)->map<work>)() !! [-1]
     println('isolated')
     println(ys)
-    let r = attempt(() => 0..64->map<bad>)()
+    let r = attempt(() => (0..64)->map<bad>)()
     let text = match r {
         case error e => e.kind
         case v => 'no fault'
     }
     println(text)
     // The schedulers are as they were: a map of the same size, with no fault.
-    println(1..49->map<work>->reduce<(a: int, x: int): int => a + x, 0>)
+    println((1..49)->map<work>->reduce<(a: int, x: int): int => a + x, 0>)
     println('after')
     return 0
 }

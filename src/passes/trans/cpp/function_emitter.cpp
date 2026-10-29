@@ -406,7 +406,6 @@ bool FunctionEmitter::nothingAfter(
         case GCNodeKind::Data:
         case GCNodeKind::Port:
         case GCNodeKind::Gate:
-        case GCNodeKind::Sync:
             continue;
         default:
             return false;
@@ -479,7 +478,7 @@ Block FunctionEmitter::lowerSequenceBody(
             // of the value that ended the sequence (a tail call has none) gives nothing.
             const bool forwards  = node->kind == GCNodeKind::Gate || node->kind == GCNodeKind::Copy;
             const bool valueOnly = forwards || node->kind == GCNodeKind::Data ||
-                                   node->kind == GCNodeKind::Port || node->kind == GCNodeKind::Sync;
+                                   node->kind == GCNodeKind::Port;
             const auto inputs    = frame.graph->normInputsOf(ref);
             if (valueOnly &&
                 (!forwards || (!inputs.empty() && frame.values.contains(inputs.front())))) {
@@ -653,8 +652,6 @@ bool FunctionEmitter::lowerNode(
         }
         return false;
     }
-    case GCNodeKind::Sync:
-        return false; // only order: the statements are already in it
     case GCNodeKind::Cast:
         lowerCast(frame, ref);
         return false;

@@ -200,7 +200,7 @@ class Builder {
     /// CastExpr (`e as T`, `e is T`) and UnaryExpr (`!e`, `-e`, `~e`).
     Value visitUnaryExpr(syntax::Node context);
     Value visitLinkExpr(syntax::cst::LinkExpr context);
-    Value visitCompExpr(syntax::cst::CompExpr context);
+    Value visitRangeExpr(syntax::cst::RangeExpr context);
     Value visitAnnoExpr(syntax::cst::AnnoExpr context);
     Value visitAccessExpr(syntax::cst::AccessExpr context);
     /// `lhs.member` (a field or tuple element), located by `range`.
@@ -229,6 +229,7 @@ class Builder {
     Value visitSpecType(syntax::cst::SpecType context);
     Value visitRefType(syntax::cst::RefType context);
     Value visitTypeOfType(syntax::cst::TypeOfType context);
+    Value visitPackType(syntax::cst::PackType context);
     Value visitMatchTypeType(syntax::cst::MatchTypeType context);
     Value visitTypeArm(syntax::cst::TypeArm context);
     Value visitStructType(syntax::cst::StructType context);

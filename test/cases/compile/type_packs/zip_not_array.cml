@@ -1,0 +1,6 @@
+/// `when ..is_array::<A>()` asks every member of the pack: an argument that is not an array makes
+/// the declaration inapplicable, and `zip` has no other.
+func main(): int sync {
+    println(zip([1, 2], 3))
+    return 0
+}

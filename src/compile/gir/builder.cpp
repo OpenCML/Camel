@@ -185,6 +185,128 @@ void Builder::registerBuiltBody(const compile_graph_ptr_t &graph) {
         }
     }
     unit_->builtBodies.push_back(graph);
+    rehomeOrderEdges(graph);
+}
+
+namespace {
+
+/// The control regions a node runs with, outermost first: the arms and the parts of a loop. The
+/// regions that only record where code came from -- an inlined body, a tagged block -- are looked
+/// through: they hold no execution of their own (docs/design/effects/edges.cn.md 5.8), so they
+/// separate nothing. Region 0, the body, is not in the chain either: its code runs with the graph.
+std::vector<uint32_t> controlRegionChainOf(
+    const runtime::GraphDraft &draft, draft_node_ref_t id) {
+    std::vector<uint32_t> chain;
+    for (uint32_t region = draft.nodeRegion(id); region != 0; region = draft.region(region).parent) {
+        const runtime::GCRegionKind kind = draft.region(region).kind;
+        if (kind == runtime::GCRegionKind::Arm || kind == runtime::GCRegionKind::LoopCond ||
+            kind == runtime::GCRegionKind::LoopBody) {
+            chain.push_back(region);
+        }
+    }
+    std::reverse(chain.begin(), chain.end());
+    return chain;
+}
+
+/// Where the ends of one order edge stand: the node itself when its region holds it, and the owner
+/// of the region (the `BRCH` or the `LOOP`) when the other end is outside that region. Returns
+/// false when an owner cannot be named -- a region nothing owns yet -- and the edge is then left
+/// where it was written rather than moved onto a node that is not there.
+bool orderEndsOnOneRegion(
+    const runtime::GraphDraft &draft, draft_node_ref_t pred, draft_node_ref_t user,
+    draft_node_ref_t &predOut, draft_node_ref_t &userOut) {
+    const std::vector<uint32_t> predChain = controlRegionChainOf(draft, pred);
+    const std::vector<uint32_t> userChain = controlRegionChainOf(draft, user);
+    size_t common                          = 0;
+    while (common < predChain.size() && common < userChain.size() &&
+           predChain[common] == userChain[common]) {
+        ++common;
+    }
+    predOut = pred;
+    userOut = user;
+    const auto handOver = [&](draft_node_ref_t &end, const std::vector<uint32_t> &chain) {
+        if (common >= chain.size()) {
+            return true; // the end is in the region both share
+        }
+        const runtime::gc_node_ref_t owner = draft.region(chain[common]).owner;
+        if (owner == runtime::kInvalidNodeRef) {
+            return false;
+        }
+        end = owner;
+        return true;
+    };
+    return handOver(predOut, predChain) && handOver(userOut, userChain);
+}
+
+} // namespace
+
+void Builder::rehomeOrderEdges(const compile_graph_ptr_t &graph) {
+    ASSERT(graph != nullptr, "A built body is a graph.");
+    runtime::GraphDraft &draft = graph->draft();
+    // Most bodies order nothing: their effects are on the sync chain, and a body of pure
+    // computation writes no order edge at all.
+    bool ordersAnything = false;
+    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount() && !ordersAnything; ++id) {
+        ordersAnything = draft.alive(id) && !draft.orderInputsOf(id).empty();
+    }
+    if (!ordersAnything) {
+        return;
+    }
+    // The edges are collected first and written afterwards: an end that moves goes onto another
+    // node's list, which may be one this walk has already passed or one it is about to.
+    std::unordered_map<draft_node_ref_t, std::vector<draft_node_ref_t>> rewritten;
+    std::vector<draft_node_ref_t> touched;
+    const auto listOf = [&](draft_node_ref_t id) -> std::vector<draft_node_ref_t> & {
+        if (auto known = rewritten.find(id); known != rewritten.end()) {
+            return known->second;
+        }
+        const auto written = draft.orderInputsOf(id);
+        touched.push_back(id);
+        return rewritten.emplace(id, std::vector<draft_node_ref_t>(written.begin(), written.end()))
+            .first->second;
+    };
+    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!draft.alive(id)) {
+            continue;
+        }
+        const std::vector<draft_node_ref_t> written(
+            draft.orderInputsOf(id).begin(), draft.orderInputsOf(id).end());
+        if (written.empty()) {
+            continue;
+        }
+        for (draft_node_ref_t pred : written) {
+            draft_node_ref_t from = pred;
+            draft_node_ref_t to   = id;
+            if (!orderEndsOnOneRegion(draft, pred, id, from, to)) {
+                continue;
+            }
+            if (from == pred && to == id) {
+                continue; // the edge already names the regions its two ends are in
+            }
+            std::vector<draft_node_ref_t> &own = listOf(id);
+            // Two arms of one branch (or two parts of one loop) never run together, so an order
+            // between them constrains nothing.
+            //
+            // An order the data path already carries is not written twice either: the pair is
+            // ordered by the values it passes (design principles 2.1). Asked again here, because
+            // moving an end can put it on a node the other end feeds -- the condition a branch
+            // reads -- and the edge then says nothing new.
+            const node_handle_t fromNode = draft.ref(from);
+            const node_handle_t toNode   = draft.ref(to);
+            std::erase(own, pred);
+            if (from == to || hasDirectDataDependency(fromNode, toNode) ||
+                dataPathReaches(fromNode, toNode)) {
+                continue;
+            }
+            std::vector<draft_node_ref_t> &target = to == id ? own : listOf(to);
+            if (std::ranges::find(target, from) == target.end()) {
+                target.push_back(from);
+            }
+        }
+    }
+    for (draft_node_ref_t id : touched) {
+        draft.setOrderInputs(id, rewritten.at(id));
+    }
 }
 
 compile_graph_ptr_t Builder::enterScope(
@@ -939,6 +1061,12 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     if (!name.empty()) {
         camel::core::tag::markIndependentElements(graph->draft(), tags.declaration);
     }
+    // The declaration's facts go with the graph (design principles 6.2, 10.1): a pass reads what
+    // a declaration writes through the function it was given — `#jvp(rule)` names a rule graph,
+    // a numeric permission is a flag — not through the module that declares it. A declaration
+    // fact is not a node attribute (`attr::fateOf` records that), so it stays cold metadata of
+    // the graph rather than an attribute of a node.
+    graph->draft().setDeclarationFacts(tags.declaration);
     if (name.empty()) {
         lambdaGraphs_[gct] = graph.get();
     }
@@ -1115,7 +1243,7 @@ void Builder::buildFuncBody(
     // too: the `n` of a `static for` and the value of an enclosing `constas` parameter are not
     // names of its body. Its own `constas` values (when it is an instance being built) are
     // bound below.
-    const size_t outerStaticValues = staticValueScopes_.size();
+    auto outerStaticValues = std::move(staticValueScopes_);
     staticValueScopes_.clear();
     try {
         registerGraphOrigin(context_, graph, gct, "gir.func.graph");
@@ -1247,7 +1375,7 @@ void Builder::buildFuncBody(
         staticDepth_             = outerStaticDepth;
         activeRestBody_          = outerRestBody;
         restBindings_.resize(outerRestBindings);
-        staticValueScopes_.resize(outerStaticValues);
+        staticValueScopes_ = std::move(outerStaticValues);
         leaveScope();
         throw e.during(
             std::format("compiling function '{}'", name.empty() ? graph->name() : name),
@@ -1260,7 +1388,7 @@ void Builder::buildFuncBody(
         staticDepth_             = outerStaticDepth;
         activeRestBody_          = outerRestBody;
         restBindings_.resize(outerRestBindings);
-        staticValueScopes_.resize(outerStaticValues);
+        staticValueScopes_ = std::move(outerStaticValues);
         leaveScope();
         throw;
     }
@@ -1268,7 +1396,7 @@ void Builder::buildFuncBody(
     staticDepth_      = outerStaticDepth;
     activeRestBody_   = outerRestBody;
     restBindings_.resize(outerRestBindings);
-    staticValueScopes_.resize(outerStaticValues);
+    staticValueScopes_ = std::move(outerStaticValues);
 }
 
 
@@ -1321,6 +1449,14 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
         synced_         = gct->synced();
         lastSyncedNode_ = {};
     }
+    // The block whose statements are built here: a block written inside a body is a block of its
+    // own, and a `return` in it gives its value, not the function's (design principles 7.3).
+    struct BlockScope {
+        const GCT::Node *&slot;
+        const GCT::Node *outer;
+        BlockScope(const GCT::Node *&s, const GCT::Node *block) : slot(s), outer(s) { slot = block; }
+        ~BlockScope() { slot = outer; }
+    } blockScope(currentBlock_, gct);
     registerGenericTemplates(gct);
     node_handle_t res{};
     // A statement in error is skipped and the following ones are still checked, so that one
@@ -1367,6 +1503,10 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
     // belong to in statementsAfterFail_ (nothing when the block has met no `fail` yet, or the
     // entry the last one opened).
     std::optional<size_t> afterFailEntry;
+    // Whether this block has met a `return` of its own. A `return` gives the value of the block it
+    // is written in (design principles 7.3), so a statement written after it in this block is never
+    // reached, and the block has nothing left for it to give.
+    bool returned = false;
     // A block that is itself a statement whose value nothing takes drops the value of its last
     // statement too.
     const bool valueDropped = gct == unusedStatement_ || droppedBodies_.contains(gct);
@@ -1375,6 +1515,16 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
         StatementState before(*this);
         try {
             const auto &child = gct->at(i);
+            // A statement written after the `return` of this block is never reached, and it is told
+            // so once, at the first one: the `return` before it gives the block's value, and no
+            // statement after it in the block has anything to add to that. Nothing after it is
+            // built either -- the block's value is already written, and a second `return` reaching
+            // the same exit is a graph no back end may be handed. A scope the lowering introduced
+            // (`gct->operands()`) is not a block of statements and has none.
+            if (returned && !gct->operands()) {
+                diags_->of(SemanticDiag::StatementAfterReturn).atOrigin(child->origin()).commit();
+                break;
+            }
             // Every statement but the last is one whose value nothing takes, and the last one
             // too when the block's value is dropped. The scopes the lowering introduced
             // (operands of a literal, the names of a declaration) have no statements; a sync
@@ -1405,6 +1555,10 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
                 result = visit(child);
             }
             unusedStatement_ = nullptr;
+            if (!gct->operands() && child->type() == GCT::NodeKind::EXIT &&
+                child->exitType() == ExitType::Return) {
+                returned = true;
+            }
             if (result.has_value() && result.type() == typeid(StaticTuple)) {
                 // A build-time tuple is the block's value only as a runtime tuple: a tail
                 // comprehension materializes here, and an unused one is held to the same
@@ -1466,19 +1620,34 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
         // it after the block's last expression (a `return` has already done this for the
         // graph's exit). Without this the chain of a block ending in a plain value was not
         // reachable from anything and the block's effects were dropped.
-        const bool returned =
-            gct->size() > 0 && gct->at(gct->size() - 1)->type() == GCT::NodeKind::EXIT;
         if (synced_ && !returned && res != nullptr && sameGraph(res, currGraph_) &&
             valueNeedsSyncEdge(res, lastSyncedNode_)) {
-            node_handle_t gate = currGraph_->addGateNode(nodeTypeOf(res));
-            linkNodes(LinkType::Norm, res, gate);
-            // The chain's tail reaches the block's value by a sync edge -- the block's value node
-            // not being one this block alone owns (docs/design/effects/edges.cn.md 5.3) -- with the
-            // control edge the kind names the same pair with beside it. The tail may be the node the
-            // GATE reads, and the wait is then the only edge that reaches the GATE at all, so this
-            // pair is written as it stands rather than dropped as "already ordered".
-            writeSyncStatement(lastSyncedNode_, gate);
-            res = gate;
+            // A value a statement already handed on behind a GATE that waits on the chain's tail
+            // is reached from the chain by that wait: it is the same pair, so the sync edge goes
+            // on that GATE and no second one is made. A write whose value stands here (`x += 1`,
+            // `x = x + 1` as the last statement) hands its value on behind such a GATE to make
+            // the write run, and the same value named and handed on is reached behind one GATE;
+            // the two are then one graph (design principles 2.1, 3.4).
+            const bool waitsOnTail =
+                nodeIsKind(res, runtime::GCNodeKind::Gate) &&
+                std::ranges::find(ctrlInputsOf(res), nodeIdOf(lastSyncedNode_)) !=
+                    ctrlInputsOf(res).end();
+            if (waitsOnTail) {
+                markSyncStatement(lastSyncedNode_);
+                markSyncStatement(res);
+                linkNodes(LinkType::Sync, lastSyncedNode_, res);
+            } else {
+                node_handle_t gate = currGraph_->addGateNode(nodeTypeOf(res));
+                linkNodes(LinkType::Norm, res, gate);
+                // The chain's tail reaches the block's value by a sync edge -- the block's value
+                // node not being one this block alone owns (docs/design/effects/edges.cn.md 5.3)
+                // -- with the control edge the kind names the same pair with beside it. The tail
+                // may be the node the GATE reads, and the wait is then the only edge that reaches
+                // the GATE at all, so this pair is written as it stands rather than dropped as
+                // "already ordered".
+                writeSyncStatement(lastSyncedNode_, gate);
+                res = gate;
+            }
         }
         synced_         = old;
         lastSyncedNode_ = oldFuncNode;

@@ -1,0 +1,89 @@
+id = "linear.var_read_before_region"
+order = 346
+tier = "fast"
+tags = ["feat", "linear", "var", "loop", "branch"]
+
+[[tests]]
+name = "var_read_before_region.default"
+desc = "A read of a var made before a loop or a branch arm reads the value the variable had at that point, not the one the region left there: a write after the read must not be what it sees, and a read made after the region still reads what the region left (while loop, interval loop, branch arm, nothing written, a value type). Pipeline: default (interpreter)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/var_read_before_region.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '0 2 | 0 3 | 0 5 1 | 7 7 | a abb', `unexpected output: ${out}`)
+assert(!input.stderr, `no diagnostic: ${input.stderr}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_read_before_region.nvm"
+desc = "A read of a var made before a loop or a branch arm reads the value the variable had at that point, not the one the region left there: a write after the read must not be what it sees, and a read made after the region still reads what the region left (while loop, interval loop, branch arm, nothing written, a value type). Pipeline: std::nvm."
+kind = "behavior"
+case = "../../../cases/linear/runtime/var_read_before_region.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '0 2 | 0 3 | 0 5 1 | 7 7 | a abb', `unexpected output: ${out}`)
+assert(!input.stderr, `no diagnostic: ${input.stderr}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_read_before_region.fvm"
+desc = "A read of a var made before a loop or a branch arm reads the value the variable had at that point, not the one the region left there: a write after the read must not be what it sees, and a read made after the region still reads what the region left (while loop, interval loop, branch arm, nothing written, a value type). Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/linear/runtime/var_read_before_region.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '0 2 | 0 3 | 0 5 1 | 7 7 | a abb', `unexpected output: ${out}`)
+assert(!input.stderr, `no diagnostic: ${input.stderr}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_read_before_region.jit"
+desc = "A read of a var made before a loop or a branch arm reads the value the variable had at that point, not the one the region left there: a write after the read must not be what it sees, and a read made after the region still reads what the region left (while loop, interval loop, branch arm, nothing written, a value type). Pipeline: std::jit."
+kind = "behavior"
+case = "../../../cases/linear/runtime/var_read_before_region.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '0 2 | 0 3 | 0 5 1 | 7 7 | a abb', `unexpected output: ${out}`)
+assert(!input.stderr, `no diagnostic: ${input.stderr}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_read_before_region.opt_nvm"
+desc = "A read of a var made before a loop or a branch arm reads the value the variable had at that point, not the one the region left there: a write after the read must not be what it sees, and a read made after the region still reads what the region left (while loop, interval loop, branch arm, nothing written, a value type). Pipeline: std::opt, then std::nvm."
+kind = "behavior"
+case = "../../../cases/linear/runtime/var_read_before_region.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '0 2 | 0 3 | 0 5 1 | 7 7 | a abb', `unexpected output: ${out}`)
+assert(!input.stderr, `no diagnostic: ${input.stderr}`)
+}
+"""
+timeout_ms = 20000

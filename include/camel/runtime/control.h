@@ -25,17 +25,32 @@ std::vector<gc_node_ref_t> controlFrontier(
 bool appendControlDependency(
     GraphDraft &draft, gc_node_ref_t predecessor, gc_node_ref_t user, size_t maxWork = 32);
 
-/// Removes CTRL edges implied by mandatory data/control paths. Branch boundaries and arm
+/// Removes CTRL edges implied by mandatory data paths, and the ones a `sync` block's chain already
+/// orders for the kinds that no longer read the control kind themselves. Branch boundaries and arm
 /// anchors are retained; JOIN/LOOP results may prove completion but their interiors are not
-/// traversed. Work is limited per target, per graph size, and by maxWork; zero disables analysis.
+/// traversed. One sweep can expose a proof the next one makes (a target's own list is read again),
+/// so a graph is swept until a sweep changes nothing. Work is limited per target, per graph size,
+/// and by maxWork; zero disables analysis.
 size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork = 250000);
 
 /// The transitive reduction over ORDER edges: an order edge A -> C goes away when a path of order
-/// edges A -> ... -> C already orders the two ends, which is exactly what "when both run the
-/// predecessor runs first" makes redundant (docs/design/effects/edges.cn.md 5.4). Sync edges are
-/// left alone: a `sync` block's statements are one chain and carry no redundancy. A proof walks
-/// only nodes of the region that holds the edge, because an ordering never leaves its region.
-/// Work is bounded by maxWork; zero disables analysis.
+/// edges or of one `sync` block's chain already orders the two ends, which is exactly what "when
+/// both run the predecessor runs first" makes redundant (docs/design/effects/edges.cn.md 5.4).
+/// Sync edges are left alone: a `sync` block's statements are one chain, they carry no redundancy,
+/// and a chain link also carries "used". Data and context edges are not read: the order they hold
+/// is one a pass may still rewrite, so an order edge they would cover is kept. A proof walks only
+/// nodes of the region that holds the edge, because an ordering never leaves its region. Work is
+/// bounded by maxWork; zero disables analysis.
 size_t reduceOrderDependencies(GraphDraft &draft, size_t maxWork = 250000);
+
+/// The same reduction read with every edge that orders, for a reader that compares programs and
+/// not graphs: a `sync` or an `order` edge goes away when a path of at least two data, sync,
+/// order or control edges already orders its two ends inside the region that holds it. That is
+/// the order a document keeps, because two programs are equivalent by the order that no other
+/// path implies (docs/technical/gir-interchange.md, "Canonical documents"); a graph a pass edits
+/// keeps the reading above. Sync edges are candidates here too: a chain link whose predecessor a
+/// data path already reaches says nothing the path does not. The walk and its budget are the ones
+/// `reduceOrderDependencies` makes; work is bounded by maxWork, and zero disables analysis.
+size_t reduceDocumentOrdering(GraphDraft &draft, size_t maxWork = 250000);
 
 } // namespace camel::runtime

@@ -98,6 +98,28 @@ Builder::namedValueOf(node_handle_t node, const std::string &name, const GCT::no
     return node;
 }
 
+compile_graph_ptr_t Builder::functionValueGraphOf(node_handle_t node) const {
+    if (node == nullptr) {
+        return nullptr;
+    }
+    // A closure is the static function it holds plus the values filled into it: the node the FILL
+    // reads is the function (`gc.fill`), its `with` inputs are the captures.
+    node = throughCopy(node);
+    if (nodeIsKind(node, runtime::GCNodeKind::Fill)) {
+        const auto held = normInputsOf(node);
+        if (held.empty()) {
+            return nullptr;
+        }
+        node = throughCopy(nodeDraftOf(node)->ref(held.front()));
+    }
+    const std::optional<slot_t> value = staticValueOf(node);
+    if (!value.has_value()) {
+        return nullptr;
+    }
+    auto *function = camel::core::rtdata::fromSlot<StaticFunction *>(*value);
+    return function != nullptr ? function->graph() : nullptr;
+}
+
 node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t &origin) {
     if (boundWithArgs_.contains(node)) {
         // `f<w>` as a value is a partial application (design principles 4.4). The binding

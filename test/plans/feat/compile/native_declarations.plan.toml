@@ -556,7 +556,7 @@ args = ["${case}"]
 expect_exit = 1
 # The message spans two lines (it lists the declaration as the available overload), so the
 # short format the runner parses as one diagnostic line does not apply; check the text.
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "declaration_type_argument.cml:12:30", "argument types: <> (float[?, ?])", "<tensor:numel>: (t: T[..]) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "declaration_type_argument.cml:12:30", "argument types: <> (float[1, 2])", "<tensor:numel>: (t: T[..]) => int"]
 
 [[tests]]
 name = "native.declaration_per_result_type"
@@ -862,7 +862,7 @@ kind = "negative"
 case = "../../../cases/compile/native/tensor_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_arity.cml:11:18", "argument types: <> (f32[?, ?], int)", "<tensor:numel>: (t: T[..]) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_arity.cml:11:18", "argument types: <> (f32[1, 2], int)", "<tensor:numel>: (t: T[..]) => int"]
 
 [[tests]]
 name = "native.tensor_wrong_type"
@@ -897,7 +897,7 @@ kind = "negative"
 case = "../../../cases/compile/native/tensor_show_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_arity.cml:11:5", "argument types: <> (f32[?, ?], int)", "<tensor:show>: (t: A[..]) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_arity.cml:11:5", "argument types: <> (f32[1, 2], int)", "<tensor:show>: (t: A[..]) => void"]
 
 [[tests]]
 name = "native.tensor_show_wrong_type"

@@ -311,12 +311,12 @@ import { seed, randint, next_key } from random
 func main(): int sync {
     seed(42)
     // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
-    let drawn = 0..8->map<(i) => next_key()->randint<0, 100>>
+    let drawn = (0..8)->map<(i) => next_key()->randint<0, 100>>
     println(drawn)
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [next_key()->randint<0, 100>]), [0][0:0]>
+    let ordered = (0..8)->reduce<(acc: int[], i: int): int[] => concat(acc, [next_key()->randint<0, 100>]), [0][0:0]>
     println(ordered)
     return 0
 }
@@ -507,7 +507,7 @@ func main(): int sync {
 
 The body of `twice` is a sync block, so the two calls of `bump` and `return c` execute in the order they are written. A few more points:
 
-- A write that is not in a sync block has no order relative to earlier reads; the compiler gives the warning `SemanticDiag::IgnoredSideEffect`.
+- A write that is not in a sync block is still ordered after the reads written before it (a read sees the value of the write written before it), but it is not guaranteed to run: with nothing reading the variable afterwards it does not run, and the compiler gives the warning `SemanticDiag::IgnoredSideEffect`.
 - If nobody reads the variable any more after the write, that modification does not run — this is still evaluation by dependency.
 
 The everyday advice is simple: write computation as `let`s and pure functions; put input and output in sync blocks; keep `var` for the few places that really need in-place updates.

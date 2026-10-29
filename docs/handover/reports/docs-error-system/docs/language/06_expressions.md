@@ -63,13 +63,13 @@ func main(): int sync {
 - 对数组不能用 `.`（`xs.1` 是 `SemanticDiag::TypeNotIndexable`）。
 - 下标紧贴被访问的表达式，不能有空白。
 - **下标从 0 开始，负数不是从尾部数**：`xs[-1]` 是故障 `RuntimeDiag::IndexOutOfRange`。最后一个元素写 `last(xs)`。
-- **`xs[idx]` 是 `take`**：`idx` 的类型必须是 `int[]`，结果是 `idx` 各位置上的元素，按 `idx` 的顺序；同一个位置出现两次就取两次。越界与负数都是故障 `RuntimeDiag::IndexOutOfRange`。结果是一份新数组，不是视图（[5.4](../design-principles.cn.md)）。
-- **切片沿第一维，左闭右开**：`xs[a:b]` 是位置 `a` 到 `b-1`。`a` 省略表示从头，`b` 省略表示到末尾，`xs[:]` 是整个数组；`s` 是步长。切片是**共用数据块的视图**（[5.4](../design-principles.cn.md)），不复制元素。
-  - 两端都是 0 到 `len(xs)` 之间的位置（`b` 可以等于长度，表示取到最后一个）；负数或越界是故障 `RuntimeDiag::SliceOutOfRange`，与下标越界一致（[3.9](../design-principles.cn.md)）。`b < a` 是空数组，不是故障。长度在编译期已知而边界是常量时，越界是编译期错误（[3.9](../design-principles.cn.md)）。
+- **`xs[idx]` 是 `take`**：`idx` 的类型必须是 `int[]`，结果是 `idx` 各位置上的元素，按 `idx` 的顺序；同一个位置出现两次就取两次。越界与负数都是故障 `RuntimeDiag::IndexOutOfRange`。结果是一份新数组，不是视图（[5.4](../../../../../design-principles.cn.md)）。
+- **切片沿第一维，左闭右开**：`xs[a:b]` 是位置 `a` 到 `b-1`。`a` 省略表示从头，`b` 省略表示到末尾，`xs[:]` 是整个数组；`s` 是步长。切片是**共用数据块的视图**（[5.4](../../../../../design-principles.cn.md)），不复制元素。
+  - 两端都是 0 到 `len(xs)` 之间的位置（`b` 可以等于长度，表示取到最后一个）；负数或越界是故障 `RuntimeDiag::SliceOutOfRange`，与下标越界一致（[3.9](../../../../../design-principles.cn.md)）。`b < a` 是空数组，不是故障。长度在编译期已知而边界是常量时，越界是编译期错误（[3.9](../../../../../design-principles.cn.md)）。
   - 步长写在第二个冒号之后：`xs[a:b:s]`，得到的仍是共用数据块的视图；要一份拷贝写 `slice(xs, 0, a, b, s)`。
   - 元素是对象的数组（`[[1, 2], [3, 4]]` 这类）按行复制，槽数组没有可共用的数据块。
-- **多维下标**：`xs[:, 0]`、`xs[a:b, c]` 沿各维取坐标，得到视图；某一维整个取用 `:`（[5.4](../design-principles.cn.md)）。
-- **字符串下标按码点**：`s[i]` 是第 `i` 个码点，结果是只含这一个字符的字符串（`'中文'[0]` 是 `'中'`）；越界同样是故障。要数值用 `str` 模块的 `codepoints`（见 [标准库参考](../stdlib-reference.md)）。
+- **多维下标**：`xs[:, 0]`、`xs[a:b, c]` 沿各维取坐标，得到视图；某一维整个取用 `:`（[5.4](../../../../../design-principles.cn.md)）。
+- **字符串下标按码点**：`s[i]` 是第 `i` 个码点，结果是只含这一个字符的字符串（`'中文'[0]` 是 `'中'`）；越界同样是故障。要数值用 `str` 模块的 `codepoints`（见 [标准库参考](../../../../../stdlib-reference.md)）。
 
 ## 6.4 调用
 
@@ -218,7 +218,7 @@ false
 
 - `==`、`!=`：数值、`bool`、`string`、`Map`、`Set`，以及数组、元组、结构体、张量，两边类型必须相同（否则是编译期错误 `SemanticDiag::NoMatchingFunction`，不做转换），结果是 `bool`。
   - **数组、元组、结构体按内容逐个比较**，递归进行：`[1, 2] == [1, 2]`、`(1, 'a') == (1, 'a')`、两个字段都相等的结构体，结果都是 `true`；长度不同的数组不相等。
-  - **整体比较就是逐元素比较再归约成一个 `bool`**：`a == b` 是形状相同、并且逐元素相等处处成立（见 [4.2](../design-principles.cn.md)）。数值数组（`f32[]`、`f32[..]` 这类）也一样，结果同样是 `bool`。
+  - **整体比较就是逐元素比较再归约成一个 `bool`**：`a == b` 是形状相同、并且逐元素相等处处成立（见 [4.2](../../../../../design-principles.cn.md)）。数值数组（`f32[]`、`f32[..]` 这类）也一样，结果同样是 `bool`。
   - 元素类型本身要能比较：数值、`bool`、`string`、`Map`、`Set`、`T?`、`T!`，以及由它们组成的数组、元组、结构体。含函数值的（`[f] == [f]`）不能比较，是带位置的编译期错误。
   - 浮点元素按浮点的规则：含 `nan` 的数组不等于它自己，`[0.0] == [-0.0]`。
   - `T?`、`T!` 本身（不在数组、元组、结构体里）仍然没有 `==`，先用 `??`、`!!` 或 `match` 拆开。
@@ -394,7 +394,7 @@ func main(): int sync {
 
 ### 6.8.3 `match type`
 
-`match type` 按**类型的形状或身份**选一条分支，用于泛型函数（[5.5](../design-principles.cn.md)）：`T` 在实例化时已经是具体类型，编译器只把选中的分支建进图里，其余分支不建图、不做类型检查（名字仍然解析）。
+`match type` 按**类型的形状或身份**选一条分支，用于泛型函数（[5.5](../../../../../design-principles.cn.md)）：`T` 在实例化时已经是具体类型，编译器只把选中的分支建进图里，其余分支不建图、不做类型检查（名字仍然解析）。
 
 ```
 match type 类型 {
@@ -409,7 +409,7 @@ match type 类型 {
 }
 ```
 
-- `struct` 匹配结构体；`tuple` 匹配**普通**元组；`func` 匹配函数类型；`#leaf` 匹配其余所有类型（标量、`string`、数组、函数、`T?`、`T!`、单元格等）。`struct` 和 `tuple` 是 [R3 内部节点](../design/generic-structure/README.cn.md)的两种形状：`T?`、`T!` 是带标记的元组，和可变单元格一样落在 `#leaf`，不算 `tuple`。
+- `struct` 匹配结构体；`tuple` 匹配**普通**元组；`func` 匹配函数类型；`#leaf` 匹配其余所有类型（标量、`string`、数组、函数、`T?`、`T!`、单元格等）。`struct` 和 `tuple` 是 [R3 内部节点](../../../../../design/generic-structure/README.cn.md)的两种形状：`T?`、`T!` 是带标记的元组，和可变单元格一样落在 `#leaf`，不算 `tuple`。
 - 类型位置写一个类型名就是**身份模式**：`case int`、`case Json`、`case MyStruct`、`case T`。身份是**精确**的：`case float` 不选 `int`（`float` 与 `f64` 是同一个类型，`int` 与 `i64` 也是；`int` 与 `i32` 不是）；`case f32` 不选 `f64`；`case MyStruct` 按声明的名字选，不选另一个字段形状相同的结构体；`case T` 在实例化时先代入 `T` 的绑定，所以它选的正是那个类型。形状与身份可以写在同一个 case 里（`case tuple | MyStruct`），按书写顺序判断：前面的 case 已经选中的类型，后面的同一身份是 `SemanticDiag::StaticMatchPatternCannotMatch`。
 - `_` 与 `#leaf` 一样匹配一切，只作为“兜底”写法；两者都必须是最后一个 case。`case struct | tuple` 用 `|` 合并几种形状。`case int` 写在 `case #leaf` 之前是正常的；写在 `#leaf`/`_` 之后是 `SemanticDiag::StaticMatchUnreachableCase`。
 - `match type` 后面是类型位置：紧跟的 `(` 一律读作类型的开头，所以 `match type () { ... }` 匹配空元组类型；函数类型要再包一层括号，写成 `match type ((x: int) => int) { ... }`。`case` 后面也是类型位置，同样的规则：`case (int, int)`、`case ()` 是元组，函数类型写成 `case ((x: int) => int)`。
@@ -430,9 +430,9 @@ func duplicate::<T>(t: T) {
 
 ### 6.8.4 `static for` 与 `t.[n]`
 
-`static for n, F in fields T => 块` 把 `T` 的**字段表**在实例化时展开（[5.5](../design-principles.cn.md)）：每个字段执行一次块，展开出的代码直接成为当前位置的直线代码，运行时没有循环节点。
+`static for n, F in fields T => 块` 把 `T` 的**字段表**在实例化时展开（[5.5](../../../../../design-principles.cn.md)）：每个字段执行一次块，展开出的代码直接成为当前位置的直线代码，运行时没有循环节点。
 
-- `T` 必须是具体类型，而且是 [R3 内部节点](../design/generic-structure/README.cn.md)：结构体或**普通**元组。`T?`、`T!`、可变单元格、标量、数组和函数都是叶子，报 `SemanticDiag::StaticForNotComposite`；先用 `match type` 处理它们。
+- `T` 必须是具体类型，而且是 [R3 内部节点](../../../../../design/generic-structure/README.cn.md)：结构体或**普通**元组。`T?`、`T!`、可变单元格、标量、数组和函数都是叶子，报 `SemanticDiag::StaticForNotComposite`；先用 `match type` 处理它们。
 - `n` 是字段名；元组的字段名是十进制下标（`"0"`、`"1"`，……），按声明顺序。`F` 是字段类型。两者只在块内可见；`F` 可以写在类型位置（`let x: F`），不能当值用。其中任何一个写成 `_` 表示这一轮不绑定它，与 `match` 的 `_` 同义：`static for n, _ in fields T => e` 只取字段名，`static for _, F in fields T => e` 只取字段类型（`_` 不是名字，块里写 `_` 仍然未定义）。
 - `fields` 后面也是类型位置：紧跟的 `(` 一律读作类型的开头，所以空元组直接写 `fields ()`，不需要先 `type EmptyTuple = ()`；函数类型要再包一层括号，写成 `fields ((x: int) => int)`。
 - 字段按声明顺序展开，每个字段的块有独立的块作用域。空结构体或空元组展开零次，块一次也不建。
@@ -739,13 +739,13 @@ DivisionByZero at main.cml:1:38
 - 边界就是那一次调用：实参的求值在边界之外。
 - `exit(n)` 不是故障，不被隔离；内存耗尽与编译器自身的错误也不被隔离。
 - 并行调度器下，`map` 的一个元素故障时，已经开始的元素运行到结束，尚未开始的不再开始；`attempt` 在已开始的全部结束之后才给出错误值。
-- 在图上它是对子图的一次带标记的调用：故障的边界就是子图的边界，结构不随子图的内容变化。实现见 [技术说明](../technical/33_fault_isolation.md)。
+- 在图上它是对子图的一次带标记的调用：故障的边界就是子图的边界，结构不随子图的内容变化。实现见 [技术说明](../../../../../technical/33_fault_isolation.md)。
 
 ## 6.11 赋值
 
 - `x = e`、`x += e` 等是表达式，值见下。目标是 `var` 变量或 `var` 形参本身，或从它出发的一条**路径**：字段、下标、任意组合（[3.7](03_data_model.md#37-letvar-与引用)）。`p.x = e`、`xs[0] = e`、`m[i].f = e` 都是对 `p`、`xs`、`m` 整体的重新绑定：`xs[i].f = e` 就是 `xs = set(xs, i, set(xs[i], f, e))`，`set` 是只改一个位置、返回新值的纯算子。路径赋值因此可以写在任何表达式位置；目标的根不是变量时（如 `f().x = e`、`{ x: 1 }.x = e`）是 `AssignmentTargetNotVariable`，下标越界是故障 `IndexOutOfRange`。
 - 路径赋值的值是**重新绑定后的整体**：`xs = xs->append<…>` 的值是新数组，`xs[0] = 5` 的值是改过之后的那个 `xs`，不是 `5`。只有目标就是变量本身时，值才是所赋的值。
-- 在 `sync` 里写一个 `var` 数组的一个元素**不复制**：写回用与 `xs = xs->sort` 同一套“未被共享”判据（[10.5](../design-principles.cn.md#105-库边界)），即 `:var/take` 在变量被别处读过之后才交出副本。所以 `let a = xs` 之后写 `xs[0]` 会复制，`a` 保持不变；没有读过 `xs` 时直接改它自己的存储。
+- 在 `sync` 里写一个 `var` 数组的一个元素**不复制**：写回用与 `xs = xs->sort` 同一套“未被共享”判据（[10.5](../../../../../design-principles.cn.md#105-库边界)），即 `:var/take` 在变量被别处读过之后才交出副本。所以 `let a = xs` 之后写 `xs[0]` 会复制，`a` 保持不变；没有读过 `xs` 时直接改它自己的存储。
 - 复合赋值可用的类型：
 
   | 运算符 | 类型 |

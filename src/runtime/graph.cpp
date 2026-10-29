@@ -1206,7 +1206,6 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape) 
     case GCNodeKind::Call:
     case GCNodeKind::Join:
     case GCNodeKind::Brch:
-    case GCNodeKind::Sync:
     case GCNodeKind::Loop:
         return true;
     case GCNodeKind::Gate:
@@ -1239,6 +1238,7 @@ void recordDraftDebugData(GCGraphDebugRecord *record, const GraphDraft &draft) {
         return;
     }
     record->implKernelUri = draft.implKernelUri();
+    record->declarationFacts = draft.declarationFacts();
     record->captureNames.assign(draft.captureNames().begin(), draft.captureNames().end());
     record->nodeNames.clear();
     bool named = false;
@@ -1867,6 +1867,10 @@ const std::string &GCGraph::implKernelUri() const {
     return debug_ ? debug_->implKernelUri : kEmpty;
 }
 
+uint32_t GCGraph::declarationFacts() const {
+    return debug_ ? debug_->declarationFacts : 0;
+}
+
 std::span<const camel::core::SymId> GCGraph::captureNames() const {
     return debug_ ? std::span<const camel::core::SymId>(debug_->captureNames)
                   : std::span<const camel::core::SymId>();
@@ -1983,6 +1987,36 @@ std::vector<GraphId> GCGraph::refsWithRole(uint8_t role) const {
 std::span<const slot_t> GCGraph::staticSlots() const {
     return staticArea_ ? std::span<const slot_t>(staticArea_->data(), staticArea_->size())
                        : std::span<const slot_t>{};
+}
+
+std::optional<std::pair<int64_t, int64_t>>
+GCGraph::intervalPairValuesOf(gc_node_ref_t ref) const {
+    // The pair is a value: the FILL the front end builds and the constant a pass may replace it
+    // with hold the same two integers, so the loop's bounds are read from either. This reads the
+    // constant: a DATA node of the static area whose type is the tuple of the two bounds.
+    const GCNode *n      = node(ref);
+    const auto *nodeType = n == nullptr ? nullptr : n->dataType();
+    if (n == nullptr || n->kind != GCNodeKind::Data || n->dataIndex >= 0 || nodeType == nullptr ||
+        nodeType->code() != TypeCode::Tuple) {
+        return std::nullopt;
+    }
+    const auto *type = static_cast<const TupleType *>(nodeType);
+    if (type->size() != 2 || type->typeAt(0) == nullptr || type->typeAt(1) == nullptr ||
+        type->typeAt(0)->code() != TypeCode::Int64 ||
+        type->typeAt(1)->code() != TypeCode::Int64) {
+        return std::nullopt;
+    }
+    const auto slots   = staticSlots();
+    const size_t index = static_cast<size_t>(-static_cast<int64_t>(n->dataIndex));
+    if (index == 0 || index >= slots.size() || slots[index] == NullSlot) {
+        return std::nullopt;
+    }
+    const auto *tuple = fromSlot<::Tuple *>(slots[index]);
+    if (tuple == nullptr || tuple->size() != 2) {
+        return std::nullopt;
+    }
+    return std::pair<int64_t, int64_t>{
+        fromSlot<int64_t>(tuple->get<slot_t>(0)), fromSlot<int64_t>(tuple->get<slot_t>(1))};
 }
 
 bool GCGraph::hasNodePayload() const { return !nativePayload_.empty(); }

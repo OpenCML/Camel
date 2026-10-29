@@ -124,9 +124,9 @@ It runs, in order:
    Three of them are perf plans whose tests assert counts and properties, never a duration:
    `perf.para_speedup` and the count guards `perf.step_counts` and `perf.reduce_layout_counts`
    (the measured halves of `perf.step_budget` and `perf.reduce_layout` stay in the skip list);
-3. the seven static checks: `stdlib-reference --verify-ops`, `--verify-doc`, `diagnostics-catalog
+3. the eight static checks: `stdlib-reference --verify-ops`, `--verify-doc`, `diagnostics-catalog
    --check`, `check-doc-links --all`, `check-doc-snippets`, `stdlib-declarations --check`,
-   `check-std-includes`;
+   `check-conformance`, `check-std-includes`;
 
 then exits non-zero when any phase failed. It does not build: build once first, and it checks the
 install it measures against that build's stamp — the rule that a run must not measure another

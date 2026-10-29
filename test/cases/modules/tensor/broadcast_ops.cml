@@ -2,7 +2,7 @@
  * NumPy-style broadcasting for arithmetic, comparison, and where.
  */
 
-import { reshape, range, where, maximum, relu, sum, shape } from tensor
+import { reshape, where, maximum, relu, sum, shape } from tensor
 
 func main(): int sync {
     let col = reshape<[3, 1]>([1.0, 2.0, 3.0])

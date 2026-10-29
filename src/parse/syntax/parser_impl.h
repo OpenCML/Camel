@@ -45,6 +45,9 @@ class ParserImpl {
 
     static constexpr uint32_t kNone     = UINT32_MAX;
     static constexpr uint8_t kEmptyNode = 1; // NodeData::flags: the node has no token
+    /// NodeData::flags: the name was written with a `..` before it, so it is a pack and not one
+    /// type (a type parameter of `::<..A>`, design principles 5.6).
+    static constexpr uint8_t kPackName = 2;
 
     // Layout context (see Scope). `nl_`: a line break before a token that could also start a
     // statement ends the expression. `angle_`: the `<` of the angle-bracket list the parser is
@@ -194,8 +197,9 @@ class ParserImpl {
     void parseFuncAnno();
     void parseFuncDecl();
     void parseFuncDeclRest(size_t m);
-    /// The type parameters a generic declaration declares at its head, `::<T, U>` after its name
-    /// (design principles 5.5): `func first::<T>(xs: T[]): T`, `rule sub_self::<T>(x: T) { ... }`.
+    /// The type parameters a generic declaration declares at its head, `::<T, ..A>` after its name
+    /// (design principles 5.5, 5.6): `func first::<T>(xs: T[]): T`, `rule sub_self::<T>(x: T) { ... }`.
+    /// A parameter written with `..` is a pack (kPackName).
     void parseTypeParams();
     void parseAnnotatedStmt();
     /// The `@` decorators and `#` tag uses before a declaration or a block, in either order.
@@ -250,8 +254,9 @@ class ParserImpl {
     /// The clause after a function's result type (design effects plan 3.1): the resources a call
     /// touches. `uses` and `pure` are contextual keywords.
     void parseResourceClause();
-    /// whenClause : 'when' logicalOrExpr
-    /// A declaration's applicability condition, after its signature (design principles 4.4).
+    /// whenClause : 'when' ('..' dataExpr | logicalOrExpr)
+    /// A declaration's applicability condition, after its signature (design principles 4.4). A
+    /// condition written with `..` holds for every member of the pack its body names (5.6).
     void parseWhenClause();
     void parseRetStmt();
 
@@ -260,10 +265,11 @@ class ParserImpl {
     void parseIdentRef(NK kind);
     void parseIdentList();
     void parseBracketedIdents(TK closer, NK kind);
-    void parseKeyParamPair(bool allowRest, bool allowConstas);
+    void parseKeyParamPair(bool allowRest, bool allowConstas, bool angled = false);
+    bool parenClosesBeforeArrow() const;
     void parsePairedParams(TK closer, bool allowRest, bool allowConstas);
     void parseParentParams(bool allowRest = false, bool allowConstas = false);
-    void parseAngledParams(bool allowRest = false);
+    void parseAngledParams(bool allowRest = false, bool allowConstas = false);
     void parseEnumType();
     void parseEnumVariant();
     void parseEnumField();
@@ -325,13 +331,13 @@ class ParserImpl {
     void parseLogicalAnd();
     void parseEquality();
     void parseRelational();
+    void parseRange();
     void parseAdditive();
     void parseMultiplicative();
     void parsePower();
     void parseNullable();
     void parseUnary();
     void parseLink();
-    void parseComp();
     void parseAnno();
     void parseAccess();
     void parsePrimary();
@@ -400,6 +406,9 @@ class ParserImpl {
     void parseMatchTypeType();
     void parseTypeArm();
     void parsePrimaryType();
+    /// Marks the IdentDef just closed, if `mark` is what it was before the name was read, as one
+    /// written with `..` (kPackName).
+    void markNameAsPack(size_t mark);
     void parseStructType();
     void parseFuncType();
     void parseTypeList(TK closer);

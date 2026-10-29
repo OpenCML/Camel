@@ -1,0 +1,62 @@
+/**
+ * Verifies a closure built and called in a loop body, with the call as the body's value: the body
+ * region's result is that call. The rewrite that differentiates a closure call erased it and left
+ * the region naming the node it erased, so the tape builder read a value the graph no longer had,
+ * and the transformation died where it stood (a null node header: a segmentation fault in a build
+ * without assertions). A region result that is a rewritten call follows the call now.
+ *
+ * The shapes are the closure's parameter and result beside a struct state: a struct to a struct
+ * (the body's value is the call itself), no parameter at all (the closure reads the state), a
+ * scalar to a scalar (the body builds its struct), and a scalar to a struct. Three rounds multiply
+ * by 1, 2, 3, so the loop's value is 6 and so is the gradient of x; every shape gives both.
+ */
+
+import { grad, with_grad } from autodiff
+
+type P = { a: float, b: float }
+
+with <x: float>
+func structToStruct(): float {
+    let q = loop q = { a: x, b: 1.0 } for d in [1.0, 2.0, 3.0] do {
+        let g = (t: P): P => { a: t.a * d, b: t.b }
+        g(q)
+    }
+    return q.a
+}
+
+with <x: float>
+func readsState(): float {
+    let q = loop q = { a: x, b: 1.0 } for d in [1.0, 2.0, 3.0] do {
+        let g = (): P => { a: q.a * d, b: q.b }
+        g()
+    }
+    return q.a
+}
+
+with <x: float>
+func scalarIn(): float {
+    let q = loop q = { a: x, b: 1.0 } for d in [1.0, 2.0, 3.0] do {
+        let g = (u: float): float => u * d
+        { a: g(q.a), b: q.b }
+    }
+    return q.a
+}
+
+with <x: float>
+func scalarToStruct(): float {
+    let q = loop q = { a: x, b: 1.0 } for d in [1.0, 2.0, 3.0] do {
+        let g = (u: float): P => { a: u * d, b: u }
+        g(q.a)
+    }
+    return q.a
+}
+
+func main(): int sync {
+    let vg    = with_grad(structToStruct)<1.0>()
+    let gRead = grad(readsState)<1.0>()
+    let gIn   = grad(scalarIn)<1.0>()
+    let gOut  = grad(scalarToStruct)<1.0>()
+    'loop_grad_closure_in_body vg={} reads={} scalarIn={} scalarOut={}'->format<
+        vg, gRead, gIn, gOut>->println
+    return 0
+}

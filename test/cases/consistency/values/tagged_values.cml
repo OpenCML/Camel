@@ -30,7 +30,7 @@ func main(): int sync {
     println(safe_div(9, 0) !! -1)
     println(label(safe_div(8, 2) -> inc))
     println(label(safe_div(8, 0) -> inc))
-    println((-2)..3->map<(d: int): int => safe_div(12, d) !! 0>)
+    println(((-2)..3)->map<(d: int): int => safe_div(12, d) !! 0>)
     println(parse_int('12') !! 0)
     println(parse_int('twelve') !! 0)
     return 0

@@ -510,20 +510,17 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "loops.onnx_refused"
-desc = "The program runs onnx.export_model on a function with a loop: the exporter refuses the loop where it is written (line 8), before the export's own simplification rewrites the function's graphs, and no model is written. No pass is needed: the exporter reads the program's own graph when the program calls it, so the default pipeline reaches the refusal. (The entry used to name std::macro, which does nothing here: the program declares no macro.) The refusal is the error value of the export_model call (`ExportUnsupported`), which nothing handles, so the exit reports it as an unhandled error at the loop."
-kind = "negative"
-case = "../../../cases/loops/onnx_refused.cml"
-args = ["-E", "short", "${case}"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::UnhandledError"
-expect_diagnostic_code = "0x04000051"
-expect_diagnostic_line = 7
-expect_diagnostic_column = 13
-expect_output_contains = ["ExportUnsupported", "a 'loop' expression is not exported to ONNX yet"]
-expect_output_not_contains = ["RewriteInvalid", "rules::simplify"]
+name = "loops.onnx_exported"
+desc = "A function with a loop, handed to onnx.export_model, exports: the LOOP becomes one ONNX Loop, the model is written, it passes onnx.checker's full check and it takes the two tensors the program gave it, while the program prints the loop's value on the default back end. No pass is needed: the exporter reads the program's own graph when the program calls it. The entry used to be `loops.onnx_refused` and pinned the opposite -- the export refused the loop at line 8 with `ExportUnsupported` and the text 'a 'loop' expression is not exported to ONNX yet; write the loop as a tail-recursive function'. That refusal was a 'not implemented yet' diagnostic that told a user to rewrite an idiomatic loop, which the rules forbid, so the ONNX Loop lowering deleted it; the assertion follows the semantics the deletion leaves behind, it is not widened to make a red green."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/loops/onnx_exported.py"
+args = ["${case}", "default"]
+skip_unless = ["${python}", "-c", "import numpy, onnx"]
+expect_exit = 0
+expect_stdout_contains = ["onnx export default: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 20000
+timeout_ms = 120000
 
 [[tests]]
 name = "loops.grad_through_loop"
@@ -607,20 +604,17 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 20000
 
 [[tests]]
-name = "loops.onnx_refused_prl"
-desc = "The same refusal by export_model run by std::prl: the back end lowers the loop in its own copy, so the export still reads the program's own graph and refuses the loop at line 8. The refusal is the error value of the export_model call (`ExportUnsupported`), which nothing handles, so the exit reports it as an unhandled error."
-kind = "negative"
-case = "../../../cases/loops/onnx_refused.cml"
-args = ["-E", "short", "${case}", "std::prl"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::UnhandledError"
-expect_diagnostic_code = "0x04000051"
-expect_diagnostic_line = 7
-expect_diagnostic_column = 13
-expect_output_contains = ["ExportUnsupported", "a 'loop' expression is not exported to ONNX yet"]
-expect_output_not_contains = ["RewriteInvalid", "rules::simplify"]
+name = "loops.onnx_exported_prl"
+desc = "The same export with export_model run by std::prl: the back end schedules the loop in its own copy of the graph, so the export reading the program's own graph must still see the LOOP and write one ONNX Loop, and the model passes onnx.checker's full check while the program prints the loop's value on that back end. This entry used to be `loops.onnx_refused_prl` and pinned the refusal this back end reached; the refusal is gone with the ONNX Loop lowering, so the entry follows the export succeeding."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/loops/onnx_exported.py"
+args = ["${case}", "prl"]
+skip_unless = ["${python}", "-c", "import numpy, onnx"]
+expect_exit = 0
+expect_stdout_contains = ["onnx export prl: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 20000
+timeout_ms = 120000
 
 [[tests]]
 name = "loops.state_in_place"

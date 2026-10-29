@@ -8,7 +8,7 @@
 import { Json, decode, get, as_string, as_array } from json
 
 func churn(n: int): int {
-    return len(0..n->map<(i: int): string => 'item-' + string(i)>)
+    return len((0..n)->map<(i: int): string => 'item-' + string(i)>)
 }
 
 func keep(j: Json, n: int): Json {
@@ -22,7 +22,7 @@ func run(d: Json, n: int): int sync {
     let kept = keep(d, n)
     let names = (kept->get<'names'>->as_array ?? [])->map<(x: Json): string => x->as_string ?? '?'>
     println(c, names, kept->get<'nested'>->get<'deep'>->get<0>->as_string ?? '?')
-    let docs = 0..3->map<(i: int): Json => decode('{"k": "v-' + string(i) + '"}') !! d>
+    let docs = (0..3)->map<(i: int): Json => decode('{"k": "v-' + string(i) + '"}') !! d>
     let d2 = churn(n)
     println(d2, docs->map<(x: Json): string => x->get<'k'>->as_string ?? '?'>)
     return 0

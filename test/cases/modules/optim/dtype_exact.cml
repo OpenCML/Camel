@@ -11,7 +11,7 @@
  * type, and which of the two element types a read of it uses is not specified.
  */
 
-import { new, to_bytes } from tensor
+import { to_bytes } from tensor
 
 import { adam, constant, init, sgd, update } from optim
 
@@ -30,8 +30,8 @@ func main(): int sync {
     // 16777217.0 is the smallest integer f32 cannot hold: `f32(16777217.0)` is 16777216.0.
     let numbers: f64[] = [16777217.0, 1.0]
     let gradients: f64[] = [1.0, 1.0]
-    let model: Wide = { w: new(numbers) }
-    let gradient: Wide = { w: new(gradients) }
+    let model: Wide = { w: numbers }
+    let gradient: Wide = { w: gradients }
     let opt = sgd(constant(0.5))
     let next = update(opt, model, gradient, init(opt, model))
     let value = next.0.w[0]
@@ -74,8 +74,8 @@ func main(): int sync {
     // the same arithmetic twice.
     let one: f64[] = [16777217.0]
     let one_gradient: f64[] = [1.0]
-    let wide_one: Wide = { w: new(one) }
-    let wide_one_gradient: Wide = { w: new(one_gradient) }
+    let wide_one: Wide = { w: one }
+    let wide_one_gradient: Wide = { w: one_gradient }
     let number_one: Number = { w: 16777217.0 }
     let number_one_gradient: Number = { w: 1.0 }
     let wide_sgd = update(opt, wide_one, wide_one_gradient, init(opt, wide_one))

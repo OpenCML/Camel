@@ -1,0 +1,139 @@
+id = "linear.var_read_before_write"
+order = 346
+tier = "fast"
+tags = ["feat", "linear", "var", "effects"]
+
+# Design principles 3.5 and docs/design/effects/edges.cn.md 5.6: a read of a `var` takes the value
+# of the write written before it -- before the first write, the cell `:var/new` made -- and the
+# writes written after it are ordered after it. That is a property of where the read is written,
+# not of whether the body is a `sync` block: a read outside one used to reach the value a later
+# write left in the cell (`var a = 1; let b = a; modify(a)` printed `a=2 b=2`).
+#
+# What a `sync` block adds is the other direction (3.5, F3): a statement of it runs whether or not
+# the variable is read afterwards, which is why every write here is still reported by
+# SemanticDiag::IgnoredSideEffect -- the diagnostic names a write whose execution nothing uses, not
+# a write whose order is unknown.
+#
+# Each function below is written outside a sync block; `main` is a `sync` block so that they run.
+# Every value is asserted on both sides: the read before the write keeps the old value, and the
+# read after it takes the new one.
+
+[[tests]]
+name = "var_read_before_write.default"
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Pipeline: default (interpreter)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/var_read_before_write.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = ['int 2 1', 'int 2 1', 'array [7, 7] [1, 1]', 'arm 0 5 1', 'loop 0 2', 'steps 2 3', 'after 2 2']
+const out = input.normalized.stdout.trim().split('\n')
+assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
+const names = input.normalized.stderr.split('name=SemanticDiag::').slice(1).map(s => s.split(',').at(0))
+assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
+assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_read_before_write.nvm"
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Pipeline: std::nvm."
+kind = "behavior"
+case = "../../../cases/linear/runtime/var_read_before_write.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = ['int 2 1', 'int 2 1', 'array [7, 7] [1, 1]', 'arm 0 5 1', 'loop 0 2', 'steps 2 3', 'after 2 2']
+const out = input.normalized.stdout.trim().split('\n')
+assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
+const names = input.normalized.stderr.split('name=SemanticDiag::').slice(1).map(s => s.split(',').at(0))
+assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
+assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_read_before_write.fvm"
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/linear/runtime/var_read_before_write.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = ['int 2 1', 'int 2 1', 'array [7, 7] [1, 1]', 'arm 0 5 1', 'loop 0 2', 'steps 2 3', 'after 2 2']
+const out = input.normalized.stdout.trim().split('\n')
+assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
+const names = input.normalized.stderr.split('name=SemanticDiag::').slice(1).map(s => s.split(',').at(0))
+assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
+assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_read_before_write.jit"
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Pipeline: std::jit."
+kind = "behavior"
+case = "../../../cases/linear/runtime/var_read_before_write.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = ['int 2 1', 'int 2 1', 'array [7, 7] [1, 1]', 'arm 0 5 1', 'loop 0 2', 'steps 2 3', 'after 2 2']
+const out = input.normalized.stdout.trim().split('\n')
+assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
+const names = input.normalized.stderr.split('name=SemanticDiag::').slice(1).map(s => s.split(',').at(0))
+assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
+assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_read_before_write.prl"
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Pipeline: std::prl."
+kind = "behavior"
+case = "../../../cases/linear/runtime/var_read_before_write.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = ['int 2 1', 'int 2 1', 'array [7, 7] [1, 1]', 'arm 0 5 1', 'loop 0 2', 'steps 2 3', 'after 2 2']
+const out = input.normalized.stdout.trim().split('\n')
+assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
+const names = input.normalized.stderr.split('name=SemanticDiag::').slice(1).map(s => s.split(',').at(0))
+assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
+assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_read_before_write.opt_nvm"
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one; the order edges survive std::opt. Pipeline: std::opt, then std::nvm."
+kind = "behavior"
+case = "../../../cases/linear/runtime/var_read_before_write.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = ['int 2 1', 'int 2 1', 'array [7, 7] [1, 1]', 'arm 0 5 1', 'loop 0 2', 'steps 2 3', 'after 2 2']
+const out = input.normalized.stdout.trim().split('\n')
+assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
+const names = input.normalized.stderr.split('name=SemanticDiag::').slice(1).map(s => s.split(',').at(0))
+assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
+assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
+}
+"""
+timeout_ms = 20000

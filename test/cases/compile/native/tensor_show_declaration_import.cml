@@ -5,10 +5,10 @@
  * layout; the marker line proves the program ran to the end.
  */
 
-import { new, show } from tensor
+import { show } from tensor
 
 func main(): int sync {
-    let t = new([[1.0, 2.0]] as f32[][])
+    let t = [[1.0, 2.0]] as f32[1, 2]
     show(t)
     show([3.0, 4.0] as f32[])
     println(7)

@@ -12,9 +12,8 @@
  *    `ones::<f32>([5])`, and this case reads it.
  */
 
-import {
-    zeros, ones, random, seed, sum, shape
-} from tensor
+import { zeros, ones, sum, shape } from tensor
+import { next_key, seed, uniform } from random
 
 func grow(t: f32[?, ?]): f32[?, ?] {
     return t + 1.0
@@ -29,9 +28,9 @@ func main(): int sync {
     w = grow(w)
     var g = ones::<f32>([5])
     seed(7)
-    let r1 = random([4], 0.0, 1.0)
+    let r1 = next_key()->uniform::<f32><shape: [4]>
     seed(7)
-    let r2 = random([4], 0.0, 1.0)
+    let r2 = next_key()->uniform::<f32><shape: [4]>
     'static_types w_sum={} pick={} same_seed={} g={}'->format<sum(w), shape(pick(false)), sum(r1) == sum(r2), sum(g)>->println
     return 0
 }

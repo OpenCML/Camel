@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-293 diagnostics: 273 errors, 20 warnings. 15 carry a machine-applicable edit, 278 say why they carry none.
+298 diagnostics: 277 errors, 21 warnings. 15 carry a machine-applicable edit, 283 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -83,6 +83,7 @@ prints one entry.
 | `0x03000055` | [SemanticDiag::GenericInstantiationTooDeep](#genericinstantiationtoodeep) | Error | no |
 | `0x03000056` | [SemanticDiag::TypeFunctionArguments](#typefunctionarguments) | Error | no |
 | `0x03000057` | [SemanticDiag::GenericFunctionUnsupported](#genericfunctionunsupported) | Error | no |
+| `0x03000058` | [SemanticDiag::PackExpansionNeedsOnePack](#packexpansionneedsonepack) | Error | no |
 | `0x03000060` | [SemanticDiag::FunctionNameAsValue](#functionnameasvalue) | Error | no |
 | `0x03000072` | [SemanticDiag::TaggedTypeNesting](#taggedtypenesting) | Error | no |
 | `0x03000073` | [SemanticDiag::TaggedValueNotOpened](#taggedvaluenotopened) | Error | no |
@@ -258,6 +259,9 @@ prints one entry.
 | `0x030001FC` | [SemanticDiag::NativeValueMismatch](#nativevaluemismatch) | Error | no |
 | `0x030001FD` | [SemanticDiag::NativeTypeNotProvided](#nativetypenotprovided) | Error | no |
 | `0x030001FE` | [SemanticDiag::TypeFunctionNotApplicable](#typefunctionnotapplicable) | Error | no |
+| `0x030001FF` | [SemanticDiag::ExtentNotADimension](#extentnotadimension) | Error | no |
+| `0x03000200` | [SemanticDiag::VarArgumentTypeMismatch](#varargumenttypemismatch) | Error | no |
+| `0x03000201` | [SemanticDiag::StatementAfterReturn](#statementafterreturn) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -312,6 +316,7 @@ prints one entry.
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn | no |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn | no |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn | no |
+| `0x04100017` | [RuntimeDiag::DefunctionalizationIncomplete](#defunctionalizationincomplete) | Warn | no |
 
 ## Internal (`InternalDiag`)
 
@@ -2442,6 +2447,40 @@ func main(): int sync {
 }
 ```
 
+### PackExpansionNeedsOnePack
+
+`0x03000058` · Error · `SemanticDiag::PackExpansionNeedsOnePack`
+
+**Fix**
+
+None: choice: which pack the expansion ranges over, and which call binds it, is the writer's to decide
+
+**Message**
+
+```text
+The expansion '{0}' must range over exactly one pack: {1}.
+```
+
+**Help**
+
+```text
+A type expression written with '..' stands for one type per member of a pack, and the members come from one place: the rest parameter of the declaration, written '..xs: ..A', binds the pack 'A' to the types of the arguments a call leaves over (design principles 5.6). So the body of an expansion names that one pack, and the expansion is used where a call binds it.
+```
+
+**Example** (`test/cases/compile/rest_params/pack_expand_two_packs.cml`, run as `camel test/cases/compile/rest_params/pack_expand_two_packs.cml`)
+
+```camel
+// An expansion ranges over one pack: a body that names two of them writes one type per member
+// of which pack, and nothing in the declaration says which.
+func blend::<..A, ..B>(..xs: ..A): ..{left: A, right: B} {
+    return {left: xs.[0], right: xs.[1]}
+}
+
+func main(): int sync {
+    return 0
+}
+```
+
 ### FunctionNameAsValue
 
 `0x03000060` · Error · `SemanticDiag::FunctionNameAsValue`
@@ -3950,13 +3989,13 @@ None: choice: the repair is a decision only the writer can make
 **Message**
 
 ```text
-This is not a shape: the extents of a type written with dimension names are integers, bound names, or linear expressions over them ('f32[n, 3]').
+This is not a shape: the extents of a type written with dimension names are integers, bound names, or expressions over them ('f32[n, 3]').
 ```
 
 **Help**
 
 ```text
-Each extent is a non-negative integer, a dimension name bound by the signature, or a linear expression over such names: 'n', 'n + 1', '2 * n', 'n - k'. A dimension that is not linear is unknown, and an unknown extent is written '?'.
+Each extent is a non-negative integer, a dimension name bound by the signature, a `constas` parameter of the signature, or an expression over such names with `+`, `-`, `*`, `/`, `%` and calls of pure functions: 'n', 'n + 1', '2 * n', '(n + 2 * p - k) / s + 1', 'conv_out(n, k, s, p)'. An extent that depends on a name the call does not bind to a constant is unknown, and an unknown extent is written '?'.
 ```
 
 **Example** (`test/cases/compile/array_shape/err_negative.cml`, run as `camel test/cases/compile/array_shape/err_negative.cml`)
@@ -5805,23 +5844,14 @@ No candidate of '{0}' applies to ({1}): every candidate's 'when' condition is fa
 A 'when' that is false makes its declaration inapplicable, not erroneous, and the call goes on to the other candidates. Pass an argument or a type that satisfies a condition, or write another overload for this call.
 ```
 
-**Example** (`test/cases/compile/when/not_applicable.cml`, run as `camel test/cases/compile/when/not_applicable.cml`)
+**Example** (`test/cases/compile/type_packs/zip_not_array.cml`, run as `camel test/cases/compile/type_packs/zip_not_array.cml`)
 
 ```camel
-func is_float::<T>(): bool {
-    return match type T {
-        case float | f32 => true
-        case _ => false
-    }
-}
-
-/// The condition asks about int, so this overload never applies here.
-func needs_float(x: float): float when is_float::<int>() {
-    return x
-}
-
+/// `when ..is_array::<A>()` asks every member of the pack: an argument that is not an array makes
+/// the declaration inapplicable, and `zip` has no other.
 func main(): int sync {
-    return int(needs_float(1.0))
+    println(zip([1, 2], 3))
+    return 0
 }
 ```
 
@@ -7823,7 +7853,7 @@ func pick(flag: bool, whole: int[], real: f32[]): int[] {
 }
 
 func main(): int sync {
-    let picked = pick(true, new([1, 2, 3] as int[]), new([f32(1.0), f32(2.0), f32(3.0)]))
+    let picked = pick(true, [1, 2, 3] as int[], [f32(1.0), f32(2.0), f32(3.0)])
     return if picked[0] > 0 then 0 else 1
 }
 ```
@@ -8383,18 +8413,137 @@ The type function '{0}' is not applicable: {1}.
 A type function computes a type from types at compile time (design principles 21): `ElementOf<T>` is the element of an array or a set, `PayloadOf<T>` the `U` of `U?` or `U!`, and `KeyOf<T>` and `ValueOf<T>` the key and value types of a map; a program writes its own with `type F<T> = ...`, whose body may be a `match type`. It is called with `F<...>` where a type is written, and it accepts only the types it is defined for.
 ```
 
-**Example** (`test/cases/modules/types/type_function_not_applicable.cml`, run as `camel test/cases/modules/types/type_function_not_applicable.cml`)
+**Example** (`test/cases/compile/type_packs/length_mismatch.cml`, run as `camel test/cases/compile/type_packs/length_mismatch.cml`)
 
 ```camel
-/// A type function that does not accept the type it is given is refused where the instance is made.
-import { is_integer, ElementOf } from types
+/// `..` expands the packs it uses together, so they must have the same length: `Mix<F>` pairs the
+/// ordinary parameters of `F` with its `with` parameters, and `Weighted` has one of the first and
+/// two of the second.
+import { ParamsOf, WithOf } from types
 
-func element_is_integer::<T>(): bool {
-    return is_integer::<ElementOf<T>>()
+type Mix<F> = (..(ParamsOf<F>, WithOf<F>))
+type Weighted = <w: float, k: int> (a: int) => bool
+
+func f(x: Mix<Weighted>): int {
+    return 0
 }
 
 func main(): int sync {
-    println(element_is_integer::<int>())
+    return 0
+}
+```
+
+### ExtentNotADimension
+
+`0x030001FF` · Error · `SemanticDiag::ExtentNotADimension`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The extent '{0}' of this call is {1}, which is not a dimension.
+```
+
+**Help**
+
+```text
+An extent written with names is evaluated where a call binds every name it uses, to a dimension of an argument or to the constant the call gives a `constas` parameter. A value below zero describes no array, so the call is refused where it is written; to allow the case, make the signature's extent unknown (`?`) or give the call arguments that make it non-negative.
+```
+
+**Example** (`test/cases/compile/extents/computed_negative.cml`, run as `camel test/cases/compile/extents/computed_negative.cml`)
+
+```camel
+/// An extent the constants of the call make negative is no dimension: the kernel (20) is wider than
+/// the padded input (8 + 2), so `(n + 2 * p - k) / s + 1` is -9, and the call is refused where it is
+/// written.
+with <constas k: int, constas s: int, constas p: int>
+func conv_len(x: f32[n]):
+    f32[(n + 2 * p - k) / s + 1] {
+    let m = (len(x) + 2 * p - k) / s + 1
+    return [f32(i) for i in 0..m]
+}
+
+func run(x: f32[8]): int {
+    let z = conv_len<20, 1, 1>(x)
+    println(z)
+    return 0
+}
+
+func main(): int sync {
+    let x: f32[8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+    return run(x as f32[8])
+}
+```
+
+### VarArgumentTypeMismatch
+
+`0x03000200` · Error · `SemanticDiag::VarArgumentTypeMismatch`
+
+**Fix**
+
+None: choice: the variable has to be declared with the parameter's type, or a variable of that type passed
+
+**Message**
+
+```text
+The argument of '{0}' at the 'var' parameter '{1}' has type {3}, and a 'var' argument is read and written by the callee: it is accepted only when its type and the parameter's type {2} accept each other's values.
+```
+
+**Help**
+
+```text
+The callee reads the caller's variable and writes into it, so what it writes must be a value the variable can hold, and what the variable holds must be a value the callee can read. A type that leaves a shape open does not: '{2}' may be written with another shape, and the variable it stands for cannot hold one. Declare the variable with the parameter's type ('var a: {2} = ...'), or pass a variable of that type.
+```
+
+**Example** (`test/cases/linear/byref/var_argument_shape.cml`, run as `camel test/cases/linear/byref/var_argument_shape.cml`)
+
+```camel
+func count(var w: f32[..], v: f32): int {
+    return len(w)
+}
+
+func main(): int sync {
+    var a: f32[] = [1.0, 2.0, 3.0]
+    println(count(a, 0.0))
+    return 0
+}
+```
+
+### StatementAfterReturn
+
+`0x03000201` · Error · `SemanticDiag::StatementAfterReturn`
+
+**Fix**
+
+None: choice: the statement belongs before the 'return' or not at all, and which one is the intent
+
+**Message**
+
+```text
+This statement cannot run: the 'return' written before it gives the value of this block, so nothing after it in the block is reached.
+```
+
+**Help**
+
+```text
+A 'return e' is the value of the block it is written in -- a function body, a 'sync' block, or the arm of an 'if' or a 'match' -- and a statement written after it in that same block is never reached. Move the statement before the 'return', or delete it.
+```
+
+**Example** (`test/cases/compile/return_after/statement_after_return_sync.cml`, run as `camel -E short test/cases/compile/return_after/statement_after_return_sync.cml`)
+
+```camel
+func g(): int sync {
+    println('a')
+    return 2
+    println('b')
+    return 1
+}
+
+func main(): int sync {
+    println(g())
     return 0
 }
 ```
@@ -8416,7 +8565,7 @@ None: choice: a value that has to be taken has no single spelling - bind it, ret
 **Help**
 
 ```text
-Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'): only then is the write ordered after the earlier uses of the variable. Without one, the write runs only if the variable is read afterwards.
+Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'): the block runs whether or not anything needs it, so the write runs with it. A write outside one is ordered after the reads written before it all the same, but it runs only if something reads the variable afterwards.
 ```
 
 **Example** (`test/cases/compile/diag_json/warnings_visible.cml`, run as `camel test/cases/compile/diag_json/warnings_visible.cml`)
@@ -8542,13 +8691,17 @@ This value has type '{0}' and nothing uses it: an error it holds is lost{1}.
 A function that returns a 'T!' reports its failure through that value. Take the value apart with '!!', '->' or 'match', return it from a function that declares a 'T!', or drop it on purpose with 'let _ = ...'.
 ```
 
-**Example** (`test/cases/consistency/unused_fallible/main_undeclared.cml`, run as `camel -E short test/cases/consistency/unused_fallible/main_undeclared.cml`)
+**Example** (`test/cases/compile/unused_values/fallible_sync.cml`, run as `camel -E short test/cases/compile/unused_values/fallible_sync.cml`)
 
 ```camel
-// A `main` without a declared return type that ends in an error value: nothing takes it.
-func main() sync {
-    println('start')
-    parse_int('zz')
+func check_same(a: int, b: int): bool! {
+    return if a == b then true else error('Mismatch', 'not the same')
+}
+
+func main(): int sync {
+    check_same(1, 2)
+    println('done')
+    return 0
 }
 ```
 
@@ -9501,12 +9654,12 @@ Convert the value to a supported type before the call.
 // diagnostic naming the operator, the argument's element type and the set the kernel takes.
 // It is never narrowed to f32 (design principles 5.1, 13.1).
 
-import { new, reshape, ones, sum } from tensor
+import { reshape, ones, sum } from tensor
 import { conv2d } from nn
 
 func main(): int sync {
     let values: f64[] = [1.0, 2.0, 3.0, 4.0]
-    let x = reshape<[1, 1, 2, 2]>(new(values))
+    let x = reshape<[1, 1, 2, 2]>(values)
     let kernel = ones::<f32>([1, 1, 1, 1])
     let bias = ones::<f32>([1])
     let y = conv2d(x, kernel, bias, 1, 0)
@@ -10366,6 +10519,47 @@ import str
 
 func main(): int sync {
     println(str::to_upper('a'))
+    return 0
+}
+```
+
+### DefunctionalizationIncomplete
+
+`0x04100017` · Warn · `RuntimeDiag::DefunctionalizationIncomplete`
+
+**Fix**
+
+None: choice: which function a value turns out to be is the program's, and a call that stays indirect is a correct program that runs one call slower
+
+**Message**
+
+```text
+Defunctionalization left {0} as written.
+```
+
+**Help**
+
+```text
+A higher-order value is lowered by turning the call through it into a direct call of the one function it can be, which is a rewriting of the call sites the program writes. A function value this pass cannot name at the call site is left as it is: a parameter the program fills with several different functions (the dispatch is then a choice at run time), a closure whose captured values are not values where the call is, or a function value the program receives from outside itself. Guessing one of them would change which effects run, so nothing is guessed.
+```
+
+**Example** (`test/cases/opt/defun/captured.cml`, run as `camel test/cases/opt/defun/captured.cml std::defunctionalize std::nvm`)
+
+```camel
+func apply(f: (x: int) => int, x: int): int {
+    return f(x)
+}
+
+func plus_one(x: int): int {
+    return x + 1
+}
+
+func main(): int sync {
+    let k = 10
+    let with_k = (x: int) => x + k
+    let captured = apply(with_k, 5)
+    let named = apply(plus_one, 5)
+    'CAPTURED captured={} named={}'->format<captured, named>->println
     return 0
 }
 ```

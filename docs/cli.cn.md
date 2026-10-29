@@ -170,6 +170,7 @@
 | `std::opt::dce` | `values_only: bool = false`（只删除无人读取的常量与纯运算，不动 GATE 与 SYNC；用作同类遍（例如用 Camel 写的遍）的对照基准） |
 | `std::opt::algebra` | 规则库的遍（`rules::simplify`，`safe_fp` 下为 `rules::simplify strict=true`）；`neutral_only: bool = false` 只做整数的单位元化简 `x + 0`、`0 + x`、`x - 0`、`x * 1`、`1 * x`，不做同类项与常数因子合并（这是没有库对应物的 C++ 对照模式，供同类遍（例如用 Camel 写的遍）对照） |
 | `std::opt`、`std::opt::inline`（及 `::small` / `::arm` / `::hybrid`）、`std::opt::specialize`、`std::opt::devirtualize` | `growth_budget: int = 4096`（特化和内联可复制的节点数；用完后剩下的调用仍是调用；0 表示不再复制；`std::opt` 的所有轮次共用一个预算） |
+| `std::opt`、`std::opt::fold` | `constant_budget: int = 8388608`（折叠可物化成常量的字节数：数组按元素数×元素大小加形状开销计，超过上限的值保留生成它的计算——程序含义不变，只是少折了一些；0 表示一个都不物化） |
 | `std::fvm`、`std::jit` | `stats: string = ""`（把本次运行每张图的字节码数与执行计数追加写入该文件） |
 | `std::jit` | `hot_threshold: int = 1`（同一调用点调用多少次后编译一张图；0 表示第一次调用就编译）。**含循环区域的图在 0 与 1（默认）这两个"尽早编译"的阈值下第一次调用就编译**：使图变贵的是轮次，调用次数看不见轮次；显式把阈值设到 1 以上仍按调用次数走（`hot_threshold=1000000000` 因此仍表示"什么都不编译"） |
 | `std::tf`、`std::prl` | `linear: bool = false`（逐节点求值），`fanout_all: bool = false`（把每个无序的高阶调用都展开成并行任务），`diag: bool = false`（打印对每张图的决定），`bytecode: bool = true`（把串行的图交给字节码解释器），`gc_stats: int = 0`（1：运行结束时打印统计；2：另外每次回收一行） |
@@ -191,8 +192,9 @@
 - `std::opt`：集成优化总入口；循环执行去虚化、特化、内联、fold、cse、algebra 和 dce，直到稳定或达到共享的增长及轮数预算
 - `std::opt::algebra`：就是规则库的化简遍 `rules::simplify`，定律即 `stdlib/rules.cml` 里的规则，一条定律只写一次；`safe_fp=true` 时运行 `rules::simplify strict=true`（设计原则 7.4：严格等价的浮点算式）。默认 `safe_fp=false`，不自动允许降精度、近似函数或任意特殊值假设。它不要求前面先有 `std::opt::fold`；`std::opt` 会先跑 fold，以得到语料对照所用的系数形式。`neutral_only=true` 保留 C++ 对照模式（只做整数单位元）。PowerShell 中带参数的遍须加引号（这是普通的遍参数）；所有参数在运行第一个遍之前校验。
 - `std::opt::fold` / `std::opt::cse` / `std::opt::dce`：分别运行常量折叠、公共子表达式消除、死代码消除
-- `std::opt::order`：顺序边的传递约简——A→B→C 已在时删去 A→C（设计稿 `docs/design/effects/edges.cn.md` 第 5 节第 4 条）；同步边是一条链，没有冗余，不动。CTRL 边还没有从图里删掉，所以在它消失之前这一遍同时继续做控制边的传递约简：删掉被必需的数据/控制路径覆盖的 CTRL 边，保留分支及循环边界、臂锚点，不把未选中的分支当作必需依赖。`std::opt` 的其他阶段结束后默认执行一次
+- `std::opt::order`：顺序边的传递约简——A→B→C 已在时删去 A→C（设计稿 `docs/design/effects/edges.cn.md` 第 5 节第 4 条）；证明路径读顺序边与同一个 `sync` 块的链，同步边本身是一条链、没有冗余且带“用到”，所以从不删掉。CTRL 边还没有从图里删掉，所以在它消失之前这一遍同时继续做控制边的传递约简：删掉被数据路径、`sync` 链或另一条控制路径覆盖的 CTRL 边，保留分支及循环边界、臂锚点，不把未选中的分支当作必需依赖。`std::opt` 的其他阶段结束后默认执行一次
 - `std::inline`（含 `small` / `arm` / `hybrid`）：`std::opt::inline` 及其策略的别名
+- `std::defunctionalize`：把通过函数值的调用降级成对被指函数的直接调用，凡是程序能说出是哪个函数的都降级，剩下的按原样保留。它不是优化遍：不内联、不按常量特化、没有增长预算——它想要闭包消失的流水线里的固定一步（`camel m.cml std::defunctionalize std::opt std::fvm`）。它把函数类型实参持有的那个函数绑进被调函数的一份副本，于是副本里对该形参的调用就是直接调用；在同一个图里构造又调用的闭包由这一遍本来就跑的去虚化降级。它说不出的形式保留通过函数值的调用——各调用点传入多个函数或闭包的形参、被捕获的值在调用处不是值的闭包、从程序外部来的函数值——并由这一遍报出哪个图还留着它、各调用点传的是什么（`RuntimeDiag::DefunctionalizationIncomplete`，`0x04100017`）。它不猜：猜一个调用到达哪个函数会改变哪些效应执行。没有任何调用到达的图（程序只作为函数值留着的那个原函数）不报。
 
 - `std::fvm`：高性能字节码虚拟机调度器
 - `std::jit`：启用即时编译的字节码虚拟机调度器。即时编译器只为 x86-64 生成代码；在其他处理器的构建中（arm64 macOS；`ENABLE_FASTVM_JIT` 关闭）`std::jit` 仍被接受，程序在字节码解释器上运行，与 `std::fvm` 相同，结果一致；该构建在日志里说明一次（`-v`：`std::jit: this build has no native code generator ...`）。这是一条日志而不是警告，所以同一条命令在所有平台上都能运行，`-Werror` 下也一样
@@ -254,7 +256,7 @@
 | 名字 | 代码 | 位置 | 含义 |
 |---|---|---|---|
 | `SemanticDiag::EffectNotExecuted` | `0x03100004` | 调用、赋值或分支 | 它有副作用，但没有东西依赖它，它也不在同步块里，所以永远不会运行。这是合法的（求值由依赖驱动）；报告它是为了让人看到被遗忘的 `sync`。每条被丢弃的链一个警告（`println(log(1))` 报告的是 `println`）。在同步块内从不报告 |
-| `SemanticDiag::IgnoredSideEffect` | `0x03100002` | 调用或分支 | 它写一个变量（`var` 实参，或被捕获的变量），而且不在同步块里：它不排在该变量先前的使用之后 |
+| `SemanticDiag::IgnoredSideEffect` | `0x03100002` | 调用或分支 | 它写一个变量（`var` 实参，或被捕获的变量），而且不在同步块里：写排在它之前的读之后，但没有东西让它运行，所以只有之后有人读这个变量时它才运行 |
 | `RuntimeDiag::PassesNeverRun` | `0x0410000F` | 没有源码位置（属于命令行的问题） | 有遍写在消耗图的遍之后；它们不会运行。与程序的警告一起打印（JSON 模式下是 stderr 数组的最后一个元素） |
 | `RuntimeDiag::ConstantExpressionFaults` | `0x04100015` | 表达式 | `std::opt::fold`（也包括 `std::opt` 内部的）遇到一个操作数全是常量而求值会出故障的表达式（`1 / 0`）。它不被折叠：有没有这个遍，程序的行为相同；运行到达该表达式时，故障连同位置一起报告。在这个遍运行之后打印到 stderr，每个表达式一次，在下一个遍之前 |
 
