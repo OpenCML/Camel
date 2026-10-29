@@ -2,7 +2,7 @@
 
 [English](en/04_execution_model.md) | 中文
 
-> 本章的规则来自 [设计原则](../design-principles.cn.md) 第 2–4 节，冲突时以它为准。
+> 本章的规则来自 [设计原则](../../../../../design-principles.cn.md) 第 2–4 节，冲突时以它为准。
 
 Camel 的程序是一张图。本章说明这张图怎样被求值：按依赖求值、`sync`、`var`、`macro`、故障与退出、遍。
 
@@ -41,7 +41,7 @@ func main(name: string, times: int): int sync {
 Hello, Camel! x2
 ```
 
-详细规则见 [cli.cn.md](../cli.cn.md)“`main` 带参数或有返回值的程序”。
+详细规则见 [cli.cn.md](../../../../../cli.cn.md)“`main` 带参数或有返回值的程序”。
 
 ## 4.2 按依赖求值
 
@@ -74,7 +74,7 @@ help: Evaluation is driven by dependencies: outside a sync block an expression w
 1
 ```
 
-警告输出到标准错误，程序照常运行。用 `-Wno-effect-not-executed` 关闭，用 `-Werror` 把警告当作错误（见 [cli.cn.md](../cli.cn.md)“诊断”）。
+警告输出到标准错误，程序照常运行。用 `-Wno-effect-not-executed` 关闭，用 `-Werror` 把警告当作错误（见 [cli.cn.md](../../../../../cli.cn.md)“诊断”）。
 
 ## 4.3 `sync`
 
@@ -87,7 +87,7 @@ help: Evaluation is driven by dependencies: outside a sync block an expression w
 - 作函数体：`func f(...): T sync { ... }`（`sync` 在返回类型之后）。
 - 作分支臂或 lambda 体：`if c then sync { ... }`、`(x: int) => sync { ... }`。
 - 单独的块语句 `sync { ... }`。注意它本身也是一个表达式：写在非同步的函数体里而值没有被使用时，整个块不执行。
-- **同步块不向内继承**（[设计原则 3.4](../design-principles.cn.md#34-sync-块)）：同步块只管它自己直接写着的语句，写在里面的分支臂、循环体与嵌套块按它们自己的写法执行，要同步就在那里写 `sync`——一个块的含义不随它写在哪里而变。下面这个 `if` 本身在同步链上，它的臂不是：臂按依赖求值，值没有被用到的 `println(1)` 不执行，`println(2)` 是臂的值、也就是 `if` 的值，所以只有它执行。要两句都打印，写 `if c then sync { ... }`：
+- **同步块不向内继承**（[设计原则 3.4](../../../../../design-principles.cn.md#34-sync-块)）：同步块只管它自己直接写着的语句，写在里面的分支臂、循环体与嵌套块按它们自己的写法执行，要同步就在那里写 `sync`——一个块的含义不随它写在哪里而变。下面这个 `if` 本身在同步链上，它的臂不是：臂按依赖求值，值没有被用到的 `println(1)` 不执行，`println(2)` 是臂的值、也就是 `if` 的值，所以只有它执行。要两句都打印，写 `if c then sync { ... }`：
 
 ```cml
 func f(c: bool): int sync {
@@ -194,7 +194,7 @@ func main(): int sync {
 
 ## 4.5 `#macro` 函数
 
-`#macro` 是标准标签（[6.2](../design-principles.cn.md)、[8](../design-principles.cn.md)），写在函数声明前面，不用导入：
+`#macro` 是标准标签（[6.2](../../../../../design-principles.cn.md)、[8](../../../../../design-principles.cn.md)），写在函数声明前面，不用导入：
 
 ```cml
 #macro func cube(x: int): int { return x * x * x }
@@ -271,7 +271,7 @@ error[RuntimeDiag::MaxRecursionDepthExceeded]: Maximum recursion depth (1000) ex
 
 （其后是位置与建议。）
 
-**其他上限**：单张图的节点、块与边表项各不超过 65,535；图空间、永久空间、元空间三块内存各 256 MB，分别由 `CAMEL_GRAPH_SPACE_LIMIT_MB`、`CAMEL_PERM_SPACE_LIMIT_MB`、`CAMEL_META_SPACE_LIMIT_MB` 调整，耗尽时是 `RuntimeDiag::MemoryExhausted`。完整的表见 [cli.cn.md](../cli.cn.md)“资源上限”。
+**其他上限**：单张图的节点、块与边表项各不超过 65,535；图空间、永久空间、元空间三块内存各 256 MB，分别由 `CAMEL_GRAPH_SPACE_LIMIT_MB`、`CAMEL_PERM_SPACE_LIMIT_MB`、`CAMEL_META_SPACE_LIMIT_MB` 调整，耗尽时是 `RuntimeDiag::MemoryExhausted`。完整的表见 [cli.cn.md](../../../../../cli.cn.md)“资源上限”。
 
 ## 4.7 遍与流水线
 

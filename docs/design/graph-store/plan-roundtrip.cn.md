@@ -16,7 +16,7 @@
 4. **优化过的图打不出来**：`camel x.cml std::opt std::cml` 与 `std::opt::inline std::cml` 今天都拒绝，理由是 `Inline` 区域（`cml.cpp#validateGraph`）。第一份计划把这当成给人用的附带功能；按裁决 9.7（改写必须保持源码程序运行的每个效应）它其实是**必须**能打的一条路。
 5. **等价判定器看不见第三种边**：canonical v2 的节点输入只有 `normal`/`context`/`control` 三种（`gir_canonical.cpp#CanonicalDocument::inputsJson`），**没有顺序边**（实测：一个带 `var` 写与同资源效应的程序，整个 canonical 文档里 `order` 出现 0 次；节点字段只有 `callee/id/inputs/kind/payload/type/value`）。图的边重构落地后每个同资源效应对与每个 `var` 写写对都有顺序边，判定器却看不见——**这是假绿的来源**。
 6. **判定器也看不见 `Block` 区域**：canonical 主动**抹掉** `Inline` 与 `Block`（`gir_canonical.cpp#CanonicalDocument::canonicalRegionOf`），而标签是程序的一部分（设计原则 2.5 明说「含区域、写法、标签」）。`Inline` 抹掉是对的（内联体不是另一个程序），`Block` 必须留下。
-7. **与图的边重构的接口是 8 处读今天表示的地方**：`cml.cpp#findEntry`、`cml.cpp#isEffectful`、`cml.cpp#regionReturnsValue`、`cml.cpp#bindLoopCond`、`cml.cpp#expression`（`Gate`/`Sync` 节点）与 `cml.cpp#buildTopo`、`cml.cpp#isEffectful`、`cml.cpp#regionReturnsValue`、`cml.cpp#regionNeedsSync`（`ctrlInputsOf`）。图的边重构删掉 `Ctrl` 这一种类与这两种节点（`edges.cn.md:15, 25, 48`；`README.cn.md:402, 409`）。**打印机今天就是按这些写的**，本计划的第一步就是让它不按这些写（§5）。
+7. **与图的边重构的接口是 8 处读今天表示的地方**：`cml.cpp#findEntry`、`cml.cpp#isEffectful`、`cml.cpp#regionReturnsValue`、`cml.cpp#bindLoopCond`、`cml.cpp#expression`（`Gate`/`Sync` 节点）与 `cml.cpp#buildTopo`、`cml.cpp#isEffectful`、`cml.cpp#regionReturnsValue`（`ctrlInputsOf`）；`cml.cpp#regionNeedsSync` 不在这八处里——它已由 sync 边判定（`syncPredsOf`）。图的边重构删掉 `Ctrl` 这一种类与这两种节点（`edges.cn.md:15, 25, 48`；`README.cn.md:402, 409`）。**打印机今天就是按这些写的**，本计划的第一步就是让它不按这些写（§5）。
 8. **顺序**：先做一个**一个提交就能看证据的竖切片**（三种边 + 端口角色进判定器与打印器视图，§6 的 S3a），再做优化过的图（S3b）、声明（S4）、其余算子与整程序（S5）、与图的边重构合流（S6）。每一步的验收都是「跑一条命令、看三份输出」，不是「看起来更好了」。
 
 ## 1. 今天已经有什么（事实，带提交与位置）
@@ -46,7 +46,7 @@
 | 节点标签/权限掩码 | `GCGraph::hasNodeAttrs()`（`graph.h#GCGraph::hasNodeAttrs`） | `#strict`、`#kernel` | **拒绝** | `trans/cml/refuse/tagged_node.cml` → `std::cml cannot print f: it has node attributes or tags.` |
 | 声明标签（函数/类型/字段/参数） | 运行时图里**没有存放处**；只有前端服务层 `model.h#DeclFacts` 的 `declFacts`。命名一张图的声明标签有：`kGraphRefRule`（`graph.h#GCGraphRefRole`，`#vjp(rule)`） | `#strict`、`#macro`、`#shape`、`#width(32)` | **拒绝/丢失** | 第一份计划 §1.1 实测 `std::jgir` 里这些标签完全不出现；今天 `#macro` 图被 `cml.cpp#validateGraph` 拒绝（38 个用例） |
 | 端口与角色（普通/上下文） | `GCNode` 的输入区（Norm 后 With，`graph.h#GCNode`）；目标模型是「一列带角色的端口」（`edges.cn.md:23-31`） | 形参与 `with <...>` | **能，但按今天的表示读** | `cml.cpp#buildTopo` 分别遍历 `normInputsOf`/`withInputsOf`；canonical 文档里 `context` 角色已存在（实测 `{normal 12, context 1, control 6}`） |
-| 同步边 | 今天：`Ctrl` 输入 + `Gate`/`Sync` 节点（`cml.cpp#findEntry`、`cml.cpp#isEffectful`、`cml.cpp#regionReturnsValue`、`cml.cpp#bindLoopCond`、`cml.cpp#expression`） | `sync { ... }`、函数体后的 `sync` | **能，但从控制边反推** | `regionNeedsSync`（`cml.cpp#regionNeedsSync`）与 `regionReturnsValue`（`cml.cpp#regionReturnsValue`）都读同区域内的控制边；`std::gir` 实测该探针图有 `GATE: 2` 节点、3 条控制边 |
+| 同步边 | 今天：`Ctrl` 输入 + `Gate`/`Sync` 节点（`cml.cpp#findEntry`、`cml.cpp#isEffectful`、`cml.cpp#regionReturnsValue`、`cml.cpp#bindLoopCond`、`cml.cpp#expression`） | `sync { ... }`、函数体后的 `sync` | **能，由 sync 边判定** | `regionNeedsSync`（`cml.cpp#regionNeedsSync`）读同区域内的 sync 边（`syncPredsOf`），`regionReturnsValue`（`cml.cpp#regionReturnsValue`）读同区域内的控制边；`std::gir` 实测该探针图有 `GATE: 2` 节点、3 条控制边 |
 | 顺序边 | `GCGraphOrderEdge`、`orderPredsOf`/`orderEdges`（`graph.h#GCGraphOrderEdge`、`graph.h#GCGraph::orderPredsOf`、`graph.h#GCGraph::orderEdges`、`graph.h#GCGraphNativePayload`）；已参与节点身份（`GCGraph::nodeContentHash`，`graph.cpp#GCGraph::nodeContentHash`） | **没有**（设计稿 `edges.cn.md:42`：从 `sync` 与资源重新推出） | **不打印，也不检查** | 实测：一个 `var x = 1; x = 2; x = 3` + 两个 `println` 的程序，canonical 文档里 `order` 出现 **0** 次；打印器输出 2 个 sync 块、往返判为等价、两侧 stdout 都是 `3\|1\|2` |
 | 分支与臂归属 | `BRCH` + `Arm` 区域（`edges.cn.md:47`：臂只靠区域归属，`BRCH` 与臂之间没有边） | `if`/`match` | **能** | 分支语料打印并等价 |
 | 闭包与函数值 | 函数常量 + `FILL` + `capturePorts` | lambda、被捕获的名字 | **能**（有边界） | 共享的 lambda（一个函数值多处用）与匿名捕获名被拒绝（`cml.cpp#validateGraph`） |
@@ -127,7 +127,7 @@ func main(): int sync { var x = 1
 | 位置 | 读什么 | 图的边重构之后 |
 |---|---|---|
 | `cml.cpp#findEntry`、`cml.cpp#isEffectful`、`cml.cpp#regionReturnsValue`、`cml.cpp#bindLoopCond`、`cml.cpp#expression` | `GCNodeKind::Gate` / `GCNodeKind::Sync` | 两种节点删除（`edges.cn.md:48`） |
-| `cml.cpp#buildTopo`、`cml.cpp#isEffectful`、`cml.cpp#regionReturnsValue`、`cml.cpp#regionNeedsSync` | `ctrlInputsOf(ref)` | `Ctrl` 种类删除，存活只沿数据端口与同步边（`edges.cn.md:15, 19`） |
+| `cml.cpp#buildTopo`、`cml.cpp#isEffectful`、`cml.cpp#regionReturnsValue` | `ctrlInputsOf(ref)` | `Ctrl` 种类删除，存活只沿数据端口与同步边（`edges.cn.md:15, 19`）；`cml.cpp#regionNeedsSync` 不读这一列，它已由 sync 边判定（`syncPredsOf`），不随这一层改 |
 | `cml.cpp#buildTopo` | `normInputsOf` / `withInputsOf` 两个列表 | 合成**一列带角色的端口**（`edges.cn.md:25`） |
 
 **做法（一个视图层，两个实现）**：在 `src/passes/trans/cml/` 里加一个只读视图 `PrintedGraph`，它把运行时图翻译成打印器唯一认识的东西：`ports(node)`（有序，带 `Normal`/`Context` 角色）、`syncPreds(node)`、`orderPreds(node)`、`regionOf(node)`、区域表；打印器其余部分只调视图，不再直接碰 `normInputsOf`/`withInputsOf`/`ctrlInputsOf`/`Gate`/`Sync`。
