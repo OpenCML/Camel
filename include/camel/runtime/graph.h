@@ -556,15 +556,20 @@ class GCUseIndex {
     std::span<const gc_node_ref_t> norm(gc_node_ref_t ref) const { return group(ref, 0); }
     std::span<const gc_node_ref_t> with(gc_node_ref_t ref) const { return group(ref, 1); }
     std::span<const gc_node_ref_t> ctrl(gc_node_ref_t ref) const { return group(ref, 2); }
+    /// The users a sync edge names: the statements written after `ref` in its `sync` block
+    /// (docs/design/effects/edges.cn.md 1.5). Kept beside the input runs' groups because a sync
+    /// edge is not a port.
+    std::span<const gc_node_ref_t> sync(gc_node_ref_t ref) const { return group(ref, 3); }
 
   private:
     std::span<const gc_node_ref_t> group(gc_node_ref_t ref, size_t kind) const {
-        const size_t at = static_cast<size_t>(ref) * 3 + kind;
+        const size_t at = static_cast<size_t>(ref) * kGroups + kind;
         return {users_.data() + begins_[at], begins_[at + 1] - begins_[at]};
     }
 
+    static constexpr size_t kGroups = 4;
     std::vector<gc_node_ref_t> users_;
-    std::vector<uint32_t> begins_; // 3 per node, then the end
+    std::vector<uint32_t> begins_; // kGroups per node, then the end
 };
 
 struct GCGraphDebugRecord;
@@ -837,6 +842,32 @@ class GCGraph : public camel::core::rtdata::Object {
         const gc_off_t end = (ref & (kNodeChunkNodes - 1)) + 1 < chunk.nodeCount ? (n + 1)->inBegin
                                                                                  : chunk.edgeCount;
         return inputRun(ref, n->ctrlBegin, end);
+    }
+
+    /// What the chain makes `ref` wait for, in either kind it is written in: the control inputs and
+    /// the sync predecessors, a pair the two kinds both name counted once (control inputs first,
+    /// then the sync ones not already named). A consumer asking "does this node wait for that one"
+    /// reads this, so that the answer does not depend on which kind carries the wait
+    /// (docs/design/effects/edges.cn.md 1, 1.5).
+    std::vector<gc_node_ref_t> waitInputsOf(gc_node_ref_t ref) const {
+        std::vector<gc_node_ref_t> waits(ctrlInputsOf(ref).begin(), ctrlInputsOf(ref).end());
+        for (const GCGraphSyncEdge &edge : syncPredsOf(ref)) {
+            if (std::find(waits.begin(), waits.end(), edge.pred) == waits.end()) {
+                waits.push_back(edge.pred);
+            }
+        }
+        return waits;
+    }
+    /// The nodes the chain makes wait for `ref`, in either kind, a pair counted once (control users
+    /// first, then the users of a sync edge).
+    std::vector<gc_node_ref_t> waitUsersOf(gc_node_ref_t ref) const {
+        std::vector<gc_node_ref_t> users(uses().ctrl(ref).begin(), uses().ctrl(ref).end());
+        for (gc_node_ref_t user : uses().sync(ref)) {
+            if (std::find(users.begin(), users.end(), user) == users.end()) {
+                users.push_back(user);
+            }
+        }
+        return users;
     }
 
     /// The ports of the one data edge kind, in port order: every normal-role port, then the
