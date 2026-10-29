@@ -67,6 +67,17 @@ class AbstractTreeNode : public std::enable_shared_from_this<AbstractTreeNode<lo
         return *static_cast<node_t *>(this);
     }
 
+    // ------------------ Give a Child Up ------------------
+    /// Hands the child at `index` to the caller: it leaves this container and keeps no parent, so
+    /// the caller may attach it to another one. The other half of `operator<<`, which takes a node
+    /// only while it belongs to no container, and what a builder uses to move a subtree.
+    node_ptr_t takeAt(size_t index) {
+        const node_ptr_t node = children_.at(index);
+        children_.erase(children_.begin() + static_cast<std::ptrdiff_t>(index));
+        node->parent_ = nullptr;
+        return node;
+    }
+
     // ------------------ Index & Size ------------------
     node_ptr_t at(size_t index) const { return children_.at(index); }
     node_ptr_t operator[](size_t index) const { return children_.at(index); }
