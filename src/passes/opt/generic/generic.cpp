@@ -769,11 +769,153 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
         }
     }
 
+    // What the arms that go away read from outside themselves. A branch is used as a whole: it uses
+    // every value its arms read from outside (design principles 3.1), so an effect written outside
+    // the branch runs when the branch runs, whichever arm is taken (3.3). Dropping the arm must not
+    // drop the effect with it (9.7); the nodes are read before the arms are erased, because the
+    // reads are the only thing that names them.
+    std::vector<gc_node_ref_t> outsideReads;
+    {
+        std::vector<gc_node_ref_t> work;
+        for (size_t i = 0; i < regions.size(); ++i) {
+            if (i == *arm) {
+                continue;
+            }
+            for (gc_node_ref_t n : regions[i]) {
+                for (auto group : {draft.normInputsOf(n),
+                                   draft.withInputsOf(n),
+                                   draft.ctrlInputsOf(n),
+                                   draft.syncInputsOf(n)}) {
+                    work.insert(work.end(), group.begin(), group.end());
+                }
+            }
+        }
+        // An arm's code is what its value reads, and an arm whose code is one value read from
+        // outside (an arm written as a name: `if c then a else 0`) has no node of its own in the
+        // region at all: the JOIN reads it through the with-port of that arm.
+        const auto joinValues = draft.withInputsOf(join);
+        for (size_t i = 0; i < regions.size() && i < joinValues.size(); ++i) {
+            if (i != *arm) {
+                work.push_back(joinValues[i]);
+            }
+        }
+        std::vector<bool> queued(draft.nodeSlotCount(), false);
+        while (!work.empty()) {
+            const gc_node_ref_t n = work.back();
+            work.pop_back();
+            if (n >= queued.size() || n == brch || n == join || !draft.alive(n) ||
+                queued[n]) {
+                continue;
+            }
+            queued[n] = true;
+            // What an arm reads is read through the arm's own code as well: the code goes away and
+            // what it read from outside is what has to keep running.
+            if (removed(n)) {
+                for (auto group : {draft.normInputsOf(n),
+                                   draft.withInputsOf(n),
+                                   draft.ctrlInputsOf(n),
+                                   draft.syncInputsOf(n)}) {
+                    work.insert(work.end(), group.begin(), group.end());
+                }
+                continue;
+            }
+            outsideReads.push_back(n);
+        }
+    }
+
     draft.eraseNode(join);
     draft.eraseNode(brch);
     for (gc_node_ref_t n = 0; n < draft.nodeSlotCount(); ++n) {
         if (dropped[n] && draft.header(n)) {
             draft.eraseNode(n);
+        }
+    }
+    // An effect among those reads that only the dropped arm used runs where the branch stood, before
+    // the code that took its place: the branch used it, so it happens whether or not that arm is
+    // taken, and it is the arm's code that runs when the arm is the taken one. The wait is written
+    // on the first thing the surviving code runs -- the taken arm's chain head, or the node that
+    // stands at the branch's place, or the effect the code after the branch reaches first.
+    {
+        std::vector<gc_node_ref_t> lost;
+        for (gc_node_ref_t read : outsideReads) {
+            if (!draft.alive(read)) {
+                continue;
+            }
+            bool stillRead = false;
+            for (auto group : {draft.normUsersOf(read),
+                               draft.withUsersOf(read),
+                               draft.ctrlUsersOf(read),
+                               draft.syncUsersOf(read)}) {
+                stillRead = stillRead || !group.empty();
+            }
+            if (stillRead) {
+                continue;
+            }
+            if (camel::runtime::carriesOrdering(draft, read, true)) {
+                lost.push_back(read);
+                continue;
+            }
+            for (gc_node_ref_t source : orderedSources(draft, read)) {
+                if (std::ranges::find(lost, source) == lost.end()) {
+                    lost.push_back(source);
+                }
+            }
+        }
+        std::vector<gc_node_ref_t> targets;
+        const auto addTarget = [&](gc_node_ref_t n) {
+            if (!draft.alive(n) || std::ranges::find(lost, n) != lost.end()) {
+                return;
+            }
+            if (camel::runtime::carriesOrdering(draft, n, true)) {
+                if (std::ranges::find(targets, n) == targets.end()) {
+                    targets.push_back(n);
+                }
+                return;
+            }
+            for (gc_node_ref_t source : orderedSources(draft, n)) {
+                if (source != n && std::ranges::find(lost, source) == lost.end() &&
+                    std::ranges::find(targets, source) == targets.end()) {
+                    targets.push_back(source);
+                }
+            }
+        };
+        if (armChainHead != kInvalidNodeRef) {
+            addTarget(armChainHead);
+        }
+        addTarget(result);
+        for (gc_node_ref_t user : joinValueUsers) {
+            addTarget(user);
+        }
+        if (targets.empty()) {
+            // Nothing after the branch carries an order (a branch folded to a constant nothing
+            // reads): the wait goes on what reads the branch's place, so the effect still runs
+            // where the branch stood.
+            for (gc_node_ref_t user : joinValueUsers) {
+                if (draft.alive(user) && std::ranges::find(lost, user) == lost.end() &&
+                    std::ranges::find(targets, user) == targets.end()) {
+                    targets.push_back(user);
+                }
+            }
+            const auto *resultHeader =
+                result == kInvalidNodeRef ? nullptr : draft.header(result);
+            if (targets.empty() && resultHeader != nullptr &&
+                resultHeader->kind != GCNodeKind::Data &&
+                std::ranges::find(lost, result) == lost.end()) {
+                targets.push_back(result);
+            }
+        }
+        for (gc_node_ref_t source : lost) {
+            for (gc_node_ref_t target : targets) {
+                // The wait is written only between two nodes that are neither ahead of the other.
+                // A place that reads the effect already runs after it -- it is the effect's own
+                // argument, a gate the effect passes on, or the code the effect calls -- so there
+                // is nothing to order there, and writing the edge would close a cycle of inputs.
+                if (isComputedAfter(draft, target, source) ||
+                    isComputedAfter(draft, source, target)) {
+                    continue;
+                }
+                camel::runtime::appendControlDependency(draft, source, target);
+            }
         }
     }
     // Gates that waited only on the branch now wait on nothing; commit dissolves them.
