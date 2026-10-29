@@ -45,6 +45,15 @@ func main(): int sync {
 
 `std::opt` 的十一个子遍逐个试：只有 `std::opt::specialize` 崩（其余 inline/small/arm/hybrid/devirtualize/fold/algebra/extract/saturate/dce/order 都正常）；`std::opt::specialize` 之后再接 nvm/fvm/jit 都崩。
 
+引入提交是 `dfbc28b6d`（2026-10-26，"Check a call against the value type its written captures give it"）。它的父 `1fba0e063` 上同一个程序**不崩**，而是在封存期报出来：
+
+```
+camel: internal error: Runtime graph 'main' breaks its edge invariants (1 violation(s)):
+  graph 'main' node 2 (10): calls 'f', which returns a float, and is a (float, var int)
+```
+
+坏图 10-26 就已经在了，`1fba0e063` 的封存检查还看得见它；`dfbc28b6d` 把"这个调用该是什么类型"改成用 `callValueTypeOf` 现算，而建图侧也是同一个函数算的，两边永远一致，检查从此对这类坏图失效，崩溃才出现。作者那条报告 10-29 出现，正在此之后。
+
 ## 四、坏在哪
 
 `specializeDirectFuncInDraft`（`src/runtime/draft_inline.cpp:1010`）把 `f<3.0>` 的声明 `with` 参数 `w` 绑成常量，`eraseFormalFromDraft` 调 `GraphDraft::removeWithPort` 把该 `with` 端口删掉——但**没有同时删掉图函数类型里的那条 `with` 参数类型**。于是 `f$spec0` 的 `withPorts` 只剩捕获单元（1 个），而 `funcType()->withTypesCount()` 仍是 1。
