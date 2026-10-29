@@ -104,9 +104,11 @@ class DeadCodePass : public RuntimeGraphRewritePass {
 };
 
 /// std::opt::order: the transitive reduction over a graph's ordering edges (docs/design/effects/
-/// edges.cn.md 5.4). It reduces ORDER edges today and keeps reducing CTRL edges until the
-/// control-edge kind is gone; the commit that removes that kind drops the half here and the CTRL
-/// assertions of test/cases/opt/control_contract.py.
+/// edges.cn.md 5.4). An order edge A -> C goes away when a path of order edges or of one `sync`
+/// block's chain already orders the two ends; sync edges themselves are never dropped. The
+/// control-edge kind is still in the graph, so until it is removed the pass also drops the CTRL
+/// edges a data, sync or control path already orders; the commit that removes that kind drops that
+/// half and the CTRL assertions of test/cases/opt/control_contract.py.
 class OrderReductionPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
