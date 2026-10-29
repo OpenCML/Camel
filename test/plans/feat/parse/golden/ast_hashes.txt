@@ -22,6 +22,7 @@ d544f7fc8cddeb00 ok test/cases/parse/rules/declared.cml
 d75e32b17301d89c ok test/cases/parse/rules/names.cml
 4ef23a2f7fbb399d no test/cases/parse/rules/no_arrow.cml
 baa3930e27b73d91 no test/cases/parse/rules/no_context.cml
+d542042c9ffdf82b ok test/cases/parse/rules/parameters.cml
 fff780ff68187f93 ok test/cases/parse/rules/values.cml
 bed54dbb47861601 no test/cases/parse/rules/when_after_body.cml
 e067b6e6bd567e4e ok test/cases/parse/rulings/doc_comment.cml

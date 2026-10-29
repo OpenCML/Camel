@@ -1075,8 +1075,13 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
                 *list << named;
             }
         }
-        for (size_t i = 0; i < ownParams->size(); ++i) {
-            *list << ownParams->at(i);
+        // The rule's own parameters follow the `with` ones. They come from `ownParams`, a list
+        // the caller builds to hand them over and keeps nothing else of, so each one is taken
+        // out of it before it is attached: a node belongs to the container that lists it and to
+        // no other (tree.h, `operator<<`), and the pair `visitPairedParams` attached to
+        // `ownParams` still has that list as its parent here.
+        while (!ownParams->empty()) {
+            *list << ownParams->takeAt(0);
         }
         return list;
     };
