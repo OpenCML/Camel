@@ -5133,6 +5133,17 @@ node_ptr_t Builder::visitSpreadArg(const AST::node_ptr_t &ast) {
     return spreadNode;
 }
 
+namespace {
+
+/// Whether a body writes a `yield` of its own: not one of a function or a lambda written in it,
+/// whose body is a body of its own (language reference 7.3.1).
+bool writesOwnYield(const AST::node_ptr_t &node);
+/// The first `yield` a body writes of its own (`nullptr` when it writes none): the position a
+/// refusal names, so that what the reader sees is the `yield` that is not lowered yet.
+AST::node_ptr_t firstOwnYield(const AST::node_ptr_t &node);
+
+} // namespace
+
 /*
 FuncData(Ref ref) : FuncType funcType, StmtBlock body ;
 */
@@ -5393,7 +5404,9 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     // result, and its exits are the function's, wherever the function is written.
     const ValueUseScope valueUseScope(*this);
     valueUse_            = {};
-    node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
+    const AST::node_ptr_t &bodyAst = ast->atAs<AST::StmtBlockLoad>(1);
+    node_ptr_t stmtsNode = writesOwnYield(bodyAst) ? visitGeneratorBody(ast, funcType)
+                                                   : visitStmtBlock(bodyAst);
     reportUnusedHead(stmtsNode, whenNode);
     node_ptr_t funcNode = tree_->makeFunc(funcData->ref().toString());
     tree_->setHeadTypeParams(
@@ -5436,6 +5449,381 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         {nodeOrigin(typeNode), nodeOrigin(stmtsNode)});
     LEAVE("FuncData");
     return funcNode;
+}
+
+namespace {
+
+/// Whether a body writes a `yield` of its own: not one of a function or a lambda written in it,
+/// whose body is a body of its own (language reference 7.3.1).
+bool writesOwnYield(const AST::node_ptr_t &node) {
+    if (node == nullptr) {
+        return false;
+    }
+    if (node->type() == AST::LoadType::Stmt) {
+        const auto &load = node->loadAs<AST::StmtLoad>();
+        if (load->stmtType() == AST::StmtType::Func) {
+            return false;
+        }
+        if (load->stmtType() == AST::StmtType::Exit &&
+            node->loadAs<AST::ExitStmtLoad>()->exitType() == AST::ExitType::Yield) {
+            return true;
+        }
+    }
+    if (node->type() == AST::LoadType::Data &&
+        node->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Func) {
+        return false;
+    }
+    for (size_t i = 0; i < node->size(); ++i) {
+        if (writesOwnYield(node->at(i))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+AST::node_ptr_t firstOwnYield(const AST::node_ptr_t &node) {
+    if (node == nullptr) {
+        return nullptr;
+    }
+    if (node->type() == AST::LoadType::Stmt) {
+        const auto &load = node->loadAs<AST::StmtLoad>();
+        if (load->stmtType() == AST::StmtType::Func) {
+            return nullptr;
+        }
+        if (load->stmtType() == AST::StmtType::Exit &&
+            node->loadAs<AST::ExitStmtLoad>()->exitType() == AST::ExitType::Yield) {
+            return node;
+        }
+    }
+    if (node->type() == AST::LoadType::Data &&
+        node->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Func) {
+        return nullptr;
+    }
+    for (size_t i = 0; i < node->size(); ++i) {
+        if (AST::node_ptr_t found = firstOwnYield(node->at(i))) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
+/*
+FuncData(Ref ref) : FuncType funcType, StmtBlock body
+A function whose body writes `yield` hands out a stream (design principles 5.4, language
+reference 7.3.1). Its body is not run where the function is called: the call answers the stream
+value, and each pull runs the body on from where the pull before it stopped.
+
+The machine is the one docs/design/io-concurrency-streams/plan.cn.md slice E describes, with the
+state kept the way this language can keep it:
+  - the `pc` cell says which point of the body the next pull starts from, and the `halt` cell
+    says the pull in hand is done;
+  - every local that lives across a `yield` is a cell of the function's own body (`var` is a
+    resource and a closure captures it by reference: the same cell across pulls, so a closure
+    the body made before a `yield` reads what a later pull wrote);
+  - `step` is one function: a `loop` while `halt == 0` around a branch on `pc`. A stretch with
+    no `yield` runs inside one round of that loop, so a `yield` is the only thing that leaves;
+    the value of a round is the answer of the pull -- the element and the rest of the stream at a
+    `yield`, the state it has had since the last one anywhere else -- and the value of the loop
+    is the answer the pull hands out;
+  - a cell is a node identity and not a type (a value taken out of a struct is not a variable),
+    so the state is not one struct: it is the cells, and the closures hold the handles.
+*/
+node_ptr_t Builder::visitGeneratorBody(
+    const AST::node_ptr_t &funcAst, const FunctionType *funcType) {
+    ENTER("GeneratorBody");
+    const AST::node_ptr_t &bodyAst = funcAst->atAs<AST::StmtBlockLoad>(1);
+    const auto &bodyStmts         = bodyAst->atAs<AST::RepeatedLoad>(0);
+
+    // The head writes the stream type, and it is what says what one `yield` hands out.
+    const auto refuse = [&](const AST::node_ptr_t &atNode) -> void {
+        const AST::node_ptr_t atYield = firstOwnYield(atNode);
+        diags_->of(SemanticDiag::FeatureNotSupported)
+            .at((atYield != nullptr ? atYield : atNode)->load()->tokenRange())
+            .commit("generators");
+        throw BuildAbortException();
+    };
+    Type *exit = funcType->exitType();
+    if (exit == nullptr || exit->code() != TypeCode::Stream) {
+        refuse(bodyStmts->size() > 0 ? bodyStmts->at(0) : bodyAst);
+    }
+    auto *stream           = static_cast<StreamType *>(exit);
+    Type *elemType         = stream->elemType();
+    FunctionType *stepType = stream->stepType();
+    Type *answerType       = TupleType::nullable(TupleType::create({elemType, exit}));
+    const AST::node_ptr_t at = bodyStmts->size() > 0 ? bodyStmts->at(0) : bodyAst;
+    // The generator's head writes the `sync` of its body: the machine's own blocks take the same
+    // one, so a write between two `yield`s is ordered by the same rule as any other (3.4).
+    const bool synced = bodyAst->loadAs<AST::StmtBlockLoad>()->synced();
+
+    const std::string pcName   = "__gen_pc__";
+    const std::string haltName = "__gen_halt__";
+    const std::string outName  = "__gen_out__";
+    const std::string stepName = "__gen_step__";
+
+    const auto intLiteral = [&](int64_t value) {
+        return tree_->makeData(makeDataFromLiteral<int64_t>(value));
+    };
+    const auto mark = [&](const node_ptr_t &node, const AST::node_ptr_t &ast, const char *what) {
+        setOriginFromAst(context_, node, ast, camel::source::OriginKind::GctNode, what);
+        return node;
+    };
+    const auto readCell = [&](const std::string &name) { return tree_->makeDRef(name); };
+    const auto writeCell = [&](const std::string &name, node_ptr_t value) {
+        node_ptr_t link = tree_->makeLink(2);
+        *link << tree_->makeDRef("__assn__") << readCell(name) << value;
+        return link;
+    };
+    const auto equalTo = [&](const std::string &name, int64_t value) {
+        node_ptr_t link = tree_->makeLink(2);
+        *link << tree_->makeDRef("__eq__") << readCell(name) << intLiteral(value);
+        return link;
+    };
+    // The stream value of one pull: a closure over the step function.
+    const auto streamValue = [&]() {
+        node_ptr_t lambda = tree_->makeFunc(std::string());
+        *lambda << tree_->makeType(stepType);
+        node_ptr_t body = makeExec(synced);
+        node_ptr_t call = tree_->makeLink(0);
+        *call << tree_->makeDRef(stepName);
+        node_ptr_t ret = tree_->makeExit(ExitType::Return);
+        *ret << call;
+        *body << ret;
+        *lambda << body;
+        mark(lambda, at, "gct.generator.stream");
+        return lambda;
+    };
+    // The element and the rest of the stream, as one value of `(T, T..)`.
+    const auto pairValue = [&](node_ptr_t elem, node_ptr_t rest) {
+        TupleDataFactory factory;
+        bool dangling       = false;
+        node_ptr_t operands = makeExec(false, true);
+        for (const node_ptr_t &part : {elem, rest}) {
+            auto [data, more] = extractData(part, operands, dangling);
+            factory.add(data);
+        }
+        node_ptr_t node = tree_->makeData(factory.build());
+        if (dangling) {
+            *operands << node;
+            node = operands;
+        }
+        return mark(node, at, "gct.generator.pair");
+    };
+
+    // The cells: `pc`, `halt`, then every local of the body in the order it is written. A
+    // declaration is hoisted only where what it holds does not depend on the point it stands at
+    // -- a constant or a lambda, which reads its cells when it is called and not now.
+    node_ptr_t outer     = makeExec(synced);
+    const auto addCell = [&](const std::string &name, node_ptr_t init, const AST::node_ptr_t &ast) {
+        node_ptr_t vari = tree_->makeVari();
+        node_ptr_t ref  = tree_->makeNRef(name);
+        *ref << init;
+        *vari << ref;
+        mark(vari, ast, "gct.generator.cell");
+        *outer << vari;
+    };
+    const auto hoistable = [](const AST::node_ptr_t &init) {
+        if (init == nullptr) {
+            return true;
+        }
+        if (init->type() != AST::LoadType::Data) {
+            return false;
+        }
+        const auto dataType = init->loadAs<AST::DataLoad>()->dataType();
+        return dataType == AST::DataType::Literal || dataType == AST::DataType::Func ||
+               dataType == AST::DataType::ConstAs;
+    };
+    addCell(pcName, intLiteral(0), at);
+    addCell(haltName, intLiteral(0), at);
+    std::vector<std::string> cellNames = {pcName, haltName};
+    std::vector<size_t> hoisted; // the body's statements that became cells
+    for (size_t i = 0; i < bodyStmts->size(); ++i) {
+        const auto &stmt = bodyStmts->at(i);
+        if (stmt->type() != AST::LoadType::Stmt ||
+            stmt->loadAs<AST::StmtLoad>()->stmtType() != AST::StmtType::Data) {
+            continue;
+        }
+        const auto &decl = stmt->loadAs<AST::DataDeclLoad>();
+        if (decl->refs().size() != 1) {
+            continue;
+        }
+        const auto &inits = stmt->atAs<AST::RepeatedLoad>(1);
+        const AST::node_ptr_t init = inits->size() == 1 ? inits->at(0) : nullptr;
+        if (!hoistable(init)) {
+            continue; // refused where the statement is reached
+        }
+        const std::string name = decl->refs()[0].toString();
+        addCell(name, init != nullptr ? visitData(init) : tree_->makeData(Data::null()), stmt);
+        cellNames.push_back(name);
+        hoisted.push_back(i);
+    }
+
+    // The arms: one per point of the body. Arm 0 is where a pull starts; the others are reached
+    // through `pc`.
+    std::vector<node_ptr_t> arms;
+    const auto newArm = [&]() {
+        arms.push_back(makeExec(synced));
+        mark(arms.back(), at, "gct.generator.arm");
+        return static_cast<int>(arms.size()) - 1;
+    };
+    const int first = newArm();
+    // A round that sets `pc` and goes on in the same pull.
+    const auto jumpTo = [&](int target) {
+        node_ptr_t exec = makeExec(synced);
+        *exec << writeCell(pcName, intLiteral(target));
+        *exec << readCell(outName);
+        mark(exec, at, "gct.generator.jump");
+        return exec;
+    };
+    // The pull is done, and what it hands out is `out` (the answer a `yield` wrote, or null at
+    // the end of the stream).
+    const auto stopHere = [&](node_ptr_t &exec) {
+        *exec << writeCell(haltName, intLiteral(1));
+        *exec << readCell(outName);
+    };
+
+    // Fills the arm `pc` with `stmts[from..]`; after them the body goes on at the arm `next`
+    // (-1: the stream ends there).
+    std::function<void(int, const AST::node_ptr_t &, size_t, int)> fill =
+        [&](int pc, const AST::node_ptr_t &stmts, size_t from, int next) {
+            node_ptr_t exec = arms[static_cast<size_t>(pc)];
+            pushScope();
+            for (size_t i = from; i < stmts->size(); ++i) {
+                const auto &stmt = stmts->at(i);
+                const bool isStmt =
+                    stmt->type() == AST::LoadType::Stmt;
+                const auto stmtType =
+                    isStmt ? stmt->loadAs<AST::StmtLoad>()->stmtType() : AST::StmtType::Expr;
+                if (isStmt && stmtType == AST::StmtType::Exit &&
+                    stmt->loadAs<AST::ExitStmtLoad>()->exitType() == AST::ExitType::Yield) {
+                    // The answer: the element and the stream that continues after this point.
+                    const auto &values = stmt->atAs<AST::RepeatedLoad>(0);
+                    if (values->size() != 1) {
+                        refuse(stmt);
+                    }
+                    const int resume = newArm();
+                    fill(resume, stmts, i + 1, next);
+                    *exec << writeCell(pcName, intLiteral(resume));
+                    *exec << writeCell(haltName, intLiteral(1));
+                    node_ptr_t elem = declaredValue(visitData(values->front()), elemType, stmt);
+                    // The value of the round is the answer of the pull: a `return` is written
+                    // only in the step function's own body
+                    // (docs/design/io-concurrency-streams/plan.cn.md, slice E), so the element
+                    // and the rest of the stream are the arm's value.
+                    *exec << pairValue(elem, streamValue());
+                    popScope();
+                    return;
+                }
+                if (isStmt && stmtType == AST::StmtType::Exit) {
+                    // `return`: the stream ends, without a value of its own.
+                    stopHere(exec);
+                    popScope();
+                    return;
+                }
+                if (isStmt && stmtType == AST::StmtType::Data) {
+                    // A local of the body that became a cell: its cell is written already.
+                    if (std::find(hoisted.begin(), hoisted.end(), i) != hoisted.end()) {
+                        continue;
+                    }
+                }
+                if (writesOwnYield(stmt)) {
+                    // A branch, or a loop, or a `match` with a `yield` in it: each point of
+                    // those has to be an arm of its own, which is the next step of the plan.
+                    const bool isIf =
+                        isStmt && stmtType == AST::StmtType::Expr && stmt->size() > 0 &&
+                        stmt->at(0)->type() == AST::LoadType::Data &&
+                        stmt->at(0)->loadAs<AST::DataLoad>()->dataType() == AST::DataType::IfExpr;
+                    if (!isIf) {
+                        refuse(stmt);
+                    }
+                    const auto &ifAst = stmt->at(0);
+                    const int after   = newArm();
+                    fill(after, stmts, i + 1, next);
+                    const int thenPc = newArm();
+                    fill(thenPc, ifAst->atAs<AST::StmtBlockLoad>(1)->atAs<AST::RepeatedLoad>(0), 0, after);
+                    const int elsePc = newArm();
+                    const auto &elseBlock = ifAst->optAtAs<AST::StmtBlockLoad>(2);
+                    if (elseBlock) {
+                        fill(elsePc, elseBlock->atAs<AST::RepeatedLoad>(0), 0, after);
+                    } else {
+                        *arms[static_cast<size_t>(elsePc)] << jumpTo(after);
+                    }
+                    node_ptr_t brch = tree_->makeBrch();
+                    *brch << visitData(ifAst->atAs<AST::DataLoad>(0));
+                    node_ptr_t trueCase = tree_->makeCase(CaseType::True);
+                    *trueCase << jumpTo(thenPc);
+                    node_ptr_t elseCase = tree_->makeCase(CaseType::Else);
+                    *elseCase << jumpTo(elsePc);
+                    *brch << trueCase << elseCase;
+                    mark(brch, stmt, "gct.generator.branch");
+                    *exec << brch;
+                    popScope();
+                    return;
+                }
+                *exec << visitStmt(stmt);
+            }
+            if (next >= 0) {
+                *exec << writeCell(pcName, intLiteral(next));
+                *exec << readCell(outName);
+            } else {
+                stopHere(exec);
+            }
+            popScope();
+        };
+    fill(first, bodyStmts, 0, -1);
+
+    // `step`: one round of the loop runs the arm `pc` names, until one of them answers.
+    node_ptr_t stepBody = makeExec(synced);
+    *stepBody << writeCell(haltName, intLiteral(0));
+    // Every cell is read here, before any arm names `step` again: a closure holds the captures
+    // its function had when it was made, so a capture made later could not be passed on.
+    for (size_t i = 0; i < cellNames.size(); ++i) {
+        node_ptr_t touch = tree_->makeNRef("__gen_touch__" + std::to_string(i));
+        *touch << readCell(cellNames[i]);
+        *stepBody << touch;
+    }
+    node_ptr_t loopNode =
+        tree_->makeLoop(camel::core::LoopKind::While, {outName}, std::string());
+    mark(loopNode, at, "gct.generator.loop");
+    *loopNode << declaredValue(tree_->makeData(Data::null()), answerType, at);
+    node_ptr_t condition = makeExec();
+    *condition << equalTo(haltName, 0);
+    *loopNode << condition;
+    node_ptr_t round = makeExec(synced);
+    node_ptr_t chain = nullptr;
+    for (size_t pc = arms.size(); pc-- > 0;) {
+        node_ptr_t brch = tree_->makeBrch();
+        *brch << equalTo(pcName, static_cast<int64_t>(pc));
+        node_ptr_t trueCase = tree_->makeCase(CaseType::True);
+        *trueCase << arms[pc];
+        node_ptr_t elseCase = tree_->makeCase(CaseType::Else);
+        if (chain == nullptr) {
+            node_ptr_t end = makeExec(synced);
+            stopHere(end);
+            *elseCase << end;
+        } else {
+            node_ptr_t wrapper = makeExec(synced);
+            *wrapper << chain;
+            *elseCase << wrapper;
+        }
+        *brch << trueCase << elseCase;
+        mark(brch, at, "gct.generator.select");
+        chain = brch;
+    }
+    *round << chain;
+    *loopNode << round;
+    *stepBody << loopNode;
+    node_ptr_t stepFunc = tree_->makeFunc(stepName);
+    mark(stepFunc, funcAst, "gct.generator.step");
+    *stepFunc << tree_->makeType(stepType) << stepBody;
+    *outer << stepFunc;
+    node_ptr_t ret = tree_->makeExit(ExitType::Return);
+    *ret << streamValue();
+    mark(ret, funcAst, "gct.generator.return");
+    *outer << ret;
+    LEAVE("GeneratorBody");
+    return outer;
 }
 
 /*
