@@ -1,0 +1,26 @@
+/**
+ * A `#cpu` block between two device regions (docs/design/gpu/plan.cn.md 2.4 and 3.2): the label
+ * says where the statements run, so the value the block reads is written back for it and the value
+ * it writes goes back to the device. `TILES_RESIDENCY` names both boundaries -- two downloads (the
+ * block reads the two device values it works on) and one upload (the value it writes) -- and the
+ * program's own number is the untagged program's: the label changes where the work runs, never what
+ * it computes.
+ */
+
+import { reshape, sum } from tensor
+
+#gpu
+func step(x: f32[2]): f32[2] sync {
+    let y = x + x
+    var out: f32[2] = y
+    #cpu {
+        sync { out = (y + y) as f32[2] }
+    }
+    return (out + out) as f32[2]
+}
+
+func main(): int sync {
+    let x = reshape<[2]>([1.0, 2.0] as f32[])
+    println(sum(step(x)))
+    return 0
+}

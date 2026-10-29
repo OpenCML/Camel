@@ -699,6 +699,17 @@ expect_stdout_contains = ["2.72"]
 timeout_ms = 30000
 
 [[tests]]
+name = "resident_cpu_block"
+desc = "A `#cpu` block between two device regions is a boundary, and the residency conclusion names it: the block reads two device values (two downloads) and writes one (one upload), with nothing per round, and the program's number is the untagged program's."
+kind = "behavior"
+case = "../../../cases/modules/tiles/resident_cpu_block.cml"
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+expect_output_contains = ['"downloads":2,"graph":"step","per_round":0,"uploads":1', "24.0"]
+timeout_ms = 30000
+
+[[tests]]
 name = "placement.query"
 desc = "The placement query resolves a node from its own fact, then the nearest tagged region, then the function body. `tiles::compile` prints the answer as one TILES_PLACEMENT JSON line per graph; the pass still does not choose an executor. A nested `#cpu` block overrides an outer `#gpu` block, an untagged function is the host, and a `#gpu` body is a device unit with a host escape inside it."
 kind = "behavior"
