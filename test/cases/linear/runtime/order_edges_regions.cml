@@ -1,0 +1,37 @@
+// An order edge never enters a control region (docs/design/effects/edges.cn.md 4.6): an arm and a
+// part of a loop run as a whole with the node that owns the region, so the order such a region has
+// with the code around it hangs on that node -- the `BRCH` or the `LOOP` -- and not on a node
+// inside the region. An edge written inside a region would tie the two regions' execution together,
+// which is what "dependencies are counted by region" (design principles 3.1) forbids.
+//
+// The three shapes below are the ones that used to write the edge in the wrong place; the test
+// asserts what the graph looks like and what every backend runs.
+
+// 1. Two arms, each writing the same variable and each effecting the same resource, with two
+//    writes inside the first arm. The read `a = x` before the branch feeds the branch's condition,
+//    so the data path already orders the BRCH: no order edge is written at all.
+//
+// 2. A read the branch's condition does not feed (`b = y`): the write inside the arm has to see the
+//    value from before the write, so the order edge is written -- on the BRCH.
+//
+// 3. A read before a loop whose body writes the same variable (`d = z`): the LOOP carries it. The
+//    body writes the value the variable already has, so what this program returns does not depend
+//    on when the read of the cell runs (the cell is shared with the loop; the read's data edge is
+//    the cell's, so its timing is the graph's business, not this program's).
+func main(): int sync {
+    var x = 1
+    let a = x
+    println(9)
+    if a > 0 then sync { x = 3; x = 4; println(1); println(2) } else sync { x = 5; println(3) }
+
+    var y = 10
+    let b = y
+    let c = 2 > 1
+    if c then sync { y = 30 } else sync { y = 40 }
+
+    var z = 5
+    let d = z
+    let n = loop k = 0 while k < 2 do sync { z = 5; println(k); k + 1 }
+
+    return x + b + y + d + z + n
+}
