@@ -308,12 +308,6 @@ void DebugMap::registerPcOrigin(size_t pc, origin_id_t origin) {
     }
 }
 
-void DebugMap::registerRuntimeGraphOrigin(uintptr_t runtimeGraphKey, origin_id_t origin) {
-    if (runtimeGraphKey != 0 && origin != kInvalidOriginId) {
-        runtimeGraphOrigins_[runtimeGraphKey] = origin;
-    }
-}
-
 origin_id_t DebugMap::graphOrigin(camel::runtime::GraphId graph) const {
     auto it = graphOrigins_.find(graph);
     return it == graphOrigins_.end() ? kInvalidOriginId : it->second;
@@ -327,11 +321,6 @@ origin_id_t DebugMap::nodeOrigin(const std::string &nodeId) const {
 origin_id_t DebugMap::pcOrigin(size_t pc) const {
     auto it = pcOrigins_.find(pc);
     return it == pcOrigins_.end() ? kInvalidOriginId : it->second;
-}
-
-origin_id_t DebugMap::runtimeGraphOrigin(uintptr_t runtimeGraphKey) const {
-    auto it = runtimeGraphOrigins_.find(runtimeGraphKey);
-    return it == runtimeGraphOrigins_.end() ? kInvalidOriginId : it->second;
 }
 
 void OriginSemanticMap::registerBundle(origin_id_t origin, SemanticBundle bundle) {
