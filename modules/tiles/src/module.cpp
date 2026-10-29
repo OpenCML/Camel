@@ -592,8 +592,14 @@ slot_t runPreferredResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) 
     return runResidentPrepared(with, std::move(program));
 }
 slot_t deviceKernel(ArgsView &, ArgsView &, Context &) {
+    // The declaration is `() => string!`, so what the call answers is a value of the tagged form:
+    // the description goes in the value half of the two-field tuple (docs/technical/
+    // 29_nullable_and_fallible_values.md). A bare string slot would answer a value whose first
+    // word is read as the tag, which is neither "a value" nor "failed".
+    static const TupleType *resultType = TupleType::fallible(Type::String());
     try {
-        return td::toSlot(::String::from(deviceInfo(), core::mm::autoSpace()));
+        return td::makeOk(
+            td::toSlot(::String::from(deviceInfo(), core::mm::autoSpace())), resultType);
     } catch (const BackendUnavailable &e) {
         // This build or this machine having no device is not a broken run: the call answers an
         // error value of kind `DeviceUnavailable` and the caller decides how to report it. An

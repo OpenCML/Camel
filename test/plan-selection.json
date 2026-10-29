@@ -159,14 +159,14 @@
             "plans": ["smoke", "feat/compile", "feat/trans", "feat/linear"]
         },
         {
-            "comment": "Tiles, the module: the CPU plan, the three GPU plans (all slow, so they are named as plan files and run in full even under --tier fast), the profile plan, and the DDPM plan whose training cases are written against tiles. A module change can invalidate every consumer, and the GPU plans are what no directory rule could reach before.",
+            "comment": "Tiles, the module: the CPU plan, the three GPU plans (all slow, so they are named as plan files and run in full even under --tier fast), the profile and reading plans, and the DDPM plan whose training cases are written against tiles. A module change can invalidate every consumer, and the GPU plans are what no directory rule could reach before.",
             "paths": ["modules/tiles/"],
-            "plans": ["feat/modules/tiles.plan.toml", "gpu/tiles.plan.toml", "gpu/tiles_rows.plan.toml", "gpu/tiles_transfer.plan.toml", "gpu/profile.plan.toml", "feat/modules/ddpm_primitives.plan.toml"]
+            "plans": ["feat/modules/tiles.plan.toml", "gpu/tiles.plan.toml", "gpu/tiles_rows.plan.toml", "gpu/tiles_transfer.plan.toml", "gpu/profile.plan.toml", "gpu/reading.plan.toml", "feat/modules/ddpm_primitives.plan.toml"]
         },
         {
-            "comment": "A tiles case: the CPU plan is the directory mirror, and the DDPM and profile plans read some of these cases. The three GPU plans are slow (88 tests) and are added only for the cases they name (`ownCases`): a case edit cannot invalidate a GPU plan that does not run it, which is what kept a one-case edit running a whole GPU plan in full. The GPU plan that shares a case with a fast plan is recorded in `slowCaseOwners`.",
+            "comment": "A tiles case: the CPU plan is the directory mirror, and the DDPM, profile and reading plans read some of these cases. The three GPU plans are slow (88 tests) and are added only for the cases they name (`ownCases`): a case edit cannot invalidate a GPU plan that does not run it, which is what kept a one-case edit running a whole GPU plan in full. The GPU plan that shares a case with a fast plan is recorded in `slowCaseOwners`.",
             "paths": ["test/cases/modules/tiles/", "test/cases/gpu/"],
-            "plans": ["feat/modules/tiles.plan.toml", "feat/modules/ddpm_primitives.plan.toml", "gpu/profile.plan.toml", { "plan": "gpu/tiles.plan.toml", "ownCases": true }, { "plan": "gpu/tiles_rows.plan.toml", "ownCases": true }, { "plan": "gpu/tiles_transfer.plan.toml", "ownCases": true }]
+            "plans": ["feat/modules/tiles.plan.toml", "feat/modules/ddpm_primitives.plan.toml", "gpu/profile.plan.toml", "gpu/reading.plan.toml", { "plan": "gpu/tiles.plan.toml", "ownCases": true }, { "plan": "gpu/tiles_rows.plan.toml", "ownCases": true }, { "plan": "gpu/tiles_transfer.plan.toml", "ownCases": true }]
         },
         {
             "comment": "The ONNX exporter. `layer` is true because the plan's four slow cases are ONNX Runtime and PyTorch comparisons: under --tier fast the fast exporter tests run and those are filtered; --tier all runs them. `feat/trans` holds the dumps that print the exported graph. `onnx_with_forms` pins the three call forms of `export_model`'s `with` list (only `out`; `out` with `target`; `out` with `dynamic_axes`), one case under `test/cases/modules/onnx/with_forms/` each.",

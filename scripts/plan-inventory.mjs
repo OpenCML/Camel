@@ -31,10 +31,15 @@ import { expandSweeps, loadPlanTests, testTier } from '../test/tools/run-tests.m
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
-// The fast layer. `smoke` + `feat` are what `npm run test` walks; `gpu/profile` is fast-tier but
-// under `gpu/`, which neither the fast target nor the slow list reaches -- it would otherwise be
-// as invisible as the rest of `gpu/**` was before the slow layer existed.
-export const FAST_TARGETS = ['smoke', 'test/plans/feat', 'test/plans/gpu/profile.plan.toml']
+// The fast layer. `smoke` + `feat` are what `npm run test` walks; `gpu/profile` and `gpu/reading`
+// are fast-tier but under `gpu/`, which neither the fast target nor the slow list reaches -- they
+// would otherwise be as invisible as the rest of `gpu/**` was before the slow layer existed.
+export const FAST_TARGETS = [
+    'smoke',
+    'test/plans/feat',
+    'test/plans/gpu/profile.plan.toml',
+    'test/plans/gpu/reading.plan.toml',
+]
 
 // The slow layer, by explicit plan file. Fourteen files: six fast plans whose slow tests
 // are runnable, five whole slow plans, and three perf plans the tree keeps gate-able -- the
