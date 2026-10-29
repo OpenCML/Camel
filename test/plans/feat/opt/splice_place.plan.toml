@@ -1,0 +1,173 @@
+id = "opt.splice_place"
+order = 332
+tier = "fast"
+tags = ["feat", "opt", "control"]
+
+# The place the splice takes back from the chain (`resolvePlaceForks`,
+# src/runtime/draft_inline.cpp). A call that heads its block has no sync predecessor while it does
+# have the statement the block's chain names after it, and the splice used to fall back to the
+# control followers whenever the predecessors were missing -- so every node that merely waited on
+# the call (a read of a `var` it writes, a gate carrying the block's value, the tuple a `let` takes
+# apart) was given a place in the chain beside that one statement. One statement with three such
+# followers is a chain that forks, which is no chain (docs/design/effects/edges.cn.md 5.3), and the
+# seal reported it as an internal error of the pass.
+#
+# These are the three programs of the whole corpus that reached it. What is locked here: the
+# statement the sync edge names follows the body's tail, the nodes that only waited on the call go
+# on waiting on what the call became, the seal reports no fork, and the values are the ones the
+# program computes with nothing but the executor -- to the byte, on every back end.
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+# Three arguments of one `println` are calls of a function with a `with <var>` parameter; each
+# splice left the `:var/peek` and the block's gate beside the statement that really follows.
+
+[[tests]]
+name = "var_parameter.reference"
+case = "../../../cases/consistency/partial_application/var_parameter.cml"
+desc = "The values with nothing but the executor: three calls through a `with <var>` partial application, and the accumulator after them."
+expect_stdout_exact = "1 3 6 6\n16 16\n"
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+args = ["${case}", "${backend}"]
+
+[[tests]]
+name = "var_parameter.opt"
+case = "../../../cases/consistency/partial_application/var_parameter.cml"
+desc = "`std::opt` inlines the three calls: the chain of the block keeps one follower per statement and the values do not change."
+expect_stdout_exact = "1 3 6 6\n16 16\n"
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+args = ["${case}", "std::opt", "${backend}"]
+
+[[tests]]
+name = "var_parameter.opt_twice"
+case = "../../../cases/consistency/partial_application/var_parameter.cml"
+desc = "The same graph through the pass twice: the second round finds nothing left to splice and no fork to report."
+expect_stdout_exact = "1 3 6 6\n16 16\n"
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+args = ["${case}", "std::opt", "std::opt", "${backend}"]
+
+[[tests]]
+name = "var_parameter.opt_inline"
+case = "../../../cases/consistency/partial_application/var_parameter.cml"
+desc = "`std::opt::inline` alone splices the same bodies and writes the same chain."
+expect_stdout_exact = "1 3 6 6\n16 16\n"
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+args = ["${case}", "std::opt::inline", "${backend}"]
+
+# The call that builds the `tee` is destructured by a `let`, so the statement the chain names after
+# it is the `accs` that takes the tuple apart, while the two `println`s after it waited on the call
+# through the control kind alone.
+
+[[tests]]
+name = "tee_result_is_tuple.reference"
+case = "../../../cases/compile/stream/tee_result_is_tuple.cml"
+desc = "Both sides of a `tee` see all three elements with nothing but the executor."
+expect_stdout_exact = "6\n6\n"
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+args = ["${case}", "${backend}"]
+
+[[tests]]
+name = "tee_result_is_tuple.opt"
+case = "../../../cases/compile/stream/tee_result_is_tuple.cml"
+desc = "`std::opt` inlines the stream helpers: the chain of the block keeps one follower per statement and both sides still see all three elements."
+expect_stdout_exact = "6\n6\n"
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+args = ["${case}", "std::opt", "${backend}"]
+
+[[tests]]
+name = "tee_result_is_tuple.opt_twice"
+case = "../../../cases/compile/stream/tee_result_is_tuple.cml"
+desc = "The same graph through the pass twice: the second round finds nothing left to splice and no fork to report."
+expect_stdout_exact = "6\n6\n"
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+args = ["${case}", "std::opt", "std::opt", "${backend}"]
+
+[[tests]]
+name = "tee_result_is_tuple.opt_inline"
+case = "../../../cases/compile/stream/tee_result_is_tuple.cml"
+desc = "`std::opt::inline` alone splices the same bodies and writes the same chain."
+expect_stdout_exact = "6\n6\n"
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+args = ["${case}", "std::opt::inline", "${backend}"]
+
+# The timed loop sits in an arm of a branch, and the place the splice writes for the body's tail is
+# the one the branch's `brch` gave it. The program's own `println` is not in a sync block and nothing
+# depends on it, so its value is never printed: stdout carries the helper's twenty measured rounds
+# and nothing else. What is compared is the shape of those lines -- the round they belong to and the
+# six decimals the timer reports, with the number itself swept out -- the exit code that says the
+# warm-up value and the average and the margin are sane, and the absence of a refused graph.
+
+[[tests]]
+name = "perf_fib_smoke.reference"
+case = "../../../cases/linear/jit/perf_fib_smoke.cml"
+desc = "The timed helper's twenty rounds with nothing but the executor: the numbers are the measurement, the lines and the exit code are the behavior."
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code"]
+args = ["${case}", "${backend}"]
+verify_script = """
+({ input, assert }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    assert(!input.normalized.stderr.includes('PassInternalError'), 'the graph was refused by the seal')
+    const lines = input.normalized.stdout.split('\n').filter((line) => line.length > 0)
+    assert(lines.length === 20, `expected the 20 measured rounds, got ${lines.length}`)
+    for (let i = 0; i < lines.length; i += 1) {
+        const round = String(20 - i).padStart(3)
+        const shape = lines[i].replace(/[0-9]+\.[0-9]{6}/g, '<T>')
+        assert(shape === `[${round}] <T> s`, `round ${20 - i} is '${lines[i]}'`)
+    }
+}
+"""
+
+[[tests]]
+name = "perf_fib_smoke.opt"
+case = "../../../cases/linear/jit/perf_fib_smoke.cml"
+desc = "`std::opt` inlines the closure the helper is given: the seal reports no fork, and the run still reports the twenty rounds and exits 0."
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code"]
+args = ["${case}", "std::opt", "${backend}"]
+verify_script = """
+({ input, assert }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    assert(!input.normalized.stderr.includes('PassInternalError'), 'the pass built a graph the seal refused')
+    const lines = input.normalized.stdout.split('\n').filter((line) => line.length > 0)
+    assert(lines.length === 20, `expected the 20 measured rounds, got ${lines.length}`)
+    for (let i = 0; i < lines.length; i += 1) {
+        const round = String(20 - i).padStart(3)
+        const shape = lines[i].replace(/[0-9]+\.[0-9]{6}/g, '<T>')
+        assert(shape === `[${round}] <T> s`, `round ${20 - i} is '${lines[i]}'`)
+    }
+}
+"""
+
+[[tests]]
+name = "perf_fib_smoke.opt_twice"
+case = "../../../cases/linear/jit/perf_fib_smoke.cml"
+desc = "The same graph through the pass twice: the second round finds nothing left to splice and no fork to report."
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code"]
+args = ["${case}", "std::opt", "std::opt", "${backend}"]
+verify_script = """
+({ input, assert }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    assert(!input.normalized.stderr.includes('PassInternalError'), 'the pass built a graph the seal refused')
+    const lines = input.normalized.stdout.split('\n').filter((line) => line.length > 0)
+    assert(lines.length === 20, `expected the 20 measured rounds, got ${lines.length}`)
+    for (let i = 0; i < lines.length; i += 1) {
+        const round = String(20 - i).padStart(3)
+        const shape = lines[i].replace(/[0-9]+\.[0-9]{6}/g, '<T>')
+        assert(shape === `[${round}] <T> s`, `round ${20 - i} is '${lines[i]}'`)
+    }
+}
+"""

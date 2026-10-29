@@ -437,6 +437,20 @@
             "plans": ["feat/consistency/print_formats.plan.toml"]
         },
         {
+            "comment": "The tuple-expansion program whose splice refuses to move a statement: its own directory resolves to feat/compile/static_expansion.plan.toml, which does not run opt.sync_chain, so that plan would be one --changed can never reach. Name the plan whose test it is.",
+            "paths": ["test/cases/compile/static_expansion/static_tuple_indices.cml"],
+            "plans": ["feat/opt/sync_chain.plan.toml"]
+        },
+        {
+            "comment": "The three programs the splice left forked: their own directories resolve to feat/consistency, feat/compile/stream and feat/linear, none of which runs opt.splice_place. Name the plan whose tests they are.",
+            "paths": [
+                "test/cases/consistency/partial_application/var_parameter.cml",
+                "test/cases/compile/stream/tee_result_is_tuple.cml",
+                "test/cases/linear/jit/perf_fib_smoke.cml"
+            ],
+            "plans": ["feat/opt/splice_place.plan.toml"]
+        },
+        {
             "comment": "The compiler benchmark's smoke test (benchmarks/compile/bench.py) is feat/tools/compile_bench: a change to its case must select the plan that runs it. The rest of benchmarks/ stays the manual perf layer, as the rule-less allowlist says.",
             "paths": ["benchmarks/compile/"],
             "plans": ["feat/tools/compile_bench.plan.toml"]

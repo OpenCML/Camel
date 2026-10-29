@@ -2139,9 +2139,22 @@ DraftInlineResult inlineCallableInDraft(
     // side of the region, and the chain it stands in is the one the branch's place entered: without
     // reading that place the body would be handed nothing to enter its chain from.
     std::vector<gc_node_ref_t> placePreds = callSyncInputs;
-    std::vector<gc_node_ref_t> placeUsers  = callSyncUsers;
     if (placePreds.empty()) {
         placePreds = ctrlPreds;
+    }
+    // The statement written after the call is the one its sync edge names, and only that one: a sync
+    // edge is what says one statement is written directly after another of its block
+    // (docs/design/effects/edges.cn.md 1.5, 4.6), and a block's statements are one chain (5.3). The
+    // call can have more nodes waiting on it than that -- a read of a `var` it writes, a gate
+    // carrying the block's value, the tuple a `let` takes apart -- and those wait on it as an order,
+    // not as the block's next statement: `replaceAllCtrlUses` above has already given each of them
+    // the body's completion to wait on, so they keep their place and are not written into the
+    // chain. Taking them from the control side as well hands the body's tail several sync
+    // followers, and a statement with two followers is a chain that forks, which is no chain. The
+    // control side is what names the successors only for a call that has no sync edge either way,
+    // where there is nothing else to read them from.
+    std::vector<gc_node_ref_t> placeUsers = callSyncUsers;
+    if (placePreds.empty() && placeUsers.empty()) {
         placeUsers = callFollowers;
     }
     if (bodyHasChain && !placePreds.empty() && draft.alive(bodyHead) && draft.alive(bodyTail)) {
@@ -2160,10 +2173,7 @@ DraftInlineResult inlineCallableInDraft(
         };
         // The statements written after the call follow the body's tail. `closeChainOver` closed the
         // chain over the call above, so they follow what the call followed until this takes that
-        // place back from it. They are read on the same side as the place above: a call that stands
-        // in its block by the control edge alone has its followers named by control edges too, and
-        // leaving them on the call's place would give that statement two sync users -- a chain that
-        // forks, which is no chain.
+        // place back from it.
         for (gc_node_ref_t user : placeUsers) {
             if (user == funcNodeId || !draft.alive(user) || user == bodyHead || user == bodyTail) {
                 continue;
