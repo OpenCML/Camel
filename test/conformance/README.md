@@ -35,6 +35,10 @@ A red run prints one line per failure under the column that owns it:
 [conformance]   case 'same_resource_order', nvm: expected exit 9, stdout "9\n0\n", actual exit 9, stdout "0\n9\n" (3.3, ...)
 ```
 
+Every run -- green or red -- prints the seven limits below ("What this gate does not cover") as
+one line each, before the columns, so a log on its own says what the reading it records does not
+prove.
+
 ## The three columns
 
 | column | what it compares |
@@ -48,6 +52,15 @@ on whether it was optimized, so `cases.json` records it once and a case that nee
 different readings is itself the defect the middle column reports. The optional `reading_after`
 field exists only so that a study that has genuinely recorded two model runs can compare them; the
 cases here do not set it.
+
+**The columns do not fail independently, and that is the design.** A wrong reading reddens
+**before** and **after** together, because both compare a run with the same record; a wrong
+`reading_after` reddens **across** and **after**, because the middle column owns the comparison of
+the two records and the right column owns the one of the second record. The middle column is
+therefore never red on its own: it states a property of the record and of the two runs, not a third
+independent measurement, and every per-back-end failure it reports is also a failure of one of the
+outer columns. A red run that names one column only is a wrong `case`, `exit` or `optimized` entry
+on the side that column reads.
 
 Standard output is normalized with the runner's own normalizers (`strip_ansi`,
 `normalize_newlines`, `trim_trailing_space`), so the comparison is the one the plan runner makes.
