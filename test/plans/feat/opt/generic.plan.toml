@@ -1818,3 +1818,35 @@ expect_exit = 0
 expect_stdout_exact = "round 1\nround 2\nround 3\nround 4\ncounted 5\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+[[tests]]
+name = "hang_branch_00017.reference"
+desc = "The corpus program std::opt hung on (`branch_00017`, Kogler7/Camel-Archive, ICPC2027/study/e2-generated/gn-suspect/S3-opt-hang) does its five calls: a loop over a constant range runs its four rounds and the branch whose test is a constant takes its `else` arm, so every call yields 0.020604834. This is the reading the passes below must keep."
+kind = "behavior"
+case = "../../../cases/opt/generic/hang_branch_00017.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "@CALL 0\n@OUT 0.020604833960533142\n@CALL 1\n@OUT 0.020604833960533142\n@CALL 2\n@OUT 0.020604833960533142\n@CALL 3\n@OUT 0.020604833960533142\n@CALL 4\n@OUT 0.020604833960533142\n@END\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "hang_branch_00017.simplify_nvm"
+desc = "std::opt keeps the rounds of the loop over a constant range in `branch_00017` and the arm the constant test selects, so the five calls of the corpus program still yield 0.020604834 and the run ends."
+kind = "behavior"
+case = "../../../cases/opt/generic/hang_branch_00017.cml"
+args = ["${case}", "std::opt", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "@CALL 0\n@OUT 0.020604833960533142\n@CALL 1\n@OUT 0.020604833960533142\n@CALL 2\n@OUT 0.020604833960533142\n@CALL 3\n@OUT 0.020604833960533142\n@CALL 4\n@OUT 0.020604833960533142\n@END\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "hang_branch_00017.simplify_macro_nvm"
+desc = "The spelling the corpus program reported the hang under (`std::macro std::opt`) keeps the rounds and the arm of `branch_00017` too: five calls, 0.020604834 each, and the run ends."
+kind = "behavior"
+case = "../../../cases/opt/generic/hang_branch_00017.cml"
+args = ["${case}", "std::macro", "std::opt", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "@CALL 0\n@OUT 0.020604833960533142\n@CALL 1\n@OUT 0.020604833960533142\n@CALL 2\n@OUT 0.020604833960533142\n@CALL 3\n@OUT 0.020604833960533142\n@CALL 4\n@OUT 0.020604833960533142\n@END\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
