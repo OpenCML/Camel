@@ -1791,6 +1791,50 @@ DraftInlineResult inlineCallableInDraft(
         clonedFormalNodes.size() == formalNodes.size(),
         "Runtime inline formal-node planning diverged between source and cloned graphs.");
 
+    // An argument the body never reads still runs. The call is where the argument is evaluated, and it
+    // takes its effects with it (design principles 3.4): `h(5, println(9))` prints `9` although `h`
+    // ignores its second parameter. Binding no use to the port left the actual reached by nothing
+    // once the call was gone, and the effect stopped running with it (9.7). The body waits on the
+    // argument instead -- on the same nodes the call's own predecessors are waited for on -- so the
+    // effect runs where the call stood and before the body does.
+    std::vector<gc_node_ref_t> unreadArgumentEffects;
+    for (size_t i = 0; i < clonedFormalNodes.size() && i < actualInputs.size(); ++i) {
+        const gc_node_ref_t port = clonedFormalNodes[i].second;
+        if (port == kInvalidNodeRef || !draft.normUsersOf(port).empty() ||
+            !draft.withUsersOf(port).empty() || !draft.ctrlUsersOf(port).empty()) {
+            continue;
+        }
+        const gc_node_ref_t actual = actualInputs[i];
+        if (!draft.alive(actual) || actual == funcNodeId ||
+            !carriesOrdering(draft, actual, true)) {
+            continue;
+        }
+        // Only the argument whose call was its last reader is lost: one another node reads keeps
+        // running where that node is, and does not have to be pulled here as well.
+        bool readOnlyHere = true;
+        for (auto group : {draft.normUsersOf(actual),
+                           draft.withUsersOf(actual),
+                           draft.ctrlUsersOf(actual),
+                           draft.syncUsersOf(actual)}) {
+            for (gc_node_ref_t user : group) {
+                readOnlyHere = readOnlyHere && user == funcNodeId;
+            }
+        }
+        if (readOnlyHere &&
+            std::ranges::find(unreadArgumentEffects, actual) == unreadArgumentEffects.end()) {
+            unreadArgumentEffects.push_back(actual);
+        }
+    }
+    // What the body waits for: the call's predecessors, and the effects of arguments it never
+    // read.
+    std::vector<gc_node_ref_t> waitPreds = ctrlPreds;
+    for (gc_node_ref_t effect : unreadArgumentEffects) {
+        if (std::ranges::find(waitPreds, effect) == waitPreds.end()) {
+            waitPreds.push_back(effect);
+        }
+    }
+    const bool bodyWaits = hasExternalCtrl || !unreadArgumentEffects.empty();
+
     // With control predecessors, the body reads each argument through a GATE that waits on
     // them. The gates order nothing the entry roots below do not order already (every
     // executable node of the body runs after a root); they are kept because consumers that
@@ -1842,11 +1886,11 @@ DraftInlineResult inlineCallableInDraft(
     // parameter gates and the callee's recorded entry node are not entry points. (They used to
     // stand in when a body had no root; nothing of such a body reads them, so the
     // predecessors ended at nodes nothing followed.)
-    std::vector<gc_node_ref_t> gateCtrl = ctrlPreds;
+    std::vector<gc_node_ref_t> gateCtrl = waitPreds;
     if (entryRoots.size() == 1) {
         result.ctrlEntry = entryRoots.front();
         const std::vector<gc_node_ref_t> mergedCtrlInputs =
-            appendUniqueRefs(draft.ctrlInputsOf(result.ctrlEntry), ctrlPreds);
+            appendUniqueRefs(draft.ctrlInputsOf(result.ctrlEntry), waitPreds);
         draft.setCtrlInputs(result.ctrlEntry, mergedCtrlInputs);
     } else if (entryRoots.size() > 1) {
         DraftNodeInit syncInit{
@@ -1854,7 +1898,7 @@ DraftInlineResult inlineCallableInDraft(
             .dataType     = nullptr,
             .kind         = GCNodeKind::Sync,
             .runtimeFlags = 0,
-            .ctrlInputs   = ctrlPreds,
+            .ctrlInputs   = waitPreds,
         };
         result.ctrlEntry = draft.addNode(syncInit);
         gateCtrl         = {result.ctrlEntry};
@@ -1905,19 +1949,20 @@ DraftInlineResult inlineCallableInDraft(
         std::find(parameterGates.begin(), parameterGates.end(), result.valueExit) !=
             parameterGates.end() &&
         result.ctrlExit == result.valueExit;
-    if (hasExternalCtrl && entryRoots.empty() && resultIsGatedArgument) {
+    if (bodyWaits && entryRoots.empty() && resultIsGatedArgument) {
         // The body forwards an argument: its gate already waits on the predecessors.
         result.ctrlEntry = result.valueExit;
-    } else if (hasExternalCtrl && entryRoots.empty()) {
+    } else if (bodyWaits && entryRoots.empty()) {
         // The body executes nothing: its result is a constant or one of the arguments. The
         // call still ran after its predecessors, and what waited on the call, or read its
         // value, ran after them too. A GATE on the result carries that. Without it the result
         // waits on nothing: where the call was the tail of a branch arm (placed in the arm by
         // the BRCH, or by an argument computed there), the tail became a value outside the
         // branch, the arm was taken to have no code, and what the call's arguments ran in the
-        // arm belonged to no arm any more.
+        // arm belonged to no arm any more. The same gate carries an argument's effect when the
+        // body reads none of it: the call ran it, so the value the call became waits for it.
         const DraftNodeHeader *valueHeader        = draft.header(result.valueExit);
-        std::vector<gc_node_ref_t> gateCtrlInputs = ctrlPreds;
+        std::vector<gc_node_ref_t> gateCtrlInputs = waitPreds;
         if (result.ctrlExit != result.valueExit) {
             gateCtrlInputs = appendUniqueRefs(
                 std::span<const gc_node_ref_t>(gateCtrlInputs.data(), gateCtrlInputs.size()),

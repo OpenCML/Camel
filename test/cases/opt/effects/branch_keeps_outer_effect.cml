@@ -1,0 +1,17 @@
+/**
+ * An effect written outside a branch stays in the region it was written in, and runs when either
+ * side first needs it: the arm that reads it, or the effect on the same resource after the branch
+ * (design principles 3.3, 3.4). It runs once, before `println(3)`, for both values of `c`.
+ */
+
+func pick(c: bool): int {
+    let a = println(1)
+    let r = if c then a else 0
+    return r + println(3)
+}
+
+func main(): int sync {
+    println(pick(true))
+    println(pick(false))
+    return 0
+}
