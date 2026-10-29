@@ -444,6 +444,10 @@ class EncodeSession {
         // the only link from a direct call of the function (one OPER of that kernel) back to
         // its Camel body.
         prepared.draft->setImplKernelUri(graph->draft().implKernelUri());
+        // The facts of the declaration the graph is (design principles 6.2): cold metadata that
+        // stays with the graph, so a pass reads `#jvp(rule)` through the function it was given
+        // instead of the module that declares it.
+        prepared.draft->setDeclarationFacts(graph->draft().declarationFacts());
         CAMEL_LOG_INFO_S("GIREncode", "Prepare compile graph '{}'.", graph->name());
         prepared.draft->setId(freshIds_ ? freshIds_->allocate() : graph->graphId());
         prepared.draft->setFuncType(graph->funcType());

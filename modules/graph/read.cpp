@@ -37,6 +37,7 @@
 #include <mutex>
 #include <optional>
 #include <span>
+#include <stdexcept>
 
 using namespace camel::core::context;
 using namespace camel::core::type;
@@ -470,6 +471,162 @@ slot_t tagsKernel(ArgsView &, ArgsView &norm, Context &) {
     return stringSlot(camel::core::attr::text(facts.tags));
 }
 
+// ---- the rules a declaration writes ----
+
+namespace attr = camel::core::attr;
+
+/// Whether a fact's value names a function: a graph reference, or a tuple with one in it. Only a
+/// tag whose parameter is a function makes such a value, so this is what tells a rule tag from
+/// every other fact (`#strict`, a numeric permission, `#impl(kernel)`).
+bool namesAFunction(attr::AttrValueId id) {
+    const attr::Value value = attr::value(id);
+    if (value.kind == attr::ValueKind::Graph) {
+        return true;
+    }
+    if (value.kind != attr::ValueKind::Tuple) {
+        return false;
+    }
+    for (const attr::AttrValueId item : value.items) {
+        if (namesAFunction(item)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// The facts of the declaration the function of this graph is whose value names a function
+/// (`#jvp(rule)`, `#transpose(rule)`, `#vjp(rule)`), ordered by the tag's qualified name as
+/// attr::entries orders them. The declaration's facts are cold metadata of the graph
+/// (GCGraph::declarationFacts): a declaration fact is on no node (`attr::fateOf`), so a pass reads
+/// it through the function. A graph that is no declaration, and a declaration that writes none,
+/// have none.
+std::vector<attr::Attr> ruleFactsOf(const GCGraph &graph) {
+    std::vector<attr::Attr> facts;
+    for (const attr::Attr &entry : attr::entries(graph.declarationFacts())) {
+        if (namesAFunction(entry.value)) {
+            facts.push_back(entry);
+        }
+    }
+    return facts;
+}
+
+/// The tag a fact belongs to: its attribute key is the tag's qualified name, and that is how the
+/// declaration is found back (the name a program writes, `jvp`, is `Decl::ident`).
+const camel::core::tag::Decl *tagOf(const attr::Attr &fact) {
+    const auto id = camel::core::tag::find(std::string(attr::keyName(fact.key)));
+    return id.has_value() ? camel::core::tag::get(*id) : nullptr;
+}
+
+/// Whether the fact is the one a program writes as `name`: the tag's name alone (`jvp`) or its
+/// qualified name (`autodiff::jvp`).
+bool namesTag(const attr::Attr &fact, const camel::core::tag::Decl *decl, std::string_view name) {
+    if (name == attr::keyName(fact.key)) {
+        return true;
+    }
+    return decl != nullptr && name == decl->ident;
+}
+
+/// The graphs a fact's value names, in the order the tag's arguments were written. A value that is
+/// not a graph reference names none.
+std::vector<GraphId> graphsOf(attr::AttrValueId id) {
+    std::vector<GraphId> graphs;
+    const attr::Value value = attr::value(id);
+    if (value.kind == attr::ValueKind::Graph) {
+        // The value is the graph's id as text (attr::graphRef); a text that is not a number names
+        // no graph this program has.
+        try {
+            graphs.push_back(static_cast<GraphId>(std::stoul(value.text)));
+        } catch (const std::exception &) {
+        }
+    } else if (value.kind == attr::ValueKind::Tuple) {
+        for (const attr::AttrValueId item : value.items) {
+            for (const GraphId graph : graphsOf(item)) {
+                graphs.push_back(graph);
+            }
+        }
+    }
+    return graphs;
+}
+
+/// The fact a Tag handle names: the entry at the handle's index of its graph's declaration facts.
+std::optional<attr::Attr> factOf(const Handle *handle, const char *site) {
+    const std::vector<attr::Attr> facts = ruleFactsOf(graphOf(handle, site));
+    if (handle->index() >= facts.size()) {
+        return std::nullopt;
+    }
+    return facts[handle->index()];
+}
+
+slot_t declarationTagsKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle   = norm.get<Handle *>(0);
+    const auto facts     = ruleFactsOf(graphOf(handle, "graph.declaration_tags"));
+    std::vector<Handle *> tags;
+    for (size_t i = 0; i < facts.size(); ++i) {
+        tags.push_back(Handle::create(
+            HandleKind::Tag,
+            handle->program(),
+            handle->graph(),
+            static_cast<uint32_t>(i),
+            nullptr,
+            mm::autoSpace()));
+    }
+    return handleArray(HandleKind::Tag, tags);
+}
+
+slot_t tagNameKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle = norm.get<Handle *>(0);
+    const auto fact    = factOf(handle, "graph.tag_name");
+    if (!fact.has_value()) {
+        return stringSlot(std::string_view{});
+    }
+    if (const auto decl = tagOf(*fact); decl != nullptr) {
+        return stringSlot(decl->ident);
+    }
+    return stringSlot(attr::keyName(fact->key));
+}
+
+slot_t tagGraphsKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle = norm.get<Handle *>(0);
+    const auto fact    = factOf(handle, "graph.tag_graphs");
+    std::vector<Handle *> graphs;
+    if (fact.has_value() && handle->program() != nullptr) {
+        for (const GraphId id : graphsOf(fact->value)) {
+            if (handle->program()->graph(id) != nullptr) {
+                graphs.push_back(graphHandle(handle->program(), id));
+            }
+        }
+    }
+    return handleArray(HandleKind::Graph, graphs);
+}
+
+/// The rule the declaration of `g` writes for the transformation `name`: `#jvp(rule)` is the rule
+/// of forward mode, `#transpose(rule)` the rule of a linear function, `#vjp(rule)` the rule that
+/// gives the pullback directly. Null when the declaration writes none, when it writes that tag
+/// more than once, and when the tag's argument is not a function.
+slot_t ruleOfKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle   = norm.get<Handle *>(0);
+    const auto *name     = norm.get<String *>(1);
+    const GCGraph &graph = graphOf(handle, "graph.rule_of");
+    std::optional<GraphId> found;
+    for (const attr::Attr &fact : ruleFactsOf(graph)) {
+        if (!namesTag(fact, tagOf(fact), name->view())) {
+            continue;
+        }
+        const std::vector<GraphId> graphs = graphsOf(fact.value);
+        if (found.has_value() || graphs.empty()) {
+            return NullSlot;
+        }
+        found = graphs.front();
+    }
+    if (!found.has_value() || handle->program() == nullptr ||
+        handle->program()->graph(*found) == nullptr) {
+        return NullSlot;
+    }
+    return makeSome(
+        toSlot(graphHandle(handle->program(), *found)),
+        nullableOf(HandleType::get(HandleKind::Graph)));
+}
+
 /// Whether the node anchors its graph: its exit, output or return node. A rewrite keeps such a
 /// node; a transaction does not replace or erase it.
 slot_t isAnchorKernel(ArgsView &, ArgsView &norm, Context &) {
@@ -694,6 +851,10 @@ const std::vector<ReadOp> &readOps() {
         {"type_name", typeNameKernel},
         {"callee", calleeKernel},
         {"tags", tagsKernel},
+        {"declaration_tags", declarationTagsKernel},
+        {"tag_name", tagNameKernel},
+        {"tag_graphs", tagGraphsKernel},
+        {"rule_of", ruleOfKernel},
         {"is_anchor", isAnchorKernel},
         {"is_written_slot", isWrittenSlotKernel},
         {"origin", originKernel},

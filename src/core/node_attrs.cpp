@@ -642,6 +642,26 @@ const std::vector<FateRow> &fateTable() {
             notNode,
             "a declaration fact (the graph of a derivative rule): no node "
             "carries it.");
+        // `#jvp(rule)` and `#transpose(rule)` are the same kind of fact: forward mode's rule and
+        // a linear function's transpose rule. A pass reads them through the function it was
+        // given (GCGraph::declarationFacts), which is cold metadata of the graph, never an
+        // attribute of a node.
+        add("autodiff::jvp",
+            "*",
+            "autodiff's `tag jvp::<F>(rule: F) on func when is_function::<F>()` declaration",
+            notNode,
+            notNode,
+            notNode,
+            notNode,
+            "a declaration fact (the graph of a forward-mode rule): no node carries it.");
+        add("autodiff::transpose",
+            "*",
+            "autodiff's `tag transpose::<F>(rule: F) on func when is_function::<F>()` declaration",
+            notNode,
+            notNode,
+            notNode,
+            notNode,
+            "a declaration fact (the graph of a transpose rule): no node carries it.");
         // `#impl(kernel)` (design principles 10.4) names the body-less declaration that
         // implements a function, so the key is interned in the attribute namespace but is a
         // declaration fact: the builder resolves it while the module is declared, and no node

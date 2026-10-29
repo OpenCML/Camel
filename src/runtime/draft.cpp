@@ -870,6 +870,7 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const Program &program, const GCG
     draft->typeSpecializationRoot_ = graph->typeSpecializationRoot();
     draft->flags_                  = graph->flags();
     draft->implKernelUri_          = graph->implKernelUri();
+    draft->declarationFacts_       = graph->declarationFacts();
     draft->funcType_ = graph->funcType();
     draft->captureNames_.assign(graph->captureNames().begin(), graph->captureNames().end());
     if (const auto *layout = graph->runtimeDataType()) {
