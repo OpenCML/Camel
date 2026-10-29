@@ -102,7 +102,10 @@ bool reaches(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to) {
             continue;
         }
         seen[n] = true;
-        for (auto users : {draft.normUsersOf(n), draft.withUsersOf(n), draft.ctrlUsersOf(n)}) {
+        for (auto users : {draft.normUsersOf(n),
+                           draft.withUsersOf(n),
+                           draft.ctrlUsersOf(n),
+                           draft.syncUsersOf(n)}) {
             work.insert(work.end(), users.begin(), users.end());
         }
     }

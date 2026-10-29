@@ -893,7 +893,8 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
             for (auto outputs :
                  {graph->normOutputsOf(ref),
                   graph->withOutputsOf(ref),
-                  graph->ctrlOutputsOf(ref)}) {
+                  graph->ctrlOutputsOf(ref),
+                  graph->uses().sync(ref)}) {
                 for (gc_node_ref_t out : outputs) {
                     if (out >= blocks || seen[out] != 0) {
                         continue;
@@ -2580,6 +2581,14 @@ void TaskflowExecSchedPass::buildRuntimeBranchJoinRegion(
 
     precedeFromInputs(runtimeGraph->normInputsOf(brchRuntimeIndex), selector);
     precedeFromInputs(runtimeGraph->ctrlInputsOf(brchRuntimeIndex), selector);
+    // The statement written before the branch waits for it the same way when the block's chain
+    // names it with a sync edge (docs/design/effects/edges.cn.md 1.5).
+    std::vector<gc_node_ref_t> brchChainPreds;
+    for (const camel::runtime::GCGraphSyncEdge &edge :
+         runtimeGraph->syncPredsOf(brchRuntimeIndex)) {
+        brchChainPreds.push_back(edge.pred);
+    }
+    precedeFromInputs(brchChainPreds, selector);
 
     selector.precede(joiner);
 

@@ -336,7 +336,7 @@ class SideWalker {
         const std::string uri = body == nullptr ? std::string() : std::string(body->uri());
         const auto inputs     = graph_.normInputsOf(ref);
         const auto found      = integerOperator(uri);
-        if (!found || !graph_.withInputsOf(ref).empty() || !graph_.ctrlInputsOf(ref).empty() ||
+        if (!found || !graph_.withInputsOf(ref).empty() || !graph_.waitInputsOf(ref).empty() ||
             inputs.size() != found->arity) {
             refuse(std::format("the operator '{}' is not translated", uri));
             return nullptr;

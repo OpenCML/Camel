@@ -104,6 +104,7 @@ std::string eligibility(
     // where the node runs, not a reason to leave it on the host: the arm or the block the node is
     // written in is the segment that holds it (docs/design/gpu/plan.cn.md 2.5).
     const bool ordered = !graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty() ||
+                         !graph.syncPredsOf(id).empty() || !graph.uses().sync(id).empty() ||
                          inChain(chain, id);
     if (node->kind == rt::GCNodeKind::Loop) {
         if (ordered && !device)
@@ -382,6 +383,10 @@ SegmentAnalysis analyzeRegions(
         // so a region that holds the node reads nothing through them (docs/design/gpu/plan.cn.md 2.5).
         for (auto edges : {graph.ctrlInputsOf(id)})
             nodes[id].order.insert(nodes[id].order.end(), edges.begin(), edges.end());
+        // The statement before it in its block's chain orders it the same way, whichever kind
+        // that edge is written in (docs/design/effects/edges.cn.md 1, 5.3).
+        for (const rt::GCGraphSyncEdge &edge : graph.syncPredsOf(id))
+            nodes[id].order.push_back(edge.pred);
         nodes[id].output = id == graph.outputNodeRef() || id == graph.exitNodeRef();
     }
     // Fixed tuple projections are structural edges of an eligible aggregate
@@ -392,6 +397,7 @@ SegmentAnalysis analyzeRegions(
         for (rt::gc_node_ref_t id = 0; id < graph.nodeCount(); ++id) {
             if (nodes[id].eligible || graph.node(id)->kind != rt::GCNodeKind::Accs ||
                 !graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty() ||
+                !graph.syncPredsOf(id).empty() || !graph.uses().sync(id).empty() ||
                 inChain(chain, id) || !graph.withInputsOf(id).empty())
                 continue;
             const auto inputs = graph.normInputsOf(id);
