@@ -2254,6 +2254,11 @@ class Builder {
     // The captured variables of `callee` as nodes of the current graph, which becomes a
     // caller of `callee`.
     std::vector<CapturedUse> capturedUsesOf(const compile_graph_ptr_t &callee);
+    // The graph of the function `node` stands for as a value: the body of a closure (a FILL of a
+    // static function), a function value that captured nothing, or one behind a COPY. Null for a
+    // value whose function is only known at run time (a parameter of the function being built, a
+    // function value the program computes) -- nothing of it can be read where it is written.
+    compile_graph_ptr_t functionValueGraphOf(node_handle_t node) const;
     // What a direct call of `callee` hands on: the callee's return value, then the new version
     // of each captured variable the callee writes, in the callee's capture order. `written` is
     // the mask of that table: bit k of the callee's k-th capture, which is where
