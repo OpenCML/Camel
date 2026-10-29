@@ -1,3 +1,4 @@
+import tensor
 import { next_key, seed, uniform } from random
 import { benchmark } from tiles
 func strict_chain(x: f32[..], w: f32[..], b: f32[..]): f32[..] {
