@@ -1483,6 +1483,120 @@ bool devirtualizeStaticCallInDraft(
     return true;
 }
 
+/// A statement of a block follows one other statement of it at most, and is followed by one: a
+/// block's statements are one chain (docs/design/effects/edges.cn.md 5.3). A chain that forks is
+/// therefore not a chain, yet a splice can leave one: it reads the end of the body's chain while the
+/// body's own calls are still to be spliced, so the statement written after the call is written after
+/// a statement that gains a follower later, when the code the call stands for is spliced in turn.
+/// The place is resolved again here, after the code is in -- reading which statement ends the chain
+/// that grows from the one it was written after, rather than the snapshot the splice took.
+void resolvePlaceForks(GraphDraft &draft) {
+    const auto isStatement = [&](gc_node_ref_t n) {
+        const DraftNodeHeader *header = draft.header(n);
+        return draft.alive(n) && header != nullptr &&
+               (header->runtimeFlags & kGCNodeFlagSyncStatement) != 0;
+    };
+    const auto inBlock = [&](gc_node_ref_t a, gc_node_ref_t b) {
+        return sameSyncBlock(draft, a, b);
+    };
+    // Does `from` wait on `target`, directly or through any edge kind? The place is moved only where
+    // the answer is no: a statement's place may not be one that waits on the statement itself (the
+    // graph would lie on a cycle of inputs). An exhausted walk answers yes, because not proving it
+    // free does not make it safe to move.
+    const auto waitsOn = [&](gc_node_ref_t from, gc_node_ref_t target) {
+        std::vector<gc_node_ref_t> work{from};
+        std::unordered_set<gc_node_ref_t> seen;
+        size_t budget = size_t{1} << 14;
+        while (!work.empty()) {
+            const gc_node_ref_t node = work.back();
+            work.pop_back();
+            if (node == target) {
+                return true;
+            }
+            if (!seen.insert(node).second) {
+                continue;
+            }
+            for (const auto &group :
+                 {draft.normInputsOf(node),
+                  draft.withInputsOf(node),
+                  draft.ctrlInputsOf(node),
+                  draft.syncInputsOf(node)}) {
+                for (gc_node_ref_t input : group) {
+                    if (budget == 0) {
+                        return true;
+                    }
+                    --budget;
+                    work.push_back(input);
+                }
+            }
+        }
+        return false;
+    };
+    // Every statement of a block that follows a statement a second statement of the block follows.
+    std::vector<gc_node_ref_t> forked;
+    for (gc_node_ref_t n = 0; n < draft.nodeSlotCount(); ++n) {
+        if (!isStatement(n)) {
+            continue;
+        }
+        const auto inputs = draft.syncInputsOf(n);
+        if (inputs.size() != 1) {
+            continue;
+        }
+        const gc_node_ref_t pred = inputs.front();
+        if (pred == n || !isStatement(pred) || !inBlock(n, pred)) {
+            continue;
+        }
+        size_t followers = 0;
+        for (gc_node_ref_t user : draft.syncUsersOf(pred)) {
+            if (user != n && isStatement(user) && inBlock(user, pred)) {
+                ++followers;
+            }
+        }
+        if (followers != 0) {
+            forked.push_back(n);
+        }
+    }
+    for (gc_node_ref_t n : forked) {
+        const auto inputs = draft.syncInputsOf(n);
+        if (inputs.size() != 1 || !draft.alive(n)) {
+            continue;
+        }
+        const gc_node_ref_t pred = inputs.front();
+        // The chain end that grows from `pred`, walked among the statements of its block and never
+        // through `n` itself: the place moves to where the chain that the statement belonged to has
+        // grown, which is where this statement's place is once the code is in.
+        gc_node_ref_t tail = pred;
+        std::unordered_set<gc_node_ref_t> seen{pred};
+        bool moved = true;
+        while (moved) {
+            moved = false;
+            gc_node_ref_t next = kInvalidNodeRef;
+            size_t count      = 0;
+            for (gc_node_ref_t user : draft.syncUsersOf(tail)) {
+                if (user == n || !isStatement(user) || !inBlock(user, pred)) {
+                    continue;
+                }
+                ++count;
+                next = user;
+            }
+            if (count != 1 || !seen.insert(next).second) {
+                break;
+            }
+            tail  = next;
+            moved = true;
+        }
+        if (tail == pred || tail == n || waitsOn(tail, n)) {
+            continue;
+        }
+        const gc_node_ref_t only[1] = {tail};
+        draft.setSyncInputs(n, only);
+        const auto ctrl = draft.ctrlInputsOf(n);
+        if (std::ranges::find(ctrl, tail) == ctrl.end()) {
+            draft.appendInput(DraftEdgeKind::Ctrl, n, tail);
+        }
+    }
+}
+
 DraftInlineResult inlineCallableInDraft(
     RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId, bool asArm) {
     DraftInlineResult result{.callNode = funcNodeId};
@@ -1984,8 +2098,19 @@ DraftInlineResult inlineCallableInDraft(
     // body's statements are laid out and the data edges of the reads it holds are final: a read of a
     // captured `var` keeps the place its nearest write gave it, and the chain is joined around it
     // rather than taking the read with it (docs/design/effects/edges.cn.md 2, 5.6).
-    if (bodyHasChain && !callSyncInputs.empty() && draft.alive(bodyHead) &&
-        draft.alive(bodyTail)) {
+    //
+    // The place the call stood in is its `sync` predecessor, or -- while a block's chain is still
+    // carried as control edges beside the sync ones -- the control predecessor that names the same
+    // pair. A call written inside an arm has the entry the builder writes from the BRCH on its own
+    // side of the region, and the chain it stands in is the one the branch's place entered: without
+    // reading that place the body would be handed nothing to enter its chain from.
+    std::vector<gc_node_ref_t> placePreds = callSyncInputs;
+    std::vector<gc_node_ref_t> placeUsers  = callSyncUsers;
+    if (placePreds.empty()) {
+        placePreds = ctrlPreds;
+        placeUsers = callFollowers;
+    }
+    if (bodyHasChain && !placePreds.empty() && draft.alive(bodyHead) && draft.alive(bodyTail)) {
         const auto markStatement = [&](gc_node_ref_t node) {
             const DraftNodeHeader *header = draft.header(node);
             if (header != nullptr) {
@@ -2001,8 +2126,11 @@ DraftInlineResult inlineCallableInDraft(
         };
         // The statements written after the call follow the body's tail. `closeChainOver` closed the
         // chain over the call above, so they follow what the call followed until this takes that
-        // place back from it.
-        for (gc_node_ref_t user : callSyncUsers) {
+        // place back from it. They are read on the same side as the place above: a call that stands
+        // in its block by the control edge alone has its followers named by control edges too, and
+        // leaving them on the call's place would give that statement two sync users -- a chain that
+        // forks, which is no chain.
+        for (gc_node_ref_t user : placeUsers) {
             if (user == funcNodeId || !draft.alive(user) || user == bodyHead || user == bodyTail) {
                 continue;
             }
@@ -2013,7 +2141,7 @@ DraftInlineResult inlineCallableInDraft(
             nameControlPair(user, bodyTail);
         }
         // The body's head is written after the statement the call was written after.
-        const gc_node_ref_t callPred = callSyncInputs.front();
+        const gc_node_ref_t callPred = placePreds.front();
         if (callPred != bodyHead && callPred != bodyTail && draft.alive(callPred)) {
             markStatement(bodyHead);
             markStatement(callPred);
@@ -2024,6 +2152,7 @@ DraftInlineResult inlineCallableInDraft(
     }
 
     draft.eraseNode(funcNodeId);
+    resolvePlaceForks(draft);
     CAMEL_LOG_INFO_S("DraftInline", "Inline splice finished for draft node {}.", funcNodeId);
     return result;
 }
