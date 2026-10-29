@@ -1,0 +1,26 @@
+id = "gate.conformance"
+order = 923
+tier = "fast"
+tags = ["feat", "gate", "conformance"]
+desc = "The conformance matrix: every recorded reading holds on the unoptimized pipeline, is the same after optimization, and holds on the optimized pipeline, on all four back ends"
+
+# The fast-layer entry for `scripts/check-conformance.mjs`. The check is also one of the release
+# gate's static checks; this entry is what makes a change to a conformance case, to the manifest or
+# to the checker run the gate that reads them, which `--changed` can only do through a plan.
+#
+# A red run of the matrix names the column, the case, the back end and both results, so the log of
+# this test is the reading: it prints one line per column with the count it measured.
+#
+# `${camel}` is the compiler of the build under test, named as an argument, the same rule the
+# standard-library checkers follow.
+
+[[tests]]
+name = "gate.conformance_matrix"
+desc = "The recorded reading of every program in test/conformance/cases.json equals what the unoptimized and the optimized implementation print and return, on nvm, fvm, jit and prl, and the reading does not change under optimization."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/check-conformance.mjs"
+args = ["${case}", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["3/3 columns green"]
+timeout_ms = 120000

@@ -1,0 +1,11 @@
+/**
+ * An effect whose result nothing uses does not run (design principles 3.1): `x` is never read, so
+ * the println bound to it is not needed and prints nothing. A warning names it. The other half of
+ * the same rule as the effects that must run: a pass may neither drop an effect that is used nor
+ * start one that is not.
+ */
+
+func main(): int {
+    let x = println(3)
+    return 0
+}
