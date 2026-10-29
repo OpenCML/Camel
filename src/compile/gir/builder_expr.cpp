@@ -488,14 +488,42 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
         // written again: `x = x + 1` and the `x += 1` that is the same thing hand the read's
         // value to the operator the write stores, so the write runs after the read already
         // (design principles 2.1, 3.5).
+        //
+        // A write that is a region itself -- the JOIN a branch's arms write to, or a LOOP -- takes
+        // the read as a control input instead, the way it takes the last write of its parts
+        // (mergeArmVariables links an arm's writer to the JOIN as a control input). A region is
+        // laid out as one piece: what its regions read from outside and what the region node
+        // itself is ordered by come before its parts, and everything the region node is ordered
+        // after comes last (src/execute/graph_runtime_support.cpp, the JOIN and LOOP blocks), so
+        // an order edge into the region node would run the read after the writes it has to see the
+        // cell before. A read this write cannot be ordered against -- a read in the region around
+        // the write, with the write in an arm or a loop body -- stays pending: the write that
+        // meets it is the region's own, and the region can order it.
+        std::vector<VariableUse> pending;
+        const camel::runtime::GCNodeKind exitKind = nodeKindOf(exit);
+        const bool regionExit = exitKind == camel::runtime::GCNodeKind::Join ||
+                                exitKind == camel::runtime::GCNodeKind::Loop;
         for (const VariableUse &use : uses) {
-            if (use.isRead && sameGraph(use.node, currGraph_) && linkCheek(use.node, exit) &&
-                nodeTakesAnOrder(use.node) && nodeTakesAnOrder(exit) &&
+            if (!use.isRead || !sameGraph(use.node, currGraph_)) {
+                continue;
+            }
+            if (regionExit) {
+                if (!hasDirectDataDependency(use.node, exit) &&
+                    !dataPathReaches(use.node, exit)) {
+                    linkNodes(LinkType::Ctrl, use.node, exit);
+                    continue;
+                }
+                pending.push_back(use);
+                continue;
+            }
+            if (nodeTakesAnOrder(use.node) && nodeTakesAnOrder(exit) &&
                 !hasDirectDataDependency(use.node, exit) && !dataPathReaches(use.node, exit)) {
                 linkNodes(LinkType::Order, use.node, exit);
+                continue;
             }
+            pending.push_back(use);
         }
-        uses.clear();
+        uses = std::move(pending);
     }
     // A store is one of the cell's known users (collapseNonEscapingVariableReads): a user the builder
     // did not record -- a:var/take, a call handed the `var` -- makes the cell escape.
