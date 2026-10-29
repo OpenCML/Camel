@@ -1,0 +1,82 @@
+/**
+ * `branch_00017`, the ICPC corpus program `std::opt` hung on, does its rounds: the corpus
+ * program is in Kogler7/Camel-Archive at ICPC2027/study/e2-generated/gn-suspect/S3-opt-hang
+ * (its parameters are the same files renamed here, see below).
+ *
+ * The shape that mattered is kept: five calls of a function whose body is a loop over a constant
+ * range (`0..4`), a branch whose test is a constant (`0.5 >= 0.9`, so the `else` arm is the one
+ * taken), and a final scalar this program prints. The corpus reports two defects on it under
+ * `std::opt`: folding lost the rounds of the loop, which yielded the initial state instead of the
+ * last round (S2, 0.00032 against 0.020604834), and some runs did not end at all (S3, 100% CPU,
+ * 7 of 25 runs over 15 s). A loop that iterates an interval keeps its two bound slots in the FILL
+ * the loop node reads first; a graph where that FILL is gone leaves the plan nothing to read the
+ * bounds from, and the read that used to follow is what made such a run depend on the frame it
+ * ran in rather than on the program.
+ *
+ * All five calls are pinned here, so a pass that loses the rounds, the arm or a call of the
+ * corpus program is red here.
+ *
+ * The inputs `w1`, `b2` and `x3` are not read by the body -- the same as in the corpus program,
+ * where they are lifted out of a generated model and the model's own computation is closed over
+ * constants. They stay because the call shape (three arguments, five call sites, two loads before
+ * the calls) is what the pass sees.
+ */
+
+import { load_npy, mean, relu, reshape, sum, tanh } from tensor
+
+func mc_main(w1: f32[..], b2: f32[..], x3: f32[..]): f32[..] {
+    let t5 = reshape<[2, 2]>([f32(0.5), f32(0.5), f32(0.5), f32(0.5)])
+    let t14 = reshape<[2, 2]>([f32(0.5), f32(0.5), f32(0.5), f32(0.5)])
+    let y20 = loop v12 = t14 as f32[..] for i13 in 0..4 do {
+        let t15 = reshape<[2, 2]>([f32(0.5), f32(0.5), f32(0.5), f32(0.5)])
+        let t17 = reshape<[2, 2]>([f32(0.5), f32(0.5), f32(0.5), f32(0.5)])
+        let t18 = t15 + t17
+        let t19 = tanh(t18)
+        t19
+    }
+    let t21 = reshape<[1]>([f32(0.5)])
+    let s22 = float(t21[0])
+    let c23 = s22 >= 0.9
+    let (y33, y34) = if c23 then {
+        let t27 = reshape<[2, 2]>([f32(0.5), f32(0.5), f32(0.5), f32(0.5)])
+        let t31 = reshape<[1]>([f32(0.5)])
+        (t27, t31)
+    } else {
+        let t28 = sum<0, true>(sum<0>(t5))
+        let t29 = tanh(t28)
+        let t30 = y20 - t29
+        let t32 = reshape<[1]>([f32(0.5)])
+        (t30, t32)
+    }
+    let t35 = y33 + y34
+    let t36 = tanh(t35)
+    let t37 = relu(t36)
+    let t38 = reshape<[1]>([f32(0.5)])
+    let t39 = t37 * t38
+    let t40 = tanh(t39)
+    let t41 = t40 * t40
+    let t42 = mean<0, true>(mean<0>(t41))
+    return t42
+}
+
+func main(): int sync {
+    let mc_p0 = load_npy::<f32>("test/cases/opt/generic/hang_branch_00017_par_0.npy")
+    let mc_p1 = load_npy::<f32>("test/cases/opt/generic/hang_branch_00017_par_1.npy")
+    let x3_0 = load_npy::<f32>("test/cases/opt/generic/hang_branch_00017_in_0.npy")
+    let x3_1 = load_npy::<f32>("test/cases/opt/generic/hang_branch_00017_in_1.npy")
+    let x3_2 = load_npy::<f32>("test/cases/opt/generic/hang_branch_00017_in_2.npy")
+    let x3_3 = load_npy::<f32>("test/cases/opt/generic/hang_branch_00017_in_3.npy")
+    let x3_4 = load_npy::<f32>("test/cases/opt/generic/hang_branch_00017_in_4.npy")
+    println('@CALL 0')
+    println('@OUT', float(mc_main(mc_p0, mc_p1, x3_0)[0]))
+    println('@CALL 1')
+    println('@OUT', float(mc_main(mc_p0, mc_p1, x3_1)[0]))
+    println('@CALL 2')
+    println('@OUT', float(mc_main(mc_p0, mc_p1, x3_2)[0]))
+    println('@CALL 3')
+    println('@OUT', float(mc_main(mc_p0, mc_p1, x3_3)[0]))
+    println('@CALL 4')
+    println('@OUT', float(mc_main(mc_p0, mc_p1, x3_4)[0]))
+    println('@END')
+    return 0
+}
