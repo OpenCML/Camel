@@ -1118,6 +1118,15 @@ class CmlPrinter {
         body.closeIndent = outerIndent;
         body.tailIndent  = indent_;
         body.sync        = regionNeedsSync(region);
+        // A region whose value is the value its last write wrote, with no chain of its own to run
+        // that write: the write is the region's last statement, as `printStatements` prints it for
+        // a body. `return <value>` there would hand the value on behind no wait at all and leave
+        // the write behind a value that reaches nothing (see `regionValueWrite`).
+        const gc_node_ref_t valueWrite =
+            region == 0 ? blockValueWrite(tail) : regionValueWrite(region, tail);
+        if (valueWrite != camel::runtime::kInvalidNodeRef) {
+            tailPrintedAsStatement = true;
+        }
         if (!functionBody && regionReturnsValue(region) && !tailPrintedAsStatement) {
             // A region whose value is a gate with ordering in front of it was written as an
             // explicit `return`; a bare last expression yields the value without that gate.
@@ -1213,18 +1222,53 @@ class CmlPrinter {
         if (!handsTail) {
             return camel::runtime::kInvalidNodeRef;
         }
-        for (const gc_node_ref_t input : graph_->ctrlInputsOf(exitRef)) {
+        return assignmentHandingOn(exitRef, 0, tail);
+    }
+
+    /// The assignment a block hands a value on behind: one of `gate`'s control inputs is a write
+    /// of `region` whose value is the one `gate` carries. That is the GATE the builder puts in
+    /// front of the value an assignment stands for, so that the write runs where nothing else
+    /// reads the version it made (design principles 3.5, 3.4): the source's block ended with the
+    /// write and the block's value is what that write wrote. `kInvalidNodeRef` otherwise.
+    gc_node_ref_t assignmentHandingOn(
+        gc_node_ref_t gate, uint32_t region, gc_node_ref_t value) const {
+        for (const gc_node_ref_t input : graph_->ctrlInputsOf(gate)) {
             const camel::runtime::GCNode *node = graph_->node(input);
             if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Oper ||
-                control_->controlOf(input) != 0) {
+                control_->controlOf(input) != region) {
                 continue;
             }
-            if (graph_->nodeBodyAs<camel::runtime::GCOperBody>(input)->uri().starts_with(
+            if (!graph_->nodeBodyAs<camel::runtime::GCOperBody>(input)->uri().starts_with(
                     ":op/assn")) {
+                continue;
+            }
+            const auto written = graph_->normInputsOf(input);
+            if (written.size() == 2 && written[1] == value) {
                 return input;
             }
         }
         return camel::runtime::kInvalidNodeRef;
+    }
+
+    /// The write whose value a region hands on, when the region has no chain of its own: the
+    /// region's result is that same GATE, and the source's region ended with the write. Printing
+    /// the value back as `return <value>` would hand it on behind no wait at all, leaving the
+    /// write behind a value that reaches nothing, so the write would not run (design principles
+    /// 3.4); the write is the region's last statement instead, as `blockValueWrite` prints it for
+    /// a block with no chain.
+    gc_node_ref_t regionValueWrite(uint32_t region, gc_node_ref_t tail) const {
+        if (tail == camel::runtime::kInvalidNodeRef || regionNeedsSync(region)) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        const camel::runtime::GCNode *gate = graph_->node(tail);
+        if (gate == nullptr || gate->kind != camel::runtime::GCNodeKind::Gate) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        const auto values = graph_->normInputsOf(tail);
+        if (values.size() != 1) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        return assignmentHandingOn(tail, region, values.front());
     }
 
     /// Whether the source wrote a `sync` block around this region's statements. A `sync` block
