@@ -185,6 +185,128 @@ void Builder::registerBuiltBody(const compile_graph_ptr_t &graph) {
         }
     }
     unit_->builtBodies.push_back(graph);
+    rehomeOrderEdges(graph);
+}
+
+namespace {
+
+/// The control regions a node runs with, outermost first: the arms and the parts of a loop. The
+/// regions that only record where code came from -- an inlined body, a tagged block -- are looked
+/// through: they hold no execution of their own (docs/design/effects/edges.cn.md 5.8), so they
+/// separate nothing. Region 0, the body, is not in the chain either: its code runs with the graph.
+std::vector<uint32_t> controlRegionChainOf(
+    const runtime::GraphDraft &draft, draft_node_ref_t id) {
+    std::vector<uint32_t> chain;
+    for (uint32_t region = draft.nodeRegion(id); region != 0; region = draft.region(region).parent) {
+        const runtime::GCRegionKind kind = draft.region(region).kind;
+        if (kind == runtime::GCRegionKind::Arm || kind == runtime::GCRegionKind::LoopCond ||
+            kind == runtime::GCRegionKind::LoopBody) {
+            chain.push_back(region);
+        }
+    }
+    std::reverse(chain.begin(), chain.end());
+    return chain;
+}
+
+/// Where the ends of one order edge stand: the node itself when its region holds it, and the owner
+/// of the region (the `BRCH` or the `LOOP`) when the other end is outside that region. Returns
+/// false when an owner cannot be named -- a region nothing owns yet -- and the edge is then left
+/// where it was written rather than moved onto a node that is not there.
+bool orderEndsOnOneRegion(
+    const runtime::GraphDraft &draft, draft_node_ref_t pred, draft_node_ref_t user,
+    draft_node_ref_t &predOut, draft_node_ref_t &userOut) {
+    const std::vector<uint32_t> predChain = controlRegionChainOf(draft, pred);
+    const std::vector<uint32_t> userChain = controlRegionChainOf(draft, user);
+    size_t common                          = 0;
+    while (common < predChain.size() && common < userChain.size() &&
+           predChain[common] == userChain[common]) {
+        ++common;
+    }
+    predOut = pred;
+    userOut = user;
+    const auto handOver = [&](draft_node_ref_t &end, const std::vector<uint32_t> &chain) {
+        if (common >= chain.size()) {
+            return true; // the end is in the region both share
+        }
+        const runtime::gc_node_ref_t owner = draft.region(chain[common]).owner;
+        if (owner == runtime::kInvalidNodeRef) {
+            return false;
+        }
+        end = owner;
+        return true;
+    };
+    return handOver(predOut, predChain) && handOver(userOut, userChain);
+}
+
+} // namespace
+
+void Builder::rehomeOrderEdges(const compile_graph_ptr_t &graph) {
+    ASSERT(graph != nullptr, "A built body is a graph.");
+    runtime::GraphDraft &draft = graph->draft();
+    // Most bodies order nothing: their effects are on the sync chain, and a body of pure
+    // computation writes no order edge at all.
+    bool ordersAnything = false;
+    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount() && !ordersAnything; ++id) {
+        ordersAnything = draft.alive(id) && !draft.orderInputsOf(id).empty();
+    }
+    if (!ordersAnything) {
+        return;
+    }
+    // The edges are collected first and written afterwards: an end that moves goes onto another
+    // node's list, which may be one this walk has already passed or one it is about to.
+    std::unordered_map<draft_node_ref_t, std::vector<draft_node_ref_t>> rewritten;
+    std::vector<draft_node_ref_t> touched;
+    const auto listOf = [&](draft_node_ref_t id) -> std::vector<draft_node_ref_t> & {
+        if (auto known = rewritten.find(id); known != rewritten.end()) {
+            return known->second;
+        }
+        const auto written = draft.orderInputsOf(id);
+        touched.push_back(id);
+        return rewritten.emplace(id, std::vector<draft_node_ref_t>(written.begin(), written.end()))
+            .first->second;
+    };
+    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!draft.alive(id)) {
+            continue;
+        }
+        const std::vector<draft_node_ref_t> written(
+            draft.orderInputsOf(id).begin(), draft.orderInputsOf(id).end());
+        if (written.empty()) {
+            continue;
+        }
+        for (draft_node_ref_t pred : written) {
+            draft_node_ref_t from = pred;
+            draft_node_ref_t to   = id;
+            if (!orderEndsOnOneRegion(draft, pred, id, from, to)) {
+                continue;
+            }
+            if (from == pred && to == id) {
+                continue; // the edge already names the regions its two ends are in
+            }
+            std::vector<draft_node_ref_t> &own = listOf(id);
+            // Two arms of one branch (or two parts of one loop) never run together, so an order
+            // between them constrains nothing.
+            //
+            // An order the data path already carries is not written twice either: the pair is
+            // ordered by the values it passes (design principles 2.1). Asked again here, because
+            // moving an end can put it on a node the other end feeds -- the condition a branch
+            // reads -- and the edge then says nothing new.
+            const node_handle_t fromNode = draft.ref(from);
+            const node_handle_t toNode   = draft.ref(to);
+            std::erase(own, pred);
+            if (from == to || hasDirectDataDependency(fromNode, toNode) ||
+                dataPathReaches(fromNode, toNode)) {
+                continue;
+            }
+            std::vector<draft_node_ref_t> &target = to == id ? own : listOf(to);
+            if (std::ranges::find(target, from) == target.end()) {
+                target.push_back(from);
+            }
+        }
+    }
+    for (draft_node_ref_t id : touched) {
+        draft.setOrderInputs(id, rewritten.at(id));
+    }
 }
 
 compile_graph_ptr_t Builder::enterScope(

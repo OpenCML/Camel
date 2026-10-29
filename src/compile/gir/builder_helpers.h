@@ -491,6 +491,28 @@ inline bool dataPathReaches(node_handle_t from, node_handle_t to) {
     return false;
 }
 
+/// Whether `node` owns a control region -- a `BRCH` or a `LOOP` whose arm or part is a region of
+/// this graph -- and so stands on the outside for what runs inside it (docs/design/effects/
+/// edges.cn.md 4.6): the region runs as a whole with its owner, so an order that would reach a node
+/// of the region is written on the owner instead. Such a node computes nothing itself, but an order
+/// edge on it says something, which is why it is not "a pure node nothing orders".
+inline bool nodeStandsForItsRegion(node_handle_t node) {
+    if (node == nullptr) {
+        return false;
+    }
+    const runtime::GCNodeKind kind = nodeKindOf(node);
+    if (kind != runtime::GCNodeKind::Brch && kind != runtime::GCNodeKind::Loop) {
+        return false;
+    }
+    const runtime::GraphDraft *draft = nodeDraftOf(node);
+    for (uint32_t region = 1; region < draft->regionCount(); ++region) {
+        if (draft->region(region).owner == nodeIdOf(node)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /// Whether the model lets an order edge sit on this node (docs/design/effects/edges.cn.md 4.6):
 /// an order edge only orders, and its two ends are effects or nodes that may fault, so a node the
 /// model lets a pass arrange freely -- pure and unable to fault (design principles 3.4) -- carries
@@ -501,6 +523,11 @@ inline bool dataPathReaches(node_handle_t from, node_handle_t to) {
 inline bool nodeTakesAnOrder(node_handle_t node) {
     if (node == nullptr) {
         return false;
+    }
+    // A region's owner carries the order of what its region holds, and the order the region as a
+    // whole has with the code around it is written on it (Builder::rehomeOrderEdges).
+    if (nodeStandsForItsRegion(node)) {
+        return true;
     }
     const runtime::GCNodeKind kind = nodeKindOf(node);
     if (kind == runtime::GCNodeKind::Oper) {
