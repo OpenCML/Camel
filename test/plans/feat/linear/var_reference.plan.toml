@@ -3905,6 +3905,45 @@ assert(!into.some((e) => e.from === port.from && e.kind === 'CTRL'), `and that w
 """
 timeout_ms = 8000
 
+[[tests]]
+name = "var_argument_statement_place"
+desc = "A `var` parameter read by a statement of the same `sync` block: the block runs its statements in the order written, so `tally` prints the value the cell holds before its write, then the one after it, and the caller sees the write (`4` then `5`, and `n` is `5`)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_argument_statement_place.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "tally 4\nafter 5\n5\n5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "var_argument_statement_place.the_statement_is_on_the_chain"
+desc = "The graph of the same case: the statement that reads the `var` parameter takes that read as its value and follows it on the block's chain -- the read is where the chain has the statement (docs/design/effects/edges.cn.md 5.3, 5.5). Without that chain edge the statement has no place of its own on the chain at all: its value edge alone only says it reads the read."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_argument_statement_place.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split(String.fromCharCode(10))
+const link = (l) => {
+  const parts = l.split(' -> ')
+  if (parts.length !== 2) return null
+  const kind = parts[1].includes('type="NORM"') ? 'NORM'
+             : parts[1].includes('type="SYNC"') ? 'SYNC'
+             : parts[1].includes('type="CTRL"') ? 'CTRL' : 'other'
+  return { from: parts[0].trim(), to: parts[1].split(' ')[0], kind }
+}
+const edges = lines.map(link).filter((e) => e !== null)
+const isOf = (node, label) => lines.some((l) => l.trim().startsWith(node + ' [') && l.includes(`label="${label}"`))
+const value = edges.find((e) => e.kind === 'NORM' && isOf(e.from, ':var/get') && isOf(e.to, ':io/println'))
+assert(value !== undefined, `the statement takes the read of the variable as its value: ${JSON.stringify(edges)}`)
+assert(edges.some((e) => e.kind === 'SYNC' && e.from === value.from && e.to === value.to), `and that read is the statement's place on the chain: ${JSON.stringify(edges)}`)
+}
+"""
+timeout_ms = 8000
+
 # A value with two names is one storage both names can write: what a write in place may touch is
 # decided by the array's own count, so the count has to count the names. A name that appears for
 # a value -- a store into a `var` cell, a read that lets the value out of a variable -- makes the
