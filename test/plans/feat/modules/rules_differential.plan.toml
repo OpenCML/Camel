@@ -6,7 +6,7 @@ desc = "The standard rule library (`stdlib/rules.cml`) checked by differential e
 
 [[tests]]
 name = "rules.differential_every_law_keeps_its_value"
-desc = "34 of the library's 37 exported rules, on 53 witness instances and 828 pairs of readings: no rewrite changes the value of its witness on the boundaries and the special values of `int`, `i32`, `float[, f32]` and `f32[]` (`+0.0`/`-0.0`, both infinities, NaN, the range ends, the subnormal end), judged bit for bit for a law that asks for no permission and as real equality for the ones a permission lets change the rounding path."
+desc = "34 of the library's 37 exported rules, on 55 witness instances and 798 pairs of readings (828 in all; the 30 a real-equality licence excludes are left out): no rewrite changes the value of its witness on the boundaries and the special values of `int`, `i32`, `float[, f32]` and `f32[]` (`+0.0`/`-0.0`, both infinities, NaN, the range ends, the subnormal end), judged bit for bit for a law that asks for no permission and as real equality for the ones a permission lets change the rounding path."
 kind = "behavior"
 case = "../../../cases/modules/rules/differential_equivalence.cml"
 args = ["${case}", "std::nvm"]
