@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-297 diagnostics: 277 errors, 20 warnings. 15 carry a machine-applicable edit, 282 say why they carry none.
+298 diagnostics: 277 errors, 21 warnings. 15 carry a machine-applicable edit, 283 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -316,6 +316,7 @@ prints one entry.
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn | no |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn | no |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn | no |
+| `0x04100017` | [RuntimeDiag::DefunctionalizationIncomplete](#defunctionalizationincomplete) | Warn | no |
 
 ## Internal (`InternalDiag`)
 
@@ -10518,6 +10519,47 @@ import str
 
 func main(): int sync {
     println(str::to_upper('a'))
+    return 0
+}
+```
+
+### DefunctionalizationIncomplete
+
+`0x04100017` · Warn · `RuntimeDiag::DefunctionalizationIncomplete`
+
+**Fix**
+
+None: choice: which function a value turns out to be is the program's, and a call that stays indirect is a correct program that runs one call slower
+
+**Message**
+
+```text
+Defunctionalization left {0} as written.
+```
+
+**Help**
+
+```text
+A higher-order value is lowered by turning the call through it into a direct call of the one function it can be, which is a rewriting of the call sites the program writes. A function value this pass cannot name at the call site is left as it is: a parameter the program fills with several different functions (the dispatch is then a choice at run time), a closure whose captured values are not values where the call is, or a function value the program receives from outside itself. Guessing one of them would change which effects run, so nothing is guessed.
+```
+
+**Example** (`test/cases/opt/defun/captured.cml`, run as `camel test/cases/opt/defun/captured.cml std::defunctionalize std::nvm`)
+
+```camel
+func apply(f: (x: int) => int, x: int): int {
+    return f(x)
+}
+
+func plus_one(x: int): int {
+    return x + 1
+}
+
+func main(): int sync {
+    let k = 10
+    let with_k = (x: int) => x + k
+    let captured = apply(with_k, 5)
+    let named = apply(plus_one, 5)
+    'CAPTURED captured={} named={}'->format<captured, named>->println
     return 0
 }
 ```
