@@ -89,6 +89,8 @@ digraph GraphIR {
             N0D -> N0F [label="0|0", type="CTRL"];
             N09 -> N10 [label="0|0", type="WITH"];
             N0F -> N10 [label="0|0", type="NORM"];
+            N0D -> N10 [label="1|0", type="CTRL"];
+            N0D -> N10 [label="SYNC", type="SYNC"];
             N08 -> N12 [label="2|0", type="NORM"];
             N11 -> N12 [label="0|1", type="NORM"];
             N10 -> N12 [label="0|0", type="CTRL"];
@@ -139,6 +141,8 @@ digraph GraphIR {
                 N1C -> N1E [label="0|0", type="CTRL"];
                 N18 -> N1F [label="0|0", type="WITH"];
                 N1E -> N1F [label="0|0", type="NORM"];
+                N1C -> N1F [label="1|0", type="CTRL"];
+                N1C -> N1F [label="SYNC", type="SYNC"];
                 N17 -> N21 [label="2|0", type="NORM"];
                 N20 -> N21 [label="0|1", type="NORM"];
                 N1F -> N21 [label="0|0", type="CTRL"];
@@ -182,6 +186,8 @@ digraph GraphIR {
             N2A -> N2C [label="0|0", type="CTRL"];
             N26 -> N2D [label="0|0", type="WITH"];
             N2C -> N2D [label="0|0", type="NORM"];
+            N2A -> N2D [label="1|0", type="CTRL"];
+            N2A -> N2D [label="SYNC", type="SYNC"];
             N25 -> N2F [label="2|0", type="NORM"];
             N2E -> N2F [label="0|1", type="NORM"];
             N26 -> N2F [label="0|2", type="NORM"];
@@ -225,6 +231,8 @@ digraph GraphIR {
             N37 -> N39 [label="0|0", type="CTRL"];
             N33 -> N3A [label="0|0", type="WITH"];
             N39 -> N3A [label="0|0", type="NORM"];
+            N37 -> N3A [label="1|0", type="CTRL"];
+            N37 -> N3A [label="SYNC", type="SYNC"];
             N32 -> N3C [label="2|0", type="NORM"];
             N3F -> N3C [label="0|1", type="NORM"];
             N33 -> N3C [label="0|2", type="NORM"];
@@ -268,6 +276,8 @@ digraph GraphIR {
             N45 -> N47 [label="0|0", type="CTRL"];
             N41 -> N48 [label="0|0", type="WITH"];
             N47 -> N48 [label="0|0", type="NORM"];
+            N45 -> N48 [label="1|0", type="CTRL"];
+            N45 -> N48 [label="SYNC", type="SYNC"];
             N40 -> N49 [label="2|0", type="NORM"];
             N4D -> N49 [label="0|1", type="NORM"];
             N41 -> N49 [label="0|2", type="NORM"];
