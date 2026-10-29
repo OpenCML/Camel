@@ -1,0 +1,29 @@
+/**
+ * One device run, as numbers: which kernel ran, how many elements it carried, how many bytes
+ * crossed, and whether the device answers what the host answers.
+ *
+ * The program prints the device's description, the largest gap between the device's answer and the
+ * host's answer on the same values -- the sum of the squared differences, which is zero exactly
+ * when every element agrees -- and the kernel's source (whose `__global__` is the kernel that ran).
+ * `std::profile` adds the rest and the test reads its JSON: the bytes each way (the element count
+ * times four), the transfers, the waits and the number of compiles.
+ */
+
+import { sum } from tensor
+import { next_key, seed, uniform } from random
+import { device, download, run_preferred_resident, source, upload } from tiles
+
+func step(x: f32[..]): f32[..] { return x * 2.0 + 1.0 }
+
+func main(): int sync {
+    seed(11)
+    let x = next_key()->uniform::<f32><shape: [256]>
+    let got = download(run_preferred_resident<step>(upload(x)))
+    let want = step(x)
+    let gap = got - want
+    let name: string = device() !! 'no device'
+    println(name)
+    println(sum(gap * gap))
+    println((x)->source<step>)
+    return 0
+}

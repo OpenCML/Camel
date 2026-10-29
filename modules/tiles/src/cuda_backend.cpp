@@ -264,7 +264,17 @@ Backend::Backend(MemoryPolicy policy)
     if (!target)
         throw std::runtime_error("NVRTC does not support this GPU architecture");
     architecture = "--gpu-architecture=compute_" + std::to_string(target);
-    api.check(api.cuDevicePrimaryCtxRetain(&context, device), "retain CUDA context");
+    const CUresult retained = api.cuDevicePrimaryCtxRetain(&context, device);
+    if (retained == CUDA_ERROR_OUT_OF_MEMORY) {
+        // The device is there and this run may use it; what it does not have is room for a
+        // context, because another process is holding its memory. Saying so keeps a report from
+        // reading as a broken driver or a build without a card.
+        throw std::runtime_error(
+            "CUDA device " + std::to_string(ordinal) + " has no free memory for a context (" +
+            "CUDA_ERROR_OUT_OF_MEMORY); another process is using it -- see nvidia-smi, or name "
+            "another ordinal with --devices");
+    }
+    api.check(retained, "retain CUDA context");
     devicePool_.bindContext(context);
     hostPool_.bindContext(context);
 }
