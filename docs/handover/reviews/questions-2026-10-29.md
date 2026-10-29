@@ -146,3 +146,11 @@
 **丢的是函数体与调用者链的连接**：`through_assignment` 子图的 `O05（EXIT）` 在全图**只出现一次**（`N25 -> O05`），**没有任何子图外的使用者，也没有任何等待者**。子图内部链是完整的（`N1E -> N23 -> N25 -> O05`），但它既不被 `main` 的链等到、也不被谁用到，于是沿"从结果出发可达"这条规则整个子图不执行。两种边都在时，接上它的正是 `draft_inline.cpp:2213-2248` 那块里 `nameControlPair` 与 `setSyncInputs` **并写的那条控制边**；同步边那一半在探针态没有写出来。
 
 **位置**：`src/runtime/draft_inline.cpp:2213-2248`，整块的前提是 `bodyHasChain && !placePreds.empty()`，`placePreds` 取 `callSyncInputs`、空了再退到 `ctrlPreds`。`O05` 连一个同步等待者都没有，说明这次拼接里 `callSyncUsers` 也是空的——**也就是说那条调用语句在探针态根本没有链位**（既无同步前驱也无同步后继）。所以问题不在内联器怎么交接，而在**建图时那条调用语句的链位是怎么写的**：`writeSyncStatement` 之外必有一处只写控制边的链位写入点，落在 18 处建图点的 P3 写侧。
+
+### 补记再一条：这两例今天靠「内联拼接自己写的控制边」撑着
+
+`through_assignment`、`after_the_write` 里那条 `report(...)` 调用，在建图时**既没有同步边也没有控制边**：前一条链上节点是它自己的一个实参读，`chainEdgeSaysSomething`（`builder_helpers.h:552`，`linkCheek && !hasDirectDataDependency`）判成「说了也白说」，两种边一起跳过。它今天能跑，是因为**它的值就是所在函数的返回值**，沿数据边从结果可达；而**函数体的效应**靠的是内联拼接处 `nameControlPair`（`src/runtime/draft_inline.cpp:2221-2226`）**自己写的那条控制边**，同步那一半被 `placePreds.empty()` 的守卫跳过。
+
+所以这个缺陷藏到现在的原因清楚了：**两种边都在时，拼接处的控制边替它撑着**。第 2 块（删 `writeSyncStatement` 的 ctrl 行）的风险也**不在建图**——那一条这条调用本来就没有——**而在拼接处**。
+
+试过一处（未提交、已还原）：把 `builder_operators.cpp:4317` 的判据放成「前一条不是链上语句就照样写」，**永远不触发**（`chainedNodes_.contains(lastSyncedNode_)` 恒为真，快层 7767/fail 0 图不变）；放宽成「带效应就写」则**正常态 30 条红**（algebra_rules 10、camel_passes 9、gir 3 等），说明那个短路在别处是对的。**真正的跳过点在读的链位**（`builder_expr.cpp:1504-1527`：`var` 端口读自己成为 `lastSyncedNode_`），下一笔应改在那里。
