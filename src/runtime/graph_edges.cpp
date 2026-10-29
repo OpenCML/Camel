@@ -28,6 +28,7 @@
 #include "camel/runtime/program.h"
 #include "camel/utils/assert.h"
 
+#include <algorithm>
 #include <format>
 #include <stdexcept>
 #include <string>
@@ -297,10 +298,94 @@ class EdgeChecker {
                 bad("orders a node after itself");
                 continue;
             }
-            if (isFreelySchedulable(edge.user)) {
+            if (isFreelySchedulable(edge.user) && !standsForItsRegion(edge.user)) {
                 bad("is on a pure node, which nothing orders");
             }
+            if (const uint32_t region = crossedControlRegion(edge.pred, edge.user); region != 0) {
+                bad(std::format(
+                    "enters region {}; an arm or a part of a loop runs as a whole, so the order it "
+                    "has with the code around it is written on the node that owns the region "
+                    "(docs/design/effects/edges.cn.md 4.6)",
+                    region));
+            }
         }
+    }
+
+    /// The control region an order edge would cross, 0 when it crosses none. An order edge orders
+    /// two nodes that both run, and an arm or a part of a loop runs as a whole with the node that
+    /// owns it: the order such a region has with the code around it is an order on the owner (the
+    /// `BRCH` or the `LOOP`), never one that reaches inside the region (docs/design/effects/
+    /// edges.cn.md 4.6; the builder puts them there in Builder::rehomeOrderEdges). A region that only
+    /// records where code came from -- an inlined body, a tagged block -- is looked through: it
+    /// holds no execution of its own (section 5.8).
+    uint32_t crossedControlRegion(gc_node_ref_t pred, gc_node_ref_t user) const {
+        const std::vector<uint32_t> predChain = controlRegionChain(pred);
+        const std::vector<uint32_t> userChain = controlRegionChain(user);
+        size_t common                          = 0;
+        while (common < predChain.size() && common < userChain.size() &&
+               predChain[common] == userChain[common]) {
+            ++common;
+        }
+        if (common == predChain.size() && common == userChain.size()) {
+            return 0; // both ends are in the one control region that holds them
+        }
+        // A node inside a deeper region stands for the owner of the first region the two ends do
+        // not share; the owner is where the edge belongs. Any other end is where it is.
+        const auto movedInside = [&](gc_node_ref_t end, const std::vector<uint32_t> &chain) {
+            if (common >= chain.size()) {
+                return false;
+            }
+            const GCRegion *region = graph_.region(chain[common]);
+            return region != nullptr && region->owner != end;
+        };
+        if (movedInside(pred, predChain)) {
+            return predChain[common];
+        }
+        if (movedInside(user, userChain)) {
+            return userChain[common];
+        }
+        return 0;
+    }
+
+    /// The control regions a node runs with, outermost first: the arms and the parts of a loop.
+    std::vector<uint32_t> controlRegionChain(gc_node_ref_t ref) const {
+        std::vector<uint32_t> chain;
+        for (uint32_t region = graph_.nodeRegion(ref); region != 0;) {
+            const GCRegion *record = graph_.region(region);
+            if (record == nullptr) {
+                break;
+            }
+            if (record->kind == GCRegionKind::Arm || record->kind == GCRegionKind::LoopCond ||
+                record->kind == GCRegionKind::LoopBody) {
+                chain.push_back(region);
+            }
+            region = record->parent;
+        }
+        std::reverse(chain.begin(), chain.end());
+        return chain;
+    }
+
+    /// Whether a node owns a control region of this graph, and so stands on the outside for what
+    /// runs inside it (docs/design/effects/edges.cn.md 4.6): an arm or a part of a loop runs as a
+    /// whole with the node that owns it, so the order the region has with the code around it is an
+    /// order on that node -- the `BRCH` or the `LOOP` -- and not one that reaches inside the region.
+    /// Such a node computes nothing itself, and still carries an order edge, which is why the rule
+    /// "a pure node carries none" reads it out here.
+    bool standsForItsRegion(gc_node_ref_t ref) const {
+        const GCNode *node = graph_.node(ref);
+        if (node == nullptr) {
+            return false;
+        }
+        if (node->kind != GCNodeKind::Brch && node->kind != GCNodeKind::Loop) {
+            return false;
+        }
+        for (uint32_t region = 1; region < graph_.regionCount(); ++region) {
+            const GCRegion *record = graph_.region(region);
+            if (record != nullptr && record->owner == ref) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// The rule of 4.6's third clause, read off the shared classification so that the seal check

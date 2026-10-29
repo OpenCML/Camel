@@ -1281,6 +1281,16 @@ class Builder {
     /// and a pass that judges every built body (the stream rule) judges it once, counts its readers
     /// once and asks about its loops once.
     void registerBuiltBody(const compile_graph_ptr_t &graph);
+    /// Puts the order edges of a finished body on the control regions that hold their ends
+    /// (docs/design/effects/edges.cn.md 4.6: an order edge never enters a region): an arm and a
+    /// part of a loop run as a whole with the node that owns them, so a node inside a region stands
+    /// on the outside for the region's owner -- the `BRCH` or the `LOOP` -- and an order edge
+    /// written across the border is written on that node instead. An edge whose two ends are two
+    /// arms of one branch says nothing (they never both run) and is dropped, and an edge the data
+    /// path already carries is dropped as the sites that write them already decide. Run over the
+    /// whole body, because a region's owner is known only once the branch or the loop that owns it
+    /// is there.
+    void rehomeOrderEdges(const compile_graph_ptr_t &graph);
     // A captured variable as the current graph sees it at a call or branch: the node of the
     // current graph that holds it, and the variable itself (its origin).
     struct CapturedUse {
