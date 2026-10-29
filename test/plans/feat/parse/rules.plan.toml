@@ -1,6 +1,7 @@
 id = "parse.rules"
 order = 303
 tier = "fast"
+debug_tier = true # also selected by --tier debug (Debug build)
 tags = ["feat", "parse", "rules"]
 desc = "Rule declarations (rewrite design 2) (design principles 4.4): `rule name(params) when condition { left => right }`, `<=>`, `const` parameters. The condition is part of the signature, so it is written before the body it guards. The grammar reads them and the formatter writes them; the compiler makes the pair of functions and the value of type Rule (module rewrite)."
 
@@ -85,6 +86,16 @@ expect_diagnostic_name = "SyntaxDiag::WhenAfterBody"
 expect_diagnostic_line = 3
 expect_diagnostic_column = 37
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.parameters_build"
+desc = "A rule that declares a parameter is built, and the optimizer's declaration read gets through the standard rules: the pair of the rule's own parameters is taken out of the list the declaration builds them in before the list of the function's parameters takes it, so no node is held by two containers at once -- which the tree refuses, and which every rule with a parameter walked through. `std::opt` is the pass that makes a build read stdlib/rules.cml, where the rules with a parameter are."
+kind = "behavior"
+case = "../../../cases/parse/rules/parameters.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]

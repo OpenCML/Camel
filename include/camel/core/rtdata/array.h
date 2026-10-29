@@ -583,18 +583,23 @@ class Array : public rtdata::Object {
         }
     }
 
+    // An index here is flat, the index `getSlot` and `setSlot` take, so the count it is checked
+    // against is the one the elements are counted by, `numel_`. `size_` is the first extent, which
+    // is the whole count only for a rank-1 array: a slice of a rank-3 array reads flat index 2 of
+    // a `{2, 3, 4}` array, which is a valid element and no element of the first dimension but the
+    // last.
     template <typename T> T get(size_t index) const {
-        ASSERT(index < size_, "Index out of range");
+        ASSERT(index < numel_, "Array flat index out of range");
         return rtdata::fromSlot<T>(getSlot(index));
     }
 
     template <typename T> void set(size_t index, T value) {
-        ASSERT(index < size_, "Index out of range");
+        ASSERT(index < numel_, "Array flat index out of range");
         setSlot(index, rtdata::toSlot(value), nullptr);
     }
 
     template <typename T> void set(size_t index, T value, const type::ArrayType *arrayType) {
-        ASSERT(index < size_, "Index out of range");
+        ASSERT(index < numel_, "Array flat index out of range");
         setSlot(index, rtdata::toSlot(value), arrayType);
     }
 
