@@ -2,7 +2,7 @@
 
 English | [中文](../04_execution_model.md)
 
-> The rules of this chapter come from sections 2–4 of [the design principles](../../design-principles.en.md), which prevail in case of conflict.
+> The rules of this chapter come from sections 2–4 of [the design principles](../../../../../../design-principles.en.md), which prevail in case of conflict.
 
 A Camel program is a graph. This chapter explains how this graph is evaluated: evaluation by dependency, `sync`, `var`, `macro`, faults and exit, passes.
 
@@ -41,7 +41,7 @@ func main(name: string, times: int): int sync {
 Hello, Camel! x2
 ```
 
-For the detailed rules see "Programs whose `main` takes parameters or returns a value" in [cli.md](../../cli.md).
+For the detailed rules see "Programs whose `main` takes parameters or returns a value" in [cli.md](../../../../../../cli.md).
 
 ## 4.2 Evaluation by dependency
 
@@ -74,7 +74,7 @@ help: Evaluation is driven by dependencies: outside a sync block an expression w
 1
 ```
 
-The warning goes to standard error and the program runs as usual. Turn it off with `-Wno-effect-not-executed`; treat warnings as errors with `-Werror` (see "Diagnostics" in [cli.md](../../cli.md)).
+The warning goes to standard error and the program runs as usual. Turn it off with `-Wno-effect-not-executed`; treat warnings as errors with `-Werror` (see "Diagnostics" in [cli.md](../../../../../../cli.md)).
 
 ## 4.3 `sync`
 
@@ -87,7 +87,7 @@ A `sync` written before a block marks a sync block: **the statements it writes d
 - As a function body: `func f(...): T sync { ... }` (`sync` comes after the return type).
 - As a branch arm or lambda body: `if c then sync { ... }`, `(x: int) => sync { ... }`.
 - As a standalone block statement `sync { ... }`. Note that it is itself an expression too: when it is written in a function body that is not a sync block and its value is not used, the whole block does not execute.
-- **A sync block does not inherit inward** ([design principles 3.4](../../design-principles.en.md#34-sync-blocks)): a sync block orders only the statements it writes directly; the branch arms, loop bodies and nested blocks written inside it follow their own spelling, and to synchronise one of them, write `sync` there — what a block means does not change with where it is written. In the `if` below the `if` itself is on the sync chain but its arm is not: the arm is evaluated by dependency, the `println(1)` whose value nothing uses does not execute, and `println(2)` is the arm's value, which is the `if`'s value, so only it executes. To print both, write `if c then sync { ... }`:
+- **A sync block does not inherit inward** ([design principles 3.4](../../../../../../design-principles.en.md#34-sync-blocks)): a sync block orders only the statements it writes directly; the branch arms, loop bodies and nested blocks written inside it follow their own spelling, and to synchronise one of them, write `sync` there — what a block means does not change with where it is written. In the `if` below the `if` itself is on the sync chain but its arm is not: the arm is evaluated by dependency, the `println(1)` whose value nothing uses does not execute, and `println(2)` is the arm's value, which is the `if`'s value, so only it executes. To print both, write `if c then sync { ... }`:
 
 ```cml
 func f(c: bool): int sync {
@@ -194,7 +194,7 @@ The management and tracking of side effects is still under research (the design 
 
 ## 4.5 `#macro` functions
 
-`#macro` is a standard tag ([6.2](../../design-principles.en.md), [8](../../design-principles.en.md)), written before a function declaration, usable without an import:
+`#macro` is a standard tag ([6.2](../../../../../../design-principles.en.md), [8](../../../../../../design-principles.en.md)), written before a function declaration, usable without an import:
 
 ```cml
 #macro func cube(x: int): int { return x * x * x }
@@ -271,7 +271,7 @@ error[RuntimeDiag::MaxRecursionDepthExceeded]: Maximum recursion depth (1000) ex
 
 (Followed by the location and a suggestion.)
 
-**Other limits**: the nodes, blocks and edge-table entries of a single graph are each at most 65,535; the three memory regions graph space, permanent space and metaspace are 256 MB each, adjusted with `CAMEL_GRAPH_SPACE_LIMIT_MB`, `CAMEL_PERM_SPACE_LIMIT_MB` and `CAMEL_META_SPACE_LIMIT_MB` respectively, and exhausting one is `RuntimeDiag::MemoryExhausted`. For the full table see "Resource limits" in [cli.md](../../cli.md).
+**Other limits**: the nodes, blocks and edge-table entries of a single graph are each at most 65,535; the three memory regions graph space, permanent space and metaspace are 256 MB each, adjusted with `CAMEL_GRAPH_SPACE_LIMIT_MB`, `CAMEL_PERM_SPACE_LIMIT_MB` and `CAMEL_META_SPACE_LIMIT_MB` respectively, and exhausting one is `RuntimeDiag::MemoryExhausted`. For the full table see "Resource limits" in [cli.md](../../../../../../cli.md).
 
 ## 4.7 Passes and pipelines
 

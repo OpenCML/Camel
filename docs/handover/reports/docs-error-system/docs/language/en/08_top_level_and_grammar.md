@@ -18,11 +18,11 @@ The module top level contains only declarations and no executable statements; ex
 
 | Declaration | Grammar | Section |
 |---|---|---|
-| Module | a file is a module, named after the file | [5.1](05_modules.md#51-a-modules-name) |
-| Import | `import (module \| (name \| { name, ... }) from module)` | [5.2](05_modules.md#52-imports) |
-| Export | `export (dataDecl \| typeDecl \| { name, ... })`; the `export` of a function is written before `func` | [5.3](05_modules.md#53-exports) |
-| Namespace | `namespace qualified-name { ... }` | [5.4](05_modules.md#54-namespaces) |
-| Opening a namespace | `using namespace qualified-name` | [5.2](05_modules.md#52-imports) |
+| Module | a file is a module, named after the file | [5.1](../../../../../../language/en/05_modules.md#51-a-modules-name) |
+| Import | `import (module \| (name \| { name, ... }) from module)` | [5.2](../../../../../../language/en/05_modules.md#52-imports) |
+| Export | `export (dataDecl \| typeDecl \| { name, ... })`; the `export` of a function is written before `func` | [5.3](../../../../../../language/en/05_modules.md#53-exports) |
+| Namespace | `namespace qualified-name { ... }` | [5.4](../../../../../../language/en/05_modules.md#54-namespaces) |
+| Opening a namespace | `using namespace qualified-name` | [5.2](../../../../../../language/en/05_modules.md#52-imports) |
 | Data | `(let \| var) name (: type)? = expression` | [7.2](07_statements.md#72-let-and-var) |
 | Function | `annotation* (with <parameters>)? export? modifier* func name(parameters) (: type)? block` | [7.4](07_statements.md#74-functions) |
 | Type | `type name (<parameter, ...>)? = type` | [7.7](07_statements.md#77-type-declarations) |
@@ -83,7 +83,7 @@ variant   : name | name '(' type, ... ')' | name '{' name: type, ... '}'
 
 - `T?`, `T!`: [3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t).
 - `::<T>`: a function, `rule` or `fact` declares its type parameters after its name ([7.5](07_statements.md#75-generic-functions)).
-- `constas n`: two uses, both compile-time names ([design principles 5.4](../../design-principles.en.md)): it names a dimension in a `const` argument -- the name is bound by `constas` where it first appears in a parameter type, and written as plain `n` afterwards -- or it is a **value parameter** of a function declaration (`func f(constas n: int, ...)`), bound by the constant at the call ([7.5](07_statements.md#75-generic-functions)). A value parameter may be written at any position in the parameter list, and there may be any number of them; each value is its own part of the instance key. A dimension name in a shape does not write `constas`: the name binds where it first appears in a parameter type and is written as plain `n` afterwards (see the array row of [3.1](03_data_model.md)).
+- `constas n`: two uses, both compile-time names ([design principles 5.4](../../../../../../design-principles.en.md)): it names a dimension in a `const` argument -- the name is bound by `constas` where it first appears in a parameter type, and written as plain `n` afterwards -- or it is a **value parameter** of a function declaration (`func f(constas n: int, ...)`), bound by the constant at the call ([7.5](07_statements.md#75-generic-functions)). A value parameter may be written at any position in the parameter list, and there may be any number of them; each value is its own part of the instance key. A dimension name in a shape does not write `constas`: the name binds where it first appears in a parameter type and is written as plain `n` afterwards (see the array row of [3.1](03_data_model.md)).
 - `enum`: [3.5](03_data_model.md#35-enums).
 - Angle brackets: the arguments of a type function ([7.7](07_statements.md#77-type-declarations)) or the arguments of a module type.
 
