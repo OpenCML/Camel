@@ -23,7 +23,7 @@
 
 | 问题 | 决定 | 图上的后果 |
 |---|---|---|
-| 1. 标签与作用域 | `#gpu`/`#cpu` 写**同一个属性键** `tiles.placement`（Symbol 值 `gpu`/`cpu`，combine=inner）；作用域 = 区域：函数体（region 0）、带标签的块（`GCRegionKind::Block`）、Arm、LoopBody；边界 = 区域边界；一个节点恰好一个放置，内层胜出；嵌套由解析规则消掉、部分作用域结构上不存在，不是"静默地为错的设备编译"；派生图用 `autodiff::expand` 在编译期建出并继承放置（§2.6）；不支持的算子、主机效果 → `GpuScopeUnsupported 0x000071` | 被标记的节点带属性；函数体区域 0 带属性；作用域内每个段在图上是一个 `OPER :tiles/exec` 调用，跨作用域边上是显式 upload/download 节点；分支的 BRCH/JOIN 留主机侧，每个臂一个段；`grad(f)` 的调用点换成持有派生图的函数常量 |
+| 1. 标签与作用域 | `#gpu`/`#cpu` 写**同一个属性键** `tiles.placement`（Symbol 值 `gpu`/`cpu`，combine=inner）；作用域 = 区域：函数体（region 0）、带标签的块（`GCRegionKind::Block`）、Arm、LoopBody；边界 = 区域边界；一个节点恰好一个放置，内层胜出；嵌套由解析规则消掉、部分作用域结构上不存在，不是"静默地为错的设备编译"；派生图由 `std::macro` 在编译期展开建出并继承放置（§2.6）；不支持的算子、主机效果 → `GpuScopeUnsupported 0x000071` | 被标记的节点带属性；函数体区域 0 带属性；作用域内每个段在图上是一个 `OPER :tiles/exec` 调用，跨作用域边上是显式 upload/download 节点；分支的 BRCH/JOIN 留主机侧，每个臂一个段；`grad(f)` 的调用点换成持有派生图的函数常量 |
 | 2. 设备数据块 | **就是普通数组值**：`mm::Block::device_` 填 DLPack 的 device；**没有第二个类型、没有第二个用户可见的名字**："同一值两种放置"是同一个值在两个用途上的放置事实，拷贝是编译器的实现（普通的值写入），不是第二个值；`Device<T>` 若保留只是签名上的放置断言（问题 2） | 传输与拷贝由遍插成节点（`:tiles/upload`/`:tiles/download`），不是隐藏同步；块的引用计数与原地写不变；优化器每步 0 分配 |
 | 3. 驻留与异步提交 | 驻留**推断**：整图（含循环、调用、with 参数）上的 owner 表；传输只在放置变化处由遍插成节点；调度器只决定**就绪**，提交发生在 `tiles:exec` 算子内部；异步 = 调用返回带完成令牌的设备值，主机观察时等待；无新语言原语 | 段的 exec 节点返回 pending 设备值；完成令牌记在设备块的 owner 记录上；数据边 + 资源边给出顺序，没有隐藏同步；故障在 exec 节点按 source origin 报出 |
 | 4. 整段编译与缓存 | 编译单元 = **（作用域图, 放置）**，含传递闭包里同一放置的被调图；一个作用域一次 `compile`，段是入口；符号维（`constas n`）编一次，形状签名只决定特化参数；`?` 按具体形状入有界队列；缓存键 = 图规范编码 + 声明键与语义版本 + 目标身份（arch/NVRTC/代码生成 schema/策略）+ 放置，**不用源哈希**；stamp = 图修订 + 声明纪元 + 目标哈希 | 作用域图带目标事实 `tiles.compiled_scope`（`tiles.compiled_region` 的扩展）；段的 exec 节点各带自己的函数常量，共享同一份编译产物；第二次调用命中，不再编译 |
@@ -38,7 +38,7 @@
 | **S2** | 放置键、两个标签、body region、全节点盖章（无消费者） | 能，不改行为 | `feat/compile` 的 GIR 快照、`inspect --tags` |
 | **S3** | 放置解析、作用域边界与 `inspect` 输出 | 能（S2 之后） | 新增 `placement_*` 用例，`--devices cpu` |
 | **S4** | 拒绝：不支持的算子、主机效果、无法确定放置的节点 | 能（S3 之后），此时 `#gpu` 首次有语义 | 负向用例的退出码与诊断文本 |
-| **S5** | 图内区域（按控制区域切段，分支、循环、调用）与派生图展开（`autodiff::expand`） | 能（S4 之后），本项第一步真正改变执行 | `tiles` 全套 + 分支/循环用例 + 展开前后逐位相同 |
+| **S5** | 图内区域（按控制区域切段，分支、循环、调用）与派生图展开（`std::macro`） | 能（S4 之后），本项第一步真正改变执行 | `tiles` 全套 + 分支/循环用例 + 展开前后逐位相同 |
 | **S6** | 设备块与值模型（`device_`、owner 记录、原地写、DLPack） | 能（S5 之后） | `feat/modules/tiles` 的设备路径 |
 | **S7** | 驻留推断与传输节点（owner 表、循环状态、调用边界、合批） | 能（S6 之后） | 传输计数用例、`inspect` 的 transfers |
 | **S8** | 异步提交与就绪（pending 值、停等点、故障位置） | 能（S6 之后） | `syncs`/`kernels` 计数、`async_execution.cml` 的既有断言、`plan_check` 的传输边界 |
@@ -273,9 +273,9 @@ N31 :call  (N30, m) (x)                          [placement=gpu]
 - `placement_tags.cml`：`#gpu`/`#cpu`/嵌套/同值嵌套；`std::gir` 快照显示 `attrs=`；`inspect --tags` 显示两个 tag 与它们的读者；
 - `placement_branch.cml` / `placement_loop.cml`：`#gpu` 函数里的 if/else 与循环，`tiles::inspect` 的段表是 2 个臂段 + 1 个循环体段，传输只在边界；
 - `placement_callee.cml`：无标签的 helper 被 `#gpu` 与主机两处调用 → 两份单元（段表里两份 helper 图）；
-- `placement_grad.cml`：`#gpu` 里的 `with_grad`，展开遍之后派生图 dump 出 `placement=gpu`，且 `inspect` 的 entries 里有它；
+- `placement_grad.cml`：`#gpu` 里的 `with_grad`，`std::macro` 展开之后派生图 dump 出 `placement=gpu`，且 `inspect` 的 entries 里有它；
 - `placement_grad_expand.cml`：同一个 `with_grad(loss)` 在展开前/后跑出**逐位相同**的值（展开不改变语义）；
-- `placement_grad_dynamic.cml`（negative）：`#gpu` 里对运行期才知道的函数调用 `grad` → 0x71，消息点名 `grad` 与该调用点；以及"忘了 `autodiff::expand`"→ 报缺少前置遍、点名它；
+- `placement_grad_dynamic.cml`（negative）：`#gpu` 里对运行期才知道的函数调用 `grad` → 0x71，消息点名 `grad` 与该调用点；以及"流水线里没有 `std::macro`"→ 报缺少前置遍、点名它；
 - `placement_reject.cml`（negative）：`print`、`sort`、无法盖章的节点 → 退出码 1、`GpuScopeUnsupported`、一条诊断列全部算子；`#gpu` + `--devices cpu` 给出**同样**的错误；
 - `placement_no_reader.cml`（negative）：只有 `#gpu` 没有 `tiles::compile` → `TagHasNoReader` 警告。
 
@@ -612,7 +612,7 @@ Draft §1 记下的缺口是"设备 64 MiB / 32 项"：训练规模下每步的�
 | `matmul`、`add`、`multiply`、`sum_axis`/`mean`、`relu`、`exp`、`log`、`maximum` | 在表里 | — |
 | `permute`/`transpose`/`reshape`、`softmax`、`gelu`、`layer_norm`、`mean`、`cross_entropy` | 不在表里 | 支持面（视图与逐元素/归约组合） |
 | `cast`（f32↔f32 以外）、`sgd`/`adam` 的逐元素更新 | 部分 | 支持面（元素类型与原地契约） |
-| `with_grad`/`grad` | 构图机制，不进设备表；今天在运行期建派生图 | G1（§2.6 的 `autodiff::expand`） |
+| `with_grad`/`grad` | 构图机制，不进设备表；`std::macro` 在编译期把它展开成派生图 | G1（§2.6） |
 
 本计划交付时，"每个算子都在 GPU 上"的闸门按支持面内的算子全绿；表外算子逐条列在上表里，支持面补齐后同一脚本零缺口。这就是两段的分界：**前者让"放上去"成为可测的、正确的事，后者让"放上去的算子足够多"**。
 
@@ -630,7 +630,7 @@ python benchmarks\train.py --check --models transformer --device cuda --camel-de
 python benchmarks\train.py --check-ksteps --models transformer --device cuda --camel-devices 0
 ```
 
-（`--torch-device`/`--camel-devices` 是本计划要加的两个参数：`compare.py` 的 `camel_arg_command` 把 `--devices 0` 放在目标文件之前；`train.py` 的 `CAMEL_CONFIGS` 加一条 GPU 配置，`run_camel_full` 把 `--devices` 传下去，`model_torch` 按 `--device` 把权重与输入搬到 CUDA。GPU 配置的遍序是 `std::macro autodiff::expand tiles::compile std::nvm`：`std::macro` 先展开宏，`autodiff::expand` 必须在 `tiles::compile` **之前**——派生图只有在遍里建出来，才会被当成同一个单元的图（§2.6）；顺序反了 `tiles::compile` 会报缺少前置遍并点名 `autodiff::expand`。）
+（`--torch-device`/`--camel-devices` 是本计划要加的两个参数：`compare.py` 的 `camel_arg_command` 把 `--devices 0` 放在目标文件之前；`train.py` 的 `CAMEL_CONFIGS` 加一条 GPU 配置，`run_camel_full` 把 `--devices` 传下去，`model_torch` 按 `--device` 把权重与输入搬到 CUDA。GPU 配置的遍序是 `std::macro tiles::compile std::nvm`：`std::macro` 必须在 `tiles::compile` **之前**——派生图只有在编译期展开出来，才会被当成同一个单元的图（§2.6）；顺序反了 `tiles::compile` 会报缺少前置遍并点名 `std::macro`。）
 
 ---
 
@@ -642,7 +642,7 @@ python benchmarks\train.py --check-ksteps --models transformer --device cuda --c
 | 2 | S2 放置键与两个标签（无消费者） | 无 | 是（若上一版已合则改它声明的键，未合则先落自己的声明） |
 | 3 | S3 放置解析与作用域边界 | 2 | 是 |
 | 4 | S4 拒绝与 0x71（接管上一版的判定） | 3 | 是 |
-| 5 | S5 图内区域（段）与派生图展开（`autodiff::expand`） | 3、4 | 是（两个提交：5a 段，5b 展开遍） |
+| 5 | S5 图内区域（段）与派生图展开（`std::macro`） | 3、4 | 是（两个提交：5a 段，5b 展开） |
 | 6 | S6 设备块与值模型 | 无（可与 1–5 并行） | 是 |
 | 7 | S7 驻留与传输 | 6 | 是 |
 | 8 | S8 异步提交与就绪 | 6 | 是 |
