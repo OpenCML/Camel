@@ -9,7 +9,11 @@
  *  - the types agree along the edges: what a node produces has the type its readers need.
  *    The rules are the ones the compiler's own graphs satisfy, node kind by node kind (see
  *    checkNode); a rewrite that breaks one has built a graph that a back end would run on the
- *    wrong slot type.
+ *    wrong slot type;
+ *  - a block's statements are one chain (docs/design/effects/edges.cn.md 5.3): each statement
+ *    follows one other of its block and one statement follows it. A statement with two predecessors
+ *    or with two statements after it is a chain that forks, which is no chain -- the layout walks
+ *    one of them and the other is reached by nothing.
  *
  * Violations are collected; the commit fails with all of them, named by graph and node.
  */
@@ -27,6 +31,7 @@
 #include <format>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace camel::runtime {
@@ -46,6 +51,7 @@ class EdgeChecker {
         checkWritings();
         checkOrderEdges();
         checkSyncEdges();
+        checkSyncChainForks();
         findCycle();
         for (auto it = graph_.nodes().begin(); it != graph_.nodes().end(); ++it) {
             checkNode(it.ref(), **it);
@@ -119,7 +125,8 @@ class EdgeChecker {
     /// The builder records that fact on each node it chains (kGCNodeFlagSyncStatement), so the
     /// check is: both ends are such a node, they are not the same node and not a node a rewrite
     /// removed, and one statement is written directly after one other (the tail that reaches the
-    /// block's value is the one node that two sync edges leave).
+    /// block's value is the one node that two sync edges leave). The other direction -- one
+    /// statement two statements follow -- is `checkSyncChainForks` below.
     void checkSyncEdges() {
         if (!graph_.hasSyncEdges()) {
             return;
@@ -167,6 +174,96 @@ class EdgeChecker {
             if (graph_.syncPredsOf(edge.user).size() > 1) {
                 bad("is the second predecessor of one statement");
             }
+        }
+    }
+
+    /// The block a statement is written in: the innermost region that holds code of its own, with the
+    /// region an inline splice gave the code it moved looked through -- that code is the code of the
+    /// block it was moved into (docs/design/effects/edges.cn.md 5.7), which is exactly what
+    /// `statementRegionOf` reads back on the draft (src/runtime/draft.cpp, beside
+    /// `sameSyncBlock`). Nothing else is looked through: a region that holds code of its own -- an
+    /// arm, a part of a loop, a block written as a statement -- separates blocks, and its chain is
+    /// its own.
+    uint32_t controlBlockOf(gc_node_ref_t ref) const {
+        uint32_t region = graph_.nodeRegion(ref);
+        while (region != 0) {
+            const GCRegion *enclosing = graph_.region(region);
+            if (enclosing == nullptr || enclosing->kind != GCRegionKind::Inline) {
+                break;
+            }
+            region = enclosing->parent;
+        }
+        return region;
+    }
+
+    /// The other half of 5.3, and the one a splice can break: a block's statements are one chain,
+    /// so one statement follows one other at most *and* one statement follows it. `checkSyncEdges`
+    /// reads the first half back; this is the second. Two statements of one block following the
+    /// same statement is a chain that forks, which is no chain: the layout takes one of the two and
+    /// the other is reached by nothing, so its work does not happen and a program that prints twice
+    /// prints once.
+    ///
+    /// What counts is the chain 5.3 and 3.4 make. A node the model lets a pass arrange freely is not
+    /// on the chain at all (3.4: a sync block orders its effects, and a node that is pure and cannot
+    /// fault has no order to keep), so an edge forking there is nothing to report. A GATE is where a
+    /// chain's tail hands its value on (5.3) -- an end of the chain, not a continuation of it --
+    /// and a value that several nested blocks hand on is reached from the one tail by one GATE each.
+    ///
+    /// The splice resolves a statement's place again once the body's code is in
+    /// (`resolvePlaceForks`, src/runtime/draft_inline.cpp) and moves a statement that finds itself
+    /// following one a second statement follows to the end of the chain growing from it. The move is
+    /// refused when that end waits on the statement being moved -- moving it would put the graph on
+    /// a cycle of inputs -- and the fork then stands: the splice has no other place to put the
+    /// statement, so the graph it would leave is one the model does not have. No such graph is
+    /// frozen: this names the statement the two follow, which is where the defect is looked for,
+    /// instead of leaving a chain the layout may walk one way and silently drop the other.
+    void checkSyncChainForks() {
+        if (!graph_.hasSyncEdges()) {
+            return;
+        }
+        std::unordered_map<gc_node_ref_t, std::vector<gc_node_ref_t>> followers;
+        for (const GCGraphSyncEdge &edge : graph_.syncEdges()) {
+            if (!graph_.containsNodeRef(edge.user) || !graph_.containsNodeRef(edge.pred)) {
+                continue; // reported by checkSyncEdges
+            }
+            const GCNode *user = graph_.node(edge.user);
+            const GCNode *pred = graph_.node(edge.pred);
+            if (user->kind == GCNodeKind::Dead || pred->kind == GCNodeKind::Dead) {
+                continue; // reported by checkSyncEdges
+            }
+            if ((user->flags & kGCNodeFlagSyncStatement) == 0 ||
+                (pred->flags & kGCNodeFlagSyncStatement) == 0) {
+                continue; // reported by checkSyncEdges
+            }
+            if (controlBlockOf(edge.user) != controlBlockOf(edge.pred)) {
+                continue; // not one block's chain, which checkSyncEdges does not allow either
+            }
+            if (user->kind == GCNodeKind::Gate) {
+                continue; // the chain's end, not its continuation
+            }
+            if (isFreelySchedulable(edge.user)) {
+                continue; // not a statement of a chain at all (3.4)
+            }
+            followers[edge.pred].push_back(edge.user);
+        }
+        for (const auto &[pred, users] : followers) {
+            if (users.size() < 2) {
+                continue;
+            }
+            std::string named;
+            for (gc_node_ref_t user : users) {
+                if (!named.empty()) {
+                    named += ", ";
+                }
+                named += std::to_string(user);
+            }
+            violations_.push_back(
+                std::format(
+                    "graph '{}': sync chain forks at node {}: statements {} follow it, and a "
+                    "block's statements are one chain (docs/design/effects/edges.cn.md 5.3)",
+                    graph_.name(),
+                    pred,
+                    named));
         }
     }
 

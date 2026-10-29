@@ -386,6 +386,75 @@ CommitConflictTestPass::apply(const camel::runtime::Program *program, std::ostre
 }
 
 const camel::runtime::Program *
+EdgesSyncForkTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    using namespace camel::runtime;
+    if (program == nullptr || program->root() == nullptr) {
+        return program;
+    }
+    RuntimeGraphDraftSession session(context_, program);
+    GraphDraft &draft = session.edit(program->root());
+    const auto markStatement = [&](gc_node_ref_t node) {
+        draft.setNodeRuntimeFlags(node, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
+    };
+    // One statement two statements follow: what the splice leaves behind when it cannot move a
+    // statement to the end of the chain growing from it (docs/design/effects/edges.cn.md 5.3).
+    const gc_node_ref_t first  = draft.addSyncNode();
+    const gc_node_ref_t second = draft.addSyncNode();
+    const gc_node_ref_t third  = draft.addSyncNode();
+    markStatement(first);
+    markStatement(second);
+    markStatement(third);
+    const gc_node_ref_t afterFirst[1] = {first};
+    draft.setSyncInputs(second, afterFirst);
+    draft.setSyncInputs(third, afterFirst);
+    os << "SYNCFORK fork=" << first << ">" << second << ", " << first << ">" << third << "\n";
+    try {
+        const Program *next = session.commit();
+        os << "EDGES accepted\n";
+        return next;
+    } catch (const std::exception &error) {
+        os << "EDGES refused: " << error.what() << "\n";
+        return program;
+    }
+}
+
+const camel::runtime::Program *
+EdgesSyncForkGateTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    using namespace camel::runtime;
+    if (program == nullptr || program->root() == nullptr) {
+        return program;
+    }
+    RuntimeGraphDraftSession session(context_, program);
+    GraphDraft &draft = session.edit(program->root());
+    const auto markStatement = [&](gc_node_ref_t node) {
+        draft.setNodeRuntimeFlags(node, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
+    };
+    // 5.3's other shape: the one chain end hands its value on, and a GATE does that for each block
+    // that ends on it -- so two GATEs may follow one statement. It is an end of the chain, not a
+    // continuation of it, and the seal check accepts it.
+    const gc_node_ref_t tail = draft.addSyncNode();
+    markStatement(tail);
+    for (float written : {2.0f, 3.0f}) {
+        const gc_node_ref_t value = draft.materializeStaticValue(
+            camel::core::rtdata::toSlot(written), camel::core::type::Type::Float32());
+        const gc_node_ref_t gate = draft.addGateNode(camel::core::type::Type::Float32());
+        draft.setNormInputs(gate, std::span<const gc_node_ref_t>(&value, 1));
+        markStatement(gate);
+        const gc_node_ref_t afterTail[1] = {tail};
+        draft.setSyncInputs(gate, afterTail);
+    }
+    os << "SYNCFORKGATE tail=" << tail << "\n";
+    try {
+        const Program *next = session.commit();
+        os << "EDGES accepted\n";
+        return next;
+    } catch (const std::exception &error) {
+        os << "EDGES refused: " << error.what() << "\n";
+        return program;
+    }
+}
+
+const camel::runtime::Program *
 EdgesSyncGateTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     using namespace camel::runtime;
     if (program == nullptr || program->root() == nullptr) {
