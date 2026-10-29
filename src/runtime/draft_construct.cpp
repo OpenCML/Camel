@@ -14,6 +14,7 @@
 #include "camel/runtime/draft.h"
 
 #include "camel/core/type/base.h"
+#include "camel/core/type/composite/func.h"
 
 #include <algorithm>
 #include <cstring>
@@ -619,7 +620,34 @@ void GraphDraft::removeNormPort(gc_node_ref_t id) {
 void GraphDraft::removeWithPort(gc_node_ref_t id) {
     requireOneWriting("removeWithPort");
     ++mutations_;
-    std::erase(withPorts_, id);
+    const auto it = std::find(withPorts_.begin(), withPorts_.end(), id);
+    if (it == withPorts_.end()) {
+        return;
+    }
+    const size_t port = static_cast<size_t>(it - withPorts_.begin());
+    withPorts_.erase(it);
+    // The declared `with` parameters are the first with ports and the captures follow them
+    // (callValueTypeOf, runtimeFuncValue read them that way). A graph that loses a declared one
+    // loses its type with it: a type that keeps it makes the graph state a parameter it no longer
+    // has, and every reader places the captures one port too late. The call's value type then
+    // leaves out the new versions the callee hands on, and a scheduler that reads them runs past
+    // the end of the call's With inputs.
+    if (funcType_ != nullptr && port < funcType_->withTypesCount()) {
+        camel::core::type::param_vec_t withTypes;
+        withTypes.reserve(funcType_->withTypesCount() - 1);
+        for (size_t i = 0; i < funcType_->withTypesCount(); ++i) {
+            if (i != port) {
+                withTypes.emplace_back(funcType_->withTypeAt(i), funcType_->withIsVarAt(i));
+            }
+        }
+        camel::core::type::param_vec_t normTypes;
+        normTypes.reserve(funcType_->normTypesCount());
+        for (size_t i = 0; i < funcType_->normTypesCount(); ++i) {
+            normTypes.emplace_back(funcType_->normTypeAt(i), funcType_->normIsVarAt(i));
+        }
+        funcType_ = camel::core::type::FunctionType::create(
+            withTypes, normTypes, funcType_->exitType());
+    }
 }
 
 void GraphDraft::removeClosureNode(gc_node_ref_t id) {
