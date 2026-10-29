@@ -98,6 +98,7 @@ digraph GraphIR {
             N07 -> N13 [label="2|0", type="NORM"];
             N12 -> N13 [label="0|1", type="NORM"];
             N09 -> N13 [label="0|2", type="NORM"];
+            N10 -> N13 [label="ORDER", type="ORDER"];
             N13 -> N14 [label="0|0", type="NORM"];
             N10 -> N14 [label="0|1", type="NORM"];
             N14 -> N15 [label="0|0", type="NORM"];
@@ -150,6 +151,7 @@ digraph GraphIR {
                 N16 -> N22 [label="2|0", type="NORM"];
                 N21 -> N22 [label="0|1", type="NORM"];
                 N18 -> N22 [label="0|2", type="NORM"];
+                N1F -> N22 [label="ORDER", type="ORDER"];
                 N22 -> N23 [label="0|0", type="NORM"];
                 N1F -> N23 [label="0|1", type="NORM"];
                 N23 -> N24 [label="0|0", type="NORM"];
@@ -192,6 +194,7 @@ digraph GraphIR {
             N2E -> N2F [label="0|1", type="NORM"];
             N26 -> N2F [label="0|2", type="NORM"];
             N2D -> N2F [label="0|0", type="CTRL"];
+            N2D -> N2F [label="ORDER", type="ORDER"];
             N2F -> N30 [label="0|0", type="NORM"];
             N2D -> N30 [label="0|1", type="NORM"];
             N30 -> N31 [label="0|0", type="NORM"];
@@ -237,6 +240,7 @@ digraph GraphIR {
             N3F -> N3C [label="0|1", type="NORM"];
             N33 -> N3C [label="0|2", type="NORM"];
             N3A -> N3C [label="0|0", type="CTRL"];
+            N3A -> N3C [label="ORDER", type="ORDER"];
             N3C -> N3D [label="0|0", type="NORM"];
             N3A -> N3D [label="0|1", type="NORM"];
             N3D -> N3E [label="0|0", type="NORM"];
@@ -282,6 +286,7 @@ digraph GraphIR {
             N4D -> N49 [label="0|1", type="NORM"];
             N41 -> N49 [label="0|2", type="NORM"];
             N48 -> N49 [label="0|0", type="CTRL"];
+            N48 -> N49 [label="ORDER", type="ORDER"];
             N49 -> N4A [label="0|0", type="NORM"];
             N48 -> N4A [label="0|1", type="NORM"];
             N4A -> N4B [label="0|0", type="NORM"];

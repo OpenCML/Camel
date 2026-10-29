@@ -1,0 +1,13 @@
+// The resource of a call is the one its callee reaches (design principles 3.3: a call is one
+// effect on the resources of the function it calls), so a call that prints takes its place in the
+// same order as a `println` written beside it: 1, then 2 from inside `write`, then 3.
+func write(x: int): int {
+    return println(x)
+}
+
+func main(): int {
+    let a = println(1)
+    let b = write(2)
+    let c = println(3)
+    return a * 100 + b * 10 + c
+}

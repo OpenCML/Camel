@@ -2,7 +2,7 @@ array_combine nodes 8 edges 10 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 d
 array_fold nodes 7 edges 7 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 2
 array_double nodes 4 edges 5 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 1 tensor_mul 0
 tensor_zero nodes 5 edges 5 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 1 tensor_add 0 tensor_mul 1
-main nodes 13 edges 15 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 4 tensor_add 0 tensor_mul 0
+main nodes 13 edges 18 add_l 0 add_i 0 sub_l 0 sub_i 0 mul_l 0 mul_i 0 div_l 0 div_i 0 neg_l 0 neg_i 0 add_d 0 sub_d 0 mul_d 0 div_d 0 neg_d 0 println 4 tensor_add 0 tensor_mul 0
 [8.0, 16.0, 24.0]
 [1.0, 2.0, 3.0]
 [6.0, 12.0, 18.0]

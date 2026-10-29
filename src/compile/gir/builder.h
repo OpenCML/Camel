@@ -2330,6 +2330,15 @@ class Builder {
     // function's resources are read from. This reports nothing: it runs before the module-by-module
     // reporting begins.
     void measureInferredResources();
+    // Once every body is built and measured: orders the effects that reach one resource by the
+    // order they are written in (design principles 3.3, "同一资源自动有序"), with one order edge
+    // between two adjacent effects on it. It runs after measureInferredResources because a call's
+    // resources are the set its callee settled at (an operator's are its own declaration's), which
+    // is not known while the caller is being built. Only the block an effect is written in is
+    // ordered: an effect in an arm and one outside it are separated by a region, and the ordering
+    // across a region is the branch's, not this pair's.
+    void orderEffectsOnOneResource();
+    void orderEffectsOnOneResourceIn(DraftGraphBuilder *graph);
     // Then holds each declaration of the current module to the clause it wrote: `uses` is an
     // upper bound and `pure` promises the empty set, so a body that reaches past its clause is
     // UsesPromiseViolated at the declaration. Reported with the other per-module diagnostics,

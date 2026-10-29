@@ -17,6 +17,8 @@
 #include "camel/utils/type.h"
 
 #include <algorithm>
+#include <format>
+#include <map>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -441,29 +443,29 @@ Builder::footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> o
     // returns the caller's cell is not a body whose result nothing else refers to.
     walk.reach.result = sem::ResultAlias{.kind = sem::ResultAlias::Kind::Unknown};
     numberBodyPorts(walk, draft, *type);
-    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-        if (!draft.alive(id)) {
-            continue;
-        }
-        if (only.has_value() && id != *only) {
-            continue; // one node's own reach, asked for by the report of a violation
-        }
-        bool placed = true;
+    // One node's own reach, asked for by the report of a violation or by the ordering of the
+    // effects on one resource, is one node's walk: nothing else of the body is looked at.
+    const auto walkNode = [&](draft_node_ref_t id) {
         switch (nodeKindOf(draft.ref(id))) {
         case runtime::GCNodeKind::Oper:
-            placed = reachOfOper(graph, draft, walk, id);
-            break;
+            return reachOfOper(graph, draft, walk, id);
         case runtime::GCNodeKind::Func:
-            placed = reachOfFunc(graph, draft, walk, id);
-            break;
+            return reachOfFunc(graph, draft, walk, id);
         case runtime::GCNodeKind::Call:
-            placed = reachOfCall(draft, walk, id);
-            break;
+            return reachOfCall(draft, walk, id);
         default:
-            break;
+            return true;
         }
-        if (!placed) {
+    };
+    if (only.has_value()) {
+        if (!draft.alive(*only) || !walkNode(*only)) {
             return std::nullopt;
+        }
+    } else {
+        for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+            if (draft.alive(id) && !walkNode(id)) {
+                return std::nullopt;
+            }
         }
     }
     if (walk.unplaceable) {
@@ -547,6 +549,143 @@ void Builder::measureInferredResources() {
         const auto &settled = inferredResources_[graph.get()];
         if (settled.anyOf.empty()) {
             graph->setResources(settled);
+        }
+    }
+}
+
+namespace {
+
+// One resource a node reaches, named the way the body it is written in names it: a parameter of
+// the body, or an ambient resource (`stdout`, `fs`) by the name the declaration gave it. Two
+// effects reach the same resource exactly when their keys are equal (design principles 3.3);
+// a node whose reach the walk cannot place is `unnamed` and stands for every resource at once.
+struct ResourceKeys {
+    std::vector<std::string> keys;
+    bool unnamed = false;
+};
+
+// What the positions of a `sync` block's chain would ask -- one statement follows the other -- is
+// not repeated here: this only says which effects touch one resource, and the chain keeps its own
+// statement order. An effect whose reach cannot be placed is ordered against everything, the way
+// an undeclared operator is read as touching "全局" (design principles 3.3).
+ResourceKeys resourceKeysOf(const camel::core::sem::ResourceSignature &reach) {
+    ResourceKeys out;
+    for (const auto &use : reach.params) {
+        out.keys.push_back(std::format("p{}", static_cast<int>(use.index)));
+    }
+    for (const auto &use : reach.ambient) {
+        out.keys.push_back(std::format("a{}", use.name));
+    }
+    out.unnamed = !reach.anyOf.empty();
+    return out;
+}
+
+// The last effect on each resource of one block, and the last effect whose resources could not be
+// named (it stands for all of them).
+struct BlockEffectOrder {
+    std::map<std::string, draft_node_ref_t> lastOn;
+    draft_node_ref_t lastUnnamed = 0;
+};
+
+} // namespace
+
+void Builder::orderEffectsOnOneResource() {
+    // Design principles 3.3: "同一资源自动有序" -- within one function body, effects that really
+    // run and reach one resource run in the order they are written, and the compiler writes an
+    // order edge between them. Without it, `let x = println(9); let y = println(0)` is left to the
+    // schedule, and the node VM prints `0` before `9`.
+    //
+    // The edge is an order edge, not a version of the resource: the console is ambient state
+    // (design principles 3.3), so there is no value that one write hands to the next one, and a
+    // data edge would carry "used" with it -- it would make the earlier effect run merely because
+    // a later one does, which is exactly what 3.1 refuses ("顺序不决定是否执行"). A `var` cell
+    // does have a version: its writes and reads are data edges already (recordWrite,
+    // collapseNonEscapingVariableReads), so a cell write or read reaching this walk is a pair that
+    // is ordered by its value, and no edge is added beside it.
+    //
+    // It runs after measureInferredResources: a call's resources are the ones its callee settled
+    // at, so the pairs can only be read once every body is built and the measurements agree.
+    for (const ModuleUnit *unit : unitOrder_) {
+        for (const compile_graph_ptr_t &graph : unit->builtBodies) {
+            orderEffectsOnOneResourceIn(graph.get());
+        }
+    }
+}
+
+void Builder::orderEffectsOnOneResourceIn(DraftGraphBuilder *graph) {
+    if (graph == nullptr || graph->funcType() == nullptr) {
+        return;
+    }
+    const runtime::GraphDraft &draft = graph->draft();
+    // The block an effect is written in decides which effects it is ordered with: an arm and a
+    // part of a loop separate blocks, and the regions that only annotate where a node came from
+    // are looked through (the notion the seal check and the layout use).
+    std::map<uint32_t, BlockEffectOrder> blocks;
+    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!draft.alive(id)) {
+            continue;
+        }
+        const node_handle_t node = draft.ref(id);
+        // Only an effect carries the ordering ("两端都是效应节点或可能出故障的节点", 4.6), and a
+        // node the model lets a pass arrange freely carries none.
+        if (!isEffectNode(graph, node) || !nodeTakesAnOrder(node)) {
+            continue;
+        }
+        const auto reach = footprintOf(graph, id);
+        ResourceKeys named;
+        if (reach.has_value()) {
+            named = resourceKeysOf(*reach);
+        } else {
+            named.unnamed = true;
+        }
+        if (!named.unnamed && named.keys.empty()) {
+            continue; // an effect the walk places on no resource orders with nothing
+        }
+        BlockEffectOrder &block = blocks[runtime::controlRegionOf(draft, id)];
+        std::vector<draft_node_ref_t> before;
+        const auto addBefore = [&](draft_node_ref_t from) {
+            if (from != 0 && from != id && std::ranges::find(before, from) == before.end()) {
+                before.push_back(from);
+            }
+        };
+        if (named.unnamed) {
+            // Everything written before it in the block is before it, whatever it touched.
+            for (const auto &[key, from] : block.lastOn) {
+                addBefore(from);
+            }
+            addBefore(block.lastUnnamed);
+        } else {
+            for (const std::string &key : named.keys) {
+                const auto found = block.lastOn.find(key);
+                if (found != block.lastOn.end()) {
+                    addBefore(found->second);
+                }
+            }
+            addBefore(block.lastUnnamed);
+        }
+        for (draft_node_ref_t from : before) {
+            const node_handle_t source = draft.ref(from);
+            if (!nodeTakesAnOrder(source) || !linkCheek(source, node)) {
+                continue;
+            }
+            // An edge the data path already carries says nothing, and one against it would be a
+            // cycle (design principles 2.1: the read and the write of `x = x + 1` are ordered by
+            // the value, not by a second edge).
+            if (hasDirectDataDependency(source, node) || dataPathReaches(source, node) ||
+                dataPathReaches(node, source)) {
+                continue;
+            }
+            linkNodes(LinkType::Order, source, node);
+        }
+        if (named.unnamed) {
+            // What it was ordered after is ordered after this one now: keeping both would say the
+            // same thing twice, and this node stands for every resource.
+            block.lastOn.clear();
+            block.lastUnnamed = id;
+        } else {
+            for (const std::string &key : named.keys) {
+                block.lastOn[key] = id;
+            }
         }
     }
 }

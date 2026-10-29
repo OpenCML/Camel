@@ -51,6 +51,7 @@ digraph GraphIR {
         N0E -> N09 [label="0|0", type="NORM"];
         N12 -> N0B [label="0|0", type="NORM"];
         N09 -> N0B [label="0|0", type="CTRL"];
+        N09 -> N0B [label="ORDER", type="ORDER"];
         N0C -> N0D [label="0|0", type="NORM"];
         N0B -> N0D [label="0|0", type="CTRL"];
         N0B -> N0D [label="SYNC", type="SYNC"];

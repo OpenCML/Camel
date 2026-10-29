@@ -34,7 +34,14 @@ gc_node_ref_t bridgeMacroRewriteControl(
     const bool wasStatement =
         replacedHeader != nullptr &&
         (replacedHeader->runtimeFlags & camel::runtime::kGCNodeFlagSyncStatement) != 0;
-    if (ctrlPreds.empty() && !wasStatement) {
+    // Something may also have ordered the replaced node: an effect written between two others on
+    // one resource carries an order edge, and the edges move with the node (takeStatementPlace ->
+    // replaceOrderEdgesAt). A materialized value is the work's result and not the work, so it is a
+    // node nothing orders and no order edge may sit on (design principles 4.6): the gate is what
+    // keeps the place the value may not take.
+    const bool wasOrdered =
+        !draft.orderInputsOf(replacedNodeId).empty() || !draft.orderUsersOf(replacedNodeId).empty();
+    if (ctrlPreds.empty() && !wasStatement && !wasOrdered) {
         return valueNodeId;
     }
 
