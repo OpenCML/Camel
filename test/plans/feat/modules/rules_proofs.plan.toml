@@ -1,0 +1,17 @@
+id = "modules.rules_proofs"
+order = 395
+tier = "fast"
+tags = ["feat", "modules", "rules", "rewrite", "verification", "smt"]
+desc = "The standard rule library (`stdlib/rules.cml`) decided by an SMT solver instead of sampled: each rule's two sides become a proposition, its numeric licence becomes a premise (bit identity for a rule that asks for none, equality over the reals for `reassociate`, the two further statements that make that reading legitimate for `no_infs` and `no_signed_zeros`, and an error bound for `refine_accuracy`, which is reported `unknown` rather than forced into an equality), and the solver answers `proved`, `refuted` with the counterexample model, or `unknown` with the reason. The licence names are read from `src/core/operator_semantics.cpp` and the guards from the library's own helper definitions, so neither list can drift away from the check. The solver is an optional dependency: the test skips with the checker's install instructions when no solver is on the host, and never reports that it proved something it never asked. Two safeguards run inside the same checker -- four ground queries whose answers are known, and a deliberately broken rule that must come back refuted with a readable model -- so a translation that stopped deciding anything fails before a `proved` does."
+[[tests]]
+name = "rules.proofs_every_law_holds_under_its_licence"
+desc = "All 37 exported rules, each at the types its guard admits (`int`, `i32`, `float`, `f32`; an array rule elementwise at its element type): nothing is refuted, every rule that is not proved carries a reason, and the deliberately broken rule is refuted with a counterexample. The per-query budget is shorter here than the one a release uses, because the two rules whose guard constrains a symbolic coefficient are the only ones that spend it and neither is decided by a longer one."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/rule-proofs.mjs"
+args = ["${case}", "--require-solver", "--timeout", "10000"]
+expect_exit = 0
+expect_stdout_contains = ["proved", "none refuted", "falsification: int_combine broken to (x * c1 + x * c2 => x * (c1 - c2)) is refuted at int"]
+skip_unless = ["node", "scripts/rule-proofs.mjs", "--probe-solver"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 300000
