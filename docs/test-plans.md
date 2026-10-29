@@ -1134,6 +1134,62 @@ wall clock is the host's, not the test's: `modules.autodiff/benchmark_gradients_
 943-979 s of its own CPU against 127-211 s of wall clock, and it used to be red on the runner's
 `TIMEOUT_MARGIN` for that reason alone.
 
+### A Quiet Window For A Startup Comparison
+
+The ceilings above answer "is the compiler slower than its own budget". They cannot answer "did
+this change save 2 ms", which is what a change to the startup path asks: the standard library's
+three passes over `prelude.cml` and the modules they pull in are 6.76 ms of a 12.24 ms run, read
+as phase CPU time in the window those figures come from (the declarations are 55% of that run), and
+the size of a change there is a difference between two builds, never a value against a bound.
+
+The sections above say child CPU time "does not grow when the host is busy". That holds for the
+commands judged there, whose CPU is hundreds of milliseconds of real work; it does not hold for a
+phase-level reading of a few milliseconds. Three readings of the same work, on this host:
+
+| reading | value | provenance |
+|---|---:|---|
+| `declaration.cost`, per declaration (294 declarations, 21 rounds) | 152.9 us | load 101.9 / 102.2 / 104.7 |
+| the same reading as `perf.startup` records it (`test/plans/perf/startup.plan.toml`) | 27.5-28.5 us | its record, at load 68-112 |
+| `declare prelude`, phase CPU, self time, 15 runs of one command | 1.80 / 1.95 / 3.06 ms (min / median / max) | load 79.9 / 87.0 / 96.7 |
+| the phase sum of those same 15 runs | 9.86 / 11.02 / 15.40 ms | same window |
+
+The first two rows are one measurement a factor of five apart, at a load the record calls quiet and
+this run does not: either the CPU clock stopped describing the work at that load, or the two host
+images are not comparable. The last two rows settle what that means for a comparison: one command,
+one window, nothing changed between the runs, and its own reading moves by 1.7x for one phase and
+1.6x for the whole compile. A change that claims 2 ms claims less than the spread of the instrument
+that measures it.
+
+#### The protocol
+
+1. **Probe.** Read the 1/5/15-minute load. The window is open when the 1-minute figure is inside
+   the band the perf gate uses (`baseline + 2 + 10%`), on a machine whose core count matches the
+   one the baseline was seeded on. Print the three figures beside every number the run reports:
+   they are provenance, not an excuse.
+2. **Calibrate a build against itself.** Run the *same* binary twice, interleaved with itself,
+   medians over the same samples the comparison uses. That difference is the floor of what the
+   window can resolve.
+3. **Interleave the two builds.** One fresh `camel` process per repetition, the order rotated each
+   round (the rotation `scripts/perf-gate.mjs` already uses), N samples of R runs each, medians
+   and p10..p90.
+4. **Read the phase table, not only the total.** Phases come from `--time-phases` (`cpu_ns` per
+   phase, `src/utils/phase_timer.cpp`); a saving is claimed against named phase rows, and the
+   report says which rows moved and by how much or says nothing.
+
+#### The verdicts, and "it cannot be resolved"
+
+Three verdicts, and the third is a result: **faster**, **slower**, **inconclusive**.
+
+- `inconclusive` is written when the medians' p10..p90 spreads overlap, or when the floor from
+  step 2 is at least as large as the effect claimed, or when the load left the band. It reads
+  "measured at load N, cannot resolve X ms". It is never rounded into a pass, and never into a win.
+- A change whose own cost is of the same order as what it saves is reported as **unresolvable on
+  this instrument**, with both figures. That is not hypothetical: a cache of the parser's product
+  in this repository's record cost 0.50 ms to read an entry back against 0.35 ms to compile what
+  the entry stood for, on a 12 ms run. A load band would have hidden it; the phase table did not.
+- A green `npm run test` says nothing about any of this. The fast layer carries no ceiling of this
+  size, and `perf.startup` (milestone tier) carries absolute ceilings, not a difference.
+
 ## Variable Expansion
 
 `args` tokens support `${name}` interpolation from:

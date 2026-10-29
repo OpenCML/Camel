@@ -34,11 +34,13 @@ bool appendControlDependency(
 size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork = 250000);
 
 /// The transitive reduction over ORDER edges: an order edge A -> C goes away when a path of order
-/// edges A -> ... -> C already orders the two ends, which is exactly what "when both run the
-/// predecessor runs first" makes redundant (docs/design/effects/edges.cn.md 5.4). Sync edges are
-/// left alone: a `sync` block's statements are one chain and carry no redundancy. A proof walks
-/// only nodes of the region that holds the edge, because an ordering never leaves its region.
-/// Work is bounded by maxWork; zero disables analysis.
+/// edges or of one `sync` block's chain already orders the two ends, which is exactly what "when
+/// both run the predecessor runs first" makes redundant (docs/design/effects/edges.cn.md 5.4).
+/// Sync edges are left alone: a `sync` block's statements are one chain, they carry no redundancy,
+/// and a chain link also carries "used". Data and context edges are not read: the order they hold
+/// is one a pass may still rewrite, so an order edge they would cover is kept. A proof walks only
+/// nodes of the region that holds the edge, because an ordering never leaves its region. Work is
+/// bounded by maxWork; zero disables analysis.
 size_t reduceOrderDependencies(GraphDraft &draft, size_t maxWork = 250000);
 
 /// The same reduction read with every edge that orders, for a reader that compares programs and
