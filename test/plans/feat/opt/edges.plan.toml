@@ -101,6 +101,21 @@ args = ["${case}", "test::edges_sync_gate"]
 expect_stdout_contains = ["SYNCGATE wrote=1 ctrl=0", "EDGES accepted", "SYNCGATE frozen_sync_edges=1 gates=1 gates_waiting_on_the_chain=1 gates_with_ctrl=0"]
 
 [[tests]]
+name = "sync_chain_fork_is_refused"
+desc = "The other half of the same rule: one statement follows one other at most *and* one statement follows it. A statement two statements of its block follow is a chain that forks, which is no chain, so a rewrite that leaves the graph in that state -- an inline splice that cannot put a statement in its place without making the graph wait on itself -- is refused by the seal, which names the statement the two follow, rather than freezing a chain the layout may walk one way and silently drop the other."
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "test::edges_sync_fork"]
+expect_stdout_contains = ["SYNCFORK fork=", "EDGES refused", "sync chain forks at node", "block's statements are one chain"]
+
+[[tests]]
+name = "a_chain_end_hands_its_value_on_to_two_blocks"
+desc = "What 5.3 allows and the fork check must not report: the one chain end hands its value on, and a GATE does that for a block that ends on it, so two GATEs may follow one statement. An end of the chain is not a continuation of it."
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "test::edges_sync_fork_gate"]
+expect_stdout_contains = ["SYNCFORKGATE tail=", "EDGES accepted"]
+expect_output_not_contains = ["refused"]
+
+[[tests]]
 name = "commit_conflict_is_detected"
 desc = "Three sessions on one program (design 4.3.1): after the first commits, the one that wrote the same graph conflicts and its checked commit is refused; the one that wrote another graph does not conflict."
 case = "../../../cases/opt/inline/consecutive_sync_calls.cml"

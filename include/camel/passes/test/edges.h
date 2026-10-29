@@ -17,6 +17,8 @@ inline constexpr const char *kEdgesOrderScheduleTestPass = "test::edges_order_sc
 inline constexpr const char *kEdgesOrderSpliceTestPass   = "test::edges_order_splice";
 inline constexpr const char *kEdgesOrderReplaceTestPass  = "test::edges_order_replace";
 inline constexpr const char *kEdgesSyncGateTestPass      = "test::edges_sync_gate";
+inline constexpr const char *kEdgesSyncForkTestPass      = "test::edges_sync_fork";
+inline constexpr const char *kEdgesSyncForkGateTestPass  = "test::edges_sync_fork_gate";
 
 // Each adds nodes to the root graph, commits, and prints "EDGES accepted" or
 // "EDGES refused: <the commit's message>".
@@ -109,6 +111,26 @@ class EdgesOrderReplaceTestPass : public RuntimeGraphRewritePass {
 // writes that shape, commits it, and prints what the graph the commit made holds: the commit must
 // accept it, and it must keep the GATE rather than dissolve it into its input.
 class EdgesSyncGateTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+// The other half of the same rule (docs/design/effects/edges.cn.md 5.3): a block's statements are
+// one chain, so one statement follows one other at most *and* one statement follows it. An inline
+// splice that cannot put a statement in its place leaves two statements following one -- a chain
+// that forks, which is no chain -- and no such graph may be frozen: the seal check names the
+// statement the two follow. The first pass writes that fork and is refused; the second writes the
+// case 5.3 allows -- one chain end handing its value on, which is a GATE per block that ends on it
+// -- and is accepted, so the check is known to tell the two apart.
+class EdgesSyncForkTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+class EdgesSyncForkGateTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     const camel::runtime::Program *
