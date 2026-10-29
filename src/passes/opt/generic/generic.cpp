@@ -606,13 +606,23 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
         draft.handChainPlaceTo(join, armTail);
     }
     // The joined chain's head stands where the branch stood: `handChainPlaceTo` gave the place to the
-    // chain's tail, which already waits on the fragment before it, so the entry is written here.
-    if (armChainHead != kInvalidNodeRef && draft.alive(armChainHead) &&
-        draft.syncInputsOf(armChainHead).empty()) {
-        for (gc_node_ref_t pred : joinChainPreds) {
-            if (pred != armChainHead && pred != join && draft.alive(pred)) {
-                chainTo(armChainHead, pred);
-                break;
+    // chain's tail, which already waits on the fragment before it, so the entry is written here. The
+    // predecessor a head arrives with can be the branch itself -- the builder enters an arm's chain
+    // from its BRCH -- and the BRCH is one of the nodes erased below, so that place is not one the
+    // head keeps: the branch's own place, the one its tail was handed, takes that slot instead.
+    const auto erasedByBranch = [&](gc_node_ref_t n) { return n == brch || n == join || removed(n); };
+    if (armChainHead != kInvalidNodeRef && draft.alive(armChainHead)) {
+        bool entered = false;
+        for (gc_node_ref_t pred : draft.syncInputsOf(armChainHead)) {
+            entered = entered || !erasedByBranch(pred);
+        }
+        if (!entered) {
+            for (gc_node_ref_t pred : joinChainPreds) {
+                if (pred != armChainHead && pred != join && draft.alive(pred) &&
+                    !removed(pred)) {
+                    chainTo(armChainHead, pred);
+                    break;
+                }
             }
         }
     }
