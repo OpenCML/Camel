@@ -1,0 +1,147 @@
+id = "linear.order_edges_regions"
+order = 347
+tier = "fast"
+tags = ["feat", "linear", "runtime", "effects", "gir"]
+
+# An order edge never enters a control region (docs/design/effects/edges.cn.md 4.6): an arm and a
+# part of a loop run as a whole with the node that owns the region, so the order such a region has
+# with the code around it is written on that node -- the `BRCH` or the `LOOP` -- and never on a node
+# inside the region. An edge inside the region would tie the two regions' execution together, which
+# is what "dependencies are counted by region" (design principles 3.1) forbids.
+#
+# `order_edges_regions.cml` has the three shapes that used to write the edge in the wrong place:
+#
+#   1. two arms of one `if`, each writing the same variable and each effecting the same resource,
+#      with two writes inside the first arm -- the read before the branch feeds the condition, so
+#      the data path already orders the `BRCH` and no order edge is needed at all;
+#   2. a read the condition does not feed: the order edge it needs is written on the `BRCH`;
+#   3. a read before a loop whose body writes the same variable: the `LOOP` carries it.
+#
+# The graph test reads those clauses off `std::jgir`, which names each node's region and each
+# region's kind and owner: no order edge may cross a control region's border, one must hang on the
+# `BRCH`, one on the `LOOP`, and the two writes inside an arm must still be ordered -- so the fix
+# cannot be met by writing no order edge at all. The behavior tests say the four backends and the
+# interpreter agree on what the program prints and returns, since an edge written in the wrong place
+# would show up as a different order of the effects.
+
+[defaults]
+kind = "behavior"
+case = "../../../cases/linear/runtime/order_edges_regions.cml"
+expect_exit = 56
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "order_edges_regions.interp"
+desc = "The three shapes print `9`, then the two lines of the arm the branch takes, then the loop's rounds, and return 56, with no pass (the interpreter, which counts dependencies by region)."
+args = ["${case}"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '9 | 1 | 2 | 0 | 1', `unexpected output: ${out}`)
+assert(input.exit_code === 56, `unexpected exit ${input.exit_code}`)
+}
+"""
+
+[[tests]]
+name = "order_edges_regions.nvm"
+desc = "The three shapes print `9`, then the two lines of the arm the branch takes, then the loop's rounds, and return 56 (stdio pipeline: std::nvm)."
+args = ["${case}", "${run_nvm}"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '9 | 1 | 2 | 0 | 1', `unexpected output: ${out}`)
+assert(input.exit_code === 56, `unexpected exit ${input.exit_code}`)
+}
+"""
+
+[[tests]]
+name = "order_edges_regions.fvm"
+desc = "The three shapes print `9`, then the two lines of the arm the branch takes, then the loop's rounds, and return 56 (stdio pipeline: std::fvm)."
+args = ["${case}", "${run_fvm}"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '9 | 1 | 2 | 0 | 1', `unexpected output: ${out}`)
+assert(input.exit_code === 56, `unexpected exit ${input.exit_code}`)
+}
+"""
+
+[[tests]]
+name = "order_edges_regions.jit"
+desc = "The three shapes print `9`, then the two lines of the arm the branch takes, then the loop's rounds, and return 56 (stdio pipeline: std::jit)."
+args = ["${case}", "${run_jit}"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '9 | 1 | 2 | 0 | 1', `unexpected output: ${out}`)
+assert(input.exit_code === 56, `unexpected exit ${input.exit_code}`)
+}
+"""
+
+[[tests]]
+name = "order_edges_regions.prl"
+desc = "The three shapes print `9`, then the two lines of the arm the branch takes, then the loop's rounds, and return 56, at four threads (stdio pipeline: std::prl)."
+args = ["-t", "4", "${case}", "${run_prl}"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '9 | 1 | 2 | 0 | 1', `unexpected output: ${out}`)
+assert(input.exit_code === 56, `unexpected exit ${input.exit_code}`)
+}
+"""
+
+[[tests]]
+name = "order_edges_regions.gir"
+desc = "No order edge crosses the border of a control region: the read before the branch that does not feed its condition is ordered by an edge on the BRCH, the read before the loop by one on the LOOP, and the two writes inside an arm are still ordered by an edge inside that arm (docs/design/effects/edges.cn.md 4.6)."
+case = "../../../cases/linear/runtime/order_edges_regions.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const document = JSON.parse(input.normalized.stdout)
+const CONTROL = new Set(['arm', 'loop_cond', 'loop_body'])
+const edges = []
+for (const graph of document.graphs) {
+const nodes = new Map(graph.nodes.map((node) => [node.id, node]))
+const regions = new Map((graph.regions || []).map((region) => [region.id, region]))
+// The control region a node runs with: the innermost region that is an arm or a part of a loop.
+// A region that only records where code came from -- an inlined body, a tagged block -- holds no
+// execution of its own, so the walk goes through it (docs/design/effects/edges.cn.md 5.8).
+const controlRegionOf = (id) => {
+const node = nodes.get(id)
+let region = node && node.region ? regions.get(node.region) : null
+while (region) {
+if (CONTROL.has(region.kind)) return region.id
+region = regions.get(region.parent)
+}
+return null
+}
+const crosses = []
+for (const edge of graph.edges || []) {
+if (edge.kind !== 'order') continue
+const from = nodes.get(edge.source)
+const to = nodes.get(edge.target)
+assert(from && to, `order edge names a node the graph does not have: ${edge.source} -> ${edge.target}`)
+if (controlRegionOf(edge.source) !== controlRegionOf(edge.target)) {
+crosses.push(`${edge.source} (${from.label}) -> ${edge.target} (${to.label})`)
+}
+edges.push({ from: from.label, toKind: to.kind, to: to.label })
+}
+assert(
+crosses.length === 0,
+`${crosses.length} order edge(s) cross a control region: ${crosses.join(', ')} -- an arm and a part of a loop run as a whole, so the edge belongs on the node that owns the region`)
+}
+const onBrch = edges.filter((edge) => edge.toKind === 'BRCH')
+const onLoop = edges.filter((edge) => edge.toKind === 'LOOP')
+assert(onBrch.length === 1, `expected one order edge on a BRCH, got ${onBrch.length}`)
+assert(onLoop.length === 1, `expected one order edge on a LOOP, got ${onLoop.length}`)
+assert(onBrch[0].from === ':var/get', `the order edge on the BRCH is from ${onBrch[0].from}, not from the read before the branch`)
+assert(onLoop[0].from === ':var/get', `the order edge on the LOOP is from ${onLoop[0].from}, not from the read before the loop`)
+// The two writes inside the first arm are what the fix must not take away: an order edge whose
+// two ends are in the same arm is the one such an edge is for.
+const inside = edges.filter((edge) => edge.to === ':op/assn_l')
+assert(inside.length === 1, `expected the two writes inside the arm to stay ordered, got ${inside.length} order edge(s) into a write`)
+}
+"""
