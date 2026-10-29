@@ -1,0 +1,10 @@
+/**
+ * A statement of a `sync` block runs where it is written, and the effect inside it is the statement
+ * (design principles 3.4): `println(5) - 1` prints `5` whether or not anything reads the result.
+ * `std::opt::dce` may not drop the effect together with the unread subtraction.
+ */
+
+func main(): int sync {
+    let r = println(5) - 1
+    return 7
+}
