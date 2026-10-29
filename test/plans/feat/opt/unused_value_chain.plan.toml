@@ -1,0 +1,149 @@
+id = "opt.unused_value_chain"
+order = 335
+tier = "fast"
+tags = ["feat", "opt", "control", "dce"]
+
+# A `sync` block's value that nothing reads is the chain's tail: the statement that computes it
+# runs, and so does every effect its value is computed from (docs/design/effects/edges.cn.md 2).
+# `unused_effect_chain.cml` writes `let r = (println(5) + println(6)) - 1` and discards `r`; the
+# value the block hands on is the constant 10, and a pass that treats the value as dead removes the
+# sum and, with it, the only route from the block's GATE to the prints. The GATE is the end of the
+# chain, not an unused node: what it waits on has to reach the exit through it.
+#
+# The entries lock three things: the two prints still run in written order through `std::opt::dce`,
+# `std::opt` and `std::opt std::nvm`; the block's GATE keeps the wait that carries the chain while
+# the unread value itself is still removed; and the same shape without an effect (`unused_pure_chain`)
+# is still optimized away whole, so "keep everything" cannot pass in place of the fix.
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 10000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "unused_effect_chain.reference"
+desc = "Both prints run, in written order, with nothing but the executor: what the passes are measured against."
+case = "../../../cases/opt/generic/unused_effect_chain.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["stdout_normalized"]
+expect_stdout_exact = "5\n6\n"
+
+[[tests]]
+name = "unused_effect_chain.dce"
+desc = "`std::opt::dce` alone keeps both prints: the unread value it removes ran them, so the block's GATE is left waiting on the last print instead of on the removed value."
+case = "../../../cases/opt/generic/unused_effect_chain.cml"
+args = ["${case}", "std::opt::dce", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["stdout_normalized"]
+expect_stdout_exact = "5\n6\n"
+
+[[tests]]
+name = "unused_effect_chain.opt"
+desc = "The integrated `std::opt` pipeline (fold, cse, dce, inline in one fixpoint) keeps both prints in written order."
+case = "../../../cases/opt/generic/unused_effect_chain.cml"
+args = ["${case}", "std::opt", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["stdout_normalized"]
+expect_stdout_exact = "5\n6\n"
+
+[[tests]]
+name = "unused_effect_chain.opt_nvm"
+desc = "`std::opt std::nvm`, the pipeline the report names: the optimized graph runs the prints exactly as the program writes them."
+case = "../../../cases/opt/generic/unused_effect_chain.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_stdout_exact = "5\n6\n"
+
+[[tests]]
+name = "unused_effect_chain.graph"
+desc = "After dce the two prints are still there and still reach the exit through the block's GATE, the GATE still waits on the chain, and the unread value (`:op/add_l`, `:op/sub_l`) is gone: the value is removed, not kept."
+case = "../../../cases/opt/generic/unused_effect_chain.cml"
+args = ["${case}", "std::opt::dce", "std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
+ const byId=new Map(g.nodes.map(n=>[n.id,n]));
+ const valueKinds=new Set(['normal','context','control','sync']);
+ const preds=new Map();
+ for(const e of g.edges){
+  if(!valueKinds.has(e.kind)) continue;
+  if(!preds.has(e.target)) preds.set(e.target,[]);
+  preds.get(e.target).push(e.source);
+ }
+ const seen=new Set();
+ const work=[g.exit];
+ while(work.length){
+  const id=work.pop();
+  if(seen.has(id)||!byId.has(id)) continue;
+  seen.add(id);
+  for(const s of preds.get(id)||[]) work.push(s);
+ }
+ const prints=g.nodes.filter(n=>n.label===':io/println');
+ assert(prints.length===2,'an effect was dropped: '+prints.length+' prints left');
+ assert(prints.every(n=>seen.has(n.id)),'a print is no longer reached from the exit, so it does not run');
+ assert(byId.get(g.exit).kind==='GATE','the block value gate is gone; the value became the graph result');
+ assert(g.edges.some(e=>e.target===g.exit&&(e.kind==='control'||e.kind==='sync')),'the terminal gate lost the chain it carries');
+ assert(!g.nodes.some(n=>n.label===':op/add_l'||n.label===':op/sub_l'),'the unread value was kept whole instead of removed');
+}
+'''
+
+[[tests]]
+name = "unused_effect_chain_param.reference"
+desc = "The same shape with a parameter as the block value: both prints run with nothing but the executor."
+case = "../../../cases/opt/generic/unused_effect_chain_param.cml"
+args = ["${case}", "--arg", "x=3", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["stdout_normalized"]
+expect_stdout_exact = "5\n6\n"
+
+[[tests]]
+name = "unused_effect_chain_param.dce"
+desc = "The block value is not a constant, and both prints still run through dce: what decides is that nothing reads the value, not that a pass could fold it."
+case = "../../../cases/opt/generic/unused_effect_chain_param.cml"
+args = ["${case}", "--arg", "x=3", "std::opt::dce", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["stdout_normalized"]
+expect_stdout_exact = "5\n6\n"
+
+[[tests]]
+name = "unused_effect_chain_param.opt_nvm"
+desc = "The non-constant shape through `std::opt std::nvm`: the prints run in written order."
+case = "../../../cases/opt/generic/unused_effect_chain_param.cml"
+args = ["${case}", "--arg", "x=3", "std::opt", "std::nvm"]
+expect_stdout_exact = "5\n6\n"
+
+[[tests]]
+name = "unused_pure_chain.dce_graph"
+desc = "The control: the same shape with no effect is dead whole, and dce leaves the program's result alone (one constant, no operator, no gate). A fix that keeps unread values to be safe fails here."
+case = "../../../cases/opt/generic/unused_pure_chain.cml"
+args = ["${case}", "std::opt::dce", "std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
+ assert(g.nodes.filter(n=>n.kind==='OPER').length===0,'a pure value survived dce');
+ assert(g.nodes.filter(n=>n.kind==='GATE').length===0,'a pure value kept a gate alive');
+ assert(g.nodes.length===1,'the graph still holds '+g.nodes.length+' nodes');
+}
+'''
+
+[[tests]]
+name = "unused_pure_chain.opt_graph"
+desc = "The control through the integrated pipeline: `std::opt` leaves the same one constant."
+case = "../../../cases/opt/generic/unused_pure_chain.cml"
+args = ["${case}", "std::opt", "std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
+ assert(g.nodes.length===1,'the graph still holds '+g.nodes.length+' nodes');
+}
+'''
+
+[[tests]]
+name = "unused_pure_chain.reference"
+desc = "The control runs and prints nothing."
+case = "../../../cases/opt/generic/unused_pure_chain.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["stdout_normalized"]
+expect_stdout_exact = ""

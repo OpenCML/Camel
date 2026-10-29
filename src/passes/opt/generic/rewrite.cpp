@@ -207,17 +207,31 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
     // wait is read in either kind: a node of a `sync` block waits through the sync edge as well as
     // through the control edge beside it, and the successor has to keep that wait whichever kind
     // named it (docs/design/effects/edges.cn.md 1, 4.6).
+    //
+    // The statements the removed node's value was computed from belong to that wait too. Reading a
+    // value runs its producer (docs/design/effects/edges.cn.md 2), so an effect that the removed
+    // node read ran exactly where the removed node did; a successor that keeps only the waits would
+    // let it stop running when the value it fed goes. That is the whole shape of `let r = (println(5)
+    // + println(6)) - 1` with `r` unread: the sum is the block's value, the block's GATE waits on
+    // it, and the prints are reached only through the sum. The GATE is the end of the chain, not an
+    // unused node, and dropping the sum must leave it waiting on the prints themselves.
     std::vector<gc_node_ref_t> inheritedWait;
+    const auto addInheritedWait = [&](gc_node_ref_t pred) {
+        const camel::runtime::DraftNodeHeader *header = draft.header(pred);
+        if (header != nullptr && header->kind == GCNodeKind::Brch) {
+            return;
+        }
+        if (std::ranges::find(inheritedWait, pred) == inheritedWait.end()) {
+            inheritedWait.push_back(pred);
+        }
+    };
     for (auto waits : {draft.ctrlInputsOf(id), draft.syncInputsOf(id)}) {
         for (gc_node_ref_t pred : waits) {
-            const camel::runtime::DraftNodeHeader *header = draft.header(pred);
-            if (header != nullptr && header->kind == GCNodeKind::Brch) {
-                continue;
-            }
-            if (std::ranges::find(inheritedWait, pred) == inheritedWait.end()) {
-                inheritedWait.push_back(pred);
-            }
+            addInheritedWait(pred);
         }
+    }
+    for (gc_node_ref_t pred : orderedSources(draft, id)) {
+        addInheritedWait(pred);
     }
 
     if (replacement != kInvalidNodeRef) {
@@ -261,7 +275,13 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
             continue;
         }
         for (gc_node_ref_t pred : inheritedWait) {
-            if (pred != user && draft.alive(pred)) {
+            if (pred == user || !draft.alive(pred)) {
+                continue;
+            }
+            // The chain takes the tail as a wait of its own kind when it can (`handOverSyncWait`),
+            // which is what the block's value does: it waits on the statement written before it
+            // (docs/design/effects/edges.cn.md 4.6, 5.3 item 3). Otherwise the wait is control.
+            if (!handOverSyncWait(draft, pred, user)) {
                 camel::runtime::appendControlDependency(draft, pred, user);
             }
         }
