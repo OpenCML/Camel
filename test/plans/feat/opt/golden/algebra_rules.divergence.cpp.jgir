@@ -104,11 +104,21 @@
           "targetIndex": 0
         },
         {
+          "kind": "order",
+          "source": "g1n2",
+          "target": "g1n5"
+        },
+        {
           "kind": "control",
           "source": "g1n5",
           "sourceIndex": 0,
           "target": "g1n6",
           "targetIndex": 0
+        },
+        {
+          "kind": "order",
+          "source": "g1n5",
+          "target": "g1n6"
         },
         {
           "kind": "sync",

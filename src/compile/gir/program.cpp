@@ -679,6 +679,11 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
         // runs here, while the bodies are still in hand; the report runs per module below, with
         // the other diagnostics of the module being reported.
         measureInferredResources();
+        // The effects that reach one resource are ordered by the order they are written in
+        // (design principles 3.3). This runs on the settled measurements, before anything reads
+        // the graphs as a schedule: an order edge is not a use, so it neither runs an effect nor
+        // changes what a body reaches.
+        orderEffectsOnOneResource();
         // Before the graphs are encoded: the reads whose value cannot be kept leave the mark
         // that lets `acc = acc->append<v>` append in place (design principles 11.3).
         markNonRetainingReads();
