@@ -1,0 +1,110 @@
+id = "opt.defun"
+order = 334
+tier = "fast"
+tags = ["feat", "opt", "defun"]
+
+[[tests]]
+name = "defun.four_backends"
+desc = "std::defunctionalize turns calls through a named function, a lambda and a two-parameter lambda into direct calls, and leaves a closure as written with a warning: the three cases print what they print without the pass, on all four backends, and the counts say the lowered calls are direct."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/opt/defun/four_backends.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["Defunctionalization lowers function values without changing results: PASS"]
+timeout_ms = 120000
+
+[[tests]]
+name = "defun.higher_order.plain"
+desc = "Without the pass the program runs as written: one line, no warning, exit 0."
+kind = "behavior"
+case = "../../../cases/opt/defun/higher_order.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === 'HIGHER ORDER named=16 lambda=104 pairs=[10, 40, 90] taken=25 other=-5\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
+assert(input.normalized.stderr === '', 'no warning without passes: ' + input.normalized.stderr)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000
+
+[[tests]]
+name = "defun.higher_order.counts"
+desc = "The pass lowers five calls through function values into direct calls and adds no closure: 7 direct and 5 indirect calls become 15 direct and 4 indirect, and the 4 left are in the graphs the program keeps only as function values, so nothing is reported."
+kind = "behavior"
+case = "../../../cases/opt/defun/higher_order.cml"
+args = ["${case}", "std::defunctionalize", "std::stats"]
+expect_exit = 0
+verify_script = """
+const lines = input.normalized.stdout.trim().split('\n')
+assert(lines.length === 2, 'a statistics line and the program line: ' + input.normalized.stdout)
+const stats = JSON.parse(lines[0].replace('GRAPH_STATS ', ''))
+assert(stats.direct_calls === 15, 'direct calls: ' + lines[0])
+assert(stats.indirect_calls === 4, 'indirect calls: ' + lines[0])
+assert(stats.closures === 0, 'closures: ' + lines[0])
+assert(lines[1] === 'HIGHER ORDER named=16 lambda=104 pairs=[10, 40, 90] taken=25 other=-5', lines[1])
+assert(input.normalized.stderr === '', 'nothing to report: ' + input.normalized.stderr)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000
+
+[[tests]]
+name = "defun.captured.unsupported"
+desc = "A closure is a function value with the values it captured: the pass leaves it as written, the program prints the same line, and two warnings name the graph that still calls through it and the closure itself. Guessing which function a call reaches would change which effects run."
+kind = "behavior"
+case = "../../../cases/opt/defun/captured.cml"
+args = ["${case}", "std::defunctionalize", "std::nvm"]
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === 'CAPTURED captured=15 named=6\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
+const lines = input.normalized.stderr.split('\n').filter((line) => line.includes('DefunctionalizationIncomplete'))
+assert(lines.length === 2, 'two warnings: ' + input.normalized.stderr)
+assert(lines[0].includes("Defunctionalization left 'apply' still holds 1 indirect call(s) and 0 closure(s)"), lines[0])
+assert(lines[0].includes('filled at 1 call site(s) with: a closure over 1 captured value(s)'), lines[0])
+assert(lines[1].includes("Defunctionalization left 'main' still holds 0 indirect call(s) and 1 closure(s)"), lines[1])
+assert(lines[1].includes('a closure written here over 1 captured value(s)'), lines[1])
+assert(lines[1].endsWith('(name=RuntimeDiag::DefunctionalizationIncomplete, code=0x04100017)'), lines[1])
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000
+
+[[tests]]
+name = "defun.effects.kept"
+desc = "A function value that prints runs once per call and in the order the program writes: the pass changes which calls are direct and not which effects run."
+kind = "behavior"
+case = "../../../cases/opt/defun/effects.cml"
+args = ["${case}", "std::defunctionalize", "std::nvm"]
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === 'EFFECT 1\nEFFECT 2\nEFFECTS a=10 b=20 c=4\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
+assert(input.normalized.stderr === '', 'nothing to report: ' + input.normalized.stderr)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000
+
+[[tests]]
+name = "defun.pipeline_order_free"
+desc = "The pass is not an optimizer's round and needs no other pass: before std::opt it lowers the same calls, and the program runs the same on the JIT."
+kind = "behavior"
+case = "../../../cases/opt/defun/higher_order.cml"
+args = ["${case}", "std::defunctionalize", "std::opt", "std::jit"]
+expect_exit = 0
+expect_stdout_contains = ["HIGHER ORDER named=16 lambda=104 pairs=[10, 40, 90] taken=25 other=-5"]
+timeout_ms = 15000
+
+[[tests]]
+name = "defun.native_map.kept"
+desc = "A higher-order operator calls what it is given inside the operator (zip and map here), so a closure handed to one is not a call this pass can make direct: the call count still drops because the wrapper's own call through its parameter is lowered, the closure is reported, and the program prints the same line."
+kind = "behavior"
+case = "../../../cases/opt/defun/native_map.cml"
+args = ["${case}", "std::defunctionalize", "std::nvm"]
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === 'MAP ys=[11, 12, 13] zs=[2, 4, 6] pairs=[(1, 10), (2, 20)]\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
+const lines = input.normalized.stderr.split('\n').filter((line) => line.includes('DefunctionalizationIncomplete'))
+assert(lines.length === 1, 'one warning: ' + input.normalized.stderr)
+assert(lines[0].includes("Defunctionalization left 'main' still holds 0 indirect call(s) and 1 closure(s)"), lines[0])
+assert(lines[0].includes('a closure written here over 1 captured value(s)'), lines[0])
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000

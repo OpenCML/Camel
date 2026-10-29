@@ -324,6 +324,14 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "Every other operator is translated into C++ that needs only the standard library (docs/cpp_export_build.md). The comment at the top of the C++ file gives the command that builds it with the runtime.",
             },
         },
+        {
+            RuntimeDiag::DefunctionalizationIncomplete,
+            {
+                "DefunctionalizationIncomplete",
+                "Defunctionalization left {0} as written.",
+                "A higher-order value is lowered by turning the call through it into a direct call of the one function it can be, which is a rewriting of the call sites the program writes. A function value this pass cannot name at the call site is left as it is: a parameter the program fills with several different functions (the dispatch is then a choice at run time), a closure whose captured values are not values where the call is, or a function value the program receives from outside itself. Guessing one of them would change which effects run, so nothing is guessed.",
+            },
+        },
     };
     return infoMap;
 }

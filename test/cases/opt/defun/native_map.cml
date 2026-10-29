@@ -1,0 +1,13 @@
+func apply_n(f: (x: int) => int, xs: int[]): int[] {
+    return xs->map<f>
+}
+
+func main(): int sync {
+    let k = 10
+    let with_k = (x: int) => x + k
+    let ys = apply_n(with_k, [1, 2, 3])
+    let zs = apply_n((x: int) => x * 2, [1, 2, 3])
+    let pairs = zip([1, 2], [10, 20])
+    'MAP ys={} zs={} pairs={}'->format<ys, zs, pairs>->println
+    return 0
+}
