@@ -1849,6 +1849,70 @@ assert(out === 'loss | helper | helper: done | loss: helper returned | 0.5579508
 timeout_ms = 12000
 
 [[tests]]
+name = "grad_captured_var_written.default"
+desc = "A differentiated function calls a function that writes module-level `var`s: the write is an effect, so it runs in the forward pass, and the versions the call hands on are resource state, not gradient. The value and the gradient are the ones the plain call gives, the counters show the write ran once per forward pass, and a read of a counter after the call reads the version it handed on. Building the derivative used to break the graph's edge invariants: the call of the forward graph was typed with a module variable's version as an extra tuple component, so `with_grad` failed with an internal error. Under: the default run (grad runs with the program)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_captured_var_written.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '1 | 2 | 19.0 | 6.0 | 2 | 6.0', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "grad_captured_var_written.macro"
+desc = "A differentiated function calls a function that writes module-level `var`s: the write is an effect, so it runs in the forward pass, and the versions the call hands on are resource state, not gradient. The value and the gradient are the ones the plain call gives, the counters show the write ran once per forward pass, and a read of a counter after the call reads the version it handed on. Building the derivative used to break the graph's edge invariants: the call of the forward graph was typed with a module variable's version as an extra tuple component, so `with_grad` failed with an internal error. Under: std::macro (grad built at compile time)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_captured_var_written.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '1 | 2 | 19.0 | 6.0 | 2 | 6.0', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "grad_captured_var_written.macro.opt"
+desc = "A differentiated function calls a function that writes module-level `var`s: the write is an effect, so it runs in the forward pass, and the versions the call hands on are resource state, not gradient. The value and the gradient are the ones the plain call gives, the counters show the write ran once per forward pass, and a read of a counter after the call reads the version it handed on. Building the derivative used to break the graph's edge invariants: the call of the forward graph was typed with a module variable's version as an extra tuple component, so `with_grad` failed with an internal error. Under: std::macro std::opt (the derivative inlined and folded)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_captured_var_written.cml"
+args = ["${case}", "std::macro", "std::opt"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '1 | 2 | 19.0 | 6.0 | 2 | 6.0', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "grad_captured_var_written.macro.fvm"
+desc = "A differentiated function calls a function that writes module-level `var`s: the write is an effect, so it runs in the forward pass, and the versions the call hands on are resource state, not gradient. The value and the gradient are the ones the plain call gives, the counters show the write ran once per forward pass, and a read of a counter after the call reads the version it handed on. Building the derivative used to break the graph's edge invariants: the call of the forward graph was typed with a module variable's version as an extra tuple component, so `with_grad` failed with an internal error. Under: std::macro std::fvm."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_captured_var_written.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '1 | 2 | 19.0 | 6.0 | 2 | 6.0', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
 name = "grad_function_values.default"
 desc = "Gradients through calls of function values that are named or built elsewhere than at the call: (1) a closure called twice inside a second closure that captured it, (2) three closures deep, (3) a closure returned by a factory and called twice, (4) a factory closure capturing a tensor, (5) a closure passed to a function that calls it twice, (6) a named function passed, (7) a closure passed on through two functions, (8) a factory closure passed to a function, (9) a function taking a closure and returning one that captures it, (10) a lambda returning a lambda. In all but (6) a captured value depends on the differentiated parameter, so the gradient must also arrive through the capture. The expected gradients agree with central finite differences of an independent NumPy float64 version of each loss (grad_function_values_reference.py). Under: the default run (grad runs with the program)."
 kind = "behavior"
