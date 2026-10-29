@@ -595,8 +595,6 @@ static bytecode_vec_t compileRuntimeGraph(
         }
 
         case camel::runtime::GCNodeKind::Port:
-            [[fallthrough]];
-        case camel::runtime::GCNodeKind::Sync:
             continue;
 
         default:

@@ -3922,7 +3922,6 @@ void Backward::visit(gc_node_ref_t node) {
     case GCNodeKind::Data:
     case GCNodeKind::Port:
     case GCNodeKind::Brch:
-    case GCNodeKind::Sync:
         return;
     case GCNodeKind::Func:
         // Calls the forward rewrite left alone take no differentiable input: constants. Unless

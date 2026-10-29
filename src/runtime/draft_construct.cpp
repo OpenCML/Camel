@@ -334,11 +334,6 @@ gc_node_ref_t GraphDraft::addOperNode(
         });
 }
 
-gc_node_ref_t GraphDraft::addSyncNode() {
-    ++mutations_;
-    return addNode(DraftNodeInit{.dataIndex = 0, .dataType = nullptr, .kind = GCNodeKind::Sync});
-}
-
 gc_node_ref_t GraphDraft::addGateNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex) {
     ++mutations_;
     dataIndex = ensureValueSlot(*this, type, dataIndex);

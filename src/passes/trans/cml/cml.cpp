@@ -388,7 +388,6 @@ class CmlPrinter {
                 return;
             }
             if (node->kind == camel::runtime::GCNodeKind::Gate ||
-                node->kind == camel::runtime::GCNodeKind::Sync ||
                 node->kind == camel::runtime::GCNodeKind::Copy) {
                 const auto inputs = root->normInputsOf(ref);
                 if (inputs.empty()) {
@@ -866,10 +865,6 @@ class CmlPrinter {
                             continue;
                         }
                         if (!candidate->ctrlInputsOf(ref).empty()) {
-                            effect = true;
-                            break;
-                        }
-                        if (node->kind == camel::runtime::GCNodeKind::Sync) {
                             effect = true;
                             break;
                         }
@@ -1363,7 +1358,6 @@ class CmlPrinter {
         switch (node->kind) {
         case camel::runtime::GCNodeKind::Port:
         case camel::runtime::GCNodeKind::Gate:
-        case camel::runtime::GCNodeKind::Sync:
         case camel::runtime::GCNodeKind::Copy:
         case camel::runtime::GCNodeKind::Brch:
             return;
@@ -1591,8 +1585,7 @@ class CmlPrinter {
             return {found->second, 100};
         }
         case camel::runtime::GCNodeKind::Copy:
-        case camel::runtime::GCNodeKind::Gate:
-        case camel::runtime::GCNodeKind::Sync: {
+        case camel::runtime::GCNodeKind::Gate: {
             const auto inputs = graph_->normInputsOf(ref);
             if (inputs.empty()) {
                 return {"()", 100};

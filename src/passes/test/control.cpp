@@ -269,7 +269,7 @@ void syncChainOrdering() {
     // control input at all (5.3).
     {
         GraphDraft draft;
-        const auto tail  = draft.addSyncNode();
+        const auto tail  = node(draft);
         const auto value = node(draft);
         const auto gate  = draft.addGateNode(camel::core::type::Type::Float32());
         draft.setNormInputs(gate, std::span<const gc_node_ref_t>(&value, 1));
@@ -285,7 +285,7 @@ void syncChainOrdering() {
     // it stands in, not only through the control edge it used to be written as.
     {
         GraphDraft draft;
-        const auto tail  = draft.addSyncNode();
+        const auto tail  = node(draft);
         const auto value = node(draft);
         const auto plain = draft.addNode(DraftNodeInit{.kind = GCNodeKind::Copy});
         draft.setNormInputs(plain, std::span<const gc_node_ref_t>(&value, 1));
@@ -343,7 +343,7 @@ void documentOrdering() {
     // never considers a sync edge.
     {
         GraphDraft draft;
-        const auto first = draft.addSyncNode(), step = node(draft);
+        const auto first = node(draft), step = node(draft);
         draft.setNormInputs(step, std::span<const gc_node_ref_t>(&first, 1));
         const auto next = node(draft);
         draft.setNormInputs(next, std::span<const gc_node_ref_t>(&step, 1));

@@ -14,7 +14,11 @@
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/passes/test/anchor.h"
 #include "camel/runtime/draft_session.h"
+
+using camel::passes::test::anchorNode;
+using camel::passes::test::blankNode;
 
 const camel::runtime::Program *
 KeepFnTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
@@ -32,7 +36,7 @@ KeepFnTestPass::apply(const camel::runtime::Program *program, std::ostream &os) 
     // of its graph, then the program that replaces it: nothing but the function value holds the
     // first when the graph space is collected.
     RuntimeGraphDraftSession first(context_, program);
-    first.edit(largest).addSyncNode();
+    blankNode(first.edit(largest));
     const Program *middle = first.commit();
     context_->settleRuntimeGraphs(middle);
     GCGraph *edited = middle->graph(largest->id());
@@ -44,7 +48,7 @@ KeepFnTestPass::apply(const camel::runtime::Program *program, std::ostream &os) 
     camel::core::mm::RootHandle held(heap, function, edited->funcType(), "test::keepfn");
 
     RuntimeGraphDraftSession second(context_, middle);
-    second.edit(edited).addSyncNode();
+    blankNode(second.edit(edited));
     const Program *next = second.commit();
     context_->settleRuntimeGraphs(next);
     context_->collectRuntimeGraphs();

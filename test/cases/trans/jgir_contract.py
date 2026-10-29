@@ -84,7 +84,7 @@ for retired in ("dot", "rdot", "graphviz", "readable_graphviz", "annotated_graph
 LIBRARY = str(ROOT / "test/cases/trans/library_module.cml")
 KNOWN_KINDS = {
     "DATA", "PORT", "CAST", "COPY", "FILL", "ACCS",
-    "BRCH", "JOIN", "CALL", "FUNC", "OPER", "SYNC", "GATE", "LOOP",
+    "BRCH", "JOIN", "CALL", "FUNC", "OPER", "GATE", "LOOP",
 }
 def invoke(*args):
     return subprocess.run([EXE, *args], cwd=ROOT, capture_output=True, text=True)

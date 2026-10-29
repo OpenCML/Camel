@@ -1206,7 +1206,6 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape) 
     case GCNodeKind::Call:
     case GCNodeKind::Join:
     case GCNodeKind::Brch:
-    case GCNodeKind::Sync:
     case GCNodeKind::Loop:
         return true;
     case GCNodeKind::Gate:

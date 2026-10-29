@@ -3,7 +3,11 @@
 
 #include "fault.h"
 
+#include "camel/passes/test/anchor.h"
 #include "camel/runtime/draft_session.h"
+
+using camel::passes::test::anchorNode;
+using camel::passes::test::blankNode;
 
 const camel::runtime::Program *
 DropCallArgumentTestPass::apply(const camel::runtime::Program *program, std::ostream &) {
@@ -67,7 +71,7 @@ LeakBranchArmTestPass::apply(const camel::runtime::Program *program, std::ostrea
            camel::runtime::gc_node_ref_t brch,
            camel::runtime::gc_node_ref_t join) {
             // A node that runs because of the BRCH and that no arm's result depends on.
-            const auto stray = draft.addSyncNode();
+            const auto stray = anchorNode(draft);
             draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, stray, brch);
             draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, join, stray);
         });

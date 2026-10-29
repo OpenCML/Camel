@@ -102,7 +102,7 @@ uint64_t originKeyOf(
 
 /// The function's own computation: the OPERs, the calls it makes and the structural nodes
 /// (BRCH/JOIN/LOOP/FUNC) it is made of. A constant (DATA), a parameter (PORT), a GATE and the
-/// bookkeeping an inline splice adds (a GATE per argument, a SYNC, the nodes of a function the
+/// bookkeeping an inline splice adds (a GATE per argument, the nodes of a function the
 /// splice copied in) are not counted. This is the measure of "how small is the function"
 /// (InlineRewriteConfig::smallSubgraphMaxComputeNodes) and what a message about a callee's size
 /// reports.
@@ -152,7 +152,6 @@ size_t inlinedComputeNodeCount(
         case GCNodeKind::Data: // a constant
         case GCNodeKind::Port: // a parameter
         case GCNodeKind::Gate: // orders a value after something; a splice adds one per argument
-        case GCNodeKind::Sync: // stands for several control predecessors at a splice
         case GCNodeKind::Dead:
             continue;
         default:
