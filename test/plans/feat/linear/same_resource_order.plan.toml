@@ -1,0 +1,160 @@
+id = "linear.same_resource_order"
+order = 347
+tier = "fast"
+tags = ["feat", "linear", "runtime", "effects"]
+
+# Design principles 3.3, "同一资源自动有序": within one function body, the effects that really run
+# and reach one resource run in the order they are written, and the compiler writes an order edge
+# between them (docs/design/effects/edges.cn.md 1). The edge is what makes the order a property of
+# the program: without it the two calls are left to the schedule, and the node VM prints them in
+# the wrong order.
+#
+# The edge is not a version of the resource: the console is ambient state, so no value passes from
+# one write to the next, and a data edge would carry "used" with it -- it would run the earlier
+# effect only because a later one runs (3.1, F2). A `var` cell is the other half of the rule: its
+# writes and reads are versions already, so no order edge is written beside them.
+#
+# `same_resource_order.cml` is the review's minimal program (`let x = println(9); let y =
+# println(0); …`, which must print `9` then `0`); `same_resource_order_call.cml` has a call that
+# prints between two `println`s, whose resource is the one its callee reaches. Every scheduler must
+# print the same thing, in the same order.
+
+[[tests]]
+name = "same_resource_order.nvm"
+desc = "Two `println` calls in one body print in the order they are written (`9` then `0`), and a call whose callee prints keeps its place between them (`1`, `2`, `3`) (nvm)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/same_resource_order.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 9
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split('\n')
+assert(lines.length === 2, `expected 2 lines, got ${lines.length}: ${lines.join(',')}`)
+assert(lines[0] === '9', `the first call prints 9, not ${lines[0]} (all: ${lines.join(',')})`)
+assert(lines[1] === '0', `the second call prints 0, not ${lines[1]} (all: ${lines.join(',')})`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "same_resource_order.fvm"
+desc = "Two `println` calls in one body print in the order they are written (`9` then `0`), and a call whose callee prints keeps its place between them (`1`, `2`, `3`) (fvm)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/same_resource_order.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 9
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split('\n')
+assert(lines.length === 2, `expected 2 lines, got ${lines.length}: ${lines.join(',')}`)
+assert(lines[0] === '9', `the first call prints 9, not ${lines[0]} (all: ${lines.join(',')})`)
+assert(lines[1] === '0', `the second call prints 0, not ${lines[1]} (all: ${lines.join(',')})`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "same_resource_order.jit"
+desc = "Two `println` calls in one body print in the order they are written (`9` then `0`), and a call whose callee prints keeps its place between them (`1`, `2`, `3`) (jit)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/same_resource_order.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 9
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split('\n')
+assert(lines.length === 2, `expected 2 lines, got ${lines.length}: ${lines.join(',')}`)
+assert(lines[0] === '9', `the first call prints 9, not ${lines[0]} (all: ${lines.join(',')})`)
+assert(lines[1] === '0', `the second call prints 0, not ${lines[1]} (all: ${lines.join(',')})`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "same_resource_order.opt_nvm"
+desc = "Two `println` calls in one body print in the order they are written (`9` then `0`), and a call whose callee prints keeps its place between them (`1`, `2`, `3`) (std::opt, then nvm)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/same_resource_order.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 9
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split('\n')
+assert(lines.length === 2, `expected 2 lines, got ${lines.length}: ${lines.join(',')}`)
+assert(lines[0] === '9', `the first call prints 9, not ${lines[0]} (all: ${lines.join(',')})`)
+assert(lines[1] === '0', `the second call prints 0, not ${lines[1]} (all: ${lines.join(',')})`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "same_resource_order_call.nvm"
+desc = "A call whose callee prints is ordered with the `println` calls beside it: `1`, `2`, `3` (nvm)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/same_resource_order_call.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 123
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split('\n')
+assert(lines.length === 3, `expected 3 lines, got ${lines.length}: ${lines.join(',')}`)
+assert(lines.join(',') === '1,2,3', `expected 1,2,3, got ${lines.join(',')}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "same_resource_order_call.fvm"
+desc = "A call whose callee prints is ordered with the `println` calls beside it: `1`, `2`, `3` (fvm)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/same_resource_order_call.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 123
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split('\n')
+assert(lines.length === 3, `expected 3 lines, got ${lines.length}: ${lines.join(',')}`)
+assert(lines.join(',') === '1,2,3', `expected 1,2,3, got ${lines.join(',')}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "same_resource_order_call.jit"
+desc = "A call whose callee prints is ordered with the `println` calls beside it: `1`, `2`, `3` (jit)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/same_resource_order_call.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 123
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split('\n')
+assert(lines.length === 3, `expected 3 lines, got ${lines.length}: ${lines.join(',')}`)
+assert(lines.join(',') === '1,2,3', `expected 1,2,3, got ${lines.join(',')}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "same_resource_order_call.opt_nvm"
+desc = "A call whose callee prints is ordered with the `println` calls beside it: `1`, `2`, `3` (std::opt, then nvm)."
+kind = "behavior"
+case = "../../../cases/linear/runtime/same_resource_order_call.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 123
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split('\n')
+assert(lines.length === 3, `expected 3 lines, got ${lines.length}: ${lines.join(',')}`)
+assert(lines.join(',') === '1,2,3', `expected 1,2,3, got ${lines.join(',')}`)
+}
+"""
+timeout_ms = 10000

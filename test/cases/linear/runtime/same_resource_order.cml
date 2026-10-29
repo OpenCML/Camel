@@ -1,0 +1,12 @@
+// Two effects on one resource, written one after the other: `println` writes `stdout`, so the
+// first is printed before the second (design principles 3.3, "同一资源自动有序"). The order is
+// carried by an order edge between the two calls, not by the schedule.
+//
+// The review's minimal program: the two calls are statements of one body that is not a `sync`
+// block, both values are used by the result, so both effects run -- and the order they run in is
+// the one they are written in. `main` returns the first one, 9.
+func main(): int {
+    let x = println(9)
+    let y = println(0)
+    return if x > 100 then y else x
+}

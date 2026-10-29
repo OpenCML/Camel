@@ -9,6 +9,11 @@
 // digests were recorded once more for that field: deleting the node `name` entries from the
 // document reproduces the previous values exactly.
 //
+// Recorded once more when the graph builder began writing the order edges that order two effects
+// on one resource (design principles 3.3): these samples print, so their graphs gained edges. The
+// rename itself still changes only the module name; the digests are a snapshot of the whole graph,
+// which is what this check is.
+//
 // The sample programs hold literals only and `std::jgir` is a translation pass: no environment
 // read, hash or machine query is executed, so the graph is the same on every machine.
 //
@@ -35,13 +40,13 @@ const CASES = {
         old: 'sys',
         now: 'env',
         file: 'env_identity.cml',
-        expected: '0e6a6004eb35c4dc95cfdb7728223be195ace3626a91ee9fe66364e5bde838d5',
+        expected: 'd4785cc572cb48997b83e6362e7fd4a76fce01ce2d54ff05d298b021442ecc27',
     },
     process: {
         old: 'os',
         now: 'process',
         file: 'process_identity.cml',
-        expected: '62a5ec2d39f630ea23abc5e8002538703f9f29918dffe9b84d7ec6ae0c7b1360',
+        expected: 'a1f13890de58a4a185feaef24a0cec38558f32832dcb50c5d70b4723377ddb15',
     },
 }
 

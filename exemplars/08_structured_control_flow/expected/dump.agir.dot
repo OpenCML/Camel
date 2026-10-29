@@ -131,6 +131,7 @@ digraph GraphIR {
         N16 -> N2D [label="1|1", type="NORM"];
         N2E -> N2F [label="0|0", type="NORM"];
         N2D -> N2F [label="0|0", type="CTRL"];
+        N22 -> N2F [label="ORDER", type="ORDER"];
         N2D -> N2F [label="SYNC", type="SYNC"];
         N30 -> N31 [label="0|0", type="NORM"];
         N2F -> N31 [label="0|0", type="CTRL"];
