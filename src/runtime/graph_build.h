@@ -33,6 +33,11 @@ struct GCGraphDebugRecord {
     // that must see inside the function (autodiff, fusion, export, a rule) reaches the body
     // through it instead of the kernel's own rule.
     std::string implKernelUri;
+    // The facts of the declaration this graph is, as the module's interned set
+    // (GCGraph::declarationFacts; 0 for a graph that is not a declaration). A declaration fact
+    // stays on the declaration: no node carries it (`attr::fateOf` says so for the ones that
+    // name a function), and a pass reads it here, through the function it was given.
+    uint32_t declarationFacts = 0;
     // The names the graph captures, in the order it captured them (GCGraph::captureNames).
     std::vector<camel::core::SymId> captureNames;
     // The source name of each node's value (`let x`, `var x`), indexed by node reference;

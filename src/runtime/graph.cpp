@@ -1239,6 +1239,7 @@ void recordDraftDebugData(GCGraphDebugRecord *record, const GraphDraft &draft) {
         return;
     }
     record->implKernelUri = draft.implKernelUri();
+    record->declarationFacts = draft.declarationFacts();
     record->captureNames.assign(draft.captureNames().begin(), draft.captureNames().end());
     record->nodeNames.clear();
     bool named = false;
@@ -1865,6 +1866,10 @@ const std::string &GCGraph::name() const {
 const std::string &GCGraph::implKernelUri() const {
     static const std::string kEmpty;
     return debug_ ? debug_->implKernelUri : kEmpty;
+}
+
+uint32_t GCGraph::declarationFacts() const {
+    return debug_ ? debug_->declarationFacts : 0;
 }
 
 std::span<const camel::core::SymId> GCGraph::captureNames() const {

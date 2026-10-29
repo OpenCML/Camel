@@ -581,7 +581,7 @@ arity_probe: <tag: int, extra: int[] = []> (f: F, example: E) => int when is_fun
 zen: () => string
 ```
 
-**`graph`** — import { ... } from graph — 38 name(s)
+**`graph`** — import { ... } from graph — 42 name(s)
 
 ```text
 graph_of: (f: F) => Graph when is_function::<F>()
@@ -605,6 +605,10 @@ type_of: (n: Node) => TypeRef?
 type_name: (t: TypeRef) => string
 callee: (n: Node) => Graph?
 tags: (n: Node) => string
+declaration_tags: (g: Graph) => Tag[]
+tag_name: (t: Tag) => string
+tag_graphs: (t: Tag) => Graph[]
+rule_of: (g: Graph, name: string) => Graph?
 origin: (n: Node) => int
 constant: (n: Node) => T? when is_ordered::<T>()
 region_of: (n: Node) => Region
@@ -728,12 +732,22 @@ update: (opt: Sgd, params: P, grads: G, state: SgdState) => (P, SgdState)
 update: (opt: Adam, params: P, grads: G, state: AdamState<P>) => (P, AdamState<P>)
 ```
 
-**`autodiff`** — import { ... } from autodiff — 3 name(s)
+**`autodiff`** — import { ... } from autodiff — 13 name(s)
 
 ```text
 grad: (f: F) => Gradient<F> when is_function::<F>()
 with_grad: (f: F) => ValueAndGradient<F> when is_function::<F>()
 stop_gradient: (x: T) => T pure
+add_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+sub_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+mul_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+div_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+neg_tangent: (x: T, dx: T) => T when is_float::<T>()
+add_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+sub_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+mul_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+div_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+neg_cotangent: (x: T, ct: T) => T when is_float::<T>()
 ```
 
 **`sim`** — import { ... } from sim — 2 name(s)

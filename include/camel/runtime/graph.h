@@ -654,6 +654,13 @@ class GCGraph : public camel::core::rtdata::Object {
     /// finds the body from the OPER at a call site through it, instead of the kernel's own
     /// derivative or lowering rule, which is execution and not meaning.
     const std::string &implKernelUri() const;
+    /// The facts of the declaration this graph is (design principles 6.2): the interned attribute
+    /// set the module keeps for it (`camel/core/node_attrs.h`), 0 for a graph that is not a
+    /// declaration. A declaration fact stays on the declaration (no node carries one: `#vjp(rule)`
+    /// names a graph and `attr::fateOf` records that it is not a node attribute), so this is what
+    /// a pass reads it through — the function it was given, without the module that declares it.
+    /// Cold metadata: it says nothing about the graph's content.
+    uint32_t declarationFacts() const;
     /// The graph this one is written in, invalid for a root graph.
     GraphId outerGraphId() const { return outerGraphId_; }
     /// The graph's revision (graph facts, camel/runtime/facts.h): a process-wide number. A
