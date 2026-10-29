@@ -980,3 +980,15 @@ expect_stdout_exact = "5\n"
 expect_output_not_contains = ["[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "stream.generator_match"
+desc = "A `yield` in each arm of a `match`: the arm the value picks is the point the next pull goes on from, so the element after the arm's `yield` is the one this pull hands out next. Both arms are taken in one program."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_match.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "100\n200\n"
+expect_output_not_contains = ["[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

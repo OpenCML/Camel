@@ -5734,8 +5734,53 @@ node_ptr_t Builder::visitGeneratorBody(
                         isStmt && stmtType == AST::StmtType::Expr && stmt->size() > 0 &&
                         stmt->at(0)->type() == AST::LoadType::Data &&
                         stmt->at(0)->loadAs<AST::DataLoad>()->dataType() == AST::DataType::IfExpr;
-                    if (!isIf) {
+                    const bool isMatch =
+                        isStmt && stmtType == AST::StmtType::Expr && stmt->size() > 0 &&
+                        stmt->at(0)->type() == AST::LoadType::Data &&
+                        stmt->at(0)->loadAs<AST::DataLoad>()->dataType() == AST::DataType::MatchExpr;
+                    if (!isIf && !isMatch) {
                         refuse(stmt);
+                    }
+                    if (isMatch) {
+                        // The subject is read at this point, and the arm the value picks becomes
+                        // the point the next round of the same pull runs.
+                        const auto &matchAst = stmt->at(0);
+                        const int afterMatch = newArm();
+                        fill(afterMatch, stmts, i + 1, next);
+                        node_ptr_t brch = tree_->makeBrch();
+                        *brch << visitData(matchAst->atAs<AST::DataLoad>(0));
+                        for (const auto &caseNode : *matchAst->atAs<AST::RepeatedLoad>(1)) {
+                            const auto &pattern = caseNode->at(0);
+                            if (pattern->type() == AST::LoadType::Data &&
+                                (pattern->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Ref ||
+                                 pattern->loadAs<AST::DataLoad>()->dataType() ==
+                                     AST::DataType::EnumPattern)) {
+                                // The arm binds a name; a binding lives in the arm's own graph, so
+                                // it would have to become a cell to outlive the `yield`.
+                                refuse(caseNode);
+                            }
+                            const int armPc = newArm();
+                            fill(
+                                armPc,
+                                caseNode->atAs<AST::StmtBlockLoad>(1)->atAs<AST::RepeatedLoad>(0),
+                                0,
+                                afterMatch);
+                            if (pattern->type() == AST::LoadType::Null) {
+                                // `case _`: the arm every other value takes.
+                                node_ptr_t gCase = tree_->makeCase(CaseType::Else);
+                                *gCase << jumpTo(armPc);
+                                *brch << gCase;
+                                continue;
+                            }
+                            node_ptr_t gCase = tree_->makeCase(CaseType::Value);
+                            *gCase << visitData(caseNode->atAs<AST::DataLoad>(0))
+                                   << jumpTo(armPc);
+                            *brch << gCase;
+                        }
+                        mark(brch, stmt, "gct.generator.match");
+                        *exec << brch;
+                        popScope();
+                        return;
                     }
                     const auto &ifAst = stmt->at(0);
                     const int after   = newArm();
