@@ -57,7 +57,41 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_diagnostic_code = "0x04000051"
 expect_stderr_contains = ["An error value reached the exit of 'main' without being handled: NotSupported: this program has too few graphs"]
-expect_output_not_contains = ["42"]
+# The program did not run, so nothing it computes reaches the output: stdout is exactly empty.
+# What the diagnostic says is asserted by its shape -- the site it names and the message it
+# carries -- and never by the absence of a literal. A literal such as `42` also occurs in an
+# absolute source path (`.../m-h242/test/cases/.../identity.cml`), so a checkout whose directory
+# name contains it failed this test on a compiler that was behaving correctly.
+expect_stdout_exact = ""
+verify_script = """
+const stderr = input.normalized.stderr
+const lines = stderr.trim().split('\n')
+assert(lines.length === 1, 'one diagnostic line on stderr, got ' + lines.length + ': ' + JSON.stringify(stderr))
+const head = /^(?:\([^)]*\))?(.*?):(\d+):(\d+): \[([^\]]+)\]: (.*)$/.exec(lines[0])
+assert(head !== null, 'not a <path>:<line>:<column>: [severity]: message line: ' + JSON.stringify(lines[0]))
+const file = head[1]
+const line = head[2]
+const severity = head[4]
+const rest = head[5]
+assert(/[\\/]identity\.cml$/.test(file), 'the diagnostic names the pass module that refused, not ' + file)
+assert(line === '15', 'the diagnostic is where the pass makes the error (line 15), not line ' + line)
+assert(severity === 'Error', 'the diagnostic is an error, not ' + severity)
+const closed = / \(name=(.+), code=(0x[0-9A-Fa-f]+)\)$/.exec(rest)
+assert(closed !== null, 'the diagnostic closes with its name and code: ' + JSON.stringify(rest))
+assert(
+    closed[1] === 'RuntimeDiag::UnhandledError' && closed[2] === '0x04000051',
+    'the diagnostic is RuntimeDiag::UnhandledError (0x04000051), not ' + closed[1] + ' (' + closed[2] + ')'
+)
+// The prose: the message the pass made, then the compiler's own suggestion. No value the program
+// computed is in it -- that is what this test is about, and it is asserted on the diagnostic
+// itself rather than on a literal that could also spell a directory of the checkout.
+const prose = rest.slice(0, closed.index)
+assert(
+    prose.startsWith("An error value reached the exit of 'main' without being handled: NotSupported: this program has too few graphs."),
+    'the message is the one the pass made: ' + JSON.stringify(prose)
+)
+assert(!/[0-9]/.test(prose), 'the diagnostic is the site and the message, with no value in it: ' + JSON.stringify(prose))
+"""
 timeout_ms = 10000
 
 [[tests]]
@@ -176,7 +210,10 @@ case = "../../../cases/modules/graph_pass/edits.cml"
 args = ["${case}", "probes::break_types", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["GraphInvalid", "passes a string as ordinary argument 0 of 'inc', which takes a int"]
-expect_output_not_contains = ["126"]
+# The commit refused the edit, so the pass stopped the pipeline before the program ran: stdout is
+# exactly empty. A literal taken from the program (`126`) would also match the absolute path of
+# the case in a diagnostic, which is a property of the checkout, not of the compiler.
+expect_stdout_exact = ""
 timeout_ms = 10000
 
 [[tests]]
