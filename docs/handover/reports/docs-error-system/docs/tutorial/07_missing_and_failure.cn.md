@@ -10,7 +10,7 @@ Camel 的办法是把"可能为空"和"可能出错"写进类型：`T?` 与 `T!`
 
 ## 可能为空：`T?`
 
-[`examples/07_nullable.cml`](examples/07_nullable.cml)：
+[`examples/07_nullable.cml`](../../../../../tutorial/examples/07_nullable.cml)：
 
 ```cml
 // T? may be null; open it with ?? or with match.
@@ -191,7 +191,7 @@ OutOfRange: age -5 is not possible
 除数为零、下标越界、递归过深是**故障**（fault）：程序带位置终止，`!!` 接不住。读一个三元素数组的
 `xs[5]`：
 
-[`examples/07_fault.cml`](examples/07_fault.cml)：
+[`examples/07_fault.cml`](../../../../../tutorial/examples/07_fault.cml)：
 
 ```cml
 // A fault is not an error value: reading past the end ends the program, with a position.

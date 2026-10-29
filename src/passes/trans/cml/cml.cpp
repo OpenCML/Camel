@@ -1169,9 +1169,6 @@ class CmlPrinter {
         return text;
     }
 
-    /// Whether the source wrote a `sync` block around this region's statements. A branch or loop
-    /// links its region to the owner with a control edge, so that edge does not count; a `sync`
-    /// block orders one statement after another, which is a control edge between two nodes of
     /// Whether the source ended this region with an explicit `return`: the region yields a gate
     /// that orders the returned value after the statements before it.
     bool regionReturnsValue(uint32_t region) const {
@@ -1271,12 +1268,14 @@ class CmlPrinter {
         return assignmentHandingOn(tail, region, values.front());
     }
 
-    /// Whether the source wrote a `sync` block around this region's statements. A `sync` block
-    /// orders one statement after another, which is the sync edge the builder writes between the
-    /// two (the control edge it writes beside that one is a wait of the same pair, and a value
-    /// handed on behind a gate to make a write run has that wait alone: that is no block's chain,
-    /// and printing it as one would make the block's reads settle as the reads of a chain
-    /// (Builder::markNonRetainingReads) and print a graph the source did not write).
+    /// Whether the source wrote a `sync` block around this region's statements: the answer is
+    /// decided by the sync edge. A `sync` block orders one statement after another, which is the
+    /// sync edge the builder writes between the two (`syncPredsOf`, docs/design/effects/edges.cn.md
+    /// 1.5); a branch or loop links its region to the owner with a control edge, so that edge says
+    /// nothing here. A value handed on behind a gate to make a write run waits through the control
+    /// kind alone: that is no block's chain, and printing it as one would make the block's reads
+    /// settle as the reads of a chain (Builder::markNonRetainingReads) and print a graph the
+    /// source did not write.
     bool regionNeedsSync(uint32_t region) const {
         for (const gc_node_ref_t ref : topo_) {
             if (graph_->node(ref) == nullptr || control_->controlOf(ref) != region) {

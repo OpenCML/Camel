@@ -588,10 +588,12 @@ inline void markSyncStatement(node_handle_t node) {
 }
 
 /// One link of a `sync` block's chain: a statement follows the one written before it by a sync edge,
-/// which carries "used" as well as the order (docs/design/effects/edges.cn.md 1), and the control
-/// edge the kind names the same pair with, which is what every consumer of the chain that reads only
-/// that kind still reads. Both are written as one pair so that no consumer of the chain reads less
-/// than it did; the inline splice writes them the same way (src/runtime/draft.cpp, `setSyncInputs`).
+/// which carries "used" as well as the order (docs/design/effects/edges.cn.md 1). The link is decided
+/// by that sync edge -- what a `sync` block wrote is read back from `syncPredsOf` -- and the control
+/// edge the kind names the same pair with is written beside it only for a consumer that still reads
+/// that kind; nothing is judged by it. Both are written as one pair so that no consumer of the chain
+/// reads less than it did; the inline splice writes them the same way (src/runtime/draft.cpp,
+/// `setSyncInputs`).
 ///
 /// Both ends are marked as statements of one block, which is what the seal check reads back
 /// (src/runtime/graph_edges.cpp, `checkSyncEdges`). The caller has already decided the edge says
