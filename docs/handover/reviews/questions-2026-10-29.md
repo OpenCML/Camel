@@ -129,3 +129,12 @@
 ## 催办（2026-10-29 22:20，决策者）
 
 68 分钟没有一笔代码提交，只有一致性闸门的 README 与打印。表上"进行中"的各路（区域挂载、程序变换、去函数化、GPU、graph-store v2、规则证明）这段时间都没有提交，第 9 条（删控制边）、第 23 条（求导经优化后段错误）还没人接。请每一路把手上的东西按小步提交，不要攒；空着的子代理接第 9、23 条。
+
+## 第 9 条施工记录：内联器在只有同步边的链上丢掉一个效应（`var_read_before_write.opt_nvm` 7 行里只剩 5 行）
+
+探针态（把 `writeSyncStatement` 里那一行 `linkNodes(LinkType::Ctrl, from, to)` 去掉）下量 `test/cases/linear/runtime/var_read_before_write.cml`：
+
+- `std::nvm` 与 `std::opt::dce|cse|order|saturate` 各遍都出齐全 7 行；**`std::opt::inline` 单独就只剩 5 行**——缺 `through_assignment` 的第二个 `int 2 1` 与 `after_the_write` 的 `after 2 2`。
+- 图上的样子（`std::opt::inline std::gir`）：`through_assignment` 区域里语句链是 **`N1E(:var/get) -> N23(:io/println) -> N25(GATE) -> EXIT`**，而先于 `println` 写的赋值 `N20(:op/assn_l)` 只剩 `N1E -> N20 [ORDER]`、`N20 -> N22` 这样的**顺序边与数据边，没有同步后继**。也就是说链的**入口锚在一次读上，而不是前一条语句**，赋值语句整条掉出链；两种边都在时那批控制边还替它把执行撑着，同步边独存时这个效应就不可达了。
+- **位置**：内联器把调用者的链位交给函数体时的写侧交接（`closeChainOver`/`handChainPlaceTo`、`src/runtime/draft_inline.cpp:1652` 那处 `setSyncInputs`），与 `edges.cn.md` 5.7（从链上前一条语句向函数体里每个效应节点连边，再从它们连向后一条）一致的方向。
+- **一个最小的两函数例子在主机上复现不出来**（`var a = 1; let b = a; a = 2; return rep("t", a, b)` 内联后照常打印）——**这个用例的形状本身是证据的一部分：两个读同一版本、赋值夹在中间、读又作为实参传进一个 `sync` 函数**。不要为了"最小化"把它削到不复现。
