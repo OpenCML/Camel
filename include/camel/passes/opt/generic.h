@@ -39,12 +39,21 @@
 #pragma once
 
 #include "camel/execute/pass/opt.h"
+#include "camel/passes/opt/config.h"
 
 class ConstantFoldPass : public RuntimeGraphRewritePass {
   public:
-    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    explicit ConstantFoldPass(
+        const camel::core::context::context_ptr_t &ctx,
+        size_t constantBudgetBytes = kDefaultConstantBudgetBytes)
+        : RuntimeGraphRewritePass(ctx), constantBudgetBytes_(constantBudgetBytes) {}
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
+
+  private:
+    /// Bytes of constants this pass may materialize (kDefaultConstantBudgetBytes, and the
+    /// `constant_budget` parameter the pass declares).
+    size_t constantBudgetBytes_;
 };
 
 class CommonSubexpressionPass : public RuntimeGraphRewritePass {
