@@ -1,0 +1,15 @@
+/**
+ * A branch is used as a whole: it uses every value its arms read from outside (design principles
+ * 3.1), so `println(1)` runs when the branch runs, whichever arm is taken. Folding the condition
+ * must not take the effect away with the arm that is not taken.
+ */
+
+func pick(c: bool): int {
+    let a = println(1)
+    return if c then a else (println(2) - 1)
+}
+
+func main(): int sync {
+    println(pick(false))
+    return 0
+}
