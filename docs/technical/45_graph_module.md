@@ -28,6 +28,8 @@
 
 事实（`docs/technical/40_graph_facts.md`）经上下文的事实库读取：`effects(g)`（`external`、`writes_variables`、`may_fault`、`may_not_terminate`）、`shape(n)`、`permissions(n)`。第一次问时计算，之后只要它读过的图没有变就不重算。
 
+声明写的规则（`#jvp(rule)`、`#transpose(rule)`、`#vjp(rule)`）按结构读取，不是读文本：实参是函数，这类事实是**声明事实**，不落在任何节点上（`attr::fateOf` 记着 `autodiff::vjp` 是 not-on-a-node），而是作为图的冷元数据随图走（`GCGraph::declarationFacts`，与 `implKernelUri` 同处），所以遍不需要声明它的模块就能读到。`declaration_tags(g)` 给出这些标签（按标签名排序，`Tag` 句柄按序索引），`tag_name(t)` 给出程序写的名字（`jvp`），`tag_graphs(t)` 给出实参命名的图，`rule_of(g, name)` 直接给出某个变换的规则图（`jvp` / `transpose` / `vjp`，也可以写限定名）；没有写、写了两次、或实参不是函数时得到 `null`。`tags(n)` 仍然只把属性读成文本，别拿它判规则。
+
 句柄也可以指向**正在改写的草稿**（`Handle::createInDraft`）：`when` 条件收到的 `Node` 就是匹配在当前草稿里的节点，不是冻结程序里的版本。读算子对两种来源给同样的答案（`NodeView`：冻结的 `GCNode` 或草稿的 `DraftNodeHeader`），包括 `inputs` / `with_inputs` / `sync_inputs` / `order_inputs`、`users` / `value_users`、`kind`、`op` / `op_name`、`is_pure`、`is_anchor`、`is_written_slot`、`is_constant` / `constant`、`type_of` / `type_name`、`tags`、`origin`、`show`。两处限制：`callee` 在草稿上返回 `null`（草稿不属于任何一个快照版本，没有函数值可读；今天也没有规则模式匹配 `CALL`）；`is_written_slot` 在草稿上每次现算（冻结的图按版本缓存，草稿按 `mutations()` 缓存是以后的事）。草稿句柄不持有快照：草稿属于尚未提交的会话，它的静态值与编译进规则的常量由引擎在条件调用期间注册的根集重定位（`rewrite.engineRoots`）。
 
 ## 事务

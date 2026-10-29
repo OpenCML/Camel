@@ -1,0 +1,96 @@
+/**
+ * The local rules of a transform, read back by structure and checked against the derivative they
+ * claim.
+ *
+ * `#jvp(rule)`, `#transpose(rule)` and `#vjp(rule)` name functions, and a pass reads them from the
+ * declaration it is given: `graph.rule_of` answers the graph of the function written for one
+ * transformation, and `graph.declaration_tags` answers all of them with the tag each belongs to.
+ * Nothing here reads the text of an attribute: the answer is a Graph in the same program.
+ *
+ * The scalar family's rules are the derivatives of the primitives they name: each tangent is
+ * compared with the central difference of its primitive, exact where the arithmetic is (every
+ * value below is a small integer or a power of two, and the step is one), and the transpose is
+ * checked against the tangent by the adjoint identity, which is what makes `vjp` the transpose of
+ * `jvp`.
+ */
+
+import { declaration_tags, graph_of, rule_of, tag_graphs, tag_name } from graph
+import { add_tangent, div_tangent, mul_cotangent, mul_tangent, neg_tangent, sub_tangent, jvp, transpose, vjp } from autodiff
+import { Graph, Tag } from graph
+
+// A function with all three rules: a linear one, so its transpose and its pullback are the transpose
+// of its own derivative.
+func scale_jvp(x: float, k: float, dx: float, dk: float): float {
+    return dx * k + x * dk
+}
+
+func scale_t(x: float, k: float, ct: float): float {
+    return ct * k
+}
+
+#jvp(scale_jvp) #transpose(scale_t) #vjp(scale_t)
+func scale(x: float, k: float): float {
+    return x * k
+}
+
+// A function with one of the three: what a declaration that writes a single rule reads back as.
+func cube_jvp(x: float, dx: float): float {
+    return 3.0 * x * x * dx
+}
+
+#jvp(cube_jvp)
+func cube(x: float): float {
+    return x * x * x
+}
+
+func isRule(of: Graph?, rule: Graph): bool {
+    return match of {
+        case null => false
+        case g => g == rule
+    }
+}
+
+func written(of: Graph?): bool {
+    return match of {
+        case null => false
+        case g => true
+    }
+}
+
+// Whether the tangent agrees with the central difference of the primitive at `x` along `dx`.
+func agrees(tangent: float, difference: float): bool {
+    let gap = tangent - difference
+    let size = if gap < 0.0 then -gap else gap
+    return size < 0.001
+}
+
+func main(): int sync {
+    let g = graph_of(scale)
+    let tags = declaration_tags(g)
+    let read = isRule(rule_of(g, 'jvp'), graph_of(scale_jvp)) &&
+        isRule(rule_of(g, 'transpose'), graph_of(scale_t)) && isRule(rule_of(g, 'vjp'), graph_of(scale_t))
+    println('transform_rules read={} tags={} one={}'->format<read, len(tags), isRule(rule_of(graph_of(cube), 'jvp'), graph_of(cube_jvp)) && !written(rule_of(graph_of(cube), 'vjp'))>)
+    println(tags->map<(t: Tag): string => tag_name(t)>)
+    // The first tag's argument is the function written for it, and the name a program writes
+    // (`jvp`) and the qualified spelling both find the same rule.
+    println('transform_rules graph={} qualified={}'->format<tag_graphs(tags[0])[0] == graph_of(scale_jvp), isRule(rule_of(g, 'autodiff::jvp'), graph_of(scale_jvp))>)
+
+    // The tangent of each scalar primitive is its derivative.
+    let e = 1.0
+    let add = add_tangent(3.0, 5.0, 1.0, 0.0) == ((3.0 + e) + 5.0 - ((3.0 - e) + 5.0)) / (2.0 * e)
+    let sub = sub_tangent(3.0, 5.0, 1.0, 0.0) == ((3.0 + e) - 5.0 - ((3.0 - e) - 5.0)) / (2.0 * e)
+    let mul_x = mul_tangent(3.0, 5.0, 1.0, 0.0) == ((3.0 + e) * 5.0 - ((3.0 - e) * 5.0)) / (2.0 * e)
+    let mul_w = mul_tangent(3.0, 5.0, 0.0, 1.0) == (3.0 * (5.0 + e) - 3.0 * (5.0 - e)) / (2.0 * e)
+    let div_x = div_tangent(6.0, 4.0, 1.0, 0.0) == ((6.0 + e) / 4.0 - (6.0 - e) / 4.0) / (2.0 * e)
+    let div_w = agrees(div_tangent(6.0, 4.0, 0.0, 1.0), (6.0 / 4.125 - 6.0 / 3.875) / 0.25)
+    let neg = neg_tangent(3.0, 1.0) == (-(3.0 + e) + (3.0 - e)) / (2.0 * e)
+    println('transform_rules derivative add={} sub={} mul={} mul_w={} div={} div_w={} neg={}'->format<add, sub, mul_x, mul_w, div_x, div_w, neg>)
+
+    // The transpose is the adjoint of the tangent: `<J v, ct> = <v, T ct>`.
+    let x = 3.0
+    let w = 5.0
+    let dx = 2.0
+    let ct = 7.0
+    println('transform_rules adjoint={}'->format<mul_tangent(x, w, dx, 0.0) * ct == dx * mul_cotangent(x, w, ct)>)
+    return 0
+}

@@ -72,6 +72,17 @@ GOLDEN_JSON = HERE / "fusion_group_none.profile.golden.json"
 # `compile`, `gct`, `declare` and `gir`, five labels, the same durations and the same order. The
 # graph name a report prints is the entry function's (`main`), not the module's, so the hint line
 # reads `(main)` as it did. That is the whole diff.
+#
+# Re-recorded on 2026-10-29: `stdlib/autodiff.cml` now declares the local rules of the scalar
+# arithmetic and the transform's tags (`#jvp(rule)`, `#transpose(rule)`, `#vjp(rule)`), so
+# declaring `autodiff` compiles the two standard-library modules the rule machinery declares in
+# -- `graph` and `rewrite` -- and the report's "compilation - self time by phase" table gains
+# theirs: sixteen rows, in this order, `resolve types` `resolve graph` `cmo_load graph`
+# `resolve rewrite` `cmo_load rewrite` `parse graph` `gct graph` `resolve types` `(counting)`
+# `declare graph` `parse rewrite` `gct rewrite` `resolve graph` `resolve types` `(counting)`
+# `declare rewrite`. That is the whole diff: the
+# operator rows, their counts, the block payloads, the byte counts, the hint, the loop's step
+# numbers and the values the program prints did not move, and the JSON golden is untouched.
 
 # The measured numbers a report prints: durations, shares and byte counts. Everything else in the
 # report is a count or a name, and must not change.

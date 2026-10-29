@@ -156,6 +156,38 @@ export func callee(n: Node): Graph?
 /// @example tags(n)
 export func tags(n: Node): string
 
+// ---- the tags a declaration writes ----
+// A tag whose argument is a function (`#jvp(rule)`, `#transpose(rule)`, `#vjp(rule)`) is a fact
+// about the declaration a pass needs the function of, not text about it: `declaration_tags` reads
+// it back by structure, and `rule_of` names the one a transform asks for.
+
+/// The tags written on the declaration of the function of this graph whose argument is a
+/// function, in the order of their names; empty for a graph that is no declaration (a lambda) and
+/// for a declaration that writes none. The declaration's facts travel with the graph, so a pass
+/// reads them without the module that declares the function.
+/// @example-fragment pass is the surrounding pass and f the function it received
+/// @example declaration_tags(graph_of(f))
+export func declaration_tags(g: Graph): Tag[]
+
+/// The name of the tag as the program writes it (`jvp`, `vjp`); the qualified name when the tag is
+/// not declared any more.
+/// @example-fragment t is a tag read from a declaration
+/// @example tag_name(t)    // 'jvp'
+export func tag_name(t: Tag): string
+
+/// The graphs the tag's arguments name, in the order written: `#jvp(mul_jvp)` names one.
+/// @example-fragment t is a tag read from a declaration
+/// @example tag_graphs(t)
+export func tag_graphs(t: Tag): Graph[]
+
+/// The rule the declaration of `g` writes for the transformation `name`: `jvp` is forward mode,
+/// `transpose` the rule of a linear function, and `vjp` the rule that gives the pullback directly.
+/// Null when the declaration writes none, when it writes that tag twice, and when what the tag
+/// names is not a function. The name is the one the program writes, or its qualified spelling.
+/// @example-fragment pass is the surrounding pass and f the function it received
+/// @example rule_of(graph_of(f), 'vjp')
+export func rule_of(g: Graph, name: string): Graph?
+
 /// The source origin id of the node, 0 when unknown.
 /// @example-fragment n is a node of the surrounding pass
 /// @example origin(n)

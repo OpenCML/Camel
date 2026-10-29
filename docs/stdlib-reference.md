@@ -4973,6 +4973,63 @@ The attributes of the node as text (empty when there are none).
 - Example (a fragment, not compiled): `tags(n)`
 - Why it is not compiled: n is a node of the surrounding pass
 
+### The tags a declaration writes
+
+A tag whose argument is a function (`#jvp(rule)`, `#transpose(rule)`, `#vjp(rule)`) is a fact
+about the declaration a pass needs the function of, not text about it: `declaration_tags` reads
+it back by structure, and `rule_of` names the one a transform asks for.
+
+#### `declaration_tags`
+
+```camel
+declaration_tags: (g: Graph) => Tag[]
+```
+
+The tags written on the declaration of the function of this graph whose argument is a
+function, in the order of their names; empty for a graph that is no declaration (a lambda) and
+for a declaration that writes none. The declaration's facts travel with the graph, so a pass
+reads them without the module that declares the function.
+
+- Example (a fragment, not compiled): `declaration_tags(graph_of(f))`
+- Why it is not compiled: pass is the surrounding pass and f the function it received
+
+#### `tag_name`
+
+```camel
+tag_name: (t: Tag) => string
+```
+
+The name of the tag as the program writes it (`jvp`, `vjp`); the qualified name when the tag is
+not declared any more.
+
+- Example (a fragment, not compiled): `tag_name(t)` gives `'jvp'`
+- Why it is not compiled: t is a tag read from a declaration
+
+#### `tag_graphs`
+
+```camel
+tag_graphs: (t: Tag) => Graph[]
+```
+
+The graphs the tag's arguments name, in the order written: `#jvp(mul_jvp)` names one.
+
+- Example (a fragment, not compiled): `tag_graphs(t)`
+- Why it is not compiled: t is a tag read from a declaration
+
+#### `rule_of`
+
+```camel
+rule_of: (g: Graph, name: string) => Graph?
+```
+
+The rule the declaration of `g` writes for the transformation `name`: `jvp` is forward mode,
+`transpose` the rule of a linear function, and `vjp` the rule that gives the pullback directly.
+Null when the declaration writes none, when it writes that tag twice, and when what the tag
+names is not a function. The name is the one the program writes, or its qualified spelling.
+
+- Example (a fragment, not compiled): `rule_of(graph_of(f), 'vjp')`
+- Why it is not compiled: pass is the surrounding pass and f the function it received
+
 #### `origin`
 
 ```camel
@@ -6153,8 +6210,12 @@ not known when they run to a run-time refusal. `vjp` is reverse mode for a resul
 scalar (it gives the result and the pullback from the cotangent of the result to the gradient),
 and `jvp` is forward mode (the result and its tangent along a direction); both land with the
 autodiff lane, not before they work.
-`stop_gradient` marks a value as a constant, and a custom derivative of a function is the tag
-`#vjp(rule)` on its declaration.
+
+`stop_gradient` marks a value as a constant. A transform's local rules are the tags on a
+declaration and the `rule` declarations below: the tags give a function's own rules
+(`#jvp(rule)` forward, `#transpose(rule)` for a linear function, `#vjp(rule)` the pullback) and
+are read back by structure (`graph::rule_of`); a primitive's rules are the rules whose pattern
+is the primitive, one family at a time, starting with the scalar arithmetic.
 
 #### `grad`
 
@@ -6191,6 +6252,123 @@ Gives its argument unchanged and cuts the gradient at this point: a value passed
 argument's own type.
 
 - Example: `stop_gradient(3.0)` gives `3.0`
+
+### The local rules of the scalar arithmetic
+
+One law, written once: the pattern names the primitive and the right side what the transform
+makes of it. Forward mode's right side is "the tangents of the arguments => the tangent of the
+result", linear in the tangents; a linear primitive's transpose's right side is "the cotangent
+of the result => the cotangent of the argument that carries the data". The value the primitive
+was given is a value here, not a constant of the rule, so `mul_t` is also the transpose of
+`x * 3`.
+
+Each right side is the named function below it, so the tangent a transform produces is a value
+a program can call and compare with the derivative it claims, and the library keeps one writing
+of the mathematics (design principles: one law, one writing).
+
+A constant of a graph and a reference to a parameter are not primitives: a constant has no
+tangent and a parameter's tangent is its own, so a transform lifts the first to a zero tangent
+and passes the second through, without a rule.
+
+#### `add_tangent`
+
+```camel
+add_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+```
+
+The tangent of `x + w` along `(dx, dw)`: `dx + dw`.
+
+- Example: `add_tangent(3.0, 5.0, 1.0, 0.0)` gives `1.0`
+
+#### `sub_tangent`
+
+```camel
+sub_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+```
+
+The tangent of `x - w` along `(dx, dw)`: `dx - dw`.
+
+- Example: `sub_tangent(3.0, 5.0, 1.0, 0.0)` gives `1.0`
+
+#### `mul_tangent`
+
+```camel
+mul_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+```
+
+The tangent of `x * w` along `(dx, dw)`: `dx * w + x * dw`.
+
+- Example: `mul_tangent(3.0, 5.0, 1.0, 0.0)` gives `5.0`
+
+#### `div_tangent`
+
+```camel
+div_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+```
+
+The tangent of `x / w` along `(dx, dw)`: `dx / w - x * dw / (w * w)`.
+
+- Example: `div_tangent(6.0, 4.0, 1.0, 0.0)` gives `0.25`
+
+#### `neg_tangent`
+
+```camel
+neg_tangent: (x: T, dx: T) => T when is_float::<T>()
+```
+
+The tangent of `-x` along `dx`: `-dx`.
+
+- Example: `neg_tangent(3.0, 1.0)` gives `-1.0`
+
+#### `add_cotangent`
+
+```camel
+add_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+```
+
+The cotangent of `x` in `x + c`: the cotangent of the sum, unchanged.
+
+- Example: `add_cotangent(3.0, 5.0, 2.0)` gives `2.0`
+
+#### `sub_cotangent`
+
+```camel
+sub_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+```
+
+The cotangent of `x` in `x - c`: the cotangent of the difference, unchanged.
+
+- Example: `sub_cotangent(3.0, 5.0, 2.0)` gives `2.0`
+
+#### `mul_cotangent`
+
+```camel
+mul_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+```
+
+The cotangent of `x` in `x * c`: `ct * c`.
+
+- Example: `mul_cotangent(3.0, 5.0, 2.0)` gives `10.0`
+
+#### `div_cotangent`
+
+```camel
+div_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
+```
+
+The cotangent of `x` in `x / c`: `ct / c`.
+
+- Example: `div_cotangent(6.0, 4.0, 2.0)` gives `0.5`
+
+#### `neg_cotangent`
+
+```camel
+neg_cotangent: (x: T, ct: T) => T when is_float::<T>()
+```
+
+The cotangent of `x` in `-x`: `-ct`.
+
+- Example: `neg_cotangent(3.0, 2.0)` gives `-2.0`
 
 <a id="sim"></a>
 

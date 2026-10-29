@@ -3308,3 +3308,22 @@ expect_exit = 0
 expect_stdout_exact = "loop_grad_closure_in_body vg=(6.0, 6.0) reads=6.0 scalarIn=6.0 scalarOut=6.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+[[tests]]
+name = "transform_rules"
+desc = "A transform's local rules are read back by structure and hold: #jvp, #transpose and #vjp name functions of the program, graph.rule_of answers the graph written for one transformation (by the name a program writes and by its qualified name), graph.declaration_tags answers all of them with the tag each belongs to, and a declaration that writes one rule reads back as one. The scalar family's rules are the derivatives of the primitives they name: add, sub, mul (in each argument) and neg agree with the central difference exactly, div in its first argument exactly and in its second within 0.001, and the transpose of mul is the adjoint of its tangent (<J v, ct> = <v, T ct> exactly)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/transform_rules.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('transform_rules read=true tags=3 one=true'), `the three rules were not read back: ${out}`)
+assert(out.includes('[jvp, transpose, vjp]'), `the tags are not the ones written: ${out}`)
+assert(out.includes('transform_rules graph=true qualified=true'), `a tag does not name the function written for it: ${out}`)
+assert(out.includes('transform_rules derivative add=true sub=true mul=true mul_w=true div=true div_w=true neg=true'), `a tangent is not the derivative of its primitive: ${out}`)
+assert(out.includes('transform_rules adjoint=true'), `the transpose is not the adjoint of the tangent: ${out}`)
+}
+"""
+timeout_ms = 10000

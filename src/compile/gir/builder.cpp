@@ -939,6 +939,12 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     if (!name.empty()) {
         camel::core::tag::markIndependentElements(graph->draft(), tags.declaration);
     }
+    // The declaration's facts go with the graph (design principles 6.2, 10.1): a pass reads what
+    // a declaration writes through the function it was given — `#jvp(rule)` names a rule graph,
+    // a numeric permission is a flag — not through the module that declares it. A declaration
+    // fact is not a node attribute (`attr::fateOf` records that), so it stays cold metadata of
+    // the graph rather than an attribute of a node.
+    graph->draft().setDeclarationFacts(tags.declaration);
     if (name.empty()) {
         lambdaGraphs_[gct] = graph.get();
     }
