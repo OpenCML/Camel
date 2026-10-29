@@ -943,3 +943,40 @@ expect_stdout_contains = ["nowhere_name"]
 expect_stdout_not_contains = ["consumed twice", "consumed once per round"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+[[tests]]
+name = "stream.generator"
+desc = "A function that writes `yield` hands out a stream: three `yield`s with a `var` written between them are three elements, the tuple element is read with `.0` and `.1`, a branch with a `yield` in each arm goes on in the arm the condition chose, and a closure the body made before a `yield` reads the cell a later pull wrote through it (`read()` is 5, not 0). All four back ends agree."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "56\n1234\n10\n-10\n5\n"
+expect_output_not_contains = ["[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "stream.generator_default"
+desc = "The same program with no pass named: the default path is std::nvm, and it is the fifth back end the case is pinned on."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "56\n1234\n10\n-10\n5\n"
+expect_output_not_contains = ["[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "stream.generator_no_sync"
+desc = "A generator head without `sync`: what the body writes between two `yield`s is an effect like any other, and the program is told so rather than the write quietly taking place or quietly going away."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_no_sync.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "5\n"
+expect_output_not_contains = ["[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

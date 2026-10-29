@@ -1,0 +1,49 @@
+/**
+ * A generator hands out a stream: its body runs a stretch at a time, and each pull runs it on
+ * from where the pull before stopped (language reference 7.3.1).
+ */
+
+// Three `yield`s and a `var` the body writes between them: the cell lives in the function's own
+// body, so the second pull reads what the first one wrote.
+func count(): int.. sync {
+    var i = 0
+    yield i
+    i = 5
+    yield i
+    yield i + 1
+}
+
+// The element can be a tuple of any type.
+func quad(): (int, int).. sync {
+    yield (1, 2)
+    yield (3, 4)
+}
+
+// A branch with a `yield` in each arm: the arm is where the next pull goes on.
+func sign(x: int): int.. sync {
+    if x > 0 then {
+        yield 1
+    } else {
+        yield -1
+    }
+    yield 0
+}
+
+// What the author ruled: a closure the body made before a `yield` reads the cell a later pull
+// wrote through it -- `read()` is 5 here, not 0.
+func reading(): int.. sync {
+    var x    = 0
+    let read = () => x
+    yield 0
+    x = 5
+    yield read()
+}
+
+func main(): int sync {
+    println(loop acc = 0 for v in count() do acc * 10 + v)
+    println(loop acc = 0 for q in quad() do acc * 100 + q.0 * 10 + q.1)
+    println(loop acc = 0 for v in sign(3) do acc * 10 + v)
+    println(loop acc = 0 for v in sign(-3) do acc * 10 + v)
+    println(loop acc = 0 for v in reading() do acc * 10 + v)
+    return 0
+}
