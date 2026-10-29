@@ -919,7 +919,8 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                     if (growthSpent >= growthBudget) {
                         break; // out of growth budget: a specialization is a copy of the callee
                     }
-                    if (camel::runtime::specializeDirectFuncInDraft(session, draft, funcNodeId)) {
+                    if (camel::runtime::specializeDirectFuncInDraft(
+                            session, draft, funcNodeId, config.specializeOnFunctionValues)) {
                         changed        = true;
                         roundChanged   = true;
                         graphRewritten = true;

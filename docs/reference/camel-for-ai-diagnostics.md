@@ -337,9 +337,10 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `DeviceNotSelected` | No device to run '{0}' on: {1}. |
 | `GpuScopeMacroNotExpanded` | `#gpu` scope '{0}': {1} is a macro operator no pass has expanded, so the derived graph does not exist when the scope is compiled; put the pass '{2}' before this one. |
 
-**Run time and passes — warnings** (`RuntimeDiag`) — 3
+**Run time and passes — warnings** (`RuntimeDiag`) — 4
 
 | `PassesNeverRun` | Pass '{0}' consumes the graph, so {1} written after it will not run. |
 | `ConstantExpressionFaults` | This constant expression faults whenever it is evaluated ({0}); it is not folded. |
 | `TranslationLinksRuntime` | std::cpp has no standalone translation of {0}: the program it writes calls the Camel runtime there and is built with libcamel. |
+| `DefunctionalizationIncomplete` | Defunctionalization left {0} as written. |
 <!-- camel-for-ai end: diagnostics -->

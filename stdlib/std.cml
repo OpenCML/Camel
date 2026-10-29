@@ -24,6 +24,15 @@ export func nop::<F>(f: F): F! when is_function::<F>()
 /// the passes that follow.
 export func macro::<F>(f: F): F! when is_function::<F>()
 
+/// Lowers the calls made through function values into direct calls, ahead of the passes that
+/// follow: a call through a parameter whose call site passes a function the program can name
+/// becomes a call of that function, and a call of a closure built in the same graph becomes a call
+/// of its body with the captured values as arguments. A value it cannot name at the call site is
+/// left as it is, and the graph that still calls it is reported by a warning. It takes no
+/// parameters: one copy is made per (function, value) pair and nothing else grows, so it always
+/// completes.
+export func defunctionalize::<F>(f: F): F! when is_function::<F>()
+
 // -----------------------------------------------------------------------------
 // Dumps and translations of the graph
 // -----------------------------------------------------------------------------

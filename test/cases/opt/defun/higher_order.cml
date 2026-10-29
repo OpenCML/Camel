@@ -1,0 +1,41 @@
+/**
+ * The calls defunctionalization makes direct: a parameter filled with a named function at every
+ * call site, a parameter filled with a function value the program writes where it calls (a lambda
+ * with nothing to capture), two functions through one parameter, a two-parameter function value,
+ * and a call in each arm of a branch. The pass must leave the program's results alone, which is
+ * what the printed line says: the same line with and without the pass, on every backend.
+ */
+
+func square(x: int): int {
+    return x * x
+}
+
+func negate(x: int): int {
+    return 0 - x
+}
+
+func apply(f: (x: int) => int, x: int): int {
+    return f(x)
+}
+
+func pairwise(a: int[], b: int[], f: (x: int, y: int) => int): int[] {
+    return [f(a[0], b[0]), f(a[1], b[1]), f(a[2], b[2])]
+}
+
+func pick(flag: bool, x: int): int {
+    return if flag then apply(square, x) else apply(negate, x)
+}
+
+func main(): int sync {
+    let named = apply(square, 4)
+    let lambda = apply((x: int) => x + 100, 4)
+    let pairs = pairwise([1, 2, 3], [10, 20, 30], (x: int, y: int) => x * y)
+    let taken = pick(true, 5)
+    let other = pick(false, 5)
+    'HIGHER ORDER named={} lambda={} pairs={} taken={} other={}'->format<named,
+        lambda,
+        pairs,
+        taken,
+        other>->println
+    return 0
+}

@@ -22,7 +22,7 @@
 2. `agents/test.md`、`agents/commit.md`、`agents/refactor.md`。`agents/branching.md` 讲的是维护者的发布流程，**你不做发布，不碰 `main`、`develop`**，分支规则以本文件第 1 节为准。
 3. **`docs/design-principles.cn.md`**：规范性文件，与代码、测试、其他文档冲突时以它为准。至少读第 1–3 节、第 5–13 节、第 14 节（实际发生过的误读）、第 15 节（尚未决定的问题）。
 4. `docs/roadmap.cn.md`：当前顺序、谁在做什么。
-5. 本次任务相关的设计稿与审查报告（各任务里写明）。审查报告在 `docs/reviews/2026-10-19/`，每条有位置、现状引文和"优雅的形式"。
+5. 本次任务相关的设计稿与审查报告（各任务里写明）。审查报告在 `docs/handover/reviews/`，每条有位置、现状引文和"优雅的形式"。
 
 不确定某个词、某条规则的意思时，先在设计原则里搜；搜不到再按第 4 节提问，不要猜。
 
@@ -911,7 +911,7 @@ VJP 与 ONNX lowering 全部删除，ONNX 导出与 Tiles 的区域分析看到�
 
 ### H6：地基遗留的条目与声明上的标签
 
-地基工作在额度用尽前收尾，下列条目没有完成（详见各条地基的合并提交说明与 `docs/reviews/2026-10-19/` 的对应条目）：
+地基工作在额度用尽前收尾，下列条目没有完成（详见各条地基的合并提交说明与 `docs/handover/reviews/` 的对应条目）：
 
 1. **前端**（审查 frontend）：第 6 条，期望类型合并为一条通道；第 7 条，`append` 的就地改写改走通用的 `setInPlaceForm`（牵涉 `std::cpp` 发射器、ONNX 导出器与测试）；第 15 条，语言服务器的类型与命名空间解析取自编译器（编译器先要记录类型名的声明来源）；`TypeCode::Byte` 的移除（会移动类型码与转换表，单独做）。`from_bytes::<T>` 按类型分 URI、`load_tree` 运行时读类型，等泛型（设计稿 `docs/design/generic-structure`）实现后再改，不在本任务。
 2. **运行时**（审查 runtime）：第 9 条 `:graph/original` 改为引用表中的关系；第 10 条控制边约简移出编码器与建图器；`OperatorTraits` 的位由语义记录推出。用户函数声明"元素互不依赖"（3.6）用节点上的标签实现。（H85 部分完成：`:graph/original` 已在 `43286534f` 随循环 lowering 删除，不是改成关系；traits 由 `OperatorTraits::traitsOf` 唯一推出；`#independent` 标签与运行时查询已实现；控制边约简由 H95 收到 `std::opt::ctrl`：H85 因 `path_assigned.allocs` 从 `1 0 0` 变成 `2 0 0` 撤回，H95 测量证明复制次数不变，多出的块是数组字面量构造落进测量窗口，用例已把窗口锚定在构造之后，四个后端在有/无 `std::opt::ctrl` 下都是 `1 0 0`，见 `note ⟨9db8f50⟩`。）
