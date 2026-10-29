@@ -547,7 +547,10 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     // The arms' code must stay inside the branch: nothing but the JOIN may read it.
     for (const auto &region : regions) {
         for (gc_node_ref_t n : region) {
-            for (auto users : {draft.normUsersOf(n), draft.withUsersOf(n), draft.ctrlUsersOf(n)}) {
+            for (auto users : {draft.normUsersOf(n),
+                               draft.withUsersOf(n),
+                               draft.ctrlUsersOf(n),
+                               draft.syncUsersOf(n)}) {
                 for (gc_node_ref_t u : users) {
                     if (u != join && std::ranges::find(region, u) == region.end()) {
                         return false;
@@ -557,9 +560,7 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
         }
     }
 
-    std::vector<gc_node_ref_t> brchPreds(
-        draft.ctrlInputsOf(brch).begin(),
-        draft.ctrlInputsOf(brch).end());
+    std::vector<gc_node_ref_t> brchPreds = draft.waitInputsOf(brch);
     // The branch also ran after what its condition was ordered after: a condition whose value
     // is known may still wait on an effect (the result of a call that prints, seen through a
     // GATE). With the BRCH gone nothing else may reach that effect, and it was silently dropped.
@@ -672,9 +673,7 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
         armTail = armChainTail;
     }
     const auto &preds = brchPreds;
-    const std::vector<gc_node_ref_t> brchCtrlUsers(
-        draft.ctrlUsersOf(brch).begin(),
-        draft.ctrlUsersOf(brch).end());
+    const std::vector<gc_node_ref_t> brchCtrlUsers = draft.waitUsersOf(brch);
     for (gc_node_ref_t user : brchCtrlUsers) {
         if (user == join || removed(user)) {
             continue;
@@ -689,11 +688,9 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     // branch: they now wait for the result, for what the JOIN itself waited on, and for what the
     // BRCH waited on (the result may come from outside the arm, so waiting on it alone could cut
     // them off from earlier effects).
-    const std::vector<gc_node_ref_t> joinCtrlUsers(
-        draft.ctrlUsersOf(join).begin(),
-        draft.ctrlUsersOf(join).end());
+    const std::vector<gc_node_ref_t> joinCtrlUsers = draft.waitUsersOf(join);
     std::vector<gc_node_ref_t> after{result};
-    for (gc_node_ref_t pred : draft.ctrlInputsOf(join)) {
+    for (gc_node_ref_t pred : draft.waitInputsOf(join)) {
         after.push_back(pred);
     }
     after.insert(after.end(), brchPreds.begin(), brchPreds.end());
@@ -1444,7 +1441,7 @@ size_t dceDraft(GraphDraft &draft, bool valuesOnly = false) {
             const auto *h          = draft.header(id);
             const bool isDeadGate =
                 !valuesOnly && h && h->kind == GCNodeKind::Gate &&
-                (!draft.ctrlUsersOf(id).empty() || gateInputsSurvive(draft, id));
+                (!draft.waitUsersOf(id).empty() || gateInputsSurvive(draft, id));
             if ((isDeadWhenUnread(draft, id) || isDeadGate) && draft.normUsersOf(id).empty() &&
                 draft.withUsersOf(id).empty() && isReplaceable(draft, id)) {
                 replaceNode(draft, id, kInvalidNodeRef);
