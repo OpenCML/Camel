@@ -154,3 +154,15 @@
 所以这个缺陷藏到现在的原因清楚了：**两种边都在时，拼接处的控制边替它撑着**。第 2 块（删 `writeSyncStatement` 的 ctrl 行）的风险也**不在建图**——那一条这条调用本来就没有——**而在拼接处**。
 
 试过一处（未提交、已还原）：把 `builder_operators.cpp:4317` 的判据放成「前一条不是链上语句就照样写」，**永远不触发**（`chainedNodes_.contains(lastSyncedNode_)` 恒为真，快层 7767/fail 0 图不变）；放宽成「带效应就写」则**正常态 30 条红**（algebra_rules 10、camel_passes 9、gir 3 等），说明那个短路在别处是对的。**真正的跳过点在读的链位**（`builder_expr.cpp:1504-1527`：`var` 端口读自己成为 `lastSyncedNode_`），下一笔应改在那里。
+
+### 交作者：给「读了前一条语句的效应语句」补链位，会改执行结果
+
+`sync` 体的语句是一条链，链上的语句不该因为「值有来源」就退出链——所以 `chainEdgeSaysSomething`（`builder_helpers.h:552`）的数据依赖短路只该豁免纯值节点。试了这条修法（`nodeTakesAnOrder(to)` 直接为真），正常态快层红 30 条，**其中 3 条是行为变，不是图变**：
+
+1. `named_struct_types` —— **stdout 变了**：`Point{lit::record_2.x, lit::record_2.y}` 不再出现，即程序的输出变了；
+2. `element_assigned_append.in_place_form` —— 自检失败：`the take is the control dependency of the store, which is where the cell is read`；
+3. `var_argument_reads_the_nearest_write.the_edge_is_data` —— 自检失败：`and that write is not also a control input of the call`。
+
+其余 27 条只是图变（`algebra_rules` 10、`camel_passes` 9、`gir` 3、`boundaries` 2、`entering` 2、`sync.ctrl_dedup_snapshot` 1），其中 `algebra_rules` 与 `camel_passes` 那 19 条**比的是图不是结果**（`graph_equal.mjs`、`tables.mjs`、`pairs.mjs`、`algebra_graph_equal.mj`），所以要写清，免得被当成 19 条行为回归被放过。
+
+**要问作者的一句**：`sync` 体的链上语句，当它直接读前一条语句产出的值时，链上那条边该不该写？写了会让 `named_struct_types` 的输出变、让上面两条自检失去成立的前提；不写则 `report(...)` 这类调用在控制边删除后无处可达（P2 的 5/7 与 0 行）。这两者互斥，请裁定。
