@@ -1,0 +1,39 @@
+id = "selftest.free-device.device"
+order = 1
+tier = "fast"
+tags = ["selftest", "gpu"]
+desc = "The card a `cuda_free_device` test is given, and the host that has none to give"
+
+# The fixture of the runner's card selection (`test/tools/free-device.mjs`). The listing the
+# runner reads is supplied by `test/tools/selftest/run.mjs` through `CAMEL_TEST_GPU_CARDS`, so both
+# answers -- one idle card, and none -- are pinned on whatever host the self-test runs on. The
+# numbers here are the fixture's: card 1 is the only one under the 1024 MiB bar.
+#
+# `free_card` must see exactly one card, and the order that makes its ordinal the one the listing
+# printed. `names_its_own_card` writes the variable itself, so the runner neither chooses a card
+# for it nor skips it when the host would have: a test that made the decision keeps it.
+
+[[tests]]
+name = "free_card"
+kind = "behavior"
+tool = "node"
+case = "see_device.mjs"
+args = ["${case}"]
+cuda_free_device = true
+expect_exit = 0
+expect_stdout_exact = "CUDA_VISIBLE_DEVICES=1\nCUDA_DEVICE_ORDER=PCI_BUS_ID\n"
+timeout_ms = 30000
+
+[[tests]]
+name = "names_its_own_card"
+kind = "behavior"
+tool = "node"
+case = "see_device.mjs"
+args = ["${case}"]
+cuda_free_device = true
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+# Only the variable it named is pinned: the runner writes no order beside a test's own value, and
+# what the machine's own `CUDA_DEVICE_ORDER` says is not this fixture's subject.
+expect_stdout_starts_with = "CUDA_VISIBLE_DEVICES=-1\n"
+timeout_ms = 30000
