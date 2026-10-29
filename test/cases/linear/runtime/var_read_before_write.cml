@@ -1,0 +1,108 @@
+/**
+ * A read of a `var` takes the value of the write written before it, never the one a write written
+ * after it leaves there -- and that holds in a body that is not a `sync` block (docs/design/
+ * effects/edges.cn.md 5.6: every read is tied to the write the source writes before it, and
+ * before the first write to the cell `:var/new` made). So the write written below a read is
+ * ordered after it; what being in a `sync` block adds is that the write runs whether or not the
+ * variable is read afterwards (design principles 3.5, F3).
+ *
+ * Each function here is written outside a `sync` block, and the read it makes before the write is
+ * the value the variable had at that point. `main` is a `sync` block so that each of them runs.
+ *
+ * Expected output:
+ *   int 2 1                 a `var` argument writes the variable after the read
+ *   int 2 1                 a direct assignment writes it
+ *   array [7, 7] [1, 1]     the read keeps the array the variable held, not the one stored later
+ *   arm 0 5 1               a branch arm writes it after the read
+ *   loop 0 2                a loop body writes it after the read
+ *   steps 2 3               a read between two writes takes the first one; one after takes the second
+ *   after 2 2               a read written after the write sees it
+ */
+
+func swap(var x: int, v: int): int sync {
+    x = v
+    return 0
+}
+
+func report(tag: string, a: int, b: int): int sync {
+    println(tag, a, b)
+    return 0
+}
+
+func report_array(tag: string, a: int[], b: int[]): int sync {
+    println(tag, a, b)
+    return 0
+}
+
+func report_arm(tag: string, a: int, b: int, c: int): int sync {
+    println(tag, a, b, c)
+    return 0
+}
+
+func through_var_argument(): int {
+    var a = 1
+    let b = a
+    swap(a, 2)
+    return report("int", a, b)
+}
+
+func through_assignment(): int {
+    var a = 1
+    let b = a
+    a = 2
+    return report("int", a, b)
+}
+
+func through_array_assignment(): int {
+    var a = [1, 1]
+    let b = a
+    a = [7, 7]
+    return report_array("array", a, b)
+}
+
+func through_arm(): int {
+    var v = 0
+    let before = v
+    let r = if true then sync {
+        v = 5
+        1
+    } else 0
+    return report_arm("arm", before, v, r)
+}
+
+func through_loop(): int {
+    var z = 0
+    let before = z
+    loop i = 0 while i < 2 do sync {
+        z = z + 1
+        i + 1
+    }
+    return report("loop", before, z)
+}
+
+func between_two_writes(): int {
+    var a = 1
+    a = 2
+    let b = a
+    a = 3
+    let c = a
+    return report("steps", b, c)
+}
+
+func after_the_write(): int {
+    var a = 1
+    swap(a, 2)
+    let c = a
+    return report("after", a, c)
+}
+
+func main(): int sync {
+    through_var_argument()
+    through_assignment()
+    through_array_assignment()
+    through_arm()
+    through_loop()
+    between_two_writes()
+    after_the_write()
+    return 0
+}

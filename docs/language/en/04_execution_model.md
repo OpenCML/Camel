@@ -187,7 +187,7 @@ func main(): int sync {
 ```
 
 - When a write is not in a sync block and nothing reads the variable afterwards, the modification does not execute (evaluation by dependency).
-- A write that is not in a sync block has no order relative to earlier reads; the compiler gives the warning `SemanticDiag::IgnoredSideEffect`.
+- A write that is not in a sync block is still ordered after the reads written before it (a read sees the value of the write written before it), but it is not guaranteed to run: with nothing reading the variable afterwards it does not run, and the compiler gives the warning `SemanticDiag::IgnoredSideEffect`.
 - Tracking of modifications covers captures: when a function writes a `var` through a capture, the call site is recorded as a write to that variable. For a call through a function value (an argument, a return value or a stored lambda), the call site can recognise side effects only by its type (`var` parameters).
 
 The management and tracking of side effects is still under research (the design principles, 2.8). The behaviour when the same mutable object is written in several places outside a sync block is not yet decided.

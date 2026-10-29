@@ -219,7 +219,7 @@ warning[SemanticDiag::IgnoredSideEffect]: The call of '<__assn__>: (var int, int
     |
  9 |     c = 5
     |     ^^^^^
-help: Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'): only then is the write ordered after the earlier uses of the variable. Without one, the write runs only if the variable is read afterwards.
+help: Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'): the block runs whether or not anything needs it, so the write runs with it. A write outside one is ordered after the reads written before it all the same, but it runs only if something reads the variable afterwards.
 
 warning[SemanticDiag::EffectNotExecuted]: The assignment has side effects but is never executed: nothing depends on it and it is not in a sync block.
    --> docs/tutorial/examples/10_write_nobody_reads.cml:9:7
@@ -233,7 +233,7 @@ help: Evaluation is driven by dependencies: outside a sync block an expression w
 ```
 
 两个函数都打印 `1`：读到的是写之前的版本，写又没人读。区别在保证——同步块里的那次写**一定发生**，并且排在
-它前面的读之后；不在同步块里的那次写，编译器只能告诉你它没有顺序（`SemanticDiag::IgnoredSideEffect`），
+它前面的读之后；不在同步块里的那次写，编译器只能告诉你它不一定执行（`SemanticDiag::IgnoredSideEffect`），
 而且因为没有地方再读它，整条写入不执行（`SemanticDiag::EffectNotExecuted`）。
 
 一句话：**输出对不等于程序对**。要顺序的地方写 `sync`，编译器就不能再挪它了。

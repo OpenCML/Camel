@@ -8565,7 +8565,7 @@ None: choice: a value that has to be taken has no single spelling - bind it, ret
 **Help**
 
 ```text
-Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'): only then is the write ordered after the earlier uses of the variable. Without one, the write runs only if the variable is read afterwards.
+Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'): the block runs whether or not anything needs it, so the write runs with it. A write outside one is ordered after the reads written before it all the same, but it runs only if something reads the variable afterwards.
 ```
 
 **Example** (`test/cases/compile/diag_json/warnings_visible.cml`, run as `camel test/cases/compile/diag_json/warnings_visible.cml`)
