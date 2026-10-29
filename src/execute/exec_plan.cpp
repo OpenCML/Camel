@@ -14,7 +14,9 @@
 #include "camel/runtime/control_regions.h"
 
 #include <algorithm>
+#include <format>
 #include <optional>
+#include <stdexcept>
 #include <string_view>
 #include <unordered_set>
 
@@ -254,10 +256,27 @@ void buildLoopTables(const GCGraph &graph, ExecPlan &plan) {
                 // element of a round from them and the round number, and no array of the interval
                 // is ever built (`for i in a..b`, design principles 4.2).
                 loop.intervalIterates = true;
-                const auto bounds     = boundSlotsOf(graph, norm.front());
-                ASSERT(
-                    bounds.has_value(),
-                    "An interval a loop iterates is the pair of its two bounds.");
+                // The pair is read where the iterable is, behind the gates that order it after
+                // statements (line above): the pass that keeps the pair unwraps those the same way.
+                const auto bounds = boundSlotsOf(graph, valueBehindGates(graph, norm.front()));
+                // A loop that iterates an interval and has no pair of bounds behind it is a graph
+                // the front end never builds and no pass may make: the two slots it would read are
+                // not there, and reading them anyway takes the trip count of the loop from whatever
+                // the frame happens to hold -- a wrong number of rounds, or a number so large that
+                // the run never ends, on one machine and not on another. It is reported instead
+                // (main.cpp prints an exception from here as the compiler's own defect), because
+                // ASSERT is compiled out of a release build and the alternative is that read.
+                if (!bounds.has_value()) {
+                    throw std::runtime_error(
+                        std::format(
+                            "Runtime graph '{}' iterates an interval with no pair of bounds behind "
+                            "node {} ({}): the two bounds of `for i in a..b` are the FILL the loop "
+                            "node reads first, and a pass removed it. This is a defect of the "
+                            "compiler, not an error of the program.",
+                            graph.name(),
+                            ref,
+                            graph.nodeOrigin(ref)));
+                }
                 loop.intervalFromSlot = bounds->first;
                 loop.intervalToSlot   = bounds->second;
             }
