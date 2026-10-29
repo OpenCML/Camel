@@ -6,6 +6,10 @@ and an independent structural checker (`test/tools/cml_roundtrip.py`). This case
 
   * the document is deterministic and contains no names, origins or original node numbers;
   * the default dump is untouched (still version 1);
+  * the document carries the `sync` and `order` edges, reduced to the part of the order no data
+    path or other ordering path already implies, so the two spellings of one `var` assignment
+    write one document; two effects on one resource stay ordered in it; and the checker says
+    different when an ordered pair is dropped;
   * the checker says equal for the same program twice, for a document whose input lists are
     reversed (equivalence orders edges by kind and slot), for two programs that differ only in
     names, and for a real program round-tripped through the no-op pass `std::stats`;
@@ -144,7 +148,7 @@ for graph in base["graphs"]:
         slots = {}
         for item in node["inputs"]:
             assert set(item) == {"kind", "slot", "source"}, item
-            assert item["kind"] in ("normal", "context", "control")
+            assert item["kind"] in ("normal", "context", "control", "sync", "order")
             slots.setdefault(item["kind"], []).append(item["slot"])
             assert item["source"] is None or item["source"] in set(ids)
         for kind, used in slots.items():
@@ -170,7 +174,8 @@ assert any("label" in node for graph in v1["graphs"] for node in graph["nodes"])
 # Same program twice: equal. (Its text was already asserted identical above.)
 compare(write("base.json", base), write("base2.json", canonical(LOOPS)[1]), True)
 
-# Only the order of the input lists differs: edges are compared by kind and slot, so equal.
+# Only the order of the input lists differs: the value edges are compared by kind and slot and the
+# ordering edges as the pairs they spell, so equal.
 reordered = copy.deepcopy(base)
 for graph in reordered["graphs"]:
     for node in graph["nodes"]:
@@ -218,7 +223,165 @@ compare(write("stats.json", json.loads(through_stats)), write("base4.json", base
 calls = canonical(CALLS)[1]
 compare(write("calls.json", calls), write("calls2.json", json.loads(canonical(CALLS)[0])), True)
 
-# -- 3. budget: stops and reports, never passes --------------------------------------------
+# -- 3. the ordering edges ----------------------------------------------------------------
+
+# A program whose body holds both kinds of ordering edge: a read of a `var` and the write after
+# it are one ordered pair with no data path between them (an `order` edge), and the statements of
+# the sync block are a chain (a `sync` edge). Both are in the graph before any pass runs.
+ORDERED = write(
+    "ordering_order.cml",
+    "func main(): int sync {\n"
+    "    var x = 1\n"
+    "    let y: int = x\n"
+    "    x = 5\n"
+    "    println(y)\n"
+    "    println(x)\n"
+    "    return 0\n"
+    "}\n",
+)
+ordered = canonical(ORDERED)[1]
+
+# Two effects on one ambient resource, neither of which reads the other's value. Their order is
+# the source order, and it is what the document has to show: the point of exporting the ordering
+# edges at all. The builder does not write an `order` edge between two effects of one resource
+# yet, so today the pair is carried by the sync chain of the block and by the control wait; the
+# assertion below names no kind, because the order is the same order whichever kind spells it,
+# and a same-resource `order` edge would join the same pair without changing this.
+DOUBLE = write(
+    "ordering_effects.cml",
+    "func main(): int sync {\n" "    println(9)\n" "    println(0)\n" "    return 0\n" "}\n",
+)
+double = canonical(DOUBLE)[1]
+
+
+def ordering_edges(document):
+    """The ordering edges of a document: {(graph, target): {source: {kinds}}}."""
+    edges = {}
+    for graph in document["graphs"]:
+        for node in graph["nodes"]:
+            for item in node["inputs"]:
+                if item["kind"] not in ("control", "sync", "order") or item["source"] is None:
+                    continue
+                per = edges.setdefault((graph["id"], node["id"]), {})
+                per.setdefault(item["source"], set()).add(item["kind"])
+    return edges
+
+
+def ordered_through_another_path(document, gid, source, target):
+    """Whether `source` reaches `target` over at least two edges of the graph the document holds.
+
+    Every kind counts (data, control, sync, order): each of them orders the two ends, and a
+    document keeps an edge only where no such path already orders them.
+    """
+    successors = {}
+    for graph in document["graphs"]:
+        if graph["id"] != gid:
+            continue
+        for node in graph["nodes"]:
+            for item in node["inputs"]:
+                if item["source"] is None:
+                    continue
+                if (item["source"], node["id"]) == (source, target):
+                    continue
+                successors.setdefault(item["source"], []).append(node["id"])
+    seen, level = {source}, successors.get(source, [])
+    depth = 1
+    while level:
+        if target in level:
+            return depth >= 2
+        next_level = []
+        for node in level:
+            for successor in successors.get(node, []):
+                if successor not in seen:
+                    seen.add(successor)
+                    next_level.append(successor)
+        level, depth = next_level, depth + 1
+    return False
+
+
+# Both kinds reached the document.
+loops_edges = ordering_edges(base)
+assert any(
+    "sync" in kinds for sources in loops_edges.values() for kinds in sources.values()
+), "no sync edge reached the canonical document"
+assert any(
+    "order" in kinds for sources in ordering_edges(ordered).values() for kinds in sources.values()
+), "no order edge reached the canonical document"
+
+# The reduction: no `sync` or `order` edge is left whose two ends another path already orders.
+# Without it the document would carry the edges of one spelling of a program and not the ones of
+# another (docs/technical/gir-interchange.md, "Canonical documents").
+for document, name in ((base, "loops"), (ordered, "ordering")):
+    for (gid, target), sources in ordering_edges(document).items():
+        for source, kinds in sources.items():
+            if not kinds & {"sync", "order"}:
+                continue
+            assert not ordered_through_another_path(document, gid, source, target), (
+                f"{name}: {source} -> {target} is written as {sorted(kinds)} although another "
+                "path of the graph already orders the two ends"
+            )
+
+# A redundant ordering edge really is gone: the read of a `var` and the write after it are one
+# pair here, and the printed body of the same assignment -- whose read and write are joined by an
+# `order` edge a data path already implies -- writes the same document as the assignment itself.
+VAR_PARAM = CASES / "trans/cml/var_param.cml"
+printed = TMP / "var_param_printed.cml"
+just_printed = invoke(EXE, VAR_PARAM, "std::cml")
+assert just_printed.returncode == 0, just_printed.stderr
+printed.write_text(just_printed.stdout, encoding="utf-8")
+printed_doc = canonical(printed)[1]
+compare(
+    write("var_param.json", canonical(VAR_PARAM)[1]),
+    write("var_param_printed.json", printed_doc),
+    True,
+)
+
+# The document orders the two `println`s of one resource, in the order the program wrote them:
+# the one that prints 9 comes before the one that prints 0.
+printlns = [
+    key
+    for key, node in nodes_of(double).items()
+    if "println" in str((node.get("payload") or {}).get("op"))
+]
+assert len(printlns) == 2, printlns
+values = {}
+for key in printlns:
+    for item in nodes_of(double)[key]["inputs"]:
+        if item["kind"] != "normal":
+            continue
+        printed_value = nodes_of(double).get((key[0], item["source"]), {}).get("value") or {}
+        if printed_value.get("k") in ("i32", "i64"):
+            values[key] = printed_value["v"]
+assert sorted(values.values()) == [0, 9], values
+nine = next(key for key, value in values.items() if value == 9)
+zero = next(key for key, value in values.items() if value == 0)
+assert nine[0] == zero[0], "the two effects are statements of one graph"
+assert nine[1] in ordering_edges(double).get(zero, {}), (
+    "the document does not order the two printlns of one resource: "
+    f"{ordering_edges(double).get(zero, {})}"
+)
+
+# The checker reads them: dropping one ordered pair from a document makes it different, and so
+# does dropping the `order` edge of a pair that carries no other kind.
+dropped = copy.deepcopy(ordered)
+for graph in dropped["graphs"]:
+    for node in graph["nodes"]:
+        node["inputs"] = [item for item in node["inputs"] if item["kind"] != "order"]
+assert differing_fields(ordered, dropped) == {"node.inputs"}
+compare(write("dropped_order.json", dropped), write("ordered.json", ordered), False)
+
+unpaired = copy.deepcopy(double)
+for graph in unpaired["graphs"]:
+    for node in graph["nodes"]:
+        node["inputs"] = [
+            item
+            for item in node["inputs"]
+            if not (item["source"] == nine[1] and item["kind"] in ("control", "sync", "order"))
+        ]
+assert differing_fields(double, unpaired) == {"node.inputs"}
+compare(write("unpaired.json", unpaired), write("double.json", double), False)
+
+# -- 4. budget: stops and reports, never passes --------------------------------------------
 
 def over_budget(*options):
     left = write("budget_a.json", base)
