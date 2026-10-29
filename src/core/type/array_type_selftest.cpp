@@ -200,6 +200,24 @@ std::string debugRunArrayTypeSelfTest() {
             std::string::npos,
         "the runtime element check says: " + elementCheck);
 
+    // ---- An array with no element type yet takes nothing, and nothing takes it ---------------
+    // The `Ref` placeholder of an array literal whose elements are names the graph has not built
+    // yet (design principles 5.1: no type is undetermined after compilation, so no value has this
+    // one). `resolved()` names that state; both questions answer `false` and `Forbidden` rather
+    // than compare the placeholder with an element type, which the primitive comparison cannot
+    // answer (it asserts on it).
+    ArrayType *unresolved = ArrayType::create(Type::Ref());
+    require(!unresolved->resolved(), "an array of the Ref placeholder counts as resolved");
+    require(!anyF32->assignableFrom(unresolved), "f32[] takes an array with no element type yet");
+    require(!fixed4->assignableFrom(unresolved), "f32[4] takes an array with no element type yet");
+    require(!unresolved->assignableFrom(anyF32), "an array with no element type yet takes f32[]");
+    require(
+        anyF32->castSafetyFrom(unresolved) == CastSafety::Forbidden,
+        "f32[] converts from an array with no element type yet");
+    require(
+        unresolved->castSafetyFrom(anyF32) == CastSafety::Forbidden,
+        "an array with no element type yet converts from f32[]");
+
     // ---- Unification and widening ---------------------------------------------------------
     Type *joined = ArrayType::create(i64, shapeOf({3}))->unify(ArrayType::create(i64, shapeOf({4})));
     require(joined != nullptr && joined->toString() == "int[]", "int[3] + int[4] does not unify to int[?]");

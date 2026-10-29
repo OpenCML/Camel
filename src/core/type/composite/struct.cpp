@@ -415,6 +415,15 @@ StructRelation camel::core::type::relateStructs(const StructType *target, const 
     if (target == source || target->equals(const_cast<StructType *>(source))) {
         return StructRelation::SameLayout;
     }
+    // A struct type still holding the `Ref` placeholder of a field is not one a value can have
+    // (design principles 5.1: every value has a determined type, and no type is undetermined
+    // after compilation). `resolved()` names that state, and the fields are filled from the
+    // computed elements of a literal. No field of it can be related to the other type's fields,
+    // so there is no relation to state -- and comparing the placeholder with a field type is a
+    // question the primitive comparison cannot answer (it asserts on it).
+    if (!target->resolved() || !source->resolved()) {
+        return StructRelation::None;
+    }
     if (target->size() != source->size()) {
         return StructRelation::None;
     }

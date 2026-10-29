@@ -476,6 +476,17 @@ CastSafety ArrayType::castSafetyFrom(Type *sourceType) const {
     if (sourceType == nullptr) {
         return CastSafety::Forbidden;
     }
+    // A type that still holds the `Ref` placeholder is not one a value can have, so nothing is
+    // converted to or from it: the conversion refuses it here for the reason
+    // ArrayType::assignableFrom states below, instead of asking whether its element type fits
+    // (which that comparison cannot answer). A type against itself is not such a question.
+    if (this == sourceType) {
+        return CastSafety::Safe;
+    }
+    if (!resolved() || (sourceType->code() == TypeCode::Array &&
+                        !static_cast<const ArrayType *>(sourceType)->resolved())) {
+        return CastSafety::Forbidden;
+    }
     if (assignableFrom(sourceType)) {
         return CastSafety::Safe;
     }
@@ -579,6 +590,15 @@ bool ArrayType::assignableFrom(Type *sourceType) const {
         return false;
     }
     const auto *source = static_cast<const ArrayType *>(sourceType);
+    // A type that still holds the `Ref` placeholder is not one a value can have (design
+    // principles 5.1: every value has a determined type, and no type is undetermined after
+    // compilation). `resolved()` names that state, and `resolve` is what turns it into a type
+    // from the computed elements of a literal. Nothing is assignable to it and it is assignable
+    // to nothing, so the answer is `false` -- not a comparison of the placeholder with an element
+    // type, which the primitive comparison cannot answer and asserts on.
+    if (!resolved() || !source->resolved()) {
+        return false;
+    }
     if (elemTypeCode_ != TypeCode::Void && !elemType_->assignableFrom(source->elemType_)) {
         return false;
     }
