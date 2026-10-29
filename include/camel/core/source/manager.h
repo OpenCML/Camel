@@ -206,20 +206,16 @@ class DebugMap {
     void registerEntryOrigin(origin_id_t origin);
     void registerNodeOrigin(const std::string &nodeId, origin_id_t origin);
     void registerPcOrigin(size_t pc, origin_id_t origin);
-    void registerRuntimeGraphOrigin(uintptr_t runtimeGraphKey, origin_id_t origin);
-
     origin_id_t graphOrigin(camel::runtime::GraphId graph) const;
     origin_id_t entryOrigin() const { return entryOrigin_; }
     origin_id_t nodeOrigin(const std::string &nodeId) const;
     origin_id_t pcOrigin(size_t pc) const;
-    origin_id_t runtimeGraphOrigin(uintptr_t runtimeGraphKey) const;
 
   private:
     std::unordered_map<camel::runtime::GraphId, origin_id_t> graphOrigins_; // GraphId -> origin
     origin_id_t entryOrigin_ = kInvalidOriginId;
     std::unordered_map<std::string, origin_id_t> nodeOrigins_;       // node entity id -> origin
     std::unordered_map<size_t, origin_id_t> pcOrigins_;              // bytecode pc -> origin
-    std::unordered_map<uintptr_t, origin_id_t> runtimeGraphOrigins_; // runtime graph ptr -> origin
 };
 
 /// Semantic side table keyed by OriginId, mainly for tree-like stages such as AST/GCT.

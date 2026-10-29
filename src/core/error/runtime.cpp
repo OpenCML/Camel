@@ -71,7 +71,7 @@ camel::source::origin_id_t resolveOriginFromSite(
     }
 
     if (site.runtimeGraph) {
-        auto origin = debugMap.runtimeGraphOrigin(reinterpret_cast<uintptr_t>(site.runtimeGraph));
+        auto origin = debugMap.graphOrigin(site.runtimeGraph->id());
         if (origin != camel::source::kInvalidOriginId) {
             return origin;
         }
@@ -200,8 +200,7 @@ ExecutionSite makeGraphExecutionSite(
     site.frameDepth   = frameDepth;
     site.taskLabel    = std::move(taskLabel);
     if (graph && sourceContext) {
-        site.cachedOrigin =
-            sourceContext->debugMap().runtimeGraphOrigin(reinterpret_cast<uintptr_t>(graph));
+        site.cachedOrigin = sourceContext->debugMap().graphOrigin(graph->id());
     }
     return site;
 }

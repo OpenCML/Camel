@@ -494,9 +494,6 @@ class Context : public std::enable_shared_from_this<Context> {
     /// loaded: what tells a name with no module behind it from a module that is there and cannot
     /// be used.
     bool moduleFileExists(const std::string &moduleName);
-
-  private:
-    void registerRuntimeGraphDebugInfo(const camel::runtime::Program *program);
 };
 
 } // namespace camel::core::context

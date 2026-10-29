@@ -1002,7 +1002,6 @@ const camel::runtime::Program *Context::materializeRuntimeProgram() {
         *rootModule,
         *program);
     runtimeGraphMgr_->adoptRoot(program);
-    registerRuntimeGraphDebugInfo(program);
     return program;
 }
 
@@ -1010,7 +1009,6 @@ const camel::runtime::Program *
 Context::installRuntimeProgram(const camel::runtime::Program *program) {
     ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
     runtimeGraphMgr_->replaceRoot(program);
-    registerRuntimeGraphDebugInfo(program);
     return program;
 }
 
@@ -1018,7 +1016,6 @@ const camel::runtime::Program *
 Context::adoptRuntimeProgram(const camel::runtime::Program *program) {
     ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
     runtimeGraphMgr_->adoptRoot(program);
-    registerRuntimeGraphDebugInfo(program);
     return program;
 }
 
@@ -1028,7 +1025,6 @@ bool Context::installRuntimeProgramIfCurrent(
     if (!runtimeGraphMgr_->replaceRootIfCurrent(expected, program)) {
         return false;
     }
-    registerRuntimeGraphDebugInfo(program);
     return true;
 }
 
@@ -1110,19 +1106,6 @@ void Context::releaseDetachedRuntimeGraphs() {
 
 void Context::registerExecutorFactory(std::string name, executor_factory_t fact) {
     exeMgr_->registerExecutorFactory(name, fact);
-}
-
-void Context::registerRuntimeGraphDebugInfo(const camel::runtime::Program *program) {
-    if (!program || !sourceContext_) {
-        return;
-    }
-    auto &debugMap = sourceContext_->debugMap();
-    for (camel::runtime::GCGraph *graph : program->graphs()) {
-        camel::source::origin_id_t origin = debugMap.graphOrigin(graph->id());
-        if (origin != camel::source::kInvalidOriginId) {
-            debugMap.registerRuntimeGraphOrigin(reinterpret_cast<uintptr_t>(graph), origin);
-        }
-    }
 }
 
 } // namespace camel::core::context

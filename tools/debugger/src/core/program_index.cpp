@@ -962,10 +962,7 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
     // The function of the source the graph was built from: the one whose span is the span
     // of the graph's origin; for a graph without one, where most of its nodes were written.
     if (auto sc = ctx_ ? ctx_->sourceContext() : nullptr) {
-        origin_t graphOrigin = sc->debugMap().graphOrigin(g->id());
-        if (graphOrigin == 0) {
-            graphOrigin = sc->debugMap().runtimeGraphOrigin(reinterpret_cast<uintptr_t>(g));
-        }
+        const origin_t graphOrigin = sc->debugMap().graphOrigin(g->id());
         const SourceLoc &l = loc(graphOrigin);
         if (l.valid()) {
             for (size_t i = 0; i < functions_.size(); ++i) {
