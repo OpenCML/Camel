@@ -26,9 +26,10 @@ Each graph contains:
   this is not a nested tree, and names need not be unique.
 - `nodes`: real runtime nodes. Each has a document-unique `id`, `kind`, display-only `label`
   and `outputType` (a source-spelled type, or `null` when unavailable).
-- `edges`: `source` and `target` node IDs, `kind` (`normal`, `context`, `control`),
-  `sourceIndex` in the source's unique-consumer list of that kind and `targetIndex` in the target's
-  incoming list. Parallel/repeated inputs are separate edges.
+- `edges`: `source` and `target` node IDs, `kind` (`normal`, `context`, `control`, `sync`,
+  `order`), `sourceIndex` in the source's unique-consumer list of that kind and `targetIndex` in
+  the target's incoming list. Parallel/repeated inputs are separate edges. `sync` and `order` are
+  not ports (see below): they carry neither `sourceIndex` nor `targetIndex`, only the two ends.
 - `normalPorts`, `contextPorts`, `capturePorts`: ordered input-node IDs.
 - `exit`: the real output-node ID. Visual ARGS/EXIT markers belong to the viewer and are not
   serialized as runtime nodes.
@@ -79,9 +80,9 @@ A canonical document keeps what equivalence is defined on, and nothing else:
   - A graph has `id`, `flags`, `signature` (an index into `types`), `nodes`, `regions`,
     `normalPorts`, `contextPorts`, `capturePorts`, `exit`, and `root: true` on the root graph.
   - A node has `id`, `kind`, `type` (an index into `types`), `inputs` (each
-    `{kind, slot, source}` with kind `normal`, `context` or `control`; `source` is a node ID or
-    `null`), and, when they apply, `attrs` (tag atom to value), `perms` (the numeric permission
-    mask), `param` (`{kind, index}`), `callee` (a graph ID), `loop`
+    `{kind, slot, source}` with kind `normal`, `context`, `control`, `sync` or `order`; `source`
+    is a node ID or `null`), and, when they apply, `attrs` (tag atom to value), `perms` (the
+    numeric permission mask), `param` (`{kind, index}`), `callee` (a graph ID), `loop`
     (`{kind, collectionCount, condition, body, conditionRegion, bodyRegion}`, graph and region
     IDs), `value` (a static value) and `payload`.
   - A region has `id`, `kind`, `index`, `parent` (0 is the body), and, when they apply, `owner`,
@@ -111,13 +112,49 @@ numbers: the IDs above are the export's own and carry no meaning across exports.
 root's exit chain calls a function constant directly. Hoisting an inlined entry into a virtual
 `main` is not done yet; it belongs with the printer that makes it necessary.
 
+## Ordering edges in the two versions
+
+The `sync` and `order` edges are not ports: they order without carrying a value, so neither
+occupies an input slot and neither is addressed by one (docs/design/effects/edges.cn.md 1.5).
+The two versions write them differently, and deliberately:
+
+| | version 1 (default) | version 2 (`canonical=true`) |
+| --- | --- | --- |
+| `normal`, `context`, `control` | every edge the graph holds, with consumer indices | the same, as node `inputs` |
+| `sync`, `order` | every edge the graph holds, without indices | the graph's, after the reduction below |
+
+Version 1 is the complete information for tools: it is a dump of the graph as it is. Version 2 is
+the input of an equivalence checker, so it holds what equivalence is defined on, which is the
+order that cannot be derived:
+
+- **Two programs are equivalent when no order one of them has can be derived in the other.** The
+  value edges decide an order by themselves (a consumer runs after what it reads), so an ordering
+  edge whose two ends another path already orders says nothing the document does not already say.
+- **Before the `sync` and `order` edges are written, the graph is reduced**: an edge goes away
+  when a path of at least two edges between its two ends already orders them, inside the region
+  that holds it. The path may use any edge that orders -- data, `sync`, `order` and the `control`
+  waits -- and the reduction is the transitive reduction `std::opt::order` makes over order edges
+  (`camel::runtime::reduceDocumentOrdering` shares its walk, bounded the same way).
+- **What survives is the order that would be lost otherwise.** `x += 1` and its split spelling,
+  whose graphs differ only in an order edge a data path already implies, write the same document,
+  so printing a program and compiling it back still compares equal. Two `println`s of one resource
+  that read nothing from each other stay ordered in the document.
+- **The `control` waits are written as the graph holds them, unreduced**: they are the edges that
+  are still being retired (docs/design/effects/edges.cn.md 1), and a document that dropped them
+  would stop seeing the order they carry today.
+- **The ordering edges are compared as one relation.** `control`, `sync` and `order` all say "the
+  predecessor runs first", and the builder writes a control wait beside the sync link it makes for
+  one pair. The checker reads those kinds as one edge per ordered pair, whatever kind spells it;
+  this is why the kinds are a spelling of the order and not part of it.
+
 ## Equivalence checker
 
 `test/tools/cml_roundtrip.py` compares two canonical documents, independently of the dump. It
 refines vertex colors over the whole structure (graphs, nodes, regions, types, declarations,
 tag atoms, with kinds, slots, payloads and values as labels), checks that every color class has
 the same multiplicity on both sides, and searches for a structure-preserving bijection with
-bounded backtracking. Names are not compared because they are not in the document.
+bounded backtracking. Names are not compared because they are not in the document, and the three
+ordering kinds are compared as the set of ordered pairs they spell (above).
 
     cml_roundtrip.py LEFT.json RIGHT.json [--max-nodes N] [--max-steps N]
 

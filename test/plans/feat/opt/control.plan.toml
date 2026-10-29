@@ -5,7 +5,7 @@ tags = ["feat", "opt", "control"]
 
 [[tests]]
 name = "control.topology"
-desc = "Bounded mandatory data/control proofs, zero/exhausted budgets, predecessor frontiers, branch anchors, conditional-value barriers and dense-chain reduction."
+desc = "Bounded mandatory data/control proofs, zero/exhausted budgets, predecessor frontiers, branch anchors, conditional-value barriers, dense-chain reduction, and the two readings of the order reduction: a document drops an ordering edge a data path already covers while the pass keeps it."
 kind = "behavior"
 case = "../../../cases/opt/generic/control_chain.cml"
 args = ["${case}", "test::control", "std::nvm"]

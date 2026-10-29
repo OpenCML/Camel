@@ -5,7 +5,7 @@ tags = ["feat", "trans", "dump", "json", "canonical"]
 
 [[tests]]
 name = "canonical_document_and_equivalence"
-desc = "The canonical JSON GIR document (version 2, canonical=true): deterministic, no names/origins/original ids, attributes and permissions kept, default version 1 output untouched. The independent checker (test/tools/cml_roundtrip.py) says equal for the same program, for reordered input lists, for name-only differences and for a std::stats round trip, says different for an attribute-only difference, and reports over budget with exit 2 instead of passing."
+desc = "The canonical JSON GIR document (version 2, canonical=true): deterministic, no names/origins/original ids, attributes and permissions kept, default version 1 output untouched, the sync and order edges written after the reduction that drops what a data path or another ordering path already orders, two effects of one resource still ordered in it, and the two spellings of a var assignment writing one document. The independent checker (test/tools/cml_roundtrip.py) says equal for the same program, for reordered input lists, for name-only differences and for a std::stats round trip, says different for an attribute-only difference and for a dropped ordered pair, and reports over budget with exit 2 instead of passing."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/cml_canon_contract.py"
