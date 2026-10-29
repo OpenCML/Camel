@@ -1,0 +1,17 @@
+合并 fsh8 进 develop（`abbc9c229`）：3 笔里只有 8 行文档，中间那笔是空合并
+
+**`origin/fsh-dev` 领先的 3 笔，逐笔定性**：`3216d8b22`（第 9 条返工，`+4` 行）与 `a7a2baa85`（第 11 条复核，`+4` 行）是**真内容**，都只改 `docs/handover/reviews/questions-2026-10-29.md`；`9e3cbd6c7`（`Merge remote-tracking branch 'origin/develop' into fsh-dev`）是**空合并，净 0**——它的第二父提交就是 `origin/develop` 的顶端 `79c75d6c4`，也正是合并基，所以它对 develop 只贡献首父已有的那 4 行；它相对首父多出的 `+499 / −2`（`src/compile/gct/builder.cpp`、`builder.h`、`generators.cml`、`generators_no_sync.cml`、`stream.plan.toml`、`questions-2026-10-29.md` 六项）是 develop 自己被拉进 fsh-dev，不是作者的新内容。整笔合并净新增 **8 行、1 个文档**（`docs/handover/reviews/questions-2026-10-29.md`，`+8 / −0`），零代码、零用例；合并后树与 `origin/fsh-dev` 逐字节一致。
+
+**作者原话（第 9 条清单项，`3216d8b22`）**：
+
+裁定是"数据依赖的短路只豁免纯值节点，带效应的语句一律写同步边"。现在的 `chainLinkSaysSomething` 只在"前驱是目标拿来当实参的那次 `var` 读"这一种情形下写边，其余带效应的语句仍按数据依赖跳过。这是按用例开口子，下一个形状照样会掉链。按裁定改成一般规则：目标带效应或可能出故障，就写同步边。由此变红的 30 条按裁定分三类处理（27 条重录、2 条自检改成断言不变量、`named_struct_types` 查清对错）。这一笔的用例保留。
+
+**作者原话（第 11 条清单项，`a7a2baa85`）**：
+
+方向对：单元按句柄进状态结构体，`step` 是一个按 `pc` 分支的循环，`sync` 照生成器的函数头。但它只覆盖不含循环的形状，循环里的 `yield` 仍用 `FeatureNotSupported`（"还没降级"）拒绝。这正是 10-24 裁定说的"半成品不进 develop"，也是"不留尚未实现式诊断"那条规矩所禁止的。既然已经合入，这一路**接下来只做把它补完**，按你们排的顺序：`pairs(n)` 双层循环 → `match` 臂 → `sync` 里的打印顺序 → 提前停 → 可错元素。补完的同一笔删掉那条 `FeatureNotSupported`，翻转 `stream.yield_lowering_refused`，改掉语言参考里那句。中间不再接别的活。
+
+**清单项归属与有没有新任务**：分别落在 `docs/handover/batches-2026-10-29.cn.md` 状态表**第 9 条**（`lane-order-region`，进行中：收掉控制边重建的最后一半）与**第 11 条**（`lane-gen`，受阻：`yield` 与生成器状态机）。两笔都是既有裁定（`questions-2026-10-29.md` 里"读了前一条语句的值的效应语句，链上的边要写"与"生成器状态里被捕获的 `var` 是单元、句柄进状态结构体"两节）下的**返工 / 收口指令**：第 9 条＝把链边判据从一个特例改成一般规则——目标带效应或可能出故障就写同步边，由此变红的 30 条按裁定分三类（27 条重录、2 条自检改成断言不变量、`named_struct_types` 查清对错），这一笔的用例保留；第 11 条＝这一路接下来只做把它补完，中间不接别的活，补完的同一笔删掉那条 `FeatureNotSupported`、翻转 `stream.yield_lowering_refused`、改掉语言参考里那句。**没有新清单项，也没有新裁定。**
+
+**闸门**（`-Plan all -Tier fast -Jobs 8`，在主机 88 上跑，本机 0 构建）：sha `abbc9c229`；build stamp `abbc9c229（clean）/ 1217 source files / fingerprint 8816c26b1ab3f0ed`，`dirty=false / dirtyCount 0 / dirtyPaths []`；`total 7802 / pass 7798 / fail 0 / skip 2 / known 2`，新红 0、`snapshot differs 0`，对上基线 7802 / 0 / 2，`RUN_EXIT=0`（wall 307.9 s，build 19.6 s，total 346 s）。
+
+**代码检查**：冲突标记 0 处（`--no-ff` 合并零冲突，工作树全程干净）；`diagnostics-catalog --check` 298 codes 通过；`check-grammar --check` 126 productions / 29 contextual keywords 通过；`stdlib-reference --verify-doc` 与 `diagnostics-catalog --verify-doc` 均 up to date；`check-doc-links --all` 0 坏链 / 361 篇。
