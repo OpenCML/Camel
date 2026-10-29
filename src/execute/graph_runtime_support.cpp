@@ -914,9 +914,21 @@ slot_t runtimeFuncValue(
             continue;
         }
         const size_t at = declaredWith + k;
-        ASSERT(
-            at < withValues.size(),
-            "A call that writes captured variables must pass each of them as a With input.");
+        // A graph whose call carries a version it does not pass is a defect of the compiler or of
+        // a pass, and it is reported here: reading past the end of the `with` arguments would put
+        // a slot that is not a value into the tuple the call hands on (design principles 5.1, and
+        // a bad graph never crashes the process).
+        if (at >= withValues.size()) {
+            throw std::runtime_error(
+                std::format(
+                    "Runtime graph '{}' writes captured variable {} but its call passes only {} "
+                    "`with` arguments and declares {} of them: the call's value states a version "
+                    "it is not given.",
+                    calleeGraph->name(),
+                    k,
+                    withValues.size(),
+                    declaredWith));
+        }
         parts.push_back(withValues[at]);
     }
     if (parts.size() <= 1) {
@@ -925,11 +937,17 @@ slot_t runtimeFuncValue(
     }
     // More than one part: the value is the tuple the builder typed the call node with, in the
     // order the parts were just gathered (the return value first, then the written versions).
-    ASSERT(valueType != nullptr, "A call whose value is a tuple must be typed as one.");
-    auto *tupleType = tt::as_ptr<camel::core::type::TupleType>(valueType);
-    ASSERT(
-        tupleType->size() == parts.size(),
-        "A call must hand on exactly the parts its value type declares.");
+    auto *tupleType =
+        valueType != nullptr ? tt::as_ptr<camel::core::type::TupleType>(valueType) : nullptr;
+    if (tupleType == nullptr || tupleType->size() != parts.size()) {
+        throw std::runtime_error(
+            std::format(
+                "Runtime graph '{}' hands on {} parts but its call's value type states {}: the "
+                "versions a call of it produces do not match the type it was given.",
+                calleeGraph->name(),
+                parts.size(),
+                tupleType != nullptr ? tupleType->size() : size_t{0}));
+    }
     auto *tuple = Tuple::create(parts.size(), camel::core::mm::autoSpace());
     for (size_t i = 0; i < parts.size(); ++i) {
         CAMEL_ASSERT_NOT_VIEW(parts[i], tupleType->typeAt(i), "the value of a call");
