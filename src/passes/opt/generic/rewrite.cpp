@@ -247,6 +247,71 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
             camel::runtime::appendControlDependency(draft, pred, user);
         }
     }
+    // An effect this node was the last reader of keeps running where the node stood (design
+    // principles 3.4, 9.7): the statements of a `sync` block happen where they are written, and the
+    // effect is inside one of them whatever layer of its expression it is at. `println(5) - 1`
+    // written as a statement prints `5` whether or not anything reads the difference, so removing
+    // the unread difference may not remove the print with it. The effect takes the statement's
+    // place in the chain -- what follows the statement follows the effect (5.7's handover, the same
+    // one a splice uses) -- rather than being left reached by nothing when the chain closes over
+    // the node.
+    if (!draft.syncUsersOf(id).empty()) {
+        std::vector<gc_node_ref_t> lastRead;
+        for (gc_node_ref_t source : orderedSources(draft, id)) {
+            if (!camel::runtime::carriesOrdering(draft, source, true)) {
+                continue;
+            }
+            bool readElsewhere = false;
+            for (auto group : {draft.normUsersOf(source),
+                               draft.withUsersOf(source),
+                               draft.ctrlUsersOf(source),
+                               draft.syncUsersOf(source)}) {
+                for (gc_node_ref_t user : group) {
+                    readElsewhere = readElsewhere || (user != id && user != source);
+                }
+            }
+            if (!readElsewhere) {
+                lastRead.push_back(source);
+            }
+        }
+        // Source order is creation order: the effects of one expression are made in the order they
+        // are written, and they run in that order.
+        std::sort(lastRead.begin(), lastRead.end());
+        lastRead.erase(std::unique(lastRead.begin(), lastRead.end()), lastRead.end());
+        const std::vector<gc_node_ref_t> chainPreds(
+            draft.syncInputsOf(id).begin(), draft.syncInputsOf(id).end());
+        const auto chainTo = [&](gc_node_ref_t user, gc_node_ref_t pred) {
+            markSyncStatement(draft, user);
+            markSyncStatement(draft, pred);
+            const gc_node_ref_t only[1] = {pred};
+            draft.setSyncInputs(user, only);
+            camel::runtime::appendControlDependency(draft, pred, user);
+        };
+        for (size_t i = 1; i < lastRead.size(); ++i) {
+            // An effect written inside another one's argument is computed after it; chaining it the
+            // other way would close a cycle of inputs.
+            if (isComputedAfter(draft, lastRead[i - 1], lastRead[i]) ||
+                isComputedAfter(draft, lastRead[i], lastRead[i - 1])) {
+                continue;
+            }
+            chainTo(lastRead[i], lastRead[i - 1]);
+        }
+        if (!lastRead.empty()) {
+            draft.handChainPlaceTo(id, lastRead.back());
+            // An expression with several effects in it is a chain of them, and what the statement
+            // was written after is what the first of them is written after: the place was handed to
+            // the last one above.
+            if (lastRead.size() > 1 && draft.alive(lastRead.front()) &&
+                draft.syncInputsOf(lastRead.front()).empty()) {
+                for (gc_node_ref_t pred : chainPreds) {
+                    if (pred != lastRead.front() && draft.alive(pred)) {
+                        chainTo(lastRead.front(), pred);
+                        break;
+                    }
+                }
+            }
+        }
+    }
     draft.eraseNode(id);
     // Closing the chain over a node hands its successor the place that node stood in. A node the
     // program did not write as a statement of the block stands in none -- a pure node the block's
