@@ -507,7 +507,7 @@ func main(): int sync {
 
 The body of `twice` is a sync block, so the two calls of `bump` and `return c` execute in the order they are written. A few more points:
 
-- A write that is not in a sync block has no order relative to earlier reads; the compiler gives the warning `SemanticDiag::IgnoredSideEffect`.
+- A write that is not in a sync block is still ordered after the reads written before it (a read sees the value of the write written before it), but it is not guaranteed to run: with nothing reading the variable afterwards it does not run, and the compiler gives the warning `SemanticDiag::IgnoredSideEffect`.
 - If nobody reads the variable any more after the write, that modification does not run — this is still evaluation by dependency.
 
 The everyday advice is simple: write computation as `let`s and pure functions; put input and output in sync blocks; keep `var` for the few places that really need in-place updates.
