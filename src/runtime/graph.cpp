@@ -2204,6 +2204,10 @@ GCUseIndex::GCUseIndex(const GCGraph &graph) {
     // Users in node order, each user once per group even when it reads the node twice: the
     // order and the uniqueness the encoder gave the stored outputs before they were dropped.
     // Two passes over the input table: count, then place (a counting sort by source).
+    //
+    // The fourth group is the sync edges, which are not in the input table: they are a side array
+    // sorted by (user, pred), so they are read in the same user order and placed the same way
+    // (docs/design/effects/edges.cn.md 1.5).
     const size_t count  = graph.nodeCount();
     const auto groupsOf = [&](gc_node_ref_t user) {
         return std::array<std::span<const gc_node_ref_t>, 3>{
@@ -2213,13 +2217,13 @@ GCUseIndex::GCUseIndex(const GCGraph &graph) {
     };
     // A user reading one source twice in one group is listed once: it is skipped when the
     // previous entry placed for that (source, group) is the same user.
-    std::vector<uint32_t> sizes(count * 3, 0);
-    std::vector<gc_node_ref_t> lastUser(count * 3, kInvalidNodeRef);
+    std::vector<uint32_t> sizes(count * kGroups, 0);
+    std::vector<gc_node_ref_t> lastUser(count * kGroups, kInvalidNodeRef);
     for (gc_node_ref_t user = 0; user < count; ++user) {
         const auto groups = groupsOf(user);
         for (size_t kind = 0; kind < 3; ++kind) {
             for (gc_node_ref_t input : groups[kind]) {
-                const size_t at = static_cast<size_t>(input) * 3 + kind;
+                const size_t at = static_cast<size_t>(input) * kGroups + kind;
                 if (lastUser[at] != user) {
                     lastUser[at] = user;
                     ++sizes[at];
@@ -2227,13 +2231,23 @@ GCUseIndex::GCUseIndex(const GCGraph &graph) {
             }
         }
     }
-    begins_.resize(count * 3 + 1);
+    for (const GCGraphSyncEdge &edge : graph.syncEdges()) {
+        if (!graph.containsNodeRef(edge.pred) || !graph.containsNodeRef(edge.user)) {
+            continue;
+        }
+        const size_t at = static_cast<size_t>(edge.pred) * kGroups + 3;
+        if (lastUser[at] != edge.user) {
+            lastUser[at] = edge.user;
+            ++sizes[at];
+        }
+    }
+    begins_.resize(count * kGroups + 1);
     uint32_t total = 0;
-    for (size_t at = 0; at < count * 3; ++at) {
+    for (size_t at = 0; at < count * kGroups; ++at) {
         begins_[at] = total;
         total += sizes[at];
     }
-    begins_[count * 3] = total;
+    begins_[count * kGroups] = total;
     users_.resize(total);
     std::vector<uint32_t> cursor(begins_.begin(), begins_.end() - 1);
     std::fill(lastUser.begin(), lastUser.end(), kInvalidNodeRef);
@@ -2241,12 +2255,22 @@ GCUseIndex::GCUseIndex(const GCGraph &graph) {
         const auto groups = groupsOf(user);
         for (size_t kind = 0; kind < 3; ++kind) {
             for (gc_node_ref_t input : groups[kind]) {
-                const size_t at = static_cast<size_t>(input) * 3 + kind;
+                const size_t at = static_cast<size_t>(input) * kGroups + kind;
                 if (lastUser[at] != user) {
                     lastUser[at]         = user;
                     users_[cursor[at]++] = user;
                 }
             }
+        }
+    }
+    for (const GCGraphSyncEdge &edge : graph.syncEdges()) {
+        if (!graph.containsNodeRef(edge.pred) || !graph.containsNodeRef(edge.user)) {
+            continue;
+        }
+        const size_t at = static_cast<size_t>(edge.pred) * kGroups + 3;
+        if (lastUser[at] != edge.user) {
+            lastUser[at]         = edge.user;
+            users_[cursor[at]++] = edge.user;
         }
     }
 }

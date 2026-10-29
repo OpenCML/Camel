@@ -497,7 +497,7 @@ const runtime::Program *outlineRegions(
             std::vector<rt::gc_node_ref_t> controls;
             for (auto member : region.members) {
                 const auto ref = static_cast<rt::gc_node_ref_t>(member);
-                for (auto pred : graph->ctrlInputsOf(ref)) {
+                for (auto pred : graph->waitInputsOf(ref)) {
                     if (isMember(pred) ||
                         std::find(controls.begin(), controls.end(), pred) != controls.end())
                         continue;
@@ -507,8 +507,7 @@ const runtime::Program *outlineRegions(
                 // What the replaced statement ordered follows the call. Only its own place moves:
                 // a user keeps every other reference it has to the node (the graph's exit, a
                 // region's value, a branch's join), which the outline moves below with the values.
-                const std::vector<rt::gc_node_ref_t> users(
-                    graph->ctrlOutputsOf(ref).begin(), graph->ctrlOutputsOf(ref).end());
+                const std::vector<rt::gc_node_ref_t> users = graph->waitUsersOf(ref);
                 for (auto user : users) {
                     if (isMember(user) || !draft.alive(user))
                         continue;

@@ -940,8 +940,10 @@ DraftWritings::choiceByCost(const CostModel &model, camel::core::context::Contex
     std::vector<gc_node_ref_t> chosen(slots, kInvalidNodeRef);
     const auto inputsOf = [&](gc_node_ref_t node) {
         std::vector<gc_node_ref_t> all;
-        for (auto part :
-             {draft_.normInputsOf(node), draft_.withInputsOf(node), draft_.ctrlInputsOf(node)}) {
+        for (auto part : {draft_.normInputsOf(node),
+                          draft_.withInputsOf(node),
+                          draft_.ctrlInputsOf(node),
+                          draft_.syncInputsOf(node)}) {
             all.insert(all.end(), part.begin(), part.end());
         }
         return all;
@@ -999,8 +1001,10 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
     }
     const auto inputsOf = [&](gc_node_ref_t node) {
         std::vector<gc_node_ref_t> all;
-        for (auto part :
-             {draft_.normInputsOf(node), draft_.withInputsOf(node), draft_.ctrlInputsOf(node)}) {
+        for (auto part : {draft_.normInputsOf(node),
+                          draft_.withInputsOf(node),
+                          draft_.ctrlInputsOf(node),
+                          draft_.syncInputsOf(node)}) {
             all.insert(all.end(), part.begin(), part.end());
         }
         return all;
@@ -1504,10 +1508,11 @@ bool DraftWritings::matchFrom(
                 return false;
             }
             // What this term waits for: the rewrite carries it onto the writing that replaces the
-            // root, so the law does not move the computation across a control edge's ordering.
+            // root, so the law does not move the computation across an edge that orders it -- a
+            // control edge, or the sync edge of the `sync` block's chain it is written in.
             const size_t savedWaits = waits != nullptr ? waits->size() : 0;
             if (waits != nullptr) {
-                for (gc_node_ref_t wait : draft_.ctrlInputsOf(candidate)) {
+                for (gc_node_ref_t wait : draft_.waitInputsOf(candidate)) {
                     if (std::find(waits->begin(), waits->end(), wait) == waits->end()) {
                         waits->push_back(wait);
                     }
@@ -1570,6 +1575,7 @@ bool DraftWritings::matchFrom(
                         ih != nullptr && draft_.alive(in) && ih->kind == GCNodeKind::Oper &&
                         ih->permissions == matchPerms_ && takesPart(in) &&
                         draft_.withInputsOf(in).empty() && draft_.ctrlInputsOf(in).empty() &&
+                        draft_.syncInputsOf(in).empty() &&
                         draft_.normInputsOf(in).size() == 2 &&
                         reinterpret_cast<const GCOperBody *>(draft_.payloadOf(in).data())->oper ==
                             p.oper;
@@ -1716,7 +1722,7 @@ bool DraftWritings::matchFrom(
                 });
                 const size_t savedWaits = waits != nullptr ? waits->size() : 0;
                 if (waits != nullptr) {
-                    for (gc_node_ref_t wait : draft_.ctrlInputsOf(candidate)) {
+                    for (gc_node_ref_t wait : draft_.waitInputsOf(candidate)) {
                         if (std::find(waits->begin(), waits->end(), wait) == waits->end()) {
                             waits->push_back(wait);
                         }
@@ -1885,7 +1891,7 @@ bool DraftWritings::pureComputation(gc_node_ref_t node) {
         if (h == nullptr || !draft_.alive(at)) {
             continue;
         }
-        if (carriesOrdering(draft_, at, true) || !draft_.ctrlInputsOf(at).empty() ||
+        if (carriesOrdering(draft_, at, true) || !draft_.waitInputsOf(at).empty() ||
             writtenInPlace(at)) {
             return false;
         }
@@ -2010,7 +2016,7 @@ RewriteStats DraftWritings::rewrite(
     };
     const auto unused = [&](gc_node_ref_t node) {
         return draft_.normUsersOf(node).empty() && draft_.withUsersOf(node).empty() &&
-               draft_.ctrlUsersOf(node).empty();
+               draft_.ctrlUsersOf(node).empty() && draft_.syncUsersOf(node).empty();
     };
     // Erases a node nothing reads, then what only it was reading (pure nodes only). `step`, when
     // given, notes each node and its text before the draft forgets both.
@@ -2023,10 +2029,10 @@ RewriteStats DraftWritings::rewrite(
                 continue;
             }
             std::vector<gc_node_ref_t> inputs;
-            for (auto part :
-                 {draft_.normInputsOf(node),
-                  draft_.withInputsOf(node),
-                  draft_.ctrlInputsOf(node)}) {
+            for (auto part : {draft_.normInputsOf(node),
+                              draft_.withInputsOf(node),
+                              draft_.ctrlInputsOf(node),
+                              draft_.syncInputsOf(node)}) {
                 inputs.insert(inputs.end(), part.begin(), part.end());
             }
             if (node < ix.keyOf.size() && ix.keyOf[node].has_value()) {

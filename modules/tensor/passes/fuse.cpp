@@ -69,7 +69,7 @@ const PatternOperators &patternOperators() {
 /// precondition for merging: a value with another reader would simply not be private to a group.
 bool isPrivateIntermediate(const GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t next) {
     const auto normUsers = draft.normUsersOf(id);
-    const auto ctrlUsers = draft.ctrlUsersOf(id);
+    const std::vector<gc_node_ref_t> ctrlUsers = draft.waitUsersOf(id);
     return normUsers.size() == 1 && normUsers[0] == next && draft.withUsersOf(id).empty() &&
            std::ranges::all_of(ctrlUsers, [&](gc_node_ref_t user) { return user == next; }) &&
            id != draft.outputNode() && id != draft.returnNode() && id != draft.exitNode();

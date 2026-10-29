@@ -537,6 +537,31 @@ std::span<const gc_node_ref_t> GraphDraft::syncInputsOf(const DraftNode *nodePtr
                                  : std::span<const gc_node_ref_t>{};
 }
 
+/// Appends the refs of `extra` that `into` does not already name.
+static void appendUnnamed(std::vector<gc_node_ref_t> &into, std::span<const gc_node_ref_t> extra) {
+    for (gc_node_ref_t ref : extra) {
+        if (std::ranges::find(into, ref) == into.end()) {
+            into.push_back(ref);
+        }
+    }
+}
+
+std::vector<gc_node_ref_t> GraphDraft::waitInputsOf(gc_node_ref_t id) const {
+    std::vector<gc_node_ref_t> waits(ctrlInputsOf(id).begin(), ctrlInputsOf(id).end());
+    appendUnnamed(waits, syncInputsOf(id));
+    return waits;
+}
+
+std::vector<gc_node_ref_t> GraphDraft::waitUsersOf(gc_node_ref_t id) const {
+    std::vector<gc_node_ref_t> users(ctrlUsersOf(id).begin(), ctrlUsersOf(id).end());
+    appendUnnamed(users, syncUsersOf(id));
+    return users;
+}
+
+bool GraphDraft::hasWaiters(gc_node_ref_t id) const {
+    return !ctrlUsersOf(id).empty() || !syncUsersOf(id).empty();
+}
+
 std::span<const gc_node_ref_t> GraphDraft::dataPortsOf(const DraftNode *nodePtr) const {
     if (!containsNode(nodePtr)) {
         return {};
@@ -717,9 +742,11 @@ gc_node_ref_t GraphDraft::resolveForwardedValueRef(gc_node_ref_t id) const {
         if (draftHeader->kind != GCNodeKind::Gate) {
             return current;
         }
-        if (!ctrlInputsOf(current).empty()) {
-            // A gate with control predecessors is an observable completion
-            // anchor, not a transparent value-only forwarding node.
+        if (!waitInputsOf(current).empty()) {
+            // A gate with predecessors that order it is an observable completion anchor, not a
+            // transparent value-only forwarding node: the chain it waits on is a sync edge in the
+            // model and a control input in the transitional kind, and either one makes it an
+            // anchor (docs/design/effects/edges.cn.md 5.3).
             return current;
         }
         const auto normInputs = normInputsOf(current);

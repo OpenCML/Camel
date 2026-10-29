@@ -477,6 +477,17 @@ class GraphDraft {
     /// reaches it (DraftEdgeKind::Sync).
     std::span<const gc_node_ref_t> syncInputsOf(gc_node_ref_t id) const;
     std::span<const gc_node_ref_t> syncInputsOf(const DraftNode *node) const;
+    /// What the chain makes `id` wait for, in either kind it is written in: the control inputs and
+    /// the sync inputs, a pair the two kinds both name counted once (control inputs first, then the
+    /// sync ones not already named). A consumer asking "does this node wait for that one" reads
+    /// this, so that the answer does not depend on which kind carries the wait
+    /// (docs/design/effects/edges.cn.md 1, 1.5). A node that waits for nothing gives an empty list.
+    std::vector<gc_node_ref_t> waitInputsOf(gc_node_ref_t id) const;
+    /// The nodes the chain makes wait for `id`, in either kind, a pair counted once (control users
+    /// first, then the sync users not already named).
+    std::vector<gc_node_ref_t> waitUsersOf(gc_node_ref_t id) const;
+    /// Whether something waits for `id` in either kind (`waitUsersOf` without the list).
+    bool hasWaiters(gc_node_ref_t id) const;
     std::span<const gc_node_ref_t> normUsersOf(gc_node_ref_t id) const;
     std::span<const gc_node_ref_t> normUsersOf(const DraftNode *node) const;
     std::span<const gc_node_ref_t> withUsersOf(gc_node_ref_t id) const;

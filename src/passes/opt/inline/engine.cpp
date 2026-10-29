@@ -298,7 +298,10 @@ std::vector<bool>
 upstreamOf(const camel::runtime::GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t skip) {
     std::vector<bool> seen(draft.nodeSlotCount(), false);
     std::vector<gc_node_ref_t> work;
-    for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id), draft.ctrlInputsOf(id)}) {
+    for (auto inputs : {draft.normInputsOf(id),
+                        draft.withInputsOf(id),
+                        draft.ctrlInputsOf(id),
+                        draft.syncInputsOf(id)}) {
         work.insert(work.end(), inputs.begin(), inputs.end());
     }
     while (!work.empty()) {
@@ -308,7 +311,10 @@ upstreamOf(const camel::runtime::GraphDraft &draft, gc_node_ref_t id, gc_node_re
             continue;
         }
         seen[n] = true;
-        for (auto inputs : {draft.normInputsOf(n), draft.withInputsOf(n), draft.ctrlInputsOf(n)}) {
+        for (auto inputs : {draft.normInputsOf(n),
+                            draft.withInputsOf(n),
+                            draft.ctrlInputsOf(n),
+                            draft.syncInputsOf(n)}) {
             work.insert(work.end(), inputs.begin(), inputs.end());
         }
     }
@@ -319,7 +325,7 @@ bool isDraftBranchArmHead(const camel::runtime::GraphDraft &draft, gc_node_ref_t
     if (!draft.alive(nodeId)) {
         return false;
     }
-    for (gc_node_ref_t pred : draft.ctrlInputsOf(nodeId)) {
+    for (gc_node_ref_t pred : draft.waitInputsOf(nodeId)) {
         const auto *predHeader = draft.header(pred);
         if (predHeader && predHeader->kind == GCNodeKind::Brch) {
             return true;
@@ -1181,7 +1187,7 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
             camel::runtime::appendControlDependency(draft, source, funcNodeId);
         }
     }
-    for (gc_node_ref_t pred : draft.ctrlInputsOf(funcNodeId)) {
+    for (gc_node_ref_t pred : draft.waitInputsOf(funcNodeId)) {
         if (std::ranges::find(argSources, pred) == argSources.end()) {
             argSources.push_back(pred);
         }
@@ -1191,7 +1197,8 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
         for (auto group :
              {draft.normUsersOf(funcNodeId),
               draft.withUsersOf(funcNodeId),
-              draft.ctrlUsersOf(funcNodeId)}) {
+              draft.ctrlUsersOf(funcNodeId),
+              draft.syncUsersOf(funcNodeId)}) {
             for (gc_node_ref_t user : group) {
                 if (std::ranges::find(callUsers, user, &decltype(callUsers)::value_type::first) !=
                     callUsers.end()) {

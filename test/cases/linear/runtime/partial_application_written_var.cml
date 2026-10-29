@@ -1,0 +1,26 @@
+/**
+ * A partial application of a `sync` function that writes a module-level `var`, called, and the
+ * `var` read afterwards.
+ *
+ * The call hands on the value and, beside it, the new version of the variable it wrote, so what
+ * follows the call sees the version the call produced. `f<3.0>` binds the declared `with`
+ * parameter away, and the call then passes the captured cell as its only `with` argument: the
+ * callee's type must state no declared `with` parameter any more, or the reader of the call
+ * places that cell one port too late, the call's value loses the version, and a scheduler that
+ * reads the version runs past the end of the call's `with` arguments. That is what this pins:
+ * the value (9.0), the version the caller reads (1), and the fact that the body ran once.
+ */
+var calls: int = 0
+
+with <w: float>
+func f(x: float): float sync {
+    println('f body runs')
+    calls = calls + 1
+    return w * w * x
+}
+
+func main(): int sync {
+    println(f<3.0>(1.0))
+    println(calls)
+    return 0
+}

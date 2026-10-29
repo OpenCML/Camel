@@ -136,11 +136,16 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
         return;
     }
 
-    const auto inputsOf = [graph](gc_node_ref_t ref) {
-        return std::array<std::span<const gc_node_ref_t>, 3>{
-            graph->normInputsOf(ref),
-            graph->withInputsOf(ref),
-            graph->ctrlInputsOf(ref)};
+    // Every edge a node is entered from: its data and context ports and the chain that orders it, in
+    // either kind that chain is written in (docs/design/effects/edges.cn.md 1). A chain link waits
+    // on the link written before it either way, so liveness does not depend on the kind.
+    const auto appendInputsOf = [graph](gc_node_ref_t ref, std::vector<gc_node_ref_t> &into) {
+        for (auto part : {graph->normInputsOf(ref), graph->withInputsOf(ref)}) {
+            into.insert(into.end(), part.begin(), part.end());
+        }
+        for (gc_node_ref_t wait : graph->waitInputsOf(ref)) {
+            into.push_back(wait);
+        }
     };
 
     // Only what the exit depends on is ever laid out and run. The rest (a node a rewrite left
@@ -156,9 +161,7 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
             continue;
         }
         live[ref] = 1;
-        for (const auto inputs : inputsOf(ref)) {
-            work.insert(work.end(), inputs.begin(), inputs.end());
-        }
+        appendInputsOf(ref, work);
     }
 
     const ControlRegions regions(*graph);
@@ -219,10 +222,12 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
                 fail(graph, std::format("arm {} of BRCH {} has no region", k, brch));
             }
         }
-        // What waits on the BRCH is in one of its arms.
-        for (gc_node_ref_t user : graph->ctrlOutputsOf(brch)) {
+        // What waits on the BRCH is in one of its arms. A statement waits on it through the control
+        // edge of the transitional kind or through the sync edge that enters an arm's own chain
+        // (docs/design/effects/edges.cn.md 5.7): both name the same wait.
+        const auto checkWait = [&](gc_node_ref_t user) {
             if (!live[user] || user == join) {
-                continue;
+                return;
             }
             if (!inArmOf(controlOf(user), brch)) {
                 fail(
@@ -234,6 +239,9 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
                         brch,
                         join));
             }
+        };
+        for (gc_node_ref_t user : graph->waitUsersOf(brch)) {
+            checkWait(user);
         }
     }
 
@@ -296,11 +304,12 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
                 continue;
             }
         }
-        for (const auto inputs : inputsOf(ref)) {
-            for (gc_node_ref_t input : inputs) {
-                if (input == kInvalidNodeRef || input >= slots || !live[input]) {
-                    continue;
-                }
+        std::vector<gc_node_ref_t> inputs;
+        appendInputsOf(ref, inputs);
+        for (gc_node_ref_t input : inputs) {
+            if (input == kInvalidNodeRef || input >= slots || !live[input]) {
+                continue;
+            }
                 const uint32_t there = controlOf(input);
                 if (there == 0 || within(here, there)) {
                     continue;
@@ -349,7 +358,6 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
                         describe(program, graph, input),
                         region.owner,
                         describe(program, graph, ref)));
-            }
         }
     }
 }

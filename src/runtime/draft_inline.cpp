@@ -228,6 +228,9 @@ std::vector<gc_node_ref_t> collectExecutableEntryRoots(
         for (gc_node_ref_t in : sourceGraph->ctrlInputsOf(curr)) {
             stack.push_back(in);
         }
+        for (const camel::runtime::GCGraphSyncEdge &edge : sourceGraph->syncPredsOf(curr)) {
+            stack.push_back(edge.pred);
+        }
     }
 
     std::vector<gc_node_ref_t> roots;
@@ -258,6 +261,16 @@ std::vector<gc_node_ref_t> collectExecutableEntryRoots(
         if (!hasNonDataPortInput) {
             scanInputs(sourceGraph->ctrlInputsOf(sourceRef));
         }
+        if (!hasNonDataPortInput) {
+            for (const camel::runtime::GCGraphSyncEdge &edge : sourceGraph->syncPredsOf(sourceRef)) {
+                const GCNode *inputNode = sourceGraph->node(edge.pred);
+                if (inputNode && inputNode->kind != GCNodeKind::Data &&
+                    inputNode->kind != GCNodeKind::Port) {
+                    hasNonDataPortInput = true;
+                    break;
+                }
+            }
+        }
         if (hasNonDataPortInput) {
             continue;
         }
@@ -284,6 +297,9 @@ std::vector<gc_node_ref_t> collectExecutableEntryRoots(
             stack.push_back(in);
         }
         for (gc_node_ref_t in : sourceDraft.ctrlInputsOf(curr)) {
+            stack.push_back(in);
+        }
+        for (gc_node_ref_t in : sourceDraft.syncInputsOf(curr)) {
             stack.push_back(in);
         }
     }
@@ -314,6 +330,9 @@ std::vector<gc_node_ref_t> collectExecutableEntryRoots(
         }
         if (!hasNonDataPortInput) {
             scanInputs(sourceDraft.ctrlInputsOf(sourceRef));
+        }
+        if (!hasNonDataPortInput) {
+            scanInputs(sourceDraft.syncInputsOf(sourceRef));
         }
         if (hasNonDataPortInput) {
             continue;
@@ -551,8 +570,10 @@ bool insideBranchArm(const GraphDraft &draft, gc_node_ref_t id) {
             reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(brch).data())->join;
         std::vector<bool> seen(draft.nodeSlotCount(), false);
         std::vector<gc_node_ref_t> work;
-        for (auto users :
-             {draft.normUsersOf(brch), draft.withUsersOf(brch), draft.ctrlUsersOf(brch)}) {
+        for (auto users : {draft.normUsersOf(brch),
+                           draft.withUsersOf(brch),
+                           draft.ctrlUsersOf(brch),
+                           draft.syncUsersOf(brch)}) {
             work.insert(work.end(), users.begin(), users.end());
         }
         while (!work.empty()) {
@@ -565,7 +586,10 @@ bool insideBranchArm(const GraphDraft &draft, gc_node_ref_t id) {
                 return true;
             }
             seen[n] = true;
-            for (auto users : {draft.normUsersOf(n), draft.withUsersOf(n), draft.ctrlUsersOf(n)}) {
+            for (auto users : {draft.normUsersOf(n),
+                               draft.withUsersOf(n),
+                               draft.ctrlUsersOf(n),
+                               draft.syncUsersOf(n)}) {
                 work.insert(work.end(), users.begin(), users.end());
             }
         }
@@ -906,9 +930,7 @@ void bindPortValueUses(GraphDraft &draft, gc_node_ref_t portNodeId, gc_node_ref_
     // the front end makes a BRCH wait on every value its arms capture, and a rewrite that
     // removes a node hands its control inputs to its users. Erasing the port dropped those
     // edges, and with them the only thing that ordered such a node after the argument.
-    const std::vector<gc_node_ref_t> waiting(
-        draft.ctrlUsersOf(portNodeId).begin(),
-        draft.ctrlUsersOf(portNodeId).end());
+    const std::vector<gc_node_ref_t> waiting = draft.waitUsersOf(portNodeId);
     for (gc_node_ref_t user : waiting) {
         draft.unlinkInput(DraftEdgeKind::Ctrl, user, portNodeId);
         appendControlDependency(draft, actualInputId, user);
@@ -1157,7 +1179,7 @@ bool specializeDirectFuncInDraft(
             if (!header) {
                 break;
             }
-            if (!draft.ctrlInputsOf(current).empty()) {
+            if (!draft.waitInputsOf(current).empty()) {
                 appendControlDependency(draft, current, funcNodeId);
                 break;
             }
@@ -1213,7 +1235,7 @@ gc_node_ref_t resolveTupleProjection(const GraphDraft &draft, gc_node_ref_t id) 
 /// (a constant, a closure built from values) carries no ordering.
 void keepCalleeOrdering(GraphDraft &draft, gc_node_ref_t funcNodeId, gc_node_ref_t callee) {
     const DraftNodeHeader *header = draft.header(callee);
-    if (!header || draft.ctrlInputsOf(callee).empty()) {
+    if (!header || draft.waitInputsOf(callee).empty()) {
         return;
     }
     appendControlDependency(draft, callee, funcNodeId);
@@ -1802,7 +1824,7 @@ DraftInlineResult inlineCallableInDraft(
     for (size_t i = 0; i < clonedFormalNodes.size() && i < actualInputs.size(); ++i) {
         const gc_node_ref_t port = clonedFormalNodes[i].second;
         if (port == kInvalidNodeRef || !draft.normUsersOf(port).empty() ||
-            !draft.withUsersOf(port).empty() || !draft.ctrlUsersOf(port).empty()) {
+            !draft.withUsersOf(port).empty() || !draft.waitUsersOf(port).empty()) {
             continue;
         }
         const gc_node_ref_t actual = actualInputs[i];

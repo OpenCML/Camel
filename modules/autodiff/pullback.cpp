@@ -2245,7 +2245,7 @@ bool ForwardRewrite::dependsOnTangentPort(gc_node_ref_t node) {
             work.pop_back();
             for (const std::span<const gc_node_ref_t> users :
                  {draft_.normUsersOf(value), draft_.withUsersOf(value),
-                  draft_.ctrlUsersOf(value)}) {
+                  draft_.ctrlUsersOf(value), draft_.syncUsersOf(value)}) {
                 for (gc_node_ref_t user : users) {
                     if (reach_.insert(user).second) {
                         work.push_back(user);
@@ -3858,7 +3858,8 @@ void Backward::checkVariableReads(const std::vector<gc_node_ref_t> &order) {
             for (auto users :
                  {forward_.normUsersOf(node),
                   forward_.withUsersOf(node),
-                  forward_.ctrlUsersOf(node)}) {
+                  forward_.ctrlUsersOf(node),
+                  forward_.syncUsersOf(node)}) {
                 for (gc_node_ref_t user : users) {
                     if (after.insert(user).second) {
                         work.push_back(user);
