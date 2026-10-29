@@ -296,6 +296,14 @@ CastSafety TupleType::castSafetyFrom(Type *sourceType) const {
     // decided by structure, so `t as (int, int)` passes for `t: (int, int)`.
     if (equals(sourceType))
         return CastSafety::Safe;
+    // A type that still holds the `Ref` placeholder is not one a value can have, so nothing is
+    // converted to or from it: the conversion refuses it here for the reason
+    // TupleType::assignableFrom states, instead of asking whether the member types fit (which
+    // that comparison cannot answer).
+    if (!resolved() || (sourceType != nullptr && sourceType->code() == TypeCode::Tuple &&
+                        !static_cast<const TupleType *>(sourceType)->resolved())) {
+        return CastSafety::Forbidden;
+    }
     if (cell_ && sourceType != nullptr && sourceType->code() == TypeCode::Tuple) {
         const auto *source = static_cast<const TupleType *>(sourceType);
         if (source->cell_) {
@@ -367,6 +375,15 @@ bool TupleType::assignableFrom(Type *sourceType) const {
     }
     const TupleType &other = static_cast<const TupleType &>(*sourceType);
     if (size_ != other.size_ || cell_ != other.cell_ || tag_ != other.tag_) {
+        return false;
+    }
+    // A type that still holds the `Ref` placeholder is not one a value can have (design
+    // principles 5.1: every value has a determined type, and no type is undetermined after
+    // compilation). `resolved()` names that state, and `resolve` is what turns it into a type
+    // from the computed elements of a literal. Nothing is assignable to it and it is assignable
+    // to nothing, so the answer is `false` -- not a comparison of the placeholder with a member
+    // type, which the primitive comparison cannot answer and asserts on.
+    if (!resolved() || !other.resolved()) {
         return false;
     }
     if (cell_) {
