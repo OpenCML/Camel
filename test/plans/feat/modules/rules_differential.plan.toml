@@ -1,0 +1,16 @@
+id = "modules.rules_differential"
+order = 394
+tier = "fast"
+tags = ["feat", "modules", "rules", "rewrite", "verification"]
+desc = "The standard rule library (`stdlib/rules.cml`) checked by differential execution rather than by sampling the two sides: every exported rule is written as a witness program containing its left side at concrete types and constants, the rule is applied to that witness alone, and the witness is run before and after the rewrite on one finite domain of inputs on one interpreter. A rule that stops firing, a rule whose two readings differ by one bit (a `-0.0` where a `+0.0` was), a rule of the library that no witness covers, and a label that outlives its rule all fail the check. The three accuracy laws are declared out of scope with the reason that their proposition is an error bound, not equality. Coverage and the proposition of each rule are read from the library's own `#requires` lines by `verify/differential_equivalence.mjs`, so the list of rules cannot drift away from the check."
+
+[[tests]]
+name = "rules.differential_every_law_keeps_its_value"
+desc = "34 of the library's 37 exported rules, on 53 witness instances and 828 pairs of readings: no rewrite changes the value of its witness on the boundaries and the special values of `int`, `i32`, `float[, f32]` and `f32[]` (`+0.0`/`-0.0`, both infinities, NaN, the range ends, the subnormal end), judged bit for bit for a law that asks for no permission and as real equality for the ones a permission lets change the rounding path."
+kind = "behavior"
+case = "../../../cases/modules/rules/differential_equivalence.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script_path = "./verify/differential_equivalence.mjs"
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 60000

@@ -1,0 +1,535 @@
+/**
+ * The standard rule library, checked by differential execution instead of by sampling the two
+ * sides: for every rule of `stdlib/rules.cml` a witness program writes the rule's left side at
+ * concrete types and constants, the rule is applied to that witness on its own, and the witness is
+ * then run before and after the rewrite on one finite domain of inputs, on one interpreter. A
+ * value the rewrite changes, including only the sign of a zero, is a counterexample and is printed.
+ *
+ * Why this is not the `check` of `rewrite`: `check` reads the two sides of a rule itself and
+ * compares them over samples, but its translation layer covers the integer scalars only, so every
+ * floating-point law it reports as `sampled` rests on `beyond translation coverage` rather than on
+ * a comparison. This case does not read the sides: it builds a program that contains the left
+ * side, lets the engine perform the rewrite, and compares what the two programs compute. What it
+ * compares is the text of the value, which is the shortest text that reads back as the same value
+ * (design principles 7.7), so `+0.0` and `-0.0` are two different readings and every NaN is one.
+ *
+ * What the finite domain is: the boundaries and the special values of each type (both ends of the
+ * range, the wrapping points, the subnormal end, both zeros, both infinities, NaN) plus a fixed
+ * list of ordinary values. It is exhaustive over that list, and over nothing else: a pass here
+ * says the rule held on every value of the list, not that it holds for all values of the type.
+ *
+ * Two things a line has to show, because a line that compares nothing is not a pass: the rule must
+ * have fired, and both readings must be there. A constant-guarded law uses constants its guard
+ * accepts, and a licence-gated law sits on a witness marked with the licence it asks for
+ * (design principles 7.5: a permission written on the code, not on the rule), so a rule whose
+ * guard or licence changed stops firing here and is reported as such.
+ *
+ * `test/plans/feat/modules/verify/differential_equivalence.mjs` reads this output together with
+ * the library: it fails on a rule of the library that no line reports, on a rule that fired
+ * nothing, on a pair that differs, and on a `rearranged` count that did not fall.
+ */
+import { flatten } from array
+import { Graph, Node, graphs_of, nodes } from graph
+import { Rule, run, saturate, extract } from rewrite
+import { nodes as node_cost } from rules
+import {
+    mul_one,
+    div_one,
+    sub_zero,
+    neg_neg,
+    add_self,
+    int_add_zero,
+    int_mul_zero,
+    int_sub_self,
+    int_combine,
+    int_fold,
+    int_fold_add,
+    int_combine_one,
+    int_distribute,
+    float_add_neg_zero,
+    float_combine,
+    float_combine_mixed,
+    float_fold,
+    float_double,
+    float_combine_one,
+    float_combine_one_mixed,
+    array_mul_one,
+    array_div_one,
+    array_sub_zero,
+    array_neg_neg,
+    array_add_self,
+    array_add_neg_zero,
+    array_combine,
+    array_combine_mixed,
+    array_fold,
+    array_double,
+    array_combine_one,
+    array_combine_one_mixed,
+    array_distribute,
+    array_sigmoid_chain
+} from rules
+import { exp as exp_array } from tensor
+import { is_function } from types
+
+// ---- the finite domains: the boundaries and the special values of each type ----
+
+func int_values(): int[] {
+    return [
+        0,
+        1,
+        -1,
+        2,
+        -2,
+        3,
+        5,
+        -5,
+        7,
+        1024,
+        -1024,
+        4611686018427387904,
+        -4611686018427387904,
+        9223372036854775807,
+        (-9223372036854775807 - 1)
+    ]
+}
+
+func i32_values(): i32[] {
+    return [
+        0,
+        1,
+        -1,
+        2,
+        -2,
+        3,
+        5,
+        -5,
+        65536,
+        -65536,
+        1073741824,
+        -1073741824,
+        2147483647,
+        i32(-2147483647 - 1)
+    ]
+}
+
+func float_values(): float[] {
+    return [
+        0.0,
+        -0.0,
+        1.0,
+        -1.0,
+        0.5,
+        -0.5,
+        2.0,
+        -2.0,
+        3.0,
+        -3.0,
+        0.1,
+        -0.1,
+        4503599627370496.0,
+        -4503599627370496.0,
+        1e300,
+        -1e300,
+        5e-324,
+        -5e-324,
+        float('inf'),
+        -float('inf'),
+        float('nan')
+    ]
+}
+
+func f32_values(): f32[] {
+    return [
+        0.0,
+        -0.0,
+        1.0,
+        -1.0,
+        0.5,
+        -0.5,
+        2.0,
+        -2.0,
+        3.0,
+        -3.0,
+        0.1,
+        -0.1,
+        8388608.0,
+        -8388608.0,
+        3.4e38,
+        -3.4e38,
+        1.4e-45,
+        -1.4e-45,
+        f32(float('inf')),
+        -f32(float('inf')),
+        f32(float('nan'))
+    ]
+}
+
+func f32_arrays(): f32[][] {
+    return [
+        [],
+        [0.0],
+        [-0.0],
+        [1.0, -0.0, 2.0],
+        [-1.0, 0.0, -2.0],
+        [3.4e38, -3.4e38, 1.4e-45],
+        [f32(float('inf')), -f32(float('inf')), f32(float('nan'))],
+        [0.1, -0.1, 8388608.0]
+    ]
+}
+
+func int_triples(): (int, int, int)[] {
+    return [
+        (0, 0, 0),
+        (1, 2, 3),
+        (-1, 2, 3),
+        (7, -3, 5),
+        (1024, 1, 1),
+        (9223372036854775807, 1, 0),
+        (1, 9223372036854775807, 1)
+    ]
+}
+
+func int_array_triples(): (int[], int[], int[])[] {
+    return [
+        ([], [0], [1]),
+        ([1, 2, 3], [4, 5, 6], [7, 8, 9]),
+        ([-1, 0, 1], [2, -2, 3], [1, 1, -1]),
+        ([9223372036854775807, 1], [-1, 1], [1, -1])
+    ]
+}
+
+// ---- the drivers: apply one rule to one witness, then compare before and after ----
+
+func pair_line(
+    label: string,
+    input: string,
+    before: string,
+    after: string
+): string {
+    return `pair ${label} ${before} | ${after} | ${input}`
+}
+
+func nodes_of::<F>(f: F): int when is_function::<F>() {
+    return len(flatten(graphs_of(f)->map<nodes>))
+}
+
+with <rules: Rule[]>
+func check_scalar::<T>(label: string, f: (x: T) => T, values: T[]): string[] {
+    return match f->run<rules, rounds: 6> {
+        case error e => [`error ${label} ${e.kind}`]
+        case r => concat(
+            [`fired ${label} ${r.rewrites}`],
+            values->map<(v: T): string => pair_line(label, `${v}`, `${f(v)}`, `${r.result(v)}`)>
+        )
+    }
+}
+
+with <rules: Rule[]>
+func check_array::<E>(
+    label: string,
+    f: (xs: E[]) => E[],
+    values: E[][]
+): string[] {
+    return match f->run<rules, rounds: 6> {
+        case error e => [`error ${label} ${e.kind}`]
+        case r => concat(
+            [`fired ${label} ${r.rewrites}`],
+            values->map<(v: E[]): string => pair_line(label, `${v}`, `${f(v)}`, `${r.result(v)}`)>
+        )
+    }
+}
+
+// A rule written `<=>` has no one direction `run` may take (`RuleTwoWay`), so the two writings of a
+// value are collected by a saturation and the cheapest is extracted. The witness is written in the
+// long form, so a saturation that found the law reports fewer nodes afterwards: that pair of counts
+// is this driver's evidence that the rule fired, where the others read `run`'s rewrite count.
+with <rules: Rule[]>
+func check_rearranging_three::<T>(
+    label: string,
+    f: (a: T, b: T, c: T) => T,
+    values: (T, T, T)[]
+): string[] {
+    return match f->saturate<rules, rounds: 6> {
+        case error e => [`error ${label} ${e.kind}`]
+        case tabled => match tabled->extract<node_cost> {
+            case error e => [`error ${label} ${e.kind}`]
+            case g => concat(
+                [`rearranged ${label} ${nodes_of(f)} ${nodes_of(g)}`],
+                values->map<(v: (T, T, T)): string => pair_line(label, `${v.0} ${v.1} ${v.2}`, `${f(v.0, v.1, v.2)}`, `${g(v.0, v.1, v.2)}`)>
+            )
+        }
+    }
+}
+
+// ---- the witnesses: one left side each, at concrete types and constants ----
+
+// The real-number laws, at the integers and at the floats.
+func w_mul_one_int(x: int): int {
+    return x * 1
+}
+func w_mul_one_float(x: float): float {
+    return x * 1.0
+}
+func w_div_one_int(x: int): int {
+    return x / 1
+}
+func w_div_one_float(x: float): float {
+    return x / 1.0
+}
+func w_sub_zero_int(x: int): int {
+    return x - 0
+}
+func w_sub_zero_float(x: float): float {
+    return x - 0.0
+}
+func w_neg_neg_int(x: int): int {
+    return -(-x)
+}
+func w_neg_neg_float(x: float): float {
+    return -(-x)
+}
+func w_add_self_int(x: int): int {
+    return x + x
+}
+func w_add_self_float(x: float): float {
+    return x + x
+}
+
+// The integer laws: wrapping arithmetic, exact at every width.
+func w_int_add_zero(x: int): int {
+    return x + 0
+}
+func w_int_add_zero_32(x: i32): i32 {
+    return x + 0
+}
+func w_int_mul_zero(x: int): int {
+    return x * 0
+}
+func w_int_mul_zero_32(x: i32): i32 {
+    return x * 0
+}
+func w_int_sub_self(x: int): int {
+    return x - x
+}
+func w_int_sub_self_32(x: i32): i32 {
+    return x - x
+}
+func w_int_combine(x: int): int {
+    return x * 3 + x * 5
+}
+func w_int_combine_32(x: i32): i32 {
+    return x * 3 + x * 5
+}
+func w_int_combine_negative(x: int): int {
+    return x * -4 + x * 9
+}
+func w_int_fold(x: int): int {
+    return (x * 3) * 5
+}
+func w_int_fold_32(x: i32): i32 {
+    return (x * 3) * 5
+}
+func w_int_fold_add(x: int): int {
+    return (x + 3) + 5
+}
+func w_int_fold_add_32(x: i32): i32 {
+    return (x + 3) + 5
+}
+func w_int_combine_one(x: int): int {
+    return x * 3 + x
+}
+func w_int_combine_one_32(x: i32): i32 {
+    return x * 3 + x
+}
+
+// The float law that needs no permission, and the ones a permission allows. The tags are the
+// licence the law asks for, written on the code it applies to (design principles 7.5); a witness
+// without them is a witness the engine refuses to rewrite, which is a change this case reports.
+func w_float_add_neg_zero(x: float): float {
+    return x + -0.0
+}
+func w_float_add_neg_zero_32(x: f32): f32 {
+    return x + -0.0
+}
+func w_float_combine(x: float): float {
+    return x * 3.0 + x * 5.0
+}
+func w_float_combine_32(x: f32): f32 {
+    return x * 3.0 + x * 5.0
+}
+func w_float_combine_negative(x: float): float {
+    return x * -3.0 + x * -5.0
+}
+
+#[reassociate, no_infs, no_signed_zeros]
+func w_float_combine_mixed(x: float): float {
+    return x * 3.0 + x * -5.0
+}
+
+#[reassociate, no_infs, no_signed_zeros]
+func w_float_combine_mixed_32(x: f32): f32 {
+    return x * 3.0 + x * -5.0
+}
+
+#[reassociate, no_infs]
+func w_float_fold(x: float): float {
+    return (x * 3.0) * 5.0
+}
+
+#[reassociate, no_infs]
+func w_float_fold_32(x: f32): f32 {
+    return (x * 3.0) * 5.0
+}
+
+func w_float_double(x: float): float {
+    return x * 2.0 + x * 2.0
+}
+func w_float_double_32(x: f32): f32 {
+    return x * 2.0 + x * 2.0
+}
+func w_float_combine_one(x: float): float {
+    return x * 3.0 + x
+}
+func w_float_combine_one_32(x: f32): f32 {
+    return x * 3.0 + x
+}
+
+#[reassociate, no_infs, no_signed_zeros]
+func w_float_combine_one_mixed(x: float): float {
+    return x * -3.0 + x
+}
+
+#[reassociate, no_infs, no_signed_zeros]
+func w_float_combine_one_mixed_32(x: f32): f32 {
+    return x * -3.0 + x
+}
+
+// The elementwise forms of the same laws.
+func w_array_mul_one(x: f32[]): f32[] {
+    return x * 1.0
+}
+func w_array_div_one(x: f32[]): f32[] {
+    return x / 1.0
+}
+func w_array_sub_zero(x: f32[]): f32[] {
+    return x - 0.0
+}
+func w_array_neg_neg(x: f32[]): f32[] {
+    return -(-x)
+}
+func w_array_add_self(x: f32[]): f32[] {
+    return x + x
+}
+func w_array_add_neg_zero(x: f32[]): f32[] {
+    return x + -0.0
+}
+func w_array_combine(x: f32[]): f32[] {
+    return x * 3.0 + x * 5.0
+}
+func w_array_double(x: f32[]): f32[] {
+    return x * 2.0 + x * 2.0
+}
+func w_array_combine_one(x: f32[]): f32[] {
+    return x * 3.0 + x
+}
+
+#[reassociate, no_infs, no_signed_zeros]
+func w_array_combine_mixed(x: f32[]): f32[] {
+    return x * 3.0 + x * -5.0
+}
+
+#[reassociate, no_infs]
+func w_array_fold(x: f32[]): f32[] {
+    return (x * 3.0) * 5.0
+}
+
+#[reassociate, no_infs, no_signed_zeros]
+func w_array_combine_one_mixed(x: f32[]): f32[] {
+    return x * -3.0 + x
+}
+
+// The rearranging laws, written in their long form, and the fusion law whose sides are one value.
+func w_int_distribute(a: int, b: int, c: int): int {
+    return a * b + a * c
+}
+func w_array_distribute(a: int[], b: int[], c: int[]): int[] {
+    return a * b + a * c
+}
+func w_array_sigmoid_chain(x: f32[]): f32[] {
+    return 1.0 / (1.0 + exp_array(-x))
+}
+
+// ---- the library, as this case reads it ----
+
+func report(): string[] {
+    return flatten([
+        // the real-number laws
+        check_scalar<[mul_one]>('mul_one/int', w_mul_one_int, int_values()),
+        check_scalar<[mul_one]>('mul_one/float', w_mul_one_float, float_values()),
+        check_scalar<[div_one]>('div_one/int', w_div_one_int, int_values()),
+        check_scalar<[div_one]>('div_one/float', w_div_one_float, float_values()),
+        check_scalar<[sub_zero]>('sub_zero/int', w_sub_zero_int, int_values()),
+        check_scalar<[sub_zero]>('sub_zero/float', w_sub_zero_float, float_values()),
+        check_scalar<[neg_neg]>('neg_neg/int', w_neg_neg_int, int_values()),
+        check_scalar<[neg_neg]>('neg_neg/float', w_neg_neg_float, float_values()),
+        check_scalar<[add_self]>('add_self/int', w_add_self_int, int_values()),
+        check_scalar<[add_self]>('add_self/float', w_add_self_float, float_values()),
+        // the integer laws
+        check_scalar<[int_add_zero]>('int_add_zero/int', w_int_add_zero, int_values()),
+        check_scalar<[int_add_zero]>('int_add_zero/i32', w_int_add_zero_32, i32_values()),
+        check_scalar<[int_mul_zero]>('int_mul_zero/int', w_int_mul_zero, int_values()),
+        check_scalar<[int_mul_zero]>('int_mul_zero/i32', w_int_mul_zero_32, i32_values()),
+        check_scalar<[int_sub_self]>('int_sub_self/int', w_int_sub_self, int_values()),
+        check_scalar<[int_sub_self]>('int_sub_self/i32', w_int_sub_self_32, i32_values()),
+        check_scalar<[int_combine]>('int_combine/int', w_int_combine, int_values()),
+        check_scalar<[int_combine]>('int_combine/i32', w_int_combine_32, i32_values()),
+        check_scalar<[int_combine]>('int_combine/negative', w_int_combine_negative, int_values()),
+        check_scalar<[int_fold]>('int_fold/int', w_int_fold, int_values()),
+        check_scalar<[int_fold]>('int_fold/i32', w_int_fold_32, i32_values()),
+        check_scalar<[int_fold_add]>('int_fold_add/int', w_int_fold_add, int_values()),
+        check_scalar<[int_fold_add]>('int_fold_add/i32', w_int_fold_add_32, i32_values()),
+        check_scalar<[int_combine_one]>('int_combine_one/int', w_int_combine_one, int_values()),
+        check_scalar<[int_combine_one]>('int_combine_one/i32', w_int_combine_one_32, i32_values()),
+        // the float laws
+        check_scalar<[float_add_neg_zero]>('float_add_neg_zero/float', w_float_add_neg_zero, float_values()),
+        check_scalar<[float_add_neg_zero]>('float_add_neg_zero/f32', w_float_add_neg_zero_32, f32_values()),
+        check_scalar<[float_combine]>('float_combine/float', w_float_combine, float_values()),
+        check_scalar<[float_combine]>('float_combine/f32', w_float_combine_32, f32_values()),
+        check_scalar<[float_combine]>('float_combine/negative', w_float_combine_negative, float_values()),
+        check_scalar<[float_combine_mixed]>('float_combine_mixed/float', w_float_combine_mixed, float_values()),
+        check_scalar<[float_combine_mixed]>('float_combine_mixed/f32', w_float_combine_mixed_32, f32_values()),
+        check_scalar<[float_fold]>('float_fold/float', w_float_fold, float_values()),
+        check_scalar<[float_fold]>('float_fold/f32', w_float_fold_32, f32_values()),
+        check_scalar<[float_double]>('float_double/float', w_float_double, float_values()),
+        check_scalar<[float_double]>('float_double/f32', w_float_double_32, f32_values()),
+        check_scalar<[float_combine_one]>('float_combine_one/float', w_float_combine_one, float_values()),
+        check_scalar<[float_combine_one]>('float_combine_one/f32', w_float_combine_one_32, f32_values()),
+        check_scalar<[float_combine_one_mixed]>('float_combine_one_mixed/float', w_float_combine_one_mixed, float_values()),
+        check_scalar<[float_combine_one_mixed]>('float_combine_one_mixed/f32', w_float_combine_one_mixed_32, f32_values()),
+        // the elementwise forms
+        check_array<[array_mul_one]>('array_mul_one/f32', w_array_mul_one, f32_arrays()),
+        check_array<[array_div_one]>('array_div_one/f32', w_array_div_one, f32_arrays()),
+        check_array<[array_sub_zero]>('array_sub_zero/f32', w_array_sub_zero, f32_arrays()),
+        check_array<[array_neg_neg]>('array_neg_neg/f32', w_array_neg_neg, f32_arrays()),
+        check_array<[array_add_self]>('array_add_self/f32', w_array_add_self, f32_arrays()),
+        check_array<[array_add_neg_zero]>('array_add_neg_zero/f32', w_array_add_neg_zero, f32_arrays()),
+        check_array<[array_combine]>('array_combine/f32', w_array_combine, f32_arrays()),
+        check_array<[array_combine_mixed]>('array_combine_mixed/f32', w_array_combine_mixed, f32_arrays()),
+        check_array<[array_fold]>('array_fold/f32', w_array_fold, f32_arrays()),
+        check_array<[array_double]>('array_double/f32', w_array_double, f32_arrays()),
+        check_array<[array_combine_one]>('array_combine_one/f32', w_array_combine_one, f32_arrays()),
+        check_array<[array_combine_one_mixed]>('array_combine_one_mixed/f32', w_array_combine_one_mixed, f32_arrays()),
+        check_array<[array_sigmoid_chain]>('array_sigmoid_chain/f32', w_array_sigmoid_chain, f32_arrays()),
+        // the rearranging laws: the two writings of one value, both taken
+        check_rearranging_three<[int_distribute]>('int_distribute/int', w_int_distribute, int_triples()),
+        check_rearranging_three<[array_distribute]>('array_distribute/int', w_array_distribute, int_array_triples())
+    ])
+}
+
+func main(): int sync {
+    let out = report()
+    out->foreach<(line: string): void => {
+        println(line)
+    }>
+    return 0
+}
