@@ -1224,6 +1224,7 @@ case = "../../cases/gpu/nofallback/supported.cml"
 # Every operator in the scope has a device program for its static shapes: the pass accepts it and
 # the region runs on the device (one kernel), not on the host.
 args = ["${case}", 'std::profile json="${test_tmp}/profile.json"', "tiles::compile", "std::nvm"]
+cuda_free_device = true
 skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
 expect_exit = 0
 verify_script = """
@@ -1290,6 +1291,7 @@ case = "../../cases/gpu/nofallback/shape_generic.cml"
 # the type-only template cannot fix the shapes, so the run retries with the actual arguments
 # and still gets a device program. A refusal here would break a call the device can serve.
 args = ["${case}", 'std::profile json="${test_tmp}/profile.json"', "tiles::compile", "std::nvm"]
+cuda_free_device = true
 skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
 expect_exit = 0
 verify_script = """
@@ -1310,6 +1312,7 @@ case = "../../cases/gpu/nofallback/runtime_refusal.cml"
 # and the device refuses them. The run reports it instead of replaying the graph on the host.
 args = ["${case}", "tiles::compile", "std::nvm"]
 # A run with no device is not a refusal: it is the host path `--devices cpu` names on purpose.
+cuda_free_device = true
 skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::GpuScopeNoDeviceProgram"

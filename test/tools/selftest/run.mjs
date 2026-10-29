@@ -980,6 +980,66 @@ if (unpinnedAudit.problems.length !== 2) {
     )
 }
 
+// --- the card a GPU test is given ---------------------------------------------------------------
+// A GPU test that names no card used to get device 0, and on a host others share that card is
+// often full: the run then died with "CUDA device 0 has no free memory for a context", which read
+// as a defect in the code under test. `cuda_free_device = true` makes the choice the runner's
+// (docs/test-plans.md, "A card that is not device 0"), and the two answers of the host are pinned
+// here on one host: the listing is supplied, so neither case needs a card or a driver.
+//
+// The busy answer must be a SKIP that names every card, never a pass and never a fail: a skip is
+// what this host state is, and a red would be blamed on the code.
+const devicePlan = path.join(here, 'free-device', 'device.plan.toml')
+const idleListing = [
+    '0, GPU-00000000-0000-0000-0000-000000000001, 20000, 24576, NVIDIA GeForce RTX 3090',
+    '1, GPU-00000000-0000-0000-0000-000000000002, 12, 24576, NVIDIA GeForce RTX 3090',
+    '2, GPU-00000000-0000-0000-0000-000000000003, 20000, 24576, NVIDIA GeForce RTX 3090',
+].join('\n')
+const busyListing = [
+    '0, GPU-00000000-0000-0000-0000-000000000001, 20000, 24576, NVIDIA GeForce RTX 3090',
+    '1, GPU-00000000-0000-0000-0000-000000000002, 19000, 24576, NVIDIA GeForce RTX 3090',
+    '2, GPU-00000000-0000-0000-0000-000000000003, 20000, 24576, NVIDIA GeForce RTX 3090',
+].join('\n')
+
+const idle = runRunner([devicePlan, '--jobs', '1'], { CAMEL_TEST_GPU_CARDS: idleListing })
+if (idle.status !== 0) problems.push(`free device: runner exit ${idle.status}, expected 0`)
+if (!/\[SUMMARY\] total: 2, pass: 2, fail: 0\b/.test(idle.output) || /\[SKIP\]/.test(idle.output)) {
+    problems.push(
+        `free device: an idle card and a test that names its own were not both run ` +
+            `(${summaryLine(idle.output)})`
+    )
+}
+if (!/^\[PASS\] free_card\b/m.test(idle.output)) {
+    problems.push(
+        `free device: the test was not given the lowest idle card of the listing, so its exact ` +
+            `stdout assertion failed:\n${idle.output}`
+    )
+}
+
+const busy = runRunner([devicePlan, '--jobs', '1'], { CAMEL_TEST_GPU_CARDS: busyListing })
+if (busy.status !== 0) {
+    problems.push(`free device: a host with no idle card failed the run (exit ${busy.status})`)
+}
+if (!/\[SUMMARY\] total: 2, pass: 1, fail: 0, skip: 1\b/.test(busy.output)) {
+    problems.push(`free device: unexpected summary (${summaryLine(busy.output)})`)
+}
+if (!/^\[SKIP\] free_card\b/m.test(busy.output) || /^\[FAIL\] free_card\b/m.test(busy.output)) {
+    problems.push(`free device: no idle card did not skip the test by name:\n${busy.output}`)
+}
+for (const text of [
+    'no idle CUDA device',
+    'all 3 cards on this host are held by another process',
+    'card 0 20000/24576 MiB',
+    'card 2 20000/24576 MiB',
+]) {
+    if (!busy.output.includes(text)) problems.push(`free device: the skip reason lacks: ${text}`)
+}
+// A test that writes the variable itself is neither given a card nor skipped for want of one: the
+// skip is the selection's, and it does not reach past a test that made its own decision.
+if (!/^\[PASS\] names_its_own_card\b/m.test(busy.output)) {
+    problems.push('free device: a test that named its own card was skipped or failed')
+}
+
 if (problems.length > 0) {
     console.error(problems.join('\n'))
     console.error('--- runner output ---')

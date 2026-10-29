@@ -566,6 +566,17 @@ Every `[[tests]]` entry may use these common fields:
   A test that does not declare it sees no device at all, so a CPU-only PyTorch program cannot die
   on a card another tenant holds. See "CUDA visibility"; every plan tagged `gpu` declares it in
   `[defaults]`.
+- `cuda_free_device`
+  Optional boolean, default `false`: `true` declares that this test runs on **one idle card**, and
+  that which card is the runner's decision rather than the test's. The runner asks the host for
+  every card's `memory.used`, hands the child the lowest-numbered card under `1024 MiB` (through
+  `CUDA_VISIBLE_DEVICES`, with `CUDA_DEVICE_ORDER=PCI_BUS_ID` so the ordinal means the same thing
+  to CUDA as to `nvidia-smi`), and records the choice in the test's `meta.json` under
+  `cuda_device`. A host whose cards are all occupied **skips** the test with their numbers in the
+  reason; a host that lists no card at all leaves the test to run as it would have. The choice is
+  made once per test, before its `skip_unless` probe, so the probe is asked against the card the
+  test will get. A test that writes `CUDA_VISIBLE_DEVICES` itself keeps its own value. See "A card
+  that is not device 0".
 - `tier`
   `fast`, `slow` or `debug`, overriding the plan's layer for this test only.
 - `parallel`
@@ -965,6 +976,50 @@ It prints how many tests it examined and fails when that number moves, so it can
 anything unnoticed. `test/tools/selftest/cuda-visibility/` is its fixture and the runner's:
 `visibility.plan.toml` runs the default, its precondition, the opt-in and a test's own value against
 an untouched `node` reference, and `unpinned/` is the plan the guard must refuse, test by test.
+
+## A card that is not device 0
+
+A GPU test that does not name a card used to get device 0, which is a bet about the host: on a
+machine other people share, the lowest ordinal is often the one a tenant has already filled.
+`cuDevicePrimaryCtxRetain` then answers `CUDA_ERROR_OUT_OF_MEMORY`, the run dies with "CUDA device 0
+has no free memory for a context", and that reads as a defect in the code under test. It was not
+one: on the same host the same plan passed once `CUDA_VISIBLE_DEVICES` named an idle card.
+
+So a plan that needs a card declares `cuda_free_device = true` and lets the runner choose, once per
+test, before the test's `skip_unless` probe:
+
+| the host answers | what the runner does |
+|---|---|
+| at least one card under `1024 MiB` used | gives the child the lowest such card: `CUDA_VISIBLE_DEVICES=<ordinal>` and `CUDA_DEVICE_ORDER=PCI_BUS_ID`; the test runs |
+| cards, none under the bar | **skips** the test, with every card and its `used/total` MiB in the reason |
+| no card at all (`nvidia-smi` absent or lists nothing) | hands out nothing; the test runs as it did before, because nothing is occupied |
+
+Three things follow from that split, and each is deliberate:
+
+- **A skip is not a green.** The reason names the host state ("no idle CUDA device: all 8 cards on
+  this host are held by another process ...") and the summary counts a skip as neither passed nor
+  failed, so a run on a busy host looks like what it is rather than like a passed test.
+- **A skip cannot hide our own bug.** Only the selection skips. Once a card is chosen the test runs,
+  and an out-of-memory error after that is the test's own failure: the runner never re-reads the
+  failure of a test it started as "the host was busy".
+- **A host with no card is not a busy host.** Nothing is taken from anyone there, and several gpu
+  plans assert host-path behaviour on the same cases, so taking a cardless machine away from them
+  would lose coverage. A test that cannot hold without a device keeps saying so with its own
+  precondition (`have-cuda-device.mjs`, `have-cuda-build.mjs`), which is asked with the chosen card
+  in its environment.
+
+The choice is written to the test's `meta.json` as `cuda_device` (`ordinal`, `uuid`, `used_mib`,
+`total_mib`), because which card a result came from is not derivable from its output. A test that
+writes `CUDA_VISIBLE_DEVICES` itself is left alone: its value wins, and no card is chosen for it.
+
+The threshold is `FREE_MEMORY_MIB` in `test/tools/free-device.mjs`, and the bar is on `memory.used`:
+a card counts as idle while it holds less than that much. `CAMEL_TEST_GPU_FREE_MIB` moves it for one
+run, and `0` is the strictest bar there is -- a card would have to report a negative usage -- so
+every card reads as occupied: that is how the skip state is reproduced on a host that does have an
+idle card, with the reason naming each card as it really is. A listing can also be supplied through
+`CAMEL_TEST_GPU_CARDS`, which is what the runner's self-test does to see both answers on whatever
+host it runs on. Neither can turn a red green: a listing that claims a busy card is idle only makes
+the test run, and then it fails on the card.
 
 ## Snapshot Tests
 
