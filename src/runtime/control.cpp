@@ -165,9 +165,9 @@ size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork) {
     }
     maxWork = std::min(maxWork, 8 * (slots + edges));
     // Epochs avoid clearing graph-sized scratch arrays for every target. Mandatory value inputs
-    // seed the walk directly; CTRL inputs seed only their parents, so a control edge cannot prove
-    // itself. JOIN arm values are alternatives, never mandatory predecessors: a walk may reach a
-    // completed JOIN/LOOP as its endpoint but cannot walk through it.
+    // seed the walk directly; the other control inputs seed only their parents, so a control edge
+    // cannot prove itself. JOIN arm values are alternatives, never mandatory predecessors: a walk
+    // may reach a completed JOIN/LOOP as its endpoint but cannot walk through it.
     //
     // The sweep runs twice, for two readings of the graph. The first is the value-path reduction the
     // pass has always made. The second reads the sync edge as an ordering of its own: it is the edge
@@ -175,9 +175,12 @@ size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork) {
     // control edge the builder writes beside it says nothing more
     // (docs/design/effects/edges.cn.md 1.5). The kinds that still read the control kind themselves
     // keep theirs -- the GATE, whose wait it is, and the call, whose predecessors the inline splice
-    // hands to the body through it -- until those paths are on the sync edge too. An order edge
-    // proves nothing here: it orders without carrying "used", and a control edge is also how the
-    // runtime keeps its predecessor alive.
+    // hands to the body through it -- until those paths are on the sync edge too.
+    //
+    // Both readings prove a wait redundant through the orderings the graph already holds: the value
+    // inputs a target is computed from, and, in the second reading, a `sync` block's chain. An
+    // order edge proves nothing here: it orders without carrying "used", and a control edge is also
+    // how the runtime keeps its predecessor alive.
     std::vector<size_t> candidate(slots, 0), seen(slots, 0), redundant(slots, 0);
     size_t epoch = 0;
     const auto reduce = [&](bool readSync) {
@@ -292,18 +295,29 @@ size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork) {
 
 namespace {
 
-/// The reduction both readings share. An edge A -> C goes away when a path of at least two edges
-/// that order already orders the two ends inside the region that holds the edge, which is what
-/// "when both run the predecessor runs first" makes redundant. `readEveryOrderingPath` adds the
-/// data, sync and control edges to the walk and lets a sync edge be a candidate: a document is
-/// compared by the order, so a chain link a data path already reaches says nothing more
-/// (docs/technical/gir-interchange.md). Without it the walk reads order edges alone, which is the
-/// reduction `std::opt::order` makes on a graph it edits.
-size_t reduceOrderingEdges(GraphDraft &draft, size_t maxWork, bool readEveryOrderingPath) {
+/// Which edges a reduction reads as ordering, and which of them it may drop. An edge A -> C goes
+/// away when a path of at least two edges that order already orders the two ends inside the region
+/// that holds the edge, which is what "when both run the predecessor runs first" makes redundant.
+enum class OrderingReading {
+    /// `std::opt::order` on a graph a pass still rewrites: order edges are the candidates, and the
+    /// proof walks order edges and sync edges -- the two kinds that order without passing "used"
+    /// (docs/design/effects/edges.cn.md 1). Data and control edges stay out of the proof: a pass may
+    /// still rewrite them, so an order edge they would cover is the conservative answer while they
+    /// are there.
+    Pass,
+    /// A document, compared by the order a program keeps: order edges and sync links are the
+    /// candidates, and the proof walks every kind that orders (data, sync, order, control). A chain
+    /// link a data path already reaches says nothing more about the order (docs/technical/
+    /// gir-interchange.md).
+    Document,
+};
+
+size_t reduceOrderingEdges(GraphDraft &draft, size_t maxWork, OrderingReading reading) {
     if (!maxWork) {
         return 0;
     }
-    const size_t slots = draft.nodeSlotCount();
+    const bool readsEveryKind = reading == OrderingReading::Document;
+    const size_t slots        = draft.nodeSlotCount();
     std::vector<size_t> seen(slots, 0);
     size_t removed = 0;
     size_t epoch   = 0;
@@ -314,15 +328,15 @@ size_t reduceOrderingEdges(GraphDraft &draft, size_t maxWork, bool readEveryOrde
         const auto syncInputs  = draft.syncInputsOf(user);
         const std::vector<gc_node_ref_t> order(orderInputs.begin(), orderInputs.end());
         const std::vector<gc_node_ref_t> sync(syncInputs.begin(), syncInputs.end());
-        const bool considerSync = readEveryOrderingPath && !sync.empty();
+        const bool considerSync = readsEveryKind && !sync.empty();
         if (order.empty() && !considerSync) {
             continue;
         }
-        // One order edge cannot be implied by another one, so only a node that two order edges
-        // meet in is a candidate; the pass's screen reads the same condition from the frozen
-        // graph. A document also reads a single edge, because the path that implies it may be a
+        // A graph a pass edits reads a node that two order edges meet in: with one such edge the
+        // proof would be a longer path of order edges, which the pass leaves to the document
+        // reading. A document also reads a single edge, because the path that implies it may be a
         // data path rather than another ordering edge.
-        if (!readEveryOrderingPath && order.size() < 2) {
+        if (!readsEveryKind && order.size() < 2) {
             continue;
         }
         const uint32_t region = draft.nodeRegion(user);
@@ -349,7 +363,7 @@ size_t reduceOrderingEdges(GraphDraft &draft, size_t maxWork, bool readEveryOrde
                             // left the walk; the document's reading has a kind per list to
                             // walk, so it goes on with the list it has.
                             proven = depth >= 2;
-                            if (!readEveryOrderingPath || proven) {
+                            if (!readsEveryKind || proven) {
                                 return;
                             }
                             continue;
@@ -364,8 +378,8 @@ size_t reduceOrderingEdges(GraphDraft &draft, size_t maxWork, bool readEveryOrde
                 };
                 for (gc_node_ref_t from : level) {
                     walk(draft.orderUsersOf(from));
-                    if (readEveryOrderingPath) {
-                        walk(draft.syncUsersOf(from));
+                    walk(draft.syncUsersOf(from));
+                    if (readsEveryKind) {
                         walk(draft.normUsersOf(from));
                         walk(draft.withUsersOf(from));
                         walk(draft.ctrlUsersOf(from));
@@ -409,11 +423,11 @@ size_t reduceOrderingEdges(GraphDraft &draft, size_t maxWork, bool readEveryOrde
 } // namespace
 
 size_t reduceOrderDependencies(GraphDraft &draft, size_t maxWork) {
-    return reduceOrderingEdges(draft, maxWork, false);
+    return reduceOrderingEdges(draft, maxWork, OrderingReading::Pass);
 }
 
 size_t reduceDocumentOrdering(GraphDraft &draft, size_t maxWork) {
-    return reduceOrderingEdges(draft, maxWork, true);
+    return reduceOrderingEdges(draft, maxWork, OrderingReading::Document);
 }
 
 } // namespace camel::runtime

@@ -297,6 +297,22 @@ void syncChainOrdering() {
             std::ranges::find(sources, tail) != sources.end(),
             "the walk did not follow the sync chain");
     }
+    // The order reduction reads the chain too: two order edges meet in one node and the chain
+    // already orders one of the two ends before the other, so the edge that spells it says nothing
+    // (docs/design/effects/edges.cn.md 5.4). Reading order edges alone, the pass finds nothing.
+    {
+        GraphDraft draft;
+        const auto head = node(draft);
+        const auto next = node(draft);
+        check(draft.setSyncPredecessor(next, head), "a node did not take a sync predecessor");
+        const auto user             = node(draft);
+        const gc_node_ref_t ordered[] = {head, next};
+        draft.setOrderInputs(user, ordered);
+        check(reduceOrderDependencies(draft) == 1, "the pass did not read the sync chain");
+        check(
+            draft.orderInputsOf(user).size() == 1 && draft.orderInputsOf(user).front() == next,
+            "the pass dropped the order the chain does not give");
+    }
 }
 /// The two readings of one order reduction. A document is compared by the order a program holds,
 /// so an ordering edge whose two ends a data path already orders says nothing and is dropped
