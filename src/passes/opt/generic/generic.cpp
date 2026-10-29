@@ -90,6 +90,16 @@ class StaticArgsView final : public ArgsView {
     std::vector<type::Type *> types_;
 };
 
+/// Whether a fold left no value at all. A lowering applied to the case its tag does not select
+/// returns the zero slot (tagged.cpp), and a member the constant does not have reads as one: that
+/// is no value of a type that has no null. Materializing it would put a constant where the type
+/// promises an object, and a later fold would read the empty slot as that object -- `kind(v)` of
+/// a failed `Json!`, in the match arm the tag does not take, read a document at a null pointer.
+bool holdsNoValue(slot_t value, type::Type *type) {
+    return value == NullSlot && type != nullptr && type::isGCTraced(type->code()) &&
+           type::asNullable(type) == nullptr;
+}
+
 /// Static DATA, seen through GATEs or a JOIN whose arms all forward the same scalar bits.
 /// This proves a value, not permission to discard its producer: replaceNode retains ordering.
 /// A shared budget bounds gate walks; nested JOINs are not recursively expanded.
@@ -490,6 +500,9 @@ bool foldStaticAccess(GraphDraft &draft, gc_node_ref_t id) {
     } else {
         return false;
     }
+    if (holdsNoValue(value, result)) {
+        return false;
+    }
     // The element is reachable from the constant it was read from, which the graph keeps.
     replaceFoldResult(draft, id, draft.materializeStaticValue(value, result));
     return true;
@@ -618,7 +631,7 @@ bool foldFromTypes(
         statics.push_back(value ? std::optional<slot_t>(value->first) : std::nullopt);
     }
     const auto result = (*folder)(types, statics, camel::core::mm::autoSpace());
-    if (!result) {
+    if (!result || holdsNoValue(*result, resultType)) {
         return false;
     }
     if (type::isGCTraced(resultType->code()) && *result != NullSlot) {
@@ -774,6 +787,11 @@ size_t foldDraft(
                 continue; // leave the failure to be reported when the program runs
             }
             if (!foldable) {
+                continue;
+            }
+            if (holdsNoValue(result, resultType)) {
+                // The lowering returned the zero slot for the case its tag does not select: no
+                // constant goes where the type promises an object (see holdsNoValue).
                 continue;
             }
             if (resultType && type::isGCTraced(resultType->code()) && result != NullSlot) {
