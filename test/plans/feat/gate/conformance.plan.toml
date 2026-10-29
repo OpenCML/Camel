@@ -16,11 +16,14 @@ desc = "The conformance matrix: every recorded reading holds on the unoptimized 
 
 [[tests]]
 name = "gate.conformance_matrix"
-desc = "The recorded reading of every program in test/conformance/cases.json equals what the unoptimized and the optimized implementation print and return, on nvm, fvm, jit and prl, and the reading does not change under optimization."
+desc = "The recorded reading of every program in test/conformance/cases.json equals what the unoptimized and the optimized implementation print and return, on nvm, fvm, jit and prl, the reading does not change under optimization, and the run states the seven things it does not prove."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/check-conformance.mjs"
 args = ["${case}", "--camel", "${camel}"]
+# The second substring is the promise the lane's report made and the run did not keep: the limits
+# of a green run are printed, one line each, not only pointed at. Asserted here so it cannot drift
+# back to a pointer.
 expect_exit = 0
-expect_stdout_contains = ["3/3 columns green"]
+expect_stdout_contains = ["3/3 columns green", "not covered -- the model is not re-executed"]
 timeout_ms = 120000

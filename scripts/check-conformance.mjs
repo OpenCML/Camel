@@ -22,10 +22,9 @@
 // The readings, the columns, what each one covers and what it does not are in
 // `test/conformance/README.md`.
 //
-// The model itself is not re-executed here: the Lean model and the corpus of the conformance
-// study live outside this repository (README.md, "What this gate does not cover"), so a reading
-// stands in for the model's run. That substitution is the one thing a green run does not prove,
-// and it is named on every run.
+// What a green run does not prove is printed on every run, one line per item: the list is the
+// sections of README.md, "What this gate does not cover". A reader of the log has to be able to
+// tell the gate's own gaps from its findings without opening the page.
 //
 // Usage:
 //
@@ -68,6 +67,20 @@ const COLUMNS = [
         name: 'after optimization',
         statement: 'the optimized implementation matches the recorded reading',
     },
+]
+
+// The seven limits of a green run, one line each, in the order README.md gives them. They are
+// printed before the columns so that the reading a log records is never read as more than it is:
+// the first is the one that matters most -- a reading stands in for the model's run, so the gate
+// proves the implementation matches the record, not that the record matches the model.
+const NOT_COVERED = [
+    "the model is not re-executed: a reading stands in for its run, so this proves the implementation matches the record, not that the record matches the model",
+    "the study's corpus is not here: only the cases in cases.json run, so a defect they would expose is unknown to this gate",
+    'programs that must be refused are not cases: parse errors, type errors, refused declarations, faults and error values keep their own plans',
+    'non-determinism is not asserted: an order the specification leaves open cannot be written as a reading',
+    'graph shape is not compared: where an order edge sits is the linear plans\u2019 snapshots to own',
+    'coverage is stdout and the exit code only: fs, the clock, the environment, user-declared resources and handle types are not exercised',
+    'device and export paths do not run: GPU execution, ONNX export, the Python SDK and the C++ translation have their own plans',
 ]
 
 function usage(message) {
@@ -217,17 +230,18 @@ for (const entry of cases) {
     }
 }
 
-// The run's own report: one line per column with the count it measured, then every failure under
-// the column that owns it. The reading's provenance is printed on a green run too, because a
-// reader has to know what a green line does and does not prove.
+// The run's own report: what it measured, then the seven limits of a green run -- one line each,
+// before any column, so a log cannot record a green reading as more than it is -- then one line per
+// column with the count it measured, then every failure under the column that owns it.
 console.log(
     `[conformance] ${cases.length} case(s) from test/conformance/cases.json; back ends ${backends.join(', ')}; ` +
         `optimized pipeline ${optimized.join(' ')}; ${runs} program run(s)`,
 )
 console.log(
-    '[conformance] a reading is the result the named principle gives the program; this run compares the ' +
-        'implementation with it and does not re-run the model (README.md, "What this gate does not cover")',
+    `[conformance] a reading is the result the named principle gives the program; what a green run does not ` +
+        `prove, ${NOT_COVERED.length} items (README.md, "What this gate does not cover"):`,
 )
+for (const item of NOT_COVERED) console.log(`[conformance]   not covered -- ${item}`)
 
 let failedColumns = 0
 for (const column of COLUMNS) {
