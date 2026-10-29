@@ -802,6 +802,9 @@ class CmlPrinter {
             for (const gc_node_ref_t input : graph_->ctrlInputsOf(ref)) {
                 depend(input);
             }
+            for (const camel::runtime::GCGraphSyncEdge &edge : graph_->syncPredsOf(ref)) {
+                depend(edge.pred);
+            }
         }
         auto later = [&](gc_node_ref_t a, gc_node_ref_t b) {
             return order.contains(a) && order.contains(b) ? order[a] > order[b]
@@ -864,7 +867,8 @@ class CmlPrinter {
                         if (node == nullptr) {
                             continue;
                         }
-                        if (!candidate->ctrlInputsOf(ref).empty()) {
+                        if (!candidate->ctrlInputsOf(ref).empty() ||
+                            !candidate->syncPredsOf(ref).empty()) {
                             effect = true;
                             break;
                         }
@@ -1192,7 +1196,7 @@ class CmlPrinter {
             if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Gate) {
                 continue;
             }
-            for (const gc_node_ref_t source : graph_->ctrlInputsOf(result)) {
+            for (const gc_node_ref_t source : graph_->waitInputsOf(result)) {
                 if (graph_->node(source) != nullptr && control_->controlOf(source) == region) {
                     return true;
                 }
@@ -1231,7 +1235,7 @@ class CmlPrinter {
     /// write and the block's value is what that write wrote. `kInvalidNodeRef` otherwise.
     gc_node_ref_t assignmentHandingOn(
         gc_node_ref_t gate, uint32_t region, gc_node_ref_t value) const {
-        for (const gc_node_ref_t input : graph_->ctrlInputsOf(gate)) {
+        for (const gc_node_ref_t input : graph_->waitInputsOf(gate)) {
             const camel::runtime::GCNode *node = graph_->node(input);
             if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Oper ||
                 control_->controlOf(input) != region) {
