@@ -4165,6 +4165,65 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     if (targetGraph) {
         captured = capturedUsesOf(targetGraph);
     }
+    // A function value handed to a parameter of function type that writes no resource clause is
+    // the instantiation's: the parameter's resources are the argument's (design principles 3.3),
+    // so the call uses the variables that value's body captured and writes those it writes, just
+    // as a direct call writes the captures of its callee. Without this, a callback writing a
+    // captured `var` left the write out of the call site: a read written before the call was not
+    // ordered before it, and a read written after it did not take the version the call made.
+    std::vector<compile_graph_ptr_t> argumentFunctions;
+    const auto addArgumentCaptures = [&](node_handle_t argument, Type *declared) {
+        if (declared == nullptr || declared->code() != TypeCode::Function) {
+            return;
+        }
+        const auto *parameterType = tt::as_ptr<FunctionType>(declared);
+        if (parameterType == nullptr ||
+            parameterType->resources().mode !=
+                camel::core::sem::ResourceSignature::Mode::Generic) {
+            return; // a clause names what the value may reach: nothing is left to the value
+        }
+        compile_graph_ptr_t value = functionValueGraphOf(argument);
+        if (value == nullptr || value == targetGraph ||
+            std::ranges::find(argumentFunctions, value) != argumentFunctions.end()) {
+            return;
+        }
+        // The captures of a value made in another function are that function's cells, handed over
+        // inside the value: this graph cannot name them, so what is read here is the call's
+        // conservative set alone.
+        const auto summary = captures_.find(value.get());
+        if (summary == captures_.end()) {
+            return;
+        }
+        for (node_handle_t origin : summary->second.variables) {
+            bool enclosed = false;
+            for (DraftGraphBuilder *outer = currGraph_.get(); outer != nullptr;
+                 outer                     = outer->outerGraph().get()) {
+                if (nodeGraphOf(origin) == outer) {
+                    enclosed = true;
+                    break;
+                }
+            }
+            if (!enclosed) {
+                return;
+            }
+        }
+        for (CapturedUse &use : capturedUsesOf(value)) {
+            captured.push_back(std::move(use));
+        }
+        argumentFunctions.push_back(std::move(value));
+    };
+    if (targetFuncType != nullptr) {
+        const size_t withCount = targetFuncType->withTypesCount();
+        for (size_t i = 0; i < passed.size(); ++i) {
+            Type *declared = nullptr;
+            if (i < withCount) {
+                declared = targetFuncType->withTypeAt(i);
+            } else if (i - withCount < targetFuncType->normTypesCount()) {
+                declared = targetFuncType->normTypeAt(i - withCount);
+            }
+            addArgumentCaptures(passed[i].node, declared);
+        }
+    }
     // What the call hands on beside its return value: the new version of each captured variable
     // it writes, in the callee's capture order. The mask was decided when the node was made and
     // is in its payload; here it says which of the call's With inputs are those versions, and
@@ -4208,8 +4267,17 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                 .atOrigin(gct->origin())
                 .commit(subject, "it takes a var argument");
         } else if (!capturedWrites.empty()) {
+            // The graphs whose writes count here: the callee's, and the one of each function value
+            // the call hands to a parameter whose resources are the value's.
+            std::vector<DraftGraphBuilder *> writingGraphs;
+            if (targetGraph) {
+                writingGraphs.push_back(targetGraph.get());
+            }
+            for (const compile_graph_ptr_t &value : argumentFunctions) {
+                writingGraphs.push_back(value.get());
+            }
             unit_->pendingIgnoredWrites.push_back(
-                {{targetGraph.get()}, capturedWrites, {}, gct->origin(), subject, "it writes"});
+                {std::move(writingGraphs), capturedWrites, {}, gct->origin(), subject, "it writes"});
         }
     }
     for (const Passed &arg : passed) {

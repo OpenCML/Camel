@@ -402,3 +402,59 @@ case = "../../../cases/effects/ok_recursive_pure.cml"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["120 true true"]
+
+# ---- A callback that writes a captured variable ----
+#
+# A parameter of function type that writes no resource clause is resource-generic: what a call
+# through it reaches is the set the value handed to it reaches at this instantiation (design
+# principles 3.3). So a callback writing a `var` it captured is a write of that variable at the
+# call, as a direct call writes the captures of its callee (3.5). Both shapes are held below: the
+# accepted one, where the read written before the call keeps the value from before it, and the one
+# that is reported, where the call is not in a sync block.
+
+[[tests]]
+name = "callback.write_through_parameter"
+desc = "A callback that writes a `var` it captured is passed to a parameter of function type and the call that runs it is a statement of a sync block: a read written before the call keeps the value from before it and a read written after it takes the value the call made, for a local variable and for a variable of the module. The same output on all four back ends."
+kind = "behavior"
+case = "../../../cases/effects/callback_write_through_parameter.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = ["1 40", "7 50"].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "callback.write_through_parameter_opt"
+desc = "The same program through the optimizer: the write the call makes stays a write, so nothing folds the read of the variable into the value it had before the call. Same output as the unoptimized back ends."
+kind = "behavior"
+case = "../../../cases/effects/callback_write_through_parameter.cml"
+args = ["${case}", "std::opt", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = ["1 40", "7 50"].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "callback.write_ignored_outside_sync"
+desc = "A call that hands a callback writing a captured `var` to a parameter of function type is a write of that variable at the call: outside a sync block it is reported (IgnoredSideEffect) exactly as the direct call of a writing function is, and the read after it still takes the value the callback wrote."
+kind = "behavior"
+case = "../../../cases/effects/callback_write_ignored.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["3"]
+expect_output_contains = ["is not in a sync block, and it writes the captured variable 'counter'"]
+timeout_ms = 20000
