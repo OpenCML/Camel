@@ -1131,31 +1131,16 @@ node_handle_t Builder::compoundAssignmentByRebinding(
     };
     // The right operand is evaluated once: it was built already, and is named here.
     const std::string right = bindTemporary(valueOf(operands[1].node));
-    // The place is read through `:var/peek`: what the plain operator reads is the value this same
-    // assignment writes back, so the read must not take the place's array with it, and whether the
-    // store updates in place is the memory planner's question (design principles 6.11). The read
-    // is otherwise the read the place would get: it is the same `:var/peek` a place of an array is
-    // read with when the assignment is in place, and the same one a read inside a sync block is
-    // settled to when nothing after it needs the array. A place that is not a variable of the
-    // program is left to be built as written, so its own report is the one given.
-    node_handle_t placeCell = nullptr;
-    if (operands[0].expr != nullptr && operands[0].expr->type() == GCT::NodeKind::DREF) {
-        const std::string name = moduleLevelName(operands[0].expr->name());
-        if (nodeAt(name).has_value()) {
-            if (node_handle_t node = resolveNodeByRef(name); isVariable(node)) {
-                placeCell = node;
-            }
-        }
-    }
-    const std::string place =
-        placeCell != nullptr ? bindTemporary(peekVariable(placeCell)) : std::string();
+    // The place is read as it is written, by the link below: `a op= b` reads `a` with the read
+    // `a = a op b` reads it with, built where that reading is built and settled by the same rule
+    // (design principles 2.1, 6.11: whether the read keeps the place's array for the store to
+    // write in place is the memory plan's question, Builder::markNonRetainingReads). The place is
+    // written again rather than named from the operand the compound operator built, so that the
+    // two spellings make their nodes in one order and write one graph; a place that is not a
+    // variable of the program is built as written too, and its own report is the one given.
     GCT::node_ptr_t value = makeOperator(tree_->makeLink(2));
     *value << makeOperator(tree_->makeDRef(plainName));
-    if (place.empty()) {
-        *value << tree_->clone(operands[0].expr);
-    } else {
-        *value << make(tree_->makeDRef(place));
-    }
+    *value << tree_->clone(operands[0].expr);
     *value << make(tree_->makeDRef(right));
     // The plain operator is resolved as one written by itself would be: this is where its
     // availability is settled for the arguments, and where its result type is known. A result
@@ -4237,12 +4222,14 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         // A call through a function value may write any variable the value captured, and which
         // ones is not known here: every read written before it is ordered before it, as a read is
         // before the write it precedes (the reads of a variable nothing else touches are folded
-        // away, with these edges).
+        // away, with these edges). A read whose value the call already takes is ordered by that
+        // data edge, and is not given a second one.
         for (const auto &[variable, uses] : pendingUses_) {
             for (const VariableUse &use : uses) {
                 if (use.isRead && sameGraph(use.node, currGraph_) && linkCheek(use.node, targetNode) &&
                     nodeTakesAnOrder(use.node) && nodeTakesAnOrder(targetNode) &&
-                    !hasDirectDataDependency(use.node, targetNode)) {
+                    !hasDirectDataDependency(use.node, targetNode) &&
+                    !dataPathReaches(use.node, targetNode)) {
                     linkNodes(LinkType::Order, use.node, targetNode);
                 }
             }

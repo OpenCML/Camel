@@ -459,6 +459,38 @@ inline bool hasDirectDataDependency(node_handle_t lhs, node_handle_t rhs) {
            std::ranges::find(withInputsOf(lhs), rhsId) != withInputsOf(lhs).end();
 }
 
+/// Whether `from` already reaches `to` over data edges, directly or through the nodes between them:
+/// `to` reads what `from` produced, so it is computed after it, and an edge that only says "after"
+/// says nothing new. This is the transitive form of `hasDirectDataDependency`, and the question a
+/// read before a write asks: `x = x + 1` and `x += 1` both hand the read's value to the operator the
+/// write stores, so both are ordered already and neither is given a second edge (design principles
+/// 2.1). The transitive reduction over the edges that remain is `std::opt::order`'s.
+inline bool dataPathReaches(node_handle_t from, node_handle_t to) {
+    if (!from || !to || from == to || nodeGraphOf(from) != nodeGraphOf(to)) {
+        return false;
+    }
+    const draft_node_ref_t target = nodeIdOf(from);
+    std::vector<draft_node_ref_t> pending{nodeIdOf(to)};
+    std::set<draft_node_ref_t> seen;
+    while (!pending.empty()) {
+        const draft_node_ref_t id = pending.back();
+        pending.pop_back();
+        if (id == target) {
+            return true;
+        }
+        if (!seen.insert(id).second) {
+            continue;
+        }
+        const node_handle_t node = nodeDraftOf(to)->ref(id);
+        for (const auto inputs : {normInputsOf(node), withInputsOf(node)}) {
+            for (draft_node_ref_t input : inputs) {
+                pending.push_back(input);
+            }
+        }
+    }
+    return false;
+}
+
 /// Whether the model lets an order edge sit on this node (docs/design/effects/edges.cn.md 4.6):
 /// an order edge only orders, and its two ends are effects or nodes that may fault, so a node the
 /// model lets a pass arrange freely -- pure and unable to fault (design principles 3.4) -- carries

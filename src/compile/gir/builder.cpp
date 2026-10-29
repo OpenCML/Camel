@@ -1494,15 +1494,32 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
         // reachable from anything and the block's effects were dropped.
         if (synced_ && !returned && res != nullptr && sameGraph(res, currGraph_) &&
             valueNeedsSyncEdge(res, lastSyncedNode_)) {
-            node_handle_t gate = currGraph_->addGateNode(nodeTypeOf(res));
-            linkNodes(LinkType::Norm, res, gate);
-            // The chain's tail reaches the block's value by a sync edge -- the block's value node
-            // not being one this block alone owns (docs/design/effects/edges.cn.md 5.3) -- with the
-            // control edge the kind names the same pair with beside it. The tail may be the node the
-            // GATE reads, and the wait is then the only edge that reaches the GATE at all, so this
-            // pair is written as it stands rather than dropped as "already ordered".
-            writeSyncStatement(lastSyncedNode_, gate);
-            res = gate;
+            // A value a statement already handed on behind a GATE that waits on the chain's tail
+            // is reached from the chain by that wait: it is the same pair, so the sync edge goes
+            // on that GATE and no second one is made. A write whose value stands here (`x += 1`,
+            // `x = x + 1` as the last statement) hands its value on behind such a GATE to make
+            // the write run, and the same value named and handed on is reached behind one GATE;
+            // the two are then one graph (design principles 2.1, 3.4).
+            const bool waitsOnTail =
+                nodeIsKind(res, runtime::GCNodeKind::Gate) &&
+                std::ranges::find(ctrlInputsOf(res), nodeIdOf(lastSyncedNode_)) !=
+                    ctrlInputsOf(res).end();
+            if (waitsOnTail) {
+                markSyncStatement(lastSyncedNode_);
+                markSyncStatement(res);
+                linkNodes(LinkType::Sync, lastSyncedNode_, res);
+            } else {
+                node_handle_t gate = currGraph_->addGateNode(nodeTypeOf(res));
+                linkNodes(LinkType::Norm, res, gate);
+                // The chain's tail reaches the block's value by a sync edge -- the block's value
+                // node not being one this block alone owns (docs/design/effects/edges.cn.md 5.3)
+                // -- with the control edge the kind names the same pair with beside it. The tail
+                // may be the node the GATE reads, and the wait is then the only edge that reaches
+                // the GATE at all, so this pair is written as it stands rather than dropped as
+                // "already ordered".
+                writeSyncStatement(lastSyncedNode_, gate);
+                res = gate;
+            }
         }
         synced_         = old;
         lastSyncedNode_ = oldFuncNode;
