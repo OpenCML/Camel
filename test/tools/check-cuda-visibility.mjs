@@ -86,8 +86,17 @@ const CUDA_AWARE_MODULES = [
  * matmul's gradient in the same plan (`test/cases/modules/onnx/ort_grad_matmul_batched.py`). It is
  * CPU-only too -- `providers=["CPUExecutionProvider"]` on a model it exports and compares -- so it
  * names no device either, and the runner's default hides the machine's cards from it.
+ * 35 -> 37: `export_loop_for` and `export_loop_cond` joined, the two probes of the `loop`
+ * expression's ONNX Loop export in the same plan. They are two tests over one case
+ * (`test/cases/modules/onnx/ort_loop_node.py`, modes `for` and `cond`), and they reach Python
+ * because both name it as their tool and in `skip_unless` (`import numpy, onnx, onnxruntime`).
+ * Both are CPU-only in the way of every other probe there: the case asks ONNX Runtime for
+ * `providers=["CPUExecutionProvider"]` on a model it exports and compares, so neither names a
+ * device and the runner's default hides the machine's cards from both. The lane that added the
+ * Loop export left this pin at 35, and the pin is what makes that visible: the runner's self-test
+ * reads the same audit, so the stale number was red there before anyone ran the guard alone.
  */
-export const EXPECTED_EXAMINED = 35
+export const EXPECTED_EXAMINED = 37
 export const EXPECTED_DEVICE_LAYER = 17
 
 function walkPlanFiles(dir, out = []) {
