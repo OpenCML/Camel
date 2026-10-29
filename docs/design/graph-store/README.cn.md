@@ -289,7 +289,7 @@ export let simplify = [mul_one, add_assoc, fuse_map]
 
 判据与验收：
 
-1. **身份**：`include`、`src`、`modules` 里不再有以图为键的地址容器；图的身份只由 `GCGraph::id()` 给出，运行时与编译期查的是同一张 `GraphId → origin` 表。
+1. **身份**：`include`、`src`、`modules` 里不再有以地址为图的身份的容器；图的身份只由 `GCGraph::id()` 给出，运行时与编译期查的是同一张 `GraphId → origin` 表。仍以 `GCGraph*` 为键的容器都是"要那一个版本对象"而不是"要哪张图"：GC 的登记表（`GCGraphManager::graphs_`、`unbound_`）、事务里的草稿表（`DraftSession::drafts_`、`edited_`）、遍内按版本建的计划与偏移表——它们随对象一起消失，不承担身份。
 2. **输出逐字不变**：解释器 `std::nvm` 与另外三个后端（`std::fvm`、`std::jit`、`std::prl`）在同一批语料上的 stdout、退出码、诊断名、行、列不变——`feat/consistency/faults`、`feat/consistency/faults_optimized` 两张计划逐条比对这四个后端并且比位置，正是这条的守卫：把编号查表去掉（而不是把地址表换成它），这两张计划会红在"诊断没有位置"。
 3. **闸门**：`-Plan all -Tier fast -Jobs 8` 新红 0、`snapshot differs` 0；GIR 金标若变单独一笔重录并说明原因（本轮预期不变：`GraphId` 不进 DOT 文本——`src/passes/trans/dot/graphviz.cpp` 不读它——`gir_canonical` 的 `g0/g1` 由遍历顺序给出）。
 4. **没有过渡态**：不新增格式、不保留地址表、不留"以后再说"的分支；地址表与它的写入点是净删除。
