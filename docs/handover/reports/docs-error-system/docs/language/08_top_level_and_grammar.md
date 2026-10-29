@@ -18,11 +18,11 @@ decl    : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceD
 
 | 声明 | 文法 | 章节 |
 |---|---|---|
-| 模块 | 一个文件就是一个模块，名字来自文件名 | [5.1](05_modules.md#51-模块的名字) |
-| 导入 | `import (模块 \| (名字 \| { 名字 (as 新名)?, ... }) from 模块)` | [5.2](05_modules.md#52-导入) |
-| 导出 | `export (dataDecl \| typeDecl \| { 名字, ... })`；函数的 `export` 写在 `func` 前 | [5.3](05_modules.md#53-导出) |
-| 命名空间 | `namespace 限定名 { ... }` | [5.4](05_modules.md#54-命名空间) |
-| 展开命名空间 | `using namespace 限定名` | [5.2](05_modules.md#52-导入) |
+| 模块 | 一个文件就是一个模块，名字来自文件名 | [5.1](../../../../../language/05_modules.md#51-模块的名字) |
+| 导入 | `import (模块 \| (名字 \| { 名字 (as 新名)?, ... }) from 模块)` | [5.2](../../../../../language/05_modules.md#52-导入) |
+| 导出 | `export (dataDecl \| typeDecl \| { 名字, ... })`；函数的 `export` 写在 `func` 前 | [5.3](../../../../../language/05_modules.md#53-导出) |
+| 命名空间 | `namespace 限定名 { ... }` | [5.4](../../../../../language/05_modules.md#54-命名空间) |
+| 展开命名空间 | `using namespace 限定名` | [5.2](../../../../../language/05_modules.md#52-导入) |
 | 数据 | `(let \| var) 名字 (: 类型)? = 表达式` | [7.2](07_statements.md#72-let-与-var) |
 | 函数 | `标注* (with <形参>)? export? 修饰符* func 名字(形参) (: 类型)? 块` | [7.4](07_statements.md#74-函数) |
 | 类型 | `type 名字 (<参数, ...>)? = 类型` | [7.7](07_statements.md#77-类型声明) |
@@ -83,7 +83,7 @@ enumBody  : 'enum' '{' 变体, ... '}'
 
 - `T?`、`T!`：[3.4](03_data_model.md#34-可能为空-t-与可能出错-t)。
 - `::<T>`：函数、`rule` 与 `fact` 在名字后声明类型参数（[7.5](07_statements.md#75-泛型函数)）。
-- `constas n`：两种用法，都是编译期的名字（[设计原则 5.4](../design-principles.cn.md)）：在 `const` 实参里给维度命名——名字在形参类型里第一次出现时用 `constas` 绑定，之后直接写 `n`；或者作为函数声明的一个**值形参**（`func f(constas n: int, ...)`），由调用点的常量绑定（[7.5](07_statements.md#75-泛型函数)）。值形参可以写在形参表的任意位置，个数不限；每个值各自进入实例键。形状里的维度名不写 `constas`：名字在形参类型里第一次出现时自动绑定，之后直接写 `n`。
+- `constas n`：两种用法，都是编译期的名字（[设计原则 5.4](../../../../../design-principles.cn.md)）：在 `const` 实参里给维度命名——名字在形参类型里第一次出现时用 `constas` 绑定，之后直接写 `n`；或者作为函数声明的一个**值形参**（`func f(constas n: int, ...)`），由调用点的常量绑定（[7.5](07_statements.md#75-泛型函数)）。值形参可以写在形参表的任意位置，个数不限；每个值各自进入实例键。形状里的维度名不写 `constas`：名字在形参类型里第一次出现时自动绑定，之后直接写 `n`。
 - `enum`：[3.5](03_data_model.md#35-枚举-enum)。
 - 尖括号：类型函数的实参（[7.7](07_statements.md#77-类型声明)）或模块类型的实参。
 

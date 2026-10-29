@@ -28,25 +28,25 @@ Camel 是图原生的通用编程语言：程序只表达计算意图——要�
 [接下来](#接下来)
 
 按新提纲已写好的章（中英文同步，各自独立成页）：
-[1 五分钟见到图](01_five_minutes.cn.md) ·
-[2 值、类型与 `let`](02_values_and_let.cn.md) ·
-[3 函数与管道](03_functions_and_pipes.cn.md) ·
-[4 分支与 `match`](04_branches_and_match.cn.md) ·
-[5 数组与循环](05_arrays_and_loops.cn.md) ·
-[6 结构体、元组、映射与集合](06_aggregates.cn.md) ·
+[1 五分钟见到图](../../../../../tutorial/01_five_minutes.cn.md) ·
+[2 值、类型与 `let`](../../../../../tutorial/02_values_and_let.cn.md) ·
+[3 函数与管道](../../../../../tutorial/03_functions_and_pipes.cn.md) ·
+[4 分支与 `match`](../../../../../tutorial/04_branches_and_match.cn.md) ·
+[5 数组与循环](../../../../../tutorial/05_arrays_and_loops.cn.md) ·
+[6 结构体、元组、映射与集合](../../../../../tutorial/06_aggregates.cn.md) ·
 [7 缺失与失败](07_missing_and_failure.cn.md) ·
-[8 模块、标准库与一个小工具](08_modules_and_stdlib.cn.md) ·
-[9 按依赖求值](09_evaluation_by_dependency.cn.md) ·
-[10 效应与顺序](10_effects_and_order.cn.md) ·
-[18 教编译器一条定律](17_teaching_a_law.cn.md)
+[8 模块、标准库与一个小工具](../../../../../tutorial/08_modules_and_stdlib.cn.md) ·
+[9 按依赖求值](../../../../../tutorial/09_evaluation_by_dependency.cn.md) ·
+[10 效应与顺序](../../../../../tutorial/10_effects_and_order.cn.md) ·
+[18 教编译器一条定律](../../../../../tutorial/17_teaching_a_law.cn.md)
 
 ---
 
 ## 1. 第一个程序
 
-先得到 `camel` 可执行文件：按 [setup.cn.md](../setup.cn.md) 从源码构建，并把 `out/latest/bin` 加入 `PATH`。`camel --version` 能打印版本就可以开始了。
+先得到 `camel` 可执行文件：按 [setup.cn.md](../../../../../setup.cn.md) 从源码构建，并把 `out/latest/bin` 加入 `PATH`。`camel --version` 能打印版本就可以开始了。
 
-[`examples/01_hello.cml`](examples/01_hello.cml)：
+[`examples/01_hello.cml`](../../../../../tutorial/examples/01_hello.cml)：
 
 ```cml
 
@@ -71,7 +71,7 @@ Hello, Camel!
 
 ## 2. 值与类型
 
-[`examples/02_values.cml`](examples/02_values.cml)：
+[`examples/02_values.cml`](../../../../../tutorial/examples/02_values.cml)：
 
 ```cml
 
@@ -125,7 +125,7 @@ func main(): int sync {
 
 ## 3. 函数
 
-[`examples/03_functions.cml`](examples/03_functions.cml)：
+[`examples/03_functions.cml`](../../../../../tutorial/examples/03_functions.cml)：
 
 ```cml
 
@@ -173,7 +173,7 @@ func main(): int sync {
 
 ## 4. 分支与 match
 
-[`examples/04_branches.cml`](examples/04_branches.cml)：
+[`examples/04_branches.cml`](../../../../../tutorial/examples/04_branches.cml)：
 
 ```cml
 
@@ -218,7 +218,7 @@ A B D
 
 ### 最容易掉进去的坑：块里的 `return`
 
-在图上，分支的每个臂是它自己的一张子图。所以**臂的块里写的 `return` 给出的是这个分支的值，不是离开函数**。[`examples/04_block_return.cml`](examples/04_block_return.cml)：
+在图上，分支的每个臂是它自己的一张子图。所以**臂的块里写的 `return` 给出的是这个分支的值，不是离开函数**。[`examples/04_block_return.cml`](../../../../../tutorial/examples/04_block_return.cml)：
 
 ```cml
 
@@ -260,7 +260,7 @@ Camel 里没有“提前返回”。让分支成为函数体的最后一个表�
 
 ## 5. 数组与高阶算子
 
-[`examples/05_arrays.cml`](examples/05_arrays.cml)：
+[`examples/05_arrays.cml`](../../../../../tutorial/examples/05_arrays.cml)：
 
 ```cml
 
@@ -302,7 +302,7 @@ item c
 
 ### 反例：`map` 的元素函数里不要放有状态的调用
 
-`map` 的各个元素之间**没有执行顺序的约定**。元素函数是纯的时候这无关紧要；一旦它调用了有状态的东西，结果就取决于哪个元素先算。[`examples/05_map_order.cml`](examples/05_map_order.cml) 用随机数发生器演示（`randint` 每调用一次，隐藏的状态前进一步）：
+`map` 的各个元素之间**没有执行顺序的约定**。元素函数是纯的时候这无关紧要；一旦它调用了有状态的东西，结果就取决于哪个元素先算。[`examples/05_map_order.cml`](../../../../../tutorial/examples/05_map_order.cml) 用随机数发生器演示（`randint` 每调用一次，隐藏的状态前进一步）：
 
 ```cml
 
@@ -346,7 +346,7 @@ func main(): int sync {
 
 在大多数语言里，语句一条接一条执行。在 Camel 里，默认情况下**求值由依赖驱动**：一个表达式被求值，是因为有人要用它的结果。互不依赖的表达式没有先后，可以并行。
 
-这带来一个推论：**在同步块之外，一个结果没人用的调用不会执行**，哪怕它有副作用。[`examples/06_unused_effect.cml`](examples/06_unused_effect.cml)：
+这带来一个推论：**在同步块之外，一个结果没人用的调用不会执行**，哪怕它有副作用。[`examples/06_unused_effect.cml`](../../../../../tutorial/examples/06_unused_effect.cml)：
 
 ```cml
 
@@ -382,7 +382,7 @@ help: Evaluation is driven by dependencies: outside a sync block an expression w
 
 ### 6.2 同步块
 
-写在块前的 `sync` 使它成为同步块：**它自己直接写着的**语句按书写顺序执行，相当于编译器在相邻的语句之间加了控制边。[`examples/06_sync_block.cml`](examples/06_sync_block.cml) 只把 `greet` 的函数体改成同步块：
+写在块前的 `sync` 使它成为同步块：**它自己直接写着的**语句按书写顺序执行，相当于编译器在相邻的语句之间加了控制边。[`examples/06_sync_block.cml`](../../../../../tutorial/examples/06_sync_block.cml) 只把 `greet` 的函数体改成同步块：
 
 <!-- camel-snippet: compile-only: the fence is the changed function only; the text block is the output of examples/06_sync_block.cml -->
 
@@ -400,7 +400,7 @@ hello from greet
 
 在同步块里调用什么、有没有副作用都无所谓，因为已经有顺序了。输入输出就写在同步块里。
 
-**同步块不向内继承。** 它只管自己直接写着的语句：写在里面的分支臂、循环体与嵌套块按它们自己的写法执行，要同步就在那里写 `sync`（[设计原则 3.4](../design-principles.cn.md#34-sync-块)）。这和上一节“函数的行为由它自己决定”是同一条规则，只是往内一层：
+**同步块不向内继承。** 它只管自己直接写着的语句：写在里面的分支臂、循环体与嵌套块按它们自己的写法执行，要同步就在那里写 `sync`（[设计原则 3.4](../../../../../design-principles.cn.md#34-sync-块)）。这和上一节“函数的行为由它自己决定”是同一条规则，只是往内一层：
 
 ```cml
 func f(c: bool): int sync {
@@ -413,7 +413,7 @@ func f(c: bool): int sync {
 
 ### 6.3 函数的行为由它自己决定
 
-`main` 的函数体是同步块，那它调用的函数里的 `println` 会执行吗？不会。函数编译成它自己的子图，调用只是把这个子图节点放进更大的图里，不改变它的结构。[`examples/06_callee_decides.cml`](examples/06_callee_decides.cml)：
+`main` 的函数体是同步块，那它调用的函数里的 `println` 会执行吗？不会。函数编译成它自己的子图，调用只是把这个子图节点放进更大的图里，不改变它的结构。[`examples/06_callee_decides.cml`](../../../../../tutorial/examples/06_callee_decides.cml)：
 
 ```cml
 
@@ -438,7 +438,7 @@ func main(): int sync {
 
 ### 6.4 `sync` 与函数体
 
-`sync` 写在**函数体**位置时（`func g(): int sync { ... }`），它修饰的是函数体那个块：块里的语句按书写顺序执行。不写 `sync` 的函数体不是同步块，里面 `println` 这类效果不执行（按依赖求值）。[`examples/06_sync_body.cml`](examples/06_sync_body.cml)：
+`sync` 写在**函数体**位置时（`func g(): int sync { ... }`），它修饰的是函数体那个块：块里的语句按书写顺序执行。不写 `sync` 的函数体不是同步块，里面 `println` 这类效果不执行（按依赖求值）。[`examples/06_sync_body.cml`](../../../../../tutorial/examples/06_sync_body.cml)：
 
 ```cml
 
@@ -467,7 +467,7 @@ g
 
 ### 6.5 `var`、引用与顺序
 
-Camel 里一切值按引用传递。形参前写 `var` 表示函数会修改它；修改就是写到调用方的那个变量上。把 `let` 传给 `var` 形参是编译期错误（[`examples/06_let_to_var.cml`](examples/06_let_to_var.cml)）：
+Camel 里一切值按引用传递。形参前写 `var` 表示函数会修改它；修改就是写到调用方的那个变量上。把 `let` 传给 `var` 形参是编译期错误（[`examples/06_let_to_var.cml`](../../../../../tutorial/examples/06_let_to_var.cml)）：
 
 ```text
 error[SemanticDiag::ImmutablePassedToVarParam]: 'k' is immutable and cannot be passed to a var parameter of 'bump'.
@@ -479,7 +479,7 @@ help: Only a variable declared with 'var' (or a var parameter) can be modified. 
       'var', or bind the new value to a new name.
 ```
 
-有了可变的变量，就有了顺序问题：读要排在哪次写之后？答案是同步块：写进同一个同步块的语句按书写顺序执行，所以两次写入与后面的读取有确定的先后。[`examples/06_var_order.cml`](examples/06_var_order.cml)：
+有了可变的变量，就有了顺序问题：读要排在哪次写之后？答案是同步块：写进同一个同步块的语句按书写顺序执行，所以两次写入与后面的读取有确定的先后。[`examples/06_var_order.cml`](../../../../../tutorial/examples/06_var_order.cml)：
 
 ```cml
 
@@ -514,7 +514,7 @@ func main(): int sync {
 
 ## 7. 闭包与函数值
 
-[`examples/07_closures.cml`](examples/07_closures.cml)：
+[`examples/07_closures.cml`](../../../../../tutorial/examples/07_closures.cml)：
 
 ```cml
 
@@ -559,7 +559,7 @@ func main(): int sync {
 
 ## 8. 泛型
 
-[`examples/08_generics.cml`](examples/08_generics.cml)：
+[`examples/08_generics.cml`](../../../../../tutorial/examples/08_generics.cml)：
 
 ```cml
 
@@ -666,7 +666,7 @@ error DivByZero: the divisor is zero
   - `match` 的 `case error e`（`e.kind`、`e.message`、`e.location`）与 `case v`。
 - 在图上，这三种写法都是一个分支，条件是值上的一位标记，与 `if` 是同一种结构。
 
-**错误与故障是两回事。** 除数为零、下标越界、递归过深是故障，不是错误值：程序带位置终止，`!!` 接不住。[`examples/09_fault.cml`](examples/09_fault.cml) 读 `xs[5]`：
+**错误与故障是两回事。** 除数为零、下标越界、递归过深是故障，不是错误值：程序带位置终止，`!!` 接不住。[`examples/09_fault.cml`](../../../../../tutorial/examples/09_fault.cml) 读 `xs[5]`：
 
 ```text
 before
@@ -682,7 +682,7 @@ help: Ensure the index is within the valid range of the collection.
 
 ## 10. 可空的值
 
-**`T?`** 的值要么是 `null`，要么是一个 `T`。[`examples/10_nullable.cml`](examples/10_nullable.cml)：
+**`T?`** 的值要么是 `null`，要么是一个 `T`。[`examples/10_nullable.cml`](../../../../../tutorial/examples/10_nullable.cml)：
 
 ```cml
 
@@ -722,7 +722,7 @@ null
 
 ## 11. 映射与集合
 
-`Map<K, V>` 与 `Set<T>` 是内建类型。没有专门的字面量：写一个数组，再用 `as` 转换。[`examples/11_collections.cml`](examples/11_collections.cml)：
+`Map<K, V>` 与 `Set<T>` 是内建类型。没有专门的字面量：写一个数组，再用 `as` 转换。[`examples/11_collections.cml`](../../../../../tutorial/examples/11_collections.cml)：
 
 ```cml
 
@@ -759,7 +759,7 @@ func main(): int sync {
 
 ## 12. 模块与标准库
 
-[`examples/shapes.cml`](examples/shapes.cml) 是一个库模块，用 `export` 标出对外可见的名字：
+[`examples/shapes.cml`](../../../../../tutorial/examples/shapes.cml) 是一个库模块，用 `export` 标出对外可见的名字：
 
 ```cml
 
@@ -776,7 +776,7 @@ export func area(w: float, h: float): float {
 }
 ```
 
-[`examples/12_modules.cml`](examples/12_modules.cml) 使用它和标准模块 `math`：
+[`examples/12_modules.cml`](../../../../../tutorial/examples/12_modules.cml) 使用它和标准模块 `math`：
 
 ```cml
 
@@ -804,7 +804,7 @@ func main(): int sync {
 
 ### 标准库
 
-随 Camel 提供的模块有 `str`（字符串）、`array`（数组）、`math`、`statistics`、`random`、`time`、`fs`、`json`、`process`、`env`、`re`、`hash`、`para`、`this`，张量一系的 `tensor`、`nn`、`autodiff`、`onnx`，以及嵌入 Python 的 `python`（[语言参考 5.2.1](../language/05_modules.md#521-随-camel-提供的模块)）。[标准库参考](../stdlib-reference.md)逐个列出前十四个模块的函数：签名、是否纯、失败时的行为、例子。[`examples/12_stdlib.cml`](examples/12_stdlib.cml)：
+随 Camel 提供的模块有 `str`（字符串）、`array`（数组）、`math`、`statistics`、`random`、`time`、`fs`、`json`、`process`、`env`、`re`、`hash`、`para`、`this`，张量一系的 `tensor`、`nn`、`autodiff`、`onnx`，以及嵌入 Python 的 `python`（[语言参考 5.2.1](../../../../../language/05_modules.md#521-随-camel-提供的模块)）。[标准库参考](../../../../../stdlib-reference.md)逐个列出前十四个模块的函数：签名、是否纯、失败时的行为、例子。[`examples/12_stdlib.cml`](../../../../../tutorial/examples/12_stdlib.cml)：
 
 ```cml
 
@@ -866,7 +866,7 @@ OPERATOR {"module":"str","name":"split","uri":"str:split","with":1,"norm":1,"pur
 
 ## 13. 看图
 
-到这里一直在说“函数是子图，调用是节点”。现在亲眼看一看。[`examples/13_graph.cml`](examples/13_graph.cml)：
+到这里一直在说“函数是子图，调用是节点”。现在亲眼看一看。[`examples/13_graph.cml`](../../../../../tutorial/examples/13_graph.cml)：
 
 ```cml
 
@@ -938,7 +938,7 @@ digraph GraphIR {
 
 ## 14. 换遍
 
-`std::rgir` 是一个**遍**。Camel 把编译、优化、执行、导出都建模为对图的变换，文件名后面写的就是要依次运行的遍。同一份源码，换一组遍，做不同的事。用 [`examples/14_passes.cml`](examples/14_passes.cml)：
+`std::rgir` 是一个**遍**。Camel 把编译、优化、执行、导出都建模为对图的变换，文件名后面写的就是要依次运行的遍。同一份源码，换一组遍，做不同的事。用 [`examples/14_passes.cml`](../../../../../tutorial/examples/14_passes.cml)：
 
 ```cml
 
@@ -998,7 +998,7 @@ camel docs/tutorial/examples/14_passes.cml --dump-after-each-pass snap std::opt:
 
 ## 15. 张量与模型的导出
 
-张量来自 `tensor` 模块。[`examples/15_tensor.cml`](examples/15_tensor.cml)：
+张量来自 `tensor` 模块。[`examples/15_tensor.cml`](../../../../../tutorial/examples/15_tensor.cml)：
 
 ```cml
 
@@ -1023,7 +1023,7 @@ func main(): int sync {
 [3, 2]
 ```
 
-**一个最小的模型。** Camel 程序的本来面目是只表达计算：`main` 就是模型，它的参数就是模型的输入。[`examples/15_model.cml`](examples/15_model.cml)：
+**一个最小的模型。** Camel 程序的本来面目是只表达计算：`main` 就是模型，它的参数就是模型的输入。[`examples/15_model.cml`](../../../../../tutorial/examples/15_model.cml)：
 
 ```cml
 
@@ -1037,7 +1037,7 @@ func main(x: f32[2, 3]): f32[..] {
 
 `main` 没有打印任何东西，也没有 `sync`：它是纯的。参数 `x` 的类型写明了元素类型与形状。
 
-**运行它**：参数的值从命令行给，张量来自 `.npy` 文件（[`examples/x.npy`](examples/x.npy) 是 `[[1, -2, 3], [-4, -5, 6]]`）；`main` 返回的值打印到标准输出：
+**运行它**：参数的值从命令行给，张量来自 `.npy` 文件（[`examples/x.npy`](../../../../../tutorial/examples/x.npy) 是 `[[1, -2, 3], [-4, -5, 6]]`）；`main` 返回的值打印到标准输出：
 
 ```bash
 camel docs/tutorial/examples/15_model.cml --arg x=docs/tutorial/examples/x.npy
@@ -1059,11 +1059,11 @@ onnx::export: wrote model.onnx
 
 得到的 `model.onnx` 有一个形状为 `[2, 3]` 的输入 `x` 和一个输出 `output`；用 ONNX Runtime 喂同一个 `x.npy`，得到同样的 `[[2.], [0.]]`。
 
-导出遍能翻译就翻译，翻译不了（程序里有打印、读文件等效应）就报错并指出位置。既要计时、打印又要导出的程序，改为在程序里调用 `onnx.export_model` 导出自己的某个函数（[cli.cn.md](../cli.cn.md)“以遍的形式导出 ONNX”）。
+导出遍能翻译就翻译，翻译不了（程序里有打印、读文件等效应）就报错并指出位置。既要计时、打印又要导出的程序，改为在程序里调用 `onnx.export_model` 导出自己的某个函数（[cli.cn.md](../../../../../cli.cn.md)“以遍的形式导出 ONNX”）。
 
 ## 16. 求梯度
 
-自动微分是建立在遍机制之上的库：`grad(f)` 把 `f` 的图改写成它的导数的图。`f` 的第一个 `with` 参数是被求导的权重，普通参数是数据。[`examples/16_grad.cml`](examples/16_grad.cml)：
+自动微分是建立在遍机制之上的库：`grad(f)` 把 `f` 的图改写成它的导数的图。`f` 的第一个 `with` 参数是被求导的权重，普通参数是数据。[`examples/16_grad.cml`](../../../../../tutorial/examples/16_grad.cml)：
 
 ```cml
 
@@ -1097,12 +1097,12 @@ camel docs/tutorial/examples/16_grad.cml std::macro
 - `with_grad(f)` 同时返回值和梯度。循环里推荐把变换先绑定一次，再带着权重调用：`let loss_with_grad = with_grad(loss)`，循环内 `let (l, g) = loss_with_grad<model>(x, y)`。
 - `grad` 是 macro 算子。流水线里的 `std::macro` 在运行之前就把它展开成导数的图，后面的优化遍可以继续优化这张图。这是这个库的前提，不是语言的约束。
 - 被求导的函数用 `let` 写成纯的数据流；梯度需要经过 `var` 的读写时会被直接拒绝。第一个 `with` 参数是 `var`、没有切向量，或函数没有 `with` 参数时，编译期以 `SemanticDiag::NotDifferentiable` 拒绝并说明原因。
-- 训练一步就是“梯度 + 更新”：模型的权重写成 `with` 参数，`grad(loss)<model>(x, y)` 对权重求导，`nn` 模块的 `sgd` 给出更新后的权重。完整的例子见 [`examples/ml/train_linear.cml`](../../examples/ml/train_linear.cml)。
+- 训练一步就是“梯度 + 更新”：模型的权重写成 `with` 参数，`grad(loss)<model>(x, y)` 对权重求导，`nn` 模块的 `sgd` 给出更新后的权重。完整的例子见 [`examples/ml/train_linear.cml`](../../../../../../examples/ml/train_linear.cml)。
 
 ## 接下来
 
-- [示例集](../../examples/README.cn.md)：按任务组织的短程序——JSON、文件、词频统计、排序、命令行工具、并行、仿真、训练。
+- [示例集](../../../../../../examples/README.cn.md)：按任务组织的短程序——JSON、文件、词频统计、排序、命令行工具、并行、仿真、训练。
 - [语言参考](../language/README.md)：每个构造的精确规则。
-- [标准库参考](../stdlib-reference.md)：每个模块的每个函数。
-- [命令行](../cli.cn.md)：全部选项、遍、诊断格式、资源上限；`camel --explain <诊断名>` 解释一条诊断。
-- [设计原则](../design-principles.cn.md)：语言为什么是这个样子。
+- [标准库参考](../../../../../stdlib-reference.md)：每个模块的每个函数。
+- [命令行](../../../../../cli.cn.md)：全部选项、遍、诊断格式、资源上限；`camel --explain <诊断名>` 解释一条诊断。
+- [设计原则](../../../../../design-principles.cn.md)：语言为什么是这个样子。

@@ -13,7 +13,7 @@ different thing.
 
 ## May be nothing: `T?`
 
-[`examples/07_nullable.cml`](examples/07_nullable.cml):
+[`examples/07_nullable.cml`](../../../../../tutorial/examples/07_nullable.cml):
 
 ```cml
 // T? may be null; open it with ?? or with match.
@@ -204,7 +204,7 @@ The line in `label` is the centre of this chapter: `text->parse_int->check_age->
 Division by zero, an index out of range and recursion that runs too deep are **faults**: the program stops, with a
 position, and `!!` cannot catch them. Here is `xs[5]` on a three-element array:
 
-[`examples/07_fault.cml`](examples/07_fault.cml):
+[`examples/07_fault.cml`](../../../../../tutorial/examples/07_fault.cml):
 
 ```cml
 // A fault is not an error value: reading past the end ends the program, with a position.
