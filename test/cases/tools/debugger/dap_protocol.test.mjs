@@ -4,7 +4,7 @@
 // disconnect on a program that never ends; the back ends that cannot be stopped run on one
 // that can, and say so; stopOnEntry; zero-based lines.
 
-import { runTest, check, checkEq, fixture, lineOf } from '../../../tools/debugger/client.mjs'
+import { runTest, check, checkEq, fixture, lineOf, lineWithoutCode, positionOf } from '../../../tools/debugger/client.mjs'
 
 const CALLS = fixture('calls.cml')
 const LOOP = fixture('loop_forever.cml')
@@ -76,7 +76,10 @@ await runTest(async (t) => {
             'a breakpoint in a file that is not part of the program is unverified, with the reason',
             r,
         )
-        r = await dap.request('setBreakpoints', { source: { path: CALLS }, breakpoints: [{ line: 2 }, { line: 9999 }] })
+        // The line inside the file is read from the fixture, not written here: the fixture's
+        // header has moved twice, and a line that had no code when this test was written now has
+        // the body of `double`. 9999 is past the end of any fixture this case uses.
+        r = await dap.request('setBreakpoints', { source: { path: CALLS }, breakpoints: [{ line: lineWithoutCode(CALLS) }, { line: 9999 }] })
         check(
             r.success && r.body.breakpoints.every((b) => b.verified === false && /No code on this line/.test(b.message)),
             'a breakpoint on a line without code is unverified, with the reason',
@@ -103,8 +106,15 @@ await runTest(async (t) => {
         const exited = await dap.waitEvent('exited')
         checkEq(exited?.body?.exitCode, 1, 'the session ends with exit code 1')
         check(await dap.waitEvent('terminated'), 'and terminated')
+        // The position is the fixture's own `missing_name`, read from the file: the fixture lost
+        // its module line, so the diagnostic that points at that name moved with it.
+        const missing = positionOf(BROKEN, 'missing_name')
+        const diagnostic = new RegExp(
+            'error\\[SemanticDiag::UnresolvedReference\\][\\s\\S]*missing_name[\\s\\S]*' +
+                `broken\\.cml:${missing.line}:${missing.column}`,
+        )
         check(
-            /error\[SemanticDiag::UnresolvedReference\].*missing_name[\s\S]*broken\.cml:4:13/.test(dap.outputOf('stdout')),
+            diagnostic.test(dap.outputOf('stdout')),
             'after the diagnostic of the compiler, with its position',
             dap.outputOf('stdout'),
         )
