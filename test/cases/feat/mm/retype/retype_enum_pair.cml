@@ -1,0 +1,28 @@
+/**
+ * A value and the pullback that goes with it, held as one tuple -- the shape a gradient step
+ * hands back. test::retype_enum rebuilds every graph with that tuple replaced by an `enum` whose
+ * one variant carries the same tuple, and changes nothing else: no node is added, removed or
+ * rewritten, and the branch that yields the pair on either arm, the JOIN that merges the two and
+ * the signature of the function that returns it all become the same enum type in one commit.
+ *
+ * The tuple literal is why the graph has a static area of the pair's type at all: the aggregates a
+ * program builds are kept as static templates. A rebuild may not put a new type over an object
+ * that keeps its class, so those entries keep the pair's type while every node is retyped -- which
+ * is what the pass reports as `statics_left`, and what the rewrite that replaces the constructor
+ * reconciles.
+ *
+ * The graph is dumped, not run: the values of a retyped graph are still the values of the old type
+ * (a tuple object where the type now says enum), and the runtime reads them as the type the graph
+ * declares. Building the variants and matching on them is the rewrite of the next step.
+ */
+type Pull = (float, (dy: float) => float)
+
+func make_pair(c: bool, x: float, f: (dy: float) => float): Pull {
+    if c then (x, f) else (x + 1.0, f)
+}
+
+func main(): int sync {
+    make_pair(true, 1.5, (dy: float): float => dy * 2.0)
+    println("pair made")
+    return 0
+}
