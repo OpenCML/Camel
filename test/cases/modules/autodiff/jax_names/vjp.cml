@@ -1,0 +1,18 @@
+/**
+ * `vjp` is JAX's reverse-mode transform for a result of any shape: it gives the result and the
+ * pullback. Camel's `vjp` today is the tag `#vjp(rule)`, the custom derivative of a declaration
+ * (JAX's `custom_vjp`), so there is no transform of that name and the call is refused.
+ *
+ * The call shape is the one the transform is expected to take; when it lands this case becomes the
+ * pair it writes here (docs/handover/reviews/questions-2026-10-30-jax.md).
+ */
+
+func square(x: float): float {
+    return x * x
+}
+
+func main(): int sync {
+    let (y, pull) = vjp(square)(2.0)
+    println('jax_vjp y={} pulled={}'->format<y, pull(1.0)>)
+    return 0
+}

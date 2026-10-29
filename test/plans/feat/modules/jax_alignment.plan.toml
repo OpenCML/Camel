@@ -1,0 +1,103 @@
+id = "modules.jax_alignment"
+order = 363
+tier = "fast"
+tags = ["feat", "modules", "autodiff", "jax"]
+
+# What the JAX-facing surface answers today, and what it does not answer yet.
+#
+# Two kinds of test are here on purpose:
+#
+#   * the part that already agrees with JAX, pinned with JAX's own examples (batching at a leading
+#     axis through `map`; `grad`/`with_grad` on `f(x) = x * x` at 2; `stop_gradient` cutting the
+#     derivative). These must stay green through any transform work: they are the numbers the
+#     alignment is measured against.
+#   * the names that are not values yet (`vmap`, `jvp`, `vjp`, `checkpoint`), pinned as refused with
+#     the diagnostic that names them. Each is the case that flips to a positive one when its
+#     transform lands; the flip is the proof of alignment, not a sentence in a document.
+#
+# docs/handover/reviews/questions-2026-10-30-jax.md holds the gap list, the split between naming
+# and semantics, and the assertions each absent name must satisfy once it exists.
+
+[[tests]]
+name = "batching.axis0"
+desc = "Batching at a leading axis through `map`, over the values JAX's `vmap` documentation uses: `[0.0, 1.0, 2.0]->map<(x) => x * x>` is `[0.0, 1.0, 4.0]`, and an array of structs is batched the same way (one array, its one axis, the result by position)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/jax_batching.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "jax_batching axis0\n[0.0, 1.0, 4.0]\njax_batching struct\n[2.0, 4.0, 6.0]\n"
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "derivatives.value_and_grad"
+desc = "The derivative surface JAX shares, on JAX's example: `f(x) = x * x` at 2 gives `grad = 4.0` and `with_grad = (4.0, 4.0)` (value first), and `stop_gradient` leaves `2x = 4.0` because the stopped branch has no derivative."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/jax_derivatives.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "jax_derivatives\n4.0\n(4.0, 4.0)\n4.0\n"
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "absent.vmap"
+desc = "`vmap` (JAX's batching transform) is not a value: the name resolves to nothing, so the call is refused and the diagnostic names it. The batching that exists is `map` (batching.axis0). When `vmap` lands this case flips to the batched function it writes."
+kind = "negative"
+case = "../../../cases/modules/autodiff/jax_names/vmap.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+expect_diagnostic_code = "0x0300000B"
+expect_output_contains = ["Unresolved reference: 'vmap'"]
+expect_output_not_contains = ["UnknownInternalError", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "absent.jvp"
+desc = "`jvp` (JAX's forward-mode transform) is not a value: forward mode exists only as the tag `#jvp(rule)` and its scalar rules, so the call is refused and the diagnostic names it. When the transform lands this case flips to `(4.0, 4.0)` at x = 2 along 1.0."
+kind = "negative"
+case = "../../../cases/modules/autodiff/jax_names/jvp.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+expect_diagnostic_code = "0x0300000B"
+expect_output_contains = ["Unresolved reference: 'jvp'"]
+expect_output_not_contains = ["UnknownInternalError", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "absent.vjp"
+desc = "`vjp` (JAX's reverse-mode transform for any result shape) is not a value: the name is the tag `#vjp(rule)`, the custom derivative of a declaration, so the call is refused and the diagnostic names it. When the transform lands this case flips to `(4.0, pullback)` with `pull(1.0) == 4.0`."
+kind = "negative"
+case = "../../../cases/modules/autodiff/jax_names/vjp.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+expect_diagnostic_code = "0x0300000B"
+expect_output_contains = ["Unresolved reference: 'vjp'"]
+expect_output_not_contains = ["UnknownInternalError", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "absent.checkpoint"
+desc = "`checkpoint` (JAX's recompute-in-backward transform, `remat`) is not a value: the word in this tree names the persistence module `ckpt`, so the call is refused and the diagnostic names it. When the transform lands this case flips to a function value that recomputes instead of saving."
+kind = "negative"
+case = "../../../cases/modules/autodiff/jax_names/checkpoint.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+expect_diagnostic_code = "0x0300000B"
+expect_output_contains = ["Unresolved reference: 'checkpoint'"]
+expect_output_not_contains = ["UnknownInternalError", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000

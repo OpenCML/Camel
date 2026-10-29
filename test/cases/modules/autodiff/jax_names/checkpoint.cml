@@ -1,0 +1,19 @@
+/**
+ * `checkpoint` is JAX's recompute-in-the-backward-pass transform (`remat`): the same values, with
+ * the annotated section recomputed instead of kept. Camel has no such transform, and the word
+ * "checkpoint" in this tree means the persistence module `ckpt` (stdlib/ckpt.cml), so the name is
+ * not a value and the call is refused.
+ *
+ * The call shape is the one the transform is expected to take; when it lands this case becomes the
+ * same function value it writes here (docs/handover/reviews/questions-2026-10-30-jax.md).
+ */
+
+func square(x: float): float {
+    return x * x
+}
+
+func main(): int sync {
+    let g = checkpoint(square)
+    println('jax_checkpoint g={}'->format<g(2.0)>)
+    return 0
+}

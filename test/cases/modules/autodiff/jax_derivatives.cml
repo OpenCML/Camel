@@ -1,0 +1,36 @@
+/**
+ * The derivative surface Camel already shares with JAX, on JAX's own example.
+ *
+ * `f(x) = x * x` at `x = 2` gives `4`; `jax.grad(f)(2.0)` is `4.0` and
+ * `jax.value_and_grad(f)(2.0)` is `(4.0, 4.0)` -- value first, gradient second. Camel's `grad` and
+ * `with_grad` answer the same numbers in the same order, with the differentiated value bound as
+ * the first `with` parameter (design principles 9.9) instead of JAX's first positional argument.
+ * `stop_gradient` cuts the derivative at the value it is given, as `jax.lax.stop_gradient` does:
+ * `d/dx (x*x + sg(10x))` is `2x`.
+ *
+ * `jvp`, `vjp` and a non-scalar result are not here: they are the transforms that do not exist yet
+ * (docs/handover/reviews/questions-2026-10-30-jax.md).
+ */
+
+import { grad, with_grad, stop_gradient } from autodiff
+
+with <x: float>
+func square(): float {
+    return x * x
+}
+
+with <x: float>
+func stopped(): float {
+    return x * x + stop_gradient(x * 10.0)
+}
+
+func main(): int sync {
+    let d = grad(square)<2.0>()
+    let vg = with_grad(square)<2.0>()
+    let ds = grad(stopped)<2.0>()
+    println('jax_derivatives')
+    println(d)
+    println(vg)
+    println(ds)
+    return 0
+}
