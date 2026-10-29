@@ -530,12 +530,31 @@ CastSafety ArrayType::castSafetyFrom(Type *sourceType) const {
 // The runtime half of the checked conversion: the shape is checked against the type the program
 // declared. After the tensor alias the array is where a numeric array states its shape, and these
 // diagnostics are its own: they say `the array has shape [2, 3]`, which is what the value is.
+//
+// A conversion that runs here can be Forbidden by the two types and still have to run. The types
+// compared are the ones the value and the target have now, and a pass may sharpen the source: a
+// call folded into the constant it returns, or a constant re-inferred at its exact type, turns the
+// `f32[..]` the program wrote into `f32[2, 3]`, so the `as f32[3, 2]` beside it converts a shape
+// that cannot fit. That conversion is the program's own and it fails when the program runs, with
+// the diagnostic below, exactly as it does without any pass (design principles 3.9: a conversion
+// that can only fail is neither folded away nor turned into a compile-time refusal; 5.4: the
+// conversion is where a shape is checked). So the question here is not "would the builder have
+// admitted these two types?" -- it answers that for the types the program wrote, and refuses them
+// there -- but "what does the value hold?", which every answer but Safe asks below.
 slot_t ArrayType::castSlotFrom(slot_t value, Type *sourceType) const {
+    ASSERT(sourceType != nullptr, "castSlotFrom source type is null");
     const CastSafety safety = castSafetyFrom(sourceType);
-    ASSERT(safety != CastSafety::Forbidden, "castSlotFrom only allowed when the cast is not forbidden");
     if (safety == CastSafety::Safe) {
         return value;
     }
+    // What every other answer needs is a value of a type a value can have: `Unsafe` is answered
+    // only for an array source, and no compiled value has a type that still holds the `Ref`
+    // placeholder (design principles 5.1, 5.2). A source of another kind is one the builder
+    // refused while reading the program, and its slot is not one this check can read.
+    ASSERT(
+        resolved() && sourceType->code() == TypeCode::Array &&
+            static_cast<const ArrayType *>(sourceType)->resolved(),
+        "an array converts from a resolved array type");
     auto *array      = camel::core::rtdata::fromSlot<Array *>(value);
     const auto refuse = [&](const std::string &what) {
         camel::core::error::throwRuntimeFault(
