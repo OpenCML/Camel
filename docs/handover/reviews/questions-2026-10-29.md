@@ -138,3 +138,11 @@
 - 图上的样子（`std::opt::inline std::gir`）：`through_assignment` 区域里语句链是 **`N1E(:var/get) -> N23(:io/println) -> N25(GATE) -> EXIT`**，而先于 `println` 写的赋值 `N20(:op/assn_l)` 只剩 `N1E -> N20 [ORDER]`、`N20 -> N22` 这样的**顺序边与数据边，没有同步后继**。也就是说链的**入口锚在一次读上，而不是前一条语句**，赋值语句整条掉出链；两种边都在时那批控制边还替它把执行撑着，同步边独存时这个效应就不可达了。
 - **位置**：内联器把调用者的链位交给函数体时的写侧交接（`closeChainOver`/`handChainPlaceTo`、`src/runtime/draft_inline.cpp:1652` 那处 `setSyncInputs`），与 `edges.cn.md` 5.7（从链上前一条语句向函数体里每个效应节点连边，再从它们连向后一条）一致的方向。
 - **一个最小的两函数例子在主机上复现不出来**（`var a = 1; let b = a; a = 2; return rep("t", a, b)` 内联后照常打印）——**这个用例的形状本身是证据的一部分：两个读同一版本、赋值夹在中间、读又作为实参传进一个 `sync` 函数**。不要为了"最小化"把它削到不复现。
+
+### 补记（同日）：丢的是「函数体没接回调用者的链」，不是「调用的链位写错」
+
+`std::opt::inline std::gir` 的图里**没有任何调用的节点**：全图只有一个 `CALL`（`N0111`，`main()` 本身），也没有 `FUNC` 节点——七个函数都已内联进 `main`，函数体各以同名子图（cluster）留着。所以前一条里「EXIT 只有 5 个等待者、7 条语句」不能按「调用语句丢了」读。
+
+**丢的是函数体与调用者链的连接**：`through_assignment` 子图的 `O05（EXIT）` 在全图**只出现一次**（`N25 -> O05`），**没有任何子图外的使用者，也没有任何等待者**。子图内部链是完整的（`N1E -> N23 -> N25 -> O05`），但它既不被 `main` 的链等到、也不被谁用到，于是沿"从结果出发可达"这条规则整个子图不执行。两种边都在时，接上它的正是 `draft_inline.cpp:2213-2248` 那块里 `nameControlPair` 与 `setSyncInputs` **并写的那条控制边**；同步边那一半在探针态没有写出来。
+
+**位置**：`src/runtime/draft_inline.cpp:2213-2248`，整块的前提是 `bodyHasChain && !placePreds.empty()`，`placePreds` 取 `callSyncInputs`、空了再退到 `ctrlPreds`。`O05` 连一个同步等待者都没有，说明这次拼接里 `callSyncUsers` 也是空的——**也就是说那条调用语句在探针态根本没有链位**（既无同步前驱也无同步后继）。所以问题不在内联器怎么交接，而在**建图时那条调用语句的链位是怎么写的**：`writeSyncStatement` 之外必有一处只写控制边的链位写入点，落在 18 处建图点的 P3 写侧。
