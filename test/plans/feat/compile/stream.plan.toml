@@ -968,3 +968,15 @@ expect_stdout_exact = "56\n1234\n10\n-10\n5\n"
 expect_output_not_contains = ["[Error]", "[Warn]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+[[tests]]
+name = "stream.generator_no_sync"
+desc = "A generator head without `sync`: what the body writes between two `yield`s is an effect like any other, and the program is told so rather than the write quietly taking place or quietly going away."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_no_sync.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "5\n"
+expect_output_not_contains = ["[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
