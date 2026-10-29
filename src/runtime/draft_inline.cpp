@@ -573,7 +573,8 @@ bool insideBranchArm(const GraphDraft &draft, gc_node_ref_t id) {
 }
 
 std::vector<DraftFormalBinding> collectDirectFuncSpecializations(
-    const GraphDraft &draft, gc_node_ref_t funcNodeId, const GCGraph *calleeGraph) {
+    const GraphDraft &draft, gc_node_ref_t funcNodeId, const GCGraph *calleeGraph,
+    bool functionValuesOnly) {
     std::vector<DraftFormalBinding> bindings;
     if (!calleeGraph) {
         return bindings;
@@ -607,6 +608,25 @@ std::vector<DraftFormalBinding> collectDirectFuncSpecializations(
 
     for (size_t i = 0; i < formals.size(); ++i) {
         DraftStaticValue staticValue = tryResolveStaticValue(draft, actualInputs[i]);
+        if (functionValuesOnly) {
+            // The copy is this same function with one parameter already known, so the one binding
+            // that is made is the function value a function-typed parameter holds. Nothing else is
+            // bound, not a constant (that unrolls a recursion, a rewrite with a budget of its own)
+            // and not a refined parameter type (that re-infers the copy's types). A function value
+            // is not an object in the language's sense: it has no identity (design principles
+            // 5.2), so nothing observable can tell the copy from the call.
+            if (staticValue.valid() && staticValue.type->isGCTraced() &&
+                staticValue.type->code() == camel::core::type::TypeCode::Function) {
+                bindings.push_back(
+                    DraftFormalBinding{
+                        .kind         = formals[i].first,
+                        .index        = i,
+                        .formalNodeId = formals[i].second,
+                        .staticValue  = staticValue,
+                    });
+            }
+            continue;
+        }
         // An argument whose value is not bound (dynamic, or an object, see below) may still have a
         // type more precise than the parameter's (a tensor whose type carries its shape): then the
         // callee's types are specialized to it.
@@ -663,11 +683,24 @@ std::vector<DraftFormalBinding> collectDirectFuncSpecializations(
     // when the recursion's stop condition becomes constant, and then folding has already removed
     // the branch guarding the call. A call still guarded by a branch whose condition is not
     // constant would unroll forever: it gets type refinements only.
+    //
+    // A bound function value is not a constant the recursion can count down to: the call the copy
+    // makes is the same call, one function further along, and the specialization table answers the
+    // second lap with the copy of the first. So a function value may be bound here, and a call in
+    // a loop body or an arm keeps the one binding that turns its dispatch into a direct call.
     const bool bindsValues =
         std::ranges::any_of(bindings, [](const DraftFormalBinding &b) { return b.bindsValue(); });
     if (bindsValues && insideBranchArm(draft, funcNodeId) &&
         onCallCycle(*draft.program(), calleeGraph)) {
-        std::erase_if(bindings, [](const DraftFormalBinding &b) { return b.bindsValue(); });
+        // Only a constant (or an object) bound here unrolls, so only a call that binds one loses
+        // its value bindings.
+        const bool bindsOtherValues = std::ranges::any_of(bindings, [](const DraftFormalBinding &b) {
+            return b.bindsValue() && b.staticValue.type != nullptr &&
+                   b.staticValue.type->code() != camel::core::type::TypeCode::Function;
+        });
+        if (bindsOtherValues) {
+            std::erase_if(bindings, [](const DraftFormalBinding &b) { return b.bindsValue(); });
+        }
     }
     return bindings;
 }
@@ -975,7 +1008,8 @@ gc_node_ref_t resolveInlineCtrlExit(
 } // namespace
 
 bool specializeDirectFuncInDraft(
-    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId) {
+    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId,
+    bool functionValuesOnly) {
     const DraftNodeHeader *funcHeader = draft.header(funcNodeId);
     if (!funcHeader || funcHeader->kind != GCNodeKind::Func) {
         return false;
@@ -986,7 +1020,7 @@ bool specializeDirectFuncInDraft(
     }
 
     const std::vector<DraftFormalBinding> bindings =
-        collectDirectFuncSpecializations(draft, funcNodeId, calleeGraph);
+        collectDirectFuncSpecializations(draft, funcNodeId, calleeGraph, functionValuesOnly);
     CAMEL_LOG_INFO_S(
         "DraftOpt",
         "Specialize FUNC node {} callee='{}' bindings={}.",

@@ -1,0 +1,22 @@
+/**
+ * A function value that prints, passed through a higher-order function: the calls run in the order
+ * the program writes them and print once each, with and without the pass. A rewrite that changed
+ * which effects run, or their order, would show here.
+ */
+
+func apply(f: (x: int) => int, x: int): int sync {
+    return f(x)
+}
+
+func announce(x: int): int sync {
+    'EFFECT {}'->format<x>->println
+    return x * 10
+}
+
+func main(): int sync {
+    let a = apply(announce, 1)
+    let b = apply(announce, 2)
+    let c = apply((x: int) => x + 1, 3)
+    'EFFECTS a={} b={} c={}'->format<a, b, c>->println
+    return 0
+}
