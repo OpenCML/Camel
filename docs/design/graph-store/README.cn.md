@@ -246,3 +246,59 @@ export let simplify = [mul_one, add_assoc, fuse_map]
 10. 事务采用以图为单位、可串行化的乐观并发；并行组合子按固定顺序提交，结果确定（4.3.1）。
 11. 事实按需、增量地重算，结果不变则提前截断（4.4）。
 12. 快照与图版本由垃圾回收管理，取代引用计数与图管理器的手动释放（4.2）。
+
+---
+
+## 9. 开工计划
+
+第 1 节是 2026-10-19 施工前的调查，不是今天的形状：第 1 步的主体已经在这一版主干上，第 2 步的存储部分（32 位编号、分块、墓碑）、第 4 步（执行计划）与第 5 步的大部也已在。下面先按代码量一遍现状（数字都在，可复核），再写第 1 步剩下的那一处怎么做完，以及它给序列化留下什么。
+
+### 9.1 现状：三份构造收敛到一处
+
+| 项目 | 施工前的调查（第 1 节） | 现在（`src/` 实测） |
+|---|---|---|
+| 冻结图的构造点 | 3 处：前端旁路表建图 → 编码时第二份草稿 → 冻结图 | **1 处**：`GCGraphBuildAccess::constructInPlace`（`src/runtime/graph.cpp#GCGraphBuildAccess::constructInPlace`；`create` 只算字节再调它）。另有 `GCGraph::clone`（`src/runtime/graph.cpp#GCGraph::clone`）复制值头、共享块，不构造内容 |
+| 编码入口 | 前端与改写各有一套 | **1 个**：`encodeToRuntimeProgram`（`src/compile/gir/graph_encode.cpp#encodeToRuntimeProgram`），6 个调用点（`userdef.cpp` 1、`definitions.cpp` 2、`rule_templates.cpp` 3） |
+| 编辑用的图 | 前端旁路表 + 第二份草稿 | 前端与改写共用一份 `runtime::GraphDraft`（`include/camel/runtime/draft.h`），编码直接读它，"第二份草稿"不存在了 |
+| 以节点为键的旁路表 | 8 张，键是节点指针（第 1 节） | **4 张**，键是节点编号：`nodePortNames_`、`funcTargets_`、`drefTargets_`、`operTargets_`（`include/camel/compile/gir/draft_graph_builder.h#nodePortNames_`） |
+| 以图为键的地址表 | 图的身份就是 `GCGraph*` | **1 张**：`DebugMap::runtimeGraphOrigins_`，本轮删除（9.3） |
+
+三份构造于是收敛成"一份可编辑的图（草稿）+ 一次编码"，图的内容只在一处造（`constructInPlace`）。剩下的收敛是第 2 步的"前端在事务中直接建图、删掉草稿与旁路表"，它一次改动前端、内联、自动微分与全部后端，单独一步做不成独立的一步，排在第 1 步之后。
+
+### 9.2 第 1 步清单里已落地的部分（不再重复做）
+
+- **`GraphId`**（`4.4`）：每程序一个 `GraphIdAllocator`（`Context::graphIds()`，`include/camel/core/context/context.h#graphIds`），建图处取号：`src/compile/gir/builder.cpp#graphIds`、`src/compile/gir/builder_generics.cpp#graphIds`，改写造的新图由编码取新号（`src/compile/gir/graph_encode.cpp#setId`）。
+- **函数值持（快照，`GraphId`）**：`Function::program()` 与 `Function::graphId()`，取图走 `program->graph(id)`（`include/camel/core/rtdata/func.h#graphId`）。
+- **程序快照**：`Program`（`include/camel/runtime/program.h`），`GraphId → 该图的一个版本`；快照与图版本由 GC 管（`GCGraphManager`，`include/camel/runtime/graph.h#GCGraphManager`），不是引用计数——这是第 8 节第 12 条，第 7 节第 1 步括号里的"（引用计数）"已被它取代，代码取第 12 条。
+- **`stableId`、`lineage`、`serial` 退役**：`include/`、`src/`、`modules/` 里已无这三个名字。
+- **其余键也已按编号**：引用表按 `GraphId`（`GCGraph::refs()`）、事实库键为（`GraphId`，节点）（`include/camel/runtime/facts.h#entries_`）、特化表按 `GraphId`、GIR 的编号由 `GraphId` 推出（`src/passes/trans/json/gir_canonical.cpp#graphIdByValue_`）。
+
+### 9.3 第 1 步剩下的那一处：运行时图的源位置不再按地址查
+
+"这个运行时图是从哪段源码来的"曾经有两个来源：`DebugMap::graphOrigins_`（键是 `GraphId`）与 `DebugMap::runtimeGraphOrigins_`（键是 `GCGraph*` 的地址）。后者是每次安装程序时由 `Context::registerRuntimeGraphDebugInfo` 从前者拷进来的，只为让故障报告（`ExecutionSite` 手里只有 `GCGraph*`）查得到。这与第 4.4 节"`GraphId` 取代 `GCGraph*`"相反，代价有三条：
+
+1. **同一事实两处**：拷进地址表的值与编号表里的值随时可能不同（`cloneGirGraphDebugInfo` 改了编号表，地址表不会跟着改），故障报的行号因此可能是旧版本的。
+2. **过期与泄漏**：地址表只增不减，图版本被回收后条目还在；地址被后来的图复用时，那张图会读到别人的源位置。
+3. **序列化接不住**：写出去再读回来的程序，图的地址全变了，地址键一条也对不上；`GraphId` 键可以随冻结图块一起存、一起读。
+
+做法（`4.4` 的直接后果，不引入任何新形式）：
+
+- 删 `DebugMap::registerRuntimeGraphOrigin`、`DebugMap::runtimeGraphOrigin` 与 `runtimeGraphOrigins_`（`include/camel/core/source/manager.h`、`src/core/source/manager.cpp`）。
+- 删 `Context::registerRuntimeGraphDebugInfo` 与它的 4 个调用点（`materializeRuntimeProgram`、`installRuntimeProgram`、`adoptRuntimeProgram`、`installRuntimeProgramIfCurrent`）；它唯一做的事就是那次拷贝。调试器里同一个值的地址兜底（`tools/debugger/src/core/program_index.cpp`）一并删掉。
+- 两处查表改成按编号：`ExecutionSite` 的源位置由 `site.runtimeGraph->id()` 查 `DebugMap::graphOrigin(GraphId)`（`src/core/error/runtime.cpp` 的 `resolveOriginFromSite` 与 `makeGraphExecutionSite`）。
+
+判据与验收：
+
+1. **身份**：`include`、`src`、`modules` 里不再有以图为键的地址容器；图的身份只由 `GCGraph::id()` 给出，运行时与编译期查的是同一张 `GraphId → origin` 表。
+2. **输出逐字不变**：解释器 `std::nvm` 与另外三个后端（`std::fvm`、`std::jit`、`std::prl`）在同一批语料上的 stdout、退出码、诊断名、行、列不变——`feat/consistency/faults`、`feat/consistency/faults_optimized` 两张计划逐条比对这四个后端并且比位置，正是这条的守卫：把编号查表去掉（而不是把地址表换成它），这两张计划会红在"诊断没有位置"。
+3. **闸门**：`-Plan all -Tier fast -Jobs 8` 新红 0、`snapshot differs` 0；GIR 金标若变单独一笔重录并说明原因（本轮预期不变：`GraphId` 不进 DOT 文本——`src/passes/trans/dot/graphviz.cpp` 不读它——`gir_canonical` 的 `g0/g1` 由遍历顺序给出）。
+4. **没有过渡态**：不新增格式、不保留地址表、不留"以后再说"的分支；地址表与它的写入点是净删除。
+
+它给后续序列化留下的东西：一张按 `GraphId` 键的源位置表可以和图块写在一起、读回来仍然对得上（地址做不到）；而"图的内容只在一处造"（9.1）意味着冻结图块就是唯一的落盘形状——声明状态那一类产物直接写这个形状即可，不必先造一个临时格式再写第二遍。
+
+### 9.4 之后（不在本轮）
+
+1. 第 2 步剩下的那一半：前端在事务中直接建图，删掉 `GraphDraft` 与 9.1 那 4 张旁路表；此后"构造一遍"才真正成立。
+2. 第 3 步剩下的：程序级的引用索引（"谁调用、引用了某张图"；每图的使用者索引 `GCUseIndex` 与"只编码改过的图"已在，`src/runtime/draft_session.cpp` 的 `edited` 集合就是后者）。
+3. 第 5 步剩下的：内联来源的标注区域（3.3）。
+4. 冻结图块的写出与读回：在 9.2 的身份与 9.1 的单一构造之上，作为声明状态产物的载体。
