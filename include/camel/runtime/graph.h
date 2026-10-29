@@ -785,6 +785,11 @@ class GCGraph : public camel::core::rtdata::Object {
         }
         return std::pair{*from, *to};
     }
+    /// The two integers of the interval pair `intervalBoundsOf` reads, when a pass wrote that pair
+    /// as the constant holding the same two values instead of the FILL that builds it: the pair is
+    /// the value, not the form, so a loop's bounds are read the same from either. The first bound
+    /// first. Nothing when `ref` is not such a constant.
+    std::optional<std::pair<int64_t, int64_t>> intervalPairValuesOf(gc_node_ref_t ref) const;
     gc_node_ref_t matchedJoinOutputOf(gc_node_ref_t ref) const;
 
     /// The payload of node `ref` as a `Body` (see the payload structs above). The node must

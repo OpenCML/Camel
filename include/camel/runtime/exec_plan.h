@@ -69,15 +69,24 @@ struct ExecLoop {
     /// Where the elements come from (camel::core::LoopIterableForm). `false` (Array): the slot of
     /// `iterableSlot` holds the array, and the round takes its element at the round number.
     /// `true` (Interval): Norm input 0 is the pair of the interval's two bounds, and the round
-    /// takes `intervalFromSlot + round` while it is below `intervalToSlot`; no array of the
-    /// interval exists (`for i in a..b`: the compiler fuses it, design principles 4.2).
+    /// takes `intervalFrom + round` while it is below `intervalTo`; no array of the interval
+    /// exists (`for i in a..b`: the compiler fuses it, design principles 4.2).
     bool intervalIterates = false;
+    /// One bound of an interval iterable: the integer the rounds are taken from, and where the
+    /// plan has it. A bound the graph computes is read from its slot in the frame; one the graph
+    /// holds as a constant is that constant (the pair of bounds is a value, and a pass may write
+    /// it, or one of its two integers, as a constant instead of the FILL).
+    struct IntervalBound {
+        gc_data_idx_t slot = 0; // the frame slot of the bound, when !isConstant
+        int64_t value      = 0; // the constant, when isConstant
+        bool isConstant    = false;
+    };
     gc_data_idx_t stateSlot      = 0; // the slot of the LOOP node: the state, a tuple if it wraps
     gc_data_idx_t iterableSlot   = 0;
-    /// The two bound slots of an interval iterable (intervalIterates): the integers `from` and
-    /// `to` of the half-open interval [from, to).
-    gc_data_idx_t intervalFromSlot = 0;
-    gc_data_idx_t intervalToSlot   = 0;
+    /// The two bounds of an interval iterable (intervalIterates): the integers `from` and `to` of
+    /// the half-open interval [from, to).
+    IntervalBound intervalFrom;
+    IntervalBound intervalTo;
     gc_data_idx_t condResultSlot = 0;
     gc_data_idx_t bodyResultSlot = 0;
     /// The slot the rounds are counted in: the number of rounds done while the loop runs, -1 once

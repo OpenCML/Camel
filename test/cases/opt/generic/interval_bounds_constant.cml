@@ -1,0 +1,16 @@
+// A loop over an interval of constants does its rounds. The pair of integers a loop over `0..4`
+// iterates is a value: the front end builds it as a tuple FILL, and folding replaces that FILL by
+// the constant holding the same two integers. The loop is read the same from either writing of
+// the pair, so its four rounds print 0 1 2 3 and the state goes 0, 1, 2, 3, 4.
+func counted(): int sync {
+    let v = loop v = 0 for i in 0..4 do sync {
+        println('round', i)
+        v + 1
+    }
+    return v
+}
+
+func main(): int sync {
+    println('counted', counted())
+    return 0
+}
