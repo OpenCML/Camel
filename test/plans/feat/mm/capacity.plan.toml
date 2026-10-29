@@ -281,10 +281,10 @@ timeout_ms = 60000
 
 [[tests]]
 name = "capacity.fold_clone_limit"
-desc = "A constant the fold made is cloned once per graph the next commit encodes. With the block space at 24 MB one copy of 2,000,000 ints (15.3 MB) fits and two do not, so the commit exhausts the space while it clones the second and the run reports RuntimeDiag::MemoryExhausted and exits 1. The graphs that commit had bound and never built are given back as memory rather than destructed: the teardown used to dispatch through a vtable that was never written and took the process down after the diagnostic."
+desc = "A constant the fold made is cloned once per graph the next commit encodes. With the block space at 24 MB one copy of 2,000,000 ints (15.3 MB) fits and two do not, so the commit exhausts the space while it clones the second and the run reports RuntimeDiag::MemoryExhausted and exits 1. The graphs that commit had bound and never built are given back as memory rather than destructed: the teardown used to dispatch through a vtable that was never written and took the process down after the diagnostic. The case needs a folded constant large enough to be cloned, so it names the budget that admits one: constant_budget's default stays with the pass, and the premise holds whatever that default becomes."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_constant_clone_limit.cml"
-args = ["--block-limit", "24", "${case}", "std::opt", "std::jgir", "canonical=true"]
+args = ["--block-limit", "24", "${case}", "std::opt constant_budget=100000000", "std::jgir", "canonical=true"]
 expect_exit = 1
 expect_output_contains = ["RuntimeDiag::MemoryExhausted"]
 expect_output_not_contains = ["Segmentation fault", "core dumped"]

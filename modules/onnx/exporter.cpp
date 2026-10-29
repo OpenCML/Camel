@@ -4733,6 +4733,10 @@ OptimizeRewriteConfig exportRewriteConfig() {
     // large for the runtime representation fails at commit.
     config.growthBudget.nodes         = std::numeric_limits<size_t>::max();
     config.inlineConfig.maxOwnerNodes = std::numeric_limits<size_t>::max();
+    // The same for the size of a folded constant: a model's weights are constants the file has to
+    // hold anyway, so an export that had to leave a large one as a computation would refuse the
+    // program (constant_budget belongs to the pass on the pipeline, like growth_budget).
+    config.constantBudgetBytes = std::numeric_limits<size_t>::max();
     return config;
 }
 

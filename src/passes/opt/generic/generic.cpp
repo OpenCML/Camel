@@ -14,7 +14,9 @@
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/operator_traits.h"
+#include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/tags.h"
@@ -99,6 +101,113 @@ class StaticArgsView final : public ArgsView {
 bool holdsNoValue(slot_t value, type::Type *type) {
     return value == NullSlot && type != nullptr && type::isGCTraced(type->code()) &&
            type::asNullable(type) == nullptr;
+}
+
+/// What a constant's own shape costs on top of the bytes of its elements: the object header and
+/// the table of extents and strides an array carries, the header of a tuple, a struct or a string.
+/// Counted so that a value made of many small pieces is not free of charge.
+constexpr size_t kConstantShapeOverheadBytes = 4 * sizeof(slot_t);
+
+/// How deep the walk below follows a value's members. A constant that shares a member with itself
+/// (or a value whose contents this estimate does not know) ends here instead of walking forever.
+constexpr size_t kConstantEstimateDepth = 8;
+
+/**
+ * The bytes a value takes once it is a constant of the graph: its elements (count x element size)
+ * plus the shape that describes them (kConstantShapeOverheadBytes). Folding replaces a computation
+ * by the value it produces, so this is the compile-time memory that buys the run time; a value past
+ * the pass's budget is not worth it and stays the computation that builds it. The estimate stops
+ * once it passes `stopAt` -- the caller only asks whether the value fits, never how big it is --
+ * and so neither allocates nor walks a large value whole.
+ *
+ * It counts what the value occupies, not what it costs to build: an array of a hundred million
+ * `int` is 800 MB here, as it would be in the graph.
+ */
+size_t constantBytesOf(
+    slot_t value, const type::Type *type, size_t stopAt, size_t depth = 0) {
+    if (value == NullSlot || type == nullptr || !type::isGCTraced(type->code())) {
+        return sizeof(slot_t);
+    }
+    const auto *object = camel::core::rtdata::fromSlot<const camel::core::rtdata::Object *>(value);
+    if (object == nullptr || stopAt == 0 || depth >= kConstantEstimateDepth) {
+        return 0;
+    }
+    const auto fits = [&](size_t taken) { return taken < stopAt ? stopAt - taken : 0; };
+    size_t bytes    = kConstantShapeOverheadBytes;
+    switch (type->code()) {
+    case type::TypeCode::Array: {
+        const auto *array = static_cast<const Array *>(object);
+        // The elements, plus the extent and stride table the rank adds to the header.
+        bytes += sizeof(Array) + array->rank() * 2 * sizeof(int64_t) +
+                 array->byteSize();
+        // An element that is a reference is one slot, which the element bytes above already
+        // count; the objects the slots point at are counted here.
+        if (array->isSlots() && array->elemType() != nullptr &&
+            type::isGCTraced(array->elemType()->code())) {
+            for (uint64_t i = 0; i < array->numel() && bytes < stopAt; ++i) {
+                bytes += constantBytesOf(
+                    array->getSlot(i), array->elemType(), fits(bytes), depth + 1);
+            }
+        }
+        break;
+    }
+    case type::TypeCode::Tuple: {
+        const auto *tuple     = static_cast<const Tuple *>(object);
+        const auto *tupleType = static_cast<const type::TupleType *>(type);
+        bytes += sizeof(Tuple) + tuple->size() * sizeof(slot_t);
+        for (size_t i = 0; i < tuple->size() && i < tupleType->size() && bytes < stopAt; ++i) {
+            const type::Type *field = tupleType->typeAt(i);
+            if (field != nullptr && type::isGCTraced(field->code())) {
+                bytes += constantBytesOf(tuple->slotAt(i), field, fits(bytes), depth + 1);
+            }
+        }
+        break;
+    }
+    case type::TypeCode::Struct: {
+        const auto *record     = static_cast<const Struct *>(object);
+        const auto *structType = static_cast<const type::StructType *>(type);
+        bytes += sizeof(Struct) + record->size() * sizeof(slot_t);
+        for (size_t i = 0; i < record->size() && i < structType->size() && bytes < stopAt; ++i) {
+            const type::Type *field = structType->typeAt(i);
+            if (field != nullptr && type::isGCTraced(field->code())) {
+                bytes += constantBytesOf(record->slotAt(i), field, fits(bytes), depth + 1);
+            }
+        }
+        break;
+    }
+    case type::TypeCode::String: {
+        const auto *text = static_cast<const String *>(object);
+        bytes += sizeof(String) + text->size() + 1;
+        break;
+    }
+    case type::TypeCode::Complex64:
+    case type::TypeCode::Complex128: {
+        // Two parts, the wider of the two types: a number is not a container.
+        bytes += 2 * sizeof(double);
+        break;
+    }
+    default:
+        // A closure, a stream, an enumeration or a module type: this estimate does not know what
+        // its contents are, so it counts the header and not the members.
+        break;
+    }
+    return bytes;
+}
+
+/**
+ * Whether a folded value may be put into the graph as a constant. A value above the pass's
+ * `constant_budget` is left as the computation that builds it: not truncated and not refused, so
+ * the program means the same and runs the same, only with that computation still in it. A budget
+ * of 0 materializes nothing at all, like `growth_budget`'s 0 copying nothing.
+ *
+ * The question is asked after the operator ran, because its result's size is not known before: a
+ * value too large for the budget still costs the one allocation that built it (and, for an
+ * operator whose type does not carry the extents, the pass cannot know earlier). What the budget
+ * bounds is what the graph keeps, which is what the program would carry and what the export
+ * would write; the value itself is dropped here and collected as garbage.
+ */
+bool fitsConstantBudget(slot_t value, type::Type *type, size_t budget) {
+    return constantBytesOf(value, type, budget) < budget;
 }
 
 /// Static DATA, seen through GATEs or a JOIN whose arms all forward the same scalar bits.
@@ -679,7 +788,7 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
 }
 
 /// Replaces an element access on a constant tuple or struct by the element's value.
-bool foldStaticAccess(GraphDraft &draft, gc_node_ref_t id) {
+bool foldStaticAccess(GraphDraft &draft, gc_node_ref_t id, size_t constantBudget) {
     const auto sources = draft.normInputsOf(id);
     if (sources.size() != 1) {
         return false;
@@ -710,6 +819,9 @@ bool foldStaticAccess(GraphDraft &draft, gc_node_ref_t id) {
     if (holdsNoValue(value, result)) {
         return false;
     }
+    if (!fitsConstantBudget(value, result, constantBudget)) {
+        return false; // the element is a value of its own, and one too large to hold
+    }
     // The element is reachable from the constant it was read from, which the graph keeps.
     replaceFoldResult(draft, id, draft.materializeStaticValue(value, result));
     return true;
@@ -717,7 +829,8 @@ bool foldStaticAccess(GraphDraft &draft, gc_node_ref_t id) {
 
 /// Replaces a FILL whose template and values are all constants by the object it builds.
 bool foldStaticFill(
-    GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots) {
+    GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots,
+    size_t constantBudget) {
     const auto sources = draft.normInputsOf(id);
     type::Type *result = draft.header(id)->dataType;
     if (sources.size() != 1 || !result || !type::isGCTraced(result->code())) {
@@ -740,6 +853,14 @@ bool foldStaticFill(
         }
         slots.push_back(value->first);
     }
+    // The template carries the shape of the object the fill builds, and its own type is the one
+    // that describes that shape, so its size is the size the constant would have. One above the
+    // budget is not made at all: folding buys run time with compile-time memory, which a value
+    // this large does not repay.
+    if (!fitsConstantBudget(source->first, source->second ? source->second : result,
+                            constantBudget)) {
+        return false;
+    }
     auto *object = camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(source->first)
                        ->clone(camel::core::mm::autoSpace(), result, false);
     // Keep the object alive until commit moves it into the graph's static area.
@@ -761,7 +882,8 @@ bool foldStaticFill(
  * graph, to fail with its own located error when the program runs.
  */
 bool foldStaticCast(
-    GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots) {
+    GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots,
+    size_t constantBudget) {
     const auto sources = draft.normInputsOf(id);
     type::Type *target = draft.header(id)->dataType;
     if (sources.size() != 1 || !target || !draft.withInputsOf(id).empty()) {
@@ -769,6 +891,11 @@ bool foldStaticCast(
     }
     const auto source = staticValueOf(draft, sources[0]);
     if (!source || !source->second) {
+        return false;
+    }
+    // A conversion of a value above the budget is not made: the conversion of a large array copies
+    // it, and the copy is a constant as large as the source.
+    if (!fitsConstantBudget(source->first, source->second, constantBudget)) {
         return false;
     }
     const type::CastSafety safety = target->castSafetyFrom(source->second);
@@ -801,6 +928,10 @@ bool foldStaticCast(
     } catch (...) {
         return false; // the conversion fails: left to be reported when the program runs
     }
+    if (type::isGCTraced(target->code()) && result != NullSlot && result != source->first &&
+        !fitsConstantBudget(result, target, constantBudget)) {
+        return false; // the conversion succeeded but its value is too large to hold
+    }
     if (type::isGCTraced(target->code()) && result != NullSlot && result != source->first) {
         // Keep a value the conversion made alive until commit moves it into the static area.
         roots.emplace_back(
@@ -817,7 +948,8 @@ bool foldStaticCast(
 /// Replaces a pure operator by the constant its argument types fix, through the operator's
 /// registered type folder. Returns false when there is none or the types do not fix the result.
 bool foldFromTypes(
-    GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots) {
+    GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots,
+    size_t constantBudget) {
     const auto *folder     = camel::core::OperatorTable::instance().typeFolder(operIdOf(draft, id));
     type::Type *resultType = draft.header(id)->dataType;
     // The arguments as the operator's kernel reads them (with-arguments after the ordinary ones
@@ -840,6 +972,9 @@ bool foldFromTypes(
     const auto result = (*folder)(types, statics, camel::core::mm::autoSpace());
     if (!result || holdsNoValue(*result, resultType)) {
         return false;
+    }
+    if (!fitsConstantBudget(*result, resultType, constantBudget)) {
+        return false; // the value is above the budget: the computation that builds it stays
     }
     if (type::isGCTraced(resultType->code()) && *result != NullSlot) {
         // Keep the value alive until commit moves it into the graph's static area.
@@ -891,7 +1026,7 @@ std::vector<uint8_t> intervalPairs(const GraphDraft &draft) {
 
 size_t foldDraft(
     GraphDraft &draft, camel::core::context::Context &ctx,
-    std::deque<camel::core::mm::RootHandle> &roots) {
+    std::deque<camel::core::mm::RootHandle> &roots, size_t constantBudget) {
     const std::vector<uint8_t> intervalPair = intervalPairs(draft);
     size_t folded = 0;
     for (bool changed = true; changed;) {
@@ -914,7 +1049,7 @@ size_t foldDraft(
                     replaceFoldResult(draft, id, value);
                     ++folded;
                     changed = true;
-                } else if (foldStaticAccess(draft, id)) {
+                } else if (foldStaticAccess(draft, id, constantBudget)) {
                     ++folded;
                     changed = true;
                 }
@@ -925,7 +1060,7 @@ size_t foldDraft(
             if (const auto *h = draft.header(id);
                 h && h->kind == GCNodeKind::Fill && isFoldable(draft, id)) {
                 const bool pair = id < intervalPair.size() && intervalPair[id];
-                if (!pair && foldStaticFill(draft, id, roots)) {
+                if (!pair && foldStaticFill(draft, id, roots, constantBudget)) {
                     ++folded;
                     changed = true;
                 }
@@ -934,7 +1069,7 @@ size_t foldDraft(
             // A conversion of a constant is a constant, when the conversion succeeds.
             if (const auto *h = draft.header(id);
                 h && h->kind == GCNodeKind::Cast && isFoldable(draft, id)) {
-                if (foldStaticCast(draft, id, roots)) {
+                if (foldStaticCast(draft, id, roots, constantBudget)) {
                     ++folded;
                     changed = true;
                 }
@@ -954,7 +1089,7 @@ size_t foldDraft(
                 }
                 // Not all arguments are constants, but their types may fix the result (e.g. the
                 // shape of a tensor whose type carries it).
-                if (foldFromTypes(draft, id, roots)) {
+                if (foldFromTypes(draft, id, roots, constantBudget)) {
                     ++folded;
                     changed = true;
                 }
@@ -999,6 +1134,12 @@ size_t foldDraft(
             if (holdsNoValue(result, resultType)) {
                 // The lowering returned the zero slot for the case its tag does not select: no
                 // constant goes where the type promises an object (see holdsNoValue).
+                continue;
+            }
+            if (!fitsConstantBudget(result, resultType, constantBudget)) {
+                // The value is above what the pass may materialize: the computation that builds
+                // it stays in the graph (design principles 9.6). It is not truncated and not
+                // refused -- the program means the same, only less folded.
                 continue;
             }
             if (resultType && type::isGCTraced(resultType->code()) && result != NullSlot) {
@@ -1224,7 +1365,9 @@ ConstantFoldPass::apply(const camel::runtime::Program *program, std::ostream &) 
         context_,
         program,
         "std::opt::fold",
-        [&](GraphDraft &draft) { return foldDraft(draft, *context_, roots); },
+        [&](GraphDraft &draft) {
+            return foldDraft(draft, *context_, roots, constantBudgetBytes_);
+        },
         nullptr,
         nullptr,
         mayFold);
@@ -1300,7 +1443,9 @@ const camel::runtime::Program *simplifyGraph(
             context,
             program,
             "std::opt::fold",
-            [&](GraphDraft &draft) { return foldDraft(draft, *context, roots); },
+            [&](GraphDraft &draft) {
+                return foldDraft(draft, *context, roots, config.constantBudgetBytes);
+            },
             &folded,
             &memo,
             mayFold,

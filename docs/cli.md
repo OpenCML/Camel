@@ -211,6 +211,9 @@ with <
     /// Nodes specialization and inlining may copy before the remaining calls are left as calls;
     /// 0 stops them (design principles 9.6).
     growth_budget: int = 4096,
+    /// Bytes of constants folding may materialize in a graph: a value above it is left as the
+    /// computation that builds it (design principles 9.6); 0 materializes none.
+    constant_budget: int = 8388608,
     /// Test of the generic passes' screens: give the graphs they skip to the pass anyway and
     /// fail if it rewrites one.
     check_screens: bool = false
@@ -262,6 +265,7 @@ Settings of a pass are parameters:
 | `std::opt::dce` | `values_only: bool = false` (remove only the constants and pure operations that no node reads, not gates and syncs; the reference for passes that do the same, such as one written in Camel) |
 | `std::opt::algebra` | the rules library's pass (`rules::simplify`, or `rules::simplify strict=true` under `safe_fp`); `neutral_only: bool = false` applies only the integer neutral elements `x + 0`, `0 + x`, `x - 0`, `x * 1`, `1 * x`, not the merging of like terms and constant factors (a C++ reference mode with no library equivalent, for passes that do the same, such as one written in Camel) |
 | `std::opt`, `std::opt::inline` (and `::small` / `::arm` / `::hybrid`), `std::opt::specialize`, `std::opt::devirtualize` | `growth_budget: int = 4096` (nodes specialization and inlining may copy before the remaining calls are left as calls; 0 stops them; one budget for all rounds of `std::opt`) |
+| `std::opt`, `std::opt::fold` | `constant_budget: int = 8388608` (bytes of constants folding may materialize: an array counts its elements times the element size plus its shape, and a value above the budget is left as the computation that builds it — the program means the same, only less folded; 0 materializes none) |
 | `std::fvm`, `std::jit` | `stats: string = ""` (append per-graph bytecode and execution counts of the run to this file) |
 | `std::jit` | `hot_threshold: int = 1` (calls from one call site before a graph is compiled; 0 compiles at the first call). A graph that runs a loop of regions is compiled at its first call under the eager thresholds (0 and 1, the default): what makes it expensive is the rounds, which a call count cannot see; an explicit threshold above 1 keeps the call-count rule (so `hot_threshold=1000000000` still compiles nothing) |
 | `std::tf`, `std::prl` | `linear: bool = false` (evaluate node by node), `fanout_all: bool = false` (fan every unordered higher-order call out), `diag: bool = false` (print the decision for every graph), `bytecode: bool = true` (hand serial graphs to the bytecode interpreter), `gc_stats: int = 0` (1: statistics at the end of the run; 2: also one line per collection), `gc_stress: bool = false` (this run's work is the collection stress: serve every collection it asks for one for one, instead of the gate's pacing) |

@@ -359,6 +359,15 @@ std::string pathArgument(const PassArgs &args, const std::string &name) {
     return args.isNull(name) ? std::string() : args.getString(name);
 }
 
+/// The `constant_budget` parameter of the passes that fold (design principles 9.6): the bytes of
+/// constants folding may materialize in a graph. A negative value is read as 0, which
+/// materializes none of them, the way `growth_budget`'s 0 copies nothing. Its declaration is in
+/// stdlib/std.cml.
+size_t constantBudgetOf(const PassArgs &args) {
+    const int64_t bytes = args.getInt("constant_budget");
+    return bytes < 0 ? 0 : static_cast<size_t>(bytes);
+}
+
 PassMaker makeGraphVizPass(GraphVizDumpConfig config) {
     return [config](const context_ptr_t &ctx, const PassArgs &) {
         return std::make_unique<GraphVizDumpPass>(ctx, config);
@@ -379,9 +388,10 @@ template <class Pass, class... Args> PassMaker makePass(Args &&...args) {
 PassMaker optimizePass() {
     return [](const context_ptr_t &ctx, const PassArgs &args) {
         OptimizeRewriteConfig config;
-        config.safeFloatingPoint = args.getBool("safe_fp");
-        config.checkScreens      = args.getBool("check_screens");
-        config.growthBudget      = growthBudgetOf(args, "std::opt");
+        config.safeFloatingPoint   = args.getBool("safe_fp");
+        config.checkScreens        = args.getBool("check_screens");
+        config.growthBudget        = growthBudgetOf(args, "std::opt");
+        config.constantBudgetBytes = constantBudgetOf(args);
         return std::make_unique<OptimizeRewritePass>(ctx, config);
     };
 }
@@ -415,6 +425,13 @@ PassMaker devirtualizePass() {
 PassMaker extractPass() {
     return [](const context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<ExtractPass>(ctx, args.getString("cost"));
+    };
+}
+
+/// The fold pass on its own, with the same `constant_budget` the integrated pipeline reads.
+PassMaker foldPass() {
+    return [](const context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<ConstantFoldPass>(ctx, constantBudgetOf(args));
     };
 }
 
@@ -579,7 +596,7 @@ void registerCoreKernels() {
         "opt::hybrid", inlinePass(InlineTargetStrategy::Hybrid, "std::opt::inline::hybrid"));
     registerCoreKernel("opt::devirtualize", devirtualizePass());
     registerCoreKernel("opt::specialize", specializePass());
-    registerCoreKernel("opt::fold", makePass<ConstantFoldPass>());
+    registerCoreKernel("opt::fold", foldPass());
     registerCoreKernel("opt::algebra", algebraPass());
     registerCoreKernel("opt::saturate", saturatePass());
     registerCoreKernel("opt::extract", extractPass());
