@@ -517,6 +517,13 @@ class GraphDraft {
         ++mutations_;
         closureType_ = closureType;
     }
+    /// Gives the static area this layout, slot for slot; the values in `staticSlots()` stay as they
+    /// are. A rewrite that retypes what a constant stands for changes the layout here and not the
+    /// value (camel/runtime/retype.h), which is why the two are set apart.
+    void setStaticSlotTypes(std::span<camel::core::type::Type *const> slotTypes) {
+        ++mutations_;
+        staticSlotTypes_.assign(slotTypes.begin(), slotTypes.end());
+    }
 
     gc_node_ref_t addNode(const DraftNodeInit &init);
     gc_node_ref_t

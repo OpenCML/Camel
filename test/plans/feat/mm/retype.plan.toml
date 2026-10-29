@@ -1,0 +1,48 @@
+id = "mm.retype"
+order = 369
+tier = "fast"
+tags = ["feat", "mm", "graph", "retype", "backends"]
+desc = """
+A frozen graph's node types are written into the record when it is encoded (`GCNode::typeId`,
+from the draft's node type or from the slot the node reads), and its frame layout, function type
+and static-area layout are written beside it. Nothing of that is a column a pass can rewrite
+afterwards, and every graph that calls it, every reader that holds the version and the back end
+that laid out the frame were built for the type it has. Replacing a type is therefore a rebuild:
+decode the graph, change the types -- nodes, slot layouts, signature, closure and the form ports
+of the regions -- and commit it as a new version, leaving the old one for its readers
+(camel/runtime/retype.h).
+
+The two cases below are the primitive's acceptance. The first is the trivial substitution
+(`float` -> `int`, everything else unchanged) on four back ends, together with the proof that the
+rebuild adds nothing of its own: a rebuild under an empty substitution has to be recognized as
+the same content, and the graph the program was built from has to be exactly what it was. The
+second is the probe the defunctionalization step needs: a `(float, (float) => float)` pair -- a
+value and its pullback -- replaced by an `enum` with one variant carrying the same tuple, changing
+no node. What proves that swap is the commit's own validation: a JOIN and the arms that feed it, a
+function's signature and the call that reads it all have to be one type afterwards.
+"""
+
+[defaults]
+normalizers = ["normalize_newlines"]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
+timeout_ms = 60000
+
+[[tests]]
+name = "retype.float_to_int"
+desc = "Every `float` on every graph of the program becomes an `int` (test::retype_f64_i64), and the rebuilt program runs on the node VM, the bytecode VM, the JIT and the parallel scheduler. The pass prints what it checked: the graph count, the node and edge counts the program had, that no `float` is left anywhere in a node, a slot, a signature or a region's form ports, that a rebuild under an empty substitution is recognized as the same content and leaves the same version, and that the graph the program was built from still has the records and the types it had. What the program prints is a value the substitution does not touch, so all four back ends must print the bytes the program prints without the pass: the values of a retyped graph keep the representation of the old type until the rewrite that builds them, which is the limit the primitive documents."
+kind = "behavior"
+case = "../../../cases/feat/mm/retype/retype_trivial.cml"
+args = ["${case}", "test::retype_f64_i64", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["RETYPE identity_changed=0 identity_same_version=1", "RETYPE counts_same=1", "f64_after=0", "RETYPE source_unchanged=1", "retype kept the graph; printed value= 2"]
+
+[[tests]]
+name = "retype.enum_pair"
+desc = "The probe: the pair type `(float, (float) => float)` of the program is replaced by an enum with one variant carrying exactly that tuple (test::retype_enum), on every graph at once and without touching a node. The commit's validators are the proof -- the branch's two arms, the JOIN that merges them, the function's signature and the call that reads it all agree on the enum -- and the graph is then dumped rather than run. Two things the pass reports are why: the static area keeps the entries whose value is an object of the old type (`statics_left=2`: an aggregate the program builds is a static template, and a rebuild may not put a new type over an object that keeps its class), and a rebuilt graph cannot be run at all before the rewrite that builds and matches the variants, because the runtime reads its values as the type the graph now declares."
+kind = "behavior"
+case = "../../../cases/feat/mm/retype/retype_enum_pair.cml"
+args = ["${case}", "test::retype_enum", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["RETYPEENUM seal=ok", "arms_ok=1", "pair_after=0", "statics_left=2", "source_unchanged=1", "PullbackValue"]

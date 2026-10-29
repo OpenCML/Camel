@@ -38,6 +38,7 @@
 #include "camel/passes/test/exhaust_perm_space.h"
 #include "camel/passes/test/exec_plan.h"
 #include "camel/passes/test/regions.h"
+#include "camel/passes/test/retype.h"
 #include "camel/passes/test/arm_loop_regions.h"
 #include "camel/passes/test/loop_inputs.h"
 #include "camel/passes/trans/cml/cml.h"
@@ -939,6 +940,8 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kTagsTestPass, TagsTestPass),
         TEST_PASS(kImplBodyTestPass, ImplBodyTestPass),
         TEST_PASS(kChunksTestPass, ChunksTestPass),
+        TEST_PASS(kRetypeTrivialTestPass, RetypeTrivialTestPass),
+        TEST_PASS(kRetypeEnumTestPass, RetypeEnumTestPass),
         TEST_PASS(kEdgesCycleTestPass, EdgesCycleTestPass),
         TEST_PASS(kEdgesTypeTestPass, EdgesTypeTestPass),
         TEST_PASS(kEdgesOkTestPass, EdgesOkTestPass),
