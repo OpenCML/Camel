@@ -1,0 +1,23 @@
+/**
+ * The same write outside a sync block: a call that hands a callback writing a captured `var` to a
+ * parameter of function type is a write of that variable at the call, so it is reported the way
+ * any other such write is -- only a sync block orders it after the earlier uses of the variable
+ * (design principles 3.4). The write still happens, because the read after it needs it: the call
+ * is what the read takes its value from, and the value printed is the one the callback wrote.
+ */
+
+var counter = 0;
+
+func apply(f: (x: int) => void, v: int) {
+    f(v)
+}
+
+func add(x: int): int {
+    apply((y: int) => { counter = y }, x)
+    return counter
+}
+
+func main(): int sync {
+    println(add(3))
+    return 0
+}
