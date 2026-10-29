@@ -668,14 +668,13 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
         }
     }
     // Gates that waited only on the branch now wait on nothing; commit dissolves them.
-
-    // The arm's code is code of this block now (eraseNode re-parented its regions), and it was joined
-    // while it was still the arm's own block: what the block holds after the merge -- the arm's code,
-    // what stood before the branch, and the code a later prune moved in -- is joined again here, so
-    // that the statements the block gained stand on its chain instead of beside it (5.3, 2).
-    if (armTail != kInvalidNodeRef && draft.alive(armTail)) {
-        joinBlockFragments(draft, armTail);
-    }
+    //
+    // What is not done here: joining the block's fragments a second time, now that the arm's code is
+    // code of this block. Reading the fragments of a block the arm was just merged into takes the
+    // statements of a `var` that was captured and written in the same block for fragments of one
+    // chain, and joining them reorders writes the capture rules keep apart (`var_capture`,
+    // `captured_write_order`). The arm's fragments are joined above, where the block is still the
+    // arm's own and the statements are the arm's.
     return true;
 }
 
