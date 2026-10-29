@@ -1984,8 +1984,19 @@ DraftInlineResult inlineCallableInDraft(
     // body's statements are laid out and the data edges of the reads it holds are final: a read of a
     // captured `var` keeps the place its nearest write gave it, and the chain is joined around it
     // rather than taking the read with it (docs/design/effects/edges.cn.md 2, 5.6).
-    if (bodyHasChain && !callSyncInputs.empty() && draft.alive(bodyHead) &&
-        draft.alive(bodyTail)) {
+    //
+    // The place the call stood in is its `sync` predecessor, or -- while a block's chain is still
+    // carried as control edges beside the sync ones -- the control predecessor that names the same
+    // pair. A call written inside an arm has the entry the builder writes from the BRCH on its own
+    // side of the region, and the chain it stands in is the one the branch's place entered: without
+    // reading that place the body would be handed nothing to enter its chain from.
+    std::vector<gc_node_ref_t> placePreds = callSyncInputs;
+    std::vector<gc_node_ref_t> placeUsers  = callSyncUsers;
+    if (placePreds.empty()) {
+        placePreds = ctrlPreds;
+        placeUsers = callFollowers;
+    }
+    if (bodyHasChain && !placePreds.empty() && draft.alive(bodyHead) && draft.alive(bodyTail)) {
         const auto markStatement = [&](gc_node_ref_t node) {
             const DraftNodeHeader *header = draft.header(node);
             if (header != nullptr) {
@@ -2001,8 +2012,11 @@ DraftInlineResult inlineCallableInDraft(
         };
         // The statements written after the call follow the body's tail. `closeChainOver` closed the
         // chain over the call above, so they follow what the call followed until this takes that
-        // place back from it.
-        for (gc_node_ref_t user : callSyncUsers) {
+        // place back from it. They are read on the same side as the place above: a call that stands
+        // in its block by the control edge alone has its followers named by control edges too, and
+        // leaving them on the call's place would give that statement two sync users -- a chain that
+        // forks, which is no chain.
+        for (gc_node_ref_t user : placeUsers) {
             if (user == funcNodeId || !draft.alive(user) || user == bodyHead || user == bodyTail) {
                 continue;
             }
@@ -2013,7 +2027,7 @@ DraftInlineResult inlineCallableInDraft(
             nameControlPair(user, bodyTail);
         }
         // The body's head is written after the statement the call was written after.
-        const gc_node_ref_t callPred = callSyncInputs.front();
+        const gc_node_ref_t callPred = placePreds.front();
         if (callPred != bodyHead && callPred != bodyTail && draft.alive(callPred)) {
             markStatement(bodyHead);
             markStatement(callPred);
