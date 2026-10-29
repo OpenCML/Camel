@@ -135,3 +135,67 @@
 ## 催办（2026-10-29 23:40，决策者）
 
 51 分钟没有提交。表上进行中的程序变换（第 6 条）、去函数化（第 7 条）、graph-store v2（第 8 条）、删控制边（第 9 条，读侧已改完，接着删写侧与控制边本身）、GPU（第 12 条），各自把已经能过测试的一小步先提交。第 11 条（生成器）、第 14 条（对齐 JAX，先交计划）还没人接，哪一路收口就接上。
+
+## 第 11 条（生成器）：清点交上来，等一条裁定
+
+**在拿到裁定前，本条不产出代码**：按 2026-10-24 那次裁定（`questions-2026-10-24-evening.md` 的生成器两节），完整形态一次做完、半成品不进 develop，所以这里只交清点与一条提问。状态表第 11 条原来是**未开始**；五个状态值里没有"等裁定"，所以记**受阻**，备注写"等作者裁定：生成器捕获的 `var` 是单元还是按值"——不是"进行中"，也不是"已完成"。
+
+**现状三行**（在 `8d556cdb6` 上逐条读码，不引旧清点稿）：
+- **语言层有 `yield`**：关键字在 `include/camel/parse/syntax/token_kinds.def:50`，产生式 `retStmt : ('return' | 'yield') dataList` 在 `src/parse/syntax/parser.cpp:1250`，AST 的 `ExitType::Yield`、"`yield` 不能当名字"的负例、格式化器都在，语言参考 7.3.1 已写语法与恢复点。**缺的是"写 `yield` 的函数头必须是 `T..`"这条规则没有任何检查**，诊断注册表里也还没有 generator 条目；`yield` 写在 lambda 体里没有说法。
+- **编译层：整台状态机 0 行**。`yield` 走到 GCT 就按名字拒绝，没有活性分析、没有分段、没有状态结构体、没有步进函数。
+- **运行时一行不改**：流值就是 `() => (T, T..)?` 的普通函数值，状态活在捕获里；`for x in s` 已展开成既有的 `LOOP`，`unfold`、`tee`、线性检查都在。
+
+**两处过期信息，引用时按这里**：
+- 拒绝**不在** `src/compile/gir/builder.cpp:2164`：`git show` 读该文件为 **1661 行**（换行数加一，空行也算；`Measure-Object -Line` 读作 1610，因为它跳过 51 行空行——判断路径在不在用前者），没有这个位置。真正的拒绝在 `src/compile/gct/builder.cpp:2164`，是 `SemanticDiag::FeatureNotSupported`（`0x03000040`）里的 `'generators'`。
+- 锁着这个拒绝的用例是 `test/plans/feat/compile/stream.plan.toml:528` 的 `stream.yield_lowering_refused`。它转成正例（`count(3)` 产出 `0`、`1`、`2`）的那一刻，就是这台机器的验收。
+
+**要裁定的一句**：生成器状态里被闭包捕获的 `var`，是**单元**（3.5"闭包对变量的捕获也是引用"、3.3"每个 `var` 自动是一个资源"，跨拉取保持同一个），还是 5.4 字面的"结构体装局部变量"（按值）？两者不能同时按字面成立。判别例：
+
+```camel
+func g(): int.. {
+    var x = 0
+    let read = () => x
+    yield 0
+    x = 5
+    yield read()
+}
+```
+
+`read` 建在 `yield` 之前、`x` 写在它之后；下一拉 `read()` 必须是 `5`。请定"单元放进状态结构体"还是"单元作为循环携带的资源与结构体并排穿过机器"；状态打包与差分用例都照这一句写。落地顺序（供接这一条的一路用）：`count(3)` → `pairs(n)` 双层循环 → `match` 臂 → `sync` 里的打印序 → 提前停 → 可错元素，最后一笔才翻转上面那条用例与语言参考里"状态机还没有"那句。
+
+## 第 9 条施工记录：内联器在只有同步边的链上丢掉一个效应（`var_read_before_write.opt_nvm` 7 行里只剩 5 行）
+
+探针态（把 `writeSyncStatement` 里那一行 `linkNodes(LinkType::Ctrl, from, to)` 去掉）下量 `test/cases/linear/runtime/var_read_before_write.cml`：
+
+- `std::nvm` 与 `std::opt::dce|cse|order|saturate` 各遍都出齐全 7 行；**`std::opt::inline` 单独就只剩 5 行**——缺 `through_assignment` 的第二个 `int 2 1` 与 `after_the_write` 的 `after 2 2`。
+- 图上的样子（`std::opt::inline std::gir`）：`through_assignment` 区域里语句链是 **`N1E(:var/get) -> N23(:io/println) -> N25(GATE) -> EXIT`**，而先于 `println` 写的赋值 `N20(:op/assn_l)` 只剩 `N1E -> N20 [ORDER]`、`N20 -> N22` 这样的**顺序边与数据边，没有同步后继**。也就是说链的**入口锚在一次读上，而不是前一条语句**，赋值语句整条掉出链；两种边都在时那批控制边还替它把执行撑着，同步边独存时这个效应就不可达了。
+- **位置**：内联器把调用者的链位交给函数体时的写侧交接（`closeChainOver`/`handChainPlaceTo`、`src/runtime/draft_inline.cpp:1652` 那处 `setSyncInputs`），与 `edges.cn.md` 5.7（从链上前一条语句向函数体里每个效应节点连边，再从它们连向后一条）一致的方向。
+- **一个最小的两函数例子在主机上复现不出来**（`var a = 1; let b = a; a = 2; return rep("t", a, b)` 内联后照常打印）——**这个用例的形状本身是证据的一部分：两个读同一版本、赋值夹在中间、读又作为实参传进一个 `sync` 函数**。不要为了"最小化"把它削到不复现。
+
+### 补记（同日）：丢的是「函数体没接回调用者的链」，不是「调用的链位写错」
+
+`std::opt::inline std::gir` 的图里**没有任何调用的节点**：全图只有一个 `CALL`（`N0111`，`main()` 本身），也没有 `FUNC` 节点——七个函数都已内联进 `main`，函数体各以同名子图（cluster）留着。所以前一条里「EXIT 只有 5 个等待者、7 条语句」不能按「调用语句丢了」读。
+
+**丢的是函数体与调用者链的连接**：`through_assignment` 子图的 `O05（EXIT）` 在全图**只出现一次**（`N25 -> O05`），**没有任何子图外的使用者，也没有任何等待者**。子图内部链是完整的（`N1E -> N23 -> N25 -> O05`），但它既不被 `main` 的链等到、也不被谁用到，于是沿"从结果出发可达"这条规则整个子图不执行。两种边都在时，接上它的正是 `draft_inline.cpp:2213-2248` 那块里 `nameControlPair` 与 `setSyncInputs` **并写的那条控制边**；同步边那一半在探针态没有写出来。
+
+**位置**：`src/runtime/draft_inline.cpp:2213-2248`，整块的前提是 `bodyHasChain && !placePreds.empty()`，`placePreds` 取 `callSyncInputs`、空了再退到 `ctrlPreds`。`O05` 连一个同步等待者都没有，说明这次拼接里 `callSyncUsers` 也是空的——**也就是说那条调用语句在探针态根本没有链位**（既无同步前驱也无同步后继）。所以问题不在内联器怎么交接，而在**建图时那条调用语句的链位是怎么写的**：`writeSyncStatement` 之外必有一处只写控制边的链位写入点，落在 18 处建图点的 P3 写侧。
+
+### 补记再一条：这两例今天靠「内联拼接自己写的控制边」撑着
+
+`through_assignment`、`after_the_write` 里那条 `report(...)` 调用，在建图时**既没有同步边也没有控制边**：前一条链上节点是它自己的一个实参读，`chainEdgeSaysSomething`（`builder_helpers.h:552`，`linkCheek && !hasDirectDataDependency`）判成「说了也白说」，两种边一起跳过。它今天能跑，是因为**它的值就是所在函数的返回值**，沿数据边从结果可达；而**函数体的效应**靠的是内联拼接处 `nameControlPair`（`src/runtime/draft_inline.cpp:2221-2226`）**自己写的那条控制边**，同步那一半被 `placePreds.empty()` 的守卫跳过。
+
+所以这个缺陷藏到现在的原因清楚了：**两种边都在时，拼接处的控制边替它撑着**。第 2 块（删 `writeSyncStatement` 的 ctrl 行）的风险也**不在建图**——那一条这条调用本来就没有——**而在拼接处**。
+
+试过一处（未提交、已还原）：把 `builder_operators.cpp:4317` 的判据放成「前一条不是链上语句就照样写」，**永远不触发**（`chainedNodes_.contains(lastSyncedNode_)` 恒为真，快层 7767/fail 0 图不变）；放宽成「带效应就写」则**正常态 30 条红**（algebra_rules 10、camel_passes 9、gir 3 等），说明那个短路在别处是对的。**真正的跳过点在读的链位**（`builder_expr.cpp:1504-1527`：`var` 端口读自己成为 `lastSyncedNode_`），下一笔应改在那里。
+
+### 交作者：给「读了前一条语句的效应语句」补链位，会改执行结果
+
+`sync` 体的语句是一条链，链上的语句不该因为「值有来源」就退出链——所以 `chainEdgeSaysSomething`（`builder_helpers.h:552`）的数据依赖短路只该豁免纯值节点。试了这条修法（`nodeTakesAnOrder(to)` 直接为真），正常态快层红 30 条，**其中 3 条是行为变，不是图变**：
+
+1. `named_struct_types` —— **stdout 变了**：`Point{lit::record_2.x, lit::record_2.y}` 不再出现，即程序的输出变了；
+2. `element_assigned_append.in_place_form` —— 自检失败：`the take is the control dependency of the store, which is where the cell is read`；
+3. `var_argument_reads_the_nearest_write.the_edge_is_data` —— 自检失败：`and that write is not also a control input of the call`。
+
+其余 27 条只是图变（`algebra_rules` 10、`camel_passes` 9、`gir` 3、`boundaries` 2、`entering` 2、`sync.ctrl_dedup_snapshot` 1），其中 `algebra_rules` 与 `camel_passes` 那 19 条**比的是图不是结果**（`graph_equal.mjs`、`tables.mjs`、`pairs.mjs`、`algebra_graph_equal.mj`），所以要写清，免得被当成 19 条行为回归被放过。
+
+**要问作者的一句**：`sync` 体的链上语句，当它直接读前一条语句产出的值时，链上那条边该不该写？写了会让 `named_struct_types` 的输出变、让上面两条自检失去成立的前提；不写则 `report(...)` 这类调用在控制边删除后无处可达（P2 的 5/7 与 0 行）。这两者互斥，请裁定。
