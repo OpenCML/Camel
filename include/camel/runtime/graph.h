@@ -107,7 +107,8 @@ enum class GCNodeKind : uint8_t {
     Bind = 9, // reserved, see above
     Func = 10,
     Oper = 11,
-    Sync = 12,
+    // 12 was the SYNC node, deleted: a statement's place in its `sync` block is a sync edge, and
+    // the node it used to need is not part of the model (docs/design/effects/edges.cn.md 5.3).
     Gate = 13,
     Dref = 14, // build-time only, see above
     // A loop (design principles 3.10; docs/design/graph-model 3.5, the LOOP card):

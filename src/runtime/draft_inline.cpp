@@ -188,13 +188,14 @@ appendUniqueRefs(std::span<const gc_node_ref_t> lhs, std::span<const gc_node_ref
 }
 
 /// Kinds an entry root of an inlined body may have: every node that is not a value carrier.
-/// SYNC and GATE count. A callee that was itself inlined into (earlier in the same session, or
-/// by an earlier pass) starts with the entry SYNC of that splice, and its first operators wait
-/// on that SYNC: they have a non-constant input, so they are not roots themselves. Leaving the
-/// SYNC out made such a body have no root at all. The control predecessors of the call (the
-/// BRCH whose arm the call is, the statement before it) were then attached to the callee's
-/// recorded entry node only, and everything behind the SYNC ran whether the arm was taken or
-/// not, and before the statements it was written after.
+/// A GATE counts. A callee that was itself inlined into (earlier in the same session, or by an
+/// earlier pass) starts with the entry its splice wrote, which is the first statement of the
+/// body's code: its first operators wait on the predecessors the splice handed them, so they have
+/// a non-constant input and are not roots themselves. Leaving them out made such a body have no
+/// root at all. The control predecessors of the call (the BRCH whose arm the call is, the
+/// statement before it) were then attached to the callee's recorded entry node only, and the code
+/// behind that entry ran whether the arm was taken or not, and before the statements it was
+/// written after.
 bool isExecutableEntryKind(GCNodeKind kind) {
     switch (kind) {
     case GCNodeKind::Data:
@@ -1881,36 +1882,22 @@ DraftInlineResult inlineCallableInDraft(
         }
     }
 
-    // The entry roots take over the call's predecessors: directly when there is one root,
-    // through a SYNC when there are several. The roots are all there is to order: the
-    // parameter gates and the callee's recorded entry node are not entry points. (They used to
-    // stand in when a body had no root; nothing of such a body reads them, so the
-    // predecessors ended at nodes nothing followed.)
+    // The entry roots take over the call's predecessors: each of them waits on the predecessors
+    // itself. The roots are all there is to order: the parameter gates and the callee's recorded
+    // entry node are not entry points. (They used to stand in when a body had no root; nothing of
+    // such a body reads them, so the predecessors ended at nodes nothing followed.) A body with
+    // several roots used to get one SYNC node standing for the predecessors, which the model
+    // deletes (docs/design/effects/edges.cn.md 5.3): the wait is written on the roots themselves.
     std::vector<gc_node_ref_t> gateCtrl = waitPreds;
-    if (entryRoots.size() == 1) {
+    if (!entryRoots.empty()) {
         result.ctrlEntry = entryRoots.front();
-        const std::vector<gc_node_ref_t> mergedCtrlInputs =
-            appendUniqueRefs(draft.ctrlInputsOf(result.ctrlEntry), waitPreds);
-        draft.setCtrlInputs(result.ctrlEntry, mergedCtrlInputs);
-    } else if (entryRoots.size() > 1) {
-        DraftNodeInit syncInit{
-            .dataIndex    = 0,
-            .dataType     = nullptr,
-            .kind         = GCNodeKind::Sync,
-            .runtimeFlags = 0,
-            .ctrlInputs   = waitPreds,
-        };
-        result.ctrlEntry = draft.addNode(syncInit);
-        gateCtrl         = {result.ctrlEntry};
         for (gc_node_ref_t targetId : entryRoots) {
-            const std::vector<gc_node_ref_t> mergedCtrlInputs = appendUniqueRefs(
-                draft.ctrlInputsOf(targetId),
-                std::span<const gc_node_ref_t>(&result.ctrlEntry, 1));
+            const std::vector<gc_node_ref_t> mergedCtrlInputs =
+                appendUniqueRefs(draft.ctrlInputsOf(targetId), waitPreds);
             draft.setCtrlInputs(targetId, mergedCtrlInputs);
         }
     }
-    // A gate waits on the predecessors themselves, or on the SYNC that stands for them; never
-    // on an entry root, which may read the gate.
+    // A gate waits on the predecessors themselves; never on an entry root, which may read the gate.
     for (gc_node_ref_t gateId : parameterGates) {
         draft.setCtrlInputs(gateId, gateCtrl);
     }
@@ -2008,9 +1995,8 @@ DraftInlineResult inlineCallableInDraft(
     if (result.ctrlEntry == kInvalidNodeRef) {
         result.ctrlEntry = result.ctrlExit;
     }
-    // What the splice added around the body (the gates of the arguments, the SYNC of several
-    // entries, the bridge gate of the result) is where the body is: in the arm, or where the
-    // call was.
+    // What the splice added around the body (the gates of the arguments, the bridge gate of the
+    // result) is where the body is: in the arm, or where the call was.
     const uint32_t spliceRegion = intoArm ? inlineRegion : draft.nodeRegion(funcNodeId);
     for (gc_node_ref_t id = static_cast<gc_node_ref_t>(slotsBefore); id < draft.nodeSlotCount();
          ++id) {

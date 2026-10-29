@@ -1433,22 +1433,19 @@ size_t dceDraft(GraphDraft &draft, bool valuesOnly = false) {
                 changed = true;
                 continue;
             }
-            // A SYNC only joins control; replaceNode hands its predecessors to its users, which
-            // keeps every ordering it expressed.
             // A GATE only forwards its value once its control inputs ran. When no node reads the
-            // value it is a SYNC that also depends on a value, and it goes the same way: the
+            // value it is a wait that also depends on a value, and it goes the same way: the
             // nodes that wait on it wait on what it waited on instead (its control inputs and
             // the ordered nodes its value came from). Keeping such a GATE because other nodes
             // wait on it kept its value alive for nothing: a closure that is only called
             // through a branch stayed read by the dead GATE, and the export could not split
             // that call across the branch. A GATE that nothing uses at all stays when it is the
             // only way something it waits on reaches the exit.
-            const auto *h     = draft.header(id);
-            const bool isJoin = !valuesOnly && h && h->kind == GCNodeKind::Sync;
+            const auto *h          = draft.header(id);
             const bool isDeadGate =
                 !valuesOnly && h && h->kind == GCNodeKind::Gate &&
                 (!draft.ctrlUsersOf(id).empty() || gateInputsSurvive(draft, id));
-            if ((isDeadWhenUnread(draft, id) || isJoin || isDeadGate) && draft.normUsersOf(id).empty() &&
+            if ((isDeadWhenUnread(draft, id) || isDeadGate) && draft.normUsersOf(id).empty() &&
                 draft.withUsersOf(id).empty() && isReplaceable(draft, id)) {
                 replaceNode(draft, id, kInvalidNodeRef);
                 ++removed;

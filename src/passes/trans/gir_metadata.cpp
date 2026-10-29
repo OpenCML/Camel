@@ -146,8 +146,6 @@ string recordLabel(
             graph->nodePayloadBytes(nodeRef).size() >= sizeof(camel::runtime::GCOperBody),
             "GraphViz OPER payload is smaller than its fixed header.");
         return std::string(graph->nodeBodyAs<camel::runtime::GCOperBody>(nodeRef)->uri());
-    case camel::runtime::GCNodeKind::Sync:
-        return "SYNC";
     case camel::runtime::GCNodeKind::Gate:
         return "GATE";
     case camel::runtime::GCNodeKind::Loop: {
@@ -184,8 +182,6 @@ string recordType(const camel::runtime::GCNode &record) {
         return "FUNC";
     case camel::runtime::GCNodeKind::Oper:
         return "OPER";
-    case camel::runtime::GCNodeKind::Sync:
-        return "SYNC";
     case camel::runtime::GCNodeKind::Gate:
         return "GATE";
     case camel::runtime::GCNodeKind::Loop:

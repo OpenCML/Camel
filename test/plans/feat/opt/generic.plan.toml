@@ -1264,7 +1264,7 @@ verify_script = """
 const out = input.normalized.stdout + input.normalized.stderr
 assert(out.includes('"stage":"pass:test::leak_branch_arm"'), `stage missing: ${out}`)
 assert(out.includes('"name":"RuntimeDiag::PassInternalError"'), `name missing: ${out}`)
-assert(/Runtime graph 'main' breaks the branch-arm invariant: SYNC \d+ runs between BRCH \d+ and its JOIN \d+ and belongs to no arm/.test(out), `reason missing: ${out}`)
+assert(/Runtime graph 'main' breaks the branch-arm invariant: [A-Z]+ \d+ runs between BRCH \d+ and its JOIN \d+ and belongs to no arm/.test(out), `reason missing: ${out}`)
 assert(!out.includes('main start'), `the program ran: ${out}`)
 }
 """

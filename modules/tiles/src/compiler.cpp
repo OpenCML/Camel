@@ -538,10 +538,6 @@ class Compiler {
                 if (!ins.empty())
                     out = eval(f, ins.front());
                 break;
-            case rt::GCNodeKind::Sync:
-                for (auto in : ins)
-                    out = eval(f, in);
-                break;
             case rt::GCNodeKind::Brch:
                 if (!g->withInputsOf(id).empty())
                     throw UnsupportedComputation("tiles match lowering is not implemented");

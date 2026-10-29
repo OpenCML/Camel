@@ -1036,7 +1036,6 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
 
         case GCNodeKind::Data:
         case GCNodeKind::Port:
-        case GCNodeKind::Sync:
         case GCNodeKind::Gate:
             break;
 

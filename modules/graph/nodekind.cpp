@@ -26,7 +26,6 @@ constexpr std::pair<GCNodeKind, const char *> kNodeKinds[] = {
     {GCNodeKind::Call, "Call"},
     {GCNodeKind::Func, "Func"},
     {GCNodeKind::Oper, "Oper"},
-    {GCNodeKind::Sync, "Sync"},
     {GCNodeKind::Gate, "Gate"},
     {GCNodeKind::Loop, "Loop"},
 };
@@ -63,7 +62,6 @@ std::optional<uint32_t> nodeKindTag(GCNodeKind kind) {
     case GCNodeKind::Call:
     case GCNodeKind::Func:
     case GCNodeKind::Oper:
-    case GCNodeKind::Sync:
     case GCNodeKind::Gate:
     case GCNodeKind::Loop:
         for (uint32_t i = 0; i < std::size(kNodeKinds); ++i) {

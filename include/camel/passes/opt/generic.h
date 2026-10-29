@@ -13,7 +13,7 @@
  *                   inputs;
  *   std::opt::algebra combines local scalar arithmetic, with optional safe_fp mode;
  *   std::opt::dce   removes pure operator (and value-only) nodes whose results
- *                   are unused, SYNC control joins, and GATEs used only for control;
+ *                   are unused, and GATEs used only for control;
  *                   also bypasses non-anchor GATEs by transferring waits to mandatory users,
  *                   within an edge-growth budget;
  *                   their ordering is transferred to their control users.

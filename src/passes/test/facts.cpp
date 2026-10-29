@@ -15,7 +15,11 @@
 #include "camel/runtime/fact_persist.h"
 #include "camel/runtime/facts.h"
 #include "camel/runtime/reachable.h"
+#include "camel/passes/test/anchor.h"
 #include "execute/camel_pass.h"
+
+using camel::passes::test::anchorNode;
+using camel::passes::test::blankNode;
 
 #include <algorithm>
 #include <chrono>
@@ -657,7 +661,7 @@ FactNodeTestPass::apply(const camel::runtime::Program *program, std::ostream &os
 
     // A node more at the end of the root: its revision changes, the record of `kept` does not.
     RuntimeGraphDraftSession session(context_, program);
-    (void)session.edit(root).addSyncNode();
+    (void)blankNode(session.edit(root));
     const camel::runtime::Program *grown = session.commit();
     GCGraph *grownRoot                   = grown->root();
     const Anchor grownAnchor{grown, grownRoot, kept};

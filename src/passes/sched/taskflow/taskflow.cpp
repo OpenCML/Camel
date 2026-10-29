@@ -756,7 +756,7 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
     const uint32_t anchorPos = plan.anchorOk && plan.lastNode < blocks ? pos[plan.lastNode] : kNo;
 
     const auto isElided = [](GCNodeKind kind) {
-        return kind == GCNodeKind::Data || kind == GCNodeKind::Port || kind == GCNodeKind::Sync;
+        return kind == GCNodeKind::Data || kind == GCNodeKind::Port;
     };
 
     // Where each executable node lives: its scope and its item there. BRCH and JOIN map to the
@@ -1559,7 +1559,6 @@ void TaskflowExecSchedPass::runLinearBody(
             break;
         case GCNodeKind::Data:
         case GCNodeKind::Port:
-        case GCNodeKind::Sync:
             break;
         case GCNodeKind::Loop:
             // The rounds ran at the events of the plan; the state is the value.
@@ -1792,7 +1791,6 @@ slot_t TaskflowExecSchedPass::executeLinearNode(
     switch (node->kind) {
     case GCNodeKind::Data:
     case GCNodeKind::Port:
-    case GCNodeKind::Sync:
         return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
 
     case GCNodeKind::Join: {
@@ -2154,7 +2152,6 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
     switch (node->kind) {
     case GCNodeKind::Data:
     case GCNodeKind::Port:
-    case GCNodeKind::Sync:
         return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
 
     case GCNodeKind::Join: {
@@ -2380,9 +2377,6 @@ void TaskflowExecSchedPass::buildRuntimeNodeTasks(
             break;
         case GCNodeKind::Oper:
             task = buildOperTask(flowLike, graph, nodeRef, frame);
-            break;
-        case GCNodeKind::Sync:
-            task = flowLike.emplace([]() {}).name("SYNC");
             break;
         case GCNodeKind::Gate:
             task = flowLike

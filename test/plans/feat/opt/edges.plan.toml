@@ -24,7 +24,7 @@ expect_output_not_contains = ["refused"]
 
 [[tests]]
 name = "cycle_is_refused"
-desc = "Two SYNC nodes that wait on each other form a cycle of control inputs; the commit names the cycle."
+desc = "Two nodes that wait on each other form a cycle of control inputs; the commit names the cycle."
 args = ["${case}", "test::edges_cycle"]
 expect_stdout_contains = ["EDGES refused", "lies on a cycle of inputs"]
 
@@ -57,7 +57,7 @@ expect_stdout_contains = ["ORDER wrote=11", "EDGES accepted", "ORDER ordered_pai
 
 [[tests]]
 name = "order_edges_survive_a_removed_node"
-desc = "Removing a node keeps the ordering that passed through it: of the chain A -> B -> C the graph loses B and keeps A -> C, through the same eraseNode call a dead-code pass makes (docs/design/effects/edges.cn.md 4). B is a SYNC anchor, so the graph may carry an order edge on it at all (4.6)."
+desc = "Removing a node keeps the ordering that passed through it: of the chain A -> B -> C the graph loses B and keeps A -> C, through the same eraseNode call a dead-code pass makes (docs/design/effects/edges.cn.md 4). B is an anchor no pass may arrange freely, so the graph may carry an order edge on it at all (4.6)."
 case = "../../../cases/opt/generic/generic_passes.cml"
 args = ["${case}", "test::edges_order_splice"]
 verify_script = '''
