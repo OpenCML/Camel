@@ -1,0 +1,11 @@
+// A rule that declares a parameter. The builder hands the rule's own parameters over to each
+// function the declaration becomes, and a tree that refuses a node two containers both hold is
+// where a hand-off that left the pair in the list it came from showed up. `std::opt` reads
+// stdlib/rules.cml, which declares one rule with a parameter after another, so a build in which
+// the refusal is compiled in could not read this program or the standard rules.
+
+rule add_zero(x: int) { x + 0 => x }
+
+func main(): int {
+    return 0
+}
