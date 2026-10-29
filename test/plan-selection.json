@@ -79,9 +79,9 @@
             "plans": ["smoke", "feat/linear", "feat/para", "feat/trans"]
         },
         {
-            "comment": "The optimization passes and the rewrite rule library they run: the opt plans, the pass dumps that print their effect, the rewrite-rule plan, and feat/compile for the module registration and operator declarations a rewrite-module change can break. stdlib/rules.cml is the data these passes run, so it selects the same set. `feat/opt` is a directory target, so `--tier fast` keeps its fast plans and filters the slow progen plan (progen is never selected by a rule).",
-            "paths": ["src/passes/opt/", "stdlib/rules.cml", "modules/rewrite/"],
-            "plans": ["smoke", "feat/opt", "feat/trans/pass_dump.plan.toml", "feat/modules/rules.plan.toml", "feat/compile"]
+            "comment": "The optimization passes and the rewrite rule library they run: the opt plans, the pass dumps that print their effect, the rewrite-rule plan, and feat/compile for the module registration and operator declarations a rewrite-module change can break. stdlib/rules.cml is the data these passes run, so it selects the same set. `feat/opt` is a directory target, so `--tier fast` keeps its fast plans and filters the slow progen plan (progen is never selected by a rule). The rule library's own SMT check is selected here too: it reads stdlib/rules.cml, so a rule that stops holding under its licence is reported by the change that edited it.",
+            "paths": ["src/passes/opt/", "stdlib/rules.cml", "modules/rewrite/", "scripts/rule-proofs.mjs"],
+            "plans": ["smoke", "feat/opt", "feat/trans/pass_dump.plan.toml", "feat/modules/rules.plan.toml", "feat/compile", "feat/modules/rules_proofs.plan.toml"]
         },
         {
             "comment": "The profiler pass: its own plan runs without a CUDA device (the host fallback), so it is safe from an ordinary change.",

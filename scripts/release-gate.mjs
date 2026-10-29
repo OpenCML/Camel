@@ -22,7 +22,7 @@
 //                      one. Naming a file makes the runner run the whole plan, slow tests
 //                      included, whatever `--tier` says; that is the only honest way to reach
 //                      them, and a directory target would silently drop them again;
-//   3. static checks-- the seven tree/compiler checks a release has to pass;
+//   3. static checks-- the eight tree/compiler checks a release has to pass;
 //   4. the policy  -- the plans in FORBIDDEN are the milestone layer: each of their own files says
 //                      `tier = "milestone"`, so they are never run by an ordinary or a slow run and
 //                      `--tier milestone` is what selects them. The gate prints them by name,
@@ -112,6 +112,12 @@ const STATIC_CHECKS = [
     { name: 'document snippets: Camel fences compile and print what the page says', args: ['scripts/check-doc-snippets.mjs'], camel: true },
     { name: 'stdlib declarations: a migrated module stays migrated', args: ['scripts/stdlib-declarations.mjs', '--check'], camel: true },
     { name: 'std includes: no header borrowed through another header', args: ['scripts/check-std-includes.mjs'] },
+    // The rule library decided by an SMT solver: every rule's two sides under the premise its
+    // numeric licence stands for. The solver is an optional dependency, so the checker prints a
+    // SKIPPED banner naming what to install and still exits zero; that banner is in this layer's
+    // output, so a machine without one records that no proof was taken instead of the gate
+    // reporting a proof it never took.
+    { name: 'rule library: every rule holds under its own numeric licence', args: ['scripts/rule-proofs.mjs'] },
 ]
 
 // The command line of one static check, with the install this gate found when the check reads one.
