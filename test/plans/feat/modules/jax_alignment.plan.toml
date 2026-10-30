@@ -9,11 +9,17 @@ tags = ["feat", "modules", "autodiff", "jax"]
 #
 #   * the part that already agrees with JAX, pinned with JAX's own examples (batching at a leading
 #     axis through `map`; `grad`/`with_grad` on `f(x) = x * x` at 2; `stop_gradient` cutting the
-#     derivative). These must stay green through any transform work: they are the numbers the
-#     alignment is measured against.
-#   * the names that are not values yet (`vmap`, `jvp`, `vjp`, `checkpoint`), pinned as refused with
-#     the diagnostic that names them. Each is the case that flips to a positive one when its
-#     transform lands; the flip is the proof of alignment, not a sentence in a document.
+#     derivative; `has_aux` splitting a pair result). These must stay green through any transform
+#     work: they are the numbers the alignment is measured against.
+#   * the names that are not values yet (`jvp`, `vjp`, `checkpoint`, `remat`), pinned as refused
+#     with the diagnostic that names them. Each is the case that flips to a positive one when its
+#     transform lands; the flip is the proof of alignment, not a sentence in a document. `vmap` is
+#     the first name to have flipped: `batching.vmap` is what `absent.vmap` pinned against.
+#     `checkpoint` is the one that does not flip: the persistence module `ckpt` owns the word, and
+#     the recompute-to-save-memory transform is `remat`.
+#   * the parameter that is refused on purpose (`argnums`) and the two `has_aux` calls that are
+#     refused with a reason (a pair result without the argument, and `has_aux: false`): what the
+#     surface does not accept is pinned as exactly what it does not accept.
 #
 # docs/handover/reviews/questions-2026-10-30-jax.md holds the gap list, the split between naming
 # and semantics, and the assertions each absent name must satisfy once it exists.
@@ -24,7 +30,7 @@ desc = "Batching at a leading axis through `map`, over the values JAX's `vmap` d
 kind = "behavior"
 case = "../../../cases/modules/autodiff/jax_batching.cml"
 args = ["${case}", "${backend}"]
-backends = ["nvm", "fvm", "jit"]
+backends = ["nvm", "fvm", "jit", "prl", "inline_jit"]
 backends_agree = ["stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "jax_batching axis0\n[0.0, 1.0, 4.0]\njax_batching struct\n[2.0, 4.0, 6.0]\n"
@@ -38,7 +44,7 @@ desc = "The derivative surface JAX shares, on JAX's example: `f(x) = x * x` at 2
 kind = "behavior"
 case = "../../../cases/modules/autodiff/jax_derivatives.cml"
 args = ["${case}", "${backend}"]
-backends = ["nvm", "fvm", "jit"]
+backends = ["nvm", "fvm", "jit", "prl", "inline_jit"]
 backends_agree = ["stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "jax_derivatives\n4.0\n(4.0, 4.0)\n4.0\n"
@@ -47,15 +53,99 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
-name = "absent.vmap"
-desc = "`vmap` (JAX's batching transform) is not a value: the name resolves to nothing, so the call is refused and the diagnostic names it. The batching that exists is `map` (batching.axis0). When `vmap` lands this case flips to the batched function it writes."
+name = "derivatives.has_aux"
+desc = "`has_aux` splits a pair result: `f(x) = (x*x, 3x)` at 2 gives `grad(f, has_aux: true) == (4.0, 6.0)` and `with_grad(f, has_aux: true) == ((4.0, 6.0), 4.0)`, JAX's order for both; the auxiliary value is carried, not differentiated, and its type is the function's own (`(4.0, 7)` for an `int`)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/jax_has_aux.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl", "inline_jit"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "jax_has_aux\n(4.0, 6.0)\n((4.0, 6.0), 4.0)\n(4.0, 7)\n"
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "absent.argnums"
+desc = "`argnums` is not a parameter of `grad`: the differentiated value is the first `with` parameter (design principles 9.9), so the call names a parameter the rule does not have and is refused as that -- the diagnostic names `argnums` rather than reporting a call that does not match."
 kind = "negative"
-case = "../../../cases/modules/autodiff/jax_names/vmap.cml"
+case = "../../../cases/modules/autodiff/jax_names/argnums.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
-expect_diagnostic_code = "0x0300000B"
-expect_output_contains = ["Unresolved reference: 'vmap'"]
+expect_diagnostic_name = "SemanticDiag::ParamArgumentUnknown"
+expect_diagnostic_code = "0x030001CD"
+expect_output_contains = ["'argnums' is not a parameter of 'grad'"]
+expect_output_not_contains = ["UnknownInternalError", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "refused.has_aux_missing"
+desc = "A pair result without `has_aux` is refused, and the reason names the result type: `grad(f)` differentiates a float, and splitting the pair is written at the call."
+kind = "negative"
+case = "../../../cases/modules/autodiff/jax_names/has_aux_plain.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NotDifferentiable"
+expect_diagnostic_code = "0x03000150"
+expect_output_contains = ["it returns (float, float), not a float"]
+expect_output_not_contains = ["UnknownInternalError", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "refused.has_aux_false"
+desc = "`has_aux: false` is refused with the call to write instead: the pair is split or it is not, and that cannot follow a value a call computes, so `false` means the plain form (`grad(f)`), not a second behaviour of the same name."
+kind = "negative"
+case = "../../../cases/modules/autodiff/jax_names/has_aux_false.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NotDifferentiable"
+expect_diagnostic_code = "0x03000150"
+expect_output_contains = ["`has_aux` is false", "write `grad(f)`"]
+expect_output_not_contains = ["UnknownInternalError", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "batching.vmap"
+desc = "`vmap(f)` is the batched function as a value: `vmap((x) => x * x)([0.0, 1.0, 2.0])` is `[0.0, 1.0, 4.0]` (JAX's own first `vmap` example), the value can be applied to a second array, and a lambda batches as a named function does. One parameter, axis 0 -- the half of J7 Camel has, now as a transform rather than a call form."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/jax_vmap.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl", "inline_jit"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "jax_vmap\n[0.0, 1.0, 4.0]\n[1.0, 4.0]\n[2.0, 4.0, 6.0]\n"
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "refused.vmap_two_parameters"
+desc = "`vmap` batches one parameter, so a function of two is refused instead of being batched over its first one: batching `add` that way would answer a question the program did not ask. The refusal names both shapes -- the argument's two parameters and the one-parameter function the transform takes -- so what is unsupported is what the message shows. JAX batches the second argument only because `in_axes` says so, and that parameter does not exist here."
+kind = "negative"
+case = "../../../cases/modules/autodiff/jax_names/vmap_two_parameters.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
+expect_diagnostic_code = "0x03000053"
+expect_output_contains = ["argument 1 has type '(a: float, b: float) => float pure'", "its parameter 'f: (item: T) => U'"]
+expect_output_not_contains = ["UnknownInternalError", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "absent.in_axes"
+desc = "`in_axes` is not a parameter of `vmap`: `T[]` is rank one, so axis 0 is the only axis there is and there is nothing to name. The call is refused as an unknown parameter and the diagnostic names `in_axes` -- an axis the transform cannot honour is not one a call can quietly ask for."
+kind = "negative"
+case = "../../../cases/modules/autodiff/jax_names/vmap_in_axes.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamArgumentUnknown"
+expect_diagnostic_code = "0x030001CD"
+expect_output_contains = ["'in_axes' is not a parameter of"]
 expect_output_not_contains = ["UnknownInternalError", "never printed"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -90,7 +180,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "absent.checkpoint"
-desc = "`checkpoint` (JAX's recompute-in-backward transform, `remat`) is not a value: the word in this tree names the persistence module `ckpt`, so the call is refused and the diagnostic names it. When the transform lands this case flips to a function value that recomputes instead of saving."
+desc = "`checkpoint` is not a value and is not the transform's name either: the word in this tree names the persistence module `ckpt` (stdlib/ckpt.cml writes and reads a tree of leaves), so the call is refused and the diagnostic names it. The recompute-in-the-backward transform is `remat` (absent.remat); when it lands this case stays refused, and the call it writes is the one that must keep meaning persistence."
 kind = "negative"
 case = "../../../cases/modules/autodiff/jax_names/checkpoint.cml"
 args = ["${case}"]
@@ -98,6 +188,20 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
 expect_diagnostic_code = "0x0300000B"
 expect_output_contains = ["Unresolved reference: 'checkpoint'"]
+expect_output_not_contains = ["UnknownInternalError", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "absent.remat"
+desc = "`remat` is the name the recompute-in-the-backward transform will have -- JAX's `jax.checkpoint` under its other name, chosen so the persistence word `checkpoint` stays the `ckpt` module's -- and it is reserved rather than implemented: `autodiff` does not export it, so the import is refused and the diagnostic names the name and the module. The import is what makes the pin a tripwire: the day the module exports `remat`, this case flips by itself to the gradient it prints (4.0 at x = 2)."
+kind = "negative"
+case = "../../../cases/modules/autodiff/jax_names/remat.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImportNameNotExported"
+expect_diagnostic_code = "0x03000015"
+expect_output_contains = ["Reference 'remat' is declared as imported but is not exported by its module"]
 expect_output_not_contains = ["UnknownInternalError", "never printed"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

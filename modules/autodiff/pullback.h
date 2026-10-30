@@ -56,12 +56,17 @@ struct GradientSignature {
 
 /// Why f cannot be differentiated: its result is not a float, it has no `with` parameter, its
 /// first `with` parameter is a `var`, or that parameter's type has no tangent. Empty when it can
-/// be differentiated.
-std::string differentiationRefusal(type::FunctionType *function);
+/// be differentiated. With `hasAux` the result must be a pair `(value, aux)` whose first element
+/// is the float that is differentiated; the pair's second element is handed back unchanged, as
+/// JAX's `has_aux` does.
+std::string differentiationRefusal(type::FunctionType *function, bool hasAux = false);
 
 /// The signature of grad(f) (or with_grad(f)), or nullopt when f cannot be differentiated
-/// (see differentiationRefusal).
-std::optional<GradientSignature> gradientSignature(type::FunctionType *function, bool withValue);
+/// (see differentiationRefusal). With `hasAux` the transform gives `(gradient, aux)` where grad
+/// gives the gradient, and `((value, aux), gradient)` where with_grad gives the pair, which is
+/// JAX's order for both.
+std::optional<GradientSignature>
+gradientSignature(type::FunctionType *function, bool withValue, bool hasAux = false);
 
 /// The graph of a gradient and the program of the graphs built with it.
 struct GradientGraph {
@@ -72,6 +77,6 @@ struct GradientGraph {
 /// Builds the graph of grad(f) (or with_grad(f)) for the graph `function` of `program`.
 GradientGraph buildGradientGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    camel::runtime::GCGraph *function, bool withValue);
+    camel::runtime::GCGraph *function, bool withValue, bool hasAux = false);
 
 } // namespace camel::autodiff

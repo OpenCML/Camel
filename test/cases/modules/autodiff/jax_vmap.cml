@@ -1,0 +1,30 @@
+/**
+ * `vmap` at a leading axis: JAX's `jax.vmap(fun)` with one argument.
+ *
+ * JAX's first `vmap` example batches a square over `jnp.arange(3.)`; Camel's `vmap(f)` is the
+ * function that does the same, over the one axis an array has (`T[]` is rank one). Unlike `map`,
+ * which takes the function as a `with` parameter of the call, `vmap` gives the batched function
+ * back as a value: `let batched = vmap(square)` is the function, and it is applied to as many
+ * arrays as the program needs -- which is the half of J7 that Camel lacked (a transform is a
+ * value, not a call form).
+ *
+ * What is not here: batching a second array, choosing or naming an axis, and batching a `with`
+ * parameter. A function of two parameters is refused (jax_names/vmap_two_parameters.cml), and
+ * `in_axes` is not a parameter (jax_names/vmap_in_axes.cml).
+ */
+
+import { vmap } from array
+
+func square(x: float): float {
+    return x * x
+}
+
+func main(): int sync {
+    let batched = vmap(square)
+    println('jax_vmap')
+    println(batched([0.0, 1.0, 2.0]))
+    println(batched([1.0, 2.0]))
+    let inline_batched = vmap((x: float) => x + x)
+    println(inline_batched([1.0, 2.0, 3.0]))
+    return 0
+}

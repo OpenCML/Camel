@@ -1259,6 +1259,11 @@ The tree is the data, the directory is where it goes: `tree->save_tree<dir: 'out
 holds something other than a tree of the type asked for is an error value too. Walking a tree is
 the tree library's (`stdlib/tree.cml`), not this module's.
 
+A checkpoint here is what is written down, not what is recomputed: the transform that trades
+memory for recomputation (the same values, the annotated section recomputed in the backward pass)
+is named `remat` in this standard library, and never `checkpoint` -- so a name in a gradient that
+says checkpoint is this module, and a name that says `remat` is that transform.
+
 #### `tree_leaves`
 
 ```camel
@@ -2824,6 +2829,25 @@ f(xs[i], ys[i]) for every i.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Failure: fault `InvalidArgument` (of zip) when the two arrays differ in length.
 - Example: `zip_with<(a, b) => a + b>([1, 2], [10, 20])` gives `[11, 22]`
+
+### Batching
+
+#### `vmap`
+
+```camel
+vmap: (f: (item: T) => U) => (xs: T[]) => U[]
+```
+
+The batching of a function as a value: `vmap(f)` is the function that applies f to every
+element of an array and gives the results in order, which is JAX's `vmap(fun)` for the one
+argument and the one axis an array has. `T[]` is rank one, so axis 0 is the only axis there is;
+a function of two parameters is refused rather than batched over its first one, a second array
+to batch together is refused, and an axis is not a parameter -- there is nothing to name. Being
+a value, it is stored once and applied to several arrays (`let batched = vmap(square)`), which
+is what makes it a transform rather than a call form of `map`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap((x: float) => x * x)([0.0, 1.0, 2.0])` gives `[0.0, 1.0, 4.0]`
 
 <a id="stream"></a>
 
@@ -6197,6 +6221,16 @@ What is differentiated is the first `with` parameter of `f` (the weights); every
 parameter is a constant, and so is every ordinary parameter. To differentiate the data, bind it
 as a `with` parameter with a lambda. A function with no `with` parameter, or whose first one has
 no tangent, or a result that is not a scalar float, is refused where the call is compiled.
+There is no `argnums`: which value is differentiated is what the `with` binding says, not a
+position, so a call that would name one is refused as the unknown parameter it is.
+
+`has_aux: true` is for a function whose result is the pair `(value, aux)`, the shape JAX uses it
+for: the first element is the loss and the second is anything the caller wants carried (a count,
+a norm). The pair is split, the first element is differentiated and the second is handed back
+unchanged: `grad(f, has_aux: true)` gives `(gradient, aux)` and
+`with_grad(f, has_aux: true)` gives `((value, aux), gradient)`, which are JAX's orders.
+The argument has to be the constant `true` -- a call has one result type, so whether the pair is
+split cannot follow a value -- and `has_aux: false` is refused with the plain call to write.
 
 The gradient has the type of the parameter it is the gradient of: a struct gives a struct of
 gradients, a tuple a tuple, an array of floats an array of the same element type and shape, a
@@ -6213,6 +6247,13 @@ not known when they run to a run-time refusal. `vjp` is reverse mode for a resul
 scalar (it gives the result and the pullback from the cotangent of the result to the gradient),
 and `jvp` is forward mode (the result and its tangent along a direction); both land with the
 autodiff lane, not before they work.
+
+The transform that trades memory for recomputation -- the same values, with the annotated section
+recomputed in the backward pass instead of kept -- is named `remat` here. JAX calls it
+`jax.checkpoint` and, by its other name, `jax.remat`; in this tree "checkpoint" is the persistence
+module `stdlib/ckpt.cml` and stays that, so the transform takes the other word and there is no
+second name for a reader to disambiguate. It is not implemented yet: the name is not a value, and
+a call to it is refused like any other name that does not resolve.
 
 `stop_gradient` marks a value as a constant. A transform's local rules are the tags on a
 declaration and the `rule` declarations below: the tags give a function's own rules
@@ -6232,6 +6273,20 @@ result with respect to its first `with` parameter, in the type of that parameter
 - Example (a fragment, not compiled): `let loss_grad = grad(loss)`
 - Why it is not compiled: `loss` must have a `with` parameter for its gradient to exist, and that takes a declaration, so the example is a fragment of a program that declares it
 
+#### `grad`
+
+```camel
+grad: (f: F, has_aux: bool) => GradientAndAux<F> when is_function::<F>()
+```
+
+The same over a function whose result is the pair `(value, aux)`: the first element is
+differentiated and the second is handed back unchanged, so the gradient function gives
+`(gradient, aux)` -- JAX's `grad(f, has_aux=True)`. `has_aux` has to be the constant `true`:
+the pair is split, or the writer means the plain form and writes `grad(f)`.
+
+- Example (a fragment, not compiled): `let loss_grad = grad(loss, has_aux: true)`
+- Why it is not compiled: the function must return a pair whose first element is the loss, and that takes a declaration, so the example is a fragment of a program that declares it
+
 #### `with_grad`
 
 ```camel
@@ -6243,6 +6298,19 @@ the pair a training step needs from one evaluation. The same compile-time refusa
 
 - Example (a fragment, not compiled): `let step = with_grad(loss)`
 - Why it is not compiled: `loss` must have a `with` parameter for its gradient to exist, and that takes a declaration, so the example is a fragment of a program that declares it
+
+#### `with_grad`
+
+```camel
+with_grad: (f: F, has_aux: bool) => ValueAndGradientAndAux<F> when is_function::<F>()
+```
+
+The value, the auxiliary value and the gradient of a function whose result is `(value, aux)`:
+the pair the function gives is returned whole, followed by the gradient --
+`((value, aux), gradient)`, JAX's `value_and_grad(f, has_aux=True)`.
+
+- Example (a fragment, not compiled): `let step = with_grad(loss, has_aux: true)`
+- Why it is not compiled: the function must return a pair whose first element is the loss, and that takes a declaration, so the example is a fragment of a program that declares it
 
 #### `stop_gradient`
 

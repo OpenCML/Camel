@@ -11,6 +11,11 @@
  * `'out/ckpt'->load_tree::<T>`. A failure of the file system is an error value; a directory that
  * holds something other than a tree of the type asked for is an error value too. Walking a tree is
  * the tree library's (`stdlib/tree.cml`), not this module's.
+ *
+ * A checkpoint here is what is written down, not what is recomputed: the transform that trades
+ * memory for recomputation (the same values, the annotated section recomputed in the backward pass)
+ * is named `remat` in this standard library, and never `checkpoint` -- so a name in a gradient that
+ * says checkpoint is this module, and a name that says `remat` is that transform.
  */
 
 import { is_numeric, ElementOf } from types

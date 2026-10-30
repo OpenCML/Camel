@@ -4034,17 +4034,19 @@ The function cannot be differentiated: {0}.
 grad and with_grad differentiate the first `with` parameter of a function that returns a float (design principles 9.9). Weights are `with` parameters; the remaining `with` parameters are constants and the ordinary parameters are data. Give the function a `with` parameter of a differentiable type, or wrap the value to differentiate in a lambda that makes it the first `with` parameter.
 ```
 
-**Example** (`test/cases/modules/autodiff/grad_refuse_no_with.cml`, run as `camel test/cases/modules/autodiff/grad_refuse_no_with.cml std::macro`)
+**Example** (`test/cases/modules/autodiff/jax_names/has_aux_plain.cml`, run as `camel test/cases/modules/autodiff/jax_names/has_aux_plain.cml`)
 
 ```camel
 import { grad } from autodiff
 
-func ordinary(x: float): float {
-    return x * x
+with <x: float>
+func pair_loss(): (float, float) {
+    return (x * x, x * 3.0)
 }
 
 func main(): int sync {
-    println(grad(ordinary)(2.0))
+    let d = grad(pair_loss)<2.0>()
+    println(d)
     return 0
 }
 ```

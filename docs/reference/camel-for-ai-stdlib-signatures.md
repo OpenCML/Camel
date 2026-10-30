@@ -282,7 +282,7 @@ is_bool: () => bool
 is_plain: () => bool
 ```
 
-**`array`** — import { ... } from array — 36 name(s)
+**`array`** — import { ... } from array — 37 name(s)
 
 ```text
 reverse: (xs: T[]) => T[]
@@ -328,6 +328,7 @@ merge_sorted: (xs: T[], ys: T[]) => T[] when is_ordered::<T>()
 sort_by: <key: (x: T) => K> (xs: T[]) => T[] when is_ordered::<K>()
 flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
 zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
+vmap: (f: (item: T) => U) => (xs: T[]) => U[]
 ```
 
 **`stream`** — import { ... } from stream — 12 name(s)
@@ -732,11 +733,13 @@ update: (opt: Sgd, params: P, grads: G, state: SgdState) => (P, SgdState)
 update: (opt: Adam, params: P, grads: G, state: AdamState<P>) => (P, AdamState<P>)
 ```
 
-**`autodiff`** — import { ... } from autodiff — 13 name(s)
+**`autodiff`** — import { ... } from autodiff — 15 name(s)
 
 ```text
 grad: (f: F) => Gradient<F> when is_function::<F>()
+grad: (f: F, has_aux: bool) => GradientAndAux<F> when is_function::<F>()
 with_grad: (f: F) => ValueAndGradient<F> when is_function::<F>()
+with_grad: (f: F, has_aux: bool) => ValueAndGradientAndAux<F> when is_function::<F>()
 stop_gradient: (x: T) => T pure
 add_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 sub_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
