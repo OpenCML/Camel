@@ -1,0 +1,26 @@
+# b4 第一片停住：handle 不能先于 `Writings` 拿到事务
+
+推入 develop：`061cc0e46`（docs 笔 `d378afb14` + 并入 develop 35 笔）。闸门同树：**total 7915 / pass 7906 / fail 0 / skip 7 / known 2**，指纹 `ba8b7045… / clean`。三个数 66 / 535 / 3 / 6。
+
+## 为什么没按计划改 `read.cpp:165`
+
+试读之后发现那条路会**改坏行为**，证据两条：
+
+1. **读端先改，草稿 handle 全变"看不见"**：`viewOf`／`nodeHandle` 判"是不是草稿"用的就是 `handle->draft()`；先换成 `transaction()`，那些 `createInDraft` 造出的 handle（`transaction_` 为 null）会被当成已发布的图落到 `nodeOfFrozen`，而它们的 `program_` 是空。
+2. **写端也换不了**：`module.cpp:259` 是 `auto &draft = match.writings.draft();`，而 `Writings` 存的是 **`GraphDraft &draft_`（`writings.h:414`／`542`），它手里没有事务**；`fact.cpp` 的 `Source.draft` 又是从 handle 借的（`fact.cpp:859`）。
+
+**账本 §12 那句"4 个在事务里造"因此是错的**：那 4 个不是"在事务里"，是"在存储里"。**17 个构造点，今天 0 个手里有事务。**
+
+## 两条路（都不是 b4 第一片，而是别人那层的题）
+
+- **A（推荐）**：先让 `Writings` 通过事务持有草稿（它构造时本来就从会话拿草稿，`writings.h:405`），handle 随后跟上——这是 **b6 的第一小步**。
+- **B**：`draft_` 留在 handle 里，等 b6 随类型一起消失。
+
+## 今晚落了什么
+
+- `e467242e3`：`Handle` 能指名事务（`transaction_`、`transaction()`、`createInTransaction`、`clone` 分支），**纯加能力、无调用者、行为逐字节相同**——这一笔是 A 和 B 都用得上的底。
+- 账本 §15 的规矩（点名即宣告所有权）、§16 的停因与证据。
+
+## 一条顺带的观察
+
+闸门输出里有 `[PLAN] feat.compile.probe: A probe, removed before the case set is finished.`，并且 `probe.machine` 是 PASS——**一条自称"要在用例集完成前删掉"的探针计划还留在计划树里**。不在我这条线上，记在这里给协调者。
