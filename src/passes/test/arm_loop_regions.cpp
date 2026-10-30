@@ -56,7 +56,7 @@ ArmLoopRegionsTestPass::apply(const camel::runtime::Program *program, std::ostre
         return program;
     }
     RuntimeGraphDraftSession session(context_, program);
-    GraphDraft &draft = session.edit(found.graph);
+    auto &draft = session.edit(found.graph).edit();
     // The same loop, with a body region in the body of the graph instead of in the arm it runs in.
     draft.addRegion(GCRegionKind::LoopBody, 0, found.loop, 0);
     try {

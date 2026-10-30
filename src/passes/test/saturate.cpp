@@ -203,7 +203,7 @@ const Program *saturateProgram(
         if (!targets.contains(graph->name())) {
             continue;
         }
-        GraphDraft &draft = session.edit(graph);
+        auto &draft = session.edit(graph).edit();
         const auto t0 = std::chrono::steady_clock::now();
         DraftWritings writings(draft, policy);
         writings.build();
@@ -260,7 +260,7 @@ const Program *saturateProgramChecked(
             if (!kCorpusTargets.contains(graph->name())) {
                 continue;
             }
-            GraphDraft &draft = session.edit(graph);
+            auto &draft = session.edit(graph).edit();
             DraftWritings writings(draft, policy);
             writings.build();
             const SaturateStats first = writings.saturate(rules, budget);
@@ -279,7 +279,7 @@ const Program *saturateProgramChecked(
         if (!kCorpusTargets.contains(graph->name())) {
             continue;
         }
-        GraphDraft &draft = session.edit(graph);
+        auto &draft = session.edit(graph).edit();
         DraftWritings writings(draft, policy);
         writings.build();
         const SaturateStats stats = writings.saturate(rules, budget);

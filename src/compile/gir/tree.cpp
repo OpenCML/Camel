@@ -63,8 +63,8 @@ node_handle_t Builder::expandTreeCall(
         core::mm::NoCollectionScope guard;
         const slot_t empty =
             core::rtdata::toSlot(::Tuple::create(values.size(), core::mm::autoSpace()));
-        auto &draft = currGraph_->draft();
-        auto base  = draft.ref(draft.materializeStaticValue(empty, type));
+        auto &draft = currGraph_->transaction().edit();
+        auto base   = draft.ref(draft.materializeStaticValue(empty, type));
         std::vector<size_t> slots(values.size());
         std::iota(slots.begin(), slots.end(), 0);
         auto out = currGraph_->addFillNode(

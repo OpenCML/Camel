@@ -30,7 +30,7 @@ struct DraftInlineResult {
 /// becomes the Arm region of that arm (an arm index of the BRCH that orders the call), not an Inline
 /// region.
 DraftInlineResult inlineCallableInDraft(
-    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId,
+    RuntimeGraphDraftSession &session, GraphTransaction &transaction, gc_node_ref_t funcNodeId,
     bool asArm = false);
 /// Runaway guard on the type-only specializations of one recursive function that a program may
 /// hold.
@@ -54,15 +54,14 @@ inline constexpr size_t kTypeSpecializationFixedPointGuard = 4096;
 /// identity is observable); a function value has no identity (design principles 5.2), so binding
 /// it changes nothing but which calls are known.
 bool specializeDirectFuncInDraft(
-    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId,
-    bool functionValuesOnly = false);
+    RuntimeGraphDraftSession &session, GraphTransaction &transaction, gc_node_ref_t funcNodeId, bool functionValuesOnly = false);
 /// Rewrites a CALL into a direct FUNC when its callee is known: a static Function (its static
 /// captures bound into a specialization), or a closure built in this graph by FILL, whose graph
 /// is lifted so that the captures become trailing norm arguments. With `unwrapGatedCallee` a
 /// callee hidden behind gates (sync code gates a callee after the previous statement) is seen
 /// through; the FUNC keeps the gate as a control input, so ordering is preserved.
 bool devirtualizeStaticCallInDraft(
-    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId,
+    RuntimeGraphDraftSession &session, GraphTransaction &transaction, gc_node_ref_t callNodeId,
     bool unwrapGatedCallee = false);
 
 /// The node whose value `id` reads when `id` projects an element out of a tuple built by FILL
@@ -77,7 +76,7 @@ gc_node_ref_t resolveTupleProjection(const GraphDraft &draft, gc_node_ref_t id);
 /// captured value: the type that constant gets instead of the one the closure declares (a type
 /// the caller knows to be more precise for that value; null keeps the declared one).
 void bindFunctionCall(
-    GraphDraft &draft, const ::Function *function,
+    GraphTransaction &transaction, const ::Function *function,
     std::span<camel::core::type::Type *const> normTypes,
     std::span<camel::core::type::Type *const> closureTypes = {});
 

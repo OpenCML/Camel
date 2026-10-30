@@ -90,7 +90,7 @@ size_t rewriteGraph(RuntimeGraphDraftSession &session, GCGraph *owner, bool summ
         // every tape entry would show the final array: the tape needs the copying form, and the
         // body falls back to it. The program is legal either way, so this is a fallback and not
         // a refusal (design principles: an optimization never makes a legal program fail).
-        GraphDraft &body      = session.edit(owner);
+        auto &body      = session.edit(owner).edit();
         const gc_node_ref_t loopId = body.draftIdOfSourceRef(id);
         ASSERT(loopId != kInvalidNodeRef, "A LOOP node is not in its graph's draft.");
         const uint32_t bodyRegion = body.loopRegionOf(loopId, camel::runtime::GCRegionKind::LoopBody);
@@ -149,7 +149,7 @@ size_t rewriteGraph(RuntimeGraphDraftSession &session, GCGraph *owner, bool summ
         body.setWithInputs(loopId, results);
 
         // The node: its value is the state and the two tapes.
-        GraphDraft &ownerDraft      = body;
+        auto &ownerDraft      = body;
         const gc_node_ref_t draftId = loopId;
         Type *const valueType = collectedValueType(stateTypes, elem);
         ownerDraft.setNodeDataType(draftId, valueType);

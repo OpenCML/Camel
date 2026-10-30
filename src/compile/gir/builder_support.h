@@ -125,6 +125,12 @@ inline DraftGraphBuilder *nodeGraphOf(node_handle_t node) {
     return builder;
 }
 
+/// The transaction the node's graph is built in: the owner of what `nodeDraftOf` points at, and the
+/// identity two nodes of one graph agree on (the storage's address says where it happens to live).
+inline runtime::GraphTransaction *nodeTransactionOf(node_handle_t node) {
+    return &nodeGraphOf(node)->transaction();
+}
+
 inline draft_node_ref_t nodeIdOf(node_handle_t node) {
     ASSERT(node != nullptr, "Draft node is null.");
     return node.id;

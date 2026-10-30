@@ -73,7 +73,7 @@ bool applyMacroRewrite(
         return false;
     }
 
-    camel::runtime::GraphDraft &draft = session.edit(candidate.runtimeGraph);
+    auto &draft = session.edit(candidate.runtimeGraph).edit();
     const gc_node_ref_t draftNodeId   = draft.draftIdOfSourceRef(candidate.nodeRef);
     if (draftNodeId == camel::runtime::kInvalidNodeRef || !draft.alive(draftNodeId)) {
         return false;

@@ -197,7 +197,7 @@ void roundtrip(Report &r, const camel::core::context::context_ptr_t &ctx, const 
     const GraphId id = graph->id();
     RuntimeGraphDraftSession first(ctx, &program);
     first.setGraphState(GraphState::Tabled);
-    GraphDraft &draft = first.edit(const_cast<GCGraph *>(graph));
+    auto &draft = first.edit(const_cast<GCGraph *>(graph)).edit();
     {
         DraftWritings writings(draft);
         writings.build();
@@ -247,7 +247,7 @@ void roundtrip(Report &r, const camel::core::context::context_ptr_t &ctx, const 
     // Nothing added: the same version.
     RuntimeGraphDraftSession second(ctx, tabled);
     second.setGraphState(GraphState::Tabled);
-    GraphDraft &redraft = second.edit(const_cast<GCGraph *>(after));
+    auto &redraft = second.edit(const_cast<GCGraph *>(after)).edit();
     {
         DraftWritings writings(redraft);
         writings.build();
@@ -258,7 +258,7 @@ void roundtrip(Report &r, const camel::core::context::context_ptr_t &ctx, const 
     // The table is content: one more equivalence is a new version.
     RuntimeGraphDraftSession third(ctx, tabled);
     third.setGraphState(GraphState::Tabled);
-    GraphDraft &more = third.edit(const_cast<GCGraph *>(after));
+    auto &more = third.edit(const_cast<GCGraph *>(after)).edit();
     {
         DraftWritings writings(more);
         const auto ports = portsOf(more);
@@ -325,7 +325,7 @@ const Program *extraction(
     const Program *extracted = &program;
     {
         RuntimeGraphDraftSession session(ctx, &program);
-        GraphDraft &draft = session.edit(const_cast<GCGraph *>(graph));
+        auto &draft = session.edit(const_cast<GCGraph *>(graph)).edit();
         DraftWritings writings(draft);
         writings.build();
         const gc_node_ref_t add = firstOperWith(draft, "add");
@@ -358,7 +358,7 @@ const Program *extraction(
     {
         // A value that is one of its own writings: a == a * 1.
         RuntimeGraphDraftSession session(ctx, extracted);
-        GraphDraft &draft = session.edit(const_cast<GCGraph *>(extracted->graph(id)));
+        auto &draft = session.edit(const_cast<GCGraph *>(extracted->graph(id))).edit();
         DraftWritings writings(draft);
         writings.build();
         const gc_node_ref_t mul = firstOperWith(draft, "mul");
@@ -403,7 +403,7 @@ void facts(Report &r, const camel::core::context::context_ptr_t &ctx, const Prog
         return;
     }
     RuntimeGraphDraftSession session(ctx, &program);
-    GraphDraft &draft = session.edit(const_cast<GCGraph *>(graph));
+    auto &draft = session.edit(const_cast<GCGraph *>(graph)).edit();
     DraftWritings writings(draft);
     writings.build();
     const gc_node_ref_t add = firstOperWith(draft, "add");
@@ -471,7 +471,7 @@ TabledTestPass::apply(const camel::runtime::Program *program, std::ostream &os) 
     }
     RuntimeGraphDraftSession session(context_, program);
     session.setGraphState(GraphState::Tabled);
-    GraphDraft &draft = session.edit(const_cast<GCGraph *>(graph));
+    auto &draft = session.edit(const_cast<GCGraph *>(graph)).edit();
     DraftWritings writings(draft);
     writings.build();
     const gc_node_ref_t add = firstOperWith(draft, "add");
