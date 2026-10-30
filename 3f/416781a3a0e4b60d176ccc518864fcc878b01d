@@ -1,0 +1,3 @@
+这条只把一页放回待裁表：去函数化的验收数为什么在改动之前就已经是 0。一个带调用、分支和循环的 with_grad 小程序，在 stamp 与树一致的构建上读 std::stats（collectGraphStats）：closures 与 indirect_calls 已经是 0，所以那个数分不清"做了"和"没做"。页面给出读数、可能的解释，以及能让它重新有区分力的两种读法，并问作者这一段归两条任务里的哪一条。
+
+闸门（m-lane-defn @ 3f416781a，-Plan all -Tier fast -Jobs 8）：total 7864 / pass 7855 / fail 0 / skip 7 / known failures 2；stamp revision 3f416781a3、clean、fingerprint 98858e9852bc。
