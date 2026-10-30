@@ -19,11 +19,15 @@
 
 **两条判据，先说在前面。**
 
-- **“没有出错路径”包括不分配。** 这个运行时里分配失败是一条真故障：内核分配不到内存时
-  `throw std::bad_alloc()`（例如 `src/core/rtdata/collection.cpp#Table::create`、
-  `include/camel/core/rtdata/string.h`），`src/execute/pass.cpp` 在跑的循环里接住
-  `mm::MemoryExhausted` 并报成 `RuntimeDiag::MemoryExhausted`，程序看得见。所以“不抛运行时故障”
-  只是一半，另一半是“不造值”。造值的算子（数组、字符串、表、装箱）默认留着这条路径。
+- **“没有出错路径”按裁定指“算子自己判断不出失败”。** `faults` 表只记算子看着自己的操作数就能
+  判定的失败（除零、越界、空归约、转换超范围、形状不符）。**内存耗尽是进程级的界限**，和栈溢出
+  同一类，由运行时在进程边界上报 `MemoryExhausted`，不属于任何算子的语义——所以 `faults = []`
+  说的是“这个算子不会自己说不”，**不保证进程不会耗尽内存**。裁定与落地见
+  `docs/handover/reviews/questions-2026-10-30-allocation-failure-in-the-faults-table.md`。
+  由此还有一条白送的收益：优化在两个效应之间移动一个分配，不算改变效应顺序（`edges.cn.md` 第 4.6 条
+  的“纯且不会出故障的节点可自由安排”因此不再被分配挡住）。
+  （这一条在裁定之前写作“包括不分配”，下面第二节“第二批”“第三批”挑族时用的就是那个读法；
+  那两批补的算子此后按新读法仍然成立——它们既不抛点，也不造值。留档不改。）
 - **两条反向用例分工不同。** 声明那一侧（`declared_records` / `declared_traits`）读的是**宣言**，
   把它删掉就红——它只证明宣言还在；运行那一侧（`fault_free_behavior`、`read_only_helpers`）
   跑的是**实现**，给它加一个抛点就红——它才证明这条保证是真的。一个“永不出故障”的声明要两半都钉住，
@@ -170,12 +174,8 @@
 
 裁定之后按可达性排的第一族。挑它是因为三件事同时成立：`stdlib/prelude.cml` 直接声明了这几个
 算子并且每个都带示例（`#op(':coll/has')`、`'set_contains'`、`'eq'`、`'neq'`、`'set_is_subset'`），
-测试在用，而且它们的实现不造任何值。**不造值**是关键：这个运行时里分配失败是一条真的出错路径，
-`src/core/rtdata/collection.cpp#Table::create` 在分配不到时 `throw std::bad_alloc()`，
-`src/execute/pass.cpp` 在跑的循环里接住 `mm::MemoryExhausted` 并报成 `RuntimeDiag::MemoryExhausted`。
-所以 `coll/` 里造值的那些（`map_put`、`set_add`、`merge`、`set_union`、`set_intersect`、
-`set_difference`、`keys`、`map_values`、`map_items`、`set_items`，以及会给可空值装箱的
-`map_idx`）都有这条出错路径，不在这一批里。
+测试在用，而且它们的实现不造任何值（这一族的同门里，造值的那些当时被“不分配”那条读法挡在门外；
+裁定之后那条读法更正为“算子自己判断不出失败”，所以它们以后可以按新判据逐个读，见本节末尾）。
 
 | 算子 | 实现 | 实现里的出错路径 | 声明 | 用例 |
 |---|---|---|---|---|
@@ -198,7 +198,8 @@
 `contains` 查数组（`#__contains_arr__`）、`contains` 查字符串（`#__contains_str__`）、`Bytes`
 的 `len`（`#__len_bytes__`）、`Bytes` 的 `==`/`!=`（`#__eq_bytes__`/`#__ne_bytes__`）。
 会分配的同门兄弟（`concat_arr`、`append_arr`、`add_bytes`、`slice_bytes`、`zip`、`range`）
-一个都没补，理由同上一条判据。
+当时按“不分配”那条读法没补；裁定把那条读法更正之后，它们不再因为分配被排除，但 `zip`（长度不符）
+与 `range`（步长为 0）自己的内核**真的判定失败**，所以这一族要按新判据逐个读、而不是整族补。
 
 | 算子 | 实现 | 实现里的出错路径 | 声明 | 用例 |
 |---|---|---|---|---|
@@ -236,10 +237,10 @@
   （`src/runtime/effects.cpp#ofNodes`）。一次补齐等于一次全局语义改动：一批图的 `may_fault`
   从 1 变 0，而读它的地方不止一处；一处读错，错的是调度与优化能假定什么。所以补齐要跟着
   “有人核对过这个内核”走，不能跟着“表看起来缺”走。
-- **判据**：一条“不会故障”的声明成立，指的是那个内核既不抛运行时故障，**也不分配**——这个
-  运行时里分配失败是 `RuntimeDiag::MemoryExhausted`（`src/execute/pass.cpp` 接住
-  `mm::MemoryExhausted` 后报成诊断），是一条程序看得见的故障。所以造值的算子（数组、字符串、
-  表、装箱）默认都有这条路径，除非内核里根本没有分配。
+- **判据**：一条“不会故障”的声明成立，指的是那个内核**自己不判定失败**——没有 `throwRuntimeFault`
+  那类抛点，也不调用会判定失败的算子。分配不在判据里：内存耗尽是进程级界限，在表外
+  （见上面“两条判据”第一条与那一页的裁定）。所以造值的算子（数组、字符串、表、装箱）只要内核
+  自己不判定失败，就可以补；今天没补它们只是因为还没按这一条逐个读过。
 - **没碰到但不放心**：写进 `docs/handover/questions/` 的一页，不要在这里顺手补。
 
 这一轮之前“没声明是第三态还是没写完的表”提的那一问，答在这一页：
