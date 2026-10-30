@@ -1,0 +1,7 @@
+**页面在 `ee02ddc4d` 之后补了一节：`test/cases/para/core/` 里有六个程序打出多段多链，所以“1 段 0 链”是那两个程序的形状，不是这个参数的退化。**
+
+推入 develop：`38c1ba334`（页面补节 `2e20b3190` + 并入 develop 两笔）。闸门同树：**total 7920 / pass 7911 / fail 0 / skip 7 / known 2**，指纹 `436a17582c28 / clean`。
+
+最大的一份：`merge_sort.cml` 的 `mergesort` = 3 段 5 链 15 算子，段 2 跑成任务图，`chain 1 -> 4`（两个切片各一条链，合并等它们）。其余：`merge_sort_small` 3 段 11 链、`concurrent_alloc` 3 段 5 链、`concurrent_recursion` 3 段 3 链、`concurrent_calls` 的 `both` 1 段 3 链、`sync_order_with_tasks` 的 `independent` 1 段 3 链。
+
+结论不变，只是现在有正面参照：`sort_rebinding` 与 `gpu_fallback` 的 `main` 是 1 段 0 链，因为这两个程序只排得出一条全序；08:30 的“问题在它的分段”按此修正，08:49 的“没守住同步链和顺序边”才是行为缺陷。
