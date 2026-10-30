@@ -847,9 +847,11 @@ GCGraph *specializeGraphWithBindings(
 } // namespace
 
 void bindFunctionCall(
-    GraphDraft &draft, const Function *function,
+    GraphTransaction &transaction, const Function *function,
     std::span<camel::core::type::Type *const> normTypes,
     std::span<camel::core::type::Type *const> closureTypes) {
+    // The graph is the transaction's: this helper edits it through the one handle.
+    auto &draft = transaction.edit();
     ASSERT(function != nullptr, "bindFunctionCall requires a function.");
     if (const Tuple *closure = function->tuple()) {
         const auto *tupleType = function->tupleType();

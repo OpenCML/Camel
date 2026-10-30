@@ -4898,7 +4898,7 @@ Model exportBound(
                     exactTypeOf(captured->get<slot_t>(i), fn->tupleType()->typeAt(i)));
             }
         }
-        camel::runtime::bindFunctionCall(session.rootDraft().edit(), fn, inputTypes, captureTypes);
+        camel::runtime::bindFunctionCall(session.rootDraft(), fn, inputTypes, captureTypes);
         prepared = session.commit();
     }
     std::unordered_map<slot_t, std::string> names;

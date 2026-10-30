@@ -77,7 +77,7 @@ gc_node_ref_t resolveTupleProjection(const GraphDraft &draft, gc_node_ref_t id);
 /// captured value: the type that constant gets instead of the one the closure declares (a type
 /// the caller knows to be more precise for that value; null keeps the declared one).
 void bindFunctionCall(
-    GraphDraft &draft, const ::Function *function,
+    GraphTransaction &transaction, const ::Function *function,
     std::span<camel::core::type::Type *const> normTypes,
     std::span<camel::core::type::Type *const> closureTypes = {});
 
