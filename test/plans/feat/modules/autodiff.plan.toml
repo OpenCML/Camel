@@ -2494,17 +2494,6 @@ timeout_ms = 20000
 name = "benchmark_gradients_vs_torch"
 # Slow layer: measured 8.3 s in the full serial run.
 tier = "slow"
-# Marked `known_fail`, in the shape of docs/handover/reports/known-failures-two.md (see
-# docs/handover/reports/known-failure-run-training.md for the page that explains it): the training
-# workload is red until the defunctionalization crash it names is fixed, and the mark is what keeps
-# it from ever being green by abandonment again.
-#
-# It is one test with a one-entry back-end matrix only because `known_fail` is a per-back-end mark
-# (test/tools/run-tests.mjs#expandBackends refuses a `known_fail` outside `backends`, and reads no
-# mark at all on an entry without one). The python driver runs the same command either way; the six
-# pass configurations it stands for are inside benchmarks/train.py, not in this list.
-backends = ["nvm"]
-known_fail = ["nvm"]
 desc = "The training gradient of nine benchmark models (mlp, mlp_big, lenet, lenet_big, gru, gru_big, transformer, transformer4, transformer_big) against PyTorch float32 autograd on the benchmark weights and input (benchmarks/train.py --check): the gradient of mean(y * y) with respect to every weight, under std::macro std::nvm and under std::macro std::opt std::nvm, each weight within 1e-4 of the reference (max|diff| over the weight's largest gradient entry, floored at 1e-3 of the model's). 1e-4 is the benchmark's agreement tolerance; the worst of the nine measures 6.7e-06. This is the second of the two numerical comparisons (native execution against PyTorch), not the exported artifact against native execution. resnet and resnetbn are checked by the next four entries: a float32-against-float32 comparison is not a test of their rules."
 kind = "behavior"
 tool = "python"
@@ -2514,7 +2503,6 @@ skip_unless = ["${python}", "-c", "import numpy, psutil, torch"]
 expect_exit = 0
 expect_stdout_contains = ["== transformer_big (camel_opt_nvm)", "gradient check: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-known_fail_note = "The training workload leaves a value the run cannot hold: `camel benchmarks/mlp_big/model.cml std::macro std::opt std::nvm` is killed by SIGSEGV (benchmarks/train.py reports `failed (-11)`), and the stack is `camel::core::rtdata::Variant::updateRefs` at +31, from `GenerationalAllocatorWithGC::scanRelocatedObjects` at a minor collection inside `NodeVMSchedPass::call`. The faulting instruction is in the first statements of the trace, before the field loop; the six nested `call` frames above it do not grow with the model, so this is not stack depth. The value is the enum a lowered closure became, and the trace cannot hold its type. It is the pass's defect and not the program's: the same model completes the training workload under `std::macro std::nvm` with no defunctionalization, inference under the same pass exits 0, and the small `mlp` crashes exactly as `mlp_big` does -- the difference is the pass, not the model's size. Owner: lane-defun5 (the diagnosis was taken on that lane's tree). It waits for the value's enum type to outlive the value the run holds; the catch that used to leave `run_training` as written is removed in the commit that follows, so this entry stays red instead of green by abandonment."
 # The cost bound is this check's own CPU time (user + system), and the timeout is its liveness
 # bound, by the rule:
 #

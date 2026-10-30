@@ -1536,16 +1536,25 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                     ty::Type::Int64());
                 std::vector<gc_node_ref_t> operands{tag};
                 operands.insert(operands.end(), captures.begin(), captures.end());
+                const auto enumType = enumOfFamily.find(owner);
+                if (enumType == enumOfFamily.end()) {
+                    continue;
+                }
                 GCOperBody body;
                 body.op   = nullptr;
                 body.oper = camel::core::OperatorTable::instance().intern(":enum/make");
                 DraftNodeInit init = snapshotOf(draft, id);
                 init.kind          = GCNodeKind::Oper;
-                init.dataType      = draft.header(id)->dataType;
-                init.dataIndex     = draft.header(id)->dataIndex;
-                init.payload       = payloadOf(&body, sizeof(body));
-                init.normInputs    = operands;
-                init.withInputs    = std::span<const gc_node_ref_t>{};
+                // The node's type and the slot's type are one answer, and the value being written is
+                // the enum: the node's type says what the value is, the slot's says what the frame
+                // holds, and the collector traces the frame by the slot. Leaving either at the
+                // function type is what made a traced `Variant` be read as a function (the crash at
+                // Variant::updateRefs: a value of one form in a slot that declared another).
+                init.dataType  = enumType->second;
+                init.dataIndex = draft.header(id)->dataIndex;
+                init.payload   = payloadOf(&body, sizeof(body));
+                init.normInputs = operands;
+                init.withInputs = std::span<const gc_node_ref_t>{};
                 draft.rewriteNode(id, init);
                 ++rewroteValues;
                 // The static function under a closure is not a value any more: the closure packed
