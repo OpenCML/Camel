@@ -1,0 +1,6 @@
+两条标量减法声明：`de0f3c2a6`。
+
+1. **探针结论（语法事实）**：同一文件里 `#op(':op/sub_f') operator -(x: f32, y: f32)` 与 `#op(':op/neg_f') operator -(x: f32)` 共存，编译与运行无报错——**同名不同元数的 `operator` 可以共存，取负写成一个参数的 `operator -`**，不另起名。
+2. **URI 全部从 `src/builtin/executors/builtin.cpp` 核对**，不靠记忆：`sub_f`:297 / `sub_d`:298 / `mul_f`:304 / `mul_d`:305 / `div_f`:312 / `div_d`:313 / `neg_f`:349 / `neg_d`:350。
+3. **写法照裁定**：`func operator +` 才是程序写的形态，`__add__`/`__sub__` 只是编译器内部名字，`ReservedIdentifier` 照旧生效。
+4. 五项：total 7877 / pass 7868 / fail 0 / skip 7 / known 2。
