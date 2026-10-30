@@ -2825,6 +2825,25 @@ f(xs[i], ys[i]) for every i.
 - Failure: fault `InvalidArgument` (of zip) when the two arrays differ in length.
 - Example: `zip_with<(a, b) => a + b>([1, 2], [10, 20])` gives `[11, 22]`
 
+### Batching
+
+#### `vmap`
+
+```camel
+vmap: (f: (item: T) => U) => (xs: T[]) => U[]
+```
+
+The batching of a function as a value: `vmap(f)` is the function that applies f to every
+element of an array and gives the results in order, which is JAX's `vmap(fun)` for the one
+argument and the one axis an array has. `T[]` is rank one, so axis 0 is the only axis there is;
+a function of two parameters is refused rather than batched over its first one, a second array
+to batch together is refused, and an axis is not a parameter -- there is nothing to name. Being
+a value, it is stored once and applied to several arrays (`let batched = vmap(square)`), which
+is what makes it a transform rather than a call form of `map`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap((x: float) => x * x)([0.0, 1.0, 2.0])` gives `[0.0, 1.0, 4.0]`
+
 <a id="stream"></a>
 
 ## `stream`: producing and consuming streams

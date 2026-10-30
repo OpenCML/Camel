@@ -11,9 +11,10 @@ tags = ["feat", "modules", "autodiff", "jax"]
 #     axis through `map`; `grad`/`with_grad` on `f(x) = x * x` at 2; `stop_gradient` cutting the
 #     derivative; `has_aux` splitting a pair result). These must stay green through any transform
 #     work: they are the numbers the alignment is measured against.
-#   * the names that are not values yet (`vmap`, `jvp`, `vjp`, `checkpoint`), pinned as refused with
+#   * the names that are not values yet (`jvp`, `vjp`, `checkpoint`), pinned as refused with
 #     the diagnostic that names them. Each is the case that flips to a positive one when its
-#     transform lands; the flip is the proof of alignment, not a sentence in a document.
+#     transform lands; the flip is the proof of alignment, not a sentence in a document. `vmap` is
+#     the first name to have flipped: `batching.vmap` is what `absent.vmap` pinned against.
 #   * the parameter that is refused on purpose (`argnums`) and the two `has_aux` calls that are
 #     refused with a reason (a pair result without the argument, and `has_aux: false`): what the
 #     surface does not accept is pinned as exactly what it does not accept.
@@ -106,15 +107,43 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 10000
 
 [[tests]]
-name = "absent.vmap"
-desc = "`vmap` (JAX's batching transform) is not a value: the name resolves to nothing, so the call is refused and the diagnostic names it. The batching that exists is `map` (batching.axis0). When `vmap` lands this case flips to the batched function it writes."
+name = "batching.vmap"
+desc = "`vmap(f)` is the batched function as a value: `vmap((x) => x * x)([0.0, 1.0, 2.0])` is `[0.0, 1.0, 4.0]` (JAX's own first `vmap` example), the value can be applied to a second array, and a lambda batches as a named function does. One parameter, axis 0 -- the half of J7 Camel has, now as a transform rather than a call form."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/jax_vmap.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "jax_vmap\n[0.0, 1.0, 4.0]\n[1.0, 4.0]\n[2.0, 4.0, 6.0]\n"
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "refused.vmap_two_parameters"
+desc = "`vmap` batches one parameter, so a function of two is refused instead of being batched over its first one: batching `add` that way would answer a question the program did not ask. The refusal names both shapes -- the argument's two parameters and the one-parameter function the transform takes -- so what is unsupported is what the message shows. JAX batches the second argument only because `in_axes` says so, and that parameter does not exist here."
 kind = "negative"
-case = "../../../cases/modules/autodiff/jax_names/vmap.cml"
+case = "../../../cases/modules/autodiff/jax_names/vmap_two_parameters.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
-expect_diagnostic_code = "0x0300000B"
-expect_output_contains = ["Unresolved reference: 'vmap'"]
+expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
+expect_diagnostic_code = "0x03000053"
+expect_output_contains = ["argument 1 has type '(a: float, b: float) => float pure'", "its parameter 'f: (item: T) => U'"]
+expect_output_not_contains = ["UnknownInternalError", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "absent.in_axes"
+desc = "`in_axes` is not a parameter of `vmap`: `T[]` is rank one, so axis 0 is the only axis there is and there is nothing to name. The call is refused as an unknown parameter and the diagnostic names `in_axes` -- an axis the transform cannot honour is not one a call can quietly ask for."
+kind = "negative"
+case = "../../../cases/modules/autodiff/jax_names/vmap_in_axes.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamArgumentUnknown"
+expect_diagnostic_code = "0x030001CD"
+expect_output_contains = ["'in_axes' is not a parameter of"]
 expect_output_not_contains = ["UnknownInternalError", "never printed"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
