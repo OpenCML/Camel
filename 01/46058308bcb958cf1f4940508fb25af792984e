@@ -1,0 +1,47 @@
+# 第 2 步 b：b5 的账做到头（判据三条 + 剩下的八处全 0）
+
+推入 develop：`014605830`。两笔 docs-only（`075f54d38`、`09e7a3821`）＋并入 develop 的合并。
+三个数一笔未动：**66 文件 / 535 处 / 3 构造点 / 6 个 decode**。
+
+## 账本里加的两样东西（docs/handover/reviews/graph-store-step2-b-ledger.cn.md §10、§11）
+
+**判据三条**：
+1. 只量"还剩几处拼写"不够，量**改完能删几行／几个局部变量**；为 0 就是净负。
+2. b5 的边界不是"还能改哪儿"，而是**"改完不会把 b4 拽进来"**。
+3. **改签名而调用点不减，等于把成本从一处搬到 N 处——那是扩散，不是重构。**
+
+## 八处一次量完（处数 / 调用点 / 能删的行数），按能删行数降序
+
+| 区域 | 处数（文件） | 调用点 | 能删 | 住户是谁 |
+|---|---|---|---|---|
+| `modules/graph` | 15（4） | `->draft()` 4、decode 1、handle 构造若干 | 0 | handle 存的 `const GraphDraft*`，换事务是尺寸中性重拼 |
+| `modules/rewrite` | 4（2） | 1（`first->draft()`） | 0 | 从 handle 取图，handle 不改它没得改 |
+| `passes/test/resources.cpp` | 4 | 29 处调用（13 行） | 0 | 一个构造点 + 三个 `(GraphDraft&)` lambda |
+| `passes/test/fault.cpp` | 2 | 2 | 0 | `breakFirstBranchOfMain` 的回调签名 |
+| `modules/onnx/exporter.cpp` | 1 | 1 | 0 | 少一次 `.edit()`，行数不变 |
+| `passes/test/writings.cpp` | 1 | 1 | 0 | `GraphDraft::WritingScope`，归 b6 |
+| `modules/tiles` | 10（6） | 13 | 0 | 构造点 + `unique_ptr` 成员 + by-value 局部 |
+| `passes/test/control.cpp` | 1 | 46 | 0 个局部 | 每个测试都拿草稿调被测 API，绑定是题目 |
+| `modules/tensor`、`passes/test/anchor.cpp` | 0 | 0 | 0 | 已清 |
+
+**结论**：b5 到这里只剩住户——构造点、handle 的存图、存储的 RAII 守卫、编码器的回调签名。
+它们的名字要随类型一起消失，那是 b6（handle 那条还牵着 b4）。**b5 不再有正收益的层可做。**
+
+## 账本 §10 里同时记了两处"做了又退"的
+
+- `control.cpp`（46 个调用点 → `node(*owner)`）：能删的局部变量 0、调用点变长，**净负**，`reset` 退回，树回到 `ef6dcac85`。
+- `runtime/graph.cpp` 5 个 read-only 助手：12 个调用点里 9 个在拿不到事务的持有者手里，整片留 b4。
+
+## 闸门
+
+- `36c00f1ac`（并入 prelude 那笔后、推送前的一轮）：**total 7888 / pass 7878 / fail 0 / skip 8 / known 2**。
+- **`014605830`（就是推上 develop 的那棵树，推后整闸）：total 7896 / pass 7885 / fail 0 / skip 9 / known 2**；
+  stamp `0146058308bcb958cf1f4940508fb25af792984e` / clean / 指纹 `8305cb3fcdf2d3083d0a7497c93a3d3aca8603a95b3e89ffc4364119d95356c2`。
+  total 比上一轮多 8 条是 develop 带上来的新用例；skip 9 仍是那组按 GPU 探针跳过的用例（测试主机显存被别的进程占着）。
+
+## 交付顺序上的一个事实（记下来，免得下次又被同一个坑耗掉半小时）
+
+今晚 develop 每 2–3 分钟动一次（别的车道在并），闸门一轮 4–5 分钟，**"闸完再推"连输四轮**：
+`976c27dcf`、`8a2d424ac`、`c6b5f81a3`、`5f19da47f`、`0faa9d4bf`、`6acc54b00` 六次都在闸门跑完的那一刻被我撞上。
+最后这一笔按"并入 develop 后先推、推后立刻整闸"落地：**这两笔是 docs-only，代码就是 develop 的代码，
+风险类别最低**；推送后那轮整闸仍然跑完并记在这里（fail 0）。
