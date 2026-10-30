@@ -2116,8 +2116,9 @@ Types are also computed from types, in the one language (design principles 5.6, 
 function is declared with `type`, takes its arguments in the angle brackets of a type position
 and has a type expression for its body, a `match type` among them. `ElementOf<T>` (the element
 of an array or a set), `PayloadOf<T>` (the `U` of `U?` or `U!`), `KeyOf<T>` and `ValueOf<T>` (the
-key and value types of a map) take a type apart where `match type` cannot, and are declared
-below without a body: the compiler provides them. They are evaluated when the instance that
+key and value types of a map) take a type apart where `match type` cannot, and `RowsOf<T>` (the
+array whose first-dimension elements are `T`) puts one back together the same way; they are
+declared below without a body: the compiler provides them. They are evaluated when the instance that
 binds `T` is made, so `is_integer::<ElementOf<T>>()` asks the element type of `T`.
 
 `match type` compares a type's identity as well as its shape (design principles 5.5): the
@@ -2835,19 +2836,30 @@ f(xs[i], ys[i]) for every i.
 #### `vmap`
 
 ```camel
-vmap: (f: (item: T) => U) => (xs: T[]) => U[]
+vmap: (f: (row: T) => U) => (xs: RowsOf<T>) => U[]
 ```
 
 The batching of a function as a value: `vmap(f)` is the function that applies f to every
-element of an array and gives the results in order, which is JAX's `vmap(fun)` for the one
-argument and the one axis an array has. `T[]` is rank one, so axis 0 is the only axis there is;
-a function of two parameters is refused rather than batched over its first one, a second array
-to batch together is refused, and an axis is not a parameter -- there is nothing to name. Being
-a value, it is stored once and applied to several arrays (`let batched = vmap(square)`), which
-is what makes it a transform rather than a call form of `map`.
+element along the leading axis of an array and gives the results in order, which is JAX's
+`vmap(fun)` for the one argument and the axis 0. One name serves every rank, the leading axis
+being the element `x[i]` takes (design principles 5.4): rank 1 batches the elements
+(`vmap((x: float) => x * x)` over a `float[]` gives their squares), and rank 2 and above batch
+the rows, so `vmap((r: f32[3]) => sum(r * r))` applied to an `f32[4, 3]` gives the four row
+results as an `f32[]`. `RowsOf<T>` states that shape: the type the function takes, with one
+dimension of unknown length in front of it.
+
+The rows are taken one at a time, which is what the result is: turning the rowwise application
+into one kernel is an optimization of the same semantics, left to the batching rules (it does
+not change this interface). A function of two parameters would batch two parameters at once and
+is refused rather than batched over its first one, a second array to batch together with the
+first is refused, and an axis is not a parameter -- there is nothing to name (`in_axes` and
+multiple batched parameters wait for the sixth answer). Being a value, it is stored once and
+applied to several arrays (`let batched = vmap(square)`), which is what makes it a transform
+rather than a call form of `map`.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap((x: float) => x * x)([0.0, 1.0, 2.0])` gives `[0.0, 1.0, 4.0]`
+- Example: `vmap((r: f32[3]) => r[2] * r[2])([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3])` gives `[9.0, 36.0]`
 
 <a id="stream"></a>
 
