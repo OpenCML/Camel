@@ -3334,6 +3334,10 @@ void Backward::refuseWhenActive(
 }
 
 void Backward::run(const std::vector<gc_node_ref_t> &order) {
+    // The graph this pass walks: the transaction it reads hands out a const view, so every use
+    // below is a read by construction. A `forward()` call would say no less, but it would say it
+    // once, for the whole body; this says it at each of the sites that rely on it.
+    const auto &forward = forwardTransaction_.graph();
     primals_.insert(order.begin(), order.end());
     // The differentiated ports are active from the start: a port may be read after the node whose
     // region reads it (a loop's body reads it outside the value order of the node), and it does
@@ -3381,11 +3385,11 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
             return inputType->code() == TypeCode::Bool;
         }
         if (kind == GCNodeKind::Oper) {
-            const auto payload = forward().payloadOf(node);
+            const auto payload = forward.payloadOf(node);
             if (payload.size() >= sizeof(rt::GCOperBody)) {
                 const std::string uri(reinterpret_cast<const rt::GCOperBody *>(payload.data())->uri());
                 if (uri == "tensor:where" || uri == ":op/where") {
-                    const auto norm = forward().normInputsOf(node);
+                    const auto norm = forward.normInputsOf(node);
                     return !norm.empty() && input == norm.front();
                 }
                 if (inputType->code() == TypeCode::Bool) {
@@ -3402,7 +3406,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         if (kindOf(forwardTransaction_, node) != GCNodeKind::Oper) {
             return false;
         }
-        const auto payload = forward().payloadOf(node);
+        const auto payload = forward.payloadOf(node);
         if (payload.size() < sizeof(rt::GCOperBody)) {
             return false;
         }
@@ -3427,13 +3431,13 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
             return true;
         }
         if (kindOf(forwardTransaction_, read) == GCNodeKind::Join) {
-            const auto payload = forward().payloadOf(read);
+            const auto payload = forward.payloadOf(read);
             if (payload.size() < sizeof(rt::GCJoinBody)) {
                 return false;
             }
             const auto *body = reinterpret_cast<const rt::GCJoinBody *>(payload.data());
             for (size_t i = 0; i < body->armCount; ++i) {
-                const uint32_t region = forward().armRegionOf(body->brch, i);
+                const uint32_t region = forward.armRegionOf(body->brch, i);
                 if (region == 0) {
                     continue;
                 }
@@ -3447,7 +3451,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         }
         if (kindOf(forwardTransaction_, read) == GCNodeKind::Loop) {
             for (gc_node_ref_t inner :
-                 rt::LoopDraftView(*forward().program(), forward(), read).externalInputs(false)) {
+                 rt::LoopDraftView(*forward.program(), forward, read).externalInputs(false)) {
                 if (self(inner, self)) {
                     return true;
                 }
@@ -3466,7 +3470,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         // rule lookup when the value takes part in the gradient.
         if (kindOf(forwardTransaction_, node) == GCNodeKind::Loop) {
             const auto iterable =
-                rt::LoopDraftView(*forward().program(), forward(), node).iterable();
+                rt::LoopDraftView(*forward.program(), forward, node).iterable();
             if (iterable.has_value() &&
                 (active_.contains(*iterable) || tainted_.contains(*iterable))) {
                 Type *const iterableType = typeOf(forwardTransaction_, *iterable);
@@ -3474,7 +3478,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                     machineryTangentTypeOf(iterableType) == nullptr) {
                     Type *const elementType = tt::as_ptr<type::ArrayType>(iterableType)->elemType();
                     failAt(
-                        forward().nodeOrigin(node),
+                        forward.nodeOrigin(node),
                         std::format(
                             "a 'loop' iterates over an array of type '{}'{} that depends on a "
                             "differentiated parameter, but the array has no tangent: its element "
@@ -3483,7 +3487,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                             "(a float, or a struct or tuple of them), or stop depending on the "
                             "differentiated value",
                             iterableType->toString(),
-                            whereIs(forward().nodeOrigin(*iterable)),
+                            whereIs(forward.nodeOrigin(*iterable)),
                             elementType->toString()));
                 }
                 // A round of a loop over an array whose elements are themselves arrays (a rank-2
@@ -3513,7 +3517,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                         roundType != nullptr && roundType->code() == TypeCode::Array;
                     if (slicedValues && !isNumericArrayType(iterableType)) {
                         failAt(
-                            forward().nodeOrigin(node),
+                            forward.nodeOrigin(node),
                             std::format(
                                 "a 'loop' iterates over an array of type '{}'{} whose rounds are "
                                 "its slices: a round of that array is itself an array, and the "
@@ -3523,7 +3527,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                                 "rounds are numbers or records, or take the slices' gradient "
                                 "another way",
                                 iterableType->toString(),
-                                whereIs(forward().nodeOrigin(*iterable))));
+                                whereIs(forward.nodeOrigin(*iterable))));
                     }
                 }
             }
@@ -3532,7 +3536,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         const bool carrier = holdsFunction(type);
         bool inputActive    = false;
         bool inputTainted   = false;
-        for (auto inputs : {forward().normInputsOf(node), forward().withInputsOf(node)}) {
+        for (auto inputs : {forward.normInputsOf(node), forward.withInputsOf(node)}) {
             for (gc_node_ref_t input : inputs) {
                 inputActive |= active_.contains(input);
                 if (!controlInput(node, input)) {
@@ -3541,11 +3545,11 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
             }
         }
         if (kindOf(forwardTransaction_, node) == GCNodeKind::Join) {
-            const auto payload = forward().payloadOf(node);
+            const auto payload = forward.payloadOf(node);
             if (payload.size() >= sizeof(rt::GCJoinBody)) {
                 const auto *body = reinterpret_cast<const rt::GCJoinBody *>(payload.data());
                 for (size_t i = 0; i < body->armCount; ++i) {
-                    const uint32_t region = forward().armRegionOf(body->brch, i);
+                    const uint32_t region = forward.armRegionOf(body->brch, i);
                     if (region == 0) {
                         continue;
                     }
@@ -3567,7 +3571,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         // composite state is dropped at the projection without a diagnostic.
         if (kindOf(forwardTransaction_, node) == GCNodeKind::Loop && !inputActive) {
             for (gc_node_ref_t read :
-                 rt::LoopDraftView(*forward().program(), forward(), node).externalInputs(false)) {
+                 rt::LoopDraftView(*forward.program(), forward, node).externalInputs(false)) {
                 if (readsActive(read, readsActive)) {
                     inputActive = true;
                     break;
@@ -3580,18 +3584,18 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         if (kindOf(forwardTransaction_, node) == GCNodeKind::Loop && untapedLoops_.contains(node)) {
             // The condition and the body are regions: what the loop depends on is what they read
             // from around them, not only what the node itself is passed.
-            std::vector<gc_node_ref_t> reads{forward().normInputsOf(node).begin(),
-                                             forward().normInputsOf(node).end()};
+            std::vector<gc_node_ref_t> reads{forward.normInputsOf(node).begin(),
+                                             forward.normInputsOf(node).end()};
             reads.insert(
-                reads.end(), forward().withInputsOf(node).begin(), forward().withInputsOf(node).end());
+                reads.end(), forward.withInputsOf(node).begin(), forward.withInputsOf(node).end());
             for (gc_node_ref_t read :
-                 rt::LoopDraftView(*forward().program(), forward(), node).externalInputs(false)) {
+                 rt::LoopDraftView(*forward.program(), forward, node).externalInputs(false)) {
                 reads.push_back(read);
             }
             for (gc_node_ref_t input : reads) {
                 if (active_.contains(input) || tainted_.contains(input)) {
                     failAt(
-                        forward().nodeOrigin(node),
+                        forward.nodeOrigin(node),
                         std::format(
                             "a 'loop' depends on a differentiated parameter, but its "
                             "value of type '{}' has no gradient channel. Gradients cannot "
@@ -3599,7 +3603,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                             "loop's value, or the value it reads, something that can carry "
                             "a gradient",
                             type->toString(),
-                            whereIs(forward().nodeOrigin(node))));
+                            whereIs(forward.nodeOrigin(node))));
                 }
             }
         }
@@ -3634,7 +3638,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         // stops here without a diagnostic. Refuse the use rather than return a partial answer.
         if (!structural(node, type) && inputTainted) {
             const gc_node_ref_t source = [&] {
-                for (auto inputs : {forward().normInputsOf(node), forward().withInputsOf(node)}) {
+                for (auto inputs : {forward.normInputsOf(node), forward.withInputsOf(node)}) {
                     for (gc_node_ref_t input : inputs) {
                         if (tainted_.contains(input)) {
                             return input;
@@ -3644,19 +3648,19 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                 return kInvalidNodeRef;
             }();
             failAt(
-                forward().nodeOrigin(node),
+                forward.nodeOrigin(node),
                 std::format(
                     "a value of type '{}' depends on a differentiated parameter but has no "
                     "gradient channel, and it is used as data here{}; the parameter's "
                     "contribution would be dropped without a diagnostic. Use a value that can "
                     "carry a gradient (a float, or an aggregate of floats){}",
                     typeOf(forwardTransaction_, source)->toString(),
-                    whereIs(forward().nodeOrigin(node)),
+                    whereIs(forward.nodeOrigin(node)),
                     source == kInvalidNodeRef
                         ? std::string()
                         : std::format(
                               "; the value with no channel comes from {}",
-                              whereIs(forward().nodeOrigin(source)))));
+                              whereIs(forward.nodeOrigin(source)))));
         }
         active_.insert(node);
     }
