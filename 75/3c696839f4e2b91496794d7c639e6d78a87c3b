@@ -1,0 +1,54 @@
+# 四条裁定落地（分族判据、两条 random 红、`grad` 归属）
+
+四笔：`00873b35d`（`std::gir` 抖动）→ `f960e16c8`（分族判据）→ `8d9c23517`（四十次编译的网）→
+`9660c1707`（`grad` 归属页）。下面每条的 before/after 都是本树、主机上实测。
+
+## ① UnusedPureResult（random 红其一）：根因是"以对象地址为键的 body 表"
+
+- 根因：编译期有一张表拿对象的**地址**当键，而键所指的 body 比表先死、地址被后来的对象重用，
+  于是"某条语句的值没人要"报到了别人的行上；报在哪一行由堆布局决定，所以同一份输入时好时坏。
+- `develop` 上 `ca94c1759` 已修：body 改用永不重用的 id 命名（`ArmBuild::bodyId` / `GraphId`），
+  `droppedGraphs_`、`inferredExitGraphs_`、`droppedBodies_` 一并在那笔里换了键。
+- 本树 A/B（不是读代码）：把那笔 revert 掉 →
+  `unused_values.loop_statements_used` **每次**红在 `13:38` 的 `+`（`SemanticDiag::UnusedPureResult`），
+  恢复 → 打印 `6`、零诊断（同一次运行 `[SUMMARY] total: 8, pass: 7, fail: 1`）。
+- 新加的 `unused_values.one_input_one_answer`（`train_step.cml` 四十次编译，退出 0、无输出，3.4 s）
+  **只当网、不当复现**：碰撞由二进制布局决定，把那笔 revert 掉它照样四十次全过。这句写在用例的
+  `desc` 里，真正的复现形状是上面那条循环用例。
+- 扫查结论：builder 里以指针为键的表只查出**这一类 bug 一处**（就是 `ca94c1759` 修的那张）。
+  `blockGraphs_` 只写不读（死状态，未动）；其余（`bodyStates_`、`captures_`、`effectfulGraphs_`、
+  `inferredSignatures_`/`inferredResources_`、`valueUsedGraphs_`、`brokenBodies_`、`failedBodies_`、
+  `lateCaptures_`、`lambdaGraphs_`）都以"正在建的那个模块"的图/节点为键，并在模块结束前被读，
+  没有跨生命周期。所以不是"所有指针键表都有同一个 bug"。
+
+## ② std::gir 输出抖动（random 红其二）：图冻结时按前驱编号排序写
+
+- 修法：`src/runtime/graph.cpp#emitSideEdges` 把每个节点的前驱先拷进 `std::vector`、按编号
+  `std::sort` 再写；`orderEdges()`、`std::gir` 的 dump、图哈希都读这同一份规范数组。
+- 红：`EDGES frozen_agrees=1 some_node_ordered=1 frozen_sorted=0`，20 次跑出 **2 份 dump**
+  （9 与 11 两个节点的顺序互换）；绿：`frozen_sorted=1`，20 次**同一哈希**
+  （`trans.print_determinism`，hash 相同、>100 行）。
+
+## ③ 分族判据：参数与结果结构相同，效应限定不参与
+
+- 判据：一族 = 参数与结果**结构相同**的类型（`typeEqualsIgnoringResources`，效应子句在每一层都略过）；
+  不用"互相可赋值"（既不传递也不对称）。`docs/design-principles.cn.md` 5.2 加了这条。
+- 四组数字（`test/cases/opt/defun/family_shape.cml`，一值 `() => void`、一值 `(x: int) => int`）：
+  `DEFUN_VALUE types=1 values=1 calls=1 refused=1` → `types=3 values=3 calls=2 refused=0`；
+  另有 `GRAPH_STATS … "indirect_calls":0`、`"closures":0`，程序输出不变（`FAMILY a=42`）。
+- `defun.value_tag.tag` 仍 `types=2`：`pure` 与不写效应仍是**一族**，这条判据没把它拆开。
+
+## ④ `grad` 运行期建图的归属页
+
+- `docs/handover/reports/grad-runtime-graph-ownership.md`：归 `transforms` 线（`reinterp`/`split`/
+  `transpose` 在建图期建图），去函数化只管程序里写出来的函数值。
+- 本树复测（同一小程序、`std::stats`）：原样 `0/2`、`std::macro` `4/7`、`std::opt` `0/2`
+  （`specializations=2`）、`std::macro std::opt` `8/8`。**代码未动**。
+
+## 没做
+
+整条去函数化（捕获 + 多变体分派/折叠 + 同笔退役旧遍）未开工，coordinator 另开车道。交给它的两个数：
+旧遍 `src/passes/opt/defun/defun.cpp` **369 行**；`std::defunctionalize` 拼写 **16 处 / 17 个文件**、
+真依赖它的调用者 **9 处**（注册 1、`stdlib/std.cml` 声明 1、`defun.plan.toml` 6 条、`four_backends.py`
+1 个常量）+ 文档 6 处（`docs/cli.md:298`、`cli.cn.md:197`、`diagnostics.md` 5 处、`reference/…` 1 处）；
+`defun.plan.toml` 7 条期望待重写。
