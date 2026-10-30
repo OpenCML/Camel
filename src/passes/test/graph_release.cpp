@@ -19,6 +19,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/mm.h"
 #include "camel/runtime/draft_session.h"
+#include "camel/runtime/graph_txn.h"
 
 using camel::passes::test::anchorNode;
 using camel::passes::test::blankNode;
@@ -35,14 +36,17 @@ GraphReleaseTestPass::apply(const camel::runtime::Program *program, std::ostream
     bool alive         = false;
     {
         RuntimeGraphDraftSession session(context_, program);
-        auto draft = GraphDraft::decode(*program, program->root());
-        draft->setId(context_->graphIds().allocate());
+        // The graph is the transaction's: the test builds in it and encodes from it, and names
+        // no storage of its own.
+        auto transaction = GraphTransaction::decode(*program, program->root());
+        auto &draft      = transaction->edit();
+        draft.setId(context_->graphIds().allocate());
         // A graph big enough to show in the space: a specialization of a graph that is inlined
         // is of the graph it specializes, which is not small either.
         for (size_t i = 0; i < 20000; ++i) {
-            blankNode(*draft);
+            blankNode(draft);
         }
-        encoded    = draft->encode("test$unbound", "test$unbound");
+        encoded    = draft.encode("test$unbound", "test$unbound");
         afterEncode = camel::core::mm::graphSpace().usage().usedBytes;
         session.adoptGraph(encoded);
         // A collection while the pass runs must keep it: the session's drafts reach it.
