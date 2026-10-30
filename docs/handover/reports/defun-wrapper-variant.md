@@ -17,6 +17,8 @@ FUNC node 1 calls a graph that is not among the graphs this graph calls (its ref
 * 造它的遍，在它自己的草稿里 `addDependency`；
 * 被改写去调用它的那些图的草稿，也要 `addDependency(包装图的 id)`——否则同样是这一句红，而这次它是在**一次真的改写之后**才出现，很容易被当成改写本身写坏了。
 
+那张只为验证“遍里能造图”的调用图后来**删掉了**：包装图用的是同一条路，留着它等于每次降级都白造一张图、白烧一个 `graph id`。删的是 `writeCallGraph` 和它在会话开头的那次调用，`context_->graphIds().allocate()` 的调用点因此少一处（只剩包装图那一处）。
+
 ## 二、借一次的手不许点名类型
 
 写图 helper 先写成 `GraphDraft &draft = transaction->edit();`，账本（`test/cases/runtime/graph_draft_ledger`）当场判红：files 66 → 67、references 535 → 536。它只借一次草稿、并不持有它，所以 helper 收的是模板参数（`template <class Draft>`，从调用点收 `transaction->edit()`），三个数回到 66 / 535。
