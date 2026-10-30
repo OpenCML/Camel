@@ -138,15 +138,11 @@ std::string debugRunArrayTypeSelfTest() {
     require(open3->assignableFrom(fromInts), "f32[3, ..] does not accept f32[3, 4]");
     require(!open3->assignableFrom(ArrayType::create(f32, shapeOf({4, 5}))), "f32[3, ..] accepts f32[4, 5]");
     require(!open3->assignableFrom(anyF32), "f32[3, ..] accepts an argument of unknown extents");
-    // Rank zero is the element itself (design principles 5.4), but no slot of a `T[..]` type holds
-    // a rank-zero value at run time: an array-typed slot is an array, and a scalar put in it is
-    // read as one (a `println(v)` of such a parameter crashed the process). So the relation that
-    // answers "can this value be held where `T` is declared" says no to the element -- as it does
-    // for `T[]`, which states one dimension, and for the prefix of `T[3, ..]`, which is a
-    // dimension the value must have. The element reaches `T[..]` through a declaration or a cast,
-    // which make the name the element instead of storing it in a slot (Builder::declaredValue,
-    // Builder::visitCastNode); that is why the cast below is still Safe.
-    require(!openF32->assignableFrom(f32), "f32[..] holds f32 (there is no rank-zero slot)");
+    // Rank zero is the element itself (design principles 5.4): `T[..]` includes it, so a value of
+    // the element type is a value of `T[..]` -- and `T[]`, which states one dimension, is not
+    // that type: it takes no value of rank zero. The prefix of `T[3, ..]` is a dimension, so a
+    // value of rank zero does not enter it either.
+    require(openF32->assignableFrom(f32), "f32[..] does not accept f32 (rank zero)");
     require(!anyF32->assignableFrom(f32), "f32[] accepts f32 (rank one is not rank zero)");
     require(!open3->assignableFrom(f32), "f32[3, ..] accepts f32 (its prefix is a dimension)");
     require(!openF32->assignableFrom(i64), "f32[..] accepts int (another element type)");
