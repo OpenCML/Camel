@@ -1,0 +1,18 @@
+/**
+ * The shape is the field names as well as their number (design principles 5.5): `A = {a: int}`
+ * over `B = {b: int}` has the same kind and the same count, and is still another shape, because
+ * the head names the fields and `b` is not `a`. The member types agree here, so what refuses it is
+ * the names alone.
+ */
+
+type A = {a: int}
+type B = {b: int}
+
+func build(u: B) {
+    return A { static for n, F in fields B => u.[n] }
+}
+
+func main(): int sync {
+    println(build({b: 1}))
+    return 0
+}
