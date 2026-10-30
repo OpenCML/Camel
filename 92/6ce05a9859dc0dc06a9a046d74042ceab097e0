@@ -1,0 +1,6 @@
+`modules/transforms` 骨架：`926ce05a9`，纯接线，无行为变化。
+
+1. **为什么只做骨架**：§4.1 把 `reinterp` 写成 `func reinterp::<F, H>(f: F): Reinterp<F, H> when is_function::<F>() && is_rule_set::<H>()`，而 `Reinterp` 与 `is_rule_set` 今天**都不存在**（`git grep -n "\bReinterp\b"`、`\bis_rule_set\b` 各 0 处，`RuleSet` 也是 0 处）。所以签名写不出来，类型函数也不在这一笔里顺手造。
+2. **先前的误判已纠正**：`reinterp` 在代码里 0 处；`pullback.cpp` 里那"19 处"是 `reinterpret_cast` 的误匹配。**找符号名必须加词边界**——这条写进工作习惯。
+3. **构建知识**（探针实测）：`add_camel_module` 的 `EXTRA_INCLUDES <dir>` + `EXTRA_LIBS <name>_cmo` 能让一个 `.cmo` 链接另一个 `.cmo` 的 C++ 符号；提供方模块的 `add_subdirectory` 必须排在前面，所以 `modules/transforms` 在 `modules/autodiff` 之前。这与"跨 cmo 不可跨"的旧判断相反，旧判断错。
+4. **读数纪律**：没有 `[SUMMARY]` 的闸门日志不算读数；本次第一次日志半途截断，重跑后才取到 **total 7873 / pass 7862 / fail 0 / skip 9 / known 2**。`skip` 随 GPU 卡占用浮动，比总数没意义，要比 `[SKIP]` 行的差集。
