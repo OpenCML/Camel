@@ -3,6 +3,7 @@
 
 #include "handle.h"
 
+#include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/text.h"
@@ -15,6 +16,8 @@
 #include <ostream>
 
 namespace camel::graphmod {
+namespace err = camel::core::error;
+
 
 using namespace camel::core::type;
 using camel::runtime::GraphId;
@@ -230,6 +233,19 @@ HandleType::cloneWithArguments(std::span<const TypeArgument> arguments, std::str
 Handle *Handle::create(
     HandleKind kind, const Program *program, GraphId graph, uint32_t index, Type *typeRef,
     mm::IAllocator &allocator) {
+    // A handle that names a program names a node that program has. A node made in a draft is not
+    // in the published graph yet, and a handle that claimed it would send every reader to a slot
+    // the graph does not have -- so the mistake is refused here, where the handle is made, rather
+    // than where somebody reads it.
+    if (kind == HandleKind::Node && program != nullptr) {
+        const camel::runtime::GCGraph *published = program->graph(graph);
+        if (published == nullptr || !published->containsNodeRef(index)) {
+            err::throwRuntimeFault(
+                err::RuntimeDiag::InvalidArgument,
+                "graph.handle",
+                "the node is not in the program's graph");
+        }
+    }
     void *mem = allocator.alloc(sizeof(Handle), alignof(Handle));
     if (mem == nullptr) {
         throw std::bad_alloc();

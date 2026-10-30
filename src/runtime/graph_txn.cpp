@@ -19,4 +19,8 @@ GraphTransaction::decode(const Program &program, const GCGraph *graph) {
         new GraphTransaction(GraphDraft::decode(program, graph)));
 }
 
+std::unique_ptr<GraphTransaction> GraphTransaction::borrow(GraphDraft &draft) {
+    return std::unique_ptr<GraphTransaction>(new GraphTransaction(draft));
+}
+
 } // namespace camel::runtime
