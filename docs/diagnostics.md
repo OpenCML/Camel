@@ -2171,15 +2171,15 @@ Check the documentation for supported features.
 **Example** (`test/cases/compile/stream/yield_lowering.cml`, run as `camel test/cases/compile/stream/yield_lowering.cml`)
 
 ```camel
-func count(n: int): int.. {
-    loop i = 0 while i < n do {
-        yield i
-        i + 1
+func running(n: int): (int, int).. {
+    loop i = 0, s = 0 while i < n do {
+        yield (i, s)
+        (i + 1, s + i)
     }
 }
 
 func main(): int sync {
-    let s = count(3)
+    let s = running(3)
     println(1)
     return 0
 }
