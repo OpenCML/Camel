@@ -485,7 +485,7 @@ func positions(t: (int, string)): (int, int) {
 
 - 块的**值就是那一轮的值**：与语句形式不同，这里不丢弃。块里可以用 `let`，最后一句话的值就是字段的值；没有值（空块，或以一条没有值的语句结尾）报 `SemanticDiag::StaticComprehensionVoidElement`。
 - 每个字段/元素的**类型取自那一轮的值**，不强制等于 `F`：`F` 是 `int` 而值是 `float` 时结果字段就是 `float`。字段名与顺序仍来自 `T` 的声明顺序，所以 `tree_map` 这类改变叶子类型、保持形状的展开可以直接写。
-- **同一形状写成 `T { ... }`**：`T { static for n, F in fields T => e }` 用一个类型 `T` 同时给出字段名和种类（结构体或元组），所以 `case struct | tuple` 一个分支就够。`T` 必须与生成器遍历的类型是同一个类型，否则报 `SemanticDiag::SameShapeComprehensionMismatch`；`T` 是叶子（没有字段）时报 `SemanticDiag::SameShapeComprehensionNotComposite`。`{ ... }` 与 `( ... )` 仍分别只装结构体和元组。
+- **同一形状写成 `T { ... }`**：`T { static for n, F in fields T => e }` 用一个类型 `T` 同时给出字段名和种类（结构体或元组），所以 `case struct | tuple` 一个分支就够。这里是类型位置，写入的是一个类型表达式而不只是类型名：`Tangent<T> { static for n, _ in fields T => zero_tangent(x.[n]) }` 的头部是算出来的类型（设计原则 5.6），字段名与种类取自它、每个字段的类型取自那一轮的值，两种头部写法同一条规则。头部与生成器遍历的类型必须**同形状**：同样的种类、同样的字段名与个数，否则报 `SemanticDiag::SameShapeComprehensionMismatch`（`Tangent<T>` 与其参数 `T` 就是同形状）；头部算出来是叶子（没有字段）时报 `SemanticDiag::SameShapeComprehensionNotComposite`。`{ ... }` 与 `( ... )` 仍分别只装结构体和元组。
 - 空结构体、空元组没有轮次，结果是 `{}` / `()`（一个零槽的 `FILL`）。
 - 图上是直线代码：每轮按声明顺序建出它读的 `ACCS`，comprehension 本身没有节点。元组推导式的结果先保持为编译期元组：只被 `indices`、`..` 或 `.[j]` 使用时元素保持独立、不建 `FILL`；作为值用（打印、返回、赋给运行期位置）时，在使用处一个 `FILL` 把各轮的值装回同形状。结构体推导式总是装成一个 `FILL`。`t.[n].[m]` 里对父的访问只建一次，内层各字段共用同一个 `ACCS`，因此与 C++ `tree_map` 对同一棵树建出的图相同。
 - `{ static for ... }` 在需要块的位置（`case struct => { ... }`、`if c then { ... }`）也读作 comprehension，所以语句形式不能再套一层花括号：直接写 `static for n, F in fields T => 块`。
