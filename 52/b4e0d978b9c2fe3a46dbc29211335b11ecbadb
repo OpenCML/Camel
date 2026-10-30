@@ -1,0 +1,34 @@
+# graph-store 第 2 步 b（b5a–b5c）：直连 `GraphDraft` 的引用 562 → 537 处
+
+分支 `lane-gs2b`；推入 develop 的提交 `52b4e0d97`（三笔改动 + 三次并入 develop：`6ed427f5e`、`9fcf82843`、`d60905221`，并入的都是别的车道的用例与 stdlib 声明，与这三层无交集）。
+
+## 做了什么
+
+| 提交 | 从 → 到 | 压了哪些文件 |
+|---|---|---|
+| `1bd624280` | 73 文件 / 562 处 → 71 / 553；decode 12 → 6 | `trans/json/gir_canonical.cpp` 的 `orderingOf`、`test/graph_release.cpp`、`test/writings.cpp` 的四处：遍自己给输入 decode 一张图的三处改问事务要图，`GraphDraft::decode` 四处换成 `GraphTransaction::decode` |
+| `4d440545e` | 71 / 553 → 69 / 541 | `tensor/passes/fuse.cpp` 的七个局部助手、`test/loop_collect.cpp` 的三个建图小助手改收 `GraphTransaction&`：只读的体首一行 `transaction.graph()`，要写的体首一行 `transaction.edit()`，函数体其余未动 |
+| `6a8cfb97b` | 69 / 541 → 67 / 537 | `runtime/retype.{h,cpp}` 的 `retypeDraft`、`inputCountOf` 与 `GraphRetypeOptions::nodeType` 钩子；`opt/defun/defun_value.cpp` 的整程序重建改传事务 |
+
+## 三件事说清
+
+1. **decode 12 → 6 是这一轮压得最多的一项，那 12 里 6 处是纯读**：这 6 处遍只是要一张自己输入图来读（`orderingOf`、`graph_release`、`writings` 的四个读点），改后读事务拥有的那一张，不再自己 decode 一张。剩下 6 处各有用处：`draft.cpp` 的定义一句、`rewrite/proof.h` 的注释一句、`modules/graph/read.cpp` 的句柄自己开一张、`draft_inline.cpp` 两张底图、`writings.cpp` 里一个自建 draft 的 roundtrip 助手。
+2. **构造点 3 一笔未动**：新建一张可编辑图的三处就是"谁能建图"这件事本身，动它等于换所有者的位置；这一轮只换读取者与写者的签名，构造点与 b4（会话与通用改写）留给后面的层。
+3. **`never_rises` 每一次闸门都跑、每次都绿**：三个数只准降不准涨，每降一次就 `check.mjs --record` 记一次（562→553→541→537 逐笔记下）。这是这份工作唯一能防止收益被下一笔抵消的东西——下一笔只要新建一处直连，闸门当场红，并打印"哪个数从几升到几"和新出现的位置。
+
+## 闸门与戳
+
+| 提交 | total | pass | fail | skip | known | revision / clean / fingerprint |
+|---|---|---|---|---|---|---|
+| `1bd624280` | 7869 | 7858 | 0 | 9 | 2 | 1bd624280827 / true / f628049b3275 |
+| `4d440545e` | 7869 | 7858 | 0 | 9 | 2 | 4d440545e490 / true / d2258adf90a5 |
+| `6a8cfb97b` | 7869 | 7858 | 0 | 9 | 2 | 6a8cfb97b06b / true / dd3ebe8ddec6 |
+| `52b4e0d97` | 7877 | 7868 | 0 | 7 | 2 | 52b4e0d978 / true / c5ebfd7d2490 |
+
+skip 随主机上有没有那张卡浮动（7 或 9），total 随 skip 一起动；判据只看 fail。
+
+## 下一层（按风险从低到高）
+
+1. `runtime/graph.cpp` 的 read-only 助手 5 处；
+2. `runtime/control.cpp` 12 处；
+3. 最后才是 `compile/gir/builder_helpers` 的 66 处（b2.4 的余量，动它等于改建造模式，一层一审）。
