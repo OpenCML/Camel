@@ -1529,8 +1529,8 @@ OrderReductionPass::apply(const camel::runtime::Program *program, std::ostream &
         "std::opt::order",
         [](camel::runtime::GraphTransaction &transaction) {
             auto &draft = transaction.edit();
-            return camel::runtime::reduceOrderDependencies(draft) +
-                   camel::runtime::reduceControlDependencies(draft);
+            return camel::runtime::reduceOrderDependencies(transaction) +
+                   camel::runtime::reduceControlDependencies(transaction);
         },
         nullptr,
         nullptr,
@@ -1556,8 +1556,8 @@ const camel::runtime::Program *simplifyGraph(
             "std::opt::order",
             [](camel::runtime::GraphTransaction &transaction) {
             auto &draft = transaction.edit();
-            return camel::runtime::reduceOrderDependencies(draft) +
-                   camel::runtime::reduceControlDependencies(draft);
+            return camel::runtime::reduceOrderDependencies(transaction) +
+                   camel::runtime::reduceControlDependencies(transaction);
         },
             nullptr,
             &memo,

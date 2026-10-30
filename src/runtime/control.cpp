@@ -124,7 +124,8 @@ bool appendControlDependency(
     return true;
 }
 
-size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork) {
+size_t reduceControlDependencies(camel::runtime::GraphTransaction &transaction, size_t maxWork) {
+    auto &draft = transaction.edit();
     if (!maxWork) {
         return 0;
     }
@@ -429,11 +430,17 @@ size_t reduceOrderingEdges(GraphDraft &draft, size_t maxWork, OrderingReading re
 
 } // namespace
 
-size_t reduceOrderDependencies(GraphDraft &draft, size_t maxWork) {
+/// Names the transaction, not the draft, for the same reason the rest of this family does. It still
+/// reads control waits: the question of whether a pass may stop making them at all (edges 2a) is
+/// undecided, and until it is, a reduction that ignored them would be answering a question about a
+/// graph the compiler does not build.
+size_t reduceOrderDependencies(camel::runtime::GraphTransaction &transaction, size_t maxWork) {
+    auto &draft = transaction.edit();
     return reduceOrderingEdges(draft, maxWork, OrderingReading::Pass);
 }
 
-size_t reduceDocumentOrdering(GraphDraft &draft, size_t maxWork) {
+size_t reduceDocumentOrdering(camel::runtime::GraphTransaction &transaction, size_t maxWork) {
+    auto &draft = transaction.edit();
     return reduceOrderingEdges(draft, maxWork, OrderingReading::Document);
 }
 
