@@ -4,15 +4,14 @@ refusing a rank-zero value instead of reading a dimension it has not. Print and 
 handled rank zero, and no operator takes an open rank today, so arithmetic has no rank-zero path.
 The self-test checks rank 0 / one element / size 1 / prints "1.0" / equals a 1.0 and not a 2.0.
 
-KNOWN DEFECT, open at this commit: `func show(v: f32[..]) { println(v) }` called with a number
-exits 139. One line reproduces it:
+KNOWN DEFECT at 619eedb6c, CLOSED by cae413dbf: `func show(v: f32[..]) { println(v) }` called with a
+number exits 139 at this commit (reproducer one line: `show(2.5)`), and after cae413dbf the same
+program prints `2.5`. Cause: the edge from the value to the slot was not converted. Fix: the
+conversion at the one place a value's type goes from `T` to `T[..]` (`Builder::coerceTo`), with the
+call-argument edge routed through the same question, and the run-time half in `castSlotFrom`.
 
-    func show(v: f32[..]) { println(v) }
-    func main() { show(2.5) }
-
-Cause: the edge from the value to the slot is not converted -- the slot of `T[..]` holds the
-element itself, and the reading of that slot reads it as an array. The commit that fixes it
-(S2: the wrapping conversion at the one place a value's type goes from `T` to `T[..]`, in
-`Builder::coerceTo`, with the call-argument edge routed through it) must record this defect as
-closed, and the gate is green until then only because no case calls a `T[..]` parameter with an
-element: 7939 / 7930 / 0 with the defect live.
+Still open after cae413dbf: a struct field of `T[..]` built from a composite literal whose element
+is computed (`let b: Box = { v: one }`) reads the field as an array that is not there -- the
+composite literal's FILL links its element nodes without `coerceTo`, and the pure-literal form of
+the same literal is refused with `LiteralNotRepresentable`. That entrance needs the conversion
+before a `T[..]` field can hold a value.
