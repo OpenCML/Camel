@@ -38,6 +38,8 @@
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace camel::runtime {
 
@@ -653,6 +655,9 @@ struct PlannedDraftNode {
 struct DraftPayloadPlan {
     std::vector<PlannedDraftNode> nodes;
     std::vector<gc_node_ref_t> runtimeRefsByDraftId;
+    // True when the plan is of a part of the draft's nodes (`live` in planDraftPayload): a control
+    // region whose owner the part leaves out is dead in the graph the plan describes.
+    bool subset               = false;
     gc_cnt_t edgeCount        = 0;
     gc_cnt_t orderEdgeCount   = 0;
     gc_cnt_t syncEdgeCount    = 0;
@@ -690,12 +695,24 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
     return (bodyBytes + kPayloadWordBytes - 1) / kPayloadWordBytes;
 }
 
-DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
+DraftPayloadPlan planDraftPayload(
+    const GraphDraft &draft, std::optional<std::span<const gc_node_ref_t>> live = std::nullopt) {
+    // A caller that builds a graph from a part of the draft's nodes names them in `live`, sorted
+    // (collectLiveDraftNodes). Every other node the draft still holds is not in the graph, and an
+    // order edge that names one of them is dropped with it: an order edge carries no liveness of
+    // its own (docs/design/effects/edges.cn.md 1.5).
+    const bool subset = live.has_value();
+    std::unordered_set<gc_node_ref_t> liveSet;
+    if (subset) {
+        ASSERT(!draft.keepsNodeIds(), "A subset of a draft's nodes cannot keep their ids.");
+        liveSet.insert(live->begin(), live->end());
+    }
+    const auto inGraph = [&](gc_node_ref_t id) { return !subset || liveSet.contains(id); };
     auto requireAlive = [&](gc_node_ref_t owner, gc_node_ref_t ref, std::string_view lane) {
         if (ref == kInvalidNodeRef) {
             return;
         }
-        if (!draft.alive(ref)) {
+        if (!draft.alive(ref) || !inGraph(ref)) {
             const auto *ownerHeader = owner == kInvalidNodeRef ? nullptr : draft.header(owner);
             throw std::runtime_error(
                 std::format(
@@ -712,6 +729,7 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
     };
 
     DraftPayloadPlan plan;
+    plan.subset = subset;
     plan.runtimeRefsByDraftId.assign(draft.nodeSlotCount(), kInvalidNodeRef);
 
     // Live nodes keep their draft order and take dense NodeIds.
@@ -735,6 +753,9 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
             }
             continue;
         }
+        if (!inGraph(draftId)) {
+            continue;
+        }
         const DraftNodeHeader *header = draft.header(draftId);
         ASSERT(header != nullptr, "Draft payload plan requires a non-null node header.");
         for (gc_node_ref_t ref : draft.normInputsOf(draftId)) {
@@ -746,8 +767,13 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
         for (gc_node_ref_t ref : draft.ctrlInputsOf(draftId)) {
             requireAlive(draftId, ref, "ctrl-input");
         }
+        size_t keptOrderInputs = 0;
         for (gc_node_ref_t ref : draft.orderInputsOf(draftId)) {
+            if (subset && !inGraph(ref)) {
+                continue; // dropped with the node it orders after
+            }
             requireAlive(draftId, ref, "order-input");
+            ++keptOrderInputs;
         }
         for (gc_node_ref_t ref : draft.syncInputsOf(draftId)) {
             requireAlive(draftId, ref, "sync-input");
@@ -769,7 +795,7 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
         payloadWords += words;
         edgeCount += draft.normInputsOf(draftId).size() + draft.withInputsOf(draftId).size() +
                      draft.ctrlInputsOf(draftId).size();
-        orderEdgeCount += draft.orderInputsOf(draftId).size();
+        orderEdgeCount += keptOrderInputs;
         syncEdgeCount += draft.syncInputsOf(draftId).size();
     }
 
@@ -1017,7 +1043,8 @@ void emitDraftPayload(
     // The order edges and the sync edges (docs/design/effects/edges.cn.md 1.5): neither is a port,
     // so each is written to the graph's own array, in the node order the records have (which is
     // what makes the arrays sorted by user).
-    const auto emitSideEdges = [&](auto *edges, gc_cnt_t count, const auto &inputsOf) {
+    const auto emitSideEdges = [&](auto *edges, gc_cnt_t count, const auto &inputsOf,
+                                   bool dropUnmapped) {
         if (count == 0) {
             return;
         }
@@ -1027,11 +1054,14 @@ void emitDraftPayload(
                 continue;
             }
             for (gc_node_ref_t pred : inputsOf(planned.draftId)) {
-                ASSERT(at < count, "Draft side-edge emission wrote past the planned edges.");
                 ASSERT(
                     pred < plan.runtimeRefsByDraftId.size(),
                     "Draft side-edge emission encountered a node outside the payload plan.");
                 const gc_node_ref_t runtimePred = plan.runtimeRefsByDraftId[pred];
+                if (runtimePred == kInvalidNodeRef && dropUnmapped) {
+                    continue;
+                }
+                ASSERT(at < count, "Draft side-edge emission wrote past the planned edges.");
                 ASSERT(
                     runtimePred != kInvalidNodeRef,
                     "Draft side-edge emission encountered a dead node.");
@@ -1043,10 +1073,10 @@ void emitDraftPayload(
     };
     emitSideEdges(
         payload.orderEdges, payload.orderEdgeCount,
-        [&](gc_node_ref_t id) { return draft.orderInputsOf(id); });
+        [&](gc_node_ref_t id) { return draft.orderInputsOf(id); }, true);
     emitSideEdges(
         payload.syncEdges, payload.syncEdgeCount,
-        [&](gc_node_ref_t id) { return draft.syncInputsOf(id); });
+        [&](gc_node_ref_t id) { return draft.syncInputsOf(id); }, false);
 
     for (size_t i = 0; i < draft.normPorts().size(); ++i) {
         payload.normPorts[i] = plan.runtimeRefsByDraftId[draft.normPorts()[i]];
@@ -1069,6 +1099,13 @@ void emitDraftPayload(
         region.owner           = mapRegionNode(region.owner);
         region.result          = mapRegionNode(region.result);
         region.callSite        = mapRegionNode(region.callSite);
+        // A control region the graph being built has no owner for is dead: what it held went with
+        // the node that ran it. A graph of the draft's every node keeps its regions as they are.
+        if (plan.subset && region.owner == kInvalidNodeRef &&
+            (region.kind == GCRegionKind::Arm || region.kind == GCRegionKind::LoopCond ||
+             region.kind == GCRegionKind::LoopBody)) {
+            region.kind = GCRegionKind::Dead;
+        }
         payload.regionTable[r] = region;
     }
     for (uint32_t i = 0; i < draft.regionPortCount(); ++i) {
@@ -1233,29 +1270,39 @@ GCGraphDebugRecord *createGraphDebugRecord(std::string mangledName, std::string 
     return record;
 }
 
-void recordDraftDebugData(GCGraphDebugRecord *record, const GraphDraft &draft) {
+void recordDraftDebugData(
+    GCGraphDebugRecord *record, const GraphDraft &draft,
+    std::optional<std::span<const gc_node_ref_t>> live) {
     if (!record) {
         return;
     }
+    const bool subset = live.has_value();
+    std::unordered_set<gc_node_ref_t> liveSet;
+    if (subset) {
+        liveSet.insert(live->begin(), live->end());
+    }
+    const auto inGraph = [&](gc_node_ref_t id) { return !subset || liveSet.contains(id); };
     record->implKernelUri = draft.implKernelUri();
     record->declarationFacts = draft.declarationFacts();
     record->captureNames.assign(draft.captureNames().begin(), draft.captureNames().end());
     record->nodeNames.clear();
     bool named = false;
     for (gc_node_ref_t ref = 0; ref < draft.nodeSlotCount(); ++ref) {
-        if (draft.alive(ref) && draft.nodeName(ref) != camel::core::kEmptySym) {
+        if (draft.alive(ref) && inGraph(ref) && draft.nodeName(ref) != camel::core::kEmptySym) {
             named = true;
         }
     }
 
     if (named) {
         // The names are indexed by runtime node id, not by draft place: the commit drops dead
-        // places and may number the rest differently.
-        const DraftPayloadPlan plan = planDraftPayload(draft);
+        // places and may number the rest differently, and a graph built from a part of the
+        // draft's nodes has only that part.
+        const DraftPayloadPlan plan = planDraftPayload(draft, live);
         record->nodeNames.assign(plan.nodes.size(), camel::core::kEmptySym);
 
         for (gc_node_ref_t ref = 0; ref < draft.nodeSlotCount(); ++ref) {
-            if (!draft.alive(ref) || draft.nodeName(ref) == camel::core::kEmptySym) {
+            if (!draft.alive(ref) || !inGraph(ref) ||
+                draft.nodeName(ref) == camel::core::kEmptySym) {
                 continue;
             }
             const gc_node_ref_t runtime =
@@ -1774,12 +1821,16 @@ GCGraph::GCGraph(
     revision_ = revisions.fetch_add(1, std::memory_order_relaxed) + 1;
 }
 
-GCGraphPayloadShape describeDraftNativePayload(const GraphDraft &draft) {
-    return describeDraftPayload(draft, planDraftPayload(draft));
+GCGraphPayloadShape
+describeDraftNativePayload(
+    const GraphDraft &draft, std::optional<std::span<const gc_node_ref_t>> live) {
+    return describeDraftPayload(draft, planDraftPayload(draft, live));
 }
 
-void emitDraftNativePayload(const GraphDraft &draft, GCGraphPayloadArena &payload) {
-    emitDraftPayload(draft, planDraftPayload(draft), payload);
+void emitDraftNativePayload(
+    const GraphDraft &draft, GCGraphPayloadArena &payload,
+    std::optional<std::span<const gc_node_ref_t>> live) {
+    emitDraftPayload(draft, planDraftPayload(draft, live), payload);
 }
 
 void validateRuntimeGraphPayload(const Program &program, const GCGraph *graph) {
