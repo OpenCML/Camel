@@ -1,0 +1,24 @@
+/**
+ * What a loop takes from its own statements is used: the condition it asks, the body's value that
+ * becomes the next state. Neither is a statement whose value nobody takes, so neither is an
+ * UnusedPureResult -- and neither is reported when a later body drops what it gives.
+ *
+ * The bodies of a loop's condition and body live only as long as the loop is built; a body built
+ * after it must be judged by its own last statement and not by a dead one at the same address
+ * (they used to be keyed by the address of the object, and a seed of this shape reported
+ * `s + b` below and `maybe`'s empty arm, exit 1).
+ */
+
+func seed(xs: int[]): int {
+    return loop s = 0 for b in xs do s + b
+}
+
+func dropsWhatItGives(flag: bool): void {
+    if flag then {}
+}
+
+func main(): int sync {
+    println(seed([1, 2, 3]))
+    dropsWhatItGives(true)
+    return 0
+}

@@ -1,0 +1,36 @@
+/**
+ * The statements of a generator body that writes `sync` are one sync block, so they run in the
+ * order they are written in -- across the `yield`s too: a statement written after a `yield` waits
+ * for the pull that goes on from there, and then runs before that pull hands its element out
+ * (design principles 3.4, 5.4; language reference 7.3.1).
+ *
+ * `counted` alternates the element and a print, so the two orders give two different outputs:
+ * the source order is `1 a 2 b 3` -- `a` is written between the first and the second element, so
+ * it is printed after the `1` the consumer took and before the `2`, and `b` between the second
+ * and the third. An element printed before the print written before it (`a 1 2 b 3`) or prints
+ * gathered at one end (`a b 1 2 3`) are both a different string.
+ *
+ * `opening` puts a print before its first `yield` and one after its last: `start 1 end` says the
+ * first statement runs in the pull that starts the body, and the last one runs in the pull that
+ * finds the stream over -- both pulled by the same consumer loop, so the two are read in one order.
+ */
+
+func counted(): int.. sync {
+    yield 1
+    println("a")
+    yield 2
+    println("b")
+    yield 3
+}
+
+func opening(): int.. sync {
+    println("start")
+    yield 1
+    println("end")
+}
+
+func main(): int sync {
+    println(loop acc = 0 for v in counted() do sync { println(v); acc + v })
+    println(loop acc = 0 for v in opening() do sync { println(v); acc + v })
+    return 0
+}

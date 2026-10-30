@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-298 diagnostics: 277 errors, 21 warnings. 15 carry a machine-applicable edit, 283 say why they carry none.
+300 diagnostics: 279 errors, 21 warnings. 15 carry a machine-applicable edit, 285 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -262,6 +262,8 @@ prints one entry.
 | `0x030001FF` | [SemanticDiag::ExtentNotADimension](#extentnotadimension) | Error | no |
 | `0x03000200` | [SemanticDiag::VarArgumentTypeMismatch](#varargumenttypemismatch) | Error | no |
 | `0x03000201` | [SemanticDiag::StatementAfterReturn](#statementafterreturn) | Error | no |
+| `0x03000202` | [SemanticDiag::TagArgumentNotValue](#tagargumentnotvalue) | Error | no |
+| `0x03000203` | [SemanticDiag::TagNameAsValue](#tagnameasvalue) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -2171,15 +2173,15 @@ Check the documentation for supported features.
 **Example** (`test/cases/compile/stream/yield_lowering.cml`, run as `camel test/cases/compile/stream/yield_lowering.cml`)
 
 ```camel
-func count(n: int): int.. {
-    loop i = 0 while i < n do {
-        yield i
-        i + 1
+func running(n: int): (int, int).. {
+    loop i = 0, s = 0 while i < n do {
+        yield (i, s)
+        (i + 1, s + i)
     }
 }
 
 func main(): int sync {
-    let s = count(3)
+    let s = running(3)
     println(1)
     return 0
 }
@@ -4097,7 +4099,7 @@ No tag '{0}' is declared.
 **Help**
 
 ```text
-Tags share the namespace of functions and types: import the module that declares it, or declare it with 'tag {0} on ...'.
+A tag has a space of its own, separate from functions, types and values, and the tag itself is not a value: import the module that declares it, or declare it with 'tag {0} on ...'.
 ```
 
 **Example** (`test/cases/compile/tags/err_undeclared.cml`, run as `camel test/cases/compile/tags/err_undeclared.cml`)
@@ -8546,6 +8548,77 @@ func g(): int sync {
 
 func main(): int sync {
     println(g())
+    return 0
+}
+```
+
+### TagArgumentNotValue
+
+`0x03000202` · Error · `SemanticDiag::TagArgumentNotValue`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The tag '{1}' cannot take '{0}' as an argument: it names {2}.
+```
+
+**Help**
+
+```text
+A tag is read before the program runs, so an argument is a compile-time value -- a literal, a top-level constant or a string -- or, for a parameter that carries a function, the name of a function of the program (the fact is that function's graph reference). A tag and a type are declarations, not values; a rule and a body-less kernel are declarations too, and neither has the function graph such a parameter takes. Name a function, a literal or a constant.
+```
+
+**Example** (`test/cases/compile/tags/err_tag_argument.cml`, run as `camel test/cases/compile/tags/err_tag_argument.cml`)
+
+```camel
+/// A tag argument that names a tag. A tag is a declaration, not a value (the author's ruling of
+/// 2026-10-30: a tag keeps the name it is written with and does not enter the value namespace), so
+/// the refusal at the tag says what the name is. Reporting the parameter's declared type against it
+/// would read as a kind mismatch and hide the point.
+
+tag vjp::<F>(rule: F) on func when is_function::<F>()
+
+#vjp(vjp)
+func label(x: int): int { return x }
+
+func main(): int sync { return 0 }
+```
+
+### TagNameAsValue
+
+`0x03000203` · Error · `SemanticDiag::TagNameAsValue`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+'{0}' names a tag, and a tag is not a value: write '#{0}' where the tag belongs.
+```
+
+**Help**
+
+```text
+A tag is a compile-time fact attached to a declaration or to the nodes of a region (design principles 6.2): it is read before the program runs, never called and never passed. A value of that name takes a declaration of its own -- a function, a constant or a variable.
+```
+
+**Example** (`test/cases/compile/tags/err_tag_as_value.cml`, run as `camel test/cases/compile/tags/err_tag_as_value.cml`)
+
+```camel
+/// A tag name written where a value belongs. A tag keeps its name and does not enter the value
+/// namespace (design principles 6.2, the author's ruling of 2026-10-30), so the report says the
+/// name is a tag -- not that the name is undeclared, which it is not.
+
+tag label(x: int) on func
+
+func main(): int sync {
+    let f = label
     return 0
 }
 ```

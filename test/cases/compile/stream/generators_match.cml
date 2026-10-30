@@ -1,0 +1,21 @@
+/**
+ * A `yield` in each arm of a `match`: the arm the value picks is where the next pull goes on.
+ */
+
+func kind(x: int): int.. sync {
+    match x {
+        case 1 => {
+            yield 10
+        }
+        case _ => {
+            yield 20
+        }
+    }
+    yield 0
+}
+
+func main(): int sync {
+    println(loop acc = 0 for v in kind(1) do acc * 10 + v)
+    println(loop acc = 0 for v in kind(3) do acc * 10 + v)
+    return 0
+}

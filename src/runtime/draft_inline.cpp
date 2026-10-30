@@ -2059,34 +2059,126 @@ DraftInlineResult inlineCallableInDraft(
         return id >= static_cast<gc_node_ref_t>(slotsBefore) && draft.alive(id) &&
                controlRegionOf(draft, id) == callBlockRegion;
     };
-    gc_node_ref_t bodyHead      = kInvalidNodeRef;
-    gc_node_ref_t bodyTail      = kInvalidNodeRef;
-    size_t bodyHeads            = 0;
-    size_t bodyTails            = 0;
-    for (gc_node_ref_t id = static_cast<gc_node_ref_t>(slotsBefore); id < draft.nodeSlotCount();
-         ++id) {
-        const DraftNodeHeader *header = draft.header(id);
-        if (!inCallBlock(id) || id == funcNodeId || header == nullptr ||
-            (header->runtimeFlags & kGCNodeFlagSyncStatement) == 0) {
-            continue;
+    // A statement of the block as the chain reads it: the flag the builder writes when it chains a
+    // statement (`markSyncStatement`), read back over the code this splice added.
+    const auto isBodyStatement = [&](gc_node_ref_t id) {
+        if (id == funcNodeId || !inCallBlock(id)) {
+            return false;
         }
-        bool bodyFollows = false;
-        for (gc_node_ref_t user : draft.syncUsersOf(id)) {
-            if (inCallBlock(user)) {
-                bodyFollows = true;
-                break;
+        const DraftNodeHeader *h = draft.header(id);
+        return h != nullptr && (h->runtimeFlags & kGCNodeFlagSyncStatement) != 0;
+    };
+    struct BodyChain {
+        gc_node_ref_t head = kInvalidNodeRef;
+        gc_node_ref_t tail = kInvalidNodeRef;
+        size_t heads       = 0;
+        size_t tails       = 0;
+    };
+    // The ends of the body's chain as the block's chain sees it: a statement nothing in the block
+    // follows heads a chain, and one nothing in the block is written after ends it.
+    const auto scanBodyChain = [&]() {
+        BodyChain chain;
+        for (gc_node_ref_t id = static_cast<gc_node_ref_t>(slotsBefore);
+             id < draft.nodeSlotCount();
+             ++id) {
+            if (!isBodyStatement(id)) {
+                continue;
+            }
+            bool bodyFollows = false;
+            for (gc_node_ref_t user : draft.syncUsersOf(id)) {
+                if (inCallBlock(user)) {
+                    bodyFollows = true;
+                    break;
+                }
+            }
+            if (draft.syncInputsOf(id).empty()) {
+                if (bodyFollows) {
+                    chain.head = id;
+                    ++chain.heads;
+                }
+            } else if (!bodyFollows) {
+                chain.tail = id;
+                ++chain.tails;
             }
         }
-        if (draft.syncInputsOf(id).empty()) {
-            if (bodyFollows) {
-                bodyHead = id;
-                ++bodyHeads;
+        return chain;
+    };
+    BodyChain bodyChain = scanBodyChain();
+    // The chain the call stood in has to run through the body once the body is spliced in: its
+    // statements are statements of the caller's block (docs/design/effects/edges.cn.md 5.7), and a
+    // block's statements are one chain (5.3). The builder writes that chain statement by statement,
+    // and it leaves one link of it out where the statement reads, as a value, the node the link
+    // would run from: the data edge already orders the two, so `chainLinkSaysSomething`
+    // (src/compile/gir/builder_helpers.h) writes no chain link there. A body compiled on its own is
+    // entered from the call's predecessors, so the missing link costs it nothing; spliced in, the
+    // pieces of its chain are on nothing at all, and a statement on no chain is a statement that
+    // never runs (3.1). So the pieces are joined here, where both ends are known: a statement that
+    // follows nothing in the block is written after the nearest statement it reads through a chain
+    // of values -- the order the body's data edges already give it -- and the body's chain becomes
+    // the one chain a block has.
+    if (callHasChainPlace && bodyChain.heads > 1) {
+        for (gc_node_ref_t head = static_cast<gc_node_ref_t>(slotsBefore);
+             head < draft.nodeSlotCount();
+             ++head) {
+            if (!isBodyStatement(head) || !draft.syncInputsOf(head).empty()) {
+                continue;
             }
-        } else if (!bodyFollows) {
-            bodyTail = id;
-            ++bodyTails;
+            // The nearest statement this one reads: walking back over the value ports only, so the
+            // link written below is one the body's data edges already order.
+            std::vector<gc_node_ref_t> todo(
+                draft.normInputsOf(head).begin(), draft.normInputsOf(head).end());
+            todo.insert(
+                todo.end(), draft.withInputsOf(head).begin(), draft.withInputsOf(head).end());
+            std::unordered_set<gc_node_ref_t> seen{head};
+            gc_node_ref_t pred = kInvalidNodeRef;
+            while (!todo.empty() && pred == kInvalidNodeRef) {
+                const gc_node_ref_t current = todo.back();
+                todo.pop_back();
+                if (current < static_cast<gc_node_ref_t>(slotsBefore) || !draft.alive(current) ||
+                    !seen.insert(current).second) {
+                    continue;
+                }
+                if (isBodyStatement(current) && draft.syncUsersOf(current).empty()) {
+                    pred = current;
+                    break;
+                }
+                todo.insert(
+                    todo.end(),
+                    draft.normInputsOf(current).begin(),
+                    draft.normInputsOf(current).end());
+                todo.insert(
+                    todo.end(),
+                    draft.withInputsOf(current).begin(),
+                    draft.withInputsOf(current).end());
+            }
+            if (pred == kInvalidNodeRef || pred == head) {
+                continue;
+            }
+            // The pair the block's chain is written with: both ends a statement of it, the sync edge
+            // naming the order and the control edge the same pair beside it, as the builder writes
+            // them (writeSyncStatement).
+            const auto markStatement = [&](gc_node_ref_t node) {
+                const DraftNodeHeader *h = draft.header(node);
+                if (h != nullptr) {
+                    draft.setNodeRuntimeFlags(
+                        node, static_cast<uint8_t>(h->runtimeFlags | kGCNodeFlagSyncStatement));
+                }
+            };
+            markStatement(pred);
+            markStatement(head);
+            const gc_node_ref_t only[1] = {pred};
+            draft.setSyncInputs(head, only);
+            const auto ctrl = draft.ctrlInputsOf(head);
+            if (std::ranges::find(ctrl, pred) == ctrl.end()) {
+                draft.appendInput(DraftEdgeKind::Ctrl, head, pred);
+            }
         }
+        bodyChain = scanBodyChain();
     }
+    gc_node_ref_t bodyHead            = bodyChain.head;
+    gc_node_ref_t bodyTail            = bodyChain.tail;
+    const size_t bodyHeads            = bodyChain.heads;
+    const size_t bodyTails            = bodyChain.tails;
     // One head and one tail, or the body's chain is not one statement of the block -- a chain that
     // forks or breaks keeps the gate carrying the place rather than half of it moving.
     const bool bodyHasChain = bodyHeads == 1 && bodyTails == 1;

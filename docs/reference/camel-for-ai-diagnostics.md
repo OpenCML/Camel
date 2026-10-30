@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 218
+**Semantic — errors** (`SemanticDiag`) — 220
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -153,11 +153,13 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `NotDifferentiable` | The function cannot be differentiated: {0}. |
 | `TagNotAtPosition` | The tag '{0}' may not be written at a {1}: it is declared for {2}. |
 | `TagUndeclared` | No tag '{0}' is declared. |
+| `TagNameAsValue` | '{0}' names a tag, and a tag is not a value: write '#{0}' where the tag belongs. |
 | `TagArgumentCount` | The tag '{0}' takes {1} parameter(s), but {2} argument(s) are written. |
 | `TagArgumentNotConstant` | The argument '{0}' of the tag '{1}' is not a compile-time value. |
 | `TagOnUnnamedField` | A tag on the field '{0}' of an unnamed struct type belongs to no declaration. |
 | `TagArgumentNamed` | A tag argument is positional: '{0}' is named. |
 | `TagArgumentType` | The parameter '{0}' of the tag '{1}' is declared '{2}', but the argument is '{3}' ({4}). |
+| `TagArgumentNotValue` | The tag '{1}' cannot take '{0}' as an argument: it names {2}. |
 | `TagNotAPermission` | The tag '{0}' grants no numeric permission. |
 | `RuleTagNotRequires` | A rule may be preceded only by '#requires(...)', not by the tag '{0}'. |
 | `TagParameterType` | The parameter '{0}' of the tag '{1}' is declared '{2}': a tag parameter is an int, a float, a bool, a string, a concrete function type, or a type parameter the condition selects with is_function. |

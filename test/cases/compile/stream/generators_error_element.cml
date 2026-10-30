@@ -1,0 +1,35 @@
+/**
+ * A stream whose elements can be wrong: the element type is written `T!` (`int!..`, design
+ * principles 5.4), so one element is a `T!` value and the error it carries is what the consumer
+ * of that pull reads. An error element is a value and not a fault (3.9), so the pull answers it
+ * like any other element -- printed as `error Kind: message` -- and the stream ends where the
+ * body ends, never because an element was the wrong one.
+ *
+ * The two shapes the ruling names (5.4: an error element is handed out with `yield error(...)`):
+ * `literal` yields an error written where it is yielded, and `fromCall` yields what a fallible
+ * call answered -- one good element and one error element each. Both are pinned because nothing
+ * held them: an element that silently became a value (`0` for the error) would otherwise print
+ * a number where this case prints an error.
+ */
+
+func literal(): int!.. sync {
+    yield 1
+    yield error('Boom', 'bad')
+}
+
+func fromCall(): int!.. sync {
+    yield pick(1)
+    yield pick(-1)
+}
+
+func pick(x: int): int! {
+    return if x > 0 then x else error('Bad', 'no')
+}
+
+func main(): int sync {
+    loop acc = 0 for v in literal() do sync { let _ = println(v); acc + 1 }
+    println("-")
+    loop acc = 0 for v in fromCall() do sync { let _ = println(v); acc + 1 }
+    println("end")
+    return 0
+}
