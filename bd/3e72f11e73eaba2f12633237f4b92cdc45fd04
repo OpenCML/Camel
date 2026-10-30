@@ -1,0 +1,5 @@
+**`merge_sort_small` 的 11 条链那张打印进了页面：段 2 的 14 个条目切成 11 条可并发的链、13 条链间边，`array:merge_sorted_l` 只等汇合到它的 `chain 2/5`。**
+
+推入 develop：`bd3e72f11`（页面补节 `76d639cca` + 并入 develop 两笔）。闸门同树：**total 7921 / pass 7912 / fail 0 / skip 7 / known 2**，指纹 `01bdc8774cda / clean`。
+
+页面：`docs/handover/reports/prl-two-reds-and-segments.md`（“对照：有并行结构的程序不是一段”一节，5 链与 11 链两段原文并排）。
