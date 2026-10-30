@@ -5,6 +5,18 @@ tags = ["feat", "compile", "prelude", "rest"]
 desc = "The built-in functions are declared in the prelude (stdlib/prelude.cml): a lambda written for one takes its parameter types from the declaration, and a pack stands for the arguments a declaration leaves open (`with <..args>`, `(..A) => R`)."
 
 [[tests]]
+name = "imported_name_reads_the_file_once"
+desc = "A program may import a name of the prelude, which is read with every program. The import finds the module that was read, so the file is not read and checked a second time: a second pass has none of the built-in module's claims in hand, and the file's `#op` declarations name rules of that module, so it would report that no loaded module implements them."
+kind = "behavior"
+case = "../../../cases/compile/prelude_signatures/imported_name.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "42\n"
+expect_output_not_contains = ["[Error]", "NativeDeclarationNotLoaded"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "untyped_lambdas_of_builtins"
 desc = "filter, map, foreach and reduce take lambdas that write no parameter types."
 kind = "behavior"

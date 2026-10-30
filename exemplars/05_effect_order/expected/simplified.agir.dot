@@ -22,7 +22,6 @@ digraph GraphIR {
             N03 -> N05 [label="0|0", type="CTRL"];
             N03 -> N05 [label="SYNC", type="SYNC"];
             N05 -> N06 [label="0|0", type="NORM"];
-            N05 -> N06 [label="0|0", type="CTRL"];
             N05 -> N06 [label="SYNC", type="SYNC"];
         }
         subgraph cluster_F03 {
@@ -78,7 +77,6 @@ digraph GraphIR {
             N1A -> N13 [label="0|1", type="NORM"];
             N0D -> N13 [label="2|0", type="CTRL"];
             N13 -> N14 [label="0|0", type="NORM"];
-            N13 -> N14 [label="0|0", type="CTRL"];
             N13 -> N14 [label="SYNC", type="SYNC"];
             N0F -> N16 [label="0|0", type="WITH"];
             N15 -> N16 [label="0|0", type="NORM"];
@@ -93,7 +91,6 @@ digraph GraphIR {
             N0D -> N19 [label="5|0", type="CTRL"];
             N17 -> N19 [label="SYNC", type="SYNC"];
             N19 -> N1A [label="0|0", type="NORM"];
-            N19 -> N1A [label="0|0", type="CTRL"];
             N0F -> N1A [label="ORDER", type="ORDER"];
             N19 -> N1A [label="SYNC", type="SYNC"];
         }
@@ -145,7 +142,6 @@ digraph GraphIR {
             N2C -> N25 [label="0|1", type="NORM"];
             N20 -> N25 [label="2|0", type="CTRL"];
             N25 -> N26 [label="0|0", type="NORM"];
-            N25 -> N26 [label="0|0", type="CTRL"];
             N25 -> N26 [label="SYNC", type="SYNC"];
             N22 -> N28 [label="0|0", type="WITH"];
             N27 -> N28 [label="0|0", type="NORM"];
@@ -160,7 +156,6 @@ digraph GraphIR {
             N20 -> N2B [label="5|0", type="CTRL"];
             N29 -> N2B [label="SYNC", type="SYNC"];
             N2B -> N2C [label="0|0", type="NORM"];
-            N2B -> N2C [label="0|0", type="CTRL"];
             N22 -> N2C [label="ORDER", type="ORDER"];
             N2B -> N2C [label="SYNC", type="SYNC"];
         }

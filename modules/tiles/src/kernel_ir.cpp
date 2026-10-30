@@ -46,6 +46,12 @@ template <class Expr> bool indices(const Expr &expr, const Scope &scope) {
     return uniform;
 }
 void scalar(const ScalarExpr &expr, const Scope &scope) {
+    // An index read is spelled by its loop variables, so it is checked as an index rather than
+    // as a symbol: a name that is not a loop in scope is still an unbound index.
+    if (const auto *index = expr.index()) {
+        indices(*index, scope);
+        return;
+    }
     for (const auto &[name, type] : expr.symbols()) {
         auto it = scope.find(name);
         require(it != scope.end() && !it->second.index, "unbound scalar");

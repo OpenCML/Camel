@@ -104,9 +104,10 @@ void checkScalarI64() {
 } // namespace
 
 // The position an index-carrying reduction stores is the loop index itself, not a number derived
-// from it. The storage half is expressible today: an i64 slot and a store of it validate. The
-// update half is not -- a loop binds its index as an index, so reading it into a register is an
-// unbound scalar. This check states that boundary rather than working around it.
+// from it. Three things are stated here together: the read is now spelled by the loop variable and
+// validates, the value it stores is that variable, and nothing else became possible -- a plain
+// symbol of the same name still refuses and i64 arithmetic still refuses, so a reader cannot think
+// the i64 door opened for arithmetic.
 void checkI64PositionRead() {
     const auto refused = [](const KernelBody &body, const char *message) {
         try {
@@ -118,23 +119,35 @@ void checkI64PositionRead() {
         }
         throw std::runtime_error(std::string("accepted an i64 position statement: ") + message);
     };
-    validateBody(KernelBody{{{MemorySpace::Shared, ScalarType::I64, 0, 4, true}},
-                            {ScalarBinding{"k_pos", ScalarExpr::literal(ScalarValue::i64(-1))},
-                             Store{{0, IndexExpr(0), Predicate(true)},
-                                   ScalarExpr::symbol("k_pos", ScalarType::I64)}}});
-    refused(
-        KernelBody{{{MemorySpace::Shared, ScalarType::I64, 0, 4, true}},
-                   {ScalarBinding{"k_pos", ScalarExpr::literal(ScalarValue::i64(-1))},
-                    Loop{"k_r",
-                         IndexExpr(0),
-                         IndexExpr(3),
-                         1,
-                         {Assignment{"k_pos", ScalarExpr::symbol("k_r", ScalarType::I64)}}},
-                    Store{{0, IndexExpr(0), Predicate(true)},
-                          ScalarExpr::symbol("k_pos", ScalarType::I64)}}},
-        "unbound scalar");
-    std::cout << "tiles i64 position: an i64 slot and its store validate, and reading the loop index "
-                 "into that slot is refused as an unbound scalar\n";
+    const auto position = [](const char *loop) {
+        return ScalarExpr::fromIndex(IndexExpr::variable(loop), ScalarType::I64);
+    };
+    const auto body = [&](ScalarExpr value) {
+        return KernelBody{{{MemorySpace::Shared, ScalarType::I64, 0, 4, true}},
+                          {ScalarBinding{"k_pos", ScalarExpr::literal(ScalarValue::i64(-1))},
+                           Loop{"k_r", IndexExpr(0), IndexExpr(3), 1, {Assignment{"k_pos", std::move(value)}}},
+                           Store{{0, IndexExpr(0), Predicate(true)},
+                                 ScalarExpr::symbol("k_pos", ScalarType::I64)}}};
+    };
+    validateBody(body(position("k_r")));
+    const auto source = emitBody(body(position("k_r")));
+    if (source.find("k_pos=((long long)(k_r));") == std::string::npos)
+        throw std::runtime_error("the i64 position read did not store the loop variable");
+    // The value is the index, not a register that happens to share its name: the symbol form is
+    // still refused, which is what makes the read above a distinct statement rather than a rename.
+    refused(body(ScalarExpr::symbol("k_r", ScalarType::I64)), "unbound scalar");
+    // And a position takes no part in arithmetic.
+    try {
+        (void)ScalarExpr::apply(ScalarOp::Add, {position("k_r"), ScalarExpr::literal(ScalarValue::i64(1))});
+        throw std::runtime_error("i64 arithmetic became available with the index read");
+    } catch (const std::invalid_argument &) {
+    }
+    // What a loop iteration would hand the store: the position itself, bit for bit.
+    if (position("k_r").evaluate({{"k_r", ScalarValue::i64(2)}}).asI64() != 2 ||
+        position("k_r").type() != ScalarType::I64 || !position("k_r").symbols().contains("k_r"))
+        throw std::runtime_error("the i64 position read lost the loop index it names");
+    std::cout << "tiles i64 position: the loop index reads into an i64 slot and stores that position, "
+                 "a plain symbol of the same name still refuses, and i64 arithmetic stays refused\n";
 }
 
 void checkKernelIR() {

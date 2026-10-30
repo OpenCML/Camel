@@ -136,22 +136,35 @@ wrapping 32 位算术契约。也就是说 i64 在下标这里不是"不能算"�
 `unresolved_type` 处拒（数字好看、能力没变），或者不拒而把 4 字节的 f32 结果按 8 字节下标读出去。"**
 「不拒」那条今天已经有实证：宽度那一处如果不改，`bytes()` 就会按四字节算，回读出来的下标正好是半个。
 
-## 五、第 2 步停在哪里：位置是**下标本身**，而内核 IR 不把下标读进寄存器
+## 五、位置是**下标本身**：新增 `ScalarExpr::fromIndex`（只读，不加算术）
 
 第 2 步要把位置接到真内核上（`argmax` 分支 + 两槽累加器）。开工前把四条路走了一遍，结果是
-**存储那一半今天就能写，更新那一半缺一个原语**——缺的不是 i64 算术（那个本来就被拒），而是
-"**把循环下标读成一个寄存器值**"这一步。
+**存储那一半本来就能写，更新那一半缺一个原语**——缺的不是 i64 算术（那个本来就被拒），而是
+"**把循环下标读成一个寄存器值**"这一步。先把边界交回去，决定选了最小的一刀：
 
-**读数**（`test/cases/modules/tiles/kernel_ir_check.cpp#checkI64PositionRead`，由 `tiles-plan-check`
-的 `checkKernelIR` 调用，计划条目 `plan_validation` 的 `expect_stdout_contains` 钉住）：
+**`ScalarExpr::fromIndex(IndexExpr, ScalarType)`**（`scalar_expr.h`）——把一个下标读成 **i64 寄存器值**，
+只读、不参与算术。它与 `scalar_expr.cpp:175-178` 那句"i64 只承载静态循环域元素"**同向**：那句禁的是
+**算术**。三处配套：`scalar_expr.cpp#Node::Kind::Index`（`evaluate` 按 index 绑定取名、`symbols()` 报成
+i64、`cuda()` 输出 `((long long)(k_r))`）、`kernel_ir.cpp#scalar`（下标读按 index 校验，非循环名仍是
+`unbound index`）、`modules/tiles/CMakeLists.txt`（`tiles-module-lease` 一并编 `index_expr.cpp`）。
+
+**读数**（`test/cases/modules/tiles/kernel_ir_check.cpp#checkI64PositionRead`，`plan_validation` 钉住）：
 
 ```
-tiles i64 position: an i64 slot and its store validate, and reading the loop index into that slot is refused as an unbound scalar
+tiles i64 position: the loop index reads into an i64 slot and stores that position, a plain symbol of the same name still refuses, and i64 arithmetic stays refused
 ```
 
-即：`ScalarBinding{"k_pos", i64}` + `Store{…, i64}` 通过 `validateBody`；而 `Loop{"k_r", …}` 体里写
-`Assignment{"k_pos", ScalarExpr::symbol("k_r", I64)}`，`validateBody` 报 **`unbound scalar`**。这正是
-"两槽累加器"差的那一半。
+一条用例同时钉三件事，缺一条就有人以为路开了：
+
+| 断言 | 手段 |
+| --- | --- |
+| 下标读**通过**校验、且**存进去的确实是那个下标** | `validateBody` 通过 + `emitBody` 里出现 `k_pos=((long long)(k_r));` |
+| 同名的**普通符号仍被拒** | 同一个 body 换成 `symbol("k_r", I64)` → 恰好 `unbound scalar` |
+| **i64 算术仍被拒** | `apply(Add, {fromIndex(k_r), i64(1)})` 抛 `invalid_argument`（`k_pos += 1` 这条路没有开） |
+
+A/B 就是上面第二行：把 `fromIndex` 换回普通符号，读数回到 `unbound scalar`。
+
+（下面是当时停下来的记录，留作"为什么是这个原语"的依据。）
 
 四条路都查过，没有第五条：
 
@@ -175,16 +188,41 @@ tiles i64 position: an i64 slot and its store validate, and reading the loop ind
 `serial_kernel.cpp` 没有分支，`lower.value(...)` 会把输入值当结果存下去——那比"数字好看、能力没变"更糟，
 是错的数。
 
+### 顺序按"先有分支、再开门"落实了
+
+`fromIndex` 落地之后，第 2 步的剩余部分按这个顺序做完（顺序不是洁癖：反过来就会得到上面那个错的数）：
+
+1. **`serial_kernel.cpp` 的 ArgMax/ArgMin 分支**（先写，写了也还是死代码）——两槽：`k_best` 是 f32、
+   `k_pos` 是 i64；循环体里 `k_x` 取值、`Conditional{Less(k_best, k_x)}` 成立才 `k_best = k_x` 且
+   `k_pos = fromIndex(k_r)`；严格小于 ⇒ 相等时保留更早的位置；结束时 `result = k_pos`。
+   **位置的写入是 `fromIndex`，不是算术**，所以 `k_pos += 1` 这条路仍然不存在。
+2. **`reduction_kernel.cpp#domain` 的 law 门**——位置定律单列一支：`input/accumulator == f32`、
+   `result == Int64`、`init == FirstContribution`、`order == Ascending`、`finalize == None`、`kind` 与算符一致。
+   同时 `canonicalAxisReduction` 对这两条算子**返回 false**：位置走通用归约，物理 axis 内核答的是 f32。
+3. **`schedule.cpp#validate` 的窄放宽**——只对 `argmax_axis`/`argmin_axis` 允许 i64 结果（`positional(op)`），
+   其他任何算子仍是"结果必须是 f32"。**这条不是提前松闸，而是让第 2 步的程序真的能被计划出来**：
+   没有它，`generate()` 会在自己的门上报错，两槽分支永远没有一条计划走到过。
+
+**读数**（`test/cases/modules/tiles/reduction_domain_check.cpp#checkReductionDomains` 末尾，
+`plan_validation` 钉住）：
+
+```
+tiles position reduction: an argmax plan keeps the value and stores the loop index as i64 in its planned body and source
+```
+
+它断言的是**计划出来的东西**，不是手搭的 body：`argmax_axis`（`f32[2,3]` → `i64[2]`）经 `generate()` 得到
+**一个** launch、走通用归约（`canonicalAxisReduction` 为假）、贡献数 3；该 launch 的 `serialBody`
+过 `validateBody`，`emitBody` 与最终 `program.source` 里都有 `k_pos=((long long)(k_r));`。
+
 ### 今天还有什么在阻止 `tensor:argmax_axis` 进表
 
-1. **内核程序（第 2 步）**——`reduction_kernel.cpp#domain` 的 law 门只接受 Max/Add/DivideByCount，
-   ArgMax 会被拒；即使放它进来，两槽累加器缺上面那个原语。**这是唯一一道"能力"闸门。**
+1. ~~**内核程序（第 2 步）**~~ —— **已做**：law 门、两槽分支、窄放宽、计划级读数都在。**能力这一侧不再有闸门。**
 2. **`graph_regions.cpp#shape`（第 3 步）**——i64 结果是 `unresolved_type`，`eligibility` 到不了 lowering；
-   必须等第 2 步，否则拒绝只是换成更靠后、更难懂的一种。
-3. **`compiler.cpp:1094`（第 3 步）**——`needs a statically known f32 tensor result`；有程序能产生 i64
-   结果之后才谈得上放宽。
-4. **`schedule.cpp#validate`（第 2 步之后）**——计划里出现 i64 节点之前，它没有东西可放行。
-5. **`--devices cpu` 的那条读数（第 4 步）**——今天 `argmax_axis` 进不了 `#gpu` scope，无处可测。
+   这是现在第一道、也是唯一一道拦在表外的门。
+3. **`compiler.cpp:1094`（第 3 步）**——`needs a statically known f32 tensor result`；它是"算子结果能不能落在
+   运行图上"的那句话，与第 2 项一起构成第 3 步。
+4. ~~**`schedule.cpp#validate`（第 2 步之后）**~~ —— 已按算子窄放宽（见上）。
+5. **`--devices cpu` 的那条位置读数（第 4 步）**——要等第 3 步让 `argmax_axis` 进得了 `#gpu` scope。
 
 `deviceScalarDType`（标量叶子）**不在这条路上**：结果类型是张量，走 tensor 分支。
 

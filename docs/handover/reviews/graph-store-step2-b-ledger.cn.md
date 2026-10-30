@@ -510,3 +510,76 @@ HANDLE_PROBE refused: InvalidArgument
 **三个数**：删掉的行数 **0**（每个函数是搬进类里，不是删掉）；消失的参数 **5 个**；保留 **23 个**（每个都是一句"它服务的不止一张图"）。
 
 **四个数：62 / 509 / 3 / 4**（`514 → 509`）。
+
+## 28. B 第三片：那 23 个的边界在"调用点上手里有没有事务"
+
+**判据（这一层的那句话，写在这里）**：*同一个 helper 被三种草稿调用——重写自己的 `draft()`、反向传播的 `forward()`、`target()`。转成某一个对象的成员，就是替另一个对象认错了图。**它们该去的地方是**事务**（谁拥有这张图），不是某个重写器。***
+
+**于是表问的是另一件事**：不是"谁是它的主人"，而是**"它的调用点上，手里有没有事务"**——有就换成收 `const rt::GraphTransaction &`，没有（只拿到一个 draft 参数的）就得先转那个自由函数。
+
+| helper | 今天被哪些草稿调用 | 能从事务到达 | 本片 |
+|---|---|---|---|
+| `staticValue` | `draft()`、`forward()`、`target()` | **是** | **改** |
+| `calleeOf` | `draft()`、`forward()` | **是** | **改** |
+| `externalInputsOf` | `draft()`、`forward()` | **是** | **改** |
+| `portsOf` | `forward()` | **是** | **改** |
+| `addCall` | `target()` | **是** | **改** |
+| `typeOf` | `draft`、`draft()`、`forward`、`forward()`、`liftedDraft`、`target()` | 否 | 留 |
+| `kindOf` | `draft`、`draft()`、`forward()`、`target()` | 否 | 留 |
+| `regionMember` | `draft`、`draft()` | 否 | 留 |
+| `valueNode` | `draft`、`forward` | 否 | 留 |
+| `hasOrdering` | `draft` | 否 | 留 |
+| `addAccs`／`addField`／`addOper`／`addPort`／`addAggregate`／`addFill` | `draft`、`draft()`、`target()`、`pullback` | 否 | 留 |
+| `setResult`／`pruneUnreachable` | `draft`、`forward`、`pullback` | 否 | 留 |
+| `addLoopInt`／`stampLoopOrigin`／`addZeroTangent`／`addTangentSum`／`buildReverseCond` | `draft` | 否 | 留 |
+| `addClosure` | `engine_.group()` 与 `draft()`／`forward`／`draft` | 否 | 留 |
+
+**"否"的那 18 行是哪一种**：它们都经**自由函数的 `draft` 参数**到达——`buildReverseBody`、`buildReverseClosure`、`packState` 那一族。**它们的调用点上没有事务，只有草稿**；要转就得把那一族一起转，而那一族目前的调用者里还有人只传草稿。**这就是这次重构的边界，写在这张表里，不是留在脑子里。**
+
+**三个数**：删掉的行数 **10**（净 `-10`）；**消失／换掉的参数 5 个**（五处 `const GraphDraft &draft` / `GraphDraft &draft` → 所有者）；**保留 18 个**。
+
+**四个数：62 / 504 / 3 / 4**（`509 → 504`）。
+
+## 29. `generic` 这一族：深度是 3，而且**入口的 `std::function` 类型是原子**
+
+**判据沿用 §28 那条**（可检查）：**"能不能在**调用点上**拿到事务——不是'谁是它的主人'。"**
+
+**这一族长什么样**：`generic` 里所有收草稿的函数，**调用点的第一个实参全都是同一个标识符 `draft`**——一个从入口一路传下来的名字。链条只有一条：
+
+| 层 | 谁 | 这一层手里有没有事务 |
+|---|---|---|
+| **0 入口** | `rewriteReachableGraphs`（`rewrite.cpp:457`） | **有**：`session.edit(g)` 就在调用点上 |
+| **1 回调** | `std::function<size_t(GraphDraft &)>`，六个 lambda（`generic.cpp:1465/1491/1503/1527/1543/1577`、`algebra.cpp:276`） | 没有，参数是草稿 |
+| **2 pass 函数** | `algebraDraft`、`cseDraft`、`dceDraft`、`reduceControlDependencies`、`reduceOrderDependencies`、`reduceDocumentOrdering` | 没有，同上 |
+| **3 叶子** | `operUriOf`、`operIdOf`、`isPureOper`、`isValueOnly`、`isDeadWhenUnread`、`isReplaceable`、`reaches`、`orderedSources`、`readsNoWrittenSlot`、`replaceNode`、`markSyncStatement`、`handOverSyncWait`、`gateInputsSurvive`、`staticValueOf`、`isFoldable`、`staticArgs`、`staticArmOf`、`branchArmNodes`、`joinBlockFragments`、`pruneBranch`、`foldStaticAccess`、`bypassValueGate`（22 个） | 没有，同上 |
+
+**"有多深"的答案：一个叶子要变成收事务，得改三处签名（0→1→2→3）**；**但真正的原子是第 0–1 层**：`std::function<size_t(GraphDraft &)>` 这个类型不在一个函数里，它决定**六个 lambda 全部**的写法。**所以这一族不能按"每片 5–8 个函数"切**——切法只能是**按分支**，每个分支都要付一次"入口 + 回调类型"的共同成本。
+
+| 分支 | 内容 | 叶子数 |
+|---|---|---|
+| **A. 代数** | `algebraDraft` + `operUriOf`、`isPureOper`、`replaceNode`、`markSyncStatement`、`handOverSyncWait`、`gateInputsSurvive` | 6 |
+| **B. 公共子式与死代码** | `cseDraft`、`dceDraft`、`foldStaticAccess` + `isValueOnly`、`isDeadWhenUnread`、`isReplaceable`、`reaches`、`orderedSources`、`readsNoWrittenSlot`、`pruneBranch`、`joinBlockFragments` | 8 |
+| **C. 顺序去重** | `reduceControlDependencies`、`reduceOrderDependencies`、`reduceDocumentOrdering`（在 `src/runtime/control.cpp`，被同样的 lambda 调用） | 0 |
+
+**A 与 `pullback` 那 18 行是同一族**：形状一样（草稿作为自由函数的参数一路传下来，入口处本来就有事务），**只是两处实例**——`generic` 的 `draft` 与 `pullback` 的 `draft`/`forward`/`pullback`。**表能看出它们是同一族：判据一样、链条一样、原子一样。**
+
+**三个数（这一片未动代码）：0 / 0 / 28（保留，等分批）**。**四个数：62 / 504 / 3 / 4（未变）。**
+
+## 30. 那一族的原子换了形状（`71151fc20`）
+
+**只改类型与签名，一条规则体都没动，一个叶子都没搬**：
+
+| 位置 | 改前 | 改后 |
+|---|---|---|
+| `rewriteReachableGraphs` 的入口（`rewrite.cpp:457`） | `rewrite(session.edit(g).edit())` | `rewrite(session.edit(g))` |
+| 回调类型（`rewrite.h:218`、`rewrite.cpp:459`） | `std::function<size_t(GraphDraft &)>` | `std::function<size_t(camel::runtime::GraphTransaction &)>` |
+| 六个 lambda（`generic.cpp` 四处、`finish` 一处、`algebra.cpp:277`） | `(GraphDraft &draft)` | `(GraphTransaction &transaction)` + 首行 `auto &draft = transaction.edit();` |
+| 第 2 层三个 pass 函数（`algebraDraft`、`cseDraft`、`dceDraft`） | `(GraphDraft &draft)` | `(GraphTransaction &transaction)` + 同一行 |
+
+**用 `edit()` 不是 `graph()`**：`graph()` 是 `const GraphDraft &`，而这几个 pass 函数要改图——**这正是"所有权"在类型上的第一次显形**：写的人要拿 `edit()`，读的人拿 `graph()`。编译器的第一轮报错（`setNodeAttrs` 作用在 `const GraphDraft` 上）就是这个区分的证据。
+
+**验收（可检查的一条）**：`git grep -n "std::function<size_t(GraphDraft &)>" -- src` → **无输出（exit 1）**。**"类型没了"比"能编过"更能说明这一笔真的改了形状。**
+
+**三个数**：**消失的参数 13 个**（11 处签名／lambda 的 `GraphDraft` 参数 + 入口两处 `.edit()` 的二次解包）；**删掉的行数 0**（净 `+15`，都是 lambda 首行的绑定与折行）；**保留 28 个**（叶子一个没动）。
+
+**四个数：62 / 491 / 3 / 4**（`504 → 491`）。

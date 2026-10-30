@@ -208,7 +208,8 @@ bool simplify(
 
 } // namespace
 
-size_t algebraDraft(GraphDraft &draft, bool safeFp, bool neutralOnly) {
+size_t algebraDraft(camel::runtime::GraphTransaction &transaction, bool safeFp, bool neutralOnly) {
+    auto &draft = transaction.edit();
     (void)safeFp; // the neutral elements are integer-only; the library owns the float policy
     if (!neutralOnly) {
         return 0;
@@ -273,8 +274,8 @@ AlgebraPass::apply(const camel::runtime::Program *program, std::ostream &) {
         context_,
         program,
         "std::opt::algebra",
-        [&](camel::runtime::GraphDraft &draft) {
-            return camel::passes::generic::algebraDraft(draft, false, neutralOnly_);
+        [&](camel::runtime::GraphTransaction &transaction) {
+            return camel::passes::generic::algebraDraft(transaction, false, neutralOnly_);
         },
         nullptr,
         nullptr,

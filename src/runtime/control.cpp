@@ -97,11 +97,13 @@ bool appendControlDependency(
     // A direct value input already orders ordinary users after its producer. Calls are
     // excluded: the inliner intentionally adds explicit argument ordering just before it
     // removes the call and may discard an unused argument. That edge must reach the body.
-    // A GATE must still have at least one CTRL input; conditional boundaries stay separate.
+    // A GATE must still have at least one CTRL input while its wait is only a control edge
+    // (`docs/design/effects/edges.cn.md` 5.3): its wait is the sync predecessor, so a gate that has
+    // one needs no control input at all, and nothing here appends one for its sake.
     const auto *source = draft.header(predecessor);
     if (h && source && source->kind != GCNodeKind::Brch && h->kind != GCNodeKind::Loop &&
         h->kind != GCNodeKind::Func && h->kind != GCNodeKind::Call && !isBoundary(draft, user) &&
-        (h->kind != GCNodeKind::Gate || !existing.empty())) {
+        (h->kind != GCNodeKind::Gate || !existing.empty() || !draft.syncInputsOf(user).empty())) {
         for (auto inputs : {draft.normInputsOf(user), draft.withInputsOf(user)}) {
             for (auto input : inputs) {
                 if (!maxWork) {
@@ -145,7 +147,7 @@ size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork) {
             }
             keep.push_back(pred);
         }
-        if (keep.empty() && h->kind == GCNodeKind::Gate) {
+        if (keep.empty() && h->kind == GCNodeKind::Gate && draft.syncInputsOf(id).empty()) {
             continue;
         }
         if (keep.size() < draft.ctrlInputsOf(id).size()) {
@@ -271,11 +273,14 @@ size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork) {
                         keep.push_back(root);
                     }
                 }
-                // GATEs require a CTRL input even if a value path already orders them. With no
-                // value seed, an empty frontier instead indicates a malformed cycle; preserve
-                // diagnostics.
+                // A GATE keeps one control input only while that input *is* its wait -- a gate with a sync
+                // predecessor waits on that (`docs/design/effects/edges.cn.md` 5.3) and needs none.
+                // With no value seed, an empty frontier otherwise indicates a malformed cycle;
+                // preserve diagnostics.
                 if (keep.empty() &&
-                    (draft.header(target)->kind == GCNodeKind::Gate || !hasValues)) {
+                    ((draft.header(target)->kind == GCNodeKind::Gate &&
+                      draft.syncInputsOf(target).empty()) ||
+                     !hasValues)) {
                     keep.push_back(roots.back());
                 }
                 if (keep.size() < draft.ctrlInputsOf(target).size()) {
