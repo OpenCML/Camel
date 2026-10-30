@@ -1,0 +1,9 @@
+`T[..]` 的槽只收数组，元素在编译期拒（修复 79385f20c，红用例同笔）。
+
+- 段错误：`func show(v: f32[..]) { println(v) }` 喂标量，编译通过、运行 **exit 139**——调用边接受了元素（`f32[..]` 可被 `f32` 赋值），被调方把 `f32[..]` 的槽当数组读。**今天唯一「用户代码能打崩进程」的缺陷**，已关。
+- 判据：设计上秩 0 = 元素自身（5.4），**但运行期没有秩 0 的槽**——数组槽就是数组，塞进去的标量会被当数组读。所以 `T[..]` 型的**槽**（参数、return、赋值）只收数组，元素在编译期拒（`NoMatchingFunction`，候选里带参数原文）。
+- 改的是**槽的关系** `ArrayType::assignableFrom`（非数组源一律 false），不是类型宣言：`ArrayType::castSafetyFrom` 仍对元素读 Safe（`x as T[..]` 是把秩 0 值**命名**，不是塞进槽，`Builder::visitCastNode` 原样返回），宣言也不是槽（`let x: f32[..] = 1.0`、`let open: f32[..] = scalar` 照旧，`Builder::declaredValue`）——三处读法现在各有各的话。
+- 用例：`rank_zero_refuses_parameter.cml` 先写「今天它崩」（红读数 `exit null`，即信号死），修复后钉 `exit 1` + `NoMatchingFunction` + 行号与候选原文；**没有把 139 钉成事实**。两条原来喂标量给参数的用例按槽的读法重写（`open_rank_element` / `open_rank_tuple_element`：槽收数组，宣言收元素）。`array_type_selftest` 里那条「f32[..] 可被 f32 赋值」翻成「槽不收」，并写明为何 cast 仍 Safe。
+- A/B（array_shape 43 条）：回退修复 → **恰好一条红** `rank_zero_refuses_parameter`，**且是崩**（`exit null`）；还原 → 43/43 绿。
+- 溯源：**438d3727e** "Read the element itself as rank zero of an open-rank array type" 为了给宣言以读法，把 `T[..]` 对元素的赋值一并打开了——于是每个槽也对元素开放，而**没有一条用例把参数物化**，这个口子一路绿到有人写 `println(v)`。教训：放宽一条**类型关系**时，要同时问「这条关系被哪些**位置**当作准入条件」，并把每一个位置都摆一条用例；只验你想修的那个位置，剩下的位置就是没人测的路。
+- 闸门（在确认列车 5e7628a4e 上合并后跑）：total 7935 / pass 7926 / fail 0 / skip 7 / known 2；另有一条待办：秩 0 若将来要有运行期表示，槽的这条拒绝才是可以撤的那一条。
