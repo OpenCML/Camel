@@ -324,8 +324,16 @@ b4 只有一个人口：`modules/graph/handle.h` 里那个 `const GraphDraft *dr
 
 **做了什么**：`DraftWritings` 新增一个收 `GraphTransaction &` 的构造（旧的收 `GraphDraft &` 的构造**原封不动**），成员多了 `transaction_` 与访问器 `transaction()`；重写模块里 5 个构造点从"传草稿"改成"传 `session.edit(graph)`"。**handle 侧一行没改。**
 
-**为什么它是 b6 的第一小步**：`DraftWritings` 是重写引擎里"草稿"的**存储侧所有者**——`Match::writings.draft()` 就是 `module.cpp:259` 取草稿的地方。它先拿到事务，"草稿有个不来自 handle 的所有者"才成立；下一步（§18）才轮得到 `fact.cpp#Source.draft` 不再从 handle 借。
+**为什么它是 b6 的第一小步**：`DraftWritings` 是重写引擎里"草稿"的**存储侧所有者**——`Match::writings.draft()` 就是 `module.cpp:259` 取草稿的地方。它先拿到事务，"草稿有个不来自 handle 的所有者"才成立；下一步才轮得到 `fact.cpp#Source.draft` 不再从 handle 借。
 
 **验收（照 §14 的三种收益）**：① 删行 0；② 消点 0；③ **消掉一条生存期漏洞的一半**——草稿从此能指认它的所有者（事务），只是还没有读端用它。**三个数一个没涨：66 / 535 / 3 / 6**；`read.cpp` 的 `->draft()` 仍是 3；行为逐字节相同（`transaction_` 没有被任何代码读）。构建：`-Plan compile` 1860/1860、`fail 0`。
 
-**下一步第一件**：`fact.cpp#Source.draft` 改从 `DraftWritings` 取（不再从 handle 借），见 §18。
+**下一步第一件**：`fact.cpp#Source.draft` 改从 `DraftWritings` 取（不再从 handle 借）。
+
+## 18. 这条规矩在 b4 之外的第一次应验（另一条线记，协调者留在账本里）
+
+`src/passes/opt/defun/defunctionalize.cpp` 新增了一处写图的 helper：一个遍第一次自己造一张图（id 取 `Context::graphIds`、一个 `PORT`、直接调用、`exit`、`encode`／`adoptGraph`）。它先写成 `GraphDraft &draft = transaction->edit();`，账本当场红：files 66 → 67、references 535 → 536。
+
+helper 只借一次草稿、并不持有它，所以改成收模板参数（`template <class Draft>`，调用点传 `transaction->edit()`），三个数回到 **66 / 535 / 3 / 6**。
+
+这不是"台账省一格"的老故事，是 §15 的规矩第一次在 b4 之外被用到：**点名就是宣告所有权**，借的一次写 `auto` 或写模板，所有者留在事务那里。数没动，所以不记新行，只记这条用例——下一笔若有人在遍里直接写 `GraphDraft`，先问它是不是真的持有。
