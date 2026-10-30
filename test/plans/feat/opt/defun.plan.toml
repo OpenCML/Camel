@@ -108,3 +108,44 @@ assert(lines[0].includes('a closure written here over 1 captured value(s)'), lin
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 8000
+[[tests]]
+name = "defun.value_tag.plain"
+desc = "Without the pass the program is what it is: two direct calls and the one call through the function value, no closure, one line."
+kind = "behavior"
+case = "../../../cases/opt/defun/value_tag.cml"
+args = ["${case}", "std::stats", "std::nvm"]
+expect_exit = 0
+verify_script = """
+const lines = input.normalized.stdout.trim().split('\n')
+assert(lines.length === 2, 'a statistics line and the program line: ' + input.normalized.stdout)
+const stats = JSON.parse(lines[0].replace('GRAPH_STATS ', ''))
+assert(stats.direct_calls === 2, 'direct calls: ' + lines[0])
+assert(stats.indirect_calls === 2, 'indirect calls: ' + lines[0])
+assert(stats.closures === 0, 'closures: ' + lines[0])
+assert(lines[1] === 'VALUE TAG a=5 b=11', lines[1])
+"""
+normalizers = ["strip_ansi"]
+timeout_ms = 8000
+
+[[tests]]
+name = "defun.value_tag.tag"
+desc = "The pass gives the one-valued function type the enum form (one variant, no data) and turns its one call into a direct call: the counts move from 2 direct / 1 indirect to 3 direct / 0 indirect, no closure and no branch is added, and the program prints the same line."
+kind = "behavior"
+case = "../../../cases/opt/defun/value_tag.cml"
+args = ["${case}", "std::defun_value", "std::stats", "std::nvm"]
+expect_exit = 0
+verify_script = """
+const lines = input.normalized.stdout.trim().split('\n')
+assert(lines.length === 5, 'the pass lines, a statistics line and the program line: ' + JSON.stringify(lines))
+assert(lines[0] === 'DEFUN_VALUE types=2 values=3 calls=2 refused=0', lines[0])
+assert(lines[1] === "DEFUN_VALUE type='(x: int) => int' variant='inc' values=2 calls=1", lines[1])
+assert(lines[2] === "DEFUN_VALUE type='() => int' variant='main' values=1 calls=1", lines[2])
+const stats = JSON.parse(lines[3].replace('GRAPH_STATS ', ''))
+assert(stats.direct_calls === 4, 'direct calls: ' + lines[3])
+assert(stats.indirect_calls === 0, 'indirect calls: ' + lines[3])
+assert(stats.closures === 0, 'closures: ' + lines[3])
+assert(stats.branches === 0, 'no dispatch is built for one variant: ' + lines[3])
+assert(lines[4] === 'VALUE TAG a=5 b=11', lines[4])
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000

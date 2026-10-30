@@ -1,0 +1,21 @@
+/**
+ * The smallest function type there is: one function, no capture, a value that is only ever handed
+ * to a parameter and called through it. The pass gives that value the enum form the design asks
+ * for -- one variant, no data, so the tag is in the value's type -- and turns the one call through
+ * it into a direct call. The program must print the same line with and without the pass.
+ */
+
+func inc(x: int): int {
+    return x + 1
+}
+
+func apply(f: (x: int) => int, x: int): int {
+    return f(x)
+}
+
+func main(): int sync {
+    let a = apply(inc, 4)
+    let b = apply(inc, 10)
+    'VALUE TAG a={} b={}'->format<a, b>->println
+    return 0
+}

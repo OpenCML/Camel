@@ -33,6 +33,13 @@ export func macro::<F>(f: F): F! when is_function::<F>()
 /// completes.
 export func defunctionalize::<F>(f: F): F! when is_function::<F>()
 
+/// Gives a function value that captures nothing and names one function the form the design asks
+/// for: an enum value with one variant and no data, so the tag is in the value's type. Every call
+/// through such a value becomes a direct call of that function, and with one variant there is no
+/// dispatch left to write. A function type the program also gives another function, or a closure,
+/// is left as it is; the pass says which and why in its DEFUN_VALUE line.
+export func defun_value::<F>(f: F): F! when is_function::<F>()
+
 // -----------------------------------------------------------------------------
 // Dumps and translations of the graph
 // -----------------------------------------------------------------------------
