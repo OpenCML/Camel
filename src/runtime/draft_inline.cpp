@@ -1747,7 +1747,10 @@ DraftInlineResult inlineCallableInDraft(
     EffectLivenessFacts callFacts;
     callFacts.hasWaitEdge     = !ctrlPreds.empty();
     callFacts.isSyncStatement = !draft.syncInputsOf(funcNodeId).empty();
-    const bool hasExternalCtrl = callFacts.hasWaitEdge;
+    // The body waits where the call waited: a wait of its own, or a place on a block's chain. The
+    // chain is the one that outlives the control edge (docs/design/effects/edges.cn.md 5.3), so it
+    // is asked as a fact of its own and not only as part of the predecessors read above.
+    const bool hasExternalCtrl = callFacts.hasWaitEdge || callFacts.isSyncStatement;
     // The statement(s) written after the call in its block: the call is replaced by the body's
     // result and the chain goes on from there, so 5.7's order edges have to reach exactly the nodes
     // that followed the call. Read now, because replacing the call's uses below is what makes them
