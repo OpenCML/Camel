@@ -124,7 +124,7 @@ class EdgeChecker {
                         node.typeId));
             }
         }
-        ASSERT(
+        GUARD(
             violations_.empty(),
             "A frozen graph names a type id that did not come from the type table's interning "
             "path (see typeIdOf in src/runtime/graph.cpp).");
