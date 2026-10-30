@@ -487,7 +487,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.yield_statement_is_read"
-desc = "The syntax of a generator: `yield` is the third alternative of `retStmt`, so `yield e` parses wherever a statement stands, in a `loop` and in an `if` (the two shapes the plan's acceptance names) and in a body whose head writes the stream type (design principles 5.4). It is read without compiling: what produces the stream is the state machine of the plan's slice E, which is not built yet."
+desc = "The syntax of a generator: `yield` is the third alternative of `retStmt`, so `yield e` parses wherever a statement stands, in a `loop` and in an `if` (the two shapes the plan's acceptance names) and in a body whose head writes the stream type (design principles 5.4). This entry is the parse of the statement and nothing more: what the two functions hand out is pinned by stream.generator_loop (the loop) and stream.generator (the `if` arms), and the file compiles as a whole since the machine lowers both shapes."
 kind = "behavior"
 case = "../../../cases/compile/stream/yield_statement.cml"
 args = ["check", "-s", "${case}"]
