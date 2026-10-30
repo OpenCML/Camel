@@ -438,3 +438,26 @@ helper 只借一次草稿、并不持有它，所以改成收模板参数（`tem
 `check.mjs` 现在**直接查这件事**（`ZERO_FILES`）：`modules/graph/handle.h`、`handle.cpp`、`modules/graph/read.cpp`、`modules/rewrite/fact.cpp`、`modules/rewrite/module.cpp` 五处，任何一处出现这个类型名即红，与四个总数无关。
 
 **A 那半边照旧成立，不因为改成 C 就说回去**：`createInDraft` 零调用者、`Handle::draft_` 已删、`nodeHandleOf` 单形态。
+
+## 25. b4 的 A：13 处"从 program 造 handle"问完，答案是三层
+
+问的是**"读一个已发布的程序，造 handle 要不要事务"**。13 行逐个答，答案不是两种而是三种：
+
+| 类 | 处数 | 位置 | 要不要事务 |
+|---|---|---|---|
+| **① 已发布的程序** | **9** | `read.cpp:158/162/172/570/742/796`、`txn.cpp:393`、`fact.cpp:423`、`module.cpp:1555`（其中 1555 与 404/438 一类，见下） | **不要**：图不再变 |
+| **② 根本无图** | **3** | `read.cpp:404`（Op）、`read.cpp:438`（TypeRef）、`module.cpp:1555`（Op） | **不需要**：没有图可谈 |
+| **③ 草稿里的新节点** | **2** | `txn.cpp:350`（常量折叠）、`txn.cpp:440`（`add_constant`） | **要**：节点只存在于草稿里 |
+
+**可检查的一句话**：*不是"不要事务"，是"两种都有"——9 行已发布、3 行根本无图、2 行未发布。*
+
+**第 ③ 类这一笔就修了（`82c8be1ee`）**：两个内核手里本来就有 `state.session` 与 `session.edit(graph)`，所以不是加管道，是**把已有的东西接上**——返回值改 `createInTransaction`。
+
+**然后加了一条可执行的自律，不然分类法只是自律（`a985ea51c`）**：`Handle::create` 在 `kind == Node && program != nullptr` 时要求 `(graph, node)` 真在 program 里（用现成的 `program->graph()` 与 `containsGraphNode`），**错了就在造 handle 的地方炸**，不等某个读者拿空 `program_` 去查。触发它的是一条只读自测 `graph::probe_handle`（`probe.cpp` + `probe_handle.cml` + 计划里的 `runtime.graph_draft_ledger.handle_invariant`），读数：
+```
+HANDLE_PROBE allowed a node that is there: yes
+HANDLE_PROBE refused: InvalidArgument
+```
+**第②类是"无图"不是"未发布"，这一点写在这里**：Op／TypeRef handle 的 `program` 是 `nullptr`、图 id 是 `Invalid`，它们根本不命名图，所以在这个断言里必然放行——放行是对的。
+
+**断言一开就抓到了第 14 个红（`4a7892476`）**：`graph.replace` 的守卫问替换节点要 `program`，而折叠刚写进草稿的节点现在用事务命名，于是 14 个折叠用例当场全红。守卫改成"两种命名法都认"（`to->program() == state.base` 或 `to->transaction()->id() == to->graph()`）。**这就是断言的价值：它抓的不是我改的两行，是我没想到的第三个地方。**
