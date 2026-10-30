@@ -85,6 +85,10 @@ b1 的 −2 是从哪掉的：`src/compile/gir/draft_graph_builder.cpp` 的 `mak
 
 `b5a` 的 `check.mjs --record`：`[LEDGER] recorded files 71 references 553 constructions 3 decode 6`。命名按层走：这一笔先拿"读的最薄、调用者一两个、不依赖谁"的那片，b4（运行时会话与通用改写）没动。
 
+| b5b（遍自己的局部助手收事务） | 两个遍的局部助手不再收 `GraphDraft&`：`tensor::fuse` 的七个（`operOf`、`isPrivateIntermediate`、`setSymbol`、`kernelChoice`、`markKernels`、`markGroup`、`markGroups`）与 `test::loop_collect` 的三个建图小助手（`addAccs`、`addOper`、`addInt`）改收 `GraphTransaction&`，只读的体首一行 `const auto &draft = transaction.graph();`、要写的 `auto &draft = transaction.edit();`，函数体其余一字未改；调用点把 `session.edit(g)` 那一份事务直接传下去，不再先 `.edit()` 再传。两个文件从此不再出现这个名字 | 69 / 541 | 3 | 6 |
+
+`b5b` 的 `check.mjs --record`：`[LEDGER] recorded files 69 references 541 constructions 3 decode 6`。
+
 命名说明：上面那行 `b2.4a（测试体）` 是本页早先写的（`control.cpp` 那 15 处），协调者后来把这一步拆成"建图器签名"和"事实表"两笔并沿用 b2.4a／b2.4b 两个字母，所以本页有两处 b2.4a；括号里的名字才是区分。
 
 ### 一处行序抖动：`test/cases/linear/byref/var_capture_reference.cml`
