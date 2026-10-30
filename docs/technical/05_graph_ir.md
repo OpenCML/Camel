@@ -65,8 +65,10 @@
 - **Norm**：普通数据边（主数据流）。
 - **With**：with 参数边（如上下文、配置等命名参数）。
 - **Ctrl**：控制边（保证顺序、分支汇合等）。
+- **Order**：只排序——两端都执行时前者在后者之前，不传递"被用到"（`LinkType::Order`，`include/camel/compile/gir/types.h`；`docs/design/effects/edges.cn.md` 1）。
+- **Sync**：`sync` 块里相邻语句之间的边，既排序又让前一条因此**被用到**（`LinkType::Sync`）；它是边，不是节点，见 §4.5。
 
-节点间通过 `Node::link(LinkType, from, to)` 连接。
+节点间通过 `LinkType` 连接：建图期是 `linkNodes(LinkType, from, to)`（`src/compile/gir/builder_support.h`），改写期是 `GraphDraft` 上的 setter（如 `setSyncPredecessor`）。同步边与顺序边不进输入端口列表，各存一列（`GCGraphSyncEdge` / `GCGraphOrderEdge`，`include/camel/runtime/graph.h`）。
 
 对外只读访问统一使用：
 
@@ -75,7 +77,7 @@
 
 这些接口返回 `node_span_t`。在 draft 节点上它们视图到内部 `vector`，在 frozen 节点上它们视图到 arena 中的定长数组。
 
-## 4. 节点类型（NodeType）
+## 4. 节点类型（`GCNodeKind`）
 
 | 类型   | 说明 |
 |--------|------|
@@ -91,11 +93,12 @@
 | BIND   | 部分应用（绑定参数） |
 | FUNC   | 直接子图调用节点，节点内缓存目标 `Graph*` 与运行时 `Function*` 原型 |
 | OPER   | 原子算子，节点内持有裸 `OperatorIndex*` |
-| SYNC   | 同步点（无私有数据） |
 | GATE   | **数据与控制依赖的聚合门控节点**（无私有数据；见下节语义约定） |
 | DREF   | 临时解引用节点（图构造用，通常不加入图） |
 
-除上表一行摘要外，**§4.1–§4.9** 按类型补充**角色、典型 `Norm`/`With`/`Ctrl` 连边约定**及与调度后端的关系；命名与 `NodeType`（`include/camel/compile/gir/types.h`）、子类（`include/camel/compile/gir/nodes.h`）一致。
+`SYNC` 曾是一个节点种类（旧编号 12），已从模型里删除：`GCNodeKind` 里那个编号空着（`include/camel/runtime/graph.h`），`sync` 块里语句的先后改由**同步边**表达（§3、§4.5）。
+
+除上表一行摘要外，**§4.1–§4.9** 按类型补充**角色、典型 `Norm`/`With`/`Ctrl` 连边约定**及与调度后端的关系；命名与 `GCNodeKind`（`include/camel/runtime/graph.h`）一致，编译期的节点是 `DraftNodeRef` 句柄，不再有节点子类（`include/camel/compile/gir/nodes.h` 今天只是一个弃用转发头）。
 
 ### 4.1 `GATE`：数据-控制聚合门控
 
@@ -141,11 +144,15 @@
   - **各臂尾值**：**`With` 入边**按槽位与各臂一一对应（`armTail(i)`），仅**被执行臂**上的数据流会“活”到汇合点。  
   - **出边**：汇合后的**统一类型**值与控制流继续向下游传递。
 
-### 4.5 `SYNC`
+### 4.5 同步链（原 `SYNC` 节点）
 
-- **语义**：**纯控制汇聚点**，不承载业务载荷类型（实现上常为 `Void` 数据类型）；用于把**多条控制前驱**（例如多个参数门控、多个副作用完成点）收敛为**单一控制后继**，以便后续只挂一条 `Ctrl` 边。  
-- **边**：**多条 `Ctrl` 入边**表示“这些序都到达后才继续”；出边可为 **`Ctrl` / `Norm`**，取决于后续是控制头还是已经与会合后的值相连。  
-- **与 `GATE` 的区别**：`SYNC` **不要求**同时有 `Norm` 值入边；`GATE` **必须**同时有值与控制两门控语义（见 §4.1）。
+`SYNC` 节点已从模型里删掉，`GCNodeKind` 里它原来的编号 12 空着（`include/camel/runtime/graph.h`）；原来由它承担的"把多条控制前驱收敛成一个后继"改由**同步边**表达（`docs/design/effects/edges.cn.md` 5.3）。
+
+- **语义**：`sync` 块里一条语句跟在书写在它前面的那条语句之后，且前者因此**被用到**——不只是先后（`docs/design/effects/edges.cn.md` 1）。一条语句最多跟一条、也最多被一条跟，所以链不分支（封存检查 `checkSyncEdges` 与 `checkSyncChainForks`，`src/runtime/graph_edges.cpp`）。
+- **表示**：`LinkType::Sync`（`include/camel/compile/gir/types.h`）；运行图上不进输入端口列，单独存一列 `GCGraphSyncEdge`（`GCGraph::syncPredsOf()` / `graph.syncEdges()`；draft 侧是 `GraphDraft::syncInputsOf()` / `setSyncPredecessor()`）。
+- **由谁写**：构图器的 `writeSyncStatement(from, to)`（`src/compile/gir/builder_helpers.h`）给两端打上"同步块语句"标记，再连一条 `Sync` 边与**同对的**一条 `Ctrl` 边——后者只为仍读这个种类的消费者保留，判定不看它。链上是否写这一对由 `chainLinkSaysSomething` 决定：纯值节点不在链上，已被数据依赖蕴含的先后不再重复写。
+- **链尾**：链尾要连到块的值；值节点不归这个块独有时生成 `GATE`——数据端口读该值，等待就是链尾（同步前驱；仍在用控制边的旧图写的是 `Ctrl` 入边，封存检查两者都接受），值原样放行（`docs/design/effects/edges.cn.md` 5.3、`src/runtime/graph.cpp`）。
+- **冗余**：**顺序边**的冗余不在建图时省，由 `std::opt::order`（`reduceOrderDependencies`）与规范导出的约简（`reduceDocumentOrdering`，`src/passes/trans/json/gir_canonical.cpp`）去掉；同步链在建图时只写说了什么的那一对（上一条）。
 
 ### 4.6 `CALL` 与 `BIND`
 
@@ -219,9 +226,10 @@ Node 自身只保留查询入口，不再直接持有这些 `std::string`。
 - **OperNode**：节点内保存裸 `OperatorIndex*`；真正所有权由 Graph 的 `operIndexRegistry_` 维护。
 - **BrchNode / JoinNode**：与 BRCH/JOIN 字节码对应，用于条件分支与汇合。
 - **GateNode**：即 **`GATE`**（§4.1），数据-控制聚合门控。
-- **SyncNode**：即 **`SYNC`**（§4.5），控制汇聚。
 - **AccsNode**：索引已改为 POD 形式：数字索引保存在节点内，字符串索引键保存在 Graph 侧。
 - **CastNode**：运行时类型转换；由 GCT 的 `CastLoad` 在 `visitCastNode` 中生成，normInputs 为待转换的值节点，dataType 为目标类型。
+
+同步边（§4.5）不是节点，没有对应的节点子类。
 
 ## 7. GraphBuilder / GraphDraft / GraphRewriteSession
 
@@ -245,10 +253,9 @@ Node 自身只保留查询入口，不再直接持有这些 `std::string`。
 - 结构自检：`validateGraph` / `validateGraphRecursively`（`GraphDraft::seal()` 在递归封印前会调用后者）。
   其中 **必须存在 `exitNode`（值出口锚点）是 seal 前硬约束**，缺失 output 直接视为图结构不完整并拒绝封印。
 
-**内联与 import 相关类型**（与 `include/camel/compile/gir/builder.h` 一致）：
+**内联与 import 相关类型**：
 
-- **`InlineOptions` / `InlineSyncPolicy`**：`Auto`、`Force`、`Never` 控制内联时控制同步边的插入策略。
-- **`inlineCallable()`** 返回 **`InlineResult`**（调用点、`valueExit`、`ctrlEntry`、是否插入入口 `SYNC`、导入的子图与依赖等），作为唯一内联入口；值-控门控 `GATE` 在 `inlineCallable` 内部完成。
+- **`inlineCallable()`**（`inlineCallableInDraft`，`include/camel/runtime/draft_inline.h`）返回 **`DraftInlineResult`**（`callNode`、`valueExit`、`ctrlEntry`、`ctrlExit`），作为唯一内联入口；入口不再插入 `SYNC` 节点——多个入口根时每个根各自接上外部控制前驱，`ctrlEntry` 取第一个（`docs/technical/16_inline_rewrite_algorithm.md` 7.3）；需要会合的值-控门控 `GATE` 在 `inlineCallable` 内部完成。
 - **`GraphImportMode`**：`importSubGraph` / `importDependency` 可选用 **`ReferenceOnly`**（仅登记共享引用）或 **`CloneIntoDraft`**（先 `cloneIntoDraft` 再登记），与下节「仅 root 默认 owned」规则一致。
 
 ### 7.2 GraphDraft
@@ -294,7 +301,7 @@ Node 自身只保留查询入口，不再直接持有这些 `std::string`。
 
 `std::opt::inline` 目前采用 **SCC 缩点 + DAG 逆拓扑** 的执行框架，而不是旧的“逐图扫描 + 反复重跑”：
 
-> 深入版说明见 [`16_inline_rewrite_algorithm.md`](16_inline_rewrite_algorithm.md)（覆盖会话级 use-index 重定向、`inlineCallable` 的 `SYNC/GATE` 语义、slot-safe prune 与预算哨兵）。
+> 深入版说明见 [`16_inline_rewrite_algorithm.md`](16_inline_rewrite_algorithm.md)（覆盖会话级 use-index 重定向、`inlineCallable` 的控制入口与 `GATE` 语义、slot-safe prune 与预算哨兵）。
 
 1. 先收集可达图并建立 draft 映射；
 2. 构建会话级 use-index（`FUNC.bodyGraph` + `DATA(Function).graph`）；
