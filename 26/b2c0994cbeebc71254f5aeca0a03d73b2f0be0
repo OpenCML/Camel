@@ -1,0 +1,16 @@
+S5: the slot-by-writing matrix, and the two cells that were empty. An array whose element type is
+`f32[..]` (`[1.0, 2.5]`, `[one, two]`) was refused with ElementTypeMismatch and now holds two
+rank-zero elements: `ArrayDataFactory::add` makes the element of the open rank first and then the
+rank-zero value of it. A field of `f32[..]` one level down (`Outer { inner: Inner }`) exited 139 for
+a computed value and now reads as the element: `convertStructValue` asks `isRankZeroEdge` /
+`coerceTo` for a field whose target type accepts the source, as it did for nested structs.
+
+Eight cases, one per slot, both writings each, all on nvm/fvm/jit/tf (32 entries):
+rank_zero_slot_{let,parameter,field,var,array_element,return,tuple_element,nested_field}. The
+call-argument row is the parameter row by construction (the argument enters the parameter where the
+call is made); that reason is written in the case and in this commit.
+
+The two roads stay two and unmerged (a literal in the data layer, a computed value through the edge's
+CAST), both ending in the run's one rank-zero value. A/B: with the two conversions above disabled,
+exactly the eight entries of the two filled rows are red (76 of 84); restored, 84 of 84. Gate
+7981 / 7972 / 0.
