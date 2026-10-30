@@ -488,7 +488,7 @@ There are two mechanisms, very different underneath, so their notations are clea
 ### 6.3 Reading tags
 
 - A C++ module reads them through the registration and query interface; in compile-time code a tag is a compile-time value, `match type T { case #leaf => … }`, and `fields T` gives the tags of each field at the same time.
-- Tags share the namespace with other names, are imported in the same way, and can be written qualified, `#[tiles::kernel]`.
+- Tags have a space of their own, separate from functions, types and values (language author, 2026-10-30): a function and a tag of one name coexist, `#name` finds only tags, and a tag name written where a value belongs is not a value (`SemanticDiag::TagNameAsValue`; neither name takes the other's space). They are imported and exported in the same way and can be written qualified, `#[tiles::kernel]`.
 - Whether a requirement-like tag (such as `#kernel`) is satisfied is checked by the library's pass.
 
 ### 6.4 Keywords

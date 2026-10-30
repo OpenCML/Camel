@@ -1,0 +1,8 @@
+/// A tag name called as a function: a tag is a compile-time fact, and calling it is not reading it.
+/// The report names the tag rather than calling the name undeclared.
+
+tag label(x: int) on func
+
+func main(): int sync {
+    return label(1)
+}
