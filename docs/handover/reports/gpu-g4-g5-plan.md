@@ -51,3 +51,17 @@
 ## 不在 G4/G5
 
 多卡数据并行（G7）；CPU 路径提速与编译启动提速（G6）。这两项与 G4/G5 共用段与传输表，但改的是另一批文件。
+
+## 引用说明：计划正文指的那页问题页不存在
+
+`docs/design/gpu/plan.cn.md` 的 G2-1、G2-2、G2-3、G3-1、G3-2、G3-3 六节各用"问题页第 1–7 条"指代未决项，而树里没有这一页（`docs/handover/questions/` 下是一页一问的主题页，没有 GPU 页）。**该引用按失效处理**：下面这些就是未决项本身，按计划正文已经写下的机制执行——缺的是入口，不是内容。没有落到代码的五条：
+
+| 步 | 正文已写下的机制 | 仍未定的 |
+|---|---|---|
+| G2-1 | owner（流、事件、大小、释放回调）由 Tiles 设备层持有，块用 `adoptExternal(..., release)` 释放它 | 数组值并进来之后，元素的类型与秩从哪里读 |
+| G2-3 | 提交在段的 exec 算子内，完成记在输出块的 owner 上，主机观察时才等 | pending 设备值能否穿过一个不观察它的主机算子 |
+| G3-1 | 单元 =（作用域图, 放置）的传递闭包，事实 `tiles.compiled_scope` 已在用 | 与 `tiles.compiled_region` 的键怎么接：取代还是并存一次 |
+| G3-2 | 五段拼成的指纹；形状签名只作特化表的键；`CAMEL_HOME` 下的版本目录 | 默认是否落盘、目录、清理与版本目录的上限 |
+| G3-3 | 按 size class、按工作集高水位、OOM 先 trim 再试一次 | 上界依据取设备总显存比例加空闲探测，还是工作集高水位 |
+
+同一份正文里还有两处拼写已经过期，读到那几节时按这里的名字算：`compiled_region.cpp`/`compileTypes`/`hasCompiledRegion` 今天是 `modules/tiles/src/compiled_scope.cpp` 的 `compileTypes`/`prepareProgram`/`hasCompiledScope`，`tiles.compiled_region` 的键已经换成 `tiles.compiled_scope`。
