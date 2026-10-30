@@ -1686,13 +1686,20 @@ struct GraphOrder {
     size_t id = 0; // the GraphId value
     std::vector<camel::runtime::gc_node_ref_t> nodes;
     std::vector<std::vector<camel::runtime::gc_node_ref_t>> users;
+    /// Where each node stands in `nodes`, by node reference, kNotOrdered when it is not in it: what
+    /// asks for the place of the node that owns a graph.
+    std::vector<uint32_t> places;
 };
+inline constexpr uint32_t kNotOrdered = UINT32_MAX;
 
 /// The effects of one program, and the order of each of its graphs.
 struct ProgramEffects {
     std::vector<EffectSite> sites;
     std::vector<GraphOrder> graphs;
     std::unordered_map<size_t, size_t> graphAt; // GraphId value -> index in `graphs`
+    /// For each graph a body was inlined into: the graph that holds it and the node there that runs
+    /// it (the call the inline region replaced). A nested graph runs at the place of that node.
+    std::unordered_map<size_t, std::pair<size_t, camel::runtime::gc_node_ref_t>> ownerOf;
 };
 
 /// `graph` in one topological order: every node after every node its edges make it wait for (its
@@ -1774,6 +1781,10 @@ GraphOrder orderOfGraph(const GCGraph &graph) {
             }
         }
     }
+    result.places.assign(count, kNotOrdered);
+    for (size_t position = 0; position < result.nodes.size(); ++position) {
+        result.places[result.nodes[position]] = static_cast<uint32_t>(position);
+    }
     return result;
 }
 
@@ -1787,6 +1798,16 @@ ProgramEffects collectEffects(const camel::runtime::Program &program) {
             effects.graphs.size();
         effects.graphs.push_back(orderOfGraph(*graph));
         const GraphOrder &order = effects.graphs.back();
+        for (uint32_t regionId = 1; regionId < graph->regionCount(); ++regionId) {
+            const camel::runtime::GCRegion *region = graph->region(regionId);
+            if (region == nullptr || region->kind != camel::runtime::GCRegionKind::Inline ||
+                region->inlineOf == camel::runtime::kInvalidGraphId ||
+                region->callSite == camel::runtime::kInvalidNodeRef) {
+                continue;
+            }
+            effects.ownerOf[static_cast<size_t>(camel::runtime::toValue(region->inlineOf))] = {
+                order.id, region->callSite};
+        }
         for (size_t position = 0; position < order.nodes.size(); ++position) {
             const gc_node_ref_t ref = order.nodes[position];
             if (!nodeHasEffect(*graph, ref)) {
@@ -1959,6 +1980,60 @@ std::string describeMoves(const EffectSite &a, const EffectSite &runsA, const Ef
     return moves.empty() ? "both stayed in their graphs" : moves;
 }
 
+/// Where the place of a graph is, when it is not the graph itself: the graph that carries it and the
+/// place in that graph of the node that runs it. A graph a pass inlined into another one has its
+/// place at the call it replaced, so an effect in it runs at that call, not wherever its own graph
+/// would have been laid out.
+struct GraphPlace {
+    bool found      = false;
+    size_t graph    = 0;
+    size_t position = 0;
+};
+
+GraphPlace placeOfGraph(const ProgramEffects &effects, size_t graph) {
+    const auto owner = effects.ownerOf.find(graph);
+    if (owner == effects.ownerOf.end()) {
+        return {};
+    }
+    const auto holder = effects.graphAt.find(owner->second.first);
+    if (holder == effects.graphAt.end()) {
+        return {};
+    }
+    const GraphOrder &order = effects.graphs[holder->second];
+    const size_t ref        = owner->second.second;
+    if (ref >= order.places.size() || order.places[ref] == kNotOrdered) {
+        return {};
+    }
+    return {true, owner->second.first, order.places[ref]};
+}
+
+/// Whether the order the program wrote between two effects still holds: the one waits for the other
+/// in the graph they share, or, when a pass left them in two graphs, through the calls that hold
+/// those graphs. An effect of a nested graph runs at the place of the call that runs it, so the
+/// question is asked of the outermost graph both of them reach, lifting the one whose graph is
+/// nested one level at a time. Only pairs the comparison above flagged are asked: an effect whose
+/// graph nothing holds (a program graph) stays where it is.
+bool orderedInProgram(const ProgramEffects &effects, EffectSite earlier, EffectSite later) {
+    for (int step = 0; step < 64; ++step) {
+        if (earlier.graph == later.graph) {
+            return waitsFor(effects, earlier, later);
+        }
+        const GraphPlace place = placeOfGraph(effects, later.graph);
+        if (place.found) {
+            later.graph = place.graph;
+            later.position = place.position;
+            continue;
+        }
+        const GraphPlace earlierPlace = placeOfGraph(effects, earlier.graph);
+        if (!earlierPlace.found) {
+            return false;
+        }
+        earlier.graph    = earlierPlace.graph;
+        earlier.position = earlierPlace.position;
+    }
+    return false;
+}
+
 /// The one effect-order violation of a pass, as the text its diagnostic carries; empty when every
 /// pair of effects on one resource is still in the order the program wrote it in (design principles
 /// 3.3). Two things are compared, and both are needed:
@@ -1988,17 +2063,20 @@ std::string effectOrderViolation(const ProgramEffects &before, const ProgramEffe
             const EffectSite &later       = writtenFirst ? second : first;
             const EffectSite &runsEarlier = writtenFirst ? runsFirst : runsSecond;
             const EffectSite &runsLater   = writtenFirst ? runsSecond : runsFirst;
-            if (earlier.graph != later.graph || !waitsFor(before, earlier, later)) {
-                continue; // two graphs before the pass, or no chain: the program ordered neither
+            if (!orderedInProgram(before, earlier, later)) {
+                continue; // no chain before the pass: the program did not put them in this order
+            }
+            if (orderedInProgram(after, runsEarlier, runsLater)) {
+                continue; // the program's order still holds, in one graph or through the calls
             }
             const std::string moves = describeMoves(earlier, runsEarlier, later, runsLater);
             if (runsEarlier.graph != runsLater.graph) {
-                // The pass left them in two graphs: whatever order the graph that held them made
-                // is gone with it, and neither graph orders the one against the other alone.
+                // The pass left them in two graphs, and the calls that hold these graphs do not
+                // make the one wait for the other either: the written order is gone.
                 return std::format(
                     "the effects on '{}' are not in the order the program wrote them: the program "
-                    "wrote {} before {} in graph {}, and this pass leaves them in two graphs, "
-                    "where nothing orders them any more: {} and {} ({})",
+                    "wrote {} before {} in graph {}, and this pass leaves them in two graphs where "
+                    "no call makes the one wait for the other any more: {} and {} ({})",
                     resource,
                     describeEffect(earlier),
                     describeEffect(later),
@@ -2006,9 +2084,6 @@ std::string effectOrderViolation(const ProgramEffects &before, const ProgramEffe
                     describeEffect(runsEarlier),
                     describeEffect(runsLater),
                     moves);
-            }
-            if (waitsFor(after, runsEarlier, runsLater)) {
-                continue; // the graph they are in still makes the one wait for the other
             }
             return std::format(
                 "the effects on '{}' are not in the order the program wrote them: the program "
