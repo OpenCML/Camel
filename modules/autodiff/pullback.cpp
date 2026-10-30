@@ -1275,14 +1275,17 @@ class Engine {
         std::unique_ptr<rt::GraphTransaction> source, const std::string &name,
         const PullbackPlan &types, GraphScope scope);
 
-    /// The functions whose bodies, brought into an arm region, the arm came with.
-    const std::unordered_set<GCGraph *> &ownersOf(const GraphDraft *draft, uint32_t region) const {
+    /// The functions whose bodies, brought into an arm region, the arm came with. The key is the
+    /// transaction that owns the draft, not the draft: a draft is reached through its owner, so
+    /// naming the storage here would make this bookkeeping depend on where the storage lives.
+    const std::unordered_set<GCGraph *> &
+    ownersOf(const rt::GraphTransaction *transaction, uint32_t region) const {
         static const std::unordered_set<GCGraph *> none;
-        auto it = regionOwners_.find({draft, region});
+        auto it = regionOwners_.find({transaction, region});
         return it == regionOwners_.end() ? none : it->second;
     }
-    void noteArmOwner(const GraphDraft *draft, uint32_t region, GCGraph *owner) {
-        regionOwners_[{draft, region}].insert(owner);
+    void noteArmOwner(const rt::GraphTransaction *transaction, uint32_t region, GCGraph *owner) {
+        regionOwners_[{transaction, region}].insert(owner);
     }
     void noteArmOwner(GCGraph *arm, GCGraph *owner) { armOwners_[arm].insert(owner); }
     const std::unordered_set<GCGraph *> &ownersOf(GCGraph *arm) const {
@@ -1342,7 +1345,7 @@ class Engine {
     rt::RuntimeGraphDraftSession inlining_;
     size_t followed_ = 0;
     std::unordered_map<GCGraph *, std::unordered_set<GCGraph *>> armOwners_;
-    std::map<std::pair<const GraphDraft *, uint32_t>, std::unordered_set<GCGraph *>> regionOwners_;
+    std::map<std::pair<const rt::GraphTransaction *, uint32_t>, std::unordered_set<GCGraph *>> regionOwners_;
     std::unordered_set<GCGraph *> recursions_;
     std::vector<Refusal> refusals_;
     // The semantic bodies of the program's `#impl` functions (see implBodiesByKernel), read
@@ -1446,7 +1449,7 @@ void ForwardRewrite::followFunctionValues() {
                 // The body came into this region; a function it calls from here that calls
                 // itself is this function's recursion.
                 if (part_ != 0 && draft().region(part_).kind == rt::GCRegionKind::Arm) {
-                    engine_.noteArmOwner(&draft(), part_, function);
+                    engine_.noteArmOwner(&transaction_, part_, function);
                 }
             } else {
                 left.insert(id);
@@ -2865,7 +2868,7 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
         ArmRewrite &arm       = rewritten[i];
         arm.scope             = GraphScope{
                         .role      = GraphRole::BranchArm,
-                        .enclosing = engine_.ownersOf(&draft(), region),
+                        .enclosing = engine_.ownersOf(&transaction_, region),
                         .recursive = scope_.recursive,
         };
         // The function whose graph holds the arm: a call of it from the arm is its recursion.
