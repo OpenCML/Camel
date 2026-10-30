@@ -1,0 +1,51 @@
+# 窄浮点 `^` 用例（pow 族）
+
+分支 `lane-narrow`，测试提交 `d8fb13f2d`，合入 develop（`6ed427f5e`）后的合并提交 `9fcf82843`。
+
+## 结论先行：算子早已存在，缺的是用例
+
+`bf16`/`f16` 的标量算术与比较在本笔之前就齐了，来自两个更早的提交：
+
+- `b8d5e57c6` Give bf16 and f16 the scalar arithmetic and comparison of any other float
+- `1363189a9` Register the scalar arithmetic of bf16 and f16 under the URIs their implementations use
+
+**本笔不含任何算子**，只补 `^` 这一族的用例。后人不必把它当成这批算子的来源。
+
+三条读数（也写进了 `d8fb13f2d` 的提交信息）：
+
+1. **算子零缺口**：`add/sub/mul/div/pow/neg` + 六个比较 + 五个 `assn_*`，每种窄类型 **17 条**，f32 是 **18 条**；唯一差 `op/assn_f`，而那是 float 的通用赋值而非算术（窄值走类型无关的 `op/assn`）。`%` 在 f32 上也缺，属对等。
+2. **逐元素分派**：不存在按元素类型索引的算子表。唯一按 `TypeCode` 的分派是 `modules/tensor/dtype.h` 的 `dispatchDType`，七个分支含 `BFloat16`/`Float16`；kernel 是存储类型模板，窄类型加宽 f32 算、存时舍入一次；`modules/tensor/ops/elementwise_ops.cpp` 的名字表按**算子枚举**索引，与元素类型无关。
+3. **显式转换**：`op/bftof`、`op/f6tof` 与 `f32(x: bf16)` / `f32(x: f16)`（`stdlib/prelude.cml`）今天就有；加宽精确无舍入。`as` 按设计拒绝该对，写法是转换函数。
+
+## 本笔的钉法
+
+`test/cases/modules/stdlib/reduced_pow.cml`，计划条目 `reduced_pow`（nvm/fvm/jit/prl 四后端，`backends_agree`）。
+
+- **字节链**：bf16 1024=0x4480、3.375=0x4058、4.0=0x4080、1000=0x447A、-8=0xC100、√3=0x3FDE、溢出=0x7F80；f16 对应 0x6400/0x42C0/0x4400/0x63D0/0xC800/0x3EEE/0x7C00。溢出钉成 `inf` 而不是饱和到最大有限值。
+- **与 f32 同一算式一次性舍入逐位相等**：`x ^ y == bf16(pow(float(x), float(y)))`（f16 同）。
+- **与 f64 精确幂在类型自身 epsilon 内**：bf16 `2^-8`、f16 `2^-11`，不是 f32 的 `2^-23`。这条能失败：1.734375 距精确 3^0.5 为 1.34e-3，过 bf16 的 3.9e-3、不过 f16 的 4.9e-4，用例里就有一条 `false` 作证。
+- **元素类型仍是窄类型**：`let r: bf16 = x ^ y` 静态成立（无隐式数值转换），三个结果进 `bf16[]` 是 6 字节（若答 f32 会是 12）。
+- **期望值不由二进制输出抄来**：用独立脚本按“f32 幂 + 半精度 round-nearest-even”算出字节链，f64 精确值另算；实测与脚本逐条一致。
+
+## A/B（红证）
+
+删掉 `src/builtin/modules/globals.cpp` 窄 `__pow__` 组的 `CAMEL_HALF_BINARY("pow")` 臂 →
+该计划 `total 27 / pass 23 / fail 4`，红的**恰好**是 `reduced_pow` 的四个后端，诊断
+`SemanticDiag::ReducedPrecisionUnsupported`，指名 `operator ^` 与元素类型 `bf16`/`f16`；其余 23 条不动。
+还原该臂后 `27 pass`。
+
+## 基线的更正（方法 + 两个数）
+
+引用的基线 `total 7873` 与本工作树不符。用 `git stash -u` 把两个新文件移出、**同一棵树、同一个二进制**重跑整闸门，得：
+
+| 状态 | total | pass | fail | skip | known |
+|---|---|---|---|---|---|
+| 并入 `6ed427f5e` 前、本树干净 | 7869 | 7858 | 0 | 9 | 2 |
+| 并入前、带本笔 | 7873 | 7862 | 0 | 9 | 2 |
+| **并入 `6ed427f5e` 后、带本笔** | **7877** | **7866** | **0** | **9** | **2** |
+
+增量恒为 **+4 pass / fail 0 / skip 不变**，即用例的四个后端。`7873` 是并入前“develop 已多 4 条别的用例”的数，不是本树的干净基线。
+
+## 未完成（同一族的后续笔）
+
+标量 `-` 钉值、对算出的值取 unary `neg`、`f32(f16 值)` 加宽，以及复合赋值 `+= -= *= /= ^=`（零用例，正在做；`^=` 排最后，因为它的算子臂就是本笔记过的 `pow`）。
