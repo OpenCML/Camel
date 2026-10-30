@@ -82,3 +82,30 @@ single red test -- `FeatureNotSupported`, i.e. the refusal this commit removes -
 
 Trunk was `7927ed48c` when this was written and is `45bc25f47` now, so the lane is one merge
 behind: the commit has not been pushed.
+What is still refused, and the rule that shape broke: a loop state whose first value is
+computed (`loop j = i + 1` inside another loop) is refused in the compiler today, and it is
+refused because the shape that was tried instead was unacceptable: with the first value read
+across an arm boundary and no lowering for that read, the program did not fail to compile --
+it crashed the compiler at run time. The rule the lowering holds, and should hold: **a shape
+whose cross-arm read is not lowered must be refused in the compiler, never left to the run
+time.** So `!hoistable(init)` stays on the loop-state path (literal/lambda/`const as` only)
+until that read is lowered; the type inference alone does not make the shape safe.
+
+`fallibleTypeOf` in `reportUnusedFallibleValues` (a cell is not a `T!` that nothing takes) is
+the classic "a new feature ships and immediately manufactures a false warning": making a local
+a cell of a fallible type put two `UnusedFallibleValue` warnings on a program that used its
+error, one for the cell the creation body makes and one for the write that fills it. Nothing
+about the warning rule was wrong -- the rule never had to look at a `var T!` statement before.
+If a later change sees this warning on a cell, it is this rule, not a regression.
+
+The A/B that located it is worth copying: reverting **one file** of the half-finished feature
+(`git checkout HEAD~1 -- src/compile/gct/builder.cpp`) rather than the whole commit leaves the
+rest of the mechanism in place, so exactly one test goes red and the reason is unambiguous --
+`stream.generator_local_across_yield` refused by `FeatureNotSupported`, 105 green -- and
+restoring it gives 106/106. Reverting half a feature by file locates it better than reverting
+all of it.
+
+The refusal sites did not move: `FeatureNotSupported` is still emitted from three places in
+`gct/builder.cpp` and `refuseLocalAcrossYield` is still called once. What changed is the set of
+declarations that reaches it -- a single-name declaration with a value is a cell now, so it
+never becomes an arm local; a declaration that binds several names or has no value still does.
