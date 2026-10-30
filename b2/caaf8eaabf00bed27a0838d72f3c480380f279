@@ -1,0 +1,8 @@
+开秩匹配：`[..]` 现在覆盖任意秩（含"秩 0 是元素本身"），`[?]` 不动。三笔：`7ae302a71`、`3b0dab108`、`b2caaf8ea`。
+
+1. **秩 0 不是"零维数组类型"**。原则原文：`T[..]` includes rank 0, and an array of rank 0 is that element, and there is no separate "rank-zero array" in the types。所以开秩模式要能选中**元素本身**；只判"subject 是数组"少了一半，补 `typeEquals(subject, want->elemType())` 之后 `open_rank(f32(1.5))` 才命中 `case f32[..]`。
+2. **A/B 两个数**：`case f32[?]` 放在 `case f32[..]` 之前 → 输出 `3.0 / 0.0 / 7 / 2 / 2 / 2`；放在之后 → `3.0 / 0.0 / 7 / 2 / 2 / 1`。差的是 `f32[]` 那一行。
+3. **一个意外（记录在案）**：`case f32[?]` 对 `f32[]`（秩 1、extent 未知）**也不选中**——两条臂先后只影响那一行、而且是被 `[..]` 选中。也就是说 `[?]` 这个模式今天**什么也不选**；这不是本次改动引入的，但值得单独验一次（`typeEquals` 对未知 extent 的相等判定）。
+4. **今天 `stdlib` 里 `match type` 臂用 `[..]` 的处数为 0**，261 处都在标注/参数/返回，匹配不读。
+
+闸门（`-Plan all -Tier fast -Jobs 8`）：total 7864 / fail 0 / skip 7 / known 2。
