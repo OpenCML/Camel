@@ -320,8 +320,8 @@ void replaceNode(
         for (size_t i = 1; i < lastRead.size(); ++i) {
             // An effect written inside another one's argument is computed after it; chaining it the
             // other way would close a cycle of inputs.
-            if (isComputedAfter(draft, lastRead[i - 1], lastRead[i]) ||
-                isComputedAfter(draft, lastRead[i], lastRead[i - 1])) {
+            if (isComputedAfter(transaction, lastRead[i - 1], lastRead[i]) ||
+                isComputedAfter(transaction, lastRead[i], lastRead[i - 1])) {
                 continue;
             }
             chainTo(lastRead[i], lastRead[i - 1]);

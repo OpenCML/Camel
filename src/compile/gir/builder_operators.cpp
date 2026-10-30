@@ -4018,7 +4018,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         if (a == nullptr || b == nullptr || nodeGraphOf(a) != nodeGraphOf(b)) {
             return false;
         }
-        runtime::GraphDraft *draft = nodeDraftOf(a);
+        auto *draft = nodeDraftOf(a);
         const draft_node_ref_t first  = nodeIdOf(a);
         const draft_node_ref_t second = nodeIdOf(b);
         if (!draft->alive(first) || !draft->alive(second)) {

@@ -506,7 +506,7 @@ inline bool nodeStandsForItsRegion(node_handle_t node) {
     if (kind != runtime::GCNodeKind::Brch && kind != runtime::GCNodeKind::Loop) {
         return false;
     }
-    const runtime::GraphDraft *draft = nodeDraftOf(node);
+    const auto *draft = nodeDraftOf(node);
     for (uint32_t region = 1; region < draft->regionCount(); ++region) {
         if (draft->region(region).owner == nodeIdOf(node)) {
             return true;

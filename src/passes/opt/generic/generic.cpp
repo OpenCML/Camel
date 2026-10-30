@@ -917,8 +917,8 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
                 // A place that reads the effect already runs after it -- it is the effect's own
                 // argument, a gate the effect passes on, or the code the effect calls -- so there
                 // is nothing to order there, and writing the edge would close a cycle of inputs.
-                if (isComputedAfter(draft, target, source) ||
-                    isComputedAfter(draft, source, target)) {
+                if (isComputedAfter(transaction, target, source) ||
+                    isComputedAfter(transaction, source, target)) {
                     continue;
                 }
                 camel::runtime::appendControlDependency(transaction, source, target);
