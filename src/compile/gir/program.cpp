@@ -659,8 +659,6 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
         if (!unit->failed && unit->module &&
             unit->module->name().rfind("rulesets.", 0) == 0) {
             const std::string ruleset = unit->module->name();
-            const char *wanted        = std::getenv("CAMEL_RULESET_INDEX");
-            const bool showIndex      = (wanted != nullptr && *wanted != '\0') || unit->entry;
             std::vector<camel::parse::ast::RuleHead> rules =
                 camel::parse::ast::takeRuleHeads(ruleset);
             if (rules.empty()) {
@@ -689,64 +687,12 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                     diag.commit(first, rule.rule, rule.head, std::to_string(rule.arity));
                     continue;
                 }
-                // A probe of the index itself: it prints what the ruleset holds, so a reader can
-                // see the heads the transform will look up rather than trusting that they are
-                // there. It is not the transform: no rule is applied here, and it stays quiet
-                // unless it is asked, because a program that imports a ruleset is not a program
-                // that asked to have its rules listed: the entry module of a probe prints its own
-                // index, and `CAMEL_RULESET_INDEX` asks for every ruleset's.
-                if (showIndex) {
-                    std::cout << "RULESET " << ruleset << ' ' << rule.head << '/' << rule.arity
-                              << " -> " << rule.rule << '\n';
-                }
             }
             unit->failed = inError(unit);
         }
     }
     bool ok = std::none_of(order.begin(), order.end(), inError);
 
-    // A probe of the index's query, not of the index: `CAMEL_RULESET_LOOKUP` asks the same function
-    // a transform will ask -- `family|head|arity`, several separated by `;` -- and prints the answer
-    // with the reason when there is none. It is separate from the build above because a query is
-    // what a reader of a ruleset actually needs: an index that can be printed but not asked answers
-    // nothing.
-    if (const char *queries = std::getenv("CAMEL_RULESET_LOOKUP");
-        queries != nullptr && *queries != '\0') {
-        std::string text = queries;
-        size_t start     = 0;
-        while (start <= text.size()) {
-            const size_t end  = text.find(';', start);
-            const std::string one = text.substr(start, end == std::string::npos ? std::string::npos
-                                                                                : end - start);
-            start             = end == std::string::npos ? text.size() + 1 : end + 1;
-            if (one.empty()) {
-                continue;
-            }
-            const size_t bar1 = one.find('|');
-            const size_t bar2 = bar1 == std::string::npos ? std::string::npos : one.find('|', bar1 + 1);
-            if (bar1 == std::string::npos || bar2 == std::string::npos) {
-                std::cout << "LOOKUP " << one << " -> malformed\n";
-                continue;
-            }
-            const std::string family = one.substr(0, bar1);
-            const std::string head   = one.substr(bar1 + 1, bar2 - bar1 - 1);
-            const uint32_t arity     = static_cast<uint32_t>(std::atoi(one.c_str() + bar2 + 1));
-            const auto answer        = camel::parse::ast::lookupRule(family, head, arity);
-            std::cout << "LOOKUP " << family << ' ' << head << '/' << arity << " -> ";
-            switch (answer.status) {
-            case camel::parse::ast::RuleLookup::Found:
-                std::cout << answer.rule;
-                break;
-            case camel::parse::ast::RuleLookup::NoRuleForPrimitive:
-                std::cout << "no rule";
-                break;
-            case camel::parse::ast::RuleLookup::NoSuchFamily:
-                std::cout << "no such family";
-                break;
-            }
-            std::cout << '\n';
-        }
-    }
 
     // Step three: link.
     if (ok) {

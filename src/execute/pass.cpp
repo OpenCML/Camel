@@ -75,6 +75,7 @@
 #include "passes/trans/dot/graphviz.h"
 #include "passes/trans/profile/profile.h"
 #include "passes/trans/stats/stats.h"
+#include "passes/trans/rulesets/rulesets.h"
 #include "passes/trans/tns/topo_node_seq.h"
 
 #include "camel/utils/log.h"
@@ -571,6 +572,12 @@ void registerCoreKernels() {
     registerCoreKernel(
         "argir", makeGraphVizPass(GraphVizDumpConfig{.rich = true, .annotateRoles = true}));
     registerCoreKernel("stats", makePass<GraphStatsPass>());
+    registerCoreKernel(
+        "rulesets",
+        [](const context_ptr_t &ctx, const PassArgs &args) {
+            return std::make_unique<RulesetsPass>(
+                ctx, args.isNull("query") ? std::string() : args.getString("query"));
+        });
     registerCoreKernel("profile", profilePass());
     registerCoreKernel("cpp", makePass<CppDumpPass>());
     registerCoreKernel("cpp::module_file", makePass<CppModuleDumpPass>());

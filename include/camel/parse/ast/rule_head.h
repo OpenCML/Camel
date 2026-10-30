@@ -76,4 +76,14 @@ RuleMatch lookupRule(const std::string &family, const std::string &head, uint32_
 /// The families built so far, in name order: what a reader can ask `lookupRule` about.
 std::vector<std::string> ruleFamilies();
 
+/// One rule as a reader of the index sees it: what it is filed under, and what it is called.
+struct RuleEntry {
+    std::string head; // the operator of the rule's left side
+    uint32_t arity = 0;
+    std::string rule;
+};
+
+/// Everything `family` holds, in key order (`head` then `arity`): what a printer of the index reads.
+std::vector<RuleEntry> rulesOf(const std::string &family);
+
 } // namespace camel::parse::ast

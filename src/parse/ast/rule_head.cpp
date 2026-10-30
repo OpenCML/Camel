@@ -5,6 +5,7 @@
 
 #include "camel/parse/syntax/cst.h"
 
+#include <cstdlib>
 #include <map>
 #include <mutex>
 
@@ -143,6 +144,27 @@ std::vector<std::string> ruleFamilies() {
         families.push_back(family);
     }
     return families;
+}
+
+std::vector<RuleEntry> rulesOf(const std::string &family) {
+    std::lock_guard<std::mutex> lock(registryMutex);
+    std::vector<RuleEntry> entries;
+    const auto at = indexed.find(family);
+    if (at == indexed.end()) {
+        return entries;
+    }
+    entries.reserve(at->second.size());
+    for (const auto &[key, rule] : at->second) {
+        const size_t at2 = key.rfind('@');
+        if (at2 == std::string::npos) {
+            continue;
+        }
+        entries.push_back(RuleEntry{
+            key.substr(0, at2),
+            static_cast<uint32_t>(std::strtoul(key.c_str() + at2 + 1, nullptr, 10)),
+            rule});
+    }
+    return entries;
 }
 
 } // namespace camel::parse::ast

@@ -1,9 +1,9 @@
 """Asks a ruleset's index a question, and checks the answer and the reason when there is none.
 
-The index is built while a ruleset module is read (`src/compile/gir/program.cpp`), but built is not
-the same as askable: a table that can only be printed answers nothing, and reads as if it did. So
-the case asks `lookupRule(family, head, arity)` -- the same function a transform asks -- through the
-compiler's probe, and pins all three answers the function can give:
+The index is built while a ruleset module is read; built is not the same as askable, and a table
+that can only be printed answers nothing while looking as if it did. The `std::rulesets` pass is the
+reading: it prints the index, and with `query=` it asks `lookupRule(family, head, arity)` -- the
+function a transform asks -- and prints the answer. The case pins all three answers:
 
   found          `rulesets.jvp` has a rule for `-` with one operand: `jvp_neg`, and for `-` with two
                  operands: `jvp_sub`. The two are different primitives (`__neg__` and `__sub__`),
@@ -11,8 +11,9 @@ compiler's probe, and pins all three answers the function can give:
   no rule        `-` with three operands: the family is there, nothing there takes three.
   no family      a name no ruleset module has.
 
-It also checks that the probe is the only thing that prints: a program that imports a ruleset and
-asks nothing prints nothing about rules.
+The two ways of not finding a rule are named apart because the repairs differ (write the rule, or
+import the ruleset). The case also checks that a program without the pass prints nothing about
+rules, and that the pass hands the program on unchanged.
 
 Usage: python rulesets_lookup.py [--camel PATH]
 """
@@ -48,15 +49,15 @@ def check(ok: bool, what: str) -> None:
         failures.append(what)
 
 
-def run(env_extra: dict[str, str] | None) -> tuple[int, str]:
+def run(extra: list[str]) -> tuple[int, str]:
     env = dict(os.environ)
     env.setdefault("CAMEL_HOME", str(Path(CAMEL).resolve().parents[1]))
+    # No environment switch does this any more: what a run prints about rules is what its passes ask
+    # for (design principles: a pass is the interface, not an environment variable).
     env.pop("CAMEL_RULESET_LOOKUP", None)
     env.pop("CAMEL_RULESET_INDEX", None)
-    if env_extra:
-        env.update(env_extra)
     proc = subprocess.run(
-        [CAMEL, str(PROGRAM), *ARGV],
+        [CAMEL, str(PROGRAM), *extra, *ARGV],
         env=env,
         capture_output=True,
         text=True,
@@ -65,20 +66,32 @@ def run(env_extra: dict[str, str] | None) -> tuple[int, str]:
     return proc.returncode, proc.stdout
 
 
-code, quiet = run(None)
-check(code == 0, f"the program exits 0 without the probe (got {code}):\n{quiet}")
-check("LOOKUP" not in quiet, f"nothing is asked, so nothing is answered:\n{quiet}")
+code, quiet = run([])
+check(code == 0, f"the program exits 0 without the pass (got {code}):\n{quiet}")
+check("LOOKUP" not in quiet, f"no pass asks, so nothing is answered:\n{quiet}")
 check("RULESET " not in quiet, f"and nothing is listed either:\n{quiet}")
+check("1.0" in quiet, f"the program still runs and prints its value:\n{quiet}")
 
-code, asked = run({"CAMEL_RULESET_LOOKUP": ";".join(query for query, _ in QUERIES)})
-check(code == 0, f"the program exits 0 with the probe (got {code}):\n{asked}")
+query = ";".join(question for question, _ in QUERIES)
+code, asked = run(["std::rulesets", f"query={query}"])
+check(code == 0, f"the program exits 0 with the pass (got {code}):\n{asked}")
 
 lines = [line for line in asked.splitlines() if line.startswith("LOOKUP ")]
 expected = [want for _, want in QUERIES]
 check(lines == expected, f"the answers are {expected}, got {lines}")
 
-# The reason is part of the answer: "no rule" and "no such family" are different repairs (write the
-# rule, or import the ruleset), so they are never collapsed into one "none".
+# The index itself is listed by the same pass, one line per rule, and the program still runs.
+listed = [line for line in asked.splitlines() if line.startswith("RULESET ")]
+check(len(listed) == 10, f"the index lists ten rules, got {len(listed)}: {listed}")
+check(
+    "RULESET rulesets.jvp -/1 -> jvp_neg" in listed
+    and "RULESET rulesets.transpose -/2 -> sub_t" in listed,
+    f"the listing names the rule each key is filed under: {listed}",
+)
+check("1.0" in asked, f"the pass hands the program on unchanged:\n{asked}")
+
+# The reason is part of the answer: "no rule" and "no such family" are different repairs, so they
+# are never collapsed into one "none".
 check(
     sum(1 for line in lines if line.endswith("-> no rule")) == 1,
     f"exactly one answer says the family has no such rule: {lines}",
