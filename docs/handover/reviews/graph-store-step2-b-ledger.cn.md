@@ -612,3 +612,29 @@ HANDLE_PROBE refused: InvalidArgument
 **三个数**：**消失的参数 2 个**（`const GraphDraft &draft` ×2）；**删掉的行数 0**（净 `+7`：多出的三句挡路注释、两个 `const auto &draft` 绑定）；**保留 26 个**。
 
 **四个数：62 / 488 / 3 / 4**（`491 → 488`）。
+
+## 32. B 分支：`draftOf` 也交了——**一个函数的返回值，决定了四个叶子能不能转**（`c336ad4dc`）
+
+**B 转了 11 处签名**：`bypassValueGate`、fold 一族的六个（`foldDraft`、`foldStaticAccess`、`foldStaticFill`、
+`foldStaticCast`、`foldFromTypes`、`replaceFoldResult`）、以及 A 留下的四个叶子（`isPureOper`、
+`markSyncStatement`、`handOverSyncWait`、`replaceNode`）。**外加 algebra 里被 `replaceNode` 与 `isPureOper`
+牵动的两处（`simplify` 与那次 `replaceNode` 调用）——它们不在表上，是编译器点名的。**
+
+**真正的发现不在 `generic` 里，在 `modules/graph/txn.cpp`**：`replaceNode` 的最后一个外部调用者
+是 `graph.replace`／`graph.erase`，而它们手里只有一个**裸草稿**——因为 `draftOf` 的返回值就是
+`std::pair<GraphDraft &, gc_node_ref_t>`。**一个辅助函数的返回类型，卡住了另一个模块的重构**：
+
+| | 改前 | 改后 |
+|---|---|---|
+| `draftOf` | `std::pair<GraphDraft &, gc_node_ref_t>` | `std::pair<camel::runtime::GraphTransaction &, ...>` |
+| 三个调用点 | `auto [draft, ref]` | `auto [transaction, ref]` + 一行 `auto &draft = transaction.edit();` |
+
+**这不是顺手的清理，是判据的必然**：`draftOf` 的注释本来写着"返回草稿"，而 `Handle` 那边已经裁定
+"草稿里的节点只能由事务命名"。**两句话对不上，编译器就把它们撞在一起了。**
+
+**`test::control` 的门自检也一样**：它原来 `bypassValueGate(draft, ...)`，可它上面两行就是
+`auto owner = GraphTransaction::open(...)`——**事务一直在手边，只是没交出去。**
+
+**三个数**：**消失的参数 11 个**；**删掉的行数 12**（净 `+11`：十处 `auto &draft = transaction.edit();` 与一行 `const auto &draft = transaction.graph();`，抵掉旧签名折行的行数）；**保留 15 个**（`armRegions`、`staticValueOf`、`isFoldable`、`staticArgs`、`staticArmOf`、`branchArmNodes`、`joinBlockFragments`、`pruneBranch`、`operIdOf`、`isValueOnly`、`isDeadWhenUnread`、`isReplaceable`、`reaches`、`orderedSources`、`readsNoWrittenSlot`——都是被 B 的函数用草稿调用的读，**它们的调用点现在手里是事务，但转它们要连这些读的调用者一起看，留给下一片**）。
+
+**四个数：61 / 472 / 3 / 4**（`488 → 472`，**files 首次降到 61**：`gates.cpp` 不再拼那个类型名）。
