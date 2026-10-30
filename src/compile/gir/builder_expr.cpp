@@ -11,6 +11,8 @@
 #include "builder_helpers.h"
 #include "builder_support.h"
 
+#include <cstdio>
+
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/data/composite/struct.h"
 #include "camel/core/numeric_convert.h"
@@ -674,6 +676,7 @@ node_handle_t Builder::valueVersionOf(node_handle_t variable) {
         // after that call, and the edge from the call is what makes it run (3.1). The call's value
         // may be `void` -- this operator does not read it.
         if (nodeKindOf(*modifier) == camel::runtime::GCNodeKind::Call) {
+            std::fprintf(stderr, "TRACE valueVersionOf took the call writer\n");
             return variableAfterCall(variable, *modifier);
         }
         return nullptr;
