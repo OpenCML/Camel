@@ -6468,8 +6468,11 @@ transforms).
 tangent of its type. A constant and a captured value are lifted this way, so a straight-line
 program is lifted node by node and a call hands its parameters on in the same shape.
 
-Every rule here is xportd: the caller that attaches one to an operator lives in another
+Every rule here is `export`ed: the caller that attaches one to an operator lives in another
 module, and a rule that is not exported is refused where it is imported.
+
+Adding a rule changes docs/stdlib-reference.md; regenerate it with
+`node scripts/stdlib-reference.mjs --write`.
 
 #### `lift`
 
