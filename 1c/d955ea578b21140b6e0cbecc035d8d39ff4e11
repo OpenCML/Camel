@@ -1,0 +1,56 @@
+# lane-gen：单元类型那条卡在 GIR，落了三张用例、一页问题
+
+基线 `2e07e43cc`；期间 `origin/develop` 连推了三次（别的车道在落地），本车道合并了三次，head 是本 note
+所挂的那个提交。
+
+## 落了什么
+
+- `test/plans/feat/compile/stream.plan.toml` 新增 4 条测试（10 个实例，四后端 + 默认）：
+  `generators_cell_type.cml`（`std::jgir` 读出单元是 `var string`；另四后端打印 `one`/`two`）、
+  `generators_cell_retype.cml`（`x = "text"` 无 `=` 重载，与生成器外同一诊断、同一重载表）、
+  `generators_body_fault.cml`（stdout 只有 `1`，`1234` 与 `after` 都不出现）。
+- 每条先手工跑过 `camel <case>`（以及 `std::jgir`），读数写进断言，不是照着规矩抄的期望。
+
+## 没落的：裁定那句「先建 step」
+
+三处实测/读码：
+
+- `Builder::visitDRefNode` 与 `Builder::captureInto`：内层图引用外层名字的时刻，就是它被造出来的
+  时刻。只把单元挪到 `step` 之后，`generators.cml` 逐字报
+  `SemanticDiag::ImportNameNotExported: '__gen_pc__'`。
+- `Builder::visitVariNode` / `Builder::newVariable`：单元就是 `:var/new` 作用于一个值，类型来自初值；
+  GIR 里没有「带类型、没有值」的单元。
+- `typeof` 在声明的类型位置不求值（`DeclaredTypeMismatch: ... not the declared type 'typeof'`），
+  所以 GCT 拿不到「第一次写那个表达式的类型」而不把它建出来。
+
+这不是构建顺序问题，是新机制。按「不留限制版」没有先落半步。
+
+**`FeatureNotSupported` 一处都没删，这个数是 0。** `'generators'`（内层 `pairs(n)`）与
+`a local read after a 'yield'` 今天都仍可达；「删掉余下」是裁定的第二半，今天做不到。账记在这里，
+下一个人不要以为已经删过。
+
+问题页：`docs/handover/questions/generator-cell-type-by-inference.cn.md`（三条机制各写层/代价/风险，
+推荐「GIR 只求类型」，末尾一句请作者裁）。
+
+## 两条暗礁（下一个人会踩）
+
+1. **新用例会改变生成的文档。** 第一次跑闸门 `catalog.doc_is_generated` 红：新用例被
+   `scripts/diagnostics-catalog.mjs` 选成 `RuntimeDiag::DivisionByZero` 的示例（它按
+   `expect_diagnostic_name` 的精确命中取第一条），把
+   `test/cases/consistency/attempt/fault_outside.cml` 那条挤掉了。改成断言消息文本、再
+   `node scripts/diagnostics-catalog.mjs --write` 才绿。**以后新增带 `expect_diagnostic_name` 的用例，
+   先单独跑这一条并看 `docs/diagnostics.md` 的 diff。**
+2. **不能只钉一条。** 单元是共用机制：拿掉 `Builder::visitGeneratorBody` 里局部量的提升，12 条生成器
+   用例一起红。A/B 只能记成「改这一条的输入 → 恰好读它的那几条红」，不能记成「改一处 → 恰好一条红」。
+
+## A/B
+
+- cell 用例两条写改成 `1`/`2` → 只红 `generator_cell_type_from_first_write` + 四个
+  `generator_cell_across_pulls`（101/106）。
+- `x = 2` → 只红 `generator_cell_write_type`（105/106）。
+- `10 / 1` → 只红四个 `generator_body_fault_ends_stream`（102/106）。
+
+## 闸门
+
+`-Plan all -Tier fast -Jobs 8`：total 7915 / pass 7904 / fail 0 / skip 9 / known 2。
+第一次全量 7908/7898/0/8/2（+10 正是新加的实例），最后一次见上。
