@@ -1846,8 +1846,6 @@ GraphId GraphDraftGroup::reserve(std::string mangledName, std::string name) {
 
 GraphDraft &GraphDraftGroup::draft(GraphId id) { return member(id).transaction->edit(); }
 
-GraphTransaction &GraphDraftGroup::transaction(GraphId id) { return *member(id).transaction; }
-
 void GraphDraftGroup::define(GraphId id, std::unique_ptr<GraphTransaction> transaction) {
     ASSERT(transaction != nullptr, "Graph draft group member transaction cannot be null.");
     GraphDraft &draft = transaction->edit();

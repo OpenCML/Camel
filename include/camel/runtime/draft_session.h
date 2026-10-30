@@ -344,8 +344,6 @@ class GraphDraftGroup {
     GraphId reserve(std::string mangledName, std::string name);
     /// The graph of a member, to build in.
     GraphDraft &draft(GraphId id);
-    /// The transaction the member's graph is built in.
-    GraphTransaction &transaction(GraphId id);
     /// Replaces the graph of a member.
     void define(GraphId id, std::unique_ptr<GraphTransaction> transaction);
 
