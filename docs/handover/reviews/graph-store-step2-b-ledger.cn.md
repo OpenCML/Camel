@@ -742,3 +742,36 @@ HANDLE_PROBE refused: InvalidArgument
 按"任何时刻停下树都要能构建"退回了（`git checkout --`，树已重新绿）。**这一片需要一个 A/B：先给每个成员方法标出它读写的是哪个事务，再改签名。**
 
 **三个数（这一片）：0 / 0 / 56**（未动）。**四个数：57 / 432 / 3 / 4（未变）。**
+
+## 37. `pullback` 的 A 表：**三张草稿，两个事务，一个映射**
+
+**表头那句判据**：*一个方法同时握两个事务本身不是错——错的是它把一张草稿上的节点塞进另一张草稿。
+"跨事务写"那一列非空的地方，就是要单独想的地方。*
+
+**`ForwardRewrite`：15 个方法，一个事务。** 它只收一个 `rt::GraphTransaction &transaction_`，
+`draft()` 就是 `transaction_.edit()`；**没有任何方法同时握两个**：
+
+| 方法 | 用哪张草稿 | 事务 | 跨事务写 |
+|---|---|---|---|
+| `followFunctionValues`、`carriesFunctionValue`、`expandKernelBodies`、`run`、`retarget`、`redirectValue`、`redirectCallValue`、`redirectAnchors`、`split`、`dependsOnTangentPort`、`rewriteLoop`、`rewriteIndirectCall`、`rewriteClosureCall`、`rewriteCall`、`rewriteBranch`（15 个） | `draft()` | **`transaction_`（一个）** | **无** |
+
+**`Backward`：35 个方法，两张草稿两个事务。**
+
+| 结论 | 方法数 | 方法 |
+|---|---|---|
+| **只读前向**（`forward()` → `forwardTransaction_`） | **16** | `accumulate`、`gradient`、`userGradient`、`refuseWhenActive`、`run`、`reportRefusals`、`activeFunctionInput`、`chosenFunction`、`refusalReason`、`whyNotEvident`、`operUri`、`operId`、`checkVariableReads`、`visit`、`visitOper`、`visitAccs` |
+| **只写目标**（`target()` → `targetTransaction_`） | **8** | `accumulateInto`、`producerOf`、`add`、`zero`、`materialize`、`visitCallSite`、`visitRuleSite`、`finishCaptures` |
+| **两张都不用** | **7** | `primalOf`、`gradientOf`、`accumulateGradient`、`isActive`、`mergeInto`、`refuseActiveCollection`、`refuseActiveEnum` |
+| **两张都用（交界）** | **4** | `ref`、`checkGradientType`、`visitFill`、`visitForward` |
+
+**交界处 4 处，但只有 1 处是设计上的跨**：
+
+* `ref(primal)`——**它就是那张映射表本身**，注释写着"Target-graph node holding the primal value"。**唯一一处把前向节点变成目标节点的地方。**
+* `checkGradientType`、`visitFill`、`visitForward`——**同时读两个事务，但都不调用 `ref()`**。
+  **B 那一轮的第一件事就是核实这三处**：它们若把前向节点直接塞进目标写，那就是这条族真正的风险点；
+  若只是比较类型、读两边头部，那就没问题。**表里这一列非空，但还不知道是"跨"还是"看"。**
+
+**B 的做法（随之定）**：`ForwardRewrite` 的方法继续收 `transaction_`；`Backward` 的方法**显式收它真正用的那一个，
+需要两个的就显式收两个**（`forwardTransaction_`、`targetTransaction_`）——**不收一个"能拿到另一个"的接口，那是把判据藏起来。**
+
+**三个数**：**0 / 0 / 56**（这一片只出表）。**四个数：57 / 432 / 3 / 4（未变）。**
