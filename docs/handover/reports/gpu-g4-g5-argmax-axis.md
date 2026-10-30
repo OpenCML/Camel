@@ -35,6 +35,44 @@
 - `modules/tiles/src/compiler.cpp:1094`：`operator '…' needs a statically known f32 tensor result`——
   这是把 i64 结果落在运行图里的那道门的原话。
 
+## 一之二、第 1 步做完了什么（上传 / 内核 / 回读里的第三段，加两处宽度）
+
+四步顺序的第 1 步是"`I64` 走通上传 / 内核 / 回读"。这一笔做的是**回读这一段的全部**、
+**内核那一段里 i64 的真实能力**、和**两处宽度**；上传段只做了一半，理由在下面的清单里。
+
+**读数**（`test/plans/feat/modules/tiles.plan.toml#compiled_region_i64_leaf_reads_back`，
+`--devices cpu`，跑 `tiles::test_outline_compiled` + `std::nvm`）：
+
+```
+TILES_OUTLINED 2
+TILES_I64 {"device":[3,5],"host":[3,5],"equal":true}
+```
+
+那一行是 `modules/tiles/src/region_test_pass.cpp#i64LeafReport` 打印的：两个位置先作为 i64 **值**
+进内核表达式层（`ScalarExpr::literal(ScalarValue::i64(3))`），再进一个 `DType::I64` 的设备叶子
+（`retainHostValue({2}, DType::I64, 16 字节)`，就是 `Device<int64[2]>` 的存储），`downloadValue` 把字节
+取回，`tree_transfer.cpp#hostLeafValue` 按叶子的 dtype 建出 `TypeCode::Int64` 的 `[2]` 张量，与主机
+`[3, 5]` 逐位相同（`equal: true` 是断言之后的结论，不是口号：不同就抛，条目会红）。
+
+**这一笔改了哪几处，为什么是这几处**（只在"加法是穷举的"或者"默认值在说谎"的地方动）：
+
+| 位置 | 为什么必须现在改 |
+| --- | --- |
+| `modules/tiles/include/tiles/dtype.h#DType` | 加 `I64`。它是"元素类型"这个名字本身。 |
+| `modules/tiles/src/schedule.cpp#bytes` | 原来是"f64 八字节，**其余四字节**"——i64 会被按四字节读出一半。这是唯一一处"默认值在说谎"，必须改。 |
+| `modules/tiles/src/scalar_expr.cpp#ScalarType(DType)` | `DType` → 寄存器类型的唯一桥；它有 `I64` 这个 kind 可以映射，且对未知类型是 `throw`（穷举的加法）。 |
+| `modules/tiles/src/tree_transfer.cpp#hostLeafValue` | 回读的唯一出口，原来写死 f32；i64 分支就是第 1 步的交付物。上传侧的 tensor 分支也一并认 i64（八字节/元素，宽度取自 `bytes`）。 |
+| `test/cases/modules/tiles/*` + 计划条目 | 上面那条读数。 |
+
+**其余十三处按 `F32`/`F64` 分支的代码一律没动**，理由：那些 `switch` 里没有 i64 的分支就会落到它们
+自己的 `default:` 或 `throw`，报错比"一次全改"安全；真正需要它们的时机是第 2 步（内核要存 i64）和第 3 步
+（plan 里要出现 i64 节点），不是现在。
+
+**顺带记一条内核侧的事实**（对第 2 步是好消息）：`scalar_expr.cpp:175-178` 明写
+`I64` 只承载"静态循环域元素"，i64 **算术**被拒（"unsupported i64 scalar operation"），因为那是另一份
+wrapping 32 位算术契约。也就是说 i64 在下标这里不是"不能算"，而是"不需要算"——`argmax_axis` 要存的
+位置正是循环域里的那个元素（`k_r`），不是算出来的数。第 2 步的内核因此不需要动标量算术。
+
 ## 二、带下标的归约在契约里怎么表达
 
 **契约这边已经有了，不用新写**：`modules/tensor/ops/indexing.cpp#positionLaw` 给 `argmax_axis` 挂了
@@ -73,7 +111,8 @@
 表里的名字是"**有 device 程序**"的宣称（`operations()` 是 `deviceCapable` 的唯一定义处，
 `modules/tiles/src/region_outline.cpp` 用它决定接受还是拒绝一个 `#gpu` scope）。所以顺序是死的：
 
-1. `DType::I64` 走通"上传 → 内核 → 回读"（上面第一项的三处闸门一起改）；
+1. ~~`DType::I64` 走通"上传 → 内核 → 回读"~~ —— **第 1 步已做**：回读整段通了（有上面的读数），
+   宽度与寄存器类型两处穷举点改了，上传段只认了类型与宽度（见下面的清单）；
 2. `ArgMax` law 的内核分支落地（顺序版）；
 3. `eligibility` 的归约分支已经能接（`_axis` 走 `DimRole::Reduction` 求 `attributes`，
    再 `reductionAccess`），但 `graph_regions.cpp#shape` 要能读 i64 结果，否则永远停在 `unresolved_type`；
@@ -81,13 +120,27 @@
    （照 `test/cases/modules/tiles/gpu_scope_views.cml` 的写法钉值）；
 5. 这之后才把 `tensor:argmax_axis` 写进 `operations()`，C2 的读数才允许从 21 = 8 + 13 变成 21 = 9 + 12。
 
-在第 4 步有读数之前把名字填进表，只会得到两种结果：`eligibility` 在 `unresolved_type` 处拒（数字好看、
-能力没变），或者更糟——不拒，于是把 4 字节的 f32 结果按 8 字节下标读出去。**这就是这一条始终不进表的
-全部理由**，与"今晚不想做"无关。
+### 四个"真正拒它的地方"：谁现在改、谁留到第几步、为什么可以留
+
+| 闸门 | 决定 | 理由 |
+| --- | --- | --- |
+| `device.cpp#deviceScalarDType` | **留到第 2 步之后**（今天不改） | 它管的是**标量**叶子；`argmax_axis` 的结果是张量，走的是 tensor 分支，与它无关。而改它等于宣称"设备能持有一个 i64 标量"，那是把一个没有程序的结果形状提前放进类型面。 |
+| `graph_regions.cpp#shape` | **留到第 3 步** | 它是 `eligibility` 的入口：改它，i64 结果就能进入 lowering，而 lowering 那边没有程序（第 2 步才做）。先改这里只会把拒绝从 `unresolved_type` 变成更靠后的、更难看懂的一种。 |
+| `schedule.cpp#validate` | **留到第 2 步之后** | 它守的是**计划**：只有第 2 步让内核能存 i64，计划里才可能出现 i64 节点。现在放宽，等于允许一个内核无法存储的 dtype 进计划。 |
+| `compiler.cpp:1094`（`needs a statically known f32 tensor result`） | **留到第 3 步** | 它是"算子结果能不能落在运行图上"的那句话。第 1 步只让**已经存在的** i64 字节能被正确读回，没有新增任何能产生 i64 结果的算子；这句话这时是对的，不能提前松。 |
+
+四条的共同理由一句话：**这一笔只让 i64 的"存储与回读"正确，没有让任何东西能"产生" i64 结果；
+任何让产生变可能的改动，都属于第 2、3 步。**
+
+在第 4 步有读数之前把名字填进表，只有两种下场，原话留档在这里：**"提前进表只有两种下场：在
+`unresolved_type` 处拒（数字好看、能力没变），或者不拒而把 4 字节的 f32 结果按 8 字节下标读出去。"**
+「不拒」那条今天已经有实证：宽度那一处如果不改，`bytes()` 就会按四字节算，回读出来的下标正好是半个。
 
 ## 附：这一笔之后账本上的位置
 
 - A 组 5 条：4 条视图已进表（`a3d119690`），剩 `tensor:argmax_axis` 这 1 条，卡在本文第一、三项。
+  缺口**没有变**，还是 26：这一笔让 i64 的存储与回读对了，没有让任何东西能产生 i64 结果，
+  `argmax_axis` 仍未进表。
 - 缺口 26 = transformer_step 13（`nn:sgd`、`gelu`、`gelu_grad`、`layer_norm`、`layer_norm_grad`、
   `matmul_grad_lhs`、`matmul_grad_rhs`、`numel`、`permute_inverse`、`shape`、`softmax`、`softmax_grad`、
   `zeros_like`）+ C2 13（`nn:adam`、`nn:adam_state`、`softmax_cross_entropy_labels`、
