@@ -165,9 +165,13 @@ Handle *nodeHandle(const Program *program, GraphId graph, uint32_t node) {
 }
 
 /// The handle of a node read from `from`: the same draft when `from` names one, otherwise the
-/// same program and graph.
+/// same program and graph. The draft a handle names is reached through its transaction when it
+/// has one, so the handle made here names that transaction too and not the raw draft.
 Handle *nodeHandle(const Handle *from, gc_node_ref_t node) {
-    if (const GraphDraft *draft = from->draft()) {
+    if (const auto *transaction = from->transaction()) {
+        return Handle::createInTransaction(*transaction, node, mm::autoSpace());
+    }
+    if (const auto *draft = from->draft()) {
         return Handle::createInDraft(*draft, node, mm::autoSpace());
     }
     return Handle::create(
