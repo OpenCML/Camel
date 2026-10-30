@@ -1,0 +1,14 @@
+// `f32[]` is one dimension whose length the run knows (design principles 5.4: `int[]` is
+// `int[?]`), not "any number of dimensions". A value of type `f32` is rank zero -- the element
+// itself -- so it does not enter this position: the open rank `f32[..]` takes it
+// (`open_rank_element.cml`), and this type does not.
+
+func rank(v: f32[]): int {
+    return len(v)
+}
+
+func main(): int sync {
+    let scalar: f32 = 2.5
+    println(rank(scalar))
+    return 0
+}

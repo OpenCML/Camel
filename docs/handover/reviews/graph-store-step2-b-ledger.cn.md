@@ -302,3 +302,18 @@ b4 只有一个人口：`modules/graph/handle.h` 里那个 `const GraphDraft *dr
 **从这一笔里出来的一条规矩：新代码里点名就算数，`auto` 是这一层的写法。**
 起因很小：`createInTransaction` 里先写成 `const camel::runtime::GraphDraft &draft = transaction.graph();`，账本当场判红（535 → 536），改成 `const auto &draft = …` 才绿。但它说明的不是"台账要省一格"，而是**这一层的类型名是借来的，写类型名等于宣告所有权**——写下 `GraphDraft` 的人，等于说"这份草稿归我管"。
 所以 b4／b6 从此按这一条判断：**谁在代码里写出 `GraphDraft`，谁就是在宣告自己持有它**；只想借来用一次的，写 `auto`，让所有者留在它该在的地方（事务、会话、存储自身）。
+
+## 16. b4 第一片停在这里：它前面还有一层 `Writings`（§12 的"4 个在事务里"要改）
+
+原计划下一件是 `read.cpp:165`：把 `nodeHandle(from, node)` 从 `from->draft()` 改成 `from->transaction()`。**试读之后不能做**，证据两条：
+
+1. **读端先改，会让所有草稿 handle 变成"看不见"**：`viewOf` 与 `nodeHandle` 判"这是不是草稿"用的就是 `handle->draft()`；先换成 `transaction()`，那些由 `createInDraft` 造出的 handle（`transaction_` 为 null）会被当成已发布的图，落到 `nodeOfFrozen` 上，而它们的 `program_` 是 null。
+2. **写端也换不了**：`module.cpp:259` 是 `auto &draft = match.writings.draft();`，而 `Writings` 存的是 **`GraphDraft &draft_`（`writings.h:414`／`542`），它手里没有事务**；`fact.cpp` 的 `Source.draft` 又是从 handle 借的（`fact.cpp:859`）。
+
+**所以 §12 那句"4 个在事务里造"是错的：这 4 个不是"在事务里"，是"在存储里"**——草稿来自 `Writings`。**17 个构造点里，0 个手里有事务。**
+
+**两条路，都是别人那一层的题：**
+- **A（推荐）**：先让 `Writings` 通过事务持有草稿（它的构造本来就从会话拿草稿，`writings.h:405`），handle 随后跟上。这**不是 b4 第一片，是 b6 的第一小步**。
+- **B**：`draft_` 留在 handle 里，等 b6 随类型一起消失（第一片不做）。
+
+**状态**：这一轮没有改代码（树干净、构建绿）；已落地的是纯加能力的 `e467242e3`（`transaction_`／`createInTransaction`，无调用者）。**下一步要协调者定 A 还是 B**，不猜。
