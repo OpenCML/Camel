@@ -2498,6 +2498,7 @@ Type *Builder::inferTypeOf(const GCT::node_ptr_t &expression) {
     const decorated_scope_ptr_t savedDecorated = decoratedScope_;
     const template_scope_ptr_t savedTemplate   = templateScope_;
     const diagnostics_ptr_t savedDiags         = diags_;
+    const bool savedInferring                  = inferringTypeOf_;
     // What the inference says about `e` is nobody's business: `e` is checked where it is
     // evaluated. The sink is what tells "nothing to report" apart from "the expression is not a
     // value", the way a speculative instantiation keeps what it learns about the bodies it tries.
@@ -2519,6 +2520,7 @@ Type *Builder::inferTypeOf(const GCT::node_ptr_t &expression) {
         decorated_scope_ptr_t decorated;
         template_scope_ptr_t templ;
         diagnostics_ptr_t diags;
+        bool inferring;
         DraftGraphBuilder *scratch;
         ~Restore() {
             self.nodeScope_        = nodes;
@@ -2532,6 +2534,7 @@ Type *Builder::inferTypeOf(const GCT::node_ptr_t &expression) {
             self.varied_           = varied;
             self.declaresVariable_ = declares;
             self.diags_            = diags;
+            self.inferringTypeOf_  = inferring;
             // The entries are keyed by the address of the graph that is going away, and another
             // graph may take that address, so they go with it.
             self.capturedValues_.erase(scratch);
@@ -2549,9 +2552,11 @@ Type *Builder::inferTypeOf(const GCT::node_ptr_t &expression) {
               savedDecorated,
               savedTemplate,
               savedDiags,
+              savedInferring,
               scratch.get()};
 
-    diags_ = sink;
+    diags_          = sink;
+    inferringTypeOf_ = true;
     enterGraphScope(scratch, "__typeof__");
     lastSyncedNode_ = {};
     chainedNodes_.clear();

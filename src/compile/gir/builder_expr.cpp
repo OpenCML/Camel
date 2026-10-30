@@ -363,6 +363,8 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
             node = nativeValueNode(gct, declared);
         } else if (typedCell) {
             node = newVariableOfType(visitTypeNode(gct->at(0)));
+            // Written where its declaration stands, not here (see cellsAwaitingWrite_).
+            cellsAwaitingWrite_[ident] = node;
         } else {
             node = functionValueOf(valueNodeOf(visit(gct->at(0))), gct);
         }
@@ -856,6 +858,20 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
     auto optNode = nodeAt(name);
     if (optNode.has_value()) {
         node_handle_t node = optNode.value();
+        // A cell of a generator body that no statement has written yet: the write itself (the
+        // cell read the compiler makes for `__assn__`, which has no origin of the program) is
+        // what declares it, and a read that stands before that statement is a name used before
+        // it is declared -- the same error as in any function.
+        if (const auto pending = cellsAwaitingWrite_.find(name);
+            pending != cellsAwaitingWrite_.end() && pending->second == node) {
+            if (!inferringTypeOf_ && gct->origin() != camel::source::kInvalidOriginId) {
+                diags_->of(SemanticDiag::UnresolvedReference)
+                    .atOrigin(gct->origin())
+                    .commit(name);
+                throw BuildAbortException();
+            }
+            cellsAwaitingWrite_.erase(pending);
+        }
         if (!sameGraph(node, currGraph_)) {
             // A name bound to an operator or to a set of overloads has no value that a
             // capture could hold (it was captured as a port of type void, and the call of
