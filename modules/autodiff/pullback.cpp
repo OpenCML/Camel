@@ -249,39 +249,9 @@ std::vector<Type *> callVersionsOf(Type *callValueType, uint32_t writtenCaptures
     return versions;
 }
 
-/// Whether `node` reads a version a call handed on: an access node that takes a component past
-/// the callee's value (callValueTypeOf).
-bool readsCallVersion(const GraphDraft &draft, gc_node_ref_t node) {
-    if (kindOf(draft, node) != GCNodeKind::Accs) {
-        return false;
-    }
-    const auto payload = draft.payloadOf(node);
-    if (payload.size() < sizeof(rt::GCAccsBody)) {
-        return false;
-    }
-    const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
-    return accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value >= 1;
-}
-
 /// The projection of `node`'s value: the access node that takes component `index` of it, or
 /// `kInvalidNodeRef` when nothing projects that component. A call has at most one of them per
 /// component (the builder caches the access node it makes for a call's value).
-gc_node_ref_t componentProjectionOf(const GraphDraft &draft, gc_node_ref_t node, uint32_t index) {
-    for (gc_node_ref_t user : draft.normUsersOf(node)) {
-        if (kindOf(draft, user) != GCNodeKind::Accs) {
-            continue;
-        }
-        const auto payload = draft.payloadOf(user);
-        if (payload.size() < sizeof(rt::GCAccsBody)) {
-            continue;
-        }
-        const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
-        if (accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value == index) {
-            return user;
-        }
-    }
-    return kInvalidNodeRef;
-}
 
 std::optional<slot_t> staticValue(const GraphDraft &draft, gc_node_ref_t node) {
     const auto *header = draft.header(node);
@@ -317,68 +287,16 @@ using camel::runtime::ungated;
 /// A wait is read in either kind: a node of a `sync` block waits through the sync edge of the
 /// block's chain as well as through the control edge beside it
 /// (docs/design/effects/edges.cn.md 1, 4.6).
-std::vector<gc_node_ref_t> orderingOf(const GraphDraft &draft, gc_node_ref_t node) {
-    std::vector<gc_node_ref_t> ctrl;
-    while (true) {
-        for (auto waits : {draft.ctrlInputsOf(node), draft.syncInputsOf(node)}) {
-            for (gc_node_ref_t before : waits) {
-                if (std::find(ctrl.begin(), ctrl.end(), before) == ctrl.end()) {
-                    ctrl.push_back(before);
-                }
-            }
-        }
-        if (kindOf(draft, node) != GCNodeKind::Gate || draft.normInputsOf(node).empty()) {
-            return ctrl;
-        }
-        node = draft.normInputsOf(node).back();
-    }
-}
 
 /// A node that stands for another takes the chain place of the one it replaces as well: a
 /// statement of a `sync` block is written after the statement before it through the sync edge, and
 /// a clone or a direct call that keeps only the control edge beside it leaves the block's chain
 /// broken (docs/design/effects/edges.cn.md 1, 4.6; docs/handover/README.cn.md 5.21 item 4).
-void takeSyncPlace(GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to) {
-    const auto inputs = copyOf(draft.syncInputsOf(from));
-    if (inputs.empty() || from == to) {
-        return;
-    }
-    if (const auto *header = draft.header(to); header != nullptr) {
-        draft.setNodeRuntimeFlags(
-            to,
-            static_cast<uint8_t>(header->runtimeFlags |
-                                 camel::runtime::kGCNodeFlagSyncStatement));
-    }
-    draft.setSyncInputs(to, inputs);
-    for (gc_node_ref_t user : copyOf(draft.syncUsersOf(from))) {
-        draft.replaceInput(rt::DraftEdgeKind::Sync, user, from, to);
-    }
-}
 
 /// The function a function value is, where the graph itself says so: a constant function, or a
 /// closure built in this graph (FILL) over a constant function. Null for anything else (a
 /// port, the result of a branch or of a call, an element of a container).
-::Function *evidentFunction(const GraphDraft &draft, gc_node_ref_t node) {
-    node = ungated(draft, node);
-    if (!isFunctionType(typeOf(draft, node))) {
-        return nullptr;
-    }
-    gc_node_ref_t constant = node;
-    if (kindOf(draft, node) == GCNodeKind::Fill) {
-        const auto *body = reinterpret_cast<const rt::GCFillBody *>(draft.payloadOf(node).data());
-        if (body->fillKind != rt::GCFillKind::FunctionClosure ||
-            draft.normInputsOf(node).size() != 1) {
-            return nullptr;
-        }
-        constant = draft.normInputsOf(node).front();
-        if (!isFunctionType(typeOf(draft, constant))) {
-            return nullptr;
-        }
-    }
-    const auto value = staticValue(draft, constant);
-    auto *function   = value ? fromSlot<::Function *>(*value) : nullptr;
-    return function != nullptr && function->graph() != nullptr ? function : nullptr;
-}
+
 
 GCGraph *calleeOf(const GraphDraft &draft, gc_node_ref_t node) {
     return draft.calleeGraphOf(node);
@@ -923,6 +841,113 @@ class ForwardRewrite {
     bool member(gc_node_ref_t node) const {
         return regionMember(draft(), draft().nodeRegion(node), part_);
     }
+
+    // The five readers below ask this rewrite's own graph, so they are members: a free function
+    // that took the draft as its first parameter was taking something the object already knows,
+    // and every caller passed exactly `draft()`.
+
+    /// Whether `node` reads a version a call handed on: an access node that takes a component past
+    /// the callee's value (callValueTypeOf).
+    bool readsCallVersion(gc_node_ref_t node) const {
+        if (kindOf(draft(), node) != GCNodeKind::Accs) {
+            return false;
+        }
+        const auto payload = draft().payloadOf(node);
+        if (payload.size() < sizeof(rt::GCAccsBody)) {
+            return false;
+        }
+        const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
+        return accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value >= 1;
+    }
+
+    /// The projection of `node`'s value: the access node that takes component `index` of it, or
+    /// `kInvalidNodeRef` when nothing projects that component. A call has at most one of them per
+    /// component (the builder caches the access node it makes for a call's value).
+    gc_node_ref_t componentProjectionOf(gc_node_ref_t node, uint32_t index) const {
+        for (gc_node_ref_t user : draft().normUsersOf(node)) {
+            if (kindOf(draft(), user) != GCNodeKind::Accs) {
+                continue;
+            }
+            const auto payload = draft().payloadOf(user);
+            if (payload.size() < sizeof(rt::GCAccsBody)) {
+                continue;
+            }
+            const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
+            if (accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value == index) {
+                return user;
+            }
+        }
+        return kInvalidNodeRef;
+    }
+
+    /// What `node` and the gates it passes through wait for, the gated value's own ordering
+    /// included. A wait is read in either kind: a node of a `sync` block waits through the sync
+    /// edge of the block's chain as well as through the control edge beside it
+    /// (docs/design/effects/edges.cn.md 1, 4.6).
+    std::vector<gc_node_ref_t> orderingOf(gc_node_ref_t node) const {
+        std::vector<gc_node_ref_t> ctrl;
+        while (true) {
+            for (auto waits : {draft().ctrlInputsOf(node), draft().syncInputsOf(node)}) {
+                for (gc_node_ref_t before : waits) {
+                    if (std::find(ctrl.begin(), ctrl.end(), before) == ctrl.end()) {
+                        ctrl.push_back(before);
+                    }
+                }
+            }
+            if (kindOf(draft(), node) != GCNodeKind::Gate || draft().normInputsOf(node).empty()) {
+                return ctrl;
+            }
+            node = draft().normInputsOf(node).back();
+        }
+    }
+
+    /// A node that stands for another takes the chain place of the one it replaces as well: a
+    /// statement of a `sync` block is written after the statement before it through the sync
+    /// edge, and a clone or a direct call that keeps only the control edge beside it leaves the
+    /// block's chain broken (docs/design/effects/edges.cn.md 1, 4.6; docs/handover/README.cn.md
+    /// 5.21 item 4).
+    void takeSyncPlace(gc_node_ref_t from, gc_node_ref_t to) const {
+        const auto inputs = copyOf(draft().syncInputsOf(from));
+        if (inputs.empty() || from == to) {
+            return;
+        }
+        if (const auto *header = draft().header(to); header != nullptr) {
+            draft().setNodeRuntimeFlags(
+                to,
+                static_cast<uint8_t>(
+                    header->runtimeFlags | camel::runtime::kGCNodeFlagSyncStatement));
+        }
+        draft().setSyncInputs(to, inputs);
+        for (gc_node_ref_t user : copyOf(draft().syncUsersOf(from))) {
+            draft().replaceInput(rt::DraftEdgeKind::Sync, user, from, to);
+        }
+    }
+
+    /// The function a function value is, where the graph itself says so: a constant function, or a
+    /// closure built in this graph (FILL) over a constant function. Null for anything else (a
+    /// port, the result of a branch or of a call, an element of a container).
+    ::Function *evidentFunction(gc_node_ref_t node) const {
+        node = ungated(draft(), node);
+        if (!isFunctionType(typeOf(draft(), node))) {
+            return nullptr;
+        }
+        gc_node_ref_t constant = node;
+        if (kindOf(draft(), node) == GCNodeKind::Fill) {
+            const auto *body =
+                reinterpret_cast<const rt::GCFillBody *>(draft().payloadOf(node).data());
+            if (body->fillKind != rt::GCFillKind::FunctionClosure ||
+                draft().normInputsOf(node).size() != 1) {
+                return nullptr;
+            }
+            constant = draft().normInputsOf(node).front();
+            if (!isFunctionType(typeOf(draft(), constant))) {
+                return nullptr;
+            }
+        }
+        const auto value = staticValue(draft(), constant);
+        auto *function   = value ? fromSlot<::Function *>(*value) : nullptr;
+        return function != nullptr && function->graph() != nullptr ? function : nullptr;
+    }
     /// Brings the functions that function values stand for into this graph, so that the calls
     /// of those values become calls of closures built here (see the definition).
     void followFunctionValues();
@@ -1398,7 +1423,7 @@ void ForwardRewrite::followFunctionValues() {
             GCGraph *const function =
                 kind == GCNodeKind::Func
                     ? calleeOf(draft(), id)
-                    : engine_.graphOf(evidentFunction(draft(), draft().withInputsOf(id).front()));
+                    : engine_.graphOf(evidentFunction(draft().withInputsOf(id).front()));
             if (scope_.enclosing.contains(function)) {
                 engine_.noteRecursion(function);
                 left.insert(id);
@@ -1463,7 +1488,7 @@ void ForwardRewrite::followFunctionValues() {
 /// its callee, as an argument or a captured value, or gets a function value back from it.
 bool ForwardRewrite::carriesFunctionValue(gc_node_ref_t call) const {
     const auto evident = [&](gc_node_ref_t node) {
-        return evidentFunction(draft(), node) != nullptr;
+        return evidentFunction(node) != nullptr;
     };
     // A macro, and a function with a derivative rule of its own, are not differentiated
     // through their bodies.
@@ -1481,7 +1506,7 @@ bool ForwardRewrite::carriesFunctionValue(gc_node_ref_t call) const {
         if (withInputs.empty()) {
             return false;
         }
-        const ::Function *function = evidentFunction(draft(), withInputs.front());
+        const ::Function *function = evidentFunction(withInputs.front());
         if (function == nullptr || opaque(function->graph())) {
             return false;
         }
@@ -1631,7 +1656,7 @@ void ForwardRewrite::expandKernelBodies() {
         draft().setWithInputs(direct, withInputs);
         draft().setNormInputs(direct, normInputs);
         draft().setCtrlInputs(direct, copyOf(draft().ctrlInputsOf(id)));
-        takeSyncPlace(draft(), id, direct);
+        takeSyncPlace(id, direct);
         draft().replaceAllValueUses(id, direct);
         for (gc_node_ref_t user : copyOf(draft().ctrlUsersOf(id))) {
             draft().replaceInput(rt::DraftEdgeKind::Ctrl, user, id, direct);
@@ -1743,12 +1768,12 @@ void ForwardRewrite::redirectCallValue(
     // value: its users project it, and the projection takes the pair now, whose component 0 is
     // the value it named.
     for (gc_node_ref_t user : copyOf(draft().normUsersOf(call))) {
-        if (!readsCallVersion(draft(), user)) {
+        if (!readsCallVersion(user)) {
             draft().replaceInput(rt::DraftEdgeKind::Data, user, call, pair, rt::PortRole::Normal);
         }
     }
     for (gc_node_ref_t user : copyOf(draft().withUsersOf(call))) {
-        if (!readsCallVersion(draft(), user)) {
+        if (!readsCallVersion(user)) {
             draft().replaceInput(rt::DraftEdgeKind::Data, user, call, pair, rt::PortRole::Context);
         }
     }
@@ -1811,7 +1836,7 @@ void ForwardRewrite::split(
         // The tangent of the call's value accumulates on the node that projects it, and a fresh
         // node holding the same value would take none of it: the projection the graph already
         // has becomes the value node.
-        value = componentProjectionOf(draft(), node, 0);
+        value = componentProjectionOf(node, 0);
         if (value == kInvalidNodeRef) {
             value = draft().addAccsNode(plan.valueType, 0u);
         }
@@ -2610,13 +2635,13 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
     draft().setNormInputs(direct, copyOf(draft().normInputsOf(call)));
     // The call ran after its callee value was there; keep what that value waited for.
     std::vector<gc_node_ref_t> ctrl = copyOf(draft().ctrlInputsOf(call));
-    for (gc_node_ref_t before : orderingOf(draft(), withInputs.front())) {
+    for (gc_node_ref_t before : orderingOf(withInputs.front())) {
         if (std::find(ctrl.begin(), ctrl.end(), before) == ctrl.end()) {
             ctrl.push_back(before);
         }
     }
     draft().setCtrlInputs(direct, ctrl);
-    takeSyncPlace(draft(), call, direct);
+    takeSyncPlace(call, direct);
     draft().replaceAllValueUses(call, direct);
     for (gc_node_ref_t user : copyOf(draft().ctrlUsersOf(call))) {
         draft().replaceInput(rt::DraftEdgeKind::Ctrl, user, call, direct);
@@ -2683,13 +2708,13 @@ void ForwardRewrite::rewriteClosureCall(
     draft().setNormInputs(direct, norm);
     // The call ran after the closure was built; keep what the closure waited for.
     std::vector<gc_node_ref_t> ctrl = copyOf(draft().ctrlInputsOf(call));
-    for (gc_node_ref_t before : orderingOf(draft(), calleeValue)) {
+    for (gc_node_ref_t before : orderingOf(calleeValue)) {
         if (std::find(ctrl.begin(), ctrl.end(), before) == ctrl.end()) {
             ctrl.push_back(before);
         }
     }
     draft().setCtrlInputs(direct, ctrl);
-    takeSyncPlace(draft(), call, direct);
+    takeSyncPlace(call, direct);
     // Everything that named the call names the direct call now: its users, the site records that
     // already read its value, the graph's own result, and the region whose result it is (a loop
     // body or an arm whose value is the closure call). `split` then carries the same uses to the
