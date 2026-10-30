@@ -284,7 +284,7 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
         const RuleObject *current = call.rule != nullptr ? call.rule->getAs<RuleObject>() : nullptr;
         return current != nullptr ? current->name() : std::string_view(call.name);
     };
-    auto &draft    = match.writings.draft();
+    auto &draft    = match.writings.transaction().edit();
     auto &writings = match.writings;
     // One slot per parameter: a rooted Node handle for a node parameter, a rooted object for a
     // constant the collector can move, and nothing for a constant whose bits are copied below.
@@ -1536,7 +1536,7 @@ class CamelCostModel final : public camel::runtime::CostModel {
     double totalCost(
         const camel::runtime::CostContext &context, camel::runtime::gc_node_ref_t node, double own,
         std::span<const double> inputs) const override {
-        const auto *header = context.draft.header(node);
+        const auto *header = context.transaction.graph().header(node);
         double inputsTotal = 0.0;
         for (double cost : inputs) {
             inputsTotal += cost;
@@ -1544,7 +1544,7 @@ class CamelCostModel final : public camel::runtime::CostModel {
         if (header == nullptr || header->kind != camel::runtime::GCNodeKind::Oper) {
             return own + inputsTotal;
         }
-        const auto bytes = context.draft.payloadOf(node);
+        const auto bytes = context.transaction.graph().payloadOf(node);
         if (bytes.size() < sizeof(camel::runtime::GCOperBody)) {
             return own + inputsTotal;
         }

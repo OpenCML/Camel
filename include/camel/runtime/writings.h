@@ -113,7 +113,7 @@ class WritingStore {
 /// What a cost model may look at: the draft, and the context for the facts about the program
 /// (a back end's model reads the shapes there).
 struct CostContext {
-    const GraphDraft &draft;
+    const GraphTransaction &transaction;
     camel::core::context::Context *context = nullptr;
 };
 
@@ -420,10 +420,10 @@ class DraftWritings : private WritingObserver {
     DraftWritings(const DraftWritings &)            = delete;
     DraftWritings &operator=(const DraftWritings &) = delete;
 
-    /// Writes the equivalences back to the draft (GraphDraft::setWritings), which keeps them
+    /// Writes the equivalences back to the draft (`setWritings`), which keeps them
     /// until it is encoded.
     void save() { draft_.setWritings(std::vector<WritingUnion>(store_.log().begin(), store_.log().end())); }
-    GraphDraft &draft() { return draft_; }
+
     /// The transaction the draft belongs to. It is never null: a draft no transaction owns has
     /// no writings.
     GraphTransaction &transaction() { return *transaction_; }

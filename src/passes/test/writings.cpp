@@ -298,7 +298,7 @@ class LikesNode : public CostModel {
         if (node == liked_) {
             return 1.0;
         }
-        const auto kind = context.draft.header(node)->kind;
+        const auto kind = context.transaction.graph().header(node)->kind;
         return kind == GCNodeKind::Oper ? operCost_ : kind == GCNodeKind::Port ? portCost_ : 1.0;
     }
 
