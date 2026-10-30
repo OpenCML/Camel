@@ -2,7 +2,7 @@ id = "compile.type_packs"
 order = 1006
 tier = "fast"
 tags = ["feat", "compile", "types", "packs"]
-desc = "Type packs (design principles 5.6): `ParamsOf<F>`, `WithOf<F>` and `ResultOf<F>` take a function type apart, `..E` in a tuple type is one member for each member of the packs it uses, a rest parameter typed `..xs: ..A` binds the pack `A` to the types of its arguments, and `when ..pred::<A>()` asks every member; `zip` is a declaration of the prelude written with them"
+desc = "Type packs (design principles 5.6): `ParamsOf<F>`, `WithOf<F>` and `ResultOf<F>` take a function type apart, `..E` in a tuple type is one member for each member of the packs it uses, a rest parameter typed `..xs: ..A` binds the pack `A` to the types of its arguments, and `when ..pred::<A>()` asks every member; `zip` is a declaration of the prelude written with them. `Tangent<T>` (9.9) is the fourth type function: a float and a tensor of floats are their own tangent space, a tuple and a struct take it member by member, and an integer, a `bool` and a `string` take the empty tuple"
 
 [[tests]]
 name = "type_packs.function_parts"
@@ -100,5 +100,18 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "3 7\n7 7\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "type_packs.tangent_space"
+desc = "`Tangent<T>` is the type a tangent of a value of `T` has: a float and a tensor of floats are their own tangent space, a tuple and a struct take the tangent space of each member in that member's own place, and an integer, a `bool` and a `string` take the empty tuple -- the value that carries no data, which a rule ignores."
+kind = "behavior"
+case = "../../../cases/compile/type_packs/tangent_space.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "true\ntrue\nfalse\ntrue\ntrue\ntrue\ntrue\nfalse\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

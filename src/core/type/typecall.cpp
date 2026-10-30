@@ -3,15 +3,18 @@
 
 #include "camel/core/type/typecall.h"
 
+#include "camel/core/derivative.h"
 #include "camel/core/mm.h"
 #include "camel/core/type/collection.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/text.h"
 #include "camel/core/type/typevar.h"
 #include "camel/utils/assert.h"
+#include "camel/utils/type.h"
 
 #include <algorithm>
 #include <vector>
@@ -34,11 +37,48 @@ constexpr std::string_view kTypeFunctions[] = {
     "RowsOf",
     "ParamsOf",
     "WithOf",
-    "ResultOf"};
+    "ResultOf",
+    "Tangent"};
 
 constexpr std::string_view kPackName   = "$pack";
 constexpr std::string_view kExpandName = "$expand";
 constexpr std::string_view kLengthsTag = "$lengths:";
+
+/// The tangent space of a value (design principles 9.9): a float and a tensor of floats are their
+/// own tangent space; a tuple and a struct are the tangent space of each member in the member's
+/// own place; every other type is the empty tuple, the value that carries no data and that a rule
+/// ignores -- an integer, a `bool` and a `string` have no derivative, and neither has a function.
+///
+/// The empty tuple is what the answer is for a type the derivative machinery has no space for, so
+/// a tangent type is always a type a program can write: a parameter the user differentiates never
+/// meets a "no tangent" hole, it meets a value of no data. Which member is a continuous quantity
+/// is not this function's question; it is the same one `machineryTangentTypeOf` answers.
+Type *tangentSpaceOf(Type *type) {
+    if (type->code() == TypeCode::Struct || type->code() == TypeCode::Tuple) {
+        const bool structure = type->code() == TypeCode::Struct;
+        const size_t size = structure ? tt::as_ptr<StructType>(type)->size()
+                                      : tt::as_ptr<TupleType>(type)->size();
+        StructTypeFactory factory;
+        std::vector<Type *> elements;
+        for (size_t i = 0; i < size; ++i) {
+            Type *member = structure ? tt::as_ptr<StructType>(type)->typeAt(i)
+                                     : tt::as_ptr<TupleType>(type)->typeAt(i);
+            Type *space  = tangentSpaceOf(member);
+            if (structure) {
+                factory.add(std::string(tt::as_ptr<StructType>(type)->fieldName(i)), space);
+            } else {
+                elements.push_back(space);
+            }
+        }
+        return structure
+                   ? static_cast<Type *>(factory.build())
+                   : static_cast<Type *>(TupleType::create(std::move(elements)));
+    }
+    if (Type *space = camel::core::machineryTangentTypeOf(type); space != nullptr) {
+        return space;
+    }
+    return TupleType::create(std::vector<Type *>{});
+}
 
 } // namespace
 
@@ -65,6 +105,9 @@ Type *TypeCallType::evaluate(
         return nullptr;
     }
     Type *type = arguments.front();
+    if (name == "Tangent") {
+        return tangentSpaceOf(type);
+    }
     if (name == "ParamsOf" || name == "WithOf" || name == "ResultOf") {
         if (type->code() != TypeCode::Function) {
             error = type->toString() + " is not a function type";
