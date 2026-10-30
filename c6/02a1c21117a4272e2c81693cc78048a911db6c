@@ -1,0 +1,9 @@
+库里的声明能不能叫保留名：一页，`c602a1c21`。
+
+1. **两条规则相撞**：裁定说算子族的库名就是它已用的保留名（`__add__`），而 `SemanticDiag::ReservedIdentifier` 拒掉库里任何 `__x__` 声明——实测在 `stdlib/prelude.cml` 里写 `#op(':op/add_f')` + `export func __add__(x: f32, y: f32): f32` 立刻报错，随后 `Cannot import module 'prelude'`。
+2. **证据**：`docs/cli.md#--ops` 的输出示例 `"name":"__add__","uri":":op/add_l"`；`docs/.../02_lexical.md`"`a + b` 是 `__add__(a, b)`"。同族 `__mul__`、`__sub__`、`__neg__`。
+3. **三档**：① 只给 `#op` 声明开一个保留名的口子（与 `TagArgumentNotValue` 同类的"只在一处放宽"风险）；② 库名用普通名、`#jvp` 按 URI 关联（一个算子两个名字）；③ **保留名只作标签实参 `#jvp(__add__)`，声明取普通名**（默认：不动保留标识符规则、不引入族名，与"标签里的名字不是值"同源）。
+4. **没有自行绕过**：`ReservedIdentifier` 没动，推行改动，工作树退回干净再报。
+5. 下一步是 `modules/transforms` 的纯搬家（基线 `total 7869 / fail 0 / skip 7 / known 2`），与本页无关。
+
+闸门（`-Plan all -Tier fast -Jobs 8`）：total 7869 / fail 0 / skip 7 / known 2。
