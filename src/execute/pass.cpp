@@ -1641,6 +1641,28 @@ bool nodeHasEffect(const GCGraph &graph, camel::runtime::gc_node_ref_t ref) {
     return !table.isPure(op) || table.hasExternalEffect(op);
 }
 
+/// The call whose body a node was copied into, when a pass inlined one around it: the source origin
+/// of the innermost inline region it sits in, 0 when it sits where the program wrote it. The region
+/// table is part of the frozen graph, so this reads the same before and after a pass, which is what
+/// the effect comparison needs; the origin of the copy alone does not tell it from the node it was
+/// copied from.
+uint64_t inlinedCopySite(const GCGraph &graph, camel::runtime::gc_node_ref_t ref) {
+    using camel::runtime::GCRegionKind;
+    uint32_t region = graph.nodeRegion(ref);
+    for (uint32_t depth = 0; depth < 64 && region != 0; ++depth) {
+        const camel::runtime::GCRegion *current = graph.region(region);
+        if (current == nullptr) {
+            break;
+        }
+        if (current->kind == GCRegionKind::Inline &&
+            current->callSite != camel::runtime::kInvalidNodeRef) {
+            return graph.nodeOrigin(current->callSite);
+        }
+        region = current->parent;
+    }
+    return 0;
+}
+
 /// One effect of a program, at the place the program puts it: the source origin and the operator it
 /// runs (what names it across a pass), the graph it is in, its position in that graph's order, and
 /// the ambient resources it touches.
@@ -1649,6 +1671,12 @@ struct EffectSite {
     std::string_view uri = {};
     size_t graph         = 0; // the GraphId value of the graph it runs in
     size_t position      = 0; // its index in that graph's order
+    /// Which copy of that origin it is: 0 for the node as the program wrote it, and the source
+    /// origin of the call whose body it was copied into when a pass inlined one. A pass that copies
+    /// a body gives the copy the origin of the node it copied, so the origin alone names both the
+    /// copy and the node it came from; this is what tells them apart across the boundary, and it is
+    /// read from the region the node sits in, which every frozen graph carries.
+    uint64_t copySite    = 0;
     std::vector<std::string> resources; // the ambient resources it names, sorted and deduplicated
 };
 
@@ -1769,6 +1797,7 @@ ProgramEffects collectEffects(const camel::runtime::Program &program) {
             site.uri      = graph->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri();
             site.graph    = order.id;
             site.position = position;
+            site.copySite = inlinedCopySite(*graph, ref);
             const camel::runtime::NodeResources resources =
                 camel::runtime::resourcesOf(program, *graph, ref);
             for (const camel::runtime::NodeAccess &access : resources.accesses) {
@@ -1793,6 +1822,8 @@ ProgramEffects collectEffects(const camel::runtime::Program &program) {
 /// (a copy it makes carries the origin of the node it copied too).
 std::string effectKey(const EffectSite &site) {
     std::string key = std::to_string(site.origin);
+    key += '\x1f';
+    key.append(std::to_string(site.copySite));
     key += '\x1f';
     key.append(site.uri.data(), site.uri.size());
     return key;
@@ -1889,6 +1920,15 @@ bool waitsFor(const ProgramEffects &effects, const EffectSite &earlier, const Ef
 }
 
 std::string describeEffect(const EffectSite &site) {
+    if (site.copySite != 0) {
+        return std::format(
+            "'{}' at origin {} copied into the call at origin {} (graph {}, position {})",
+            std::string(site.uri),
+            site.origin,
+            site.copySite,
+            site.graph,
+            site.position);
+    }
     return std::format(
         "'{}' at origin {} (graph {}, position {})",
         std::string(site.uri),
