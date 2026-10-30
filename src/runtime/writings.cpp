@@ -11,6 +11,7 @@
 #include "camel/core/type/text.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/draft_writes.h"
+#include "camel/runtime/graph_txn.h"
 
 #include <algorithm>
 #include <chrono>
@@ -429,6 +430,11 @@ struct DraftWritings::Index {
 
 DraftWritings::DraftWritings(GraphDraft &draft, camel::core::sem::NumericPolicy policy)
     : draft_(draft), policy_(policy), store_(draft.writings()), index_(std::make_unique<Index>()) {}
+
+DraftWritings::DraftWritings(
+    GraphTransaction &transaction, camel::core::sem::NumericPolicy policy)
+    : draft_(transaction.edit()), transaction_(&transaction), policy_(policy),
+      store_(draft_.writings()), index_(std::make_unique<Index>()) {}
 
 DraftWritings::~DraftWritings() = default;
 
