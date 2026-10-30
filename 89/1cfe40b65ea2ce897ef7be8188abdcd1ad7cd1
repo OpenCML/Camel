@@ -1,0 +1,9 @@
+这一轮落两件：`Tangent<T>`（第四个类型函数，能算）与一页问题（`#jvp` 这一族规则没有挂点）。第 3 步的验收（标量 `jvp`）仍未跑通。
+
+1. **`Tangent<T>`**：`stdlib/types.cml` 里与 `ParamsOf<F>`／`WithOf<F>`／`ResultOf<F>` 并列；`TypeCallType::evaluate` 的一个分支，判定问的是派生机制自己的 `machineryTangentTypeOf`，只把"没有空间"换成 `()`（不带数据、规则忽略）。浮点与浮点张量取自身，元组与结构体逐分量、位置不变，整数／`bool`／`string`／函数取 `()`。用例 `type_packs.tangent_space`（nvm/fvm）守住这七条；**A/B：拿掉那条分支，恰好这 2 条红，报错是 `Tangent<float>` "is not a type function"；还原 19/19**。
+
+2. **卡在哪**：裁定说规则用 `#jvp(mul_jvp)` 挂在原语的声明上，但**这一族规则没有挂点**——标签的宿主是 `func`／`type`／`field`／`params`／`nodes`，`rule` 不在里面；标量原语是内置算子（`:op/mul_l`），没有声明可挂；规则名当标签实参今天被拒（`TagArgumentNotValue`）。于是"某条规则属于 `jvp` 族"无处可读：`rule_of`／`ruleOf` 读的是函数图上的 `#jvp(rule)`，`genericRuleInstance` 只实例化已知 id。页给了三个落点（原语声明／标签挂到 `rule`／C++ 查表）与默认 ①，作者补一句即可开工。
+
+3. **闸门**：`-Plan all -Tier fast -Jobs 8` → total 7859 / fail 0 / skip 6 / known 2（基线 7857，+2 是 `Tangent` 的两条）。**skip 2→6 已结案为环境**：另一条车道独立报的是同样四条 GPU 用例本轮没拿到设备（`device_startup.available`、`gpu_preference.named_device`、`gpu_scope.placement_with_a_device`、`gpu_scope.host_effect_synchronises`），两条车道互不相干、报同一组。
+
+4. **还剩**：`stdlib/rulesets/jvp.cml`（`Lift`／`lift`）、`modules/transforms`（`reinterp`，建图能力从 `autodiff` 搬过来）、`jvp` 包装。裁定落地后按 ① 或作者选的落点开工。
