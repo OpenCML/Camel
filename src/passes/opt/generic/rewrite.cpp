@@ -198,7 +198,7 @@ void replaceNode(
             preds.push_back(source);
         }
     }
-    preds = camel::runtime::controlFrontier(draft, preds);
+    preds = camel::runtime::controlFrontier(transaction, preds);
     std::vector<gc_node_ref_t> users;
     for (auto group : {draft.normUsersOf(id), draft.withUsersOf(id), draft.ctrlUsersOf(id)}) {
         for (gc_node_ref_t u : group) {
@@ -274,7 +274,7 @@ void replaceNode(
                 handOverSyncWait(transaction, pred, user)) {
                 continue;
             }
-            camel::runtime::appendControlDependency(draft, pred, user);
+            camel::runtime::appendControlDependency(transaction, pred, user);
         }
     }
     // An effect this node was the last reader of keeps running where the node stood (design
@@ -315,7 +315,7 @@ void replaceNode(
             markSyncStatement(transaction, pred);
             const gc_node_ref_t only[1] = {pred};
             draft.setSyncInputs(user, only);
-            camel::runtime::appendControlDependency(draft, pred, user);
+            camel::runtime::appendControlDependency(transaction, pred, user);
         };
         for (size_t i = 1; i < lastRead.size(); ++i) {
             // An effect written inside another one's argument is computed after it; chaining it the
@@ -363,7 +363,7 @@ void replaceNode(
             // which is what the block's value does: it waits on the statement written before it
             // (docs/design/effects/edges.cn.md 4.6, 5.3 item 3). Otherwise the wait is control.
             if (!handOverSyncWait(transaction, pred, user)) {
-                camel::runtime::appendControlDependency(draft, pred, user);
+                camel::runtime::appendControlDependency(transaction, pred, user);
             }
         }
     }

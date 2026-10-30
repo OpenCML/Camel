@@ -4186,7 +4186,7 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     for (node_handle_t ctrlInput : syncInputs) {
         if (linkCheek(ctrlInput, outputAnchor) &&
             !runtime::hasControlDependency(
-                *nodeDraftOf(outputAnchor),
+                *nodeTransactionOf(outputAnchor),
                 nodeIdOf(ctrlInput),
                 nodeIdOf(outputAnchor))) {
             if (ctrlInput == lastSyncedNode_) {

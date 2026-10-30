@@ -689,3 +689,89 @@ HANDLE_PROBE refused: InvalidArgument
 **三个数**：**消失的参数 3 个**；**删掉的行数 3**（净 `+5`：三行绑定 + 那段"仍然读控制边"的注释）；**保留 13 个**（上表）。
 
 **四个数：59 / 444 / 3 / 4**（`450 → 444`）。
+
+## 35. 收尾扫描：那 13 处不是"拼写数"，是**13 个删不掉的理由**（`46a30576e`）
+
+**判据的对象换了**：这一族的目标不是少写字，是**最后能删掉 `GraphDraft` 本身**——所以
+**"能删掉几行"在这里读成"能删掉几个 `GraphDraft &` 参数"**：**每一个还在收它的参数，都是一个删不掉的理由。**
+这不是把标准放宽，是把标准的**对象**从行数换成了**参数**。
+
+**13 处全转，0 处拿不到事务。** 而且有三处把同一个问题往外推了一跳，**每一跳都早就有人回答过**：
+
+| 那一跳 | 它本来就有 |
+|---|---|
+| `builder_control.cpp` / `builder_operators.cpp` | **`nodeTransactionOf`**，就写在 `nodeDraftOf` 旁边，注释原话：*"the transaction the node's graph is built in … the identity two nodes of one graph agree on"* |
+| `draft_inline.cpp` 的拼接例程 | `inlineCallableInDraft(session, GraphTransaction &transaction, …)` 的参数表 |
+| `test/control.cpp` | 每个用例第二行的 `GraphTransaction::open(...)` |
+
+**额外带出来的三个**（不在那 13 里，是编译器点名的下一跳）：`bindPortValueUses`、`keepCalleeOrdering`、
+`devirtualizeClosureCallInDraft`——**它们都在 `draft_inline.cpp`，上游都是已经收事务的函数。**
+
+**"没有一处需要新造事务"**——**这句话是整场迁移的总答案**：*"调用点上能不能拿到事务"这条判据，
+到现在为止的答案是：能——只要那个模块已经按自己的方式回答过一次。*
+
+**这一族的账**：`generic` 与 `control` 两个模块里**再没有一处参数写 `GraphDraft`**。
+
+**三个数**：**消失的参数 16 个**（13 + 额外三跳）；**删掉的行数 16**；**保留 0 个**。
+
+**四个数：57 / 432 / 3 / 4**（`444 → 432`，**files 59 → 57**：`control.cpp`、`control.h` 连拼写都没了）。
+
+## 36. 族谱：b6 还差多远，用**还能收草稿的参数**报（不是 `references`）
+
+**判据要换对象**：*b6 的进度不该用 `references` 这个数报，应该用**还能收草稿的参数数**报——因为目标是删掉类型，
+而类型只能在没有函数收它的时候被删。*
+
+**全仓 444 处拼写里，174 处在参数位置**（其余是 `using`、`#include`、`GraphDraft::` 成员定义、类型自身的声明）：
+
+| 族 | 文件数 | 收草稿的参数 | 其中"类型自己的家／成员定义"（删不掉也不该删） |
+|---|---|---|---|
+| `runtime/draft*` + `graph_txn` + `writings`（墙） | 19 | 112 | **112**（全是：类型自身的成员与自由函数读它的内部） |
+| `compile/gir`（builder 一族） | 3 | 3 | 0（**但是造草稿的地方，要单独一轮**） |
+| `modules/autodiff`（`pullback`） | 1 | **23** | 0 |
+| `passes/`（`opt` + `test`） | 7 | 12 | 0 |
+| `modules/tiles` | 4 | 7 | 0 |
+| `core/tags` | 2 | 10 | 0 |
+| `modules/onnx` | 1 | 1 | 0 |
+
+**所以"墙外"还剩 56 个参数**，分布在 18 个文件里。**`pullback` 的 23 个是最大的一块。**
+
+**`pullback` 这一片今晚没成，原因是判据在这一族上第一次不够用**：那 23 个参数不是 23 个自由函数的入口，
+而是**同一个类（`ForwardRewrite`／`Backward`）的成员方法里的 40 多处调用**，而这些成员同时握着三张草稿
+（`draft()`、`forward()`、`target()`）——**"调用点上有没有事务"在这里退化成"这三张草稿各自属于哪个事务"，
+而它们属于两个不同的事务（`forwardTransaction_` 与 `targetTransaction_`）。** 我改到一半树不能构建，
+按"任何时刻停下树都要能构建"退回了（`git checkout --`，树已重新绿）。**这一片需要一个 A/B：先给每个成员方法标出它读写的是哪个事务，再改签名。**
+
+**三个数（这一片）：0 / 0 / 56**（未动）。**四个数：57 / 432 / 3 / 4（未变）。**
+
+## 37. `pullback` 的 A 表：**三张草稿，两个事务，一个映射**
+
+**表头那句判据**：*一个方法同时握两个事务本身不是错——错的是它把一张草稿上的节点塞进另一张草稿。
+"跨事务写"那一列非空的地方，就是要单独想的地方。*
+
+**`ForwardRewrite`：15 个方法，一个事务。** 它只收一个 `rt::GraphTransaction &transaction_`，
+`draft()` 就是 `transaction_.edit()`；**没有任何方法同时握两个**：
+
+| 方法 | 用哪张草稿 | 事务 | 跨事务写 |
+|---|---|---|---|
+| `followFunctionValues`、`carriesFunctionValue`、`expandKernelBodies`、`run`、`retarget`、`redirectValue`、`redirectCallValue`、`redirectAnchors`、`split`、`dependsOnTangentPort`、`rewriteLoop`、`rewriteIndirectCall`、`rewriteClosureCall`、`rewriteCall`、`rewriteBranch`（15 个） | `draft()` | **`transaction_`（一个）** | **无** |
+
+**`Backward`：35 个方法，两张草稿两个事务。**
+
+| 结论 | 方法数 | 方法 |
+|---|---|---|
+| **只读前向**（`forward()` → `forwardTransaction_`） | **16** | `accumulate`、`gradient`、`userGradient`、`refuseWhenActive`、`run`、`reportRefusals`、`activeFunctionInput`、`chosenFunction`、`refusalReason`、`whyNotEvident`、`operUri`、`operId`、`checkVariableReads`、`visit`、`visitOper`、`visitAccs` |
+| **只写目标**（`target()` → `targetTransaction_`） | **8** | `accumulateInto`、`producerOf`、`add`、`zero`、`materialize`、`visitCallSite`、`visitRuleSite`、`finishCaptures` |
+| **两张都不用** | **7** | `primalOf`、`gradientOf`、`accumulateGradient`、`isActive`、`mergeInto`、`refuseActiveCollection`、`refuseActiveEnum` |
+| **两张都用（交界）** | **4** | `ref`、`checkGradientType`、`visitFill`、`visitForward` |
+
+**交界处 4 处，但只有 1 处是设计上的跨**：
+
+* `ref(primal)`——**它就是那张映射表本身**，注释写着"Target-graph node holding the primal value"。**唯一一处把前向节点变成目标节点的地方。**
+* `checkGradientType`、`visitFill`、`visitForward`——**同时读两个事务，但都不调用 `ref()`**。
+  **B 那一轮的第一件事就是核实这三处**：它们若把前向节点直接塞进目标写，那就是这条族真正的风险点；
+  若只是比较类型、读两边头部，那就没问题。**表里这一列非空，但还不知道是"跨"还是"看"。**
+
+**B 的做法（随之定）**：`ForwardRewrite` 的方法继续收 `transaction_`；`Backward` 的方法**显式收它真正用的那一个，
+需要两个的就显式收两个**（`forwardTransaction_`、`targetTransaction_`）——**不收一个"能拿到另一个"的接口，那是把判据藏起来。**
+
+**三个数**：**0 / 0 / 56**（这一片只出表）。**四个数：57 / 432 / 3 / 4（未变）。**
