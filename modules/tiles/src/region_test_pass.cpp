@@ -297,6 +297,23 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
                 (void)compileTypes(function, context_->facts());
         }
         os << "TILES_OUTLINED " << count << '\n';
+        // Why each operator node of the result is in no region, in the analysis's own words. The
+        // count alone says a scope was not planned; it does not say which node refused it.
+        if (std::getenv("CAMEL_TILES_TEST_REASONS")) {
+            runtime::RuntimeGraphDraftSession session(context_, result);
+            for (auto *graph : session.collectReachableRuntimeGraphs()) {
+                const auto analysis = analyzeRegions(*result, *graph, context_->facts(), nullptr);
+                for (size_t id = 0; id < graph->nodeCount(); ++id) {
+                    if (graph->node(id)->kind != runtime::GCNodeKind::Oper)
+                        continue;
+                    const std::string name(core::OperatorTable::instance().uri(
+                        graph->nodeBodyAs<runtime::GCOperBody>(id)->oper));
+                    const auto &reason = analysis.exclusions[id];
+                    os << "TILES_REGION_REASON " << name << ' '
+                       << (reason.empty() ? "eligible" : reason) << '\n';
+                }
+            }
+        }
         if (std::getenv("CAMEL_TILES_TEST_I64") && !i64Reported) {
             i64Reported = true;
             os << "TILES_I64 " << i64LeafReport() << '\n';
