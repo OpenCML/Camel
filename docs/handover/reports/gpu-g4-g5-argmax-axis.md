@@ -136,22 +136,35 @@ wrapping 32 位算术契约。也就是说 i64 在下标这里不是"不能算"�
 `unresolved_type` 处拒（数字好看、能力没变），或者不拒而把 4 字节的 f32 结果按 8 字节下标读出去。"**
 「不拒」那条今天已经有实证：宽度那一处如果不改，`bytes()` 就会按四字节算，回读出来的下标正好是半个。
 
-## 五、第 2 步停在哪里：位置是**下标本身**，而内核 IR 不把下标读进寄存器
+## 五、位置是**下标本身**：新增 `ScalarExpr::fromIndex`（只读，不加算术）
 
 第 2 步要把位置接到真内核上（`argmax` 分支 + 两槽累加器）。开工前把四条路走了一遍，结果是
-**存储那一半今天就能写，更新那一半缺一个原语**——缺的不是 i64 算术（那个本来就被拒），而是
-"**把循环下标读成一个寄存器值**"这一步。
+**存储那一半本来就能写，更新那一半缺一个原语**——缺的不是 i64 算术（那个本来就被拒），而是
+"**把循环下标读成一个寄存器值**"这一步。先把边界交回去，决定选了最小的一刀：
 
-**读数**（`test/cases/modules/tiles/kernel_ir_check.cpp#checkI64PositionRead`，由 `tiles-plan-check`
-的 `checkKernelIR` 调用，计划条目 `plan_validation` 的 `expect_stdout_contains` 钉住）：
+**`ScalarExpr::fromIndex(IndexExpr, ScalarType)`**（`scalar_expr.h`）——把一个下标读成 **i64 寄存器值**，
+只读、不参与算术。它与 `scalar_expr.cpp:175-178` 那句"i64 只承载静态循环域元素"**同向**：那句禁的是
+**算术**。三处配套：`scalar_expr.cpp#Node::Kind::Index`（`evaluate` 按 index 绑定取名、`symbols()` 报成
+i64、`cuda()` 输出 `((long long)(k_r))`）、`kernel_ir.cpp#scalar`（下标读按 index 校验，非循环名仍是
+`unbound index`）、`modules/tiles/CMakeLists.txt`（`tiles-module-lease` 一并编 `index_expr.cpp`）。
+
+**读数**（`test/cases/modules/tiles/kernel_ir_check.cpp#checkI64PositionRead`，`plan_validation` 钉住）：
 
 ```
-tiles i64 position: an i64 slot and its store validate, and reading the loop index into that slot is refused as an unbound scalar
+tiles i64 position: the loop index reads into an i64 slot and stores that position, a plain symbol of the same name still refuses, and i64 arithmetic stays refused
 ```
 
-即：`ScalarBinding{"k_pos", i64}` + `Store{…, i64}` 通过 `validateBody`；而 `Loop{"k_r", …}` 体里写
-`Assignment{"k_pos", ScalarExpr::symbol("k_r", I64)}`，`validateBody` 报 **`unbound scalar`**。这正是
-"两槽累加器"差的那一半。
+一条用例同时钉三件事，缺一条就有人以为路开了：
+
+| 断言 | 手段 |
+| --- | --- |
+| 下标读**通过**校验、且**存进去的确实是那个下标** | `validateBody` 通过 + `emitBody` 里出现 `k_pos=((long long)(k_r));` |
+| 同名的**普通符号仍被拒** | 同一个 body 换成 `symbol("k_r", I64)` → 恰好 `unbound scalar` |
+| **i64 算术仍被拒** | `apply(Add, {fromIndex(k_r), i64(1)})` 抛 `invalid_argument`（`k_pos += 1` 这条路没有开） |
+
+A/B 就是上面第二行：把 `fromIndex` 换回普通符号，读数回到 `unbound scalar`。
+
+（下面是当时停下来的记录，留作"为什么是这个原语"的依据。）
 
 四条路都查过，没有第五条：
 
