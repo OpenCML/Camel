@@ -8569,7 +8569,7 @@ The tag '{1}' cannot take '{0}' as an argument: it names {2}.
 **Help**
 
 ```text
-A tag is read before the program runs, so an argument is a compile-time value -- a literal, a top-level constant or a string -- or, for a parameter that carries a function, the name of a function of the program (the fact is that function's graph reference). A tag and a type are declarations, not values; a rule and a body-less kernel are declarations too, and neither has the function graph such a parameter takes. Name a function, a literal or a constant.
+A tag is read before the program runs, so an argument is a compile-time value -- a literal, a top-level constant or a string -- or, for a parameter that carries a function, the name of a function of the program or of one of its rules. A rule may be named because the parameter asks for a declaration of the law, and a rule is a declaration: its name is what the tag writes and what the pass reads. A value that is no function cannot be named there: it stands for data the program computes, and a tag is read before any of it exists. A tag and a type are declarations too, and neither has a value for a parameter that takes one. Name a function, a rule, a literal or a constant.
 ```
 
 **Example** (`test/cases/compile/tags/err_tag_argument.cml`, run as `camel test/cases/compile/tags/err_tag_argument.cml`)
