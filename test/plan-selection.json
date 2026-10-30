@@ -114,9 +114,9 @@
             "plans": ["smoke", "feat/parse", "feat/compile", "feat/consistency"]
         },
         {
-            "comment": "Values, types, the collector and the runtime shell. The array type's dimensions live here, so its self-test runs too.",
+            "comment": "Values, types, the collector and the runtime shell. The array type's dimensions live here, so its self-test runs too. The direct-connection ledger of graph-store step 2 b is checked here as well: its three numbers count the references to `GraphDraft`, and `src/runtime/` is where both the storage and the transaction live, so this is the directory a commit can add a direct connection from. The plan is fast and cheap (one `git grep` pass), so it rides along rather than waiting for its own gate.",
             "paths": ["src/core/", "src/runtime/"],
-            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml"]
+            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml", "feat/runtime/graph_draft_ledger.plan.toml"]
         },
         {
             "comment": "Execution, entry arguments and the standalone bridge.",
@@ -144,9 +144,9 @@
             "plans": ["smoke", "feat/trans", "feat/opt", "feat/linear"]
         },
         {
-            "comment": "The core value/type headers and the runtime headers. The array type's dimensions live here, so its self-test runs too.",
+            "comment": "The core value/type headers and the runtime headers. The array type's dimensions live here, so its self-test runs too. The ledger's `files`/`references` count is partly a header count (`include/camel/runtime/draft.h`, `draft_session.h`, ...), so this rule names the ledger plan for the same reason the src/ one does.",
             "paths": ["include/camel/core/", "include/camel/runtime/"],
-            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml"]
+            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml", "feat/runtime/graph_draft_ledger.plan.toml"]
         },
         {
             "comment": "The executor and entry-argument headers.",
