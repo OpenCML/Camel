@@ -66,6 +66,22 @@ expect_stdout = "[112, 64] [112, 64]\n[80, 64] [80, 64]\n[208, 64] [208, 64]\n[2
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
+# Scalar subtraction, which no case had pinned: exact differences, the two directions of a tie,
+# a real rounding, zero, and one past the range.
+
+[[tests]]
+name = "reduced_subtraction"
+desc = "`a - b` on bf16 and f16 is the type's one arithmetic path: the operands are elements, the difference is taken in f32 and rounded once into the element type, so 3.75 - 0.5 = 3.25 (bf16 0x4050 [80, 64], f16 0x4280 [128, 66]), 0.5 - 1.0 = -0.5 (0xBF00 [0, 191], 0xB800 [0, 184]) and -1.5 - 2.25 = -3.75 (0xC070 [112, 192], 0xC380 [128, 195]) exactly in both; the ties go to the even neighbour and both directions are pinned -- 1.0 - 2^-9 is halfway between 0.99609375 and 1.0 and answers 1.0 (0x3F80 [128, 63]), 1.0 - 1.5*2^-8 is halfway between 0.9921875 and 0.99609375 and answers 0.9921875 (0x3F7E [126, 63]), and each of the two is asserted to be a tie at all by comparing the distance to both neighbours, so a rule that always rounded up fails the first and one that always rounded down fails the second (f16: 0x3BFF [255, 59] and 0x3BFE [254, 59]); a difference that is not a tie rounds -- 1.0 - 0.1 answers 0.8984375 (0x3F66 [102, 63]) and 0.89990234375 (0x3B33 [51, 59]) -- and is also read against the exact difference in f64, which it must be within the type's own epsilon of (2^-8, 2^-11); 1.5 - 1.5 is +0.0 (0x0000 in both) and -max - max is -infinity (0xFF80 [128, 255], 0xFC00 [0, 252]) rather than a saturation at -max. The result keeps the operands' element type: a one-element array of it is two bytes."
+kind = "behavior"
+case = "../../../cases/modules/stdlib/reduced_subtraction.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "[80, 64] 3.25\n[0, 191] -0.5\n[112, 192] -3.75\n[128, 63] true\n[126, 63] true\n[102, 63] true\n[0, 0] 0.0\n[128, 255] -inf\n[128, 66] 3.25\n[0, 184] -0.5\n[128, 195] -3.75\n[255, 59] true\n[254, 59] true\n[51, 59] true\n[0, 0] 0.0\n[0, 252] -inf\n2 2\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
 # The reduction the rule re-pointed: the refusal this case asserted became a computation.
 
 [[tests]]
