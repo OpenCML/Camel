@@ -97,7 +97,7 @@
 - **放行语义**：调度/执行上可理解为：**仅当 `Ctrl` 侧所表达的控制序已满足时，才沿 `Norm` 边向下游“放行”该值**（具体实现由 VM 与算子约定；图上则体现为同时依赖两类边）。
 - **典型场景**：子图出口上，若“值出口”与“控制完成点”不是同一节点（例如存在经 `println` 等副作用控制路径），则通过 `GATE` 将控制锚到值路径，供 `BRCH/JOIN` 臂或调用点统一消费；详见 [`16_inline_rewrite_algorithm.md`](16_inline_rewrite_algorithm.md)。
 
-> **口径注（2026-10-30）：与另一份设计文档冲突，待裁。** 本节要求 `GATE` 至少一条 `Ctrl` 入边；`docs/design/effects/edges.cn.md` 5.3 与运行图的封存检查（`src/runtime/graph.cpp#validateRuntimeGraphPayloadImpl`）却把 `GATE` 说成纯传值节点、等待是**同步前驱**，控制输入只是旧图仍在用的写法（`graph.cpp#validateRuntimeGraphPayloadImpl` 两种都接受）。是改本节还是改 5.3、默认建议走哪条，见 [`2026-10-30-gate-control-edge.md`](../handover/questions/2026-10-30-gate-control-edge.md)；裁定前本节正文保持原样。
+> **口径注（2026-10-30）：与另一份设计文档冲突，待裁。** 本节要求 `GATE` 至少一条 `Ctrl` 入边；`docs/design/effects/edges.cn.md` 5.3 与运行图的封存检查（`src/runtime/graph.cpp#validateRuntimeGraphPayloadImpl`）却把 `GATE` 说成纯传值节点、等待是**同步前驱**，控制输入只是旧图仍在用的写法（`graph.cpp#validateRuntimeGraphPayloadImpl` 两种都接受）。是改本节还是改 5.3、默认建议走哪条，见 [`questions-2026-10-30-gate-control-edge.md`](../handover/questions/questions-2026-10-30-gate-control-edge.md)；裁定前本节正文保持原样。
 
 ### 4.2 `DATA` 与 `PORT`
 
