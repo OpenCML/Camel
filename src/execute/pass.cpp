@@ -528,6 +528,7 @@ PassMaker taskflowPass() {
         options.linear    = args.getBool("linear");
         options.fanOutAll = args.getBool("fanout_all");
         options.diag      = args.getBool("diag");
+        options.segments  = args.getBool("segments");
         options.bytecode  = args.getBool("bytecode");
         options.gcStats   = static_cast<int>(args.getInt("gc_stats"));
         options.gcStress  = args.getBool("gc_stress");
