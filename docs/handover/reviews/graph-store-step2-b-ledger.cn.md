@@ -853,3 +853,40 @@ HANDLE_PROBE refused: InvalidArgument
 | `rt::fallBackToCopyingAppend` | **运行时入口**，调用方是 pass，它拿的是"要追加的那张图"，收事务会把运行时的边界掀开。 |
 
 **记住它们不是妥协**：**这三处是"事务之外还允许存在草稿"的全部理由**，b6 要删掉 `GraphDraft` 时，得先回答这三条。
+
+## 41. `passes/` + `core/tags` 那 22 处：转掉的、和"不该转"的（`3a128f94e`）
+
+**先给清单（一行一处）**：
+
+| # | 位置 | 那个函数收了什么 | 调用点上能不能拿事务 |
+|---|---|---|---|
+| 1 | `core/tags.h:55` | 前置声明 `class GraphDraft;` | —（声明） |
+| 2 | `core/tags.h:249` / `tags.cpp:575` | `factsOf(const GraphDraft &, node)` | **不收**：见下方"边界" |
+| 3 | `core/tags.h:256` / `tags.cpp:584` | `permissionsOf(...)` | **不收**：同上 |
+| 4 | `core/tags.h:264` / `tags.cpp:594` | `effectivePermissions(...)` | **不收**：同上 |
+| 5 | `core/tags.h:274` / `tags.cpp:619` | `declaresIndependentElements(const GraphDraft &)` | **不收**：同上 |
+| 6 | `core/tags.h:281` / `tags.cpp:637` | `markIndependentElements(GraphDraft &, attr)` | **不收**：同上 |
+| 7 | `passes/opt/generic/algebra.cpp:154` | `constant<T>(const GraphDraft &, ...)` | **能**（`simplify` 已收事务）→ **转** |
+| 8 | `passes/opt/generic/rewrite.h:26` | `using camel::runtime::GraphDraft;` | 第 9 条转完即删 → **删** |
+| 9 | `passes/opt/generic/rewrite.h:34` | `isComputedAfter(const GraphDraft &, ...)` | **能**（`replaceNode`、`pruneBranch` 都有事务）→ **转** |
+| 10 | `passes/opt/inline/engine.cpp:118` | **注释**里的 `GraphDraft::calleeGraphOf` | → **改写成"草稿的 `calleeGraphOf`"** |
+| 11 | `passes/opt/inline/engine.cpp:298` | `upstreamOf(const GraphDraft &, ...)` | **能**（内联轮次有事务）→ **转** |
+| 12 | `passes/opt/inline/engine.cpp:324` | `isDraftBranchArmHead(const GraphDraft &, ...)` | **能** → **转** |
+| 13 | `passes/test/control.cpp:19` | `node(GraphDraft &, {...})`（37 个调用点） | **能**（每个用例都有 `owner`）→ **转** |
+| 14 | `passes/test/fault.cpp:70`、`:85` | 两个 lambda `(GraphDraft &draft, brch, join)` | **能**（`breakFirstBranchOfMain` 里 `session.edit(owner)` 就是事务）→ **转** |
+| 15 | `passes/test/resources.cpp:151`、`:157`、`:162`、`:168` | 三个 lambda + `make_unique<GraphDraft>()` | **留**：这一族自己**造**草稿（构造出来的不是事务给的），要动它得先回答"谁能造草稿"——那不是这一片的判据 |
+| 16 | `passes/test/writings.cpp:216` | `GraphDraft::WritingScope scope(draft)` | **留**：它是**类型的嵌套作用域守卫**，不是参数 |
+| 17 | `passes/test/anchor.h:24`、`:36` | `anchorNode(GraphDraft &)`、`blankNode(...)` | **留**：33 个调用点散在 7 个测试文件里，是**另一片**（测试 pass 一族） |
+
+**"为什么 `core/tags` 不该转"——这一条是这张表里最重要的**：
+
+`camel/core/tags.h` **已经把同一个函数写了两遍**：一遍收 `const GraphDraft &`，一遍收 `const GCGraph &`。
+**因为它们是两个不同的类**，访问器不同；**而事务交出来的正是草稿**——所以收草稿的那一遍**恰好就是事务的调用者需要的那一遍**。
+**再加一个收事务的重载，只会多一个拼写，不会多一条保证。** 这里剩下的是**"草稿上的只读 API"**——**是边界，不是漏网。**
+
+**这一片的结果**：`files 56 → 51`，`references 408 → 399`。
+
+**三个数**：**消失的参数 9 个**（第 7、9、11、12、13、14 六项 + `using` 一行 + 注释一处不计数，实为 9 个参数）；
+**删掉的行数 73**；**保留 13 个**（表里标"留"与"不收"的）。
+
+**四个数：51 / 399 / 3 / 4。**
