@@ -2462,24 +2462,131 @@ compile_graph_ptr_t Builder::instantiateGeneric(
     return graph;
 }
 
+Type *Builder::inferTypeOf(const GCT::node_ptr_t &expression) {
+    if (expression == nullptr) {
+        return nullptr;
+    }
+    // The graph `e` is built in: it stands inside the one the type is used in, so the names it
+    // reads resolve where they are written, and it is nobody's subgraph, so nothing of it is
+    // reached from the program.
+    //
+    // Three things make that graph safe to drop, and all three have to hold before this is
+    // changed. (1) Its diagnostics go to a sink of its own: nothing the inference says about `e`
+    // reaches the program's diagnostics, because `e` is checked where it is evaluated; the one
+    // report the caller gets is the replay further down, for an `e` written nowhere else.
+    // (2) The graph, the tail of the chain, `chainedNodes_` and the four scope pointers are
+    // restored as a whole afterwards (the guard below), so an inference that stops halfway
+    // leaves nothing of itself behind and the next statement is built as if it had not happened.
+    // (3) The entries this builder keeps keyed by a graph's address -- `capturedValues_`,
+    // `valueUsedGraphs_` -- are erased with the graph, and the graph is not registered as a body
+    // of the unit, so no pass over the built bodies ever judges it.
+    const compile_graph_ptr_t scratch = createCompileGraph(
+        context_->graphIds().allocate(), FunctionType::create(), nullptr, "__typeof__");
+    scratch->setOuterGraph(currGraph_);
+    std::erase_if(
+        unit_->builtBodies,
+        [&](const compile_graph_ptr_t &known) { return known.get() == scratch.get(); });
+
+    const compile_graph_ptr_t savedGraph       = currGraph_;
+    const node_handle_t savedSynced            = lastSyncedNode_;
+    const auto savedChained                    = chainedNodes_;
+    const bool savedSyncedFlag                 = synced_;
+    const bool savedVaried                     = varied_;
+    const bool savedDeclares                   = declaresVariable_;
+    const node_scope_ptr_t savedNodes          = nodeScope_;
+    const graph_scope_ptr_t savedGraphs        = graphScope_;
+    const decorated_scope_ptr_t savedDecorated = decoratedScope_;
+    const template_scope_ptr_t savedTemplate   = templateScope_;
+    const diagnostics_ptr_t savedDiags         = diags_;
+    // What the inference says about `e` is nobody's business: `e` is checked where it is
+    // evaluated. The sink is what tells "nothing to report" apart from "the expression is not a
+    // value", the way a speculative instantiation keeps what it learns about the bodies it tries.
+    auto sink = std::make_shared<Diagnostics>(
+        diags_->moduleName(), diags_->modulePath(), diags_->sourceContext());
+
+    // The scopes and the chain of the graph the type is used in are restored as a whole: an
+    // inference that stops halfway leaves nothing of itself behind in either.
+    struct Restore {
+        Builder &self;
+        compile_graph_ptr_t graph;
+        node_handle_t synced;
+        std::unordered_set<node_handle_t> chained;
+        bool syncedFlag;
+        bool varied;
+        bool declares;
+        node_scope_ptr_t nodes;
+        graph_scope_ptr_t graphs;
+        decorated_scope_ptr_t decorated;
+        template_scope_ptr_t templ;
+        diagnostics_ptr_t diags;
+        DraftGraphBuilder *scratch;
+        ~Restore() {
+            self.nodeScope_        = nodes;
+            self.graphScope_       = graphs;
+            self.decoratedScope_   = decorated;
+            self.templateScope_    = templ;
+            self.currGraph_        = graph;
+            self.lastSyncedNode_   = synced;
+            self.chainedNodes_     = std::move(chained);
+            self.synced_           = syncedFlag;
+            self.varied_           = varied;
+            self.declaresVariable_ = declares;
+            self.diags_            = diags;
+            // The entries are keyed by the address of the graph that is going away, and another
+            // graph may take that address, so they go with it.
+            self.capturedValues_.erase(scratch);
+            self.valueUsedGraphs_.erase(scratch);
+        }
+    } restore{*this,
+              savedGraph,
+              savedSynced,
+              savedChained,
+              savedSyncedFlag,
+              savedVaried,
+              savedDeclares,
+              savedNodes,
+              savedGraphs,
+              savedDecorated,
+              savedTemplate,
+              savedDiags,
+              scratch.get()};
+
+    diags_ = sink;
+    enterGraphScope(scratch, "__typeof__");
+    lastSyncedNode_ = {};
+    chainedNodes_.clear();
+    Type *type = nullptr;
+    try {
+        const std::any result = visit(expression);
+        if (result.type() == typeid(StaticTuple)) {
+            type = any_cast<const StaticTuple &>(result).type;
+        } else if (node_handle_t value = valueNodeOf(result)) {
+            type = valueTypeOf(nodeTypeOf(value));
+        }
+    } catch (const BuildAbortException &) {
+        type = nullptr;
+    }
+    if (type == nullptr && !sink->errors().empty()) {
+        // The first thing `e` said is why there is no type. `e` written only inside a `typeof` is
+        // checked nowhere else, so it is reported here, once, at the `typeof` that kept it.
+        savedDiags->add(Diagnostic(*sink->errors().front()));
+        throw BuildAbortException();
+    }
+    return type;
+}
+
 Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
     if (type == nullptr) {
         return nullptr;
     }
     if (type->code() == TypeCode::TypeOf) {
-        // `typeof e`: build e where the type is used and take the type of the value it makes.
-        // A build-time tuple is taken without a FILL, as `indices` and `...` take one.
+        // `typeof e`: the type of the value `e` would have, inferred without evaluating it. A
+        // build-time tuple is taken without a FILL, as `indices` and `...` take one.
         const auto *placeholder = tt::as_ptr<TypeOfType>(type);
-        const auto *held       = static_cast<const GCT::Node *>(placeholder->expression());
+        const auto *held        = static_cast<const GCT::Node *>(placeholder->expression());
         ASSERT(held != nullptr, "typeof holds the expression it was made with.");
         GCT::Node *expression = const_cast<GCT::Node *>(held);
-        Type *valueType       = nullptr;
-        const std::any result = visit(expression);
-        if (result.type() == typeid(StaticTuple)) {
-            valueType = any_cast<const StaticTuple &>(result).type;
-        } else if (node_handle_t value = valueNodeOf(result)) {
-            valueType = valueTypeOf(nodeTypeOf(value));
-        }
+        Type *valueType       = inferTypeOf(expression);
         if (valueType == nullptr || valueType->code() == TypeCode::Void) {
             diags_->of(SemanticDiag::TypeOfNotAValue)
                 .atOrigin(expression->origin())

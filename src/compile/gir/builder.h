@@ -2460,6 +2460,13 @@ class Builder {
     bool isVariable(node_handle_t node) const { return variables_.contains(node); }
     // A new variable holding the value of `value` (`:var/new`).
     node_handle_t newVariable(node_handle_t value);
+    /**
+     * A new variable of `type` with no value in it yet (`:var/new/empty`): its slot holds nothing
+     * until the write that fills it. A declaration whose value is written where the statement
+     * stands, and not where the cell is made, is built this way (a local of a generator body:
+     * design principles 5.4).
+     */
+    node_handle_t newVariableOfType(Type *type);
     // The value `variable` holds when the returned node runs (`:var/get`), ordered after the
     // variable's last writer in this graph and, in a sync block, in the block's chain.
     node_handle_t readVariable(node_handle_t variable);
@@ -2505,12 +2512,21 @@ class Builder {
     node_handle_t visitDataNode(const GCT::node_ptr_t &gct);
     Type *visitTypeNode(const GCT::node_ptr_t &gct);
     /**
-     * The type a type expression denotes once its `typeof` placeholders are resolved: the
-     * expression is built where the type is used, and the placeholder is replaced by its value
-     * type. Any other type is bound by `boundType`. A placeholder nested inside a larger type
-     * is refused: `typeof` stands for a whole type.
+     * The type a type expression denotes once its `typeof` placeholders are resolved: the type of
+     * the value the expression would have, inferred without evaluating it (see `inferTypeOf`).
+     * Any other type is bound by `boundType`. A placeholder nested inside a larger type is
+     * refused: `typeof` stands for a whole type.
      */
     Type *resolveTypeNode(Type *type, const GCT::node_ptr_t &at);
+    /**
+     * The type `e` would have, with nothing of `e` left behind: `typeof e` reads a type and does
+     * not evaluate a value (design principles 5.4), so `e` is built in a graph of its own that is
+     * dropped with it -- no node of the graph the type is used in, no effect in its chain. What
+     * the inference says about `e` is kept in a sink of its own: `e` is checked where it is
+     * evaluated, so an inference that fails reports nothing and an `e` written only inside a
+     * `typeof` reports its first error here.
+     */
+    Type *inferTypeOf(const GCT::node_ptr_t &expression);
     node_handle_t visitNRefNode(const GCT::node_ptr_t &gct);
     /// A name: its value node, or the build-time tuple a rest parameter names (no node).
     std::any visitDRefNode(const GCT::node_ptr_t &gct);

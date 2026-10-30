@@ -977,6 +977,11 @@ void Builder::reportUnusedFallibleValues() {
                 type = callee->funcType()->exitType();
             }
         }
+        if (valueTypeOf(type) != type) {
+            // A cell keeps the value it was given: a `T!` stored in one is not a `T!` that
+            // nothing takes, and the statement that makes or fills the cell does not lose it.
+            return static_cast<TupleType *>(nullptr);
+        }
         return asFallible(valueTypeOf(type));
     };
     // The entry function, when it declares no return type: what its body ends with is not

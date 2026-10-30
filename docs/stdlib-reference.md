@@ -6468,6 +6468,12 @@ transforms).
 tangent of its type. A constant and a captured value are lifted this way, so a straight-line
 program is lifted node by node and a call hands its parameters on in the same shape.
 
+Every rule here is `export`ed: the caller that attaches one to an operator lives in another
+module, and a rule that is not exported is refused where it is imported.
+
+Adding a rule changes docs/stdlib-reference.md; regenerate it with
+`node scripts/stdlib-reference.mjs --write`.
+
 #### `lift`
 
 ```camel
@@ -6479,6 +6485,72 @@ no tangent, a tensor of zeros for a tensor, and each member's own zero for a tup
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `lift(3.0)` gives `(3.0, 0.0)`
+
+#### `mul_jvp`
+
+```camel
+mul_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
+```
+
+The forward rule of `*` on two 32-bit floats: the product rule, `x*dy + y*dx`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `mul_jvp(f32(2.0), f32(3.0), (f32(0.5), f32(0.25)))` gives `(6.0, 3.0)`
+
+#### `mul_jvp`
+
+```camel
+mul_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
+```
+
+The forward rule of `*` on two 64-bit floats.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `mul_jvp(2.0, 3.0, (0.5, 0.25))` gives `(6.0, 3.0)`
+
+#### `sub_jvp`
+
+```camel
+sub_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
+```
+
+The forward rule of `-` on two 32-bit floats: the tangents subtract the same way.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `sub_jvp(f32(5.0), f32(3.0), (f32(0.5), f32(0.25)))` gives `(2.0, 0.25)`
+
+#### `sub_jvp`
+
+```camel
+sub_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
+```
+
+The forward rule of `-` on two 64-bit floats.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `sub_jvp(5.0, 3.0, (0.5, 0.25))` gives `(2.0, 0.25)`
+
+#### `div_jvp`
+
+```camel
+div_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
+```
+
+The forward rule of `/` on two 32-bit floats: the quotient rule, `(y*dx - x*dy) / (y*y)`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `div_jvp(f32(6.0), f32(2.0), (f32(1.0), f32(0.25)))` gives `(3.0, 0.125)`
+
+#### `div_jvp`
+
+```camel
+div_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
+```
+
+The forward rule of `/` on two 64-bit floats.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `div_jvp(6.0, 2.0, (1.0, 0.25))` gives `(3.0, 0.125)`
 
 <a id="sim"></a>
 
