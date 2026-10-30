@@ -1,0 +1,1 @@
+lane-eff-rule: arm-chain diagnosis page, docs-only commit. Establishes: chain correct after fold; cse merge is not the mover (probe prints nothing); the node lives in the arm's region graph; outer chain bypassed after. Records guards as load-bearing (removal: fail 94 -> 104) and the three lessons. No behaviour change.
