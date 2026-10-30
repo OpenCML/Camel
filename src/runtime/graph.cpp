@@ -11,6 +11,7 @@
  * blob, one unified edge arena, and a compact branch-arm arena.
  */
 
+#include "camel/runtime/effect_liveness.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/exec_plan.h"
@@ -563,9 +564,15 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             // there at all: it is a pure value-forwarding node with one data port and one sync
             // predecessor). The control input is what that wait used to be written as; the paths
             // this lane has not moved onto the sync edge yet still carry one, and the ones that
-            // have carry the sync edge instead. A GATE with neither waits on nothing, which is
-            // what this refuses.
-            if (graph->syncPredsOf(ref).empty() && graph->ctrlInputsOf(ref).empty()) {
+            // have carry the sync edge instead.
+            // Asked through the facts every pass asks (camel/runtime/effect_liveness.h): the wait a
+            // GATE carries is either a block's chain or an edge of its own, and the two are named
+            // there instead of here. A GATE with neither waits on nothing, which is what this
+            // refuses.
+            EffectLivenessFacts facts;
+            facts.hasWaitEdge     = !graph->ctrlInputsOf(ref).empty();
+            facts.isSyncStatement = !graph->syncPredsOf(ref).empty();
+            if (!facts.hasWaitEdge && !facts.isSyncStatement) {
                 throw std::runtime_error(
                     std::format(
                         "Runtime graph '{}' has GATE node {} without a wait: no sync predecessor "
