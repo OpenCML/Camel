@@ -1,0 +1,10 @@
+第 3 步 `reinterp<H>` 停在规则集 `H` 的形式上；这一笔只交一页问题，不交语义。
+
+1. 两个数：`reinterp` 拼写 **28** 处（全部在 `docs/`：设计稿 9、JAX 页 6、设计原则中英 6、复核页 3，其余 4），调用者 **0**（`src/`、`modules/`、`stdlib/`、`test/` 里 0 行实现、0 个调用）。**"28/0" 这个形状本身就是结论：`reinterp` 今天只是纸上的东西**——没有半成品可续，也没有一处代码在等它。
+
+2. 卡在哪条缝上：规则是库里的泛型 `rule`（`stdlib/autodiff.cml#mul_jvp`），把某类型下的两侧取出来的唯一入口 `genericRuleInstance` 在编译侧；建图只在 `modules/autodiff`（`pullback.cpp#buildReverseClosure`）——**两半之间今天没有契约，而 `H` 必须跨这条缝**。原语的规则既挂不上声明（标量算术是内置算子 `:op/mul_l`，没有声明可挂），也做不成标签实参（`diagnostics/registry.tsv#TagArgumentNotValue`，`#jvp(mul_jvp)` 被拒）；变换的签名由 C++ 解析器算（`modules/autodiff/operators.cpp#GradResolver`，`stdlib/signatures/autodiff.cml` 明写 "these declarations are not compiled"），`H` 只能从那里进；`Tangent<T>` 不存在（`stdlib/types.cml` 只有 `ParamsOf`、`WithOf`、`ResultOf`），提升后的函数类型写不进库里的声明。
+
+3. `docs/design/program-transforms/README.cn.md` 第 7 节已把"规则集 `H` 作为值的类型与 `Lift` 的声明方式"列为**第 3 步开工前定**，这一条一直没有裁定。裁定之前不动第 3 步：不先造 `Tangent<T>`，也不先造库到模块的值通道。
+
+页：`docs/handover/questions/questions-2026-10-30-reinterp-rule-set.md`（一页一问，`路径#符号` 无行号；A/B/C 每条写清"要多造什么"，默认 A：`H` 为 `Rule[]`、建图与规则引擎同住、同一步加 `Tangent<T>`）。
+闸门（`-Plan all -Tier fast -Jobs 8`）：total 7857 / fail 0 / skip 2 / known 2。
