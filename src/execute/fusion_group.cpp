@@ -11,6 +11,7 @@
 
 #include "camel/core/rtdata/base.h"
 #include "camel/profile/profile.h"
+#include "camel/runtime/effect_liveness.h"
 
 #include <algorithm>
 #include <chrono>
@@ -83,7 +84,23 @@ bool FusionGroupView::isPrivateTo(gc_node_ref_t node, std::span<const gc_node_re
             return false;
         }
     }
-    return graph_->withOutputsOf(node).empty() && graph_->ctrlOutputsOf(node).empty();
+    // What is left is the question of what observes the node from outside the group, and it is
+    // asked where every other pass asks it (camel/runtime/effect_liveness.h): a data user, a wait,
+    // or a place on a block's chain. A node that any of those reaches must stay where it is -- a
+    // fusion group runs as one piece, so taking it in would move the observation with it.
+    camel::runtime::EffectLivenessFacts facts;
+    facts.hasDataUser  = !graph_->withOutputsOf(node).empty();
+    facts.isWaitedOn   = !graph_->ctrlOutputsOf(node).empty();
+    facts.isSyncStatement = !graph_->syncPredsOf(node).empty();
+    if (!facts.isSyncStatement && graph_->hasSyncEdges()) {
+        for (const camel::runtime::GCGraphSyncEdge &edge : graph_->syncEdges()) {
+            if (edge.pred == node) {
+                facts.isSyncStatement = true;
+                break;
+            }
+        }
+    }
+    return !facts.hasDataUser && !facts.isWaitedOn && !facts.isSyncStatement;
 }
 
 void registerFusionGroup(attr::AttrKey key, std::string_view name, FusionGroupKernel kernel) {
