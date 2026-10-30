@@ -201,8 +201,13 @@ slot_t replaceKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *from = norm.get<Handle *>(1);
     const auto *to   = norm.get<Handle *>(2);
     auto [draft, fromRef] = draftOf(state, from, "graph.replace");
-    if (to->program() != state.base || to->graph() != from->graph() ||
-        !draft.alive(to->index())) {
+    // The replacement names this graph either way it can be named: through the program it came
+    // from, or through the transaction that owns the draft a fold wrote it into.
+    const bool sameGraph = to->graph() == from->graph();
+    const bool knownOwner =
+        to->program() == state.base ||
+        (to->transaction() != nullptr && to->transaction()->id() == to->graph());
+    if (!sameGraph || !knownOwner || !draft.alive(to->index())) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
             "graph.replace",
