@@ -136,6 +136,58 @@ wrapping 32 位算术契约。也就是说 i64 在下标这里不是"不能算"�
 `unresolved_type` 处拒（数字好看、能力没变），或者不拒而把 4 字节的 f32 结果按 8 字节下标读出去。"**
 「不拒」那条今天已经有实证：宽度那一处如果不改，`bytes()` 就会按四字节算，回读出来的下标正好是半个。
 
+## 五、第 2 步停在哪里：位置是**下标本身**，而内核 IR 不把下标读进寄存器
+
+第 2 步要把位置接到真内核上（`argmax` 分支 + 两槽累加器）。开工前把四条路走了一遍，结果是
+**存储那一半今天就能写，更新那一半缺一个原语**——缺的不是 i64 算术（那个本来就被拒），而是
+"**把循环下标读成一个寄存器值**"这一步。
+
+**读数**（`test/cases/modules/tiles/kernel_ir_check.cpp#checkI64PositionRead`，由 `tiles-plan-check`
+的 `checkKernelIR` 调用，计划条目 `plan_validation` 的 `expect_stdout_contains` 钉住）：
+
+```
+tiles i64 position: an i64 slot and its store validate, and reading the loop index into that slot is refused as an unbound scalar
+```
+
+即：`ScalarBinding{"k_pos", i64}` + `Store{…, i64}` 通过 `validateBody`；而 `Loop{"k_r", …}` 体里写
+`Assignment{"k_pos", ScalarExpr::symbol("k_r", I64)}`，`validateBody` 报 **`unbound scalar`**。这正是
+"两槽累加器"差的那一半。
+
+四条路都查过，没有第五条：
+
+| 想走的路 | IR 的态度 | 结论 |
+| --- | --- | --- |
+| `k_pos = k_r`（下标读进 i64 寄存器） | `kernel_ir.cpp#validateBlock` 把 `Loop` 的索引声明为 **index**（`declare(nested, s.index, {true, …})`），`scalar()` 要求 `!index` → `unbound scalar` | 缺一个原语 |
+| `k_pos` 按 i64 算术累加（每轮 +1） | `scalar_expr.cpp:175-178` 明拒，`checkScalarI64` 早已在钉 | 被设计拒 |
+| `Store` 直接存一个下标 | `Store` 的 value 是 `ScalarExpr`，只有 `Access.address` 是下标 | 缺一个原语 |
+| 先用 `IndexBinding` 起别名再读 | 仍是 index 绑定 | 同第一条 |
+
+**所以停在这里，把选择交回去**（三个候选，都不等于"放宽 i64 算术"）：
+
+1. **`ScalarExpr::fromIndex(IndexExpr, ScalarType)`**——最小的一刀：允许把下标读成 i64 寄存器值，只读、
+   不引入算术。它与 `scalar_expr.cpp:175-178` 那句话不冲突：那句禁的是**算术**，不是**读取**。
+2. **让 `Loop` 的索引同时可当 i64 标量读**（`declare(nested, s.index, {true, DType::I64, …})` 并对
+   i64 的 index 绑定放行）。改动面更大，且把 `IndexExpr` 与 `ScalarExpr` 的边界弄模糊。
+3. **加一条 `IndexStore` 语句**：把 `IndexExpr` 直接存进 i32/i64 缓冲。概念最干净（下标本来就是下标），
+   但要动 `codegen`、`validateBody` 与 `KernelBody` 的语句集合。
+
+倾向 **1**。**在拿到决定之前不动 `reduction_kernel.cpp` 的 law 门**：先让 `domain()` 接受 ArgMax 而
+`serial_kernel.cpp` 没有分支，`lower.value(...)` 会把输入值当结果存下去——那比"数字好看、能力没变"更糟，
+是错的数。
+
+### 今天还有什么在阻止 `tensor:argmax_axis` 进表
+
+1. **内核程序（第 2 步）**——`reduction_kernel.cpp#domain` 的 law 门只接受 Max/Add/DivideByCount，
+   ArgMax 会被拒；即使放它进来，两槽累加器缺上面那个原语。**这是唯一一道"能力"闸门。**
+2. **`graph_regions.cpp#shape`（第 3 步）**——i64 结果是 `unresolved_type`，`eligibility` 到不了 lowering；
+   必须等第 2 步，否则拒绝只是换成更靠后、更难懂的一种。
+3. **`compiler.cpp:1094`（第 3 步）**——`needs a statically known f32 tensor result`；有程序能产生 i64
+   结果之后才谈得上放宽。
+4. **`schedule.cpp#validate`（第 2 步之后）**——计划里出现 i64 节点之前，它没有东西可放行。
+5. **`--devices cpu` 的那条读数（第 4 步）**——今天 `argmax_axis` 进不了 `#gpu` scope，无处可测。
+
+`deviceScalarDType`（标量叶子）**不在这条路上**：结果类型是张量，走 tensor 分支。
+
 ## 附：这一笔之后账本上的位置
 
 - A 组 5 条：4 条视图已进表（`a3d119690`），剩 `tensor:argmax_axis` 这 1 条，卡在本文第一、三项。
