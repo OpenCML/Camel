@@ -36,7 +36,7 @@ C2：面内 21 = 有实现 8（`tensor:abs`、`tensor:add`、`tensor:matmul`、`
 `tensor:argmax_axis`（C2 的 1 条）。四条视图算子 `eligibility` 过了 `semantics` 那一问就能进下标映射，
 `argmax_axis` 的归约语义也已在；它们要补的是 `operations()` 那条记录与一份 lowering。
 
-**B 组——连语义声明都还没写：21 条**（transformer 13 + C2 12，两程序共用 `matmul_grad_lhs`、
+**B 组 21 条分三类：5 条 `nn:*` 根本不在算子表里**（`lookup` 返回 none，id=none）——要**注册**；**15 条 `tensor:*` 在表里但没有语义声明**（`undeclared major=-1`）——要**写声明**；**1 条 `tensor:softmax`（id 424）已有声明 `major=1`**——它其实属于 A 组，缺的只是表里一个名字与 device 程序。三类修法不同，排期不能合并（读数 `TILES_DECLARATIONS_1..6`）（读数：`TILES_DECLARATIONS_*`，`CAMEL_TILES_TEST_DECLARATIONS=1`）。（transformer 13 + C2 12，两程序共用 `matmul_grad_lhs`、
 `matmul_grad_rhs`、`numel`、`shape` 四条）
 `nn:sgd`、`nn:adam`、`nn:adam_state`、`nn:softmax_cross_entropy_labels`、
 `nn:softmax_cross_entropy_labels_grad`、`tensor:gelu`、`tensor:gelu_grad`、`tensor:layer_norm`、

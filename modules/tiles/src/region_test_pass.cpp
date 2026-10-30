@@ -363,21 +363,28 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
                 "tensor:numel",
                 "tensor:shape"};
             std::string row;
+            size_t pending = 0;
+            size_t batch   = 1;
             for (const char *uri : grouped) {
                 const auto found = core::OperatorTable::instance().lookup(uri);
                 const auto *semantics =
                     found ? core::OperatorTable::instance().semantics(*found) : nullptr;
-                // One line: the runner's failure dump is a window, and a table split over twenty
-                // lines loses its head.
+                // Four per line: the runner's failure dump truncates a long line, and a table split
+                // over twenty-one lines loses its head. Six short lines survive whole.
                 row += std::string(uri) + ' ' +
                        (found ? std::to_string(static_cast<long long>(*found))
                               : std::string("none")) +
                        ' ' + (semantics ? "declared" : "undeclared") + " major=" +
                        (semantics ? std::to_string(static_cast<long long>(semantics->key.major))
                                   : std::string("-1")) +
-                       ';';
+                       "; ";
+                if (++pending == 4 || uri == grouped[std::size(grouped) - 1]) {
+                    os << "TILES_DECLARATIONS_" << batch << ' ' << row << '\n';
+                    row.clear();
+                    pending = 0;
+                    ++batch;
+                }
             }
-            os << "TILES_DECLARATIONS " << row << '\n';
         }
         return result;
     }

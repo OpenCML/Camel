@@ -293,3 +293,10 @@ TILES_OPERATOR_ID tensor:reshape id=406 tensor_spelling=422
 这一步要作者裁：哪个拼法是正名，另一个是别名还是应当不存在。
 
 在等答复期间并行的事：330/422 之外的 A 组工作已经没有了，缺口停在 26、`operations()` 停在 21。
+
+### 六之三、B 组不是一类，是两类（口径已改在账本原位）
+
+`CAMEL_TILES_TEST_DECLARATIONS=1` 的读数：5 条 `nn:*`（`sgd`、`adam`、`adam_state`、
+`softmax_cross_entropy_labels`、`softmax_cross_entropy_labels_grad`）**`lookup` 返回 none——不在算子表里**；
+16 条 `tensor:*` 在表里但 `undeclared major=-1`。**前者要注册，后 15 条要写声明，排期不能合并。**另外第六条读数推翻了"B 组"这个划分本身：**`tensor:softmax`（id 424）已有声明 `major=1`**，它属于 A 组，缺的只是表里一个名字与 device 程序——所以 21 条是**三类**，不是两类。
+缺口账本 `gpu-g4-g5-gap-list.md:39` 那句已原位改掉（不是另起一段），否则下一个人照旧读到旧口径。
