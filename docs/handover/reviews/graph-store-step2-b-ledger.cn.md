@@ -638,3 +638,22 @@ HANDLE_PROBE refused: InvalidArgument
 **三个数**：**消失的参数 11 个**；**删掉的行数 12**（净 `+11`：十处 `auto &draft = transaction.edit();` 与一行 `const auto &draft = transaction.graph();`，抵掉旧签名折行的行数）；**保留 15 个**（`armRegions`、`staticValueOf`、`isFoldable`、`staticArgs`、`staticArmOf`、`branchArmNodes`、`joinBlockFragments`、`pruneBranch`、`operIdOf`、`isValueOnly`、`isDeadWhenUnread`、`isReplaceable`、`reaches`、`orderedSources`、`readsNoWrittenSlot`——都是被 B 的函数用草稿调用的读，**它们的调用点现在手里是事务，但转它们要连这些读的调用者一起看，留给下一片**）。
 
 **四个数：61 / 472 / 3 / 4**（`488 → 472`，**files 首次降到 61**：`gates.cpp` 不再拼那个类型名）。
+
+## 33. 那 15 个读：一片带走，而且**"读"和"写"在这一层第一次分家**（`6aa9ef309`）
+
+**15 个全部转了**，写法按它们对图能做什么分两种：
+
+| 一种 | 谁 | 体内第一行 |
+|---|---|---|
+| **只读**（13 个） | `operIdOf`、`isValueOnly`、`isDeadWhenUnread`、`isReplaceable`、`reaches`、`orderedSources`、`readsNoWrittenSlot`、`armRegions`、`staticValueOf`、`isFoldable`、`staticArgs`、`staticArmOf`、`branchArmNodes` | `const auto &draft = transaction.graph();` |
+| **会写**（2 个） | `joinBlockFragments`、`pruneBranch` | `auto &draft = transaction.edit();` |
+
+**这不是风格，是参数表在说它能做什么**：一个只读的 helper 收 `const GraphTransaction &` 就**拿不到可写草稿**，
+编译器替"这个函数不该改图"做了担保。**今晚第一次，判据从注释搬进了类型。**
+
+**又没有在新模块里踩坑**，因为 B 那一笔已经把它们都解决了：图模块的 `replace`／`erase` 手里是 `draftOf` 现在返回的事务，
+`inline` 的 `inlineCallInOrder` 自己的参数表里就写着 `GraphTransaction &transaction`。**"先报再改"这一条没有触发——三个外部调用点全都是"事务本来就在手边"。**
+
+**三个数**：**消失的参数 15 个**；**删掉的行数 15**（净 `0`：进 89 出 89，签名换行与绑定行正好抵平——**这一片是纯形状，行数不动**）；**保留 0 个**（`generic` 这一族到此清空，只剩 C（`runtime/control.cpp` 那三个）与 `rewrite.h` 里两个 inline 的边界）。
+
+**四个数：59 / 450 / 3 / 4**（`472 → 450`，**files 61 → 59**：`algebra.cpp` 与 `gates.cpp` 一起不再拼那个类型名）。
