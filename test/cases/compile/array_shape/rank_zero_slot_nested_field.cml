@@ -1,0 +1,24 @@
+// A field of `f32[..]` one level down: `Outer { inner: Inner }` with `Inner { v: f32[..] }`, both
+// writings. The nested literal is the named type its field states (design principles 5.2), and the
+// field inside it is the rank-zero value of the element (5.4) -- the two rules are taken one after
+// the other, which is exactly where a conversion that only looks one level deep stops.
+//
+// What this case pins: the value is converted at every level it passes through, for a literal that
+// is one constant and for a literal with a computed element alike.
+
+type Inner = { v: f32[..] }
+type Outer = { inner: Inner }
+
+func main(): int sync {
+    let one: f32 = 1.0
+    let two: f32 = 2.5
+    let writtenLow: Outer = { inner: { v: 1.0 } }
+    println(writtenLow.inner.v)
+    let writtenHigh: Outer = { inner: { v: 2.5 } }
+    println(writtenHigh.inner.v)
+    let computedLow: Outer = { inner: { v: one } }
+    println(computedLow.inner.v)
+    let computedHigh: Outer = { inner: { v: two } }
+    println(computedHigh.inner.v)
+    return 0
+}

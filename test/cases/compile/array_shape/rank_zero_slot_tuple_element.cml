@@ -1,0 +1,18 @@
+// A tuple whose elements are `f32[..]`: the tuple element slot, both writings. `(1.0, 2.5)` is two
+// elements written where the element types are open ranks, and `(one, two)` is the same two
+// computed.
+//
+// What this case pins: a tuple element is a position with a type like a field, converted per element
+// for both writings, so a tuple of an open rank's elements reads back as its elements.
+
+func main(): int sync {
+    let one: f32 = 1.0
+    let two: f32 = 2.5
+    let written: (f32[..], f32[..]) = (1.0, 2.5)
+    println(written.0)
+    println(written.1)
+    let computed: (f32[..], f32[..]) = (one, two)
+    println(computed.0)
+    println(computed.1)
+    return 0
+}
