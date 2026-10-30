@@ -26,7 +26,11 @@ const void *hostData(const Node &node) {
 size_t bytes(const Node &node) {
     if (!node.results.empty())
         return 0; // Operation producers carry dependencies; only their results hold values.
-    const size_t width = node.dtype == DType::F64 ? sizeof(double) : sizeof(float);
+    // The width is the element's own: this used to read "eight bytes for f64, four otherwise",
+    // which would have made an i64 value four bytes per element and read half of it.
+    const size_t width = node.dtype == DType::F32   ? sizeof(float)
+                         : node.dtype == DType::F64 ? sizeof(double)
+                                                    : sizeof(int64_t);
     const size_t count = elements(node.shape);
     if (count > SIZE_MAX / width)
         throw std::runtime_error("typed tensor byte size overflows");

@@ -1122,4 +1122,43 @@ inline ConditionSeparation separateWhenConditions(
     return unanswerable ? ConditionSeparation::NotComputable : ConditionSeparation::Disjoint;
 }
 
+/// Whether a value's type goes from `T` to `T[..]`, or back from `T[..]` to `T`: the two edges the
+/// run represents with a rank-zero array (design principles 5.4 -- a rank-zero array *is* the
+/// element, so the conversion is invisible to the program: the same value, the same printing, the
+/// same comparison). `Builder::coerceTo` is where the conversion is inserted, and a call argument --
+/// the one entrance that is not some position's `coerceTo` -- asks this same question before it
+/// enters (builder_operators.cpp), so both entrances answer with one rule.
+inline bool isRankZeroEdge(Type *target, Type *source) {
+    if (target == nullptr || source == nullptr || target->equals(source)) {
+        return false;
+    }
+    const bool targetIsArray = target->code() == TypeCode::Array;
+    if (targetIsArray == (source->code() == TypeCode::Array)) {
+        return false;
+    }
+    if (targetIsArray) {
+        // `T` into `T[..]`: the value of the element type is the value of the open rank, and the
+        // slot keeps it as the rank-zero array the run holds.
+        const auto *arrayTarget = tt::as_ptr<const ArrayType>(target);
+        return arrayTarget != nullptr && arrayTarget->rankZeroType() != nullptr &&
+               arrayTarget->assignableFrom(source);
+    }
+    // `T[..]` into `T`: only the open rank has a value with no dimension to read the element from;
+    // `T[]` and `T[3, ..]` state dimensions and are not this edge.
+    const auto *arraySource = tt::as_ptr<const ArrayType>(source);
+    Type *element          = arraySource != nullptr ? arraySource->rankZeroType() : nullptr;
+    return element != nullptr && target->assignableFrom(element);
+}
+
+/// The element type a position of `T[..]` holds, or null when the position is not an open rank with
+/// no prefix. A rank-zero value is that element (design principles 5.4), which is what a literal in
+/// such a position is too: `show(1.0)` with `v: f32[..]` is the element `1.0`.
+inline Type *rankZeroElementOf(Type *type) {
+    if (type == nullptr || type->code() != TypeCode::Array) {
+        return nullptr;
+    }
+    const auto *array = tt::as_ptr<const ArrayType>(type);
+    return array != nullptr ? array->rankZeroType() : nullptr;
+}
+
 } // namespace camel::compile::gir
