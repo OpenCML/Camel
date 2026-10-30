@@ -1,0 +1,19 @@
+// A struct field declared `f32[..]`, filled from a value the program computed: the field is a slot
+// with a type, so the value is wrapped there as it enters the FILL (design principles 5.4), and the
+// field reads back as the element it is.
+//
+// The FILL's element inputs were the last entrance that did not convert: at `cae413dbf` this
+// program still read the field as an array that was not there and crashed. After the FILL converts
+// its inputs, the four slots print the same two lines.
+
+type Box = { v: f32[..] }
+
+func main(): int sync {
+    let one: f32 = 1.0
+    let first: Box = { v: one }
+    println(first.v)
+    let two: f32 = 2.5
+    let second: Box = { v: two }
+    println(second.v)
+    return 0
+}

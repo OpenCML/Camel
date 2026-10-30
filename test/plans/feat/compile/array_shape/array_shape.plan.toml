@@ -529,3 +529,90 @@ expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
 expect_output_contains = ["f32[]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+[[tests]]
+name = "rank_zero_show"
+desc = "`show(1.0)` with `v: f32[..]` (design principles 5.4): the slot takes the element and the callee prints the value it was given. Before the conversion on that edge the same program exited 139 on `show(2.5)`; after it the four backends print the same two lines."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_show.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_show_fvm"
+desc = "The same program on the bytecode VM: `show(1.0)` prints `1.0` and `show(2.5)` prints `2.5`, the same two lines as the node VM."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_show.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_show_jit"
+desc = "The same program on the JIT: `show(1.0)` prints `1.0` and `show(2.5)` prints `2.5`, the same two lines as the node VM."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_show.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_show_tf"
+desc = "The same program on the taskflow scheduler: `show(1.0)` prints `1.0` and `show(2.5)` prints `2.5`, the same two lines as the node VM."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_show.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_parameter_slot"
+desc = "The element into a `f32[..]` parameter and back out as `f32` (design principles 5.4): the two conversions are the compiler's, and the slot prints the same two lines the other slots print."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_parameter_slot.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_let_slot"
+desc = "A name declared `f32[..]` and given the element is the same rule as a parameter (design principles 5.4): one value, wrapped once, printing the same two lines."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_let_slot.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_field_slot"
+desc = "A struct field declared `f32[..]` filled from a computed value: the FILL's element input is converted as it enters, so the field reads back as the element (design principles 5.4) and prints the same two lines. Before that entrance converted, this read the field as an array and crashed."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_field_slot.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_var_slot"
+desc = "A `var` declared `f32[..]`, written at the declaration and again later: both writes enter the same slot the same way (design principles 5.4), and the value prints the same two lines."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_var_slot.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
