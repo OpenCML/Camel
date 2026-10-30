@@ -1,5 +1,9 @@
 # GPU 支持面：`tiles::census` 的缺口账本
 
+> **量法**：这一页的每一行都按**节点携带的 URI** 量，不按 Operations 表量。表里有一个名字，不等于程序里有节点带那个名字——
+> 轴归约一族就是反例：表里写 `tensor:sum_axis`，节点带的是 `array:sum_axis`，于是「表里有」而「程序里没有」。
+> 旧的三个数是这样数错的：**旧数按表读，新数按节点读**（见文末「按节点重量」）。
+
 这是 G4 的"缺口为 0 才算完成"（`docs/handover/reports/gpu-g4-g5-plan.md` G4 第 1 条）的唯一账本。数由遍
 `tiles::census` 读出：程序可达图里的面内算子（`tensor` 的数组与 `nn` 的参数树）按
 `modules/tiles/src/graph_regions.cpp#operations` 那张表分成"有 device 实现"与"缺口"两组，逐条打印名字。
@@ -94,3 +98,24 @@ operator of the backward pass (`broadcast_like`, which the device back end does 
 `broadcast_like` 在设备侧 lower 了，于是条目由 `negative` 改成 `behavior`，断言从"必须报
 `GpuScopeUnsupported`"改成"必须接受、placement 仍是 `gpu-required`、两条读数都是 0"。这是**账被改对**，
 不是红变绿：拒绝的理由消失了，值的一致性多了一条读数。
+## 按节点重量：轴归约一族（今夜的读数）
+
+列的读法：**节点 URI** 是 `std::jgir` / 探针在图里看到的名字；**表**是 `graph_regions.cpp#operations`；
+**声明**是 `OperatorTable::semantics`；**lowering** 是 `modules/onnx/lowering.cpp` 的键。
+
+| 算子 | 节点带的 URI | 表里有节点名？ | 有声明？ | 有 lowering（同名）？ | 真实结论 |
+| --- | --- | --- | --- | --- | --- |
+| `sum_axis` | `array:sum_axis` | **没有**（表里是 `tensor:sum_axis`） | 有（挂在 `tensor:` 的 id 上） | **没有**（键是 `tensor:sum_axis`） | 进不了区域、导不出 |
+| `mean_axis` | `array:mean_axis` | **没有**（同上） | 有（`tensor:`） | **没有** | 进不了区域、导不出 |
+| `max_axis` | `array:max_axis` | **没有**（同上） | 有（`tensor:`） | **没有** | 进不了区域、导不出 |
+| `min_axis` | `array:min_axis` | **没有** | 有（`tensor:`） | **没有** | 进不了区域、导不出 |
+| `argmax_axis` | `array:argmax_axis` | **没有** | **没有**（`undeclared major=-1`，声明在 422） | **没有** | 进不了区域、导不出 |
+| `argmin_axis` | `array:argmin_axis` | **没有** | 有（`tensor:`） | **没有**（连 `tensor:` 键都没有） | 进不了区域、导不出 |
+
+**三条新总数（按节点，六条轴归约）**：真正有实现 **0**；缺 lowering **6**；不在表里（按节点名）**6**。
+**旧数（按表）**：这三条曾被读成"`sum_axis`/`mean_axis`/`max_axis` 有实现"，`operations()` 里的
+`tensor:sum_axis`、`tensor:mean_axis`、`tensor:max_axis` 三条因此**对真实程序是空的**。
+
+**而这一族的 6 条不在那 26 条缺口里**——账本把它们读成"有实现"，所以缺口数被低估了 3（按表有、按节点无），
+另 3 条（`min`、`argmax`、`argmin`）本来就没进过表面清单。**26 这个数因此不是"还剩多少没做"，而是"按表读数
+还剩多少"**；按节点重量的完整 26 行需要各跑一次 `tiles::census` 取节点名（这一步未做，不在本页冒充完成）。
