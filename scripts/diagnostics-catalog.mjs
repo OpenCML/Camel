@@ -9,6 +9,7 @@
 //   include/.../messages/*.h      the enums the compiler uses, generated
 //   src/.../messages/*.cpp        the message tables, generated
 //   docs/diagnostics.md           the reference, generated
+//   diagnostics/examples.tsv      the example each diagnostic shows, pinned once (--pin-examples)
 //
 //   node scripts/diagnostics-catalog.mjs --check       registry valid, emitted files agree
 //   node scripts/diagnostics-catalog.mjs --write       assign numbers, emit headers, tables, docs
@@ -16,6 +17,7 @@
 //   node scripts/diagnostics-catalog.mjs --verify-doc  docs/diagnostics.md is what --write produces
 //   node scripts/diagnostics-catalog.mjs --coverage    list the codes no test mentions (report only)
 //   node scripts/diagnostics-catalog.mjs --coverage-check  fail if any code is mentioned by no test
+//   node scripts/diagnostics-catalog.mjs --pin-examples   fill in the example pins of new diagnostics
 //   --root DIR                                        read and write under DIR (the proof cases)
 //
 // --check runs in two places, so a hand-edited number cannot reach a build or a test run: the
@@ -50,6 +52,7 @@ import { loadPlanTests } from '../test/tools/run-tests.mjs'
 const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const REGISTRY_REL = 'diagnostics/registry.tsv'
 const DOC_REL = 'docs/diagnostics.md'
+const EXAMPLES_REL = 'diagnostics/examples.tsv'
 
 // The sections, in the order the headers are included. `id` is also the stem of the two
 // generated files; the type byte of the printed code is read from DiagType in base.h, under the
@@ -528,6 +531,37 @@ function stripLeadingComment(source) {
     return source.replace(/^\s*\/\*[\s\S]*?\*\/\s*/, '')
 }
 
+// The example each diagnostic shows, pinned once: `<Section>::<Name>` and the case that raises it.
+// Pinning is what makes "add a test" unable to change another diagnostic's example -- see
+// exampleFor. `--pin-examples` fills in the entries that have none and never rewrites a pin it
+// finds; a pin whose case stops raising the diagnostic falls back to the search, and the page's
+// diff is then the record of it.
+function loadExamplePins(root) {
+    const pins = new Map()
+    const file = path.join(root, EXAMPLES_REL)
+    if (!fs.existsSync(file)) return pins
+    for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+        const text = line.replace(/\r$/, '')
+        if (!text || text.startsWith('#')) continue
+        const [name, example] = text.split('\t')
+        if (name && example) pins.set(name.trim(), example.trim())
+    }
+    return pins
+}
+
+function writeExamplePins(root, pins) {
+    const text = [
+        '# The example each diagnostic shows in docs/diagnostics.md: the diagnostic, and the case',
+        '# that raises it. `--write` fills in the ones that are missing and never rewrites the others:',
+        '# adding a test must not move another diagnostic\'s example, and a pin is what makes that true.',
+        ...[...pins.keys()]
+            .sort()
+            .map((name) => `${name}\t${pins.get(name)}`),
+        '',
+    ].join('\n')
+    return writeFile(root, EXAMPLES_REL, text)
+}
+
 // The entry as its author wrote it, for the loose name search below: the runner's own bookkeeping
 // (`__planPath`, `__backend`, `__knownFail`, ...) names no diagnostic and is not part of what the
 // entry declares.
@@ -535,7 +569,7 @@ function declaredFields(test) {
     return JSON.stringify(test, (key, value) => (key.startsWith('__') ? undefined : value))
 }
 
-function exampleFor(entry, tests, root) {
+function exampleFor(entry, tests, root, pins) {
     const candidates = []
     for (const test of tests) {
         // An example must be a program that passes: a test the runner marks `known_fail` on the
@@ -558,10 +592,28 @@ function exampleFor(entry, tests, root) {
         const lines = source.split('\n').length
         candidates.push({ test, casePath, source, lines, exact })
     }
-    const small = candidates.filter((c) => c.lines <= 40)
-    const best = small.find((c) => c.exact) || small[0]
+    const relOf = (candidate) => path.relative(root, candidate.casePath).replaceAll('\\', '/')
+    // The example is pinned in diagnostics/examples.tsv once, and a pinned one is what the page
+    // keeps: picking by position in the test list is only stable while nothing is added to it, so
+    // a case a lane adds above another one used to move that diagnostic's example -- the page
+    // changed for a reason that had nothing to do with the diagnostic. A pin moves only when the
+    // case it names stops raising the diagnostic or is deleted, and then the diff says so.
+    const pinned = pins.get(entry.fullName)
+    let best = null
+    if (pinned) {
+        // One case can be cited by more than one test (a plan entry that also asks for JSON output,
+        // a plan that runs it on another back end). The pin names the case; which of its citations
+        // is shown keeps the preference the search had -- the one that expects this diagnostic by
+        // name or number -- so pinning does not rewrite the command line under the example.
+        const same = candidates.filter((c) => relOf(c) === pinned)
+        best = same.find((c) => c.exact) || same[0] || null
+    }
+    if (!best) {
+        const small = candidates.filter((c) => c.lines <= 40)
+        best = small.find((c) => c.exact) || small[0]
+    }
     if (!best) return null
-    const rel = path.relative(root, best.casePath).replaceAll('\\', '/')
+    const rel = relOf(best)
     const vars = { run_nvm: 'std::nvm', run_fvm: 'std::fvm', run_jit: 'std::jit', run_prl: 'std::prl' }
     const args = (best.test.args || [])
         .flat()
@@ -591,13 +643,13 @@ function catalogEntries(records) {
         .sort((a, b) => a.code - b.code)
 }
 
-function emitDoc(entries, tests, root) {
+function emitDoc(entries, tests, root, pins) {
     const out = []
     out.push('# Diagnostics Reference')
     out.push('')
     out.push('<!-- Generated by scripts/diagnostics-catalog.mjs --write. Do not edit: the codes and')
-    out.push('     messages are declared in diagnostics/registry.tsv, and the examples come from the')
-    out.push('     tests. Add one line there and run the script. -->')
+    out.push('     messages are declared in diagnostics/registry.tsv, and each example is the one')
+    out.push('     diagnostics/examples.tsv pins for it. Add one line there and run the script. -->')
     out.push('')
     out.push('Every diagnostic the compiler, the passes and the runtime can report. `camel --explain <name or code>`')
     out.push('prints one entry.')
@@ -656,7 +708,7 @@ function emitDoc(entries, tests, root) {
             out.push(fence(entry.suggestion, 'text'))
             out.push('')
         }
-        const example = exampleFor(entry, tests, root)
+        const example = exampleFor(entry, tests, root, pins)
         if (example) {
             out.push(`**Example** (\`${example.rel}\`, run as \`${example.command}\`)`)
             out.push('')
@@ -722,9 +774,9 @@ for (let i = 0; i < argv.length; i++) {
         mode = argv[i]
     }
 }
-if (!['--check', '--write', '--generate', '--verify-doc', '--coverage', '--coverage-check'].includes(mode)) {
+if (!['--check', '--write', '--generate', '--verify-doc', '--coverage', '--coverage-check', '--pin-examples'].includes(mode)) {
     console.log(
-        'usage: node scripts/diagnostics-catalog.mjs --check | --write | --generate | --verify-doc | --coverage | --coverage-check [--root DIR]'
+        'usage: node scripts/diagnostics-catalog.mjs --check | --write | --generate | --verify-doc | --coverage | --coverage-check | --pin-examples [--root DIR]'
     )
     process.exit(2)
 }
@@ -847,6 +899,28 @@ if (mode === '--coverage' || mode === '--coverage-check') {
     process.exit(0)
 }
 
+// --pin-examples fills in the pin of every diagnostic that has none and leaves the ones already
+// written alone: the first run pins what the search would have shown that day, and from then on
+// adding a test changes no other diagnostic's example.
+if (mode === '--pin-examples') {
+    const entries = catalogEntries(records)
+    const tests = loadTests(root)
+    const pins = loadExamplePins(root)
+    const before = pins.size
+    for (const entry of entries) {
+        if (pins.has(entry.fullName)) continue
+        const example = exampleFor(entry, tests, root, new Map())
+        if (!example) continue
+        pins.set(entry.fullName, example.rel)
+    }
+    const wrote = writeExamplePins(root, pins)
+    console.log(
+        `pinned ${pins.size - before} example(s), ${pins.size} in all` +
+            `${wrote ? `, wrote ${EXAMPLES_REL}` : `, ${EXAMPLES_REL} unchanged`}`
+    )
+    process.exit(0)
+}
+
 if (mode === '--check' || mode === '--verify-doc') {
     const unnumbered = records.filter((r) => r.code === null)
     if (unnumbered.length) {
@@ -890,8 +964,19 @@ if (mode === '--write' || mode === '--generate') {
     for (const [rel, text] of emitted) if (writeFile(root, rel, text)) wrote++
     if (mode === '--write') {
         const entries = catalogEntries(records)
-        const doc = emitDoc(entries, loadTests(root), root)
+        const tests = loadTests(root)
+        const pins = loadExamplePins(root)
+        // A diagnostic with no pin yet is pinned from the search this run would have shown, so the
+        // page keeps that example from then on instead of moving when a test is added later. The
+        // pin file is written only when something was added: a re-run writes nothing.
+        for (const entry of entries) {
+            if (pins.has(entry.fullName)) continue
+            const found = exampleFor(entry, tests, root, new Map())
+            if (found) pins.set(entry.fullName, found.rel)
+        }
+        const doc = emitDoc(entries, tests, root, pins)
         if (writeFile(root, DOC_REL, doc)) wrote++
+        if (writeExamplePins(root, pins)) wrote++
     }
     const assigned = records.filter((r) => r.assigned).length
     console.log(
@@ -903,7 +988,7 @@ if (mode === '--write' || mode === '--generate') {
 
 if (mode === '--verify-doc') {
     const entries = catalogEntries(records)
-    const expected = emitDoc(entries, loadTests(root), root)
+    const expected = emitDoc(entries, loadTests(root), root, loadExamplePins(root))
     const problems = []
     verifyFile(root, DOC_REL, expected, problems)
     if (problems.length) fail(problems)
