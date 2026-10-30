@@ -25,4 +25,7 @@
 
 **第二条前提也要修正**：三处"孤立的 ctrl 等待"（`coerceArmExit`、赋值门、`void` 门）**不能改成 sync**。试过：`test/plans/feat/linear` 整层 **141 条红**（`mutable_reference.*`、`var_*`、`order_edges_regions.*`）。原因是 sync 边带链的语义（`writeSyncStatement` 会 `markSyncStatement` 两侧，`checkSyncEdges` 按链校验），而"`var` 的写排序它的读"按设计原则 3.5 是**只排序**的边——它该是 **order 边**，不是同步边。所以这三处等待属于 ②（造边那一步里把 `Ctrl` 换成 `Order`），不属于 ①。
 
-**① 这一笔的改动清单（已落地）**：`control.cpp` 三处 GATE 留 ctrl 的规则改成"有同步前驱就不需要 ctrl"、`gates.cpp:19` 改为"有 ctrl 或有 sync 都不可绕过"、`graph_runtime_support.cpp:472` 先读同步前驱、ctrl 只作旧图退路；**`std::opt::order` 不用改**（它已经只读 order 与 sync）；`passes/test/control.cpp` 在第二笔跟着改。
+**① 落地状态（按实测改的，不是按计划）**：
+- **已落地**：`graph_runtime_support.cpp:472` 先读同步前驱、ctrl 只作旧图退路（这条是纯增量，没有同步前驱的图一字不变）。
+- **还不能落地**：`control.cpp` 三处 GATE 规则与 `gates.cpp:19`。试过，**10 条红**：`control.topology`、`control.test_pass_runs_when_named`、`control_data.graph`、`integrated.graph.false`、`covered_value.graph.{false,true}`、`export_gated_gru_step`、`ort_gated_gru_step`、`pass_export_var_param_inlined`、`05_effect_order`——因为"有同步前驱的门不再留 ctrl"会**改图**，而 `passes/test/control.cpp` 的拓扑断言正是旧规则，**它不能与改动分开更新**。已回退（`4b4af813d`），留作下一笔：三处规则 + `passes/test/control.cpp` 26 处 + **重录被删掉一条边的图**，同一笔。
+- **不用改**：`std::opt::order`（只读 order 与 sync）。
