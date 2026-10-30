@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 220
+**Semantic — errors** (`SemanticDiag`) — 222
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -281,6 +281,8 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `FactCaseBindsNoVariable` | This case of the fact '{0}' names no variable. |
 | `TypeFunctionNotApplicable` | The type function '{0}' is not applicable: {1}. |
 | `StatementAfterReturn` | This statement cannot run: the 'return' written before it gives the value of this block, so nothing after it in the block is reached. |
+| `RuleLeftIsNotAnOperator` | The rule '{0}' has a left side that is not one operator; it is written as '{1}', and a ruleset indexes its rules by the head of the left side. |
+| `DuplicateRuleForOperator` | The rule '{0}' and the rule '{1}' both have '{2}' as the head of their left side, and one ruleset has one rule per operator. |
 
 **Semantic — warnings** (`SemanticDiag`) — 15
 
