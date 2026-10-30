@@ -76,3 +76,17 @@ expect_exit = 0
 expect_stdout_contains = ["ruleset lookup: PASS"]
 expect_output_not_contains = ["FAIL"]
 timeout_ms = 60000
+
+[[tests]]
+name = "rulesets_forward_rules_come_from_the_index"
+desc = "The five scalar arithmetic operators are bound to keys in `rulesets.jvp`, and the pass reads the name those keys resolve to right now: `std::rulesets forward=true` prints one `FORWARD <uri> <family> <head>/<arity> -> <rule>` line per bound operator, and none of them says `no rule`. The three readings this pins -- that a binding is a key and not a remembered name, that the ten float operators (`_d` and `_f`) share the five keys, and that `-` with one operand is `jvp_neg` while `-` with two is `jvp_sub` -- are what a forward transform will read."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/rulesets_lookup.cml"
+args = ["${case}", "std::rulesets", "forward=true", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["FORWARD :op/add_d rulesets.jvp +/2 -> jvp_add", "FORWARD :op/sub_f rulesets.jvp -/2 -> jvp_sub", "FORWARD :op/mul_d rulesets.jvp */2 -> jvp_mul", "FORWARD :op/div_f rulesets.jvp //2 -> jvp_div", "FORWARD :op/neg_d rulesets.jvp -/1 -> jvp_neg"]
+expect_output_not_contains = ["-> no rule", "no such family"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

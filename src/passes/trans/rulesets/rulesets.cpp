@@ -4,6 +4,7 @@
 #include "passes/trans/rulesets/rulesets.h"
 
 #include "camel/parse/ast/rule_head.h"
+#include "camel/core/forward.h"
 
 #include <cstdlib>
 
@@ -46,6 +47,11 @@ RulesetsPass::apply(const camel::runtime::Program *program, std::ostream &os) {
         for (const auto &entry : camel::parse::ast::rulesOf(family)) {
             os << "RULESET " << family << ' ' << entry.head << '/' << entry.arity << " -> "
                << entry.rule << '\n';
+        }
+    }
+    if (forward_) {
+        for (const std::string &line : camel::core::forwardRuleDescriptions()) {
+            os << "FORWARD " << line << '\n';
         }
     }
     size_t start = 0;
