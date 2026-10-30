@@ -898,7 +898,8 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                 "OptimizePass",
                 "Runtime rewrite scanning graph '{}' for enabled phases.",
                 nextGraph->name());
-            auto &draft = session.edit(nextGraph).edit();
+            auto &transaction = session.edit(nextGraph);
+            auto &draft       = transaction.edit();
             std::vector<gc_node_ref_t> funcNodes;
             std::vector<gc_node_ref_t> callNodes;
             funcNodes.reserve(draft.nodeCount());
@@ -925,7 +926,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                         break; // out of growth budget: a specialization is a copy of the callee
                     }
                     if (camel::runtime::specializeDirectFuncInDraft(
-                            session, draft, funcNodeId, config.specializeOnFunctionValues)) {
+                            session, transaction, funcNodeId, config.specializeOnFunctionValues)) {
                         changed        = true;
                         roundChanged   = true;
                         graphRewritten = true;

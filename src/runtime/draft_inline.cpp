@@ -1033,8 +1033,8 @@ gc_node_ref_t resolveInlineCtrlExit(
 } // namespace
 
 bool specializeDirectFuncInDraft(
-    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId,
-    bool functionValuesOnly) {
+    RuntimeGraphDraftSession &session, GraphTransaction &transaction, gc_node_ref_t funcNodeId, bool functionValuesOnly) {
+    auto &draft = transaction.edit();
     const DraftNodeHeader *funcHeader = draft.header(funcNodeId);
     if (!funcHeader || funcHeader->kind != GCNodeKind::Func) {
         return false;
