@@ -1,15 +1,16 @@
 /**
- * Batching at a leading axis: the half of JAX's `vmap` that Camel has today.
+ * Batching at a leading axis through `map`: the call form of what `vmap` turns into a value.
  *
  * `map` applies f to each element of a rank-1 array, and the result is by position: one call
  * batches one array, along the one axis that array has. The numbers below are the examples the JAX
  * documentation gives for `jax.vmap` -- `jax.vmap(lambda x: x * x)(jnp.arange(3.))` is
  * `[0., 1., 4.]` -- so the two can be compared without rewriting the program.
  *
- * What this case does not have is the rest of `vmap`: a second batched argument, a chosen or named
- * axis, a batch over the leaves of a tree, and the transform itself (a value one can compose with
- * `grad`). docs/handover/reviews/questions-2026-10-30-jax.md records that gap; the case is the
- * part that must stay green whatever the transform becomes.
+ * `vmap` is the transform (jax_vmap.cml, jax_vmap_tensor.cml): the same numbers as a value rather
+ * than as a call form. What no case has is the rest of `vmap`: a second batched argument, a chosen
+ * or named axis, and a batch over the leaves of a tree.
+ * docs/handover/reviews/questions-2026-10-30-jax.md records that gap; this case is the part that
+ * must stay green whatever the transform becomes.
  */
 
 type Point = { w: float }

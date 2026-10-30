@@ -18,8 +18,9 @@
  * function is declared with `type`, takes its arguments in the angle brackets of a type position
  * and has a type expression for its body, a `match type` among them. `ElementOf<T>` (the element
  * of an array or a set), `PayloadOf<T>` (the `U` of `U?` or `U!`), `KeyOf<T>` and `ValueOf<T>` (the
- * key and value types of a map) take a type apart where `match type` cannot, and are declared
- * below without a body: the compiler provides them. They are evaluated when the instance that
+ * key and value types of a map) take a type apart where `match type` cannot, and `RowsOf<T>` (the
+ * array whose first-dimension elements are `T`) puts one back together the same way; they are
+ * declared below without a body: the compiler provides them. They are evaluated when the instance that
  * binds `T` is made, so `is_integer::<ElementOf<T>>()` asks the element type of `T`.
  *
  * `match type` compares a type's identity as well as its shape (design principles 5.5): the
@@ -43,6 +44,15 @@ export type PayloadOf<T>
 /// is not an array is refused.
 /// @example is_same::<WithElement<int[2, 3], float>, float[2, 3]>()    // true
 export type WithElement<A, E>
+
+/// The array type whose first-dimension elements are `T`: one dimension more than `T` has, of
+/// unknown length, the dimensions `T` states kept. The inverse of the element `x[i]` and `for x in
+/// xs` take (design principles 5.4), so a value of this type indexed at `i` gives a `T`. A type
+/// with no dimension is one element of the batch: `RowsOf<f32>` is `f32[?]`, the array of floats
+/// `vmap` applies a one-parameter function to.
+/// @example is_same::<RowsOf<f32[3]>, f32[?, 3]>()    // true
+/// @example is_same::<RowsOf<f32>, f32[]>()    // true
+export type RowsOf<T>
 
 /// The key type of a map type; any other type is refused.
 /// @example is_same::<KeyOf<Map<string, int>>, string>()    // true

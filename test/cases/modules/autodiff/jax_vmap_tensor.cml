@@ -1,0 +1,32 @@
+/**
+ * `vmap` over a tensor's leading axis: JAX's `jax.vmap(fun)` where `fun` takes a row.
+ *
+ * JAX's `vmap` is mostly used on tensors: a function of one row, `f: f32[d] => U`, applied to an
+ * `f32[B, d]` gives `U[B]`. Camel's `vmap` is the same name and the same value at every rank --
+ * the leading axis is the element `x[i]` takes (design principles 5.4), so a rank-1 array batches
+ * its elements and a rank-2 array batches its rows. `f32[4, 3]` batched with a function of an
+ * `f32[3]` row gives the four row results.
+ *
+ * The rows are applied one at a time. Vectorizing that into one kernel is an optimization of the
+ * same result -- it comes with the batching rules of the sixth answer and does not change this
+ * interface or this output.
+ */
+
+import { vmap } from array
+import { sum } from tensor
+
+func main(): int sync {
+    println('jax_vmap_tensor')
+    let m = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0], [1.0, 1.0, 1.0]] as f32[4, 3]
+    println(vmap((r: f32[3]) => sum(r * r))(m))
+    // The same name over a rank-1 array: the leading axis is the elements.
+    let v = [1.0, 2.0, 3.0] as f32[]
+    println(vmap((x: f32) => x * x)(v))
+    // A rank-3 array batches its planes; the row type of the function is a whole rank-2 plane.
+    let cube = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]] as f32[2, 2, 2]
+    println(vmap((plane: f32[2, 2]) => plane[0][1])(cube))
+    // A stored batched function is still a value with the tensor form.
+    let batched = vmap((r: f32[3]) => r[0] + r[1])
+    println(batched(m))
+    return 0
+}

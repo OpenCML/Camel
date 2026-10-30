@@ -328,7 +328,7 @@ merge_sorted: (xs: T[], ys: T[]) => T[] when is_ordered::<T>()
 sort_by: <key: (x: T) => K> (xs: T[]) => T[] when is_ordered::<K>()
 flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
 zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
-vmap: (f: (item: T) => U) => (xs: T[]) => U[]
+vmap: (f: (row: T) => U) => (xs: RowsOf<T>) => U[]
 ```
 
 **`stream`** — import { ... } from stream — 12 name(s)

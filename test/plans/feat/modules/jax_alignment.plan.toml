@@ -123,22 +123,36 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
+name = "batching.tensor"
+desc = "`vmap` over a tensor's leading axis, which is where JAX uses it most: a function of a row, `f: f32[d] => U`, applied to an `f32[B, d]` gives `U[B]`. `vmap((r: f32[3]) => sum(r * r))` over an `f32[4, 3]` is `[14.0, 77.0, 194.0, 3.0]`; the same name over a rank-1 array batches the elements, over a rank-3 array batches the planes, and a stored value keeps the form. One parameter, axis 0, every rank: `RowsOf<T>` states the type, so the rows are what `x[i]` takes (design principles 5.4). Rowwise now; vectorizing it is the sixth answer's optimization of the same result."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/jax_vmap_tensor.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl", "inline_jit"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "jax_vmap_tensor\n[14.0, 77.0, 194.0, 3.0]\n[1.0, 4.0, 9.0]\n[2.0, 6.0]\n[3.0, 9.0, 15.0, 2.0]\n"
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
 name = "refused.vmap_two_parameters"
-desc = "`vmap` batches one parameter, so a function of two is refused instead of being batched over its first one: batching `add` that way would answer a question the program did not ask. The refusal names both shapes -- the argument's two parameters and the one-parameter function the transform takes -- so what is unsupported is what the message shows. JAX batches the second argument only because `in_axes` says so, and that parameter does not exist here."
+desc = "`vmap` batches one parameter, so a function of two is refused instead of being batched over its first one: batching `add` that way would answer a question the program did not ask. Two parameters would be two batching parameters at once; the refusal names both shapes -- the argument's two parameters and the one-parameter row function the transform takes -- so the call says which parameters it had and which form it needed. JAX batches the second argument only because `in_axes` says so, and that parameter does not exist here."
 kind = "negative"
 case = "../../../cases/modules/autodiff/jax_names/vmap_two_parameters.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
 expect_diagnostic_code = "0x03000053"
-expect_output_contains = ["argument 1 has type '(a: float, b: float) => float pure'", "its parameter 'f: (item: T) => U'"]
+expect_output_contains = ["argument 1 has type '(a: float, b: float) => float pure'", "its parameter 'f: (row: T) => U'"]
 expect_output_not_contains = ["UnknownInternalError", "never printed"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
 name = "absent.in_axes"
-desc = "`in_axes` is not a parameter of `vmap`: `T[]` is rank one, so axis 0 is the only axis there is and there is nothing to name. The call is refused as an unknown parameter and the diagnostic names `in_axes` -- an axis the transform cannot honour is not one a call can quietly ask for."
+desc = "`in_axes` is not a parameter of `vmap`: it batches the leading axis, so an axis is not something a call can name. The call is refused as an unknown parameter and the diagnostic names `in_axes` -- an axis the transform cannot honour is not one a call can quietly ask for."
 kind = "negative"
 case = "../../../cases/modules/autodiff/jax_names/vmap_in_axes.cml"
 args = ["${case}"]

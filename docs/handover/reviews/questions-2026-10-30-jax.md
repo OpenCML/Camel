@@ -221,3 +221,15 @@ J1（`argnums`/`has_aux`）、J3（`jvp` 变换 + 命名空间）、J4（`vjp` �
 4. **重算换内存的变换叫 `checkpoint` 还是 `remat`？** `ckpt` 的说明里"checkpoint"是持久化。我倾向 `remat`：JAX 的别名、空着、不会让持久化的读者误会。
 5. **`vmap` 的签名做到哪一步？** 只批第一个参数的轴 0（`vmap(f)`），还是 `vmap(f, in_axes, out_axes)` 全做（含按维度名对齐，5.4 有维度名可用）？我倾向先做"一个参数、轴 0、`out_axes=0`"，与 `map` 的现有含义接上，再按维度名扩。
 6. **`with_grad` 要不要改名 `value_and_grad`？** 我倾向不改：原则 9.9 与库说明都用 `with_grad`，改名的收益只是与 JAX 同拼写。
+
+## 7. 返工（2026-10-30 07:30）：`vmap` 补了张量的前导轴
+
+作者在 `docs/handover/reviews/questions-2026-10-29.md` 末尾追加了一节：`8275d460d` 的 `vmap` 只接受 `T[]`，是把 `map` 换个名字；JAX 的 `vmap` 主要用在张量上（`f: f32[d] => U` 作用在 `f32[B, d]` 上，按轴 0 批）。裁定：`vmap(f)` 作用在 `T[B, ..]` 上、结果是 `U[B, ..]`，与 `T[]` 同一个名字、按参数类型分派；语义先按逐行应用实现（结果与将来的向量化相同），向量化留给第 6 条的批处理规则集；多参数与 `in_axes` 照旧排在后面。
+
+落地是一处语言原语加一条声明：
+
+- `types` 新增编译器提供的类型函数 `RowsOf<T>`：第一维元素为 `T` 的数组类型（`RowsOf<f32[3]>` 是 `f32[?, 3]`，`RowsOf<f32>` 是 `f32[?]`），是 `ArrayType::firstDimensionElement()` 的反函数——`x[i]` 与 `for x in xs` 取的正是它说出的那一维（设计原则 5.4）。声明写不出的签名靠类型函数算出，这是设计原则 10.4／21 的那条路。
+- 于是 `vmap` 只有一条声明 `vmap::<T, U>(f: (row: T) => U): (xs: RowsOf<T>) => U[]`，秩 1 批元素、秩 2 批行、秩 3 批整块：`range(0, len(xs), 1)->map<(i: int): U => f(xs[i])>`，逐行应用，与将来的向量化结果相同。
+- 用例多了一条：`batching.tensor`（`jax_vmap_tensor.cml`，`vmap((r: f32[3]) => sum(r * r))` 在 `f32[4, 3]` 上是 `[14.0, 77.0, 194.0, 3.0]`），五后端。A/B：把声明改回 `(xs: T[]) => xs->map<f>`，恰好这五条红、其余全绿。
+- 本页第 30 行（J7「没有；最近的是 `map`」）与第 95 行（「批的是它唯一那一维」）记的是返工之前的状态，保留作对照；多参数与 `in_axes` 仍是待做项，两处拒绝用例没变。
+- 没做：`in_axes`、第二个批处理参数、按维度名对齐。多参数今天拒绝在类型层（`GenericArgumentsMismatch` 点名实参的两个参数与被调的 `f: (row: T) => U`），**没有**「不支持」字样；要诊断原样说出「多个批处理参数」，需要 `vmap` 自己的解析器（`grad` 那一套 computed signature，`ParamArgumentUnknown`/专用诊断都在 C++ 里），这一批没做。
