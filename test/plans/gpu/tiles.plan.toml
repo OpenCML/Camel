@@ -1240,6 +1240,24 @@ assert(report.device_work.kernels >= 1, JSON.stringify(report.device_work))
 timeout_ms = 60000
 
 [[tests]]
+name = "scope.one_compilation_for_two_calls"
+kind = "behavior"
+desc = "The unit of device compilation is the scope, not the call: the same `#gpu` function called twice launches twice the work and compiles nothing more."
+tool = "node"
+case = "../../cases/modules/tiles/scope_reuse.mjs"
+# Both readings come from `std::profile json=` of one program run twice (once called, twice
+# called), so the assertion is a relation and not an absolute number: an artifact that is not
+# stored makes the second run compile twice as much.
+args = ["${case}", "--camel", "${camel}"]
+cuda_free_device = true
+# A host with no card at all is not a busy host (docs/test-plans.md, "A card that is not device 0"):
+# the runner hands out nothing there, so this case says for itself that it needs one.
+skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
+expect_exit = 0
+expect_stdout_contains = ["scope reuse:"]
+timeout_ms = 120000
+
+[[tests]]
 name = "nofallback.operator_without_a_program_is_a_compile_error"
 kind = "negative"
 case = "../../cases/gpu/nofallback/refused_operator.cml"
