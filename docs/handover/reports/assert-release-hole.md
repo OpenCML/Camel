@@ -1,6 +1,12 @@
 # `ASSERT` 在 release 里被编掉：这个洞有多大
 
 > **`ASSERT` 是开发期的记录，不是运行期的守卫；凡是"若它不成立，程序会做危险的事"的地方，都必须是 release 里也活的检查。**
+>
+> **任何小于 2% 的耗时结论，只有两棵树的二进制在同一时间窗口内背靠背测量才算数——这台机器几分钟内的漂移就有 ~10%。**
+>
+> **读数落在哪个站点，本身就是注入是否正确的一种检测手段。**
+>
+> **`ASSERT` 的三种命运：崩溃（该留）、静默错（该留）、记录（可留可不留）——分不清这三种，就会把该留的删掉、把该留的留成空语句。**
 
 昨晚 `Variant::updateRefs` 撞坏指针，进程 `exit 139`，而它前面的 `ASSERT` 在 `NDEBUG` 下是 `((void)0)` —— 现场一声不响。`rank` 车道已经把那一处改成 release 里也活的断言（`abort` 带读数，`exit 134`）。这一页把整仓的洞量清楚，只出读数与清单，不给修法。
 
@@ -23,6 +29,12 @@
 | `test` | 1 |
 
 **② 其中被当作守卫用的：726 / 1224（59%）**
+
+> **进度条（第一批后）**：`ASSERT` 站点 1224 → **1216**，`GUARD` 站点 0 → **8**，release 里会说话的 212 → **220**。
+>
+> **进度条（第二批后）**：`ASSERT` 站点 1216 → **1205**，`GUARD` 站点 8 → **19**，release 里会说话的 220 → **231**。
+>
+> **进度条（第三批后）**：`ASSERT` 站点 1205 → **1199**，`GUARD` 站点 19 → **25**，release 里会说话的 231 → **237**。
 
 判据（可复算）：断言之后 3 行内出现解引用、下标、`reinterpret_cast`、`payloadAs`、`std::get`、`.value(` 或 `.at(` —— 即断言之后的代码**假设它成立**。这是上界：纯"记录意图"的断言（如"这个分支不该到达"）在这个窗口里没有这些形状，会被排除；但仍有少量被算进来的只是恰好近邻。最危险的 10 处是逐条读过上下文的，见下。
 
@@ -74,3 +86,22 @@ Camel Invariant Violation:
 ## 这一笔的范围
 
 纯读数：不构建、不跑计划、不修任何一处。修法另派（"先让读数给出名字"）。
+## 附：`variant.h:47` 的 A/B（第四批补）
+
+`type Shape = enum { Circle(float), Rect { w: float, h: float }, Empty }`，`match s { case Shape::Rect { w, h } => w * h }` 读一次 `Rect` 的两个字段；在 `Variant::get` 入口注入 `index = fieldCount_`（提交前已还原）：
+
+```
+Camel Invariant Violation:
+    Location   : ../include/camel/core/rtdata/variant.h(53)
+    Function   : slot_t camel::core::rtdata::Variant::get(size_t) const
+    Guarantee  : index < fieldCount_
+    Reading    : reading field 2 of a Variant whose tag 1 declares 2 field(s), so the read is past its last one
+```
+
+去掉注入后同一程序正常输出 `6.0`。
+
+## 图不变量的 `ASSERT`：规模与分层（读数）
+
+`src/runtime/draft*.cpp`、`graph*.cpp`、`src/compile/gir/` 三处共 **174** 处 `ASSERT`：runtime 半边 **56**、gir 半边 **118**；runtime 半边已有 **4** 处 `GUARD`（第三批）。
+
+三类分法（崩溃 / 静默错 / 记录）对 174 处的逐条判定**尚未做完**——本轮只做到抽样：runtime 半边逐条看过 12 处（全部该留，其中 4 处已改），gir 半边抽样 28 处（9 处该留、19 处只是记录）。全量需要下一轮，**不拿抽样去顶全量**。

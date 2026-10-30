@@ -89,6 +89,9 @@ inline AssertHandlerFn get_assert_handler() { return get_assert_handler_ref(); }
 ///
 /// Use it where `ASSERT` would be lying about being a guard; write `reading` so that the line says
 /// which value crossed which bound.
+///
+/// Its report is headed `Camel Invariant Violation` rather than `Debug Assertion`: this check is
+/// alive in the build that ships, so its heading must not read like a build-time reminder.
 #define GUARD(condition, reading)                                                                  \
     do {                                                                                           \
         if (CAMEL_UNLIKELY(!(condition))) {                                                        \

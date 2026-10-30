@@ -20,6 +20,7 @@
 
 #include <cstdint>
 #include <new>
+#include <string>
 
 namespace camel::core::rtdata {
 
@@ -44,11 +45,19 @@ class Variant : public Object {
     size_t fieldCount() const { return fieldCount_; }
 
     slot_t get(size_t index) const {
-        ASSERT(index < fieldCount_, "Variant field index out of range");
+        GUARD(
+            index < fieldCount_,
+            std::string("reading field ") + std::to_string(index) + " of a Variant whose tag " +
+                std::to_string(tag_) + " declares " + std::to_string(fieldCount_) +
+                " field(s), so the read is past its last one");
         return data_[index];
     }
     void set(size_t index, slot_t value) {
-        ASSERT(index < fieldCount_, "Variant field index out of range");
+        GUARD(
+            index < fieldCount_,
+            std::string("writing field ") + std::to_string(index) + " of a Variant whose tag " +
+                std::to_string(tag_) + " declares " + std::to_string(fieldCount_) +
+                " field(s), so the write is past its last one");
         data_[index] = value;
     }
     slot_t *data() { return data_; }
