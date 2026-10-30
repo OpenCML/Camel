@@ -54,7 +54,13 @@ b1 的 −2 是从哪掉的：`src/compile/gir/draft_graph_builder.cpp` 的 `mak
 
 | b2.3b | `specializeDirectFuncInDraft` 收 `GraphTransaction&`；`engine.cpp:901` 拆成 `auto &transaction = session.edit(g); auto &draft = transaction.edit();` 一次（内联引擎从此手里有事务）；**`inlineCallableInDraft`／`inlineCallInOrder`／`expandDefinition` 没能进来**：它们的另一个调用点在 `modules/autodiff/pullback.cpp:1421/1426`，那里只有 `draft_`、拿不到事务，所以整条链随 **b3** 一起换——硬塞就得在 b3 之前给自动微分造事务，那正是 b3 的题目 | 80 / 657 | 8 | 15 |
 
-| b2.4a | `passes/test/control.cpp` 的 15 处 `GraphDraft draft;` 换成真事务：`auto owner = GraphTransaction::open(static_cast<GraphId>(1)); auto &draft = owner->edit();`（既有 public 入口，无新构造路径，事务活过整个测试函数）。**它能单独编译通过，所以不挂在 b2.3e 上**；剩下的 `node(GraphDraft &draft, …)` 这个局部助手随 b5 | 80 / 642 | 8 | 15 |
+| b2.4a（测试体） | `passes/test/control.cpp` 的 15 处 `GraphDraft draft;` 换成真事务：`auto owner = GraphTransaction::open(static_cast<GraphId>(1)); auto &draft = owner->edit();`（既有 public 入口，无新构造路径，事务活过整个测试函数）。**它能单独编译通过，所以不挂在 b2.3e 上**；剩下的 `node(GraphDraft &draft, …)` 这个局部助手随 b5 | 80 / 642 | 8 | 15 |
+
+| b2.4a（建图器签名） | 十个读图的助手从收 `const GraphDraft&` 改成收 `const GraphTransaction&`，体首一行 `const auto &draft = transaction.graph();`：`builder.h` 的六个声明（`moduleVariableOf`、`numberBodyPorts`、`readCalleeSignature`、`reachOfOper`、`reachOfFunc`、`reachOfCall`）＋ `builder_resources.cpp` 的定义，加 `builder.cpp` 的两个顺序边助手与 `builder_linearity.cpp` 的 `controlRegionsAround`、`readsNode`。**每个调用点单独定来源，不是实参改名**：`footprintOf` 绑一次 `graph->transaction()` 走到底；`reachOfOper`／`reachOfFunc` 保留建图器（它们要 `operTarget`／`funcTarget`）另收事务；`rehomeOrderEdges`、`controlRegionsAround`、`readsNode` 手里只有建图器，传 `graph->transaction()`。`builder.h` 从此不再点 `GraphDraft` 的名 | 79 / 625 | 8 | 15 |
+
+| b2.4b（事实表按属主） | 两张表改存属主：`builder_linearity.cpp` 的 `GraphFacts::draft`（`const GraphDraft *`）与 `builder_diagnostics.cpp` 的 `unordered_map<GraphDraft *, bool>` 都改成 `GraphTransaction *`，读图处写 `facts[graph].transaction->graph()`；新增与 `nodeDraftOf` 对称的 `nodeTransactionOf(node)`（`builder_support.h`），于是"这个值是不是本图"从比存储地址改成比属主（`nodeTransactionOf(value) != known->second.transaction`）——b6 没有 `GraphDraft` 之后这个比较仍成立。剩下 31 处 `= X->draft()` 局部绑定（32 处里 `footprintOf` 那处随 b2.4a 已走）改成 `= X->transaction().edit()`／`= X->transaction().graph()`（只读的取 `.graph()`），不再点类型名；`builder_control.cpp`、`builder_helpers.h`、`builder_operators.cpp`、`builder_static.cpp`、`tree.cpp`、`reachable.cpp`、`debug_json.cpp` 里的这个名字一起消失 | 75 / 594 | 8 | 15 |
+
+命名说明：上面那行 `b2.4a（测试体）` 是本页早先写的（`control.cpp` 那 15 处），协调者后来把这一步拆成"建图器签名"和"事实表"两笔并沿用 b2.4a／b2.4b 两个字母，所以本页有两处 b2.4a；括号里的名字才是区分。
 
 ## 2. 那一处生死线：`edit()` 只能给引用
 

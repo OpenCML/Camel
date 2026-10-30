@@ -624,7 +624,7 @@ void Builder::orderEffectsOnOneResourceIn(DraftGraphBuilder *graph) {
     if (graph == nullptr || graph->funcType() == nullptr) {
         return;
     }
-    const runtime::GraphDraft &draft = graph->draft();
+    const auto &draft = graph->transaction().graph();
     // The block an effect is written in decides which effects it is ordered with: an arm and a
     // part of a loop separate blocks, and the regions that only annotate where a node came from
     // are looked through (the notion the seal check and the layout use).

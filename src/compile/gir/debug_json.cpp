@@ -127,7 +127,7 @@ json nodeToJson(const DraftGraphBuilder *graph, draft_node_ref_t nodeId) {
         j["operName"] = graph->operTarget(node)->name();
     }
     if (header && header->kind == GCNodeKind::Loop) {
-        const auto &draft = graph->draft();
+        const auto &draft = graph->transaction().graph();
         if (const uint32_t cond = draft.loopRegionOf(nodeId, camel::runtime::GCRegionKind::LoopCond); cond != 0) {
             j["loopCondRegion"] = cond;
         }

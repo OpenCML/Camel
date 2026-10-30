@@ -37,7 +37,6 @@ using camel::core::type::Type;
 using camel::core::type::TypeCode;
 using camel::runtime::GCRegion;
 using camel::runtime::GCRegionKind;
-using camel::runtime::GraphDraft;
 
 /// Whether a value of this type is read once on each path: a stream is, and so is the step
 /// function of a stream -- a function taking nothing whose answer carries one, because that is how
@@ -181,9 +180,10 @@ void Builder::settleStreamLinearity() {
         DraftGraphBuilder *graph = nullptr;
         draft_node_ref_t node    = 0;
     };
-    // What the pass needs of a graph: its draft and its loops (the node a round region belongs to).
+    // What the pass needs of a graph: the transaction that owns it and its loops (the node a round
+    // region belongs to).
     struct GraphFacts {
-        const GraphDraft *draft = nullptr;
+        const runtime::GraphTransaction *transaction = nullptr;
         std::vector<draft_node_ref_t> loops;
     };
     std::unordered_map<DraftGraphBuilder *, GraphFacts> facts;
@@ -210,9 +210,10 @@ void Builder::settleStreamLinearity() {
                 !judged.insert(graph.get()).second) {
                 continue;
             }
-            const GraphDraft &draft = graph->draft();
-            GraphFacts &known       = facts[graph.get()];
-            known.draft             = &draft;
+            const runtime::GraphTransaction &transaction = graph->transaction();
+            const auto &draft                            = transaction.graph();
+            GraphFacts &known                            = facts[graph.get()];
+            known.transaction                            = &transaction;
             for (uint32_t at = 1; at < static_cast<uint32_t>(draft.regionCount()); ++at) {
                 const GCRegion &region = draft.region(at);
                 if (region.kind == GCRegionKind::LoopCond || region.kind == GCRegionKind::LoopBody) {
@@ -292,8 +293,8 @@ void Builder::settleStreamLinearity() {
         if (known == facts.end()) {
             return false;
         }
-        const GraphDraft &draft = *known->second.draft;
-        const size_t slots      = draft.nodeSlotCount();
+        const auto &draft  = known->second.transaction->graph();
+        const size_t slots = draft.nodeSlotCount();
         for (draft_node_ref_t id = 0; id < slots; ++id) {
             if (!draft.alive(id) || !readsNode(violation.graph->transaction(), id, violation.port)) {
                 continue;
@@ -333,8 +334,8 @@ void Builder::settleStreamLinearity() {
         std::vector<std::pair<DraftGraphBuilder *, draft_node_ref_t>> carriers;
         for (const auto &[builder, known] : facts) {
             for (draft_node_ref_t loop : known.loops) {
-                for (draft_node_ref_t state : known.draft->normInputsOf(loop)) {
-                    if (findRoot(known.draft->ref(state)) == identity) {
+                for (draft_node_ref_t state : known.transaction->graph().normInputsOf(loop)) {
+                    if (findRoot(known.transaction->graph().ref(state)) == identity) {
                         carriers.emplace_back(builder, loop);
                         break;
                     }
@@ -347,7 +348,7 @@ void Builder::settleStreamLinearity() {
         consumers.reserve(list.size());
         for (const Reader &reader : list) {
             const GraphFacts &known = facts[reader.graph];
-            const GraphDraft &draft = *known.draft;
+            const auto &draft = known.transaction->graph();
             const auto around =
                 controlRegionsAround(reader.graph->transaction(), draft.nodeRegion(reader.node));
             steps.push_back(around);
@@ -411,7 +412,8 @@ void Builder::settleStreamLinearity() {
                 if (readerType != nullptr) {
                     const std::string readerTypeText = readerType->toString();
                     for (const auto &[builder, loop] : carriers) {
-                        Type *loopType = nodeTypeOf(facts[builder].draft->ref(loop));
+                        const auto &loopDraft = facts[builder].transaction->graph();
+                        Type *loopType        = nodeTypeOf(loopDraft.ref(loop));
                         if (loopType != nullptr && loopType->toString() == readerTypeText) {
                             consumers.emplace_back(builder, loop);
                             consumed = true;
@@ -462,14 +464,14 @@ void Builder::settleStreamLinearity() {
         // report points at the value's own read outside it when that is where the mistake is.
         const auto reportedOrigin = [&](size_t at) {
             const Reader &reader = list[at];
-            const GraphDraft &draft = *facts[reader.graph].draft;
+            const auto &draft = facts[reader.graph].transaction->graph();
             const auto origin = draft.nodeOrigin(reader.node);
             if (origin != 0) {
                 return origin;
             }
             for (size_t other = 0; other < list.size(); ++other) {
-                const GraphDraft &otherDraft = *facts[list[other].graph].draft;
-                const auto otherOrigin       = otherDraft.nodeOrigin(list[other].node);
+                const auto &otherDraft = facts[list[other].graph].transaction->graph();
+                const auto otherOrigin = otherDraft.nodeOrigin(list[other].node);
                 if (otherOrigin != 0) {
                     return otherOrigin;
                 }
@@ -503,15 +505,15 @@ void Builder::settleStreamLinearity() {
             if (value == nullptr || known == facts.end()) {
                 return false;
             }
-            const GraphDraft *draft = known->second.draft;
+            const auto &draft = known->second.transaction->graph();
             // A region id says nothing across graphs: the value must be a node of this one.
-            if (nodeDraftOf(value) != draft) {
+            if (nodeTransactionOf(value) != known->second.transaction) {
                 return false;
             }
-            uint32_t at            = static_cast<uint32_t>(draft->nodeRegion(nodeIdOf(value)));
-            const uint32_t regions = static_cast<uint32_t>(draft->regionCount());
+            uint32_t at            = static_cast<uint32_t>(draft.nodeRegion(nodeIdOf(value)));
+            const uint32_t regions = static_cast<uint32_t>(draft.regionCount());
             for (uint32_t seen = 0; at != 0 && at < regions && seen < 64; ++seen) {
-                const GCRegion &region = draft->region(at);
+                const GCRegion &region = draft.region(at);
                 if ((region.kind == GCRegionKind::LoopCond ||
                      region.kind == GCRegionKind::LoopBody) &&
                     region.owner == step.owner) {
@@ -527,9 +529,9 @@ void Builder::settleStreamLinearity() {
                 if (!step.round) {
                     continue;
                 }
-                const GraphDraft &draft = *facts[list[i].graph].draft;
-                const auto ports        = draft.regionPortsOf(step.region);
-                const auto carried      = std::find_if(
+                const auto &draft  = facts[list[i].graph].transaction->graph();
+                const auto ports   = draft.regionPortsOf(step.region);
+                const auto carried = std::find_if(
                     ports.begin(), ports.end(), [&](draft_node_ref_t port) {
                         return findRoot(draft.ref(port)) == identity;
                     });

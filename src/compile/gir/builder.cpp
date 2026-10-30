@@ -243,7 +243,7 @@ bool orderEndsOnOneRegion(
 
 void Builder::rehomeOrderEdges(const compile_graph_ptr_t &graph) {
     ASSERT(graph != nullptr, "A built body is a graph.");
-    runtime::GraphDraft &draft = graph->draft();
+    auto &draft = graph->transaction().edit();
     // Most bodies order nothing: their effects are on the sync chain, and a body of pure
     // computation writes no order edge at all.
     bool ordersAnything = false;
@@ -1428,7 +1428,7 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
             }
         }
     } regionScope;
-    regionScope.draft = &currGraph_->draft();
+    regionScope.draft = &currGraph_->transaction().edit();
     regionScope.outer = regionScope.draft->insertRegion();
     if (blockTags.nodes != camel::core::attr::kNoAttrs && gct != functionBody_) {
         const uint32_t block = regionScope.draft->addRegion(

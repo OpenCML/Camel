@@ -155,7 +155,7 @@ inline camel::core::mm::IAllocator &staticFunctionAllocator(const compile_graph_
 
 inline TupleType *currentClosureTupleType(const compile_graph_ptr_t &graph) {
     type_vec_t closureTypes;
-    auto &draft = graph->draft();
+    auto &draft = graph->transaction().edit();
     closureTypes.reserve(draft.closureNodes().size());
     for (draft_node_ref_t nodeId : draft.closureNodes()) {
         const auto *header = draft.header(nodeId);
