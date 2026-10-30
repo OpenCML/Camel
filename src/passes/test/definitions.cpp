@@ -156,11 +156,11 @@ ExpandDefinitionsTestPass::apply(const camel::runtime::Program *program, std::os
         if (nodes.empty()) {
             continue;
         }
-        auto &draft = session.edit(g).edit();
+        auto &transaction = session.edit(g);
         for (rt::gc_node_ref_t ref : nodes) {
             const std::string uri(g->nodeBodyAs<rt::GCOperBody>(ref)->uri());
-            const rt::ExpandResult result =
-                rt::expandDefinition(session, draft, draft.draftIdOfSourceRef(ref));
+            const rt::ExpandResult result = rt::expandDefinition(
+                session, transaction, transaction.edit().draftIdOfSourceRef(ref));
             if (result) {
                 ++expanded[uri];
             } else {

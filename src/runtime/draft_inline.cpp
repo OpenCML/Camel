@@ -1439,8 +1439,9 @@ void addSpliceOrderEdges(
 } // namespace
 
 bool devirtualizeStaticCallInDraft(
-    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId,
+    RuntimeGraphDraftSession &session, GraphTransaction &transaction, gc_node_ref_t callNodeId,
     bool unwrapGatedCallee) {
+    auto &draft                       = transaction.edit();
     const DraftNodeHeader *callHeader = draft.header(callNodeId);
     if (!callHeader || callHeader->kind != GCNodeKind::Call) {
         return false;
@@ -1657,7 +1658,9 @@ void resolvePlaceForks(GraphDraft &draft) {
 }
 
 DraftInlineResult inlineCallableInDraft(
-    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId, bool asArm) {
+    RuntimeGraphDraftSession &session, GraphTransaction &transaction, gc_node_ref_t funcNodeId,
+    bool asArm) {
+    auto &draft              = transaction.edit();
     DraftInlineResult result{.callNode = funcNodeId};
     CAMEL_LOG_INFO_S("DraftInline", "Inline splice begin for draft node {}.", funcNodeId);
     const DraftNodeHeader *funcHeader = draft.header(funcNodeId);

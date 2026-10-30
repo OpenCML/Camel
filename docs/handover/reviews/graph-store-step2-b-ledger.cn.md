@@ -62,6 +62,8 @@ b1 的 −2 是从哪掉的：`src/compile/gir/draft_graph_builder.cpp` 的 `mak
 
 | b3a（自动微分的图开在事务里） | `GraphDraftGroup::Member` 改持 `std::unique_ptr<GraphTransaction>`：`reserve` 用分配到的 id `open` 一份事务、`draft(id)` 回答 `transaction->edit()`、新增对称的 `transaction(id)`、`define` 收 `unique_ptr<GraphTransaction>`（定稿时把 id 与 program 盖上）、`encode` 从 `transaction->graph()` 取图。**这一处是从 b4 提前的**：`gradient()` 的最后一件事就是把图交给 group（`group_.define(key, …)`），`Member` 若留到 b4，b3 就只能在"交给 group"这道边界上退成收 `GraphDraft&`——正是这一步要消掉的第二入口，所以连带提前。自动微分自己造图的四处（`gradient` 的图、分支臂的 pullback、循环体的 pullback、循环的逆闭包）改成 `GraphTransaction::decode`／`GraphTransaction::open`，`Pending::source` 与 `planForDraft` 一并改事务；`buildReverseClosure` 从返回草稿改成在调用方开的事务里建（`open(closureKey)` 再 `define`）。**只读图的助手一个没动**，仍收事务发下来的 draft。臂的 pullback 在 reserve 之前就要开图，用 `open(kInvalidGraphId)`、id 由 `define` 盖上——`make_unique<GraphDraft>()` 今天本来就是这个状态 | 75 / 582 | 1 | 13 |
 
+| b3b（内联链收事务） | `ForwardRewrite` 手里从此有事务：新增 `rt::GraphTransaction &transaction_`，构造函数收事务、`draft_` 用 `transaction_.edit()` 初始化（成员版的"体首一行"），于是 `pullback.cpp` 里那两处内联调用（`devirtualizeStaticCallInDraft`、`inlineCallInOrder`）能把事务传下去——这是 b2.3b 记下的那个卡口。四个编辑别人图的助手改收事务、体首一行 `auto &draft = transaction.edit();`、函数体一字未改：`inlineCallableInDraft`、`devirtualizeStaticCallInDraft`（`draft_inline.h/.cpp`）、`inlineCallInOrder`（`opt/inline.h` ＋ `engine.cpp:1150`）、`expandDefinition`（`runtime/definitions.h/.cpp`，头文件补 `graph_txn.h`）。调用点逐个定来源：`engine.cpp:950/1084` 传 `:901` 那份事务、`:1238` 传本函数的、`definitions.cpp:575` 传本函数的、`passes/test/definitions.cpp:163` 从 `session.edit(g)` 取事务（`draft.draftIdOfSourceRef` → `transaction.edit().draftIdOfSourceRef`）。循环体的磁带计划也收事务：`loopBodyPlanFor`／`buildLoopBody` 改参数，缓存键从 `const GraphDraft *` 改成 `const GraphTransaction *`（按属主做键，与 b2.4b 同一理由） | 73 / 567 | 1 | 12 |
+
 命名说明：上面那行 `b2.4a（测试体）` 是本页早先写的（`control.cpp` 那 15 处），协调者后来把这一步拆成"建图器签名"和"事实表"两笔并沿用 b2.4a／b2.4b 两个字母，所以本页有两处 b2.4a；括号里的名字才是区分。
 
 ### 一处行序抖动：`test/cases/linear/byref/var_capture_reference.cml`
@@ -73,9 +75,8 @@ b2.4a／b2.4b 两笔扫下来是 3359 个 `.cml` 里 3358 个逐字节相同，�
 3359 个文件的退出码 0 处变化。所以这是这条用例自己的后继边打印序在抖，不是这一步改坏的。
 
 
-b3 的后半（`inlineCallableInDraft`／`inlineCallInOrder`／`devirtualizeStaticCallInDraft`／
-`expandDefinition` 收事务，连带 `opt/inline/engine.cpp` 的三处与 `passes/test/definitions.cpp`）
-要等 `ForwardRewrite` 手里有 `transaction_`，是紧接的下一笔；前半不给它造事务，后半无处可传。
+b3 的两笔是同一个目的的两半：前半给自动微分造事务（不然 `ForwardRewrite` 手里没有东西可传），
+后半把事务传进内联链（不然事务造了也只是躺着）。顺序不能反。
 
 ## 2. 那一处生死线：`edit()` 只能给引用
 

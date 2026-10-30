@@ -897,8 +897,11 @@ struct LoopBodyPlan {
 /// Rewrites a graph so that each differentiable call also returns its pullback.
 class ForwardRewrite {
   public:
-    ForwardRewrite(Engine &engine, GraphDraft &draft, const GraphScope &scope, uint32_t part = 0)
-        : engine_(engine), draft_(draft), scope_(scope), part_(part) {}
+    ForwardRewrite(
+        Engine &engine, rt::GraphTransaction &transaction, const GraphScope &scope,
+        uint32_t part = 0)
+        : engine_(engine), transaction_(transaction), draft_(transaction.edit()), scope_(scope),
+          part_(part) {}
 
     void run();
 
@@ -975,7 +978,8 @@ class ForwardRewrite {
     size_t retarget(gc_node_ref_t func, const PullbackPlan &plan);
 
     Engine &engine_;
-    GraphDraft &draft_;
+    rt::GraphTransaction &transaction_;
+    GraphDraft &draft_; // the graph the transaction hands out: what this rewrite edits
     const GraphScope &scope_;
     uint32_t part_;
     std::unordered_map<gc_node_ref_t, CallSite> sites_;
@@ -1290,7 +1294,7 @@ class Engine {
     /// `arrayGradient` says whether the reverse pass also carries the iterated array's gradient
     /// (so the body pullback takes the element as one more port).
     const LoopBodyPlan &loopBodyPlanFor(
-        GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, bool iterates,
+        rt::GraphTransaction &transaction, gc_node_ref_t loop, size_t stateCount, bool iterates,
         bool arrayGradient);
     /// The group of graphs this transformation adds to the program.
     rt::GraphDraftGroup &group() { return group_; }
@@ -1316,15 +1320,15 @@ class Engine {
     PullbackPlan reservePullback(const std::string &name, const PullbackPlan &types);
     void build(Pending &pending);
     LoopBodyPlan buildLoopBody(
-        GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, bool iterates,
+        rt::GraphTransaction &transaction, gc_node_ref_t loop, size_t stateCount, bool iterates,
         bool arrayGradient);
 
     camel::core::context::context_ptr_t context_;
     rt::GraphDraftGroup group_;
     std::unordered_map<GCGraph *, PullbackPlan> plans_;
     std::unordered_map<GCGraph *, PullbackPlan> closurePlans_;
-    std::map<std::pair<const GraphDraft *, gc_node_ref_t>, LoopBodyPlan> loopBodyPlans_;
-    std::set<std::pair<const GraphDraft *, gc_node_ref_t>> loopBodiesBeingBuilt_;
+    std::map<std::pair<const rt::GraphTransaction *, gc_node_ref_t>, LoopBodyPlan> loopBodyPlans_;
+    std::set<std::pair<const rt::GraphTransaction *, gc_node_ref_t>> loopBodiesBeingBuilt_;
     std::deque<Pending> pending_;
     rt::RuntimeGraphDraftSession inlining_;
     size_t followed_ = 0;
@@ -1418,12 +1422,12 @@ void ForwardRewrite::followFunctionValues() {
                 }
             };
             if (kind == GCNodeKind::Call &&
-                !rt::devirtualizeStaticCallInDraft(engine_.inlining(), draft_, id, true)) {
+                !rt::devirtualizeStaticCallInDraft(engine_.inlining(), transaction_, id, true)) {
                 restoreRegion();
                 left.insert(id);
                 continue;
             }
-            if (camel::passes::opt::inlineCallInOrder(engine_.inlining(), draft_, id)) {
+            if (camel::passes::opt::inlineCallInOrder(engine_.inlining(), transaction_, id)) {
                 changed = true;
                 for (GCGraph *arm : armGraphs()) {
                     if (!armsBefore.contains(arm)) {
@@ -2280,7 +2284,7 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     // before the tape, and are preserved here.
     const size_t existingCollections = view.collectionCount();
     const LoopBodyPlan &bodyPlan = engine_.loopBodyPlanFor(
-        draft_, loop, view.stateCount(), view.iterable().has_value(), carryArray);
+        transaction_, loop, view.stateCount(), view.iterable().has_value(), carryArray);
     const size_t k               = bodyPlan.stateTypes.size();
     const size_t m               = bodyPlan.captureTypes.size();
     // A state with no tangent whose next value depends on an active value loses that value's
@@ -2862,7 +2866,7 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
                 break;
             }
         }
-        arm.rewrite = std::make_unique<ForwardRewrite>(engine_, draft_, arm.scope, region);
+        arm.rewrite = std::make_unique<ForwardRewrite>(engine_, transaction_, arm.scope, region);
         arm.rewrite->run();
         // A recursive call found while this arm was rewritten names the function the arm is
         // inside of: a refusal in the arm then says the function is a parameter of it, rather
@@ -4392,7 +4396,7 @@ void Engine::build(Pending &pending) {
         // A call of the function from its own graph is its recursion: it is not followed.
         pending.scope.enclosing.insert(pending.graph);
     }
-    ForwardRewrite rewrite(*this, forward, pending.scope);
+    ForwardRewrite rewrite(*this, *pending.source, pending.scope);
     rewrite.run();
     // The rewrite may have found that the function calls itself (a call left as it is): the
     // refusals it records name the function as recursive.
@@ -4464,8 +4468,9 @@ void Engine::build(Pending &pending) {
 }
 
 const LoopBodyPlan &Engine::loopBodyPlanFor(
-    GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, bool iterates, bool arrayGradient) {
-    const auto key = std::make_pair(&draft, loop);
+    rt::GraphTransaction &transaction, gc_node_ref_t loop, size_t stateCount, bool iterates,
+    bool arrayGradient) {
+    const auto key = std::make_pair(&transaction, loop);
     if (auto it = loopBodyPlans_.find(key); it != loopBodyPlans_.end()) {
         ASSERT(
             it->second.stateTypes.size() == stateCount,
@@ -4480,7 +4485,7 @@ const LoopBodyPlan &Engine::loopBodyPlanFor(
             "a 'loop' whose body needs its own tape (a loop nested in the body of the same loop) "
             "cannot be differentiated");
     }
-    LoopBodyPlan plan = buildLoopBody(draft, loop, stateCount, iterates, arrayGradient);
+    LoopBodyPlan plan = buildLoopBody(transaction, loop, stateCount, iterates, arrayGradient);
     loopBodiesBeingBuilt_.erase(key);
     return loopBodyPlans_.emplace(key, std::move(plan)).first->second;
 }
@@ -4491,8 +4496,10 @@ const LoopBodyPlan &Engine::loopBodyPlanFor(
 // body, the pullback closure the round's call returned, which is a value like any other). They
 // are what the forward loop collects, so the tape is arrays of those types.
 LoopBodyPlan Engine::buildLoopBody(
-    GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, bool iterates, bool arrayGradient) {
+    rt::GraphTransaction &transaction, gc_node_ref_t loop, size_t stateCount, bool iterates,
+    bool arrayGradient) {
     LoopBodyPlan plan;
+    auto &draft                        = transaction.edit();
     const LoopDraftView view(*draft.program(), draft, loop);
     const uint32_t bodyRegion = view.bodyRegion();
     ASSERT(
@@ -4543,7 +4550,7 @@ LoopBodyPlan Engine::buildLoopBody(
     // The calls and the nested loops of the body are differentiated in place, in the body
     // region.
     const GraphScope scope{.role = GraphRole::LoopBody};
-    ForwardRewrite rewrite(*this, draft, scope, bodyRegion);
+    ForwardRewrite rewrite(*this, transaction, scope, bodyRegion);
     rewrite.run();
 
     // The body's result: the next state, followed by the collections the builder already gave
@@ -4714,7 +4721,7 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     const GraphScope scope{.role = GraphRole::Differentiated};
     auto transaction = rt::GraphTransaction::decode(inlining_.work(), function);
     auto &draft      = transaction->edit();
-    ForwardRewrite rewrite(*this, draft, scope);
+    ForwardRewrite rewrite(*this, *transaction, scope);
     rewrite.run();
     const gc_node_ref_t value = valueNode(draft);
     const auto edges         = siteEdges(rewrite.sites());

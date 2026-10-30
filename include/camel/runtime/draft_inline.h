@@ -30,7 +30,8 @@ struct DraftInlineResult {
 /// becomes the Arm region of that arm (an arm index of the BRCH that orders the call), not an Inline
 /// region.
 DraftInlineResult inlineCallableInDraft(
-    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId, bool asArm = false);
+    RuntimeGraphDraftSession &session, GraphTransaction &transaction, gc_node_ref_t funcNodeId,
+    bool asArm = false);
 /// Runaway guard on the type-only specializations of one recursive function that a program may
 /// hold.
 ///
@@ -60,7 +61,7 @@ bool specializeDirectFuncInDraft(
 /// callee hidden behind gates (sync code gates a callee after the previous statement) is seen
 /// through; the FUNC keeps the gate as a control input, so ordering is preserved.
 bool devirtualizeStaticCallInDraft(
-    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId,
+    RuntimeGraphDraftSession &session, GraphTransaction &transaction, gc_node_ref_t callNodeId,
     bool unwrapGatedCallee = false);
 
 /// The node whose value `id` reads when `id` projects an element out of a tuple built by FILL

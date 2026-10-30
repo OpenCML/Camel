@@ -949,7 +949,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                     // sibling JOINs such a rewrite would add are not executable.
                     if (camel::runtime::devirtualizeStaticCallInDraft(
                             session,
-                            draft,
+                            transaction,
                             callNodeId)) {
                         changed        = true;
                         roundChanged   = true;
@@ -1081,7 +1081,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                     continue;
                 }
                 const size_t copied = inlinedNodeCount(draft.calleeGraphOf(funcNodeId));
-                if (!camel::passes::opt::inlineCallInOrder(session, draft, funcNodeId)) {
+                if (!camel::passes::opt::inlineCallInOrder(session, transaction, funcNodeId)) {
                     continue;
                 }
                 growthSpent += copied;
@@ -1148,8 +1148,9 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
 namespace camel::passes::opt {
 
 camel::runtime::DraftInlineResult inlineCallInOrder(
-    camel::runtime::RuntimeGraphDraftSession &session, camel::runtime::GraphDraft &draft,
-    gc_node_ref_t funcNodeId, bool asArm) {
+    camel::runtime::RuntimeGraphDraftSession &session,
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t funcNodeId, bool asArm) {
+    auto &draft        = transaction.edit();
     const auto *header = draft.header(funcNodeId);
     if (!header || header->kind != GCNodeKind::Func) {
         return {};
@@ -1235,7 +1236,8 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
             joinArms.emplace_back(user, std::move(arms));
         }
     }
-    const auto inlineResult = camel::runtime::inlineCallableInDraft(session, draft, funcNodeId, asArm);
+    const auto inlineResult =
+        camel::runtime::inlineCallableInDraft(session, transaction, funcNodeId, asArm);
     if (!inlineResult) {
         return inlineResult;
     }
