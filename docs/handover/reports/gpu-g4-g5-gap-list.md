@@ -89,4 +89,8 @@ C2：面内 21 = 有实现 8（`tensor:abs`、`tensor:add`、`tensor:matmul`、`
 按归约校验，于是判成不支持。这一笔把它分成两条：`Unique` 写按视图地址校验，其余按归约契约校验
 （`modules/tiles/src/graph_regions.cpp#eligibility`）。读数是 `test/plans/feat/modules/tiles.plan.toml#gpu_scope.macro_expansion_publishes_the_derived_graph`
 从"拒绝这个 scope"变成"接受、且 scope 里算出的值与它的主机孪生一致（`moved 0.0`、`wrong 0.0`）"——这条
-计划条目原来把拒绝当成事实记着，事实变了，条目也一起改了（`negative` → `behavior`）。
+计划条目原来把拒绝当成事实记着，**事实变了，所以断言跟着变**：它的 `desc` 原文写的是"refused for a tensor
+operator of the backward pass (`broadcast_like`, which the device back end does not lower)"，而今天
+`broadcast_like` 在设备侧 lower 了，于是条目由 `negative` 改成 `behavior`，断言从"必须报
+`GpuScopeUnsupported`"改成"必须接受、placement 仍是 `gpu-required`、两条读数都是 0"。这是**账被改对**，
+不是红变绿：拒绝的理由消失了，值的一致性多了一条读数。
