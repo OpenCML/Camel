@@ -449,6 +449,29 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                 ++plan.values;
                 continue;
             }
+            // A function the program names as a value is a `FUNC` node: it calls nothing, it *is*
+            // the value. Without captures it is the function itself, which is one of the variants;
+            // with captures there is nothing here to carry them, and that is another shape (a
+            // closure written as a direct reference), not this pass's to guess at.
+            if (node.kind == GCNodeKind::Func) {
+                const GCGraph *target = program->calleeOf(*graph, it.ref());
+                if (target == nullptr) {
+                    refuseIfUnsaid(
+                        plan, "a value holds a function the program does not have");
+                    continue;
+                }
+                if (!target->closureNodes().empty()) {
+                    refuseIfUnsaid(
+                        plan, "unresolved capture, not this pass's shape: the value is a direct "
+                              "reference to a function that captures");
+                    continue;
+                }
+                variantOf(plan, *target);
+                valueRefs[toValue(graph->id())].insert(it.ref());
+                fillRefs[toValue(graph->id())].insert(it.ref()); // rewritten as a Fill of the tag
+                ++plan.values;
+                continue;
+            }
             refuseIfUnsaid(plan, "a value is not a plain reference to a function");
         }
     }
@@ -779,6 +802,11 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
     // Until that lowering is written, such a family is refused rather than half lowered. This is the
     // second half of the same defect, not an allowance: the pass leaves a family as written here
     // only while the nested lowering does not exist.
+    //
+    // `tee_result_is_tuple.cml` does not reach this rule today: its inner family is refused first,
+    // because a stream operator reads the function value inside the operator rather than calling it
+    // where this pass can see the call. That belongs to the operator-dispatch side (`map` is the
+    // same shape), not to this pass.
     for (bool changed = true; changed;) {
         changed = false;
         for (Family &family : families) {
@@ -1048,13 +1076,23 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                         }
                     }
                 } else {
-                    const GCNode *plain   = graph->node(ref);
-                    ::Function *function = plain != nullptr ? staticFunctionOf(*graph, *plain)
-                                                            : nullptr;
-                    if (function == nullptr) {
-                        continue;
+                    const GCNode *plain = graph->node(ref);
+                    // A function the program names as a value: the node *is* the value, and its
+                    // graph is the variant. It has no captures, so nothing is taken from the node.
+                    if (plain != nullptr && plain->kind == GCNodeKind::Func) {
+                        const GCGraph *named = program->calleeOf(*graph, ref);
+                        if (named == nullptr) {
+                            continue;
+                        }
+                        variant = named->id();
+                    } else {
+                        ::Function *function = plain != nullptr ? staticFunctionOf(*graph, *plain)
+                                                                : nullptr;
+                        if (function == nullptr) {
+                            continue;
+                        }
+                        variant = function->graph()->id();
                     }
-                    variant = function->graph()->id();
                 }
                 const DraftNodeHeader *header = draft.header(id);
                 const Family *owner           = familyAt(header->dataType);
