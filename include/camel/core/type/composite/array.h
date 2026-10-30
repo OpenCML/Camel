@@ -138,6 +138,17 @@ class ArrayType : public CompositeType {
     /// True when the rank is open (`T[..]`, `T[3, ..rest]`).
     bool anyRank() const { return anyRank_; }
 
+    /// What a value of this type is at rank zero: the element type, for an open rank with no
+    /// prefix (`T[..]` includes rank 0, and a rank-zero array is that element, design principles
+    /// 5.4). nullptr for every other shape -- `T[]` and `T[?]` state one dimension, and
+    /// `T[3, ..]` needs at least the dimensions its prefix states. A rank-zero array is not a
+    /// separate type (the design says so), so this is not a new type: it is the type the value of
+    /// that rank has, and the type a value must have to enter `T[..]` at that rank.
+    Type *rankZeroType() const {
+        return anyRank_ && extents_.empty() && elemTypeCode_ != TypeCode::Void ? elemType_
+                                                                              : nullptr;
+    }
+
     /// This type with another element type, shape and flags unchanged.
     ArrayType *withElementType(Type *elemType) const;
 

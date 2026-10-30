@@ -1,0 +1,18 @@
+// The ranks a position written `f32[..]` takes: every rank, the zero rank included, because rank
+// zero is the element itself (design principles 5.4). A value of type `f32` is that element, so it
+// enters the position as itself; a rank-1 and a rank-2 array enter as the arrays they are. The
+// same value does not enter `f32[]`, which states one dimension (`rank_one_refuses_element.cml`).
+
+func rank(v: f32[..]): int {
+    return 1
+}
+
+func main(): int sync {
+    let scalar: f32 = 2.5
+    println(rank(scalar))
+    let row: f32[3] = [1.0, 2.0, 3.0]
+    println(rank(row))
+    let grid = [[1.0, 2.0], [3.0, 4.0]] as f32[2, 2]
+    println(rank(grid))
+    return 0
+}
