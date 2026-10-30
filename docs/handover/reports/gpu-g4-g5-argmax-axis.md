@@ -1,5 +1,17 @@
 # `argmax_axis` 进表之前：一页纸
 
+## 零、先说三件已经付出过代价的事（先读这里）
+
+1. **同一个谎有两个入口。** `schedule.cpp#bytes` 曾经"f64 八字节，其余四字节"，`graph_regions.cpp`
+   的 `candidate.dtype` 曾经"非 f64 一律 F32"——两处都会把八字节的下标按四字节写／读，而数字看起来都对。
+   加元素类型时，**宽度表和 dtype 映射两处都要查**；只改一处，另一处会安静地把下标读成半个。
+2. **`tiles::source` 不能用来读 i64 结果的核**：它的签名是 `NumericAggregate → string`，i64 结果实测
+   `NoMatchingFunction`。要读核源码，走 `tiles::compile` + 计划级读数，别在这条死路上再试一次。
+3. **进表之前先确认节点携带的 URI，不要按前缀推断。** `argmax` 由 `stdlib/array.cml` 的
+   `#op('array:argmax_axis')` 声明，图里的节点是 **`array:argmax_axis`**；表里其余名字都走 `tensor:`
+   前缀，这一条不走。按前缀写表项会得到一个**没人携带的名字**，作用域照旧被拒（实测：
+   `TILES_REGION_REASON array:argmax_axis unsupported_operator`，表里写的 `tensor:argmax_axis` 完全没被查到）。
+
 这是 A 组最后一条（`tensor:argmax_axis`）的前置笔记，**只写判断，不写代码**。理由：它要动的是
 类型系统与归约契约，不是设备程序；先有一页纸，才有一笔代码。这一条今天**不在**
 `modules/tiles/src/graph_regions.cpp#operations` 表里，缺口账本
@@ -237,3 +249,28 @@ tiles position reduction: an argmax plan keeps the value and stores the loop ind
   `softmax_cross_entropy_labels_grad`、`argmax_axis`、`cast_like`、`gt`、`matmul_grad_lhs`、
   `matmul_grad_rhs`、`numel`、`shape`、`strict_eq`、`take`）。其中 12 条是 B 组（等作者的语义声明那页），
   `argmax_axis` 是本文这一条。
+## 六、两个探针，和"声明缺失"的四格读数
+
+**探针是通用件，不专属 argmax**（`region_test_pass.cpp`，由 `CAMEL_TILES_TEST_REASONS=1` 打开）：
+
+```
+TILES_REGION_REASON <uri> <reason>            # 该节点为什么不在任何区域里；eligible 表示进了区域
+TILES_OPERATOR_DECLARATION <uri> <declared|undeclared> major=<n>
+```
+
+任何"算子进不了区域"的问题，这两行都能直接回答"谁、为什么"，不必再读分析代码。
+
+**四格读数**（同一个作用域，`--devices cpu`）：
+
+| URI | 声明 | `major` |
+| --- | --- | --- |
+| `array:argmax_axis`（图里真正携带的那个） | **undeclared** | **-1** |
+| `tensor:reshape`（已在表里，作对照） | declared | 1 |
+
+**结论一句话：要修的是"注册"，不是"版本"**——`array:argmax_axis` 这个 `OperId` 上**根本没有语义声明**，
+所以 `graph_regions.cpp:142` 的 `!decl || major != 1` 里命中的是前半句，而不是后半句。两种修法二选一，
+都必须先有一条读数证明"声明挂上了、major 是 1"再动表：
+
+1. 让 tensor 侧把 `positionLaw` 挂到 `array:argmax_axis` 这个 id 上（如果它和 tensor 注册的是同一个算子）；
+2. 或者承认两者是**两个** `OperId`，在区域那一侧把 array 的名字映射到有声明的那一个（映射必须是
+   显式的、带读数的，不能靠前缀猜）。

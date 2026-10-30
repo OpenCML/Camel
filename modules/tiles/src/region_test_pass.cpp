@@ -306,9 +306,16 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
                 for (size_t id = 0; id < graph->nodeCount(); ++id) {
                     if (graph->node(id)->kind != runtime::GCNodeKind::Oper)
                         continue;
-                    const std::string name(core::OperatorTable::instance().uri(
-                        graph->nodeBodyAs<runtime::GCOperBody>(id)->oper));
+                    const auto &oper = graph->nodeBodyAs<runtime::GCOperBody>(id)->oper;
+                    const std::string name(core::OperatorTable::instance().uri(oper));
                     const auto &reason = analysis.exclusions[id];
+                    // The two halves of `!decl || major != 1` reported apart: no declaration and
+                    // the wrong contract version are different repairs, and a reason string that
+                    // says only "semantic_declaration" leaves that unsaid.
+                    const auto *semantics = core::OperatorTable::instance().semantics(oper);
+                    os << "TILES_OPERATOR_DECLARATION " << name << ' '
+                       << (semantics ? "declared" : "undeclared") << " major="
+                       << (semantics ? static_cast<long long>(semantics->key.major) : -1LL) << '\n';
                     os << "TILES_REGION_REASON " << name << ' '
                        << (reason.empty() ? "eligible" : reason) << '\n';
                 }
