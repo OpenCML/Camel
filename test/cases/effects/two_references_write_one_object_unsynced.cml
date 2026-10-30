@@ -1,0 +1,19 @@
+/**
+ * The same two writes, with the call outside a `sync` block: the function value `f` writes
+ * `counter`, which this level cannot see, and nothing in the block orders an unknown call after the
+ * write of the body. What the read after the call takes, and whether the call runs at all, is the
+ * question the conservative writer set answers.
+ */
+
+var counter = 0
+
+func twice(f: (x: int) => void, v: int): int {
+    counter = 1
+    f(v)
+    return counter
+}
+
+func main(): int sync {
+    println(twice((y: int) => { counter = y }, 3))
+    return 0
+}

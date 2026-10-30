@@ -448,6 +448,63 @@ assert(out === want, `unexpected output: ${out}`)
 """
 timeout_ms = 30000
 
+# ---- Two references write one mutable object ----
+#
+# `counter` is written by the body, and written again by a function value handed to a parameter of
+# function type: at the call the second writer is invisible. The write still happens, so the read
+# after the call takes the value of that second write (design principles 3.1, 3.5).
+
+[[tests]]
+name = "callback.two_references_write_one_object"
+desc = "Two references write one mutable object: the body writes `counter` and the function value the caller hands over writes it again. The call has to run and the read after it takes the value the second write made -- the call is a possible writer of a variable some function in the program writes. Same output on all four back ends."
+kind = "behavior"
+case = "../../../cases/effects/two_references_write_one_object.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "callback.two_references_write_one_object_opt"
+desc = "The same program through the optimizer: what the second write made is what the read takes, so no pass folds the read to the value the body wrote first."
+kind = "behavior"
+case = "../../../cases/effects/two_references_write_one_object.cml"
+args = ["${case}", "std::opt", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "callback.two_references_write_one_object_unsynced"
+desc = "The same two writes with the call outside a `sync` block: the write the function value makes is not visible at the call, so nothing but the conservative writer set can order the read after the call and make the call run."
+kind = "behavior"
+case = "../../../cases/effects/two_references_write_one_object_unsynced.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
 [[tests]]
 name = "callback.write_ignored_outside_sync"
 desc = "A call that hands a callback writing a captured `var` to a parameter of function type is a write of that variable at the call: outside a sync block it is reported (IgnoredSideEffect) exactly as the direct call of a writing function is, and the read after it still takes the value the callback wrote."
