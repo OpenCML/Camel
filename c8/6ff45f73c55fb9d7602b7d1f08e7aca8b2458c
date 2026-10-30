@@ -1,0 +1,84 @@
+A generator body's locals become cells: the cell's type comes from `typeof` of its first write
+
+The body of a generator is a state machine of arms, and a local declared in one arm is not
+there in the arm that a later pull runs. So a local whose value has to live across a `yield`
+is a cell of the generator's own body. What the cell's type is had been the open question:
+the first attempt took it from the type of the value the first write holds in `step`, which
+asks for the step function to be built before the body that creates the stream, and that
+order is not the one the machine is built in.
+
+The type now comes from `typeof` of the first write's expression, written in the cell's own
+type position. That is the same rule a written type follows everywhere: a type position is
+resolved in one place (`builder_generics.cpp#Builder::resolveTypeNode`, reached from seven
+call sites -- the `typeof` inference landed earlier is what makes it a type position that is
+inferred without being evaluated). The creation body makes the cell with `:var/new/empty`
+(operator `oper::VarNewEmpty`, `include/camel/core/operator_table.h`) and evaluates nothing
+(design principles 5.4); the value is written where the declaration stands, in the arm that
+reaches it, so a pull reads the value the pull before it wrote.
+
+What the change touches:
+
+- `gct/builder.cpp#Builder::visitGeneratorBody`: `addCell` for a declaration of the body is
+  now `addTypedCell` -- `NREF(name, TYPE(typeof <first write>))` -- and the hoisting no
+  longer needs the declaration's value to be a constant: the type no longer depends on the
+  value being evaluable where the stream is created. A declaration the body reads across a
+  `yield` is no longer refused; its value is written where the statement stands.
+- `gir/builder_expr.cpp#Builder::visitNRefNode`: an `NREF` whose first child is a `TYPE` is a
+  cell of that type (`Builder::newVariableOfType`), not a name to look up and not an array.
+- `gir/builder.h`, `builtin/modules/globals.cpp`, `builtin/operators/ops.*`,
+  `builtin/executors/builtin.cpp`: `:var/new/empty` -- a `var T` whose slot holds no value
+  yet, `{1, {false}}, {0, {}}` with the signature `<T>() => var T`.
+- `gir/builder_generics.cpp#Builder::inferTypeOf`: the comment now names the three things
+  that make the scratch graph safe to drop (its diagnostics go to a sink of its own; graph,
+  chain and the four scopes are restored as a whole; the entries keyed by its address are
+  erased and it is no body of the unit).
+- `gir/builder_diagnostics.cpp`: a cell is not a `T!` that nothing takes. A `var T!` keeps
+  the error it holds, so the statement that makes or fills a cell is not an unused fallible
+  value -- otherwise every generator local of a fallible type warns on the cell that holds it.
+
+The invariant the arms rest on is checked where the arms are made: a cell is written before
+it is read. Source order does not say it -- the cell's name is bound where the stream is
+created, so a statement can name one whose declaration stands after it -- so `fill` checks
+each statement against the cells whose declaration stands at or after it. That program is not
+expressible in the language (a name stands only after its declaration), so the check is an
+internal error, not a diagnostic, as the ruling of 2026-10-30 asks; a diagnostic is owed the
+day a declaration without a value is allowed. Without the check the read found the cell made
+and empty and the program printed a zero out of an uninitialised slot.
+
+What is still refused, and why, in this one place:
+
+- a loop state whose first value is computed (`loop j = i + 1` inside another loop): the cell
+  and its type are in place, but the first value reads a cell of the enclosing loop across an
+  arm boundary, and that read is not lowered yet -- measured: it does not fail to compile, it
+  crashes the compiler at run time, so `FeatureNotSupported('generators')` still refuses it;
+- a `for` in a generator body (the binder needs a cell of its own), a `while` with more than
+  one state, a `yield` in a statement shape other than `if`/`match`/`loop`, and a name bound
+  by a `match` arm;
+- a declaration that binds more than one name, or that has no value, is still an arm local and
+  reading it across a `yield` is still refused (`refuseLocalAcrossYield`).
+
+Evidence: `test/cases/compile/stream/generators_local_across_yield.cml` is now a behaviour
+case -- a local computed from a parameter, written before the first `yield` and read after it,
+hands out `1` and then `6` -- where it used to be the case that pinned the refusal. Reversing
+the typed cell (back to a cell made with the initializer's value and the old const-only
+hoisting) makes exactly that case red again; the other 105 tests of the stream plan stay
+green. The graph of a generator shows the cell as `OPER | var int` with no node of the
+initializer in the body that creates the stream, which is what `stream.generator_cell_type_
+from_first_write` holds. Before this change the same program was refused by
+`FeatureNotSupported('generators')` at the declaration -- that refusal is what the case used
+to pin, and `git stash` of the generator change turns the rewritten case red again with that
+same message.
+
+Open, and for the author: with the cell's name bound where the stream is created, a program
+CAN name a cell before the statement that writes it (`yield e` written above `let e = 5`).
+The ruling of 2026-10-30 says such a program cannot be written and so needs no diagnostic;
+this commit holds that invariant with an internal error at the arm-construction site. If a
+diagnostic is wanted instead, it is a small change at one place (`gct/builder.cpp`, `fill`).
+Gate (base `ef42c99b9`, the tree of this commit): total 7927, pass 7916, fail 0, skip 9,
+known failures 2. A/B: `git checkout HEAD~1 -- src/compile/gct/builder.cpp` (the generator half
+reverted, the rest of the commit in place) makes `stream.generator_local_across_yield` the
+single red test -- `FeatureNotSupported`, i.e. the refusal this commit removes -- and the other
+105 of the stream plan stay green; restored, 106/106.
+
+Trunk was `7927ed48c` when this was written and is `45bc25f47` now, so the lane is one merge
+behind: the commit has not been pushed.
