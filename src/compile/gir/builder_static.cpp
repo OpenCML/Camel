@@ -428,14 +428,30 @@ bool Builder::typeCaseMatches(Type *subject, const GCT::node_ptr_t &caseNode) co
     if ((patterns & typeCaseBit(GCT::TypeCaseKind::Leaf)) != 0 && !isStruct && !isTuple) {
         return true;
     }
-    // An identity pattern is exact: `case float` does not select `int`, `case f32` does not
-    // select `f64`, and a named struct is its declaration, not merely a struct of that shape.
+    // An identity pattern is exact -- `case float` does not select `int`, `case f32` does
+    // not select `f64` -- except for an open-rank array: `T[..]` selects an array of any
+    // rank, the zero rank included, so long as the element types are the same.
     // The pattern's type variables have the bindings of the instance being built, so `case T`
     // selects exactly the type `T` was bound to. A pattern that is still open is reported by
     // visitTypeMatchNode before any case is selected.
     for (size_t i = 0; i < caseNode->typeCaseTypeCount(); ++i) {
         Type *pattern = boundType(caseNode->typeCaseTypeAt(i));
         if (pattern == nullptr || containsTypeVar(pattern)) {
+            continue;
+        }
+        if (pattern->openRank()) {
+            // Rank zero is the element itself (design principles: an array of rank zero is
+            // that element, and there is no separate rank-zero array in the types).
+            auto *want = static_cast<ArrayType *>(pattern);
+            if (typeEquals(subject, want->elemType())) {
+                return true;
+            }
+            if (subject->code() == TypeCode::Array) {
+                auto *have = static_cast<ArrayType *>(subject);
+                if (typeEquals(have->elemType(), want->elemType())) {
+                    return true;
+                }
+            }
             continue;
         }
         if (typeEquals(subject, pattern)) {
