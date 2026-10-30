@@ -35,6 +35,8 @@ func zero_tangent::<T>(x: T): Tangent<T> {
     return match type T {
         case float => 0.0
         case f32 => f32(0.0)
+        case bf16 => bf16(0.0)
+        case f16 => f16(0.0)
         case f32[?] => f32(zeros_like(x))
         case f64[?] => float(zeros_like(x))
         case _ => ()
