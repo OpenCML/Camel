@@ -7,6 +7,7 @@
 
 #include "stats.h"
 
+#include "camel/runtime/cycle.h"
 #include "camel/runtime/reachable.h"
 
 #include <format>
@@ -21,7 +22,7 @@ std::string GraphStats::toJson() const {
     return std::format(
         "{{\"graphs\":{},\"nodes\":{},\"edges\":{},\"opers\":{},\"direct_calls\":{},"
         "\"indirect_calls\":{},\"closures\":{},\"branches\":{},\"loops\":{},\"bytes\":{},"
-        "\"specializations\":{}}}",
+        "\"specializations\":{},\"cycle_dropped_sessions\":{}}}",
         graphs,
         nodes,
         edges,
@@ -32,7 +33,8 @@ std::string GraphStats::toJson() const {
         branches,
         loops,
         bytes,
-        specializations);
+        specializations,
+        cycleDroppedSessions);
 }
 
 GraphStats collectGraphStats(const camel::core::context::context_ptr_t &context, GCGraph *root) {
@@ -44,6 +46,7 @@ GraphStats collectGraphStats(const camel::core::context::context_ptr_t &context,
 GraphStats collectGraphStats(const camel::runtime::Program &program, GCGraph *root) {
     GraphStats stats;
     stats.specializations = program.specializations().size();
+    stats.cycleDroppedSessions = camel::runtime::cycleDroppedSessions();
     if (!root) {
         return stats;
     }

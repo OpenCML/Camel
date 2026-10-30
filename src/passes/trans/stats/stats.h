@@ -5,10 +5,15 @@
  * std::stats: graph size statistics of the program as it is at that point of
  * the pass pipeline. Prints one line
  *   GRAPH_STATS {"graphs":..,"nodes":..,"edges":..,"opers":..,"direct_calls":..,
- *                "indirect_calls":..,"closures":..,"branches":..,"loops":..,"bytes":..}
+ *                "indirect_calls":..,"closures":..,"branches":..,"loops":..,"bytes":..,
+ *                "specializations":..,"cycle_dropped_sessions":..}
  * over every graph reachable from the root, and passes the program on
  * unchanged, so `camel f.cml std::macro std::stats std::opt std::stats`
  * compares a program before and after simplification.
+ *
+ * `cycle_dropped_sessions` is not a property of the graphs: it counts the rewrite sessions the
+ * optimiser dropped because the graph they wrote closed a cycle (camel/runtime/cycle.h), so it is
+ * the same number in every line of one run and 0 means no rule composed a cycle on this program.
  */
 
 #pragma once
@@ -38,6 +43,11 @@ struct GraphStats {
     // passes that follow) but a commit drops the entries whose graph nothing reachable calls any
     // more, so an entry present here names a copy the root still reaches.
     size_t specializations = 0;
+    // Rewrite sessions dropped because the graph they wrote closed a cycle (camel/runtime/cycle.h,
+    // recordCycleDroppedSession). Not a property of the graphs: the program keeps the graph it had,
+    // so one optimisation was skipped, and this counts how often. Kept so that a rule composing a
+    // cycle shows up in a reading instead of quietly doing less work.
+    size_t cycleDroppedSessions = 0;
 
     std::string toJson() const;
 };
