@@ -1,0 +1,41 @@
+文档归档车道（lane-answered / h-ans）
+
+① 七页归档
+docs/handover/questions/ 下七页 git mv 到 docs/handover/reviews/，原文件名不变
+（what-counts-as-a-statement、may-fault-boundary、cell-type、write-before-read、
+what-keeps-a-nested-calls-value-alive、tiles-12-not-10、rows-of-name）。正文一字未动
+（similarity 94–97%），每页页首加一行横幅：「已由作者答复，裁定原文见
+docs/handover/reviews/questions-2026-10-29.md 末节与 questions-2026-10-30-gate-control-edge.md；
+本页留档，不再更新。」questions/ 现在只剩 README.md：待裁表为空（表头保留，下一轮还会用），
+七页列在「已答复」一节。
+
+② 裁定转存
+reviews/questions-2026-10-29.md 末尾依次照抄：
+  07:20  questions/ 下四页：`sync` 里谁算语句（4.6 定语句、嵌套效应与故障节点走顺序边）、
+         「可能出故障」判据 B（没声明 `faults = []` 就当可能）、单元类型取自 `step` 里的
+         第一次写、写之前读是 lowering 的内部不变量；
+  07:55  嵌套调用的值靠什么存活（3.1 本来就保证，390 红是「嵌套」判错，给出根节点判定规则）；
+  07:55  tiles 读到 12 选 A（接受 12、交叉验证后重录 22 条、授权测试遍打印区域成员）；
+  07:30  `vmap` 返工：作用在 `T[B, ..]` → `U[B, ..]`，同名按参数类型分派，先逐行应用，
+         向量化留给第 6 条；
+  08:10  `RowsOf<T>` 沿用；
+  jax 页第 7 节（与 08:10 配套：一节裁「要不要补」，一节裁「名字沿不沿用」）。
+来源标注「原文见 `origin/fsh-dev` 的 `1fac91039`（此前 `64af875f1`）；因 `fsh-dev` 不合入
+`develop`，此处按原文转存」，08:10 与第 7 节另注 `86fcfb476`。各段与 `fsh-dev` 原文逐行
+比对 0 差异。
+
+`RowsOf` 沿用，并把 `in_axes=1` 明确留给将来的另一种类型函数（在第 k 维插入、另起名字），
+不改 `RowsOf` 的含义。将来别拿 `in_axes` 去重解释 `RowsOf`。
+
+③ 数字（两个数不矛盾）
+六项检查全绿：diagnostics-catalog --check（300 codes）、--verify-doc、stdlib-reference
+--verify-doc、check-grammar --check（126 productions / 29 contextual）、check-doc-links
+--all（372 文档）、--citations（497/497 符号 + 2107 路径）。
+闸门 `-Plan all -Tier fast -Jobs 8`：total 7857 / pass 7853 / fail 0 / skip 2 / known 2。
+total 7857（-Plan all）与 7849（smoke,test/plans/feat）不是矛盾，是作用域不同：7849 是不带
+test/plans/gpu 的那份作用域（同树复跑 7849 / 7845 / 0 / 2 / 2），all 多带 gpu 的 8 条快层用例。
+别再当成一次回归。
+
+④ 合流
+lane-answered 从 abc352fa1 起，merge --no-ff origin/develop（fc405a569）后 HEAD 4b7f8eecd，
+闸门绿后 push origin HEAD:develop：fc405a569..4b7f8eecd。
