@@ -1,0 +1,5 @@
+defun_value 第一刀：一个不捕获任何值、只命名程序中一个函数的函数值，变成单变体、无数据的 enum 值，tag 因此落在类型里；穿过它的每个调用变成对该函数的直接调用，只有一个变体，所以不生成任何分派。类型替换与节点改写放在同一个提交里（retype.h 说明重建后的图不能在其间运行），DEFUN_VALUE 行报告改写了多少 types / values / calls，以及被拒绝了什么。
+
+同批另外三篇是记录，不是实现：函数类型是结构化还是 enum、tag 该不该进类型（两个待作者裁定的问题），std::gir 的输出顺序在同一个 build 内不稳定，以及 unused-pure-result 那条随机红及其测量依据。
+
+闸门（m-lane-defun2 @ c299f5309，-Plan all -Tier fast -Jobs 8）：total 7864 / pass 7855 / fail 0 / skip 7 / known failures 2；stamp revision c299f53092、clean、fingerprint 98858e9852bc。判据是 fail 0，不是 skip 的个数（skip 随 GPU 卡占用变化）。
