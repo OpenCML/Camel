@@ -4,9 +4,9 @@
 
 | 用例（原样） | 判的是哪一条 | 失败形态（原文） | 一句结论 |
 |---|---|---|---|
-| `benchmark_gradients_vs_torch.nvm` | `benchmarks/train.py --check`：九个模型的训练梯度与 PyTorch float32 自动微分一致，两种配置 `std::macro std::nvm` 与 `std::macro std::opt std::nvm` | `benchmarks/train.py` 抛 `RuntimeError: ... mlp_big/model.cml std::macro std::opt std::nvm failed (-11)`，`-11` 即 SIGSEGV；栈是 `camel::core::rtdata::Variant::updateRefs+31` ← `GenerationalAllocatorWithGC::scanRelocatedObjects` ← `minorGCUnlocked` ← `safepoint` ← `NodeVMSchedPass::call` | 去函数化交给运行时的那个 enum 值，在 minor GC 的重定位扫描里活不过它的类型：`updateRefs` 头几条指令就崩，还没走到字段槽的循环 |
+| `benchmark_gradients_vs_torch.nvm` | `benchmarks/train.py --check`：九个模型的训练梯度与 PyTorch float32 自动微分一致，两种配置 `std::macro std::nvm` 与 `std::macro std::opt std::nvm` | `benchmarks/train.py` 抛 `RuntimeError: ... mlp_big/model.cml std::macro std::opt std::nvm failed (-11)`，`-11` 即 SIGSEGV；栈是 `camel::core::rtdata::Variant::updateRefs+31` ← `GenerationalAllocatorWithGC::scanRelocatedObjects` ← `minorGCUnlocked` ← `safepoint` ← `NodeVMSchedPass::call`；`ab124a00e` 之后同一处报的是 `the type it was traced with has code 1610612746, which is not an enum's` + `the type reads as: (x: f32[..]) => float` | 去函数化把值做成了 enum（`tag=0`、`fields=1`），但它落进去的槽还写着原来的函数类型 `(x: f32[..]) => float`；GC 按槽的类型去追这个 `Variant`，读到的不是 enum |
 
-**它在等什么**：等去函数化写出的值，其 enum 类型比值活得久——GC 扫到它时读得到类型与变体表。**认领：`lane-defun5`**（诊断是在这条车道的树上取的）。
+**它在等什么**：**一个槽的类型跟着值的形式改**。`ab124a00e` 之后这条不再是推测：`Variant::updateRefs` 现在会报出它拿到的那个类型，读数是 `(x: f32[..]) => float`（`code` 1610612746 = `0x6000000A` = `TypeCode::Function`），而槽里躺着一个 `Variant`（`tag=0`、`fields=1`）——**值已经变成了 enum，位置还写着原来的函数类型**。不是 typeId 越界、不是 tag 越界、也不是悬垂指针；是表示转换只做在值上、没做在位置上（和 18:30 那条同族）。**认领：`lane-defun5`**（诊断是在这条车道的树上取的）。
 
 **它不在快层里出现，不是漏登记**：本用例属 `tier = "slow"`，`-Tier fast` 根本不跑它，所以快层闸门的 `known failures: 2` 不含它（那两条是 `effects_model_edges` 的控制边）。要看这条债务，跑 `-Tier slow` 或直接指定这个 plan 文件：`node scripts/test.js test/plans/feat/modules/autodiff.plan.toml --tier slow --jobs 1`，它报的是 `[XFAIL] ... known failures: 1`，不是 `fail`。**“已知失败但不在快层出现”正是裁定要的“不要以绿的样子出现”，不是登记漏了。**
 
