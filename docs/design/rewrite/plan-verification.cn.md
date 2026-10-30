@@ -4,6 +4,22 @@
 
 **只读调研，没有改代码。** 所有读数用 `origin/develop`（`18c98b856`）在 Linux 主机 `88zjwei` 上的构建实测：计划形式跑 `test/plans/feat/modules/rules.plan.toml`（全绿，121 通过 0 失败，`RUN_EXIT=0`，构建 51.0 s、计划 4.0 s），单条规则的一次性读数用仓库外的探针（`/tmp`，不进仓库）。
 
+> **2026-10-30：本页是 `18c98b856`（2026-10-24）的普查快照，写于求解器接入之前。** 下文所有"今天"与读数都指那一次。此后规则库折成泛型律、判定词表与覆盖检查落地，求解器以仓库外的 `z3` 可执行接入（`scripts/rule-proofs.mjs` 与 `test/plans/feat/modules/rules_proofs.plan.toml`），而 §4 设想的 CMake 开关 `CAMEL_Z3_VERIFY` 没有做。现行读数见 §0.0；§0–§5 的论证按快照读。
+
+## 0.0 现行读数（`develop`，2026-10-30）
+
+| 量 | 本页记的（`18c98b856`） | 今天 | 依据 |
+|---|---|---|---|
+| `stdlib/rules.cml` | 737 行、69 条 `export rule` | 585 行、37 条 | `git grep -c "export rule" -- stdlib/rules.cml` |
+| 规则写法 | 按元素族重复：`int` 13、`i32` 13、`float` 16、`f32` 14、张量 15 | 35 条泛型律 `::<T>` + 2 条非泛型（`array_log_softmax_of_softmax`、`array_sigmoid_chain`）；一条律按 `when` 在多个类型上出实例 | `git grep -n "^export rule .*::<" -- stdlib/rules.cml` |
+| 带许可的规则 | 21 条（`reassociate` 16、`refine_accuracy` 5） | 14 条（`reassociate` 11、`refine_accuracy` 3） | `git grep -c "^#requires" -- stdlib/rules.cml` |
+| `check` 的覆盖 | 68/69（`check_library.cml` 63 + `check_accuracy_library.cml` 5，`tensor_sigmoid_chain` 漏网） | 37/37：`check_every_rule.cml` 交出全部导出规则，`verify/check_covers_every_rule.mjs` 逐名比对；原先漏网的那条今天叫 `array_sigmoid_chain`（`tensor_`→`array_` 的改名见 `check_accuracy_library.cml`），已在其中 | `test/cases/modules/rules/` |
+| 报告词表 | `ok` / `FAIL` / `unchecked` | `proved` / `refuted` / `sampled`，每行带命题、证据、原因、覆盖 | `modules/rewrite/checkreport.h` |
+| `rules.plan.toml` | 121 个测试，其中 8 条跑 `check` | 157 个测试，其中 14 条的用例是 `check_*`（13 个 `.cml` 加 1 个 verify 脚本） | `git grep -c "^\[\[tests\]\]"`、`git grep -n "case = .*check"` |
+| 求解器 | `z3`/`smt`/`solver` 在代码里零命中 | `z3` 不进构建：`scripts/rule-proofs.mjs` 依次从 `$CAMEL_Z3`、`PATH`、用户本地目录找它的可执行，找不到就 `SKIPPED`；计划以 `skip_unless --probe-solver` 跳过 | `scripts/rule-proofs.mjs` |
+| `test/plan-selection.json` 对 `stdlib/rules.cml` | 5 个计划 | 6 个，多一个 `feat/modules/rules_proofs.plan.toml` | 该文件里 `stdlib/rules.cml` 那一项 |
+| `conanfile.txt` / `cmake/options.json` | 6 条 requires / 4 个选项 | 仍是 6 / 4 | 两个文件 |
+
 ## 0. 结论摘要
 
 1. **今天没有任何求解器接入**：`z3` 只出现在 `docs/design/rewrite/v2.cn.md` 与任务书里，`smt` 只在设计稿与示例的性能说明里，`solver` 在 `src`、`include`、`modules`、`tools`、`cmake`、`conanfile.txt` 里**零次**出现。
@@ -133,11 +149,11 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
 
 **今天 `check` 与它的唯一交互是**：`checkKernel` 看到 `RuleObject::ruleId() != 0` 就直接 `continue`，输出 `unchecked <name>: a generic rule, whose instances are not checked here`，注释里写着这条路"是这座桥的下一步"。所以衔接点非常小：`check` 那一侧要调 `genericRuleInstance` 枚举元组，并对每个**实例**（`GenericRuleInstance::lhs` / `rhs` / `when`）分别判定。类型集合按规则：算子组注册过的类型里满足 `when` 的每一个，给了 `program` 就并上程序里出现的类型；多个类型参数时取笛卡尔积，积过大按种子抽样并在报告里写明抽了哪些。
 
-**今天词表里没有的东西**：`stdlib/rules.cml` 的 69 条里**一条泛型规则都没有**（`rule <名字>::<` 零命中）。所以"泛型规则对每个实例分别证明"的验收要用 `test/cases/modules/rules/generic_law.cml` 那一类用例（或规则语言折叠后的新库）来做，不能拿今天的库直接做。
+**今天词表里没有的东西**：`stdlib/rules.cml` 的 69 条里**一条泛型规则都没有**（`rule <名字>::<` 零命中；快照——今天 37 条里有 35 条是泛型律，见 §0.0）。所以"泛型规则对每个实例分别证明"的验收要用 `test/cases/modules/rules/generic_law.cml` 那一类用例（或规则语言折叠后的新库）来做，不能拿今天的库直接做。
 
 ### 1.8 `stdlib/rules.cml` 今天的规模与分布
 
-737 行，69 条 `rule` 声明（`export rule`）。按元素族分：
+737 行，69 条 `rule` 声明（`export rule`；这是 `18c98b856` 的读数，今天是 585 行、37 条，见 §0.0）。按元素族分：
 
 | 族 | 条数 | 例 |
 |---|---|---|
@@ -153,7 +169,7 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
 
 ### 1.9 今天的验证在哪里被运行
 
-- 计划：`test/plans/feat/modules/rules.plan.toml`，`tier = "fast"`，121 个测试里 8 条跑 `check`：`rules.check_accepts_rules_that_hold`、`rules.check_finds_rules_that_do_not_hold`、`rules.library_passes_the_check`、`rules.check_bound_follows_the_permission`、`rules.when_passes_the_check`、`rules.accuracy_check_compares_error`、`rules.accuracy_rejects_naive_softmax`、`rules.accuracy_library_passes_the_check`。全部只断言**输出片段**（`expect_stdout_contains`）与"没有 `FAIL`"，所以判定词汇一改，这些断言要一起改。
+- 计划：`test/plans/feat/modules/rules.plan.toml`，`tier = "fast"`，121 个测试里 8 条跑 `check`（今天的数是 157 个里 14 条，见 §0.0）：`rules.check_accepts_rules_that_hold`、`rules.check_finds_rules_that_do_not_hold`、`rules.library_passes_the_check`、`rules.check_bound_follows_the_permission`、`rules.when_passes_the_check`、`rules.accuracy_check_compares_error`、`rules.accuracy_rejects_naive_softmax`、`rules.accuracy_library_passes_the_check`。全部只断言**输出片段**（`expect_stdout_contains`）与"没有 `FAIL`"，所以判定词汇一改，这些断言要一起改。
 - **覆盖并不完整，今天就已经有一条漏网**：`rules.library_passes_the_check` 走 `test/cases/modules/rules/check_library.cml`，那个用例列了 **63** 条规则；`rules.accuracy_library_passes_the_check` 走 `check_accuracy_library.cml`，列了那 5 条 `refine_accuracy` 规则；**第 69 条 `tensor_sigmoid_chain` 从来没有传给 `check`**——它只在 `test/cases/modules/rules/fusion_schedule.cml` 里被 `rewrite` 跑过（`rules_libraries.plan.toml` 的 `rules.fusion_sigmoid_chain`）。也就是说 `stdlib/rules.cml` 头部注释与 `docs/technical/46_rules.md` 第 5 节写的"没有一条规则在通过 `check` 之前进入这个文件"今天有**一条**不成立。任务书的验收是"**每条**规则都有标注"，所以第一步就要把 `69/69` 当硬要求，S0 的验收里带一条"`check` 的输入覆盖 `stdlib/rules.cml` 的每一条规则"。
 - 选择规则：`test/plan-selection.json` 把 `stdlib/rules.cml` 与 `modules/rewrite/` 映到 `["smoke", "feat/opt", "feat/trans/pass_dump.plan.toml", "feat/modules/rules.plan.toml", "feat/compile"]`。
 - CI：`.github/workflows/ci.yml` 三个常驻腿（两个 ubuntu、一个 windows-2022），每个腿走 `.github/workflows/ci-leg.yml` 的 "Test (smoke + feat)"，命令是 `node scripts/test.js`（快速层）。批次点是 `npm run release-gate`：快速层 + **按计划文件点名**跑可跑的慢层（`docs/test-plans.md` 的 "Layers: fast, slow And debug" 与 "Running" 两处）。
