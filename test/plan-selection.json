@@ -327,6 +327,11 @@
             "plans": ["feat/showcase_d4.plan.toml"]
         },
         {
+            "comment": "The diffusion training step (I2's CPU precursor): showcase/i2-diffusion-step/step.cml is pinned by a fast plan (the whole standard output of three DDPM steps at a stated seed, on the default back end and std::prl, plus the property that the loss falls), so an edit to the example runs it. The other showcase directories remain on the rule-less allowlist, which is why `showcase/` is still listed there.",
+            "paths": ["showcase/i2-diffusion-step/"],
+            "plans": ["feat/showcase_i2.plan.toml"]
+        },
+        {
             "comment": "Example programs and their recorded output.",
             "paths": ["examples/"],
             "plans": ["feat/examples"]
