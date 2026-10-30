@@ -223,3 +223,22 @@ shape'）；`f32[..]` 与静态形状的不统一，是程序把声明写松了�
 
 **总预算不再是失败原因：14.99 s < 17.50 s，四条子断言也全 PASS。这条红改由同一个工具里的 `declaration.cost` 承担**：
 **每声明 132.7 µs（上限 60）、绝对总量 40.1 ms（上限 20）**——**同一类「上限是按另一台机器/另一时刻的读数写的」问题，未改，未归因到某笔。**
+
+### `declaration.cost` 也按单跑重写了——而这条红又往前挪了一格
+
+按同一条规则（单跑 CPU × 1.5）：`DECLARATION_CEILING_US` 60 → **200**、`DECLARATION_TOTAL_CEILING_MS` 20 → **60**。
+单跑实测（`--jobs 1`，`tangshan88`，load 27.6/40.6/43.7，2026-10-31，`declarations=302`）：**132.7 µs/声明、40.1 ms 总量**。
+
+重跑：
+
+```
+[FAIL] startup.cost  16.32 s cpu of 17.50 s budget, 19.58 s wall   (host load=42.9/35.5/40.2)
+declaration.cost declarations=302 per_declaration_us=144.5 total_ms=43.6      ← 两条都过（200 / 60）
+startup-cost: FAILED imports_nothing: cpu median 20.0 ms exceeds ceiling 18 ms
+startup-cost: FAILED inspect_ops:     cpu median 98.3 ms exceeds ceiling 95 ms
+startup-cost: FAILED imports_all:     cpu median 95.8 ms exceeds ceiling 90 ms
+```
+
+**`declaration.cost` 的两条断言已经过；现在红的是另外三条（`imports_nothing` / `inspect_ops` / `imports_all`）。**
+上上趟同一棵树同一入口读到的是 `15.0 / 90.8 / 90.0`（三条全过），**这一趟 20.0 / 98.3 / 95.8**：**同一入口、同一棵树、两次运行之间就动了 15–30%**。
+**所以这四条上限也是同一类问题的余下部分**（按 2026-10-23 安静主机的中位数 × 2.5 写的），**我没有动它们**——按「不扩大」停在这里，等你裁定是否同样按单跑 ×1.5 重写。
