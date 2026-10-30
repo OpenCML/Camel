@@ -1948,7 +1948,7 @@ std::string effectOrderViolation(const ProgramEffects &before, const ProgramEffe
             const EffectSite &later       = writtenFirst ? second : first;
             const EffectSite &runsEarlier = writtenFirst ? runsFirst : runsSecond;
             const EffectSite &runsLater   = writtenFirst ? runsSecond : runsFirst;
-            if (earlier.graph != later.graph) {
+            if (earlier.graph != later.graph || !waitsFor(before, earlier, later)) {
                 continue; // two graphs before the pass, or no chain: the program ordered neither
             }
             const std::string moves = describeMoves(earlier, runsEarlier, later, runsLater);
