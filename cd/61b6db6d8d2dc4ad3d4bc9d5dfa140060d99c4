@@ -1,0 +1,24 @@
+tip=cd61b6db6 第 7 条：那页问题的读数——"0" 是特化换来的，剩下的间接调用数不到标签
+
+数字（这一笔只进了一页问题与待裁表一行，没有改代码）
+- 拼写 **144 处 / 59 文件**（范围 `src/`、`include/`、`modules/`、`stdlib/`、`tools/`，三拼写）：`createFuncDataNode` 29、`GCFillKind::FunctionClosure` 22、`GCNodeKind::Call` 93。
+- 调用者 **38** 个创建点：`createFuncDataNode` 25（定义 1、声明 1、注释 2 不计）、`pullback.cpp#addClosure` 3、`addCallNode` 10；闭包载荷本身只在两处拼出来（`builder_calls.cpp` 的 lambda 与 `addClosure`）。
+
+"0" 为什么不算
+- 程序：带调用、分支、循环的 `with_grad` 小程序（`f` 里一个 `h<w>(…)` 调用、一个 `if`、一个 `loop`，`main` 写 `grad(f)<2.0>(4)`）。读数取自主机构建，stamp 与本树一致。
+- `std::opt` 后 `closures 0`、`indirect_calls 2`、`specializations 2`：那个 0 是**两份特化副本换来的**，设计稿 §4.4 明说按调用点复制不是等价替代。
+- 剩下的 2 次间接调用，被调者是 `OPER autodiff:grad`：`modules/autodiff/operators.cpp#gradFunction` 在**运行期** `buildGradientGraph` 造图并返回 `::Function`，程序里说不出它是哪个函数，标签法没有它的变体。
+- 同一处还把 f 的闭包拷进 `Function::tuple()`；那个闭包不在任何图里，`src/passes/trans/stats/stats.cpp#collectGraphStats` 只数 `FILL(FunctionClosure)`，数不到——所以"闭包 0"连"没有闭包"都不成立。
+
+两个数要放在一起看
+- `std::macro` 单跑 **4 闭包 / 7 间接**；`std::macro std::opt` 读 **8 / 8**；直落 `std::opt` 才是 **0 / 2**。同一份程序，那个 0 只在带上那两份特化副本时出现。
+- 节点与边：`std::opt` 后 `nodes 47 / edges 46`；`std::macro std::opt` 后 `nodes 319 / edges 413`。
+
+停在哪儿
+- 这一条要么等第 6 条把求导图搬到建图期，要么本条先做这个前置；**不能让施工方自己挑**——两条线会撞在 `gradFunction` 的建图时机上。
+- 页里 A/B 两个选项都把验收数定成 **间接调用 2 → 0**（A 把 `grad` 让给第 6 条，B 在本条先搬建图时机）；C 是"`0 → 0`、拦不住回归"。
+- 页：`docs/handover/questions/questions-2026-10-30-grad-builds-its-graph-at-runtime.md`，一问，A 默认 / B / C。
+
+闸门与 stamp
+- `camel-remote.ps1 -Path D:\Projects\Camel-wt\h-defn -Plan all -Tier fast -Jobs 8`：`total 7857 / pass 7853 / fail 0 / skip 2 / known 2`，`RUN_EXIT=0`，与基线同。
+- stamp：`cd61b6db6` clean / 1217 个源文件 / fingerprint `6cdec66eb993`（合并 develop 前后未变）。
