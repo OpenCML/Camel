@@ -1,0 +1,9 @@
+`match type` 里能不能用类型函数做守卫：一页，`ff555eb0c`。
+
+1. **作者 09:50 给的写法在今天的语法里不存在——守卫只属于值的 `match`。** `case _ when is_float::<ElementOf<T>>() => zeros_like(x)` 在 `match type` 里报 `Expected '=>' before 'when'`；`case … when …` 只有值的 `match` 有位置（`test/cases/parse/constructs/match_guard.cml`）。所以不是没照做，是语法里没有那个位置。
+2. **`[?]` 与 `[..]` 都只匹配秩 1**：`f32[2, 3]` 与 `f32[2, 3, 4]` 全落 `case _`（实测 `Return type '()' does not match … 'f32[2, 3]'`）。"一条臂覆盖任意秩"今天没有任何写法，只能按形状枚举。
+3. **三档的分量不同**：① 给 `case` 加守卫 = 加一个位置（不改既有语义）；**② 把 `[..]` 放宽成任意秩 = 改既有构造的含义**，`stdlib/rules.cml` 里 `T[..]` 的既有用法要逐条核对；**③ 四族各一条 `[..]` = 认下枚举**，与"按判定而不是枚举"相悖，须作者认。默认 ①。
+
+裁定前 `stdlib/rulesets/jvp.cml#zero_tangent` 只覆盖浮点标量；张量与聚合体一律**被类型拒绝**，不会拿到一个错的零。任意秩两条用例（`f32[2,3]`、`f32[2,3,4]`）等裁定后写，A/B 是"拿掉那条臂 → 恰好这两条红"。
+
+闸门（`-Plan all -Tier fast -Jobs 8`）：total 7862 / fail 0 / skip 6 / known 2。
