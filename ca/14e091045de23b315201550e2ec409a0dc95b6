@@ -1,0 +1,5 @@
+S3: the cases that pin the rule at four slots and on four backends (rank_zero_show on nvm/fvm/jit/tf,
+rank_zero_parameter_slot, rank_zero_let_slot, rank_zero_field_slot, rank_zero_var_slot), each
+printing the same two lines 1.0 and 2.5, with the before/after of the closed defect in each
+description. No case pins a refusal: the rejected reading's case stays deleted. Gate 7947 / 7938 / 0
+(the eight new entries above the 7939 baseline).
