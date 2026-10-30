@@ -31,6 +31,19 @@ git grep -o 'GraphDraft::decode' -- src include modules | grep -v -e graph_txn.h
 数立刻从 709 涨到 714；改成 `auto *`（测试要的是"会话递出来的那一个"，不是它的名字）才归位。
 规则不是摆设。
 
+**这三个数现在是一条快层检查，不再靠自觉。** 用例
+`test/cases/runtime/graph_draft_ledger/check.mjs`，计划
+`test/plans/feat/runtime/graph_draft_ledger.plan.toml`（`tier = "fast"`，所以每一次闸门都跑它）。
+它按本节的两条口径原样数（事务自己那两份文件不计、整词不按子串），判据是**当前值 ≤ 基线值**
+而不是相等——这一步的目标就是让数往下走，所以降是绿、涨是红，红了就打印"哪个数从几升到几"和
+新出现的位置（`文件#符号`，符号取该处所在函数）。基线在
+`test/cases/runtime/graph_draft_ledger/baseline.json`，降了以后用 `check.mjs --record` 把新数记下来，
+好让收益不能被后面一笔等量涨回去；`--record` 遇到涨的数会拒绝，除非 `--force`，那时 diff 会自己说话。
+
+**这一笔落地时构造点数是 3，表里 b3a 起的旧行写的是 1**：本节第 2 条的 `make_unique<[^>]*GraphDraft>`
+把 `std::make_unique<rt::GraphDraft>` 也算进去，旧行只数了不带限定的那一句。`region_extract.cpp`
+和 `test/resources.cpp` 那两处是真在直接造一张可编辑图，按本节的口径就是构造点，所以记 3。
+
 ## 1. 表
 
 | 提交 | 这一步做了什么 | 事务外引用（文件 / 引用） | 构造点 | `decode` 点 |

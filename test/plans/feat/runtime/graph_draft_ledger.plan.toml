@@ -1,0 +1,35 @@
+id = "runtime.graph_draft_ledger"
+order = 380
+tier = "fast"
+tags = ["feat", "runtime", "graph", "ledger"]
+desc = "The direct-connection ledger of graph-store step 2 b as a gate: the references to `GraphDraft` outside the transaction, the construction points and the `GraphDraft::decode` points may only fall, and the check names which number rose and where when one does."
+
+# The ledger page (docs/handover/reviews/graph-store-step2-b-ledger.cn.md) records three numbers per
+# commit so that "GraphDraft is deleted" is a number and not a claim. This plan is that ledger as a
+# check, in the fast layer, because a number nobody runs is a promise nobody keeps: the case reads the
+# tracked tree with `git grep`, compares each number with the baseline it records, and fails when one
+# of them rose -- naming the number, the old and the new value, and the `file#line#symbol` of the new
+# site. A number that fell is green and prints a reminder to re-record the baseline, because the point
+# of the step is that the numbers go down and the gain has to be locked in.
+#
+# `tier = "fast"` is the wiring, not decoration: the fast layer (`-Tier fast` over the tree, `npm run
+# test`) runs this plan, so the ledger is checked on every gate instead of on the commits that happen
+# to remember it. For `--changed` two things select it: the case's own directory mirrors to this plan
+# through the `test/cases/` directory rule (test/cases/runtime/graph_draft_ledger -> this file), and
+# the `src/runtime/` file rule names it, because that is where the storage and the transaction live
+# and a commit there is exactly the kind that can add a direct connection.
+[[tests]]
+name = "runtime.graph_draft_ledger.never_rises"
+desc = "Every number of the direct-connection ledger is at or below its recorded baseline; a rise is red and names the number and the site."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/runtime/graph_draft_ledger/check.mjs"
+args = ["${case}"]
+expect_exit = 0
+# Only the parts that do not move with the numbers: a decrease must stay green, so the assertion
+# cannot name today's value. The numbers themselves are printed on the line below and are what a
+# reader compares with the ledger page.
+expect_stdout_contains = ["[LEDGER] files ", "[LEDGER] ok"]
+expect_output_not_contains = ["[LEDGER] RED"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
