@@ -12,7 +12,7 @@
 - 可错元素（`ab25942d7`）：`yield error('Boom','bad')` 与 `yield pick(-1)` 的读数都是 `1` / `error Kind: message`；
 - 体内局部跨 `yield` 的误诊（`a8286b60c`）：不再报 `UnresolvedReference: 'e'`，改按名拒并说明原因。
 
-**未落地**：跨 `yield` 活下来的值——体内的局部、以及 `match` 臂里的绑定。前者今天按名拒（`The feature 'a local read after a `yield`' is not supported yet.`，指在声明行），后者报 `FeatureNotSupported`（`'generators'`，指在臂里的 `yield`）。`loop`/`pairs(n)` 与翻转 `stream.yield_lowering_refused` 仍是最后一笔。
+**未落地**：跨 `yield` 活下来的值——体内的局部、`match` 臂里的绑定、以及循环的状态（第 ⑥ 格）。前两者今天按名拒：局部是 `The feature 'a local read after a `yield`' is not supported yet.`（指在声明行），`match` 的绑定是 `FeatureNotSupported`（`'generators'`，指在臂里的 `yield`）；循环还整块拒在 `'generators'` 上。**这三样与 §1 的裁定是同一件事**（循环为什么也落在这里，见 §1 末），裁定后连同 `stream.yield_lowering_refused` 的翻转与语言参考 7.3.1 / 5.4 那两句一起，是最后一笔。
 
 ## 1. 一个跨 `yield` 的值，状态里怎么放？（三选一）
 
@@ -31,6 +31,13 @@
 | A | 一种"已声明未赋值"的单元 | 编译期错 | 同一套 |
 | B | 无 | 运行期 null | 同一套 |
 | C | 无 | 编译期错（载荷重取） | 两套 |
+
+**⑥ 循环里的 `yield` 落在同一处，不是另一个问题。** 查过了：把循环开起来，要先把循环拆成臂（入口、条件、体、步进），因为臂是各自独立的图，跨得过去的只有单元（`src/compile/gct/builder.cpp:5733` 建臂、`5917` 起按 `pc` 选臂）；而单元建在生成器**被创建**时跑的那段体里（`5685` 的 `addCell`、`5951`、`5955`），所以单元的初值在创建那一刻就定了。可循环的初值与序列是"在循环所在处求值一次"（`3365`–`3408`，注释在 `3383`）——拆成臂之后，那就是某一臂，而不是创建时。
+
+- 单层 `while`、累加器初值是常量（`loop i = 0 while i < n do { … yield … }`）：把它变成单元时 `addCell(i, visitData(0))` 在创建时求值，与在循环处求值同值（常量无副作用、不看任何单元），**不需要本条**。
+- 作者点名的 `pairs(n)` 是双层：内层的起点从外层当前值算（5.4 的例子 `docs/design-principles.cn.md:393` 写 `func pairs(n: int): (int, int).. { … yield (i, j) … }`），创建时外层还是 0，拿它当初值只能得到错的值；`for v in xs` 的迭代器同理（序列在循环处求值，不是创建时）。
+
+也就是说，循环的某个形状第一次拉取时**还不该有值**——正是 A/B/C 要定的那一件事（A 让它"暂时没有值"，B 让它"先是 null"）。所以 ⑥ 等这一条，不再另开一问；裁定之后，`pairs(n)` 与常量初值的单层循环可以一起落。
 
 ## 2. `return` 不带值：改解析器还是改文档？
 
