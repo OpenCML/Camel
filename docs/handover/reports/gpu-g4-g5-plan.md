@@ -17,7 +17,7 @@
 | G4 的一步 | 依赖 | 为什么在这一条上 |
 |---|---|---|
 | 视图与形状算子（`permute`/`transpose`/`reshape` 作为下标映射） | G1 段 + G2-2 传输表 | 视图链要在**同一段内**完成；一旦落到段边界，就变成一次整块传输，视图的零拷贝就没有了 |
-| 规范化与归约（`softmax`/`layer_norm`/`mean`/`cross_entropy`） | G1 段 + G3-1 单元 | 一段内的多归约才是一次 kernel；跨段就退回"每个归约一次提交" |
+| 规范化与归约（`softmax`/`layer_norm`/`cross_entropy`） | G1 段 + G3-1 单元 | 一段内的多归约才是一次 kernel；跨段就退回"每个归约一次提交" |
 | 设备上的分支与循环 | G1 段（臂/循环体各自成段） | G4 换掉的是 `BRCH`/`LOOP` 留主机这一半，段的边界不动；今天的 `LoopCond` 每轮一次主机观察（`syncs` 数得出来），换成设备上判条件 |
 | bf16/f16 与 Tensor Core、批量矩阵乘、`take`/散射加 | G2-1 设备块 + G3-2 形状签名 | 元素类型与秩必须从**值自己的类型**读（`device_` 没有写入者之前，bf16 的块不是一个能被看见的值）；`?` 的形状只能靠形状签名特化 |
 | 优化器与参数树进作用域 | G1 放置传播（`modules/tiles/src/placement.cpp#calleeGraphOf`） | 无标签的 `sgd`/`adam` 跟着调用点进单元；放置不跟着走，优化器就静默落回主机 |
@@ -26,7 +26,7 @@
 
 1. 算子清点：把 C2 与 `transformer_step` 的算子按 `operations()` 表分组，输出**缺口行数**（表外算子的名字逐条）；缺口为 0 才允许记 G4 完成。今天表内 20 个名字、表外至少 8 个（三个视图名、`softmax`、`gelu`、`layer_norm`、`cross_entropy`、`cast`）。
 2. 视图与形状：`gpu.tiles` 的 `index_maps`/`consistency` 八条读数逐位为 0；`std::profile json=` 的 `device_work.kernels` 对同一形状**不随视图个数增长**。
-3. 规范化与归约：与 CPU 的差分读数保持在现有两条界内（softmax `1e-4`、不规整 matmul `5e-3`）；`hints` 为空。
+3. 规范化与归约：与 CPU 的差分读数保持在容差表内（C2 初始损失相对 `1e-5`、每个记录步缩放的相对 `1e-2`、前向 `rtol=1e-4/atol=1e-5`）；`hints` 为空。
 4. 设备上的分支与循环：一个 `#gpu` 循环的 `device_work.syncs` 从"每轮一次"降到"每段一次"，`toHost` 每轮是常数。
 5. 低精度：同一 GEMM 在 f32 与 bf16 下 `kernels` 与 `compiles` 相同；C2 记录步相对误差 `1e-2`，`#strict` 下退回逐位。
 
