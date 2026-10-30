@@ -1,0 +1,50 @@
+/**
+ * The device half of I2: the same denoiser as `step.cml`, run on the GPU.
+ *
+ * The CPU half pins the training step's semantics; this half answers the other question -- whether
+ * the device gives the same answer as the host for the step's own arithmetic. It runs the
+ * denoiser's forward pass through `tiles`, which translates the function graph to a kernel, and
+ * prints the largest disagreement between the two answers (zero exactly when every element agrees).
+ *
+ * Note what is *not* here: the schedule, the noise draw, the loss and the Adam update stay on the
+ * host. The device half of a training step is the network it runs, not the loop that drives it --
+ * the loop carries the optimizer state, which the device path does not have yet.
+ */
+
+import { relu, sum } from tensor
+import { next_key, seed, uniform } from random
+import { device, download, run_preferred_resident, upload } from tiles
+
+// The denoiser's inputs travel as one aggregate: `run_preferred_resident` takes one argument, and
+// the device specialization reads a struct of tensors by field.
+type Inputs = {
+    x: f32[4, 16],
+    w1: f32[16, 8],
+    b1: f32[8],
+    w2: f32[8, 16],
+    b2: f32[16]
+}
+
+// `relu(x @ w1 + b1) @ w2 + b2`, the expression `step.cml` writes.
+func denoise(p: Inputs): f32[4, 16] {
+    let hidden = relu(p.x @ p.w1 + p.b1)
+    return hidden @ p.w2 + p.b2
+}
+
+func main(): int sync {
+    seed(7)
+    let p = {
+        x: next_key()->uniform::<f32><shape: [4, 16]> as f32[4, 16],
+        w1: next_key()->uniform::<f32><shape: [16, 8]> as f32[16, 8],
+        b1: next_key()->uniform::<f32><shape: [8]> as f32[8],
+        w2: next_key()->uniform::<f32><shape: [8, 16]> as f32[8, 16],
+        b2: next_key()->uniform::<f32><shape: [16]> as f32[16]
+    }
+    let got = download(run_preferred_resident<denoise>(upload(p)))
+    let want = denoise(p)
+    let gap = got - want
+    let name: string = device() !! 'no device'
+    println('i2gpu device={}'->format<name>)
+    println('i2gpu gap={}'->format<sum(gap * gap)>)
+    return 0
+}

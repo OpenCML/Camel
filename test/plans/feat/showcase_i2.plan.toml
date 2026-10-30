@@ -84,3 +84,26 @@ assert(losses.length === 3, 'three steps, got ' + losses.length)
 assert(losses[0] > losses[1] && losses[1] > losses[2], 'the loss falls at seed 8 too: ' + losses.join(' -> '))
 }
 """
+
+# The device half: the same denoiser expression, run through `tiles` on a GPU. It asserts the one
+# thing a device run can assert without pinning a machine -- the device's answer equals the host's
+# answer for the step's own arithmetic (the sum of squared differences is zero when every element
+# agrees). What it does not assert is a duration, an ordinal or a device name: those are the
+# machine's, and the entry is skipped where there is no device.
+[[tests]]
+name = "diffusion_step.gpu.denoise"
+desc = "The denoiser's forward pass on the device against the same call on the host: the sum of squared differences over every element is zero, so the device's arithmetic and the host's agree on the step's own expression (matmul, add, relu, matmul, add)."
+kind = "behavior"
+case = "../../../showcase/i2-diffusion-step/step_gpu.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["i2gpu device=", "i2gpu gap=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+tier = "milestone"
+verify_script = """
+({ input, assert }) => {
+const gap = /^i2gpu gap=([0-9.eE+-]+)$/m.exec(input.normalized.stdout)
+assert(gap !== null, 'no disagreement reading on stdout')
+assert(Number(gap[1]) === 0, 'the device and the host disagree: ' + gap[1])
+}
+"""
