@@ -1,0 +1,54 @@
+作者裁定入 develop + 恢复已答页 + 建 questions 渠道（merge 115d10734）
+
+## 这批是什么
+
+合入 `origin/fsh-dev` 的两笔（`809c1990b` 催办表、`458a52710` 裁定），并把裁定带出的两处
+结构补上。净变化相对 `origin/develop` 三个文件。
+
+- **第 9 条：改 `std::opt`，不改 3.1。** 3.1/3.3 是终稿，建图时可达而 `std::opt` 后不可达，
+  错的是遍。根因 `cd4bbb259`：内联展开被调体后没接进调用方的链。修法：内联把被调体链头、
+  链尾的同步边接到调用点在调用方链上的前驱与后继，链位不变，其他遍不动。验收
+  `var_read_before_write.opt_nvm` 7/7 + 01:00 返工那 30 条按三类。`lane-eff` 那 5 笔照此改完就合。
+- **第 11 条：按原则裁定，不是"选 A"。** 原文没有 A/B/C 字母，标题写的是"你们的三个选项
+  按下面对号"，给了四条：错误值进单元；`pairs(n)` 的循环携带量都是单元、`pc` 指向循环体里的
+  `yield`；`return` 结束流、`T..` 生成器不许带值 `return`；`T!` 错误元素仍是元素，体里故障则
+  流到此为止。`lane-gen2` 那 7 笔按此对号，对不上的单独写一页问题。
+- **JAX 六答：** 加 `has_aux`（`with_grad` 的 `with` 参数，不加 `argnums`）；`#jvp`/`#vjp` 标签名
+  不改（标签不进值的命名空间）；线性转置仍叫 `transpose`；重算换内存叫 `remat`；`vmap` 先做
+  一个参数、轴 0、输出轴 0；`with_grad` 不改名。另：graph-store 全量逐字节证明不降级。
+- **恢复已答页：** `458a52710` 删掉了 `docs/handover/reviews/questions-2026-10-30-jax.md`
+  （−221 行），但 7 处引用还在（6 个 `.cml` 用例 + 1 个计划）。那页已答完，是记录不是待问
+  问题，所以原样取回、只在页首加一行指向 `questions-2026-10-29.md` 的裁定节；**不动任何
+  `.cml`**，ast 金标零重录。
+- **建渠道：** 作者要求"以后所有交给作者的问题一律放 `docs/handover/questions/`，一问一页"，
+  但那个目录原本不存在，补 `questions/README.md` 说明一页一问、写现象+两个可执行选项、
+  答完挪去 `reviews/` 留档。
+
+## 闸门
+
+- sha `115d10734fa26c0c2cfd3228a48d011407c427a2`（`-Plan all -Tier fast -Jobs 8`，远程 88）
+- `total 7802 / pass 7793 / fail 0 / skip 7 / known failures 2`，`snapshot differs 0`，RUN_EXIT=0
+- skip 7 的三分类（以后台账照此写，别写笼统的"卡被占"）：
+  5 × `CUDA device 0 is not available (tiles:available() is false)`、1 × python `import camel`、
+  1 × 仅 Windows 的 `unicode.paths`
+- 构建指纹 `ac65e136054f` → `7aacd2f00716`：develop 那 4 笔把版本号推进 `package.json` 与
+  `tools/camel-cli/config.h`，而 `tools` 与根 `CMakeLists.txt` 在构建指纹范围内，所以镜像必须
+  重建。**读数只对同一构建成立**——上一轮的读数不能搬到这一轮。
+
+## `citations` 曾红又怎么绿
+
+`check-doc-links --all` 只查 `.md` 里的相对链接，**不查** `.cml`/`.toml` 里写的路径；那 7 处
+引用只有计划里的 `--citations` 抓得到。删页后 `docs.links.citations` 报 7 条
+`no such file`（确定性，`-NoBuild` 单计划重跑复现）。恢复页面后它转绿：
+`432 of 432 symbol citation(s) verified, 2092 path citation(s) across 5471 file(s)`。
+教训：**删文档前先 `--citations`**，`--all` 绿不代表引用没断。
+
+## 踩坑：amend 后跑远程 helper
+
+`camel-remote.ps1` 在 88 的 `camel-work/Camel.git` 上为每个工作树留一个**暂存分支**
+（这里叫 `merge-fsh10`）。本地 `git commit --amend` 后该 ref 还指着旧 sha，push 就非快进、
+helper 直接拒。正解是删它那一个 scratch ref：
+
+    ssh 88zjwei "git -C camel-work/Camel.git branch -D merge-fsh10"
+
+**只删它，绝不碰 `develop`。** 或者干脆不在已推过 helper 的分支上 amend。
