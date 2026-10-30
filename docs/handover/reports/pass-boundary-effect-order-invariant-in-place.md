@@ -28,6 +28,41 @@ lane `lane-inv`，基线 `origin/develop` = `0faa9d4bf`（会话开始时），�
 | Arm / Block 归属 | 同上，但来源是 `GCRegion{kind=Arm\|Block}` 的 `owner` / `callSite` | 抬到的位置确实是运行那张图的节点，链按写下的顺序仍然存在 | 0 |
 | 「调用它的节点就拥有它」 | 上一行之外，再让任何调用某张图的节点都成为它的拥有者 | **不成立**：一张图可以被多处调用、也可以当函数值传，拥有者不唯一，抬上去的链是假的。整闸 `fail 186`（`sync_block_order.*`、`var_param.*`、`equal_branch.*` …），报文里还出现「效应在图 51 却说 in graph 47」这种混图 | 186 红，**已剔除，未进这一支** |
 
+## `older_effect_place` 今天的颜色
+
+作者问：`older_effect_place` 在 `develop` 上今天是绿是红，绿了是哪一笔修好的。
+
+**绿。** 但要先把事实说清：**这个用例不在 `develop` 的树里**。全仓只有一笔加过它——`4af274872`
+（"Hold the lane's remaining work in one place before measuring against develop"，作者 Zhenjie Wei），
+它只在 `lane-eff-rule` 分支上，没合进 `develop`。`git log --all -- test/cases/consistency/if_without_else/older_effect_place.cml`
+只有这一条，`origin/develop` 的树里既没有这个文件，也没有计划项。
+
+所以量的是**那段程序**（与那一笔里的用例同文）在两棵树上跑出来的顺序：
+
+| 树 | 三遍 | 输出 |
+|---|---|---|
+| `develop` 的 `abbc9c229`（10-29 21:10 的构建，主机 `camel-work/Camel`） | `std::nvm` / `std::opt std::nvm` / `std::opt::inline std::opt std::nvm` | `before / older / 1 1 / after`，三遍都对 |
+| 本车道 `1636a849d`（基线 develop `e8d92a8ec` + 本页的五笔） | 同上三遍 | 同上，三遍都对 |
+
+As stated at the time: **the colour "on develop" is undefined** — a case that is not in the tree has no
+colour there, and that is why the request "name the commit that fixed it" could only be answered with
+"none".
+
+Two follow-ups closed it.
+
+The case is now on a lane of its own, based on `origin/develop` = `45bc25f47`, carrying only the case
+file and its plan entry (no source change from the lane it came from): `5cdcb9692`. The whole fast gate
+on that tree is `total 7928, pass 7917, fail 0, skip 9, known failures 2`, and
+`feat.consistency.if_without_else` is 17 of 17.
+
+The bisect was done as promised, and the answer is that **the red is not in any commit**. `4af274872`'s
+parent `d86f50660` ("Judge the rewritten graph as a whole, and drop the session when it has a cycle")
+was built and run against the same program: `std::nvm`, `std::opt` and `std::opt::inline std::opt` all
+print `before / older / 1 1 / after`. Every tree that can be built — `d86f50660`, `abbc9c229`,
+`1636a849d`, `45bc25f47` — is green, so **there is no commit to name as the fix**: the red lived only
+inside that lane's working tree while the fix was being written, and the commit that carries the case
+carries the fix with it.
+
 ## 给作者的一句话
 
 **这条不变量今天是「防将来」，与此前的环守卫同类**：它没有查出任何现存缺陷，是一次「某笔改写一旦把

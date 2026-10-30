@@ -1,7 +1,8 @@
 // The element of an open rank is the type the value has at rank zero, whatever that type is
-// (design principles 5.4): `(int, f32)[..]` takes a `(int, f32)` -- the tuple itself, one value --
-// and an array of tuples, one tuple per element. The element here is the tuple, not an array
-// holding one, so a bare `f32` is not a value of this type.
+// (design principles 5.4): a name declared `(int, f32)[..]` and given a tuple is the tuple itself,
+// one value -- not an array holding one -- and the position takes an array of tuples as the array
+// it is, one tuple per element. A parameter slot takes the array only: it has no rank at run time
+// and refuses the element (`rank_zero_refuses_parameter.cml`).
 
 func rank(v: (int, f32)[..]): int {
     return 1
@@ -9,7 +10,8 @@ func rank(v: (int, f32)[..]): int {
 
 func main(): int sync {
     let pair: (int, f32) = (7, 2.5)
-    println(rank(pair))
+    let one: (int, f32)[..] = pair
+    println(one)
     let pairs: (int, f32)[] = [pair, pair]
     println(rank(pairs))
     return 0

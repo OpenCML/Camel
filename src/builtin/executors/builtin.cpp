@@ -166,6 +166,7 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 
         // variables
         {"var/new", __builtin__var_new__},
+        {"var/new/empty", __builtin__var_new_empty__},
         {"var/get", __builtin__var_get__},
         {"var/peek", __builtin__var_peek__},
         // `xs = xs->sort` as a statement (Builder::inPlaceRebindingOf); with :op/assn_owned
@@ -598,6 +599,16 @@ void registerBuiltinOperatorTraits() {
         "struct/len_arr",
         "struct/len_str",
         "coll/len",
+        // The predicates over a collection: `has` and `contains` walk the entries looking for a
+        // key, `eq` and `neq` compare two collections by content, and `set_is_subset` walks one
+        // looking for each element of the other (collection.cpp#__coll_has__, #__coll_eq__,
+        // #__coll_neq__, #__coll_set_is_subset__). None of them builds a value, so none of them
+        // can run out of memory either, which is the one fault the rest of `coll/` does have.
+        "coll/has",
+        "coll/set_contains",
+        "coll/eq",
+        "coll/neq",
+        "coll/set_is_subset",
     };
     // The conversions of an array apply to each element on its own.
     const auto isArrayConversion = [](std::string_view key) {

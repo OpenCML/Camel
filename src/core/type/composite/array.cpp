@@ -491,6 +491,14 @@ CastSafety ArrayType::castSafetyFrom(Type *sourceType) const {
         return CastSafety::Safe;
     }
     if (sourceType->code() != TypeCode::Array) {
+        // The element type written with `as T[..]` is the rank-zero value itself (design
+        // principles 5.4), and the cast names it rather than storing it: no conversion is made,
+        // and Builder::visitCastNode keeps the value as it is. That is not the same question as
+        // whether a *slot* of type `T[..]` can hold the value -- assignableFrom answers that, and
+        // says no, because the run has no rank-zero slot.
+        if (rankZeroType() != nullptr && resolved() && elemType_->assignableFrom(sourceType)) {
+            return CastSafety::Safe;
+        }
         return CastSafety::Forbidden;
     }
     const auto *source = static_cast<const ArrayType *>(sourceType);
@@ -609,12 +617,16 @@ bool ArrayType::assignableFrom(Type *sourceType) const {
         return false;
     }
     if (sourceType->code() != TypeCode::Array) {
-        // An open rank with no prefix takes rank zero too, and a rank-zero array is the element
-        // itself (design principles 5.4): a value of the element type is a value of `T[..]` --
-        // the same value, not an array holding it. `T[]` does not take it: it states one
-        // dimension, and the element type is rank zero, not rank one. Neither does an open rank
-        // with a prefix (`T[3, ..]`), whose prefix states dimensions the value must have.
-        return rankZeroType() != nullptr && resolved() && elemType_->assignableFrom(sourceType);
+        // Rank zero is the element itself (design principles 5.4), but nothing in the run holds a
+        // rank-zero value in a slot: a slot of type `T[..]` is an array, and a scalar put in it is
+        // read as an array -- `func show(v: f32[..]) { println(v) }` called with a number crashed
+        // the process. A slot therefore takes only the arrays it can hold, and the element is
+        // refused where a slot stands (a parameter, a return, an assignment). A declaration is not
+        // a slot: `let x: f32[..] = 1.0` and `let y: f32[..] = scalar` make a name of the element
+        // type, and the name is the element itself (Builder::declaredValue, Builder::visitCastNode),
+        // so those keep working. `T[]` and `T[3, ..]` refuse the element for a reason of their own
+        // (they state a rank the element does not have).
+        return false;
     }
     const auto *source = static_cast<const ArrayType *>(sourceType);
     // A type that still holds the `Ref` placeholder is not one a value can have (design

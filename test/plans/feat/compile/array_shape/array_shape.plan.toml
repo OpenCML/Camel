@@ -476,12 +476,12 @@ timeout_ms = 8000
 
 [[tests]]
 name = "open_rank_element"
-desc = "The ranks `f32[..]` takes include rank zero, which is the element itself (design principles 5.4): a value of type `f32` enters the position -- it is that value, not an array holding it -- and a rank-1 and a rank-2 array enter as the arrays they are. The same element declared `f32[..]` and written with `as f32[..]` is still the number: it prints as one, so no array was made for it."
+desc = "The ranks a declaration written `f32[..]` takes include rank zero, which is the element itself (design principles 5.4): a name declared `f32[..]` and given a value of type `f32` is that value -- it prints as a number, so no array was made for it -- and a rank-1 and a rank-2 array are the arrays they are. A parameter slot of the same type takes the arrays only (rank_zero_refuses_parameter): it holds an array at run time and has no rank of its own."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/open_rank_element.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "1\n1\n1\n2.5\n2.5\n"
+expect_stdout_exact = "1\n1\n2.5\n2.5\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -498,11 +498,46 @@ timeout_ms = 8000
 
 [[tests]]
 name = "open_rank_tuple_element"
-desc = "The element of an open rank is the type the value has at rank zero (design principles 5.4): `(int, f32)[..]` takes a tuple -- the element itself -- and an array of tuples, one tuple per element."
+desc = "The element of an open rank is the type the value has at rank zero (design principles 5.4): a name declared `(int, f32)[..]` and given a tuple is the tuple itself, and a parameter slot takes an array of tuples, one tuple per element. The slot refuses the tuple alone (rank_zero_refuses_parameter): it holds an array at run time."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/open_rank_tuple_element.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "1\n1\n"
+expect_stdout_exact = "(7, 2.5)\n1\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "open_rank_literal_element"
+desc = "A literal in a position declared `T[..]` is the element (design principles 5.4): the position includes rank zero, which is the element itself, so `let x: f32[..] = 1.0` is the f32, `let t: (int, f32)[..] = (7, 2.5)` is the tuple, and an array literal keeps the rank it has: `[1.0, 2.0]` enters as the rank-1 array it is. The arithmetic on the name runs in the element type, so no array was made for it."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/open_rank_literal_element.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "2.0\n[1.0, 2.0]\n(7, 2.5)\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_one_refuses_literal"
+desc = "`f32[]` states one dimension, so the literal the open rank takes as the element is a value the type cannot hold: refused at the literal with LiteralNotRepresentable, not wrapped around and not cut off."
+kind = "negative"
+case = "../../../../cases/compile/array_shape/rank_one_refuses_literal.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
+expect_output_contains = ["f32[]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_refuses_parameter"
+desc = "A slot of type `f32[..]` has no rank at run time: an array-typed slot holds an array, and a scalar put in it is read as one (this program crashed the process until the slot refused it). Until a rank-zero value has a representation of its own, the parameter slot takes the arrays it can hold and refuses the element at compile time. A name declared `f32[..]` still takes the element as itself -- a declaration makes a name, not a slot."
+kind = "negative"
+case = "../../../../cases/compile/array_shape/rank_zero_refuses_parameter.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_output_contains = ["rank_zero_refuses_parameter.cml:16", "show: (v: f32[..]) => f32[..] uses stdout"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
