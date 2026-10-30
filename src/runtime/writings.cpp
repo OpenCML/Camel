@@ -1226,8 +1226,8 @@ const Program *extractWritings(
         if (graph->executable()) {
             continue;
         }
-        auto &transaction = session->edit(graph);
-        DraftWritings writings(transaction);
+        auto &draft = session->edit(graph).edit();
+        DraftWritings writings(draft);
         writings.extract(model, context.get());
     }
     return session->commit(detached);
