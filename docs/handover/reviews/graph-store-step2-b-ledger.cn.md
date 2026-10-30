@@ -203,3 +203,19 @@ b2.3e 我先报的是"60 处"（`rewrite.h` 17、`generic.cpp` 23、`rewrite.cpp
 
 - **`opt/generic` 的助手签名一换，每一处调用它们的函数都必须手里有事务**；而拿不到事务的三类持有者恰好是 b3（`inlineCallInOrder`／`pullback`）、b2.4（`compile/gir/builder_*`）、b4／b5（`runtime/resources.cpp`、`definitions.cpp`、`draft_session.cpp`、`passes/trans/cml/cml.cpp`）。**b2.3e 的真正位置在它们下游。**
 - **不并进 b6**：b6 的规矩是"只做删除、diff 应几乎全是删除行"，那是它能被看懂的证据；把 15 个签名 + 77 个调用点塞进去，b6 就同时是"改名"和"删名"，证据没了。
+
+## 10. 判据：改完能删代码的数量（三处评估后不做）
+
+三个数只说明"还剩多少拼写"，不说明"这一笔值不值"。补一个判据，**改完能删掉几行代码／几个局部变量**；为 0 就是净负（调用点变长、函数体多一行绑定），不做。三处照这个判据量过，都不做：
+
+| 层 | 拼写 / 调用点 | 能删的代码 | 结论 |
+|---|---|---|---|
+| `passes/test/control.cpp`（b5d 评估） | 1 处签名 / 46 个调用点 | **0 个局部变量** | **不做** |
+| `runtime/graph.cpp` 的 5 个 read-only 助手 | 5 处签名 / 12 个调用点 | 0 | **不做，整片留 b4** |
+| `modules/tiles` | 10 处 / 6 文件 | 0 行 | **不做，留 b4** |
+
+**`control.cpp` 为什么是 0**：那 46 个调用点改成 `node(*owner)` 之后，每个测试函数的 `auto &draft = owner->edit();` 一行也删不掉——这个文件里每个测试自己都要拿草稿调被测的 API（`reduceControlDependencies(draft, …)`、`draft.ctrlInputsOf(…)`、`draft.addNode(…)`），那行绑定是测试的题目，不是直连的残渣。**换掉 1 处拼写、46 个调用点变长，净负。**代码尝试已退回，树回到 `ef6dcac85`。
+
+**`graph.cpp` 为什么整片留 b4**：那 5 个助手（`draftRuntimeNodeRefs`、`nodeIsFreelySchedulable`、`isUnanchoredPure`、`carriesOrdering`、`describeDraftPayload`）的 12 个调用点里，9 个在拿不到事务的持有者手里（`opt/generic/rewrite.cpp`、`opt/generic/generic.cpp`、`writings.cpp`、`draft_inline.cpp`）。**b5 的边界不是"还能改哪儿"，而是"改完不会把 b4 拽进来"。** 账本 §6 把 `graph.*` 归 b4、`draft.h`（存储自身）归 b6，这里以它为准。
+
+**`modules/tiles` 为什么是 0**：这 10 处里真正的住户有三个——`region_extract.cpp` 的 `std::make_unique<rt::GraphDraft>()`（**三个构造点之一**）、`regions.h` 的 `std::unique_ptr<runtime::GraphDraft> graph` 成员、`region_test_pass.cpp` 的 by-value 局部 `runtime::GraphDraft draft;`。改签名要先把这三个住户换成事务，那是 b4 的规模；只改签名则两处定义各多一行 `auto &draft = transaction.edit();`，删掉的行数是 0（`packGraphAggregate`／`packGraphTuple` 的 5 个调用点、`transferAggregate` 的 3 个调用点一个都不因此消失）。
