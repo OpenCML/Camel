@@ -3,6 +3,12 @@ order = 901
 tier = "slow"
 tags = ["gpu", "modules", "tiles"]
 
+# Every test here drives camel on a device. It asks for an idle card rather than the host's own
+# value (docs/test-plans.md, "A card that is not device 0"): the lowest ordinal is the one a
+# co-tenant usually fills, and an out-of-memory context on a shared host reads as our defect.
+[defaults]
+cuda_free_device = true
+
 [[tests]]
 name = "tree_expansion_autodiff_and_device_update"
 kind = "behavior"

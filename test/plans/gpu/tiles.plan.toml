@@ -3,12 +3,14 @@ order = 900
 tier = "slow"
 tags = ["gpu", "modules", "tiles"]
 
-# This layer runs against the cards: a Python test here drives camel or a native check on a
-# device, and the runner's Python default (docs/test-plans.md, "CUDA visibility") would otherwise
-# hide the devices from it and let it measure the CPU. The declaration is the plan's because every
-# test of the layer wants the same thing.
+# This layer runs against a card: a Python test here drives camel or a native check on a device,
+# and the runner's Python default (docs/test-plans.md, "CUDA visibility") would otherwise hide the
+# devices from it and let it measure the CPU. It asks for an idle card rather than the host's own
+# value because the lowest ordinal is the one a co-tenant usually fills, and a test that dies of
+# `CUDA_ERROR_OUT_OF_MEMORY` on a shared host reads as a defect in the code under test. The
+# declaration is the plan's because every test of the layer wants the same thing.
 [defaults]
-cuda_devices = true
+cuda_free_device = true
 
 [[tests]]
 name = "runtime_scalars"
