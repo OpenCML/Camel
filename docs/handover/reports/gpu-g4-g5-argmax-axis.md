@@ -251,7 +251,7 @@ tiles position reduction: an argmax plan keeps the value and stores the loop ind
   `argmax_axis` 是本文这一条。
 ## 六、两个探针，和"声明缺失"的四格读数
 
-**探针是通用件，不专属 argmax**（`region_test_pass.cpp`，由 `CAMEL_TILES_TEST_REASONS=1` 打开）：
+**探针是通用件，不专属 argmax**（`region_test_pass.cpp`，由 `reasons=true` 打开）：
 
 ```
 TILES_REGION_REASON <uri> <reason>            # 该节点为什么不在任何区域里；eligible 表示进了区域
@@ -277,7 +277,7 @@ TILES_OPERATOR_DECLARATION <uri> <declared|undeclared> major=<n>
 
 ### 六之二、"同一个算子两个 URI"——这里停下，要作者裁
 
-读数（`CAMEL_TILES_TEST_REASONS=1`，同一条作用域）：
+读数（`reasons=true`，同一条作用域）：
 
 ```
 TILES_OPERATOR_ID array:argmax_axis id=340 tensor_spelling=422
