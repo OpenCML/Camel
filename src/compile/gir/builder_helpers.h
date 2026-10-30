@@ -391,8 +391,10 @@ inline compile_graph_ptr_t createCompileGraph(
     runtime::GraphId id, FunctionType *funcType, const compile_graph_ptr_t &outer,
     std::string name = "",
     const std::vector<camel::source::origin_id_t> &parameterOrigins = {}) {
-    auto graph = std::make_shared<DraftGraphBuilder>(funcType ? funcType : FunctionType::create());
-    graph->draft().setId(id);
+    // The graph's identity is taken by the transaction it is built in: this is the one place a
+    // compile graph comes into being, and it comes into being inside a transaction.
+    auto graph = std::make_shared<DraftGraphBuilder>(runtime::GraphTransaction::open(
+        id, funcType ? funcType : FunctionType::create()));
     if (name.empty()) {
         name = std::format("__g_{}__", runtime::toValue(id));
     }

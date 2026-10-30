@@ -39,15 +39,14 @@ std::unordered_map<const runtime::GraphDraft *, DraftGraphBuilder *> &draftOwner
 
 } // namespace
 
-DraftGraphBuilder::DraftGraphBuilder(camel::core::type::FunctionType *funcType)
+DraftGraphBuilder::DraftGraphBuilder(std::shared_ptr<runtime::GraphTransaction> transaction)
     : arena_(std::make_shared<GraphArena>(kInitialArenaBlockBytes)),
-      draft_(std::make_unique<runtime::GraphDraft>()) {
-    draft_->setFuncType(funcType);
-    draft_->setInheritsRegions(false);
-    draftOwners()[draft_.get()] = this;
+      transaction_(std::move(transaction)) {
+    ASSERT(transaction_ != nullptr, "A compile graph is built in a transaction.");
+    draftOwners()[&draft()] = this;
 }
 
-DraftGraphBuilder::~DraftGraphBuilder() { draftOwners().erase(draft_.get()); }
+DraftGraphBuilder::~DraftGraphBuilder() { draftOwners().erase(&draft()); }
 
 DraftGraphBuilder *DraftGraphBuilder::fromDraft(const runtime::GraphDraft *draft) {
     auto it = draftOwners().find(draft);
@@ -55,42 +54,42 @@ DraftGraphBuilder *DraftGraphBuilder::fromDraft(const runtime::GraphDraft *draft
 }
 
 void DraftGraphBuilder::setFuncType(camel::core::type::FunctionType *funcType) {
-    draft_->setFuncType(funcType);
+    draft().setFuncType(funcType);
 }
 
 void DraftGraphBuilder::setExitType(camel::core::type::Type *exitType) {
-    camel::core::type::FunctionType *funcType = draft_->funcType();
+    camel::core::type::FunctionType *funcType = draft().funcType();
     ASSERT(funcType != nullptr, "A graph under construction has a function type.");
     if (auto *open = funcType->asOpen()) {
         open->setExitType(exitType);
     } else {
-        draft_->setFuncType(funcType->withExitType(exitType));
+        draft().setFuncType(funcType->withExitType(exitType));
     }
 }
 
 void DraftGraphBuilder::setResources(const camel::core::sem::ResourceSignature &resources) {
-    camel::core::type::FunctionType *funcType = draft_->funcType();
+    camel::core::type::FunctionType *funcType = draft().funcType();
     ASSERT(funcType != nullptr, "A graph under construction has a function type.");
     if (auto *open = funcType->asOpen()) {
         // The declaration's own signature, which no other function shares: what a function
         // promises about resources is part of its type, so it is written where the type is.
         open->setResources(resources);
     } else {
-        draft_->setFuncType(funcType->withResources(resources));
+        draft().setFuncType(funcType->withResources(resources));
     }
 }
 
 std::vector<std::string_view> DraftGraphBuilder::captureNames() const {
     std::vector<std::string_view> names;
-    names.reserve(draft_->captureNames().size());
-    for (camel::core::SymId name : draft_->captureNames()) {
+    names.reserve(draft().captureNames().size());
+    for (camel::core::SymId name : draft().captureNames()) {
         names.push_back(camel::core::symbolText(name));
     }
     return names;
 }
 
 void DraftGraphBuilder::setClosureType(camel::core::type::TupleType *closureType) {
-    draft_->setClosureType(closureType);
+    draft().setClosureType(closureType);
 }
 
 slot_t DraftGraphBuilder::makeStaticSlot(
@@ -124,7 +123,7 @@ runtime::gc_slot_idx_t DraftGraphBuilder::addStaticSlot(slot_t slot) {
 
 runtime::gc_slot_idx_t
 DraftGraphBuilder::addStaticSlot(slot_t slot, camel::core::type::Type *type) {
-    const size_t slotIndex = draft_->appendStaticSlot(slot, type);
+    const size_t slotIndex = draft().appendStaticSlot(slot, type);
     ASSERT(
         slotIndex <= static_cast<size_t>(std::numeric_limits<runtime::gc_slot_idx_t>::max()),
         "Compile-time static slot index exceeds runtime gc_slot_idx_t capacity.");
@@ -139,12 +138,12 @@ runtime::gc_slot_idx_t DraftGraphBuilder::addStaticData(
 }
 
 runtime::gc_slot_idx_t DraftGraphBuilder::addRuntimeSlot(camel::core::type::Type *type) {
-    return draft_->allocateRuntimeSlot(type);
+    return draft().allocateRuntimeSlot(type);
 }
 
 void DraftGraphBuilder::setStaticSlot(runtime::gc_slot_idx_t index, slot_t slot) {
     ASSERT(index < 0, "Static slot index must be negative.");
-    draft_->setStaticSlot(static_cast<size_t>(-index), slot);
+    draft().setStaticSlot(static_cast<size_t>(-index), slot);
 }
 
 void DraftGraphBuilder::setStaticData(
@@ -156,7 +155,7 @@ runtime::DraftNodeRef DraftGraphBuilder::addStaticDataNode(
     const camel::core::data::data_ptr_t &data, camel::core::type::Type *runtimeType) {
     auto *nodeType       = runtimeType ? runtimeType : data->type();
     const auto slotIndex = addStaticData(data, nodeType);
-    const auto id        = draft_->addDataNode(
+    const auto id        = draft().addDataNode(
         nodeType,
         slotIndex,
         static_cast<uint8_t>(runtime::kGCNodeFlagConstant));
@@ -166,57 +165,57 @@ runtime::DraftNodeRef DraftGraphBuilder::addStaticDataNode(
 runtime::DraftNodeRef DraftGraphBuilder::addPortNode(
     camel::core::type::Type *type, std::string name, bool isWith) {
     const auto slotIndex            = addRuntimeSlot(type);
-    const runtime::gc_node_ref_t id = draft_->addPortNode(type, slotIndex);
+    const runtime::gc_node_ref_t id = draft().addPortNode(type, slotIndex);
     const auto node                 = ref(id);
     registerNodePortName(node, std::move(name));
     if (isWith) {
-        draft_->appendWithPort(id);
+        draft().appendWithPort(id);
     } else {
-        draft_->appendNormPort(id);
+        draft().appendNormPort(id);
     }
     return node;
 }
 
 runtime::DraftNodeRef DraftGraphBuilder::addCastNode(camel::core::type::Type *type) {
-    return ref(draft_->addCastNode(type));
+    return ref(draft().addCastNode(type));
 }
 
 runtime::DraftNodeRef DraftGraphBuilder::addCopyNode(camel::core::type::Type *type) {
-    return ref(draft_->addCopyNode(type));
+    return ref(draft().addCopyNode(type));
 }
 
 runtime::DraftNodeRef
 DraftGraphBuilder::addFillNode(camel::core::type::Type *type, const runtime::GCFillBody &body) {
-    return ref(draft_->addFillNode(type, body));
+    return ref(draft().addFillNode(type, body));
 }
 
 runtime::DraftNodeRef
 DraftGraphBuilder::addFillNode(camel::core::type::Type *type, std::span<const std::byte> payload) {
-    return ref(draft_->addFillNode(type, payload));
+    return ref(draft().addFillNode(type, payload));
 }
 
 runtime::DraftNodeRef
 DraftGraphBuilder::addAccsNode(camel::core::type::Type *type, uint32_t tupleIndex) {
-    return ref(draft_->addAccsNode(type, tupleIndex));
+    return ref(draft().addAccsNode(type, tupleIndex));
 }
 
 runtime::DraftNodeRef DraftGraphBuilder::addAccsNode(camel::core::type::Type *type, std::string key) {
-    return ref(draft_->addAccsNode(type, key));
+    return ref(draft().addAccsNode(type, key));
 }
 
 runtime::DraftNodeRef DraftGraphBuilder::addBrchNode(
     camel::core::type::Type *type, runtime::DraftNodeRef joinNode, runtime::gc_cnt_t armCount) {
-    return ref(draft_->addBrchNode(type, joinNode.id, armCount));
+    return ref(draft().addBrchNode(type, joinNode.id, armCount));
 }
 
 runtime::DraftNodeRef DraftGraphBuilder::addJoinNode(
     camel::core::type::Type *type, runtime::DraftNodeRef brchNode, runtime::gc_cnt_t armCount) {
-    return ref(draft_->addJoinNode(type, brchNode.id, armCount));
+    return ref(draft().addJoinNode(type, brchNode.id, armCount));
 }
 
 runtime::DraftNodeRef
 DraftGraphBuilder::addCallNode(camel::core::type::Type *type, const runtime::GCCallBody &body) {
-    return ref(draft_->addCallNode(type, body));
+    return ref(draft().addCallNode(type, body));
 }
 
 runtime::DraftNodeRef
@@ -231,7 +230,7 @@ runtime::DraftNodeRef DraftGraphBuilder::addFuncNode(
     ASSERT(target != nullptr, "DraftGraphBuilder function target cannot be null.");
     const uint8_t runtimeFlags =
         target->draft().isMacroGraph() ? runtime::kGCNodeFlagMacro : 0;
-    const runtime::gc_node_ref_t id = draft_->addFuncNode(
+    const runtime::gc_node_ref_t id = draft().addFuncNode(
         runtime::kInvalidGraphId, type, runtimeFlags, dataIndex, writtenCaptures);
     const auto node = ref(id);
     registerFuncTarget(node, target);
@@ -240,13 +239,13 @@ runtime::DraftNodeRef DraftGraphBuilder::addFuncNode(
 
 runtime::DraftNodeRef
 DraftGraphBuilder::addRegionLoopNode(camel::core::LoopKind kind, camel::core::type::Type *type) {
-    return ref(draft_->addLoopNode(runtime::GCLoopBody{.kind = kind}, type));
+    return ref(draft().addLoopNode(runtime::GCLoopBody{.kind = kind}, type));
 }
 
 runtime::DraftNodeRef
 DraftGraphBuilder::addRegionPortNode(camel::core::type::Type *type, std::string name) {
     const auto slotIndex            = addRuntimeSlot(type);
-    const runtime::gc_node_ref_t id = draft_->addPortNode(type, slotIndex);
+    const runtime::gc_node_ref_t id = draft().addPortNode(type, slotIndex);
     const auto node                 = ref(id);
     if (!name.empty()) {
         registerNodePortName(node, std::move(name));
@@ -258,19 +257,19 @@ runtime::DraftNodeRef
 DraftGraphBuilder::addOperNode(const oper_idx_ptr_t &op, runtime::gc_slot_idx_t dataIndex) {
     ASSERT(op != nullptr, "DraftGraphBuilder operator target cannot be null.");
     const runtime::gc_node_ref_t id =
-        draft_->addOperNode(op->funcType()->exitType(), nullptr, op->uri(), dataIndex);
+        draft().addOperNode(op->funcType()->exitType(), nullptr, op->uri(), dataIndex);
     const auto node = ref(id);
     if (camel::core::OperatorTable::instance().isMacro(op->uri())) {
-        draft_->setNodeRuntimeFlags(id, runtime::kGCNodeFlagMacro);
+        draft().setNodeRuntimeFlags(id, runtime::kGCNodeFlagMacro);
     }
     registerOperTarget(node, op);
     return node;
 }
 
 void DraftGraphBuilder::retargetOperNode(runtime::DraftNodeRef node, const oper_idx_ptr_t &op) {
-    ASSERT(node && draft_->header(node.id)->kind == runtime::GCNodeKind::Oper, "Not an OPER node.");
+    ASSERT(node && draft().header(node.id)->kind == runtime::GCNodeKind::Oper, "Not an OPER node.");
     ASSERT(op != nullptr, "DraftGraphBuilder operator target cannot be null.");
-    auto payload = draft_->mutablePayloadOf(node.id);
+    auto payload = draft().mutablePayloadOf(node.id);
     ASSERT(payload.size() >= sizeof(runtime::GCOperBody), "OPER payload is too small.");
     auto *body = reinterpret_cast<runtime::GCOperBody *>(payload.data());
     body->op   = nullptr;
@@ -279,11 +278,11 @@ void DraftGraphBuilder::retargetOperNode(runtime::DraftNodeRef node, const oper_
 }
 
 runtime::DraftNodeRef DraftGraphBuilder::addGateNode(camel::core::type::Type *type) {
-    return ref(draft_->addGateNode(type));
+    return ref(draft().addGateNode(type));
 }
 
 runtime::DraftNodeRef DraftGraphBuilder::addDrefNode(DrefTarget target) {
-    const runtime::gc_node_ref_t id = draft_->addDrefNode();
+    const runtime::gc_node_ref_t id = draft().addDrefNode();
     const auto node                 = ref(id);
     registerDrefTarget(node, std::move(target));
     return node;
@@ -292,13 +291,13 @@ runtime::DraftNodeRef DraftGraphBuilder::addDrefNode(DrefTarget target) {
 void DraftGraphBuilder::link(
     runtime::DraftEdgeKind kind, runtime::DraftNodeRef from, runtime::DraftNodeRef to,
     runtime::PortRole role) {
-    draft_->appendInput(kind, to.id, from.id, role);
+    draft().appendInput(kind, to.id, from.id, role);
 }
 
 bool DraftGraphBuilder::unlink(
     runtime::DraftEdgeKind kind, runtime::DraftNodeRef from, runtime::DraftNodeRef to,
     runtime::PortRole role) {
-    return draft_->unlinkInput(kind, to.id, from.id, role);
+    return draft().unlinkInput(kind, to.id, from.id, role);
 }
 
 void DraftGraphBuilder::addDependencyGraph(const graph_ptr_t &graph) {
@@ -349,7 +348,7 @@ void DraftGraphBuilder::addRuleGraphRef(const graph_ptr_t &graph) {
         // The draft keeps its own table of graph references: a graph built from it while the
         // passes run (std::macro evaluates a gradient) must name its rule too, not only the
         // program the graphs are encoded into at the end.
-        draft_->addRuleGraphRef(graph->graphId());
+        draft().addRuleGraphRef(graph->graphId());
     }
 }
 
