@@ -265,7 +265,8 @@ class StaticArgsView final : public ArgsView {
 /// The static value and its type, or nothing: what `eval` reads its operands from and what the
 /// C++ fold's `staticValueOf` reads (minus its walk through a GATE, which the module's reads do
 /// not make; docs/technical/45_graph_module.md).
-std::optional<std::pair<slot_t, Type *>> staticValue(const GraphDraft &draft, gc_node_ref_t ref) {
+template <class Draft>
+std::optional<std::pair<slot_t, Type *>> staticValue(const Draft &draft, gc_node_ref_t ref) {
     const auto *h = draft.header(ref);
     if (h == nullptr || h->kind != GCNodeKind::Data || h->dataIndex >= 0) {
         return std::nullopt;

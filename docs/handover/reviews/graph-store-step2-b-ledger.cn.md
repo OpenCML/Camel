@@ -1,5 +1,7 @@
 # graph-store 第 2 步 b：直连账（逐步填）
 
+**这一路的账：535 → 534 → 533 → 532 → 530 → 521**（files 66 → 64，decode 6 → 5）。它**不是线性**的：`534`（`fact.cpp` 的两处退路）、`530`（转储在 decode 副本上开事务）各掉一格，而中间三笔**一格没掉**——`calleeKernel` 把 `|| handle->draft()` 收成只问事务、`read.cpp` 三处把 `->draft()` 归零（退路本就是 `auto`，没有类型名可删）、删探针（探针不碰草稿）——**"改一处就该掉一格不是必然"，每一格都能指名。**
+
 b 的落点是"可编辑图归图仓的事务所有、前端一开始就在里面建图"，最后一笔删掉 `GraphDraft`。
 本页只做一件事：把"还有多少处直接连到 `GraphDraft`"记成三个数，**每一笔提交填一行**。叙述可以说"删净了"，这三个数不会。
 
@@ -398,3 +400,21 @@ helper 只借一次草稿、并不持有它，所以改成收模板参数（`tem
 **"无事务写入"这种形态现在不存在了**：`DraftWritings` 只认事务、`Handle` 只认事务、`createInDraft` 没有调用者。§21 问的那个问题（*测试自建草稿的构造点改完从哪里拿草稿*）的答案是**它们不再需要草稿**——测试改成开事务，模拟的正是真实世界里写图的样子。
 
 **§21 那条更正到此生效**：判"是不是草稿"**只问事务**。§21 里 B 的版本（同时问事务与指针）**只适用于两种形态并存的时期**；A 落地后它不再成立。
+
+**"删得干净"的判据是这一句，不是"测试全绿"**：*`createInDraft` 零调用者，所以删得干净。* 套件全绿只能说明没人踩到，零调用者才说明这条路不存在了。
+
+## 23. 收尾清扫：`read.cpp` 不再提这个类型，账本一格没白掉
+
+**判据提前写在前面（这一笔的预期是"账本数大概不动"）**：这三处本来就拿着事务，只是写法还是老的——所以掉数不是这一笔的目的，**写法和事务一致**才是。
+
+| 改了什么 | 为什么现在能改 |
+|---|---|
+| `NodeView` 从"借一个 `const GraphDraft *`"改成"借事务"，`draft()` 访问器返回 `transaction->graph()`（`auto` 推导） | 视图的唯一来源就是事务；**`read.cpp` 里 `GraphDraft` 的出现次数 4 → 0，整个文件从账本里消失** |
+| `is_written_slot` 的缓存键值：`GraphDraft::decode` → `GraphTransaction::decode` + `.edit()`，注释写明"副本、永不 commit" | 和 `graphWritings` 同一种形态；decode 点 5 → 4 |
+| `fact.cpp` 删掉已无用的 `using camel::runtime::GraphDraft;` | 上一笔把 `Source` 改成事务之后它就没人用 |
+| `txn.cpp#staticValue` 收 `const Draft` 模板参数 | 它只是借读，不该在签名上宣称拥有 |
+| `is_anchor` 里 `const GraphDraft &draft = *node.draft;` → `const auto &` | 借读用 `auto`（§15 的老规矩） |
+
+**四项实测：62 / 515 / 3 / 4**（files 64 → 62，references 521 → 515，decode 5 → 4）。
+
+**"还有没有可删的调用点"——在今晚动过的范围里是 0**：`handle.h`／`handle.cpp` 0、`read.cpp` 0、`fact.cpp` 0、`module.cpp` 0。**`modules/graph/txn.cpp` 还剩 2 处，都不是台账住户**：一处是 `using`，一处是事务 API 自己的返回类型 `std::pair<GraphDraft &, gc_node_ref_t>`——事务的墙（§0 第 1 条）本来就不在账里。剩下的 `GraphDraft` 全在 `draft*.cpp` 与各 pass 里，那是**这个类型本身该在的地方**，不是"直连"。

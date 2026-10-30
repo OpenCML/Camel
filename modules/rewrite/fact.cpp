@@ -75,7 +75,6 @@ using camel::runtime::DraftNode;
 using camel::runtime::GCGraph;
 using camel::runtime::GCNodeKind;
 using camel::runtime::gc_node_ref_t;
-using camel::runtime::GraphDraft;
 using camel::runtime::Program;
 
 /// One node of an `on` pattern, read from the graph of the pattern function.

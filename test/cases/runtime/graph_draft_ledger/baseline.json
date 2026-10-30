@@ -1,10 +1,10 @@
 {
   "comment": "The baseline of the direct-connection ledger (graph-store step 2 b): the numbers below may only fall, and the last step is all of them at zero. `sites` records where each number comes from, as `file#symbol` (a line number moves with every edit above it, a symbol does not); it is diagnostics for a red and never decides the verdict. Record a new row after a commit with check.mjs --record.",
   "numbers": {
-    "files": 64,
-    "references": 521,
+    "files": 62,
+    "references": 515,
     "constructions": 3,
-    "decode": 5
+    "decode": 4
   },
   "sites": {
     "files": {
@@ -28,10 +28,8 @@
       "include/camel/runtime/operator_instance.h": 1,
       "include/camel/runtime/writings.h": 1,
       "modules/autodiff/pullback.cpp": 1,
-      "modules/graph/read.cpp": 1,
       "modules/graph/txn.cpp": 1,
       "modules/onnx/exporter.cpp": 1,
-      "modules/rewrite/fact.cpp": 1,
       "modules/rewrite/proof.h": 1,
       "modules/tiles/include/tiles/internal/graph_values.h": 1,
       "modules/tiles/include/tiles/internal/regions.h": 1,
@@ -137,15 +135,9 @@
       "modules/autodiff/pullback.cpp#typeOf": 1,
       "modules/autodiff/pullback.cpp#valueNode": 1,
       "modules/autodiff/pullback.cpp#valueOrder": 1,
-      "modules/graph/read.cpp#-": 1,
-      "modules/graph/read.cpp#isAnchorKernel": 1,
-      "modules/graph/read.cpp#isWrittenSlotKernel": 1,
-      "modules/graph/read.cpp#nodeOf": 1,
       "modules/graph/txn.cpp#-": 1,
       "modules/graph/txn.cpp#openState": 1,
-      "modules/graph/txn.cpp#staticValue": 1,
       "modules/onnx/exporter.cpp#bindCaptures": 1,
-      "modules/rewrite/fact.cpp#-": 1,
       "modules/rewrite/proof.h#-": 1,
       "modules/tiles/include/tiles/internal/graph_values.h#packGraphAggregate": 2,
       "modules/tiles/include/tiles/internal/regions.h#-": 1,
@@ -479,7 +471,6 @@
       "src/runtime/draft.cpp#decode": 1
     },
     "decode": {
-      "modules/graph/read.cpp#isWrittenSlotKernel": 1,
       "modules/rewrite/proof.h#-": 1,
       "src/runtime/draft.cpp#decode": 1,
       "src/runtime/draft_inline.cpp#liftClosureGraph": 1,
