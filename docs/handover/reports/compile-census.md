@@ -138,3 +138,68 @@ node scripts/test.js test/plans/perf --compile-only --jobs 8
 ```
 
 **`gpu` 的修复有效：`transformer_step` 两条从「编译不过」变成 PASS。** 但这条计划**不是 6/6/0**：`mlp_step` 的两条仍红（`expected exit 0, got 1`），**诊断原文未取到**，这里不猜原因。**「那个坏程序修好了」有读数；「这条计划绿了」没有。**
+
+### 全量两栏（fast 层外）
+
+```
+node scripts/test.js test/plans --compile-only --jobs 8
+[SUMMARY] total: 3670, pass: 3535, fail: 1, skip: 134
+[INFO] wall: 491.9 s, jobs: 8
+[NOT-JUDGED] 295 条
+[FAIL] transformer_step.profile -- does not compile (transformer_step.cml): exit 1
+```
+
+**fast 层外的 3670 个条目里，只有一个程序编不过——就是 `transformer_step.cml`，那个从没被跑过的。** 其余红全部消失：
+它们此前要么是「判据不适用」（现在显式标为 NOT-JUDGED，295 条），要么是我漏关的 CPU 判据。
+
+### 两条诊断原文（照抄，不解释）
+
+`transformer_step.cml`（快层外那条唯一的编译失败，`58dcb949c` 上）：
+
+```
+error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> ({ g1: f32[8], g2: f32[8], wq: f32[8, 8], wk: f32[8, 8], wv: f32[8, 8], wo: f32[8, 8], w1: f32[8, 16], b1: f32[16], w2: f32[16, 8], b2: f32[8] }, { g1: f32[..], g2: f32[..], wq: f32[..], wk: f32[..], wv: f32[..], wo: f32[..], w1: f32[..], b1: f32[..], w2: f32[..], b2: f32[..] }, OptimizerState, float).
+   --> test/cases/perf/transformer_step.cml:90:28
+ 90 |             let next = adam(b, gradient, opt, lr)
+help: Available overloads: <nn:adam>: (params: P, grads: grad of P, state: OptimizerState, lr: float, beta1?, beta2?, eps?) => (P, OptimizerState)
+```
+
+`mlp_step.cml`（`lane-gpu`/`d7b3ed065` 上仍红的那两条）：
+
+```
+error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> ({ w1: f32[784, 128], b1: f32[128], w2: f32[128, 10], b2: f32[10] }, { w1: f32[..], b1: f32[..], w2: f32[..], b2: f32[..] }, OptimizerState, float).
+   --> test/cases/perf/mlp_step.cml:55:28
+ 55 |             let next = adam(m, gradient, opt, lr)
+help: Available overloads: <nn:adam>: (params: P, grads: grad of P, state: OptimizerState, lr: float, beta1?, beta2?, eps?) => (P, OptimizerState)
+```
+
+**判断：程序没写错，是编译器（类型）这一侧的缺口。** 判据两条：一是 `gpu` 的 `9e01683d6` 只改了 `type Block` 的字段形状，`transformer_step` 就从「编不过」变成 PASS——**同一个文件、同一行 `adam(...)`，改的是类型声明，不是程序**；二是 `mlp_step` 是**逐字同构**的 `grad of P` 失配（参数是静态形状的 struct，梯度是无界 `f32[..]`），说明缺口没被那笔修完，而不是两个程序各自写坏。**不修，只记读数**；修要单独立一笔。
+
+**`--compile-only` 第一次跑出 1 条时，那个 1 不是噪声，是这条工具存在的理由。**
+
+## 一个关于「报数」的例子（我自己的账）
+
+今晚我两次报告账本读数都写成 **62 / 491 / 3 / 4**——那是 `gs2b` 三个族合并**之前**的数。同一份账本在**两小时内**从
+`62 / 491` 一路降到 **`47 / 395`**（`b5d86e610` 上实测：`files 47 <= 47 references 395 <= 395 constructions 3 <= 3 decode 4 <= 4`）。
+
+**判据：同一份账本在两小时内从 62/491 降到 47/395，任何引用它的页都必须带取数的 sha，否则读者无法判断自己读到的是哪一刻。**
+
+## `perf` 那 47 条里 40 条「判据不适用」这个比例本身是个读数
+
+**`perf` 层几乎不判编译，它判的是比值与预算；所以它本来就不该被这个模式覆盖。** 这也是 `--compile-only` 进不了闸门的
+第二个理由（第一个是 8 分钟）：**在这片地方，编译只是它们故事的开头。**
+
+## `mlp_step`：程序把声明写松了，不是编译器把类型抹平了
+
+```
+“`grad of P` 已经保形（`derivative.cpp:213` 那条 'a numeric array's tangent is a tensor of the same
+shape'）；`f32[..]` 与静态形状的不统一，是程序把声明写松了，不是编译器把类型抹平了。
+`transformer_step` 的修复方向是把声明改成与实际值相同的静态形状，与‘接受抹平’正好相反。”
+```
+
+**判据**：**当一个「缺口的修法」有两种方向（放宽类型系统 / 收紧程序声明），先问哪一种让系统多一个能检查的东西——今晚的答案是后者。**
+
+按这个方向，`test/cases/perf/mlp_step.cml` 的 `type Mlp` 写成了它实际构建的形状（`w1: f32[784, 128]`、`b1: f32[128]`、`w2: f32[128, 10]`、`b2: f32[10]`），理由是梯度的形状与参数一致，声明写松就会与自己的值不统一。
+
+**读数**：`perf/training_steps` **6 / 6 / 0**（此前 4/6），`mlp_step.nvm` 与 `mlp_step.fvm` 都 PASS，`transformer_step` 两条仍是 PASS。
+
+**顺手一查**：`git grep -n 'f32\[\.\.\]' -- test/cases/perf` 共 **42 处、8 个文件**（`gemm_threads_curve.cml` 17、`transformer_step.cml` 6、`fusion_step.cml` 5、`dependency_chain.cml` 4、`fusion_chain.cml` 3、`gemm_canonical_shapes.cml` 3、`mlp_step.cml` 3、`step_budget.py` 1）。**其中并非都是参数树**（`mlp_step` 剩下的 3 处是 `logits`/`loss` 的形参与返回类型），是否还有同形状的第二处，未查、未改。
