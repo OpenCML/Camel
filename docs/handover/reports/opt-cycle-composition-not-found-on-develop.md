@@ -55,7 +55,7 @@ gate 后的输入 / 区域 / 权限）和 `reaches`（`norm`/`with`/`ctrl`/`sync
 
 ## 一个会咬人的细节
 
-守卫走 **5** 类边（含 `sync`，`rewrite.cpp:489`），冻结只走 **4** 类（`graph_edges.cpp:489`）。
+守卫走 **5** 类边（含 `sync`，`rewrite.cpp:489`），冻结只走 **4** 类（`graph_edges.cpp:508`）。
 所以「守卫触发」不等于「拿掉守卫会报 `PassInternalError`」：只在 `sync` 上成的环，守卫会静默丢弃
 会话，程序照常跑。将来写这条用例时，A/B 要红必须是 4 类边上的环；只在 `sync` 上成的环要换判据。
 
