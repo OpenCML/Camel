@@ -29,4 +29,19 @@
 
 **默认建议：先查 ①**（一次实验就能判定是限制还是缺陷），判不定再走 ②。
 
-裁定之前三条标签仍留在 `stdlib/autodiff.cml`（`git show 04cf9c01e:stdlib/autodiff.cml`），标量规则留在 `stdlib/rulesets/jvp.cml`。
+裁定之前三条标签仍留在 `stdlib/autodiff.cml`（`git show 04cf9c01e:stdlib/autodiff.cml`），标量规则留在 `stdlib/rulesets/jvp.cml`。## 最小事实（2026-10-31 补测，四组各一次构建，均只跑 `feat.compile.rulesets`）
+
+在模块末尾加一条**无用**的标签声明 `export tag probe_tag::<F>(rule: F) on func`：
+
+| 加在哪 | 结果 |
+|---|---|
+| a. `stdlib/prelude.cml` | **绿**（`total 2 / pass 2 / fail 0`） |
+| b. `stdlib/autodiff.cml` | **绿**（`total 2 / pass 2 / fail 0`） |
+| c. `stdlib/types.cml` | **绿**（`total 2 / pass 2 / fail 0`） |
+| d. `stdlib/prelude.cml`，带 `when is_function::<F>()` 的 `export tag probe_tag2::<F>(rule: F) on func when is_function::<F>()` | **绿**（`total 2 / pass 2 / fail 0`） |
+
+**所以"`export tag` 在 `prelude` 里不成立"这个结论是错的，本节推翻上面的推断。** 四组都绿说明：`prelude` 能声明标签，也能写 `when is_function::<F>()`。
+
+真正触发那三条连锁报错的，**不是"标签进了 `prelude`"这件事本身**，而是搬迁那一笔里的其他东西——待定。下一步的做法是把搬迁拆成"只搬一条标签 → 构建 → 只搬三条 → 构建 → 再让用例从 `prelude` 引入"，逐层定位；`transpose` 这个名字在 `tensor` 里另有一个同名函数，是首先要排掉的嫌疑。
+
+**在这之前，三条标签仍留在 `stdlib/autodiff.cml`，标量规则仍留在 `stdlib/rulesets/jvp.cml`。**
