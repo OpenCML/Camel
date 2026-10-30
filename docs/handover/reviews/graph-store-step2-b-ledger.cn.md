@@ -689,3 +689,29 @@ HANDLE_PROBE refused: InvalidArgument
 **三个数**：**消失的参数 3 个**；**删掉的行数 3**（净 `+5`：三行绑定 + 那段"仍然读控制边"的注释）；**保留 13 个**（上表）。
 
 **四个数：59 / 444 / 3 / 4**（`450 → 444`）。
+
+## 35. 收尾扫描：那 13 处不是"拼写数"，是**13 个删不掉的理由**（`46a30576e`）
+
+**判据的对象换了**：这一族的目标不是少写字，是**最后能删掉 `GraphDraft` 本身**——所以
+**"能删掉几行"在这里读成"能删掉几个 `GraphDraft &` 参数"**：**每一个还在收它的参数，都是一个删不掉的理由。**
+这不是把标准放宽，是把标准的**对象**从行数换成了**参数**。
+
+**13 处全转，0 处拿不到事务。** 而且有三处把同一个问题往外推了一跳，**每一跳都早就有人回答过**：
+
+| 那一跳 | 它本来就有 |
+|---|---|
+| `builder_control.cpp` / `builder_operators.cpp` | **`nodeTransactionOf`**，就写在 `nodeDraftOf` 旁边，注释原话：*"the transaction the node's graph is built in … the identity two nodes of one graph agree on"* |
+| `draft_inline.cpp` 的拼接例程 | `inlineCallableInDraft(session, GraphTransaction &transaction, …)` 的参数表 |
+| `test/control.cpp` | 每个用例第二行的 `GraphTransaction::open(...)` |
+
+**额外带出来的三个**（不在那 13 里，是编译器点名的下一跳）：`bindPortValueUses`、`keepCalleeOrdering`、
+`devirtualizeClosureCallInDraft`——**它们都在 `draft_inline.cpp`，上游都是已经收事务的函数。**
+
+**"没有一处需要新造事务"**——**这句话是整场迁移的总答案**：*"调用点上能不能拿到事务"这条判据，
+到现在为止的答案是：能——只要那个模块已经按自己的方式回答过一次。*
+
+**这一族的账**：`generic` 与 `control` 两个模块里**再没有一处参数写 `GraphDraft`**。
+
+**三个数**：**消失的参数 16 个**（13 + 额外三跳）；**删掉的行数 16**；**保留 0 个**。
+
+**四个数：57 / 432 / 3 / 4**（`444 → 432`，**files 59 → 57**：`control.cpp`、`control.h` 连拼写都没了）。
