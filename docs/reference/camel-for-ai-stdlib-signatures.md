@@ -753,6 +753,12 @@ div_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
 neg_cotangent: (x: T, ct: T) => T when is_float::<T>()
 ```
 
+**`rulesets.jvp`** — import { ... } from rulesets.jvp — 1 name(s)
+
+```text
+lift: (x: T) => Lift<T>
+```
+
 **`sim`** — import { ... } from sim — 2 name(s)
 
 ```text
