@@ -21,9 +21,22 @@
 
 | 页 | 问题 | 状态 |
 |---|---|---|
-| `questions-2026-10-30-cell-type.md` | A 的"只带类型"的单元，类型从哪来 | 待裁 |
-| `questions-2026-10-30-write-before-read.md` | "写之前读是编译错误"由谁证 | 待裁 |
-| `questions-2026-10-30-rows-of-name.md` | 类型函数原语 `RowsOf<T>` 这个名字沿不沿用 | 待裁 |
+
+表这一刻是空的：七页全已答复并挪到 `docs/handover/reviews/`，待裁表头留着，下一轮还会用。
 
 2026-10-30 05:40 的裁定答的是 A 的取值形状（错误值进单元、`pairs(n)` 的跨 `yield` 携带量、
-`return`、可错元素），没有答这两页各自末尾问的那一句。
+`return`、可错元素）；cell-type 与 write-before-read 各自末尾问的那一句，由 2026-10-30 07:20 的裁定
+一并答复；rows-of-name 那页由 08:10 的裁定答复（`RowsOf<T>` 沿用）。七页的裁定原文见
+`docs/handover/reviews/questions-2026-10-29.md` 末节与 `docs/handover/reviews/questions-2026-10-30-gate-control-edge.md`。
+
+## 已答复（2026-10-30，现在在 `docs/handover/reviews/`）
+
+| 页 | 问题 |
+|---|---|
+| `questions-2026-10-30-what-counts-as-a-statement.md` | `sync` 块里「谁算语句」 |
+| `questions-2026-10-30-may-fault-boundary.md` | `sync` 链上「可能出故障」的边界 |
+| `questions-2026-10-30-cell-type.md` | A 的"只带类型"的单元，类型从哪来 |
+| `questions-2026-10-30-write-before-read.md` | "写之前读是编译错误"由谁证 |
+| `questions-2026-10-30-what-keeps-a-nested-calls-value-alive.md` | 嵌套调用的值靠什么存活 |
+| `questions-2026-10-30-tiles-12-not-10.md` | tiles 读到 12 |
+| `questions-2026-10-30-rows-of-name.md` | 类型函数原语 `RowsOf<T>` 这个名字沿不沿用 |
