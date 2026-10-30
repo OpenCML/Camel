@@ -812,3 +812,7 @@ graph-store 的账（b5 收尾、b4 入口）收下："删行数为 0 的片不�
 graph-store 和断言那两路照常推进，但不要占用这几路的人手。
 
 补一行：**第 11 条 生成器**：`builder.cpp:2164`（`yield` 的那句 `FeatureNotSupported("generators")`，注释还说"状态机 not built yet"）与 `:5704` 的 `refuse` 仍在。把 `refuse` 还会命中的形状逐个列出来，补完后删掉这两处，并翻转 `stream.yield_lowering_refused`。:2164 那段注释已经过时，同一笔删掉。
+
+## 裁定（2026-10-30 23:50）：`:var/after` 的第二个实参接受任意值
+
+接受任意值，包括 `void`。22:50 那句"它的值可以是 `void`"说的是"`void` 也行"，不是"只能是 `void`"。这个算子不读第二个实参，它只表示"这次调用之后的版本"，所以调用返回什么类型都一样。今天的实现是对的，把签名写成 `(var T, any) => var T`，语言参考写同一句。页面挪到 `reviews/` 留档。
