@@ -2485,6 +2485,9 @@ class Builder {
     node_handle_t visitOperand(const GCT::node_ptr_t &expr, const GCT::node_ptr_t &call);
     // The node of `:var/new` or `:var/get` applied to `input`.
     node_handle_t variableOperator(camel::core::OperId oper, node_handle_t input);
+    /// The variable as it stands after `call`: `:var/after(cell, call)`, the version a read takes
+    /// when the call that wrote the variable is a call through a function value (valueVersionOf).
+    node_handle_t variableAfterCall(node_handle_t variable, node_handle_t call);
     /// The group of an operator the compiler emits itself (`oper::EnumMake` and the like): the
     /// built-in module registered it; an id is fixed at start-up, the group when that module is
     /// loaded, which is before any module of a program is compiled.

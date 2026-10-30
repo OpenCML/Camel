@@ -119,7 +119,12 @@ inline constexpr OperId MacroCmp        = 19; // ":macro/cmp"
 /// generator body becomes: its value is written where the statement stands, and not in the body
 /// that creates the stream (design principles 5.4).
 inline constexpr OperId VarNewEmpty     = 20; // ":var/new/empty"
-inline constexpr OperId kWellKnownCount = 21; // kNoOper included
+/// The cell a call wrote, taken after the call: what a read of a variable written by a call through
+/// a function value takes as its version when the call's value carries no version of its own (it
+/// may be `void`). The result is the cell itself; the call is an input so that taking the value
+/// makes the call run (design principles 3.1).
+inline constexpr OperId VarAfter        = 21; // ":var/after"
+inline constexpr OperId kWellKnownCount = 22; // kNoOper included
 
 /// Reading a variable: `:var/get`, or `:var/peek`, the same read for a value that only goes to
 /// operations that cannot keep it (it leaves the variable's sole-reference mark set; see
@@ -151,6 +156,7 @@ inline constexpr std::string_view kWellKnownOperatorUris[oper::kWellKnownCount] 
     ":struct/append_arr_owned",
     ":macro/cmp",
     ":var/new/empty",
+    ":var/after",
 };
 
 /**
