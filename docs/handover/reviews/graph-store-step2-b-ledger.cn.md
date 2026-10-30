@@ -382,3 +382,19 @@ helper 只借一次草稿、并不持有它，所以改成收模板参数（`tem
 - **C**：让 `Writings` 在没有事务时**自己开一个**（拥有型），`createInDraft` 随之消失，测试不用改。
 
 **我停在这里，等裁定。** 在裁定之前不动 `handle.h` 的 `draft_`——按 §20，删字段是"删用法之后"的事，而用法的合法性还没有结论。
+
+## 22. A 落地：`draft_` 与 `createInDraft` 一起消失
+
+裁定是 **A**（C 被否：*"自己开一个事务"意味着有一张图永远不会被 commit，那正是 `draft_` 今天在做的事*）。
+
+| 笔 | 做了什么 | 四个账本数 |
+|---|---|---|
+| `404c77db4` | 17 处收草稿的 `DraftWritings` 构造改收事务（测试 10／3／2 + `extractWritings` 1） | 66 / 532 / 3 / 6 |
+| `11e83bec5` | `graphWritings` 转储：在 decode 副本上开事务、**永不 commit**，注释写明"这张图是副本，事务在这里只是写作面" | 66 / **530** / 3 / **5** |
+| 本笔 | 删 `Handle::createInDraft`、`draft_`、`draft()`、构造第 3 个参数、`class GraphDraft` 前置声明；`DraftWritings` 只剩收事务的构造，`transaction()` 返回引用（永不为空）；`fact.cpp#Source` 由草稿指针改为事务指针 | **64 / 521 / 3 / 5** |
+
+**数字怎么掉的**：`files 66 → 64` 是 `handle.h` 与 `handle.cpp` 里再没有 `GraphDraft` 这个词（`createInDraft` 的声明与定义各带走一处）；`references 530 → 521` 是 `draft()`、`draft_`、`fact.cpp#Source` 的八个分支一起走。**同一棵树上一笔 -9 references、-2 files，是今晚涨落最大的一笔。**
+
+**"无事务写入"这种形态现在不存在了**：`DraftWritings` 只认事务、`Handle` 只认事务、`createInDraft` 没有调用者。§21 问的那个问题（*测试自建草稿的构造点改完从哪里拿草稿*）的答案是**它们不再需要草稿**——测试改成开事务，模拟的正是真实世界里写图的样子。
+
+**§21 那条更正到此生效**：判"是不是草稿"**只问事务**。§21 里 B 的版本（同时问事务与指针）**只适用于两种形态并存的时期**；A 落地后它不再成立。

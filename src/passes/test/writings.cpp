@@ -453,7 +453,7 @@ void chains(Report &r, const Program &program) {
     }
     const auto transaction = GraphTransaction::decode(program, graph);
     auto &draft            = transaction->edit();
-    DraftWritings writings(draft);
+    DraftWritings writings(*transaction);
     writings.build();
     const auto ports = portsOf(*transaction);
     const size_t before = writings.congruentMerges();

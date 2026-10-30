@@ -169,20 +169,20 @@ namespace {
 
 /// Where the values of a fact live: the draft being rewritten, or a frozen graph.
 struct Source {
-    const GraphDraft *draft = nullptr;
+    const camel::runtime::GraphTransaction *transaction = nullptr;
     const Program *program  = nullptr;
     const GCGraph *graph    = nullptr;
     camel::runtime::GraphId graphId = camel::runtime::GraphId::Invalid;
 
     GCNodeKind kind(gc_node_ref_t ref) const {
-        return draft ? draft->node(ref)->header.kind : graph->node(ref)->kind;
+        return transaction ? transaction->graph().node(ref)->header.kind : graph->node(ref)->kind;
     }
     type::Type *typeOf(gc_node_ref_t ref) const {
-        return draft ? draft->node(ref)->header.dataType : graph->node(ref)->dataType();
+        return transaction ? transaction->graph().node(ref)->header.dataType : graph->node(ref)->dataType();
     }
     core::OperId operOf(gc_node_ref_t ref) const {
-        if (draft) {
-            const auto bytes = draft->payloadOf(ref);
+        if (transaction) {
+            const auto bytes = transaction->graph().payloadOf(ref);
             if (bytes.size() < sizeof(camel::runtime::GCOperBody)) {
                 return core::kNoOper;
             }
@@ -192,29 +192,29 @@ struct Source {
     }
     /// The arguments of an operator node as its kernel reads them (kernelArgumentsOf).
     std::vector<gc_node_ref_t> kernelInputs(gc_node_ref_t ref) const {
-        return draft ? camel::runtime::kernelArgumentsOf(*draft, ref).norm
+        return transaction ? camel::runtime::kernelArgumentsOf(transaction->graph(), ref).norm
                      : camel::runtime::kernelArgumentsOf(*graph, ref).norm;
     }
     std::vector<gc_node_ref_t> normInputs(gc_node_ref_t ref) const {
-        const auto inputs = draft ? draft->normInputsOf(ref) : graph->normInputsOf(ref);
+        const auto inputs = transaction ? transaction->graph().normInputsOf(ref) : graph->normInputsOf(ref);
         return std::vector<gc_node_ref_t>(inputs.begin(), inputs.end());
     }
     /// The values that read `ref` as a normal input: the candidates for the root of a
     /// multi-parameter query, asked of the draft or of the frozen graph's use index.
     std::span<const gc_node_ref_t> normUsers(gc_node_ref_t ref) const {
-        return draft ? draft->normUsersOf(ref) : graph->uses().norm(ref);
+        return transaction ? transaction->graph().normUsersOf(ref) : graph->uses().norm(ref);
     }
-    bool alive(gc_node_ref_t ref) const { return draft ? draft->alive(ref) : true; }
+    bool alive(gc_node_ref_t ref) const { return transaction ? transaction->graph().alive(ref) : true; }
     bool constant(gc_node_ref_t ref, slot_t &value, type::Type *&type) const {
         if (kind(ref) != GCNodeKind::Data) {
             return false;
         }
-        const int64_t dataIndex = draft ? draft->node(ref)->header.dataIndex
+        const int64_t dataIndex = transaction ? transaction->graph().node(ref)->header.dataIndex
                                         : graph->node(ref)->dataIndex;
         if (dataIndex >= 0) {
             return false;
         }
-        const auto slots = draft ? draft->staticSlots() : graph->staticSlots();
+        const auto slots = transaction ? transaction->graph().staticSlots() : graph->staticSlots();
         const size_t index = static_cast<size_t>(-dataIndex);
         if (index >= slots.size()) {
             return false;
@@ -418,9 +418,9 @@ slot_t evaluate(Frame &frame, gc_node_ref_t ref) {
                 continue;
             }
             camel::graphmod::Handle *handle =
-                frame.source.draft != nullptr
-                    ? camel::graphmod::Handle::createInDraft(
-                          *frame.source.draft, refs[i], mm::autoSpace())
+                frame.source.transaction != nullptr
+                    ? camel::graphmod::Handle::createInTransaction(
+                          *frame.source.transaction, refs[i], mm::autoSpace())
                     : camel::graphmod::Handle::create(
                           camel::graphmod::HandleKind::Node, frame.source.program,
                           frame.source.graphId, refs[i], nullptr, mm::autoSpace());
@@ -822,19 +822,17 @@ slot_t factKernel(ArgsView &, ArgsView &norm, camel::core::context::Context &ctx
         parts.push_back(handle->index());
     }
     auto *first = norm.get<camel::graphmod::Handle *>(nodeBegin);
-    // The draft a fact reads comes through the transaction that owns it when the handle names
-    // one, and from the handle itself only for a draft no transaction owns (a test's own draft).
-    // The bytes are the same ones either way; what changes is who is said to own them.
+    // A fact reads a draft exactly when the handle names the transaction that owns one: the
+    // draft is reached through it, and the handle keeps no draft pointer of its own.
     const auto *transaction = first->transaction();
-    const auto *draft = transaction != nullptr ? &transaction->graph() : first->draft();
-    const bool fromDraft    = draft != nullptr;
+    const bool fromDraft     = transaction != nullptr;
     const Program *program = fromDraft ? nullptr : first->program();
     const camel::runtime::GraphId graphId =
         fromDraft ? camel::runtime::GraphId::Invalid : first->graph();
     if (currentFrame != nullptr && currentFrame->definition->key == key &&
         currentFrame->definition->identity == identity) {
         const bool sameSource =
-            fromDraft ? currentFrame->source.draft == draft
+            fromDraft ? currentFrame->source.transaction == transaction
                       : currentFrame->source.program == program &&
                             currentFrame->source.graph == program->graph(graphId);
         if (sameSource) {
@@ -860,7 +858,7 @@ slot_t factKernel(ArgsView &, ArgsView &norm, camel::core::context::Context &ctx
 
     Source source;
     if (fromDraft) {
-        source.draft = draft;
+        source.transaction = transaction;
     } else {
         source.program = program;
         source.graphId = graphId;
