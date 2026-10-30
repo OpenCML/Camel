@@ -219,10 +219,11 @@ with <
     fanout_all: bool = false,
     /// Print the decision for every graph and why a graph stays node by node.
     diag: bool = false,
-    /// Print the segments the plan cut: how many items each segment holds (a segment is the
-    /// top level of a graph or one branch arm), which chain of a segment runs after which, and
-    /// where each operator lands. Use it to tell "no segment could be cut" from "a segment was
-    /// cut but not scheduled": a graph with no segments says why it is evaluated node by node.
+    /// Print the segments of the plan as it stands, not the segments it might have been cut
+    /// into: how many items each segment holds (a segment is the top level of a graph or one
+    /// branch arm), which chain of a segment runs after which, and where each operator lands.
+    /// Use it to tell "no segment could be cut" from "a segment was cut but not scheduled": a
+    /// graph that is one segment says so, and one evaluated node by node says why.
     segments: bool = false,
     /// Hand graphs that need no parallelism to the bytecode interpreter.
     bytecode: bool = true,
