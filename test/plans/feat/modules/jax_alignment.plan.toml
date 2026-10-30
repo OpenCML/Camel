@@ -11,10 +11,12 @@ tags = ["feat", "modules", "autodiff", "jax"]
 #     axis through `map`; `grad`/`with_grad` on `f(x) = x * x` at 2; `stop_gradient` cutting the
 #     derivative; `has_aux` splitting a pair result). These must stay green through any transform
 #     work: they are the numbers the alignment is measured against.
-#   * the names that are not values yet (`jvp`, `vjp`, `checkpoint`), pinned as refused with
-#     the diagnostic that names them. Each is the case that flips to a positive one when its
+#   * the names that are not values yet (`jvp`, `vjp`, `checkpoint`, `remat`), pinned as refused
+#     with the diagnostic that names them. Each is the case that flips to a positive one when its
 #     transform lands; the flip is the proof of alignment, not a sentence in a document. `vmap` is
 #     the first name to have flipped: `batching.vmap` is what `absent.vmap` pinned against.
+#     `checkpoint` is the one that does not flip: the persistence module `ckpt` owns the word, and
+#     the recompute-to-save-memory transform is `remat`.
 #   * the parameter that is refused on purpose (`argnums`) and the two `has_aux` calls that are
 #     refused with a reason (a pair result without the argument, and `has_aux: false`): what the
 #     surface does not accept is pinned as exactly what it does not accept.
@@ -178,7 +180,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "absent.checkpoint"
-desc = "`checkpoint` (JAX's recompute-in-backward transform, `remat`) is not a value: the word in this tree names the persistence module `ckpt`, so the call is refused and the diagnostic names it. When the transform lands this case flips to a function value that recomputes instead of saving."
+desc = "`checkpoint` is not a value and is not the transform's name either: the word in this tree names the persistence module `ckpt` (stdlib/ckpt.cml writes and reads a tree of leaves), so the call is refused and the diagnostic names it. The recompute-in-the-backward transform is `remat` (absent.remat); when it lands this case stays refused, and the call it writes is the one that must keep meaning persistence."
 kind = "negative"
 case = "../../../cases/modules/autodiff/jax_names/checkpoint.cml"
 args = ["${case}"]
@@ -186,6 +188,20 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
 expect_diagnostic_code = "0x0300000B"
 expect_output_contains = ["Unresolved reference: 'checkpoint'"]
+expect_output_not_contains = ["UnknownInternalError", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "absent.remat"
+desc = "`remat` is the name the recompute-in-the-backward transform will have -- JAX's `jax.checkpoint` under its other name, chosen so the persistence word `checkpoint` stays the `ckpt` module's -- and it is reserved rather than implemented: `autodiff` does not export it, so the import is refused and the diagnostic names the name and the module. The import is what makes the pin a tripwire: the day the module exports `remat`, this case flips by itself to the gradient it prints (4.0 at x = 2)."
+kind = "negative"
+case = "../../../cases/modules/autodiff/jax_names/remat.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImportNameNotExported"
+expect_diagnostic_code = "0x03000015"
+expect_output_contains = ["Reference 'remat' is declared as imported but is not exported by its module"]
 expect_output_not_contains = ["UnknownInternalError", "never printed"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

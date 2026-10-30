@@ -1259,6 +1259,11 @@ The tree is the data, the directory is where it goes: `tree->save_tree<dir: 'out
 holds something other than a tree of the type asked for is an error value too. Walking a tree is
 the tree library's (`stdlib/tree.cml`), not this module's.
 
+A checkpoint here is what is written down, not what is recomputed: the transform that trades
+memory for recomputation (the same values, the annotated section recomputed in the backward pass)
+is named `remat` in this standard library, and never `checkpoint` -- so a name in a gradient that
+says checkpoint is this module, and a name that says `remat` is that transform.
+
 #### `tree_leaves`
 
 ```camel
@@ -6242,6 +6247,13 @@ not known when they run to a run-time refusal. `vjp` is reverse mode for a resul
 scalar (it gives the result and the pullback from the cotangent of the result to the gradient),
 and `jvp` is forward mode (the result and its tangent along a direction); both land with the
 autodiff lane, not before they work.
+
+The transform that trades memory for recomputation -- the same values, with the annotated section
+recomputed in the backward pass instead of kept -- is named `remat` here. JAX calls it
+`jax.checkpoint` and, by its other name, `jax.remat`; in this tree "checkpoint" is the persistence
+module `stdlib/ckpt.cml` and stays that, so the transform takes the other word and there is no
+second name for a reader to disambiguate. It is not implemented yet: the name is not a value, and
+a call to it is refused like any other name that does not resolve.
 
 `stop_gradient` marks a value as a constant. A transform's local rules are the tags on a
 declaration and the `rule` declarations below: the tags give a function's own rules

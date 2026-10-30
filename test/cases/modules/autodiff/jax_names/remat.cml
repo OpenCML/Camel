@@ -1,0 +1,26 @@
+/**
+ * `remat` is the name this tree gives the transform that trades memory for recomputation: the same
+ * values, with the annotated section recomputed in the backward pass instead of kept. JAX spells it
+ * `jax.checkpoint` and, by its own other name, `jax.remat`; in this tree "checkpoint" is the
+ * persistence module `ckpt` (stdlib/ckpt.cml) and stays that, so the transform takes the other
+ * word. That is the author's ruling of 2026-10-30, and there is no second name to keep compatible
+ * because no such interface exists in this tree yet.
+ *
+ * The import is deliberate: the name is reserved, not a value, and `autodiff` does not export it,
+ * so the refusal is the import's own and it names the name and the module. The day `autodiff`
+ * exports `remat`, this case flips by itself -- the program below then runs and prints the gradient
+ * of `x * x` at 2, which is 4.0 -- and the flip is the proof that the transform landed under this
+ * name (docs/handover/reviews/questions-2026-10-30-jax.md, J8).
+ */
+
+import { remat } from autodiff
+
+func square(x: float): float {
+    return x * x
+}
+
+func main(): int sync {
+    let g = remat(square)
+    println('jax_remat g={}'->format<g(2.0)>)
+    return 0
+}
