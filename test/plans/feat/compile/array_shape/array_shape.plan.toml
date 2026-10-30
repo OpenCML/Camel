@@ -616,3 +616,24 @@ expect_exit = 0
 expect_stdout_exact = "1.0\n2.5\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+[[tests]]
+name = "rank_zero_field_literal"
+desc = "A struct field declared `f32[..]` filled from a literal is the rank-zero value of the element (design principles 5.4), made at the data level because there is nothing to compute: the literal was refused with LiteralNotRepresentable while data had no rank-zero value, and the field now reads back as `1.5` and `2.5`."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_field_literal.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1.5\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_field_literal_fvm"
+desc = "The same literal field on the bytecode VM: the value the data layer makes is the same one the element is, so `1.5` and `2.5` print as they do on the node VM."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_field_literal.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1.5\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

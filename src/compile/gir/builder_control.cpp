@@ -1200,6 +1200,34 @@ data_ptr_t Builder::literalElementInType(
     if (data == nullptr || type == nullptr || asTagged(type) != nullptr) {
         return nullptr;
     }
+    // The element in a position of `T[..]` is the rank-zero value that position promises (design
+    // principles 5.4): the same value, kept as the value with no dimension it is, so the run has an
+    // array to read and the program still sees the element. This is the constant side of the edge
+    // the compiler converts at a computed value (`Builder::coerceTo`): one rule, two entrances -- a
+    // value the program computes keeps its computation and is converted as it enters, a literal
+    // becomes the value at this level, because there is nothing to compute.
+    if (Type *rankZeroElement = rankZeroElementOf(type);
+        rankZeroElement != nullptr) {
+        auto *rankZeroValueType = tt::as_ptr<ArrayType>(type);
+        if (rankZeroElement->assignableFrom(data->type())) {
+            return ArrayData::rankZero(rankZeroValueType, data);
+        }
+        // A number written where the position states the element type: it takes that type as it
+        // was written (design principles 5.1), exactly as a field of a named type does, and the
+        // element is then the rank-zero value. Without this a literal `{ v: 1.5 }` could not be a
+        // value of `{ v: f32[..] }` while `{ v: one }` with `one: f32` could.
+        const literal::Value *exact = writtenValueOf(written);
+        const std::optional<literal::Value> fallback =
+            exact == nullptr ? exactValueOfData(data) : std::nullopt;
+        const literal::Value *value = exact != nullptr ? exact : fallback ? &*fallback : nullptr;
+        if (value != nullptr && isNumericType(rankZeroElement) &&
+            isNumericType(data->type()) && literal::kindEnters(*value, rankZeroElement)) {
+            if (const auto element = value->toData(rankZeroElement); element.has_value()) {
+                return ArrayData::rankZero(rankZeroValueType, *element);
+            }
+        }
+        return nullptr;
+    }
     if (type->assignableFrom(data->type())) {
         return data;
     }
