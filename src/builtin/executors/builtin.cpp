@@ -609,6 +609,16 @@ void registerBuiltinOperatorTraits() {
         "coll/eq",
         "coll/neq",
         "coll/set_is_subset",
+        // The read-only helpers of `prelude.cml`: `contains` over an array walks it comparing
+        // elements by content, `contains` over a string searches it, `len` of `Bytes` reads a
+        // length and `==`/`!=` of two `Bytes` compare them (struct.cpp#__contains_arr__,
+        // #__contains_str__, #__len_bytes__, #__eq_bytes__, #__ne_bytes__). None of them builds a
+        // value, so a failed allocation is not among their paths either.
+        "struct/contains_arr",
+        "struct/contains_str",
+        "struct/len_bytes",
+        "op/eq_bytes",
+        "op/ne_bytes",
     };
     // The conversions of an array apply to each element on its own.
     const auto isArrayConversion = [](std::string_view key) {

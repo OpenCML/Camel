@@ -1,0 +1,22 @@
+/*
+ * The read-only helpers of `prelude.cml` that declare no fault path, run on the edges a fault would
+ * have to live in: an element the array does not have, a substring the string does not have (and
+ * the empty one, which every string has), an empty `Bytes`, and two `Bytes` that differ.
+ *
+ * Each line prints the value the implementation returned; a call that faulted would end the program
+ * instead, which is what makes the empty list a claim about running the code and not only about the
+ * declaration.
+ */
+
+import { encode } from bytes
+
+func main(): int sync {
+    let xs = [1, 2, 3]
+    println(xs->contains<3>, xs->contains<4>, ([] as int[])->contains<0>)
+    println('abc'->contains<'bc'>, 'abc'->contains<'z'>, 'abc'->contains<''>)
+    let empty = encode('')
+    let ab = encode('ab')
+    println(len(empty), len(ab))
+    println(ab == encode('ab'), ab == empty, ab != empty, empty == encode(''))
+    return 0
+}
