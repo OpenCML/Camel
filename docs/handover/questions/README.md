@@ -21,8 +21,9 @@
 
 | 页 | 问题 | 状态 |
 |---|---|---|
+| `questions-2026-10-30-grad-builds-its-graph-at-runtime.md` | 第 7 条的验收数不到 `grad` 在运行期造出的函数值：这一段归第 6 条还是第 7 条 | 待裁 |
 
-表这一刻是空的：七页全已答复并挪到 `docs/handover/reviews/`，待裁表头留着，下一轮还会用。
+表里只剩上一行；其余七页已答复并挪到 `docs/handover/reviews/`。
 
 2026-10-30 05:40 的裁定答的是 A 的取值形状（错误值进单元、`pairs(n)` 的跨 `yield` 携带量、
 `return`、可错元素）；cell-type 与 write-before-read 各自末尾问的那一句，由 2026-10-30 07:20 的裁定
