@@ -62,5 +62,7 @@ export func export_model::<F, E>(fn: F, example: E): void! when is_function::<F>
 /// change nothing the exporter does: `trace` every lowered call with the facts of its arguments,
 /// `dump` the simplified graph that is translated (as `std::rgir` does), `prep_stats` the size of
 /// the function when the export receives it and after the export's own simplification.
+// One line, not a block: scripts/stdlib-reference.mjs reads a declaration's parameters from a
+// single line (docs/handover/reviews/questions-2026-10-31-stdlib-reference-one-line-declarations.md).
 with <out: string = "", trace: bool = false, dump: bool = false, prep_stats: bool = false>
 export func export_model::<F>(f: F): F! when is_function::<F>()

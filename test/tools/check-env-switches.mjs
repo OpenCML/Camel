@@ -19,8 +19,13 @@
  * exactly one site: the file, the variable it reads (`reads: null` when the helper reads a name
  * its caller chose), and one sentence saying why it is still there or who still owes it. A line
  * whose site is gone fails too, so clearing a switch means deleting its line, and the list can
- * only shrink towards the two names that are configuration rather than behaviour: `CAMEL_HOME`
- * (the installation root) and `CAMEL_TILES_NVRTC` (where the CUDA toolchain lives).
+ * only shrink towards the one line that stays -- `CAMEL_TILES_NVRTC`, where the CUDA toolchain
+ * lives; `CAMEL_HOME` (the installation root) never needs a line at all.
+ *
+ * What the ledger is for, in one sentence: it does not record what is left to clear, it records
+ * what is still there. A line that points at a call site that is gone is a fake asset in the
+ * account -- it reads like work still owed when the work is done, and it hides the day a switch
+ * comes back, because the line would quietly allow the new site.
  *
  *   node test/tools/check-env-switches.mjs
  */
@@ -42,64 +47,68 @@ const SOURCE_EXTENSIONS = new Set(['.c', '.cc', '.cpp', '.h', '.hpp', '.hh'])
 //
 //   at     file:symbol -- the function the call is in, so a line can be found again
 //   reads  the variable as a literal, or null when the helper takes its name from the caller
-//   why    why it is still here, or who still owes its removal
+//   owner  the line that still owes the cleanup, so no line is an orphan
+//   why    why it is still here
 //
-// A line is deleted with its site. The end state has no line at all beyond the two names above.
+// A line is deleted with its site.
+//
+// The target, and the number this list is expected to reach: one line, and it is
+// `CAMEL_TILES_NVRTC` (where the CUDA toolchain is installed: configuration, not behaviour).
+// `CAMEL_HOME` needs no line at all: it names the installation the run was started from.
 const LEDGER = [
     {
         at: 'src/core/mm/mm.cpp:envString',
         reads: null,
-        why: 'reads the settings of the allocator (CAMEL_GC_*, CAMEL_SPACE_SEGMENT_KB) by name; still a switch, the environment-variable queue removes it',
+        owner: 'the environment-variable queue, core batch (lane-envsw)',
+        why: 'reads the settings of the allocator (CAMEL_GC_*, CAMEL_SPACE_SEGMENT_KB) by name; still a switch',
     },
     {
         at: 'src/core/rtdata/collection_tree.cpp:envNumber',
         reads: null,
-        why: 'reads the settings of the collection tree (CAMEL_COLL_*) by name; still a switch, the environment-variable queue removes it',
+        owner: 'the environment-variable queue, core batch (lane-envsw)',
+        why: 'reads the settings of the collection tree (CAMEL_COLL_*) by name; still a switch',
     },
     {
         at: 'src/execute/limits.cpp:depthLimitFromEnvironment',
         reads: null,
-        why: 'reads CAMEL_MAX_RECURSION_DEPTH by name behind --max-depth; still a switch, the environment-variable queue removes it',
+        owner: 'the environment-variable queue, core batch (lane-envsw)',
+        why: 'reads CAMEL_MAX_RECURSION_DEPTH by name behind --max-depth; still a switch',
     },
     {
         at: 'src/execute/limits.cpp:macroRoundLimit',
         reads: null,
-        why: 'reads kMaxMacroRoundsEnvVar (CAMEL_MAX_MACRO_ROUNDS) by name, after --max-macro-rounds; still a switch, the environment-variable queue removes it',
+        owner: 'the environment-variable queue, core batch (lane-envsw)',
+        why: 'reads kMaxMacroRoundsEnvVar (CAMEL_MAX_MACRO_ROUNDS) by name, after --max-macro-rounds; still a switch',
     },
+
     {
         at: 'src/core/rtdata/variant.cpp:traceWanted',
         reads: 'CAMEL_TRACE_VARIANT',
-        why: 'a trace of the relocations of the variant; still a switch, the environment-variable queue removes it',
+        owner: 'the environment-variable queue, core batch (lane-envsw)',
+        why: 'a trace of the relocations of the variant; still a switch',
     },
     {
         at: 'src/passes/opt/defun/defunctionalize.cpp:emitCallThroughValue',
         reads: 'CAMEL_DEFUN_DEBUG',
-        why: 'a temporary diagnostic marked as such in the pass; the environment-variable queue removes it',
-    },
-    {
+        owner: 'the environment-variable queue, core batch (lane-envsw)',
+        why: 'a temporary diagnostic marked as such in the pass; still a switch',
+    },    {
         at: 'modules/tiles/src/cuda_backend.cpp:nvrtcPaths',
         reads: 'CAMEL_TILES_NVRTC',
-        why: 'where the CUDA toolchain is installed is configuration, not behaviour: it stays',
+        owner: 'none: it stays',
+        why: 'where the CUDA toolchain is installed is configuration, not behaviour',
     },
     {
         at: 'modules/tiles/src/region_test_pass.cpp:RegionOutlineTestPass',
         reads: 'CAMEL_TILES_TEST_INVALIDATION',
-        why: 'a switch of the test pass itself; the environment-variable queue removes it',
-    },
-    {
-        at: 'modules/tiles/src/region_test_pass.cpp:RegionOutlineTestPass',
-        reads: 'CAMEL_TILES_TEST_REASONS',
-        why: 'a switch of the test pass itself; the environment-variable queue removes it',
+        owner: 'the tiles line (its test pass)',
+        why: 'a switch of the test pass itself',
     },
     {
         at: 'modules/tiles/src/region_test_pass.cpp:RegionOutlineTestPass',
         reads: 'CAMEL_TILES_TEST_I64',
-        why: 'a switch of the test pass itself; the environment-variable queue removes it',
-    },
-    {
-        at: 'modules/tiles/src/region_test_pass.cpp:RegionOutlineTestPass',
-        reads: 'CAMEL_TILES_TEST_DECLARATIONS',
-        why: 'a switch of the test pass itself; the environment-variable queue removes it',
+        owner: 'the tiles line (its test pass)',
+        why: 'a switch of the test pass itself',
     },
 ]
 
@@ -189,7 +198,9 @@ for (const site of switches) {
     problems.push(`${site.file}:${site.line}: reads ${what} from the environment and no ledger line allows it`)
 }
 for (const entry of unused) {
-    problems.push(`${entry.at}: the ledger line has no site left (the switch is gone: delete the line)`)
+    problems.push(
+        `${entry.at}: the ledger line has no site left (${entry.owner}; the switch is gone: delete the line)`
+    )
 }
 
 // A line's symbol has to be in its file: a renamed function must not leave a line that points at
