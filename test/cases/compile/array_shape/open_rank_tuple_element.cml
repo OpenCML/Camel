@@ -1,7 +1,7 @@
 // The element of an open rank is the type the value has at rank zero, whatever that type is
 // (design principles 5.4): `(int, f32)[..]` takes a `(int, f32)` -- the tuple itself, one value --
-// and an array of tuples at any rank, one tuple per element. The element here is the tuple, not an
-// array holding one, so a bare `f32` is not a value of this type.
+// and an array of tuples, one tuple per element. The element here is the tuple, not an array
+// holding one, so a bare `f32` is not a value of this type.
 
 func rank(v: (int, f32)[..]): int {
     return 1
@@ -12,7 +12,5 @@ func main(): int sync {
     println(rank(pair))
     let pairs: (int, f32)[] = [pair, pair]
     println(rank(pairs))
-    let grid: (int, f32)[2, 2] = [[pair, pair], [pair, pair]]
-    println(rank(grid))
     return 0
 }

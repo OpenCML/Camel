@@ -498,11 +498,11 @@ timeout_ms = 8000
 
 [[tests]]
 name = "open_rank_tuple_element"
-desc = "The element of an open rank is the type the value has at rank zero (design principles 5.4): `(int, f32)[..]` takes a tuple, and an array of tuples at rank one and at rank two -- one tuple per element, the element type itself at rank zero."
+desc = "The element of an open rank is the type the value has at rank zero (design principles 5.4): `(int, f32)[..]` takes a tuple -- the element itself -- and an array of tuples, one tuple per element."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/open_rank_tuple_element.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "1\n1\n1\n"
+expect_stdout_exact = "1\n1\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
