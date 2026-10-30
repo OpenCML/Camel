@@ -1,0 +1,24 @@
+// The `var` slot, both writings: written at the declaration and written again later, from a literal
+// and from values the program computed. Every write is a position that gives the value its type, so
+// every write takes the same edge.
+//
+// What this case pins: the slot does not remember how a value was written -- the second write is
+// given the same type as the first, and the value reads back as the element both times.
+
+func main(): int sync {
+    let one: f32 = 1.0
+    let two: f32 = 2.5
+    var written: f32[..] = 1.0
+    println(written)
+    sync {
+        written = 2.5
+    }
+    println(written)
+    var computed: f32[..] = one
+    println(computed)
+    sync {
+        computed = two
+    }
+    println(computed)
+    return 0
+}

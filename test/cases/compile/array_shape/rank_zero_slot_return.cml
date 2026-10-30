@@ -1,0 +1,28 @@
+// The `return` slot, both writings: a function returning `f32[..]` returning a literal (`return 1.0`)
+// and returning a value the program computed (`return v`). The return is a position like a
+// declaration: the value takes the declared return type there (design principles 5.4).
+//
+// What this case pins: the value a function hands back is the value its return type promises, for a
+// literal and for a computed value alike.
+
+func writtenLow(): f32[..] {
+    return 1.0
+}
+
+func writtenHigh(): f32[..] {
+    return 2.5
+}
+
+func computed(v: f32): f32[..] {
+    return v
+}
+
+func main(): int sync {
+    let one: f32 = 1.0
+    let two: f32 = 2.5
+    println(writtenLow())
+    println(writtenHigh())
+    println(computed(one))
+    println(computed(two))
+    return 0
+}

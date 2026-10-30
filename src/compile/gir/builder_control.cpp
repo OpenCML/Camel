@@ -629,6 +629,15 @@ node_handle_t Builder::convertStructValue(
                     return nullptr;
                 }
                 field = typed;
+            } else if (isRankZeroEdge(targetFieldType, sourceFieldType)) {
+                // The field's type goes from `T` to `T[..]` here (design principles 5.4): the value
+                // is the element, and the slot holds the rank-zero array that *is* the element.
+                // Same question and same call as every other position.
+                node_handle_t wrapped = coerceTo(access, targetFieldType, origin);
+                if (wrapped == nullptr) {
+                    return nullptr;
+                }
+                field = wrapped;
             } else if (!targetFieldType->assignableFrom(sourceFieldType)) {
                 // A field of another type (a refined module type is assignable; a number of
                 // another type is not).
