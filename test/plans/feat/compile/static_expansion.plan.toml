@@ -1208,3 +1208,69 @@ expect_diagnostic_column = 5
 expect_output_contains = ["The 'match type' bodies are nested 256 deep."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "typeof.inferred_not_evaluated"
+desc = "`typeof e` reads the type `e` would have and does not evaluate it: a value written where the type is written is not a statement of the body, so neither `mark('inferred')` in a declaration's type nor `mark('cast')` in a cast's is called, and what they would have printed never appears. The inferred type is the one the value is then taken as."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/typeof_inferred_not_evaluated.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "10\n"
+expect_output_not_contains = ["inferred", "cast", "[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "typeof.no_node_of_its_expression"
+desc = "The structural half of the same reading: the graph of `main` holds no call to `mark` at all, so the expression written inside a `typeof` left nothing behind -- no node of the graph the type is used in, and no part of its chain."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/typeof_inferred_not_evaluated.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const doc = JSON.parse(input.normalized.stdout)
+const main = doc.graphs.find((g) => g.name === 'main')
+assert(main, `main is missing from ${doc.graphs.map((g) => g.name).join(', ')}`)
+const calls = main.nodes.filter((n) => (n.outputType || '').includes('=>'))
+assert(calls.length === 0, `main holds ${calls.length} function-typed node(s): ${JSON.stringify(calls.map((n) => n.outputType))}`)
+assert(doc.graphs.some((g) => g.name === 'mark'), 'mark is not declared')
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "typeof.declaration_type"
+desc = "A declaration written with `typeof e` is checked against the type `e` has: `text()` is a `string`, so a `7` written there is refused against `string`. The reading names `string` and not `typeof`, which is what a declaration that kept the placeholder would say."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/typeof_declaration_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_line = 13
+expect_diagnostic_column = 5
+expect_output_contains = ["has type 'int', which is not the declared type 'string'", "the declared type 'string'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "typeof.reported_once"
+desc = "An expression written only inside a `typeof` is checked nowhere else, so the inference that cannot type it reports once, at the `typeof`: `1 / 'x'` has no `int` division with a `string`, and that is the program's one error."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/typeof_only_here.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 23
+expect_output_contains = ["operator '/' is not defined for these operand types"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const errors = (input.normalized.stdout.match(/\[Error\]/g) || []).length
+assert(errors === 1, `${errors} errors are reported, not one`)
+}
+"""
+timeout_ms = 10000

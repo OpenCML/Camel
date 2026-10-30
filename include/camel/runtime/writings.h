@@ -43,6 +43,8 @@ class Context;
 
 namespace camel::runtime {
 
+class GraphTransaction;
+
 /// Told which nodes change class when two classes join (the nodes of the smaller class).
 class WritingObserver {
   public:
@@ -404,6 +406,12 @@ class DraftWritings : private WritingObserver {
     explicit DraftWritings(
         GraphDraft &draft,
         camel::core::sem::NumericPolicy policy = camel::core::sem::NumericPolicy::relaxed());
+    /// The same, for a draft a transaction owns. The writings record the transaction, so the
+    /// draft has an owner that is not a handle: this is what a handle can name once it stops
+    /// naming a bare draft. Nothing reads `transaction()` yet; the two forms behave the same.
+    explicit DraftWritings(
+        GraphTransaction &transaction,
+        camel::core::sem::NumericPolicy policy = camel::core::sem::NumericPolicy::relaxed());
     ~DraftWritings();
     DraftWritings(const DraftWritings &)            = delete;
     DraftWritings &operator=(const DraftWritings &) = delete;
@@ -412,6 +420,9 @@ class DraftWritings : private WritingObserver {
     /// until it is encoded.
     void save() { draft_.setWritings(std::vector<WritingUnion>(store_.log().begin(), store_.log().end())); }
     GraphDraft &draft() { return draft_; }
+    /// The transaction the draft belongs to, or null when these writings were made from a bare
+    /// draft (a test that builds one).
+    GraphTransaction *transaction() { return transaction_; }
     WritingStore &store() { return store_; }
 
     /// Indexes every node of the draft and merges the congruent ones.
@@ -540,6 +551,8 @@ class DraftWritings : private WritingObserver {
     void index(gc_node_ref_t node);
 
     GraphDraft &draft_;
+    /// The transaction `draft_` belongs to, when these writings were made from one.
+    GraphTransaction *transaction_ = nullptr;
     camel::core::sem::PermissionMask matchPerms_ = 0;
     bool greedy_        = false; // rewrite(): nodes are replaced, so nothing is looked up by key
     camel::core::sem::NumericPolicy policy_;

@@ -1,0 +1,16 @@
+/**
+ * The type a declaration is written with is the type `e` has, not the placeholder: `text()` is a
+ * `string`, so a `7` written there has the wrong type and is refused against `string` -- the
+ * reading says `string` and not `typeof`, which is what a declaration that never resolved the
+ * placeholder would say.
+ */
+
+func text(): string {
+    return 's'
+}
+
+func main(): int sync {
+    let a: typeof(text()) = 7
+    println(a)
+    return 0
+}
