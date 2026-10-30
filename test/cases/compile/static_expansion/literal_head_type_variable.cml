@@ -1,0 +1,22 @@
+/**
+ * The same head written from a type variable: `Tangent<T> { ... }` inside a generic function,
+ * where neither the members nor their types are known until the call is instantiated. One
+ * `case struct | tuple` branch covers a tuple and a struct, because the head names the kind and
+ * the field names and the rounds give the member values.
+ */
+
+import { Tangent } from types
+
+func zeros::<T>(x: T): Tangent<T> {
+    return match type T {
+        case struct | tuple => Tangent<T> { static for n, _ in fields T => zeros(x.[n]) }
+        case float => 0.0
+        case _ => ()
+    }
+}
+
+func main(): int sync {
+    println(zeros((1.0, 7)))
+    println(zeros({ a: 1.0, b: 2.0 }))
+    return 0
+}

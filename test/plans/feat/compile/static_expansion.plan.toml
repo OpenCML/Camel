@@ -932,6 +932,28 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
+name = "literal_head_type_expression"
+desc = "The head of a same-shape comprehension is a type position and takes a type expression: `Tangent<(float, int)> { ... }` names the computed type `(float, ())`, gives the kind and the field names, and each member takes the type of that round's value. The same head on two floats gives two floats. Before this change only a name path was looked for ahead, so the head of `Tangent<...> { ... }` was read as a value and the program did not build."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/literal_head_type_expression.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "true\n(0.0, ())\n(0.0, 0.0)\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_head_type_variable"
+desc = "The head of a same-shape comprehension may be a type computed from a type variable: `Tangent<T> { static for n, _ in fields T => zeros(x.[n]) }` is the same shape as the `T` the generator walks, so one `case struct | tuple` branch gives the tangent space of a tuple and of a struct alike. Before this change the head did not parse."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/literal_head_type_variable.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "(0.0, ())\n{ a: 0.0, b: 0.0 }\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "typeof_in_fields_and_match_type"
 desc = "`typeof e` gives the type of the value `e`; `fields typeof(pair_of(t))` walks the two fields and `match type typeof(pair_of(t))` selects the tuple case, inside a generic function whose pair type has no name."
 kind = "behavior"
@@ -966,7 +988,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "same_shape_comprehension_mismatch"
-desc = "The shape being filled and the type the generator walks must be the same type."
+desc = "The shape being filled and the type the generator walks must have the same shape: `A = {a: int}` over `B = {b: int, c: int}` names other fields, and a struct and a tuple are different kinds."
 kind = "negative"
 case = "../../../cases/compile/static_expansion/shape_mismatch.cml"
 args = ["${case}"]

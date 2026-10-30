@@ -179,3 +179,14 @@ expect_exit = 0
 expect_stdout_contains = ["5\n16"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "cast_target_type_expression.nvm"
+desc = "The right side of `as` is a type position and takes a type expression: a cast to the computed type `Tangent<(float, int)>` is a cast to `(float, ())`, a cast through a type variable names the tangent space of the instance, and a cast to a tuple type written out does nothing. Without the literal-head change this program already built; the case pins that the position keeps reading a whole type (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/casts/cast_target_type_expression.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "(1.0, ())\n(2.0, 3.0)\n(4.0, 5.0)\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
