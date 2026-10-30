@@ -2788,14 +2788,14 @@ bool elementsIndependent(GCGraph *graph, gc_node_ref_t nodeRef) {
 
 // The faults of the element calls of one unordered operator (map, apply, filter,
 // unordered_foreach; the chunks of unordered_reduce), which run concurrently and can fault
-// together. Design principles 3.6: elements that have started run to their end, elements
-// that have not started do not start, and of several faults the one of the smallest index is
-// reported. So that the report does not depend on which element a worker happened to pick
-// first, "do not start" is applied to the elements *after* the smallest faulting index known:
-// an element before it still runs, as it would have run first on a back end that takes the
-// elements in order. The fault reported is therefore the one the linear back ends report.
-// DESIGN-QUESTION(parallel-fault-lower-elements): the alternative is to start nothing at all
-// after the first fault met, and then which fault is reported differs from run to run.
+// together. Design principles 3.6 (ruled 2026-10-31): elements that have started run to their
+// end; of the elements that have not started, those above the smallest fault known do not
+// start and those below it still do; the fault of the smallest index is reported. So "do not
+// start" is applied to the elements *after* the smallest faulting index known: an element
+// before it still runs, as it would have run first on a back end that takes the elements in
+// order, and the fault reported is the one the linear back ends report. The elements that run
+// beyond what "start nothing after a fault" would allow are all below the reported index, and
+// 3.6 does not order effects between elements, so a program cannot observe the difference.
 //
 // Nothing escapes into the executor (it would cancel the whole flow, lower elements included):
 // the element's task keeps its failure here, and the thread that started the operator

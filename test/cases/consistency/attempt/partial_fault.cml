@@ -1,0 +1,37 @@
+/**
+ * One element of a parallel map faults while the elements below it are still queued.
+ *
+ * Design principles 3.6, as ruled on 2026-10-31: the elements that have started run to their end;
+ * of the elements that have not started, those with an index above the smallest faulting index
+ * known do not start, and those with an index below it still do. So every element below the
+ * faulting one runs whether or not it had started when the fault was known, the fault reported is
+ * the smallest index's, and both facts hold on the four back ends and on every run.
+ *
+ * Element 40 faults at once and every other element waits before it ends, so on a parallel back
+ * end the elements from 8 on are still queued when the fault is known: they are the ones the rule
+ * is about. What became of the elements above 40 is not asserted: one that had started ends, and
+ * which ones had started is up to the scheduler.
+ */
+
+import { sleep } from process
+
+func tbl(): int[] { return [1, 2, 3] }
+
+func probe(x: int): int sync {
+    println(format<x>('start {}'))
+    // The element that faults reads the table before it waits, so its fault is raised while the
+    // elements below it are still queued.
+    let q = if x == 40 then tbl()[x + 100] else x
+    sleep(0.02)
+    println(format<x>('end {}'))
+    return q
+}
+
+func main(): int sync {
+    let r = attempt(() => (0..64)->map<probe>)()
+    println(match r {
+        case error e => e.message
+        case v => 'no fault'
+    })
+    return 0
+}
