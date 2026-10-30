@@ -52,4 +52,6 @@ camel <case> std::defunctionalize std::jgir
 
 `--changed` 这一轮覆盖的计划**不是一小撮，而是几乎整棵计划树**：`289` 个计划、`7634` 个测试（`pass 7606 / fail 0`），因为 `src/` 的改动按 `test/plan-selection.json` 的目录规则映射到整棵树，不是按文件挑。分布是 `feat.compile` 88、`feat.modules` 73、`feat.linear` 27、`feat.consistency` 25、`feat.opt` 23、`feat.trans` 12、`feat.mm` 11、`feat.tools` 9、`feat.parse` 7、`feat.format` 3、`feat.para` 2，加 `feat.runtime.graph_draft_ledger`、`feat.docs_links`、`feat.exemplars`、`smoke.core` 和五个 `gpu.*`。**这一笔真正相关的两个计划都在里面**：`feat.opt.defun`（18 个用例全绿）与 `feat.runtime.graph_draft_ledger`（三个数仍是 66 / 535 / 3 / 6）。
 
-也就是说：这一轮的 `--changed` 与整闸差 `7919 - 7634 = 285` 个测试（差的那些没有逐一核对是哪几个计划，只说差额本身）。**“先推后整闸”省下的是那 285 个和几轮重跑的时间，不是覆盖面**——真正的口径仍是推完立刻在同一棵树上跑整闸。
+也就是说：这一轮的 `--changed` 与整闸差 `7919 - 7634 = 285` 个测试（差的那些没有逐一核对是哪几个计划，只说差额本身）。
+
+**这条偏离的收益要说准，别让下一个人把它当成便宜路径。** 一开始以为是“用 1 分钟的小闸换一次窗口”，实测不是：这一轮 `--changed` 跑了 **5.5 分钟**、覆盖 **7634 个测试**、与整闸只差 **285** 个。所以它**是“几乎整闸”，不是“小闸”**；偏离去掉的不是覆盖面，而是**那一次被抢跑的窗口**（整闸跑完到 push 之间 trunk 又动了，重来一轮）。**结论：`--changed` 不是便宜的替代品，它只是“可以赶在同一个窗口里跑完的整闸”；真正的口径仍是推完立刻在同一棵树上跑整闸。**
