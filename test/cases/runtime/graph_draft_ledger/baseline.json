@@ -1,8 +1,8 @@
 {
   "comment": "The baseline of the direct-connection ledger (graph-store step 2 b): the numbers below may only fall, and the last step is all of them at zero. `sites` records where each number comes from, as `file#symbol` (a line number moves with every edit above it, a symbol does not); it is diagnostics for a red and never decides the verdict. Record a new row after a commit with check.mjs --record.",
   "numbers": {
-    "files": 67,
-    "references": 537,
+    "files": 66,
+    "references": 535,
     "constructions": 3,
     "decode": 6
   },
@@ -50,7 +50,6 @@
       "src/compile/gir/draft_graph_builder.cpp": 1,
       "src/compile/gir/graph_encode.cpp": 1,
       "src/core/tags.cpp": 1,
-      "src/execute/macro/rewrite.cpp": 1,
       "src/passes/opt/generic/algebra.cpp": 1,
       "src/passes/opt/generic/gates.cpp": 1,
       "src/passes/opt/generic/generic.cpp": 1,
@@ -180,8 +179,6 @@
       "src/core/tags.cpp#effectivePermissions": 1,
       "src/core/tags.cpp#factsOf": 2,
       "src/core/tags.cpp#markIndependentElements": 1,
-      "src/execute/macro/rewrite.cpp#-": 1,
-      "src/execute/macro/rewrite.cpp#bridgeMacroRewriteControl": 1,
       "src/passes/opt/generic/algebra.cpp#algebraDraft": 1,
       "src/passes/opt/generic/algebra.cpp#apply": 1,
       "src/passes/opt/generic/algebra.cpp#constant": 1,
