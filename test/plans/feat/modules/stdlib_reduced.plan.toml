@@ -97,6 +97,21 @@ expect_stdout = "[171, 62] [171, 190]\ntrue true\n[171, 62]\n[128, 191]\n[0, 128
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
+# Widening to f32, which is exact: the element's bytes rearranged, not the decimal rewritten.
+
+[[tests]]
+name = "reduced_widen"
+desc = "`f32(x)` on a bf16 and on an f16 is exact -- every one of the 2^16 f16 patterns and every bf16 is an f32 -- so the widened value is pinned by its four little-endian f32 bytes at both ends of the range and in the subnormals: 65504 answers [0, 224, 127, 71], -0.5 [0, 0, 0, 191], 1/3 computed in the type [0, 160, 170, 62], the smallest subnormal [0, 0, 128, 51], the largest subnormal [0, 192, 127, 56], the smallest normal [0, 0, 128, 56], -0.0 [0, 0, 0, 128] and infinity [0, 0, 128, 127] -- the last four are what a widening through a decimal text or through a misrounded f64 cannot pass, since the smallest f16 subnormal is an f32 whose exponent is 24 below it and 1/3 in f16 is 0.333251953125 exactly in f32. The decimal contrast is in the case and not in an argument: `f32(f16(0.1))` is [0, 192, 204, 61] while `f32(0.1)` is [205, 204, 204, 61], and the two are compared and unequal, so what is widened is the element that was stored and not the decimal that was written; the same pair is pinned for bf16, whose 0.1 is a different element ([0, 0, 205, 61]). The widening is also asserted exact against the same value in f64 and round-tripped through `f16(f32(x)) == x`, and the widened value's own type is pinned: two of them are eight bytes."
+kind = "behavior"
+case = "../../../cases/modules/stdlib/reduced_widen.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "[0, 224, 127, 71]\n[0, 0, 0, 191]\n[0, 160, 170, 62]\n[0, 0, 128, 51]\n[0, 192, 127, 56]\n[0, 0, 128, 56]\n[0, 0, 0, 128]\n[0, 0, 128, 127]\n[0, 192, 204, 61] [205, 204, 204, 61] false\ntrue true\n[0, 0, 127, 127]\n[0, 0, 171, 62]\n[0, 0, 205, 61] [205, 204, 204, 61] false\n8\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
 # The reduction the rule re-pointed: the refusal this case asserted became a computation.
 
 [[tests]]
