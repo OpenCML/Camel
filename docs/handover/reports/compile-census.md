@@ -57,3 +57,27 @@ error[SemanticDiag::NoMatchingFunction]: No matching function found for argument
 3. **按计划运行 `-Tier slow` 的子集**——最接近真实，代价也最大。
 
 **今晚只交读数，不接闸门**：读数二的 124 条说明裸跑这条路不可用，接上去会立刻一片假红。
+
+## 读数五：串行重跑（判决：不是调度）
+
+```
+node scripts/test.js test/plans/feat --compile-only --jobs 1
+[SUMMARY] total: 7972, pass: 7918, fail: 16, skip: 38
+[INFO] wall: 682.5 s, jobs: 1, tier: fast
+```
+
+**同样是那 16 条，一条不多一条不少。** 所以它们不是并发串扰，我上一节那句「按 plan 不复现」是**错的**——我当时比的是
+`feat/opt/edges`，而 `no_ctrl_edge_kind.gir` 在 `feat/linear/effects_model_edges.plan.toml` 里。**更正后的事实**：其中
+`stdlib_registry` 三条**单独跑同样红，而且不加 `--compile-only` 也红**；直接跑那个工具得到的理由是：
+
+```
+stdlib-reference.mjs (--verify-ops): refusing to measure an install that is not this tree's build
+  [camel-remote] -NoBuild refused: out/latest was built from different sources than this tree.
+```
+
+**这台临时工作树的 `out/latest` 是远端构建的，安装印记和本树源码对不上**——所以这 16 条里至少这一族是**机器/工作树条件**，
+不是程序，也不是调度。其余各条尚未逐条归因，**不在这份页里宣称**。
+
+**判据**：**一个检查若在自己的调度下会红，它就不是在检程序，是在检调度。这和「在坏程序上变绿」是同一种错。**
+
+**代价**：8 路 **178.3 s**（约 22 ms 一条），串行 **682.5 s**；进 `-Tier fast` 意味着闸门**多约 3 分钟**（8 路）——是否每趟都跑，是裁定。
