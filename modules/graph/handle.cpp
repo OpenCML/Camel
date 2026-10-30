@@ -7,6 +7,7 @@
 #include "camel/core/type/intern.h"
 #include "camel/core/type/text.h"
 #include "camel/runtime/draft.h"
+#include "camel/runtime/graph_txn.h"
 #include "camel/runtime/program.h"
 #include "camel/utils/assert.h"
 
@@ -233,7 +234,7 @@ Handle *Handle::create(
     if (mem == nullptr) {
         throw std::bad_alloc();
     }
-    return new (mem) Handle(kind, program, nullptr, graph, index, typeRef);
+    return new (mem) Handle(kind, program, nullptr, nullptr, graph, index, typeRef);
 }
 
 Handle *Handle::createInDraft(
@@ -243,7 +244,19 @@ Handle *Handle::createInDraft(
     if (mem == nullptr) {
         throw std::bad_alloc();
     }
-    return new (mem) Handle(HandleKind::Node, nullptr, &draft, draft.id(), node, nullptr);
+    return new (mem) Handle(HandleKind::Node, nullptr, &draft, nullptr, draft.id(), node, nullptr);
+}
+
+Handle *Handle::createInTransaction(
+    const camel::runtime::GraphTransaction &transaction, camel::runtime::gc_node_ref_t node,
+    mm::IAllocator &allocator) {
+    void *mem = allocator.alloc(sizeof(Handle), alignof(Handle));
+    if (mem == nullptr) {
+        throw std::bad_alloc();
+    }
+    const auto &draft = transaction.graph();
+    return new (mem)
+        Handle(HandleKind::Node, nullptr, nullptr, &transaction, draft.id(), node, nullptr);
 }
 
 bool Handle::equals(const rtdata::Object *other, const Type *type, bool deep) const {
@@ -261,12 +274,16 @@ bool Handle::equals(const rtdata::Object *other, const Type *type, bool deep) co
     const bool sameType = typeRef_ == that->typeRef_ ||
                           (kind_ == HandleKind::TypeRef && type::sameCanonicalType(typeRef_, that->typeRef_));
     return kind_ == that->kind_ && program_ == that->program_ && draft_ == that->draft_ &&
-           graph_ == that->graph_ && index_ == that->index_ && sameType;
+           transaction_ == that->transaction_ && graph_ == that->graph_ &&
+           index_ == that->index_ && sameType;
 }
 
 rtdata::Object *Handle::clone(mm::IAllocator &allocator, const Type *type, bool deep) const {
     (void)type;
     (void)deep;
+    if (transaction_ != nullptr) {
+        return createInTransaction(*transaction_, index_, allocator);
+    }
     if (draft_ != nullptr) {
         return createInDraft(*draft_, index_, allocator);
     }
@@ -281,6 +298,9 @@ void Handle::print(std::ostream &os, const Type *type) const {
 void Handle::updateRefs(const rtdata::Object::RefRelocator &relocate, const Type *type) {
     // The Program a handle was read from lives as long as the handle does. A handle the
     // collector reaches after the program was freed (a dead one, not yet swept) names nothing.
+    // The transaction a draft-backed handle names is borrowed, not owned: it is an ordinary C++
+    // object outside the collector's graph, so it takes no part in tracing, and a handle that
+    // outlives its session names nothing either.
     if (program_ == nullptr || !mm::graphSpace().isAllocated(const_cast<Program *>(program_))) {
         return;
     }

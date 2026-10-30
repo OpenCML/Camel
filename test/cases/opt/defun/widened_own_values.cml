@@ -1,0 +1,28 @@
+/**
+ * The widening the pass cannot write, as the smallest program that shows it.
+ *
+ * `apply` takes `(x: int) => void`, and the program writes values of that type of its own (`void_g`)
+ * as well as a lambda that returns a value and is widened where `apply` is called. Lowering the
+ * lambda's family turns those values into the enum of `(x: int) => int`; the parameter's own type is
+ * a family with values, and turning it into the same enum would call `void_g` with the wrong tag.
+ * Writing the widening needs a wrapper -- a function of the parameter's type that calls the value
+ * and drops its result -- which this pass cannot build: it stops the pipeline and names this program
+ * rather than leave a graph with two forms of a function value.
+ *
+ * This is a defect of the pass and not of the program. When the wrapper lands, the pass lowers this
+ * program and the test that pins the error statement becomes the test that pins the lowering.
+ */
+
+func apply(f: (x: int) => void, v: int) {
+    f(v)
+}
+
+func void_g(x: int): void {
+    println('void_g {}'->format<x>)
+}
+
+func main(): int sync {
+    apply(void_g, 1)
+    apply((x: int) => x * 10, 2)
+    return 0
+}
