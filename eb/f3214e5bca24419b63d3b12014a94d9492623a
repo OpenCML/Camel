@@ -1,0 +1,7 @@
+两条标量加法声明：`ebf3214e5`，五项 total 7873 / pass 7863 / fail 0 / skip 8 / known 2。
+
+1. **写法依裁定**：`func operator +` 才是程序写的形态，`__add__` 只是编译器内部名字，程序不写它，`ReservedIdentifier` 照旧生效。`prelude.cml` 因此新增
+   `#op(':op/add_f') export func operator +(x: f32, y: f32): f32` 与 `#op(':op/add_d') export func operator +(x: float, y: float): float`，各带描述与可编译 `@example`（`f32(1.5) + f32(2.5)`、`1.5 + 2.5`）。
+2. **探针结论**（三读数）：`func operator +` 单独写→`NativeDeclarationNotLoaded`（对：没 `#op` 就没实现者）；加 `#op` → 无错；再加 `#jvp(...)` → `SemanticDiag::TagUndeclared`。**解析器与语义检查一行没动**，裁定担心的"实现缺口"在 `#op` 这一侧不存在。
+3. **`#jvp` 的缺口不在 `#op`**：`#op` 是内建标签的直接使用；`jvp` 要像 `vjp` 那样写 `export tag jvp::<F>(rule: F) on func when is_function::<F>()`，放在 `stdlib/autodiff.cml` 里挨着 `vjp`，不放 `prelude.cml`——同一概念不留两种位置。
+4. **`skip` 8 而非 9**：`[SKIP]` 行按名字比差集，`skip` 随 GPU 卡占用浮动，比总数没意义。
