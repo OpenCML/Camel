@@ -1307,7 +1307,8 @@ void Builder::buildFuncBody(
             }
         }
         if (!funcType->hasExitType()) {
-            inferredExitGraphs_.insert(graph.get()); // the body sets it from now on
+            inferredExitGraphs_.insert(
+                camel::runtime::toValue(graph->graphId())); // the body sets it from now on
         }
         // The values of the instance's `constas` parameters: the body reads them as static
         // values, much as a `static for` reads its round's `n` (design principles 5.4). They
@@ -1328,7 +1329,7 @@ void Builder::buildFuncBody(
         // when the block is written without decorators.
         const bool dropped = droppedBodies_.contains(gct->at(1)) && !gct->at(1)->synced();
         if (dropped) {
-            droppedGraphs_.insert(graph.get());
+            droppedGraphs_.insert(camel::runtime::toValue(graph->graphId()));
         }
         node_handle_t bodyResult = visitBodyNode(gct->at(1));
         setBodyResult(graph, dropped ? nullptr : bodyResult);
@@ -1340,9 +1341,9 @@ void Builder::buildFuncBody(
             graph->draft().setRegionAttrs(0, bodyTags.nodes);
         }
         // A body declared `: void` drops the value of its last statement.
-        if (!inferredExitGraphs_.contains(graph.get()) &&
+        if (!inferredExitGraphs_.contains(camel::runtime::toValue(graph->graphId())) &&
             isVoidGraphExitType(funcType->exitType())) {
-            rejectDiscardedValue(graph.get());
+            rejectDiscardedValue(bodyKeyOf(graph.get()));
         }
         bodyStates_[graph.get()] = BodyState::Built;
         registerBuiltBody(graph);

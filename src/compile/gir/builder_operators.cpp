@@ -3665,7 +3665,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                     }
                     if (auto element = lambdaGraphs_.find(input.expr);
                         element != lambdaGraphs_.end()) {
-                        rejectDiscardedValue(element->second);
+                        rejectDiscardedValue(bodyKeyOf(element->second));
                     }
                 }
             }

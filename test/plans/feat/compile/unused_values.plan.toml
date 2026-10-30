@@ -88,3 +88,15 @@ assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[0].name === 'SemanticDiag::UnusedPureResult', input.diagnostics[0].name)
 assert(input.diagnostics[0].line === 7 && input.diagnostics[0].column === 5, JSON.stringify(input.diagnostics[0]))
 """
+
+[[tests]]
+name = "unused_values.loop_statements_used"
+desc = "What a loop takes from its own statements is used -- the condition it asks and the body's value that becomes the next state -- so neither is UnusedPureResult, and a body that drops what it gives (the empty arm of an `if` without `else`) is judged by its own last statement, not by a loop body at the same address: the loop's condition and body arms die when the loop is built, and a body map keyed by their addresses reported `s + b` here (exit 1, seed of the shape)."
+kind = "behavior"
+case = "../../../cases/compile/unused_values/loop_statements_used.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "6\n"
+verify_script = """
+assert(input.diagnostics.length === 0, JSON.stringify(input.diagnostics))
+"""
