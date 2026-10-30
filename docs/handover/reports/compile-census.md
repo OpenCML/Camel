@@ -187,3 +187,19 @@ help: Available overloads: <nn:adam>: (params: P, grads: grad of P, state: Optim
 
 **`perf` 层几乎不判编译，它判的是比值与预算；所以它本来就不该被这个模式覆盖。** 这也是 `--compile-only` 进不了闸门的
 第二个理由（第一个是 8 分钟）：**在这片地方，编译只是它们故事的开头。**
+
+## `mlp_step`：程序把声明写松了，不是编译器把类型抹平了
+
+```
+“`grad of P` 已经保形（`derivative.cpp:213` 那条 'a numeric array's tangent is a tensor of the same
+shape'）；`f32[..]` 与静态形状的不统一，是程序把声明写松了，不是编译器把类型抹平了。
+`transformer_step` 的修复方向是把声明改成与实际值相同的静态形状，与‘接受抹平’正好相反。”
+```
+
+**判据**：**当一个「缺口的修法」有两种方向（放宽类型系统 / 收紧程序声明），先问哪一种让系统多一个能检查的东西——今晚的答案是后者。**
+
+按这个方向，`test/cases/perf/mlp_step.cml` 的 `type Mlp` 写成了它实际构建的形状（`w1: f32[784, 128]`、`b1: f32[128]`、`w2: f32[128, 10]`、`b2: f32[10]`），理由是梯度的形状与参数一致，声明写松就会与自己的值不统一。
+
+**读数**：`perf/training_steps` **6 / 6 / 0**（此前 4/6），`mlp_step.nvm` 与 `mlp_step.fvm` 都 PASS，`transformer_step` 两条仍是 PASS。
+
+**顺手一查**：`git grep -n 'f32\[\.\.\]' -- test/cases/perf` 共 **42 处、8 个文件**（`gemm_threads_curve.cml` 17、`transformer_step.cml` 6、`fusion_step.cml` 5、`dependency_chain.cml` 4、`fusion_chain.cml` 3、`gemm_canonical_shapes.cml` 3、`mlp_step.cml` 3、`step_budget.py` 1）。**其中并非都是参数树**（`mlp_step` 剩下的 3 处是 `logits`/`loss` 的形参与返回类型），是否还有同形状的第二处，未查、未改。
