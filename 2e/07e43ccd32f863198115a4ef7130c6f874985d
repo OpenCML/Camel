@@ -1,0 +1,5 @@
+`tag jvp` 声明落到 `stdlib/autodiff.cml`（挨着 `vjp`，同一 `on func` 位置、同一参数形态），`src/parse/ast/builder.cpp` 的旧写法诊断同时覆盖 `@jvp(rule)`。
+
+1. 事实键 `autodiff::jvp` 早已存在（`src/core/node_attrs.cpp`），缺的只是声明。
+2. 两处都写：只声明不改诊断，用户写 `@jvp(rule)` 会看到"未知属性"而不是"请改用 `#jvp(rule)`"。
+3. 不改 `TagArgumentNotValue`：`vjp` 那条路径已能携带函数名，`jvp` 复用同一条。
