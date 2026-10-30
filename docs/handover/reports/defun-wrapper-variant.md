@@ -81,11 +81,13 @@ camel <case> std::defunctionalize std::jgir
 
 ## 六、签名里套着另一族：一次重写里一起降
 
+**这一笔的规矩，一句话**：**一个函数值的实参位置，是 `FUNC` 与 `CALL` 的 norm 入参**；只认前者，会把每个穿过值传递的实参判成“被一个不是调用的节点读了”，于是每一层嵌套的内层族都被拒、外层族跟着被拒，整个嵌套退回原样。
+
 `nested_signature.cml` 里三层：`twice` 的参数是 `(f: (x: int) => int, x: int) => int`，后者的参数又是 `(x: int) => int`；三层都有值，所以三层都要变成枚举。签名里写着内层的**函数类型**的地方，必须改写成内层的**枚举**，否则外层函数体里那个调用会拿着 tag 去撞一个还写着函数类型的参数。
 
-真正挡住它的**不是**类型替换（那一步一直都会钻进签名里），而是“一个函数值被谁读”的许可：`checkReader` 只认 `FUNC` 节点的 norm 入参是“实参位置”，而**穿过值调用的实参写在 `CALL` 节点的 norm 入参里**（`CALL` 的 with 入参第 0 个是被调的值）。于是 `twice` 里 `h(inc, x)` 的 `inc` 被判成“被一个不是调用的节点读了”，内层族被拒，外层族跟着按 (5b) 被拒——三层全部照原样留下。
+真正挡住它的**不是**类型替换（那一步一直都会钻进签名里），而是上面那条许可：`checkReader` 当时只认 `FUNC` 节点的 norm 入参，而**穿过值调用的实参写在 `CALL` 节点的 norm 入参里**（`CALL` 的 with 入参第 0 个才是被调的值）。于是 `twice` 里 `h(inc, x)` 的 `inc` 被判成“被一个不是调用的节点读了”，内层族被拒，外层族跟着按 (5b) 被拒——三层全部照原样留下。
 
-许可改成“`FUNC` 和 `CALL` 的 norm 入参都是实参位置”之后，一次重写就把三层一起降了。`std::jgir` 里的签名（也就是“内层枚举写进了签名”这条证据）：
+许可改成 `FUNC` 与 `CALL` 都算之后，一次重写就把三层一起降了。`std::jgir` 里的签名（也就是“内层枚举写进了签名”这条证据）：
 
 ```text
 "signature": "(f: FnValue_inc_0, x: int) => int"        // apply / apply_twice
@@ -102,7 +104,7 @@ N0F [label=":enum/tag", type="OPER", value_type="int"];             // twice 里
 N13 [label="apply_twice", type="FUNC", value_type="int"];           // 两个 arm 各自直调
 ```
 
-三层枚举各自在自己的族里，**没有任何 `wrap$k`**：`inc` 是它自己那一族的变体，`twice` 传下去的就是那个枚举，调用走到的是签名本来就声明的那个参数——不是把内层的值塞进一个假枚举，也不是两个包装串起来。
+**棋盘怎么摆，一句话说清**：每一族按自己的签名造自己的变体；签名里嵌的那一层不是包装，是**另一族自己的变体**。判据是 **`wrap$k` 出现 0 次**，不是两个 enum 合成一个——合成一个 enum 是另一种语义（那等于说两族本来就是同一族），这一笔不要它。
 
 读数（`defun.nested_signature.lowered`）：`DEFUNCTIONALIZE types=3 values=6 calls=5 refused=0`（中间那族 `variants='apply,apply_twice'`）；过完这一遍 `closures=0`、`indirect_calls=1`、`branches=1`（`twice` 里那一次分派），再过 `std::opt` 是 `closures=0`、`indirect_calls=0`；程序打印 `NESTED 3 5 5 7`，不加这一遍也是这一行。
 
