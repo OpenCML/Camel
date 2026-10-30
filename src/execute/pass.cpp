@@ -1921,10 +1921,16 @@ std::string describeMoves(const EffectSite &a, const EffectSite &runsA, const Ef
 
 /// The one effect-order violation of a pass, as the text its diagnostic carries; empty when every
 /// pair of effects on one resource is still in the order the program wrote it in (design principles
-/// 3.3). The order the program wrote is the one its graph makes: a chain of edges from the one
-/// effect to the other, in the one topological order that graph is read in, so this is not a
-/// reachability test per pair but a position in an order, asked of the graph only when a pass has
-/// moved two effects the other way round.
+/// 3.3). Two things are compared, and both are needed:
+///
+/// 1. The order the program wrote, read from the one topological order of the graph the two effects
+///    shared before the pass, and the chain of edges that made the one wait for the other. A pair
+///    the program did not put in an order is not a pair to break: two effects with no chain between
+///    them are placed by whichever order the graph was written out in, and a pass that writes it out
+///    again may place them the other way without having reordered anything.
+/// 2. The graph each of them is in after the pass. A pass that pulls an effect's node into another
+///    graph takes its order with it, and a check that only read the order of a graph sees nothing:
+///    the node is still in the program, it is the graph it runs in that moved.
 std::string effectOrderViolation(const ProgramEffects &before, const ProgramEffects &after) {
     const std::vector<std::pair<size_t, size_t>> pairs = matchedEffects(before, after);
     for (size_t i = 0; i < pairs.size(); ++i) {
@@ -1933,23 +1939,36 @@ std::string effectOrderViolation(const ProgramEffects &before, const ProgramEffe
         for (size_t j = i + 1; j < pairs.size(); ++j) {
             const EffectSite &second     = before.sites[pairs[j].first];
             const EffectSite &runsSecond = after.sites[pairs[j].second];
-            if (first.graph != second.graph || runsFirst.graph != runsSecond.graph) {
-                continue;
-            }
-            const std::string resource = sharedResourceOf(first, second);
+            const std::string resource   = sharedResourceOf(first, second);
             if (resource.empty()) {
                 continue;
             }
-            const bool writtenFirst = first.position < second.position;
+            const bool writtenFirst       = first.position < second.position;
             const EffectSite &earlier     = writtenFirst ? first : second;
             const EffectSite &later       = writtenFirst ? second : first;
             const EffectSite &runsEarlier = writtenFirst ? runsFirst : runsSecond;
             const EffectSite &runsLater   = writtenFirst ? runsSecond : runsFirst;
-            if (!waitsFor(before, earlier, later)) {
-                continue; // the program did not put them in this order to begin with
+            if (earlier.graph != later.graph) {
+                continue; // two graphs before the pass, or no chain: the program ordered neither
+            }
+            const std::string moves = describeMoves(earlier, runsEarlier, later, runsLater);
+            if (runsEarlier.graph != runsLater.graph) {
+                // The pass left them in two graphs: whatever order the graph that held them made
+                // is gone with it, and neither graph orders the one against the other alone.
+                return std::format(
+                    "the effects on '{}' are not in the order the program wrote them: the program "
+                    "wrote {} before {} in graph {}, and this pass leaves them in two graphs, "
+                    "where nothing orders them any more: {} and {} ({})",
+                    resource,
+                    describeEffect(earlier),
+                    describeEffect(later),
+                    earlier.graph,
+                    describeEffect(runsEarlier),
+                    describeEffect(runsLater),
+                    moves);
             }
             if (waitsFor(after, runsEarlier, runsLater)) {
-                continue; // the written order is still the one this graph makes
+                continue; // the graph they are in still makes the one wait for the other
             }
             return std::format(
                 "the effects on '{}' are not in the order the program wrote them: the program "
@@ -1960,7 +1979,7 @@ std::string effectOrderViolation(const ProgramEffects &before, const ProgramEffe
                 describeEffect(later),
                 describeEffect(runsLater),
                 describeEffect(runsEarlier),
-                describeMoves(first, runsFirst, second, runsSecond));
+                moves);
         }
     }
     return {};
