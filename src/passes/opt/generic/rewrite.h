@@ -10,6 +10,7 @@
 #include "camel/core/context/context.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/graph_txn.h"
 
 #include <algorithm>
 #include <functional>
@@ -113,7 +114,7 @@ inline bool handOverSyncWait(GraphDraft &draft, gc_node_ref_t pred, gc_node_ref_
 /// `std::opt::algebra neutral_only=true`. The algebraic laws themselves are the rules library's
 /// (`rules::simplify`, registered as `std::opt::algebra`); this residual exists only because the
 /// library has no neutral-only mode, and does nothing without `neutralOnly`.
-size_t algebraDraft(GraphDraft &draft, bool safeFp = false, bool neutralOnly = false);
+size_t algebraDraft(camel::runtime::GraphTransaction &transaction, bool safeFp = false, bool neutralOnly = false);
 
 /// Bypass a non-anchor forwarding gate by putting its waits on mandatory consumers.
 /// Conditional value consumers and costly shared barriers stay gates; edgeBudget bounds growth.
@@ -215,7 +216,7 @@ bool mayReduceOrder(const camel::runtime::GCGraph &graph);
  */
 const camel::runtime::Program *rewriteReachableGraphs(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    std::string_view passName, const std::function<size_t(GraphDraft &)> &rewrite,
+    std::string_view passName, const std::function<size_t(camel::runtime::GraphTransaction &)> &rewrite,
     size_t *rewrites = nullptr, RewriteMemo *memo = nullptr,
     bool (*mayRewrite)(const camel::runtime::GCGraph &) = nullptr, bool checkScreens = false);
 

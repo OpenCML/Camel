@@ -652,6 +652,15 @@ node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::nod
             target->castSafetyFrom(source) == CastSafety::Safe) {
             return castNodeTo(valueOf(node), target, origin);
         }
+        // The value's type goes from `T` to `T[..]` here, and that is where the run's
+        // representation is made: the slot holds the rank-zero array that *is* the element (design
+        // principles 5.4), so the program's value, its printing and its comparison do not change,
+        // while the slot has a rank to read. This is the one place the conversion is inserted --
+        // every position that gives a value its type comes through here, and a call argument, which
+        // does not, asks the same question before it enters (builder_operators.cpp).
+        if (isRankZeroEdge(target, source)) {
+            return castNodeTo(valueOf(node), target, origin);
+        }
         return node;
     }
     // A literal takes the type of its context (design principles 5.1): `let x: float = 1`,
@@ -661,6 +670,16 @@ node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::nod
     if (const std::optional<literal::Value> value = literalValueOfExpr(origin);
         value.has_value() && target->isPrimitive() && literal::kindEnters(*value, target)) {
         return literalInType(*value, target, origin, true);
+    }
+    // A literal in a position of `T[..]` is the element (design principles 5.4): the value takes
+    // the element's type first, and the wrap above makes the rank-zero value the slot holds. The
+    // position states the element type, not a dimension, so nothing about the literal loses.
+    if (const std::optional<literal::Value> value = literalValueOfExpr(origin); value.has_value()) {
+        if (Type *element = rankZeroElementOf(target);
+            element != nullptr && literal::kindEnters(*value, element)) {
+            node_handle_t elementNode = literalInType(*value, element, origin, true);
+            return elementNode != nullptr ? castNodeTo(elementNode, target, origin) : nullptr;
+        }
     }
     // An array or struct literal takes the element (field) type its position gives it (design
     // principles 5.1): `f([1, 2])` where `f` takes a `float[]`, `return { a: 1 }` under
@@ -699,6 +718,13 @@ node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::nod
                                                     : castNodeTo(failed, fallible, origin);
     }
     if (!entersImplicitly(target, source)) {
+        // The other direction of the same edge: a value of `T[..]` read as `T` is the element it
+        // holds (design principles 5.4), so the conversion hands the element on. `T[]` and
+        // `T[3, ..]` are not this edge -- they state dimensions the element has not -- and they
+        // stay refused, as the table refuses them.
+        if (isRankZeroEdge(target, source)) {
+            return castNodeTo(valueOf(node), target, origin);
+        }
         return nullptr;
     }
     node = valueOf(node); // what a variable holds, not the variable
@@ -1243,7 +1269,7 @@ void Builder::coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_
         // statements of a sync arm) is still waited for.
         node_handle_t gate = currGraph_->addGateNode(target);
         linkNodes(LinkType::Norm, coerced, gate);
-        linkNodes(LinkType::Ctrl, output, gate);
+        linkNodes(LinkType::Sync, output, gate);
         coerced = gate;
     }
     draft.setInsertRegion(outerRegion);

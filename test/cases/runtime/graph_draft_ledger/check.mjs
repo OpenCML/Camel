@@ -114,6 +114,16 @@ const NUMBERS = [
     { key: 'decode', label: 'decode', flags: ['-o', '-n'], pattern: 'GraphDraft::decode' },
 ]
 
+// The files that must name the type nowhere: every place a handle is made and a graph is read.
+// A non-zero count here is the end of the step coming undone, whatever the totals say.
+const ZERO_FILES = [
+    'modules/graph/handle.h',
+    'modules/graph/handle.cpp',
+    'modules/graph/read.cpp',
+    'modules/rewrite/fact.cpp',
+    'modules/rewrite/module.cpp',
+]
+
 const RECORD = process.argv.includes('--record')
 const FORCE = process.argv.includes('--force')
 
@@ -126,8 +136,8 @@ function fail(message) {
  * `git grep`, from the checkout root. Exit 1 is "no match" (not an error); anything else is an
  * error, because a check that cannot read the tree must not answer "nothing rose".
  */
-function gitGrep(flags, pattern) {
-    const args = ['grep', ...flags, pattern, '--', ...SOURCE_ROOTS]
+function gitGrep(flags, pattern, paths = SOURCE_ROOTS) {
+    const args = ['grep', ...flags, pattern, '--', ...paths]
     const result = spawnSync('git', args, {
         cwd: REPO_ROOT,
         encoding: 'utf8',
@@ -198,6 +208,28 @@ function symbolAt(relative, lineNumber) {
  * per file; for the others, one entry per `file#symbol`, with the locations that made it. `sites` is
  * diagnostics only -- it says WHERE when a number rises, and never decides WHETHER the check is red.
  */
+/**
+ * The line that says whether the files the step is about are clean, and the red when one is not.
+ * The totals can fall while one of these rises, which is why the endpoint is written as a fact
+ * about these files rather than as a zero on a total.
+ */
+function zeroFilesLine() {
+    const dirty = []
+    for (const file of ZERO_FILES) {
+        const lines = gitGrep(['-n', '-w'], 'GraphDraft', [file]).filter((entry) => entry !== '')
+        if (lines.length > 0) dirty.push(`${file}: ${lines.length}`)
+    }
+    if (dirty.length === 0) {
+        return `[LEDGER] zero files ok: ${ZERO_FILES.join(', ')} name the type nowhere`
+    }
+    for (const entry of dirty) console.log(`[LEDGER] RED ${entry} name the type, and must not`)
+    console.log(
+        '[LEDGER] RED these files are where the step ends: a handle names a transaction, a reader ' +
+            'reaches the draft through it, and the boundary does not name the type at all'
+    )
+    process.exit(1)
+}
+
 function measure() {
     const values = {}
     const sites = {}
@@ -354,6 +386,8 @@ if (!baseline) {
 
 console.log(`[LEDGER] ${comparisons(measured.values, baseline)}`)
 
+console.log(zeroFilesLine())
+
 const rose = numberRises(measured.values, baseline)
 const dropped = NUMBERS.filter((number) => measured.values[number.key] < baseline.numbers[number.key])
 
@@ -373,7 +407,9 @@ if (rose.length > 0) {
                 '(re-record it), so only the total is named here'
         )
     console.log(
-        '[LEDGER] RED these numbers may only fall: the step ends when all three are zero and `GraphDraft` is deleted'
+        '[LEDGER] RED these numbers may only fall. The step ends where the type has no direct ' +
+            'connection left: handle, read, fact and module name it nowhere (the check above says ' +
+            'so), and writings.h keeps one entry point that must name the type it takes.'
     )
     process.exit(1)
 }

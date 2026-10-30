@@ -18,6 +18,8 @@
 #include "tiles/internal/compiled_scope.h"
 #include "tiles/internal/graph_values.h"
 #include "tiles/internal/regions.h"
+#include "tiles/internal/scalar_expr.h"
+#include "tiles/internal/tree_transfer.h"
 #include "tiles/program.h"
 #include <algorithm>
 #include <bit>
@@ -217,9 +219,43 @@ void checkInvalidation(::Function *function, core::context::Context &context) {
     // Leave the original graph's template usable by subsequent calls.
     (void)compileTypes(function, context.facts());
 }
+// What an i64 element does before a position can live on the device: eight bytes an element in a
+// plan, i64 values in the kernel expression layer (that layer carries i64 for loop-domain elements
+// and refuses i64 arithmetic on purpose -- an index is not accumulated), and a device leaf whose
+// bytes read back as the host tensor [3, 5] of its own element type. The leaf is resident storage,
+// so no device is touched; the env variable keeps the line out of the cases that assert their whole
+// output.
+std::string i64LeafReport() {
+    namespace td       = core::rtdata;
+    const size_t width = bytes(Node{.shape = {2}, .dtype = DType::I64});
+    if (width != 2 * sizeof(int64_t))
+        throw std::runtime_error("an i64 value is not eight bytes per element");
+    const auto third = kernel::ScalarExpr::literal(kernel::ScalarValue::i64(3)).evaluate({});
+    const auto fifth = kernel::ScalarExpr::literal(kernel::ScalarValue::i64(5)).evaluate({});
+    if (third.asI64() != 3 || fifth.asI64() != 5)
+        throw std::runtime_error("the kernel expression layer lost an i64 value");
+    const std::vector<int64_t> expected{third.asI64(), fifth.asI64()};
+    std::vector<std::byte> held(expected.size() * sizeof(int64_t));
+    std::memcpy(held.data(), expected.data(), held.size());
+    const auto resident = retainHostValue({2}, DType::I64, held);
+    const auto readback = downloadValue(*resident);
+    if (readback != held)
+        throw std::runtime_error("a resident i64 leaf did not read back the bytes it holds");
+    auto *int64x2 = tensor::ops::tensorOf(core::type::TypeCode::Int64, tensor::knownShape({2}));
+    auto *value   = td::fromSlot<tensor::Array *>(
+        hostLeafValue(int64x2, {2}, DType::I64, readback));
+    if (value->dtype() != core::type::TypeCode::Int64 || value->shapeVector() != Shape{2})
+        throw std::runtime_error("the readback did not answer in the leaf's element type");
+    std::vector<int64_t> host(expected.size());
+    std::memcpy(host.data(), value->rawData(), held.size());
+    if (host != expected)
+        throw std::runtime_error("the readback of an i64 leaf changed a position");
+    return "{\"device\":[3,5],\"host\":[3,5],\"equal\":true}";
+}
 class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
     operator_t run_;
     std::optional<SegmentDeviceOps> device_;
+    static inline bool i64Reported = false;
 
   public:
     RegionOutlineTestPass(
@@ -261,6 +297,10 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
                 (void)compileTypes(function, context_->facts());
         }
         os << "TILES_OUTLINED " << count << '\n';
+        if (std::getenv("CAMEL_TILES_TEST_I64") && !i64Reported) {
+            i64Reported = true;
+            os << "TILES_I64 " << i64LeafReport() << '\n';
+        }
         return result;
     }
 };

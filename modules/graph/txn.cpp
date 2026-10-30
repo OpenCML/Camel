@@ -201,8 +201,13 @@ slot_t replaceKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *from = norm.get<Handle *>(1);
     const auto *to   = norm.get<Handle *>(2);
     auto [draft, fromRef] = draftOf(state, from, "graph.replace");
-    if (to->program() != state.base || to->graph() != from->graph() ||
-        !draft.alive(to->index())) {
+    // The replacement names this graph either way it can be named: through the program it came
+    // from, or through the transaction that owns the draft a fold wrote it into.
+    const bool sameGraph = to->graph() == from->graph();
+    const bool knownOwner =
+        to->program() == state.base ||
+        (to->transaction() != nullptr && to->transaction()->id() == to->graph());
+    if (!sameGraph || !knownOwner || !draft.alive(to->index())) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
             "graph.replace",
@@ -346,14 +351,12 @@ slot_t evalKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the graph does not exist");
     }
     const gc_node_ref_t value = draft.materializeStaticValue(result, header->dataType);
+    // The node exists in the draft and nowhere else, so the handle that names it names the
+    // transaction holding it: a program-backed handle here would claim a published node that
+    // does not exist yet.
+    auto &transaction = state.session.edit(graph);
     return makeSome(
-        toSlot(Handle::create(
-            HandleKind::Node,
-            state.base,
-            graph->id(),
-            value,
-            nullptr,
-            mm::autoSpace())),
+        toSlot(Handle::createInTransaction(transaction, value, mm::autoSpace())),
         TupleType::nullable(HandleType::get(HandleKind::Node)));
 }
 
@@ -435,15 +438,12 @@ slot_t addConstantKernel(ArgsView &, ArgsView &norm, Context &) {
         auto *text = fromSlot<::String *>(value);
         value      = toSlot<::String *>(static_cast<::String *>(text->clone(mm::permSpace(), type)));
     }
-    auto &draft                 = state.session.edit(graph).edit();
+    auto &transaction = state.session.edit(graph);
+    auto &draft       = transaction.edit();
     const camel::runtime::gc_node_ref_t id = draft.materializeStaticValue(value, type);
-    return toSlot(Handle::create(
-        HandleKind::Node,
-        state.base,
-        graph->id(),
-        id,
-        nullptr,
-        mm::autoSpace()));
+    // The node was just made in the draft, so the handle names the transaction: naming the
+    // program would claim a published node that is not there.
+    return toSlot(Handle::createInTransaction(transaction, id, mm::autoSpace()));
 }
 
 // The fixed operators of a transaction: their signature is in stdlib/graph.cml, so the table

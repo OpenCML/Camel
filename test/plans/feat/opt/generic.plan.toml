@@ -1214,6 +1214,25 @@ assert(!out.includes('[12, 2]'), `the program ran: ${out}`)
 timeout_ms = 30000
 
 [[tests]]
+name = "bad_alloc.diagnostic"
+desc = "A failed allocation that is not one of the runtime's own spaces — what a std::vector or std::string does when `operator new` cannot satisfy it — is reported as RuntimeDiag::MemoryExhausted too, not as a PassInternalError and not by ending the process. `mm::MemoryExhausted` derives from `std::bad_alloc`, so the clause that catches the runtime's spaces does not catch this one; the test-only pass test::throw_bad_alloc throws the bare type and the run must name the memory diagnostic, the stage of the pass, and never run the program."
+kind = "behavior"
+case = "../../../cases/opt/generic/specialize_growing_shape.cml"
+args = ["--output-format", "json", "${case}", "test::throw_bad_alloc", "std::nvm"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout + input.normalized.stderr
+assert(out.includes('"stage":"pass:test::throw_bad_alloc"'), `stage missing: ${out}`)
+assert(out.includes('"name":"RuntimeDiag::MemoryExhausted"'), `name missing: ${out}`)
+assert(out.includes('the host has no memory left'), `reason missing: ${out}`)
+assert(!out.includes('RuntimeDiag::PassInternalError'), `reported as a compiler defect: ${out}`)
+assert(!out.includes('[12, 2]'), `the program ran: ${out}`)
+}
+"""
+
+[[tests]]
 name = "broken_graph.commit_validation"
 desc = "D23: structural validation runs when a rewrite is committed, in release builds too. The test-only pass test::drop_call_argument (a test-only pass) commits a call that passes fewer arguments than its callee takes; the commit is rejected as PassInternalError naming the pass, and nothing executes. Before, nvm/fvm/jit ran the broken program and printed 0 instead of 42."
 kind = "behavior"

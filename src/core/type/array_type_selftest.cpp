@@ -9,6 +9,7 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/intern.h"
 
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -150,6 +151,33 @@ std::string debugRunArrayTypeSelfTest() {
         !openF32->assignableFrom(ArrayType::create(i64, shapeOf({4}))),
         "f32[..] accepts int[4]");
     require(openF32->castSafetyFrom(f32) == CastSafety::Safe, "f32[..] from f32 is not Safe");
+
+    // ---- The rank-zero value in the run ---------------------------------------------------
+    // The type says the element is the value (design principles 5.4), and the run holds it as an
+    // array with no dimension so that a slot of `T[..]` has a rank to read: `rank()` 0, `numel()`
+    // 1 and `size()` 1 -- the 0 an empty extent of a rank-one array would count is not the count
+    // of a rank-zero value, which holds its one element. It prints as the element itself and
+    // compares by it, so a program that receives the element through a `T[..]` slot sees the value
+    // it handed in.
+    Array *rankZero =
+        Array::createRankZero(mm::autoSpace(), openF32, camel::core::rtdata::toSlot(1.0f));
+    require(rankZero->rank() == 0, "a rank-zero value has a dimension");
+    require(rankZero->numel() == 1, "a rank-zero value does not hold one element");
+    require(rankZero->size() == 1, "a rank-zero value counts 0 at its dimension");
+    std::ostringstream rankZeroText;
+    rankZero->print(rankZeroText, openF32);
+    require(
+        rankZeroText.str() == "1.0",
+        "a rank-zero value of 1.0 prints as '" + rankZeroText.str() + "'");
+    Array *sameZero =
+        Array::createRankZero(mm::autoSpace(), openF32, camel::core::rtdata::toSlot(1.0f));
+    Array *otherZero =
+        Array::createRankZero(mm::autoSpace(), openF32, camel::core::rtdata::toSlot(2.0f));
+    require(
+        rankZero->getSlot(0) == sameZero->getSlot(0),
+        "a rank-zero value holds a different element than the one it was given");
+    require(rankZero->equalsContent(sameZero, openF32), "a rank-zero value does not equal its own");
+    require(!rankZero->equalsContent(otherZero, openF32), "a rank-zero value equals another one");
     // A type nobody wrote an element type in: `Void` is the "no value" marker and `Void[..]` is
     // an open rank whose element type nobody stated, so no type variable takes either (design
     // principles 5.1, 5.2: `T := Void` is not a type a call can be made at).

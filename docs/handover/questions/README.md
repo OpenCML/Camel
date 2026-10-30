@@ -21,7 +21,12 @@
 
 | 页 | 问题 | 状态 |
 |---|---|---|
-| `questions-2026-10-30-tangent-in-prelude.md` | 三个标签搬进 `prelude` 后编译失败（`string`/`attempt` 连锁报错），标签与规则该放哪一层 | 待裁 |
-| `questions-2026-10-30-allocation-failure-in-the-faults-table.md` | 分配失败（`bad_alloc` → `MemoryExhausted`）算不算 `faults` 表该声明的故障 | 待裁 |
+| `questions-2026-10-31-tag-argument-of-a-rule.md` | 标签参数能否携带一个 `rule`（`#jvp(add_jvp)` 里的 `add_jvp`）：今天的判据只收"程序里的一个函数" | 待裁 |
+| `questions-2026-10-30-tangent-in-prelude.md` | 三个标签搬进 `prelude` 后编译失败（`string`/`attempt` 连锁报错），标签与规则该放哪一层 | 已修，见页首裁定 |
 | `questions-2026-10-30-probe-plan-kept-or-dropped.md` | `probe.machine` 这条自称「用例集完成前会被删掉」的探针计划：删掉、改写说明、还是变成 `std::gir` 快照 | 待裁 |
 | `questions-2026-10-30-grad-builds-its-graph-at-runtime.md` | 第 7 条的验收数不到 `grad` 在运行期造出的函数值：这一段归第 6 条还是第 7 条 | 待裁（`reviews/` 里暂无落档的裁定原文） |
+
+已修的两页留在原处（页首有一行裁定）：作者要的是"下一个人要知道这条路为什么长这样"，`reviews/` 放的是答复归档的当时一页；本表只把"待裁"和"已修"分开，不把两者混在一起。
+
+`questions-2026-10-30-allocation-failure-in-the-faults-table.md` 已于 2026-10-30 答复：分配失败
+不算 `faults` 表该声明的故障（(b)，进程级界限），页已挪到 `docs/handover/reviews/`。
