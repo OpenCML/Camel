@@ -126,4 +126,37 @@ inline void recordCycleDroppedSession() {
     cycleDroppedSessionsCounter().fetch_add(1, std::memory_order_relaxed);
 }
 
+/**
+ * Reads an editable draft for `findInputCycle`: a draft keeps all five edge kinds as runs of refs,
+ * so the adaptor is only a switch over the kind. Template over the draft so that it names no type
+ * it does not have to: the ledger of direct connections to the editable graph
+ * (test/cases/runtime/graph_draft_ledger) may only fall.
+ */
+template <class Draft>
+class DraftCycleEdges {
+  public:
+    explicit DraftCycleEdges(const Draft &draft) : draft_(draft) {}
+
+    size_t slotCount() const { return draft_.nodeSlotCount(); }
+    bool present(gc_node_ref_t id) const { return draft_.alive(id); }
+    std::span<const gc_node_ref_t> inputsOf(gc_node_ref_t id, CycleEdgeKind kind) const {
+        switch (kind) {
+        case CycleEdgeKind::Norm:
+            return draft_.normInputsOf(id);
+        case CycleEdgeKind::With:
+            return draft_.withInputsOf(id);
+        case CycleEdgeKind::Ctrl:
+            return draft_.ctrlInputsOf(id);
+        case CycleEdgeKind::Sync:
+            return draft_.syncInputsOf(id);
+        case CycleEdgeKind::Order:
+            return draft_.orderInputsOf(id);
+        }
+        return {};
+    }
+
+  private:
+    const Draft &draft_;
+};
+
 } // namespace camel::runtime

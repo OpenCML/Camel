@@ -19,6 +19,7 @@ inline constexpr const char *kEdgesOrderReplaceTestPass  = "test::edges_order_re
 inline constexpr const char *kEdgesSyncGateTestPass      = "test::edges_sync_gate";
 inline constexpr const char *kEdgesSyncForkTestPass      = "test::edges_sync_fork";
 inline constexpr const char *kEdgesSyncForkGateTestPass  = "test::edges_sync_fork_gate";
+inline constexpr const char *kEdgesSyncCycleTestPass     = "test::edges_sync_cycle";
 
 // Each adds nodes to the root graph, commits, and prints "EDGES accepted" or
 // "EDGES refused: <the commit's message>".
@@ -131,6 +132,18 @@ class EdgesSyncForkTestPass : public RuntimeGraphRewritePass {
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
 class EdgesSyncForkGateTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+// A cycle on sync edges: two statements that each follow the other. The draft's check and the
+// freeze's walk are one function over one list of edge kinds (camel/runtime/cycle.h), and a sync
+// edge is a real ordering, so this shape is a cycle both of them must name -- the pass prints what
+// the draft's side reports and then what the commit does with it. A freeze that walked four kinds
+// again would accept this graph, which is what this case is for.
+class EdgesSyncCycleTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     const camel::runtime::Program *
