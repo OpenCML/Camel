@@ -12,6 +12,8 @@
 #include "camel/core/mm.h"
 #include "camel/core/module/module.h"
 #include "camel/core/node_attrs.h"
+#include "camel/core/operator_table.h"
+#include "camel/runtime/resources.h"
 #include "camel/core/tags.h"
 #include "camel/core/mm/block.h"
 #include "camel/core/mm/foreign_handle.h"
@@ -1616,6 +1618,345 @@ bool programContentChanged(
     return false;
 }
 
+/// Whether the node runs an effect. This is the tree's one judgement of it, copied from the
+/// `"effect"` exclusion of modules/tiles/src/graph_regions.cpp: an operator that is not pure, or
+/// one whose running is visible outside the program. A second reading of the operator table here
+/// would be a second model to keep in step with that one.
+bool nodeHasEffect(const GCGraph &graph, camel::runtime::gc_node_ref_t ref) {
+    const camel::runtime::GCNode *node = graph.node(ref);
+    if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Oper) {
+        return false;
+    }
+    const auto &table            = camel::core::OperatorTable::instance();
+    const camel::core::OperId op = graph.nodeBodyAs<camel::runtime::GCOperBody>(ref)->oper;
+    return !table.isPure(op) || table.hasExternalEffect(op);
+}
+
+/// One effect of a program, at the place the program puts it: the source origin and the operator it
+/// runs (what names it across a pass), the graph it is in, its position in that graph's order, and
+/// the ambient resources it touches.
+struct EffectSite {
+    uint64_t origin      = 0;
+    std::string_view uri = {};
+    size_t graph         = 0; // the GraphId value of the graph it runs in
+    size_t position      = 0; // its index in that graph's order
+    std::vector<std::string> resources; // the ambient resources it names, sorted and deduplicated
+};
+
+/// One graph of a program in one topological order, with the users of each node: the order says
+/// where a node sits, and the users say whether the graph makes one node wait for another at all.
+struct GraphOrder {
+    size_t id = 0; // the GraphId value
+    std::vector<camel::runtime::gc_node_ref_t> nodes;
+    std::vector<std::vector<camel::runtime::gc_node_ref_t>> users;
+};
+
+/// The effects of one program, and the order of each of its graphs.
+struct ProgramEffects {
+    std::vector<EffectSite> sites;
+    std::vector<GraphOrder> graphs;
+    std::unordered_map<size_t, size_t> graphAt; // GraphId value -> index in `graphs`
+};
+
+/// `graph` in one topological order: every node after every node its edges make it wait for (its
+/// data inputs, its control inputs, its sync and order predecessors), each node exactly once
+/// however many edges name it. One ordering pass per graph, not a reachability test per pair of
+/// effects: the program that made a pairwise test expensive (264 effects, 20 s) costs a graph order
+/// here. Nodes a rewrite removed are not in it, and neither is anything the order cannot place (the
+/// seal check reports a cycle, and this check must not fail on it a second time).
+GraphOrder orderOfGraph(const GCGraph &graph) {
+    using camel::runtime::gc_node_ref_t;
+    GraphOrder result;
+    result.id          = static_cast<size_t>(camel::runtime::toValue(graph.id()));
+    const size_t count = graph.nodeCount();
+    result.users.assign(count, {});
+    std::vector<uint32_t> indegree(count, 0);
+    std::vector<uint32_t> seen(count, 0);
+    uint32_t stamp = 0;
+    size_t live    = 0;
+    for (auto it = graph.nodes().begin(); it != graph.nodes().end(); ++it) {
+        const gc_node_ref_t user = it.ref();
+        ++live;
+        ++stamp;
+        const auto visit = [&](gc_node_ref_t pred) {
+            if (pred == user || !graph.containsNodeRef(pred)) {
+                return;
+            }
+            const camel::runtime::GCNode *record = graph.node(pred);
+            if (record == nullptr || record->kind == camel::runtime::GCNodeKind::Dead) {
+                return;
+            }
+            if (seen[pred] == stamp) {
+                return; // one pair counted once, whatever runs of edges name it
+            }
+            seen[pred] = stamp;
+            result.users[pred].push_back(user);
+            ++indegree[user];
+        };
+        for (gc_node_ref_t pred : graph.normInputsOf(user)) {
+            visit(pred);
+        }
+        for (gc_node_ref_t pred : graph.withInputsOf(user)) {
+            visit(pred);
+        }
+        for (gc_node_ref_t pred : graph.ctrlInputsOf(user)) {
+            visit(pred);
+        }
+        for (const camel::runtime::GCGraphSyncEdge &edge : graph.syncPredsOf(user)) {
+            visit(edge.pred);
+        }
+        for (const camel::runtime::GCGraphOrderEdge &edge : graph.orderPredsOf(user)) {
+            visit(edge.pred);
+        }
+    }
+    result.nodes.reserve(count);
+    std::vector<gc_node_ref_t> ready;
+    ready.reserve(count);
+    for (auto it = graph.nodes().begin(); it != graph.nodes().end(); ++it) {
+        if (indegree[it.ref()] == 0) {
+            ready.push_back(it.ref());
+        }
+    }
+    for (size_t next = 0; next < ready.size(); ++next) {
+        const gc_node_ref_t node = ready[next];
+        result.nodes.push_back(node);
+        for (gc_node_ref_t user : result.users[node]) {
+            if (--indegree[user] == 0) {
+                ready.push_back(user);
+            }
+        }
+    }
+    if (result.nodes.size() != live) {
+        std::vector<uint8_t> placed(count, 0);
+        for (gc_node_ref_t node : result.nodes) {
+            placed[node] = 1;
+        }
+        for (auto it = graph.nodes().begin(); it != graph.nodes().end(); ++it) {
+            if (placed[it.ref()] == 0) {
+                result.nodes.push_back(it.ref());
+            }
+        }
+    }
+    return result;
+}
+
+/// The effects of `program`: every effect node of every graph of it, each at its position in one
+/// topological order of its graph and each with the ambient resources it names.
+ProgramEffects collectEffects(const camel::runtime::Program &program) {
+    using camel::runtime::gc_node_ref_t;
+    ProgramEffects effects;
+    for (GCGraph *graph : program.graphs()) {
+        effects.graphAt[static_cast<size_t>(camel::runtime::toValue(graph->id()))] =
+            effects.graphs.size();
+        effects.graphs.push_back(orderOfGraph(*graph));
+        const GraphOrder &order = effects.graphs.back();
+        for (size_t position = 0; position < order.nodes.size(); ++position) {
+            const gc_node_ref_t ref = order.nodes[position];
+            if (!nodeHasEffect(*graph, ref)) {
+                continue;
+            }
+            EffectSite site;
+            site.origin   = graph->nodeOrigin(ref);
+            site.uri      = graph->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri();
+            site.graph    = order.id;
+            site.position = position;
+            const camel::runtime::NodeResources resources =
+                camel::runtime::resourcesOf(program, *graph, ref);
+            for (const camel::runtime::NodeAccess &access : resources.accesses) {
+                if (access.resource.cls != camel::core::sem::ResourceClass::Ambient) {
+                    continue; // a cell, an object or a handle: its identity is written nowhere, so
+                              // two of them are one resource only inside one graph, which is not
+                              // what two graphs are compared by
+                }
+                site.resources.push_back(access.resource.name);
+            }
+            std::sort(site.resources.begin(), site.resources.end());
+            site.resources.erase(
+                std::unique(site.resources.begin(), site.resources.end()),
+                site.resources.end());
+            effects.sites.push_back(std::move(site));
+        }
+    }
+    return effects;
+}
+
+/// The name two effects are matched by across a pass: the node they came from, which a pass keeps
+/// (a copy it makes carries the origin of the node it copied too).
+std::string effectKey(const EffectSite &site) {
+    std::string key = std::to_string(site.origin);
+    key += '\x1f';
+    key.append(site.uri.data(), site.uri.size());
+    return key;
+}
+
+/// The effects of the two programs, matched: one origin and operator that the program has once is
+/// the same effect after the pass. An effect the pass added or removed has no partner, and takes
+/// part in no pair. An effect the program has more than once is left out of every pair: a pass that
+/// copies a body (inlining does) leaves several nodes carrying one origin, and which copy a node of
+/// the next program is cannot be read off the origin, so an order between copies would be a guess.
+std::vector<std::pair<size_t, size_t>> matchedEffects(
+    const ProgramEffects &before, const ProgramEffects &after) {
+    std::unordered_map<std::string, size_t> beforeOccurrences;
+    std::unordered_map<std::string, size_t> beforeAt;
+    beforeOccurrences.reserve(before.sites.size());
+    for (size_t i = 0; i < before.sites.size(); ++i) {
+        const std::string key = effectKey(before.sites[i]);
+        ++beforeOccurrences[key];
+        beforeAt[key] = i;
+    }
+    std::vector<uint8_t> afterSeen(before.sites.size(), 0);
+    std::vector<std::pair<size_t, size_t>> pairs;
+    for (size_t i = 0; i < after.sites.size(); ++i) {
+        const std::string key = effectKey(after.sites[i]);
+        const auto found      = beforeOccurrences.find(key);
+        if (found == beforeOccurrences.end() || found->second != 1) {
+            continue;
+        }
+        const size_t at = beforeAt[key];
+        if (afterSeen[at] != 0) {
+            continue; // the program has it more than once after the pass too
+        }
+        afterSeen[at] = 1;
+        pairs.emplace_back(at, i);
+    }
+    return pairs;
+}
+
+/// The resource two effects meet on, empty when they meet on none: the one ambient resource both of
+/// them name (design principles 3.3: two effects on different resources are not a pair, and two
+/// ambient resources are the same exactly when their names are). An effect that names no resource
+/// at all is not paired with one that names another: what it touches is written nowhere, so the
+/// model cannot say that the two are one resource, and a check that guessed would report pairs the
+/// program never ordered.
+std::string sharedResourceOf(const EffectSite &a, const EffectSite &b) {
+    for (const std::string &resource : a.resources) {
+        if (std::find(b.resources.begin(), b.resources.end(), resource) != b.resources.end()) {
+            return resource;
+        }
+    }
+    return {};
+}
+
+/// Whether the graph itself makes `later` wait for `earlier`: a chain of edges from the one to the
+/// other, its data inputs, its control inputs, its sync and order predecessors. Two effects are in
+/// the order the program wrote them in only when such a chain exists: two effects with no chain
+/// between them are placed by whichever order the graph was written out in, and a pass that writes
+/// the graph out again may place them the other way without having reordered anything.
+bool waitsFor(const ProgramEffects &effects, const EffectSite &earlier, const EffectSite &later) {
+    const auto at = effects.graphAt.find(earlier.graph);
+    if (at == effects.graphAt.end() || earlier.graph != later.graph) {
+        return false;
+    }
+    const GraphOrder &order = effects.graphs[at->second];
+    if (earlier.position >= order.nodes.size() || later.position >= order.nodes.size()) {
+        return false;
+    }
+    const camel::runtime::gc_node_ref_t from = order.nodes[earlier.position];
+    const camel::runtime::gc_node_ref_t to   = order.nodes[later.position];
+    // A node reference is a position in the graph's node table, which is at least as wide as the
+    // nodes its order holds: the marks are as wide as that table, not as the order.
+    if (static_cast<size_t>(from) >= order.users.size() ||
+        static_cast<size_t>(to) >= order.users.size()) {
+        return false;
+    }
+    std::vector<uint8_t> seen(order.users.size(), 0);
+    std::vector<camel::runtime::gc_node_ref_t> stack{from};
+    seen[from] = 1;
+    while (!stack.empty()) {
+        const camel::runtime::gc_node_ref_t node = stack.back();
+        stack.pop_back();
+        for (camel::runtime::gc_node_ref_t user : order.users[node]) {
+            if (user == to) {
+                return true;
+            }
+            if (seen[user] != 0) {
+                continue;
+            }
+            seen[user] = 1;
+            stack.push_back(user);
+        }
+    }
+    return false;
+}
+
+std::string describeEffect(const EffectSite &site) {
+    return std::format(
+        "'{}' at origin {} (graph {}, position {})",
+        std::string(site.uri),
+        site.origin,
+        site.graph,
+        site.position);
+}
+
+std::string describeMoves(const EffectSite &a, const EffectSite &runsA, const EffectSite &b,
+                          const EffectSite &runsB) {
+    std::string moves;
+    const auto appendMove = [&](const EffectSite &was, const EffectSite &is) {
+        if (was.graph == is.graph) {
+            return;
+        }
+        if (!moves.empty()) {
+            moves += "; ";
+        }
+        moves += std::format(
+            "'{}' at origin {} moved from graph {} to graph {}",
+            std::string(is.uri),
+            is.origin,
+            was.graph,
+            is.graph);
+    };
+    appendMove(a, runsA);
+    appendMove(b, runsB);
+    return moves.empty() ? "both stayed in their graphs" : moves;
+}
+
+/// The one effect-order violation of a pass, as the text its diagnostic carries; empty when every
+/// pair of effects on one resource is still in the order the program wrote it in (design principles
+/// 3.3). The order the program wrote is the one its graph makes: a chain of edges from the one
+/// effect to the other, in the one topological order that graph is read in, so this is not a
+/// reachability test per pair but a position in an order, asked of the graph only when a pass has
+/// moved two effects the other way round.
+std::string effectOrderViolation(const ProgramEffects &before, const ProgramEffects &after) {
+    const std::vector<std::pair<size_t, size_t>> pairs = matchedEffects(before, after);
+    for (size_t i = 0; i < pairs.size(); ++i) {
+        const EffectSite &first     = before.sites[pairs[i].first];
+        const EffectSite &runsFirst = after.sites[pairs[i].second];
+        for (size_t j = i + 1; j < pairs.size(); ++j) {
+            const EffectSite &second     = before.sites[pairs[j].first];
+            const EffectSite &runsSecond = after.sites[pairs[j].second];
+            if (first.graph != second.graph || runsFirst.graph != runsSecond.graph) {
+                continue;
+            }
+            const std::string resource = sharedResourceOf(first, second);
+            if (resource.empty()) {
+                continue;
+            }
+            const bool writtenFirst = first.position < second.position;
+            const EffectSite &earlier     = writtenFirst ? first : second;
+            const EffectSite &later       = writtenFirst ? second : first;
+            const EffectSite &runsEarlier = writtenFirst ? runsFirst : runsSecond;
+            const EffectSite &runsLater   = writtenFirst ? runsSecond : runsFirst;
+            if (!waitsFor(before, earlier, later)) {
+                continue; // the program did not put them in this order to begin with
+            }
+            if (waitsFor(after, runsEarlier, runsLater)) {
+                continue; // the written order is still the one this graph makes
+            }
+            return std::format(
+                "the effects on '{}' are not in the order the program wrote them: the program "
+                "wrote {} before {}, and this pass leaves {} before {} with nothing in the graph "
+                "that makes them wait for one another any more ({})",
+                resource,
+                describeEffect(earlier),
+                describeEffect(later),
+                describeEffect(runsLater),
+                describeEffect(runsEarlier),
+                describeMoves(first, runsFirst, second, runsSecond));
+        }
+    }
+    return {};
+}
+
 } // namespace
 
 PassRunResult applyRegisteredPass(
@@ -1971,6 +2312,11 @@ PassApplyResult applyPassesDetailed(
                     return {nullptr, PassApplyStatus::Failed};
                 }
             }
+            // The effects the program writes, and the order it writes them in, before the pass
+            // runs: the effects on one resource keep that order through every pass (design
+            // principles 3.3), and the end of this iteration compares. Read here rather than after
+            // the pass because the program the pass is given is not read once it has returned.
+            const ProgramEffects effectsBefore = collectEffects(*program);
             try {
                 program = pass->apply(program, os);
             } catch (const DiagnosticsLimitExceededBaseException &) {
@@ -2042,6 +2388,19 @@ PassApplyResult applyPassesDetailed(
                 CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> consumed", p);
                 return {nullptr, PassApplyStatus::Consumed};
             }
+            // The pass ended with a program: the effects on one resource must still be in the
+            // order the program wrote them, which is the order its graph makes them wait for
+            // (design principles 3.3). The check is the last thing the pass does, so that no pass
+            // of the pipeline, nested or listed, ends without it.
+            {
+                const std::string violation =
+                    effectOrderViolation(effectsBefore, collectEffects(*program));
+                if (!violation.empty()) {
+                    ctx->rtmDiags()->of(RuntimeDiag::PassInternalError).commit(p, violation);
+                    CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (effect order)", p);
+                    return {nullptr, PassApplyStatus::Failed};
+                }
+            }
             if (PassSnapshotHandler snapshotHandler =
                     passSnapshotHandlerSlot().load(std::memory_order_acquire)) {
                 snapshotHandler(
@@ -2072,6 +2431,7 @@ const camel::runtime::Program *applyPasses(
     const context_ptr_t &ctx, std::ostream &os) {
     return applyPassesDetailed(program, passes, ctx, os).program;
 }
+
 
 
 
