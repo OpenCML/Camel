@@ -19,6 +19,7 @@
 
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/control.h"
+#include "camel/runtime/effect_liveness.h"
 
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/func.h"
@@ -1738,8 +1739,15 @@ DraftInlineResult inlineCallableInDraft(
             ctrlPreds.push_back(syncPred);
         }
     }
-    ctrlPreds                  = controlFrontier(draft, ctrlPreds);
-    const bool hasExternalCtrl = !ctrlPreds.empty();
+    ctrlPreds = controlFrontier(draft, ctrlPreds);
+    // What this splice asks about the call's place, asked the way every pass asks it
+    // (camel/runtime/effect_liveness.h): the predecessors are the wait the call carries today, and
+    // whether the call sat on a block's chain is a fact of its own. Read here, once, so that a
+    // later change moves the decision below without moving the reading.
+    EffectLivenessFacts callFacts;
+    callFacts.hasWaitEdge     = !ctrlPreds.empty();
+    callFacts.isSyncStatement = !draft.syncInputsOf(funcNodeId).empty();
+    const bool hasExternalCtrl = callFacts.hasWaitEdge;
     // The statement(s) written after the call in its block: the call is replaced by the body's
     // result and the chain goes on from there, so 5.7's order edges have to reach exactly the nodes
     // that followed the call. Read now, because replacing the call's uses below is what makes them
@@ -1861,7 +1869,7 @@ DraftInlineResult inlineCallableInDraft(
             waitPreds.push_back(effect);
         }
     }
-    const bool bodyWaits = hasExternalCtrl || !unreadArgumentEffects.empty();
+    const bool bodyWaits = callFacts.hasWaitEdge || !unreadArgumentEffects.empty();
 
     // With control predecessors, the body reads each argument through a GATE that waits on
     // them. The gates order nothing the entry roots below do not order already (every
