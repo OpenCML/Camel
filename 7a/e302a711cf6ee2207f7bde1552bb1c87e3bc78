@@ -1,0 +1,9 @@
+`match type` 的开秩臂：`7ae302a71`。
+
+1. **判定的落点**：`src/compile/gir/builder_static.cpp#Builder::typeCaseMatches` 的 identity 分支之前加了 `pattern->openRank()` 一支：`subject` 是数组、元素类型相等即匹配，任意秩。改动前那一支只有 `typeEquals(subject, pattern)`（精确相等），所以 `case f32[..]` 只选中秩 1——那是实现偏离了"`T[..]` 是开秩数组（含秩 0）"这条原则，不是构造本来的含义。
+2. **`[?]` 不受影响**：`[?]` 是 `!anyRank_`、秩 1、extent 未知，仍走 `typeEquals`。
+3. **今天 `stdlib` 里 `match type` 臂用 `[..]` 的处数为 0**，261 处都在类型标注/参数/返回里，匹配不读它们，所以这次改动只影响以后写下的臂。
+4. **A/B**：短路新分支 → 恰好 `f32[2, 3]` 与 `f32[2, 3, 4]` 两个实例红；还原后 2/2。
+5. **还缺两条用例**：秩 0 正例（先找源码里零维的既有写法，找不到即"秩 0 今天无法表达"，写页）与 `[?]` 反例（先找树里"断言编译失败"的用例形态）。两条都要落地，不留空。
+
+闸门（`-Plan all -Tier fast -Jobs 8`）：total 7864 / fail 0 / skip 7 / known 2。
