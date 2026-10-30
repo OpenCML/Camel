@@ -9,8 +9,10 @@
  * and drops its result -- which this pass cannot build: it stops the pipeline and names this program
  * rather than leave a graph with two forms of a function value.
  *
- * This is a defect of the pass and not of the program. When the wrapper lands, the pass lowers this
- * program and the test that pins the error statement becomes the test that pins the lowering.
+ * This is a defect of the pass and not of the program. When the wrapper lands, this test flips: the
+ * program is lowered, `defun.widened_parameter.defect` becomes a lowering test, and it is renamed with
+ * the rest of `defun.widened_parameter.*` -- the error these lines describe is not a shape this pass
+ * keeps.
  */
 
 func apply(f: (x: int) => void, v: int) {
