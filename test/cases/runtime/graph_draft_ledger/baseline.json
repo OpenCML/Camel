@@ -1,8 +1,8 @@
 {
   "comment": "The baseline of the direct-connection ledger (graph-store step 2 b): the numbers below may only fall, and the last step is all of them at zero. `sites` records where each number comes from, as `file#symbol` (a line number moves with every edit above it, a symbol does not); it is diagnostics for a red and never decides the verdict. Record a new row after a commit with check.mjs --record.",
   "numbers": {
-    "files": 51,
-    "references": 399,
+    "files": 47,
+    "references": 395,
     "constructions": 3,
     "decode": 4
   },
@@ -35,10 +35,6 @@
       "modules/tiles/src/region_extract.cpp": 1,
       "modules/tiles/src/region_outline.cpp": 1,
       "modules/tiles/src/region_test_pass.cpp": 1,
-      "src/compile/gir/builder.cpp": 1,
-      "src/compile/gir/builder_control.cpp": 1,
-      "src/compile/gir/builder_helpers.h": 1,
-      "src/compile/gir/builder_operators.cpp": 1,
       "src/compile/gir/builder_support.h": 1,
       "src/compile/gir/debug_json.cpp": 1,
       "src/compile/gir/draft_graph_builder.cpp": 1,
@@ -100,10 +96,6 @@
       "modules/tiles/src/region_extract.cpp#makeLoopRegions": 1,
       "modules/tiles/src/region_outline.cpp#transferAggregate": 1,
       "modules/tiles/src/region_test_pass.cpp#checkBindingKinds": 1,
-      "src/compile/gir/builder.cpp#visitExecNode": 1,
-      "src/compile/gir/builder_control.cpp#isEmptyArrayLiteral": 1,
-      "src/compile/gir/builder_helpers.h#nodeStandsForItsRegion": 1,
-      "src/compile/gir/builder_operators.cpp#visitLinkNode": 1,
       "src/compile/gir/builder_support.h#nodeDraftOf": 1,
       "src/compile/gir/debug_json.cpp#-": 1,
       "src/compile/gir/draft_graph_builder.cpp#-": 1,

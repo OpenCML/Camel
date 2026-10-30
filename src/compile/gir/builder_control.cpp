@@ -129,7 +129,7 @@ bool isEmptyArrayLiteral(node_handle_t node) {
     }
     if (nodeIsKind(node, runtime::GCNodeKind::Data)) {
         // A typed `[]` is a static array: its length says whether the literal was empty.
-        const runtime::GraphDraft &draft = *nodeDraftOf(node);
+        const auto &draft = *nodeDraftOf(node);
         const int32_t dataIndex          = draft.node(nodeIdOf(node))->header.dataIndex;
         if (dataIndex < 0 && static_cast<size_t>(-dataIndex) < draft.staticSlots().size()) {
             const auto *array = camel::core::rtdata::fromSlot<::Array *>(
