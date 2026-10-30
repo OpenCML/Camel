@@ -424,7 +424,11 @@ void storeAggregate(std::byte *bytes, const type::Type *type, slot_t value) {
         return; // all-zero bytes describe the zero value
     }
     const type::DataLayout *layout = type::pureDataLayout(type);
-    ASSERT(layout != nullptr && layout->aggregate, "storeAggregate expects an aggregate type");
+    GUARD(
+        layout != nullptr && layout->aggregate,
+        std::format(
+            "storing a value of type code {} field by field, but that type has no aggregate layout",
+            static_cast<int>(type->code())));
     const auto fieldType = [type](size_t i) -> const type::Type * {
         return type->code() == TypeCode::Struct
                    ? static_cast<const type::StructType *>(type)->typeAt(i)
@@ -477,7 +481,11 @@ namespace camel::core::rtdata {
 rtdata::Object *
 materializeAggregate(const std::byte *bytes, const type::Type *type, camel::core::mm::IAllocator &allocator) {
     const type::DataLayout *layout = type::pureDataLayout(type);
-    ASSERT(layout != nullptr && layout->aggregate, "materializeAggregate expects an aggregate");
+    GUARD(
+        layout != nullptr && layout->aggregate,
+        std::format(
+            "reading a value of type code {} field by field, but that type has no aggregate layout",
+            static_cast<int>(type->code())));
     const auto fieldType = [type](size_t i) -> const type::Type * {
         return type->code() == TypeCode::Struct
                    ? static_cast<const type::StructType *>(type)->typeAt(i)
@@ -1298,7 +1306,11 @@ rtdata::Object *Array::clone(
         return copy;
     }
 
-    ASSERT(typeInfo && typeInfo->code() == TypeCode::Array, "Type must be ArrayType");
+    GUARD(
+        typeInfo && typeInfo->code() == TypeCode::Array,
+        std::format(
+            "copying a value whose type code is {}, but the copy reads an ArrayType",
+            typeInfo == nullptr ? -1 : static_cast<int>(typeInfo->code())));
     const auto *arrayType            = static_cast<const type::ArrayType *>(typeInfo);
     const type::TypeCode elemTypeCode = arrayType->elemTypeCode();
     // A slot array of any rank keeps its shape: `size_` is the first extent only, so a rank-2

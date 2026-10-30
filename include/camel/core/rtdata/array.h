@@ -408,11 +408,21 @@ class Array : public rtdata::Object {
     }
 
     template <typename T> T *dataAs() {
-        ASSERT(isCompact(), "dataAs<T>() requires a compact numeric array");
+        GUARD(
+            isCompact(),
+            std::string("asking for the storage as an array of ") + std::to_string(sizeof(T)) +
+                "-byte values, but this array is not compact: its elements are stored as " +
+                std::to_string(static_cast<int>(storage_)) +
+                " (0 compact, 1 slots, 2 view), so they are not a plain T[]");
         return reinterpret_cast<T *>(dataPtr_);
     }
     template <typename T> const T *dataAs() const {
-        ASSERT(isCompact(), "dataAs<T>() requires a compact numeric array");
+        GUARD(
+            isCompact(),
+            std::string("asking for the storage as an array of ") + std::to_string(sizeof(T)) +
+                "-byte values, but this array is not compact: its elements are stored as " +
+                std::to_string(static_cast<int>(storage_)) +
+                " (0 compact, 1 slots, 2 view), so they are not a plain T[]");
         return reinterpret_cast<const T *>(dataPtr_);
     }
 

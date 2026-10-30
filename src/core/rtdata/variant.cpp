@@ -8,6 +8,7 @@
 #include "camel/core/type/enum.h"
 
 #include <ostream>
+#include <string>
 
 using namespace camel::core::type;
 
@@ -16,9 +17,15 @@ namespace camel::core::rtdata {
 namespace {
 
 const EnumType *enumTypeOf(const Type *type) {
-    ASSERT(type != nullptr, "A variant value is printed, compared or traced by its type.");
+    GUARD(
+        type != nullptr,
+        std::string("printing, comparing or tracing a Variant that carries no type, so there is "
+                    "no field to name the value by"));
     const EnumType *enumType = asEnumType(type);
-    ASSERT(enumType != nullptr, "A variant value must have an enum type.");
+    GUARD(
+        enumType != nullptr,
+        std::string("reading a Variant as a tagged value, but the type it carries has type code ") +
+            std::to_string(static_cast<int>(type->code())) + ", which is not an enum type");
     return enumType;
 }
 
