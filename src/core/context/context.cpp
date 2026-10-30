@@ -745,6 +745,12 @@ std::string Context::checkPreludeDeclarations() {
         auto prelude = std::static_pointer_cast<UserDefinedModule>(
             UserDefinedModule::fromFile("prelude", path, shared_from_this()));
         preludeModule_ = prelude;
+        // The file is read once, and this is the module an `import` of it finds: it was compiled
+        // with the built-in claims below in hand, so its declarations are complete. Reading the
+        // file a second time would check them a second time, in a context that has nothing of
+        // this pass -- the file's `#op` declarations among them, which name the built-in rules
+        // those claims cover, and which no module implements in that second context.
+        modulesByPath_[canonicalPathKey(path)] = prelude;
         try {
             prelude->compile(CompileStage::Declared);
         } catch (...) {
