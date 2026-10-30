@@ -1,0 +1,11 @@
+同形状 = 同样的种类、同样的字段名与个数；成员类型不是形状的一部分（5.5），字段类型取自那一轮的值。
+
+① 正例：`A = {a: int}` 走过 `B = {a: f32}` 通过，`y.a` 读成 `f32`、值 1.5——头部的 `int` 会拒掉这个值，所以"字段类型取自那一轮"是被打印出来的，不是被注释说的。用例 test/cases/compile/static_expansion/shape_same_fields_other_types.cml（计划 feat/compile/static_expansion#same_shape_comprehension_other_types）。
+
+② A/B 找到一个洞：把 src/compile/gir/builder_static.cpp#sameShapeAs 比较字段名那一句去掉，整个计划 77/77 仍绿——字段名此前没有用例守着。旧负例 shape_mismatch 的 `B = {b: int, c: int}` 同时差名字和个数，个数先拒，名字那句从没被走到极限。补 shape_name_mismatch（同种类、同个数、同成员类型，只差名字）；现在去掉名字比较，恰好它一条红，其余 77 绿。
+
+③ 同一条支路的另两个方向：把成员类型也纳入比较 → 三条红（新正例 + literal_head_type_expression + literal_head_type_variable）："成员类型不参与形状"这条读法此前已有两条用例在守，新正例补的是"头部是有名字的结构体"这一形态；把种类（struct/tuple）比较去掉 → 零条红：元组的成员是位置、结构体的成员是名字，名字比较总会先拒掉种类不同的情形，那句是兜底，不是可被单条用例分辨的规则。
+
+④ 顺带改正的叙述：`same_shape_comprehension_mismatch` 的 desc 原说它同时覆盖"名字不同"和"结构体 vs 元组"，实际只差个数——已按事实改写；那条用例本身一行没动，`--update-golden` 一次没跑。
+
+闸门（本轮树，-Plan all -Tier fast -Jobs 8，对当时主干 84be793d7）：total 7905 / pass 7894 / fail 0 / skip 9 / known 2。
