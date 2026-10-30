@@ -316,4 +316,16 @@ b4 只有一个人口：`modules/graph/handle.h` 里那个 `const GraphDraft *dr
 - **A（推荐）**：先让 `Writings` 通过事务持有草稿（它的构造本来就从会话拿草稿，`writings.h:405`），handle 随后跟上。这**不是 b4 第一片，是 b6 的第一小步**。
 - **B**：`draft_` 留在 handle 里，等 b6 随类型一起消失（第一片不做）。
 
-**状态**：这一轮没有改代码（树干净、构建绿）；已落地的是纯加能力的 `e467242e3`（`transaction_`／`createInTransaction`，无调用者）。**下一步要协调者定 A 还是 B**，不猜。
+**状态**：这一轮没有改代码（树干净、构建绿）；已落地的是纯加能力的 `e467242e3`（`transaction_`／`createInTransaction`，无调用者）。协调者选了 **A**，见 §17。
+
+**一条由此得来的规矩**：**判"是不是草稿"的每一处，都是搬家的前置条件，不是搬家的对象。** 谁把 `handle->draft()` 改成 `handle->transaction()`，就必须先让被问的那个东西有事务；先改读端，等于把"有草稿"这个判据抽掉。
+
+## 17. b6 的第一小步：`DraftWritings` 记下它的事务（A 的后半）
+
+**做了什么**：`DraftWritings` 新增一个收 `GraphTransaction &` 的构造（旧的收 `GraphDraft &` 的构造**原封不动**），成员多了 `transaction_` 与访问器 `transaction()`；重写模块里 5 个构造点从"传草稿"改成"传 `session.edit(graph)`"。**handle 侧一行没改。**
+
+**为什么它是 b6 的第一小步**：`DraftWritings` 是重写引擎里"草稿"的**存储侧所有者**——`Match::writings.draft()` 就是 `module.cpp:259` 取草稿的地方。它先拿到事务，"草稿有个不来自 handle 的所有者"才成立；下一步（§18）才轮得到 `fact.cpp#Source.draft` 不再从 handle 借。
+
+**验收（照 §14 的三种收益）**：① 删行 0；② 消点 0；③ **消掉一条生存期漏洞的一半**——草稿从此能指认它的所有者（事务），只是还没有读端用它。**三个数一个没涨：66 / 535 / 3 / 6**；`read.cpp` 的 `->draft()` 仍是 3；行为逐字节相同（`transaction_` 没有被任何代码读）。构建：`-Plan compile` 1860/1860、`fail 0`。
+
+**下一步第一件**：`fact.cpp#Source.draft` 改从 `DraftWritings` 取（不再从 handle 借），见 §18。
