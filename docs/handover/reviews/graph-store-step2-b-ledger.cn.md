@@ -804,3 +804,32 @@ HANDLE_PROBE refused: InvalidArgument
 **B 的顺序**：**3 处核实（本节，已完成，不改代码）→ 16 个只读前向的签名 → 8 个只写目标 → 最后 4 个交界。**
 
 **三个数**：**0 / 0 / 56**（本轮只核实，未改代码）。**四个数：57 / 432 / 3 / 4（未变）。**
+
+## 39. B 第一笔：`pullback` 22 个参数一次转完，**并说明为什么"读批／写批"分不成两笔**（`1ba2a53af`）
+
+**计划与它为什么不成立**：原打算"先 16 个只读前向，再 8 个只写目标"。**做不到**——
+`addOper`／`addAggregate` 这些**造节点**的函数，自己要先问 `typeOf`／`kindOf`／`regionMember`（它们能造什么取决于读到了什么），
+所以**在一边点名事务，另一边同一句话里也得点名**。**读批与写批在调用图上是一个连通块，不是两层。**
+（`ref`／`checkGradientType`／`visitFill`／`visitForward` 那 4 个交界仍可最后做——它们是被调用者，不是调用者。）
+
+**真正需要一次一笔的是 `Backward::run`**：**它的 48 次 `forward()` 一次没动**——那是同一个方法里 48 个"这张图只读"的论据，
+不是机械替换。**它留作单独一笔。**（这一笔只改了 `run` 里调用那些已转函数的**实参**，十几行。）
+
+**转的时候必须区分的四个地址空间**（这就是 A 表那张图的用处）：
+
+| 位置 | 事务从哪来 |
+|---|---|
+| `ForwardRewrite` 成员 | `transaction_` |
+| `Backward` 成员读 | `forwardTransaction_` |
+| `Backward` 成员写 | `targetTransaction_` |
+| 自由函数 | 参数 `transaction` |
+| `Engine::build` 里那几处 | `*pending.source`（前向）、`*pullbackOwner`（回传图） |
+
+**三处不是这一族、仍然收草稿的东西**（转的时候被编译器点名，已还原）：
+`ungated()`（别的模块的助手）、`LoopDraftView` 的构造（**它是一张草稿的视图**）、`rt::fallBackToCopyingAppend`（运行时入口）。
+
+**结果**：**`modules/autodiff/pullback.cpp` 里 `GraphDraft` 的拼写归零**（`git grep -c -w GraphDraft` 退出码 1）。
+
+**三个数**：**消失的参数 22 个**；**删掉的行数 217**；**保留 0 个**。
+
+**四个数：56 / 408 / 3 / 4**（`432 → 408`，**files 57 → 56**：`modules/autodiff` 整族清零）。
