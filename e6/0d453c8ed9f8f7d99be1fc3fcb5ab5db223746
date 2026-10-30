@@ -1,0 +1,27 @@
+S6: the readable assertion the ruling asked for, and what it reads.
+
+ab124a00e -- `Variant::updateRefs` now answers "how does the trace know this value's type" with the
+type pointer it was handed (the type travels down the scan from the slot the value was found in:
+mm/gen.cpp TraceEntry / RefTraceInfo), and stops with a report instead of faulting. It stays in
+release on purpose: ASSERT is ((void)0) under NDEBUG, which is why this path died with exit 139 and
+no word. CAMEL_TRACE_VARIANT=1 prints the reading per relocated value, before the type is read.
+
+The reading, on mlp + std::macro std::defunctionalize std::nvm with the training workload:
+  [variant] trace value=0x7cf65c2ffdd8 type=0x7cf657c3be30 tag=0 fields=1
+  [variant] the reference trace cannot use the type of a Variant: the type it was traced with has
+            code 1610612746, which is not an enum's
+  [variant]   the type reads as: (x: f32[..]) => float
+1610612746 = 0x6000000A = TypeCode::Function. So none of the three guessed shapes: no type id (the
+scan carries a pointer), no bad tag (tag 0, one field, a well-formed Variant), no dangling pointer
+(the pointer reads back as a well-formed function type). The value became the enum and was written
+into a slot still typed as the function it used to be: the representation conversion was done on the
+value and not on the position.
+
+e60d453c8 -- the two pages that carried the earlier guess are corrected with the reading; "only at
+mlp_big's size" is retired (mlp crashes with the same top three frames); the smallest-reproducer
+debt keeps its negative result (a 20-line closure over a captured struct, 900 levels, 256-element
+array per level does not crash -- the trigger needs run_training's shape).
+
+Gate after e60d453c8 (fast, -Jobs 8): 7952 / 7943 / 0 / 7 / 2. The crash itself is still open and is
+still registered as the known failure of benchmark_gradients_vs_torch (slow layer: 245 / 244 / 0 /
+0 known failures, XFAIL, exit 0).
