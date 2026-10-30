@@ -352,10 +352,17 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     // single function value (an operator, a set of overloads) stays bound to what it names
     // and can be called where it was bound.
     const node_scope_ptr_t declScope = nodeScope_;
+    // A cell whose value is written where the declaration stands: the child is the type the cell
+    // holds (`typeof <the first write>`), not a value, so there is no initializer to evaluate
+    // here (design principles 5.4).
+    const bool typedCell =
+        gct->size() > 0 && gct->at(0)->type() == GCT::NodeKind::TYPE;
     node_handle_t node{};
     try {
         if (Type *declared = GCT::Tree::of(gct)->nativeValueTypeOf(gct)) {
             node = nativeValueNode(gct, declared);
+        } else if (typedCell) {
+            node = newVariableOfType(visitTypeNode(gct->at(0)));
         } else {
             node = functionValueOf(valueNodeOf(visit(gct->at(0))), gct);
         }
@@ -372,8 +379,9 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     // `let g = f<w>` where `f<w>` is not one function: the name would be bound to `f` and the
     // arguments lost.
     try {
-        // A native value has nothing written to the right of the name.
-        if (gct->size() > 0) {
+        // A native value has nothing written to the right of the name, and neither has a cell
+        // that is made with only its type.
+        if (gct->size() > 0 && !typedCell) {
             rejectUnappliedBinding(node, gct->at(0));
             if (genericDrefs_.contains(node)) {
                 // `let g = id`: no context to take the types from.
@@ -391,8 +399,9 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     // it without one has no element type; say so here, where the type can be written. (A
     // name the compiler made for an element of a literal starts with a digit.)
     if (Type *type = node != nullptr ? valueTypeOf(nodeTypeOf(node)) : nullptr;
-        type != nullptr && gct->size() > 0 && isUntypedArrayType(type) && !ident.empty() &&
-        !std::isdigit(static_cast<unsigned char>(ident.front())) && ident.front() != '$') {
+        type != nullptr && gct->size() > 0 && !typedCell && isUntypedArrayType(type) &&
+        !ident.empty() && !std::isdigit(static_cast<unsigned char>(ident.front())) &&
+        ident.front() != '$') {
         diags_->of(SemanticDiag::EmptyArrayWithoutType)
             .atOrigin(gct->at(0)->origin())
             .commit(ident);
@@ -411,8 +420,8 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
         return node;
     }
     // `var` x = e` binds x to a new variable holding the value of e; `let x = e` binds it to
-    // that value.
-    node_handle_t bound = isVar ? newVariable(node) : node;
+    // that value. A cell that was made with only its type is already the variable.
+    node_handle_t bound = (isVar && !typedCell) ? newVariable(node) : node;
     if (isVar) {
         // The cell is created by its declaration: that is its place in the source.
         registerNodeOrigin(context_, bound, gct, "gir.var");
@@ -1489,6 +1498,19 @@ node_handle_t Builder::newVariable(node_handle_t value) {
     // The variable takes the widened type of its initializer (:var/new), so later assignments
     // may store values with a different refinement (e.g. shape).
     node_handle_t variable = variableOperator(camel::core::oper::VarNew, value);
+    variables_.insert(variable);
+    return variable;
+}
+
+node_handle_t Builder::newVariableOfType(Type *type) {
+    // The type the cell holds is the operator's one `with` argument: no operand, no value, and the
+    // read of the cell has a type from the moment the cell is made.
+    const auto group = internalOperatorGroup(camel::core::oper::VarNewEmpty);
+    const std::vector<StaticArg> statics(0);
+    const auto op = group->resolve({type}, {}, statics);
+    ASSERT(op.has_value(), "The empty cell operator rejected the type it was given.");
+    node_handle_t variable = currGraph_->addOperNode(*op, 0);
+    stampPermissions(variable);
     variables_.insert(variable);
     return variable;
 }

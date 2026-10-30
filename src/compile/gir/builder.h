@@ -2460,6 +2460,13 @@ class Builder {
     bool isVariable(node_handle_t node) const { return variables_.contains(node); }
     // A new variable holding the value of `value` (`:var/new`).
     node_handle_t newVariable(node_handle_t value);
+    /**
+     * A new variable of `type` with no value in it yet (`:var/new/empty`): its slot holds nothing
+     * until the write that fills it. A declaration whose value is written where the statement
+     * stands, and not where the cell is made, is built this way (a local of a generator body:
+     * design principles 5.4).
+     */
+    node_handle_t newVariableOfType(Type *type);
     // The value `variable` holds when the returned node runs (`:var/get`), ordered after the
     // variable's last writer in this graph and, in a sync block, in the block's chain.
     node_handle_t readVariable(node_handle_t variable);
