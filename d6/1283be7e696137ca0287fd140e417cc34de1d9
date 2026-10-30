@@ -1,0 +1,8 @@
+字面量放进 `T[..]`：声明位置把字面量当元素（d61283be7）。
+
+- 今天：`let x: f32[..] = 1.0` 是 f32 的 1.0；`let t: (int, f32)[..] = (7, 2.5)` 是那个元组；`let row: f32[..] = [1.0, 2.0]` 仍是秩 1 的数组（自己的秩不被抹掉）。`T[]` 与 `T[3, ..]` 照旧拒同一个字面量——`ArrayType::rankZeroType` 对它们是 nullptr，没有秩 0 可给。
+- 改在 `src/compile/gct/builder.cpp#Builder::declaredValue`：非数组字面量遇到开放秩声明时按元素类型读，名字直接是元素，不再造一个 `f32[..]` 型的节点（`visitCastNode` 早就这么读，两处一致）。
+- 没开的口子：**实参位与 return 位仍拒**。这两个位置会把元素塞进 `T[..]` 型的槽，而槽在运行期没有秩：`func show(v: f32[..]) { println(v) }` 喂标量今天**段错误**（调用边界接受秩 0 是上一批带来的，测试里没有把它物化的用例）。收窄这两处会造出「f32 值落进 f32[..] 槽、槽没有秩可读」的图，所以留给「秩 0 的运行期表示」那件事。
+- A/B 三向（array_shape 42 条）：① 去掉收窄 → 恰好 `open_rank_literal_element` 红；② 用任意数组的 `elemType()` 代替 `rankZeroType()` → 恰好 `rank_one_refuses_literal` 红（这条负例是「别把 `T[]` 当 `T[..]`」的守卫）；③ 去掉「源不是数组」守卫 → 三条红（`let_shape`、`let_shape_on_the_graph`、`open_rank_literal_element`），证实这条守卫与既有两条共享。
+- `docs/diagnostics.md` 是重新生成的，不是手改：它给每条诊断取第一个产生它的用例当例子，新的负例成了 `LiteralNotRepresentable` 的第一个。
+- 闸门（主干 c97578893 上，-Plan all -Tier fast -Jobs 8）：total 7929 / pass 7920 / fail 0 / skip 7 / known 2。
