@@ -1,0 +1,23 @@
+字面量的头部按类型表达式（lane-lithd → develop 5f19da47f）
+
+结论：类型位置共 9 处，只 1 处坏——同形状推导式的字面量头部（`Tangent<…> { … }`）；其余 8 处本来就接受类型表达式。
+证据：解析器里 `parseType()` 调用点 29 处 / 4 个文件（parser_expr 9、parser_type 12、parser.cpp 6、parser_rule 2）。`:`、`type X =`、`as`、`::<…>`、`match type`、`case`、`fields`、类型函数尖括号都直接走 `parseType`；字面量头部是唯一只看名字路径的（`shapeCompAhead`）。
+
+修法：`shapeCompAhead` 按类型表达式走一遍 token——名路径、类型调用、元组/结构体类型、数组、标记、`typeof` 名——到 `{` 收手，头部仍交 `parseType` 解析。`{ static for … }` 匿名式不走新路：它没有头部，前面那个 `{` 就是推导式自己的块，走新路会被读成「结构体类型 + 字面量」。改的第一版正是这么红的：9 条既有推导式用例一起报 `SyntaxDiag::MissingComma`（`Expected ',' or '}' before 'static'`），加一条「当前位置是 `{` 且紧跟 `static for` 就返回否」才收住。
+
+语义（同一笔）：头部给形状——种类 + 字段名与个数；成员类型仍取自那一轮的值（5.5，`tree_map` 靠它换叶子、保形状）。所以头部与生成器遍历的类型必须**同形状**，不是同一个类型。只改解析、不改这条时，`Tangent<(float, int)> { static for n, F in fields (float, int) => zero_of(x.[n]) }` 报 `SemanticDiag::SameShapeComprehensionMismatch`（实测：把 `builder_static.cpp` 那一处回退后，`literal_head_type_expression` 与 `literal_head_type_variable` 两条红、其余 73 条绿），所以两处必须同一笔。
+
+`same_shape_comprehension_mismatch` 仍按预期拒绝，不是本笔遗留：它比的是 `A = {a: int}` 与 `B = {b: int, c: int}`，字段名与个数都不同，按新规则（同形状）依旧不是同一形状，用例仍 PASS。本笔没有放过任何该拒的程序；新放过的只有「形状相同、成员类型不同」这一类，那正是裁定要的那类（`Tangent<T>` 对 `T`）。
+
+验收 A/B（每条都跑了有/无修复两遍）：
+① `match_guard.first_match_wins`(.nvm/.fvm) 绿↔绿——`case 1 =>` 这类字面量模式
+② `type_identity.selftest` 绿↔绿——`case f32` 这类类型名
+③ `literal_head_type_expression` 无修复→红（`Tangent` 被当值用，`ImportNameNotExported`）／有→绿
+④ `cast_target_type_expression.nvm` 绿↔绿——`as` 右侧本来就是类型表达式
+附加 `literal_head_type_variable`（头部是类型变量算出的 `Tangent<T>`，`case struct | tuple` 一个分支盖住元组与结构体）：无修复→红（`UnexpectedToken '{'`）／有→绿
+
+闸门：`-Plan all -Tier fast -Jobs 8`，干净树，`[SUMMARY] total 7888 / pass 7879 / fail 0 / skip 7 / known 2`（基线 7873 + 本笔 3 + develop 期间新增 12）。
+戳：`5f19da47f7 (clean)` / 1223 source files / fingerprint `0d0ff6de17c9`。
+提交：`a62334f1f` 设计原则 5.6 记一笔已裁定的事实（不动语义）、`dba658e00` 解析 + 同形状 + 文档 + 3 条用例；合并提交 `6476947dc`、`31cbf4963`、`5f19da47f`——develop 在闸门期间前移三次，每次重跑整闸才推。
+
+未做：8 处「本来就对」的合盖用例（下一笔）。
