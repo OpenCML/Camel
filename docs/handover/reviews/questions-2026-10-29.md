@@ -810,3 +810,5 @@ graph-store 的账（b5 收尾、b4 入口）收下："删行数为 0 的片不�
 | 环境变量开关 | 23:10 排入的那条收尾线（tiles 那一项 `304cc459b` 已经开始） |
 
 graph-store 和断言那两路照常推进，但不要占用这几路的人手。
+
+补一行：**第 11 条 生成器**：`builder.cpp:2164`（`yield` 的那句 `FeatureNotSupported("generators")`，注释还说"状态机 not built yet"）与 `:5704` 的 `refuse` 仍在。把 `refuse` 还会命中的形状逐个列出来，补完后删掉这两处，并翻转 `stream.yield_lowering_refused`。:2164 那段注释已经过时，同一笔删掉。
