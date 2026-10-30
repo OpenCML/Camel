@@ -240,7 +240,7 @@ const char *kindName(ArgKind kind) {
 /// not values; a top-level value that is not a function (a rule, a kernel) has no function graph
 /// for the fact to be. None of them is a name the program does not know, which is what "not a
 /// function of the program" would say.
-enum class ArgumentDeclaration { Tag, Type, Value, Nothing };
+enum class ArgumentDeclaration { Tag, Type, Rule, Value, Nothing };
 
 /// The positions of a declaration as the source writes them (`func, nodes`).
 std::string positionsText(camel::core::tag::Positions positions) {
@@ -349,6 +349,36 @@ Builder::tagValueOf(const camel::core::tag::Decl &decl, const GCT::TagUse &use) 
     // Which declaration a name written in the argument's place is, when it is not the value the
     // parameter takes (ArgumentDeclaration). The refusal then says what the argument is instead of
     // reporting a kind mismatch on a name the program declares.
+    //
+    // A rule is told apart by what its declaration was lowered to, and by nothing else: a rule
+    // becomes `let <name> = __rule(...)` (`__rule_generic(...)` when it is instantiated), so the
+    // name is a *value* of the library's `Rule` type -- no graph stands for it, and the value
+    // namespace is the only place it appears. The maker it calls is the test, the same one the
+    // link builder uses to settle a generic rule by name (`ops->name() == "__rule_generic"`).
+    // Do not test the declaration's type spelling: reading it on a value declaration has taken
+    // the compiler down (the tag suite crashed on both the accepting and the refusing case), and
+    // a rule with `with` parameters is the one form the graph-side mark `ruleBinding` tells.
+    const auto ruleMakerCalled = [](const GCT::node_ptr_t &node) -> bool {
+        const std::function<bool(const GCT::node_ptr_t &)> called =
+            [&](const GCT::node_ptr_t &at) -> bool {
+            if (at == nullptr) {
+                return false;
+            }
+            if (at->type() == GCT::NodeKind::TAPP || at->type() == GCT::NodeKind::WITH) {
+                return called(at->at(0));
+            }
+            if (at->type() != GCT::NodeKind::LINK || at->size() == 0) {
+                return false;
+            }
+            const GCT::node_ptr_t &callee = at->at(0);
+            if (callee == nullptr) {
+                return false;
+            }
+            const std::string &name = callee->name();
+            return name == "__rule" || name == "__rule_generic";
+        };
+        return called(node);
+    };
     const auto declarationOf = [&](const std::string &written) -> ArgumentDeclaration {
         if (tagNamed(written).has_value()) {
             return ArgumentDeclaration::Tag;
@@ -358,7 +388,19 @@ Builder::tagValueOf(const camel::core::tag::Decl &decl, const GCT::TagUse &use) 
             importedType(ref, camel::core::module::ImportLayer::All).has_value()) {
             return ArgumentDeclaration::Type;
         }
-        if (unit_->values.contains(written) || module_->getNativeEntity(ref).has_value()) {
+        if (const auto it = unit_->values.find(written); it != unit_->values.end()) {
+            const GCT::node_ptr_t &declaration = it->second == nullptr ? nullptr : it->second->gct;
+            if (declaration != nullptr &&
+                declaration->type() == GCT::NodeKind::FUNC && declaration->ruleBinding()) {
+                return ArgumentDeclaration::Rule;
+            }
+            if (declaration != nullptr && declaration->type() == GCT::NodeKind::NREF &&
+                declaration->size() == 1 && ruleMakerCalled(declaration->at(0))) {
+                return ArgumentDeclaration::Rule;
+            }
+            return ArgumentDeclaration::Value;
+        }
+        if (module_->getNativeEntity(ref).has_value()) {
             return ArgumentDeclaration::Value;
         }
         return ArgumentDeclaration::Nothing;
@@ -372,6 +414,8 @@ Builder::tagValueOf(const camel::core::tag::Decl &decl, const GCT::TagUse &use) 
             return "a tag, and a tag is not a value";
         case ArgumentDeclaration::Type:
             return "a type, and a type is not a value";
+        case ArgumentDeclaration::Rule:
+            return "a rule, and a rule is a declaration of this program, not a value of it";
         case ArgumentDeclaration::Value:
             return "a declaration of this program that is not one function";
         default:
@@ -411,6 +455,16 @@ Builder::tagValueOf(const camel::core::tag::Decl &decl, const GCT::TagUse &use) 
                     graph = functionGraphNamed(arg->name());
                 }
                 if (!graph.has_value()) {
+                    // A rule has no function graph of its own -- its declaration is a value of the
+                    // `Rule` type -- so the fact a parameter that carries a function keeps for a
+                    // rule is the name itself (the author's ruling of 2026-10-31: a tag argument is
+                    // a function or a rule declaration, and a rule is named). A reader of the tag
+                    // looks the name up among the rules of the module.
+                    if (declarationOf(arg == nullptr ? std::string{} : arg->name()) ==
+                        ArgumentDeclaration::Rule) {
+                        values.push_back(camel::core::attr::symbol(arg->name()));
+                        continue;
+                    }
                     reportNotValue(arg == nullptr ? std::string{} : arg->name());
                     throw BuildAbortException();
                 }

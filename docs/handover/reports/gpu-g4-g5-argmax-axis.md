@@ -274,3 +274,22 @@ TILES_OPERATOR_DECLARATION <uri> <declared|undeclared> major=<n>
 1. 让 tensor 侧把 `positionLaw` 挂到 `array:argmax_axis` 这个 id 上（如果它和 tensor 注册的是同一个算子）；
 2. 或者承认两者是**两个** `OperId`，在区域那一侧把 array 的名字映射到有声明的那一个（映射必须是
    显式的、带读数的，不能靠前缀猜）。
+
+### 六之二、"同一个算子两个 URI"——这里停下，要作者裁
+
+读数（`CAMEL_TILES_TEST_REASONS=1`，同一条作用域）：
+
+```
+TILES_OPERATOR_ID array:argmax_axis id=340 tensor_spelling=422
+TILES_OPERATOR_ID tensor:reshape id=406 tensor_spelling=422
+```
+
+`array:argmax_axis` 是 **340**，`tensor:argmax_axis` 是 **422**，**两个都已在表里存在**（`lookup` 都查得到），
+**是两个 `OperId`**，不是同一个算子的两种拼法。图里的节点带 340，而语义声明挂在 422 上——所以 340 上
+`undeclared`，`graph_regions.cpp:142` 命中 `!decl`。
+
+**决定：不在区域侧加映射把它盖过去。** 两个 URI 意味着同一个算子有两条身份，这会同时影响**进表**和
+**导出格式**（`onnx::export`、`std::jgir` 里的算子名），区域侧加一层映射只会让第三处知道这件事、前两处继续不一致。
+这一步要作者裁：哪个拼法是正名，另一个是别名还是应当不存在。
+
+在等答复期间并行的事：330/422 之外的 A 组工作已经没有了，缺口停在 26、`operations()` 停在 21。
