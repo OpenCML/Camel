@@ -28,7 +28,7 @@ N0105 [label="PORT", type="PORT", param_kind="normal", param_index="0", value_ty
 ## 四、现状
 
 - `lane-defun5`：`c0b48aba9`（断言）← `82f8d47a3`（负例改写）← `6ffdf65ec`（合流）；filter 在 `f6f0dddd1`。
-- 未落：类型修复（`enumOf` 改从**值**取、字段类型只认 `variant.captures`）+ `CAMEL_DEFUN_DEBUG` 诊断，停在 `D:\Temp\defun-fix-and-diag.patch`；catch 移除 + `defun-wrapper-variant.md` §七，停在 `D:\Temp\defun-catch-doc.patch`。
-  实况更正：`D:\Temp\defun-fix-and-diag.patch`（1439 B）里**只有那两处诊断打印，没有类型修复**；类型修复 + catch 移除在 `D:\Temp\defun-attempt3.patch`（12563 B）。取栈用的是后者。
-- 已知红：`benchmark_gradients_vs_torch`（`mlp_big`，训练负载，`exit 139`），只在类型修复落地时出现；当前的树因放弃而绿。**按返工令 `477d76091`，它已登记为 `known_fail`，形状见 `known-failure-run-training.md`——绿不再被允许。**
-- 取栈结论（`std::macro std::opt std::nvm`，训练负载）：`Variant::updateRefs+31` ← `scanRelocatedObjects` ← `minorGCUnlocked` ← `safepoint` ← `NodeVMSchedPass::call`（6 层嵌套，不随模型长）。`mlp` 与 `mlp_big` 同样崩，所以与规模无关，不是栈深度。
+- 未落：**没有未落的补丁了**——类型修复 `d3ff4129d`、catch 删除 `5e3de4f82`、读数断言 `ab124a00e` 都已落。`D:\Temp\defun-fix-and-diag.patch`（1439 B）只有诊断打印，类型修复在 `D:\Temp\defun-attempt3.patch`（12563 B）。
+- 已知红：`benchmark_gradients_vs_torch`（训练负载），**按返工令 `477d76091` 已登记为 `known_fail`**（slow 层，形状见 `known-failure-run-training.md`）——绿不再被允许。
+- 取栈结论（`std::macro std::opt std::nvm`，训练负载）：`Variant::updateRefs+31` ← `scanRelocatedObjects` ← `minorGCUnlocked` ← `safepoint` ← `NodeVMSchedPass::call`（6 层嵌套，不随模型长）。**`mlp` 与 `mlp_big` 同样崩、栈顶三帧一模一样，所以早先“只在 mlp_big 规模上暴露”的说法作废，与规模无关**，也不是栈深度。
+- 读数结论（`ab124a00e`）：GC 拿到的类型是 `(x: f32[..]) => float`（`code` `1610612746` = `0x6000000A` = `TypeCode::Function`），槽里是 `Variant`（`tag=0`、`fields=1`）——**值成了 enum，位置还写着函数类型**：表示转换只做在值上、没做在位置上。**最小程序仍欠**：手写 20 行（闭包捕获小结构体 + 900 层递归 + 每层 256 元素数组）不崩，触发需要 `run_training` 的形状。
