@@ -4346,6 +4346,46 @@ bool Builder::rejectTextInLiteral(
     return false;
 }
 
+namespace {
+
+/// Whether a type has a position of an open rank (`T[..]`) anywhere: at that position a value of
+/// the element type is the rank-zero value itself (design principles 5.4), so the literal standing
+/// there is the position's to convert and not one the declaration can convert as data.
+bool hasRankZeroPosition(Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    if (type->code() == TypeCode::Array) {
+        const auto *arrayType = tt::as_ptr<ArrayType>(type);
+        if (arrayType == nullptr) {
+            return false;
+        }
+        return arrayType->rankZeroType() != nullptr ||
+               hasRankZeroPosition(arrayType->elemType());
+    }
+    if (type->code() == TypeCode::Struct) {
+        const auto *structType = tt::as_ptr<StructType>(type);
+        for (size_t i = 0; structType != nullptr && i < structType->size(); ++i) {
+            if (hasRankZeroPosition(structType->typeAt(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+    if (type->code() == TypeCode::Tuple) {
+        const auto *tupleType = tt::as_ptr<TupleType>(type);
+        for (size_t i = 0; tupleType != nullptr && i < tupleType->size(); ++i) {
+            if (hasRankZeroPosition(tupleType->typeAt(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+    return false;
+}
+
+} // namespace
+
 node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST::node_ptr_t &ast) {
     // A literal of the declared type, converted now (`let x: float = 1`). A declared `T?` /
     // `T!` and a type written with a type variable (decided when the generic function is
@@ -4432,11 +4472,18 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
                 rejectTextInLiteral(value->data(), literalType, value->origin())) {
                 throw BuildAbortException();
             }
-            data_ptr_t converted = value->data()->convertTo(literalType);
+            data_ptr_t converted = camel::core::data::convertDataTo(value->data(), literalType);
             if (converted != nullptr && converted->type()->equals(literalType)) {
                 return tree_->makeData(converted);
             }
-            if (converted == nullptr) {
+            if (converted == nullptr && hasRankZeroPosition(literalType)) {
+                // The type has a position of `T[..]`, and a literal there is converted where a
+                // position converts its literal: the element becomes the rank-zero value the
+                // position promises (design principles 5.4), through the annotation CAST below
+                // (`Builder::coerceTo`), which reports what the literal cannot be. Converting it
+                // here would need the element types the literal is written at, which are the
+                // position's, not the data layer's.
+            } else if (converted == nullptr) {
                 reportLiteralCastFailure(
                     diags_, ast->load()->tokenRange(), value->data(), literalType);
                 throw BuildAbortException();

@@ -616,3 +616,375 @@ expect_exit = 0
 expect_stdout_exact = "1.0\n2.5\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+[[tests]]
+name = "rank_zero_field_literal"
+desc = "A struct field declared `f32[..]` filled from a literal is the rank-zero value of the element (design principles 5.4), made at the data level because there is nothing to compute: the literal was refused with LiteralNotRepresentable while data had no rank-zero value, and the field now reads back as `1.5` and `2.5`."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_field_literal.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1.5\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_field_literal_fvm"
+desc = "The same literal field on the bytecode VM: the value the data layer makes is the same one the element is, so `1.5` and `2.5` print as they do on the node VM."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_field_literal.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1.5\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+[[tests]]
+name = "rank_zero_slot_let"
+desc = "The `let` slot (design principles 5.4): a declaration gives its value the type it stands in, and a literal and a computed value declare to the same slot -- both print their element, and nothing of the rank-zero array the slot holds is visible."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_let.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_let_fvm"
+desc = "The `let` slot (design principles 5.4): a declaration gives its value the type it stands in, and a literal and a computed value declare to the same slot -- both print their element, and nothing of the rank-zero array the slot holds is visible. Same programs on the bytecode VM."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_let.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_let_jit"
+desc = "The `let` slot (design principles 5.4): a declaration gives its value the type it stands in, and a literal and a computed value declare to the same slot -- both print their element, and nothing of the rank-zero array the slot holds is visible. Same programs on the JIT."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_let.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_let_tf"
+desc = "The `let` slot (design principles 5.4): a declaration gives its value the type it stands in, and a literal and a computed value declare to the same slot -- both print their element, and nothing of the rank-zero array the slot holds is visible. Same programs on the taskflow scheduler."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_let.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_parameter"
+desc = "The parameter slot (design principles 5.4), and the call-argument row with it: the argument enters the parameter where the call is made, so the two are one edge and a separate argument case would test the same bytes. A literal argument and a computed one both read as the value handed in."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_parameter.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_parameter_fvm"
+desc = "The parameter slot (design principles 5.4), and the call-argument row with it: the argument enters the parameter where the call is made, so the two are one edge and a separate argument case would test the same bytes. A literal argument and a computed one both read as the value handed in. Same programs on the bytecode VM."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_parameter.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_parameter_jit"
+desc = "The parameter slot (design principles 5.4), and the call-argument row with it: the argument enters the parameter where the call is made, so the two are one edge and a separate argument case would test the same bytes. A literal argument and a computed one both read as the value handed in. Same programs on the JIT."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_parameter.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_parameter_tf"
+desc = "The parameter slot (design principles 5.4), and the call-argument row with it: the argument enters the parameter where the call is made, so the two are one edge and a separate argument case would test the same bytes. A literal argument and a computed one both read as the value handed in. Same programs on the taskflow scheduler."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_parameter.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_field"
+desc = "The field slot (design principles 5.4): a struct field declared `f32[..]` filled from a literal (the data layer) and from a computed value (the conversion at the FILL) reads back as the element both ways, so the two roads are one rule."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_field.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_field_fvm"
+desc = "The field slot (design principles 5.4): a struct field declared `f32[..]` filled from a literal (the data layer) and from a computed value (the conversion at the FILL) reads back as the element both ways, so the two roads are one rule. Same programs on the bytecode VM."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_field.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_field_jit"
+desc = "The field slot (design principles 5.4): a struct field declared `f32[..]` filled from a literal (the data layer) and from a computed value (the conversion at the FILL) reads back as the element both ways, so the two roads are one rule. Same programs on the JIT."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_field.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_field_tf"
+desc = "The field slot (design principles 5.4): a struct field declared `f32[..]` filled from a literal (the data layer) and from a computed value (the conversion at the FILL) reads back as the element both ways, so the two roads are one rule. Same programs on the taskflow scheduler."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_field.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_var"
+desc = "The `var` slot (design principles 5.4): the declaration write and a later write are both positions, and the slot does not remember how a value was written -- a literal write and a computed one read back as the element."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_var.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_var_fvm"
+desc = "The `var` slot (design principles 5.4): the declaration write and a later write are both positions, and the slot does not remember how a value was written -- a literal write and a computed one read back as the element. Same programs on the bytecode VM."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_var.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_var_jit"
+desc = "The `var` slot (design principles 5.4): the declaration write and a later write are both positions, and the slot does not remember how a value was written -- a literal write and a computed one read back as the element. Same programs on the JIT."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_var.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_var_tf"
+desc = "The `var` slot (design principles 5.4): the declaration write and a later write are both positions, and the slot does not remember how a value was written -- a literal write and a computed one read back as the element. Same programs on the taskflow scheduler."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_var.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_array_element"
+desc = "An array whose element type is an open rank (design principles 5.4): the array element is a slot too, so `[1.0, 2.5]` and `[one, two]` are two rank-zero elements each -- the data side for literal elements, the FILL side for computed ones -- and both read as their elements."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_array_element.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_array_element_fvm"
+desc = "An array whose element type is an open rank (design principles 5.4): the array element is a slot too, so `[1.0, 2.5]` and `[one, two]` are two rank-zero elements each -- the data side for literal elements, the FILL side for computed ones -- and both read as their elements. Same programs on the bytecode VM."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_array_element.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_array_element_jit"
+desc = "An array whose element type is an open rank (design principles 5.4): the array element is a slot too, so `[1.0, 2.5]` and `[one, two]` are two rank-zero elements each -- the data side for literal elements, the FILL side for computed ones -- and both read as their elements. Same programs on the JIT."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_array_element.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_array_element_tf"
+desc = "An array whose element type is an open rank (design principles 5.4): the array element is a slot too, so `[1.0, 2.5]` and `[one, two]` are two rank-zero elements each -- the data side for literal elements, the FILL side for computed ones -- and both read as their elements. Same programs on the taskflow scheduler."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_array_element.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_return"
+desc = "The `return` slot (design principles 5.4): a function returning `f32[..]` hands back the element whether it writes the value as a literal or returns one the program computed."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_return.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_return_fvm"
+desc = "The `return` slot (design principles 5.4): a function returning `f32[..]` hands back the element whether it writes the value as a literal or returns one the program computed. Same programs on the bytecode VM."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_return.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_return_jit"
+desc = "The `return` slot (design principles 5.4): a function returning `f32[..]` hands back the element whether it writes the value as a literal or returns one the program computed. Same programs on the JIT."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_return.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_return_tf"
+desc = "The `return` slot (design principles 5.4): a function returning `f32[..]` hands back the element whether it writes the value as a literal or returns one the program computed. Same programs on the taskflow scheduler."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_return.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_tuple_element"
+desc = "The tuple element slot (design principles 5.4): a tuple element is a position with a type like a field, converted per element, so a tuple of open-rank elements reads back as its elements for both writings."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_tuple_element.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_tuple_element_fvm"
+desc = "The tuple element slot (design principles 5.4): a tuple element is a position with a type like a field, converted per element, so a tuple of open-rank elements reads back as its elements for both writings. Same programs on the bytecode VM."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_tuple_element.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_tuple_element_jit"
+desc = "The tuple element slot (design principles 5.4): a tuple element is a position with a type like a field, converted per element, so a tuple of open-rank elements reads back as its elements for both writings. Same programs on the JIT."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_tuple_element.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_tuple_element_tf"
+desc = "The tuple element slot (design principles 5.4): a tuple element is a position with a type like a field, converted per element, so a tuple of open-rank elements reads back as its elements for both writings. Same programs on the taskflow scheduler."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_tuple_element.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_nested_field"
+desc = "A field of `f32[..]` one level down (design principles 5.2 and 5.4): the nested literal is the named type its field states and the field inside it is the rank-zero value of the element, taken one after the other -- where a conversion that only looks one level deep stops."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_nested_field.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_nested_field_fvm"
+desc = "A field of `f32[..]` one level down (design principles 5.2 and 5.4): the nested literal is the named type its field states and the field inside it is the rank-zero value of the element, taken one after the other -- where a conversion that only looks one level deep stops. Same programs on the bytecode VM."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_nested_field.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_nested_field_jit"
+desc = "A field of `f32[..]` one level down (design principles 5.2 and 5.4): the nested literal is the named type its field states and the field inside it is the rank-zero value of the element, taken one after the other -- where a conversion that only looks one level deep stops. Same programs on the JIT."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_nested_field.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_zero_slot_nested_field_tf"
+desc = "A field of `f32[..]` one level down (design principles 5.2 and 5.4): the nested literal is the named type its field states and the field inside it is the rank-zero value of the element, taken one after the other -- where a conversion that only looks one level deep stops. Same programs on the taskflow scheduler."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/rank_zero_slot_nested_field.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

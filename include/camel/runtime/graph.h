@@ -206,6 +206,17 @@ class GCGraph;
 /// its input.
 bool nodeIsFreelySchedulable(const GCGraph &graph, gc_node_ref_t ref);
 
+/// Whether a node owns a control region of this graph, and so stands on the outside for what runs
+/// inside it (`docs/design/effects/edges.cn.md` 4.6): a `BRCH` or a `LOOP` that carries an arm or a
+/// part of a loop. Such a node computes nothing itself and still carries an order edge.
+bool nodeStandsForItsRegion(const GCGraph &graph, gc_node_ref_t ref);
+
+/// Whether an order edge ending on this node says nothing: the node may be arranged freely and does
+/// not stand for its region. The seal check refuses such an edge, and every path that carries order
+/// edges across a rewrite asks this same question before it writes one, so "written" and "refused"
+/// cannot drift apart -- there is never an edge the writer knew the check would reject.
+bool nodeTakesNoOrder(const GCGraph &graph, gc_node_ref_t ref);
+
 /// Properties a graph has besides its nodes (GCGraph::flags).
 enum GCGraphFlag : uint8_t {
     /// The function of the graph is a macro (design principles 8): `std::macro` may evaluate a

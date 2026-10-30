@@ -1,6 +1,7 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
+#include "camel/core/data/composite/array.h"
 #include "camel/core/data/composite/struct.h"
 #include "camel/core/data/ref.h"
 #include "camel/core/type/composite/struct.h"
@@ -239,7 +240,7 @@ data_ptr_t StructData::convertTo(Type *type) {
         if (fieldType != nullptr && !fieldType->equals(value->type())) {
             // A field of another type (a refined module type, a nested struct of another
             // type): convert it the same way, or refuse.
-            value = value->convertTo(fieldType);
+            value = convertDataTo(value, fieldType);
             if (value == nullptr) {
                 return nullptr;
             }

@@ -253,12 +253,33 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             };
             for (size_t h = 0; h < holeSlots.size() && h < refNodes.size(); ++h) {
                 Type *slotType = filledSlotType(holeSlots[h]);
-                if (slotType == nullptr ||
-                    !isRankZeroEdge(slotType, valueTypeOf(nodeTypeOf(refNodes[h])))) {
+                Type *elementType = slotType != nullptr ? valueTypeOf(nodeTypeOf(refNodes[h])) : nullptr;
+                if (slotType == nullptr || elementType == nullptr) {
                     continue;
                 }
-                if (node_handle_t entered = coerceTo(refNodes[h], slotType, gct); entered != nullptr) {
-                    refNodes[h] = entered;
+                if (isRankZeroEdge(slotType, elementType)) {
+                    if (node_handle_t entered = coerceTo(refNodes[h], slotType, gct);
+                        entered != nullptr) {
+                        refNodes[h] = entered;
+                    }
+                    continue;
+                }
+                // A nested literal in the slot is the named type the position states (design
+                // principles 5.2), not the unnamed type its own fields give it: without this the
+                // fill put a `{ v: f32 }` where the field is `Inner`, and the read of the field
+                // read a value of another type. The copy is field by field, the same one a
+                // position makes for an unnamed struct value.
+                if (slotType->code() == TypeCode::Struct && elementType->code() == TypeCode::Struct &&
+                    !slotType->equals(elementType)) {
+                    auto *slotStruct     = tt::as_ptr<StructType>(slotType);
+                    auto *elementStruct  = tt::as_ptr<StructType>(elementType);
+                    if (slotStruct != nullptr && elementStruct != nullptr && slotStruct->named() &&
+                        !elementStruct->named()) {
+                        if (node_handle_t copied = convertStructValue(refNodes[h], slotStruct, gct);
+                            copied != nullptr) {
+                            refNodes[h] = copied;
+                        }
+                    }
                 }
             }
             auto payload    = runtime::makeFillPayload(fillKindForType(filledType), holeSlots);
@@ -1437,6 +1458,15 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
                 }
             }
             if (!converted) {
+                // The value may still be a literal the position converts element by element: a
+                // composite literal whose field is `T[..]` becomes the rank-zero value of the
+                // element there (design principles 5.4), and a position converts its literal in
+                // one place (`Builder::coerceTo`). Refusing here would refuse a value the
+                // declaration itself makes, so the position is asked first.
+                if (node_handle_t entered = coerceTo(valueNode, targetType, gct->at(0)); entered != nullptr) {
+                    LEAVE("CAST");
+                    return entered;
+                }
                 diags_->of(SemanticDiag::DeclaredTypeMismatch)
                     .atOrigin(gct->origin())
                     .commit(have->toString(), targetType->toString());
