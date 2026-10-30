@@ -247,15 +247,10 @@ struct WhenCall {
     std::string name;
 };
 
-/// A node handle for a parameter of a condition: it names the transaction the writings belong to
-/// when they have one, and the draft alone otherwise (a test that builds its own draft has no
-/// transaction to name). Both forms read the same draft; the transaction form is the one that can
-/// drop its draft later, because the draft then has an owner other than the handle.
+/// A node handle for a parameter of a condition: it names the transaction the writings belong to,
+/// which is the only way a handle can be in a draft.
 Handle *nodeHandleOf(camel::runtime::DraftWritings &writings, camel::runtime::gc_node_ref_t ref) {
-    const auto *transaction = writings.transaction();
-    return transaction != nullptr
-               ? Handle::createInTransaction(*transaction, ref, mm::autoSpace())
-               : Handle::createInDraft(writings.draft(), ref, mm::autoSpace());
+    return Handle::createInTransaction(writings.transaction(), ref, mm::autoSpace());
 }
 
 /// Whether a rule's condition holds at this match (rewrite design 2 (second version) 1). A `const`

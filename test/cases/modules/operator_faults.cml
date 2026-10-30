@@ -87,6 +87,26 @@ func len_text(s: string): int {
     return len(s)
 }
 
+func map_has(m: Map<string, int>): bool {
+    return m->has<'a'>
+}
+
+func set_contains(s: Set<int>): bool {
+    return s->contains<1>
+}
+
+func map_eq(a: Map<string, int>, b: Map<string, int>): bool {
+    return a == b
+}
+
+func map_ne(a: Map<string, int>, b: Map<string, int>): bool {
+    return a != b
+}
+
+func set_subset(a: Set<int>, b: Set<int>): bool {
+    return is_subset(a, b)
+}
+
 /// A `tensor` operator, which declares no fault list at all: the answer that reads back is the
 /// third state, "nobody has checked, so assume it may fault".
 func tensor_sum(t: f32[..]): float {
@@ -119,5 +139,10 @@ func main(): int sync {
     println(may_fault_bit(graphs_of(len_array)[0]))
     println(may_fault_bit(graphs_of(len_text)[0]))
     println(may_fault_bit(graphs_of(tensor_sum)[0]))
+    println(may_fault_bit(graphs_of(map_has)[0]))
+    println(may_fault_bit(graphs_of(set_contains)[0]))
+    println(may_fault_bit(graphs_of(map_eq)[0]))
+    println(may_fault_bit(graphs_of(map_ne)[0]))
+    println(may_fault_bit(graphs_of(set_subset)[0]))
     return 0
 }

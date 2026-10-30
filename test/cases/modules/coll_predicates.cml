@@ -1,0 +1,21 @@
+/*
+ * The collection predicates that declare no fault path, run on the edges where a fault would be
+ * plausible: a key the map does not have, an empty map, a set that is not a subset of another.
+ * Every line prints the value the implementation returns; a line that reached a fault would end
+ * the program instead, so this case is what makes "no fault path" a claim about running the code
+ * rather than about the declaration alone.
+ */
+
+func main(): int sync {
+    let empty = [] as Map<string, int>
+    let one = [('a', 1)] as Map<string, int>
+    println(empty->has<'a'>)
+    println(one->has<'a'>, one->has<'b'>)
+    let es = [] as Set<int>
+    let small = [1] as Set<int>
+    let pair = [1, 2] as Set<int>
+    println(es->contains<1>, pair->contains<2>, pair->contains<3>)
+    println(empty == empty, one == one, one == empty, one != empty)
+    println(is_subset(es, es), is_subset(es, pair), is_subset(pair, small), is_subset(small, pair))
+    return 0
+}
