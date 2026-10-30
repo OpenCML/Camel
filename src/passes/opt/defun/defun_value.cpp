@@ -2,54 +2,68 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * std::defun_value: a function value that captures nothing and names one function of the program
- * is a tag.
+ * std::defun_value: a function value is a tag with the environment it captured.
  *
- * The value a program builds for such a function is a `DATA` node whose static slot holds the
- * `::Function` itself; a call through it is a `CALL` that reads the value and dispatches. This
- * pass gives the value the form the design asks for -- an enum value with one variant and no
- * data, so the tag is in the value's type -- and turns every call through it into a direct call
- * of that function. Because the type has one variant, the dispatch has one arm and is folded
- * away: no branch is built.
+ * The design note (docs/design/defunctionalization/README.cn.md, committed as df3796086) gives a
+ * function value one form: a value of an `enum` type, one variant per function the program takes
+ * as a value, and the values that function captured as that variant's data -- the tag is in the
+ * value's type, not beside it. This pass makes that form:
  *
- * It is the first slice of defunctionalization (the design note committed as df3796086, which the lane
- * it is deliberately narrow. It rewrites a function type family only when:
+ *  - every value node of a function type becomes a `:enum/make` of its family's enum: the tag of
+ *    the function it names and the values the closure captured, in capture order;
+ *  - every call through such a value becomes a direct call (a `FUNC` node) of that function. A
+ *    closure's environment travels as the function's trailing arguments, so after the pass the
+ *    captures of a function are its ordinary parameters and no closure is left in the program;
+ *  - the tag is known at build time when the callee is a value this graph builds: the value it
+ *    holds is that one function, so no match is built -- `:enum/field` takes the captures out of
+ *    the value where the callee is a parameter and the family has one variant, and nothing is
+ *    taken where the variant has no data;
+ *  - a tag only known at run time is a match on it: `:enum/tag` reads the tag, one arm of a
+ *    `BRCH` per variant takes that variant's captures out of the value and calls the function,
+ *    and the `JOIN` hands back what the taken arm returned. The arms exclude each other, so the
+ *    value is still the one the program wrote, and no call through a value is left.
  *
- *  - every value of the family is a plain reference to one function (a static `DATA` node holding
- *    a `::Function`): no closure is built anywhere for it, and no other function is written;
- *  - that function's graph captures nothing (no closure nodes);
- *  - everything that reads a value is either the callee of a `CALL` or an argument of a `FUNC`
- *    call -- nothing else observes the value, so replacing its representation changes nothing
- *    observable;
- *  - every `CALL` through the family can become a direct call: the callee is the value or a
- *    parameter and it waits on nothing;
- *  - the family is not an argument of the entry function, and it does not sit inside a named
- *    aggregate (a struct field): the substitution reaches node types, ports and signatures, and
- *    the pass refuses what it cannot see rather than leaving half the program on the old type.
+ * A *family* is one value's type: the signatures with the same parameters and the same result,
+ * with the effect qualifiers left out (design principles 5.2: an effect qualifier is a subtype
+ * relation, not another type, so `(x: int) => int pure` and `(x: int) => int` are one family).
+ * One family is one enum with one variant per function; the effect information is not lost, it is
+ * what each variant (the concrete function) is.
  *
- * A *family* is the set of signatures one value is, not one signature: a function type is
- * structural (design principles 5.2), and the same function value is written `(x: int) => int` in
- * one place and `(x: int) => int pure` in the one that takes it. The two are one value at run
- * time, so one enum is made per family -- and the members are the signatures with the same
- * parameters and the same result, compared with the effect qualifiers left out (5.2: an effect
- * qualifier is a subtype relation, not another type). Not the ones that happen to be assignable to
- * each other: assignability is neither symmetric nor transitive, a `() => void` takes a
- * `() => int` without being the same family, and a family is one type, so its grouping is an
- * equality.
+ * It refuses what it cannot see whole, and says how many families it refused, with the reason for
+ * each:
+ *
+ *  - a value read by a node that is not a call: a higher-order operator such as `map` calls the
+ *    value inside the operator, where this pass cannot see the call, and the enum would be handed
+ *    to something that expects a function;
+ *  - a function that is called directly somewhere: its captures are not arguments of that call, so
+ *    turning them into parameters would break it;
+ *  - a call whose callee waits on something, a callee that is neither a value nor a parameter, and
+ *    a type that is an argument of the entry function: the pass refuses what it cannot see rather
+ *    than leaving half the program on the old type;
+ *  - a type the program gives no value to: there is nothing to build.
  *
  * The type substitution and the node rewrite are one commit. `retype.h` says why: after the
  * rebuild the graph says the value is the enum while the static area still holds the function
  * object, so the graph would not run until the nodes that build and call the value are rewritten.
  * The commit's own validator says it for the other order: between the two halves the graph hands
  * an enum value to a parameter that still says function, which is not a program.
+ *
+ * One thing the substitution must not do is retype a graph's own signature, because a graph is a
+ * function: a function taken as a value has one type object for the value and for the signature,
+ * and `GraphRetypeOptions::leaveSignatures` keeps the signature a function while its parameters
+ * follow the substitution. Without it the graph `inc` becomes a value of the enum and every pass
+ * that hands the graph somewhere as a function (`std::opt` hands it to `rules::simplify`) has no
+ * instance for it.
  */
 
 #include "defun_value.h"
 
+#include "camel/core/operator_table.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/other.h"
+#include "camel/core/type/text.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
@@ -57,8 +71,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstring>
-#include <format>
 #include <map>
 #include <set>
 #include <string>
@@ -73,14 +85,22 @@ namespace ty = camel::core::type;
 using ty::TypeCode;
 using ty::TypeId;
 
+/// One function the program takes as a value: the enum variant that stands for it, its tag in that
+/// enum, and the values the function captured -- the variant's fields, in capture order.
+struct Variant {
+    GraphId graph = GraphId::Invalid;
+    std::string name;
+    std::vector<ty::Type *> captures;
+    size_t tag = 0;
+};
+
 /// One function type the program gives a value, and what the program does with it.
 struct TypePlan {
     ty::Type *type = nullptr;
-    GraphId target = GraphId::Invalid;
-    std::string targetName;
     std::string refuse;
     size_t values = 0;
     size_t calls  = 0;
+    std::map<GraphId, Variant> variants;
 };
 
 /// The signatures one value is: the members have the same parameters and result, so one function
@@ -89,11 +109,18 @@ struct TypePlan {
 /// nothing -- and, being the same type, they are one family whichever direction a value flows.
 struct Family {
     std::vector<TypePlan *> members;
-    GraphId target = GraphId::Invalid;
-    std::string targetName;
+    std::vector<Variant> variants;
     std::string refuse;
     size_t values = 0;
     size_t calls  = 0;
+};
+
+/// One call through a value of a family: the node, and the function it reaches -- `GraphId::Invalid`
+/// when only the run time knows it.
+struct CallSite {
+    gc_node_ref_t ref = kInvalidNodeRef;
+    GraphId variant   = GraphId::Invalid;
+    bool known        = false;
 };
 
 ::Function *staticFunctionOf(const GCGraph &graph, const GCNode &node) {
@@ -112,10 +139,9 @@ struct Family {
     return function != nullptr && function->graph() != nullptr ? function : nullptr;
 }
 
-/// Whether `type` holds `target` anywhere a substitution has to reach: as itself, in the signature
-/// of a function type, or in the components of an aggregate the type keeps as a component (a tuple,
-/// an array, an enum). A struct keeps its fields by name; that is what the pass refuses instead of
-/// seeing.
+/// Whether `type` holds `target` in its signature: as itself, or inside a function type it names.
+/// An aggregate keeps its components by name or by element type, and a value handed to one is read
+/// by a node that is not a call -- which is what the reader check refuses.
 bool mentions(const ty::Type *type, const ty::Type *target, int depth) {
     if (type == nullptr || target == nullptr || depth > 8) {
         return false;
@@ -124,30 +150,21 @@ bool mentions(const ty::Type *type, const ty::Type *target, int depth) {
         type->equals(const_cast<ty::Type *>(target))) {
         return true;
     }
-    if (type->code() == TypeCode::Function) {
-        const auto *function = static_cast<const ty::FunctionType *>(type);
-        for (const ty::Type *param : function->withTypesSpan()) {
-            if (mentions(param, target, depth + 1)) {
-                return true;
-            }
-        }
-        for (const ty::Type *param : function->normTypesSpan()) {
-            if (mentions(param, target, depth + 1)) {
-                return true;
-            }
-        }
-        return mentions(function->exitType(), target, depth + 1);
-    }
-    const auto *other = dynamic_cast<const ty::OtherType *>(type);
-    if (other == nullptr) {
+    if (type->code() != TypeCode::Function) {
         return false;
     }
-    for (const ty::Type *component : other->paramsSpan()) {
-        if (mentions(component, target, depth + 1)) {
+    const auto *function = static_cast<const ty::FunctionType *>(type);
+    for (const ty::Type *param : function->withTypesSpan()) {
+        if (mentions(param, target, depth + 1)) {
             return true;
         }
     }
-    return false;
+    for (const ty::Type *param : function->normTypesSpan()) {
+        if (mentions(param, target, depth + 1)) {
+            return true;
+        }
+    }
+    return mentions(function->exitType(), target, depth + 1);
 }
 
 std::string identifierOf(std::string_view name, std::string_view fallback) {
@@ -177,6 +194,125 @@ bool sameFamily(ty::Type *left, ty::Type *right) {
            right->code() == TypeCode::Function && ty::typeEqualsIgnoringResources(left, right);
 }
 
+/// The plan entry of one function type, made once.
+TypePlan &planOf(std::map<TypeId, TypePlan> &plans, ty::Type *type) {
+    TypePlan &plan = plans[type->typeId()];
+    plan.type      = type;
+    return plan;
+}
+
+void refuseIfUnsaid(TypePlan &plan, std::string why) {
+    if (plan.refuse.empty()) {
+        plan.refuse = std::move(why);
+    }
+}
+
+/// The variant of `target` in `plan`, made once with the values the function captures: a function
+/// the program takes as a value is one variant of the family's enum, however many closure sites
+/// build a value of it.
+Variant &variantOf(TypePlan &plan, const GCGraph &target) {
+    auto found = plan.variants.find(target.id());
+    if (found != plan.variants.end()) {
+        return found->second;
+    }
+    Variant variant;
+    variant.graph = target.id();
+    variant.name  = identifierOf(target.name(), "f");
+    for (gc_node_ref_t capture : target.closureNodes()) {
+        const GCNode *port = target.node(capture);
+        if (port != nullptr && port->dataType() != nullptr) {
+            variant.captures.push_back(port->dataType());
+        }
+    }
+    return plan.variants.emplace(target.id(), std::move(variant)).first->second;
+}
+
+/// The node a draft holds for a node of the frozen graph the session decoded it from.
+gc_node_ref_t draftIdOf(const GraphDraft &draft, gc_node_ref_t sourceRef) {
+    return draft.draftIdOfSourceRef(sourceRef);
+}
+
+/// A snapshot of every list a rewrite keeps: `rewriteNode` replaces the input lists it is given, and
+/// a statement whose chains are dropped loses its place in the block.
+DraftNodeInit snapshotOf(const GraphDraft &draft, gc_node_ref_t id) {
+    const DraftNodeHeader *header = draft.header(id);
+    DraftNodeInit init;
+    init.dataIndex    = header->dataIndex;
+    init.dataType     = header->dataType;
+    init.kind         = header->kind;
+    init.runtimeFlags = header->runtimeFlags;
+    init.origin       = header->origin;
+    init.permissions  = header->permissions;
+    init.attrs        = header->attrs;
+    init.region       = header->region;
+    init.name         = header->name;
+    init.payload      = draft.payloadOf(id);
+    init.normInputs   = draft.normInputsOf(id);
+    init.withInputs   = draft.withInputsOf(id);
+    init.ctrlInputs   = draft.ctrlInputsOf(id);
+    init.orderInputs  = draft.orderInputsOf(id);
+    init.syncInputs   = draft.syncInputsOf(id);
+    return init;
+}
+
+/// A function's captures become its trailing ordinary parameters: the pass calls such a function
+/// with the values the closure captured, so the body reads them where it read its ports.
+void parameterizeCaptures(GraphDraft &draft) {
+    const std::vector<gc_node_ref_t> captures(
+        draft.closureNodes().begin(), draft.closureNodes().end());
+    if (captures.empty()) {
+        return;
+    }
+    ty::FunctionType *type = draft.funcType();
+    if (type == nullptr) {
+        return;
+    }
+    // The signature is rebuilt rather than replaced so that it keeps what a signature means: the
+    // names of its parameters, their kinds, and the effects it publishes.
+    ty::FunctionTypeFactory factory;
+    const bool named = type->hasArgNames();
+    factory.setHasCompileInfo(named);
+    factory.setResources(type->resources());
+    for (size_t i = 0; i < type->withTypesCount(); ++i) {
+        const std::string name = named ? std::string(type->argNameAt(i)) : std::string();
+        if (type->hasWithRest() && i + 1 == type->withTypesCount()) {
+            factory.addWithRest(name);
+        } else if (type->withIsConstasAt(i)) {
+            factory.addWithConstasArg(name, type->withTypeAt(i));
+        } else {
+            factory.addWithArg(
+                name, type->withTypeAt(i), type->withIsVarAt(i), type->withNeedsValueAt(i));
+        }
+    }
+    const size_t withCount = type->withTypesCount();
+    for (size_t i = 0; i < type->normTypesCount(); ++i) {
+        const std::string name = named ? std::string(type->argNameAt(withCount + i)) : std::string();
+        if (type->hasRest() && i + 1 == type->normTypesCount()) {
+            ty::Type *pack = type->normTypeAt(i) != nullptr &&
+                                     type->normTypeAt(i)->code() == TypeCode::TypeVar
+                                 ? type->normTypeAt(i)
+                                 : nullptr;
+            factory.addRestArg(name, pack);
+        } else if (type->normIsConstasAt(i)) {
+            factory.addConstasArg(name, type->normTypeAt(i));
+        } else {
+            factory.addNormArg(name, type->normTypeAt(i), type->normIsVarAt(i));
+        }
+    }
+    for (gc_node_ref_t capture : captures) {
+        const DraftNodeHeader *header = draft.header(capture);
+        if (header == nullptr || header->dataType == nullptr) {
+            continue;
+        }
+        draft.removeClosureNode(capture);
+        draft.appendNormPort(capture);
+        factory.addNormArg(std::string(), header->dataType, false);
+    }
+    factory.setExitType(type->hasExitType() ? type->exitType() : ty::Type::Void());
+    draft.setFuncType(factory.build());
+    draft.setClosureType(nullptr);
+}
+
 } // namespace
 
 const camel::runtime::Program *
@@ -188,23 +324,38 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
     }
 
     // ---------------------------------------------------------------------------------------
-    // (1) What the program holds: values of a function type, and calls through one.
+    // (1) The static values a closure is built on, so they are not taken for values of their own.
+    // ---------------------------------------------------------------------------------------
+    std::map<uint64_t, std::set<gc_node_ref_t>> closureSources; // graph id -> the value under one
+    for (const GCGraph *graph : program->graphs()) {
+        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+            const GCNode &node = **it;
+            if (node.kind != GCNodeKind::Fill ||
+                node.dataType() == nullptr ||
+                node.dataType()->code() != TypeCode::Function) {
+                continue;
+            }
+            const auto *fill = graph->nodeBodyAs<GCFillBody>(it.ref());
+            if (fill == nullptr || fill->fillKind != GCFillKind::FunctionClosure) {
+                continue;
+            }
+            const auto norms = graph->normInputsOf(it.ref());
+            if (!norms.empty()) {
+                closureSources[toValue(graph->id())].insert(norms.front());
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // (2) What the program holds: values of a function type, and the function each one names.
     // ---------------------------------------------------------------------------------------
     std::map<TypeId, TypePlan> plans;
-    std::map<uint64_t, std::set<gc_node_ref_t>> valueRefs; // graph id -> the nodes that hold one
-
-    const auto planFor = [&](ty::Type *type) -> TypePlan & {
-        TypePlan &plan = plans[type->typeId()];
-        plan.type      = type;
-        return plan;
-    };
-    const auto refuseIfUnsaid = [](TypePlan &plan, std::string why) {
-        if (plan.refuse.empty()) {
-            plan.refuse = std::move(why);
-        }
-    };
+    std::map<uint64_t, std::set<gc_node_ref_t>> valueRefs;  // graph id -> the nodes that hold one
+    std::map<uint64_t, std::set<gc_node_ref_t>> fillRefs;   // graph id -> the closures built there
+    std::map<uint64_t, std::vector<CallSite>> callsites;    // graph id -> its calls through a value
 
     for (const GCGraph *graph : program->graphs()) {
+        const auto &sources = closureSources[toValue(graph->id())];
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
             const GCNode &node = **it;
             ty::Type *type     = node.dataType();
@@ -214,35 +365,60 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
             // A parameter of the type is where a value arrives; it is not a value the program
             // builds, and it is rewritten with the signature.
             if (node.kind == GCNodeKind::Port) {
-                planFor(type);
+                planOf(plans, type);
                 continue;
             }
-            TypePlan &plan = planFor(type);
+            TypePlan &plan = planOf(plans, type);
             if (node.kind == GCNodeKind::Fill) {
-                refuseIfUnsaid(plan, "a closure is built somewhere for the type");
+                const auto *fill = graph->nodeBodyAs<GCFillBody>(it.ref());
+                if (fill == nullptr || fill->fillKind != GCFillKind::FunctionClosure) {
+                    refuseIfUnsaid(plan, "a value is not a plain reference to a function");
+                    continue;
+                }
+                const auto norms   = graph->normInputsOf(it.ref());
+                const GCNode *base = norms.empty() ? nullptr : graph->node(norms.front());
+                ::Function *function = base != nullptr ? staticFunctionOf(*graph, *base) : nullptr;
+                if (function == nullptr) {
+                    refuseIfUnsaid(
+                        plan, "a value holds something that is not a function of the program");
+                    continue;
+                }
+                const GCGraph *target = function->graph();
+                const auto withs      = graph->withInputsOf(it.ref());
+                if (fill->slots().size() != withs.size() ||
+                    target->closureNodes().size() != withs.size()) {
+                    refuseIfUnsaid(
+                        plan, "the closure does not fill every value the function captures");
+                    continue;
+                }
+                variantOf(plan, *target);
+                valueRefs[toValue(graph->id())].insert(it.ref());
+                fillRefs[toValue(graph->id())].insert(it.ref());
+                ++plan.values;
                 continue;
             }
-            if (node.kind != GCNodeKind::Data || node.dataIndex >= 0) {
-                refuseIfUnsaid(plan, "a value is not a plain reference to a function");
+            if (node.kind == GCNodeKind::Data && node.dataIndex < 0) {
+                if (sources.contains(it.ref())) {
+                    continue; // the static function a closure is built on: not a value of its own
+                }
+                ::Function *function = staticFunctionOf(*graph, node);
+                if (function == nullptr) {
+                    refuseIfUnsaid(
+                        plan, "a value holds something that is not a function of the program");
+                    continue;
+                }
+                const GCGraph *target = function->graph();
+                if (!target->closureNodes().empty()) {
+                    refuseIfUnsaid(
+                        plan, "the value does not carry the values the function captures");
+                    continue;
+                }
+                variantOf(plan, *target);
+                valueRefs[toValue(graph->id())].insert(it.ref());
+                ++plan.values;
                 continue;
             }
-            ::Function *function = staticFunctionOf(*graph, node);
-            if (function == nullptr) {
-                refuseIfUnsaid(plan, "a value holds something that is not a function of the program");
-                continue;
-            }
-            const GCGraph *target = function->graph();
-            if (plan.target == GraphId::Invalid) {
-                plan.target     = target->id();
-                plan.targetName = std::string(target->name());
-            } else if (plan.target != target->id()) {
-                refuseIfUnsaid(plan, "the type stands for more than one function");
-            }
-            if (!target->closureNodes().empty()) {
-                refuseIfUnsaid(plan, "the function captures values");
-            }
-            valueRefs[toValue(graph->id())].insert(it.ref());
-            ++plan.values;
+            refuseIfUnsaid(plan, "a value is not a plain reference to a function");
         }
     }
 
@@ -252,10 +428,12 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
     }
 
     // ---------------------------------------------------------------------------------------
-    // (2) What else reads a value, and every call through the type.
+    // (3) What else reads a value, and every call through the type.
     // ---------------------------------------------------------------------------------------
     for (const GCGraph *graph : program->graphs()) {
-        const auto &values = valueRefs[toValue(graph->id())];
+        // The static function a closure is built on is not a value: the closure packs it into a
+        // tag, and the node is dropped with the closure.
+        const auto &sources = closureSources[toValue(graph->id())];
         std::map<gc_node_ref_t, const GCNode *> nodes;
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
             nodes.emplace(it.ref(), *it);
@@ -265,7 +443,7 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
             return found == nodes.end() ? nullptr : found->second->dataType();
         };
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
-            const GCNode &node     = **it;
+            const GCNode &node      = **it;
             const gc_node_ref_t ref = it.ref();
             if (node.kind == GCNodeKind::Call) {
                 const auto withs = graph->withInputsOf(ref);
@@ -276,37 +454,71 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
                 if (calleeType == nullptr || calleeType->code() != TypeCode::Function) {
                     continue;
                 }
-                TypePlan &plan = planFor(calleeType);
+                TypePlan &plan = planOf(plans, calleeType);
                 ++plan.calls;
                 const GCNode *callee = nodes.at(withs.front());
-                if (callee->kind != GCNodeKind::Data && callee->kind != GCNodeKind::Port) {
-                    refuseIfUnsaid(
-                        plan, "a call reads a callee that is neither a value nor a parameter");
-                }
                 if (!graph->waitInputsOf(withs.front()).empty()) {
                     refuseIfUnsaid(plan, "a call's callee waits on something");
                 }
+                CallSite site;
+                site.ref = ref;
+                if (callee->kind == GCNodeKind::Data && callee->dataIndex < 0) {
+                    if (::Function *function = staticFunctionOf(*graph, *callee)) {
+                        site.variant = function->graph()->id();
+                        site.known   = true;
+                    }
+                } else if (callee->kind == GCNodeKind::Fill) {
+                    const auto *fill = graph->nodeBodyAs<GCFillBody>(withs.front());
+                    const auto norms = graph->normInputsOf(withs.front());
+                    const GCNode *base =
+                        norms.empty() ? nullptr : graph->node(norms.front());
+                    if (fill != nullptr && fill->fillKind == GCFillKind::FunctionClosure &&
+                        base != nullptr) {
+                        if (::Function *function = staticFunctionOf(*graph, *base)) {
+                            site.variant = function->graph()->id();
+                            site.known   = true;
+                        }
+                    }
+                } else if (callee->kind != GCNodeKind::Port) {
+                    refuseIfUnsaid(
+                        plan, "a call reads a callee that is neither a value nor a parameter");
+                }
+                callsites[toValue(graph->id())].push_back(site);
             }
-            // Nothing else may read a value: the rewrite changes what the value is.
+            // Nothing else may read a value of the family -- a parameter as much as a value this
+            // graph builds: the rewrite changes what the type is, and a reader that does not take
+            // the tag (a higher-order operator such as `map`, which calls the value inside the
+            // operator) would be handed an enum where it expects a function.
             const auto checkReader = [&](std::span<const gc_node_ref_t> inputs) {
                 for (gc_node_ref_t input : inputs) {
-                    if (values.find(input) == values.end()) {
+                    if (sources.contains(input)) {
                         continue;
                     }
                     ty::Type *inputType = typeOf(input);
-                    if (inputType == nullptr) {
+                    if (inputType == nullptr || inputType->code() != TypeCode::Function) {
+                        continue;
+                    }
+                    const auto planned = plans.find(inputType->typeId());
+                    if (planned == plans.end()) {
                         continue;
                     }
                     const auto withs = graph->withInputsOf(ref);
                     const bool readsAsCallee =
                         node.kind == GCNodeKind::Call && !withs.empty() && withs.front() == input;
+                    // A value handed to another function is read where the callee declares it, and
+                    // that declaration is the same type: it is substituted with the value's.
                     const auto norms = graph->normInputsOf(ref);
-                    const bool readsAsArgument =
+                    bool readsAsArgument =
                         node.kind == GCNodeKind::Func &&
                         std::find(norms.begin(), norms.end(), input) != norms.end();
+                    if (!readsAsArgument && node.kind == GCNodeKind::Call) {
+                        readsAsArgument =
+                            std::find(withs.begin() + (withs.empty() ? 0 : 1), withs.end(), input) !=
+                            withs.end();
+                    }
                     if (!readsAsCallee && !readsAsArgument) {
                         refuseIfUnsaid(
-                            plans[inputType->typeId()], "the value is read by a node that is not a call");
+                            planned->second, "the value is read by a node that is not a call");
                     }
                 }
             };
@@ -316,8 +528,22 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
         }
     }
 
+    // A function whose captures become parameters cannot also be called directly: that call does
+    // not pass them.
+    std::set<GraphId> directlyCalled;
+    for (const GCGraph *graph : program->graphs()) {
+        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+            if ((**it).kind != GCNodeKind::Func) {
+                continue;
+            }
+            if (const GCGraph *callee = program->calleeOf(*graph, it.ref())) {
+                directlyCalled.insert(callee->id());
+            }
+        }
+    }
+
     // ---------------------------------------------------------------------------------------
-    // (3) One family per type: the signatures that are one value's type, effect qualifiers aside.
+    // (4) One family per type: the signatures that are one value's type, effect qualifiers aside.
     // ---------------------------------------------------------------------------------------
     std::vector<Family> families;
     std::set<TypeId> assigned;
@@ -342,12 +568,41 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
             if (family.refuse.empty()) {
                 family.refuse = member->refuse;
             }
-            if (member->target != GraphId::Invalid) {
-                if (family.target == GraphId::Invalid) {
-                    family.target     = member->target;
-                    family.targetName = member->targetName;
-                } else if (family.target != member->target) {
-                    family.refuse = "the type stands for more than one function";
+            for (const auto &[graphId, variant] : member->variants) {
+                const bool known = std::any_of(
+                    family.variants.begin(), family.variants.end(),
+                    [&](const Variant &seen) { return seen.graph == variant.graph; });
+                if (!known) {
+                    family.variants.push_back(variant);
+                }
+            }
+        }
+        // The tag of a variant is its position, and one enum names each variant once: two
+        // functions of one family can be written with no name of their own (two lambdas).
+        std::sort(
+            family.variants.begin(), family.variants.end(),
+            [](const Variant &left, const Variant &right) {
+                return left.name != right.name ? left.name < right.name : left.graph < right.graph;
+            });
+        std::set<std::string> used;
+        for (Variant &variant : family.variants) {
+            std::string name = variant.name;
+            size_t suffix    = 2;
+            while (used.contains(name)) {
+                name = variant.name + "_" + std::to_string(suffix++);
+            }
+            used.insert(name);
+            variant.name = name;
+        }
+        for (size_t tag = 0; tag < family.variants.size(); ++tag) {
+            family.variants[tag].tag = tag;
+        }
+        if (family.refuse.empty()) {
+            for (const Variant &variant : family.variants) {
+                if (!variant.captures.empty() && directlyCalled.contains(variant.graph)) {
+                    family.refuse = "the function is called directly where its captures are not "
+                                    "arguments";
+                    break;
                 }
             }
         }
@@ -357,7 +612,7 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
     }
 
     // ---------------------------------------------------------------------------------------
-    // (4) The entry function.
+    // (5) The entry function.
     // ---------------------------------------------------------------------------------------
     if (const auto *rootFunction = program->root()->funcType()) {
         for (const ty::Type *param : rootFunction->normTypesSpan()) {
@@ -373,7 +628,7 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
 
     std::vector<Family *> accepted;
     for (Family &family : families) {
-        if (family.refuse.empty() && family.values != 0 && family.target != GraphId::Invalid) {
+        if (family.refuse.empty() && family.values != 0 && !family.variants.empty()) {
             accepted.push_back(&family);
         }
     }
@@ -383,7 +638,7 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
     }
 
     // ---------------------------------------------------------------------------------------
-    // (5) The enum per family, and the table that retypes every object equal to a member.
+    // (6) The enum per family, and the table that retypes every object equal to a member.
     //
     // A function type is structural: the same signature may be a different object with a different
     // id, one per place it is written. The table names ids, so every object equal to a member goes
@@ -420,16 +675,29 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
     }
 
     GraphTypeSubstitution types;
-    std::map<TypeId, GraphId> enumTargets; // enum type id -> the function it names
+    std::map<TypeId, Family *> familyOfEnum;         // enum type id -> the family it stands for
+    std::map<GraphId, const Family *> familyOfGraph; // a variant's function -> its family
     size_t index = 0;
     for (Family *family : accepted) {
-        const std::string name =
-            "FnValue_" + identifierOf(family->targetName, "f") + "_" + std::to_string(index++);
+        const std::string name = "FnValue_" +
+                                 identifierOf(family->variants.front().name, "f") + "_" +
+                                 std::to_string(index++);
         ty::EnumDecl *decl = ty::EnumDecl::create(name, {}, std::string());
-        ty::EnumVariant variant;
-        variant.name  = identifierOf(family->targetName, "f");
-        variant.shape = ty::VariantShape::Unit;
-        decl->define({variant});
+        std::vector<ty::EnumVariant> variants;
+        for (const Variant &variant : family->variants) {
+            ty::EnumVariant declared;
+            declared.name = variant.name;
+            if (variant.captures.empty()) {
+                declared.shape = ty::VariantShape::Unit;
+            } else {
+                declared.shape      = ty::VariantShape::Tuple;
+                declared.fieldTypes = variant.captures;
+                declared.fieldOrigins.assign(
+                    variant.captures.size(), camel::source::kInvalidOriginId);
+            }
+            variants.push_back(std::move(declared));
+        }
+        decl->define(std::move(variants));
         ty::EnumType *enumType = decl->prototype();
         for (TypePlan *member : family->members) {
             for (ty::Type *type : equivalents[member->type->typeId()]) {
@@ -437,15 +705,43 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
             }
             types.replace(member->type, enumType);
         }
-        enumTargets.emplace(enumType->typeId(), family->target);
+        familyOfEnum.emplace(enumType->typeId(), family);
+        for (const Variant &variant : family->variants) {
+            familyOfGraph.emplace(variant.graph, family);
+        }
     }
 
     GraphRetypeOptions options;
     options.leaveStaticObjects = true; // the value's object is replaced by the node rewrite below
+    // A graph stays a function: the pass replaces the *values* of the function type, and the
+    // signature of a function that is one of them keeps its shape.
+    options.leaveSignatures = true;
 
     // ---------------------------------------------------------------------------------------
-    // (6) One commit: the type of every value, its constructor and its call change together.
+    // (7) One commit: the type of every value, its constructor and its call change together.
     // ---------------------------------------------------------------------------------------
+    const auto tagOf = [](const Family &family, GraphId graph) -> const Variant * {
+        for (const Variant &variant : family.variants) {
+            if (variant.graph == graph) {
+                return &variant;
+            }
+        }
+        return nullptr;
+    };
+    const auto enumOf = [&](ty::Type *type) -> ty::EnumType * {
+        if (type == nullptr || type->code() != ty::EnumType::typeCode()) {
+            return nullptr;
+        }
+        return static_cast<ty::EnumType *>(type);
+    };
+    const auto familyAt = [&](ty::Type *type) -> const Family * {
+        if (type == nullptr) {
+            return nullptr;
+        }
+        const auto found = familyOfEnum.find(type->typeId());
+        return found == familyOfEnum.end() ? nullptr : found->second;
+    };
+
     size_t rewroteValues = 0, rewroteCalls = 0;
     {
         RuntimeGraphDraftSession session(context_, program);
@@ -453,74 +749,280 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
             auto &draft = session.edit(graph).edit();
             retypeDraft(draft, types, options);
 
-            std::vector<gc_node_ref_t> tagNodes, callNodes;
-            for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
-                const gc_node_ref_t id = draft.draftIdOfSourceRef(it.ref());
+            const auto known = familyOfGraph.find(graph->id());
+            const Family *family =
+                known != familyOfGraph.end() ? known->second : nullptr;
+            // A function the program takes as a value has its captures as trailing parameters from
+            // here on: every call the pass writes passes them.
+            const bool captured = family != nullptr && [&] {
+                for (const Variant &variant : family->variants) {
+                    if (variant.graph == graph->id()) {
+                        return !variant.captures.empty();
+                    }
+                }
+                return false;
+            }();
+            if (captured) {
+                parameterizeCaptures(draft);
+            }
+
+            // The values this graph builds, and the calls through them.
+            const auto &values = valueRefs[toValue(graph->id())];
+            const auto &fills  = fillRefs[toValue(graph->id())];
+            const auto &sites  = callsites[toValue(graph->id())];
+
+            // What each call through a value hands to the function it names: the values a closure
+            // captured, in capture order. Read before the values are rewritten -- a closure's
+            // payload is gone once it is a tag.
+            std::map<gc_node_ref_t, std::vector<gc_node_ref_t>> capturesOfCall;
+            for (const CallSite &site : sites) {
+                if (!site.known) {
+                    continue;
+                }
+                const gc_node_ref_t id = draftIdOf(draft, site.ref);
+                if (!draft.alive(id)) {
+                    continue;
+                }
+                const auto withs = draft.withInputsOf(id);
+                if (withs.empty()) {
+                    continue;
+                }
+                const auto *fill = draft.header(withs.front())->kind == GCNodeKind::Fill
+                                       ? graph->nodeBodyAs<GCFillBody>(withs.front())
+                                       : nullptr;
+                if (fill == nullptr || fill->fillKind != GCFillKind::FunctionClosure) {
+                    continue;
+                }
+                const auto slots   = fill->slots();
+                const auto values  = draft.withInputsOf(withs.front());
+                std::vector<gc_node_ref_t> captures(slots.size(), kInvalidNodeRef);
+                for (size_t k = 0; k < slots.size() && k < values.size(); ++k) {
+                    const size_t slot = static_cast<size_t>(slots[k]);
+                    if (slot < captures.size()) {
+                        captures[slot] = values[k];
+                    }
+                }
+                capturesOfCall.emplace(site.ref, std::move(captures));
+            }
+
+            for (gc_node_ref_t ref : values) {
+                const gc_node_ref_t id = draftIdOf(draft, ref);
+                if (!draft.alive(id)) {
+                    continue;
+                }
+                const bool isClosure = fills.contains(ref);
+                GraphId variant      = GraphId::Invalid;
+                std::vector<gc_node_ref_t> captures;
+                if (isClosure) {
+                    const auto norms = graph->normInputsOf(ref);
+                    const GCNode *base =
+                        norms.empty() ? nullptr : graph->node(norms.front());
+                    ::Function *function = base != nullptr ? staticFunctionOf(*graph, *base) : nullptr;
+                    if (function == nullptr) {
+                        continue;
+                    }
+                    variant = function->graph()->id();
+                    const auto slots =
+                        graph->nodeBodyAs<GCFillBody>(ref)->slots();
+                    const auto withs = draft.withInputsOf(id);
+                    captures.assign(slots.size(), kInvalidNodeRef);
+                    for (size_t k = 0; k < slots.size() && k < withs.size(); ++k) {
+                        const size_t slot = static_cast<size_t>(slots[k]);
+                        if (slot < captures.size()) {
+                            captures[slot] = withs[k];
+                        }
+                    }
+                } else {
+                    const GCNode *plain   = graph->node(ref);
+                    ::Function *function = plain != nullptr ? staticFunctionOf(*graph, *plain)
+                                                            : nullptr;
+                    if (function == nullptr) {
+                        continue;
+                    }
+                    variant = function->graph()->id();
+                }
+                const DraftNodeHeader *header = draft.header(id);
+                const Family *owner           = familyAt(header->dataType);
+                if (owner == nullptr) {
+                    continue;
+                }
+                const Variant *target = tagOf(*owner, variant);
+                if (target == nullptr) {
+                    continue;
+                }
+                const gc_node_ref_t tag = draft.materializeStaticValue(
+                    camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
+                        static_cast<camel::core::rtdata::Int64>(target->tag)),
+                    ty::Type::Int64());
+                std::vector<gc_node_ref_t> operands{tag};
+                operands.insert(operands.end(), captures.begin(), captures.end());
+                GCOperBody body;
+                body.op   = nullptr;
+                body.oper = camel::core::OperatorTable::instance().intern(":enum/make");
+                DraftNodeInit init = snapshotOf(draft, id);
+                init.kind          = GCNodeKind::Oper;
+                init.dataType      = draft.header(id)->dataType;
+                init.dataIndex     = draft.header(id)->dataIndex;
+                init.payload       = payloadOf(&body, sizeof(body));
+                init.normInputs    = operands;
+                init.withInputs    = std::span<const gc_node_ref_t>{};
+                draft.rewriteNode(id, init);
+                ++rewroteValues;
+                // The static function under a closure is not a value any more: the closure packed
+                // it into a tag. It is dropped rather than left holding a type it no longer has.
+                if (isClosure) {
+                    const auto norms = graph->normInputsOf(ref);
+                    if (!norms.empty()) {
+                        const gc_node_ref_t base = draftIdOf(draft, norms.front());
+                        if (draft.alive(base) && draft.normUsersOf(base).empty() &&
+                            draft.withUsersOf(base).empty() && draft.ctrlUsersOf(base).empty() &&
+                            draft.orderUsersOf(base).empty() && draft.syncUsersOf(base).empty()) {
+                            draft.eraseNode(base);
+                        }
+                    }
+                }
+            }
+
+            for (const CallSite &site : sites) {
+                const gc_node_ref_t id = draftIdOf(draft, site.ref);
+                if (!draft.alive(id)) {
+                    continue;
+                }
                 const DraftNodeHeader *header = draft.header(id);
                 if (header == nullptr || header->dataType == nullptr) {
                     continue;
                 }
-                // The value a type names is its own type; the call's own type is the result, so
-                // the callee is what says whether the call goes through a value of the family.
-                if (header->kind == GCNodeKind::Data && header->dataIndex < 0 &&
-                    enumTargets.find(header->dataType->typeId()) != enumTargets.end()) {
-                    tagNodes.push_back(id);
-                    continue;
-                }
-                if (header->kind == GCNodeKind::Call) {
-                    const auto withs = draft.withInputsOf(id);
-                    if (withs.empty()) {
-                        continue;
-                    }
-                    const DraftNodeHeader *calleeHeader = draft.header(withs.front());
-                    if (calleeHeader != nullptr && calleeHeader->dataType != nullptr &&
-                        enumTargets.find(calleeHeader->dataType->typeId()) != enumTargets.end()) {
-                        callNodes.push_back(id);
-                    }
-                }
-            }
-            for (gc_node_ref_t id : tagNodes) {
-                ty::Type *enumType      = draft.header(id)->dataType;
-                const gc_node_ref_t tag = draft.materializeStaticValue(
-                    camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(0),
-                    ty::Type::Int64());
-                GCOperBody body;
-                body.op   = nullptr;
-                body.oper = camel::core::OperatorTable::instance().intern(":enum/make");
-                DraftNodeInit init;
-                init.kind       = GCNodeKind::Oper;
-                init.dataType   = enumType;
-                init.dataIndex  = draft.allocateRuntimeSlot(enumType);
-                init.payload    = payloadOf(&body, sizeof(body));
-                init.normInputs = std::span<const gc_node_ref_t>(&tag, 1);
-                draft.rewriteNode(id, init);
-                ++rewroteValues;
-            }
-            for (gc_node_ref_t id : callNodes) {
-                const DraftNodeHeader *header = draft.header(id);
-                const auto withs              = draft.withInputsOf(id);
+                const auto withs = draft.withInputsOf(id);
                 if (withs.empty()) {
                     continue;
                 }
+                // The family is the type of the value the call dispatches on, not the type of what
+                // the call returns.
                 const DraftNodeHeader *calleeHeader = draft.header(withs.front());
-                if (calleeHeader == nullptr || calleeHeader->dataType == nullptr) {
+                const Family *owner =
+                    calleeHeader != nullptr ? familyAt(calleeHeader->dataType) : nullptr;
+                if (owner == nullptr) {
                     continue;
                 }
-                const auto found = enumTargets.find(calleeHeader->dataType->typeId());
-                if (found == enumTargets.end()) {
-                    continue;
-                }
-                const std::vector<gc_node_ref_t> normInputs(
+                const std::vector<gc_node_ref_t> arguments(
                     draft.normInputsOf(id).begin(), draft.normInputsOf(id).end());
-                const std::vector<gc_node_ref_t> directWith(withs.begin() + 1, withs.end());
-                GCFuncRef callee{.ref = draft.payloadGraphIndexOf(found->second)};
-                DraftNodeInit init;
-                init.kind       = GCNodeKind::Func;
-                init.dataType   = header->dataType;
-                init.dataIndex  = header->dataIndex;
-                init.payload    = payloadOf(&callee, sizeof(callee));
-                init.normInputs = normInputs;
-                init.withInputs = directWith;
+                const std::vector<gc_node_ref_t> withArguments(
+                    withs.begin() + 1, withs.end());
+
+                if (site.known) {
+                    const Variant *target = tagOf(*owner, site.variant);
+                    if (target == nullptr) {
+                        continue;
+                    }
+                    std::vector<gc_node_ref_t> norm = arguments;
+                    if (!target->captures.empty()) {
+                        const auto found = capturesOfCall.find(site.ref);
+                        if (found == capturesOfCall.end()) {
+                            continue;
+                        }
+                        norm.insert(norm.end(), found->second.begin(), found->second.end());
+                    }
+                    GCFuncRef callee{.ref = draft.payloadGraphIndexOf(target->graph)};
+                    DraftNodeInit init      = snapshotOf(draft, id);
+                    init.kind               = GCNodeKind::Func;
+                    init.payload            = payloadOf(&callee, sizeof(callee));
+                    init.normInputs         = norm;
+                    init.withInputs         = withArguments;
+                    draft.rewriteNode(id, init);
+                    ++rewroteCalls;
+                    continue;
+                }
+
+                // Only the run time knows the tag: `:enum/tag`, one arm per variant, `JOIN`.
+                ty::Type *resultType  = header->dataType;
+                ty::EnumType *asEnum  = enumOf(resultType);
+                const uint32_t region = draft.nodeRegion(id);
+                const gc_node_ref_t at = withs.front();
+                if (owner->variants.size() == 1) {
+                    // One variant: there is nothing to branch on. The captures come out of the
+                    // value and the call names its function, as the folded case does when the
+                    // callee is a value this graph builds.
+                    const Variant &variant          = owner->variants.front();
+                    std::vector<gc_node_ref_t> norm = arguments;
+                    for (size_t field = 0; field < variant.captures.size(); ++field) {
+                        const gc_node_ref_t variantTag = draft.materializeStaticValue(
+                            camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
+                                static_cast<camel::core::rtdata::Int64>(variant.tag)),
+                            ty::Type::Int64());
+                        const gc_node_ref_t fieldIndex = draft.materializeStaticValue(
+                            camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
+                                static_cast<camel::core::rtdata::Int64>(field)),
+                            ty::Type::Int64());
+                        const gc_node_ref_t take = draft.addOperNode(
+                            asEnum != nullptr ? asEnum->fieldType(variant.tag, field)
+                                              : ty::Type::Int64(),
+                            nullptr, ":enum/field");
+                        const std::vector<gc_node_ref_t> operands{variantTag, fieldIndex, at};
+                        draft.setNormInputs(take, operands);
+                        norm.push_back(take);
+                    }
+                    GCFuncRef callee{.ref = draft.payloadGraphIndexOf(variant.graph)};
+                    DraftNodeInit init = snapshotOf(draft, id);
+                    init.kind          = GCNodeKind::Func;
+                    init.payload       = payloadOf(&callee, sizeof(callee));
+                    init.normInputs    = norm;
+                    init.withInputs    = withArguments;
+                    draft.rewriteNode(id, init);
+                    ++rewroteCalls;
+                    continue;
+                }
+                const gc_node_ref_t tag = draft.addOperNode(ty::Type::Int64(), nullptr, ":enum/tag");
+                draft.setNormInputs(tag, std::span<const gc_node_ref_t>(&at, 1));
+                std::vector<gc_node_ref_t> cases;
+                for (size_t k = 0; k + 1 < owner->variants.size(); ++k) {
+                    cases.push_back(draft.materializeStaticValue(
+                        camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
+                            static_cast<camel::core::rtdata::Int64>(k)),
+                        ty::Type::Int64()));
+                }
+                const gc_node_ref_t brch =
+                    draft.addBrchNode(ty::Type::Int64(), id, owner->variants.size());
+                draft.setNormInputs(brch, std::span<const gc_node_ref_t>(&tag, 1));
+                draft.setWithInputs(brch, cases);
+                std::vector<gc_node_ref_t> armResults;
+                for (size_t k = 0; k < owner->variants.size(); ++k) {
+                    const Variant &variant   = owner->variants[k];
+                    const uint32_t armRegion = draft.addRegion(GCRegionKind::Arm, region, brch, k);
+                    draft.setInsertRegion(armRegion);
+                    std::vector<gc_node_ref_t> norm = arguments;
+                    for (size_t field = 0; field < variant.captures.size(); ++field) {
+                        const gc_node_ref_t variantTag = draft.materializeStaticValue(
+                            camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
+                                static_cast<camel::core::rtdata::Int64>(variant.tag)),
+                            ty::Type::Int64());
+                        const gc_node_ref_t fieldIndex = draft.materializeStaticValue(
+                            camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
+                                static_cast<camel::core::rtdata::Int64>(field)),
+                            ty::Type::Int64());
+                        const gc_node_ref_t take = draft.addOperNode(
+                            asEnum != nullptr ? asEnum->fieldType(variant.tag, field)
+                                              : variant.captures[field],
+                            nullptr, ":enum/field");
+                        const std::vector<gc_node_ref_t> operands{variantTag, fieldIndex, at};
+                        draft.setNormInputs(take, operands);
+                        norm.push_back(take);
+                    }
+                    const gc_node_ref_t call =
+                        draft.addFuncNode(variant.graph, resultType, 0, 0, 0);
+                    draft.setNormInputs(call, norm);
+                    draft.setWithInputs(call, withArguments);
+                    draft.setRegionResult(armRegion, call);
+                    draft.setInsertRegion(region);
+                    armResults.push_back(call);
+                }
+                GCJoinBody join{
+                    .brch     = brch,
+                    .armCount = static_cast<gc_cnt_t>(owner->variants.size())};
+                DraftNodeInit init = snapshotOf(draft, id);
+                init.kind          = GCNodeKind::Join;
+                init.payload       = payloadOf(&join, sizeof(join));
+                init.normInputs    = std::span<const gc_node_ref_t>(&brch, 1);
+                init.withInputs    = armResults;
                 draft.rewriteNode(id, init);
                 ++rewroteCalls;
             }
@@ -533,10 +1035,25 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
         os << "DEFUN_VALUE types=" << accepted.size() << " values=" << rewroteValues
            << " calls=" << rewroteCalls << " refused=" << (families.size() - accepted.size())
            << "\n";
+        for (Family &family : families) {
+            if (family.refuse.empty()) {
+                continue;
+            }
+            os << "DEFUN_VALUE refused='" << family.members.front()->type->toString()
+               << "' reason='" << family.refuse << "'\n";
+        }
         for (Family *family : accepted) {
-            os << "DEFUN_VALUE type='" << family->members.front()->type->toString() << "' variant='"
-               << identifierOf(family->targetName, "f") << "' values=" << family->values
-               << " calls=" << family->calls << "\n";
+            os << "DEFUN_VALUE type='" << family->members.front()->type->toString() << "' ";
+            if (family->variants.size() == 1) {
+                os << "variant='" << family->variants.front().name << "'";
+            } else {
+                std::string names;
+                for (const Variant &variant : family->variants) {
+                    names += names.empty() ? variant.name : "," + variant.name;
+                }
+                os << "variants='" << names << "'";
+            }
+            os << " values=" << family->values << " calls=" << family->calls << "\n";
         }
         return done;
     }

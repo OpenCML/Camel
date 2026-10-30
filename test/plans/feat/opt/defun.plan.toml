@@ -183,3 +183,72 @@ assert(lines[lines.length - 1] === 'FAMILY a=42', lines[lines.length - 1])
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 8000
+
+[[tests]]
+name = "defun.closure_dispatch.plain"
+desc = "Without the pass the program is what it is: three functions a parameter may hold, two of them closures over different values, one line."
+kind = "behavior"
+case = "../../../cases/opt/defun/closure_dispatch.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "DISPATCH p=11 q=12 r=30\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000
+
+[[tests]]
+name = "defun.closure_dispatch.lowered"
+desc = "A family of three functions, two of which capture a value, becomes one enum with three variants (the captures are their data) and the call through the parameter becomes one match: the tag reads which variant, its arm takes the captures out of the value and calls the function with them as trailing arguments, and the arm of the function that captured nothing passes none. No closure and no call through a value is left, and the program prints the same three numbers."
+kind = "behavior"
+case = "../../../cases/opt/defun/closure_dispatch.cml"
+args = ["${case}", "std::defun_value", "std::stats", "std::nvm"]
+expect_exit = 0
+verify_script = """
+const lines = input.normalized.stdout.trim().split('\n')
+const summary = lines.find((line) => line.startsWith('DEFUN_VALUE types='))
+assert(/^DEFUN_VALUE types=2 values=4 calls=2 refused=0$/.test(summary), 'the families: ' + summary)
+const families = lines.filter((line) => line.startsWith("DEFUN_VALUE type='"))
+assert(families.length === 2, 'one line per family: ' + JSON.stringify(families))
+assert(families.some((line) => /type='\(x: int\) => int' variants='__g_\d+__,__g_\d+__,plus' values=3 calls=1/.test(line)), JSON.stringify(families))
+const stats = JSON.parse(lines.find((line) => line.startsWith('GRAPH_STATS ')).replace('GRAPH_STATS ', ''))
+assert(stats.indirect_calls === 0, 'no call through a value is left: ' + JSON.stringify(stats))
+assert(stats.closures === 0, 'no closure is left: ' + JSON.stringify(stats))
+assert(stats.branches === 1, 'one match, not one per call: ' + JSON.stringify(stats))
+assert(lines[lines.length - 1] === 'DISPATCH p=11 q=12 r=30', lines[lines.length - 1])
+assert(input.normalized.stderr === '', 'nothing to report: ' + input.normalized.stderr)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000
+
+[[tests]]
+name = "defun.fold_and_dispatch.plain"
+desc = "Without the pass the program is what it is: one call through a function value written in this graph and one through a parameter, one line."
+kind = "behavior"
+case = "../../../cases/opt/defun/fold_and_dispatch.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "FOLD folded=12 dispatched=12\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000
+
+[[tests]]
+name = "defun.fold_and_dispatch.folded"
+desc = "Two calls through the same closure: the one whose callee is the value written in this graph folds (the tag is known, the captures are passed as arguments, no match is built), and the one through the parameter of a family with one variant takes the captures out of the value and calls the function directly. Neither adds a branch, and the program prints the same two numbers."
+kind = "behavior"
+case = "../../../cases/opt/defun/fold_and_dispatch.cml"
+args = ["${case}", "std::defun_value", "std::stats", "std::nvm"]
+expect_exit = 0
+verify_script = """
+const lines = input.normalized.stdout.trim().split('\n')
+const summary = lines.find((line) => line.startsWith('DEFUN_VALUE types='))
+assert(/^DEFUN_VALUE types=2 values=2 calls=3 refused=0$/.test(summary), 'the families: ' + summary)
+const families = lines.filter((line) => line.startsWith("DEFUN_VALUE type='"))
+assert(families.some((line) => /type='\(x: int\) => int' variant='__g_\d+__' values=1 calls=2/.test(line)), JSON.stringify(families))
+const stats = JSON.parse(lines.find((line) => line.startsWith('GRAPH_STATS ')).replace('GRAPH_STATS ', ''))
+assert(stats.indirect_calls === 0, 'no call through a value is left: ' + JSON.stringify(stats))
+assert(stats.closures === 0, 'no closure is left: ' + JSON.stringify(stats))
+assert(stats.branches === 0, 'nothing to branch on: ' + JSON.stringify(stats))
+assert(lines[lines.length - 1] === 'FOLD folded=12 dispatched=12', lines[lines.length - 1])
+assert(input.normalized.stderr === '', 'nothing to report: ' + input.normalized.stderr)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000

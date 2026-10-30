@@ -5,9 +5,10 @@
 
 #include "camel/execute/pass/opt.h"
 
-/// std::defun_value: a function value that captures nothing and names one function of the program
-/// becomes a tag -- an enum value with one variant and no data -- and every call through it becomes
-/// a direct call of that function (see defun_value.cpp for what it requires and what it refuses).
+/// std::defun_value: every function the program takes as a value becomes one variant of the enum
+/// that stands for its type -- the values it captured are that variant's data -- and every call
+/// through such a value becomes a direct call of the function it names, with the captures as
+/// trailing arguments. See defun_value.cpp for what it requires and what it refuses.
 class DefunValueRewritePass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;

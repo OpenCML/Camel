@@ -123,6 +123,17 @@ struct GraphRetypeOptions {
     /// kept as static templates (a tuple literal of type `T` puts a `T` in the static area), so a
     /// whole-type substitution on a program that builds a value of the type meets this slot.
     bool leaveStaticObjects = false;
+
+    /// Retype what a graph's signature mentions rather than the signature itself. Off by default,
+    /// which is what a whole-type substitution means for a value.
+    ///
+    /// A graph is a function, so its signature is a function type: a substitution that names that
+    /// very type -- the value of a function whose signature it also is, which is one type object --
+    /// would leave the graph a value of the new type instead of a function, and every pass that
+    /// hands the graph somewhere as a function (`std::opt` hands it to `rules::simplify`) then has
+    /// no instance for it. A rewrite that turns the *values* of a function type into something else
+    /// sets this: the signature keeps its shape and its parameters follow the substitution.
+    bool leaveSignatures = false;
 };
 
 /// What one draft's rebuild did. Every count is of the items whose type actually changed, so an
