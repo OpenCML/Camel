@@ -473,3 +473,36 @@ expect_diagnostic_name = "SemanticDiag::DimensionNameNotBound"
 expect_output_contains = ["'n'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "open_rank_element"
+desc = "The ranks `f32[..]` takes include rank zero, which is the element itself (design principles 5.4): a value of type `f32` enters the position -- it is that value, not an array holding it -- and a rank-1 and a rank-2 array enter as the arrays they are. The same element declared `f32[..]` and written with `as f32[..]` is still the number: it prints as one, so no array was made for it."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/open_rank_element.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1\n1\n1\n2.5\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_one_refuses_element"
+desc = "`f32[]` states one dimension, so it is not `f32[..]`: the value of rank zero the open rank takes is refused here. The refusal is the call's own NoMatchingFunction, whose candidate list is the evidence that the parameter is `f32[]` (the diagnostic is written over several lines, so its name is not asserted)."
+kind = "negative"
+case = "../../../../cases/compile/array_shape/rank_one_refuses_element.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["rank: (v: f32[]) => int"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "open_rank_tuple_element"
+desc = "The element of an open rank is the type the value has at rank zero (design principles 5.4): `(int, f32)[..]` takes a tuple -- the element itself -- and an array of tuples, one tuple per element."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/open_rank_tuple_element.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1\n1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
