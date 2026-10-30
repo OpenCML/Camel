@@ -53,6 +53,41 @@ i2 trained t=1 loss=0.944348
   参数，不是语义；
 - 没有采样器、没有 EMA、没有学习率调度：这里只做 I2 的训练那一半。
 
+## 这一段在 `std::prl` 下怎么分段
+
+**下降是更新挣来的，不是程序写死的。** 同一 seed 加 `--arg lr=0`，同样三行读数是
+`1.202875 / 1.202875 / 1.202875`（平的），所以计划里"损失逐次下降"那条断言在更新不动参数时会红。
+**一条没法让它红的断言不值得钉**，这一条能被弄红。
+
+`std::prl segments=true` 打印调度器建出的计划而**不执行**，这是回答"并行在哪里"的诚实办法：
+
+```
+$ camel showcase/i2-diffusion-step/step.cml --arg seed=7 --arg steps=3 --arg lr=0.02 --arg t=1 \
+    "std::prl segments=true"
+[taskflow] segments 'main': no segments, evaluated node by node: it has a loop
+[taskflow] segments 'predicted_noise': 1 segment(s), 0 chain(s), 5 operator(s)
+[taskflow] segments 'predicted_noise' segment 0 (top): 9 item(s), 0 chain(s), inline
+[taskflow] segments 'predicted_noise' oper tensor:matmul #3: segment 0, inline
+[taskflow] segments 'alpha_bar': 3 segment(s), 0 chain(s), 4 operator(s)
+[taskflow] segments 'alpha_bar' segment 1 (arm of #6): 2 item(s), 0 chain(s), inline, after segment 0 item 2
+[taskflow] segments 'loss': 1 segment(s), 0 chain(s), 7 operator(s)
+```
+
+逐行读，它说的是三件事：
+
+- **`main` 一段都没有，而且自己说了原因**：训练循环让调度器逐节点求值这张图（`it has a loop`
+  ——原因记在计划上，所以能打出来）。循环是一串轮次，不是一棵可以并行的树，没有可切的东西。
+- **每个函数都是一段、一条链、`inline`**：`predicted_noise` 是五个算子排成一行
+  （`matmul, add, relu, matmul, add`），`loss` 七个，`weights` 三个——就是上面表格里的公式，一个全序。
+  网络的层本来就是顺序的。
+- **`alpha_bar` 是唯一有多段的地方**：三段，就是 if/else 链的各个臂，后一个挂在前面那个上
+  （`arm of #6 … after segment 0 item 2`）。
+
+所以"并行在哪里"的答案是：**这个例子里并行在算子内部，不在任务之间**——线程在 `tensor` 的 matmul
+与 relu 内核里，任务图上没有独立的东西可调度。这也正是两档打印同样的数的原因：调度器没有重排的自由。
+想看真的被切成链的计划（一个分支臂切成 11 条链、13 条链间边），见
+`docs/handover/reports/prl-two-reds-and-segments.md`。
+
 ## 为什么这一步还没上 GPU
 
 派工裁定原文（`docs/handover/reviews/questions-2026-10-29.md`）：**"H237 杀手级示例、H13 官方示例

@@ -52,6 +52,47 @@ the same arguments are byte-identical and the loss is an assertion rather than a
 schedule, and the three lines are one curve only because nothing but the parameters changes between
 them. A curve whose steps each drew their own noise would mix the noise level into the reading.
 
+**The descent is the update's doing, not the program's.** With `--arg lr=0` the same three lines
+read `1.202875 / 1.202875 / 1.202875` — flat — so the assertion the plan makes ("the loss falls
+from step to step") goes red the moment the update stops moving the parameters. An assertion that
+cannot be made to fail is not worth pinning; this one can.
+
+## How `std::prl` cuts it (`segments=true`)
+
+`std::prl segments=true` prints the plan the scheduler built instead of running it, which is the
+honest way to answer "where is the parallelism here":
+
+```
+$ camel showcase/i2-diffusion-step/step.cml --arg seed=7 --arg steps=3 --arg lr=0.02 --arg t=1 \
+    "std::prl segments=true"
+[taskflow] segments 'main': no segments, evaluated node by node: it has a loop
+[taskflow] segments 'predicted_noise': 1 segment(s), 0 chain(s), 5 operator(s)
+[taskflow] segments 'predicted_noise' segment 0 (top): 9 item(s), 0 chain(s), inline
+[taskflow] segments 'predicted_noise' oper tensor:matmul #3: segment 0, inline
+[taskflow] segments 'alpha_bar': 3 segment(s), 0 chain(s), 4 operator(s)
+[taskflow] segments 'alpha_bar' segment 1 (arm of #6): 2 item(s), 0 chain(s), inline, after segment 0 item 2
+[taskflow] segments 'loss': 1 segment(s), 0 chain(s), 7 operator(s)
+```
+
+Read line by line, it says three things:
+
+- **`main` has no segments at all, and says why**: the training loop makes the scheduler evaluate the
+  graph node by node (`it has a loop` — the plan's own reason, printed because the reason is kept on
+  the plan). A loop is a chain of rounds, not a tree of independent work; there is nothing to cut.
+- **each function is one segment, one chain, `inline`**: `predicted_noise` is five operators in a
+  row (`matmul, add, relu, matmul, add`), `loss` is seven, `weights` is three. Those are the step's
+  formulas from the table above, in one total order — a network's layers are sequential by
+  definition.
+- **`alpha_bar` is the one place with more than one segment**: three segments, the arms of the
+  if/else chain, each hanging off the previous one (`arm of #6 … after segment 0 item 2`).
+
+So the answer to "where is the parallelism" is: **in this example it is inside the operators, not
+between tasks** — the matmul and relu kernels of `tensor` are where the threads are, and the task
+graph has nothing independent to schedule. That is also why the two back ends print identical
+numbers: the scheduler has no freedom to reorder anything. For a plan that *does* cut chains (a
+branch arm cut into eleven chains with thirteen edges between them), see
+`docs/handover/reports/prl-two-reds-and-segments.md`.
+
 ## What is not here, and why
 
 - one timestep per run instead of a random one per sample: a demo's curve has to be comparable, and
