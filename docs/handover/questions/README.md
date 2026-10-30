@@ -1,5 +1,7 @@
 # 问题：交给作者的地方
 
+> **给作者：本表只列还在等裁定的一问一页；已裁的都在 `docs/handover/reviews/`，页首有 `裁定：` 一行。**
+>
 > **判据：一个页在 `questions/` 里活着的唯一理由，是有一个还没答的问题。**
 > 已经有裁定、或者已经修掉的页，挪到 `docs/handover/reviews/` 留档（`git mv`，不删，页首留 `裁定：` 一行）；
 > 只是记录、没有问题的页也不留在这里。
@@ -26,10 +28,10 @@
 | 页 | 问题 | 状态 |
 |---|---|---|
 | `questions-2026-10-31-tag-argument-of-a-rule.md` | 标签参数能否携带一个 `rule`（`#jvp(add_jvp)` 里的 `add_jvp`）：今天的判据只收"程序里的一个函数" | 待裁 |
-| `questions-2026-10-31-what-carries-a-wait-for-a-write.md` | 一个"等一次写"由谁携带（`edges` 车道即将交页，本行占位，页到了再补问题原文） | 待裁（页未到） |
-| `generator-cell-type-by-inference.cn.md` | 单元的类型由"只求类型的推导"定，还是由运行时状态的首个写入定 | 待裁 |
-| `defun-tag-in-the-type.cn.md` | 文档是否取代 `defun.cpp` 那句"函数值已经是标签 + 环境"；老 `std::defunctionalize` 是否退役 | 待裁 |
-| `function-type-structural-vs-enum.cn.md` | 函数类型是结构别名（5.2），"每个函数类型一个 enum"是名义类型，两者如何并存 | 待裁 |
+| `questions-2026-10-31-what-carries-a-wait-for-a-write.md` | 值在门后等一次写、或等一次调用，这件事该由哪种边承担（`lane-edges` 交的页，取自 `13e5784b1`） | 待裁 |
+| `questions-2026-10-31-generator-cell-type-by-inference.md` | 单元的类型由"只求类型的推导"定，还是由运行时状态的首个写入定 | 待裁 |
+| `questions-2026-10-30-defun-tag-in-the-type.md` | 文档是否取代 `defun.cpp` 那句"函数值已经是标签 + 环境"；老 `std::defunctionalize` 是否退役 | 待裁 |
+| `questions-2026-10-30-function-type-structural-vs-enum.md` | 函数类型是结构别名（5.2），"每个函数类型一个 enum"是名义类型，两者如何并存 | 待裁 |
 | `questions-2026-10-30-grad-builds-its-graph-at-runtime.md` | 去函数化的验收数不到 `grad` 造出的那个函数值：这一段归第 6 条还是第 7 条 | 待裁 |
 | `questions-2026-10-30-jvp-family-anchor.md` | `#jvp` 这一族规则没有挂点：补原语声明、标签挂到 `rule` 上、还是按算子 id 查表 | 待裁 |
 | `questions-2026-10-30-literal-head-type-expression.md` | 算出来的类型能不能当字面量的头：这条规则铺到哪为止 | 待裁 |
@@ -39,7 +41,7 @@
 | `questions-2026-10-30-reinterp-rule-set.md` | `reinterp<H>`：规则集 `H` 以什么形式交给算子 | 待裁 |
 | `questions-2026-10-30-reserved-name-in-library.md` | 库里的声明能不能叫保留名：`__add__` 与 `ReservedIdentifier` | 待裁 |
 
-13 页里有 12 页在等裁定；表里 13 行，第 2 行是 `edges` 车道的占位（页还没交上来）。
+13 页、表里 13 行，**全部在等裁定**。
 
 今晚从这张表里挪走的（`git mv` 到 `docs/handover/reviews/`，页首有 `裁定：` 一行）：
 
@@ -48,7 +50,9 @@
 - `questions-2026-10-30-jvp-tag-scope.md`——裁定 ① 已落地（`d1b3531b4`）；
 - `questions-2026-10-30-region-count-account.md`、`questions-2026-10-30-two-behaviour-diffs-left.md`——不是问题，是记录（页首已写明）。
 
-`questions-2026-10-30-probe-plan-kept-or-dropped.md` 这一行删掉了：那一页在树里已经不存在（`questions/` 与 `reviews/` 都没有），行留着只会让人去找一个不在的页。
+`questions-2026-10-30-probe-plan-kept-or-dropped.md` 这一行删掉了：那一页从来没进过主干——它是在
+`origin/lane-q` 的 `e08a53b1c` 上写的，那条车道还没合并上来，所以主干的 `questions/` 里没有这个文件，
+`reviews/` 里也没有（不是被删掉，也不是并进了别的页）。那条车道合并时，它会随页自己进表，那一行到时补回。
 
 `questions-2026-10-30-allocation-failure-in-the-faults-table.md` 已于 2026-10-30 答复：分配失败
 不算 `faults` 表该声明的故障（(b)，进程级界限），页已挪到 `docs/handover/reviews/`。
