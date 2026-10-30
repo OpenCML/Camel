@@ -294,12 +294,14 @@ bool isFoldable(const GraphDraft &draft, gc_node_ref_t id) {
 /// output and returned value wherever `id` was one of them. `replaceNode` re-points the value
 /// anchors it knows (output, return), but erasing the node clears the exit anchor, so all three
 /// are set again on the replacement.
-void replaceFoldResult(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement) {
+void replaceFoldResult(
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, gc_node_ref_t replacement) {
+    auto &draft          = transaction.edit();
     const bool wasExit   = draft.exitNode() == id;
     const bool wasOutput = draft.outputNode() == id;
     const bool wasReturn = draft.returnNode() == id;
     const auto kind      = draft.returnKind();
-    replaceNode(draft, id, replacement);
+    replaceNode(transaction, id, replacement);
     if (replacement == kInvalidNodeRef) {
         return;
     }
@@ -927,7 +929,9 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
 }
 
 /// Replaces an element access on a constant tuple or struct by the element's value.
-bool foldStaticAccess(GraphDraft &draft, gc_node_ref_t id, size_t constantBudget) {
+bool foldStaticAccess(
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, size_t constantBudget) {
+    auto &draft       = transaction.edit();
     const auto sources = draft.normInputsOf(id);
     if (sources.size() != 1) {
         return false;
@@ -962,14 +966,16 @@ bool foldStaticAccess(GraphDraft &draft, gc_node_ref_t id, size_t constantBudget
         return false; // the element is a value of its own, and one too large to hold
     }
     // The element is reachable from the constant it was read from, which the graph keeps.
-    replaceFoldResult(draft, id, draft.materializeStaticValue(value, result));
+    replaceFoldResult(
+        transaction, id, draft.materializeStaticValue(value, result));
     return true;
 }
 
 /// Replaces a FILL whose template and values are all constants by the object it builds.
 bool foldStaticFill(
-    GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots,
-    size_t constantBudget) {
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t id,
+    std::deque<camel::core::mm::RootHandle> &roots, size_t constantBudget) {
+    auto &draft = transaction.edit();
     const auto sources = draft.normInputsOf(id);
     type::Type *result = draft.header(id)->dataType;
     if (sources.size() != 1 || !result || !type::isGCTraced(result->code())) {
@@ -1006,8 +1012,7 @@ bool foldStaticFill(
     roots.emplace_back(camel::core::mm::autoSpace(), object, result, "std::opt::fold");
     camel::execute::writeRuntimeFillSlots(object, result, body, slots);
     replaceFoldResult(
-        draft,
-        id,
+        transaction, id,
         draft.materializeStaticValue(camel::core::rtdata::toSlot(object), result));
     return true;
 }
@@ -1021,8 +1026,9 @@ bool foldStaticFill(
  * graph, to fail with its own located error when the program runs.
  */
 bool foldStaticCast(
-    GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots,
-    size_t constantBudget) {
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t id,
+    std::deque<camel::core::mm::RootHandle> &roots, size_t constantBudget) {
+    auto &draft = transaction.edit();
     const auto sources = draft.normInputsOf(id);
     type::Type *target = draft.header(id)->dataType;
     if (sources.size() != 1 || !target || !draft.withInputsOf(id).empty()) {
@@ -1080,15 +1086,17 @@ bool foldStaticCast(
             "std::opt::fold");
     }
     const gc_node_ref_t data = draft.materializeStaticValue(result, target);
-    replaceFoldResult(draft, id, data);
+    replaceFoldResult(
+        transaction, id, data);
     return true;
 }
 
 /// Replaces a pure operator by the constant its argument types fix, through the operator's
 /// registered type folder. Returns false when there is none or the types do not fix the result.
 bool foldFromTypes(
-    GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots,
-    size_t constantBudget) {
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t id,
+    std::deque<camel::core::mm::RootHandle> &roots, size_t constantBudget) {
+    auto &draft = transaction.edit();
     const auto *folder     = camel::core::OperatorTable::instance().typeFolder(operIdOf(draft, id));
     type::Type *resultType = draft.header(id)->dataType;
     // The arguments as the operator's kernel reads them (with-arguments after the ordinary ones
@@ -1123,13 +1131,15 @@ bool foldFromTypes(
             resultType,
             "std::opt::fold");
     }
-    replaceFoldResult(draft, id, draft.materializeStaticValue(*result, resultType));
+    replaceFoldResult(
+        transaction, id, draft.materializeStaticValue(*result, resultType));
     return true;
 }
 
 size_t foldDraft(
-    GraphDraft &draft, camel::core::context::Context &ctx,
+    camel::runtime::GraphTransaction &transaction, camel::core::context::Context &ctx,
     std::deque<camel::core::mm::RootHandle> &roots, size_t constantBudget) {
+    auto &draft  = transaction.edit();
     size_t folded = 0;
     for (bool changed = true; changed;) {
         changed = false;
@@ -1148,10 +1158,11 @@ size_t foldDraft(
                 h && h->kind == GCNodeKind::Accs && isFoldable(draft, id)) {
                 const gc_node_ref_t value = camel::runtime::resolveTupleProjection(draft, id);
                 if (value != id) {
-                    replaceFoldResult(draft, id, value);
+                    replaceFoldResult(
+        transaction, id, value);
                     ++folded;
                     changed = true;
-                } else if (foldStaticAccess(draft, id, constantBudget)) {
+                } else if (foldStaticAccess(transaction, id, constantBudget)) {
                     ++folded;
                     changed = true;
                 }
@@ -1160,7 +1171,7 @@ size_t foldDraft(
             // A tuple, struct or array built from constants is a constant.
             if (const auto *h = draft.header(id);
                 h && h->kind == GCNodeKind::Fill && isFoldable(draft, id)) {
-                if (foldStaticFill(draft, id, roots, constantBudget)) {
+                if (foldStaticFill(transaction, id, roots, constantBudget)) {
                     ++folded;
                     changed = true;
                 }
@@ -1169,13 +1180,13 @@ size_t foldDraft(
             // A conversion of a constant is a constant, when the conversion succeeds.
             if (const auto *h = draft.header(id);
                 h && h->kind == GCNodeKind::Cast && isFoldable(draft, id)) {
-                if (foldStaticCast(draft, id, roots, constantBudget)) {
+                if (foldStaticCast(transaction, id, roots, constantBudget)) {
                     ++folded;
                     changed = true;
                 }
                 continue;
             }
-            if (!isPureOper(draft, id)) {
+            if (!isPureOper(transaction, id)) {
                 continue;
             }
             // A node that cannot be replaced (the head of a branch arm) is still evaluated, to
@@ -1189,7 +1200,7 @@ size_t foldDraft(
                 }
                 // Not all arguments are constants, but their types may fix the result (e.g. the
                 // shape of a tensor whose type carries it).
-                if (foldFromTypes(draft, id, roots, constantBudget)) {
+                if (foldFromTypes(transaction, id, roots, constantBudget)) {
                     ++folded;
                     changed = true;
                 }
@@ -1251,7 +1262,8 @@ size_t foldDraft(
                     "std::opt::fold");
             }
             const gc_node_ref_t value = draft.materializeStaticValue(result, resultType);
-            replaceFoldResult(draft, id, value);
+            replaceFoldResult(
+        transaction, id, value);
             ++folded;
             changed = true;
         }
@@ -1303,7 +1315,7 @@ size_t cseDraft(camel::runtime::GraphTransaction &transaction) {
         }
         auto [it, inserted] = constants.try_emplace({value->second, value->first, regions[id]}, id);
         if (!inserted && isReplaceable(draft, id) && !reaches(draft, id, it->second)) {
-            replaceNode(draft, id, it->second);
+            replaceNode(transaction, id, it->second);
             ++merged;
         }
     }
@@ -1334,7 +1346,7 @@ size_t cseDraft(camel::runtime::GraphTransaction &transaction) {
     // camel/runtime/draft.h; docs/design/effects/edges.cn.md 4.6 and 5.3). The gate keeps its place
     // and its wait either way, so this merges the computation and leaves the order it carried.
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-        if (!isPureOper(draft, id) || isWrittenInPlace(draft, id) || readsVariable(id)) {
+        if (!isPureOper(transaction, id) || isWrittenInPlace(draft, id) || readsVariable(id)) {
             continue;
         }
         const auto norm = draft.normInputsOf(id);
@@ -1369,7 +1381,7 @@ size_t cseDraft(camel::runtime::GraphTransaction &transaction) {
                     continue;
                 }
                 draft.setNodeAttrs(kept, *attrs);
-                replaceNode(draft, id, kept);
+                replaceNode(transaction, id, kept);
                 ++merged;
                 replaced = true;
                 break;
@@ -1428,7 +1440,7 @@ size_t dceDraft(camel::runtime::GraphTransaction &transaction, bool valuesOnly =
     for (bool changed = true; changed;) {
         changed = false;
         for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-            if (!valuesOnly && bypassValueGate(draft, id, gateEdgeBudget)) {
+            if (!valuesOnly && bypassValueGate(transaction, id, gateEdgeBudget)) {
                 ++removed;
                 changed = true;
                 continue;
@@ -1447,7 +1459,7 @@ size_t dceDraft(camel::runtime::GraphTransaction &transaction, bool valuesOnly =
                 (!draft.waitUsersOf(id).empty() || gateInputsSurvive(transaction, id));
             if ((isDeadWhenUnread(draft, id) || isDeadGate) && draft.normUsersOf(id).empty() &&
                 draft.withUsersOf(id).empty() && isReplaceable(draft, id)) {
-                replaceNode(draft, id, kInvalidNodeRef);
+                replaceNode(transaction, id, kInvalidNodeRef);
                 ++removed;
                 changed = true;
             }
@@ -1467,7 +1479,7 @@ ConstantFoldPass::apply(const camel::runtime::Program *program, std::ostream &) 
         "std::opt::fold",
         [&](camel::runtime::GraphTransaction &transaction) {
             auto &draft = transaction.edit();
-            return foldDraft(draft, *context_, roots, constantBudgetBytes_);
+            return foldDraft(transaction, *context_, roots, constantBudgetBytes_);
         },
         nullptr,
         nullptr,
@@ -1555,7 +1567,7 @@ const camel::runtime::Program *simplifyGraph(
             "std::opt::fold",
             [&](camel::runtime::GraphTransaction &transaction) {
                 auto &draft = transaction.edit();
-                return foldDraft(draft, *context, roots, config.constantBudgetBytes);
+                return foldDraft(transaction, *context, roots, config.constantBudgetBytes);
             },
             &folded,
             &memo,
