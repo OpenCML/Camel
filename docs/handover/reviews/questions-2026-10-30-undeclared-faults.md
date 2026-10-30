@@ -1,9 +1,16 @@
 # 没声明 `faults` 的算子：第三态，还是一张没写完的表
 
+裁定：**没声明按“可能出故障”读，第三态有意义、读数保守；但表要补完——已经核对过的族现在落地，
+其余按 reach 补。**（`fsh-dev` 上 `review: an undeclared fault list reads as may-fault and the table
+is to be completed; land the audited families now and the rest by reach`。）落地结果：
+`docs/handover/reports/faults-table-audit.md` 补了 17 行，并把“按 reach 补的规矩”写成那一节；
+`test/plans/feat/modules/operator_faults.plan.toml` 里 `declared_traits` 用 `tensor::sum` 钉住
+“没声明 ⇒ 读 1”这一条。
+
 算子的语义记录里没有 `faults` 这一项时，今天的读法是“可能出错”：`operator_table.cpp#OperatorTable::traitsOf`
 写的是 `mayFault = !facts.faults || !facts.faults->empty()`，`operator_table.h` 的注释也这么说
 （“No fault list: undeclared, may fault”）。问题不是这条读法对不对，而是：**“没声明”是一个要一直
-留着、有意义的状态，还是只是一张还没填完的表？**
+留着、有意义的状态，还是只是一张还没填完的表？** 下面的问题与选项保留原样，作为这条路的记录。
 
 ## 现象到符号
 
@@ -52,14 +59,8 @@
   其余按 ② 处理。**要多造**：这几条的 `[]` 与各自的用例；②的那一句话。**验收数**：这几族的图上
   `may_fault` 变 0，一处一条用例；tensor/math 与其余 800 个仍按第三态读。
 
-**默认建议：③**。裁定已经点名了 `len` 与非整数 `sum`，`pow` 家族和复数 `mul`/`neg` 的实现这轮也读过了，
-补这几条不需要新的判据；同时把 ② 的那句话写掉，否则第三态在 tensor/math 那一大片上仍然含义不明——
-而读数的地方不止一处。①的判据与工作量都太大，不适合在没有裁定的情况下由施工方决定；③既不动那 800 个，
-也不把有核对记录的先放着不用。
-
-在这一页裁定之前：tensor、math 与其余没有语义记录的算子一律按“可能出错”读，`len`、`pow` 的整数与
-浮点版本、复数 `mul`/`neg` 仍然不声明；这份清单记的是这个状态，不改它。
-
-**要作者答的一句**：没声明 `faults` 是第三态（没核对过，凡读数必须保守），还是一张没写完的表
-（实现不出错的都该补成 `[]`）？照 ③ 做的话，`len`、`pow` 的 i/l/f/d 与 c/z、复数 `mul`/`neg`
-这一批先补，其余等这句话。
+**已按裁定落地：①＋②＋③一起**。①那条读法没动（`traitsOf` 本来就是这么读的），③这批已经补完
+（`len` 三个 URI、`pow` 十个、复数 `mul`/`neg` 四个），②的那句话落在
+`docs/handover/reports/faults-table-audit.md` 的“按 reach 补的规矩”那一节里。裁定之前按 ② 读的
+限制只剩 tensor/math 与其余没有语义记录的算子：它们仍然是“没核对过 ⇒ 可能出错”，
+`declared_traits` 里 `tensor::sum` 那条就是钉这个状态的。
