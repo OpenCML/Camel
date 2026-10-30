@@ -1,0 +1,9 @@
+这一轮落 `stdlib/rulesets/jvp.cml`：`type Lift<T> = (T, Tangent<T>)`、`func lift`、私有 `zero_tangent`（float→`0.0`、f32→`f32(0.0)`、浮点张量→`zeros_like`、其余→`()`）。规则集的形状按裁定是"一个库模块，不加新语法"，模块名 `rulesets.jvp` 实测可用（点号名即子目录，安装后已在搜索路径上）。
+
+1. **A/B 的选法（今晚第三次"断言要红得具体"）**：把 `zero_tangent` 的 float 臂改成 `1.0` —— 输出变成 `3.0 / 1.0 / 7`，**只有那一条断言红**，另两条仍然对上；还原后 2/2 绿。**不用 `return (x, x)`**：那种改法整份程序不过类型检查，红成一片，看不出是哪条断言被守住。守断言要守到"红在那一行"。
+
+2. **闸门**（`-Plan all -Tier fast -Jobs 8`）：total 7862 / fail 0 / skip 6 / known 2。增量 +3 = 新用例 2 条 + runner 自动生成的 1 条 `poison:compile.rulesets:…`。skip 6 仍是那四条 GPU 用例（环境，另一条车道同样报）。
+
+3. **发现一处真缺口（未修，下一轮第一件）**：`scripts/stdlib-reference.mjs` 是按模块名逐条列出的，`rulesets.jvp` 不在里面 —— **新模块不进参考文档，它的 `@example` 就不被 `--verify-docs` 编译，文档例数 385 之外的代码等于没人跑过**。补上后要报例数变化（385 → N）并确认那几条 `@example` 真的被编译。这个缝对所有新模块都成立。
+
+4. **还剩**：prelude 里 `#op` + `#jvp(...)` 的标量声明 → 从 `stdlib/signatures/` 删重复条目（要报删了几条）→ 放开 `TagArgumentNotValue` 收 `rule` 名 → `modules/transforms` 建图搬家 → `reinterp`。**验收（标量 `jvp`）仍未跑通。**
