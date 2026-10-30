@@ -49,6 +49,21 @@ export type Error
 #op(':op/mem_blocks')
 export func std::mem::blocks(): { allocs: int, frees: int, live: int, bytes: int }
 
+// ---- operators ----
+//
+// The scalar arithmetic operators of the core, declared here so that the library can name them:
+// `a + b` is a call of the declaration below, and the two are one operator, not two.
+
+/// The sum of two 32-bit floats.
+/// @example f32(1.5) + f32(2.5)    // 4.0
+#op(':op/add_f')
+export func operator +(x: f32, y: f32): f32
+
+/// The sum of two 64-bit floats.
+/// @example 1.5 + 2.5    // 4.0
+#op(':op/add_d')
+export func operator +(x: float, y: float): float
+
 // ---- conversions ----
 //
 // Numeric types are never converted implicitly; these functions do it. There is one conversion
