@@ -93,10 +93,19 @@ std::string joined(const std::vector<std::string> &texts, size_t limit = 6) {
 
 ProfilePass::ProfilePass(
     const camel::core::context::context_ptr_t &ctx, camel::profile::ReportOptions options,
-    std::string jsonPath, int gcStats, bool typeStats, std::string effectTracePath)
+    std::string jsonPath, int gcStats, bool typeStats, std::string effectTracePath, bool opStats)
     : RuntimeGraphRewritePass(ctx), options_(options), jsonPath_(std::move(jsonPath)),
       gcStats_(gcStats), typeStats_(typeStats),
-      effectTracePath_(std::move(effectTracePath)) {}
+      effectTracePath_(std::move(effectTracePath)), opStats_(opStats) {
+    // The kernel-timing table is turned on here, in the constructor, not in apply(): a module's
+    // kernel map is built while the program compiles, which is before any pass is applied, so a
+    // reading that decides what the map holds has to be named before that. The driver constructs
+    // the passes when it parses the pipeline. It records nothing in the session: a run that wants
+    // only this table does not pay for the profiler.
+    if (opStats_) {
+        camel::profile::setKernelTiming(true);
+    }
+}
 
 const Program *ProfilePass::apply(const Program *program, std::ostream &os) {
     (void)os;

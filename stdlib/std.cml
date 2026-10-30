@@ -115,7 +115,10 @@ with <
     /// The type storage's statistics at exit.
     type_stats: bool = false,
     /// Append one JSON line per executed effectful operator to this file; null writes none.
-    effect_trace: string? = null
+    effect_trace: string? = null,
+    /// Print the kernel-timing table at exit: one row per operator with its calls, total time and
+    /// time per call, as the module that serves the kernels measures them.
+    opstats: bool = false
 >
 export func profile::<F>(f: F): F! when is_function::<F>()
 

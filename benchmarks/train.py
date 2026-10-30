@@ -68,7 +68,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -213,14 +213,18 @@ def camel_ksteps(
     threads: Optional[int] = None,
     log: Optional[Path] = None,
     extra_env: Optional[Dict[str, str]] = None,
+    extra_passes: Optional[Sequence[str]] = None,
 ) -> dict:
     """Runs the stateful loop and returns its per-step losses, the loss at the final parameters,
-    the final parameters and the raw output."""
+    the final parameters and the raw output. `extra_passes` are the pipeline's words before the
+    configuration's own passes (for example `std::profile opstats=true`, which asks for the
+    kernel-timing table the operator counts are read from)."""
     with tempfile.TemporaryDirectory() as tmp:
         env = {"CAMEL_BENCH_WARMUP": str(warmup), "CAMEL_BENCH_REPS": str(reps), "CAMEL_BENCH_PARAMS": tmp}
         if threads:
             env["CAMEL_BENCH_THREADS"] = str(threads)
-        stdout, stderr = run_camel_full(model, CAMEL_CONFIGS[config], {**env, **(extra_env or {})}, log=log)
+        passes = (*(extra_passes or ()), *CAMEL_CONFIGS[config])
+        stdout, stderr = run_camel_full(model, passes, {**env, **(extra_env or {})}, log=log)
         params = {p.stem: np.load(p) for p in Path(tmp).glob("*.npy")}
     found = re.search(r"^CAMEL_BENCH final_params_loss=(\S+)", stdout, re.M)
     return {

@@ -175,6 +175,10 @@ std::unordered_map<uint64_t, std::string> gLoopPositions;
 ReportOptions gOptions;
 std::string gJsonPath;
 
+/// The kernel-timing table (`std::profile opstats=true`). Read by a module's kernel dispatch, so
+/// it is an atomic the pass sets once before anything runs; the session itself is not started.
+std::atomic<bool> gKernelTiming{false};
+
 /// In-place updates, as the execution plan decided them and as the array answered at run time
 /// (docs/design/arrays-memory/README.cn.md 4.3.1): `gUpdatePlannedReuse` and
 /// `gUpdatePlannedByCount` are the marks of every plan built during the run, and
@@ -730,6 +734,10 @@ std::string jsonPath() {
     std::lock_guard lock(gMutex);
     return gJsonPath;
 }
+
+void setKernelTiming(bool on) { gKernelTiming.store(on, std::memory_order_relaxed); }
+
+bool kernelTiming() noexcept { return gKernelTiming.load(std::memory_order_relaxed); }
 
 double measurementOverheadNs() {
     measureOverhead();

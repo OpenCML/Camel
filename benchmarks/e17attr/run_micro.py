@@ -8,7 +8,7 @@ lenet_big, times one layer's forward and forward+backward kernels on both sides,
 interleaved per trial, 4 threads, fresh processes:
 
   camel side: e17attr/micro.cml (with_grad step of a one-layer function)
-  under std::macro std::nvm with CAMEL_TENSOR_OPSTATS=1; kernel us/call comes
+  under `std::profile opstats=true std::macro std::nvm`; kernel us/call comes
   from the op-stats table (one call site per op, no shape aggregation).
 
   torch side: this file's worker (fresh python -c process per measurement),
@@ -95,10 +95,20 @@ def camel_micro(shape, d: Path, warmup: int, reps: int, threads: int) -> dict:
             "CAMEL_BENCH_WARMUP": str(warmup),
             "CAMEL_BENCH_REPS": str(reps),
             "CAMEL_BENCH_THREADS": str(threads),
-            "CAMEL_TENSOR_OPSTATS": "1",
         }
     )
-    cmd = [str(camel_binary()), str(E17 / "micro.cml"), "std::macro", "std::nvm"]
+    # The kernel-timing table is a pass parameter; the profile session stays off (report=false,
+    # hints=false), so the run measures what it measured before.
+    cmd = [
+        str(camel_binary()),
+        str(E17 / "micro.cml"),
+        "std::profile",
+        "report=false",
+        "hints=false",
+        "opstats=true",
+        "std::macro",
+        "std::nvm",
+    ]
     proc = subprocess.run(cmd, cwd=E17, env=env, capture_output=True, text=True, timeout=600)
     if proc.returncode != 0:
         raise RuntimeError(f"micro {shape[0]} failed ({proc.returncode}):\n{proc.stdout}\n{proc.stderr}")

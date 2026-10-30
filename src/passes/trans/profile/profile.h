@@ -34,7 +34,8 @@ class ProfilePass : public RuntimeGraphRewritePass {
   public:
     ProfilePass(
         const camel::core::context::context_ptr_t &ctx, camel::profile::ReportOptions options,
-        std::string jsonPath, int gcStats, bool typeStats, std::string effectTracePath);
+        std::string jsonPath, int gcStats, bool typeStats, std::string effectTracePath,
+        bool opStats);
 
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
@@ -49,4 +50,5 @@ class ProfilePass : public RuntimeGraphRewritePass {
     int gcStats_;
     bool typeStats_;
     std::string effectTracePath_;
+    bool opStats_;
 };
