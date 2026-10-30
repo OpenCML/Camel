@@ -71,6 +71,12 @@ export tag transpose::<F>(rule: F) on func when is_function::<F>()
 /// function (`stdlib/signatures/autodiff.cml`).
 export tag vjp::<F>(rule: F) on func when is_function::<F>()
 
+/// The forward derivative of the function it is written on: calls of that function use `rule`
+/// instead of differentiating its body. The rule has the signature of the Jacobian-vector
+/// product of the function. The tag is written where `vjp` is and takes the same kind of
+/// argument.
+export tag jvp::<F>(rule: F) on func when is_function::<F>()
+
 /// Gives its argument unchanged and cuts the gradient at this point: a value passed through
 /// `stop_gradient` is a constant to `grad`. Any value is accepted, and the result has the
 /// argument's own type.
