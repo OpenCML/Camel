@@ -95,10 +95,14 @@
 | OPER   | 原子算子，节点内持有裸 `OperatorIndex*` |
 | GATE   | **数据与控制依赖的聚合门控节点**（无私有数据；见下节语义约定） |
 | DREF   | 临时解引用节点（图构造用，通常不加入图） |
+| LOOP   | 循环节点：条件与体是这张图的两个区域，端口是初始状态、各区域的结果与轮次计数；值与收集槽的读法见 `include/camel/runtime/loop.h` |
+| DEAD   | 改写删掉的节点留下的位置（无输入；遍历节点的消费者跳过它，编号不复用） |
 
-`SYNC` 曾是一个节点种类（旧编号 12），已从模型里删除：`GCNodeKind` 里那个编号空着（`include/camel/runtime/graph.h`），`sync` 块里语句的先后改由**同步边**表达（§3、§4.5）。
+`SYNC` 曾是一个节点种类（旧编号 12），已从模型里删除：`GCNodeKind` 里那个编号空着（`include/camel/runtime/graph.h`），`sync` 块里语句的先后改由**同步边**表达（§3、§4.5）。`LOOP` 是 15、`DEAD` 是 255（同文件）。
 
 除上表一行摘要外，**§4.1–§4.9** 按类型补充**角色、典型 `Norm`/`With`/`Ctrl` 连边约定**及与调度后端的关系；命名与 `GCNodeKind`（`include/camel/runtime/graph.h`）一致，编译期的节点是 `DraftNodeRef` 句柄，不再有节点子类（`include/camel/compile/gir/nodes.h` 今天只是一个弃用转发头）。
+
+`LOOP` 与 `DEAD` 在上表里有行、§4 里没有专节：`LOOP` 的端口与区域语义见 `docs/design/graph-model/README.cn.md` 3.5 的 `LOOP` 卡片与 `include/camel/runtime/loop.h`；`DEAD` 没有语义，只表示"这个位置曾有一个节点"。
 
 ### 4.1 `GATE`：数据-控制聚合门控
 
