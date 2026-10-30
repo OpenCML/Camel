@@ -772,8 +772,9 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
     {
         RuntimeGraphDraftSession session(context_, program);
         for (GCGraph *graph : session.program()->graphs()) {
-            auto &draft = session.edit(graph).edit();
-            retypeDraft(draft, types, options);
+            auto &transaction = session.edit(graph);
+            auto &draft       = transaction.edit();
+            retypeDraft(transaction, types, options);
 
             const auto known = familyOfGraph.find(graph->id());
             const Family *family =
