@@ -155,9 +155,42 @@ export func fuse::<F>(f: F): F! when is_function::<F>()
 // -- the same naming `shape` and `numel` use, and the one the ONNX lowering table and the
 // semantics declarations are keyed on. `stdlib/array.cml` imports these instead of declaring a
 // second spelling of each.
+/// The sum of each lane along one axis, accumulated in `f64` from `+0` in ascending order and
+/// rounded once into the element type. `keepdims` leaves the reduced axis as an extent of one.
+/// @pure
+/// @example sum_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [4.0, 6.0]
 export func sum_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..] when is_numeric::<T>()
+
+/// The mean of each lane along one axis: the sum and the count both in `f64`, one rounding into
+/// the element type. An empty axis is a fault.
+/// @pure
+/// @fails fault `InvalidArgument` when the axis has no element
+/// @example mean_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [2.0, 3.0]
 export func mean_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..] when is_numeric::<T>()
+
+/// The smallest element of each lane along one axis. An empty axis is a fault: a minimum over no
+/// element has no identity to return.
+/// @pure
+/// @fails fault `InvalidArgument` when the axis has no element
+/// @example min_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [1.0, 2.0]
 export func min_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..] when is_numeric::<T>()
+
+/// The largest element of each lane along one axis. An empty axis is a fault, as for `min_axis`.
+/// @pure
+/// @fails fault `InvalidArgument` when the axis has no element
+/// @example max_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [3.0, 4.0]
 export func max_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..] when is_numeric::<T>()
+
+/// The position of the largest element of each lane along one axis, an `int` index along that
+/// axis. A tie keeps the earlier position. An empty axis is a fault.
+/// @pure
+/// @fails fault `InvalidArgument` when the axis has no element
+/// @example argmax_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [1, 1]
 export func argmax_axis::<T>(xs: T[..], axis: int, keepdims: bool): int[] when is_numeric::<T>()
+
+/// The position of the smallest element of each lane along one axis; a tie keeps the earlier
+/// position. An empty axis is a fault.
+/// @pure
+/// @fails fault `InvalidArgument` when the axis has no element
+/// @example argmin_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [0, 0]
 export func argmin_axis::<T>(xs: T[..], axis: int, keepdims: bool): int[] when is_numeric::<T>()
