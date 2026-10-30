@@ -19,6 +19,7 @@
 
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/control.h"
+#include "camel/runtime/effect_liveness.h"
 
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/func.h"
@@ -1745,7 +1746,17 @@ DraftInlineResult inlineCallableInDraft(
         }
     }
     ctrlPreds                  = controlFrontier(transaction, ctrlPreds);
-    const bool hasExternalCtrl = !ctrlPreds.empty();
+    // What this splice asks about the call's place, asked the way every pass asks it
+    // (camel/runtime/effect_liveness.h): the predecessors are the wait the call carries today, and
+    // whether the call sat on a block's chain is a fact of its own. Read here, once, so that a
+    // later change moves the decision below without moving the reading.
+    EffectLivenessFacts callFacts;
+    callFacts.hasWaitEdge     = !ctrlPreds.empty();
+    callFacts.isSyncStatement = !draft.syncInputsOf(funcNodeId).empty();
+    // The body waits where the call waited: a wait of its own, or a place on a block's chain. The
+    // chain is the one that outlives the control edge (docs/design/effects/edges.cn.md 5.3), so it
+    // is asked as a fact of its own and not only as part of the predecessors read above.
+    const bool hasExternalCtrl = callFacts.hasWaitEdge || callFacts.isSyncStatement;
     // The statement(s) written after the call in its block: the call is replaced by the body's
     // result and the chain goes on from there, so 5.7's order edges have to reach exactly the nodes
     // that followed the call. Read now, because replacing the call's uses below is what makes them
@@ -1867,7 +1878,7 @@ DraftInlineResult inlineCallableInDraft(
             waitPreds.push_back(effect);
         }
     }
-    const bool bodyWaits = hasExternalCtrl || !unreadArgumentEffects.empty();
+    const bool bodyWaits = callFacts.hasWaitEdge || !unreadArgumentEffects.empty();
 
     // With control predecessors, the body reads each argument through a GATE that waits on
     // them. The gates order nothing the entry roots below do not order already (every
