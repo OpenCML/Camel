@@ -1,0 +1,51 @@
+# 诊断车道 h-flake：`UnusedPureResult` 的假阳性（body 按地址做键）
+
+合并提交 `4e51c0d41` 里的 `ca94c1759` 是本次唯一的改动。
+
+**结论一句话：形态 100% 可复现；旧读数不可归属。** `examples/models/naive-in-expert-out/train_step.cml`
+那次"10 次 1 次 `UnusedPureResult @ 169:30`"按不可归属处理（lane-gsb 已答复查不到该记录；我在这棵树
+上 Release 0/697、Debug 0/30，stdout/stderr 逐字节相同，`169:30` 一次也打不出来）。**不要读成"复现了那条红"**。
+
+## ① 根因：`bodyValueStatement_` 用裸地址做键，循环臂的键在对象死后悬空
+
+- 语句值没人用时是 `UnusedPureResult`；"块的值被丢弃"时的最后一句在 body 建完之后才判：
+  `visitBodyNode` 把 `(语句, 节点)` 存进 `bodyValueStatement_`，`rejectDiscardedValue` 再取回来
+  （`if` 无 `else` 的臂、`foreach` 的元素函数、声明为 `: void` 的体）。
+- 键是**对象地址** `const void *`。循环的 cond/body 是 `ArmBuild`，循环建完就死；只有分支臂在
+  `addArm` 里 `erase`（`builder_control.cpp:2502`），**循环臂的条目从不 erase**。
+- `ArmBuild` 一死，键就悬空；后建的臂常被分配器放到同一地址，若它**自己不写条目**（体为空、末句不产
+  节点），`rejectDiscardedValue` 读到的是**死体的最后一句**。报出来的位置是循环条件或循环体——那正是
+  循环自己取用的值，所以诊断是假的，行号还是别人的。
+- 命中与否由二进制的**堆布局**决定：同一二进制内恒定，换构建才换结果。这就是它在车道之间看起来"随机"的原因。
+
+## ② 修法：稳定身份
+
+- `BodyKey` 取代地址键（`builder.h`）：臂用 `ArmBuild::bodyId`（`nextBodyId_` 发放），函数体用
+  `GraphId`（程序内永不复用，`camel/runtime/graph_id.h`）。写点 `builder_control.cpp:4190`，四个读点
+  （`addArm`、`foreach` 元素函数、`: void` 体、`visitBodyNode`）全部换。
+- 同一形态一并处理：`droppedGraphs_`、`inferredExitGraphs_` 改存 `GraphId`；`droppedBodies_`（树内节点）
+  在 `buildModuleBody` 开头清空，锁住"上一个模块的节点地址被这个模块复用"的窗口。
+- 判定为**安全、留原样**并写进注释：`valueDropped` 的 `gct == unusedStatement_` 是同一次访问内的两个活指针
+  （同一棵树、同一块），不构成别名。
+
+## ③ A/B（读数原文）
+
+- 用例 `test/cases/compile/unused_values/loop_statements_used.cml`：`seed` 的循环体是 `s + b`，紧接着
+  `dropsWhatItGives` 的 `if flag then {}` 丢掉自己的值。
+- **未修树**：`[SUMMARY] total: 7, pass: 6, fail: 1`；payload
+  `{"line":13,"column":38,"name":"SemanticDiag::UnusedPureResult","code":"0x030000F0"}` = 循环体 `s + b`。
+- **修后**：`[SUMMARY] total: 7, pass: 7, fail: 0`；未改动的六个用例位置不变。
+- 合并后闸门：`smoke,test/plans/feat -Jobs 8` → `total: 7825, pass: 7821, fail: 0, skip: 2, known failures: 2`。
+
+## ④ 两条纪律
+
+1. **改动编译级原子**：改键类型，四个调用点不同时改就编不过，无法拆成"每处一跑闸门"的分步提交；闸门在整笔之后跑一次。
+2. **用例与修法同一笔提交**：否则 develop 会看到一条红闸门。那次红以三处留痕：payload（①②）、提交信息、
+   plan 的 `desc`，不留红提交。
+
+## ⑤ 另一条指纹（与本次不是同一件事，各自留着）
+
+`test/cases/linear/byref/var_capture_reference.cml`：本构建 `std::gir` 连跑 10 次得**3 种原文哈希**（4/2/4），
+472 行，**排序后同一个 sha**（`c42d27efb81e2d41`），退出码不变。机制是 DOT 打印时按**存储序**走
+`orderPredsOf`（`src/passes/trans/dot/graphviz.cpp:817`）——**打印顺序不稳**，诊断集合不变。
+与本次"指针做键 → 改变诊断集合与位置"是两条不同的指纹，两条都按"按指针/哈希遍历、按地址做身份"留档。
