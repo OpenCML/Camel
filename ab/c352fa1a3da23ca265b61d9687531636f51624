@@ -1,0 +1,57 @@
+# lane-jax2 返工：`vmap` 补上张量的前导轴（一条声明 + 一个类型函数 `RowsOf<T>`）
+
+合入 develop `f2f390116` 后推送，develop 头 **abc352fa1**。三笔：f8a1c525e（类型函数与 `vmap`）、
+79c749006（生成文档）、c66ae4855（给作者的问题页）；abc352fa1 是合入 develop 的合并提交
+（带进来两页新问题：tiles 12 与嵌套调用的值）。
+
+## ① 为什么是"一条声明 + 一个类型函数"，不是两条声明
+
+作者返工令：`vmap(f)` 作用在 `T[B, ..]` 上、结果是 `U[B, ..]`，与 `T[]` 同一个名字、按参数类型分派，
+先按逐行应用实现。`T[B, ..]` 这个拼法在 Camel 里写不出来，四条实测（都在 `lane-jax2` 上跑过）：
+
+- `vmap::<T, U>(f: (row: T[d]) => U): (xs: T[B, d]) => U[]` → `SemanticDiag::DimensionNameNotBound`
+  **0x03000141**，诊断原文：名字只出现在返回类型里是错误——调用方没有实参能说出它是多少。
+- `xs: T[]`（返工前的拼法）不匹配 `f32[4, 3]`：`ArgumentsMismatch`，`(xs: f32[3][]) => f32[]` 对不上。
+- `xs: R[..]` 拼出 `f32[3][..]`，同样不匹配 `f32[4, 3]`。
+- `xs: T[?]` 在函数类型参数里被归一成 `T[]`，于是实参写 `(row: f32[3])` 反而不匹配。
+
+"同一个名字写两条声明"也走不通：`when is_array::<T>()` 不参与重载择一，同一模块里两条 `vmap`
+直接报 `AmbiguousCall` **0x030000F4**（两条都被列为候选，条件根本没被用来筛）。所以只剩两条路：
+每种行宽各一条声明（无有限条数），或留开口维度让调用方写 `f32[]`（作者那条用例就写不成原样）。
+两条都不合令，于是按设计原则 **10.4／21** 那句"声明写不出的签名靠类型函数算出、真需要编译器的写成
+有名字、有文档、能复合的原语"，加一个类型函数——`vmap` 因此仍是**一条**声明，且秩 1／2／3 通用。
+
+## ② `RowsOf<T>` 是 `firstDimensionElement()` 的反函数
+
+`RowsOf<T>` = "第一维元素为 `T` 的数组类型"：`RowsOf<f32[3]>` 是 `f32[?, 3]`，`RowsOf<f32>` 是 `f32[?]`。
+它正是 `ArrayType::firstDimensionElement()`（`src/core/type/composite/array.cpp:359`，也就是 `x[i]`
+与 `for x in xs` 取出的那一维）的反函数，所以 `xs: RowsOf<T>` 上取 `xs[i]` 得到的正是 `T`，
+`vmap` 的体才写得出 `range(0, len(xs), 1)->map<(i: int): U => f(xs[i])>`——逐行应用，与将来的
+向量化同结果（向量化是第 6 条批处理规则集的事，不改接口）。
+
+落点：声明 `stdlib/types.cml:55`，实现 `src/core/type/typecall.cpp:34,110`（名字表 + 求值分支，
+非数组的 `T` 给 `T[?]`，开口秩保留）；`vmap` 的新签名在 `stdlib/array.cml:392`。
+名字我没有自己定死：问题页 `docs/handover/questions/questions-2026-10-30-rows-of-name.md`
+请作者裁"沿用还是改名"，默认建议沿用（它与 `ElementOf` 成反方向、`ElementOf<RowsOf<T>>` 就是 `T`）。
+
+## ③ A/B
+
+把 `vmap` 的声明改回 `(xs: T[]) => xs->map<f>`（返工前的形态）→ **恰好** `batching.tensor` 五条红
+（nvm / fvm / jit / prl / inline_jit 全红），其余 29 条全绿；改回即 34/34 全绿。
+这一条正好钉住"逐行分派在不在"：其余用例走秩 1，不受影响。
+
+## ④ 没做的一半
+
+多参数今天拒绝在**类型层**：`GenericArgumentsMismatch` **0x03000053**，同一句里既点名实参的
+`(a: float, b: float) => float pure`，也点名被调的 `f: (row: T) => U`，**没有"不支持"字样**。
+但"多个批处理参数"这句话要由诊断原样说出来，需要 `vmap` 自己的解析器（`grad` 那一套 computed
+signature，`ParamArgumentUnknown` 这类专用诊断都在 C++ 里），这一批没做，已记成待做项
+（`docs/handover/reviews/questions-2026-10-30-jax.md` §7 末条）。`in_axes` 照旧
+`ParamArgumentUnknown` **0x030001CD**，点名参数本身。
+
+## 读数与闸门
+
+`batching.tensor.{nvm,fvm,jit,prl,inline_jit}` PASS 90.76 / 90.36 / 95.59 / 102.81 / 86.25 ms；
+`batching.vmap.{…}` PASS 83.87 / 78.06 / 83.17 / 91.78 / 83.22 ms；`backends_agree` 全部一致。
+合入 develop 后跑 smoke + 全部 feat：**total 7849, pass 7845, fail 0, skip 2, known failures 2**；
+`stdlib-reference` 与 `check-doc-links` 各 0 失败；`--verify-docs` 385 个文档例子全编译（新例在内）。
