@@ -41,6 +41,8 @@
 #include "parser_impl.h"
 #include "camel/parse/ast/type_case_words.h"
 
+#include <optional>
+
 namespace camel::parse::syntax {
 
 bool ParserImpl::startsExpr(TK kind) const {
@@ -608,19 +610,115 @@ bool ParserImpl::lambdaAhead() const {
     return false;
 }
 
+namespace {
+
+/// The bracket that ends the group `open` opens, when `open` opens one in a type.
+std::optional<TK> bracketCloser(TK open) {
+    switch (open) {
+    case TK::LParen:
+        return TK::RParen;
+    case TK::LBracket:
+        return TK::RBracket;
+    case TK::LBrace:
+        return TK::RBrace;
+    case TK::LAngle:
+        return TK::Gt;
+    default:
+        return std::nullopt;
+    }
+}
+
+} // namespace
+
 /// shapeComp : typeExpr '{' staticForExpr '}'
-/// The shape comprehension reads a type first (`T`, `module::T`), then fills it from the
-/// rounds of a `static for` in the same block spelling as the other comprehensions. Only a name
-/// path is looked for ahead: a value followed by `{` is not a shape.
+/// The shape comprehension reads a type first, then fills it from the rounds of a `static for` in
+/// the same block spelling as the other comprehensions. The type is a whole type expression, as
+/// the rule says and as every type position reads one (design principles 5.6): a name path
+/// (`T`, `module::T`), a type call (`Tangent<(float, int)>`), a tuple or a struct type, an array
+/// of one of them, a mark over one of them, or `typeof` a name. A value followed by `{` is still
+/// not a shape.
+///
+/// The scan below only decides which of the two readings the `{` belongs to: `parseShapeComp`
+/// reads the head again with `parseType`. It walks the token array once, skipping the nesting of
+/// the brackets a type may hold, and stops at the first token no type holds, so that a statement
+/// written after the head is not read as part of it.
 bool ParserImpl::shapeCompAhead() const {
-    if (cur_ != TK::Identifier) {
+    if (!typeStartsAt(0)) {
         return false;
     }
-    uint32_t i = 1;
-    while (peek(i) == TK::ColonColon && peek(i + 1) == TK::Identifier) {
-        i += 2;
+    // `{ static for ... }` is the comprehension without a head: it takes the shape the generator
+    // walks, and a `{` there is a block of the comprehension, not a struct type in front of one.
+    if (cur_ == TK::LBrace && peek(1) == TK::KwStatic && peek(2) == TK::KwFor) {
+        return false;
     }
-    return peek(i) == TK::LBrace && peek(i + 1) == TK::KwStatic && peek(i + 2) == TK::KwFor;
+    const auto skip = [this](uint32_t &at) {
+        do {
+            ++at;
+        } while (isTrivia(toks_[at].kind));
+    };
+    std::vector<TK> closers;    // the brackets a group opened inside the type still has to close
+    std::optional<TK> previous; // the token before, at the type's own level
+    uint32_t at = pos_;
+    for (uint32_t step = 0; step < 1024; ++step) {
+        const TK kind = toks_[at].kind;
+        if (kind == TK::Eof || kind == TK::Semi) {
+            return false;
+        }
+        if (!closers.empty()) {
+            // Inside a bracket a type holds whatever that bracket holds (a dimension, a `const`
+            // argument, a field's tag, a parameter): only the brackets are read here.
+            if (kind == closers.back()) {
+                closers.pop_back();
+                previous = kind;
+            } else if (const auto closer = bracketCloser(kind); closer.has_value()) {
+                closers.push_back(*closer);
+            }
+            skip(at);
+            continue;
+        }
+        if (kind == TK::LBrace) {
+            // The brace of the comprehension, or the brace of a struct type written as the head.
+            uint32_t after = at;
+            skip(after);
+            if (toks_[after].kind == TK::KwStatic) {
+                skip(after);
+                if (toks_[after].kind == TK::KwFor) {
+                    return true;
+                }
+            }
+            closers.push_back(TK::RBrace);
+            previous = kind;
+            skip(at);
+            continue;
+        }
+        if (const auto closer = bracketCloser(kind); closer.has_value()) {
+            // `f(x)` is a call and `(x)` a parenthesised value where a type has no call: a `(`
+            // opens a type only where a type starts, never after a name or a closing bracket.
+            if (kind == TK::LParen &&
+                previous.has_value() &&
+                (*previous == TK::Identifier || *previous == TK::RParen ||
+                 *previous == TK::RBracket || *previous == TK::Gt)) {
+                return false;
+            }
+            if (kind == TK::LAngle && previous != TK::Identifier) {
+                return false;
+            }
+            closers.push_back(*closer);
+            previous = kind;
+            skip(at);
+            continue;
+        }
+        const bool nameHere =
+            kind == TK::Identifier &&
+            (!previous.has_value() || *previous == TK::ColonColon || *previous == TK::KwTypeof);
+        if (!nameHere && kind != TK::ColonColon && kind != TK::Question && kind != TK::Bang &&
+            kind != TK::DotDot) {
+            return false;
+        }
+        previous = kind;
+        skip(at);
+    }
+    return false;
 }
 
 void ParserImpl::parseShapeComp() {
