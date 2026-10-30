@@ -539,3 +539,28 @@ HANDLE_PROBE refused: InvalidArgument
 **三个数**：删掉的行数 **10**（净 `-10`）；**消失／换掉的参数 5 个**（五处 `const GraphDraft &draft` / `GraphDraft &draft` → 所有者）；**保留 18 个**。
 
 **四个数：62 / 504 / 3 / 4**（`509 → 504`）。
+
+## 29. `generic` 这一族：深度是 3，而且**入口的 `std::function` 类型是原子**
+
+**判据沿用 §28 那条**（可检查）：**"能不能在**调用点上**拿到事务——不是'谁是它的主人'。"**
+
+**这一族长什么样**：`generic` 里所有收草稿的函数，**调用点的第一个实参全都是同一个标识符 `draft`**——一个从入口一路传下来的名字。链条只有一条：
+
+| 层 | 谁 | 这一层手里有没有事务 |
+|---|---|---|
+| **0 入口** | `rewriteReachableGraphs`（`rewrite.cpp:457`） | **有**：`session.edit(g)` 就在调用点上 |
+| **1 回调** | `std::function<size_t(GraphDraft &)>`，六个 lambda（`generic.cpp:1465/1491/1503/1527/1543/1577`、`algebra.cpp:276`） | 没有，参数是草稿 |
+| **2 pass 函数** | `algebraDraft`、`cseDraft`、`dceDraft`、`reduceControlDependencies`、`reduceOrderDependencies`、`reduceDocumentOrdering` | 没有，同上 |
+| **3 叶子** | `operUriOf`、`operIdOf`、`isPureOper`、`isValueOnly`、`isDeadWhenUnread`、`isReplaceable`、`reaches`、`orderedSources`、`readsNoWrittenSlot`、`replaceNode`、`markSyncStatement`、`handOverSyncWait`、`gateInputsSurvive`、`staticValueOf`、`isFoldable`、`staticArgs`、`staticArmOf`、`branchArmNodes`、`joinBlockFragments`、`pruneBranch`、`foldStaticAccess`、`bypassValueGate`（22 个） | 没有，同上 |
+
+**"有多深"的答案：一个叶子要变成收事务，得改三处签名（0→1→2→3）**；**但真正的原子是第 0–1 层**：`std::function<size_t(GraphDraft &)>` 这个类型不在一个函数里，它决定**六个 lambda 全部**的写法。**所以这一族不能按"每片 5–8 个函数"切**——切法只能是**按分支**，每个分支都要付一次"入口 + 回调类型"的共同成本。
+
+| 分支 | 内容 | 叶子数 |
+|---|---|---|
+| **A. 代数** | `algebraDraft` + `operUriOf`、`isPureOper`、`replaceNode`、`markSyncStatement`、`handOverSyncWait`、`gateInputsSurvive` | 6 |
+| **B. 公共子式与死代码** | `cseDraft`、`dceDraft`、`foldStaticAccess` + `isValueOnly`、`isDeadWhenUnread`、`isReplaceable`、`reaches`、`orderedSources`、`readsNoWrittenSlot`、`pruneBranch`、`joinBlockFragments` | 8 |
+| **C. 顺序去重** | `reduceControlDependencies`、`reduceOrderDependencies`、`reduceDocumentOrdering`（在 `src/runtime/control.cpp`，被同样的 lambda 调用） | 0 |
+
+**A 与 `pullback` 那 18 行是同一族**：形状一样（草稿作为自由函数的参数一路传下来，入口处本来就有事务），**只是两处实例**——`generic` 的 `draft` 与 `pullback` 的 `draft`/`forward`/`pullback`。**表能看出它们是同一族：判据一样、链条一样、原子一样。**
+
+**三个数（这一片未动代码）：0 / 0 / 28（保留，等分批）**。**四个数：62 / 504 / 3 / 4（未变）。**
