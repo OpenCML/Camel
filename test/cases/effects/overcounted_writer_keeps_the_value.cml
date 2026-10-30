@@ -1,0 +1,21 @@
+/**
+ * A writer counted that the call does not reach. `counter` is written by `apply` itself, so every
+ * call through a function value in the program is counted as a possible write of it -- here the
+ * function value handed over only prints. Counting that writer costs the call having to run (the
+ * read after it takes the call as the variable's version): `called 3` is on the output for that
+ * reason. It does not change the value: the variable as it stands after the call still holds what
+ * the body wrote, and `1` is what is printed.
+ */
+
+var counter = 0
+
+func apply(f: (x: int) => void, v: int): int {
+    counter = 1
+    f(v)
+    return counter
+}
+
+func main(): int sync {
+    println(apply((y: int) => { println('called', y) }, 3))
+    return 0
+}

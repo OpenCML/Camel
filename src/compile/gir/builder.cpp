@@ -688,6 +688,45 @@ camel::source::origin_id_t Builder::declarationOf(const std::string &name) const
     return camel::source::kInvalidOriginId;
 }
 
+std::vector<std::pair<std::string, node_handle_t>> Builder::visibleVariables() const {
+    // The innermost binding of each name is the one a write here reaches: a `let` or a parameter
+    // that hides an outer variable of the same name makes the outer one invisible, so its name is
+    // taken even though it is no variable (and no writer of it is reachable from here).
+    std::vector<std::pair<std::string, node_handle_t>> visible;
+    std::unordered_set<std::string> bound;
+    for (node_scope_ptr_t scope = nodeScope_; scope; scope = scope->outer()) {
+        for (const auto &[name, node] : scope->self()) {
+            if (!bound.insert(name).second || !isVariable(node)) {
+                continue;
+            }
+            visible.emplace_back(name, node);
+        }
+    }
+    return visible;
+}
+
+node_handle_t Builder::capturedCellIn(DraftGraphBuilder *graph, node_handle_t origin) const {
+    const auto table = capturedValues_.find(graph);
+    if (table == capturedValues_.end()) {
+        return nullptr;
+    }
+    for (const CapturedValue &captured : table->second) {
+        if (captured.origin == origin) {
+            return captured.port;
+        }
+    }
+    return nullptr;
+}
+
+node_handle_t Builder::claimedWriterOf(DraftGraphBuilder *graph, node_handle_t origin) const {
+    const auto byGraph = claimedWriters_.find(graph);
+    if (byGraph == claimedWriters_.end()) {
+        return nullptr;
+    }
+    const auto found = byGraph->second.find(origin);
+    return found == byGraph->second.end() ? nullptr : found->second;
+}
+
 void Builder::recordResult(const GCT::node_ptr_t &gct, const std::any &res) {
     if (res.type() != typeid(node_handle_t)) {
         return;

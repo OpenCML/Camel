@@ -590,7 +590,97 @@ bool Builder::buildLibraryEntry(
     return buildFrom(*it->second, true);
 }
 
+void Builder::scanProgramWriters() {
+    programWriters_.clear();
+    // A group whose name starts with `__assn` is an assignment: `__assn__` for `=`, a compound form
+    // (`__assn_add__`) and `__assn_owned__` for a rebinding to an in-place operator (design
+    // principles 4.3). The variable it writes is the base of its target: the variable itself
+    // (`v = e`) or a path into its value (`v.f = e`, `v[i] = e`), which the GIR builder reads as a
+    // rebinding of the variable (pathAssignmentOf).
+    const auto isAssignment = [](const std::string &group) {
+        return group.rfind("__assn", 0) == 0;
+    };
+    // The variable a target names: the reference under the fields and indices the assignment
+    // writes through.
+    const auto baseOf = [](GCT::node_ptr_t target) -> GCT::node_ptr_t {
+        GCT::node_ptr_t node = target;
+        while (node != nullptr) {
+            if ((node->type() == GCT::NodeKind::ACCS || node->type() == GCT::NodeKind::SACC) &&
+                node->size() > 0) {
+                node = node->at(0);
+                continue;
+            }
+            // An index of a path is a call of `__idx__` over the value it indexes
+            // (pathAssignmentOf).
+            if (node->type() == GCT::NodeKind::LINK && node->size() == 3 &&
+                node->at(0) != nullptr && node->at(0)->type() == GCT::NodeKind::DREF &&
+                node->at(0)->name() == "__idx__") {
+                node = node->at(1);
+                continue;
+            }
+            break;
+        }
+        if (node != nullptr &&
+            (node->type() == GCT::NodeKind::DREF || node->type() == GCT::NodeKind::NREF)) {
+            return node;
+        }
+        return nullptr;
+    };
+    // The group a callee names, under the with-arguments a partial application binds
+    // (`LINK(WITH(DREF op, w...), ...)`, design principles 4.3).
+    const auto groupOf = [](GCT::node_ptr_t callee) -> const std::string * {
+        GCT::node_ptr_t node = callee;
+        if (node != nullptr && node->type() == GCT::NodeKind::WITH && node->size() > 0) {
+            node = node->at(0);
+        }
+        if (node == nullptr || node->type() != GCT::NodeKind::DREF) {
+            return nullptr;
+        }
+        return &node->name();
+    };
+    struct Pending {
+        GCT::node_ptr_t node = nullptr;
+        // The function the node is written in: the innermost FUNC, or null at a module's top
+        // level. A lambda or a nested function is a function of its own, which is what the set
+        // counts a writer as.
+        const GCT::Node *function = nullptr;
+    };
+    std::vector<Pending> pending;
+    for (const auto &[module, unit] : units_) {
+        if (unit->tree != nullptr && unit->tree->root() != nullptr) {
+            pending.push_back({unit->tree->root(), nullptr});
+        }
+    }
+    while (!pending.empty()) {
+        const Pending current = pending.back();
+        pending.pop_back();
+        const GCT::node_ptr_t node = current.node;
+        if (node == nullptr) {
+            continue;
+        }
+        const GCT::Node *function =
+            node->type() == GCT::NodeKind::FUNC ? node : current.function;
+        if (node->type() == GCT::NodeKind::LINK && node->size() >= 2) {
+            const std::string *group = groupOf(node->at(0));
+            if (group != nullptr && isAssignment(*group)) {
+                if (const GCT::node_ptr_t variable = baseOf(node->at(1)); variable != nullptr) {
+                    programWriters_[variable->name()].insert(function);
+                }
+            }
+        }
+        for (size_t i = 0; i < node->size(); ++i) {
+            pending.push_back({node->at(i), function});
+        }
+    }
+}
+
 bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
+
+    // The conservative writer set, made before any body is built (design principles 3.1, 3.5):
+    // which variables the program writes is in the construction trees, and a function whose module
+    // has not been built yet still has its body there. A call through a function value, whose
+    // callee this layer does not know, is a possible write of those variables (visitLinkNode).
+    scanProgramWriters();
 
     // The modules in the order of their imports: a module after those it imports, except
     // around a cycle of imports, where one of them comes first (its uses of the others build
