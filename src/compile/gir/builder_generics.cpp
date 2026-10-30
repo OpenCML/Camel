@@ -2468,10 +2468,24 @@ Type *Builder::inferTypeOf(const GCT::node_ptr_t &expression) {
     }
     // The graph `e` is built in: it stands inside the one the type is used in, so the names it
     // reads resolve where they are written, and it is nobody's subgraph, so nothing of it is
-    // reached from the program and nothing of it survives the inference.
+    // reached from the program.
+    //
+    // Three things make that graph safe to drop, and all three have to hold before this is
+    // changed. (1) Its diagnostics go to a sink of its own: nothing the inference says about `e`
+    // reaches the program's diagnostics, because `e` is checked where it is evaluated; the one
+    // report the caller gets is the replay further down, for an `e` written nowhere else.
+    // (2) The graph, the tail of the chain, `chainedNodes_` and the four scope pointers are
+    // restored as a whole afterwards (the guard below), so an inference that stops halfway
+    // leaves nothing of itself behind and the next statement is built as if it had not happened.
+    // (3) The entries this builder keeps keyed by a graph's address -- `capturedValues_`,
+    // `valueUsedGraphs_` -- are erased with the graph, and the graph is not registered as a body
+    // of the unit, so no pass over the built bodies ever judges it.
     const compile_graph_ptr_t scratch = createCompileGraph(
         context_->graphIds().allocate(), FunctionType::create(), nullptr, "__typeof__");
     scratch->setOuterGraph(currGraph_);
+    std::erase_if(
+        unit_->builtBodies,
+        [&](const compile_graph_ptr_t &known) { return known.get() == scratch.get(); });
 
     const compile_graph_ptr_t savedGraph       = currGraph_;
     const node_handle_t savedSynced            = lastSyncedNode_;

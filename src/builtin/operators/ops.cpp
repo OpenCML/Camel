@@ -222,6 +222,18 @@ slot_t __builtin__var_new__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return toSlot(cell);
 }
 
+slot_t __builtin__var_new_empty__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    // A cell with no value in it yet: its one slot stays the null slot `Tuple::create` filled it
+    // with until the write that fills it. The type the cell holds is the operator's one `with`
+    // argument, so the cell is a `var T` from the moment it is made, and every read of it has a
+    // type before it has a value (design principles 5.4: a generator's creation body evaluates
+    // nothing, so a local's value is written where its statement stands).
+    (void)with;
+    (void)norm;
+    (void)ctx;
+    return toSlot(Tuple::create(1, mm::autoSpace()));
+}
+
 slot_t __builtin__var_get__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
     // The value leaves the variable: from here on something else may refer to it, so what the
