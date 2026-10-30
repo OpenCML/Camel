@@ -298,3 +298,7 @@ b4 只有一个人口：`modules/graph/handle.h` 里那个 `const GraphDraft *dr
 **下一步第一件**：`modules/graph/read.cpp:165` 的 `nodeHandle(from, node)` —— 它现在从 `from->draft()` 取草稿，改成从 `from->transaction()` 取事务、用 `createInTransaction`；同一段里 `from->draft()` 的判空顺带改成 `from->transaction()` 判空。**这一步做完，`read.cpp` 的 `->draft()` 从 3 处降到 2 处。**
 
 **树能不能构建**：**能**（`-Plan compile` 全绿：1845/1845、`fail 0`，build 16.2 s）。三个数仍是 66 / 535 / 3 / 6——这一笔只加能力、不删拼写，账要等调用点搬过去才动。
+
+**从这一笔里出来的一条规矩：新代码里点名就算数，`auto` 是这一层的写法。**
+起因很小：`createInTransaction` 里先写成 `const camel::runtime::GraphDraft &draft = transaction.graph();`，账本当场判红（535 → 536），改成 `const auto &draft = …` 才绿。但它说明的不是"台账要省一格"，而是**这一层的类型名是借来的，写类型名等于宣告所有权**——写下 `GraphDraft` 的人，等于说"这份草稿归我管"。
+所以 b4／b6 从此按这一条判断：**谁在代码里写出 `GraphDraft`，谁就是在宣告自己持有它**；只想借来用一次的，写 `auto`，让所有者留在它该在的地方（事务、会话、存储自身）。
