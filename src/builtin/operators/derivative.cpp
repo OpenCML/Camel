@@ -14,6 +14,7 @@
 
 #include "camel/core/derivative.h"
 #include "camel/core/type/base.h"
+#include "camel/core/rtdata/half.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/utils/type.h"
 
@@ -48,6 +49,21 @@ struct F32 {
     static constexpr std::string_view div = ":op/div_f";
     static constexpr std::string_view neg = ":op/neg_f";
     static constexpr std::string_view pow = ":op/pow_f";
+};
+
+// The two narrow widths are floats too, and a float's tangent space is itself: a space asks them
+// only for an addition and a zero. The zero does not go through `toSlot`, which has no narrow
+// conversion; half precision has its own, `halfFromFloat`, and that is the one used here.
+struct BF16 {
+    static Type *type() { return Type::BFloat16(); }
+    static slot_t value(double v) { return halfFromFloat<BFloat16>(static_cast<float>(v)); }
+    static constexpr std::string_view add = ":op/add_bf";
+};
+
+struct F16 {
+    static Type *type() { return Type::Float16(); }
+    static slot_t value(double v) { return halfFromFloat<Float16>(static_cast<float>(v)); }
+    static constexpr std::string_view add = ":op/add_f6";
 };
 
 template <typename F>
