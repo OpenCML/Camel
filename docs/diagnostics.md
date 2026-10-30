@@ -10615,10 +10615,10 @@ Defunctionalization left {0} as written.
 **Help**
 
 ```text
-A function value is lowered by giving it the form the design asks for (one variant of the enum of its type, with the values it captured) and turning the call through it into a direct call of the function the tag names, or one match on the tag where only the run time knows it. A family this pass cannot see whole is left as it is, and the whole family stays on the old form: a value read by a node that is not a call (a higher-order operator such as map calls it inside the operator), a function that is called directly as well as held as a value, a call whose callee waits on something, or a type that is an argument of the entry function. Guessing one of them would change which effects run, so nothing is guessed.
+A function value is lowered by giving it the form the design asks for (one variant of the enum of its type, with the values it captured) and turning the call through it into a direct call of the function the tag names, or one match on the tag where only the run time knows it. A family this pass cannot see whole is left as it is, and the whole family stays on the old form: a value read by a node that is not a call (a higher-order operator such as map calls it inside the operator), a function that is called directly as well as held as a value, a call whose callee waits on something, a type that is an argument of the entry function, or a type that holds another family this pass leaves as written. Guessing one of them would change which effects run, so nothing is guessed.
 ```
 
-**Example** (`test/cases/opt/defun/native_map.cml`, run as `camel test/cases/opt/defun/native_map.cml std::defun_value std::stats std::nvm`)
+**Example** (`test/cases/opt/defun/native_map.cml`, run as `camel test/cases/opt/defun/native_map.cml std::defunctionalize std::stats std::nvm`)
 
 ```camel
 func apply_n(f: (x: int) => int, xs: int[]): int[] {
