@@ -317,3 +317,11 @@ b4 只有一个人口：`modules/graph/handle.h` 里那个 `const GraphDraft *dr
 - **B**：`draft_` 留在 handle 里，等 b6 随类型一起消失（第一片不做）。
 
 **状态**：这一轮没有改代码（树干净、构建绿）；已落地的是纯加能力的 `e467242e3`（`transaction_`／`createInTransaction`，无调用者）。**下一步要协调者定 A 还是 B**，不猜。
+
+## 17. 这条规矩在 b4 之外的第一次应验
+
+`src/passes/opt/defun/defunctionalize.cpp` 新增了一处写图的 helper：一个遍第一次自己造一张图（id 取 `Context::graphIds`、一个 `PORT`、直接调用、`exit`、`encode`／`adoptGraph`）。它先写成 `GraphDraft &draft = transaction->edit();`，账本当场红：files 66 → 67、references 535 → 536。
+
+helper 只借一次草稿、并不持有它，所以改成收模板参数（`template <class Draft>`，调用点传 `transaction->edit()`），三个数回到 **66 / 535 / 3 / 6**。
+
+这不是"台账省一格"的老故事，是 §15 的规矩第一次在 b4 之外被用到：**点名就是宣告所有权**，借的一次写 `auto` 或写模板，所有者留在事务那里。数没动，所以不记新行，只记这条用例——下一笔若有人在遍里直接写 `GraphDraft`，先问它是不是真的持有。
