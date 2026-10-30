@@ -316,6 +316,16 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
                     os << "TILES_OPERATOR_DECLARATION " << name << ' '
                        << (semantics ? "declared" : "undeclared") << " major="
                        << (semantics ? static_cast<long long>(semantics->key.major) : -1LL) << '\n';
+                    // Whether one operator is spelled two ways: the id a node carries, and the id
+                    // the same name interns under another module's prefix. Two ids means the
+                    // declaration registered for one of them is invisible to the other.
+                    const auto tensorSpelling =
+                        core::OperatorTable::instance().lookup("tensor:argmax_axis");
+                    os << "TILES_OPERATOR_ID " << name
+                       << " id=" << static_cast<long long>(oper) << " tensor_spelling="
+                       << (tensorSpelling ? std::to_string(static_cast<long long>(*tensorSpelling))
+                                          : std::string("none"))
+                       << '\n';
                     os << "TILES_REGION_REASON " << name << ' '
                        << (reason.empty() ? "eligible" : reason) << '\n';
                 }
