@@ -965,13 +965,6 @@ std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphDraft &draft);
 /// whether a node takes an order edge, which must not change as types are refined.
 bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byShape = false);
 
-/// The shared predicate of an order edge's user, asked of a draft node (`nodeTakesNoOrder` in
-/// camel/runtime/graph.h says the same of a frozen graph): the node may be arranged freely and does
-/// not stand for a region of its own, so an order edge ending on it says nothing. Every path that
-/// carries an order edge across a rewrite asks it before it writes one, so a writer never writes an
-/// edge the seal check would refuse.
-bool nodeTakesNoOrder(const GraphDraft &draft, gc_node_ref_t id);
-
 /// Whether a node carries the program's order instead of being a value a pass may compute for
 /// itself: a call runs a graph, a branch, join, sync or loop runs (or orders) what it holds, a gate
 /// waits -- for its control inputs, or for the sync edge the chain of a `sync` block is written as
