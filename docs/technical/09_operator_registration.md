@@ -247,6 +247,8 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
 | **工厂只注册一次** | 同一 protocol 重复调用 `registerExecutorFactory` 会触发断言；`load()` 应以 `loaded_` 判重。 |
 | **Executor 加载时机** | Executor 按需懒加载，首次查找该 protocol 的算子时才实例化。并行调度器可能从多个工作线程同时查找，`ExecutorManager` 内部已加锁。 |
 | **`load()` 的职责** | `load()` 中只做让声明能成立的事：Executor 工厂注册、性质登记、类型导出。`import` 不执行代码（设计原则 3.1），所以进程级资源（如 CPython 解释器）不在这里获取，而在第一次真正使用它的算子里（`modules/python/embed.h`；见 [50](50_pyplot_cpython_init.md)）。 |
+| **复合赋值的臂是兜底臂** | `a op= b` 在解析算子之前就被写成 `a = a op b`（设计原则 4.2，`Builder::compoundAssignmentByRebinding`），所以 `+=` 走的是普通算子的臂（`:op/add_bf` 这族），**不是**组里的 `:op/assn_*` 臂。`globals.cpp` 里 `CAMEL_HALF_ASSIGN` 展开的 10 条窄 `assn_*` 因此今天是语言层面不可达的兜底臂，与 f32 组同构；把它们当死代码删掉是错的（组的形状就是一算子一组、赋值算子也在其中），为它们写用例也是错的（没有写法能走到）。实测：删 `:op/assn_pow_bf` 不动任何用例，删 `:op/add_bf` 会让复合赋值的用例红。 |
+| **删执行臂会让声明模块加载失败** | 声明模块里的 `export func` 指名一个算子 URI，那个 URI 就必须被某个已加载模块实现，否则声明模块自己报 `SemanticDiag::NativeDeclarationNotLoaded`，**导入它的每个程序都编译不过**（不是"这一条调用不可用"）。实测：把 `{"op/f6tof", __f6tof__}` 从 `builtin.cpp` 的 opsMap 删掉，`stdlib/prelude.cml` 的 `f32(x: f16)` 声明立刻失效，`test/plans/feat/modules/stdlib_reduced.plan.toml` 整个计划 0 pass / 43 fail，全是 `Cannot import module 'prelude'`。所以"看起来没人用"的转换臂可能正是某条声明的支撑点，删之前先看 `--verify-ops` 会不会红。 |
 
 ## 7. 纯度声明的规则与检查
 
