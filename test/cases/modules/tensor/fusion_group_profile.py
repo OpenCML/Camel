@@ -83,6 +83,14 @@ GOLDEN_JSON = HERE / "fusion_group_none.profile.golden.json"
 # `declare rewrite`. That is the whole diff: the
 # operator rows, their counts, the block payloads, the byte counts, the hint, the loop's step
 # numbers and the values the program prints did not move, and the JSON golden is untouched.
+#
+# Re-recorded on 2026-10-31: the ten scalar rules left `stdlib/autodiff.cml` for the ruleset modules
+# that own them, so declaring `autodiff` no longer declares the modules the rule machinery lives in
+# (`graph` and `rewrite`) and the phase table loses their fourteen rows -- `resolve graph` through
+# `declare rewrite`. That is the whole diff: the operator rows, their counts, the block payloads,
+# the byte counts, the hint, the loop's step numbers and the values the program prints are the same,
+# and the JSON golden is untouched (it carries no phase table). A program that wants a ruleset's
+# rules imports the ruleset; `with_grad` is a macro of `autodiff` and does not.
 
 # The measured numbers a report prints: durations, shares and byte counts. Everything else in the
 # report is a count or a name, and must not change.

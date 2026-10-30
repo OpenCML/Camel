@@ -38,6 +38,7 @@
 #include <cctype>
 #include <format>
 #include <functional>
+#include <cstdlib>
 #include <iostream>
 #include <unordered_map>
 #include <unordered_set>
@@ -658,6 +659,8 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
         if (!unit->failed && unit->module &&
             unit->module->name().rfind("rulesets.", 0) == 0) {
             const std::string ruleset = unit->module->name();
+            const char *wanted        = std::getenv("CAMEL_RULESET_INDEX");
+            const bool showIndex      = (wanted != nullptr && *wanted != '\0') || unit->entry;
             std::vector<camel::parse::ast::RuleHead> rules =
                 camel::parse::ast::takeRuleHeads(ruleset);
             if (rules.empty()) {
@@ -685,9 +688,14 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                 }
                 // A probe of the index itself: it prints what the ruleset holds, so a reader can
                 // see the heads the transform will look up rather than trusting that they are
-                // there. It is not the transform: no rule is applied here.
-                std::cout << "RULESET " << ruleset << ' ' << rule.head << '/' << rule.arity << " -> "
-                          << rule.rule << '\n';
+                // there. It is not the transform: no rule is applied here, and it stays quiet
+                // unless it is asked, because a program that imports a ruleset is not a program
+                // that asked to have its rules listed: the entry module of a probe prints its own
+                // index, and `CAMEL_RULESET_INDEX` asks for every ruleset's.
+                if (showIndex) {
+                    std::cout << "RULESET " << ruleset << ' ' << rule.head << '/' << rule.arity
+                              << " -> " << rule.rule << '\n';
+                }
             }
             unit->failed = inError(unit);
         }
