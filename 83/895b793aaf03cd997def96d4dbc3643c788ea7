@@ -7,75 +7,72 @@ stdout 都是 `tiles: CUDA device 0 has no free memory for a context (CUDA_ERROR
 another process is using it`。四份 gpu 计划当时写的是 `cuda_devices = true`（"别动我的
 `CUDA_VISIBLE_DEVICES`"），于是每条测试都落到最低序号——共享主机上正好是别人占着的那张。同一族
 缺陷今晚还出现一次：`have-cuda-device.mjs` 问 `tiles:available()`，机器上任何一张卡在都答 true，
-于是"0 号卡被占"时它给假阴性、让测试 skip 掉而不是去空闲卡上跑。**两件事加起来是本轮最有价值的
-环境修正：被当成缺陷的，是环境。**
+于是"0 号卡被占"时它给假阴性、让测试 skip 而不是去空闲卡上跑。**被当成缺陷的，是环境。**
 
-改法是把这四份计划的 `[defaults]` 换成 `cuda_free_device = true`：runner 每条测试前挑一张低于
+改法：四份计划的 `[defaults]` 换成 `cuda_free_device = true`——runner 每条测试前挑一张低于
 1024 MiB 占用的卡，全被占就 skip 并把八张卡的 `used/total` 写进理由；测试自己写了
 `CUDA_VISIBLE_DEVICES` 的仍然赢（`envs` 写在 runner 之后）。改完 `145 = pass 142 / fail 0 /
-skip 3`；三次 skip 都只因那一刻八张卡全部越过 1024 MiB 门槛（卡 5 在 1109–1244 MiB 之间摆动）——
-gpu 层的每个数从此只反映代码，不反映邻居。
+skip 3`；三次 skip 都只因那一刻八张卡全越过门槛（卡 5 在 1109–1244 MiB 之间摆动）。
 
 二、G1–G3 的完成度（用 `git grep` 与既有用例量的）
 
-- **G1 5/5**：一个 `tiles.placement` 键、两个标签（`#gpu`/`#cpu` 都声明 `Func | Nodes | Module`
-  并共用同一个 key）、区域即作用域（函数体 region 0、块、Arm、LoopBody）、拒绝的三种因（不支持的
+- **G1 5/5**：一个 `tiles.placement` 键两个标签（`#gpu`/`#cpu` 都声明 `Func | Nodes | Module`、
+  共用同一个 key）、区域即作用域（函数体 region 0、块、Arm、LoopBody）、拒绝的三种因（不支持的
   算子、这个形状没有设备程序、无法确定放置）、主机效应边界（体内 `println` 照常执行、边界插一次
-  `download`）、派生图继承放置（`std::macro` 展开、缺前置遍时点名）。守它的用例：
-  `feat/modules/tiles` 里 30 条 `gpu_scope|placement|resident|device_startup`，`gpu/tiles` 里 26 条
+  `download`）、派生图继承放置（`std::macro` 展开、缺前置遍时点名）。守它的用例：`feat/modules/
+  tiles` 30 条 `gpu_scope|placement|resident|device_startup` 加 `gpu/tiles` 26 条
   `nofallback|grad_expand`。G1-1（标签写在模块顶）不属本车道；`module` 声明退役之后
   `Positions::Module` 已是**死拼写**（`#gpu` 还声明着它，没人能写）。
-- **G2 1/3**：G2-2 已落——`planResidency` 是唯一传输表，`planRegionTransfers` 已删，
+- **G2 1/3**：G2-2 已落——`planResidency` 是唯一传输表、`planRegionTransfers` 已删，
   `resident_loop_declares_its_blocks`/`resident_cpu_block` 守着。**G2-1 缺**：设备事实四个拼写
   （`mm::Block::device_`、`Block::device()`、`DeviceType`、DLPack 的 `device_type`/`device_id`），
   而 `device_` 的**写入者 0、`device()` 的调用者 0**——设备上的张量还不是能被看见的数组值。
   **G2-3 缺**：完成令牌四个拼写（`DeviceCompletion`、`Submission`、`SubmittedProgram::completion`、
-  `DeviceValue::completion`）全在 backend 内，**跨算子 0 处**；45 个 `DeviceValue` 站点没有一个在
+  `DeviceValue::completion`）全在 backend 内、**跨算子 0 处**；45 个 `DeviceValue` 站点没有一个在
   `modules/tiles` 之外。
 - **G3 1.5/3**：G3-1 的产物在（`tiles.compiled_scope` 目标事实、`compileTypes` 8 个调用点），但
   "同一作用域调两次只编一次"以前只有手读的数。本轮补上 `scope.one_compilation_for_two_calls`：一个
-  只调一次的程序与一个调两次的程序各跑一遍，读 `std::profile json=` 的 `device_work`，钉两条关系
+  只调一次与一个调两次的程序各跑一遍，读 `std::profile json=` 的 `device_work`，钉两条关系
   ——kernels 翻倍、compiles 不变；A/B 是拿掉
   `modules/tiles/src/cuda_backend.cpp#Backend::module` 的缓存查找，恰好红在"第二次调用又编译了"。
   绝对数仍不达标：**一个作用域今天算出 2 次编译**（目标是 1），这是 G3-1 的剩余项。**G3-2 缺**：
-  形状签名与落盘都是 **0 拼写 0 调用者**，只有进程内 `codegen_cache` 的 `planKey` schema 8。
+  形状签名与落盘 **0 拼写 0 调用者**，只有进程内 `codegen_cache` 的 `planKey` schema 8。
   **G3-3 只到高水位**：`peakLiveBytes`/`peakIdleBytes` 在算，但 **1 个策略拼写
   （`PoolPolicy::idleBytes`）+ 2 个默认值（设备 64 MiB、主机 16 MiB）、6 个计数只被 1 个 native
-  检查读**，自适应规则与 `std::profile` 的字段都还没有。
+  检查读**，自适应规则与 `std::profile` 字段都还没有。
 
 四件没做的（G2-1、G2-3、G3-2、G3-3）都**没有能用例守住的最小切片**，所以按"不定未决项"停手，
 没有为它们改任何语义。
 
 三、计划正文引用的那一页问题页不存在
 
-`docs/design/gpu/plan.cn.md` 的 G2-1、G2-2、G2-3、G3-1、G3-2、G3-3 六节各用"问题页第 1–7 条"
-指代未决项，而 `docs/handover/questions/` 下没有 GPU 页——设计稿在指着空气。这一条没有只留在
-note 里：`docs/handover/reports/gpu-g4-g5-plan.md` 新加了"引用说明"一节，按失效处理该引用，把五条
-未决项逐条列在"正文已写下的机制"旁边（缺的是入口不是内容），并把两处过期拼写
-（`compiled_region.cpp`/`tiles.compiled_region` → `compiled_scope.cpp`/`tiles.compiled_scope`）指出。
+`docs/design/gpu/plan.cn.md` 的六节各用"问题页第 1–7 条"指代未决项，而 `docs/handover/questions/`
+下没有 GPU 页——设计稿在指着空气。这一条没有只留在 note 里：G4–G5 那一页新加了"引用说明"一节，
+按失效处理该引用，把五条未决项列在"正文已写下的机制"旁边（缺的是入口不是内容），并指出两处过期
+拼写（`compiled_region.cpp`/`tiles.compiled_region` → `compiled_scope.cpp`/`tiles.compiled_scope`）。
 
 四、G4–G5 的计划
 
-同一页（45 行）。G4 是支持面：设备表今天 20 个算子名，训练步要的 `permute`/`transpose`/`reshape`、
-`softmax`、`gelu`、`layer_norm`、`cross_entropy`、`cast` 一个都不在表里。G5 是用上 7.3 已授予的
-`reassociate`/`contract`、融合与优化器多张量融合。每处验收都写成可观测的量（`device_work` 的
-`compiles`/`kernels`/`syncs`、`stages[].members`、`PoolStats` 的分配数与高水位、C2 的容差表），没有
-"实现了"这种话；依赖一列写明 G4/G5 各自踩在 G1 的段与放置传播、G2-1 的设备块、G3-1 的单元、G3-2
-的形状签名、G3-3 的池上界上。
+`docs/handover/reports/gpu-g4-g5-plan.md`（45 行）。G4 是支持面：设备表今天 20 个算子名，训练步要
+的 `permute`/`transpose`/`reshape`、`softmax`、`gelu`、`layer_norm`、`cross_entropy`、`cast` 一个
+都不在表里。G5 是用上 7.3 已授予的 `reassociate`/`contract`、融合与优化器多张量融合。每处验收都
+写成可观测的量（`device_work` 的 `compiles`/`kernels`/`syncs`、`stages[].members`、`PoolStats` 的
+分配数与高水位、C2 的容差表），没有"实现了"这种话；依赖一列写明 G4/G5 各自踩在 G1 的段与放置
+传播、G2-1 的设备块、G3-1 的单元、G3-2 的形状签名、G3-3 的池上界上。
 
 五、验收
 
 - `-Plan test/plans/gpu -Tier all -Jobs 8`：`145 = 142 / 0 / 3`。
-- 并了两次 `origin/develop`（`b78373540` 与之后的 `ff555eb0c`，都 `--no-ff`、无冲突；期间别人又推了
-  一次，按规矩重合并重跑，没有 force），最后一次 `-Plan all -Tier fast -Jobs 8`：
-  `total 7862 / pass 7853 / fail 0 / skip 7 / known 2`。skip 从基线的 6 变 7 是主机占用：那一刻又
-  多一张卡被别人占住，与代码无关——这类数只能按占用读。
+- 并了两次 `origin/develop`（`b78373540` 与之后的 `ff555eb0c`，都 `--no-ff`、无冲突；期间别人又推
+  了一次，按规矩重合并重跑，没有 force）。最后一次 `-Plan all -Tier fast -Jobs 8`：
+  `total 7862 / pass 7853 / fail 0 / skip 7 / known 2`。skip 从基线的 6 变 7 是主机占用——那一刻
+  又多一张卡被占，与代码无关；这类数只能按占用读。
 - stamp：revision `83895b793aaf03cd997def96d4dbc3643c788ea7`、clean（dirty 0）、fingerprint
   `a999c97d8402d16040939c85ede2ff5cc9cd17225d48c56a4d527565962cd276`（1218 文件）。
 - 新用例在慢层，不改 fast 总数；`skip_unless` 里的 0 是**子进程的 device 0**（runner 挑中的那张）。
 
 六、一个自己踩的坑
 
-note 草稿一度放在工作树根（`.note.md`）。camel-remote 会把未跟踪文件一并送到主机，于是
-`runner.backend_matrix` 红了：它的 plan-selection 普查要求每个被跟踪的文件都落在一条 `--changed`
-规则里，根目录多出来的 `.md` 谁都不认。写 note 与临时文件要放在树外。
+note 草稿一度放在工作树根（`.note.md`），camel-remote 把未跟踪文件一并送到主机，于是
+`runner.backend_matrix` 红了：它的 plan-selection 普查要求每个被跟踪文件都落在一条 `--changed`
+规则里，根目录多出来的 `.md` 谁都不认。note 与临时文件要写在树外。
