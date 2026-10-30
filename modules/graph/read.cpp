@@ -27,6 +27,7 @@
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_writes.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/graph_txn.h"
 #include "camel/runtime/program.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/assert.h"
@@ -133,7 +134,11 @@ struct NodeView {
 
 NodeView viewOf(const Handle *handle, const char *site) {
     NodeView view;
-    if (const GraphDraft *draft = handle->draft()) {
+    // A node is in the draft exactly when its handle names the transaction that owns the draft:
+    // there is no other way to be in a draft, and the handle keeps no draft pointer of its own.
+    const auto *transaction = handle->transaction();
+    const auto *draft = transaction != nullptr ? &transaction->graph() : nullptr;
+    if (draft != nullptr) {
         view.draft       = draft;
         view.ref         = handle->index();
         view.draftHeader = draft->header(view.ref);
@@ -159,10 +164,11 @@ Handle *nodeHandle(const Program *program, GraphId graph, uint32_t node) {
 }
 
 /// The handle of a node read from `from`: the same draft when `from` names one, otherwise the
-/// same program and graph.
+/// same program and graph. A draft is named by the transaction that owns it, so the handle made
+/// here names that transaction and nothing else.
 Handle *nodeHandle(const Handle *from, gc_node_ref_t node) {
-    if (const GraphDraft *draft = from->draft()) {
-        return Handle::createInDraft(*draft, node, mm::autoSpace());
+    if (const auto *transaction = from->transaction()) {
+        return Handle::createInTransaction(*transaction, node, mm::autoSpace());
     }
     return Handle::create(
         HandleKind::Node,
@@ -443,7 +449,7 @@ slot_t typeNameKernel(ArgsView &, ArgsView &norm, Context &) {
 /// call (and a rule's pattern cannot match one).
 slot_t calleeKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle = norm.get<Handle *>(0);
-    if (handle->draft() != nullptr) {
+    if (handle->transaction() != nullptr) {
         return NullSlot;
     }
     const GCNode &node   = nodeOfFrozen(handle, "graph.callee");

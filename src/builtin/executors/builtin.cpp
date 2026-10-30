@@ -166,6 +166,7 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 
         // variables
         {"var/new", __builtin__var_new__},
+        {"var/new/empty", __builtin__var_new_empty__},
         {"var/get", __builtin__var_get__},
         {"var/peek", __builtin__var_peek__},
         // `xs = xs->sort` as a statement (Builder::inPlaceRebindingOf); with :op/assn_owned
