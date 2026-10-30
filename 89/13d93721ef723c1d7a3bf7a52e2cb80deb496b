@@ -1,0 +1,69 @@
+tip=8913d9372 H-defun3 交付：一条遍、函数值带捕获与标签，老遍退役（闸门全绿）
+
+数字（除注明外全绿）
+- 闸门 `-Plan all -Tier fast -Jobs 8`：`total: 7873, pass: 7863, fail: 0, skip: 8, known failures: 2`，RUN_EXIT=0。
+  账：`7869（develop 当口）+ 4 条新 defun 用例 = 7873`。skip 由 7 变 8 是环境漂移，不是回归——
+  多出来的一条是 `device_region.nvm`（8 张卡全被别的进程占用，`memory.used >= 1024 MiB`，
+  它要独占一张卡所以跳过）；另外 6 条是 CUDA/tiles 设备前提、`examples.python.rules_basket`
+  （环境缺 `camel`/`numpy` 绑定）、`unicode.paths`（只在 Windows 跑）。
+- 本支 4 个提交：`f186d970a`（捕获 + 多变体分派与折叠）→ `b08dda47a`（退役老遍）→
+  `3147bf62e`（不新增 `GraphDraft` 参数、指针可解析）→ 合并提交 `61d5a4fd7` / `8913d9372`。
+  合并提交的树与 `3147bf62e` 逐字节相同（`git diff --stat 3147bf62e 61d5a4fd7` 空）。
+
+① 退役的两个数（逐字节）
+- `src/passes/opt/defun/defun.cpp` **369 行**、`defun.h` **17 行**删除，目录里只剩 `defun_value.{h,cpp}`。
+- `defunctionalize` 的拼写在**代码/测试/stdlib/文档 全为 0**，**调用者 0**：
+  `src/execute/pass.cpp` 的注册 1 处、`stdlib/std.cml` 的声明 1 处、`defun.plan.toml` 的 6 条期望、
+  `test/cases/opt/defun/four_backends.py` 的 `PASS` 常量 1 处，**全部撤净**。
+  `RuntimeDiag::DefunctionalizationIncomplete`（`0x04100017`）**保留**，改由新遍按被拒家族报出
+  类型与理由（见⑤），`diagnostics/registry.tsv` 的帮助文字与例子随之改写（例子自动换成了
+  `native_map.cml`，因为 `captured.cml` 现在能被降级、不再报）。
+
+② 故意不动的 2 处拼写
+- `docs/handover/questions/defun-tag-in-the-type.cn.md:42` 与 `:46`：那是当时的**问题记录**
+  （“老 `std::defunctionalize` 是否退役？”），裁定已落在 `docs/handover/reviews/`，
+  问题文件按“历史记录”保留，不改。全局 `git grep defunctionalize` 只剩这 2 行。
+
+③ 八组数（每条都在 `defun.plan.toml` 里断言，闸门内全绿）
+- `family_shape`（完整家族）：`types=3 values=3 calls=2 refused=0`
+- `higher_order`：`types=3 values=6 calls=5 refused=0`
+- `captured`：`types=2 values=3 calls=2 refused=0`（闭包也被降级）
+- `closure_dispatch`：`types=2 values=4 calls=2 refused=0`，`branches=1`
+- `fold_and_dispatch`：`types=2 values=2 calls=3 refused=0`，`branches=0`
+- `native_map`：`types=1 values=1 calls=1 refused=1`
+- 前六条用例里 `indirect_calls=0`（`native_map` 的闭包留着，但也没有通过函数值的调用）
+- 前六条用例里 `closures=0`（`native_map` 例外：`closures=1`，被拒家族整族保留）
+老遍在同一批用例上的读数对照：`higher_order` 曾留 4 条通过函数值的调用（都在“只作为函数值保留”
+的图里），`captured` 曾留 1 个闭包 + 1 条间接调用并报 2 条警告；新遍把两者都降到 0。
+
+④ 六条 A/B（每条都改回后重跑，记录的是“只红哪一条”）
+1. `leaveSignatures=false` → **只红** `defun.pipeline_order_free`（图签名被换成 enum，
+   `std::opt` 交给 `rules::simplify` 时没有实例）。
+2. 去掉 `raisePassWarning` → 红 `defun.native_map.kept` + `defun.four_backends`（都断言那条警告）。
+3. 关掉“值被非调用节点读取”的拒绝 → 红上面两条，读数是 `types=2 values=3 calls=1 refused=0`
+   （`map` 那一族被错误接受）。
+4. 拒绝多变体家族 → **只红** `defun.closure_dispatch.lowered`（`types=1 values=1 calls=1 refused=1`）。
+5. 每个变体都打标签 0 → 只红 `defun.closure_dispatch.lowered` 的**程序行**（`DISPATCH p=10 q=12 r=13`）。
+6. 拒绝捕获变体 → 红 `defun.closure_dispatch.lowered` + `defun.fold_and_dispatch.folded`
+   （统计 `direct_calls=4 indirect_calls=1 closures=2 branches=0`）。
+
+⑤ 诊断，以及路上顺手修的三个红
+- `0x04100017` 保留：新遍对被拒家族发一条警告
+  `Defunctionalization left '<type>' as written: <reason>`，理由就是 `DEFUN_VALUE refused='<type>'
+  reason='<why>'` 里那个；`stdlib/std.cml`、`docs/cli.md`、`docs/cli.cn.md`、`docs/diagnostics.md`
+  都按 enum 形式改写。
+- `runtime.graph_draft_ledger.never_rises`：三个 helper 的参数写成了 `GraphDraft`（`draftIdOf` /
+  `snapshotOf` / `parameterizeCaptures`），台账 `files 73 / references 562` 只准降 → 改成
+  对 session 给出的类型做模板，读数回到 `files 73 <= 73 references 562 <= 562 constructions 3
+  decode 12`，`[LEDGER] ok`。
+- `docs.links.citations`：遍和 CLI 页都指向 `docs/design/defunctionalization/README.cn.md`，
+  而该笔记不在本支 → 去掉路径指针（`498/498 symbol citation(s) verified`，`no broken links in
+  62 document(s)`）。
+- `catalog.failure_paths`：注册表被我用 `-NoNewline` 写回、**丢了末尾换行** → 证明用例在末尾追加
+  一行时读成 13 字段 → 补回换行。
+  **给人提个醒：`diagnostics/registry.tsv` 是逐字节比对的，末尾少一个换行也会红**，谁动注册表
+  都会撞上；`node scripts/diagnostics-catalog.mjs --write` 之后请确认文件仍以换行结尾。
+
+合流与推送
+- 第一次推被拒（期间 `6faf30209` 进了 develop：保留名问题 + lane-reinterp 合并），按规矩
+  **重合并、重跑闸门、不 force**：新头 `8913d9372`，上面那行闸门读数就是它这棵树上的。
