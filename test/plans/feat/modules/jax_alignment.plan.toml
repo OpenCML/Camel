@@ -30,7 +30,7 @@ desc = "Batching at a leading axis through `map`, over the values JAX's `vmap` d
 kind = "behavior"
 case = "../../../cases/modules/autodiff/jax_batching.cml"
 args = ["${case}", "${backend}"]
-backends = ["nvm", "fvm", "jit"]
+backends = ["nvm", "fvm", "jit", "prl", "inline_jit"]
 backends_agree = ["stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "jax_batching axis0\n[0.0, 1.0, 4.0]\njax_batching struct\n[2.0, 4.0, 6.0]\n"
@@ -44,7 +44,7 @@ desc = "The derivative surface JAX shares, on JAX's example: `f(x) = x * x` at 2
 kind = "behavior"
 case = "../../../cases/modules/autodiff/jax_derivatives.cml"
 args = ["${case}", "${backend}"]
-backends = ["nvm", "fvm", "jit"]
+backends = ["nvm", "fvm", "jit", "prl", "inline_jit"]
 backends_agree = ["stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "jax_derivatives\n4.0\n(4.0, 4.0)\n4.0\n"
@@ -58,7 +58,7 @@ desc = "`has_aux` splits a pair result: `f(x) = (x*x, 3x)` at 2 gives `grad(f, h
 kind = "behavior"
 case = "../../../cases/modules/autodiff/jax_has_aux.cml"
 args = ["${case}", "${backend}"]
-backends = ["nvm", "fvm", "jit"]
+backends = ["nvm", "fvm", "jit", "prl", "inline_jit"]
 backends_agree = ["stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "jax_has_aux\n(4.0, 6.0)\n((4.0, 6.0), 4.0)\n(4.0, 7)\n"
@@ -114,7 +114,7 @@ desc = "`vmap(f)` is the batched function as a value: `vmap((x) => x * x)([0.0, 
 kind = "behavior"
 case = "../../../cases/modules/autodiff/jax_vmap.cml"
 args = ["${case}", "${backend}"]
-backends = ["nvm", "fvm", "jit"]
+backends = ["nvm", "fvm", "jit", "prl", "inline_jit"]
 backends_agree = ["stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "jax_vmap\n[0.0, 1.0, 4.0]\n[1.0, 4.0]\n[2.0, 4.0, 6.0]\n"
