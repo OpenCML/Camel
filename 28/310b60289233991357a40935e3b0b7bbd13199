@@ -24,3 +24,7 @@
 ## 合并与闸门
 
 `git merge --no-ff origin/develop`（379d52ee2）无冲突；合并后重跑 `-Plan all -Tier fast -Jobs 8`：total 7802 / pass 7798 / fail 0 / skip 2 / known failures 2。新问题页按 `docs/handover/questions/README.md` 的命名改成 `questions-2026-10-30-gate-control-edge.md`（内容不变）。
+
+## 遗留（留给作者定口径，本车道不改）
+
+`docs/handover/questions/README.md` 要求页码叫 `questions-YYYY-MM-DD-<主题>.md`，可目录本身已经叫 `questions/`，文件名再带 `questions-` 前缀是重复；而 `reviews/` 下的同批页就叫 `questions-YYYY-MM-DD-*.md`（如 `questions-2026-10-30-jax.md`），两处规矩不一致。README 是别人的页面，本车道只按它守规矩、不改它；等作者定一次命名口径，把 `questions/` 与 `reviews/` 两处一次对齐。
