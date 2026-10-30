@@ -33,26 +33,31 @@ using camel::runtime::DraftEdgeKind;
 using camel::runtime::PortRole;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GCGraph;
-using camel::runtime::GraphDraft;
+using camel::runtime::GraphTransaction;
 using camel::runtime::kInvalidNodeRef;
 using camel::runtime::LoopView;
 using camel::runtime::RuntimeGraphDraftSession;
 
-gc_node_ref_t addAccs(GraphDraft &draft, gc_node_ref_t tuple, Type *type, uint32_t index) {
+gc_node_ref_t addAccs(
+    GraphTransaction &transaction, gc_node_ref_t tuple, Type *type, uint32_t index) {
+    auto &draft              = transaction.edit();
     const gc_node_ref_t node = draft.addAccsNode(type, index);
     draft.setNormInputs(node, std::span<const gc_node_ref_t>(&tuple, 1));
     return node;
 }
 
 gc_node_ref_t addOper(
-    GraphDraft &draft, Type *type, std::string_view uri, std::span<const gc_node_ref_t> inputs) {
+    GraphTransaction &transaction, Type *type, std::string_view uri,
+    std::span<const gc_node_ref_t> inputs) {
+    auto &draft              = transaction.edit();
     const gc_node_ref_t node = draft.addOperNode(type, nullptr, uri);
     draft.setNormInputs(node, inputs);
     return node;
 }
 
-gc_node_ref_t addInt(GraphDraft &draft, int64_t value) {
-    return draft.materializeStaticValue(camel::core::rtdata::toSlot<int64_t>(value), Type::Int64());
+gc_node_ref_t addInt(GraphTransaction &transaction, int64_t value) {
+    return transaction.edit().materializeStaticValue(
+        camel::core::rtdata::toSlot<int64_t>(value), Type::Int64());
 }
 
 /// The value of the LOOP node after the rewrite: (state…, array_0, array_1).
@@ -90,7 +95,8 @@ size_t rewriteGraph(RuntimeGraphDraftSession &session, GCGraph *owner, bool summ
         // every tape entry would show the final array: the tape needs the copying form, and the
         // body falls back to it. The program is legal either way, so this is a fallback and not
         // a refusal (design principles: an optimization never makes a legal program fail).
-        GraphDraft &body      = session.edit(owner);
+        auto &transaction = session.edit(owner);
+        auto &body        = transaction.edit();
         const gc_node_ref_t loopId = body.draftIdOfSourceRef(id);
         ASSERT(loopId != kInvalidNodeRef, "A LOOP node is not in its graph's draft.");
         const uint32_t bodyRegion = body.loopRegionOf(loopId, camel::runtime::GCRegionKind::LoopBody);
@@ -112,16 +118,17 @@ size_t rewriteGraph(RuntimeGraphDraftSession &session, GCGraph *owner, bool summ
         for (size_t j = 0; j < k; ++j) {
             values.push_back(
                 k == 1 ? produced
-                       : addAccs(body, produced, stateTypes[j], static_cast<uint32_t>(j)));
+                       : addAccs(transaction, produced, stateTypes[j], static_cast<uint32_t>(j)));
             slots.push_back(j);
         }
         const gc_node_ref_t slot0 = values.front();
         const gc_node_ref_t slot1 = increments
                                         ? addOper(
-                                              body,
+                                              transaction,
                                               Type::Int64(),
                                               ":op/add_l",
-                                              std::array<gc_node_ref_t, 2>{slot0, addInt(body, 1)})
+                                              std::array<gc_node_ref_t, 2>{
+                                                  slot0, addInt(transaction, 1)})
                                         : slot0;
         values.push_back(slot0);
         slots.push_back(k);
@@ -149,7 +156,7 @@ size_t rewriteGraph(RuntimeGraphDraftSession &session, GCGraph *owner, bool summ
         body.setWithInputs(loopId, results);
 
         // The node: its value is the state and the two tapes.
-        GraphDraft &ownerDraft      = body;
+        auto &ownerDraft      = body;
         const gc_node_ref_t draftId = loopId;
         Type *const valueType = collectedValueType(stateTypes, elem);
         ownerDraft.setNodeDataType(draftId, valueType);
@@ -170,18 +177,18 @@ size_t rewriteGraph(RuntimeGraphDraftSession &session, GCGraph *owner, bool summ
             const bool isReturn = ownerDraft.returnNode() == draftId;
 
             const auto *const valueTuple = static_cast<const TupleType *>(valueType);
-            const gc_node_ref_t state    = addAccs(ownerDraft, draftId, stateTypes.front(), 0);
+            const gc_node_ref_t state    = addAccs(transaction, draftId, stateTypes.front(), 0);
             const gc_node_ref_t tape0 =
-                addAccs(ownerDraft, draftId, valueTuple->typeAt(1), static_cast<uint32_t>(1));
+                addAccs(transaction, draftId, valueTuple->typeAt(1), static_cast<uint32_t>(1));
             const gc_node_ref_t tape1 =
-                addAccs(ownerDraft, draftId, valueTuple->typeAt(2), static_cast<uint32_t>(2));
+                addAccs(transaction, draftId, valueTuple->typeAt(2), static_cast<uint32_t>(2));
             const gc_node_ref_t len0 = addOper(
-                ownerDraft,
+                transaction,
                 Type::Int64(),
                 ":struct/len_arr",
                 std::span<const gc_node_ref_t>(&tape0, 1));
             const gc_node_ref_t len1 = addOper(
-                ownerDraft,
+                transaction,
                 Type::Int64(),
                 ":struct/len_arr",
                 std::span<const gc_node_ref_t>(&tape1, 1));

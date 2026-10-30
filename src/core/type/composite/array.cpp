@@ -545,6 +545,18 @@ slot_t ArrayType::castSlotFrom(slot_t value, Type *sourceType) const {
     ASSERT(sourceType != nullptr, "castSlotFrom source type is null");
     const CastSafety safety = castSafetyFrom(sourceType);
     if (safety == CastSafety::Safe) {
+        if (sourceType->code() != TypeCode::Array) {
+            // A value of the element type entering a slot of `T[..]` becomes the rank-zero array
+            // that holds it. Nothing about the value changes (design principles 5.4: a rank-zero
+            // array *is* the element -- the same value, the same printing, the same comparison),
+            // but the run now has a value with a rank to read, which is what a slot of an open
+            // rank needs. The compiler inserts this conversion where a value's type goes from `T`
+            // to `T[..]` (Builder::coerceTo); it is never the `as` of a program, which the builder
+            // answers by keeping the value as it is (Builder::visitCastNode).
+            auto *zero = Array::createRankZero(
+                camel::core::mm::autoSpace(), this, value);
+            return camel::core::rtdata::toSlot(zero);
+        }
         return value;
     }
     // What every other answer needs is a value of a type a value can have: `Unsafe` is answered
@@ -605,8 +617,16 @@ bool ArrayType::assignableFrom(Type *sourceType) const {
     if (this == sourceType) {
         return true;
     }
-    if (!sourceType || sourceType->code() != TypeCode::Array) {
+    if (!sourceType) {
         return false;
+    }
+    if (sourceType->code() != TypeCode::Array) {
+        // An open rank with no prefix takes rank zero too, and a rank-zero array is the element
+        // itself (design principles 5.4): a value of the element type is a value of `T[..]` --
+        // the same value, not an array holding it. `T[]` does not take it: it states one
+        // dimension, and the element type is rank zero, not rank one. Neither does an open rank
+        // with a prefix (`T[3, ..]`), whose prefix states dimensions the value must have.
+        return rankZeroType() != nullptr && resolved() && elemType_->assignableFrom(sourceType);
     }
     const auto *source = static_cast<const ArrayType *>(sourceType);
     // A type that still holds the `Ref` placeholder is not one a value can have (design

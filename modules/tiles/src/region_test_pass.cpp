@@ -18,6 +18,8 @@
 #include "tiles/internal/compiled_scope.h"
 #include "tiles/internal/graph_values.h"
 #include "tiles/internal/regions.h"
+#include "tiles/internal/scalar_expr.h"
+#include "tiles/internal/tree_transfer.h"
 #include "tiles/program.h"
 #include <algorithm>
 #include <bit>
@@ -189,7 +191,7 @@ void checkInvalidation(::Function *function, core::context::Context &context) {
         context.shared_from_this(),
         function->program(),
         function->graph());
-    auto &draft  = session.rootDraft();
+    auto &draft  = session.rootDraft().edit();
     bool changed = false;
     for (runtime::gc_node_ref_t id = 0; id < function->graph()->nodeCount(); ++id) {
         if (function->graph()->node(id)->kind == runtime::GCNodeKind::Oper) {
@@ -217,9 +219,43 @@ void checkInvalidation(::Function *function, core::context::Context &context) {
     // Leave the original graph's template usable by subsequent calls.
     (void)compileTypes(function, context.facts());
 }
+// What an i64 element does before a position can live on the device: eight bytes an element in a
+// plan, i64 values in the kernel expression layer (that layer carries i64 for loop-domain elements
+// and refuses i64 arithmetic on purpose -- an index is not accumulated), and a device leaf whose
+// bytes read back as the host tensor [3, 5] of its own element type. The leaf is resident storage,
+// so no device is touched; the env variable keeps the line out of the cases that assert their whole
+// output.
+std::string i64LeafReport() {
+    namespace td       = core::rtdata;
+    const size_t width = bytes(Node{.shape = {2}, .dtype = DType::I64});
+    if (width != 2 * sizeof(int64_t))
+        throw std::runtime_error("an i64 value is not eight bytes per element");
+    const auto third = kernel::ScalarExpr::literal(kernel::ScalarValue::i64(3)).evaluate({});
+    const auto fifth = kernel::ScalarExpr::literal(kernel::ScalarValue::i64(5)).evaluate({});
+    if (third.asI64() != 3 || fifth.asI64() != 5)
+        throw std::runtime_error("the kernel expression layer lost an i64 value");
+    const std::vector<int64_t> expected{third.asI64(), fifth.asI64()};
+    std::vector<std::byte> held(expected.size() * sizeof(int64_t));
+    std::memcpy(held.data(), expected.data(), held.size());
+    const auto resident = retainHostValue({2}, DType::I64, held);
+    const auto readback = downloadValue(*resident);
+    if (readback != held)
+        throw std::runtime_error("a resident i64 leaf did not read back the bytes it holds");
+    auto *int64x2 = tensor::ops::tensorOf(core::type::TypeCode::Int64, tensor::knownShape({2}));
+    auto *value   = td::fromSlot<tensor::Array *>(
+        hostLeafValue(int64x2, {2}, DType::I64, readback));
+    if (value->dtype() != core::type::TypeCode::Int64 || value->shapeVector() != Shape{2})
+        throw std::runtime_error("the readback did not answer in the leaf's element type");
+    std::vector<int64_t> host(expected.size());
+    std::memcpy(host.data(), value->rawData(), held.size());
+    if (host != expected)
+        throw std::runtime_error("the readback of an i64 leaf changed a position");
+    return "{\"device\":[3,5],\"host\":[3,5],\"equal\":true}";
+}
 class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
     operator_t run_;
     std::optional<SegmentDeviceOps> device_;
+    static inline bool i64Reported = false;
 
   public:
     RegionOutlineTestPass(
@@ -261,6 +297,95 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
                 (void)compileTypes(function, context_->facts());
         }
         os << "TILES_OUTLINED " << count << '\n';
+        // Why each operator node of the result is in no region, in the analysis's own words. The
+        // count alone says a scope was not planned; it does not say which node refused it.
+        if (std::getenv("CAMEL_TILES_TEST_REASONS")) {
+            runtime::RuntimeGraphDraftSession session(context_, result);
+            for (auto *graph : session.collectReachableRuntimeGraphs()) {
+                const auto analysis = analyzeRegions(*result, *graph, context_->facts(), nullptr);
+                for (size_t id = 0; id < graph->nodeCount(); ++id) {
+                    if (graph->node(id)->kind != runtime::GCNodeKind::Oper)
+                        continue;
+                    const auto &oper = graph->nodeBodyAs<runtime::GCOperBody>(id)->oper;
+                    const std::string name(core::OperatorTable::instance().uri(oper));
+                    const auto &reason = analysis.exclusions[id];
+                    // The two halves of `!decl || major != 1` reported apart: no declaration and
+                    // the wrong contract version are different repairs, and a reason string that
+                    // says only "semantic_declaration" leaves that unsaid.
+                    const auto *semantics = core::OperatorTable::instance().semantics(oper);
+                    os << "TILES_OPERATOR_DECLARATION " << name << ' '
+                       << (semantics ? "declared" : "undeclared") << " major="
+                       << (semantics ? static_cast<long long>(semantics->key.major) : -1LL) << '\n';
+                    // Whether one operator is spelled two ways: the id a node carries, and the id
+                    // the same name interns under another module's prefix. Two ids means the
+                    // declaration registered for one of them is invisible to the other.
+                    const auto tensorSpelling =
+                        core::OperatorTable::instance().lookup("tensor:argmax_axis");
+                    os << "TILES_OPERATOR_ID " << name
+                       << " id=" << static_cast<long long>(oper) << " tensor_spelling="
+                       << (tensorSpelling ? std::to_string(static_cast<long long>(*tensorSpelling))
+                                          : std::string("none"))
+                       << '\n';
+                    os << "TILES_REGION_REASON " << name << ' '
+                       << (reason.empty() ? "eligible" : reason) << '\n';
+                }
+            }
+        }
+        if (std::getenv("CAMEL_TILES_TEST_I64") && !i64Reported) {
+            i64Reported = true;
+            os << "TILES_I64 " << i64LeafReport() << '\n';
+        }
+        // The operators the gap ledger calls the B group, read once: the URI, the id it interns to,
+        // whether a semantic declaration is attached and its version. The ledger classifies them by
+        // reading the declaration tables in source; this prints the same answer from the table the
+        // region analysis actually asks.
+        if (std::getenv("CAMEL_TILES_TEST_DECLARATIONS")) {
+            static const char *const grouped[] = {
+                "nn:sgd",
+                "nn:adam",
+                "nn:adam_state",
+                "nn:softmax_cross_entropy_labels",
+                "nn:softmax_cross_entropy_labels_grad",
+                "tensor:gelu",
+                "tensor:gelu_grad",
+                "tensor:layer_norm",
+                "tensor:layer_norm_grad",
+                "tensor:softmax",
+                "tensor:softmax_grad",
+                "tensor:permute_inverse",
+                "tensor:matmul_grad_lhs",
+                "tensor:matmul_grad_rhs",
+                "tensor:zeros_like",
+                "tensor:cast_like",
+                "tensor:gt",
+                "tensor:strict_eq",
+                "tensor:take",
+                "tensor:numel",
+                "tensor:shape"};
+            std::string row;
+            size_t pending = 0;
+            size_t batch   = 1;
+            for (const char *uri : grouped) {
+                const auto found = core::OperatorTable::instance().lookup(uri);
+                const auto *semantics =
+                    found ? core::OperatorTable::instance().semantics(*found) : nullptr;
+                // Four per line: the runner's failure dump truncates a long line, and a table split
+                // over twenty-one lines loses its head. Six short lines survive whole.
+                row += std::string(uri) + ' ' +
+                       (found ? std::to_string(static_cast<long long>(*found))
+                              : std::string("none")) +
+                       ' ' + (semantics ? "declared" : "undeclared") + " major=" +
+                       (semantics ? std::to_string(static_cast<long long>(semantics->key.major))
+                                  : std::string("-1")) +
+                       "; ";
+                if (++pending == 4 || uri == grouped[std::size(grouped) - 1]) {
+                    os << "TILES_DECLARATIONS_" << batch << ' ' << row << '\n';
+                    row.clear();
+                    pending = 0;
+                    ++batch;
+                }
+            }
+        }
         return result;
     }
 };

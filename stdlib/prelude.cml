@@ -23,7 +23,7 @@
  * names (stdlib-conventions.cn.md, section 4).
  */
 
-import { ElementOf, WithElement, is_array, is_map, is_set, is_complex, is_numeric, is_real, is_same, is_string } from types
+import { ElementOf, WithElement, is_array, is_map, is_set, is_complex, is_numeric, is_real, is_same, is_string, is_function } from types
 
 // An array of numbers or booleans (the element types an array stores compactly): the argument the
 // elementwise conversions below take.
@@ -48,6 +48,56 @@ export type Error
 /// @example std::mem::blocks().live    // 0 when no block is alive
 #op(':op/mem_blocks')
 export func std::mem::blocks(): { allocs: int, frees: int, live: int, bytes: int }
+
+// ---- the tags of a derivative rule ----
+//
+// A tag is written on a function and holds a rule for it: `#jvp(rule)` is the rule forward mode
+// uses, `#transpose(rule)` the one the transpose uses, `#vjp(rule)` the custom derivative. The
+// rule has the signature of the transformation (`stdlib/signatures/autodiff.cml`), and the tags
+// are declared here, beside the operators the library writes them on, because a tag is a fact
+// about any function and every program reads this file.
+
+/// The rule of the function it is written on for forward mode: along the tangents of the
+/// function's arguments it gives the tangent of its result. The rule has the signature of the
+/// forward derivative of the function (`stdlib/signatures/autodiff.cml`). The tag is written
+/// where `vjp` is and takes the same kind of argument.
+export tag jvp::<F>(rule: F) on func when is_function::<F>()
+
+/// The rule of the function it is written on for the transpose, when the function is linear in
+/// its arguments: from the cotangent of the result it gives the cotangents of the arguments. The
+/// values the function was given are known when the transpose runs, so a rule is written only for
+/// the arguments that carry the data.
+export tag transpose::<F>(rule: F) on func when is_function::<F>()
+
+/// The custom derivative of the function it is written on: calls of that function use `rule`
+/// instead of differentiating its body. The rule has the signature of the pullback of the
+/// function (`stdlib/signatures/autodiff.cml`).
+export tag vjp::<F>(rule: F) on func when is_function::<F>()
+
+// ---- operators ----
+//
+// The scalar arithmetic operators of the core, declared here so that the library can name them:
+// `a + b` is a call of the declaration below, and the two are one operator, not two.
+
+/// The sum of two 32-bit floats.
+/// @example f32(1.5) + f32(2.5)    // 4.0
+#op(':op/add_f')
+export func operator +(x: f32, y: f32): f32
+
+/// The sum of two 64-bit floats.
+/// @example 1.5 + 2.5    // 4.0
+#op(':op/add_d')
+export func operator +(x: float, y: float): float
+
+/// The difference of two 32-bit floats.
+/// @example f32(3.5) - f32(1.25)    // 2.25
+#op(':op/sub_f')
+export func operator -(x: f32, y: f32): f32
+
+/// The difference of two 64-bit floats.
+/// @example 3.5 - 1.25    // 2.25
+#op(':op/sub_d')
+export func operator -(x: float, y: float): float
 
 // ---- conversions ----
 //
@@ -480,7 +530,10 @@ export func append::<T>(xs: T[]): T[]
 // work. They are declared with effects because what a
 // call does is what f does.
 
-/// f applied to every element; the calls have no order among them.
+/// f applied to every element; the calls have no order among them. One call batches one array,
+/// along the one axis that array has, and the result is by position: a function of one value
+/// becomes a function of an array of them, and of nothing else. Batching a second array, choosing
+/// or naming the axis, and applying the batch where no array is written yet are not this function.
 /// @example [1, 2, 3]->map<(x) => x * 2>    // [2, 4, 6]
 #op(':mark/map_arr')
 with <f: (item: T) => U>

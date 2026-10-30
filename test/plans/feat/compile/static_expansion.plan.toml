@@ -932,6 +932,39 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
+name = "type_expression_positions"
+desc = "Every type position takes a type expression, not only a type name (design principles 5.6): one program writes the computed type `Tangent<(float, ...)>` in each of them -- after `:` in a parameter, in a let and in a struct type, after `as`, inside `::<...>` at a call, as the `match type` subject, as a `case` pattern, after `fields`, inside a type function's angle brackets, and after `type X =`. A position later narrowed back to a name alone fails here instead of in the program that needed it."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/type_expression_positions.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "ok\n(1.0, ())\n(1.0, ())\ntrue\nfloat and unit\ntwo floats\n{ t: (1.0, 2.0), n: 3 }\n(0.0, 0.0)\n(4.0, 5.0)\ntrue\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_head_type_expression"
+desc = "The head of a same-shape comprehension is a type position and takes a type expression: `Tangent<(float, int)> { ... }` names the computed type `(float, ())`, gives the kind and the field names, and each member takes the type of that round's value. The same head on two floats gives two floats. Before this change only a name path was looked for ahead, so the head of `Tangent<...> { ... }` was read as a value and the program did not build."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/literal_head_type_expression.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "true\n(0.0, ())\n(0.0, 0.0)\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_head_type_variable"
+desc = "The head of a same-shape comprehension may be a type computed from a type variable: `Tangent<T> { static for n, _ in fields T => zeros(x.[n]) }` is the same shape as the `T` the generator walks, so one `case struct | tuple` branch gives the tangent space of a tuple and of a struct alike. Before this change the head did not parse."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/literal_head_type_variable.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "(0.0, ())\n{ a: 0.0, b: 0.0 }\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "typeof_in_fields_and_match_type"
 desc = "`typeof e` gives the type of the value `e`; `fields typeof(pair_of(t))` walks the two fields and `match type typeof(pair_of(t))` selects the tuple case, inside a generic function whose pair type has no name."
 kind = "behavior"
@@ -966,13 +999,35 @@ timeout_ms = 8000
 
 [[tests]]
 name = "same_shape_comprehension_mismatch"
-desc = "The shape being filled and the type the generator walks must be the same type."
+desc = "The shape being filled and the type the generator walks must have as many members as it states: `A = {a: int}` over `B = {b: int, c: int}` fills one member where the walked type has two. The names on their own are `same_shape_comprehension_name_mismatch`, and the member types are not part of the shape (`same_shape_comprehension_other_types`)."
 kind = "negative"
 case = "../../../cases/compile/static_expansion/shape_mismatch.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::SameShapeComprehensionMismatch"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "same_shape_comprehension_name_mismatch"
+desc = "The shape is the field names, not only their number (design principles 5.5): `A = {a: int}` over `B = {b: int}` agrees on the kind, the count and the member types, and is refused because `b` is not the name `A` states -- the head names the fields."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/shape_name_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::SameShapeComprehensionMismatch"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "same_shape_comprehension_other_types"
+desc = "The same shape is the same field names and count, not the same member types (design principles 5.5): `A = {a: int}` over `B = {a: f32}` is accepted, and the field's type is the round's value type, not the head's -- `y.a` reads as a `float` and holds 1.5, which the head's `int` would have refused, so the head gives the names and the rounds give the types."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/shape_same_fields_other_types.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "2.5\n{ a: 1.5 }\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
@@ -1153,3 +1208,69 @@ expect_diagnostic_column = 5
 expect_output_contains = ["The 'match type' bodies are nested 256 deep."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "typeof.inferred_not_evaluated"
+desc = "`typeof e` reads the type `e` would have and does not evaluate it: a value written where the type is written is not a statement of the body, so neither `mark('inferred')` in a declaration's type nor `mark('cast')` in a cast's is called, and what they would have printed never appears. The inferred type is the one the value is then taken as."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/typeof_inferred_not_evaluated.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "10\n"
+expect_output_not_contains = ["inferred", "cast", "[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "typeof.no_node_of_its_expression"
+desc = "The structural half of the same reading: the graph of `main` holds no call to `mark` at all, so the expression written inside a `typeof` left nothing behind -- no node of the graph the type is used in, and no part of its chain."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/typeof_inferred_not_evaluated.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const doc = JSON.parse(input.normalized.stdout)
+const main = doc.graphs.find((g) => g.name === 'main')
+assert(main, `main is missing from ${doc.graphs.map((g) => g.name).join(', ')}`)
+const calls = main.nodes.filter((n) => (n.outputType || '').includes('=>'))
+assert(calls.length === 0, `main holds ${calls.length} function-typed node(s): ${JSON.stringify(calls.map((n) => n.outputType))}`)
+assert(doc.graphs.some((g) => g.name === 'mark'), 'mark is not declared')
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "typeof.declaration_type"
+desc = "A declaration written with `typeof e` is checked against the type `e` has: `text()` is a `string`, so a `7` written there is refused against `string`. The reading names `string` and not `typeof`, which is what a declaration that kept the placeholder would say."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/typeof_declaration_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_line = 13
+expect_diagnostic_column = 5
+expect_output_contains = ["has type 'int', which is not the declared type 'string'", "the declared type 'string'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "typeof.reported_once"
+desc = "An expression written only inside a `typeof` is checked nowhere else, so the inference that cannot type it reports once, at the `typeof`: `1 / 'x'` has no `int` division with a `string`, and that is the program's one error."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/typeof_only_here.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 23
+expect_output_contains = ["operator '/' is not defined for these operand types"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const errors = (input.normalized.stdout.match(/\[Error\]/g) || []).length
+assert(errors === 1, `${errors} errors are reported, not one`)
+}
+"""
+timeout_ms = 10000

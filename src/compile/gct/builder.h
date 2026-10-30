@@ -297,6 +297,14 @@ class Builder {
     /// ANNO...]], the block as a function of no parameters called where it is written. The
     /// EXEC is the block lowered as without decorators (its scope, its exits, its value).
     node_ptr_t visitDecoratedBlock(const AST::node_ptr_t &ast);
+    /// The body of a function that writes `yield` of its own (design principles 5.4, language
+    /// reference 7.3.1): the machine that hands out a stream. Its `var`s are cells of the
+    /// function's own body, so every pull reads the same cells; `step` runs the body from the
+    /// point the `pc` cell names until the next `yield`, and the stream is a closure over it. A
+    /// `while` loop whose body writes a `yield` is four arms of that machine -- past the loop, at
+    /// the condition, in the body and back at the condition -- and the one value the loop carries
+    /// is a cell of its own, written from the body's last value.
+    node_ptr_t visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *funcType);
 
     // ast/data.h
     node_ptr_t visitData(const AST::node_ptr_t &ast);

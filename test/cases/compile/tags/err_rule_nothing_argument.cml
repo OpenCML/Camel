@@ -1,0 +1,9 @@
+/// A tag argument that names nothing the program declares: the refusal says so, rather than making
+/// the writer guess which declaration was meant.
+
+tag vjp::<F>(rule: F) on func when is_function::<F>()
+
+#vjp(nowhere)
+func label(x: int): int { return x }
+
+func main(): int sync { return 0 }

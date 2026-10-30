@@ -745,7 +745,15 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TagUndeclared",
                 "No tag '{0}' is declared.",
-                "Tags share the namespace of functions and types: import the module that declares it, or declare it with 'tag {0} on ...'.",
+                "A tag has a space of its own, separate from functions, types and values, and the tag itself is not a value: import the module that declares it, or declare it with 'tag {0} on ...'.",
+            },
+        },
+        {
+            SemanticDiag::TagNameAsValue,
+            {
+                "TagNameAsValue",
+                "'{0}' names a tag, and a tag is not a value: write '#{0}' where the tag belongs.",
+                "A tag is a compile-time fact attached to a declaration or to the nodes of a region (design principles 6.2): it is read before the program runs, never called and never passed. A value of that name takes a declaration of its own -- a function, a constant or a variable.",
             },
         },
         {
@@ -786,6 +794,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "TagArgumentType",
                 "The parameter '{0}' of the tag '{1}' is declared '{2}', but the argument is '{3}' ({4}).",
                 "A tag argument is a compile-time constant of the kind the parameter declares: write an integer for 'int', a real for 'float', 'true' or 'false' for 'bool', a string for 'string', and the name of a function for a parameter that carries one (the fact is the graph reference of that function).",
+            },
+        },
+        {
+            SemanticDiag::TagArgumentNotValue,
+            {
+                "TagArgumentNotValue",
+                "The tag '{1}' cannot take '{0}' as an argument: it names {2}.",
+                "A tag is read before the program runs, so an argument is a compile-time value -- a literal, a top-level constant or a string -- or, for a parameter that carries a function, the name of a function of the program or of one of its rules. A rule may be named because the parameter asks for a declaration of the law, and a rule is a declaration: its name is what the tag writes and what the pass reads. A value that is no function cannot be named there: it stands for data the program computes, and a tag is read before any of it exists. A tag and a type are declarations too, and neither has a value for a parameter that takes one. Name a function, a rule, a literal or a constant.",
             },
         },
         {
@@ -1745,7 +1761,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TypeFunctionNotApplicable",
                 "The type function '{0}' is not applicable: {1}.",
-                "A type function computes a type from types at compile time (design principles 21): `ElementOf<T>` is the element of an array or a set, `PayloadOf<T>` the `U` of `U?` or `U!`, and `KeyOf<T>` and `ValueOf<T>` the key and value types of a map; a program writes its own with `type F<T> = ...`, whose body may be a `match type`. It is called with `F<...>` where a type is written, and it accepts only the types it is defined for.",
+                "A type function computes a type from types at compile time (design principles 21): `ElementOf<T>` is the element of an array or a set, `PayloadOf<T>` the `U` of `U?` or `U!`, and `KeyOf<T>` and `ValueOf<T>` the key and value types of a map, and `RowsOf<T>` the array whose first-dimension elements are `T`; a program writes its own with `type F<T> = ...`, whose body may be a `match type`. It is called with `F<...>` where a type is written, and it accepts only the types it is defined for.",
             },
         },
         {
@@ -1754,6 +1770,22 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "StatementAfterReturn",
                 "This statement cannot run: the 'return' written before it gives the value of this block, so nothing after it in the block is reached.",
                 "A 'return e' is the value of the block it is written in -- a function body, a 'sync' block, or the arm of an 'if' or a 'match' -- and a statement written after it in that same block is never reached. Move the statement before the 'return', or delete it.",
+            },
+        },
+        {
+            SemanticDiag::RuleLeftIsNotAnOperator,
+            {
+                "RuleLeftIsNotAnOperator",
+                "The rule '{0}' has a left side that is not one operator; it is written as '{1}', and a ruleset indexes its rules by the head of the left side.",
+                "A ruleset is a module of rules, and the transform finds a rule for a primitive by the head of the rule's left side: `a + b` puts its rule under `+`, `-a` under `-`, and `f(a, b)` under `f`. A left side that is a literal, a tuple, or a chain of operators at one level names no one primitive, so no primitive can find it. Write the left side as one operator applied to the operands, or move the rule to the module that owns the shape it matches.",
+            },
+        },
+        {
+            SemanticDiag::DuplicateRuleForOperator,
+            {
+                "DuplicateRuleForOperator",
+                "The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side, and one ruleset has one rule per operator.",
+                "A transform looks up the rules of a primitive by the operator its left side is written with and the number of operands it takes, so a second rule under the same operator with the same number of operands has no way to be chosen: which of the two applies would be decided by the order they are written in, and the program would mean different things depending on where a rule sits. Merge the two into one rule whose right side covers both cases, or give one of them a left side with a different operator -- and remember that `-x` and `x - w` are two primitives, not one.",
             },
         },
         {

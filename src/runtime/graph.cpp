@@ -11,6 +11,7 @@
  * blob, one unified edge arena, and a compact branch-arm arena.
  */
 
+#include "camel/runtime/effect_liveness.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/exec_plan.h"
@@ -38,6 +39,8 @@
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace camel::runtime {
 
@@ -561,9 +564,25 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             // there at all: it is a pure value-forwarding node with one data port and one sync
             // predecessor). The control input is what that wait used to be written as; the paths
             // this lane has not moved onto the sync edge yet still carry one, and the ones that
-            // have carry the sync edge instead. A GATE with neither waits on nothing, which is
-            // what this refuses.
-            if (graph->syncPredsOf(ref).empty() && graph->ctrlInputsOf(ref).empty()) {
+            // have carry the sync edge instead.
+            // Asked through the facts every pass asks (camel/runtime/effect_liveness.h): the wait a
+            // GATE carries is either a block's chain or an edge of its own, and the two are named
+            // there instead of here. A GATE with neither waits on nothing, which is what this
+            // refuses.
+            //
+            // This is an assertion, not a rule programs reach. Measured: payload validation does run
+            // on the execution path (three graphs validated for a small program, five with a
+            // fault-injection pass in the pipeline), but a gate whose waits are all taken away never
+            // gets here -- `dceDraft` removes it first (src/passes/opt/generic/generic.cpp, the
+            // dead-gate branch: no reader, and it waited on something). A fault-injection pass that
+            // stripped both the control input and the sync predecessor of the first gate committed
+            // and ran with no error, and that gate was gone afterwards (2 gates before it, 1 after).
+            // If this ever fires, either `dceDraft` stopped removing such a gate or the builder
+            // started writing one that nothing waits on.
+            EffectLivenessFacts facts;
+            facts.hasWaitEdge     = !graph->ctrlInputsOf(ref).empty();
+            facts.isSyncStatement = !graph->syncPredsOf(ref).empty();
+            if (!facts.hasWaitEdge && !facts.isSyncStatement) {
                 throw std::runtime_error(
                     std::format(
                         "Runtime graph '{}' has GATE node {} without a wait: no sync predecessor "
@@ -644,6 +663,11 @@ void writeBody(gc_payload_word_t *payload, const GCNode &node, const Body &body)
 
 struct PlannedDraftNode {
     bool dead               = false; // the place of an erased node (ids are kept)
+    /// True when the finished node takes no order edge (nodeTakesNoOrder, asked here of the node
+    /// as it will be once the payload is emitted): its order inputs are dropped, not carried into
+    /// the graph. The answer is taken once, in the plan, and both the shape and the emission read
+    /// it, so the two cannot disagree about how many order edges the graph has.
+    bool dropsOrder         = false;
     gc_node_ref_t draftId   = kInvalidNodeRef;
     gc_node_ref_t ref       = kInvalidNodeRef;
     gc_off_t payload        = kNoPayload; // word offset in the payload area
@@ -653,6 +677,9 @@ struct PlannedDraftNode {
 struct DraftPayloadPlan {
     std::vector<PlannedDraftNode> nodes;
     std::vector<gc_node_ref_t> runtimeRefsByDraftId;
+    // True when the plan is of a part of the draft's nodes (`live` in planDraftPayload): a control
+    // region whose owner the part leaves out is dead in the graph the plan describes.
+    bool subset               = false;
     gc_cnt_t edgeCount        = 0;
     gc_cnt_t orderEdgeCount   = 0;
     gc_cnt_t syncEdgeCount    = 0;
@@ -690,12 +717,24 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
     return (bodyBytes + kPayloadWordBytes - 1) / kPayloadWordBytes;
 }
 
-DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
+DraftPayloadPlan planDraftPayload(
+    const GraphDraft &draft, std::optional<std::span<const gc_node_ref_t>> live = std::nullopt) {
+    // A caller that builds a graph from a part of the draft's nodes names them in `live`, sorted
+    // (collectLiveDraftNodes). Every other node the draft still holds is not in the graph, and an
+    // order edge that names one of them is dropped with it: an order edge carries no liveness of
+    // its own (docs/design/effects/edges.cn.md 1.5).
+    const bool subset = live.has_value();
+    std::unordered_set<gc_node_ref_t> liveSet;
+    if (subset) {
+        ASSERT(!draft.keepsNodeIds(), "A subset of a draft's nodes cannot keep their ids.");
+        liveSet.insert(live->begin(), live->end());
+    }
+    const auto inGraph = [&](gc_node_ref_t id) { return !subset || liveSet.contains(id); };
     auto requireAlive = [&](gc_node_ref_t owner, gc_node_ref_t ref, std::string_view lane) {
         if (ref == kInvalidNodeRef) {
             return;
         }
-        if (!draft.alive(ref)) {
+        if (!draft.alive(ref) || !inGraph(ref)) {
             const auto *ownerHeader = owner == kInvalidNodeRef ? nullptr : draft.header(owner);
             throw std::runtime_error(
                 std::format(
@@ -712,6 +751,7 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
     };
 
     DraftPayloadPlan plan;
+    plan.subset = subset;
     plan.runtimeRefsByDraftId.assign(draft.nodeSlotCount(), kInvalidNodeRef);
 
     // Live nodes keep their draft order and take dense NodeIds.
@@ -735,6 +775,9 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
             }
             continue;
         }
+        if (!inGraph(draftId)) {
+            continue;
+        }
         const DraftNodeHeader *header = draft.header(draftId);
         ASSERT(header != nullptr, "Draft payload plan requires a non-null node header.");
         for (gc_node_ref_t ref : draft.normInputsOf(draftId)) {
@@ -746,8 +789,37 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
         for (gc_node_ref_t ref : draft.ctrlInputsOf(draftId)) {
             requireAlive(draftId, ref, "ctrl-input");
         }
+        // The finished node answers for itself here, and this is the one owner of that answer: the
+        // payload the graph will hold is the one the draft holds, so the question the seal check asks
+        // of the frozen graph (nodeTakesNoOrder, graph_edges.cpp) is asked of this node before it is
+        // written, and the answer decides both the edge count and the edges emitted. It cannot be
+        // asked where the edge is written: a node still being built has no payload, so
+        // nodeIsFreelySchedulable answers for a half-made node and every writer believes the edge is
+        // wanted. Asked here, once, the two answers cannot disagree.
+        bool dropsOrder = false;
+        if (const DraftNodeHeader *ordered = draft.header(draftId);
+            ordered != nullptr && ordered->kind != GCNodeKind::Dead &&
+            ordered->kind != GCNodeKind::Cast && nodeIsFreelySchedulable(draft, draftId)) {
+            dropsOrder = true;
+            if (ordered->kind == GCNodeKind::Brch || ordered->kind == GCNodeKind::Loop) {
+                for (uint32_t region = 1; region < draft.regionCount(); ++region) {
+                    if (draft.region(region).owner == draftId) {
+                        dropsOrder = false; // it stands for its region and carries its order
+                        break;
+                    }
+                }
+            }
+        }
+        size_t keptOrderInputs = 0;
         for (gc_node_ref_t ref : draft.orderInputsOf(draftId)) {
+            if (dropsOrder) {
+                continue; // the edge says nothing on a node that arranges itself freely
+            }
+            if (subset && !inGraph(ref)) {
+                continue; // dropped with the node it orders after
+            }
             requireAlive(draftId, ref, "order-input");
+            ++keptOrderInputs;
         }
         for (gc_node_ref_t ref : draft.syncInputsOf(draftId)) {
             requireAlive(draftId, ref, "sync-input");
@@ -759,9 +831,11 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
             "A runtime graph is addressed with 32 bits; this one has no room left.");
         plan.nodes.push_back(
             PlannedDraftNode{
-                .draftId = draftId,
-                .ref     = static_cast<gc_node_ref_t>(nodeCount),
-                .payload = words == 0 ? kNoPayload : static_cast<gc_off_t>(payloadWords),
+                .dead       = false,
+                .dropsOrder = dropsOrder,
+                .draftId    = draftId,
+                .ref        = static_cast<gc_node_ref_t>(nodeCount),
+                .payload    = words == 0 ? kNoPayload : static_cast<gc_off_t>(payloadWords),
                 .payloadWordCount = words,
             });
         plan.runtimeRefsByDraftId[draftId] = static_cast<gc_node_ref_t>(nodeCount);
@@ -769,7 +843,7 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
         payloadWords += words;
         edgeCount += draft.normInputsOf(draftId).size() + draft.withInputsOf(draftId).size() +
                      draft.ctrlInputsOf(draftId).size();
-        orderEdgeCount += draft.orderInputsOf(draftId).size();
+        orderEdgeCount += keptOrderInputs;
         syncEdgeCount += draft.syncInputsOf(draftId).size();
     }
 
@@ -838,7 +912,12 @@ void emitDraftPayload(
                 draftRef < plan.runtimeRefsByDraftId.size(),
                 "Draft edge emission encountered a node outside the payload plan.");
             const gc_node_ref_t runtimeRef = plan.runtimeRefsByDraftId[draftRef];
-            ASSERT(runtimeRef != kInvalidNodeRef, "Draft edge emission encountered a dead node.");
+            GUARD(
+                runtimeRef != kInvalidNodeRef,
+                std::format(
+                    "emitting the inputs of a node from the payload plan: draft node {} is in the plan "
+                    "but has no runtime node (it was dropped), so the input list would name nothing",
+                    draftRef));
             payload.inputs[inputCursor++] = runtimeRef;
         }
         return begin;
@@ -846,7 +925,9 @@ void emitDraftPayload(
 
     // A GATE forwards its (last) norm input: FastVM reads the producer, NodeVM reads the gate's
     // slot, so the slot must be the input's. Rewrites that rebind a gate's input (inlining binds
-    // parameter gates to the caller's arguments) leave a stale slot, so it is derived here.
+    // parameter gates to the caller's arguments) leave a stale slot, so it is derived here. The owner
+    // of this rule is the encoder -- the payload plan in this file -- not the draft's writers: it is
+    // the place that decides what the frozen graph holds, which is where the order-edge filter sits too.
     const auto slotOf = [&](gc_node_ref_t id) {
         for (size_t hops = 0; hops < plan.nodes.size() + 1; ++hops) {
             const DraftNodeHeader *h = draft.header(id);
@@ -985,7 +1066,12 @@ void emitDraftPayload(
             break;
         case GCNodeKind::Brch: {
             const auto *draftBody = reinterpret_cast<const DraftBrchPayload *>(payloadBytes.data());
-            ASSERT(draftBody != nullptr, "Draft BRCH payload is missing.");
+            GUARD(
+                draftBody != nullptr,
+                std::format(
+                    "emitting a BRCH node: its payload table holds no DraftBrchPayload, so the join "
+                    "and the arms it names cannot be read (it needs {} bytes of it)",
+                    sizeof(DraftBrchPayload)));
             writeBody(
                 payload.payload,
                 header,
@@ -1015,23 +1101,46 @@ void emitDraftPayload(
     };
 
     // The order edges and the sync edges (docs/design/effects/edges.cn.md 1.5): neither is a port,
-    // so each is written to the graph's own array, in the node order the records have (which is
-    // what makes the arrays sorted by user).
-    const auto emitSideEdges = [&](auto *edges, gc_cnt_t count, const auto &inputsOf) {
+    // so each is written to the graph's own array, in the node order the records have, and within
+    // one node by the predecessor's number (which is what makes the arrays sorted by (user, pred),
+    // the order every reader and every dump of them relies on).
+    const auto emitSideEdges = [&](auto *edges, gc_cnt_t count, const auto &inputsOf,
+                                   bool dropUnmapped, bool dropOnFreeUser) {
         if (count == 0) {
             return;
         }
         size_t at = 0;
+        std::vector<gc_node_ref_t> preds;
         for (const PlannedDraftNode &planned : plan.nodes) {
             if (planned.dead) {
                 continue;
             }
-            for (gc_node_ref_t pred : inputsOf(planned.draftId)) {
-                ASSERT(at < count, "Draft side-edge emission wrote past the planned edges.");
+            if (dropOnFreeUser && planned.dropsOrder) {
+                continue; // the plan counted none of its order inputs (nodeTakesNoOrder)
+            }
+            // The draft appends a side edge where the rewrite that wrote it happened to stand: a
+            // pass that collects what orders a node from a container of its own appends them in
+            // whatever order that container gives. The graph writes them by number instead, so
+            // that one graph has one array -- what a dump prints, and what a hash of it mixes, is
+            // then the same on every build (`std::gir` printed two orders of the same five order
+            // edges of one node, and the bytes differed).
+            preds.assign(inputsOf(planned.draftId).begin(), inputsOf(planned.draftId).end());
+            std::sort(preds.begin(), preds.end());
+            for (gc_node_ref_t pred : preds) {
                 ASSERT(
                     pred < plan.runtimeRefsByDraftId.size(),
                     "Draft side-edge emission encountered a node outside the payload plan.");
                 const gc_node_ref_t runtimePred = plan.runtimeRefsByDraftId[pred];
+                if (runtimePred == kInvalidNodeRef && dropUnmapped) {
+                    continue;
+                }
+                GUARD(
+                    at < count,
+                    std::format(
+                        "the side-edge counter says {} edges were planned, but the writer is already at "
+                        "edge {}: the graph about to be sealed does not hold what the plan emits",
+                        count,
+                        at));
                 ASSERT(
                     runtimePred != kInvalidNodeRef,
                     "Draft side-edge emission encountered a dead node.");
@@ -1039,14 +1148,20 @@ void emitDraftPayload(
                 ++at;
             }
         }
-        ASSERT(at == count, "Draft side-edge emission wrote the wrong count.");
+        GUARD(
+            at == count,
+            std::format(
+                "the side-edge counter says {} edges were emitted, but the target port list planned "
+                "{}: the graph about to be sealed does not describe what its builder wrote",
+                at,
+                count));
     };
     emitSideEdges(
         payload.orderEdges, payload.orderEdgeCount,
-        [&](gc_node_ref_t id) { return draft.orderInputsOf(id); });
+        [&](gc_node_ref_t id) { return draft.orderInputsOf(id); }, true, true);
     emitSideEdges(
         payload.syncEdges, payload.syncEdgeCount,
-        [&](gc_node_ref_t id) { return draft.syncInputsOf(id); });
+        [&](gc_node_ref_t id) { return draft.syncInputsOf(id); }, false, false);
 
     for (size_t i = 0; i < draft.normPorts().size(); ++i) {
         payload.normPorts[i] = plan.runtimeRefsByDraftId[draft.normPorts()[i]];
@@ -1069,6 +1184,13 @@ void emitDraftPayload(
         region.owner           = mapRegionNode(region.owner);
         region.result          = mapRegionNode(region.result);
         region.callSite        = mapRegionNode(region.callSite);
+        // A control region the graph being built has no owner for is dead: what it held went with
+        // the node that ran it. A graph of the draft's every node keeps its regions as they are.
+        if (plan.subset && region.owner == kInvalidNodeRef &&
+            (region.kind == GCRegionKind::Arm || region.kind == GCRegionKind::LoopCond ||
+             region.kind == GCRegionKind::LoopBody)) {
+            region.kind = GCRegionKind::Dead;
+        }
         payload.regionTable[r] = region;
     }
     for (uint32_t i = 0; i < draft.regionPortCount(); ++i) {
@@ -1233,29 +1355,39 @@ GCGraphDebugRecord *createGraphDebugRecord(std::string mangledName, std::string 
     return record;
 }
 
-void recordDraftDebugData(GCGraphDebugRecord *record, const GraphDraft &draft) {
+void recordDraftDebugData(
+    GCGraphDebugRecord *record, const GraphDraft &draft,
+    std::optional<std::span<const gc_node_ref_t>> live) {
     if (!record) {
         return;
     }
+    const bool subset = live.has_value();
+    std::unordered_set<gc_node_ref_t> liveSet;
+    if (subset) {
+        liveSet.insert(live->begin(), live->end());
+    }
+    const auto inGraph = [&](gc_node_ref_t id) { return !subset || liveSet.contains(id); };
     record->implKernelUri = draft.implKernelUri();
     record->declarationFacts = draft.declarationFacts();
     record->captureNames.assign(draft.captureNames().begin(), draft.captureNames().end());
     record->nodeNames.clear();
     bool named = false;
     for (gc_node_ref_t ref = 0; ref < draft.nodeSlotCount(); ++ref) {
-        if (draft.alive(ref) && draft.nodeName(ref) != camel::core::kEmptySym) {
+        if (draft.alive(ref) && inGraph(ref) && draft.nodeName(ref) != camel::core::kEmptySym) {
             named = true;
         }
     }
 
     if (named) {
         // The names are indexed by runtime node id, not by draft place: the commit drops dead
-        // places and may number the rest differently.
-        const DraftPayloadPlan plan = planDraftPayload(draft);
+        // places and may number the rest differently, and a graph built from a part of the
+        // draft's nodes has only that part.
+        const DraftPayloadPlan plan = planDraftPayload(draft, live);
         record->nodeNames.assign(plan.nodes.size(), camel::core::kEmptySym);
 
         for (gc_node_ref_t ref = 0; ref < draft.nodeSlotCount(); ++ref) {
-            if (!draft.alive(ref) || draft.nodeName(ref) == camel::core::kEmptySym) {
+            if (!draft.alive(ref) || !inGraph(ref) ||
+                draft.nodeName(ref) == camel::core::kEmptySym) {
                 continue;
             }
             const gc_node_ref_t runtime =
@@ -1774,12 +1906,16 @@ GCGraph::GCGraph(
     revision_ = revisions.fetch_add(1, std::memory_order_relaxed) + 1;
 }
 
-GCGraphPayloadShape describeDraftNativePayload(const GraphDraft &draft) {
-    return describeDraftPayload(draft, planDraftPayload(draft));
+GCGraphPayloadShape
+describeDraftNativePayload(
+    const GraphDraft &draft, std::optional<std::span<const gc_node_ref_t>> live) {
+    return describeDraftPayload(draft, planDraftPayload(draft, live));
 }
 
-void emitDraftNativePayload(const GraphDraft &draft, GCGraphPayloadArena &payload) {
-    emitDraftPayload(draft, planDraftPayload(draft), payload);
+void emitDraftNativePayload(
+    const GraphDraft &draft, GCGraphPayloadArena &payload,
+    std::optional<std::span<const gc_node_ref_t>> live) {
+    emitDraftPayload(draft, planDraftPayload(draft, live), payload);
 }
 
 void validateRuntimeGraphPayload(const Program &program, const GCGraph *graph) {
@@ -2204,6 +2340,10 @@ GCUseIndex::GCUseIndex(const GCGraph &graph) {
     // Users in node order, each user once per group even when it reads the node twice: the
     // order and the uniqueness the encoder gave the stored outputs before they were dropped.
     // Two passes over the input table: count, then place (a counting sort by source).
+    //
+    // The fourth group is the sync edges, which are not in the input table: they are a side array
+    // sorted by (user, pred), so they are read in the same user order and placed the same way
+    // (docs/design/effects/edges.cn.md 1.5).
     const size_t count  = graph.nodeCount();
     const auto groupsOf = [&](gc_node_ref_t user) {
         return std::array<std::span<const gc_node_ref_t>, 3>{
@@ -2213,13 +2353,13 @@ GCUseIndex::GCUseIndex(const GCGraph &graph) {
     };
     // A user reading one source twice in one group is listed once: it is skipped when the
     // previous entry placed for that (source, group) is the same user.
-    std::vector<uint32_t> sizes(count * 3, 0);
-    std::vector<gc_node_ref_t> lastUser(count * 3, kInvalidNodeRef);
+    std::vector<uint32_t> sizes(count * kGroups, 0);
+    std::vector<gc_node_ref_t> lastUser(count * kGroups, kInvalidNodeRef);
     for (gc_node_ref_t user = 0; user < count; ++user) {
         const auto groups = groupsOf(user);
         for (size_t kind = 0; kind < 3; ++kind) {
             for (gc_node_ref_t input : groups[kind]) {
-                const size_t at = static_cast<size_t>(input) * 3 + kind;
+                const size_t at = static_cast<size_t>(input) * kGroups + kind;
                 if (lastUser[at] != user) {
                     lastUser[at] = user;
                     ++sizes[at];
@@ -2227,13 +2367,23 @@ GCUseIndex::GCUseIndex(const GCGraph &graph) {
             }
         }
     }
-    begins_.resize(count * 3 + 1);
+    for (const GCGraphSyncEdge &edge : graph.syncEdges()) {
+        if (!graph.containsNodeRef(edge.pred) || !graph.containsNodeRef(edge.user)) {
+            continue;
+        }
+        const size_t at = static_cast<size_t>(edge.pred) * kGroups + 3;
+        if (lastUser[at] != edge.user) {
+            lastUser[at] = edge.user;
+            ++sizes[at];
+        }
+    }
+    begins_.resize(count * kGroups + 1);
     uint32_t total = 0;
-    for (size_t at = 0; at < count * 3; ++at) {
+    for (size_t at = 0; at < count * kGroups; ++at) {
         begins_[at] = total;
         total += sizes[at];
     }
-    begins_[count * 3] = total;
+    begins_[count * kGroups] = total;
     users_.resize(total);
     std::vector<uint32_t> cursor(begins_.begin(), begins_.end() - 1);
     std::fill(lastUser.begin(), lastUser.end(), kInvalidNodeRef);
@@ -2241,12 +2391,22 @@ GCUseIndex::GCUseIndex(const GCGraph &graph) {
         const auto groups = groupsOf(user);
         for (size_t kind = 0; kind < 3; ++kind) {
             for (gc_node_ref_t input : groups[kind]) {
-                const size_t at = static_cast<size_t>(input) * 3 + kind;
+                const size_t at = static_cast<size_t>(input) * kGroups + kind;
                 if (lastUser[at] != user) {
                     lastUser[at]         = user;
                     users_[cursor[at]++] = user;
                 }
             }
+        }
+    }
+    for (const GCGraphSyncEdge &edge : graph.syncEdges()) {
+        if (!graph.containsNodeRef(edge.pred) || !graph.containsNodeRef(edge.user)) {
+            continue;
+        }
+        const size_t at = static_cast<size_t>(edge.pred) * kGroups + 3;
+        if (lastUser[at] != edge.user) {
+            lastUser[at]         = edge.user;
+            users_[cursor[at]++] = edge.user;
         }
     }
 }
@@ -2411,7 +2571,12 @@ void collectStaticGraphRefsRecursive(
             return;
         }
         const GraphId target = funcObj->graphId();
-        ASSERT(isValid(target), "Runtime static graph references must name a graph.");
+        GUARD(
+            isValid(target),
+            std::format(
+                "collecting the static graph references of a function value: it names graph {}, which "
+                "is not a graph in this program, so the reference would point at nothing",
+                static_cast<int>(target)));
         pushUnique(refs, target);
 
         if (::Tuple *closure = funcObj->tuple()) {

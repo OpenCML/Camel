@@ -708,6 +708,7 @@ TaskflowExecSchedPass::buildGraphPlan(GCGraph *graph) {
             plan->scopes.clear();
             plan->branches.clear();
             plan->structured = false;
+            plan->refusal    = mismatch.reason;
             if (options_.diag) {
                 std::cerr << std::format(
                     "[taskflow] graph '{}' is evaluated node by node: {}\n",
@@ -732,7 +733,133 @@ TaskflowExecSchedPass::buildGraphPlan(GCGraph *graph) {
             parallelScopes,
             chains);
     }
+    if (options_.segments) {
+        printSegments(*plan);
+    }
     return plan;
+}
+
+/// `segments=true`: what the plan cut, read back. Reads the plan only; the run is not changed.
+///
+///   [taskflow] segments 'main': 2 segment(s), 3 chain(s), 9 operator(s)
+///   [taskflow] segments 'main' segment 0 (top): 12 item(s), 2 chain(s), as tasks
+///   [taskflow] segments 'main' segment 0 chain 0: 7 item(s)
+///   [taskflow] segments 'main' segment 0 chain 0 -> 1
+///   [taskflow] segments 'main' segment 1 (arm 0 of #57): 4 item(s), inline
+///   [taskflow] segments 'main' oper :io/println #18: segment 0 chain 1
+void TaskflowExecSchedPass::printSegments(const GraphPlan &plan) const {
+    if (plan.graph == nullptr) {
+        return;
+    }
+    const std::string name = plan.graph->name();
+    if (!plan.structured) {
+        std::cerr << std::format(
+            "[taskflow] segments '{}': no segments, evaluated node by node: {}\n",
+            name,
+            plan.refusal.empty() ? "task graphs are switched off" : plan.refusal);
+        return;
+    }
+    size_t chains    = 0;
+    size_t operators = 0;
+    for (const auto &scope : plan.scopes) {
+        chains += scope->chains.size();
+    }
+    for (gc_node_ref_t ref : plan.topo) {
+        if (ref < plan.graph->nodeCount() && requireNode(plan.graph, ref)->kind == GCNodeKind::Oper) {
+            ++operators;
+        }
+    }
+    std::cerr << std::format(
+        "[taskflow] segments '{}': {} segment(s), {} chain(s), {} operator(s)\n",
+        name,
+        plan.scopes.size(),
+        chains,
+        operators);
+    for (size_t s = 0; s < plan.scopes.size(); ++s) {
+        const PlanScope &scope = *plan.scopes[s];
+        if (scope.parentScope < 0) {
+            std::cerr << std::format(
+                "[taskflow] segments '{}' segment {} (top): {} item(s), {} chain(s), {}\n",
+                name,
+                s,
+                scope.items.size(),
+                scope.chains.size(),
+                scope.sequential ? "inline" : "as tasks");
+            continue;
+        }
+        const auto &parent = *plan.scopes[static_cast<size_t>(scope.parentScope)];
+        const gc_node_ref_t brch =
+            scope.parentItem < parent.items.size() &&
+                    parent.items[scope.parentItem].branch < plan.branches.size()
+                ? plan.branches[parent.items[scope.parentItem].branch].brch
+                : kInvalidNodeRef;
+        std::cerr << std::format(
+            "[taskflow] segments '{}' segment {} (arm of #{}): {} item(s), {} chain(s), {}, after "
+            "segment {} item {}\n",
+            name,
+            s,
+            brch,
+            scope.items.size(),
+            scope.chains.size(),
+            scope.sequential ? "inline" : "as tasks",
+            scope.parentScope,
+            scope.parentItem);
+    }
+    for (size_t s = 0; s < plan.scopes.size(); ++s) {
+        const PlanScope &scope = *plan.scopes[s];
+        for (size_t c = 0; c < scope.chains.size(); ++c) {
+            std::cerr << std::format(
+                "[taskflow] segments '{}' segment {} chain {}: {} item(s)\n",
+                name,
+                s,
+                c,
+                scope.chains[c].size());
+        }
+        for (const auto &[from, to] : scope.chainEdges) {
+            std::cerr << std::format(
+                "[taskflow] segments '{}' segment {} chain {} -> {}\n", name, s, from, to);
+        }
+    }
+    for (gc_node_ref_t ref : plan.topo) {
+        if (ref >= plan.graph->nodeCount() ||
+            requireNode(plan.graph, ref)->kind != GCNodeKind::Oper) {
+            continue;
+        }
+        const std::string uri(plan.graph->nodeBodyAs<GCOperBody>(ref)->uri());
+        int32_t segment = -1;
+        int32_t chain   = -1;
+        for (size_t s = 0; s < plan.scopes.size() && segment < 0; ++s) {
+            const PlanScope &scope = *plan.scopes[s];
+            for (size_t c = 0; c < scope.chains.size() && segment < 0; ++c) {
+                for (const PlanItem &item : scope.chains[c]) {
+                    if (item.node == ref) {
+                        segment = static_cast<int32_t>(s);
+                        chain   = static_cast<int32_t>(c);
+                        break;
+                    }
+                }
+            }
+            for (size_t i = 0; i < scope.items.size() && segment < 0; ++i) {
+                if (scope.items[i].node == ref) {
+                    segment = static_cast<int32_t>(s);
+                    chain   = -1;
+                    break;
+                }
+            }
+        }
+        if (chain < 0) {
+            std::cerr << std::format(
+                "[taskflow] segments '{}' oper {} #{}: segment {}, inline\n", name, uri, ref, segment);
+        } else {
+            std::cerr << std::format(
+                "[taskflow] segments '{}' oper {} #{}: segment {} chain {}\n",
+                name,
+                uri,
+                ref,
+                segment,
+                chain);
+        }
+    }
 }
 
 void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
@@ -893,7 +1020,8 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
             for (auto outputs :
                  {graph->normOutputsOf(ref),
                   graph->withOutputsOf(ref),
-                  graph->ctrlOutputsOf(ref)}) {
+                  graph->ctrlOutputsOf(ref),
+                  graph->uses().sync(ref)}) {
                 for (gc_node_ref_t out : outputs) {
                     if (out >= blocks || seen[out] != 0) {
                         continue;
@@ -2580,6 +2708,14 @@ void TaskflowExecSchedPass::buildRuntimeBranchJoinRegion(
 
     precedeFromInputs(runtimeGraph->normInputsOf(brchRuntimeIndex), selector);
     precedeFromInputs(runtimeGraph->ctrlInputsOf(brchRuntimeIndex), selector);
+    // The statement written before the branch waits for it the same way when the block's chain
+    // names it with a sync edge (docs/design/effects/edges.cn.md 1.5).
+    std::vector<gc_node_ref_t> brchChainPreds;
+    for (const camel::runtime::GCGraphSyncEdge &edge :
+         runtimeGraph->syncPredsOf(brchRuntimeIndex)) {
+        brchChainPreds.push_back(edge.pred);
+    }
+    precedeFromInputs(brchChainPreds, selector);
 
     selector.precede(joiner);
 

@@ -1,0 +1,132 @@
+/**
+ * Scalar subtraction on the two reduced-precision float types.
+ *
+ * `a - b` is the one arithmetic path of the type: both operands are already elements, the
+ * difference is taken in f32 and rounded once into the element type (design principles 7.3). The
+ * case pins the two bytes of the stored element for eight differences per type, and the four
+ * questions a subtraction can ask of a rounding:
+ *
+ *   1. exact, both signs            3.75 - 0.5 = 3.25, 0.5 - 1.0 = -0.5, -1.5 - 2.25 = -3.75
+ *   2. a tie, the upper element even 1.0 - 2^-9 (bf16) is halfway between 0.99609375 and 1.0,
+ *                                   and 1.0 wins: 0x3F80
+ *   3. a tie, the lower element even 1.0 - 1.5 * 2^-8 (bf16) is halfway between 0.9921875 and
+ *                                   0.99609375, and 0.9921875 wins: 0x3F7E
+ *   4. neither, a real rounding      1.0 - 0.1 does not land halfway, and rounds to 0.8984375
+ *
+ * Probes 2 and 3 are a pair on purpose: both are ties, and they go opposite ways, so a rule that
+ * always rounded up (or always down) fails one of them. Each is also asserted to be a tie at all
+ * -- the two neighbouring elements are the same distance from the exact difference -- so the pair
+ * cannot pass by accident on a value that merely rounds somewhere.
+ *
+ *   5. zero and the sign it takes  1.5 - 1.5 = +0.0, 0x0000
+ *   6. one past the range          -max - max = -infinity, 0xFF80 (bf16) and 0xFC00 (f16), and not
+ *                                  a saturation at -max
+ *
+ *   probe                        bf16            f16
+ *   3.75 - 0.5                   0x4050 [80,64]  0x4280 [128,66]
+ *   0.5 - 1.0                    0xBF00 [0,191]  0xB800 [0,184]
+ *   -1.5 - 2.25                  0xC070 [112,192] 0xC380 [128,195]
+ *   1.0 - 2^-9 / 1.0 - 2^-11     0x3F80 [128,63] 0x3BFF [255,59]
+ *   1.0 - 1.5*ulp/2              0x3F7E [126,63] 0x3BFE [254,59]
+ *   1.0 - 0.1                    0x3F66 [102,63] 0x3B33 [51,59]
+ *   1.5 - 1.5                    0x0000 [0,0]    0x0000 [0,0]
+ *   -max - max                   0xFF80 [128,255] 0xFC00 [0,252]
+ *
+ * A subtraction that rounds is also read against the exact difference in f64, which the stored
+ * element must be within one rounding's relative bound of, and against the same expression in f32
+ * (a result kept at f32 would answer the f32 value and not the element).
+ */
+
+import { to_bytes } from tensor
+import { to_array } from bytes
+import { abs } from math
+
+/// The little-endian bytes of one element of a one-element array of the type.
+func bitsOfBf16(value: bf16): int[] {
+    let one: bf16[] = [value]
+    return to_array(to_bytes(one))
+}
+
+func bitsOfF16(value: f16): int[] {
+    let one: f16[] = [value]
+    return to_array(to_bytes(one))
+}
+
+/// The stored element is the nearest member of the type to the exact difference: off by no more
+/// than one rounding's relative bound (2^-8 for bf16, 2^-11 for f16; half each type's machine epsilon).
+func bf16Nearest(a: bf16, b: bf16): bool {
+    let r: bf16 = a - b
+    let exact: f64 = f64(a) - f64(b)
+    return abs(f64(r) - exact) / abs(exact) <= 0.00390625
+}
+
+func f16Nearest(a: f16, b: f16): bool {
+    let r: f16 = a - b
+    let exact: f64 = f64(a) - f64(b)
+    return abs(f64(r) - exact) / abs(exact) <= 0.00048828125
+}
+
+/// The exact difference sat between these two elements: each is the same distance away, so which
+/// one was stored is the whole of the tie rule.
+func bf16WasATie(below: bf16, above: bf16, exact: f64): bool {
+    return abs(f64(below) - exact) == abs(f64(above) - exact)
+}
+
+func f16WasATie(below: f16, above: f16, exact: f64): bool {
+    return abs(f64(below) - exact) == abs(f64(above) - exact)
+}
+
+func main(): int sync {
+    // ---- bf16 ----
+    let bfExact: bf16 = bf16(3.75) - bf16(0.5)
+    let bfNegative: bf16 = bf16(0.5) - bf16(1.0)
+    let bfBoth: bf16 = -bf16(1.5) - bf16(2.25)
+    println(bitsOfBf16(bfExact), f32(bfExact))
+    println(bitsOfBf16(bfNegative), f32(bfNegative))
+    println(bitsOfBf16(bfBoth), f32(bfBoth))
+
+    // the two ties: the upper element is even in the first, the lower in the second
+    let bfUp: bf16 = bf16(1.0) - bf16(0.001953125)
+    let bfDown: bf16 = bf16(1.0) - bf16(0.005859375)
+    println(bitsOfBf16(bfUp), bf16WasATie(bf16(0.99609375), bf16(1.0), 0.998046875))
+    println(bitsOfBf16(bfDown), bf16WasATie(bf16(0.9921875), bf16(0.99609375), 0.994140625))
+
+    // neither neighbour, a real rounding
+    let bfRounded: bf16 = bf16(1.0) - bf16(0.1)
+    println(bitsOfBf16(bfRounded), bf16Nearest(bf16(1.0), bf16(0.1)))
+
+    // zero, and one past the range
+    let bfZero: bf16 = bf16(1.5) - bf16(1.5)
+    let bfMax: bf16 = 3.3895314e38
+    let bfOver: bf16 = -bfMax - bfMax
+    println(bitsOfBf16(bfZero), f32(bfZero))
+    println(bitsOfBf16(bfOver), f32(bfOver))
+
+    // ---- f16: the same eight ----
+    let f16Exact: f16 = f16(3.75) - f16(0.5)
+    let f16Negative: f16 = f16(0.5) - f16(1.0)
+    let f16Both: f16 = -f16(1.5) - f16(2.25)
+    println(bitsOfF16(f16Exact), f32(f16Exact))
+    println(bitsOfF16(f16Negative), f32(f16Negative))
+    println(bitsOfF16(f16Both), f32(f16Both))
+
+    let f16Up: f16 = f16(1.0) - f16(0.00048828125)
+    let f16Down: f16 = f16(1.0) - f16(0.000732421875)
+    println(bitsOfF16(f16Up), f16WasATie(f16(0.9990234375), f16(1.0), 0.99951171875))
+    println(bitsOfF16(f16Down), f16WasATie(f16(0.9990234375), f16(0.99951171875), 0.999267578125))
+
+    let f16Rounded: f16 = f16(1.0) - f16(0.1)
+    println(bitsOfF16(f16Rounded), f16Nearest(f16(1.0), f16(0.1)))
+
+    let f16Zero: f16 = f16(1.5) - f16(1.5)
+    let f16Max: f16 = 65504.0
+    let f16Over: f16 = -f16Max - f16Max
+    println(bitsOfF16(f16Zero), f32(f16Zero))
+    println(bitsOfF16(f16Over), f32(f16Over))
+
+    // ---- the result keeps the operands' element type ----
+    let bfOne: bf16[] = [bfExact]
+    let f16One: f16[] = [f16Exact]
+    println(len(to_bytes(bfOne)), len(to_bytes(f16One)))
+    return 0
+}

@@ -36,7 +36,10 @@ std::optional<Shape> shape(ty::Type *type) {
     if (type->code() == ty::TypeCode::Float64)
         return Shape{};
     const tensor::TensorFacts facts = tensor::tensorFactsOf(type);
-    if (facts.dtype != ty::TypeCode::Float32 || !facts.isStaticShape())
+    // An element type whose width the device knows is readable as a shape: f32 and, because a
+    // position is an index, i64. Anything else stays unresolved here.
+    if ((facts.dtype != ty::TypeCode::Float32 && facts.dtype != ty::TypeCode::Int64) ||
+        !facts.isStaticShape())
         return std::nullopt;
     return tensor::extentsOf(*facts.shape);
 }
@@ -62,7 +65,14 @@ const std::unordered_map<core::OperId, std::string> &operations() {
               "sum_axis",
               "mean_axis",
               "max_axis",
-              "sum_to"})
+              "sum_to",
+              // The layout operators are not computed: a device program for one is the address the
+              // core's own index instance gives (`kernel::coreViewAddress`), so the region reads the
+              // operand through it and writes nothing of its own.
+              "transpose",
+              "permute",
+              "reshape",
+              "broadcast_like"})
             result.emplace(table.intern(std::string("tensor:") + name), name);
         result.emplace(table.intern("tensor:sum"), "sum_all");
         result.emplace(table.intern("tensor:mean"), "mean_all");
@@ -94,6 +104,12 @@ inline bool inChain(const std::vector<char> &chain, rt::gc_node_ref_t id) {
     return id < chain.size() && chain[id] != 0;
 }
 
+/// Whether the operation is a layout one: its result is the operand read in another order, so there
+/// is no kernel to write for it, only an address (`kernel::coreViewAddress`) to read it through.
+bool layoutOperator(const std::string &op) {
+    return op == "transpose" || op == "permute" || op == "broadcast_like";
+}
+
 std::string eligibility(
     const rt::Program &graphs, const rt::GCGraph &graph, rt::gc_node_ref_t id,
     rt::fact::FactStore &facts, const std::vector<char> &chain, bool device) {
@@ -104,6 +120,7 @@ std::string eligibility(
     // where the node runs, not a reason to leave it on the host: the arm or the block the node is
     // written in is the segment that holds it (docs/design/gpu/plan.cn.md 2.5).
     const bool ordered = !graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty() ||
+                         !graph.syncPredsOf(id).empty() || !graph.uses().sync(id).empty() ||
                          inChain(chain, id);
     if (node->kind == rt::GCNodeKind::Loop) {
         if (ordered && !device)
@@ -146,11 +163,21 @@ std::string eligibility(
         {.uri = std::string(table.uri(oper)), .key = decl->key, .declaration = decl}};
     const auto permissions =
         camel::core::tag::effectivePermissions(graph, id, core::sem::NumericPolicy::explicitOnly());
+    // The candidate carries the element type the node was inferred with. Reading it as f32 would
+    // plan a four-byte store for an eight-byte position -- the same lie the byte width told before
+    // an i64 leaf was readable.
+    const auto elementType = [](ty::TypeCode code) {
+        if (code == ty::TypeCode::Float64)
+            return DType::F64;
+        if (code == ty::TypeCode::Int64)
+            return DType::I64;
+        return DType::F32;
+    };
     Node candidate{
         .op          = found->second,
         .shape       = *output,
         .inputs      = {},
-        .dtype       = node->dataType()->code() == ty::TypeCode::Float64 ? DType::F64 : DType::F32,
+        .dtype       = elementType(node->dataType()->code()),
         .permissions = permissions,
         .semantic    = 0,
         .indexing    = inst};
@@ -171,7 +198,43 @@ std::string eligibility(
         program.nodes.push_back(Node{.op = "input", .shape = *input, .inputs = {}});
     }
     try {
-        if (elementwise(candidate.op)) {
+        if (layoutOperator(candidate.op)) {
+            // One data operand: `broadcast_like`'s second operand only names the shape the result
+            // takes, and the source map the core declared for the call reads the first one
+            // (modules/tensor/ops/indexing.cpp, broadcastLikeIndexing).
+            if (candidate.inputs.empty())
+                return "operand_arity";
+            Node view   = candidate;
+            view.op     = "reindex";
+            view.inputs = {candidate.inputs.front()};
+            (void)kernel::coreViewAddress(program, view, kernel::IndexExpr(0));
+        } else if (candidate.op == "reshape") {
+            // A reshape writes no element: it names the same buffer in another shape, and the
+            // compiler keeps the buffer only while the element count is the one the result has.
+            if (candidate.inputs.size() != 1)
+                return "operand_arity";
+            if (elements(program.nodes[candidate.inputs.front()].shape) != elements(candidate.shape))
+                return "unsupported_index_contract";
+        } else if (candidate.op == "sum_to") {
+            // `sum_to` names the shape its sum goes to in a second operand that the compiler reads
+            // as the result's shape and never as data (compiler.cpp). With that shape already the
+            // operand's, it reduces nothing and the instance writes each element once: the same
+            // address a view has, and the node the compiler keeps is a copy of it. Otherwise the
+            // sum is the reduction the first operand alone describes.
+            if (candidate.inputs.empty())
+                return "operand_arity";
+            Node single = candidate;
+            single.inputs = {candidate.inputs.front()};
+            if (inst.output.mode == sem::WriteMode::Unique) {
+                single.op = "reindex";
+                (void)kernel::coreViewAddress(program, single, kernel::IndexExpr(0));
+            } else
+                (void)kernel::reductionAccess(
+                    program,
+                    single,
+                    kernel::IndexExpr(0),
+                    kernel::IndexExpr(0));
+        } else if (elementwise(candidate.op)) {
             for (size_t side = 0; side < candidate.inputs.size(); ++side)
                 (void)kernel::pointwiseAddress(program, candidate, side, kernel::IndexExpr(0));
         } else if (candidate.op == "matmul") {
@@ -382,6 +445,10 @@ SegmentAnalysis analyzeRegions(
         // so a region that holds the node reads nothing through them (docs/design/gpu/plan.cn.md 2.5).
         for (auto edges : {graph.ctrlInputsOf(id)})
             nodes[id].order.insert(nodes[id].order.end(), edges.begin(), edges.end());
+        // The statement before it in its block's chain orders it the same way, whichever kind
+        // that edge is written in (docs/design/effects/edges.cn.md 1, 5.3).
+        for (const rt::GCGraphSyncEdge &edge : graph.syncPredsOf(id))
+            nodes[id].order.push_back(edge.pred);
         nodes[id].output = id == graph.outputNodeRef() || id == graph.exitNodeRef();
     }
     // Fixed tuple projections are structural edges of an eligible aggregate
@@ -392,6 +459,7 @@ SegmentAnalysis analyzeRegions(
         for (rt::gc_node_ref_t id = 0; id < graph.nodeCount(); ++id) {
             if (nodes[id].eligible || graph.node(id)->kind != rt::GCNodeKind::Accs ||
                 !graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty() ||
+                !graph.syncPredsOf(id).empty() || !graph.uses().sync(id).empty() ||
                 inChain(chain, id) || !graph.withInputsOf(id).empty())
                 continue;
             const auto inputs = graph.normInputsOf(id);

@@ -7,23 +7,27 @@
 #pragma once
 
 #include "camel/runtime/draft.h"
+#include "camel/runtime/graph_txn.h"
 
 namespace camel::runtime {
 
 /// Proves an existing CTRL-only path from predecessor to user, without crossing BRCH/JOIN.
 /// Exhausting maxWork means "not proven", so callers must retain the edge.
 bool hasControlDependency(
-    const GraphDraft &draft, gc_node_ref_t predecessor, gc_node_ref_t user, size_t maxWork = 64);
+    const camel::runtime::GraphTransaction &transaction, gc_node_ref_t predecessor,
+    gc_node_ref_t user, size_t maxWork = 64);
 
 /// Retains a sufficient frontier of predecessors before a rewrite transfers their ordering.
 /// Uses one shared search budget for the entire list and preserves uncertain dependencies.
 std::vector<gc_node_ref_t> controlFrontier(
-    const GraphDraft &draft, std::span<const gc_node_ref_t> inputs, size_t maxWork = 128);
+    const camel::runtime::GraphTransaction &transaction, std::span<const gc_node_ref_t> inputs,
+    size_t maxWork = 128);
 
 /// Avoids direct value-covered edges and edges already implied by CTRL paths (bounded search).
 /// Keeps explicit argument ordering on FUNC/CALL for later splicing, and a GATE's first CTRL.
 bool appendControlDependency(
-    GraphDraft &draft, gc_node_ref_t predecessor, gc_node_ref_t user, size_t maxWork = 32);
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t predecessor, gc_node_ref_t user,
+    size_t maxWork = 32);
 
 /// Removes CTRL edges implied by mandatory data paths, and the ones a `sync` block's chain already
 /// orders for the kinds that no longer read the control kind themselves. Branch boundaries and arm
@@ -31,7 +35,7 @@ bool appendControlDependency(
 /// traversed. One sweep can expose a proof the next one makes (a target's own list is read again),
 /// so a graph is swept until a sweep changes nothing. Work is limited per target, per graph size,
 /// and by maxWork; zero disables analysis.
-size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork = 250000);
+size_t reduceControlDependencies(camel::runtime::GraphTransaction &transaction, size_t maxWork = 250000);
 
 /// The transitive reduction over ORDER edges: an order edge A -> C goes away when a path of order
 /// edges or of one `sync` block's chain already orders the two ends, which is exactly what "when
@@ -41,7 +45,7 @@ size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork = 250000);
 /// is one a pass may still rewrite, so an order edge they would cover is kept. A proof walks only
 /// nodes of the region that holds the edge, because an ordering never leaves its region. Work is
 /// bounded by maxWork; zero disables analysis.
-size_t reduceOrderDependencies(GraphDraft &draft, size_t maxWork = 250000);
+size_t reduceOrderDependencies(camel::runtime::GraphTransaction &transaction, size_t maxWork = 250000);
 
 /// The same reduction read with every edge that orders, for a reader that compares programs and
 /// not graphs: a `sync` or an `order` edge goes away when a path of at least two data, sync,
@@ -51,6 +55,6 @@ size_t reduceOrderDependencies(GraphDraft &draft, size_t maxWork = 250000);
 /// keeps the reading above. Sync edges are candidates here too: a chain link whose predecessor a
 /// data path already reaches says nothing the path does not. The walk and its budget are the ones
 /// `reduceOrderDependencies` makes; work is bounded by maxWork, and zero disables analysis.
-size_t reduceDocumentOrdering(GraphDraft &draft, size_t maxWork = 250000);
+size_t reduceDocumentOrdering(camel::runtime::GraphTransaction &transaction, size_t maxWork = 250000);
 
 } // namespace camel::runtime

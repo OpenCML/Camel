@@ -7,6 +7,7 @@
 
 #include "rewrite.h"
 #include "camel/runtime/control.h"
+#include "camel/runtime/cycle.h"
 
 #include "camel/core/operator_traits.h"
 #include "camel/runtime/draft_session.h"
@@ -19,6 +20,7 @@
 #include <cstddef>
 #include <cstring>
 #include <format>
+#include <span>
 #include <stdexcept>
 #include <vector>
 
@@ -29,7 +31,8 @@ using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
 using camel::runtime::kInvalidNodeRef;
 
-std::string_view operUriOf(const GraphDraft &draft, gc_node_ref_t id) {
+std::string_view operUriOf(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
     const auto *h = draft.header(id);
     if (!h || h->kind != GCNodeKind::Oper) {
         return {};
@@ -37,7 +40,8 @@ std::string_view operUriOf(const GraphDraft &draft, gc_node_ref_t id) {
     return reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data())->uri();
 }
 
-camel::core::OperId operIdOf(const GraphDraft &draft, gc_node_ref_t id) {
+camel::core::OperId operIdOf(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
     const auto *h = draft.header(id);
     if (!h || h->kind != GCNodeKind::Oper) {
         return camel::core::kNoOper;
@@ -48,7 +52,8 @@ camel::core::OperId operIdOf(const GraphDraft &draft, gc_node_ref_t id) {
 /// Whether the pass may treat a call of the operator as a value of its own: fold it, move it,
 /// merge it with an identical call or drop it. An operator that must run where the program writes
 /// it is not one, whatever its effect (a rule's value and an `analysis` are pure and unfoldable).
-bool isPureOper(const GraphDraft &draft, gc_node_ref_t id) {
+bool isPureOper(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
     const auto *h = draft.header(id);
     if (!h || h->kind != GCNodeKind::Oper) {
         return false;
@@ -57,7 +62,8 @@ bool isPureOper(const GraphDraft &draft, gc_node_ref_t id) {
     return camel::core::OperatorTable::instance().mayBeRecomputed(body->oper);
 }
 
-bool isValueOnly(const GraphDraft &draft, gc_node_ref_t id) {
+bool isValueOnly(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
     const auto *h = draft.header(id);
     if (!h) {
         return false;
@@ -76,20 +82,23 @@ bool isValueOnly(const GraphDraft &draft, gc_node_ref_t id) {
     }
 }
 
-bool isDeadWhenUnread(const GraphDraft &draft, gc_node_ref_t id) {
-    if (isValueOnly(draft, id)) {
+bool isDeadWhenUnread(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
+    if (isValueOnly(transaction, id)) {
         return true;
     }
     return camel::runtime::isUnanchoredPure(draft, id);
 }
 
-bool isReplaceable(const GraphDraft &draft, gc_node_ref_t id) {
+bool isReplaceable(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
     // The entry node is only a marker (erasing it resets it, and encoding then derives it from
     // the first node), so it does not pin a node; inlining often leaves it on a dead value.
     return id != draft.exitNode() && id != draft.outputNode() && id != draft.returnNode();
 }
 
-bool reaches(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to) {
+bool reaches(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t from, gc_node_ref_t to) {
+    const auto &draft = transaction.graph();
     std::vector<bool> seen(draft.nodeSlotCount(), false);
     std::vector<gc_node_ref_t> work{from};
     while (!work.empty()) {
@@ -102,14 +111,18 @@ bool reaches(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to) {
             continue;
         }
         seen[n] = true;
-        for (auto users : {draft.normUsersOf(n), draft.withUsersOf(n), draft.ctrlUsersOf(n)}) {
+        for (auto users : {draft.normUsersOf(n),
+                           draft.withUsersOf(n),
+                           draft.ctrlUsersOf(n),
+                           draft.syncUsersOf(n)}) {
             work.insert(work.end(), users.begin(), users.end());
         }
     }
     return false;
 }
 
-bool readsNoWrittenSlot(const GraphDraft &draft, gc_node_ref_t id) {
+bool readsNoWrittenSlot(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
     std::vector<gc_node_ref_t> work{id};
     std::vector<bool> seen(draft.nodeSlotCount(), false);
     while (!work.empty()) {
@@ -135,7 +148,8 @@ bool readsNoWrittenSlot(const GraphDraft &draft, gc_node_ref_t id) {
     return true;
 }
 
-std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t id) {
+std::vector<gc_node_ref_t> orderedSources(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
     std::vector<gc_node_ref_t> sources, work;
     std::vector<bool> seen(draft.nodeSlotCount(), false);
     for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id)}) {
@@ -164,7 +178,9 @@ std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t
     return sources;
 }
 
-void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement) {
+void replaceNode(
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, gc_node_ref_t replacement) {
+    auto &draft = transaction.edit();
     const auto copy = [](std::span<const gc_node_ref_t> refs) {
         return std::vector<gc_node_ref_t>(refs.begin(), refs.end());
     };
@@ -177,12 +193,12 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
             preds.push_back(source);
         }
     }
-    for (gc_node_ref_t source : orderedSources(draft, id)) {
+    for (gc_node_ref_t source : orderedSources(transaction, id)) {
         if (std::ranges::find(preds, source) == preds.end()) {
             preds.push_back(source);
         }
     }
-    preds = camel::runtime::controlFrontier(draft, preds);
+    preds = camel::runtime::controlFrontier(transaction, preds);
     std::vector<gc_node_ref_t> users;
     for (auto group : {draft.normUsersOf(id), draft.withUsersOf(id), draft.ctrlUsersOf(id)}) {
         for (gc_node_ref_t u : group) {
@@ -230,7 +246,7 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
             addInheritedWait(pred);
         }
     }
-    for (gc_node_ref_t pred : orderedSources(draft, id)) {
+    for (gc_node_ref_t pred : orderedSources(transaction, id)) {
         addInheritedWait(pred);
     }
 
@@ -255,10 +271,10 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
             // statement of the block follows the same predecessor through a sync edge
             // (docs/handover/README.cn.md 5.21 item 4).
             if (std::ranges::find(chainWait, pred) != chainWait.end() &&
-                handOverSyncWait(draft, pred, user)) {
+                handOverSyncWait(transaction, pred, user)) {
                 continue;
             }
-            camel::runtime::appendControlDependency(draft, pred, user);
+            camel::runtime::appendControlDependency(transaction, pred, user);
         }
     }
     // An effect this node was the last reader of keeps running where the node stood (design
@@ -271,7 +287,7 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
     // the node.
     if (!draft.syncUsersOf(id).empty()) {
         std::vector<gc_node_ref_t> lastRead;
-        for (gc_node_ref_t source : orderedSources(draft, id)) {
+        for (gc_node_ref_t source : orderedSources(transaction, id)) {
             if (!camel::runtime::carriesOrdering(draft, source, true)) {
                 continue;
             }
@@ -295,17 +311,17 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
         const std::vector<gc_node_ref_t> chainPreds(
             draft.syncInputsOf(id).begin(), draft.syncInputsOf(id).end());
         const auto chainTo = [&](gc_node_ref_t user, gc_node_ref_t pred) {
-            markSyncStatement(draft, user);
-            markSyncStatement(draft, pred);
+            markSyncStatement(transaction, user);
+            markSyncStatement(transaction, pred);
             const gc_node_ref_t only[1] = {pred};
             draft.setSyncInputs(user, only);
-            camel::runtime::appendControlDependency(draft, pred, user);
+            camel::runtime::appendControlDependency(transaction, pred, user);
         };
         for (size_t i = 1; i < lastRead.size(); ++i) {
             // An effect written inside another one's argument is computed after it; chaining it the
             // other way would close a cycle of inputs.
-            if (isComputedAfter(draft, lastRead[i - 1], lastRead[i]) ||
-                isComputedAfter(draft, lastRead[i], lastRead[i - 1])) {
+            if (isComputedAfter(transaction, lastRead[i - 1], lastRead[i]) ||
+                isComputedAfter(transaction, lastRead[i], lastRead[i - 1])) {
                 continue;
             }
             chainTo(lastRead[i], lastRead[i - 1]);
@@ -346,8 +362,8 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
             // The chain takes the tail as a wait of its own kind when it can (`handOverSyncWait`),
             // which is what the block's value does: it waits on the statement written before it
             // (docs/design/effects/edges.cn.md 4.6, 5.3 item 3). Otherwise the wait is control.
-            if (!handOverSyncWait(draft, pred, user)) {
-                camel::runtime::appendControlDependency(draft, pred, user);
+            if (!handOverSyncWait(transaction, pred, user)) {
+                camel::runtime::appendControlDependency(transaction, pred, user);
             }
         }
     }
@@ -451,7 +467,7 @@ void RewriteMemo::remember(std::string_view passName, const GCGraph *graph) {
 
 const camel::runtime::Program *rewriteReachableGraphs(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    std::string_view passName, const std::function<size_t(GraphDraft &)> &rewrite,
+    std::string_view passName, const std::function<size_t(camel::runtime::GraphTransaction &)> &rewrite,
     size_t *rewrites, RewriteMemo *memo, bool (*mayRewrite)(const GCGraph &),
     bool checkScreens) {
     camel::runtime::RuntimeGraphDraftSession session(context, program);
@@ -468,6 +484,19 @@ const camel::runtime::Program *rewriteReachableGraphs(
             continue;
         }
         const size_t made = rewrite(session.edit(g));
+        // A rewrite's own edges are not the only ones it moves: a merge hands a node's waits to the
+        // users of the node it removes, so the graph has to be judged as a whole once the rewrite is
+        // written, not predicted from the node pair the rewrite names. Nothing here can undo a merge
+        // that has been written -- so the session is dropped and the program keeps the graph it had,
+        // which is a correct graph where the rewritten one was not proved to be. The judgement is
+        // the freeze's own (camel/runtime/cycle.h: one list of edge kinds, one walk), and the drop is
+        // counted so that a rule composing a cycle shows up in std::stats instead of quietly doing
+        // less work.
+        camel::runtime::DraftCycleEdges edges(session.edit(g).graph());
+        if (camel::runtime::findInputCycle(edges) != camel::runtime::kInvalidNodeRef) {
+            camel::runtime::recordCycleDroppedSession();
+            return program;
+        }
         total += made;
         if (memo && made == 0) {
             memo->remember(passName, g);

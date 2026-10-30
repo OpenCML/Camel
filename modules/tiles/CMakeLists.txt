@@ -1,7 +1,7 @@
 include(${CMAKE_CURRENT_SOURCE_DIR}/../camel_module.cmake)
 add_camel_module(
   NAME tiles
-  SOURCES src/tree_transfer.cpp src/resident_storage.cpp src/module.cpp src/graph_values.cpp src/graph_regions.cpp src/placement.cpp src/residency.cpp src/region_extract.cpp src/region_outline.cpp src/region_test_pass.cpp src/region_pass.cpp src/compiler.cpp src/compiled_scope.cpp src/row_kernel.cpp src/row_body.cpp src/codegen.cpp src/codegen_cache.cpp src/scalar_expr.cpp src/index_expr.cpp src/access.cpp src/kernel_ir.cpp src/matmul_kernel.cpp src/serial_kernel.cpp src/pointwise_kernel.cpp src/reduction_kernel.cpp src/regions.cpp src/scalar_kernel.cpp src/loop_kernel.cpp src/parallel_kernel.cpp src/cuda.cpp src/mixed_gemm.cpp src/cuda_backend.cpp src/cuda_pool.cpp src/capability.cpp src/cuda_resources.cpp src/cuda_submission.cpp src/schedule.cpp src/device.cpp
+  SOURCES src/tree_transfer.cpp src/resident_storage.cpp src/module.cpp src/graph_values.cpp src/graph_regions.cpp src/placement.cpp src/residency.cpp src/region_extract.cpp src/region_outline.cpp src/region_test_pass.cpp src/region_pass.cpp src/compiler.cpp src/compiled_scope.cpp src/row_kernel.cpp src/row_body.cpp src/codegen.cpp src/codegen_cache.cpp src/scalar_expr.cpp src/index_expr.cpp src/access.cpp src/kernel_ir.cpp src/matmul_kernel.cpp src/serial_kernel.cpp src/pointwise_kernel.cpp src/reduction_kernel.cpp src/regions.cpp src/scalar_kernel.cpp src/loop_kernel.cpp src/parallel_kernel.cpp src/cuda.cpp src/mixed_gemm.cpp src/cuda_backend.cpp src/cuda_pool.cpp src/capability.cpp src/cuda_resources.cpp src/cuda_submission.cpp src/schedule.cpp src/device.cpp src/census.cpp
   EXTRA_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/include
   EXTRA_LIBS tensor_cmo nlohmann_json::nlohmann_json ${CMAKE_DL_LIBS}
 )
@@ -34,7 +34,9 @@ if(CUDAToolkit_FOUND)
   target_link_libraries(tiles-async-check PRIVATE libcamel fmt::fmt nlohmann_json::nlohmann_json ${CMAKE_DL_LIBS})
   # The lease test builds the module's device code without libcamel; `--devices` is read from
   # the core's selection, so that one translation unit comes along (it depends on nothing else).
-  add_executable(tiles-module-lease ../../test/cases/modules/tiles/module_lease.cpp ../../test/cases/modules/tiles/scalar_device.cpp src/scalar_expr.cpp src/cuda_backend.cpp src/cuda_pool.cpp src/capability.cpp src/cuda_resources.cpp ${CMAKE_SOURCE_DIR}/src/execute/devices.cpp)
+  # kernel expression construction names index expressions, so index_expr.cpp is one of the files
+  # this target cannot leave out.
+  add_executable(tiles-module-lease ../../test/cases/modules/tiles/module_lease.cpp ../../test/cases/modules/tiles/scalar_device.cpp src/scalar_expr.cpp src/index_expr.cpp src/cuda_backend.cpp src/cuda_pool.cpp src/capability.cpp src/cuda_resources.cpp ${CMAKE_SOURCE_DIR}/src/execute/devices.cpp)
   target_compile_features(tiles-module-lease PRIVATE cxx_std_23)
   target_include_directories(tiles-module-lease PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/include)
   target_link_libraries(tiles-module-lease PRIVATE ${CMAKE_DL_LIBS})

@@ -233,7 +233,7 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     }
     case runtime::GCNodeKind::Loop: {
         // Each round runs the condition and the body, regions of the graph.
-        const runtime::GraphDraft &draft = graph->draft();
+        const auto &draft = graph->transaction().graph();
         for (auto part : {runtime::GCRegionKind::LoopCond, runtime::GCRegionKind::LoopBody}) {
             const uint32_t region = draft.loopRegionOf(nodeIdOf(node), part);
             if (region == 0) {
@@ -250,7 +250,7 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     }
     case runtime::GCNodeKind::Join: {
         // The branch is an effect when what an arm gives depends on one inside the arm.
-        const runtime::GraphDraft &draft = graph->draft();
+        const auto &draft                = graph->transaction().graph();
         const draft_node_ref_t join      = nodeIdOf(node);
         const auto *body =
             reinterpret_cast<const runtime::GCJoinBody *>(draft.payloadOf(join).data());
@@ -378,7 +378,7 @@ void Builder::reportDroppedEffectsOfBodies() {
 }
 
 void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report) {
-    auto &draft = graph->draft();
+    auto &draft = graph->transaction().edit();
     // What the exit depends on, through data, control and sync edges.
     std::unordered_set<draft_node_ref_t> needed;
     std::vector<draft_node_ref_t> work;
@@ -575,7 +575,7 @@ std::vector<Builder::RuleCondition> Builder::ruleConditionsIn(
         return conditions;
     }
     auto sourceContext = context_ ? context_->sourceContext() : nullptr;
-    const runtime::GraphDraft &draft = graph->draft();
+    const auto &draft = graph->transaction().graph();
     for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         if (!draft.alive(id)) {
             continue;
@@ -774,7 +774,7 @@ node_handle_t Builder::effectOfGraph(
     if (graph == nullptr || !visited.insert(graph.get()).second) {
         return nullptr;
     }
-    const runtime::GraphDraft &draft = graph->draft();
+    const auto &draft = graph->transaction().graph();
     // The calls of the graph come first: what the graph itself does is a closer answer than what
     // a function it calls does.
     std::vector<compile_graph_ptr_t> calls;
@@ -977,6 +977,11 @@ void Builder::reportUnusedFallibleValues() {
                 type = callee->funcType()->exitType();
             }
         }
+        if (valueTypeOf(type) != type) {
+            // A cell keeps the value it was given: a `T!` stored in one is not a `T!` that
+            // nothing takes, and the statement that makes or fills the cell does not lose it.
+            return static_cast<TupleType *>(nullptr);
+        }
         return asFallible(valueTypeOf(type));
     };
     // The entry function, when it declares no return type: what its body ends with is not
@@ -985,13 +990,14 @@ void Builder::reportUnusedFallibleValues() {
     if (context_ && module_ && context_->mainModule() == module_) {
         if (auto mains = graphsAt("main");
             mains.has_value() && !mains.value()->empty() &&
-            inferredExitGraphs_.contains(mains.value()->front().get())) {
+            inferredExitGraphs_.contains(
+                camel::runtime::toValue(mains.value()->front()->graphId()))) {
             undeclaredMain = mains.value()->front().get();
         }
     }
 
     for (const compile_graph_ptr_t &graph : unit_->builtBodies) {
-        auto &draft = graph->draft();
+        auto &draft = graph->transaction().edit();
         if (draft.exitNode() == runtime::kInvalidNodeRef) {
             continue; // the body did not build (an error was reported)
         }
@@ -1152,28 +1158,30 @@ void Builder::markNonRetainingReads() {
         }
     };
     // Condition 5, per graph.
-    std::unordered_map<runtime::GraphDraft *, bool> unchainedWriter;
-    const auto hasUnchainedWriter = [&](runtime::GraphDraft *draft) {
-        if (auto it = unchainedWriter.find(draft); it != unchainedWriter.end()) {
+    std::unordered_map<runtime::GraphTransaction *, bool> unchainedWriter;
+    const auto hasUnchainedWriter = [&](runtime::GraphTransaction *transaction) {
+        if (auto it = unchainedWriter.find(transaction); it != unchainedWriter.end()) {
             return it->second;
         }
-        bool found = false;
-        for (draft_node_ref_t id = 0; !found && id < draft->nodeSlotCount(); ++id) {
-            if (draft->alive(id)) {
-                node_handle_t node = draft->ref(id);
+        const auto &draft = transaction->graph();
+        bool found        = false;
+        for (draft_node_ref_t id = 0; !found && id < draft.nodeSlotCount(); ++id) {
+            if (draft.alive(id)) {
+                node_handle_t node = draft.ref(id);
                 found              = mayWrite(node) && !chainedNodes_.contains(node);
             }
         }
-        return unchainedWriter[draft] = found;
+        return unchainedWriter[transaction] = found;
     };
     const oper_group_ptr_t peekGroup = internalOperatorGroup(camel::core::oper::VarPeek);
     const std::vector<StaticArg> statics(1);
 
     for (node_handle_t read : syncedReads_) {
-        runtime::GraphDraft *draft = nodeDraftOf(read);
-        const draft_node_ref_t id  = nodeIdOf(read);
-        if (!draft->alive(id) || id == draft->exitNode() || id == draft->outputNode() ||
-            id == draft->returnNode()) {
+        runtime::GraphTransaction *transaction = nodeTransactionOf(read);
+        const auto &draft                      = transaction->graph();
+        const draft_node_ref_t id              = nodeIdOf(read);
+        if (!draft.alive(id) || id == draft.exitNode() || id == draft.outputNode() ||
+            id == draft.returnNode()) {
             continue; // condition 2
         }
         draft_node_ref_t lastUser = id;
@@ -1181,7 +1189,7 @@ void Builder::markNonRetainingReads() {
         size_t users              = 0;
         for (auto inputs : {normUsersOf(read), withUsersOf(read)}) {
             for (draft_node_ref_t userId : inputs) {
-                node_handle_t user = draft->ref(userId);
+                node_handle_t user = draft.ref(userId);
                 ++users;
                 lastUser = std::max(lastUser, userId);
                 if (!nodeIsKind(user, runtime::GCNodeKind::Oper) || !chainedNodes_.contains(user) ||
@@ -1195,12 +1203,12 @@ void Builder::markNonRetainingReads() {
             continue;
         }
         for (draft_node_ref_t between = id + 1; !keeps && between < lastUser; ++between) {
-            keeps = draft->alive(between) && mayWrite(draft->ref(between)); // condition 4
+            keeps = draft.alive(between) && mayWrite(draft.ref(between)); // condition 4
         }
-        if (keeps || hasUnchainedWriter(draft)) {
+        if (keeps || hasUnchainedWriter(transaction)) {
             continue;
         }
-        node_handle_t cell = draft->ref(normInputsOf(read).front());
+        node_handle_t cell = draft.ref(normInputsOf(read).front());
         const auto peek    = peekGroup->resolve({}, {nodeTypeOf(cell)}, statics);
         ASSERT(peek.has_value(), "__var_peek__ rejected a variable.");
         nodeGraphOf(read)->retargetOperNode(read, *peek);
@@ -1208,10 +1216,21 @@ void Builder::markNonRetainingReads() {
     syncedReads_.clear();
 }
 
-void Builder::rejectDiscardedValue(const void *body) {
+void Builder::rejectDiscardedValue(BodyKey body) {
     if (auto it = bodyValueStatement_.find(body); it != bodyValueStatement_.end()) {
         rejectUnusedPureResult(it->second.first, it->second.second);
     }
+}
+
+Builder::BodyKey Builder::bodyKeyOf(const DraftGraphBuilder *graph) {
+    return graph != nullptr ? BodyKey{false, camel::runtime::toValue(graph->graphId())} : BodyKey{};
+}
+
+Builder::BodyKey Builder::currentBodyKey() const {
+    // The arm that is being built is the body; a body of no arm is the graph of the function it
+    // is written in.
+    const ArmBuild *arm = activeArm();
+    return arm != nullptr ? BodyKey{true, arm->bodyId} : bodyKeyOf(currGraph_.get());
 }
 
 void Builder::rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t node) {

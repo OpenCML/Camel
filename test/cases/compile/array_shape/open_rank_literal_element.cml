@@ -1,0 +1,17 @@
+// A literal written where `T[..]` is declared: the position includes rank zero, which is the
+// element itself (design principles 5.4), so the literal is the element and keeps the element
+// type -- `let x: f32[..] = 1.0` is the f32 1.0, not an array holding it. The same holds for a
+// tuple, the element of (int, f32)[..], and an array literal keeps its rank: [1.0, 2.0] is a
+// rank-1 array and enters the position as one. The declaration's `T[..]` states no rank of its own, so
+// there is nothing to refuse and nothing to wrap: the arithmetic below runs in the element type,
+// and `T[]` (`rank_one_refuses_literal.cml`) refuses the very same literal.
+
+func main(): int sync {
+    let x: f32[..] = 1.0
+    println(x + 1.0)
+    let row: f32[..] = [1.0, 2.0]
+    println(row)
+    let t: (int, f32)[..] = (7, 2.5)
+    println(t)
+    return 0
+}

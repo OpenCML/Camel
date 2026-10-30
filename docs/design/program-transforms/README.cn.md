@@ -36,31 +36,44 @@ func zip::<..A>(..xs: ..A): (..ElementOf<A>)[] when ..is_array::<A>()
 
 ## 3. 原语的规则
 
-规则是普通的 `rule` 声明（规则语言第二版），用标签挂在原语上（原则 6.2，标签参数用圆括号）。三种，按需要写：
+内置原语（`prelude` 里的 `func operator +` 等，以及 tensor、math 的原语）的规则写在**规则集模块**里，
+例如 `stdlib/rulesets/jvp.cml`。**一个模块是不是规则集，由它的路径前缀决定**：`stdlib/rulesets/` 下的
+模块是规则集，其他模块是库；索引只从这样命名的模块里建，所以一个库不会因为写了 `rule` 就被当成规则集。
+一条规则属于哪一族，是因为它声明在哪个模块里；**它是哪个原语的规则，由它的左边决定**——`rule jvp_add
+{ x + w => … }` 的左边头就是 `+`，**而且左边的运算符连同它的元数一起才是键**：`-x` 是一元取负
+（`__neg__`），`x - w` 是二元减法（`__sub__`），两者写同一个 `-`，是两条规则、两个原语。变换按"原语 →
+规则集模块里左边以它（运算符与元数）为键的规则"建一张索引，一条规则集一张。
 
 ```camel
-#jvp(mul_jvp) #transpose(mul_t)
-func mul::<T>(x: T, w: T): T when is_float::<T>()
-
-// 前向：右边是"输入切向量 => 输出切向量"，对切向量线性
-rule mul_jvp::<T>(x: T, w: T) when is_float::<T>() {
-    x * w => (dx: T, dw: T) => dx * w + x * dw
+// 规则集模块里（例如 stdlib/rulesets/jvp.cml）：左边的运算符与元数就是这条规则所属的原语
+rule jvp_add::<T>(x: T, w: T) when is_float::<T>() {
+    x + w => (dx: T, dw: T) => add_tangent(x, w, dx, dw)
 }
 
-// 转置：只对线性的实参写；c 在转置时是已知值
-rule mul_t::<T>(x: T, c: T) when is_float::<T>() {
-    x * c => (ct: T) => ct * c
-}
-
-// 直接给回传：jvp 加转置写起来不自然的原语（softmax、排序类）用它
-#vjp(softmax_vjp)
-func softmax…
-rule softmax_vjp::<T>(x: T[..]) when is_float::<T>() {
-    softmax(x) => (softmax(x), (ct) => …)
+rule jvp_mul::<T>(x: T, w: T) when is_float::<T>() {
+    x * w => (dx: T, dw: T) => mul_tangent(x, w, dx, dw)
 }
 ```
 
-- 规则右边的计算全部写成 Camel，能读、能测、能被规则系统改写。
+**前向与转置是两个规则集**：`stdlib/rulesets/jvp.cml` 收前向规则，`stdlib/rulesets/transpose.cml` 收转置
+规则。它们的左边往往一模一样（`add_jvp` 与 `add_t` 都写 `x + w`），而一个规则集里一个原语只有一条规则，
+所以这两族分居两个模块——一个模块不兼任两族，正如一个模块不兼任库和规则集。规则右边的数学由库
+（`stdlib/autodiff.cml`）里那几个切线/余切函数写着，规则只是把它接到原语上。
+
+程序自己写的函数才用标签（相当于 JAX 的 `custom_jvp`）：标签放在 `prelude`，规则写在用户自己的模块里，
+可以 `import`。
+
+```camel
+#jvp(my_jvp)
+func my_fn(x: float): float { … }
+
+rule my_jvp(x: float) {
+    my_fn(x) => (dx: float) => …
+}
+```
+
+- **同一原语在同一规则集里有两条键相同（运算符与元数都相同）的规则，报编译错误**：否则谁生效取决于书写顺序。
+- **用户函数既有 `#jvp` 标签、规则集里又有以它为头的规则时，以标签为准。**
 - **缺规则必须拒绝**（原则 9.9）：变换遇到一个没有对应规则的原语，在那个原语处给编译期诊断，点名原语与缺的是哪种规则。
 - 线性原语只有十几个（加、减、取负、乘以已知值、矩阵乘、求和、广播、改形状、切片、拼接、转置、`where` 的选择），`#transpose` 规则只给它们写。
 

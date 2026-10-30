@@ -18,6 +18,7 @@
 #include "camel/core/tags.h"
 #include "camel/execute/pass/params.h"
 #include "camel/runtime/draft_session.h"
+#include "camel/runtime/graph_txn.h"
 #include "camel/utils/log.h"
 
 #include <algorithm>
@@ -31,7 +32,7 @@ using camel::runtime::gc_node_ref_t;
 using camel::runtime::GCGraph;
 using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
-using camel::runtime::GraphDraft;
+using camel::runtime::GraphTransaction;
 using camel::runtime::kInvalidNodeRef;
 using camel::runtime::RuntimeGraphDraftSession;
 
@@ -42,7 +43,8 @@ namespace sem  = camel::core::sem;
 namespace tag  = camel::core::tag;
 
 /// The operator of an OPER node, kNoOper for any other node.
-camel::core::OperId operOf(const GraphDraft &draft, gc_node_ref_t id) {
+camel::core::OperId operOf(const GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
     const auto *h = draft.header(id);
     if (!h || h->kind != GCNodeKind::Oper) {
         return camel::core::kNoOper;
@@ -67,16 +69,20 @@ const PatternOperators &patternOperators() {
 /// input) and its control users, if any, are `next` as well. The group's nodes stay separate
 /// nodes of the graph (identity is preserved), so this is a property of the pattern, not a
 /// precondition for merging: a value with another reader would simply not be private to a group.
-bool isPrivateIntermediate(const GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t next) {
+bool isPrivateIntermediate(
+    const GraphTransaction &transaction, gc_node_ref_t id, gc_node_ref_t next) {
+    const auto &draft = transaction.graph();
     const auto normUsers = draft.normUsersOf(id);
-    const auto ctrlUsers = draft.ctrlUsersOf(id);
+    const std::vector<gc_node_ref_t> ctrlUsers = draft.waitUsersOf(id);
     return normUsers.size() == 1 && normUsers[0] == next && draft.withUsersOf(id).empty() &&
            std::ranges::all_of(ctrlUsers, [&](gc_node_ref_t user) { return user == next; }) &&
            id != draft.outputNode() && id != draft.returnNode() && id != draft.exitNode();
 }
 
 /// Writes `text` (a Symbol) under `key` on `id`; false when the set already said that.
-bool setSymbol(GraphDraft &draft, gc_node_ref_t id, attr::AttrKey key, std::string_view text) {
+bool setSymbol(
+    GraphTransaction &transaction, gc_node_ref_t id, attr::AttrKey key, std::string_view text) {
+    auto &draft                   = transaction.edit();
     const attr::AttrSetId before = draft.nodeAttrs(id);
     const attr::AttrSetId after  = attr::unite(before, attr::single(key, attr::symbol(text)));
     if (after == before) {
@@ -91,7 +97,9 @@ bool setSymbol(GraphDraft &draft, gc_node_ref_t id, attr::AttrKey key, std::stri
 /// the accumulation (a separately rounded multiply and add included, 2.17); nothing else is
 /// needed. Implementation choices do not change the operator (9.6), so this writes an
 /// attribute, not another operator.
-std::string_view kernelChoice(const GraphDraft &draft, gc_node_ref_t id, const sem::NumericPolicy &policy) {
+std::string_view kernelChoice(
+    const GraphTransaction &transaction, gc_node_ref_t id, const sem::NumericPolicy &policy) {
+    const auto &draft = transaction.graph();
     const sem::PermissionMask effective = tag::effectivePermissions(draft, id, policy);
     return (effective & sem::kReassociate) != 0 ? kLibraryKernel : kCanonicalKernel;
 }
@@ -102,22 +110,24 @@ std::string_view kernelChoice(const GraphDraft &draft, gc_node_ref_t id, const s
 /// the rule may carry. Returns how many nodes it changed and counts the choices, so a run says
 /// how many products run each way.
 size_t markKernels(
-    GraphDraft &draft, const sem::NumericPolicy &policy, size_t &library, size_t &canonical) {
+    GraphTransaction &transaction, const sem::NumericPolicy &policy, size_t &library,
+    size_t &canonical) {
+    auto &draft                 = transaction.edit();
     const PatternOperators &ops = patternOperators();
     size_t changed              = 0;
     const gc_node_ref_t slots   = draft.nodeSlotCount();
     for (gc_node_ref_t id = 0; id < slots; ++id) {
-        const camel::core::OperId oper = operOf(draft, id);
+        const camel::core::OperId oper = operOf(transaction, id);
         if (oper != ops.matmul && oper != ops.linear) {
             continue;
         }
-        const std::string_view choice = kernelChoice(draft, id, policy);
+        const std::string_view choice = kernelChoice(transaction, id, policy);
         if (choice == kLibraryKernel) {
             ++library;
         } else {
             ++canonical;
         }
-        if (setSymbol(draft, id, kernelAttrKey(), choice)) {
+        if (setSymbol(transaction, id, kernelAttrKey(), choice)) {
             ++changed;
         }
     }
@@ -128,8 +138,9 @@ size_t markKernels(
 /// tensor.fusion with the same value. False when a node already belongs to another group or all
 /// of them already carry this value (a second run writes nothing).
 bool markGroup(
-    GraphDraft &draft, gc_node_ref_t matmul, gc_node_ref_t add, gc_node_ref_t relu,
+    GraphTransaction &transaction, gc_node_ref_t matmul, gc_node_ref_t add, gc_node_ref_t relu,
     std::string_view fusion) {
+    auto &draft             = transaction.edit();
     const attr::AttrKey key = fusionAttrKey();
     for (gc_node_ref_t member : {matmul, add, relu}) {
         if (member == kInvalidNodeRef) {
@@ -143,7 +154,7 @@ bool markGroup(
     bool changed = false;
     for (gc_node_ref_t member : {matmul, add, relu}) {
         if (member != kInvalidNodeRef) {
-            changed |= setSymbol(draft, member, key, fusion);
+            changed |= setSymbol(transaction, member, key, fusion);
         }
     }
     return changed;
@@ -151,12 +162,13 @@ bool markGroup(
 
 /// Marks every `x @ w + b` / `relu(x @ w + b)` group whose product nothing else observes.
 /// Returns the number of groups written (a second run finds them marked and writes none).
-size_t markGroups(GraphDraft &draft) {
+size_t markGroups(GraphTransaction &transaction) {
+    auto &draft                 = transaction.edit();
     const PatternOperators &ops = patternOperators();
     const gc_node_ref_t slots   = draft.nodeSlotCount();
     size_t groups               = 0;
     for (gc_node_ref_t add = 0; add < slots; ++add) {
-        if (operOf(draft, add) != ops.add) {
+        if (operOf(transaction, add) != ops.add) {
             continue;
         }
         const auto inputs = draft.normInputsOf(add);
@@ -168,9 +180,9 @@ size_t markGroups(GraphDraft &draft) {
         gc_node_ref_t matmul = kInvalidNodeRef;
         for (size_t side = 0; side < 2; ++side) {
             const gc_node_ref_t candidate = inputs[side];
-            if (operOf(draft, candidate) == ops.matmul &&
+            if (operOf(transaction, candidate) == ops.matmul &&
                 draft.normInputsOf(candidate).size() == 2 &&
-                isPrivateIntermediate(draft, candidate, add)) {
+                isPrivateIntermediate(transaction, candidate, add)) {
                 matmul = candidate;
                 break;
             }
@@ -181,12 +193,12 @@ size_t markGroups(GraphDraft &draft) {
         gc_node_ref_t relu      = kInvalidNodeRef;
         std::string_view fusion = kLinearFusion;
         const auto users        = draft.normUsersOf(add);
-        if (users.size() == 1 && operOf(draft, users[0]) == ops.relu &&
-            isPrivateIntermediate(draft, add, users[0])) {
+        if (users.size() == 1 && operOf(transaction, users[0]) == ops.relu &&
+            isPrivateIntermediate(transaction, add, users[0])) {
             relu   = users[0];
             fusion = kLinearReluFusion;
         }
-        if (markGroup(draft, matmul, add, relu, fusion)) {
+        if (markGroup(transaction, matmul, add, relu, fusion)) {
             ++groups;
         }
     }
@@ -203,9 +215,9 @@ TensorFusePass::apply(const camel::runtime::Program *program, std::ostream &) {
     RuntimeGraphDraftSession session(context_, program);
     size_t changed = 0, library = 0, canonical = 0, groups = 0;
     for (GCGraph *g : session.collectReachableRuntimeGraphs()) {
-        GraphDraft &draft = session.edit(g);
-        changed += markKernels(draft, policy, library, canonical);
-        groups += markGroups(draft);
+        auto &transaction = session.edit(g);
+        changed += markKernels(transaction, policy, library, canonical);
+        groups += markGroups(transaction);
     }
     changed += groups;
     CAMEL_LOG_INFO_S(

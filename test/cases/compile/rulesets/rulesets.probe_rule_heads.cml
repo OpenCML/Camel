@@ -1,0 +1,18 @@
+// The ruleset index, read as it is built: a rule is filed under the head of its left side, and
+// the three shapes are read where the rule is written -- `a + b`, `a * b`, and `-a`.
+rule add_rule(x: float, w: float) {
+    x + w => (dx: float, dw: float) => dx
+}
+
+rule mul_rule(x: float, w: float) {
+    x * w => (dx: float, dw: float) => dx
+}
+
+rule neg_rule(x: float) {
+    -x => (dx: float) => dx
+}
+
+func main(): int sync {
+    println(1)
+    return 0
+}

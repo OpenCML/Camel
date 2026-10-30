@@ -693,8 +693,13 @@ class Builder {
     node_handle_t visitDecoratedBlock(const GCT::node_ptr_t &link, bool unused);
     // The bodies whose value is dropped: a decorated block whose value nothing takes is a
     // function whose value is dropped, as a plain block drops the value of its last statement.
+    // The node is a node of the tree being built, read while that tree is still being visited;
+    // the set is emptied when a module's body begins, so a node of a finished module cannot be
+    // mistaken for one of this module's at the same address.
     std::unordered_set<const GCT::Node *> droppedBodies_;
-    std::unordered_set<const DraftGraphBuilder *> droppedGraphs_; // their graphs
+    /// Their graphs, by `GraphId`: a graph is dropped after it is built and its address is reused,
+    /// its id is not (camel/runtime/graph_id.h).
+    std::unordered_set<uint32_t> droppedGraphs_;
     // The graphs of decorated blocks: written as blocks, they are not functions a program
     // declares, and get no ignored-write check of their own.
     std::unordered_set<const DraftGraphBuilder *> blockGraphs_;
@@ -793,7 +798,7 @@ class Builder {
     // value captured, so a read written after it is ordered after it (readVariableThrough).
     node_handle_t lastIndirectCall_ = nullptr;
     std::optional<std::string>
-    moduleVariableOf(const runtime::GraphDraft &draft, draft_node_ref_t port) const;
+    moduleVariableOf(const runtime::GraphTransaction &transaction, draft_node_ref_t port) const;
     // The value the port of a machine's region stands for: a round takes the sequence it iterates
     // and the states it starts from out of its ports, so the port is that value inside the round,
     // exactly as a capture port is what it captured (design principles 3.7, rule C1). The machine
@@ -1073,6 +1078,9 @@ class Builder {
     struct ArmBuild {
         DraftGraphBuilder *graph = nullptr;
         uint32_t region          = 0;
+        /// The arm's own name, given when it begins and never reused: what a map that outlives the
+        /// arm keys it by (see BodyKey).
+        std::size_t bodyId = 0;
         /// What the region is: a branch's arm, or the condition or the body of a loop. A loop's
         /// round regions are the ones that run again on every round, which is what a stream
         /// written outside the loop is consumed by.
@@ -1113,6 +1121,8 @@ class Builder {
     using arm_ptr_t = std::shared_ptr<ArmBuild>;
     /// The arms being built, outermost first.
     std::vector<ArmBuild *> armStack_;
+    /// Hands out `ArmBuild::bodyId`: an arm's name that outlives the arm (see BodyKey).
+    std::size_t nextBodyId_ = 0;
     /// Refuses the second reader of one stream on one execution path (design principles 5.4: a stream
     /// is read once on each path). The check measures the built graphs of the whole program -- a
     /// value handed to a function is read where that call stands -- and records what it finds below;
@@ -2305,26 +2315,28 @@ class Builder {
     // The walk of one body, in the named steps it is made of: the body's ports, the uses one node
     // adds, and the three node kinds whose resources are not their own type's -- an operator, a
     // direct call and a call through a value. Each step says whether the node could be placed.
+    // Every step reads the graph through the transaction that owns it, never the storage by name.
     void numberBodyPorts(
-        BodyReach &walk, const runtime::GraphDraft &draft, const FunctionType &type) const;
+        BodyReach &walk, const runtime::GraphTransaction &transaction, const FunctionType &type)
+        const;
     void addParamUse(
         BodyReach &walk, size_t index, camel::core::sem::ResourceClass cls, const std::string &name,
         camel::core::sem::AccessMode mode) const;
     void addAmbientUse(
         BodyReach &walk, const std::string &name, camel::core::sem::AccessMode mode) const;
     bool readCalleeSignature(
-        BodyReach &walk, const runtime::GraphDraft &draft,
+        BodyReach &walk, const runtime::GraphTransaction &transaction,
         const camel::core::sem::ResourceSignature &sig, size_t calleeWithCount, bool isCall,
         draft_node_ref_t id) const;
     void readUnknownValue(BodyReach &walk) const;
     bool reachOfOper(
-        DraftGraphBuilder *graph, const runtime::GraphDraft &draft, BodyReach &walk,
+        DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction, BodyReach &walk,
         draft_node_ref_t id) const;
     bool reachOfFunc(
-        DraftGraphBuilder *graph, const runtime::GraphDraft &draft, BodyReach &walk,
+        DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction, BodyReach &walk,
         draft_node_ref_t id) const;
     bool reachOfCall(
-        const runtime::GraphDraft &draft, BodyReach &walk, draft_node_ref_t id) const;
+        const runtime::GraphTransaction &transaction, BodyReach &walk, draft_node_ref_t id) const;
     void addVarParameters(BodyReach &walk, const FunctionType &type) const;
     // The resources a body touches, from what its nodes already publish: an operator's own
     // signature, a callee's, and the signature of the function value a call goes through. Empty
@@ -2448,6 +2460,13 @@ class Builder {
     bool isVariable(node_handle_t node) const { return variables_.contains(node); }
     // A new variable holding the value of `value` (`:var/new`).
     node_handle_t newVariable(node_handle_t value);
+    /**
+     * A new variable of `type` with no value in it yet (`:var/new/empty`): its slot holds nothing
+     * until the write that fills it. A declaration whose value is written where the statement
+     * stands, and not where the cell is made, is built this way (a local of a generator body:
+     * design principles 5.4).
+     */
+    node_handle_t newVariableOfType(Type *type);
     // The value `variable` holds when the returned node runs (`:var/get`), ordered after the
     // variable's last writer in this graph and, in a sync block, in the block's chain.
     node_handle_t readVariable(node_handle_t variable);
@@ -2493,12 +2512,21 @@ class Builder {
     node_handle_t visitDataNode(const GCT::node_ptr_t &gct);
     Type *visitTypeNode(const GCT::node_ptr_t &gct);
     /**
-     * The type a type expression denotes once its `typeof` placeholders are resolved: the
-     * expression is built where the type is used, and the placeholder is replaced by its value
-     * type. Any other type is bound by `boundType`. A placeholder nested inside a larger type
-     * is refused: `typeof` stands for a whole type.
+     * The type a type expression denotes once its `typeof` placeholders are resolved: the type of
+     * the value the expression would have, inferred without evaluating it (see `inferTypeOf`).
+     * Any other type is bound by `boundType`. A placeholder nested inside a larger type is
+     * refused: `typeof` stands for a whole type.
      */
     Type *resolveTypeNode(Type *type, const GCT::node_ptr_t &at);
+    /**
+     * The type `e` would have, with nothing of `e` left behind: `typeof e` reads a type and does
+     * not evaluate a value (design principles 5.4), so `e` is built in a graph of its own that is
+     * dropped with it -- no node of the graph the type is used in, no effect in its chain. What
+     * the inference says about `e` is kept in a sink of its own: `e` is checked where it is
+     * evaluated, so an inference that fails reports nothing and an `e` written only inside a
+     * `typeof` reports its first error here.
+     */
+    Type *inferTypeOf(const GCT::node_ptr_t &expression);
     node_handle_t visitNRefNode(const GCT::node_ptr_t &gct);
     /// A name: its value node, or the build-time tuple a rest parameter names (no node).
     std::any visitDRefNode(const GCT::node_ptr_t &gct);
@@ -3038,7 +3066,23 @@ class Builder {
     /// body. Where that value is dropped (a body declared `: void`, the element function of
     /// `foreach`, the arm of an `if` without `else`), rejectDiscardedValue checks it as a
     /// statement whose value nothing takes.
-    std::unordered_map<const void *, std::pair<GCT::node_ptr_t, node_handle_t>>
+    ///
+    /// The key names the body, not the address of the object that was the body: a loop's condition
+    /// and body arms die when the loop is built, their addresses are handed to the bodies built
+    /// after them, and an address-keyed map then read a dead body's last statement -- reporting a
+    /// value the loop itself takes as one nobody took. An arm is named by `ArmBuild::bodyId` and a
+    /// function body by its `GraphId`, which the program never reuses.
+    struct BodyKey {
+        bool arm       = false;
+        std::size_t id = 0;
+        bool operator==(const BodyKey &other) const { return arm == other.arm && id == other.id; }
+    };
+    struct BodyKeyHash {
+        std::size_t operator()(const BodyKey &key) const {
+            return std::hash<std::size_t>{}(key.id * 2 + (key.arm ? 1 : 0));
+        }
+    };
+    std::unordered_map<BodyKey, std::pair<GCT::node_ptr_t, node_handle_t>, BodyKeyHash>
         bodyValueStatement_;
     /// The last statement of the block visitExecNode finished most recently, and its node.
     std::pair<GCT::node_ptr_t, node_handle_t> lastBlockStatement_{};
@@ -3057,7 +3101,11 @@ class Builder {
     std::vector<StatementsAfterFail> statementsAfterFail_;
     /// UnusedPureResult at the last statement of the body of `graph` when it is a call of a
     /// pure operator: the body's value is dropped where `graph` is used (see above).
-    void rejectDiscardedValue(const void *body);
+    void rejectDiscardedValue(BodyKey body);
+    /// The key of a body being built: the arm that is being built, else the graph of the function.
+    BodyKey currentBodyKey() const;
+    /// The key of a `DraftGraphBuilder`'s body.
+    static BodyKey bodyKeyOf(const DraftGraphBuilder *graph);
     /// The graph of each function written in place (a lambda), by its construction node.
     std::unordered_map<const GCT::Node *, const DraftGraphBuilder *> lambdaGraphs_;
     std::vector<node_handle_t> syncedReads_;
@@ -3068,8 +3116,10 @@ class Builder {
     /// (`out = out->append<i>; total += len(out)` in a loop stays linear). See the definition
     /// for the conditions; a read that does not meet every one of them stays `:var/get`.
     void markNonRetainingReads();
-    /// Function graphs whose return type is not declared but taken from their body.
-    std::unordered_set<DraftGraphBuilder *> inferredExitGraphs_;
+    /// Function graphs whose return type is not declared but taken from their body, by `GraphId`:
+    /// the graph is built and dropped long before this question is asked, so its address says
+    /// nothing.
+    std::unordered_set<uint32_t> inferredExitGraphs_;
 
     /// Binds `node` to a fresh name no program can write, so that arms can capture it.
     std::string bindTemporary(node_handle_t node);

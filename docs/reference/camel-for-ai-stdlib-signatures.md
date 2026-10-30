@@ -282,7 +282,7 @@ is_bool: () => bool
 is_plain: () => bool
 ```
 
-**`array`** — import { ... } from array — 36 name(s)
+**`array`** — import { ... } from array — 37 name(s)
 
 ```text
 reverse: (xs: T[]) => T[]
@@ -328,6 +328,7 @@ merge_sorted: (xs: T[], ys: T[]) => T[] when is_ordered::<T>()
 sort_by: <key: (x: T) => K> (xs: T[]) => T[] when is_ordered::<K>()
 flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
 zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
+vmap: (f: (row: T) => U) => (xs: RowsOf<T>) => U[]
 ```
 
 **`stream`** — import { ... } from stream — 12 name(s)
@@ -732,11 +733,13 @@ update: (opt: Sgd, params: P, grads: G, state: SgdState) => (P, SgdState)
 update: (opt: Adam, params: P, grads: G, state: AdamState<P>) => (P, AdamState<P>)
 ```
 
-**`autodiff`** — import { ... } from autodiff — 13 name(s)
+**`autodiff`** — import { ... } from autodiff — 15 name(s)
 
 ```text
 grad: (f: F) => Gradient<F> when is_function::<F>()
+grad: (f: F, has_aux: bool) => GradientAndAux<F> when is_function::<F>()
 with_grad: (f: F) => ValueAndGradient<F> when is_function::<F>()
+with_grad: (f: F, has_aux: bool) => ValueAndGradientAndAux<F> when is_function::<F>()
 stop_gradient: (x: T) => T pure
 add_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 sub_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
@@ -748,6 +751,18 @@ sub_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
 mul_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
 div_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
 neg_cotangent: (x: T, ct: T) => T when is_float::<T>()
+```
+
+**`rulesets.jvp`** — import { ... } from rulesets.jvp — 7 name(s)
+
+```text
+lift: (x: T) => Lift<T>
+mul_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
+mul_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
+sub_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
+sub_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
+div_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
+div_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
 ```
 
 **`sim`** — import { ... } from sim — 2 name(s)

@@ -77,6 +77,7 @@ Not in this reference: the profiler (`perf`).
 | [nn](#nn) | `import { ... } from nn` | C++ |
 | [optim](#optim) | `import { ... } from optim` | Camel |
 | [autodiff](#autodiff) | `import { ... } from autodiff` | C++ |
+| [rulesets.jvp](#rulesets.jvp) | `import { ... } from rulesets.jvp` | Camel |
 | [sim](#sim) | `import { ... } from sim` | C++ |
 | [onnx](#onnx) | `import { ... } from onnx` | C++ |
 | [built-in](#built-in-functions) | none |  |
@@ -110,6 +111,7 @@ Not in this reference: the profiler (`perf`).
 | [nn](#nn) | `import { ... } from nn` |  |
 | [optim](#optim) | `import { ... } from optim` |  |
 | [autodiff](#autodiff) | `import { ... } from autodiff` |  |
+| [rulesets.jvp](#rulesets.jvp) | `import { ... } from rulesets.jvp` |  |
 | [sim](#sim) | `import { ... } from sim` |  |
 | [onnx](#onnx) | `import { ... } from onnx` |  |
 
@@ -715,7 +717,10 @@ call does is what f does.
 map: <f: (item: T) => U> (xs: T[]) => U[]
 ```
 
-f applied to every element; the calls have no order among them.
+f applied to every element; the calls have no order among them. One call batches one array,
+along the one axis that array has, and the result is by position: a function of one value
+becomes a function of an array of them, and of nothing else. Batching a second array, choosing
+or naming the axis, and applying the batch where no array is written yet are not this function.
 
 - Example: `[1, 2, 3]->map<(x) => x * 2>` gives `[2, 4, 6]`
 
@@ -1255,6 +1260,11 @@ The tree is the data, the directory is where it goes: `tree->save_tree<dir: 'out
 `'out/ckpt'->load_tree::<T>`. A failure of the file system is an error value; a directory that
 holds something other than a tree of the type asked for is an error value too. Walking a tree is
 the tree library's (`stdlib/tree.cml`), not this module's.
+
+A checkpoint here is what is written down, not what is recomputed: the transform that trades
+memory for recomputation (the same values, the annotated section recomputed in the backward pass)
+is named `remat` in this standard library, and never `checkpoint` -- so a name in a gradient that
+says checkpoint is this module, and a name that says `remat` is that transform.
 
 #### `tree_leaves`
 
@@ -2108,8 +2118,9 @@ Types are also computed from types, in the one language (design principles 5.6, 
 function is declared with `type`, takes its arguments in the angle brackets of a type position
 and has a type expression for its body, a `match type` among them. `ElementOf<T>` (the element
 of an array or a set), `PayloadOf<T>` (the `U` of `U?` or `U!`), `KeyOf<T>` and `ValueOf<T>` (the
-key and value types of a map) take a type apart where `match type` cannot, and are declared
-below without a body: the compiler provides them. They are evaluated when the instance that
+key and value types of a map) take a type apart where `match type` cannot, and `RowsOf<T>` (the
+array whose first-dimension elements are `T`) puts one back together the same way; they are
+declared below without a body: the compiler provides them. They are evaluated when the instance that
 binds `T` is made, so `is_integer::<ElementOf<T>>()` asks the element type of `T`.
 
 `match type` compares a type's identity as well as its shape (design principles 5.5): the
@@ -2821,6 +2832,36 @@ f(xs[i], ys[i]) for every i.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Failure: fault `InvalidArgument` (of zip) when the two arrays differ in length.
 - Example: `zip_with<(a, b) => a + b>([1, 2], [10, 20])` gives `[11, 22]`
+
+### Batching
+
+#### `vmap`
+
+```camel
+vmap: (f: (row: T) => U) => (xs: RowsOf<T>) => U[]
+```
+
+The batching of a function as a value: `vmap(f)` is the function that applies f to every
+element along the leading axis of an array and gives the results in order, which is JAX's
+`vmap(fun)` for the one argument and the axis 0. One name serves every rank, the leading axis
+being the element `x[i]` takes (design principles 5.4): rank 1 batches the elements
+(`vmap((x: float) => x * x)` over a `float[]` gives their squares), and rank 2 and above batch
+the rows, so `vmap((r: f32[3]) => sum(r * r))` applied to an `f32[4, 3]` gives the four row
+results as an `f32[]`. `RowsOf<T>` states that shape: the type the function takes, with one
+dimension of unknown length in front of it.
+
+The rows are taken one at a time, which is what the result is: turning the rowwise application
+into one kernel is an optimization of the same semantics, left to the batching rules (it does
+not change this interface). A function of two parameters would batch two parameters at once and
+is refused rather than batched over its first one, a second array to batch together with the
+first is refused, and an axis is not a parameter -- there is nothing to name (`in_axes` and
+multiple batched parameters wait for the sixth answer). Being a value, it is stored once and
+applied to several arrays (`let batched = vmap(square)`), which is what makes it a transform
+rather than a call form of `map`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap((x: float) => x * x)([0.0, 1.0, 2.0])` gives `[0.0, 1.0, 4.0]`
+- Example: `vmap((r: f32[3]) => r[2] * r[2])([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3])` gives `[9.0, 36.0]`
 
 <a id="stream"></a>
 
@@ -6194,6 +6235,16 @@ What is differentiated is the first `with` parameter of `f` (the weights); every
 parameter is a constant, and so is every ordinary parameter. To differentiate the data, bind it
 as a `with` parameter with a lambda. A function with no `with` parameter, or whose first one has
 no tangent, or a result that is not a scalar float, is refused where the call is compiled.
+There is no `argnums`: which value is differentiated is what the `with` binding says, not a
+position, so a call that would name one is refused as the unknown parameter it is.
+
+`has_aux: true` is for a function whose result is the pair `(value, aux)`, the shape JAX uses it
+for: the first element is the loss and the second is anything the caller wants carried (a count,
+a norm). The pair is split, the first element is differentiated and the second is handed back
+unchanged: `grad(f, has_aux: true)` gives `(gradient, aux)` and
+`with_grad(f, has_aux: true)` gives `((value, aux), gradient)`, which are JAX's orders.
+The argument has to be the constant `true` -- a call has one result type, so whether the pair is
+split cannot follow a value -- and `has_aux: false` is refused with the plain call to write.
 
 The gradient has the type of the parameter it is the gradient of: a struct gives a struct of
 gradients, a tuple a tuple, an array of floats an array of the same element type and shape, a
@@ -6211,11 +6262,22 @@ scalar (it gives the result and the pullback from the cotangent of the result to
 and `jvp` is forward mode (the result and its tangent along a direction); both land with the
 autodiff lane, not before they work.
 
-`stop_gradient` marks a value as a constant. A transform's local rules are the tags on a
-declaration and the `rule` declarations below: the tags give a function's own rules
+The transform that trades memory for recomputation -- the same values, with the annotated section
+recomputed in the backward pass instead of kept -- is named `remat` here. JAX calls it
+`jax.checkpoint` and, by its other name, `jax.remat`; in this tree "checkpoint" is the persistence
+module `stdlib/ckpt.cml` and stays that, so the transform takes the other word and there is no
+second name for a reader to disambiguate. It is not implemented yet: the name is not a value, and
+a call to it is refused like any other name that does not resolve.
+
+`stop_gradient` marks a value as a constant, and the mathematics of the local rules is written
+here, where the library keeps one statement of it: `add_tangent` and its siblings are the tangent
+of a primitive, `add_cotangent` and its siblings its cotangent. The rules themselves -- the
+declarations that attach those statements to a primitive -- live in the ruleset modules, which is
+what a transform reads: `stdlib/rulesets/jvp.cml` for the forward rules and
+`stdlib/rulesets/transpose.cml` for the transposes. A tag gives a function's own rules
 (`#jvp(rule)` forward, `#transpose(rule)` for a linear function, `#vjp(rule)` the pullback) and
-are read back by structure (`graph::rule_of`); a primitive's rules are the rules whose pattern
-is the primitive, one family at a time, starting with the scalar arithmetic.
+is read back by structure (`graph::rule_of`); a primitive's rules are the ruleset's, by the
+operator of their left side.
 
 #### `grad`
 
@@ -6229,6 +6291,20 @@ result with respect to its first `with` parameter, in the type of that parameter
 - Example (a fragment, not compiled): `let loss_grad = grad(loss)`
 - Why it is not compiled: `loss` must have a `with` parameter for its gradient to exist, and that takes a declaration, so the example is a fragment of a program that declares it
 
+#### `grad`
+
+```camel
+grad: (f: F, has_aux: bool) => GradientAndAux<F> when is_function::<F>()
+```
+
+The same over a function whose result is the pair `(value, aux)`: the first element is
+differentiated and the second is handed back unchanged, so the gradient function gives
+`(gradient, aux)` -- JAX's `grad(f, has_aux=True)`. `has_aux` has to be the constant `true`:
+the pair is split, or the writer means the plain form and writes `grad(f)`.
+
+- Example (a fragment, not compiled): `let loss_grad = grad(loss, has_aux: true)`
+- Why it is not compiled: the function must return a pair whose first element is the loss, and that takes a declaration, so the example is a fragment of a program that declares it
+
 #### `with_grad`
 
 ```camel
@@ -6240,6 +6316,19 @@ the pair a training step needs from one evaluation. The same compile-time refusa
 
 - Example (a fragment, not compiled): `let step = with_grad(loss)`
 - Why it is not compiled: `loss` must have a `with` parameter for its gradient to exist, and that takes a declaration, so the example is a fragment of a program that declares it
+
+#### `with_grad`
+
+```camel
+with_grad: (f: F, has_aux: bool) => ValueAndGradientAndAux<F> when is_function::<F>()
+```
+
+The value, the auxiliary value and the gradient of a function whose result is `(value, aux)`:
+the pair the function gives is returned whole, followed by the gradient --
+`((value, aux), gradient)`, JAX's `value_and_grad(f, has_aux=True)`.
+
+- Example (a fragment, not compiled): `let step = with_grad(loss, has_aux: true)`
+- Why it is not compiled: the function must return a pair whose first element is the loss, and that takes a declaration, so the example is a fragment of a program that declares it
 
 #### `stop_gradient`
 
@@ -6369,6 +6458,103 @@ neg_cotangent: (x: T, ct: T) => T when is_float::<T>()
 The cotangent of `x` in `-x`: `-ct`.
 
 - Example: `neg_cotangent(3.0, 2.0)` gives `-2.0`
+
+<a id="rulesets.jvp"></a>
+
+## `rulesets.jvp`: how a forward transform lifts a value
+
+The `jvp` ruleset: how a forward transform lifts a value (design principles 9.9, program
+transforms).
+
+    let (y, dy) = lift(3.0);   // 3.0 and its zero tangent
+
+`Lift<T>` is a value and the tangent of that value, and `lift(x)` is the value plus the zero
+tangent of its type. A constant and a captured value are lifted this way, so a straight-line
+program is lifted node by node and a call hands its parameters on in the same shape.
+
+Every rule here is `export`ed: the caller that attaches one to an operator lives in another
+module, and a rule that is not exported is refused where it is imported.
+
+Adding a rule changes docs/stdlib-reference.md; regenerate it with
+`node scripts/stdlib-reference.mjs --write`.
+
+#### `lift`
+
+```camel
+lift: (x: T) => Lift<T>
+```
+
+`x` lifted: the value, and the zero tangent of its type -- the empty tuple for a type that has
+no tangent, a tensor of zeros for a tensor, and each member's own zero for a tuple or a struct.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `lift(3.0)` gives `(3.0, 0.0)`
+
+#### `mul_jvp`
+
+```camel
+mul_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
+```
+
+The forward rule of `*` on two 32-bit floats: the product rule, `x*dy + y*dx`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `mul_jvp(f32(2.0), f32(3.0), (f32(0.5), f32(0.25)))` gives `(6.0, 3.0)`
+
+#### `mul_jvp`
+
+```camel
+mul_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
+```
+
+The forward rule of `*` on two 64-bit floats.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `mul_jvp(2.0, 3.0, (0.5, 0.25))` gives `(6.0, 3.0)`
+
+#### `sub_jvp`
+
+```camel
+sub_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
+```
+
+The forward rule of `-` on two 32-bit floats: the tangents subtract the same way.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `sub_jvp(f32(5.0), f32(3.0), (f32(0.5), f32(0.25)))` gives `(2.0, 0.25)`
+
+#### `sub_jvp`
+
+```camel
+sub_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
+```
+
+The forward rule of `-` on two 64-bit floats.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `sub_jvp(5.0, 3.0, (0.5, 0.25))` gives `(2.0, 0.25)`
+
+#### `div_jvp`
+
+```camel
+div_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
+```
+
+The forward rule of `/` on two 32-bit floats: the quotient rule, `(y*dx - x*dy) / (y*y)`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `div_jvp(f32(6.0), f32(2.0), (f32(1.0), f32(0.25)))` gives `(3.0, 0.125)`
+
+#### `div_jvp`
+
+```camel
+div_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
+```
+
+The forward rule of `/` on two 64-bit floats.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `div_jvp(6.0, 2.0, (1.0, 0.25))` gives `(3.0, 0.125)`
 
 <a id="sim"></a>
 

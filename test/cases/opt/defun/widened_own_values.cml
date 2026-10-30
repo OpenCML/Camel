@@ -1,0 +1,28 @@
+/**
+ * The widening the pass writes with a wrapper.
+ *
+ * `apply` takes `(x: int) => void`, and the program writes values of that type of its own (`void_g`)
+ * as well as a lambda that returns a value and is widened where `apply` is called. Those are two
+ * families: one enum over both would call `void_g` with a tag that is not its own. So the
+ * parameter's family gains a variant whose one field is the enum of the lambda's family, and the
+ * function that variant names -- a graph this pass writes -- takes the parameter's own parameters
+ * and, last, that enum. It dispatches over it, calls the value, and drops what the value gives,
+ * because its own signature is the parameter's and that one says `void`.
+ *
+ * Nothing of the program's is left as a function value: no closure and no call through a value
+ * remains once both families are lowered.
+ */
+
+func apply(f: (x: int) => void, v: int) {
+    f(v)
+}
+
+func void_g(x: int): void {
+    println('void_g {}'->format<x>)
+}
+
+func main(): int sync {
+    apply(void_g, 1)
+    apply((x: int) => x * 10, 2)
+    return 0
+}

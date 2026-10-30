@@ -1,0 +1,127 @@
+/**
+ * Compound assignment on the two reduced-precision float types.
+ *
+ * `+= -= *= /= ^=` read a bf16 or f16 cell, compute in f32 and round once into the element type,
+ * which is the one arithmetic path of the type; the cell keeps its element type, so the value the
+ * next statement reads is the element that was stored and not an f32 that happens to be near it.
+ *
+ * The form is `a = a op b` (design principles 4.2): the builder rewrites every compound
+ * assignment into the plain operator and the assignment it would otherwise be written as
+ * (`Builder::compoundAssignmentByRebinding`), so what a narrow `op=` follows is `:op/add_bf` and
+ * its siblings, and the five `:op/assn_*` narrow operators are the group's fallback rather than
+ * this path. Removing `:op/assn_pow`'s arm changes nothing here; removing the plain arm is what
+ * turns the line red, and that is the one this case pins.
+ *
+ * Each form is asserted against the binary operator written beside it, and each pair is pinned by
+ * the two bytes of the stored element:
+ *
+ *   form   bf16                 f16                   value
+ *   +=     0x4070 [112, 64]     0x4380 [128, 67]      1.5 + 2.25 = 3.75
+ *   -=     0x4050 [80, 64]      0x4280 [128, 66]      3.75 - 0.5 = 3.25
+ *   *=     0x40D0 [208, 64]     0x4680 [128, 70]      3.25 * 2.0 = 6.5
+ *   /=     0x3FD0 [208, 63]     0x3E80 [128, 62]      6.5 / 4.0 = 1.625
+ *   ^=     0x4029 [41, 64]      0x4148 [72, 65]       1.625 ^ 2.0 = 2.640625
+ *
+ * Every value above is exact in both types, so the five lines separate the two things a wrong
+ * implementation would get wrong -- the operator the form stands for, and the element type of the
+ * result -- without a rounding question in the way. The rounding itself is pinned next.
+ *
+ * ---- one rounding per statement, and the control that says so ----
+ *
+ * `x += 2^-8` on a bf16 cell starting at 1.0 computes 1 + 2^-8 = 1.00390625, exactly halfway
+ * between the bf16 neighbours 1.0 and 1.0078125, and rounds it to the even one: 1.0. A second
+ * `+= 2^-8` reads 1.0 again and does the same, so the cell is 1.0 and its two bytes are [128, 63].
+ *
+ * A cell that kept f32 between the two statements would hold 1.00390625 after the first, and
+ * 1.0078125 after the second, and store 0x3F81 [129, 63]: the two readings differ by one ulp of
+ * the type, which is what makes the line assert something. The case writes that wider value
+ * explicitly and compares, so the reading is a pair and not a claim: `chain == bf16(1.0078125)`
+ * must be false, and if it were ever true the "one rounding per statement" line would be untested.
+ * The f16 probe is the same with 2^-11 (the half ulp of 1.0 there) and 1.0009765625 for the
+ * wider value, 0x3C01 [1, 60] against the stored 0x3C00 [0, 60].
+ *
+ * The stored element is two bytes in both readings, which is the run-time half of "the cell keeps
+ * the element type"; the static half is that the cell is declared `bf16` and no conversion is
+ * written anywhere.
+ */
+
+import { to_bytes } from tensor
+import { to_array } from bytes
+import { abs, pow } from math
+
+/// The little-endian bytes of one element of a one-element array of the type.
+func bitsOfBf16(value: bf16): int[] {
+    let one: bf16[] = [value]
+    return to_array(to_bytes(one))
+}
+
+func bitsOfF16(value: f16): int[] {
+    let one: f16[] = [value]
+    return to_array(to_bytes(one))
+}
+
+/// The stored element within one rounding's relative bound of the exact power in f64: the tolerance
+/// reduced_pow uses, so a compound assignment that kept f32 precision or rounded twice moves it.
+func bf16WithinEps(x: bf16, y: bf16): bool {
+    let r: bf16 = x ^ y
+    let exact: f64 = pow(f64(x), f64(y))
+    return abs(f64(r) - exact) / abs(exact) <= 0.00390625
+}
+
+func f16WithinEps(x: f16, y: f16): bool {
+    let r: f16 = x ^ y
+    let exact: f64 = pow(f64(x), f64(y))
+    return abs(f64(r) - exact) / abs(exact) <= 0.00048828125
+}
+
+func main(): int sync {
+    // ---- bf16: each form beside the binary operator it stands for ----
+    var b = bf16(1.5)
+    b += bf16(2.25)
+    println(bitsOfBf16(b), bitsOfBf16(bf16(1.5) + bf16(2.25)))
+    b -= bf16(0.5)
+    println(bitsOfBf16(b), bitsOfBf16(bf16(3.75) - bf16(0.5)))
+    b *= bf16(2.0)
+    println(bitsOfBf16(b), bitsOfBf16(bf16(3.25) * bf16(2.0)))
+    b /= bf16(4.0)
+    println(bitsOfBf16(b), bitsOfBf16(bf16(6.5) / bf16(4.0)))
+    b ^= bf16(2.0)
+    println(bitsOfBf16(b), bitsOfBf16(bf16(1.625) ^ bf16(2.0)))
+    println(f32(b))
+
+    // ---- f16: the same five ----
+    var h = f16(1.5)
+    h += f16(2.25)
+    println(bitsOfF16(h), bitsOfF16(f16(1.5) + f16(2.25)))
+    h -= f16(0.5)
+    println(bitsOfF16(h), bitsOfF16(f16(3.75) - f16(0.5)))
+    h *= f16(2.0)
+    println(bitsOfF16(h), bitsOfF16(f16(3.25) * f16(2.0)))
+    h /= f16(4.0)
+    println(bitsOfF16(h), bitsOfF16(f16(6.5) / f16(4.0)))
+    h ^= f16(2.0)
+    println(bitsOfF16(h), bitsOfF16(f16(1.625) ^ f16(2.0)))
+    println(f32(h))
+
+    // ---- one rounding per statement, against the value a wider cell would give ----
+    var chainBf = bf16(1.0)
+    chainBf += bf16(0.00390625)
+    chainBf += bf16(0.00390625)
+    let bfCell: bf16[] = [chainBf]
+    println(bitsOfBf16(chainBf), chainBf == bf16(1.0078125), len(to_bytes(bfCell)))
+
+    var chainF16 = f16(1.0)
+    chainF16 += f16(0.00048828125)
+    chainF16 += f16(0.00048828125)
+    let f16Cell: f16[] = [chainF16]
+    println(bitsOfF16(chainF16), chainF16 == f16(1.0009765625), len(to_bytes(f16Cell)))
+
+    // ---- the inexact power, through the form that shares the operator the case above pins ----
+    var rootBf = bf16(3.0)
+    rootBf ^= bf16(0.5)
+    var rootF16 = f16(3.0)
+    rootF16 ^= f16(0.5)
+    println(bitsOfBf16(rootBf), f32(rootBf), bf16WithinEps(bf16(3.0), bf16(0.5)))
+    println(bitsOfF16(rootF16), f32(rootF16), f16WithinEps(f16(3.0), f16(0.5)))
+    return 0
+}

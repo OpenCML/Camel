@@ -171,3 +171,80 @@ verify_script = """
     }
 }
 """
+
+
+# The chain a spliced body carries is joined into the caller's before the call's place is handed
+# over: a statement of the body that follows nothing in the block is written after the nearest
+# statement it reads, so the body's chain is the one chain a block has and the caller's chain runs
+# through it (docs/design/effects/edges.cn.md 5.3, 5.7). Without the join the pieces of the body's
+# chain stay unreached, and a statement on no chain is a statement that never runs (3.1) -- the
+# caller printed one of the six lines `check` writes.
+#
+# `nn_grad_check` is the case: `check`'s body is four pieces once the call is spliced in, and each
+# piece holds a `println`. What is locked here is the pair of edges, named node to node: every
+# `println` of a spliced copy (the ones outside the definition's cluster) is written after the
+# statement before it and before the statement after it, by a SYNC edge whose same pair also carries
+# the control edge, exactly one of each. The definition's own `println` heads its block and is left
+# out of the count.
+
+[[tests]]
+name = "nn_grad_check.spliced_body_chain_is_one_chain"
+case = "../../../cases/modules/autodiff/nn_grad_check.cml"
+desc = "`std::opt::inline` splices `check` six times: each copy's `:io/println` has exactly one SYNC predecessor and one SYNC successor, and the same pairs carry the control edge beside them."
+args = ["${case}", "std::opt::inline", "std::gir"]
+verify_script = """
+({ input, assert }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const lines = input.normalized.stdout.split('\n')
+    const edge = /^ *(N[0-9A-F]+) -> (N[0-9A-F]+) \[label="([^"]*)", type="([A-Z]+)"\]/
+    const node = /^ *(N[0-9A-F]+) \[label="([^"]*)", type="([A-Z]+)"/
+    const inside = []
+    const nodes = new Map()
+    const into = new Map()
+    const out = new Map()
+    let depth = 0
+    for (const line of lines) {
+        if (/^ *subgraph cluster/.test(line)) {
+            depth += 1
+            continue
+        }
+        if (/^ *\} *$/.test(line)) {
+            if (depth > 0) depth -= 1
+            continue
+        }
+        const m = node.exec(line)
+        if (m) {
+            nodes.set(m[1], { label: m[2], depth })
+            continue
+        }
+        const e = edge.exec(line)
+        if (!e) continue
+        const key = `${e[1]} ${e[2]} ${e[4]}`
+        if (!into.has(e[2])) into.set(e[2], [])
+        if (!out.has(e[1])) out.set(e[1], [])
+        into.get(e[2]).push(e)
+        out.get(e[1]).push(e)
+    }
+    // Every graph is drawn in its own cluster and the definition of a spliced function is nested in the caller's, so a node of the caller's block is one cluster deep and a node of the definition is two.
+    const prints = [...nodes].filter(([, n]) => n.label === ':io/println' && n.depth === 1).map(([id]) => id)
+    assert(prints.length === 6, `expected the six spliced copies of \`check\`, found ${prints.length}: ${prints.join(' ')}`)
+    for (const id of prints) {
+        const preds = (into.get(id) || []).filter((e) => e[4] === 'SYNC')
+        const succs = (out.get(id) || []).filter((e) => e[4] === 'SYNC')
+        assert(preds.length === 1, `${id}: ${preds.length} SYNC predecessors, expected one`)
+        assert(succs.length === 1, `${id}: ${succs.length} SYNC successors, expected one`)
+        for (const pair of [preds[0], succs[0]]) {
+            const same = (pair === preds[0] ? out.get(pair[1]) : into.get(pair[2]))
+            assert(
+                same.some((e) => e[1] === pair[1] && e[2] === pair[2] && e[4] === 'CTRL'),
+                `${pair[1]} -> ${pair[2]} carries SYNC without the control edge beside it`,
+            )
+        }
+        assert(
+            preds[0][1] !== id && succs[0][2] !== id,
+            `${id}: the chain edge names the node itself`,
+        )
+    }
+}
+"""
+timeout_ms = 20000

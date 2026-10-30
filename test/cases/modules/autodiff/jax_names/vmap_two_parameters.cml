@@ -1,0 +1,27 @@
+/**
+ * `vmap` batches one parameter, and a function of two is refused.
+ *
+ * JAX's `vmap(fun, in_axes=(0, None))` batches chosen arguments of a function of several; Camel's
+ * `vmap` batches the one parameter the function has. A function of two would be two batching
+ * parameters at once, so the call is refused where it is written: batching `add` over its first
+ * parameter alone would silently answer a question the program did not ask (`add` with the second
+ * one left out).
+ *
+ * The diagnostic shows both shapes -- the argument's two parameters `(a: float, b: float)`, and the
+ * one-parameter row function the transform takes `f: (row: T) => U` -- so the call says which
+ * parameters it had and which form it needed. The second half is batched in JAX only because
+ * `in_axes` says so, and there is no such parameter here (jax_names/vmap_in_axes.cml): it cannot be
+ * asked for at all.
+ */
+
+import { vmap } from array
+
+func add(a: float, b: float): float {
+    return a + b
+}
+
+func main(): int sync {
+    let batched = vmap(add)
+    println(batched([1.0, 2.0]))
+    return 0
+}

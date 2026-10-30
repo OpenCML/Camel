@@ -3,10 +3,12 @@
 
 #include "handle.h"
 
+#include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/text.h"
 #include "camel/runtime/draft.h"
+#include "camel/runtime/graph_txn.h"
 #include "camel/runtime/program.h"
 #include "camel/utils/assert.h"
 
@@ -14,6 +16,8 @@
 #include <ostream>
 
 namespace camel::graphmod {
+namespace err = camel::core::error;
+
 
 using namespace camel::core::type;
 using camel::runtime::GraphId;
@@ -229,6 +233,19 @@ HandleType::cloneWithArguments(std::span<const TypeArgument> arguments, std::str
 Handle *Handle::create(
     HandleKind kind, const Program *program, GraphId graph, uint32_t index, Type *typeRef,
     mm::IAllocator &allocator) {
+    // A handle that names a program names a node that program has. A node made in a draft is not
+    // in the published graph yet, and a handle that claimed it would send every reader to a slot
+    // the graph does not have -- so the mistake is refused here, where the handle is made, rather
+    // than where somebody reads it.
+    if (kind == HandleKind::Node && program != nullptr) {
+        const camel::runtime::GCGraph *published = program->graph(graph);
+        if (published == nullptr || !published->containsNodeRef(index)) {
+            err::throwRuntimeFault(
+                err::RuntimeDiag::InvalidArgument,
+                "graph.handle",
+                "the node is not in the program's graph");
+        }
+    }
     void *mem = allocator.alloc(sizeof(Handle), alignof(Handle));
     if (mem == nullptr) {
         throw std::bad_alloc();
@@ -236,14 +253,17 @@ Handle *Handle::create(
     return new (mem) Handle(kind, program, nullptr, graph, index, typeRef);
 }
 
-Handle *Handle::createInDraft(
-    const camel::runtime::GraphDraft &draft, camel::runtime::gc_node_ref_t node,
+Handle *Handle::createInTransaction(
+    const camel::runtime::GraphTransaction &transaction, camel::runtime::gc_node_ref_t node,
     mm::IAllocator &allocator) {
     void *mem = allocator.alloc(sizeof(Handle), alignof(Handle));
     if (mem == nullptr) {
         throw std::bad_alloc();
     }
-    return new (mem) Handle(HandleKind::Node, nullptr, &draft, draft.id(), node, nullptr);
+    // A node handle names the transaction and nothing else: the draft it reads is reached
+    // through that transaction, so no draft pointer is kept here at all.
+    const auto &draft = transaction.graph();
+    return new (mem) Handle(HandleKind::Node, nullptr, &transaction, draft.id(), node, nullptr);
 }
 
 bool Handle::equals(const rtdata::Object *other, const Type *type, bool deep) const {
@@ -260,15 +280,16 @@ bool Handle::equals(const rtdata::Object *other, const Type *type, bool deep) co
     // structure name the same type, whatever names (dimensions, parameters) they were written with.
     const bool sameType = typeRef_ == that->typeRef_ ||
                           (kind_ == HandleKind::TypeRef && type::sameCanonicalType(typeRef_, that->typeRef_));
-    return kind_ == that->kind_ && program_ == that->program_ && draft_ == that->draft_ &&
-           graph_ == that->graph_ && index_ == that->index_ && sameType;
+    return kind_ == that->kind_ && program_ == that->program_ &&
+           transaction_ == that->transaction_ && graph_ == that->graph_ &&
+           index_ == that->index_ && sameType;
 }
 
 rtdata::Object *Handle::clone(mm::IAllocator &allocator, const Type *type, bool deep) const {
     (void)type;
     (void)deep;
-    if (draft_ != nullptr) {
-        return createInDraft(*draft_, index_, allocator);
+    if (transaction_ != nullptr) {
+        return createInTransaction(*transaction_, index_, allocator);
     }
     return create(kind_, program_, graph_, index_, typeRef_, allocator);
 }
@@ -281,6 +302,9 @@ void Handle::print(std::ostream &os, const Type *type) const {
 void Handle::updateRefs(const rtdata::Object::RefRelocator &relocate, const Type *type) {
     // The Program a handle was read from lives as long as the handle does. A handle the
     // collector reaches after the program was freed (a dead one, not yet swept) names nothing.
+    // The transaction a draft-backed handle names is borrowed, not owned: it is an ordinary C++
+    // object outside the collector's graph, so it takes no part in tracing, and a handle that
+    // outlives its session names nothing either.
     if (program_ == nullptr || !mm::graphSpace().isAllocated(const_cast<Program *>(program_))) {
         return;
     }

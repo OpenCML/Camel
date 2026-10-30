@@ -1,0 +1,21 @@
+/**
+ * A declaration that binds several names to one value, read across a `yield`: the value is
+ * evaluated once, where the statement stands, and put in a cell of its own; each name is a cell
+ * typed by one element of that value, so the pull after a `yield` reads what the pull before it
+ * wrote. The stream carries `b` and then `3b`.
+ */
+
+func pair(): (int, string) {
+    return (3, 'b')
+}
+
+func g(): string.. sync {
+    let (a, b) = pair()
+    yield b
+    yield string(a) + b
+}
+
+func main(): int sync {
+    loop acc = 0 for v in g() do sync { let _ = println(v); acc + 1 }
+    return 0
+}

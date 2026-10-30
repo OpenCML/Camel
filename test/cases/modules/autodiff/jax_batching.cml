@@ -1,0 +1,29 @@
+/**
+ * Batching at a leading axis through `map`: the call form of what `vmap` turns into a value.
+ *
+ * `map` applies f to each element of a rank-1 array, and the result is by position: one call
+ * batches one array, along the one axis that array has. The numbers below are the examples the JAX
+ * documentation gives for `jax.vmap` -- `jax.vmap(lambda x: x * x)(jnp.arange(3.))` is
+ * `[0., 1., 4.]` -- so the two can be compared without rewriting the program.
+ *
+ * `vmap` is the transform (jax_vmap.cml, jax_vmap_tensor.cml): the same numbers as a value rather
+ * than as a call form. What no case has is the rest of `vmap`: a second batched argument, a chosen
+ * or named axis, and a batch over the leaves of a tree.
+ * docs/handover/reviews/questions-2026-10-30-jax.md records that gap; this case is the part that
+ * must stay green whatever the transform becomes.
+ */
+
+type Point = { w: float }
+
+func main(): int sync {
+    let squares = [0.0, 1.0, 2.0]->map<(x: float): float => x * x>
+    println('jax_batching axis0')
+    println(squares)
+    // The batch is one array of values, and a struct element is batched like any other: what `vmap`
+    // does to the leaves of a tree, `map` does to the fields of an element.
+    let ps: Point[] = [{ w: 1.0 }, { w: 2.0 }, { w: 3.0 }]
+    let doubled = ps->map<(p: Point): float => p.w * 2.0>
+    println('jax_batching struct')
+    println(doubled)
+    return 0
+}

@@ -114,9 +114,9 @@
             "plans": ["smoke", "feat/parse", "feat/compile", "feat/consistency"]
         },
         {
-            "comment": "Values, types, the collector and the runtime shell. The array type's dimensions live here, so its self-test runs too.",
+            "comment": "Values, types, the collector and the runtime shell. The array type's dimensions live here, so its self-test runs too. The direct-connection ledger of graph-store step 2 b is checked here as well: its three numbers count the references to `GraphDraft`, and `src/runtime/` is where both the storage and the transaction live, so this is the directory a commit can add a direct connection from. The plan is fast and cheap (one `git grep` pass), so it rides along rather than waiting for its own gate.",
             "paths": ["src/core/", "src/runtime/"],
-            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml"]
+            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml", "feat/runtime/graph_draft_ledger.plan.toml"]
         },
         {
             "comment": "Execution, entry arguments and the standalone bridge.",
@@ -144,9 +144,9 @@
             "plans": ["smoke", "feat/trans", "feat/opt", "feat/linear"]
         },
         {
-            "comment": "The core value/type headers and the runtime headers. The array type's dimensions live here, so its self-test runs too.",
+            "comment": "The core value/type headers and the runtime headers. The array type's dimensions live here, so its self-test runs too. The ledger's `files`/`references` count is partly a header count (`include/camel/runtime/draft.h`, `draft_session.h`, ...), so this rule names the ledger plan for the same reason the src/ one does.",
             "paths": ["include/camel/core/", "include/camel/runtime/"],
-            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml"]
+            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml", "feat/runtime/graph_draft_ledger.plan.toml"]
         },
         {
             "comment": "The executor and entry-argument headers.",
@@ -292,8 +292,8 @@
             "plans": ["feat/tools/portability.plan.toml", "feat/tools/clean.plan.toml"]
         },
         {
-            "comment": "The diagnostics registry: compile.diag_catalog runs --check, the failure-path proof, --verify-doc and --coverage; the registry is the one declaration file and the generated tables live beside the code they number.",
-            "paths": ["scripts/diagnostics-catalog.mjs", "diagnostics/registry.tsv", "test/cases/diagnostics/registry_proof.mjs"],
+            "comment": "The diagnostics registry and the example pins: compile.diag_catalog runs --check, the failure-path proof, --verify-doc and --coverage; the registry is the one declaration file, the pins are the one record of which case each page example shows, and the generated tables live beside the code they number.",
+            "paths": ["scripts/diagnostics-catalog.mjs", "diagnostics/registry.tsv", "diagnostics/examples.tsv", "test/cases/diagnostics/registry_proof.mjs"],
             "plans": ["feat/compile/diag_catalog.plan.toml"]
         },
         {
@@ -325,6 +325,11 @@
             "comment": "The MCTS showcase: showcase/d4-mcts/search.cml is pinned by a fast plan (the whole standard output of four searches on four back ends, the properties that move if the search is wrong, and three refusals), so an edit to the example runs it. The directory's perf case (compare.py, the Camel/Python comparison) stays where the perf layer keeps it, unselectable by an ordinary change; the other showcase directories remain on the rule-less allowlist, which is why `showcase/` is still listed there.",
             "paths": ["showcase/d4-mcts/"],
             "plans": ["feat/showcase_d4.plan.toml"]
+        },
+        {
+            "comment": "The diffusion training step (I2's CPU precursor): showcase/i2-diffusion-step/step.cml is pinned by a fast plan (the whole standard output of three DDPM steps at a stated seed, on the default back end and std::prl, plus the property that the loss falls), so an edit to the example runs it. The other showcase directories remain on the rule-less allowlist, which is why `showcase/` is still listed there.",
+            "paths": ["showcase/i2-diffusion-step/"],
+            "plans": ["feat/showcase_i2.plan.toml"]
         },
         {
             "comment": "Example programs and their recorded output.",

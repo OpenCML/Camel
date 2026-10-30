@@ -98,3 +98,86 @@ assert(out === '1 | 2 | 1 | 2 | 1 | 1 | 2 | 6 | 1 | 2 | 3 | 1 | 2 | 3 | 2', `une
 }
 """
 timeout_ms = 20000
+[[tests]]
+name = "partial_application_written_var.default"
+desc = "A sync function that writes a module-level var is called through a partial application that binds its declared with parameter away, and the var is read afterwards: the call hands on the value (9.0) and the new version of the var (1) beside it, so the read after the call sees the version the call wrote and the body ran once. The callee's type must state no declared with parameter once it is bound, or the call's version is placed one port too late and a scheduler reads past the end of its with arguments. Pipeline: default."
+kind = "behavior"
+case = "../../../cases/linear/runtime/partial_application_written_var.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "f body runs\n9.0\n1\n"
+expect_output_not_contains = ["internal error", "Camel Debug Assertion"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "partial_application_written_var.nvm"
+desc = "The partial application of a sync function that writes a module-level var, on the node VM: the value, the version the caller reads and the fact that the body ran once. Pipeline: nvm."
+kind = "behavior"
+case = "../../../cases/linear/runtime/partial_application_written_var.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "f body runs\n9.0\n1\n"
+expect_output_not_contains = ["internal error", "Camel Debug Assertion"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "partial_application_written_var.fvm"
+desc = "The partial application of a sync function that writes a module-level var, on the bytecode VM: the value, the version the caller reads and the fact that the body ran once. Pipeline: fvm."
+kind = "behavior"
+case = "../../../cases/linear/runtime/partial_application_written_var.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "f body runs\n9.0\n1\n"
+expect_output_not_contains = ["internal error", "Camel Debug Assertion"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "partial_application_written_var.jit"
+desc = "The partial application of a sync function that writes a module-level var, with the JIT-enabled VM: the value, the version the caller reads and the fact that the body ran once. Pipeline: jit."
+kind = "behavior"
+case = "../../../cases/linear/runtime/partial_application_written_var.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+expect_stdout_exact = "f body runs\n9.0\n1\n"
+expect_output_not_contains = ["internal error", "Camel Debug Assertion"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "partial_application_written_var.prl"
+desc = "The partial application of a sync function that writes a module-level var, on the task scheduler: the value, the version the caller reads and the fact that the body ran once. Pipeline: prl."
+kind = "behavior"
+case = "../../../cases/linear/runtime/partial_application_written_var.cml"
+args = ["${case}", "std::prl"]
+expect_exit = 0
+expect_stdout_exact = "f body runs\n9.0\n1\n"
+expect_output_not_contains = ["internal error", "Camel Debug Assertion"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "partial_application_written_var.opt"
+desc = "The partial application of a sync function that writes a module-level var, after the optimizer: std::opt::specialize binds the with parameter and rewrites the call, and it used to leave the callee's type stating that parameter -- the call's value lost the version, and the four schedulers segfaulted after the body printed its line. Pipeline: opt."
+kind = "behavior"
+case = "../../../cases/linear/runtime/partial_application_written_var.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+expect_stdout_exact = "f body runs\n9.0\n1\n"
+expect_output_not_contains = ["internal error", "Camel Debug Assertion"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "partial_application_written_var.opt_specialize"
+desc = "The same call after the one pass that broke it, alone: std::opt::specialize binds the declared with parameter away, and the node VM then reads the version the call hands on -- the value, that version and the single run of the body. Pipeline: opt_specialize."
+kind = "behavior"
+case = "../../../cases/linear/runtime/partial_application_written_var.cml"
+args = ["${case}", "std::opt::specialize", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "f body runs\n9.0\n1\n"
+expect_output_not_contains = ["internal error", "Camel Debug Assertion"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

@@ -1,0 +1,21 @@
+id = "trans.print_determinism"
+order = 343
+tier = "fast"
+tags = ["feat", "trans", "dump", "determinism"]
+
+# The same input prints the same bytes: `std::gir` draws a node's order predecessors from the
+# graph's own array, and the graph writes that array by the predecessor's number, so it does not
+# matter in what order a rewrite appended them or how the heap fell on a given run. Before the
+# array was canonical, the 472 lines of this case came out in two orders (five ORDER edges of one
+# node moved) about once in ten runs of the same binary.
+
+[[tests]]
+name = "gir_prints_one_hash"
+desc = "Twenty runs in twenty processes of one program print one dump: same lines, same order, one SHA-256. The case is the by-reference capture program the two orders were observed on, and the dump is long enough (over a hundred lines) that a printer with nothing to do cannot pass this."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/trans/print_determinism.py"
+args = ["${case}", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["std::gir printed one graph one way: PASS (20 runs"]
+timeout_ms = 60000

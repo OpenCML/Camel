@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The edge invariants of an encoded graph, checked at every commit (docs/design/graph-store 5.4):
+ * The edge invariants of an encoded graph, checked at every commit (docs/design/graph-store 5.4).
+ * The owner of these rules is the finished graph, executed by the seal check at commit, not the
+ * draft's writers: a node still being built answers a different question.
  *
  *  - no cycle: following the inputs of a node (value, `with` and control alike) never comes back
  *    to it. A graph calls itself through other graphs, never through an edge;
@@ -24,6 +26,7 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/runtime/cycle.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
 #include "camel/utils/assert.h"
@@ -40,6 +43,48 @@ namespace camel::runtime {
 using namespace camel::core::type;
 
 namespace {
+
+/// Reads a frozen graph for `camel::runtime::findInputCycle`: the data, `with`, control and sync
+/// edges are runs of refs; an order edge is a record (`GCGraphOrderEdge`), so the adaptor collects
+/// the predecessors it was asked for and hands out that scratch until the next call.
+class FrozenCycleEdges {
+  public:
+    explicit FrozenCycleEdges(const GCGraph &graph) : graph_(graph) {}
+
+    size_t slotCount() const { return graph_.nodeCount(); }
+    bool present(gc_node_ref_t ref) const {
+        return graph_.containsNodeRef(ref) && graph_.node(ref)->kind != GCNodeKind::Dead;
+    }
+    std::span<const gc_node_ref_t> inputsOf(gc_node_ref_t ref, CycleEdgeKind kind) {
+        switch (kind) {
+        case CycleEdgeKind::Norm:
+            return graph_.normInputsOf(ref);
+        case CycleEdgeKind::With:
+            return graph_.withInputsOf(ref);
+        case CycleEdgeKind::Ctrl:
+            return graph_.ctrlInputsOf(ref);
+        case CycleEdgeKind::Sync:
+            sideEdges_.clear();
+            for (const GCGraphSyncEdge &edge : graph_.syncPredsOf(ref)) {
+                sideEdges_.push_back(edge.pred);
+            }
+            return std::span<const gc_node_ref_t>(sideEdges_);
+        case CycleEdgeKind::Order:
+            sideEdges_.clear();
+            for (const GCGraphOrderEdge &edge : graph_.orderPredsOf(ref)) {
+                sideEdges_.push_back(edge.pred);
+            }
+            return std::span<const gc_node_ref_t>(sideEdges_);
+        }
+        return {};
+    }
+
+  private:
+    const GCGraph &graph_;
+    /// The predecessors of the edge kind asked for last: sync and order edges are records, not
+    /// runs of refs, so the adaptor hands out this scratch until the next call.
+    std::vector<gc_node_ref_t> sideEdges_;
+};
 
 class EdgeChecker {
   public:
@@ -81,7 +126,7 @@ class EdgeChecker {
                         node.typeId));
             }
         }
-        ASSERT(
+        GUARD(
             violations_.empty(),
             "A frozen graph names a type id that did not come from the type table's interning "
             "path (see typeIdOf in src/runtime/graph.cpp).");
@@ -202,7 +247,8 @@ class EdgeChecker {
     /// reads the first half back; this is the second. Two statements of one block following the
     /// same statement is a chain that forks, which is no chain: the layout takes one of the two and
     /// the other is reached by nothing, so its work does not happen and a program that prints twice
-    /// prints once.
+    /// prints once. The owner of this rule is the finished graph, executed by the seal check at
+    /// commit, not the draft's writers.
     ///
     /// What counts is the chain 5.3 and 3.4 make. A node the model lets a pass arrange freely is not
     /// on the chain at all (3.4: a sync block orders its effects, and a node that is pure and cannot
@@ -298,7 +344,7 @@ class EdgeChecker {
                 bad("orders a node after itself");
                 continue;
             }
-            if (isFreelySchedulable(edge.user) && !standsForItsRegion(edge.user)) {
+            if (nodeTakesNoOrder(graph_, edge.user)) {
                 bad("is on a pure node, which nothing orders");
             }
             if (const uint32_t region = crossedControlRegion(edge.pred, edge.user); region != 0) {
@@ -311,7 +357,8 @@ class EdgeChecker {
         }
     }
 
-    /// The control region an order edge would cross, 0 when it crosses none. An order edge orders
+    /// The control region an order edge would cross, 0 when it crosses none. The owner of this rule is
+    /// the finished graph, executed by the seal check at commit, not the draft's writers. An order edge orders
     /// two nodes that both run, and an arm or a part of a loop runs as a whole with the node that
     /// owns it: the order such a region has with the code around it is an order on the owner (the
     /// `BRCH` or the `LOOP`), never one that reaches inside the region (docs/design/effects/
@@ -371,22 +418,7 @@ class EdgeChecker {
     /// order on that node -- the `BRCH` or the `LOOP` -- and not one that reaches inside the region.
     /// Such a node computes nothing itself, and still carries an order edge, which is why the rule
     /// "a pure node carries none" reads it out here.
-    bool standsForItsRegion(gc_node_ref_t ref) const {
-        const GCNode *node = graph_.node(ref);
-        if (node == nullptr) {
-            return false;
-        }
-        if (node->kind != GCNodeKind::Brch && node->kind != GCNodeKind::Loop) {
-            return false;
-        }
-        for (uint32_t region = 1; region < graph_.regionCount(); ++region) {
-            const GCRegion *record = graph_.region(region);
-            if (record != nullptr && record->owner == ref) {
-                return true;
-            }
-        }
-        return false;
-    }
+    bool standsForItsRegion(gc_node_ref_t ref) const { return nodeStandsForItsRegion(graph_, ref); }
 
     /// The rule of 4.6's third clause, read off the shared classification so that the seal check
     /// and the passes that write order edges cannot drift: only a node the model lets a pass
@@ -395,7 +427,8 @@ class EdgeChecker {
         // Whether a conversion can fail depends on the types it converts between, and a pass that
         // refines the types (specialization, inlining) can make a conversion that was ordered when
         // it was written one that cannot fail. The order it was given then stays: dropping it is
-        // the passes' choice, and an edge on such a node is not a defect of the graph.
+        // the passes' choice, and an edge on such a node is not a defect of the graph. The owner of
+        // this rule is the finished graph, executed by the seal check at commit, not the draft's writers.
         const GCNode *node = graph_.node(ref);
         if (node != nullptr && node->kind == GCNodeKind::Cast) {
             return false;
@@ -482,77 +515,22 @@ class EdgeChecker {
                 what));
     }
 
-    /// Depth-first over the edges with an explicit stack; a node reached while it is open is on a
-    /// cycle. An order edge takes part: it constrains the order the back ends lay the graph out
-    /// in, so a cycle of them is a graph no scheduler can run (docs/design/effects/edges.cn.md
-    /// 1.5, 2).
+    /// The judgement the draft's check makes, on the frozen graph (camel/runtime/cycle.h): every
+    /// edge kind takes part, the sync and order ones included. Each of them makes one node run after
+    /// another -- a sync edge is a real ordering (docs/design/effects/edges.cn.md, section 1) -- so a
+    /// cycle of them is a graph no back end can run, and it is refused here rather than handed on.
     void findCycle() {
-        const size_t count = graph_.nodeCount();
-        std::vector<uint8_t> state(count, 0); // 0 new, 1 open, 2 done
-        std::vector<gc_node_ref_t> orderPreds;
-        struct Frame {
-            gc_node_ref_t node;
-            uint8_t group;
-            size_t next;
-        };
-        for (auto it = graph_.nodes().begin(); it != graph_.nodes().end(); ++it) {
-            const gc_node_ref_t start = it.ref();
-            if (state[start] != 0) {
-                continue;
-            }
-            std::vector<Frame> stack{{start, 0, 0}};
-            state[start] = 1;
-            while (!stack.empty()) {
-                Frame &top = stack.back();
-                std::span<const gc_node_ref_t> inputs;
-                while (top.group < 4) {
-                    if (top.group == 3) {
-                        orderPreds.clear();
-                        for (const GCGraphOrderEdge &edge : graph_.orderPredsOf(top.node)) {
-                            orderPreds.push_back(edge.pred);
-                        }
-                        inputs = std::span<const gc_node_ref_t>(orderPreds);
-                    } else {
-                        inputs = top.group == 0   ? graph_.normInputsOf(top.node)
-                                 : top.group == 1 ? graph_.withInputsOf(top.node)
-                                                  : graph_.ctrlInputsOf(top.node);
-                    }
-                    if (top.next < inputs.size()) {
-                        break;
-                    }
-                    ++top.group;
-                    top.next = 0;
-                }
-                if (top.group == 4) {
-                    state[top.node] = 2;
-                    stack.pop_back();
-                    continue;
-                }
-                const gc_node_ref_t input = inputs[top.next++];
-                if (!graph_.containsNodeRef(input)) {
-                    continue; // reported by the reference check
-                }
-                if (state[input] == 1) {
-                    std::string path;
-                    bool on = false;
-                    for (const Frame &frame : stack) {
-                        on = on || frame.node == input;
-                        if (on) {
-                            path += std::format(
-                                "{}({}) <- ",
-                                frame.node,
-                                static_cast<int>(graph_.node(frame.node)->kind));
-                        }
-                    }
-                    report(input, "lies on a cycle of inputs: " + path + std::to_string(input));
-                    return;
-                }
-                if (state[input] == 0) {
-                    state[input] = 1;
-                    stack.push_back({input, 0, 0});
-                }
-            }
+        FrozenCycleEdges edges(graph_);
+        std::vector<gc_node_ref_t> path;
+        const gc_node_ref_t closes = findInputCycle(edges, &path);
+        if (closes == kInvalidNodeRef) {
+            return;
         }
+        std::string chain;
+        for (gc_node_ref_t node : path) {
+            chain += std::format("{}({}) <- ", node, static_cast<int>(graph_.node(node)->kind));
+        }
+        report(closes, "lies on a cycle of inputs: " + chain + std::to_string(closes));
     }
 
     void checkNode(gc_node_ref_t ref, const GCNode &node) {
@@ -715,4 +693,33 @@ void validateRuntimeGraphEdges(const Program &program, const GCGraph *graph, Gra
     throw std::runtime_error(text);
 }
 
+
+/// The two questions the seal check asks of an order edge's user, kept here so that the check and
+/// the writers that carry order edges across a rewrite ask one question and not two.
+bool nodeStandsForItsRegion(const GCGraph &graph, gc_node_ref_t ref) {
+    const GCNode *node = graph.node(ref);
+    if (node == nullptr) {
+        return false;
+    }
+    if (node->kind != GCNodeKind::Brch && node->kind != GCNodeKind::Loop) {
+        return false;
+    }
+    for (uint32_t region = 1; region < graph.regionCount(); ++region) {
+        const GCRegion *record = graph.region(region);
+        if (record != nullptr && record->owner == ref) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool nodeTakesNoOrder(const GCGraph &graph, gc_node_ref_t ref) {
+    // A conversion that was ordered when it could fail keeps its place: a pass that refines the
+    // types can make it infallible, and dropping the order is the pass's choice, not a defect.
+    const GCNode *node = graph.node(ref);
+    if (node != nullptr && node->kind == GCNodeKind::Cast) {
+        return false;
+    }
+    return nodeIsFreelySchedulable(graph, ref) && !nodeStandsForItsRegion(graph, ref);
+}
 } // namespace camel::runtime

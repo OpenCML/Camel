@@ -1822,7 +1822,7 @@ node_handle_t Builder::visitPipeLink(
         scratch.mode     = PipeMode::Scratch;
         scratch.previous = pipe_;
         unusedStatement_                 = nullptr;
-        runtime::GraphDraft &draft       = currGraph_->draft();
+        auto &draft                      = currGraph_->transaction().edit();
         const draft_node_ref_t firstNode = static_cast<draft_node_ref_t>(draft.nodeSlotCount());
         // Nothing the dropped arm built stays in the graph: a node of it that had an effect would
         // be reported as one that never runs, and one that did would run.
@@ -2583,6 +2583,18 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 entered[i] = param;
                 continue;
             }
+            // A literal in a position of `T[..]` is the element (design principles 5.4): the
+            // position states an element type and no dimension, so the value takes the element
+            // type it can be, and the rank-zero value the slot holds is made where the argument
+            // enters (coerceTo). Without this, `show(1.0)` with `v: f32[..]` has no candidate at
+            // all, and the writing the principle promises cannot be compiled.
+            if (value.has_value()) {
+                if (Type *element = rankZeroElementOf(param);
+                    element != nullptr && literal::kindEnters(*value, element)) {
+                    entered[i] = param;
+                    continue;
+                }
+            }
             // An array or struct literal is a position with an expected type too (design
             // principles 5.1): `pick([1.0])` with `xs: f32[]`, `norm({ x: 1.0 })` with a
             // struct parameter. Its elements are converted once, from the values they were
@@ -2693,7 +2705,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 Type *param      = with ? funcType->withTypeAt(i) : funcType->normTypeAt(i);
                 const bool isVar = with ? funcType->withIsVarAt(i) : funcType->normIsVarAt(i);
                 if (isVar || param == nullptr || containsTypeVar(param) ||
-                    param->assignableFrom(types[i])) {
+                    (param->assignableFrom(types[i]) && !isRankZeroEdge(param, types[i]))) {
                     continue;
                 }
                 if (node_handle_t entered = checkValue(inputs[i].node, param, inputs[i].expr)) {
@@ -3665,7 +3677,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                     }
                     if (auto element = lambdaGraphs_.find(input.expr);
                         element != lambdaGraphs_.end()) {
-                        rejectDiscardedValue(element->second);
+                        rejectDiscardedValue(bodyKeyOf(element->second));
                     }
                 }
             }
@@ -3884,16 +3896,26 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     }
 
     // A built-in operator reads the argument types its signature names (the arguments are not
-    // converted on the way in). A struct value that enters a struct parameter is the one
-    // conversion made here (design principles 5.2): an unnamed value is copied into the named
-    // type, field by field and by name, so the operator reads the layout it was given.
-    const auto enterStructParameters = [&](FunctionType *funcType) {
+    // converted on the way in). Two entrances are the exception, and both go through
+    // `Builder::coerceTo`, the one place a value's type is made to fit a position. A struct value
+    // that enters a struct parameter is the first (design principles 5.2): an unnamed value is
+    // copied into the named type, field by field and by name, so the operator reads the layout it
+    // was given. The second is the edge between `T` and `T[..]` (design principles 5.4): the slot
+    // of the open rank holds a rank-zero array, and the value of the element type is wrapped into
+    // one as it enters -- and read back out when an open-rank argument enters a parameter of the
+    // element type. A call argument is the one entrance that is not a position's own `coerceTo`,
+    // so without this the callee would read a slot that holds the element as if it were an array.
+    const auto enterConvertedParameters = [&](FunctionType *funcType) {
         const auto enter = [&](std::vector<Argument> &inputs, type_vec_t &types, bool with) {
             const size_t count = with ? funcType->withTypesCount() : funcType->normTypesCount();
             for (size_t i = 0; i < inputs.size() && i < count; ++i) {
                 Type *param = with ? funcType->withTypeAt(i) : funcType->normTypeAt(i);
-                if (param == nullptr || param->code() != TypeCode::Struct || types[i] == nullptr ||
-                    types[i]->code() != TypeCode::Struct || param->equals(types[i])) {
+                if (param == nullptr || types[i] == nullptr || param->equals(types[i])) {
+                    continue;
+                }
+                const bool structEnters =
+                    param->code() == TypeCode::Struct && types[i]->code() == TypeCode::Struct;
+                if (!structEnters && !isRankZeroEdge(param, types[i])) {
                     continue;
                 }
                 if (node_handle_t entered = checkValue(inputs[i].node, param, inputs[i].expr)) {
@@ -3910,7 +3932,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     if (targetOperator == nullptr) {
         enterParameters(targetFuncType);
     } else {
-        enterStructParameters(targetFuncType);
+        enterConvertedParameters(targetFuncType);
     }
     if (recorder_) {
         const bool macroCallee =
@@ -3996,7 +4018,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         if (a == nullptr || b == nullptr || nodeGraphOf(a) != nodeGraphOf(b)) {
             return false;
         }
-        runtime::GraphDraft *draft = nodeDraftOf(a);
+        auto *draft = nodeDraftOf(a);
         const draft_node_ref_t first  = nodeIdOf(a);
         const draft_node_ref_t second = nodeIdOf(b);
         if (!draft->alive(first) || !draft->alive(second)) {
@@ -4152,7 +4174,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             const bool chainedAfterModifier =
                 synced_ && lastSyncedNode_ != nullptr && sameGraph(lastSyncedNode_, currGraph_) &&
                 runtime::hasControlDependency(
-                    *nodeDraftOf(lastSyncedNode_), nodeIdOf(*modifierNode), nodeIdOf(lastSyncedNode_));
+                    *nodeTransactionOf(lastSyncedNode_), nodeIdOf(*modifierNode), nodeIdOf(lastSyncedNode_));
             if (sameGraph(*modifierNode, currGraph_) && !chainedAfterModifier &&
                 shouldAddSyncCtrlLink(*modifierNode, targetNode)) {
                 linkNodes(LinkType::Ctrl, *modifierNode, targetNode);

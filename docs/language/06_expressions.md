@@ -161,7 +161,7 @@ func main(): int sync {
 
 ## 6.7 其他运算符
 
-下面各节的运算符（`&&`、`||`、`as` 除外）都是函数的调用：`a + b` 是 `__add__(a, b)`，表里列的是内建的重载。程序可以为自己的类型添加重载（`func operator +`，[7.4.5](07_statements.md#745-运算符重载)）；它与内建的、C++ 模块的重载合成一组，按操作数的类型选择。
+下面各节的运算符（`&&`、`||`、`as` 除外）都是函数的调用：`a + b` 是 `__add__(a, b)`，表里列的是内建的重载。程序可以为自己的类型添加重载（`func operator +`，[7.4.5](07_statements.md#745-运算符重载)）；它与内建的、C++ 模块的重载合成一组，按操作数的类型选择。重载按参数个数各自成组：一个参数的 `operator -`（取负）与两个参数的 `operator -`（相减）可以同时声明、各自选中，同名不妨碍区分。
 
 ### 6.7.1 算术
 
@@ -423,7 +423,7 @@ match type 类型 {
 - 选中的分支直接成为当前位置的直线代码，运行时没有分支节点。分支的值就是整个 `match type` 的值；空分支的值为 `void`。
 - 泛型函数的返回类型可以省略，由每个实例选中的分支推出（返回类型推断）。如果递归调用回到**同一个类型实例**、而该实例的返回类型还没有推出，报 `SemanticDiag::GenericInstantiationCycle`；递归到严格更小的类型参数则照常先完成子实例。
 
-**类型函数。** 类型也可以由类型算出（设计原则 5.6）：类型函数用 `type` 声明，`type F<T> = 体`，在类型位置写成 `F<...>` 调用；函数体是类型表达式，各 case 给出类型的 `match type` 也是：`type ElemOrSelf<T> = match type T { case array => ElementOf<T>  case _ => T }`。`types` 声明了五个 `match type` 取不出或造不出的部分：`ElementOf<T>` 是数组或集合的元素类型，`PayloadOf<T>` 是 `U?` 或 `U!` 里的 `U`，`KeyOf<T>` 与 `ValueOf<T>` 是映射的键类型与值类型，`WithElement<A, E>` 是把数组类型 `A` 的元素类型换成 `E`、形状不变的数组类型（`f32(xs)` 的结果就是 `WithElement<A, f32>`）。调用本身就是一个类型，和别的类型一样用：`is_integer::<ElementOf<T>>()` 里它是类型实参，`func first::<T>(xs: T): ElementOf<T>` 里它是结果类型。`T` 还是类型变量时调用等着；实例绑定 `T` 之后，调用被它算出的类型取代。函数不接受的类型（`ElementOf<int>`，或没有 case 选中的 `match type`）是 `SemanticDiag::TypeFunctionNotApplicable`：参数是具体类型时在类型写出处报，否则在造出实例的调用处报。
+**类型函数。** 类型也可以由类型算出（设计原则 5.6）：类型函数用 `type` 声明，`type F<T> = 体`，在类型位置写成 `F<...>` 调用；函数体是类型表达式，各 case 给出类型的 `match type` 也是：`type ElemOrSelf<T> = match type T { case array => ElementOf<T>  case _ => T }`。`types` 声明了六个 `match type` 取不出或造不出的部分：`ElementOf<T>` 是数组或集合的元素类型，`PayloadOf<T>` 是 `U?` 或 `U!` 里的 `U`，`KeyOf<T>` 与 `ValueOf<T>` 是映射的键类型与值类型，`WithElement<A, E>` 是把数组类型 `A` 的元素类型换成 `E`、形状不变的数组类型（`f32(xs)` 的结果就是 `WithElement<A, f32>`），`RowsOf<T>` 是第一维元素为 `T` 的数组类型（`RowsOf<f32[3]>` 是 `f32[?, 3]`，`vmap` 把一个行函数的批类型写成的形状）。调用本身就是一个类型，和别的类型一样用：`is_integer::<ElementOf<T>>()` 里它是类型实参，`func first::<T>(xs: T): ElementOf<T>` 里它是结果类型。`T` 还是类型变量时调用等着；实例绑定 `T` 之后，调用被它算出的类型取代。函数不接受的类型（`ElementOf<int>`，或没有 case 选中的 `match type`）是 `SemanticDiag::TypeFunctionNotApplicable`：参数是具体类型时在类型写出处报，否则在造出实例的调用处报。
 
 **类型包。** `ParamsOf<F>`、`WithOf<F>` 是函数类型的普通参数与 `with` 参数，作为一个类型包；`ResultOf<F>` 是返回类型。`..` 写在类型表达式前，对包的每个成员各展开一次：`(..ParamsOf<F>)` 是 `F` 的参数组成的元组，`(..ElementOf<A>)` 是 `A` 的每个成员取元素类型。用到几个包，它们的长度必须相同，否则是 `SemanticDiag::TypeFunctionNotApplicable`，信息里写出每个包与它的长度。声明头写 `::<..A>`，rest 形参写成 `..xs: ..A`，调用把 `A` 绑定为 rest 实参类型组成的包；`when ..pred::<A>()` 表示包的每个成员都满足 `pred`。`zip` 就是这样声明的：`zip::<..A>(..xs: ..A): (..ElementOf<A>)[] when ..is_array::<A>()`。
 
@@ -485,7 +485,7 @@ func positions(t: (int, string)): (int, int) {
 
 - 块的**值就是那一轮的值**：与语句形式不同，这里不丢弃。块里可以用 `let`，最后一句话的值就是字段的值；没有值（空块，或以一条没有值的语句结尾）报 `SemanticDiag::StaticComprehensionVoidElement`。
 - 每个字段/元素的**类型取自那一轮的值**，不强制等于 `F`：`F` 是 `int` 而值是 `float` 时结果字段就是 `float`。字段名与顺序仍来自 `T` 的声明顺序，所以 `tree_map` 这类改变叶子类型、保持形状的展开可以直接写。
-- **同一形状写成 `T { ... }`**：`T { static for n, F in fields T => e }` 用一个类型 `T` 同时给出字段名和种类（结构体或元组），所以 `case struct | tuple` 一个分支就够。`T` 必须与生成器遍历的类型是同一个类型，否则报 `SemanticDiag::SameShapeComprehensionMismatch`；`T` 是叶子（没有字段）时报 `SemanticDiag::SameShapeComprehensionNotComposite`。`{ ... }` 与 `( ... )` 仍分别只装结构体和元组。
+- **同一形状写成 `T { ... }`**：`T { static for n, F in fields T => e }` 用一个类型 `T` 同时给出字段名和种类（结构体或元组），所以 `case struct | tuple` 一个分支就够。这里是类型位置，写入的是一个类型表达式而不只是类型名：`Tangent<T> { static for n, _ in fields T => zero_tangent(x.[n]) }` 的头部是算出来的类型（设计原则 5.6），字段名与种类取自它、每个字段的类型取自那一轮的值，两种头部写法同一条规则。头部与生成器遍历的类型必须**同形状**：同样的种类、同样的字段名与个数，否则报 `SemanticDiag::SameShapeComprehensionMismatch`（`Tangent<T>` 与其参数 `T` 就是同形状）；头部算出来是叶子（没有字段）时报 `SemanticDiag::SameShapeComprehensionNotComposite`。`{ ... }` 与 `( ... )` 仍分别只装结构体和元组。
 - 空结构体、空元组没有轮次，结果是 `{}` / `()`（一个零槽的 `FILL`）。
 - 图上是直线代码：每轮按声明顺序建出它读的 `ACCS`，comprehension 本身没有节点。元组推导式的结果先保持为编译期元组：只被 `indices`、`..` 或 `.[j]` 使用时元素保持独立、不建 `FILL`；作为值用（打印、返回、赋给运行期位置）时，在使用处一个 `FILL` 把各轮的值装回同形状。结构体推导式总是装成一个 `FILL`。`t.[n].[m]` 里对父的访问只建一次，内层各字段共用同一个 `ACCS`，因此与 C++ `tree_map` 对同一棵树建出的图相同。
 - `{ static for ... }` 在需要块的位置（`case struct => { ... }`、`if c then { ... }`）也读作 comprehension，所以语句形式不能再套一层花括号：直接写 `static for n, F in fields T => 块`。

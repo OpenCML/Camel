@@ -21,7 +21,7 @@
  */
 
 import math
-import { is_array, is_float, is_integer, is_numeric, is_ordered, is_plain, is_same } from types
+import { RowsOf, is_array, is_float, is_integer, is_numeric, is_ordered, is_plain, is_same } from types
 
 // ---- rearranging ----
 
@@ -366,6 +366,31 @@ export func flat_map::<T, U>(xs: T[]): U[] {
 with <f: (a: T, b: U) => V>
 export func zip_with::<T, U, V>(xs: T[], ys: U[]): V[] {
     return zip(xs, ys)->map<((a, b)) => f(a, b)>
+}
+
+// ---- batching ----
+
+/// The batching of a function as a value: `vmap(f)` is the function that applies f to every
+/// element along the leading axis of an array and gives the results in order, which is JAX's
+/// `vmap(fun)` for the one argument and the axis 0. One name serves every rank, the leading axis
+/// being the element `x[i]` takes (design principles 5.4): rank 1 batches the elements
+/// (`vmap((x: float) => x * x)` over a `float[]` gives their squares), and rank 2 and above batch
+/// the rows, so `vmap((r: f32[3]) => sum(r * r))` applied to an `f32[4, 3]` gives the four row
+/// results as an `f32[]`. `RowsOf<T>` states that shape: the type the function takes, with one
+/// dimension of unknown length in front of it.
+///
+/// The rows are taken one at a time, which is what the result is: turning the rowwise application
+/// into one kernel is an optimization of the same semantics, left to the batching rules (it does
+/// not change this interface). A function of two parameters would batch two parameters at once and
+/// is refused rather than batched over its first one, a second array to batch together with the
+/// first is refused, and an axis is not a parameter -- there is nothing to name (`in_axes` and
+/// multiple batched parameters wait for the sixth answer). Being a value, it is stored once and
+/// applied to several arrays (`let batched = vmap(square)`), which is what makes it a transform
+/// rather than a call form of `map`.
+/// @example vmap((x: float) => x * x)([0.0, 1.0, 2.0])    // [0.0, 1.0, 4.0]
+/// @example vmap((r: f32[3]) => r[2] * r[2])([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3])    // [9.0, 36.0]
+export func vmap::<T, U>(f: (row: T) => U): (xs: RowsOf<T>) => U[] {
+    return (xs: RowsOf<T>): U[] => range(0, len(xs), 1)->map<(i: int): U => f(xs[i])>
 }
 
 // ---- native atoms and kernels ----

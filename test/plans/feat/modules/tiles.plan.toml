@@ -25,6 +25,16 @@ expect_stdout_exact = "TILES_OUTLINED 2\n[4.0, 16.0, 36.0]\n[2.0, 4.0, 6.0]\n[8.
 timeout_ms = 180000
 
 [[tests]]
+name = "compiled_region_i64_leaf_reads_back"
+kind = "behavior"
+case = "../../../cases/modules/tiles/compiled_region.cml"
+args = ["--devices", "cpu", "${case}", "tiles::test_outline_compiled", "std::nvm"]
+envs = ["CAMEL_TILES_TEST_I64=1"]
+expect_exit = 0
+expect_stdout_contains = ["TILES_I64 {\"device\":[3,5],\"host\":[3,5],\"equal\":true}"]
+timeout_ms = 180000
+
+[[tests]]
 name = "compiled_region_tuple_and_embedded_axis"
 kind = "behavior"
 case = "../../../cases/modules/tiles/region_execution.cml"
@@ -140,7 +150,17 @@ tool = "python"
 case = "../../../cases/modules/tiles/plan_check.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["tiles core views: quasi-affine maps, strided simplification, empty domains and rejected mutations passed", "tiles reduction domains: core extents, output permutations, canonical contributions and empty faults passed", "tiles scalar i64: exact payloads, comparisons and nearest-even f64 casts passed", "tiles loop source cache: exact domains, embedded bits, bindings and recursive contracts passed", "tiles multi-result storage: one producer, distinct writes and inclusive read lifetimes passed", "tiles regions: convexity, boundaries, liveness and dependency order passed", "tiles general reductions: scalar and sum-to core maps preserve contribution order", "tiles axis contracts: mapped traversal, numerical law and row eligibility passed", "tiles pointwise contracts: operand maps, bounds and row eligibility passed", "tiles kernel faults: IEEE conditions, resources and early-exit convergence passed", "tiles reduction laws: declared freedom required for parallel maximum", "tiles scalar expressions: typed rounding, FMA and IEEE bits passed", "tiles plan validation: 33 rejected mutations", "tiles index expressions: composition and checked evaluation passed", "tiles accesses: masked composition and lazy evaluation passed", "tiles ordered reductions: fusion boundaries and plan mutations passed", "tiles scalar inputs: typed payload and shape validation passed", "tiles source cache: values, literals, storage ownership and eviction passed", "tiles operator contracts: absent, replaced and incompatible declarations rejected", "tiles cast_like boundary: plans never name it, and a conversion is rejected"]
+expect_stdout_contains = ["tiles core views: quasi-affine maps, strided simplification, empty domains and rejected mutations passed", "tiles reduction domains: core extents, output permutations, canonical contributions and empty faults passed", "tiles position reduction: an argmax plan keeps the value and stores the loop index as i64 in its planned body and source", "tiles scalar i64: exact payloads, comparisons and nearest-even f64 casts passed", "tiles i64 position: the loop index reads into an i64 slot and stores that position, a plain symbol of the same name still refuses, and i64 arithmetic stays refused", "tiles loop source cache: exact domains, embedded bits, bindings and recursive contracts passed", "tiles multi-result storage: one producer, distinct writes and inclusive read lifetimes passed", "tiles regions: convexity, boundaries, liveness and dependency order passed", "tiles general reductions: scalar and sum-to core maps preserve contribution order", "tiles axis contracts: mapped traversal, numerical law and row eligibility passed", "tiles pointwise contracts: operand maps, bounds and row eligibility passed", "tiles kernel faults: IEEE conditions, resources and early-exit convergence passed", "tiles reduction laws: declared freedom required for parallel maximum", "tiles scalar expressions: typed rounding, FMA and IEEE bits passed", "tiles plan validation: 33 rejected mutations", "tiles index expressions: composition and checked evaluation passed", "tiles accesses: masked composition and lazy evaluation passed", "tiles ordered reductions: fusion boundaries and plan mutations passed", "tiles scalar inputs: typed payload and shape validation passed", "tiles source cache: values, literals, storage ownership and eviction passed", "tiles operator contracts: absent, replaced and incompatible declarations rejected", "tiles cast_like boundary: plans never name it, and a conversion is rejected"]
+timeout_ms = 10000
+
+[[tests]]
+name = "argmax_axis_scope_reasons"
+kind = "behavior"
+case = "../../../cases/modules/tiles/argmax_axis_scope.cml"
+args = ["--devices", "cpu", "${case}", "tiles::test_outline_compiled", "std::nvm"]
+envs = ["CAMEL_TILES_TEST_REASONS=1", "CAMEL_TILES_TEST_DECLARATIONS=1"]
+expect_exit = 0
+expect_stdout_contains = ["TILES_OUTLINED 0", "TILES_REGION_REASON array:argmax_axis unsupported_operator", "TILES_OPERATOR_DECLARATION array:argmax_axis undeclared major=-1", "TILES_OPERATOR_ID array:argmax_axis id=340 tensor_spelling=422", "TILES_DECLARATIONS_3 tensor:layer_norm_grad 463 undeclared major=-1; tensor:softmax 424 declared major=1;", "TILES_OPERATOR_DECLARATION tensor:reshape declared major=1"]
 timeout_ms = 10000
 
 [[tests]]
@@ -1111,13 +1131,13 @@ timeout_ms = 30000
 
 [[tests]]
 name = "gpu_scope.macro_expansion_publishes_the_derived_graph"
-desc = "With `std::macro` before the pass the scope holds the derived graph instead of the macro operator: it is refused for a tensor operator of the backward pass (`broadcast_like`, which the device back end does not lower), and `TILES_PLACEMENT` shows `grad(loss)` as a `#gpu` body — the derived graph inherits the primal's placement (plan 2.3, 2.6)."
-kind = "negative"
+desc = "With `std::macro` before the pass the scope holds the derived graph instead of the macro operator, and every operator the backward pass writes is on the device capability list, so the pass accepts `grad(loss)` and the device computes the step: `TILES_PLACEMENT` shows `grad(loss)` as a `#gpu` body — the derived graph inherits the primal's placement (plan 2.3, 2.6) — and the values the scope produced are the ones its host twin produced (`moved 0.0`, `wrong 0.0`). Red when the derived graph is refused, when its placement is not the primal's, or when the scope and the host disagree."
+kind = "behavior"
 case = "../../../cases/gpu/nofallback/grad_expand.cml"
 args = ["--devices", "cpu", "${case}", "std::macro", "tiles::compile", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
-expect_exit = 1
-expect_output_not_contains = ["is a macro operator no pass has expanded"]
+expect_exit = 0
+expect_output_not_contains = ["is a macro operator no pass has expanded", "GpuScopeUnsupported"]
 verify_script = """
 ({ input, assert }) => {
 const NL = String.fromCharCode(10)
@@ -1127,11 +1147,31 @@ assert(row, `no placement row for grad(loss): ${JSON.stringify(lines.filter((l) 
 const report = JSON.parse(row.slice('TILES_PLACEMENT '.length))
 assert(report.body === 'gpu-required' && report.body_fact === 'gpu', row)
 assert(report.gpu_required === report.nodes, row)
-const refusal = lines.find((line) => line.includes("scope 'grad(loss)'"))
-assert(refusal, JSON.stringify(lines.filter((l) => l.includes('scope '))))
-assert(refusal.includes("operator 'tensor:"), refusal)
-assert(refusal.includes('cannot run on the device'), refusal)
 assert(!lines.some((l) => l.includes('autodiff:with_grad')), 'the scope still holds the runtime operator')
+const moved = lines.find((line) => line.startsWith('moved '))
+const wrong = lines.find((line) => line.startsWith('wrong '))
+assert(moved === 'moved 0.0', JSON.stringify([moved, wrong]))
+assert(wrong === 'wrong 0.0', JSON.stringify([moved, wrong]))
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_scope.view_operators_compile_and_read_the_operand"
+desc = "The three operators a training step turns a tensor with — `permute`, `transpose` and `reshape` — write no element: what a device program for one is, is the address the core's own index instance gives, so the pass accepts a `#gpu` scope holding them instead of refusing it. The run prints what each one computed: the permuted and transposed `[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]` read `[[1.0, 4.0], [2.0, 5.0], [3.0, 6.0]]`, and the reshaped one is the operand's own buffer read in the order it was written. Red when a scope with a layout operator is refused, or when the address it reads is the operand's coordinates instead of the result's."
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_scope_views.cml"
+args = ["${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const NL = String.fromCharCode(10)
+const lines = input.normalized.stdout.split(NL).filter(Boolean).filter((line) => !line.startsWith('TILES_'))
+assert(lines.length === 3, JSON.stringify(lines))
+assert(lines[0] === '[[1.0, 4.0], [2.0, 5.0], [3.0, 6.0]]', lines[0])
+assert(lines[1] === '[[1.0, 4.0], [2.0, 5.0], [3.0, 6.0]]', lines[1])
+assert(lines[2] === '[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]', lines[2])
 }
 """
 timeout_ms = 30000
@@ -1317,4 +1357,28 @@ for (const label of ['1.0', '0.0']) {
 }
 }
 """
+timeout_ms = 30000
+
+[[tests]]
+name = "census.device_surface_has_no_gap"
+desc = "The operator surface of a program written against the capability table: four operators the device lowers and no operator outside the table, so the gap is empty and nothing is listed. A `#gpu` scope would hold this program whole."
+kind = "behavior"
+case = "../../../cases/modules/tiles/census.cml"
+args = ["${case}", "tiles::census"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+expect_stdout_exact = "TILES_CENSUS ops=4 device=4 gap=0\nTILES_CENSUS_DEVICE tensor:add\nTILES_CENSUS_DEVICE tensor:multiply\nTILES_CENSUS_DEVICE tensor:relu\nTILES_CENSUS_DEVICE tensor:sum\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
+name = "census.names_the_operator_without_a_device_program"
+desc = "One operator the device back end does not lower (`tanh`) is one gap line, named: the census counts the surface and lists every operator outside the table, which is the list the support surface has to empty."
+kind = "behavior"
+case = "../../../cases/modules/tiles/census_gap.cml"
+args = ["${case}", "tiles::census"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+expect_stdout_exact = "TILES_CENSUS ops=2 device=1 gap=1\nTILES_CENSUS_DEVICE tensor:add\nTILES_CENSUS_GAP tensor:tanh\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 30000

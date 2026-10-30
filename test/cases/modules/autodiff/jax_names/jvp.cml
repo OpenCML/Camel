@@ -1,0 +1,18 @@
+/**
+ * `jvp` is JAX's forward-mode transform: `(x, dx) -> (f(x), J dx)`. Camel has the rule of forward
+ * mode (the tag `#jvp(rule)` and the scalar family's tangents) but not the transform, so the name is
+ * a tag and not a value: this program is refused before anything runs.
+ *
+ * The call shape is the one the transform is expected to take; when it lands this case becomes the
+ * pair it writes here (docs/handover/reviews/questions-2026-10-30-jax.md).
+ */
+
+func square(x: float): float {
+    return x * x
+}
+
+func main(): int sync {
+    let (y, dy) = jvp(square)(2.0, 1.0)
+    println('jax_jvp y={} dy={}'->format<y, dy>)
+    return 0
+}

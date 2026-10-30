@@ -1,0 +1,26 @@
+/**
+ * `argnums` is not a parameter of `grad`.
+ *
+ * JAX's `grad(f, argnums=1)` chooses which positional argument is differentiated. Camel chooses
+ * differently: `grad` differentiates the first `with` parameter (design principles 9.9) and every
+ * other parameter is data, so there is no number to pass -- and the author's ruling of 2026-10-30
+ * keeps it that way (`has_aux` was added, `argnums` was not).
+ *
+ * This program pins the refusal: the name is not one the rule knows, so the call is refused before
+ * anything runs, and the diagnostic names the parameter. The function itself is one `grad` would
+ * accept, so the only thing wrong with the call is the parameter it names. The call shape is the
+ * one JAX writes, so the case is the one that would change if `argnums` were ever decided.
+ */
+
+import { grad } from autodiff
+
+with <x: float>
+func square(): float {
+    return x * x
+}
+
+func main(): int sync {
+    let d = grad(square, argnums: 0)<2.0>()
+    println(d)
+    return 0
+}

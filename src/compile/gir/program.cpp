@@ -31,12 +31,16 @@
 
 #include "camel/core/mm.h"
 #include "camel/core/module/userdef.h"
+#include "camel/parse/ast/rule_head.h"
 #include "camel/runtime/graph.h"
 
 #include <algorithm>
 #include <cctype>
 #include <format>
 #include <functional>
+#include <cstdlib>
+#include <iostream>
+#include <unordered_map>
 #include <unordered_set>
 
 using namespace camel::core::error;
@@ -506,6 +510,10 @@ node_handle_t Builder::exportedValueNode(ExportedValue &value) {
 
 void Builder::buildModuleBody(ModuleUnit &unit) {
     UnitContext context(*this, unit);
+    // A dropped body is written and read within the module it is written in (see droppedBodies_):
+    // the nodes of a finished module's tree are gone, and their addresses are handed back to the
+    // next module's tree.
+    droppedBodies_.clear();
     try {
         reportImportNameConflicts();
     } catch (const BuildAbortException &) {
@@ -643,6 +651,54 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
             camel::core::error::setPipelineStage("");
         }
         unit->failed = inError(unit);
+        // A ruleset is a module of rules, and a transform finds a rule for a primitive by the head
+        // of the rule's left side. The heads were read while the module's declarations were read
+        // (a rule's `__lhs` has no body at that stage, so nothing here could read them); they are
+        // indexed here, where the module and its diagnostics are in hand: one index per ruleset,
+        // taken once, and a second rule under one head is refused rather than chosen by order.
+        if (!unit->failed && unit->module &&
+            unit->module->name().rfind("rulesets.", 0) == 0) {
+            const std::string ruleset = unit->module->name();
+            const char *wanted        = std::getenv("CAMEL_RULESET_INDEX");
+            const bool showIndex      = (wanted != nullptr && *wanted != '\0') || unit->entry;
+            std::vector<camel::parse::ast::RuleHead> rules =
+                camel::parse::ast::takeRuleHeads(ruleset);
+            if (rules.empty()) {
+                rules = camel::parse::ast::takeRuleHeads(unit->diags->moduleName());
+            }
+            // The key is the operator and how many operands it was given, not the token alone:
+            // `-x` and `x - w` are two primitives (`__neg__` and `__sub__`) that write the same
+            // token, so a key without the count files two rules as one and refuses the second.
+            std::unordered_map<std::string, std::string> ruleOfHead;
+            for (const auto &rule : rules) {
+                if (!rule.shape.empty()) {
+                    auto diag = unit->diags->of(SemanticDiag::RuleLeftIsNotAnOperator);
+                    diag.at(TokenRange{rule.tokenStart, rule.tokenEnd});
+                    diag.commit(rule.rule, rule.shape);
+                    continue;
+                }
+                const std::string key = rule.head + "@" + std::to_string(rule.arity);
+                const auto inserted   = ruleOfHead.emplace(key, rule.rule);
+                if (!inserted.second) {
+                    auto diag = unit->diags->of(SemanticDiag::DuplicateRuleForOperator);
+                    diag.at(TokenRange{rule.tokenStart, rule.tokenEnd});
+                    diag.commit(
+                        inserted.first->second, rule.rule, rule.head, std::to_string(rule.arity));
+                    continue;
+                }
+                // A probe of the index itself: it prints what the ruleset holds, so a reader can
+                // see the heads the transform will look up rather than trusting that they are
+                // there. It is not the transform: no rule is applied here, and it stays quiet
+                // unless it is asked, because a program that imports a ruleset is not a program
+                // that asked to have its rules listed: the entry module of a probe prints its own
+                // index, and `CAMEL_RULESET_INDEX` asks for every ruleset's.
+                if (showIndex) {
+                    std::cout << "RULESET " << ruleset << ' ' << rule.head << '/' << rule.arity
+                              << " -> " << rule.rule << '\n';
+                }
+            }
+            unit->failed = inError(unit);
+        }
     }
     bool ok = std::none_of(order.begin(), order.end(), inError);
 

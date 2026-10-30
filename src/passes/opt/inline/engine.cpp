@@ -115,7 +115,7 @@ uint64_t originKeyOf(
 /// that lowering count once (the coalesce positions this function collects first); every other node
 /// counts for itself, so a function is measured by the compute nodes it is written as.
 ///
-/// The count is read off the graph the round began with -- GraphDraft::calleeGraphOf answers the
+/// The count is read off the graph the round began with -- the draft's `calleeGraphOf` answers the
 /// committed graph, not the draft -- so what a round splices or folds cannot move it: the same
 /// function answers the same twice in one round, and its answer changes only when a round commits a
 /// change to that function.
@@ -294,11 +294,15 @@ std::vector<const GCGraph *> directCallees(
 }
 
 /// The nodes `id` runs after other than through `skip` (its transitive inputs of every kind).
-std::vector<bool>
-upstreamOf(const camel::runtime::GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t skip) {
+std::vector<bool> upstreamOf(
+    const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, gc_node_ref_t skip) {
+    const auto &draft = transaction.graph();
     std::vector<bool> seen(draft.nodeSlotCount(), false);
     std::vector<gc_node_ref_t> work;
-    for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id), draft.ctrlInputsOf(id)}) {
+    for (auto inputs : {draft.normInputsOf(id),
+                        draft.withInputsOf(id),
+                        draft.ctrlInputsOf(id),
+                        draft.syncInputsOf(id)}) {
         work.insert(work.end(), inputs.begin(), inputs.end());
     }
     while (!work.empty()) {
@@ -308,18 +312,23 @@ upstreamOf(const camel::runtime::GraphDraft &draft, gc_node_ref_t id, gc_node_re
             continue;
         }
         seen[n] = true;
-        for (auto inputs : {draft.normInputsOf(n), draft.withInputsOf(n), draft.ctrlInputsOf(n)}) {
+        for (auto inputs : {draft.normInputsOf(n),
+                            draft.withInputsOf(n),
+                            draft.ctrlInputsOf(n),
+                            draft.syncInputsOf(n)}) {
             work.insert(work.end(), inputs.begin(), inputs.end());
         }
     }
     return seen;
 }
 
-bool isDraftBranchArmHead(const camel::runtime::GraphDraft &draft, gc_node_ref_t nodeId) {
+bool isDraftBranchArmHead(
+    const camel::runtime::GraphTransaction &transaction, gc_node_ref_t nodeId) {
+    const auto &draft = transaction.graph();
     if (!draft.alive(nodeId)) {
         return false;
     }
-    for (gc_node_ref_t pred : draft.ctrlInputsOf(nodeId)) {
+    for (gc_node_ref_t pred : draft.waitInputsOf(nodeId)) {
         const auto *predHeader = draft.header(pred);
         if (predHeader && predHeader->kind == GCNodeKind::Brch) {
             return true;
@@ -892,7 +901,8 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                 "OptimizePass",
                 "Runtime rewrite scanning graph '{}' for enabled phases.",
                 nextGraph->name());
-            camel::runtime::GraphDraft &draft = session.edit(nextGraph);
+            auto &transaction = session.edit(nextGraph);
+            auto &draft       = transaction.edit();
             std::vector<gc_node_ref_t> funcNodes;
             std::vector<gc_node_ref_t> callNodes;
             funcNodes.reserve(draft.nodeCount());
@@ -919,7 +929,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                         break; // out of growth budget: a specialization is a copy of the callee
                     }
                     if (camel::runtime::specializeDirectFuncInDraft(
-                            session, draft, funcNodeId, config.specializeOnFunctionValues)) {
+                            session, transaction, funcNodeId, config.specializeOnFunctionValues)) {
                         changed        = true;
                         roundChanged   = true;
                         graphRewritten = true;
@@ -942,7 +952,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                     // sibling JOINs such a rewrite would add are not executable.
                     if (camel::runtime::devirtualizeStaticCallInDraft(
                             session,
-                            draft,
+                            transaction,
                             callNodeId)) {
                         changed        = true;
                         roundChanged   = true;
@@ -1038,7 +1048,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                     acyclic,
                     calls,
                     returnsClosure(calleeGraph));
-                const bool isArm = isDraftBranchArmHead(draft, id);
+                const bool isArm = isDraftBranchArmHead(transaction, id);
                 const bool suppressNonRecursiveArmInlining =
                     config.inlineConfig.inlineStrategy == InlineTargetStrategy::Hybrid &&
                     isSmallRuntimeSubgraphForInline(nextGraph, config.inlineConfig, source) &&
@@ -1074,7 +1084,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                     continue;
                 }
                 const size_t copied = inlinedNodeCount(draft.calleeGraphOf(funcNodeId));
-                if (!camel::passes::opt::inlineCallInOrder(session, draft, funcNodeId)) {
+                if (!camel::passes::opt::inlineCallInOrder(session, transaction, funcNodeId)) {
                     continue;
                 }
                 growthSpent += copied;
@@ -1141,8 +1151,9 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
 namespace camel::passes::opt {
 
 camel::runtime::DraftInlineResult inlineCallInOrder(
-    camel::runtime::RuntimeGraphDraftSession &session, camel::runtime::GraphDraft &draft,
-    gc_node_ref_t funcNodeId, bool asArm) {
+    camel::runtime::RuntimeGraphDraftSession &session,
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t funcNodeId, bool asArm) {
+    auto &draft        = transaction.edit();
     const auto *header = draft.header(funcNodeId);
     if (!header || header->kind != GCNodeKind::Func) {
         return {};
@@ -1156,7 +1167,7 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
     // that ordering nor has an effect of its own to hang it on (a recursion's base
     // case, a constant result), nothing else keeps the predecessor reachable, and a
     // write the program made was silently dropped.
-    auto argSources = camel::passes::generic::orderedSources(draft, funcNodeId);
+    auto argSources = camel::passes::generic::orderedSources(transaction, funcNodeId);
     // And the other way round: the call ran after the ordered sources of ALL its
     // arguments, so the body must too, also where it does not read the argument
     // that carried the ordering (a read of a variable feeding an argument the
@@ -1174,14 +1185,14 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
         // as data. Waiting on it would also wrap the cell in a GATE when the call is spliced,
         // and a consumer that follows a variable by its cell (the ONNX exporter) would no
         // longer see it as local.
-        if (camel::passes::generic::operIdOf(draft, source) == camel::core::oper::VarNew) {
+        if (camel::passes::generic::operIdOf(transaction, source) == camel::core::oper::VarNew) {
             continue;
         }
         if (draft.alive(source)) {
-            camel::runtime::appendControlDependency(draft, source, funcNodeId);
+            camel::runtime::appendControlDependency(transaction, source, funcNodeId);
         }
     }
-    for (gc_node_ref_t pred : draft.ctrlInputsOf(funcNodeId)) {
+    for (gc_node_ref_t pred : draft.waitInputsOf(funcNodeId)) {
         if (std::ranges::find(argSources, pred) == argSources.end()) {
             argSources.push_back(pred);
         }
@@ -1191,13 +1202,14 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
         for (auto group :
              {draft.normUsersOf(funcNodeId),
               draft.withUsersOf(funcNodeId),
-              draft.ctrlUsersOf(funcNodeId)}) {
+              draft.ctrlUsersOf(funcNodeId),
+              draft.syncUsersOf(funcNodeId)}) {
             for (gc_node_ref_t user : group) {
                 if (std::ranges::find(callUsers, user, &decltype(callUsers)::value_type::first) !=
                     callUsers.end()) {
                     continue;
                 }
-                const auto before = upstreamOf(draft, user, funcNodeId);
+                const auto before = upstreamOf(transaction, user, funcNodeId);
                 std::vector<gc_node_ref_t> missing;
                 for (gc_node_ref_t source : argSources) {
                     if (source != user && !before[source]) {
@@ -1227,7 +1239,8 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
             joinArms.emplace_back(user, std::move(arms));
         }
     }
-    const auto inlineResult = camel::runtime::inlineCallableInDraft(session, draft, funcNodeId, asArm);
+    const auto inlineResult =
+        camel::runtime::inlineCallableInDraft(session, transaction, funcNodeId, asArm);
     if (!inlineResult) {
         return inlineResult;
     }
@@ -1277,7 +1290,7 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
             continue;
         }
         for (gc_node_ref_t source : sources) {
-            camel::runtime::appendControlDependency(draft, source, user);
+            camel::runtime::appendControlDependency(transaction, source, user);
         }
     }
     return inlineResult;

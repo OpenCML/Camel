@@ -15,6 +15,8 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/graph.h"
 
+#include <string>
+
 using namespace camel::core::data;
 using namespace camel::core::type;
 using namespace camel::core::rtdata;
@@ -49,10 +51,15 @@ std::vector<int64_t> statedExtents(const ArrayType *arrayType, size_t elements) 
 } // namespace
 
 slot_t makeSlotFromPrimitiveData(const data_ptr_t &data) {
-    ASSERT(data != nullptr, "Data is null.");
+    GUARD(
+        data != nullptr,
+        std::string("converting a null value to a slot: there is no value to convert"));
 
     TypeCode typeCode = data->type()->code();
-    ASSERT(camel::core::type::isPrimitive(typeCode), "Type is not primitive.");
+    GUARD(
+        camel::core::type::isPrimitive(typeCode),
+        std::string("converting a value of type code ") + std::to_string(static_cast<int>(typeCode)) +
+            " to a slot as a primitive, but that type is not primitive");
 
     switch (typeCode) {
     case TypeCode::Int32: {
@@ -114,10 +121,15 @@ slot_t makeSlotFromPrimitiveData(const data_ptr_t &data) {
 }
 
 Object *makeGCRefFromGCTracedData(const data_ptr_t &data, camel::core::mm::IAllocator &allocator) {
-    ASSERT(data != nullptr, "Data is null.");
+    GUARD(
+        data != nullptr,
+        std::string("converting a null value to a traced reference: there is no value to convert"));
 
     TypeCode typeCode = data->type()->code();
-    ASSERT(camel::core::type::isGCTraced(typeCode), "Type is not GC traced.");
+    GUARD(
+        camel::core::type::isGCTraced(typeCode),
+        std::string("converting a value of type code ") + std::to_string(static_cast<int>(typeCode)) +
+            " to a traced reference, but that type carries no GC trace");
 
     switch (typeCode) {
     case TypeCode::Complex64:
@@ -134,6 +146,22 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, camel::core::mm::IAllo
     case TypeCode::Array: {
         auto arrayData        = tt::as_shared<camel::core::data::ArrayData>(data);
         const auto *arrayType = tt::as_ptr<camel::core::type::ArrayType>(arrayData->type());
+        if (arrayData->isRankZero()) {
+            // A value with no dimension is the element it holds (design principles 5.4): the run
+            // makes of it the rank-zero array a slot of `T[..]` reads, not an array of one
+            // element, so it prints and compares as the element itself.
+            slot_t element = NullSlot;
+            if (!arrayData->raw().empty()) {
+                const auto &held = arrayData->raw().front();
+                if (held->type()->isGCTraced()) {
+                    element = camel::core::rtdata::toSlot(
+                        makeGCRefFromGCTracedData(held, allocator));
+                } else if (camel::core::type::isPrimitive(held->type()->code())) {
+                    element = makeSlotFromPrimitiveData(held);
+                }
+            }
+            return Array::createRankZero(allocator, arrayType, element);
+        }
         // The shape a type states as constants is the value's shape (design principles 5.4): a
         // rank-2 constant written as a nested literal is one array of that shape, not a flat run
         // of its elements. A type that states none (`f32[]`, `f32[n]`) keeps the length the

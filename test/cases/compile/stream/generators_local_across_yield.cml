@@ -1,0 +1,22 @@
+/**
+ * A local of a generator body that lives across a `yield`: `e` is a value computed where its
+ * declaration stands, and the pull after a `yield` runs another arm of the machine, which
+ * declares no `e`.
+ *
+ * The local becomes a cell of the generator's own body, typed by its first write and filled
+ * where the declaration stands: the second pull reads the one the first pull wrote, and the
+ * stream carries `6`. The body that creates the stream evaluates nothing of it (design
+ * principles 5.4), so the cell is made with a type and no value, and the value is written when
+ * the declaration is reached.
+ */
+
+func g(n: int): int.. sync {
+    let e = n * 3
+    yield 1
+    yield e
+}
+
+func main(): int sync {
+    loop acc = 0 for v in g(2) do sync { let _ = println(v); acc + 1 }
+    return 0
+}

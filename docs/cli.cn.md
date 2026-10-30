@@ -173,7 +173,7 @@
 | `std::opt`、`std::opt::fold` | `constant_budget: int = 8388608`（折叠可物化成常量的字节数：数组按元素数×元素大小加形状开销计，超过上限的值保留生成它的计算——程序含义不变，只是少折了一些；0 表示一个都不物化） |
 | `std::fvm`、`std::jit` | `stats: string = ""`（把本次运行每张图的字节码数与执行计数追加写入该文件） |
 | `std::jit` | `hot_threshold: int = 1`（同一调用点调用多少次后编译一张图；0 表示第一次调用就编译）。**含循环区域的图在 0 与 1（默认）这两个"尽早编译"的阈值下第一次调用就编译**：使图变贵的是轮次，调用次数看不见轮次；显式把阈值设到 1 以上仍按调用次数走（`hot_threshold=1000000000` 因此仍表示"什么都不编译"） |
-| `std::tf`、`std::prl` | `linear: bool = false`（逐节点求值），`fanout_all: bool = false`（把每个无序的高阶调用都展开成并行任务），`diag: bool = false`（打印对每张图的决定），`bytecode: bool = true`（把串行的图交给字节码解释器），`gc_stats: int = 0`（1：运行结束时打印统计；2：另外每次回收一行） |
+| `std::tf`、`std::prl` | `linear: bool = false`（逐节点求值），`fanout_all: bool = false`（把每个无序的高阶调用都展开成并行任务），`diag: bool = false`（打印对每张图的决定），`segments: bool = false`（打印当前计划的分段（不是理论上可以切成的分段）：每段的条目与链、每条链等谁，以及每个算子落在哪一段），`bytecode: bool = true`（把串行的图交给字节码解释器），`gc_stats: int = 0`（1：运行结束时打印统计；2：另外每次回收一行） |
 | `onnx::export` | `out: string = ""`（模型文件；见下） |
 
 仍留在环境变量里的是进程的环境，不是某个遍的设置：`CAMEL_HOME`、`CAMEL_STD_LIB`、`CAMEL_PACKAGES`，日志与诊断格式变量，资源上限（`CAMEL_*_SPACE_*`，以及 `--max-recursion-depth`、`--max-macro-depth`、`--max-macro-rounds` 的环境变量写法），回收器的诊断与节奏变量（`CAMEL_GC_HEAP_LIMIT_MB`、`CAMEL_GC_GROWTH_PERCENT`、`CAMEL_GC_PROMOTION_AGE`、`CAMEL_GC_POISON`、`CAMEL_GC_VERIFY`、`CAMEL_GC_STRESS_*`），以及 `CAMEL_STARTUP_PROFILE`。重写引擎的增长预算是上面那些遍的 `growth_budget` 参数，不从环境变量读取。开关是选项和遍参数：`--gc`、`--block-limit`、`--graph-gc-mb`、`--native-stack-guard`、`--profile-mode`，以及 `std::profile` 的 `gc_stats`、`type_stats`、`effect_trace` 参数；测试专用的遍在流水线里写出名字即可。
@@ -194,8 +194,7 @@
 - `std::opt::fold` / `std::opt::cse` / `std::opt::dce`：分别运行常量折叠、公共子表达式消除、死代码消除
 - `std::opt::order`：顺序边的传递约简——A→B→C 已在时删去 A→C（设计稿 `docs/design/effects/edges.cn.md` 第 5 节第 4 条）；证明路径读顺序边与同一个 `sync` 块的链，同步边本身是一条链、没有冗余且带“用到”，所以从不删掉。CTRL 边还没有从图里删掉，所以在它消失之前这一遍同时继续做控制边的传递约简：删掉被数据路径、`sync` 链或另一条控制路径覆盖的 CTRL 边，保留分支及循环边界、臂锚点，不把未选中的分支当作必需依赖。`std::opt` 的其他阶段结束后默认执行一次
 - `std::inline`（含 `small` / `arm` / `hybrid`）：`std::opt::inline` 及其策略的别名
-- `std::defunctionalize`：把通过函数值的调用降级成对被指函数的直接调用，凡是程序能说出是哪个函数的都降级，剩下的按原样保留。它不是优化遍：不内联、不按常量特化、没有增长预算——它想要闭包消失的流水线里的固定一步（`camel m.cml std::defunctionalize std::opt std::fvm`）。它把函数类型实参持有的那个函数绑进被调函数的一份副本，于是副本里对该形参的调用就是直接调用；在同一个图里构造又调用的闭包由这一遍本来就跑的去虚化降级。它说不出的形式保留通过函数值的调用——各调用点传入多个函数或闭包的形参、被捕获的值在调用处不是值的闭包、从程序外部来的函数值——并由这一遍报出哪个图还留着它、各调用点传的是什么（`RuntimeDiag::DefunctionalizationIncomplete`，`0x04100017`）。它不猜：猜一个调用到达哪个函数会改变哪些效应执行。没有任何调用到达的图（程序只作为函数值留着的那个原函数）不报。
-
+- `std::defunctionalize`：让每个函数值都有设计稿要的形式，从而程序里不再留下闭包、也不再留下通过函数值的调用。程序赋予值的那个函数类型变成一个 `enum`：程序当成值用的每个函数是其中一个变体，该函数捕获的值就是这个变体的数据，于是标签就在值的类型里。通过值的调用变成对被指函数的直接调用，捕获值作为末尾的实参；只有在运行期才知道的标签变成对它的一个 `match`——`:enum/tag`、每个变体一条臂（从值里取出该变体的捕获值）、一个 `JOIN`；在构造处就知道的标签直接折掉，只有一个变体的家族也直接折掉。它不是优化遍：它改变哪些调用是直接调用，而不改变代码有多少；流水线会在 `std::opt` 之前跑它，不需要程序写出来——`camel m.cml std::opt std::fvm` 就是"想让通过函数值的调用变成直接调用"的程序的全部流水线。写出来时它只在写的位置跑，并报出它做了什么、留下了什么（`report=true`）；流水线插入的那一步什么也不写，免得报告落在程序自己的输出里。它改的是程序写出来的值：外壳自己拿着的入口函数值原样保留，所以没有哪个程序的入口点被重新编码。它看不全的家族保留原来的形式，并报出那个类型和原因（`RuntimeDiag::DefunctionalizationIncomplete`，`0x04100017`）：值被不是调用的节点读（`map` 这类高阶算子会在算子内部调用它）、函数既被直接调用又被当成值、调用的被调方还在等东西、值交给了一个声明成另一种函数类型的形参（比如 lambda 返回它写下的值，而形参说的是 `void`）、类型是入口函数的实参、或者类型里装着这一遍留下来的另一个家族。它不猜：猜一个调用到达哪个函数会改变哪些效应执行。
 - `std::fvm`：高性能字节码虚拟机调度器
 - `std::jit`：启用即时编译的字节码虚拟机调度器。即时编译器只为 x86-64 生成代码；在其他处理器的构建中（arm64 macOS；`ENABLE_FASTVM_JIT` 关闭）`std::jit` 仍被接受，程序在字节码解释器上运行，与 `std::fvm` 相同，结果一致；该构建在日志里说明一次（`-v`：`std::jit: this build has no native code generator ...`）。这是一条日志而不是警告，所以同一条命令在所有平台上都能运行，`-Werror` 下也一样
 - `std::gir`：转储当前的图中间表示并停止

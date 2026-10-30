@@ -1,0 +1,148 @@
+/**
+ * `^` on the two reduced-precision float types.
+ *
+ * bf16 and f16 are floating types of the language (design principles 7.3), so `x ^ y` on them is
+ * the power of any other float: both operands widen to f32, the power is computed there, and the
+ * result is rounded once into the element type, which is the one arithmetic path of the type.
+ * `:op/pow_bf` and `:op/pow_f6` are the two operators behind it, and the result keeps the
+ * operands' element type: it is an element of `bf16` or `f16`, not an f32 that happens to hold
+ * the same number, so two bytes of storage and no conversion the program did not write.
+ *
+ * Every line below is a number, or the little-endian bytes of one stored element, that only that
+ * rule gives. Two comparisons follow the values: the same expression computed in f32 and rounded
+ * once into the element type, which must agree bit for bit, and the exact power computed in f64,
+ * which the stored element must be within one rounding's relative bound of (2^-8 for bf16, 2^-11 for
+ * f16, the spacing of the type at 1).
+ *
+ *   x       ^   y      bf16                   f16                     why
+ *   2.0     ^   10.0   1024.0 (0x4480)        1024.0 (0x6400)         exact in both: 2^10 is one bit
+ *   1.5     ^    3.0   3.375  (0x4058)        3.375  (0x42C0)         exact in both: 27/8
+ *   0.5     ^   -2.0   4.0    (0x4080)        4.0    (0x4400)         a negative exponent
+ *   10.0    ^    3.0   1000.0 (0x447A)        1000.0 (0x63D0)         exact in both: 125 x 8
+ *   -2.0    ^    3.0   -8.0   (0xC100)        -8.0   (0xC800)         the sign comes from the base
+ *   3.0     ^    0.5   1.734375 (0x3FDE)      1.732421875 (0x3EEE)    inexact: each type's nearest
+ *   3.0e38  ^    2.0   inf    (0x7F80)        -                       beyond the type: an infinity
+ *   3.0e4   ^    2.0   -                      inf    (0x7C00)         the same, at f16's range
+ *
+ * The inexact line separates the rules a wrong implementation would follow: a result kept in f32
+ * and stored without rounding would be 1.7320508 in both types, and a rounding that went through
+ * the other type on the way (f16 to bf16, or bf16 to f16) would move the bytes by an ulp. The
+ * infinities are pinned as infinities and the three exact lines by their bytes, so a saturation at
+ * the largest finite value moves a byte rather than a digit.
+ *
+ * The element type of the result is pinned twice: statically, because `let r: bf16 = x ^ y`
+ * compiles only if the operator answers a bf16 (there is no implicit numeric conversion, design
+ * principles 5.1), and at run time by the size of a `bf16[]` holding the results, which is two
+ * bytes an element. An operator that answered in f32 fails the first and would print four bytes an
+ * element in the second.
+ */
+
+import { to_bytes } from tensor
+import { to_array } from bytes
+import { abs, is_inf, pow } from math
+
+/// The little-endian bytes of one element of a one-element array of the type: the stored element
+/// itself, two bytes for either reduced-precision type.
+func bitsOfBf16(value: bf16): int[] {
+    let one: bf16[] = [value]
+    return to_array(to_bytes(one))
+}
+
+func bitsOfF16(value: f16): int[] {
+    let one: f16[] = [value]
+    return to_array(to_bytes(one))
+}
+
+/// The same power computed in f32 and rounded once into bf16: the operator has to answer the
+/// value this expression gives, element for element, because both are the one arithmetic path.
+func bf16AgreesWithF32(x: bf16, y: bf16): bool {
+    let r: bf16 = x ^ y
+    return r == bf16(pow(float(x), float(y)))
+}
+
+func f16AgreesWithF32(x: f16, y: f16): bool {
+    let r: f16 = x ^ y
+    return r == f16(pow(float(x), float(y)))
+}
+
+/// Whether the stored element is within one rounding's relative bound of the exact power, computed in
+/// f64 from the two widening values. The tolerance is the spacing of the type at 1 -- 2^-8 for
+/// bf16 and 2^-11 for f16 -- and not the f32 one (2^-23), which no 16-bit result could meet.
+func bf16WithinEps(x: bf16, y: bf16): bool {
+    let r: bf16 = x ^ y
+    let exact: f64 = pow(f64(x), f64(y))
+    return abs(f64(r) - exact) / abs(exact) <= 0.00390625
+}
+
+func f16WithinEps(x: f16, y: f16): bool {
+    let r: f16 = x ^ y
+    let exact: f64 = pow(f64(x), f64(y))
+    return abs(f64(r) - exact) / abs(exact) <= 0.00048828125
+}
+
+/// The same comparison with the other type's bound. It must answer false for the inexact bf16
+/// probe: 1.734375 is 1.34e-3 from the exact power, which passes bf16's 3.9e-3 and fails f16's
+/// 4.9e-4. A tolerance that passed everything would answer true here, so this line is what says
+/// the check above can fail at all.
+func bf16WithinF16Eps(x: bf16, y: bf16): bool {
+    let r: bf16 = x ^ y
+    let exact: f64 = pow(f64(x), f64(y))
+    return abs(f64(r) - exact) / abs(exact) <= 0.00048828125
+}
+
+func main(): int sync {
+    // ---- the exact powers, by the bytes of the stored element ----
+    let bfTen: bf16 = bf16(2.0) ^ bf16(10.0)
+    let bfCubic: bf16 = bf16(1.5) ^ bf16(3.0)
+    let bfInverse: bf16 = bf16(0.5) ^ bf16(-2.0)
+    let bfThousand: bf16 = bf16(10.0) ^ bf16(3.0)
+    let bfNegative: bf16 = bf16(-2.0) ^ bf16(3.0)
+    println(
+        bitsOfBf16(bfTen),
+        bitsOfBf16(bfCubic),
+        bitsOfBf16(bfInverse),
+        bitsOfBf16(bfThousand),
+        bitsOfBf16(bfNegative))
+    println(f32(bfTen), f32(bfCubic), f32(bfInverse), f32(bfThousand), f32(bfNegative))
+
+    // ---- the inexact power, and one beyond the range of the type ----
+    let bfRoot: bf16 = bf16(3.0) ^ bf16(0.5)
+    let bfOver: bf16 = bf16(3.0e38) ^ bf16(2.0)
+    println(bitsOfBf16(bfRoot), f32(bfRoot), is_inf(bfOver), bitsOfBf16(bfOver))
+
+    // ---- the same seven probes at f16 ----
+    let f16Ten: f16 = f16(2.0) ^ f16(10.0)
+    let f16Cubic: f16 = f16(1.5) ^ f16(3.0)
+    let f16Inverse: f16 = f16(0.5) ^ f16(-2.0)
+    let f16Thousand: f16 = f16(10.0) ^ f16(3.0)
+    let f16Negative: f16 = f16(-2.0) ^ f16(3.0)
+    println(
+        bitsOfF16(f16Ten),
+        bitsOfF16(f16Cubic),
+        bitsOfF16(f16Inverse),
+        bitsOfF16(f16Thousand),
+        bitsOfF16(f16Negative))
+    println(f32(f16Ten), f32(f16Cubic), f32(f16Inverse), f32(f16Thousand), f32(f16Negative))
+
+    let f16Root: f16 = f16(3.0) ^ f16(0.5)
+    let f16Over: f16 = f16(3.0e4) ^ f16(2.0)
+    println(bitsOfF16(f16Root), f32(f16Root), is_inf(f16Over), bitsOfF16(f16Over))
+
+    // ---- the result's element type is the operands', not f32 ----
+    // Two bytes an element: three bf16 results are six bytes, three f16 results six, and an
+    // operator answering in f32 would make both twelve.
+    let bfResults: bf16[] = [bfTen, bfCubic, bfRoot]
+    let f16Results: f16[] = [f16Ten, f16Cubic, f16Root]
+    println(len(to_bytes(bfResults)), len(to_bytes(f16Results)))
+
+    // ---- the same expression in f32, rounded once into the element type ----
+    println(bf16AgreesWithF32(bf16(3.0), bf16(0.5)), f16AgreesWithF32(f16(3.0), f16(0.5)))
+    println(bf16AgreesWithF32(bf16(10.0), bf16(3.0)), f16AgreesWithF32(f16(10.0), f16(3.0)))
+
+    // ---- the exact power in f64, within one rounding's relative bound ----
+    println(bf16WithinEps(bf16(3.0), bf16(0.5)), f16WithinEps(f16(3.0), f16(0.5)))
+    println(bf16WithinEps(bf16(1.5), bf16(3.0)), f16WithinEps(f16(1.5), f16(3.0)))
+    // The bf16 probe inside f16's bound: false, so the tolerance above is each type's own.
+    println(bf16WithinF16Eps(bf16(3.0), bf16(0.5)), bf16WithinEps(bf16(3.0), bf16(0.5)))
+    return 0
+}

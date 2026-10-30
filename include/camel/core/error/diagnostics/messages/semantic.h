@@ -153,11 +153,13 @@ enum class SemanticDiag : uint32_t {
     // Tags (design principles 6.2): 0x160 and up.
     TagNotAtPosition       = 0x000161,
     TagUndeclared          = 0x000162,
+    TagNameAsValue         = 0x000203,
     TagArgumentCount       = 0x000163,
     TagArgumentNotConstant = 0x000164,
     TagOnUnnamedField      = 0x000167,
     TagArgumentNamed       = 0x000168,
     TagArgumentType        = 0x00016A,
+    TagArgumentNotValue    = 0x000202,
     TagNotAPermission      = 0x00016B,
     RuleTagNotRequires     = 0x00016C,
     TagParameterType       = 0x00016D,
@@ -464,6 +466,8 @@ enum class SemanticDiag : uint32_t {
     FactCaseBindsNoVariable   = 0x0001F8,
     TypeFunctionNotApplicable = 0x0001FE,
     StatementAfterReturn      = 0x000201,
+    RuleLeftIsNotAnOperator   = 0x000204,
+    DuplicateRuleForOperator  = 0x000205,
 
     // Warnings
     IgnoredSideEffect = 0x100002,

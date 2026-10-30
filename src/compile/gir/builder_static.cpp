@@ -85,6 +85,31 @@ std::string typePatternText(const GCT::node_ptr_t &caseNode) {
     return text.empty() ? std::string("(none)") : text;
 }
 
+/// Whether two types have the same shape (design principles 5.5): the same kind, the same number
+/// of members and, for a struct, the same field names in the same order. A same-shape
+/// comprehension takes the field names and the kind from the type written as its head, and its
+/// member types from the rounds' values, so a head whose member types are other than the walked
+/// type's (`Tangent<T>` around the `T` the generator walks) is the same shape as long as those
+/// agree.
+bool sameShapeAs(const Type *head, const Type *walked) {
+    if (head == walked) {
+        return true;
+    }
+    if (head == nullptr || walked == nullptr || head->code() != walked->code() ||
+        !tree::isInternal(head) || !tree::isInternal(walked)) {
+        return false;
+    }
+    if (tree::arity(head) != tree::arity(walked)) {
+        return false;
+    }
+    for (size_t i = 0; i < tree::arity(head); ++i) {
+        if (tree::childName(head, i) != tree::childName(walked, i)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 void Builder::resolveStaticBodyNames(const GCT::node_ptr_t &body) {
@@ -428,14 +453,30 @@ bool Builder::typeCaseMatches(Type *subject, const GCT::node_ptr_t &caseNode) co
     if ((patterns & typeCaseBit(GCT::TypeCaseKind::Leaf)) != 0 && !isStruct && !isTuple) {
         return true;
     }
-    // An identity pattern is exact: `case float` does not select `int`, `case f32` does not
-    // select `f64`, and a named struct is its declaration, not merely a struct of that shape.
+    // An identity pattern is exact -- `case float` does not select `int`, `case f32` does
+    // not select `f64` -- except for an open-rank array: `T[..]` selects an array of any
+    // rank, the zero rank included, so long as the element types are the same.
     // The pattern's type variables have the bindings of the instance being built, so `case T`
     // selects exactly the type `T` was bound to. A pattern that is still open is reported by
     // visitTypeMatchNode before any case is selected.
     for (size_t i = 0; i < caseNode->typeCaseTypeCount(); ++i) {
         Type *pattern = boundType(caseNode->typeCaseTypeAt(i));
         if (pattern == nullptr || containsTypeVar(pattern)) {
+            continue;
+        }
+        if (pattern->openRank()) {
+            // Rank zero is the element itself (design principles: an array of rank zero is
+            // that element, and there is no separate rank-zero array in the types).
+            auto *want = static_cast<ArrayType *>(pattern);
+            if (typeEquals(subject, want->elemType())) {
+                return true;
+            }
+            if (subject->code() == TypeCode::Array) {
+                auto *have = static_cast<ArrayType *>(subject);
+                if (typeEquals(have->elemType(), want->elemType())) {
+                    return true;
+                }
+            }
             continue;
         }
         if (typeEquals(subject, pattern)) {
@@ -1342,8 +1383,12 @@ std::any Builder::visitStaticComprehensionNode(const GCT::node_ptr_t &gct) {
     // struct (or the elements of a tuple) of the same shape. Nothing of it is left in the graph
     // but the straight-line code of the rounds and one FILL.
     //
-    // `T { ... }` names the shape: the field names and the kind come from `T`, which must be the
-    // type the generator walks.
+    // `T { ... }` names the shape: the field names and the kind come from the head, so that one
+    // `case struct | tuple` branch covers both kinds. The head is a type expression
+    // (`Tangent<(float, int)>`), not a name, and its member types need not be the walked type's:
+    // the member types are the rounds' values (design principles 5.5, which is what lets an
+    // expansion such as `tree_map` change the leaves and keep the shape). What the head and the
+    // walked type must share is the shape itself.
     const bool sameShape = gct->comprehensionSameShape();
     Type *declaredShape  = nullptr;
     if (sameShape) {
@@ -1377,7 +1422,7 @@ std::any Builder::visitStaticComprehensionNode(const GCT::node_ptr_t &gct) {
     }
     (void)visitStaticForNode(generator, &values, &shape);
     if (sameShape) {
-        if (shape == nullptr || shape != declaredShape) {
+        if (!sameShapeAs(shape, declaredShape)) {
             diags_->of(SemanticDiag::SameShapeComprehensionMismatch)
                 .atOrigin(generator->origin())
                 .commit(
@@ -1471,7 +1516,7 @@ node_handle_t Builder::fillStaticValues(
         tuple
             ? core::rtdata::toSlot(::Tuple::create(values.size(), core::mm::autoSpace()))
             : core::rtdata::toSlot(::Struct::create(values.size(), core::mm::autoSpace()));
-    auto &draft = currGraph_->draft();
+    auto &draft = currGraph_->transaction().edit();
     auto base   = draft.ref(draft.materializeStaticValue(empty, type));
     std::vector<size_t> slots(values.size());
     std::iota(slots.begin(), slots.end(), 0);

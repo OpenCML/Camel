@@ -1,0 +1,17 @@
+// A struct field declared `f32[..]` filled from a literal: the field is a position with a type, so
+// the element written there is the rank-zero value the position promises (design principles 5.4) --
+// the same value the computed side becomes (`rank_zero_field_slot.cml`), made at the data level
+// because there is nothing to compute.
+//
+// Before the data layer could hold a rank-zero value, this literal was refused with
+// `LiteralNotRepresentable`; after it, the field reads back as the element on every backend.
+
+type Box = { v: f32[..] }
+
+func main(): int sync {
+    let first: Box = { v: 1.5 }
+    println(first.v)
+    let second: Box = { v: 2.5 }
+    println(second.v)
+    return 0
+}

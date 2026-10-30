@@ -121,8 +121,12 @@ GCGraphDebugRecord *createGraphDebugRecord(std::string mangledName, std::string 
 /// Records the cold data of `draft` in `record`: the names it captures and how it was derived.
 /// (The source origins of its nodes are a column of the frozen graph, written with the records.)
 /// Every encoding of a draft calls it, so that nothing of the draft's debug data is lost on a
-/// commit.
-void recordDraftDebugData(GCGraphDebugRecord *record, const GraphDraft &draft);
+/// commit. `live` names the nodes the graph being built has when it is a part of the draft's
+/// nodes (see describeDraftNativePayload); the node names are indexed by the runtime node id the
+/// subset gives them.
+void recordDraftDebugData(
+    GCGraphDebugRecord *record, const GraphDraft &draft,
+    std::optional<std::span<const gc_node_ref_t>> live = std::nullopt);
 
 /// How a graph was derived, besides what its nodes say (GCGraph::typeSpecializationRoot,
 /// GCGraph::flags).
@@ -173,8 +177,15 @@ struct GCGraphBuildAccess {
         }
     }
 };
-GCGraphPayloadShape describeDraftNativePayload(const GraphDraft &draft);
-void emitDraftNativePayload(const GraphDraft &draft, GCGraphPayloadArena &payload);
+/// The shape and the bytes of the frozen payload of `draft`. A caller that builds a graph from
+/// part of a draft's nodes names them in `live` (sorted draft ids): the nodes the draft holds
+/// besides them are not in the graph, and an order edge that names one of them goes with it.
+/// `std::nullopt` means every node the draft has; an empty set is a graph of no node.
+GCGraphPayloadShape describeDraftNativePayload(
+    const GraphDraft &draft, std::optional<std::span<const gc_node_ref_t>> live = std::nullopt);
+void emitDraftNativePayload(
+    const GraphDraft &draft, GCGraphPayloadArena &payload,
+    std::optional<std::span<const gc_node_ref_t>> live = std::nullopt);
 
 void collectStaticGraphRefsRecursive(
     std::vector<GraphId> &refs, slot_t slot, camel::core::type::Type *type,

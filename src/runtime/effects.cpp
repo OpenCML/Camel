@@ -7,6 +7,8 @@
 
 #include "camel/runtime/effects.h"
 
+#include "camel/runtime/effect_liveness.h"
+
 #include "camel/core/operator_table.h"
 
 #include <unordered_map>
@@ -110,6 +112,24 @@ effectSummaryOfRegion(const Program &program, const GCGraph *graph, uint32_t reg
     EffectWalk walk{program};
     walk.active.insert(graph);
     return walk.ofNodes(graph, region);
+}
+
+EffectStanding effectStandingOf(const EffectLivenessFacts &facts) {
+    // 3.1's two: a value of it is read, or it is a statement of a `sync` block. A read written
+    // after it takes what it wrote only where the writer table says so.
+    if (facts.hasDataUser || facts.isSyncStatement || facts.isWriterWithLaterRead) {
+        return EffectStanding::Alive;
+    }
+    // A call through a function value is not a third answer: the writer table records it as the
+    // variable's write, the call is that variable's new version, and the read written after it
+    // takes a data edge from the call (Builder::valueVersionOf). A write nothing here knows about
+    // is left to the sync blocks and the resource order (docs/design-principles.cn.md 3.3); it is
+    // not a credential of this layer, which is why it does not make a node alive.
+    return EffectStanding::HasNoCredential;
+}
+
+bool keepsEffectAlive(EffectStanding standing) {
+    return standing != EffectStanding::HasNoCredential;
 }
 
 } // namespace camel::runtime

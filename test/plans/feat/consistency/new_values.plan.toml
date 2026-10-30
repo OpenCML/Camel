@@ -370,3 +370,34 @@ envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFE
 expect_exit = 0
 expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5]"]
 timeout_ms = 60000
+
+[[tests]]
+name = "new_values.sort_rebinding.segments"
+desc = "The same program on std::prl with the plan printed (`segments=true`): the graph is one segment run inline, and the print names that segment for every operator of the graph exactly once, so the reader can tell a segment that was cut from one that was cut and not scheduled. Printing the plan does not change the program's output."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/sort_rebinding.cml"
+args = ["${case}", "${run_prl_segments}"]
+expect_exit = 0
+expect_stdout = "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stderr.trim().split(String.fromCharCode(10))
+const header = lines.find(l => l.indexOf("[taskflow] segments 'main': ") === 0)
+assert(header !== undefined, 'no segment header for main: ' + input.normalized.stderr)
+const shape = /([0-9]+) segment[(]s[)], ([0-9]+) chain[(]s[)], ([0-9]+) operator[(]s[)]/.exec(header)
+assert(shape !== null, 'the header does not say what was cut: ' + header)
+const segments = Number(shape[1])
+const chains = Number(shape[2])
+const operators = Number(shape[3])
+assert(segments >= 1, 'a structured graph has at least one segment: ' + header)
+const ops = lines.filter(l => l.indexOf("[taskflow] segments 'main' oper ") === 0)
+assert(ops.length === operators, 'main printed ' + ops.length + ' operators, its header says ' + operators)
+for (const line of ops) {
+  const at = /: segment ([0-9]+)(?:, inline| chain ([0-9]+))$/.exec(line)
+  assert(at !== null, 'an operator line does not say where it landed: ' + line)
+  assert(Number(at[1]) < segments, 'an operator landed outside the segments: ' + line)
+  if (at[2] !== undefined) assert(Number(at[2]) < chains, 'an operator landed outside the chains: ' + line)
+}
+}
+"""

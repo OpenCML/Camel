@@ -3,15 +3,18 @@
 
 #include "camel/core/type/typecall.h"
 
+#include "camel/core/derivative.h"
 #include "camel/core/mm.h"
 #include "camel/core/type/collection.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/text.h"
 #include "camel/core/type/typevar.h"
 #include "camel/utils/assert.h"
+#include "camel/utils/type.h"
 
 #include <algorithm>
 #include <vector>
@@ -26,11 +29,56 @@ TypeCode TypeCallType::typeCode() {
 namespace {
 
 constexpr std::string_view kTypeFunctions[] = {
-    "ElementOf", "PayloadOf", "KeyOf", "ValueOf", "WithElement", "ParamsOf", "WithOf", "ResultOf"};
+    "ElementOf",
+    "PayloadOf",
+    "KeyOf",
+    "ValueOf",
+    "WithElement",
+    "RowsOf",
+    "ParamsOf",
+    "WithOf",
+    "ResultOf",
+    "Tangent"};
 
 constexpr std::string_view kPackName   = "$pack";
 constexpr std::string_view kExpandName = "$expand";
 constexpr std::string_view kLengthsTag = "$lengths:";
+
+/// The tangent space of a value (design principles 9.9): a float and a tensor of floats are their
+/// own tangent space; a tuple and a struct are the tangent space of each member in the member's
+/// own place; every other type is the empty tuple, the value that carries no data and that a rule
+/// ignores -- an integer, a `bool` and a `string` have no derivative, and neither has a function.
+///
+/// The empty tuple is what the answer is for a type the derivative machinery has no space for, so
+/// a tangent type is always a type a program can write: a parameter the user differentiates never
+/// meets a "no tangent" hole, it meets a value of no data. Which member is a continuous quantity
+/// is not this function's question; it is the same one `machineryTangentTypeOf` answers.
+Type *tangentSpaceOf(Type *type) {
+    if (type->code() == TypeCode::Struct || type->code() == TypeCode::Tuple) {
+        const bool structure = type->code() == TypeCode::Struct;
+        const size_t size = structure ? tt::as_ptr<StructType>(type)->size()
+                                      : tt::as_ptr<TupleType>(type)->size();
+        StructTypeFactory factory;
+        std::vector<Type *> elements;
+        for (size_t i = 0; i < size; ++i) {
+            Type *member = structure ? tt::as_ptr<StructType>(type)->typeAt(i)
+                                     : tt::as_ptr<TupleType>(type)->typeAt(i);
+            Type *space  = tangentSpaceOf(member);
+            if (structure) {
+                factory.add(std::string(tt::as_ptr<StructType>(type)->fieldName(i)), space);
+            } else {
+                elements.push_back(space);
+            }
+        }
+        return structure
+                   ? static_cast<Type *>(factory.build())
+                   : static_cast<Type *>(TupleType::create(std::move(elements)));
+    }
+    if (Type *space = camel::core::machineryTangentTypeOf(type); space != nullptr) {
+        return space;
+    }
+    return TupleType::create(std::vector<Type *>{});
+}
 
 } // namespace
 
@@ -57,6 +105,9 @@ Type *TypeCallType::evaluate(
         return nullptr;
     }
     Type *type = arguments.front();
+    if (name == "Tangent") {
+        return tangentSpaceOf(type);
+    }
     if (name == "ParamsOf" || name == "WithOf" || name == "ResultOf") {
         if (type->code() != TypeCode::Function) {
             error = type->toString() + " is not a function type";
@@ -98,6 +149,25 @@ Type *TypeCallType::evaluate(
         }
         error = type->toString() + " is neither an array nor a set";
         return nullptr;
+    }
+    if (name == "RowsOf") {
+        // The array whose first-dimension elements are `type`: one dimension more, its length not
+        // known (a batch), the dimensions the argument states kept as they are. This is the
+        // inverse of ArrayType::firstDimensionElement(), which is the rule `x[i]` and `for x in
+        // xs` follow (design principles 5.4), so `x[i]` on `RowsOf<T>` is a `T` again. A type with
+        // no dimension (`f32`, a struct) is one element of the batch: `f32[?]`.
+        const ArrayType *array = asArrayType(type);
+        if (array == nullptr) {
+            return ArrayType::create(type);
+        }
+        std::vector<ExtentForm> forms;
+        forms.reserve(array->rank() + 1);
+        forms.push_back(ExtentForm::unknown());
+        forms.insert(forms.end(), array->extents().begin(), array->extents().end());
+        if (array->anyRank()) {
+            return ArrayType::openRank(array->elemType(), forms);
+        }
+        return ArrayType::create(array->elemType(), forms, array->packName());
     }
     if (name == "PayloadOf") {
         if (TupleType *tagged = asTagged(type)) {

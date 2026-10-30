@@ -117,3 +117,12 @@ backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_starts_with = "big\nafter\n9\n"
 expect_stderr_contains = ["name=SemanticDiag::ExitInUnusedBranch", "This 'return' gives the value of the 'if' it is in"]
+
+[[tests]]
+name = "if_without_else.older_effect_place"
+desc = "The effect of a call written in a later statement's argument runs where that statement is, not at the head of the block: the minimal form of `statement`."
+kind = "behavior"
+case = "../../../cases/consistency/if_without_else/older_effect_place.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 0
+expect_stdout_starts_with = "before\nolder\n1 1\nafter\n"

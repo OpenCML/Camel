@@ -225,6 +225,63 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
                     literalData = converted;
                 }
             }
+            // The computed element enters the slot the position gives it, and where the two types
+            // stand on the edge between `T` and `T[..]` the value is converted as it enters
+            // (design principles 5.4): the slot of an open rank holds a rank-zero array, and a
+            // FILL links its element nodes as they are. This is the last entrance that did not go
+            // through `Builder::coerceTo` -- a call argument was the first -- so it is converted
+            // here, by the same question and the same call, rather than left to be read as an
+            // array that is not there.
+            const auto filledSlotType = [&](size_t slot) -> Type * {
+                if (filledType->code() == TypeCode::Array) {
+                    const auto *arrayType = tt::as_ptr<ArrayType>(filledType);
+                    return arrayType != nullptr ? arrayType->elemType() : nullptr;
+                }
+                if (filledType->code() == TypeCode::Struct) {
+                    const auto *structType = tt::as_ptr<StructType>(filledType);
+                    return structType != nullptr && slot < structType->size()
+                               ? structType->typeAt(slot)
+                               : nullptr;
+                }
+                if (filledType->code() == TypeCode::Tuple) {
+                    const auto *tupleType = tt::as_ptr<TupleType>(filledType);
+                    return tupleType != nullptr && slot < tupleType->size()
+                               ? tupleType->typeAt(slot)
+                               : nullptr;
+                }
+                return nullptr;
+            };
+            for (size_t h = 0; h < holeSlots.size() && h < refNodes.size(); ++h) {
+                Type *slotType = filledSlotType(holeSlots[h]);
+                Type *elementType = slotType != nullptr ? valueTypeOf(nodeTypeOf(refNodes[h])) : nullptr;
+                if (slotType == nullptr || elementType == nullptr) {
+                    continue;
+                }
+                if (isRankZeroEdge(slotType, elementType)) {
+                    if (node_handle_t entered = coerceTo(refNodes[h], slotType, gct);
+                        entered != nullptr) {
+                        refNodes[h] = entered;
+                    }
+                    continue;
+                }
+                // A nested literal in the slot is the named type the position states (design
+                // principles 5.2), not the unnamed type its own fields give it: without this the
+                // fill put a `{ v: f32 }` where the field is `Inner`, and the read of the field
+                // read a value of another type. The copy is field by field, the same one a
+                // position makes for an unnamed struct value.
+                if (slotType->code() == TypeCode::Struct && elementType->code() == TypeCode::Struct &&
+                    !slotType->equals(elementType)) {
+                    auto *slotStruct     = tt::as_ptr<StructType>(slotType);
+                    auto *elementStruct  = tt::as_ptr<StructType>(elementType);
+                    if (slotStruct != nullptr && elementStruct != nullptr && slotStruct->named() &&
+                        !elementStruct->named()) {
+                        if (node_handle_t copied = convertStructValue(refNodes[h], slotStruct, gct);
+                            copied != nullptr) {
+                            refNodes[h] = copied;
+                        }
+                    }
+                }
+            }
             auto payload    = runtime::makeFillPayload(fillKindForType(filledType), holeSlots);
             node_handle_t srcNode = currGraph_->addStaticDataNode(literalData, filledType);
             node                  = currGraph_->addFillNode(filledType, payload);
@@ -352,10 +409,17 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     // single function value (an operator, a set of overloads) stays bound to what it names
     // and can be called where it was bound.
     const node_scope_ptr_t declScope = nodeScope_;
+    // A cell whose value is written where the declaration stands: the child is the type the cell
+    // holds (`typeof <the first write>`), not a value, so there is no initializer to evaluate
+    // here (design principles 5.4).
+    const bool typedCell =
+        gct->size() > 0 && gct->at(0)->type() == GCT::NodeKind::TYPE;
     node_handle_t node{};
     try {
         if (Type *declared = GCT::Tree::of(gct)->nativeValueTypeOf(gct)) {
             node = nativeValueNode(gct, declared);
+        } else if (typedCell) {
+            node = newVariableOfType(visitTypeNode(gct->at(0)));
         } else {
             node = functionValueOf(valueNodeOf(visit(gct->at(0))), gct);
         }
@@ -372,8 +436,9 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     // `let g = f<w>` where `f<w>` is not one function: the name would be bound to `f` and the
     // arguments lost.
     try {
-        // A native value has nothing written to the right of the name.
-        if (gct->size() > 0) {
+        // A native value has nothing written to the right of the name, and neither has a cell
+        // that is made with only its type.
+        if (gct->size() > 0 && !typedCell) {
             rejectUnappliedBinding(node, gct->at(0));
             if (genericDrefs_.contains(node)) {
                 // `let g = id`: no context to take the types from.
@@ -391,8 +456,9 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     // it without one has no element type; say so here, where the type can be written. (A
     // name the compiler made for an element of a literal starts with a digit.)
     if (Type *type = node != nullptr ? valueTypeOf(nodeTypeOf(node)) : nullptr;
-        type != nullptr && gct->size() > 0 && isUntypedArrayType(type) && !ident.empty() &&
-        !std::isdigit(static_cast<unsigned char>(ident.front())) && ident.front() != '$') {
+        type != nullptr && gct->size() > 0 && !typedCell && isUntypedArrayType(type) &&
+        !ident.empty() && !std::isdigit(static_cast<unsigned char>(ident.front())) &&
+        ident.front() != '$') {
         diags_->of(SemanticDiag::EmptyArrayWithoutType)
             .atOrigin(gct->at(0)->origin())
             .commit(ident);
@@ -411,8 +477,8 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
         return node;
     }
     // `var` x = e` binds x to a new variable holding the value of e; `let x = e` binds it to
-    // that value.
-    node_handle_t bound = isVar ? newVariable(node) : node;
+    // that value. A cell that was made with only its type is already the variable.
+    node_handle_t bound = (isVar && !typedCell) ? newVariable(node) : node;
     if (isVar) {
         // The cell is created by its declaration: that is its place in the source.
         registerNodeOrigin(context_, bound, gct, "gir.var");
@@ -431,7 +497,7 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     // two names to one value; the first name wins).
     if (!ident.empty() && !std::isdigit(static_cast<unsigned char>(ident.front())) &&
         ident.front() != '$') {
-        runtime::GraphDraft &draft = currGraph_->draft();
+        auto &draft = currGraph_->transaction().edit();
         if (draft.nodeName(bound.id) == camel::core::kEmptySym) {
             draft.setNodeName(bound.id, camel::core::internSymbol(ident));
         }
@@ -1152,6 +1218,14 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
     if (isPoisonedName(name)) {
         throw BuildAbortException();
     }
+    // A name used as a value that is a tag. A tag keeps the name it is written with and does not
+    // enter the value namespace (design principles 6.2, the author's ruling of 2026-10-30), so a
+    // tag and a value of one name may coexist and the tag is reached only through `#`. Saying that
+    // beats telling the writer to check that a name the program declares is declared.
+    if (tagNamed(name).has_value()) {
+        diags_->of(SemanticDiag::TagNameAsValue).atOrigin(gct->origin()).commit(name);
+        throw BuildAbortException();
+    }
     diags_->of(SemanticDiag::UnresolvedReference).atOrigin(gct->origin()).commit(name);
     throw BuildAbortException();
 }
@@ -1221,16 +1295,23 @@ bool Builder::valueNameExists(const std::string &written, const GCT::node_ptr_t 
 
 node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     ENTER("CAST");
-    ExpectedValueScope expectedScope(expectedValueType_, boundType(gct->targetType()));
+    // A type written as `typeof e` (`let a: typeof(f()) = g()`, `x as typeof(f)`) is inferred
+    // before anything is built with it, so that the expected type a literal takes is the inferred
+    // one, and so that `e` is not evaluated by being written there (design principles 5.4).
+    Type *written      = gct->targetType();
+    const bool inferred = written != nullptr && written->code() == TypeCode::TypeOf;
+    if (inferred) {
+        written = resolveTypeNode(written, gct);
+    }
+    ExpectedValueScope expectedScope(expectedValueType_, boundType(written));
     if (const auto &operand = gct->at(0);
-        operand->type() == GCT::NodeKind::DATA && containsTypeVar(gct->targetType()) &&
-        asTagged(gct->targetType()) == nullptr &&
-        asCollectionTypeOrPrototype(gct->targetType()) == nullptr) {
+        operand->type() == GCT::NodeKind::DATA && (inferred || containsTypeVar(written)) &&
+        asTagged(written) == nullptr && asCollectionTypeOrPrototype(written) == nullptr) {
         // A literal converted to a type written with a type variable (`let zero: T = 0`,
         // `0 as T`). The GCT converts a literal to a concrete type itself; here the type is
         // only known now, so the same conversion is applied now.
         const data_ptr_t &data = operand->data();
-        Type *targetType       = boundType(gct->targetType());
+        Type *targetType       = boundType(written);
         const bool literal =
             !isComposite(data->type()->code()) || tt::as_shared<CompositeData>(data)->resolved();
         if (literal) {
@@ -1265,7 +1346,7 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
             return node;
         }
     }
-    Type *targetType = boundType(gct->targetType());
+    Type *targetType = boundType(written);
     if (targetType != nullptr && targetType->code() == TypeCode::Function) {
         // A function type written for a function: it says which function a name stands for
         // (the instance of a generic function, one of several overloads, a partial
@@ -1335,6 +1416,19 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
         LEAVE("CAST");
         return valueNode;
     }
+    if (targetType->code() == TypeCode::Array && asTagged(targetType) == nullptr) {
+        // `T[..]` includes rank zero, which is the element itself (design principles 5.4): a value
+        // of that element's type is the value the position names -- the same value, not an array
+        // holding it. Nothing is converted, and the value keeps the element type: the type has no
+        // separate rank-zero array, and a CAST node typed `T[..]` would say the value is an array
+        // the run cannot read (`T[]` states one dimension and is not this case; rankZeroType()
+        // answers nullptr for it).
+        Type *rankZero = tt::as_ptr<ArrayType>(targetType)->rankZeroType();
+        if (rankZero != nullptr && rankZero->assignableFrom(valueTypeOf(sourceType))) {
+            LEAVE("CAST");
+            return valueNode;
+        }
+    }
     if (gct->annotation() && asTagged(targetType) == nullptr) {
         // The type a declaration is written with (`let x: T = e`; GCT Builder::declaredValue):
         // `e` must already have it. A value of that very type passes as it is (converting a
@@ -1364,6 +1458,15 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
                 }
             }
             if (!converted) {
+                // The value may still be a literal the position converts element by element: a
+                // composite literal whose field is `T[..]` becomes the rank-zero value of the
+                // element there (design principles 5.4), and a position converts its literal in
+                // one place (`Builder::coerceTo`). Refusing here would refuse a value the
+                // declaration itself makes, so the position is asked first.
+                if (node_handle_t entered = coerceTo(valueNode, targetType, gct->at(0)); entered != nullptr) {
+                    LEAVE("CAST");
+                    return entered;
+                }
                 diags_->of(SemanticDiag::DeclaredTypeMismatch)
                     .atOrigin(gct->origin())
                     .commit(have->toString(), targetType->toString());
@@ -1450,7 +1553,18 @@ node_handle_t Builder::variableOperator(camel::core::OperId oper, node_handle_t 
     const auto group = internalOperatorGroup(oper);
     const std::vector<StaticArg> statics(1);
     const auto op = group->resolve({}, {nodeTypeOf(input)}, statics);
-    ASSERT(op.has_value(), "Variable operator rejected its operand.");
+    if (!op.has_value()) {
+        // ASSERT is an empty statement under NDEBUG, so the line below dereferenced an empty
+        // optional and this was a 139 -- the second one tonight that a sentence would have
+        // prevented (the first was Variant::updateRefs). The reading says which operand and what
+        // node it is: a variable operator needs a version that carries a value, and `void` is not
+        // one.
+        throw std::runtime_error(
+            std::format(
+                "a variable operator got an operand with no value type: `:var/get` needs a version "
+                "that carries a value, and the node it was given is a node of kind {} with none",
+                static_cast<int>(nodeKindOf(input))));
+    }
     node_handle_t node = currGraph_->addOperNode(*op, 0);
     stampPermissions(node);
     linkNodes(LinkType::Norm, input, node);
@@ -1461,6 +1575,19 @@ node_handle_t Builder::newVariable(node_handle_t value) {
     // The variable takes the widened type of its initializer (:var/new), so later assignments
     // may store values with a different refinement (e.g. shape).
     node_handle_t variable = variableOperator(camel::core::oper::VarNew, value);
+    variables_.insert(variable);
+    return variable;
+}
+
+node_handle_t Builder::newVariableOfType(Type *type) {
+    // The type the cell holds is the operator's one `with` argument: no operand, no value, and the
+    // read of the cell has a type from the moment the cell is made.
+    const auto group = internalOperatorGroup(camel::core::oper::VarNewEmpty);
+    const std::vector<StaticArg> statics(0);
+    const auto op = group->resolve({type}, {}, statics);
+    ASSERT(op.has_value(), "The empty cell operator rejected the type it was given.");
+    node_handle_t variable = currGraph_->addOperNode(*op, 0);
+    stampPermissions(variable);
     variables_.insert(variable);
     return variable;
 }
@@ -1545,7 +1672,7 @@ void Builder::collapseNonEscapingVariableReads() {
     // would name a node the graph does not keep. It goes before the reads that are folded, with the
     // order edge that kept the next write after it.
     {
-        auto &graphDraft = currGraph_->draft();
+        auto &graphDraft = currGraph_->transaction().edit();
         std::vector<node_handle_t> unused;
         for (const auto &entry : variableReadSource_) {
             const node_handle_t read = entry.first;
@@ -1582,7 +1709,7 @@ void Builder::collapseNonEscapingVariableReads() {
         }
         byCell[info.cell].push_back({read, info.source});
     }
-    auto &draft = currGraph_->draft();
+    auto &draft = currGraph_->transaction().edit();
     for (auto &[cell, reads] : byCell) {
         // A `var` parameter of this graph is a resource shared with the caller, and a captured cell
         // is shared with a closure: both keep their cell.

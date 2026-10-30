@@ -12,6 +12,16 @@
  * parameter is a constant, and so is every ordinary parameter. To differentiate the data, bind it
  * as a `with` parameter with a lambda. A function with no `with` parameter, or whose first one has
  * no tangent, or a result that is not a scalar float, is refused where the call is compiled.
+ * There is no `argnums`: which value is differentiated is what the `with` binding says, not a
+ * position, so a call that would name one is refused as the unknown parameter it is.
+ *
+ * `has_aux: true` is for a function whose result is the pair `(value, aux)`, the shape JAX uses it
+ * for: the first element is the loss and the second is anything the caller wants carried (a count,
+ * a norm). The pair is split, the first element is differentiated and the second is handed back
+ * unchanged: `grad(f, has_aux: true)` gives `(gradient, aux)` and
+ * `with_grad(f, has_aux: true)` gives `((value, aux), gradient)`, which are JAX's orders.
+ * The argument has to be the constant `true` -- a call has one result type, so whether the pair is
+ * split cannot follow a value -- and `has_aux: false` is refused with the plain call to write.
  *
  * The gradient has the type of the parameter it is the gradient of: a struct gives a struct of
  * gradients, a tuple a tuple, an array of floats an array of the same element type and shape, a
@@ -29,30 +39,29 @@
  * and `jvp` is forward mode (the result and its tangent along a direction); both land with the
  * autodiff lane, not before they work.
  *
- * `stop_gradient` marks a value as a constant. A transform's local rules are the tags on a
- * declaration and the `rule` declarations below: the tags give a function's own rules
+ * The transform that trades memory for recomputation -- the same values, with the annotated section
+ * recomputed in the backward pass instead of kept -- is named `remat` here. JAX calls it
+ * `jax.checkpoint` and, by its other name, `jax.remat`; in this tree "checkpoint" is the persistence
+ * module `stdlib/ckpt.cml` and stays that, so the transform takes the other word and there is no
+ * second name for a reader to disambiguate. It is not implemented yet: the name is not a value, and
+ * a call to it is refused like any other name that does not resolve.
+ *
+ * `stop_gradient` marks a value as a constant, and the mathematics of the local rules is written
+ * here, where the library keeps one statement of it: `add_tangent` and its siblings are the tangent
+ * of a primitive, `add_cotangent` and its siblings its cotangent. The rules themselves -- the
+ * declarations that attach those statements to a primitive -- live in the ruleset modules, which is
+ * what a transform reads: `stdlib/rulesets/jvp.cml` for the forward rules and
+ * `stdlib/rulesets/transpose.cml` for the transposes. A tag gives a function's own rules
  * (`#jvp(rule)` forward, `#transpose(rule)` for a linear function, `#vjp(rule)` the pullback) and
- * are read back by structure (`graph::rule_of`); a primitive's rules are the rules whose pattern
- * is the primitive, one family at a time, starting with the scalar arithmetic.
+ * is read back by structure (`graph::rule_of`); a primitive's rules are the ruleset's, by the
+ * operator of their left side.
  */
 
-import { is_float, is_function } from types
+import { is_float } from types
 
-/// The rule of the function it is written on for forward mode: along the tangents of the
-/// function's arguments it gives the tangent of its result. The rule has the signature of the
-/// forward derivative of the function (`stdlib/signatures/autodiff.cml`).
-export tag jvp::<F>(rule: F) on func when is_function::<F>()
-
-/// The rule of the function it is written on for the transpose, when the function is linear in
-/// its arguments: from the cotangent of the result it gives the cotangents of the arguments. The
-/// values the function was given are known when the transpose runs, so a rule is written only for
-/// the arguments that carry the data.
-export tag transpose::<F>(rule: F) on func when is_function::<F>()
-
-/// The custom derivative of the function it is written on: calls of that function use `rule`
-/// instead of differentiating its body. The rule has the signature of the pullback of the
-/// function (`stdlib/signatures/autodiff.cml`).
-export tag vjp::<F>(rule: F) on func when is_function::<F>()
+// The three tags a derivative rule is written with (`#jvp`, `#transpose`, `#vjp`) are declared
+// in `prelude`, beside the operators they are written on: a tag is a fact about any function,
+// the library's own operators included, and every program reads the prelude.
 
 /// Gives its argument unchanged and cuts the gradient at this point: a value passed through
 /// `stop_gradient` is a constant to `grad`. Any value is accepted, and the result has the
@@ -82,20 +91,10 @@ export func add_tangent::<T>(x: T, w: T, dx: T, dw: T): T when is_float::<T>() {
     return dx + dw
 }
 
-/// `d(x + w) = dx + dw`.
-export rule add_jvp::<T>(x: T, w: T) when is_float::<T>() {
-    x + w => (dx: T, dw: T) => add_tangent(x, w, dx, dw)
-}
-
 /// The tangent of `x - w` along `(dx, dw)`: `dx - dw`.
 /// @example sub_tangent(3.0, 5.0, 1.0, 0.0)    // 1.0
 export func sub_tangent::<T>(x: T, w: T, dx: T, dw: T): T when is_float::<T>() {
     return dx - dw
-}
-
-/// `d(x - w) = dx - dw`.
-export rule sub_jvp::<T>(x: T, w: T) when is_float::<T>() {
-    x - w => (dx: T, dw: T) => sub_tangent(x, w, dx, dw)
 }
 
 /// The tangent of `x * w` along `(dx, dw)`: `dx * w + x * dw`.
@@ -104,20 +103,10 @@ export func mul_tangent::<T>(x: T, w: T, dx: T, dw: T): T when is_float::<T>() {
     return dx * w + x * dw
 }
 
-/// `d(x * w) = dx * w + x * dw`.
-export rule mul_jvp::<T>(x: T, w: T) when is_float::<T>() {
-    x * w => (dx: T, dw: T) => mul_tangent(x, w, dx, dw)
-}
-
 /// The tangent of `x / w` along `(dx, dw)`: `dx / w - x * dw / (w * w)`.
 /// @example div_tangent(6.0, 4.0, 1.0, 0.0)    // 0.25
 export func div_tangent::<T>(x: T, w: T, dx: T, dw: T): T when is_float::<T>() {
     return dx / w - x * dw / (w * w)
-}
-
-/// `d(x / w) = dx / w - x * dw / (w * w)`.
-export rule div_jvp::<T>(x: T, w: T) when is_float::<T>() {
-    x / w => (dx: T, dw: T) => div_tangent(x, w, dx, dw)
 }
 
 /// The tangent of `-x` along `dx`: `-dx`.
@@ -126,20 +115,10 @@ export func neg_tangent::<T>(x: T, dx: T): T when is_float::<T>() {
     return -dx
 }
 
-/// `d(-x) = -dx`.
-export rule neg_jvp::<T>(x: T) when is_float::<T>() {
-    -x => (dx: T) => neg_tangent(x, dx)
-}
-
 /// The cotangent of `x` in `x + c`: the cotangent of the sum, unchanged.
 /// @example add_cotangent(3.0, 5.0, 2.0)    // 2.0
 export func add_cotangent::<T>(x: T, c: T, ct: T): T when is_float::<T>() {
     return ct
-}
-
-/// The transpose of `x + c`.
-export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
-    x + c => (ct: T) => add_cotangent(x, c, ct)
 }
 
 /// The cotangent of `x` in `x - c`: the cotangent of the difference, unchanged.
@@ -148,20 +127,10 @@ export func sub_cotangent::<T>(x: T, c: T, ct: T): T when is_float::<T>() {
     return ct
 }
 
-/// The transpose of `x - c`.
-export rule sub_t::<T>(x: T, c: T) when is_float::<T>() {
-    x - c => (ct: T) => sub_cotangent(x, c, ct)
-}
-
 /// The cotangent of `x` in `x * c`: `ct * c`.
 /// @example mul_cotangent(3.0, 5.0, 2.0)    // 10.0
 export func mul_cotangent::<T>(x: T, c: T, ct: T): T when is_float::<T>() {
     return ct * c
-}
-
-/// The transpose of `x * c`.
-export rule mul_t::<T>(x: T, c: T) when is_float::<T>() {
-    x * c => (ct: T) => mul_cotangent(x, c, ct)
 }
 
 /// The cotangent of `x` in `x / c`: `ct / c`.
@@ -170,18 +139,8 @@ export func div_cotangent::<T>(x: T, c: T, ct: T): T when is_float::<T>() {
     return ct / c
 }
 
-/// The transpose of `x / c`.
-export rule div_t::<T>(x: T, c: T) when is_float::<T>() {
-    x / c => (ct: T) => div_cotangent(x, c, ct)
-}
-
 /// The cotangent of `x` in `-x`: `-ct`.
 /// @example neg_cotangent(3.0, 2.0)    // -2.0
 export func neg_cotangent::<T>(x: T, ct: T): T when is_float::<T>() {
     return -ct
-}
-
-/// The transpose of `-x`.
-export rule neg_t::<T>(x: T) when is_float::<T>() {
-    -x => (ct: T) => neg_cotangent(x, ct)
 }

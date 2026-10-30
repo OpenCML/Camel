@@ -11,10 +11,16 @@
 
 #include "camel/passes/test/anchor.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/core/type/composite/func.h"
 #include "camel/runtime/draft_session.h"
+#include "camel/runtime/cycle.h"
 #include "camel/runtime/exec_plan.h"
+#include "runtime/graph_build.h"
 
 #include <exception>
+#include <optional>
+#include <span>
+#include <vector>
 
 using camel::passes::test::anchorNode;
 using camel::passes::test::blankNode;
@@ -32,7 +38,7 @@ const Program *commitEdit(
         return program;
     }
     RuntimeGraphDraftSession session(context, program);
-    GraphDraft &draft = session.edit(program->root());
+    auto &draft = session.edit(program->root()).edit();
     switch (edit) {
     case Edit::Cycle: {
         const gc_node_ref_t a = blankNode(draft);
@@ -49,9 +55,26 @@ const Program *commitEdit(
         draft.setNormInputs(copy, std::span<const gc_node_ref_t>(&value, 1));
         break;
     }
-    case Edit::Ok:
-        blankNode(draft);
+    case Edit::Ok: {
+        // The session hands out one graph per graph it edits, and it stays where the session put
+        // it: a pass binds that graph by reference and keeps it while it edits. An accessor that
+        // made a new object per call would leave the pass writing into a graph the commit never
+        // sees, and a value where a reference is expected is not a compile error at the call site.
+        // The identity is what can be looked at here; the type is held by the static_assert in
+        // draft_session.h. Nothing here names the graph's type: what the session hands out is
+        // what a pass edits, and the test is about the one it hands out, not about its name.
+        auto *first     = &session.edit(program->root());
+        auto *second    = &session.edit(program->root());
+        blankNode(first->edit());
+        auto *afterEdit = &session.edit(program->root());
+        if (first == second && first == afterEdit) {
+            os << "EDGES transaction stable\n";
+        } else {
+            os << "EDGES transaction moved: " << first << " " << second << " " << afterEdit << "\n";
+        }
+        blankNode(first->edit());
         break;
+    }
     }
     try {
         const Program *next = session.commit();
@@ -91,13 +114,19 @@ EdgesOrderOkTestPass::apply(const camel::runtime::Program *program, std::ostream
     }
     const GraphId rootId = program->root()->id();
     RuntimeGraphDraftSession session(context_, program);
-    GraphDraft &draft = session.edit(program->root());
+    auto &draft = session.edit(program->root()).edit();
     const gc_node_ref_t first  = anchorNode(draft);
     const gc_node_ref_t second = anchorNode(draft);
+    const gc_node_ref_t third  = anchorNode(draft);
     os << "ORDER wrote=" << (draft.appendOrderDependency(second, first) ? 1 : 0)
        << " twice=" << (draft.appendOrderDependency(second, first) ? 1 : 0) << "\n";
     os << "ORDER preds=" << draft.orderInputsOf(second).size()
        << " users=" << draft.orderUsersOf(first).size() << "\n";
+    // Two predecessors of one user, appended in the order that is not their numbering order: the
+    // frozen graph writes one node's side edges by the predecessor's number, so what a dump of it
+    // prints does not depend on the order a rewrite collected them in.
+    os << "ORDER wrote_reversed=" << (draft.appendOrderDependency(third, second) ? 1 : 0)
+       << (draft.appendOrderDependency(third, first) ? 1 : 0) << "\n";
     try {
         const Program *next = session.commit();
         const GCGraph *root = next->graph(rootId);
@@ -106,13 +135,20 @@ EdgesOrderOkTestPass::apply(const camel::runtime::Program *program, std::ostream
         // scheduler and pass uses) agrees with that array node for node.
         size_t seen = 0;
         size_t ordered = 0;
+        bool sorted    = true;
         for (auto it = root->nodes().begin(); it != root->nodes().end(); ++it) {
             const auto preds = root->orderPredsOf(it.ref());
             seen += preds.size();
             ordered += preds.empty() ? 0 : 1;
+            for (size_t i = 1; i < preds.size(); ++i) {
+                if (preds[i - 1].pred > preds[i].pred) {
+                    sorted = false;
+                }
+            }
         }
         os << "ORDER frozen_agrees=" << (seen == root->orderEdges().size() ? 1 : 0)
-           << " some_node_ordered=" << (ordered != 0 ? 1 : 0) << "\n";
+           << " some_node_ordered=" << (ordered != 0 ? 1 : 0)
+           << " frozen_sorted=" << (sorted ? 1 : 0) << "\n";
         return next;
     } catch (const std::exception &error) {
         os << "EDGES refused: " << error.what() << "\n";
@@ -126,22 +162,69 @@ EdgesOrderPureTestPass::apply(const camel::runtime::Program *program, std::ostre
     if (program == nullptr || program->root() == nullptr) {
         return program;
     }
+    // A negative case must be built in the layer that owns the invariant. The seal check owns "no
+    // order edge on a pure node" (docs/design/effects/edges.cn.md 4.6) and it reads a finished
+    // graph; the draft only writes the edges a rewrite asks for. Since the encoder drops an order
+    // edge whose user takes no order (planDraftPayload), a bad graph built through a draft is never
+    // written at all: the case would print "wrote=1" and then watch the commit accept a graph
+    // without the edge. So the case builds the bad graph *here*, on the frozen records, and hands it
+    // to the seal check. The draft's half is asserted to be "no longer produced" instead.
     RuntimeGraphDraftSession session(context_, program);
-    GraphDraft &draft = session.edit(program->root());
+    auto &draft = session.edit(program->root()).edit();
     const gc_node_ref_t anchor = anchorNode(draft);
     // A constant is a pure node: nothing about it can be ordered.
     const gc_node_ref_t constant = draft.materializeStaticValue(
-        camel::core::rtdata::toSlot<float>(1.0f),
-        camel::core::type::Type::Float32());
+        camel::core::rtdata::toSlot<float>(1.0f), camel::core::type::Type::Float32());
     os << "ORDER wrote=" << (draft.appendOrderDependency(constant, anchor) ? 1 : 0) << "\n";
+    // The encoder's own reading: the edge was asked for and the plan drops it, because the node it
+    // would order takes no order -- so the graph the draft hands the commit does not have it.
+    const GraphId rootId = program->root()->id();
+    const Program *next  = session.commit();
+    const GCGraph *root  = next != nullptr ? next->graph(rootId) : nullptr;
+    os << "ORDER frozen_edges=" << (root != nullptr ? root->orderEdges().size() : 0) << "\n";
+
+    // The bad graph itself: two pure nodes and an order edge on the user of them. It is written
+    // straight into the frozen form the seal check reads, so nothing in the builder can drop it.
+    GCGraphPayloadShape shape;
+    shape.nodeCount       = 2;
+    shape.orderEdgeCount  = 1;
+    std::vector<GraphId> noGraphs;
+    const auto sameType = camel::core::type::Type::Float32()->typeId();
+    GCGraph *bad        = GCGraphBuildAccess::create(
+        context_->graphIds().allocate(),
+        GCGraphDerivation{},
+        createGraphDebugRecord("test$order_pure", "test$order_pure"),
+        camel::core::type::FunctionType::create(),
+        std::nullopt,
+        nullptr,
+        nullptr,
+        kInvalidGraphId,
+        noGraphs,
+        noGraphs,
+        noGraphs,
+        noGraphs,
+        shape,
+        [&](GCGraphPayloadArena &arena) {
+            for (gc_node_ref_t ref = 0; ref < 2; ++ref) {
+                GCNode node;
+                node.kind   = GCNodeKind::Data;
+                node.typeId = sameType;
+                arena.nodes[ref] = node;
+            }
+            arena.nodes[2] = GCNode{};
+            arena.orderEdges[0] = GCGraphOrderEdge{.user = 0, .pred = 1};
+            arena.entryNode  = 0;
+            arena.exitNode   = 1;
+            arena.outputNode = 0;
+        },
+        std::span<const slot_t>{});
     try {
-        session.commit();
+        validateRuntimeGraphEdges(*program, bad);
         os << "EDGES accepted\n";
-        return program;
     } catch (const std::exception &error) {
         os << "EDGES refused: " << error.what() << "\n";
-        return program;
     }
+    return program;
 }
 
 const camel::runtime::Program *
@@ -152,7 +235,7 @@ EdgesOrderScheduleTestPass::apply(const camel::runtime::Program *program, std::o
     }
     const GraphId rootId = program->root()->id();
     RuntimeGraphDraftSession session(context_, program);
-    GraphDraft &draft = session.edit(program->root());
+    auto &draft = session.edit(program->root()).edit();
     const gc_node_ref_t exit = draft.exitNode();
     if (exit == kInvalidNodeRef) {
         os << "ORDER no_exit=1\n";
@@ -228,7 +311,7 @@ const Program *writeOrderChain(
     }
     rootId = program->root()->id();
     RuntimeGraphDraftSession session(context, program);
-    GraphDraft &draft = session.edit(program->root());
+    auto &draft = session.edit(program->root()).edit();
     chain.a           = anchorNode(draft);
     chain.b           = anchorNode(draft);
     chain.c           = anchorNode(draft);
@@ -264,7 +347,7 @@ EdgesOrderSpliceTestPass::apply(const camel::runtime::Program *program, std::ost
     printOrderEdges(withChain, rootId, os);
     // The same call a dead-code pass makes to drop a statement the graph no longer needs.
     RuntimeGraphDraftSession session(context_, withChain);
-    session.edit(withChain->graph(rootId)).eraseNode(chain.b);
+    session.edit(withChain->graph(rootId)).edit().eraseNode(chain.b);
     const Program *committed = nullptr;
     try {
         committed = session.commit();
@@ -290,7 +373,7 @@ EdgesOrderReplaceTestPass::apply(const camel::runtime::Program *program, std::os
     }
     printOrderEdges(withChain, rootId, os);
     RuntimeGraphDraftSession session(context_, withChain);
-    GraphDraft &draft = session.edit(withChain->graph(rootId));
+    auto &draft = session.edit(withChain->graph(rootId)).edit();
     const gc_node_ref_t replacement = anchorNode(draft);
     draft.takeStatementPlace(chain.b, replacement);
     draft.eraseNode(chain.b);
@@ -333,8 +416,8 @@ CommitMergeTestPass::apply(const camel::runtime::Program *program, std::ostream 
     const GCGraph *otherBefore = program->graph(other->id());
     RuntimeGraphDraftSession first(context_, program);
     RuntimeGraphDraftSession second(context_, program);
-    blankNode(first.edit(program->root()));
-    blankNode(second.edit(other));
+    blankNode(first.edit(program->root()).edit());
+    blankNode(second.edit(other).edit());
     const Program *one = first.commit();
     os << "MERGE stale=" << (context_->currentRuntimeProgram() == one ? 1 : 0) << "\n";
     // The second session started from the program the first replaced; its graph (and nothing it
@@ -371,10 +454,10 @@ CommitConflictTestPass::apply(const camel::runtime::Program *program, std::ostre
     RuntimeGraphDraftSession first(context_, program);
     RuntimeGraphDraftSession second(context_, program);
     RuntimeGraphDraftSession third(context_, program);
-    blankNode(first.edit(program->root()));
-    blankNode(second.edit(program->root()));
+    blankNode(first.edit(program->root()).edit());
+    blankNode(second.edit(program->root()).edit());
     if (other != nullptr) {
-        third.edit(other);
+        third.edit(other).edit();
     }
     os << "CONFLICTS before=" << second.conflicts().size() << "\n";
     const Program *next = first.commit();
@@ -396,7 +479,7 @@ EdgesSyncForkTestPass::apply(const camel::runtime::Program *program, std::ostrea
         return program;
     }
     RuntimeGraphDraftSession session(context_, program);
-    GraphDraft &draft = session.edit(program->root());
+    auto &draft = session.edit(program->root()).edit();
     const auto markStatement = [&](gc_node_ref_t node) {
         draft.setNodeRuntimeFlags(node, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
     };
@@ -429,7 +512,7 @@ EdgesSyncForkGateTestPass::apply(const camel::runtime::Program *program, std::os
         return program;
     }
     RuntimeGraphDraftSession session(context_, program);
-    GraphDraft &draft = session.edit(program->root());
+    auto &draft = session.edit(program->root()).edit();
     const auto markStatement = [&](gc_node_ref_t node) {
         draft.setNodeRuntimeFlags(node, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
     };
@@ -466,7 +549,7 @@ EdgesSyncGateTestPass::apply(const camel::runtime::Program *program, std::ostrea
     }
     const GraphId rootId = program->root()->id();
     RuntimeGraphDraftSession session(context_, program);
-    GraphDraft &draft = session.edit(program->root());
+    auto &draft = session.edit(program->root()).edit();
     // The chain's tail: a statement a `sync` block wrote. A pass stands in for the builder here, so
     // it records the same fact the builder records (kGCNodeFlagSyncStatement): the seal check reads
     // it back, and a sync edge may only join statements of the block.
@@ -511,6 +594,52 @@ EdgesSyncGateTestPass::apply(const camel::runtime::Program *program, std::ostrea
         os << "SYNCGATE frozen_sync_edges=" << syncEdges << " gates=" << gates
            << " gates_waiting_on_the_chain=" << gatesWaited << " gates_with_ctrl=" << gatesCtrl
            << "\n";
+        return next;
+    } catch (const std::exception &error) {
+        os << "EDGES refused: " << error.what() << "\n";
+        return program;
+    }
+}
+
+// The shared judgement, on the side that has no back end to protect it: two statements that each
+// follow the other is a cycle on sync edges (docs/design/effects/edges.cn.md section 1), and
+// camel/runtime/cycle.h walks sync with the other four kinds, so both the draft's check and the
+// freeze's walk must name it. The pass prints what the draft's side reports -- found, and whether
+// the chain it returns holds both nodes -- and then what the commit does with the same graph.
+const camel::runtime::Program *
+EdgesSyncCycleTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    using namespace camel::runtime;
+    if (program == nullptr || program->root() == nullptr) {
+        return program;
+    }
+    RuntimeGraphDraftSession session(context_, program);
+    auto &draft = session.edit(program->root()).edit();
+    const auto markStatement = [&](gc_node_ref_t node) {
+        draft.setNodeRuntimeFlags(node, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
+    };
+    const gc_node_ref_t a = anchorNode(draft);
+    const gc_node_ref_t b = anchorNode(draft);
+    markStatement(a);
+    markStatement(b);
+    const gc_node_ref_t afterA[1] = {a};
+    const gc_node_ref_t afterB[1] = {b};
+    draft.setSyncInputs(a, afterB);
+    draft.setSyncInputs(b, afterA);
+    DraftCycleEdges edges(draft);
+    std::vector<gc_node_ref_t> path;
+    const gc_node_ref_t closes = findInputCycle(edges, &path);
+    bool hasA                  = false;
+    bool hasB                  = false;
+    for (gc_node_ref_t node : path) {
+        hasA = hasA || node == a;
+        hasB = hasB || node == b;
+    }
+    os << "SYNCCYCLE a=" << a << " b=" << b << " found="
+       << (closes == kInvalidNodeRef ? 0 : 1) << " on_cycle_a=" << (hasA ? 1 : 0)
+       << " on_cycle_b=" << (hasB ? 1 : 0) << "\n";
+    try {
+        const Program *next = session.commit();
+        os << "EDGES accepted\n";
         return next;
     } catch (const std::exception &error) {
         os << "EDGES refused: " << error.what() << "\n";

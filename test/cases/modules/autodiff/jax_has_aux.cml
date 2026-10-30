@@ -1,0 +1,37 @@
+/**
+ * `has_aux`: JAX's `grad(f, has_aux=True)` and `value_and_grad(f, has_aux=True)`.
+ *
+ * A function whose result is the pair `(value, aux)` is differentiated at its first element, and
+ * the second one is handed back unchanged -- it is carried, not differentiated, which is what JAX
+ * uses it for (a count, a norm, anything a training step wants to log). With `f(x) = (x*x, 3x)`
+ * at `x = 2`, JAX gives `jax.grad(f, has_aux=True)(2.0) == (4.0, 6.0)` and
+ * `jax.value_and_grad(f, has_aux=True)(2.0) == ((4.0, 6.0), 4.0)`; Camel answers the same numbers
+ * in the same order, with `has_aux` named at the call (§1 of
+ * docs/handover/reviews/questions-2026-10-30-jax.md).
+ *
+ * The `aux` value's type is the function's own (`int` in `report`): the pair is split by type, not
+ * by a convention about floats.
+ */
+
+import { grad, with_grad } from autodiff
+
+with <x: float>
+func loss(): (float, float) {
+    return (x * x, x * 3.0)
+}
+
+with <x: float>
+func report(): (float, int) {
+    return (x * x, 7)
+}
+
+func main(): int sync {
+    let gradient = grad(loss, has_aux: true)<2.0>()
+    let step = with_grad(loss, has_aux: true)<2.0>()
+    let counted = grad(report, has_aux: true)<2.0>()
+    println('jax_has_aux')
+    println(gradient)
+    println(step)
+    println(counted)
+    return 0
+}

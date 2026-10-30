@@ -11,6 +11,7 @@
 #include "camel/core/operator_table.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
+#include "camel/runtime/graph_txn.h"
 #include "camel/runtime/program.h"
 #include "camel/runtime/writings.h"
 
@@ -92,7 +93,10 @@ void deep(Report &r) {
     r.check("long_chain", store.find(0, n) == 1 && store.members(0, 1).size() == n);
 }
 
-std::vector<gc_node_ref_t> portsOf(const GraphDraft &draft) {
+/// The ports of the graph `transaction` owns. The test reads the graph the transaction holds;
+/// it does not keep a storage of its own to answer from.
+std::vector<gc_node_ref_t> portsOf(const GraphTransaction &transaction) {
+    const auto &draft = transaction.graph();
     std::vector<gc_node_ref_t> ports;
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         if (draft.alive(id) && draft.header(id)->kind == GCNodeKind::Port) {
@@ -117,10 +121,11 @@ void congruence(Report &r, const Program &program) {
     if (graph == nullptr) {
         return;
     }
-    auto draft = GraphDraft::decode(program, graph);
-    DraftWritings writings(*draft);
+    const auto transaction = GraphTransaction::decode(program, graph);
+    auto &draft            = transaction->edit();
+    DraftWritings writings(draft);
     writings.build();
-    const auto ports = portsOf(*draft);
+    const auto ports = portsOf(*transaction);
     r.check("params_are_two", ports.size() == 2);
     const size_t before = writings.congruentMerges();
     r.os << "WRITINGS info build_merges=" << before << "\n";
@@ -135,8 +140,8 @@ void congruence(Report &r, const Program &program) {
     // Asking for a writing that exists gives it; for one that does not, adds a node.
     DraftNodeInit init;
     init.kind = GCNodeKind::Cast;
-    init.dataType = draft->header(ports[0])->dataType;
-    const size_t slots = draft->nodeSlotCount();
+    init.dataType = draft.header(ports[0])->dataType;
+    const size_t slots = draft.nodeSlotCount();
     const gc_node_ref_t made = writings.lookupOrAdd(init, std::array{ports[0]});
     const gc_node_ref_t again = writings.lookupOrAdd(init, std::array{ports[1]});
     r.check("lookup_adds_once", made == slots && again == made);
@@ -148,25 +153,26 @@ void apart(Report &r, const Program &program) {
     if (graph == nullptr) {
         return;
     }
-    auto draft = GraphDraft::decode(program, graph);
-    DraftWritings writings(*draft);
+    const auto transaction = GraphTransaction::decode(program, graph);
+    auto &draft            = transaction->edit();
+    DraftWritings writings(draft);
     writings.build();
     std::vector<gc_node_ref_t> zeros, events;
-    for (gc_node_ref_t id = 0; id < draft->nodeSlotCount(); ++id) {
-        const auto *h = draft->header(id);
-        if (!draft->alive(id) || h == nullptr) {
+    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        const auto *h = draft.header(id);
+        if (!draft.alive(id) || h == nullptr) {
             continue;
         }
         if (h->kind == GCNodeKind::Data && h->dataIndex < 0) {
             const double v = std::bit_cast<double>(
-                draft->staticSlots()[static_cast<size_t>(-h->dataIndex)]);
+                draft.staticSlots()[static_cast<size_t>(-h->dataIndex)]);
             if (v == 0.0) {
                 zeros.push_back(id);
             }
         }
         if (h->kind == GCNodeKind::Oper &&
             !camel::core::OperatorTable::instance().isPure(
-                reinterpret_cast<const GCOperBody *>(draft->payloadOf(id).data())->oper)) {
+                reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data())->oper)) {
             events.push_back(id);
         }
     }
@@ -197,11 +203,12 @@ void roundtrip(Report &r, const camel::core::context::context_ptr_t &ctx, const 
     const GraphId id = graph->id();
     RuntimeGraphDraftSession first(ctx, &program);
     first.setGraphState(GraphState::Tabled);
-    GraphDraft &draft = first.edit(const_cast<GCGraph *>(graph));
+    auto &transaction = first.edit(const_cast<GCGraph *>(graph));
+    auto &draft       = transaction.edit();
     {
         DraftWritings writings(draft);
         writings.build();
-        const auto ports = portsOf(draft);
+        const auto ports = portsOf(transaction);
         writings.assertEqual(ports[0], ports[1]);
         DraftNodeInit init;
         init.kind     = GCNodeKind::Cast;
@@ -212,7 +219,7 @@ void roundtrip(Report &r, const camel::core::context::context_ptr_t &ctx, const 
     }
     bool refused = false;
     try {
-        draft.eraseNode(portsOf(draft)[0]);
+        draft.eraseNode(portsOf(transaction)[0]);
     } catch (const std::logic_error &) {
         refused = true;
     }
@@ -239,15 +246,16 @@ void roundtrip(Report &r, const camel::core::context::context_ptr_t &ctx, const 
     }
     r.os << "WRITINGS info chunks_shared=" << shared << " of " << old->chunkCount << "\n";
     r.check("chunks_shared", shared + 1 >= old->chunkCount);
-    // Back into a draft: the same equivalences.
-    auto again = GraphDraft::decode(*tabled, after);
+    // Back into a graph a transaction owns: the same equivalences.
+    const auto again = GraphTransaction::decode(*tabled, after);
     r.check(
         "decode_gives_them_back",
-        again->writings().size() == after->writings().size() && !again->writings().empty());
+        again->graph().writings().size() == after->writings().size() &&
+            !again->graph().writings().empty());
     // Nothing added: the same version.
     RuntimeGraphDraftSession second(ctx, tabled);
     second.setGraphState(GraphState::Tabled);
-    GraphDraft &redraft = second.edit(const_cast<GCGraph *>(after));
+    auto &redraft = second.edit(const_cast<GCGraph *>(after)).edit();
     {
         DraftWritings writings(redraft);
         writings.build();
@@ -258,10 +266,11 @@ void roundtrip(Report &r, const camel::core::context::context_ptr_t &ctx, const 
     // The table is content: one more equivalence is a new version.
     RuntimeGraphDraftSession third(ctx, tabled);
     third.setGraphState(GraphState::Tabled);
-    GraphDraft &more = third.edit(const_cast<GCGraph *>(after));
+    auto &thirdTransaction = third.edit(const_cast<GCGraph *>(after));
+    auto &more             = thirdTransaction.edit();
     {
         DraftWritings writings(more);
-        const auto ports = portsOf(more);
+        const auto ports = portsOf(thirdTransaction);
         std::vector<gc_node_ref_t> others;
         for (gc_node_ref_t node = 0; node < more.nodeSlotCount(); ++node) {
             if (more.alive(node) && more.header(node)->dataType == more.header(ports[0])->dataType &&
@@ -299,7 +308,10 @@ class LikesNode : public CostModel {
     double portCost_;
 };
 
-gc_node_ref_t firstOperWith(const GraphDraft &draft, std::string_view part, size_t skip = 0) {
+/// The first operator of `part` in the graph `transaction` owns.
+gc_node_ref_t firstOperWith(
+    const GraphTransaction &transaction, std::string_view part, size_t skip = 0) {
+    const auto &draft = transaction.graph();
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         if (draft.alive(id) && draft.header(id)->kind == GCNodeKind::Oper) {
             const auto uri =
@@ -325,10 +337,11 @@ const Program *extraction(
     const Program *extracted = &program;
     {
         RuntimeGraphDraftSession session(ctx, &program);
-        GraphDraft &draft = session.edit(const_cast<GCGraph *>(graph));
+        auto &transaction = session.edit(const_cast<GCGraph *>(graph));
+        auto &draft       = transaction.edit();
         DraftWritings writings(draft);
         writings.build();
-        const gc_node_ref_t add = firstOperWith(draft, "add");
+        const gc_node_ref_t add = firstOperWith(transaction, "add");
         const auto inputs       = std::vector<gc_node_ref_t>(
             draft.normInputsOf(add).begin(), draft.normInputsOf(add).end());
         const auto payload = std::vector<std::byte>(
@@ -358,13 +371,14 @@ const Program *extraction(
     {
         // A value that is one of its own writings: a == a * 1.
         RuntimeGraphDraftSession session(ctx, extracted);
-        GraphDraft &draft = session.edit(const_cast<GCGraph *>(extracted->graph(id)));
+        auto &transaction = session.edit(const_cast<GCGraph *>(extracted->graph(id)));
+        auto &draft       = transaction.edit();
         DraftWritings writings(draft);
         writings.build();
-        const gc_node_ref_t mul = firstOperWith(draft, "mul");
+        const gc_node_ref_t mul = firstOperWith(transaction, "mul");
         const auto payload = std::vector<std::byte>(
             draft.payloadOf(mul).begin(), draft.payloadOf(mul).end());
-        const auto ports = portsOf(draft);
+        const auto ports = portsOf(transaction);
         gc_node_ref_t one = kInvalidNodeRef;
         for (gc_node_ref_t node = 0; node < draft.nodeSlotCount(); ++node) {
             if (draft.alive(node) && draft.header(node)->kind == GCNodeKind::Data &&
@@ -403,10 +417,11 @@ void facts(Report &r, const camel::core::context::context_ptr_t &ctx, const Prog
         return;
     }
     RuntimeGraphDraftSession session(ctx, &program);
-    GraphDraft &draft = session.edit(const_cast<GCGraph *>(graph));
+    auto &transaction = session.edit(const_cast<GCGraph *>(graph));
+    auto &draft       = transaction.edit();
     DraftWritings writings(draft);
     writings.build();
-    const gc_node_ref_t add = firstOperWith(draft, "add");
+    const gc_node_ref_t add = firstOperWith(transaction, "add");
     const auto inputs       = std::vector<gc_node_ref_t>(
         draft.normInputsOf(add).begin(), draft.normInputsOf(add).end());
     const auto payload =
@@ -424,7 +439,7 @@ void facts(Report &r, const camel::core::context::context_ptr_t &ctx, const Prog
     const auto on   = [](gc_node_ref_t node) { return static_cast<int>(node); };
     const auto join = [](int a, int b) { return std::max(a, b); };
     const int joined = classFact<int>(writings, add, on, join);
-    const gc_node_ref_t port = portsOf(draft)[0];
+    const gc_node_ref_t port = portsOf(transaction)[0];
     r.check("class_fact_is_the_join", joined == static_cast<int>(commuted) && joined > static_cast<int>(add));
     r.check("single_writing_fact_is_its_own", classFact<int>(writings, port, on, join) == static_cast<int>(port));
 }
@@ -435,10 +450,11 @@ void chains(Report &r, const Program &program) {
     if (graph == nullptr) {
         return;
     }
-    auto draft = GraphDraft::decode(program, graph);
-    DraftWritings writings(*draft);
+    const auto transaction = GraphTransaction::decode(program, graph);
+    auto &draft            = transaction->edit();
+    DraftWritings writings(*transaction);
     writings.build();
-    const auto ports = portsOf(*draft);
+    const auto ports = portsOf(*transaction);
     const size_t before = writings.congruentMerges();
     writings.assertEqual(ports[0], ports[1]);
     r.os << "WRITINGS info chain_merges=" << writings.congruentMerges() - before << "\n";
@@ -471,10 +487,11 @@ TabledTestPass::apply(const camel::runtime::Program *program, std::ostream &os) 
     }
     RuntimeGraphDraftSession session(context_, program);
     session.setGraphState(GraphState::Tabled);
-    GraphDraft &draft = session.edit(const_cast<GCGraph *>(graph));
+    auto &transaction = session.edit(const_cast<GCGraph *>(graph));
+    auto &draft       = transaction.edit();
     DraftWritings writings(draft);
     writings.build();
-    const gc_node_ref_t add = firstOperWith(draft, "add");
+    const gc_node_ref_t add = firstOperWith(transaction, "add");
     const auto inputs       = std::vector<gc_node_ref_t>(
         draft.normInputsOf(add).begin(), draft.normInputsOf(add).end());
     const auto payload =

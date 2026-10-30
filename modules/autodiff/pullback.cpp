@@ -70,7 +70,6 @@ using camel::core::rtdata::toSlot;
 using rt::gc_node_ref_t;
 using rt::GCGraph;
 using rt::GCNodeKind;
-using rt::GraphDraft;
 using rt::kInvalidNodeRef;
 using rt::LoopDraftView;
 using type::ArrayType;
@@ -204,7 +203,8 @@ bool isCellType(Type *type) {
 
 // ---------------------------------------------------------------- draft helpers
 
-Type *typeOf(const GraphDraft &draft, gc_node_ref_t node) {
+Type *typeOf(const rt::GraphTransaction &transaction, gc_node_ref_t node) {
+    const auto &draft = transaction.graph();
     const auto *header = draft.header(node);
     if (header == nullptr) {
         fail(
@@ -216,7 +216,8 @@ Type *typeOf(const GraphDraft &draft, gc_node_ref_t node) {
     return header->dataType;
 }
 
-GCNodeKind kindOf(const GraphDraft &draft, gc_node_ref_t node) {
+GCNodeKind kindOf(const rt::GraphTransaction &transaction, gc_node_ref_t node) {
+    const auto &draft = transaction.graph();
     const auto *header = draft.header(node);
     if (header == nullptr) {
         fail(
@@ -249,41 +250,10 @@ std::vector<Type *> callVersionsOf(Type *callValueType, uint32_t writtenCaptures
     return versions;
 }
 
-/// Whether `node` reads a version a call handed on: an access node that takes a component past
-/// the callee's value (callValueTypeOf).
-bool readsCallVersion(const GraphDraft &draft, gc_node_ref_t node) {
-    if (kindOf(draft, node) != GCNodeKind::Accs) {
-        return false;
-    }
-    const auto payload = draft.payloadOf(node);
-    if (payload.size() < sizeof(rt::GCAccsBody)) {
-        return false;
-    }
-    const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
-    return accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value >= 1;
-}
-
-/// The projection of `node`'s value: the access node that takes component `index` of it, or
-/// `kInvalidNodeRef` when nothing projects that component. A call has at most one of them per
-/// component (the builder caches the access node it makes for a call's value).
-gc_node_ref_t componentProjectionOf(const GraphDraft &draft, gc_node_ref_t node, uint32_t index) {
-    for (gc_node_ref_t user : draft.normUsersOf(node)) {
-        if (kindOf(draft, user) != GCNodeKind::Accs) {
-            continue;
-        }
-        const auto payload = draft.payloadOf(user);
-        if (payload.size() < sizeof(rt::GCAccsBody)) {
-            continue;
-        }
-        const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
-        if (accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value == index) {
-            return user;
-        }
-    }
-    return kInvalidNodeRef;
-}
-
-std::optional<slot_t> staticValue(const GraphDraft &draft, gc_node_ref_t node) {
+/// A static value the node holds, where the graph is the one the transaction owns: the owner is
+/// what a caller has, so the owner is what it passes.
+std::optional<slot_t> staticValue(const rt::GraphTransaction &transaction, gc_node_ref_t node) {
+    const auto &draft  = transaction.graph();
     const auto *header = draft.header(node);
     if (!header || header->kind != GCNodeKind::Data || header->dataIndex >= 0) {
         return std::nullopt;
@@ -313,84 +283,20 @@ bool holdsFunction(Type *type) {
 /// answer a comparison of two computations in the optimizer asks for.
 using camel::runtime::ungated;
 
-/// What `node` and the gates it passes through wait for, the gated value's own ordering included.
-/// A wait is read in either kind: a node of a `sync` block waits through the sync edge of the
-/// block's chain as well as through the control edge beside it
-/// (docs/design/effects/edges.cn.md 1, 4.6).
-std::vector<gc_node_ref_t> orderingOf(const GraphDraft &draft, gc_node_ref_t node) {
-    std::vector<gc_node_ref_t> ctrl;
-    while (true) {
-        for (auto waits : {draft.ctrlInputsOf(node), draft.syncInputsOf(node)}) {
-            for (gc_node_ref_t before : waits) {
-                if (std::find(ctrl.begin(), ctrl.end(), before) == ctrl.end()) {
-                    ctrl.push_back(before);
-                }
-            }
-        }
-        if (kindOf(draft, node) != GCNodeKind::Gate || draft.normInputsOf(node).empty()) {
-            return ctrl;
-        }
-        node = draft.normInputsOf(node).back();
-    }
+
+GCGraph *calleeOf(const rt::GraphTransaction &transaction, gc_node_ref_t node) {
+    return transaction.graph().calleeGraphOf(node);
 }
 
-/// A node that stands for another takes the chain place of the one it replaces as well: a
-/// statement of a `sync` block is written after the statement before it through the sync edge, and
-/// a clone or a direct call that keeps only the control edge beside it leaves the block's chain
-/// broken (docs/design/effects/edges.cn.md 1, 4.6; docs/handover/README.cn.md 5.21 item 4).
-void takeSyncPlace(GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to) {
-    const auto inputs = copyOf(draft.syncInputsOf(from));
-    if (inputs.empty() || from == to) {
-        return;
-    }
-    if (const auto *header = draft.header(to); header != nullptr) {
-        draft.setNodeRuntimeFlags(
-            to,
-            static_cast<uint8_t>(header->runtimeFlags |
-                                 camel::runtime::kGCNodeFlagSyncStatement));
-    }
-    draft.setSyncInputs(to, inputs);
-    for (gc_node_ref_t user : copyOf(draft.syncUsersOf(from))) {
-        draft.replaceInput(rt::DraftEdgeKind::Sync, user, from, to);
-    }
-}
-
-/// The function a function value is, where the graph itself says so: a constant function, or a
-/// closure built in this graph (FILL) over a constant function. Null for anything else (a
-/// port, the result of a branch or of a call, an element of a container).
-::Function *evidentFunction(const GraphDraft &draft, gc_node_ref_t node) {
-    node = ungated(draft, node);
-    if (!isFunctionType(typeOf(draft, node))) {
-        return nullptr;
-    }
-    gc_node_ref_t constant = node;
-    if (kindOf(draft, node) == GCNodeKind::Fill) {
-        const auto *body = reinterpret_cast<const rt::GCFillBody *>(draft.payloadOf(node).data());
-        if (body->fillKind != rt::GCFillKind::FunctionClosure ||
-            draft.normInputsOf(node).size() != 1) {
-            return nullptr;
-        }
-        constant = draft.normInputsOf(node).front();
-        if (!isFunctionType(typeOf(draft, constant))) {
-            return nullptr;
-        }
-    }
-    const auto value = staticValue(draft, constant);
-    auto *function   = value ? fromSlot<::Function *>(*value) : nullptr;
-    return function != nullptr && function->graph() != nullptr ? function : nullptr;
-}
-
-GCGraph *calleeOf(const GraphDraft &draft, gc_node_ref_t node) {
-    return draft.calleeGraphOf(node);
-}
-
-gc_node_ref_t addAccs(GraphDraft &draft, Type *type, gc_node_ref_t source, size_t index) {
+gc_node_ref_t addAccs(rt::GraphTransaction &transaction, Type *type, gc_node_ref_t source, size_t index) {
+    auto &draft = transaction.edit();
     const gc_node_ref_t node = draft.addAccsNode(type, static_cast<uint32_t>(index));
     draft.setNormInputs(node, std::span<const gc_node_ref_t>(&source, 1));
     return node;
 }
 
-gc_node_ref_t addField(GraphDraft &draft, Type *aggregate, gc_node_ref_t source, size_t index) {
+gc_node_ref_t addField(rt::GraphTransaction &transaction, Type *aggregate, gc_node_ref_t source, size_t index) {
+    auto &draft = transaction.edit();
     Type *elemType = aggregateElement(aggregate, index);
     if (aggregate->code() == TypeCode::Struct) {
         const auto name          = tt::as_ptr<StructType>(aggregate)->fieldName(index);
@@ -398,18 +304,22 @@ gc_node_ref_t addField(GraphDraft &draft, Type *aggregate, gc_node_ref_t source,
         draft.setNormInputs(node, std::span<const gc_node_ref_t>(&source, 1));
         return node;
     }
-    return addAccs(draft, elemType, source, index);
+    return addAccs(transaction, elemType, source, index);
 }
 
 gc_node_ref_t
-addOper(GraphDraft &draft, Type *type, std::string_view uri, std::span<const gc_node_ref_t> in) {
+addOper(rt::GraphTransaction &transaction, Type *type, std::string_view uri, std::span<const gc_node_ref_t> in) {
+    auto &draft = transaction.edit();
     const gc_node_ref_t node = draft.addOperNode(type, nullptr, uri);
     draft.setNormInputs(node, in);
     return node;
 }
 
 gc_node_ref_t
-addCall(GraphDraft &draft, Type *type, gc_node_ref_t callee, std::span<const gc_node_ref_t> args) {
+addCall(
+    rt::GraphTransaction &transaction, Type *type, gc_node_ref_t callee,
+    std::span<const gc_node_ref_t> args) {
+    auto &draft              = transaction.edit();
     const gc_node_ref_t node = draft.addCallNode(type);
     draft.setWithInputs(node, std::span<const gc_node_ref_t>(&callee, 1));
     draft.setNormInputs(node, args);
@@ -417,8 +327,9 @@ addCall(GraphDraft &draft, Type *type, gc_node_ref_t callee, std::span<const gc_
 }
 
 gc_node_ref_t addFill(
-    GraphDraft &draft, Type *type, rt::GCFillKind kind, gc_node_ref_t source,
+    rt::GraphTransaction &transaction, Type *type, rt::GCFillKind kind, gc_node_ref_t source,
     std::span<const gc_node_ref_t> values) {
+    auto &draft = transaction.edit();
     std::vector<size_t> slots(values.size());
     for (size_t i = 0; i < slots.size(); ++i) {
         slots[i] = i;
@@ -431,7 +342,8 @@ gc_node_ref_t addFill(
 }
 
 /// A tuple or struct built from `values`, one per element in order.
-gc_node_ref_t addAggregate(GraphDraft &draft, Type *type, std::span<const gc_node_ref_t> values) {
+gc_node_ref_t addAggregate(rt::GraphTransaction &transaction, Type *type, std::span<const gc_node_ref_t> values) {
+    auto &draft = transaction.edit();
     const size_t size = aggregateSize(type);
     ASSERT(values.size() == size, "autodiff: aggregate element count mismatch.");
     camel::core::rtdata::Object *empty = nullptr;
@@ -445,29 +357,32 @@ gc_node_ref_t addAggregate(GraphDraft &draft, Type *type, std::span<const gc_nod
     }
     const gc_node_ref_t source =
         draft.materializeStaticValue(toSlot<camel::core::rtdata::Object *>(empty), type);
-    return addFill(draft, type, kind, source, values);
+    return addFill(transaction, type, kind, source, values);
 }
 
 /// A closure of `graph` (a graph of the current group) capturing `captures`.
 gc_node_ref_t addClosure(
-    rt::GraphDraftGroup &group, GraphDraft &draft, rt::GraphId graph, FunctionType *type,
+    rt::GraphDraftGroup &group, rt::GraphTransaction &transaction, rt::GraphId graph, FunctionType *type,
     TupleType *closureType, std::span<const gc_node_ref_t> captures) {
+    auto &draft = transaction.edit();
     auto *function = ::Function::create(group.program(), graph, closureType, mm::autoSpace());
     const gc_node_ref_t source = draft.materializeStaticValue(toSlot<::Function *>(function), type);
-    return addFill(draft, type, rt::GCFillKind::FunctionClosure, source, captures);
+    return addFill(transaction, type, rt::GCFillKind::FunctionClosure, source, captures);
 }
 
-gc_node_ref_t addPort(GraphDraft &draft, Type *type) {
+gc_node_ref_t addPort(rt::GraphTransaction &transaction, Type *type) {
+    auto &draft = transaction.edit();
     return draft.addPortNode(type, draft.allocateRuntimeSlot(type));
 }
 
 /// Makes `result` what the graph returns, keeping the effects the old exit waited for.
-void setResult(GraphDraft &draft, gc_node_ref_t result) {
+void setResult(rt::GraphTransaction &transaction, gc_node_ref_t result) {
+    auto &draft = transaction.edit();
     const gc_node_ref_t oldExit   = draft.exitNode();
     const gc_node_ref_t oldOutput = draft.outputNode();
     gc_node_ref_t exit            = result;
     if (oldExit != kInvalidNodeRef && oldExit != oldOutput && oldExit != result) {
-        exit = draft.addGateNode(typeOf(draft, result));
+        exit = draft.addGateNode(typeOf(transaction, result));
         draft.setNormInputs(exit, std::span<const gc_node_ref_t>(&result, 1));
         draft.setCtrlInputs(exit, std::span<const gc_node_ref_t>(&oldExit, 1));
     }
@@ -476,7 +391,8 @@ void setResult(GraphDraft &draft, gc_node_ref_t result) {
     draft.setReturnNode(exit, rt::GCReturnKind::Self);
 }
 
-gc_node_ref_t valueNode(const GraphDraft &draft) {
+gc_node_ref_t valueNode(const rt::GraphTransaction &transaction) {
+    const auto &draft = transaction.graph();
     gc_node_ref_t output = draft.outputNode();
     if (output == kInvalidNodeRef) {
         output = draft.returnNode();
@@ -491,7 +407,8 @@ gc_node_ref_t valueNode(const GraphDraft &draft) {
 /// INLINE/BLOCK region nested in it (those only say where code came from; their values are read
 /// from outside, exactly like the code of the region itself). A control region (an arm, a loop
 /// part) is a graph of its own and is not followed here.
-bool regionMember(const GraphDraft &draft, uint32_t r, uint32_t region) {
+bool regionMember(const rt::GraphTransaction &transaction, uint32_t r, uint32_t region) {
+    const auto &draft = transaction.graph();
     while (true) {
         if (r == region) {
             return true;
@@ -512,8 +429,9 @@ bool regionMember(const GraphDraft &draft, uint32_t r, uint32_t region) {
 /// values it reads outside are handled where the region is. `extra` adds edges a rewrite made
 /// without a graph edge: the values a branch or a loop pullback returns gradients for.
 std::vector<gc_node_ref_t> valueOrder(
-    const GraphDraft &draft, gc_node_ref_t root, uint32_t region = 0,
+    const rt::GraphTransaction &transaction, gc_node_ref_t root, uint32_t region = 0,
     const std::unordered_map<gc_node_ref_t, std::vector<gc_node_ref_t>> *extra = nullptr) {
+    const auto &draft = transaction.graph();
     std::vector<gc_node_ref_t> order;
     std::unordered_set<gc_node_ref_t> seen;
     std::vector<std::pair<gc_node_ref_t, bool>> stack{{root, false}};
@@ -527,7 +445,7 @@ std::vector<gc_node_ref_t> valueOrder(
         if (!seen.insert(node).second) {
             continue;
         }
-        if (!regionMember(draft, draft.nodeRegion(node), region)) {
+        if (!regionMember(transaction, draft.nodeRegion(node), region)) {
             continue;
         }
         stack.emplace_back(node, true);
@@ -535,10 +453,10 @@ std::vector<gc_node_ref_t> valueOrder(
         // dependencies of the node though not graph edges. Without them a read that the loop's
         // own inputs do not reach would not be visited, and its gradient would be lost at the
         // loop's site without a diagnostic.
-        if (kindOf(draft, node) == GCNodeKind::Loop) {
+        if (kindOf(transaction, node) == GCNodeKind::Loop) {
             for (gc_node_ref_t read :
                  rt::LoopDraftView(*draft.program(), draft, node).externalInputs(false)) {
-                if (!seen.contains(read) && regionMember(draft, draft.nodeRegion(read), region)) {
+                if (!seen.contains(read) && regionMember(transaction, draft.nodeRegion(read), region)) {
                     stack.emplace_back(read, false);
                 }
             }
@@ -547,19 +465,19 @@ std::vector<gc_node_ref_t> valueOrder(
             if (const auto it = extra->find(node); it != extra->end()) {
                 for (gc_node_ref_t input : it->second) {
                     if (!seen.contains(input) &&
-                        regionMember(draft, draft.nodeRegion(input), region)) {
+                        regionMember(transaction, draft.nodeRegion(input), region)) {
                         stack.emplace_back(input, false);
                     }
                 }
             }
         }
         for (gc_node_ref_t input : draft.withInputsOf(node)) {
-            if (!seen.contains(input) && regionMember(draft, draft.nodeRegion(input), region)) {
+            if (!seen.contains(input) && regionMember(transaction, draft.nodeRegion(input), region)) {
                 stack.emplace_back(input, false);
             }
         }
         for (gc_node_ref_t input : draft.normInputsOf(node)) {
-            if (!seen.contains(input) && regionMember(draft, draft.nodeRegion(input), region)) {
+            if (!seen.contains(input) && regionMember(transaction, draft.nodeRegion(input), region)) {
                 stack.emplace_back(input, false);
             }
         }
@@ -569,7 +487,8 @@ std::vector<gc_node_ref_t> valueOrder(
 
 /// The nodes outside `region` that its nodes read, in the order they are first read. The
 /// constants are left out: a rule copies them, it does not capture them.
-std::vector<gc_node_ref_t> externalInputsOf(const GraphDraft &draft, uint32_t region) {
+std::vector<gc_node_ref_t> externalInputsOf(const rt::GraphTransaction &transaction, uint32_t region) {
+    const auto &draft = transaction.graph();
     std::vector<gc_node_ref_t> nodes;
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         if (draft.alive(id) && draft.regionWithin(draft.nodeRegion(id), region)) {
@@ -582,7 +501,7 @@ std::vector<gc_node_ref_t> externalInputsOf(const GraphDraft &draft, uint32_t re
     for (gc_node_ref_t id : nodes) {
         for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id)}) {
             for (gc_node_ref_t input : inputs) {
-                if (!seen.contains(input) && kindOf(draft, input) != GCNodeKind::Data &&
+                if (!seen.contains(input) && kindOf(transaction, input) != GCNodeKind::Data &&
                     found.insert(input).second) {
                     externals.push_back(input);
                 }
@@ -595,7 +514,8 @@ std::vector<gc_node_ref_t> externalInputsOf(const GraphDraft &draft, uint32_t re
 
 /// Whether anything `node` runs after is ordered (code with effects): the control input a
 /// statement carries, or the sync edge of its block's chain.
-bool hasOrdering(const GraphDraft &draft, gc_node_ref_t node) {
+bool hasOrdering(const rt::GraphTransaction &transaction, gc_node_ref_t node) {
+    const auto &draft = transaction.graph();
     std::unordered_set<gc_node_ref_t> seen{node};
     std::vector<gc_node_ref_t> work{node};
     while (!work.empty()) {
@@ -622,7 +542,8 @@ bool hasOrdering(const GraphDraft &draft, gc_node_ref_t node) {
 
 /// Erases the nodes the graph's result does not depend on (backward nodes computing gradients
 /// of constants, forward values only the gradient needed not), keeping ports and closure nodes.
-void pruneUnreachable(GraphDraft &draft) {
+void pruneUnreachable(rt::GraphTransaction &transaction) {
+    auto &draft = transaction.edit();
     std::vector<bool> live(draft.nodeSlotCount(), false);
     std::vector<gc_node_ref_t> stack;
     for (gc_node_ref_t root : {draft.exitNode(), draft.outputNode(), draft.returnNode()}) {
@@ -698,7 +619,8 @@ std::vector<Type *> portTypesOf(const GCGraph *graph) {
     return types;
 }
 
-std::vector<gc_node_ref_t> portsOf(const GraphDraft &draft) {
+std::vector<gc_node_ref_t> portsOf(const rt::GraphTransaction &transaction) {
+    const auto &draft = transaction.graph();
     std::vector<gc_node_ref_t> ports = copyOf(draft.withPorts());
     for (gc_node_ref_t port : draft.normPorts()) {
         ports.push_back(port);
@@ -897,8 +819,10 @@ struct LoopBodyPlan {
 /// Rewrites a graph so that each differentiable call also returns its pullback.
 class ForwardRewrite {
   public:
-    ForwardRewrite(Engine &engine, GraphDraft &draft, const GraphScope &scope, uint32_t part = 0)
-        : engine_(engine), draft_(draft), scope_(scope), part_(part) {}
+    ForwardRewrite(
+        Engine &engine, rt::GraphTransaction &transaction, const GraphScope &scope,
+        uint32_t part = 0)
+        : engine_(engine), transaction_(transaction), scope_(scope), part_(part) {}
 
     void run();
 
@@ -910,12 +834,123 @@ class ForwardRewrite {
     const std::unordered_map<gc_node_ref_t, CallSite> &sites() const { return sites_; }
 
   private:
+    /// The graph this rewrite edits: what its transaction hands out. A method that builds asks
+    /// the transaction for it, the way a free function binds it at the top of its body.
+    auto &draft() const { return transaction_.edit(); }
+
     /// Whether `node` is a direct member of the region being rewritten. A nested region's nodes
     /// are rewritten when the node that owns it is; an INLINE/BLOCK region is not a graph of its
     /// own (it only records where the code came from), so its nodes belong to the region it is
     /// nested in and are rewritten with it.
     bool member(gc_node_ref_t node) const {
-        return regionMember(draft_, draft_.nodeRegion(node), part_);
+        return regionMember(transaction_, draft().nodeRegion(node), part_);
+    }
+
+    // The five readers below ask this rewrite's own graph, so they are members: a free function
+    // that took the draft as its first parameter was taking something the object already knows,
+    // and every caller passed exactly `draft()`.
+
+    /// Whether `node` reads a version a call handed on: an access node that takes a component past
+    /// the callee's value (callValueTypeOf).
+    bool readsCallVersion(gc_node_ref_t node) const {
+        if (kindOf(transaction_, node) != GCNodeKind::Accs) {
+            return false;
+        }
+        const auto payload = draft().payloadOf(node);
+        if (payload.size() < sizeof(rt::GCAccsBody)) {
+            return false;
+        }
+        const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
+        return accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value >= 1;
+    }
+
+    /// The projection of `node`'s value: the access node that takes component `index` of it, or
+    /// `kInvalidNodeRef` when nothing projects that component. A call has at most one of them per
+    /// component (the builder caches the access node it makes for a call's value).
+    gc_node_ref_t componentProjectionOf(gc_node_ref_t node, uint32_t index) const {
+        for (gc_node_ref_t user : draft().normUsersOf(node)) {
+            if (kindOf(transaction_, user) != GCNodeKind::Accs) {
+                continue;
+            }
+            const auto payload = draft().payloadOf(user);
+            if (payload.size() < sizeof(rt::GCAccsBody)) {
+                continue;
+            }
+            const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
+            if (accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value == index) {
+                return user;
+            }
+        }
+        return kInvalidNodeRef;
+    }
+
+    /// What `node` and the gates it passes through wait for, the gated value's own ordering
+    /// included. A wait is read in either kind: a node of a `sync` block waits through the sync
+    /// edge of the block's chain as well as through the control edge beside it
+    /// (docs/design/effects/edges.cn.md 1, 4.6).
+    std::vector<gc_node_ref_t> orderingOf(gc_node_ref_t node) const {
+        std::vector<gc_node_ref_t> ctrl;
+        while (true) {
+            for (auto waits : {draft().ctrlInputsOf(node), draft().syncInputsOf(node)}) {
+                for (gc_node_ref_t before : waits) {
+                    if (std::find(ctrl.begin(), ctrl.end(), before) == ctrl.end()) {
+                        ctrl.push_back(before);
+                    }
+                }
+            }
+            if (kindOf(transaction_, node) != GCNodeKind::Gate || draft().normInputsOf(node).empty()) {
+                return ctrl;
+            }
+            node = draft().normInputsOf(node).back();
+        }
+    }
+
+    /// A node that stands for another takes the chain place of the one it replaces as well: a
+    /// statement of a `sync` block is written after the statement before it through the sync
+    /// edge, and a clone or a direct call that keeps only the control edge beside it leaves the
+    /// block's chain broken (docs/design/effects/edges.cn.md 1, 4.6; docs/handover/README.cn.md
+    /// 5.21 item 4).
+    void takeSyncPlace(gc_node_ref_t from, gc_node_ref_t to) const {
+        const auto inputs = copyOf(draft().syncInputsOf(from));
+        if (inputs.empty() || from == to) {
+            return;
+        }
+        if (const auto *header = draft().header(to); header != nullptr) {
+            draft().setNodeRuntimeFlags(
+                to,
+                static_cast<uint8_t>(
+                    header->runtimeFlags | camel::runtime::kGCNodeFlagSyncStatement));
+        }
+        draft().setSyncInputs(to, inputs);
+        for (gc_node_ref_t user : copyOf(draft().syncUsersOf(from))) {
+            draft().replaceInput(rt::DraftEdgeKind::Sync, user, from, to);
+        }
+    }
+
+    /// The function a function value is, where the graph itself says so: a constant function, or a
+    /// closure built in this graph (FILL) over a constant function. Null for anything else (a
+    /// port, the result of a branch or of a call, an element of a container).
+    ::Function *evidentFunction(gc_node_ref_t node) const {
+        node = ungated(draft(), node);
+        if (!isFunctionType(typeOf(transaction_, node))) {
+            return nullptr;
+        }
+        gc_node_ref_t constant = node;
+        if (kindOf(transaction_, node) == GCNodeKind::Fill) {
+            const auto *body =
+                reinterpret_cast<const rt::GCFillBody *>(draft().payloadOf(node).data());
+            if (body->fillKind != rt::GCFillKind::FunctionClosure ||
+                draft().normInputsOf(node).size() != 1) {
+                return nullptr;
+            }
+            constant = draft().normInputsOf(node).front();
+            if (!isFunctionType(typeOf(transaction_, constant))) {
+                return nullptr;
+            }
+        }
+        const auto value = staticValue(transaction_, constant);
+        auto *function   = value ? fromSlot<::Function *>(*value) : nullptr;
+        return function != nullptr && function->graph() != nullptr ? function : nullptr;
     }
     /// Brings the functions that function values stand for into this graph, so that the calls
     /// of those values become calls of closures built here (see the definition).
@@ -975,7 +1010,7 @@ class ForwardRewrite {
     size_t retarget(gc_node_ref_t func, const PullbackPlan &plan);
 
     Engine &engine_;
-    GraphDraft &draft_;
+    rt::GraphTransaction &transaction_;
     const GraphScope &scope_;
     uint32_t part_;
     std::unordered_map<gc_node_ref_t, CallSite> sites_;
@@ -1029,17 +1064,23 @@ struct Refusal {
 /// runs over one round's collected values (design principles 9.9).
 class Backward final : public VjpBuilder {
   public:
+    /// The graph the pass reads, and the one it writes.
+    auto &forward() const { return forwardTransaction_.graph(); }
+    auto &target() const { return targetTransaction_.edit(); }
     /// `differentiated` are the forward ports whose gradient this pass computes: the parameter
     /// of a `grad`/`with_grad` call, or every port a pullback returns a tangent for. A port that
     /// merely has a tangent (an ordinary tensor argument used as data) is not one, and neither
     /// is anything derived from it: no gradient is being computed there, so nothing can be lost.
+    /// `forward` is the graph this pass reads and `target` the one it writes. They are two
+    /// transactions even when they are the same graph: the call site that passes one transaction
+    /// twice says so, and nothing here has to ask whether reusing one is allowed.
     Backward(
-        Engine &engine, GraphDraft &forward, GraphDraft &target,
+        Engine &engine, rt::GraphTransaction &forward, rt::GraphTransaction &target,
         const std::unordered_map<gc_node_ref_t, CallSite> &sites, const GraphScope &scope,
         std::vector<Refusal> &refusals, std::vector<gc_node_ref_t> differentiated,
         bool residualPorts = false, std::unordered_set<gc_node_ref_t> boundary = {},
         std::unordered_set<gc_node_ref_t> untaped = {})
-        : engine_(engine), forward_(forward), target_(target), sites_(sites),
+        : engine_(engine), forwardTransaction_(forward), targetTransaction_(target), sites_(sites),
           inPlace_(&forward == &target), scope_(scope), refusals_(refusals),
           differentiated_(differentiated.begin(), differentiated.end()),
           residualPorts_(residualPorts), boundary_(std::move(boundary)),
@@ -1052,7 +1093,7 @@ class Backward final : public VjpBuilder {
     /// accumulateInto does for every other whole-value gradient — otherwise visitFill, which
     /// distributes elements, would find none and the seed would stop at the result node.
     void seed(gc_node_ref_t primal, gc_node_ref_t gradient) {
-        accumulateInto(gradients_[primal], typeOf(forward_, primal), gradient, primal);
+        accumulateInto(gradients_[primal], typeOf(forwardTransaction_, primal), gradient, primal);
     }
     /// Propagates gradients through the forward nodes `order` (inputs before users).
     void run(const std::vector<gc_node_ref_t> &order);
@@ -1076,25 +1117,25 @@ class Backward final : public VjpBuilder {
     const std::vector<gc_node_ref_t> &residuals() const { return captures_; }
 
     // VjpBuilder
-    Type *nodeType(vjp_node_t node) const override { return typeOf(target_, node); }
+    Type *nodeType(vjp_node_t node) const override { return typeOf(targetTransaction_, node); }
     std::optional<slot_t> staticValueOf(vjp_node_t node) const override {
-        return staticValue(target_, node);
+        return staticValue(targetTransaction_, node);
     }
     vjp_node_t addStatic(slot_t value, Type *type) override {
-        return target_.materializeStaticValue(value, type);
+        return target().materializeStaticValue(value, type);
     }
     vjp_node_t
     addOper(Type *type, std::string_view uri, std::span<const vjp_node_t> normInputs) override {
-        return autodiff::addOper(target_, type, uri, normInputs);
+        return autodiff::addOper(targetTransaction_, type, uri, normInputs);
     }
     vjp_node_t addOper(
         Type *type,
         std::string_view uri,
         std::span<const vjp_node_t> normInputs,
         camel::core::attr::AttrSetId attrs) override {
-        const vjp_node_t node = autodiff::addOper(target_, type, uri, normInputs);
+        const vjp_node_t node = autodiff::addOper(targetTransaction_, type, uri, normInputs);
         if (attrs != camel::core::attr::kNoAttrs) {
-            target_.setNodeAttrs(node, attrs);
+            target().setNodeAttrs(node, attrs);
         }
         return node;
     }
@@ -1108,12 +1149,12 @@ class Backward final : public VjpBuilder {
         const camel::core::attr::AttrValueId value = camel::core::attr::symbol(name);
         const camel::core::attr::AttrSetId attrs = camel::core::attr::single(key, value);
         for (vjp_node_t node : members) {
-            target_.setNodeAttrs(
-                node, camel::core::attr::unite(target_.nodeAttrs(node), attrs));
+            target().setNodeAttrs(
+                node, camel::core::attr::unite(target().nodeAttrs(node), attrs));
         }
     }
     vjp_node_t addAccess(vjp_node_t aggregate, size_t index) override {
-        return autodiff::addField(target_, typeOf(target_, aggregate), aggregate, index);
+        return autodiff::addField(targetTransaction_, typeOf(targetTransaction_, aggregate), aggregate, index);
     }
     std::optional<vjp_node_t> gradientOf(vjp_node_t node) const override;
     void accumulateGradient(vjp_node_t node, vjp_node_t gradient) override;
@@ -1172,9 +1213,10 @@ class Backward final : public VjpBuilder {
     gc_node_ref_t chosenFunction(gc_node_ref_t call) const;
     void reportRefusals(const std::vector<gc_node_ref_t> &order);
 
+
     Engine &engine_; // the `#impl` bodies this pass must not confuse with their kernels
-    GraphDraft &forward_;
-    GraphDraft &target_;
+    rt::GraphTransaction &forwardTransaction_;
+    rt::GraphTransaction &targetTransaction_;
     const std::unordered_map<gc_node_ref_t, CallSite> &sites_;
     const bool inPlace_;
     const GraphScope &scope_;
@@ -1223,7 +1265,7 @@ class Engine {
     }
     ~Engine() { currentSource = outerSource_; }
 
-    GCGraph *gradient(GCGraph *function, bool withValue);
+    GCGraph *gradient(GCGraph *function, bool withValue, bool hasAux);
     const camel::core::context::context_ptr_t &context() const { return context_; }
 
     /// The session the inlining helpers of the runtime layer work in. Nothing is committed
@@ -1259,17 +1301,20 @@ class Engine {
     const PullbackPlan &planFor(GCGraph *callee);
     /// A plan for a synthesized graph (a branch arm) with the given types.
     PullbackPlan planForDraft(
-        std::unique_ptr<GraphDraft> source, const std::string &name, const PullbackPlan &types,
-        GraphScope scope);
+        std::unique_ptr<rt::GraphTransaction> source, const std::string &name,
+        const PullbackPlan &types, GraphScope scope);
 
-    /// The functions whose bodies, brought into an arm region, the arm came with.
-    const std::unordered_set<GCGraph *> &ownersOf(const GraphDraft *draft, uint32_t region) const {
+    /// The functions whose bodies, brought into an arm region, the arm came with. The key is the
+    /// transaction that owns the draft, not the draft: a draft is reached through its owner, so
+    /// naming the storage here would make this bookkeeping depend on where the storage lives.
+    const std::unordered_set<GCGraph *> &
+    ownersOf(const rt::GraphTransaction *transaction, uint32_t region) const {
         static const std::unordered_set<GCGraph *> none;
-        auto it = regionOwners_.find({draft, region});
+        auto it = regionOwners_.find({transaction, region});
         return it == regionOwners_.end() ? none : it->second;
     }
-    void noteArmOwner(const GraphDraft *draft, uint32_t region, GCGraph *owner) {
-        regionOwners_[{draft, region}].insert(owner);
+    void noteArmOwner(const rt::GraphTransaction *transaction, uint32_t region, GCGraph *owner) {
+        regionOwners_[{transaction, region}].insert(owner);
     }
     void noteArmOwner(GCGraph *arm, GCGraph *owner) { armOwners_[arm].insert(owner); }
     const std::unordered_set<GCGraph *> &ownersOf(GCGraph *arm) const {
@@ -1290,7 +1335,7 @@ class Engine {
     /// `arrayGradient` says whether the reverse pass also carries the iterated array's gradient
     /// (so the body pullback takes the element as one more port).
     const LoopBodyPlan &loopBodyPlanFor(
-        GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, bool iterates,
+        rt::GraphTransaction &transaction, gc_node_ref_t loop, size_t stateCount, bool iterates,
         bool arrayGradient);
     /// The group of graphs this transformation adds to the program.
     rt::GraphDraftGroup &group() { return group_; }
@@ -1305,7 +1350,7 @@ class Engine {
   private:
     struct Pending {
         PullbackPlan plan;
-        std::unique_ptr<GraphDraft> source;
+        std::unique_ptr<rt::GraphTransaction> source;
         GraphScope scope;
         GCGraph *graph = nullptr; // the function this is the graph of, for a callee
     };
@@ -1316,20 +1361,20 @@ class Engine {
     PullbackPlan reservePullback(const std::string &name, const PullbackPlan &types);
     void build(Pending &pending);
     LoopBodyPlan buildLoopBody(
-        GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, bool iterates,
+        rt::GraphTransaction &transaction, gc_node_ref_t loop, size_t stateCount, bool iterates,
         bool arrayGradient);
 
     camel::core::context::context_ptr_t context_;
     rt::GraphDraftGroup group_;
     std::unordered_map<GCGraph *, PullbackPlan> plans_;
     std::unordered_map<GCGraph *, PullbackPlan> closurePlans_;
-    std::map<std::pair<const GraphDraft *, gc_node_ref_t>, LoopBodyPlan> loopBodyPlans_;
-    std::set<std::pair<const GraphDraft *, gc_node_ref_t>> loopBodiesBeingBuilt_;
+    std::map<std::pair<const rt::GraphTransaction *, gc_node_ref_t>, LoopBodyPlan> loopBodyPlans_;
+    std::set<std::pair<const rt::GraphTransaction *, gc_node_ref_t>> loopBodiesBeingBuilt_;
     std::deque<Pending> pending_;
     rt::RuntimeGraphDraftSession inlining_;
     size_t followed_ = 0;
     std::unordered_map<GCGraph *, std::unordered_set<GCGraph *>> armOwners_;
-    std::map<std::pair<const GraphDraft *, uint32_t>, std::unordered_set<GCGraph *>> regionOwners_;
+    std::map<std::pair<const rt::GraphTransaction *, uint32_t>, std::unordered_set<GCGraph *>> regionOwners_;
     std::unordered_set<GCGraph *> recursions_;
     std::vector<Refusal> refusals_;
     // The semantic bodies of the program's `#impl` functions (see implBodiesByKernel), read
@@ -1365,24 +1410,24 @@ void ForwardRewrite::followFunctionValues() {
     while (changed) {
         changed = false;
         std::unordered_set<gc_node_ref_t> arms;
-        for (gc_node_ref_t id = 0; id < draft_.nodeSlotCount(); ++id) {
-            if (draft_.alive(id) && member(id) && kindOf(draft_, id) == GCNodeKind::Join) {
-                arms.insert(draft_.withInputsOf(id).begin(), draft_.withInputsOf(id).end());
+        for (gc_node_ref_t id = 0; id < draft().nodeSlotCount(); ++id) {
+            if (draft().alive(id) && member(id) && kindOf(transaction_, id) == GCNodeKind::Join) {
+                arms.insert(draft().withInputsOf(id).begin(), draft().withInputsOf(id).end());
             }
         }
-        for (gc_node_ref_t id = 0; id < draft_.nodeSlotCount(); ++id) {
-            if (!draft_.alive(id) || !member(id) || left.contains(id) || arms.contains(id)) {
+        for (gc_node_ref_t id = 0; id < draft().nodeSlotCount(); ++id) {
+            if (!draft().alive(id) || !member(id) || left.contains(id) || arms.contains(id)) {
                 continue;
             }
-            const GCNodeKind kind = kindOf(draft_, id);
+            const GCNodeKind kind = kindOf(transaction_, id);
             if ((kind != GCNodeKind::Func && kind != GCNodeKind::Call) || !carriesFunctionValue(id)) {
                 continue;
             }
             // The function whose body would come in (for a closure, the function it closes).
             GCGraph *const function =
                 kind == GCNodeKind::Func
-                    ? calleeOf(draft_, id)
-                    : engine_.graphOf(evidentFunction(draft_, draft_.withInputsOf(id).front()));
+                    ? calleeOf(transaction_, id)
+                    : engine_.graphOf(evidentFunction(draft().withInputsOf(id).front()));
             if (scope_.enclosing.contains(function)) {
                 engine_.noteRecursion(function);
                 left.insert(id);
@@ -1393,11 +1438,11 @@ void ForwardRewrite::followFunctionValues() {
             }
             const auto armGraphs = [&] {
                 std::unordered_set<GCGraph *> graphs;
-                for (gc_node_ref_t join = 0; join < draft_.nodeSlotCount(); ++join) {
-                    if (draft_.alive(join) && kindOf(draft_, join) == GCNodeKind::Join) {
-                        for (gc_node_ref_t arm : draft_.withInputsOf(join)) {
-                            if (kindOf(draft_, arm) == GCNodeKind::Func) {
-                                graphs.insert(calleeOf(draft_, arm));
+                for (gc_node_ref_t join = 0; join < draft().nodeSlotCount(); ++join) {
+                    if (draft().alive(join) && kindOf(transaction_, join) == GCNodeKind::Join) {
+                        for (gc_node_ref_t arm : draft().withInputsOf(join)) {
+                            if (kindOf(transaction_, arm) == GCNodeKind::Func) {
+                                graphs.insert(calleeOf(transaction_, arm));
                             }
                         }
                     }
@@ -1408,22 +1453,22 @@ void ForwardRewrite::followFunctionValues() {
             // A closure call first becomes a direct call of the closure's graph with the
             // captured values as arguments. Should the inlining then fail, that direct call
             // is an ordinary call and is differentiated as one.
-            const uint32_t savedRegion = draft_.insertRegion();
+            const uint32_t savedRegion = draft().insertRegion();
             if (part_ != 0) {
-                draft_.setInsertRegion(part_);
+                draft().setInsertRegion(part_);
             }
             const auto restoreRegion = [&] {
                 if (part_ != 0) {
-                    draft_.setInsertRegion(savedRegion);
+                    draft().setInsertRegion(savedRegion);
                 }
             };
             if (kind == GCNodeKind::Call &&
-                !rt::devirtualizeStaticCallInDraft(engine_.inlining(), draft_, id, true)) {
+                !rt::devirtualizeStaticCallInDraft(engine_.inlining(), transaction_, id, true)) {
                 restoreRegion();
                 left.insert(id);
                 continue;
             }
-            if (camel::passes::opt::inlineCallInOrder(engine_.inlining(), draft_, id)) {
+            if (camel::passes::opt::inlineCallInOrder(engine_.inlining(), transaction_, id)) {
                 changed = true;
                 for (GCGraph *arm : armGraphs()) {
                     if (!armsBefore.contains(arm)) {
@@ -1432,8 +1477,8 @@ void ForwardRewrite::followFunctionValues() {
                 }
                 // The body came into this region; a function it calls from here that calls
                 // itself is this function's recursion.
-                if (part_ != 0 && draft_.region(part_).kind == rt::GCRegionKind::Arm) {
-                    engine_.noteArmOwner(&draft_, part_, function);
+                if (part_ != 0 && draft().region(part_).kind == rt::GCRegionKind::Arm) {
+                    engine_.noteArmOwner(&transaction_, part_, function);
                 }
             } else {
                 left.insert(id);
@@ -1447,7 +1492,7 @@ void ForwardRewrite::followFunctionValues() {
 /// its callee, as an argument or a captured value, or gets a function value back from it.
 bool ForwardRewrite::carriesFunctionValue(gc_node_ref_t call) const {
     const auto evident = [&](gc_node_ref_t node) {
-        return evidentFunction(draft_, node) != nullptr;
+        return evidentFunction(node) != nullptr;
     };
     // A macro, and a function with a derivative rule of its own, are not differentiated
     // through their bodies.
@@ -1455,9 +1500,9 @@ bool ForwardRewrite::carriesFunctionValue(gc_node_ref_t call) const {
         return graph == nullptr || graph->isMacro() || hasRule(graph);
     };
     GCGraph *graph  = nullptr;
-    auto withInputs = draft_.withInputsOf(call);
-    if (kindOf(draft_, call) == GCNodeKind::Func) {
-        graph = calleeOf(draft_, call);
+    auto withInputs = draft().withInputsOf(call);
+    if (kindOf(transaction_, call) == GCNodeKind::Func) {
+        graph = calleeOf(transaction_, call);
         if (opaque(graph)) {
             return false;
         }
@@ -1465,7 +1510,7 @@ bool ForwardRewrite::carriesFunctionValue(gc_node_ref_t call) const {
         if (withInputs.empty()) {
             return false;
         }
-        const ::Function *function = evidentFunction(draft_, withInputs.front());
+        const ::Function *function = evidentFunction(withInputs.front());
         if (function == nullptr || opaque(function->graph())) {
             return false;
         }
@@ -1478,16 +1523,16 @@ bool ForwardRewrite::carriesFunctionValue(gc_node_ref_t call) const {
                 }
             }
         }
-        const gc_node_ref_t closure = ungated(draft_, withInputs.front());
-        if (kindOf(draft_, closure) == GCNodeKind::Fill &&
-            std::ranges::any_of(draft_.withInputsOf(closure), evident)) {
+        const gc_node_ref_t closure = ungated(draft(), withInputs.front());
+        if (kindOf(transaction_, closure) == GCNodeKind::Fill &&
+            std::ranges::any_of(draft().withInputsOf(closure), evident)) {
             return true;
         }
         withInputs = withInputs.subspan(1);
     }
     return isFunctionType(graph->funcType()->exitType()) ||
            std::ranges::any_of(withInputs, evident) ||
-           std::ranges::any_of(draft_.normInputsOf(call), evident);
+           std::ranges::any_of(draft().normInputsOf(call), evident);
 }
 
 /// The semantic bodies of the program's `#impl` functions, by the kernel URI a direct call of
@@ -1549,11 +1594,11 @@ void ForwardRewrite::expandKernelBodies() {
     if (bodies.empty()) {
         return;
     }
-    for (gc_node_ref_t id = 0; id < draft_.nodeSlotCount(); ++id) {
-        if (!draft_.alive(id) || !member(id) || kindOf(draft_, id) != GCNodeKind::Oper) {
+    for (gc_node_ref_t id = 0; id < draft().nodeSlotCount(); ++id) {
+        if (!draft().alive(id) || !member(id) || kindOf(transaction_, id) != GCNodeKind::Oper) {
             continue;
         }
-        const auto payload = draft_.payloadOf(id);
+        const auto payload = draft().payloadOf(id);
         const auto *body   = reinterpret_cast<const rt::GCOperBody *>(payload.data());
         const auto found   = bodies.find(std::string(body->uri()));
         if (found == bodies.end()) {
@@ -1571,7 +1616,7 @@ void ForwardRewrite::expandKernelBodies() {
                 named += "'" + implementing->name() + "'";
             }
             failAt(
-                draft_.nodeOrigin(id),
+                draft().nodeOrigin(id),
                 std::format(
                     "the call of an '#impl' function is one OPER of the '{}' kernel, and {} "
                     "semantic bodies of this program implement that kernel ({}); which one the "
@@ -1580,10 +1625,10 @@ void ForwardRewrite::expandKernelBodies() {
                     body->uri(),
                     found->second.size(),
                     named,
-                    whereIs(draft_.nodeOrigin(id))));
+                    whereIs(draft().nodeOrigin(id))));
         }
-        const std::vector<gc_node_ref_t> withInputs = copyOf(draft_.withInputsOf(id));
-        const std::vector<gc_node_ref_t> normInputs = copyOf(draft_.normInputsOf(id));
+        const std::vector<gc_node_ref_t> withInputs = copyOf(draft().withInputsOf(id));
+        const std::vector<gc_node_ref_t> normInputs = copyOf(draft().normInputsOf(id));
         const auto portTypes                        = portTypesOf(semantic);
         if (withInputs.size() + normInputs.size() != portTypes.size()) {
             // Not reachable through `#impl` today: the builder compares the kernel's signature
@@ -1592,7 +1637,7 @@ void ForwardRewrite::expandKernelBodies() {
             // builds a call of the body out of the OPER's own inputs, and a call built from the
             // wrong argument list would be a wrong number: name the call instead.
             failAt(
-                draft_.nodeOrigin(id),
+                draft().nodeOrigin(id),
                 std::format(
                     "the '{}' kernel of an '#impl' function is called with {} argument(s), but "
                     "the semantic body of that function has {} port(s): the kernel does not "
@@ -1600,43 +1645,43 @@ void ForwardRewrite::expandKernelBodies() {
                     body->uri(),
                     withInputs.size() + normInputs.size(),
                     portTypes.size(),
-                    whereIs(draft_.nodeOrigin(id))));
+                    whereIs(draft().nodeOrigin(id))));
         }
-        const uint32_t savedInsert = draft_.insertRegion();
+        const uint32_t savedInsert = draft().insertRegion();
         if (part_ != 0) {
-            draft_.setInsertRegion(part_);
+            draft().setInsertRegion(part_);
         }
         // A direct call of the body: the with-inputs of the OPER are the with-arguments of the
         // function and its ordinary inputs the ordinary ones, which is the order the body's
         // ports are in (with ports, then norm ports).
         const gc_node_ref_t direct =
-            draft_.addFuncNode(semantic->id(), semantic->funcType(), 0, 0);
-        draft_.setNodeOrigin(direct, draft_.nodeOrigin(id));
-        draft_.setWithInputs(direct, withInputs);
-        draft_.setNormInputs(direct, normInputs);
-        draft_.setCtrlInputs(direct, copyOf(draft_.ctrlInputsOf(id)));
-        takeSyncPlace(draft_, id, direct);
-        draft_.replaceAllValueUses(id, direct);
-        for (gc_node_ref_t user : copyOf(draft_.ctrlUsersOf(id))) {
-            draft_.replaceInput(rt::DraftEdgeKind::Ctrl, user, id, direct);
+            draft().addFuncNode(semantic->id(), semantic->funcType(), 0, 0);
+        draft().setNodeOrigin(direct, draft().nodeOrigin(id));
+        draft().setWithInputs(direct, withInputs);
+        draft().setNormInputs(direct, normInputs);
+        draft().setCtrlInputs(direct, copyOf(draft().ctrlInputsOf(id)));
+        takeSyncPlace(id, direct);
+        draft().replaceAllValueUses(id, direct);
+        for (gc_node_ref_t user : copyOf(draft().ctrlUsersOf(id))) {
+            draft().replaceInput(rt::DraftEdgeKind::Ctrl, user, id, direct);
         }
-        if (draft_.outputNode() == id) {
-            draft_.setOutputNode(direct);
+        if (draft().outputNode() == id) {
+            draft().setOutputNode(direct);
         }
-        if (draft_.exitNode() == id) {
-            draft_.setExitNode(direct);
+        if (draft().exitNode() == id) {
+            draft().setExitNode(direct);
         }
-        if (draft_.returnNode() == id) {
-            draft_.setReturnNode(direct, draft_.returnKind());
+        if (draft().returnNode() == id) {
+            draft().setReturnNode(direct, draft().returnKind());
         }
-        for (uint32_t r = 0; r < draft_.regionCount(); ++r) {
-            if (draft_.region(r).result == id) {
-                draft_.setRegionResult(r, direct);
+        for (uint32_t r = 0; r < draft().regionCount(); ++r) {
+            if (draft().region(r).result == id) {
+                draft().setRegionResult(r, direct);
             }
         }
-        draft_.eraseNode(id);
+        draft().eraseNode(id);
         if (part_ != 0) {
-            draft_.setInsertRegion(savedInsert);
+            draft().setInsertRegion(savedInsert);
         }
     }
     // The rewritten calls are left for the ordinary rewrite pass: the node scan of run() finds
@@ -1652,14 +1697,14 @@ void ForwardRewrite::run() {
     std::vector<gc_node_ref_t> indirect;
     std::vector<gc_node_ref_t> loops;
     std::unordered_set<gc_node_ref_t> arms;
-    for (gc_node_ref_t id = 0; id < draft_.nodeSlotCount(); ++id) {
-        if (!draft_.alive(id) || !member(id)) {
+    for (gc_node_ref_t id = 0; id < draft().nodeSlotCount(); ++id) {
+        if (!draft().alive(id) || !member(id)) {
             continue;
         }
-        switch (kindOf(draft_, id)) {
+        switch (kindOf(transaction_, id)) {
         case GCNodeKind::Join:
             joins.push_back(id);
-            for (gc_node_ref_t arm : draft_.withInputsOf(id)) {
+            for (gc_node_ref_t arm : draft().withInputsOf(id)) {
                 arms.insert(arm);
             }
             break;
@@ -1701,21 +1746,21 @@ size_t ForwardRewrite::retarget(gc_node_ref_t func, const PullbackPlan &plan) {
     // runs in the forward pass only, and what it writes is resource state (design principles
     // 3.5, 9.9). Only the value those versions follow changes, into the (value, pullback) pair.
     const std::vector<Type *> versions =
-        callVersionsOf(typeOf(draft_, func), draft_.funcWriteMaskOf(func));
+        callVersionsOf(typeOf(transaction_, func), draft().funcWriteMaskOf(func));
     Type *valueType = plan.forwardValueType;
     if (!versions.empty()) {
         std::vector<Type *> parts{valueType};
         parts.insert(parts.end(), versions.begin(), versions.end());
         valueType = TupleType::create(std::move(parts));
     }
-    draft_.setCalleeGraph(func, plan.forward);
-    draft_.setNodeDataType(func, valueType);
-    draft_.setNodeDataIndex(func, draft_.allocateRuntimeSlot(valueType));
+    draft().setCalleeGraph(func, plan.forward);
+    draft().setNodeDataType(func, valueType);
+    draft().setNodeDataIndex(func, draft().allocateRuntimeSlot(valueType));
     return versions.size();
 }
 
 void ForwardRewrite::redirectValue(gc_node_ref_t node, gc_node_ref_t value) {
-    draft_.replaceAllValueUses(node, value);
+    draft().replaceAllValueUses(node, value);
     redirectAnchors(node, value);
 }
 
@@ -1726,14 +1771,14 @@ void ForwardRewrite::redirectCallValue(
     // use of the call's value named that value, and a call that hands versions on has a tuple
     // value: its users project it, and the projection takes the pair now, whose component 0 is
     // the value it named.
-    for (gc_node_ref_t user : copyOf(draft_.normUsersOf(call))) {
-        if (!readsCallVersion(draft_, user)) {
-            draft_.replaceInput(rt::DraftEdgeKind::Data, user, call, pair, rt::PortRole::Normal);
+    for (gc_node_ref_t user : copyOf(draft().normUsersOf(call))) {
+        if (!readsCallVersion(user)) {
+            draft().replaceInput(rt::DraftEdgeKind::Data, user, call, pair, rt::PortRole::Normal);
         }
     }
-    for (gc_node_ref_t user : copyOf(draft_.withUsersOf(call))) {
-        if (!readsCallVersion(draft_, user)) {
-            draft_.replaceInput(rt::DraftEdgeKind::Data, user, call, pair, rt::PortRole::Context);
+    for (gc_node_ref_t user : copyOf(draft().withUsersOf(call))) {
+        if (!readsCallVersion(user)) {
+            draft().replaceInput(rt::DraftEdgeKind::Data, user, call, pair, rt::PortRole::Context);
         }
     }
     redirectAnchors(call, value);
@@ -1754,23 +1799,23 @@ void ForwardRewrite::redirectAnchors(gc_node_ref_t node, gc_node_ref_t value) {
     // Control users (e.g. a later BRCH that must run after the values its arms capture) now wait
     // for the value, which itself waits for the call.
     // (Only the edges: the branch structure, e.g. BRCH -> JOIN, still names the JOIN itself.)
-    for (gc_node_ref_t user : copyOf(draft_.ctrlUsersOf(node))) {
-        draft_.replaceInput(rt::DraftEdgeKind::Ctrl, user, node, value);
+    for (gc_node_ref_t user : copyOf(draft().ctrlUsersOf(node))) {
+        draft().replaceInput(rt::DraftEdgeKind::Ctrl, user, node, value);
     }
-    if (draft_.outputNode() == node) {
-        draft_.setOutputNode(value);
+    if (draft().outputNode() == node) {
+        draft().setOutputNode(value);
     }
-    if (draft_.exitNode() == node) {
-        draft_.setExitNode(value);
+    if (draft().exitNode() == node) {
+        draft().setExitNode(value);
     }
-    if (draft_.returnNode() == node) {
-        draft_.setReturnNode(value, draft_.returnKind());
+    if (draft().returnNode() == node) {
+        draft().setReturnNode(value, draft().returnKind());
     }
     // A region that ended in this node now ends in its value: a call in a loop body or an arm
     // that is the region's result returns the (value, pullback) pair after the rewrite.
-    for (uint32_t r = 0; r < draft_.regionCount(); ++r) {
-        if (draft_.region(r).result == node) {
-            draft_.setRegionResult(r, value);
+    for (uint32_t r = 0; r < draft().regionCount(); ++r) {
+        if (draft().region(r).result == node) {
+            draft().setRegionResult(r, value);
         }
     }
 }
@@ -1779,7 +1824,7 @@ void ForwardRewrite::split(
     gc_node_ref_t node, const PullbackPlan &plan, std::vector<gc_node_ref_t> inputs,
     size_t versions) {
     if (part_ != 0) {
-        draft_.setInsertRegion(part_);
+        draft().setInsertRegion(part_);
     }
     // The call's value is the (value, pullback) pair, then the new version of each captured
     // variable it wrote. The pair is what the gradient reads; the users of the call keep naming
@@ -1788,25 +1833,25 @@ void ForwardRewrite::split(
     gc_node_ref_t pair = node;
     gc_node_ref_t value;
     if (versions == 0) {
-        value = draft_.addAccsNode(plan.valueType, 0u);
+        value = draft().addAccsNode(plan.valueType, 0u);
         redirectValue(node, value);
-        draft_.setNormInputs(value, std::span<const gc_node_ref_t>(&node, 1));
+        draft().setNormInputs(value, std::span<const gc_node_ref_t>(&node, 1));
     } else {
         // The tangent of the call's value accumulates on the node that projects it, and a fresh
         // node holding the same value would take none of it: the projection the graph already
         // has becomes the value node.
-        value = componentProjectionOf(draft_, node, 0);
+        value = componentProjectionOf(node, 0);
         if (value == kInvalidNodeRef) {
-            value = draft_.addAccsNode(plan.valueType, 0u);
+            value = draft().addAccsNode(plan.valueType, 0u);
         }
-        pair = draft_.addAccsNode(plan.forwardValueType, 0u);
+        pair = draft().addAccsNode(plan.forwardValueType, 0u);
         redirectCallValue(node, pair, value);
-        draft_.setNormInputs(pair, std::span<const gc_node_ref_t>(&node, 1));
-        draft_.setNormInputs(value, std::span<const gc_node_ref_t>(&pair, 1));
+        draft().setNormInputs(pair, std::span<const gc_node_ref_t>(&node, 1));
+        draft().setNormInputs(value, std::span<const gc_node_ref_t>(&pair, 1));
     }
-    const gc_node_ref_t pullback = addAccs(draft_, plan.pullbackType, pair, 1);
+    const gc_node_ref_t pullback = addAccs(transaction_, plan.pullbackType, pair, 1);
     if (part_ != 0) {
-        draft_.setInsertRegion(0);
+        draft().setInsertRegion(0);
     }
     sites_.emplace(
         value,
@@ -1863,13 +1908,15 @@ struct ReverseLoop {
     TupleType *bodyTangentsType = nullptr; // the result type of body.pb
 };
 
-gc_node_ref_t addLoopInt(GraphDraft &draft, int64_t value) {
+gc_node_ref_t addLoopInt(rt::GraphTransaction &transaction, int64_t value) {
+    auto &draft = transaction.edit();
     return draft.materializeStaticValue(toSlot<int64_t>(value), Type::Int64());
 }
 
 /// Where the loop is written is stamped on everything the reverse pass runs, so that a diagnostic
 /// from inside it (a memory exhaustion, an operator's error) points at the loop.
-void stampLoopOrigin(GraphDraft &draft, uint64_t origin) {
+void stampLoopOrigin(rt::GraphTransaction &transaction, uint64_t origin) {
+    auto &draft = transaction.edit();
     if (origin == 0) {
         return;
     }
@@ -1904,12 +1951,13 @@ std::vector<Type *> reverseStateTypes(const ReverseLoop &loop) {
 /// A tuple of `values`, or the value itself when there is only one (the loop's value is not
 /// wrapped when neither the state nor the collection count wraps it).
 gc_node_ref_t packState(
-    GraphDraft &draft, const std::vector<Type *> &types, std::span<const gc_node_ref_t> values) {
+    rt::GraphTransaction &transaction, const std::vector<Type *> &types, std::span<const gc_node_ref_t> values) {
+    auto &draft = transaction.edit();
     ASSERT(types.size() == values.size(), "autodiff: state component count mismatch.");
     if (types.size() == 1) {
         return values.front();
     }
-    return addAggregate(draft, TupleType::create(types), values);
+    return addAggregate(transaction, TupleType::create(types), values);
 }
 
 /// The type a node the machinery builds is declared with: the value's tangent type when it has one,
@@ -1941,7 +1989,8 @@ std::optional<slot_t> discreteZeroSlot(Type *type) {
 
 /// The zero of `primal`'s tangent; `primalValue` is the primal value (a tensor's zero is taken
 /// from it).
-gc_node_ref_t addZeroTangent(GraphDraft &draft, Type *primal, gc_node_ref_t primalValue) {
+gc_node_ref_t addZeroTangent(rt::GraphTransaction &transaction, Type *primal, gc_node_ref_t primalValue) {
+    auto &draft = transaction.edit();
     if (isAggregate(primal)) {
         std::vector<gc_node_ref_t> zeros;
         for (size_t i = 0; i < aggregateSize(primal); ++i) {
@@ -1949,9 +1998,9 @@ gc_node_ref_t addZeroTangent(GraphDraft &draft, Type *primal, gc_node_ref_t prim
                 continue;
             }
             Type *element = aggregateElement(primal, i);
-            zeros.push_back(addZeroTangent(draft, element, addField(draft, primal, primalValue, i)));
+            zeros.push_back(addZeroTangent(transaction, element, addField(transaction, primal, primalValue, i)));
         }
-        return addAggregate(draft, machineryTangentTypeOf(primal), zeros);
+        return addAggregate(transaction, machineryTangentTypeOf(primal), zeros);
     }
     const TangentSpace *space = DerivativeRegistry::instance().findTangentSpace(primal);
     if (space == nullptr) {
@@ -1967,12 +2016,13 @@ gc_node_ref_t addZeroTangent(GraphDraft &draft, Type *primal, gc_node_ref_t prim
         return draft.materializeStaticValue(*space->zero, tangentNodeType(primal));
     }
     const std::array<gc_node_ref_t, 1> input{primalValue};
-    return addOper(draft, tangentNodeType(primal), space->zerosLikeUri, input);
+    return addOper(transaction, tangentNodeType(primal), space->zerosLikeUri, input);
 }
 
 /// `lhs + rhs` of the tangents of `primal`, element-wise for an aggregate (a state or a captured
 /// value may be a tuple, a struct or a model).
-gc_node_ref_t addTangentSum(GraphDraft &draft, Type *primal, gc_node_ref_t lhs, gc_node_ref_t rhs) {
+gc_node_ref_t addTangentSum(rt::GraphTransaction &transaction, Type *primal, gc_node_ref_t lhs, gc_node_ref_t rhs) {
+    auto &draft = transaction.edit();
     if (isAggregate(primal)) {
         Type *tangent = machineryTangentTypeOf(primal);
         std::vector<gc_node_ref_t> sums;
@@ -1983,12 +2033,12 @@ gc_node_ref_t addTangentSum(GraphDraft &draft, Type *primal, gc_node_ref_t lhs, 
             }
             Type *element = aggregateElement(primal, i);
             sums.push_back(addTangentSum(
-                draft,
+                transaction,
                 element,
-                addField(draft, tangent, lhs, *position),
-                addField(draft, tangent, rhs, *position)));
+                addField(transaction, tangent, lhs, *position),
+                addField(transaction, tangent, rhs, *position)));
         }
-        return addAggregate(draft, tangent, sums);
+        return addAggregate(transaction, tangent, sums);
     }
     const TangentSpace *space = DerivativeRegistry::instance().findTangentSpace(primal);
     if (space == nullptr || space->addUri.empty()) {
@@ -2000,20 +2050,21 @@ gc_node_ref_t addTangentSum(GraphDraft &draft, Type *primal, gc_node_ref_t lhs, 
         fail(std::format("cannot add gradients of type '{}'", primal->toString()));
     }
     const std::array<gc_node_ref_t, 2> inputs{lhs, rhs};
-    return addOper(draft, tangentNodeType(primal), space->addUri, inputs);
+    return addOper(transaction, tangentNodeType(primal), space->addUri, inputs);
 }
 
 /// Whether the reverse loop goes on: one more round while the index is not negative. The
 /// condition is a region of the reverse pass's own graph, like every loop a program has.
-void buildReverseCond(const ReverseLoop &loop, GraphDraft &draft, uint32_t region) {
+void buildReverseCond(const ReverseLoop &loop, rt::GraphTransaction &transaction, uint32_t region) {
+    auto &draft = transaction.edit();
     draft.setInsertRegion(region);
     std::vector<gc_node_ref_t> ports;
     for (Type *type : reverseStateTypes(loop)) {
-        ports.push_back(addPort(draft, type));
+        ports.push_back(addPort(transaction, type));
     }
     draft.setRegionPorts(region, ports);
-    const std::array<gc_node_ref_t, 2> compare{ports.front(), addLoopInt(draft, 0)};
-    draft.setRegionResult(region, addOper(draft, Type::Bool(), ":op/ge_l", compare));
+    const std::array<gc_node_ref_t, 2> compare{ports.front(), addLoopInt(transaction, 0)};
+    draft.setRegionResult(region, addOper(transaction, Type::Bool(), ":op/ge_l", compare));
     draft.setInsertRegion(0);
 }
 
@@ -2022,13 +2073,14 @@ void buildReverseCond(const ReverseLoop &loop, GraphDraft &draft, uint32_t regio
 /// gradients the loop carries. A state's gradient is what the previous round gets; a capture's
 /// gradient accumulates over the rounds.
 void buildReverseBody(
-    const ReverseLoop &loop, GraphDraft &draft, uint32_t region,
+    const ReverseLoop &loop, rt::GraphTransaction &transaction, uint32_t region,
     std::span<const gc_node_ref_t> tapePorts) {
+    auto &draft = transaction.edit();
     const std::vector<Type *> stateTypes = reverseStateTypes(loop);
     draft.setInsertRegion(region);
     std::vector<gc_node_ref_t> ports;
     for (Type *type : stateTypes) {
-        ports.push_back(addPort(draft, type));
+        ports.push_back(addPort(transaction, type));
     }
     draft.setRegionPorts(region, ports);
     // The gradient of the state this round produced, taken out of the components that carry it.
@@ -2042,24 +2094,24 @@ void buildReverseBody(
                 components.push_back(ports[loop.stateSlot[j]]);
             }
         }
-        dy = addAggregate(draft, machineryTangentTypeOf(loop.stateValueType), components);
+        dy = addAggregate(transaction, machineryTangentTypeOf(loop.stateValueType), components);
     }
     std::vector<gc_node_ref_t> args{dy};
     for (size_t c = 0; c < loop.residualTypes.size(); ++c) {
         const std::array<gc_node_ref_t, 2> at{tapePorts[c], ports.front()};
-        args.push_back(addOper(draft, loop.residualTypes[c], ":op/idx_arr", at));
+        args.push_back(addOper(transaction, loop.residualTypes[c], ":op/idx_arr", at));
     }
     const gc_node_ref_t pullback =
         draft.addFuncNode(loop.bodyPullback, loop.bodyTangentsType);
     draft.setNormInputs(pullback, args);
-    const std::array<gc_node_ref_t, 2> step{ports.front(), addLoopInt(draft, 1)};
-    std::vector<gc_node_ref_t> next{addOper(draft, Type::Int64(), ":op/sub_l", step)};
+    const std::array<gc_node_ref_t, 2> step{ports.front(), addLoopInt(transaction, 1)};
+    std::vector<gc_node_ref_t> next{addOper(transaction, Type::Int64(), ":op/sub_l", step)};
     for (size_t j = 0; j < loop.stateTypes.size(); ++j) {
         if (loop.stateSlot[j] == kNoSlot) {
             continue;
         }
         next.push_back(addAccs(
-            draft,
+            transaction,
             loop.bodyTangentsType->typeAt(*loop.stateTangent[j]),
             pullback,
             *loop.stateTangent[j]));
@@ -2069,11 +2121,11 @@ void buildReverseBody(
             continue;
         }
         next.push_back(addTangentSum(
-            draft,
+            transaction,
             loop.captureTypes[c],
             ports[loop.captureSlot[c]],
             addAccs(
-                draft,
+                transaction,
                 loop.bodyTangentsType->typeAt(*loop.captureTangent[c]),
                 pullback,
                 *loop.captureTangent[c])));
@@ -2083,7 +2135,7 @@ void buildReverseBody(
         // gradient body.pb sends back goes into the array's gradient at that index
         // (design principles 9.9: the reverse of a read by index is a scatter-add).
         const gc_node_ref_t element = addAccs(
-            draft,
+            transaction,
             loop.bodyTangentsType->typeAt(*loop.elementTangent),
             pullback,
             *loop.elementTangent);
@@ -2108,12 +2160,12 @@ void buildReverseBody(
                 ? std::string_view(space->scatterUri)
                 : std::string_view(":tangent/scatter_add_arr");
         next.push_back(addOper(
-            draft,
+            transaction,
             loop.tangentsType->typeAt(*loop.arrayTangent),
             scatterUri,
             scatter));
     }
-    draft.setRegionResult(region, packState(draft, stateTypes, next));
+    draft.setRegionResult(region, packState(transaction, stateTypes, next));
     draft.setInsertRegion(0);
 }
 
@@ -2122,24 +2174,25 @@ void buildReverseBody(
 /// the reverse loop, and return the gradients of the site's ports (captures, then states). A loop
 /// that ran no round leaves the state's gradient as it came and every capture's zero, which is
 /// what a sum over no round contributes.
-std::unique_ptr<GraphDraft> buildReverseClosure(
-    const ReverseLoop &loop, TupleType *closureType, std::vector<gc_node_ref_t> captures) {
+void buildReverseClosure(
+    rt::GraphTransaction &transaction, const ReverseLoop &loop, TupleType *closureType,
+    std::vector<gc_node_ref_t> captures) {
     const std::vector<Type *> stateTypes = reverseStateTypes(loop);
-    auto draft                           = std::make_unique<GraphDraft>();
+    auto &draft                          = transaction.edit();
     ASSERT(
         captures.size() == closureType->size(),
         "autodiff: reverse loop capture count mismatch.");
-    draft->setFuncType(
+    draft.setFuncType(
         FunctionType::create(param_vec_t{}, param_vec_t{{loop.dyType, false}}, loop.tangentsType));
-    draft->setClosureType(closureType);
-    const gc_node_ref_t dy = addPort(*draft, loop.dyType);
-    draft->appendNormPort(dy);
+    draft.setClosureType(closureType);
+    const gc_node_ref_t dy = addPort(transaction, loop.dyType);
+    draft.appendNormPort(dy);
     // What the reverse pass reads from outside: the tape, one array per collection slot, and the
     // captures whose gradient starts at zero (a tensor's zero is taken from the primal).
     std::vector<gc_node_ref_t> tapePorts;
     for (Type *type : loop.collectionTypes) {
-        const gc_node_ref_t tape = addPort(*draft, type);
-        draft->appendClosureNode(tape);
+        const gc_node_ref_t tape = addPort(transaction, type);
+        draft.appendClosureNode(tape);
         tapePorts.push_back(tape);
     }
     std::vector<gc_node_ref_t> capturePorts(loop.captureTypes.size(), kInvalidNodeRef);
@@ -2147,27 +2200,27 @@ std::unique_ptr<GraphDraft> buildReverseClosure(
         if (loop.captureSlot[c] == kNoSlot) {
             continue;
         }
-        capturePorts[c] = addPort(*draft, loop.captureTypes[c]);
-        draft->appendClosureNode(capturePorts[c]);
+        capturePorts[c] = addPort(transaction, loop.captureTypes[c]);
+        draft.appendClosureNode(capturePorts[c]);
     }
     // The iterated array itself, when its gradient is carried: the zero tangent starts at the
     // primal's length and shape (a `float[]` taken from the array the forward loop walked).
     gc_node_ref_t iterablePort = kInvalidNodeRef;
     if (loop.arrayTangent) {
-        iterablePort = addPort(*draft, loop.iterableType);
-        draft->appendClosureNode(iterablePort);
+        iterablePort = addPort(transaction, loop.iterableType);
+        draft.appendClosureNode(iterablePort);
     }
     // The cond and the body are regions of this graph; the loop node names them by owning them,
     // and its With inputs are their results and the round port.
-    const uint32_t condRegion = draft->addRegion(rt::GCRegionKind::LoopCond, 0);
-    const uint32_t bodyRegion = draft->addRegion(rt::GCRegionKind::LoopBody, 0);
-    buildReverseCond(loop, *draft, condRegion);
-    buildReverseBody(loop, *draft, bodyRegion, tapePorts);
+    const uint32_t condRegion = draft.addRegion(rt::GCRegionKind::LoopCond, 0);
+    const uint32_t bodyRegion = draft.addRegion(rt::GCRegionKind::LoopBody, 0);
+    buildReverseCond(loop, transaction, condRegion);
+    buildReverseBody(loop, transaction, bodyRegion, tapePorts);
     // The last round of the tape, and the gradients the first reverse round gets.
     const std::array<gc_node_ref_t, 1> tape{tapePorts.front()};
-    const gc_node_ref_t count = addOper(*draft, Type::Int64(), ":struct/len_arr", tape);
-    const std::array<gc_node_ref_t, 2> begin{count, addLoopInt(*draft, 1)};
-    std::vector<gc_node_ref_t> initial{addOper(*draft, Type::Int64(), ":op/sub_l", begin)};
+    const gc_node_ref_t count = addOper(transaction, Type::Int64(), ":struct/len_arr", tape);
+    const std::array<gc_node_ref_t, 2> begin{count, addLoopInt(transaction, 1)};
+    std::vector<gc_node_ref_t> initial{addOper(transaction, Type::Int64(), ":op/sub_l", begin)};
     for (size_t j = 0; j < loop.stateTypes.size(); ++j) {
         if (loop.stateSlot[j] == kNoSlot) {
             continue;
@@ -2175,16 +2228,16 @@ std::unique_ptr<GraphDraft> buildReverseClosure(
         initial.push_back(
             loop.stateTypes.size() == 1
                 ? dy
-                : addAccs(*draft, loop.tangentsType->typeAt(*loop.stateTangent[j]), dy, loop.statePart[j]));
+                : addAccs(transaction, loop.tangentsType->typeAt(*loop.stateTangent[j]), dy, loop.statePart[j]));
     }
     for (size_t c = 0; c < loop.captureTypes.size(); ++c) {
         if (loop.captureSlot[c] == kNoSlot) {
             continue;
         }
-        initial.push_back(addZeroTangent(*draft, loop.captureTypes[c], capturePorts[c]));
+        initial.push_back(addZeroTangent(transaction, loop.captureTypes[c], capturePorts[c]));
     }
     if (loop.arrayTangent) {
-        initial.push_back(addZeroTangent(*draft, loop.iterableType, iterablePort));
+        initial.push_back(addZeroTangent(transaction, loop.iterableType, iterablePort));
     }
     const Type *valueType =
         stateTypes.size() == 1 ? stateTypes.front() : TupleType::create(stateTypes);
@@ -2193,22 +2246,22 @@ std::unique_ptr<GraphDraft> buildReverseClosure(
         .bodyGraph       = rt::kInvalidGraphId,
         .kind            = camel::core::LoopKind::While,
         .collectionCount = 0};
-    const gc_node_ref_t round    = addPort(*draft, Type::Int64());
-    const gc_node_ref_t loopNode = draft->addLoopNode(payload, const_cast<Type *>(valueType));
-    draft->setNormInputs(loopNode, initial);
+    const gc_node_ref_t round    = addPort(transaction, Type::Int64());
+    const gc_node_ref_t loopNode = draft.addLoopNode(payload, const_cast<Type *>(valueType));
+    draft.setNormInputs(loopNode, initial);
     const std::array<gc_node_ref_t, 3> parts{
-        draft->region(bodyRegion).result, draft->region(condRegion).result, round};
-    draft->setWithInputs(loopNode, parts);
-    draft->setRegionOwner(condRegion, loopNode, 0);
-    draft->setRegionOwner(bodyRegion, loopNode, 1);
-    draft->setNodeOrigin(loopNode, loop.origin);
+        draft.region(bodyRegion).result, draft.region(condRegion).result, round};
+    draft.setWithInputs(loopNode, parts);
+    draft.setRegionOwner(condRegion, loopNode, 0);
+    draft.setRegionOwner(bodyRegion, loopNode, 1);
+    draft.setNodeOrigin(loopNode, loop.origin);
     // The gradients the loop ends with, in the order the site's ports are in.
     std::vector<gc_node_ref_t> stateValues;
     if (stateTypes.size() == 1) {
         stateValues.push_back(loopNode);
     } else {
         for (size_t i = 0; i < stateTypes.size(); ++i) {
-            stateValues.push_back(addAccs(*draft, stateTypes[i], loopNode, i));
+            stateValues.push_back(addAccs(transaction, stateTypes[i], loopNode, i));
         }
     }
     std::vector<gc_node_ref_t> tangents;
@@ -2225,17 +2278,16 @@ std::unique_ptr<GraphDraft> buildReverseClosure(
     if (loop.arrayTangent) {
         tangents.push_back(stateValues[loop.arraySlot]);
     }
-    setResult(*draft, addAggregate(*draft, loop.tangentsType, tangents));
-    stampLoopOrigin(*draft, loop.origin);
-    return draft;
+    setResult(transaction, addAggregate(transaction, loop.tangentsType, tangents));
+    stampLoopOrigin(transaction, loop.origin);
 }
 
 bool ForwardRewrite::dependsOnTangentPort(gc_node_ref_t node) {
     if (!reachComputed_) {
         std::vector<gc_node_ref_t> work;
-        for (gc_node_ref_t id = 0; id < draft_.nodeSlotCount(); ++id) {
-            if (draft_.alive(id) && kindOf(draft_, id) == GCNodeKind::Port &&
-                hasTangentType(typeOf(draft_, id))) {
+        for (gc_node_ref_t id = 0; id < draft().nodeSlotCount(); ++id) {
+            if (draft().alive(id) && kindOf(transaction_, id) == GCNodeKind::Port &&
+                hasTangentType(typeOf(transaction_, id))) {
                 reach_.insert(id);
                 work.push_back(id);
             }
@@ -2244,8 +2296,8 @@ bool ForwardRewrite::dependsOnTangentPort(gc_node_ref_t node) {
             const gc_node_ref_t value = work.back();
             work.pop_back();
             for (const std::span<const gc_node_ref_t> users :
-                 {draft_.normUsersOf(value), draft_.withUsersOf(value),
-                  draft_.ctrlUsersOf(value)}) {
+                 {draft().normUsersOf(value), draft().withUsersOf(value),
+                  draft().ctrlUsersOf(value), draft().syncUsersOf(value)}) {
                 for (gc_node_ref_t user : users) {
                     if (reach_.insert(user).second) {
                         work.push_back(user);
@@ -2259,7 +2311,7 @@ bool ForwardRewrite::dependsOnTangentPort(gc_node_ref_t node) {
 }
 
 void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
-    const LoopDraftView view(*draft_.program(), draft_, loop);
+    const LoopDraftView view(*draft().program(), draft(), loop);
     // A `for` over an array: when the array depends on a differentiated value, the loop's reverse
     // pass sends each round's element gradient back into an array gradient carried alongside the
     // state gradients (the reverse of a read by index is a scatter-add, design principles 9.9).
@@ -2267,7 +2319,7 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     // port more, after the captures and the states. An array that no port reaches (a literal) is
     // left out: nothing that can carry a gradient flows into it.
     const auto iterable      = view.iterable();
-    Type *const iterableType = iterable ? typeOf(draft_, *iterable) : nullptr;
+    Type *const iterableType = iterable ? typeOf(transaction_, *iterable) : nullptr;
     // Only an array's iteration has a reverse here: the element of a tensor iterated by its first
     // axis is a slice, and iterating any other value goes through that kind's own operator. Such a
     // value reaches the loop as the array that operator produced, or is refused where the operator
@@ -2280,7 +2332,7 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     // before the tape, and are preserved here.
     const size_t existingCollections = view.collectionCount();
     const LoopBodyPlan &bodyPlan = engine_.loopBodyPlanFor(
-        draft_, loop, view.stateCount(), view.iterable().has_value(), carryArray);
+        transaction_, loop, view.stateCount(), view.iterable().has_value(), carryArray);
     const size_t k               = bodyPlan.stateTypes.size();
     const size_t m               = bodyPlan.captureTypes.size();
     // A state with no tangent whose next value depends on an active value loses that value's
@@ -2290,7 +2342,7 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
         if (!carriesGradient(bodyPlan.stateTypes[j]) && j < bodyPlan.stateNextTainted.size() &&
             bodyPlan.stateNextTainted[j]) {
             failAt(
-                draft_.nodeOrigin(loop),
+                draft().nodeOrigin(loop),
                 std::format(
                     "a 'loop' state of type '{}' has no gradient channel, but its next value "
                     "depends on a differentiated parameter{}; the loop would drop that "
@@ -2298,7 +2350,7 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
                     "gradient (a float, or an aggregate of floats), or stop depending on the "
                     "differentiated value",
                     bodyPlan.stateTypes[j]->toString(),
-                    whereIs(draft_.nodeOrigin(loop))));
+                    whereIs(draft().nodeOrigin(loop))));
         }
     }
     // A loop whose value has no tangent cannot carry a gradient, and one none of whose ports has
@@ -2349,9 +2401,9 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     std::vector<Type *> valueTypes = bodyPlan.stateTypes;
     valueTypes.insert(valueTypes.end(), bodyPlan.collectionTypes.begin(), bodyPlan.collectionTypes.end());
     Type *const valueType = TupleType::create(valueTypes);
-    draft_.setLoopCollectionCount(loop, static_cast<uint32_t>(bodyPlan.collectionTypes.size()));
-    draft_.setNodeDataType(loop, valueType);
-    draft_.setNodeDataIndex(loop, draft_.allocateRuntimeSlot(valueType));
+    draft().setLoopCollectionCount(loop, static_cast<uint32_t>(bodyPlan.collectionTypes.size()));
+    draft().setNodeDataType(loop, valueType);
+    draft().setNodeDataIndex(loop, draft().allocateRuntimeSlot(valueType));
     // The loop's users see the state alone; the tape is read through the node below. The
     // builder already inserted that projection when it normalised the loop; reuse it rather
     // than redirect it to itself (a cycle), and add one only for a loop that has none.
@@ -2359,56 +2411,56 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     // programme's own field reads (`q.a`) are ACCS users of the loop node too, and one of them
     // is a float, not the state (the state is the struct, not its fields).
     gc_node_ref_t state = kInvalidNodeRef;
-    for (gc_node_ref_t user : draft_.normUsersOf(loop)) {
-        if (k == 1 && kindOf(draft_, user) == GCNodeKind::Accs &&
-            typeOf(draft_, user) == bodyPlan.stateValueType) {
+    for (gc_node_ref_t user : draft().normUsersOf(loop)) {
+        if (k == 1 && kindOf(transaction_, user) == GCNodeKind::Accs &&
+            typeOf(transaction_, user) == bodyPlan.stateValueType) {
             state = user;
             break;
         }
-        if (k > 1 && kindOf(draft_, user) == GCNodeKind::Fill &&
-            typeOf(draft_, user) == bodyPlan.stateValueType) {
+        if (k > 1 && kindOf(transaction_, user) == GCNodeKind::Fill &&
+            typeOf(transaction_, user) == bodyPlan.stateValueType) {
             state = user;
             break;
         }
     }
-    const uint64_t origin = draft_.nodeOrigin(loop);
+    const uint64_t origin = draft().nodeOrigin(loop);
     if (state == kInvalidNodeRef) {
         if (k == 1) {
-            state = draft_.addAccsNode(bodyPlan.stateTypes.front(), 0u);
+            state = draft().addAccsNode(bodyPlan.stateTypes.front(), 0u);
         } else {
             std::vector<size_t> slots(k);
             for (size_t j = 0; j < k; ++j) {
                 slots[j] = j;
             }
-            state = draft_.addFillNode(
+            state = draft().addFillNode(
                 bodyPlan.stateValueType, rt::makeFillPayload(rt::GCFillKind::Tuple, slots));
         }
-        draft_.setNodeOrigin(state, origin);
+        draft().setNodeOrigin(state, origin);
         redirectValue(loop, state);
         if (k == 1) {
-            draft_.setNormInputs(state, std::span<const gc_node_ref_t>(&loop, 1));
+            draft().setNormInputs(state, std::span<const gc_node_ref_t>(&loop, 1));
         } else {
             std::vector<gc_node_ref_t> components;
             for (size_t j = 0; j < k; ++j) {
-                const gc_node_ref_t component = addAccs(draft_, bodyPlan.stateTypes[j], loop, j);
-                draft_.setNodeOrigin(component, origin);
+                const gc_node_ref_t component = addAccs(transaction_, bodyPlan.stateTypes[j], loop, j);
+                draft().setNodeOrigin(component, origin);
                 components.push_back(component);
             }
             auto *const empty = ::Tuple::create(k, mm::autoSpace());
-            const gc_node_ref_t source = draft_.materializeStaticValue(
+            const gc_node_ref_t source = draft().materializeStaticValue(
                 toSlot<camel::core::rtdata::Object *>(empty), bodyPlan.stateValueType);
-            draft_.setNormInputs(state, std::span<const gc_node_ref_t>(&source, 1));
-            draft_.setWithInputs(state, components);
+            draft().setNormInputs(state, std::span<const gc_node_ref_t>(&source, 1));
+            draft().setWithInputs(state, components);
         }
     } else {
-        draft_.setNodeOrigin(state, origin);
+        draft().setNodeOrigin(state, origin);
     }
     std::vector<gc_node_ref_t> tapes;
     for (size_t c = 0; c < bodyPlan.tapeCollectionTypes.size(); ++c) {
         const gc_node_ref_t tape = addAccs(
-            draft_, bodyPlan.tapeCollectionTypes[c], loop,
+            transaction_, bodyPlan.tapeCollectionTypes[c], loop,
             static_cast<uint32_t>(k + existingCollections + c));
-        draft_.setNodeOrigin(tape, origin);
+        draft().setNodeOrigin(tape, origin);
         tapes.push_back(tape);
     }
     // How the reverse pass sees the loop: one slot per gradient it carries, and where in the
@@ -2480,10 +2532,11 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
         closureTypes.push_back(iterableType);
     }
     TupleType *const closureType = TupleType::create(closureTypes);
-    engine_.group().define(
-        closureKey, buildReverseClosure(reverse, closureType, captures));
+    auto closure = rt::GraphTransaction::open(closureKey);
+    buildReverseClosure(*closure, reverse, closureType, captures);
+    engine_.group().define(closureKey, std::move(closure));
     const gc_node_ref_t pullback =
-        addClosure(engine_.group(), draft_, closureKey, site.pullbackType, closureType, captures);
+        addClosure(engine_.group(), transaction_, closureKey, site.pullbackType, closureType, captures);
     // The site: the loop's value is `state`; its gradient is the gradient of the loop's value.
     CallSite recorded;
     recorded.pullback = pullback;
@@ -2493,27 +2546,27 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
 }
 
 std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t call) {
-    const std::vector<gc_node_ref_t> withInputs = copyOf(draft_.withInputsOf(call));
+    const std::vector<gc_node_ref_t> withInputs = copyOf(draft().withInputsOf(call));
     if (withInputs.empty()) {
         return std::nullopt;
     }
     // The callee value, behind the gates that order it.
-    const gc_node_ref_t fill = ungated(draft_, withInputs.front());
-    auto calleeValue         = staticValue(draft_, fill);
+    const gc_node_ref_t fill = ungated(draft(), withInputs.front());
+    auto calleeValue         = staticValue(transaction_, fill);
     auto *function           = calleeValue ? fromSlot<::Function *>(*calleeValue) : nullptr;
     // A closure built in this graph: FILL(function, captured values...).
     std::vector<gc_node_ref_t> filled; // captured values by closure slot, where filled here
     bool builtHere = false;
-    if (function == nullptr && kindOf(draft_, fill) == GCNodeKind::Fill &&
-        draft_.normInputsOf(fill).size() == 1) {
-        const auto *body = reinterpret_cast<const rt::GCFillBody *>(draft_.payloadOf(fill).data());
-        const auto base  = staticValue(draft_, draft_.normInputsOf(fill).front());
+    if (function == nullptr && kindOf(transaction_, fill) == GCNodeKind::Fill &&
+        draft().normInputsOf(fill).size() == 1) {
+        const auto *body = reinterpret_cast<const rt::GCFillBody *>(draft().payloadOf(fill).data());
+        const auto base  = staticValue(transaction_, draft().normInputsOf(fill).front());
         auto *target     = base ? fromSlot<::Function *>(*base) : nullptr;
         if (body->fillKind == rt::GCFillKind::FunctionClosure && target != nullptr &&
             target->graph() != nullptr) {
             engine_.graphOf(target);
             const auto slots  = body->slots();
-            const auto values = draft_.withInputsOf(fill);
+            const auto values = draft().withInputsOf(fill);
             const size_t n    = target->graph()->closureNodes().size();
             filled.assign(n, kInvalidNodeRef);
             builtHere = slots.size() == values.size();
@@ -2538,7 +2591,7 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
     if (function != nullptr && function->graph() != nullptr) {
         graph = engine_.graphOf(function);
         std::vector<gc_node_ref_t> inputs(withInputs.begin() + 1, withInputs.end());
-        for (gc_node_ref_t input : draft_.normInputsOf(call)) {
+        for (gc_node_ref_t input : draft().normInputsOf(call)) {
             inputs.push_back(input);
         }
         if (hasRule(graph)) {
@@ -2546,7 +2599,7 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
             ::Function *rule   = ruleOf(function);
             if (rule == nullptr) {
                 failAt(
-                    draft_.nodeOrigin(call),
+                    draft().nodeOrigin(call),
                     "a 'vjp' rule of this function is not part of the program being "
                     "differentiated; the rule must be a function the program keeps");
             }
@@ -2570,7 +2623,7 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
                 if (i < filled.size() && filled[i] != kInvalidNodeRef) {
                     captures[i] = filled[i];
                 } else if (held != nullptr && i < held->size()) {
-                    captures[i] = draft_.materializeStaticValue(
+                    captures[i] = draft().materializeStaticValue(
                         held->get<slot_t>(i),
                         graph->node(graph->closureNodes()[i])->dataType());
                 } else {
@@ -2584,45 +2637,45 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
         return std::nullopt; // a function computed at run time
     }
     // A static capture-free function: call its graph directly.
-    const uint32_t savedInsert = draft_.insertRegion();
+    const uint32_t savedInsert = draft().insertRegion();
     if (part_ != 0) {
-        draft_.setInsertRegion(part_);
+        draft().setInsertRegion(part_);
     }
-    const gc_node_ref_t direct = draft_.addFuncNode(graph->id(), typeOf(draft_, call));
-    draft_.setWithInputs(direct, std::span(withInputs).subspan(1));
-    draft_.setNormInputs(direct, copyOf(draft_.normInputsOf(call)));
+    const gc_node_ref_t direct = draft().addFuncNode(graph->id(), typeOf(transaction_, call));
+    draft().setWithInputs(direct, std::span(withInputs).subspan(1));
+    draft().setNormInputs(direct, copyOf(draft().normInputsOf(call)));
     // The call ran after its callee value was there; keep what that value waited for.
-    std::vector<gc_node_ref_t> ctrl = copyOf(draft_.ctrlInputsOf(call));
-    for (gc_node_ref_t before : orderingOf(draft_, withInputs.front())) {
+    std::vector<gc_node_ref_t> ctrl = copyOf(draft().ctrlInputsOf(call));
+    for (gc_node_ref_t before : orderingOf(withInputs.front())) {
         if (std::find(ctrl.begin(), ctrl.end(), before) == ctrl.end()) {
             ctrl.push_back(before);
         }
     }
-    draft_.setCtrlInputs(direct, ctrl);
-    takeSyncPlace(draft_, call, direct);
-    draft_.replaceAllValueUses(call, direct);
-    for (gc_node_ref_t user : copyOf(draft_.ctrlUsersOf(call))) {
-        draft_.replaceInput(rt::DraftEdgeKind::Ctrl, user, call, direct);
+    draft().setCtrlInputs(direct, ctrl);
+    takeSyncPlace(call, direct);
+    draft().replaceAllValueUses(call, direct);
+    for (gc_node_ref_t user : copyOf(draft().ctrlUsersOf(call))) {
+        draft().replaceInput(rt::DraftEdgeKind::Ctrl, user, call, direct);
     }
-    if (draft_.outputNode() == call) {
-        draft_.setOutputNode(direct);
+    if (draft().outputNode() == call) {
+        draft().setOutputNode(direct);
     }
-    if (draft_.exitNode() == call) {
-        draft_.setExitNode(direct);
+    if (draft().exitNode() == call) {
+        draft().setExitNode(direct);
     }
-    if (draft_.returnNode() == call) {
-        draft_.setReturnNode(direct, draft_.returnKind());
+    if (draft().returnNode() == call) {
+        draft().setReturnNode(direct, draft().returnKind());
     }
-    draft_.eraseNode(call);
+    draft().eraseNode(call);
     // The call may have been a region's result (an arm whose value is the call): the region now
     // ends in the direct call.
-    for (uint32_t r = 0; r < draft_.regionCount(); ++r) {
-        if (draft_.region(r).result == call) {
-            draft_.setRegionResult(r, direct);
+    for (uint32_t r = 0; r < draft().regionCount(); ++r) {
+        if (draft().region(r).result == call) {
+            draft().setRegionResult(r, direct);
         }
     }
     if (part_ != 0) {
-        draft_.setInsertRegion(savedInsert);
+        draft().setInsertRegion(savedInsert);
     }
     return direct;
 }
@@ -2639,8 +2692,8 @@ void ForwardRewrite::rewriteClosureCall(
     if (!carriesFlow || graph->isMacro()) {
         return; // nothing to differentiate: the call stays, a constant to the reverse pass
     }
-    const std::vector<gc_node_ref_t> withInputs = copyOf(draft_.withInputsOf(call));
-    std::vector<gc_node_ref_t> norm             = copyOf(draft_.normInputsOf(call));
+    const std::vector<gc_node_ref_t> withInputs = copyOf(draft().withInputsOf(call));
+    std::vector<gc_node_ref_t> norm             = copyOf(draft().normInputsOf(call));
     norm.insert(norm.end(), captures.begin(), captures.end());
     std::vector<gc_node_ref_t> inputs(withInputs.begin() + 1, withInputs.end());
     inputs.insert(inputs.end(), norm.begin(), norm.end());
@@ -2650,62 +2703,70 @@ void ForwardRewrite::rewriteClosureCall(
                 "call of a closure passes {} values to {} ports and captures{}",
                 inputs.size(),
                 portTypes.size(),
-                whereIs(draft_.nodeOrigin(call))));
+                whereIs(draft().nodeOrigin(call))));
     }
     const PullbackPlan &plan = engine_.planForClosure(graph);
 
     // The call being replaced belongs to the region being rewritten; every node that replaces it
     // must stay in that region (an arm's call must not end up between the BRCH and its JOIN).
-    const uint32_t savedInsert = draft_.insertRegion();
+    const uint32_t savedInsert = draft().insertRegion();
     if (part_ != 0) {
-        draft_.setInsertRegion(part_);
+        draft().setInsertRegion(part_);
     }
-    const gc_node_ref_t direct = draft_.addFuncNode(graph->id(), typeOf(draft_, call));
-    draft_.setNodeOrigin(direct, draft_.nodeOrigin(call));
-    draft_.setWithInputs(direct, std::span(withInputs).subspan(1));
-    draft_.setNormInputs(direct, norm);
+    const gc_node_ref_t direct = draft().addFuncNode(graph->id(), typeOf(transaction_, call));
+    draft().setNodeOrigin(direct, draft().nodeOrigin(call));
+    draft().setWithInputs(direct, std::span(withInputs).subspan(1));
+    draft().setNormInputs(direct, norm);
     // The call ran after the closure was built; keep what the closure waited for.
-    std::vector<gc_node_ref_t> ctrl = copyOf(draft_.ctrlInputsOf(call));
-    for (gc_node_ref_t before : orderingOf(draft_, calleeValue)) {
+    std::vector<gc_node_ref_t> ctrl = copyOf(draft().ctrlInputsOf(call));
+    for (gc_node_ref_t before : orderingOf(calleeValue)) {
         if (std::find(ctrl.begin(), ctrl.end(), before) == ctrl.end()) {
             ctrl.push_back(before);
         }
     }
-    draft_.setCtrlInputs(direct, ctrl);
-    takeSyncPlace(draft_, call, direct);
+    draft().setCtrlInputs(direct, ctrl);
+    takeSyncPlace(call, direct);
     // Everything that named the call names the direct call now: its users, the site records that
     // already read its value, the graph's own result, and the region whose result it is (a loop
     // body or an arm whose value is the closure call). `split` then carries the same uses to the
     // value half of the pair.
     redirectValue(call, direct);
-    draft_.eraseNode(call);
+    draft().eraseNode(call);
     const size_t versions = retarget(direct, plan);
     split(direct, plan, std::move(inputs), versions);
     if (part_ != 0) {
-        draft_.setInsertRegion(savedInsert);
+        draft().setInsertRegion(savedInsert);
     }
 }
 
 ::Function *ForwardRewrite::macroCallee(gc_node_ref_t callee) {
-    if (kindOf(draft_, callee) != GCNodeKind::Oper) {
+    if (kindOf(transaction_, callee) != GCNodeKind::Oper) {
         return nullptr;
     }
-    const auto *body = reinterpret_cast<const rt::GCOperBody *>(draft_.payloadOf(callee).data());
-    // The two operators of this module that take a function, recognised by id. (A custom rule
-    // is a declaration tag now, `#vjp(rule)`: it is not a call of an operator.)
+    const auto *body = reinterpret_cast<const rt::GCOperBody *>(draft().payloadOf(callee).data());
+    // The operators of this module that take a function, recognised by id. (A custom rule
+    // is a declaration tag now, `#vjp(rule)`: it is not a call of an operator.) The `has_aux`
+    // forms are the same transforms over a function whose result is the pair `(value, aux)`.
     static const camel::core::OperId kGrad =
         camel::core::OperatorTable::instance().intern("autodiff:grad");
     static const camel::core::OperId kValueAndGrad =
         camel::core::OperatorTable::instance().intern("autodiff:with_grad");
+    static const camel::core::OperId kGradAux =
+        camel::core::OperatorTable::instance().intern("autodiff:grad_aux");
+    static const camel::core::OperId kValueAndGradAux =
+        camel::core::OperatorTable::instance().intern("autodiff:with_grad_aux");
     const camel::core::OperId oper = body->oper;
     const auto staticFunction      = [&](gc_node_ref_t node) -> ::Function      *{
-        const auto value = staticValue(draft_, node);
+        const auto value = staticValue(transaction_, node);
         auto *function   = value ? fromSlot<::Function *>(*value) : nullptr;
         return function && function->graph() ? function : nullptr;
     };
-    const auto norm    = draft_.normInputsOf(callee);
+    const auto norm    = draft().normInputsOf(callee);
     ::Function *result = nullptr;
-    if ((oper == kGrad || oper == kValueAndGrad) && norm.size() == 1) {
+    const bool withValue = oper == kValueAndGrad || oper == kValueAndGradAux;
+    const bool hasAux    = oper == kGradAux || oper == kValueAndGradAux;
+    const bool takesFunction = oper == kGrad || oper == kValueAndGrad || hasAux;
+    if (takesFunction && norm.size() == (hasAux ? 2u : 1u)) {
         ::Function *function = staticFunction(norm.front());
         if (function == nullptr) {
             return nullptr;
@@ -2714,7 +2775,8 @@ void ForwardRewrite::rewriteClosureCall(
             engine_.context(),
             function->program(),
             function->graph(),
-            oper == kValueAndGrad);
+            withValue,
+            hasAux);
         // The gradient reads the same captured values as f.
         result = ::Function::create(
             gradient.program,
@@ -2735,7 +2797,7 @@ void ForwardRewrite::rewriteClosureCall(
 }
 
 void ForwardRewrite::rewriteCall(gc_node_ref_t call) {
-    GCGraph *callee = calleeOf(draft_, call);
+    GCGraph *callee = calleeOf(transaction_, call);
     if (callee == nullptr) {
         fail("found a call without a callee graph");
     }
@@ -2750,17 +2812,17 @@ void ForwardRewrite::rewriteCall(gc_node_ref_t call) {
         // The declaration has a custom rule (`#vjp(rule)`): the call computes its ordinary
         // value as it is, and the rule, not the body, gives the gradient. The call is a site
         // the backward pass replaces (visitRuleSite), as a call through a function value is.
-        ::Function *rule = ruleOf(draft_.program(), callee);
+        ::Function *rule = ruleOf(draft().program(), callee);
         if (rule == nullptr) {
             failAt(
-                draft_.nodeOrigin(call),
+                draft().nodeOrigin(call),
                 std::format(
                     "the 'vjp' rule of '{}' is not part of the program being differentiated; "
                     "the rule must be a function the program keeps",
                     callee->name()));
         }
-        std::vector<gc_node_ref_t> siteInputs = copyOf(draft_.withInputsOf(call));
-        for (gc_node_ref_t input : draft_.normInputsOf(call)) {
+        std::vector<gc_node_ref_t> siteInputs = copyOf(draft().withInputsOf(call));
+        for (gc_node_ref_t input : draft().normInputsOf(call)) {
             siteInputs.push_back(input);
         }
         if (siteInputs.size() != portTypes.size()) {
@@ -2780,8 +2842,8 @@ void ForwardRewrite::rewriteCall(gc_node_ref_t call) {
             });
         return;
     }
-    std::vector<gc_node_ref_t> inputs = copyOf(draft_.withInputsOf(call));
-    for (gc_node_ref_t input : draft_.normInputsOf(call)) {
+    std::vector<gc_node_ref_t> inputs = copyOf(draft().withInputsOf(call));
+    for (gc_node_ref_t input : draft().normInputsOf(call)) {
         inputs.push_back(input);
     }
     if (inputs.size() != portTypes.size()) {
@@ -2798,16 +2860,16 @@ void ForwardRewrite::rewriteCall(gc_node_ref_t call) {
 }
 
 void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
-    Type *valueType = typeOf(draft_, join);
+    Type *valueType = typeOf(transaction_, join);
     if (machineryTangentTypeOf(valueType) == nullptr) {
         return;
     }
-    const std::vector<gc_node_ref_t> arms = copyOf(draft_.withInputsOf(join));
+    const std::vector<gc_node_ref_t> arms = copyOf(draft().withInputsOf(join));
     if (arms.empty()) {
         return;
     }
     // The JOIN names the BRCH whose arms are regions of this graph.
-    const auto payload = draft_.payloadOf(join);
+    const auto payload = draft().payloadOf(join);
     if (payload.size() < sizeof(rt::GCJoinBody)) {
         fail("a branch JOIN has no BRCH");
     }
@@ -2822,11 +2884,11 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
     // so the arms are rewritten first and the ports are collected afterwards.
     std::vector<uint32_t> regions;
     for (size_t i = 0; i < arms.size(); ++i) {
-        const uint32_t region = draft_.armRegionOf(brch, i);
+        const uint32_t region = draft().armRegionOf(brch, i);
         if (region == 0) {
             fail("a branch arm is not a region of the graph; differentiate before lowering it");
         }
-        if (!draft_.regionPortsOf(region).empty()) {
+        if (!draft().regionPortsOf(region).empty()) {
             fail("a branch arm with ports is not supported; differentiate before inlining it");
         }
         regions.push_back(region);
@@ -2842,18 +2904,18 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
         ArmRewrite &arm       = rewritten[i];
         arm.scope             = GraphScope{
                         .role      = GraphRole::BranchArm,
-                        .enclosing = engine_.ownersOf(&draft_, region),
+                        .enclosing = engine_.ownersOf(&transaction_, region),
                         .recursive = scope_.recursive,
         };
         // The function whose graph holds the arm: a call of it from the arm is its recursion.
         arm.scope.enclosing.insert(scope_.enclosing.begin(), scope_.enclosing.end());
         // An arm brought into this graph by inlining a function's body is still that function's
         // arm: the INLINE regions around it name the functions it came from.
-        for (uint32_t r = draft_.region(region).parent;; r = draft_.region(r).parent) {
-            const auto &parent = draft_.region(r);
+        for (uint32_t r = draft().region(region).parent;; r = draft().region(r).parent) {
+            const auto &parent = draft().region(r);
             if (parent.kind == rt::GCRegionKind::Inline && parent.inlineOf != rt::kInvalidGraphId &&
-                draft_.program() != nullptr) {
-                if (GCGraph *function = draft_.program()->graph(parent.inlineOf)) {
+                draft().program() != nullptr) {
+                if (GCGraph *function = draft().program()->graph(parent.inlineOf)) {
                     arm.scope.enclosing.insert(function);
                 }
             }
@@ -2861,7 +2923,7 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
                 break;
             }
         }
-        arm.rewrite = std::make_unique<ForwardRewrite>(engine_, draft_, arm.scope, region);
+        arm.rewrite = std::make_unique<ForwardRewrite>(engine_, transaction_, arm.scope, region);
         arm.rewrite->run();
         // A recursive call found while this arm was rewritten names the function the arm is
         // inside of: a refusal in the arm then says the function is a parameter of it, rather
@@ -2876,16 +2938,16 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
         }
     }
     // The JOIN may have been given new arm values by the rewrites.
-    const std::vector<gc_node_ref_t> armValues = copyOf(draft_.withInputsOf(join));
+    const std::vector<gc_node_ref_t> armValues = copyOf(draft().withInputsOf(join));
     std::vector<gc_node_ref_t> shared;
     for (size_t i = 0; i < regions.size(); ++i) {
-        for (gc_node_ref_t input : externalInputsOf(draft_, regions[i])) {
+        for (gc_node_ref_t input : externalInputsOf(transaction_, regions[i])) {
             if (std::find(shared.begin(), shared.end(), input) == shared.end()) {
                 shared.push_back(input);
             }
         }
-        gc_node_ref_t value = draft_.region(regions[i]).result;
-        if (value != kInvalidNodeRef && !draft_.alive(value)) {
+        gc_node_ref_t value = draft().region(regions[i]).result;
+        if (value != kInvalidNodeRef && !draft().alive(value)) {
             value = kInvalidNodeRef;
         }
         if (value == kInvalidNodeRef) {
@@ -2893,7 +2955,7 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
             // DATA node in the body), leaving the region without a result. The value the JOIN is
             // passed is the arm's value all the same.
             value = i < armValues.size() ? armValues[i] : kInvalidNodeRef;
-            if (value != kInvalidNodeRef && !draft_.alive(value)) {
+            if (value != kInvalidNodeRef && !draft().alive(value)) {
                 value = kInvalidNodeRef;
             }
         }
@@ -2904,7 +2966,7 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
     }
     std::vector<Type *> sharedTypes;
     for (gc_node_ref_t input : shared) {
-        sharedTypes.push_back(typeOf(draft_, input));
+        sharedTypes.push_back(typeOf(transaction_, input));
     }
     const PullbackPlan types = makePlanTypes(sharedTypes, valueType);
     const std::unordered_set<gc_node_ref_t> boundary(shared.begin(), shared.end());
@@ -2914,20 +2976,23 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
         const uint32_t region = regions[i];
         ArmRewrite &arm       = rewritten[i];
         const gc_node_ref_t value = arm.value;
-        auto pullback = std::make_unique<GraphDraft>();
-        pullback->setFuncType(types.pullbackType);
-        const gc_node_ref_t dy = addPort(*pullback, machineryTangentTypeOf(valueType));
-        pullback->appendNormPort(dy);
+        // The identity is the one the arm's plan reserves below; define() stamps it.
+        auto pullbackOwner = rt::GraphTransaction::open(rt::kInvalidGraphId);
+        auto &pullback     = pullbackOwner->edit();
+        pullback.setFuncType(types.pullbackType);
+        const gc_node_ref_t dy = addPort(*pullbackOwner, machineryTangentTypeOf(valueType));
+        pullback.appendNormPort(dy);
         std::vector<gc_node_ref_t> differentiated;
         for (gc_node_ref_t input : shared) {
             differentiated.push_back(input);
         }
         Backward backward(
-            engine_, draft_, *pullback, arm.rewrite->sites(), arm.scope, engine_.refusals(),
+            engine_, transaction_, *pullbackOwner, arm.rewrite->sites(), arm.scope,
+            engine_.refusals(),
             std::move(differentiated),
             /*residualPorts=*/false, boundary, arm.rewrite->untapedLoops());
         backward.seed(value, dy);
-        std::vector<gc_node_ref_t> order = valueOrder(draft_, value, region);
+        std::vector<gc_node_ref_t> order = valueOrder(transaction_, value, region);
         order.insert(order.begin(), shared.begin(), shared.end());
         backward.run(order);
         std::vector<gc_node_ref_t> tangents;
@@ -2936,38 +3001,38 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
                 tangents.push_back(backward.gradient(shared[p]));
             }
         }
-        setResult(*pullback, addAggregate(*pullback, types.tangentsType, tangents));
-        pruneUnreachable(*pullback);
+        setResult(*pullbackOwner, addAggregate(*pullbackOwner, types.tangentsType, tangents));
+        pruneUnreachable(*pullbackOwner);
         const std::vector<gc_node_ref_t> captured = backward.finishCaptures();
         std::vector<Type *> captureTypes;
         for (gc_node_ref_t capture : captured) {
-            captureTypes.push_back(typeOf(draft_, capture));
+            captureTypes.push_back(typeOf(transaction_, capture));
         }
         TupleType *const closureType = TupleType::create(captureTypes);
-        pullback->setClosureType(closureType);
+        pullback.setClosureType(closureType);
         const PullbackPlan armPlan =
             engine_.reserveRegionPullback(std::format("arm{}.{}", static_cast<size_t>(region), i), types);
-        const uint32_t savedRegion = draft_.insertRegion();
-        draft_.setInsertRegion(region);
+        const uint32_t savedRegion = draft().insertRegion();
+        draft().setInsertRegion(region);
         const gc_node_ref_t closure =
-            addClosure(engine_.group(), draft_, armPlan.pullback, types.pullbackType, closureType, captured);
+            addClosure(engine_.group(), transaction_, armPlan.pullback, types.pullbackType, closureType, captured);
         const std::array<gc_node_ref_t, 2> pair{value, closure};
-        const gc_node_ref_t result = addAggregate(draft_, types.forwardValueType, pair);
-        const gc_node_ref_t oldResult = draft_.region(region).result;
+        const gc_node_ref_t result = addAggregate(transaction_, types.forwardValueType, pair);
+        const gc_node_ref_t oldResult = draft().region(region).result;
         gc_node_ref_t armResult      = result;
         if (oldResult != kInvalidNodeRef && oldResult != result) {
-            armResult = draft_.addGateNode(typeOf(draft_, result));
-            draft_.setNormInputs(armResult, std::span<const gc_node_ref_t>(&result, 1));
-            draft_.setCtrlInputs(armResult, std::span<const gc_node_ref_t>(&oldResult, 1));
+            armResult = draft().addGateNode(typeOf(transaction_, result));
+            draft().setNormInputs(armResult, std::span<const gc_node_ref_t>(&result, 1));
+            draft().setCtrlInputs(armResult, std::span<const gc_node_ref_t>(&oldResult, 1));
         }
-        draft_.setRegionResult(region, armResult);
+        draft().setRegionResult(region, armResult);
         armResults.push_back(armResult);
-        draft_.setInsertRegion(savedRegion);
-        engine_.group().define(armPlan.pullback, std::move(pullback));
+        draft().setInsertRegion(savedRegion);
+        engine_.group().define(armPlan.pullback, std::move(pullbackOwner));
     }
-    draft_.setWithInputs(join, armResults);
-    draft_.setNodeDataType(join, types.forwardValueType);
-    draft_.setNodeDataIndex(join, draft_.allocateRuntimeSlot(types.forwardValueType));
+    draft().setWithInputs(join, armResults);
+    draft().setNodeDataType(join, types.forwardValueType);
+    draft().setNodeDataIndex(join, draft().allocateRuntimeSlot(types.forwardValueType));
     split(join, types, shared);
 }
 
@@ -2981,18 +3046,18 @@ gc_node_ref_t Backward::ref(gc_node_ref_t primal) {
         return it->second;
     }
     gc_node_ref_t node;
-    if (auto value = staticValue(forward_, primal)) {
+    if (auto value = staticValue(forwardTransaction_, primal)) {
         // Constants are copied rather than captured.
-        node = target_.materializeStaticValue(*value, typeOf(forward_, primal));
+        node = target().materializeStaticValue(*value, typeOf(forwardTransaction_, primal));
     } else if (residualPorts_) {
         // The tape mode: the residual is a parameter of the pullback, in the order it is first
         // read, so a loop can hand each round's collected value to the same graph.
-        node = addPort(target_, typeOf(forward_, primal));
-        target_.appendNormPort(node);
+        node = addPort(targetTransaction_, typeOf(forwardTransaction_, primal));
+        target().appendNormPort(node);
         captures_.push_back(primal);
     } else {
-        node = addPort(target_, typeOf(forward_, primal));
-        target_.appendClosureNode(node);
+        node = addPort(targetTransaction_, typeOf(forwardTransaction_, primal));
+        target().appendClosureNode(node);
         captures_.push_back(primal);
     }
     toTarget_.emplace(primal, node);
@@ -3038,7 +3103,7 @@ void Backward::accumulate(gc_node_ref_t primal, gc_node_ref_t gradient) {
         return; // a constant, or a value no parameter flows into
     }
     ++contributions_[primal];
-    accumulateInto(gradients_[primal], typeOf(forward_, primal), gradient, primal);
+    accumulateInto(gradients_[primal], typeOf(forwardTransaction_, primal), gradient, primal);
 }
 
 void Backward::accumulateInto(
@@ -3052,7 +3117,7 @@ void Backward::accumulateInto(
             if (!position) {
                 continue;
             }
-            const gc_node_ref_t element = addField(target_, tangentType, gradient, *position);
+            const gc_node_ref_t element = addField(targetTransaction_, tangentType, gradient, *position);
             accumulateInto(tangent.elements[i], aggregateElement(primalType, i), element, at);
         }
         return;
@@ -3070,12 +3135,12 @@ void Backward::accumulateInto(
 /// right type -- not a converted gradient.
 void Backward::checkGradientType(Type *primalType, gc_node_ref_t gradient, gc_node_ref_t at) {
     Type *expected = tangentElementType(primalType);
-    Type *given    = tangentElementType(typeOf(target_, gradient));
+    Type *given    = tangentElementType(typeOf(targetTransaction_, gradient));
     if (expected == nullptr || given == nullptr || expected->code() == given->code()) {
         return;
     }
     const gc_node_ref_t where = producing_ != kInvalidNodeRef ? producing_ : at;
-    const uint64_t origin     = where != kInvalidNodeRef ? forward_.nodeOrigin(where) : 0;
+    const uint64_t origin     = where != kInvalidNodeRef ? forward().nodeOrigin(where) : 0;
     failGradientType(
         origin,
         primalType->toString(),
@@ -3086,9 +3151,9 @@ void Backward::checkGradientType(Type *primalType, gc_node_ref_t gradient, gc_no
 /// What produced the gradient node `gradient`, for the refusal that names it: the derivative rule's
 /// operator (the usual case), or the kind of value the rule handed over.
 std::string Backward::producerOf(gc_node_ref_t gradient) const {
-    switch (kindOf(target_, gradient)) {
+    switch (kindOf(targetTransaction_, gradient)) {
     case GCNodeKind::Oper: {
-        const auto payload = target_.payloadOf(gradient);
+        const auto payload = target().payloadOf(gradient);
         if (payload.size() >= sizeof(rt::GCOperBody)) {
             const auto *body = reinterpret_cast<const rt::GCOperBody *>(payload.data());
             return std::format("operator '{}'", body->uri());
@@ -3131,12 +3196,12 @@ gc_node_ref_t Backward::add(Type *primalType, gc_node_ref_t lhs, gc_node_ref_t r
             // Two zeros of a discrete value add to the zero of its own type (design principles
             // 9.9): it carries no gradient, and the user's gradient keeps such a member in its
             // place, at its own type.
-            return target_.materializeStaticValue(*discrete, primalType);
+            return target().materializeStaticValue(*discrete, primalType);
         }
         fail(std::format("cannot add gradients of type '{}'", primalType->toString()));
     }
     const std::array<gc_node_ref_t, 2> inputs{lhs, rhs};
-    return autodiff::addOper(target_, tangentNodeType(primalType), space->addUri, inputs);
+    return autodiff::addOper(targetTransaction_, tangentNodeType(primalType), space->addUri, inputs);
 }
 
 gc_node_ref_t Backward::zero(Type *primalType, gc_node_ref_t primal, TangentAudience audience) {
@@ -3150,16 +3215,16 @@ gc_node_ref_t Backward::zero(Type *primalType, gc_node_ref_t primal, TangentAudi
             // The zero of a discrete scalar, at its own type: the user's gradient keeps such a
             // member at the zero of its own type and shape (`gradientTypeOf` would have given the
             // parameter no gradient at all if it stood alone, and the machinery drops it).
-            return target_.materializeStaticValue(*discrete, primalType);
+            return target().materializeStaticValue(*discrete, primalType);
         }
         fail(std::format("no zero gradient for type '{}'", primalType->toString()));
     }
     if (space->zero) {
-        return target_.materializeStaticValue(*space->zero, tangentNodeType(primalType));
+        return target().materializeStaticValue(*space->zero, tangentNodeType(primalType));
     }
     const gc_node_ref_t value = primal;
     return autodiff::addOper(
-        target_,
+        targetTransaction_,
         tangentNodeType(primalType),
         space->zerosLikeUri,
         std::span<const gc_node_ref_t>(&value, 1));
@@ -3189,19 +3254,19 @@ gc_node_ref_t Backward::materialize(
         const bool needsPrimal =
             it == tangent.elements.end() || it->second.empty() || isAggregate(elementType);
         const gc_node_ref_t element =
-            needsPrimal ? addField(target_, primalType, primal, i) : kInvalidNodeRef;
+            needsPrimal ? addField(targetTransaction_, primalType, primal, i) : kInvalidNodeRef;
         if (it == tangent.elements.end()) {
             values.push_back(zero(elementType, element, audience));
         } else {
             values.push_back(materialize(it->second, elementType, element, audience));
         }
     }
-    tangent.materialized = addAggregate(target_, tangentTypeFor(primalType, audience), values);
+    tangent.materialized = addAggregate(targetTransaction_, tangentTypeFor(primalType, audience), values);
     return tangent.materialized;
 }
 
 gc_node_ref_t Backward::gradient(gc_node_ref_t primal) {
-    Type *type       = typeOf(forward_, primal);
+    Type *type       = typeOf(forwardTransaction_, primal);
     Tangent &tangent = gradients_[primal];
     if (tangent.materialized != kInvalidNodeRef) {
         return tangent.materialized;
@@ -3213,7 +3278,7 @@ gc_node_ref_t Backward::gradient(gc_node_ref_t primal) {
 }
 
 gc_node_ref_t Backward::userGradient(gc_node_ref_t primal) {
-    Type *type       = typeOf(forward_, primal);
+    Type *type       = typeOf(forwardTransaction_, primal);
     Tangent &tangent = gradients_[primal];
     // The gradient the user is handed is built for the *user*'s question, not the tape's: it has
     // the parameter's own gradient type (`gradientTypeOf`), a discrete member included. Whatever
@@ -3253,11 +3318,11 @@ void Backward::refuseActiveEnum(gc_node_ref_t node, Type *type) {
 
 void Backward::refuseWhenActive(
     gc_node_ref_t node, Type *type, const char *what, const char *remedy) {
-    for (auto inputs : {forward_.normInputsOf(node), forward_.withInputsOf(node)}) {
+    for (auto inputs : {forward().normInputsOf(node), forward().withInputsOf(node)}) {
         for (gc_node_ref_t input : inputs) {
             if (active_.contains(input)) {
                 failAt(
-                    forward_.nodeOrigin(node),
+                    forward().nodeOrigin(node),
                     "a value that depends on a differentiated parameter is put into " +
                         std::string(what) + " '" + type->toString() +
                         "'. Gradients do not flow through it: there is no derivative rule for "
@@ -3269,12 +3334,16 @@ void Backward::refuseWhenActive(
 }
 
 void Backward::run(const std::vector<gc_node_ref_t> &order) {
+    // The graph this pass walks: the transaction it reads hands out a const view, so every use
+    // below is a read by construction. A `forward()` call would say no less, but it would say it
+    // once, for the whole body; this says it at each of the sites that rely on it.
+    const auto &forward = forwardTransaction_.graph();
     primals_.insert(order.begin(), order.end());
     // The differentiated ports are active from the start: a port may be read after the node whose
     // region reads it (a loop's body reads it outside the value order of the node), and it does
     // not become differentiated by being visited.
     for (gc_node_ref_t id : differentiated_) {
-        if (machineryTangentTypeOf(typeOf(forward_, id)) != nullptr) {
+        if (machineryTangentTypeOf(typeOf(forwardTransaction_, id)) != nullptr) {
             active_.insert(id);
         }
     }
@@ -3295,7 +3364,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
     // instead (visitAccs seeds it from its source). A loop with a tangent is the same: its
     // differentiable state can be read, and a read of a state with no channel is the loss.
     const auto structural = [&](gc_node_ref_t node, Type *type) {
-        const GCNodeKind kind = kindOf(forward_, node);
+        const GCNodeKind kind = kindOf(forwardTransaction_, node);
         if (kind != GCNodeKind::Fill) {
             return false;
         }
@@ -3307,20 +3376,20 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
     // through the choice. Those inputs are exempt from the taint check; reading the condition
     // as data (a cast to float, arithmetic) is not.
     const auto controlInput = [&](gc_node_ref_t node, gc_node_ref_t input) {
-        const GCNodeKind kind = kindOf(forward_, node);
-        const Type *inputType = typeOf(forward_, input);
-        if (kind == GCNodeKind::Join && kindOf(forward_, input) == GCNodeKind::Brch) {
+        const GCNodeKind kind = kindOf(forwardTransaction_, node);
+        const Type *inputType = typeOf(forwardTransaction_, input);
+        if (kind == GCNodeKind::Join && kindOf(forwardTransaction_, input) == GCNodeKind::Brch) {
             return true;
         }
         if (kind == GCNodeKind::Brch) {
             return inputType->code() == TypeCode::Bool;
         }
         if (kind == GCNodeKind::Oper) {
-            const auto payload = forward_.payloadOf(node);
+            const auto payload = forward.payloadOf(node);
             if (payload.size() >= sizeof(rt::GCOperBody)) {
                 const std::string uri(reinterpret_cast<const rt::GCOperBody *>(payload.data())->uri());
                 if (uri == "tensor:where" || uri == ":op/where") {
-                    const auto norm = forward_.normInputsOf(node);
+                    const auto norm = forward.normInputsOf(node);
                     return !norm.empty() && input == norm.front();
                 }
                 if (inputType->code() == TypeCode::Bool) {
@@ -3334,10 +3403,10 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
     // flow: using it to reshape or index is control, and differentiating through it is not
     // defined. Such a value is not tainted even when its input is active.
     const auto metadataOper = [&](gc_node_ref_t node) {
-        if (kindOf(forward_, node) != GCNodeKind::Oper) {
+        if (kindOf(forwardTransaction_, node) != GCNodeKind::Oper) {
             return false;
         }
-        const auto payload = forward_.payloadOf(node);
+        const auto payload = forward.payloadOf(node);
         if (payload.size() < sizeof(rt::GCOperBody)) {
             return false;
         }
@@ -3361,18 +3430,18 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         if (active_.contains(read) || tainted_.contains(read)) {
             return true;
         }
-        if (kindOf(forward_, read) == GCNodeKind::Join) {
-            const auto payload = forward_.payloadOf(read);
+        if (kindOf(forwardTransaction_, read) == GCNodeKind::Join) {
+            const auto payload = forward.payloadOf(read);
             if (payload.size() < sizeof(rt::GCJoinBody)) {
                 return false;
             }
             const auto *body = reinterpret_cast<const rt::GCJoinBody *>(payload.data());
             for (size_t i = 0; i < body->armCount; ++i) {
-                const uint32_t region = forward_.armRegionOf(body->brch, i);
+                const uint32_t region = forward.armRegionOf(body->brch, i);
                 if (region == 0) {
                     continue;
                 }
-                for (gc_node_ref_t inner : externalInputsOf(forward_, region)) {
+                for (gc_node_ref_t inner : externalInputsOf(forwardTransaction_, region)) {
                     if (self(inner, self)) {
                         return true;
                     }
@@ -3380,9 +3449,9 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
             }
             return false;
         }
-        if (kindOf(forward_, read) == GCNodeKind::Loop) {
+        if (kindOf(forwardTransaction_, read) == GCNodeKind::Loop) {
             for (gc_node_ref_t inner :
-                 rt::LoopDraftView(*forward_.program(), forward_, read).externalInputs(false)) {
+                 rt::LoopDraftView(*forward.program(), forward, read).externalInputs(false)) {
                 if (self(inner, self)) {
                     return true;
                 }
@@ -3399,17 +3468,17 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         // derivative is zero by definition). Every other iterable is materialized by the
         // iteration operator of its kind (`tensor:iter` and the like), which is refused by the
         // rule lookup when the value takes part in the gradient.
-        if (kindOf(forward_, node) == GCNodeKind::Loop) {
+        if (kindOf(forwardTransaction_, node) == GCNodeKind::Loop) {
             const auto iterable =
-                rt::LoopDraftView(*forward_.program(), forward_, node).iterable();
+                rt::LoopDraftView(*forward.program(), forward, node).iterable();
             if (iterable.has_value() &&
                 (active_.contains(*iterable) || tainted_.contains(*iterable))) {
-                Type *const iterableType = typeOf(forward_, *iterable);
+                Type *const iterableType = typeOf(forwardTransaction_, *iterable);
                 if (iterableType->code() == TypeCode::Array &&
                     machineryTangentTypeOf(iterableType) == nullptr) {
                     Type *const elementType = tt::as_ptr<type::ArrayType>(iterableType)->elemType();
                     failAt(
-                        forward_.nodeOrigin(node),
+                        forward.nodeOrigin(node),
                         std::format(
                             "a 'loop' iterates over an array of type '{}'{} that depends on a "
                             "differentiated parameter, but the array has no tangent: its element "
@@ -3418,7 +3487,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                             "(a float, or a struct or tuple of them), or stop depending on the "
                             "differentiated value",
                             iterableType->toString(),
-                            whereIs(forward_.nodeOrigin(*iterable)),
+                            whereIs(forward.nodeOrigin(*iterable)),
                             elementType->toString()));
                 }
                 // A round of a loop over an array whose elements are themselves arrays (a rank-2
@@ -3448,7 +3517,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                         roundType != nullptr && roundType->code() == TypeCode::Array;
                     if (slicedValues && !isNumericArrayType(iterableType)) {
                         failAt(
-                            forward_.nodeOrigin(node),
+                            forward.nodeOrigin(node),
                             std::format(
                                 "a 'loop' iterates over an array of type '{}'{} whose rounds are "
                                 "its slices: a round of that array is itself an array, and the "
@@ -3458,16 +3527,16 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                                 "rounds are numbers or records, or take the slices' gradient "
                                 "another way",
                                 iterableType->toString(),
-                                whereIs(forward_.nodeOrigin(*iterable))));
+                                whereIs(forward.nodeOrigin(*iterable))));
                     }
                 }
             }
         }
-        Type *const type   = typeOf(forward_, node);
+        Type *const type   = typeOf(forwardTransaction_, node);
         const bool carrier = holdsFunction(type);
         bool inputActive    = false;
         bool inputTainted   = false;
-        for (auto inputs : {forward_.normInputsOf(node), forward_.withInputsOf(node)}) {
+        for (auto inputs : {forward.normInputsOf(node), forward.withInputsOf(node)}) {
             for (gc_node_ref_t input : inputs) {
                 inputActive |= active_.contains(input);
                 if (!controlInput(node, input)) {
@@ -3475,16 +3544,16 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                 }
             }
         }
-        if (kindOf(forward_, node) == GCNodeKind::Join) {
-            const auto payload = forward_.payloadOf(node);
+        if (kindOf(forwardTransaction_, node) == GCNodeKind::Join) {
+            const auto payload = forward.payloadOf(node);
             if (payload.size() >= sizeof(rt::GCJoinBody)) {
                 const auto *body = reinterpret_cast<const rt::GCJoinBody *>(payload.data());
                 for (size_t i = 0; i < body->armCount; ++i) {
-                    const uint32_t region = forward_.armRegionOf(body->brch, i);
+                    const uint32_t region = forward.armRegionOf(body->brch, i);
                     if (region == 0) {
                         continue;
                     }
-                    for (gc_node_ref_t read : externalInputsOf(forward_, region)) {
+                    for (gc_node_ref_t read : externalInputsOf(forwardTransaction_, region)) {
                         if (readsActive(read, readsActive)) {
                             inputActive = true;
                             break;
@@ -3500,9 +3569,9 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         // (Fill/Accs). The projection only passes its gradient on when the loop counts as
         // active, so the loop must see what its regions read: otherwise the gradient of a
         // composite state is dropped at the projection without a diagnostic.
-        if (kindOf(forward_, node) == GCNodeKind::Loop && !inputActive) {
+        if (kindOf(forwardTransaction_, node) == GCNodeKind::Loop && !inputActive) {
             for (gc_node_ref_t read :
-                 rt::LoopDraftView(*forward_.program(), forward_, node).externalInputs(false)) {
+                 rt::LoopDraftView(*forward.program(), forward, node).externalInputs(false)) {
                 if (readsActive(read, readsActive)) {
                     inputActive = true;
                     break;
@@ -3512,21 +3581,21 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         // A loop whose value has no gradient channel cannot be given a tape: no gradient can flow
         // through the value. It must not be skipped silently when it reads a differentiated
         // value, because that value's contribution would be dropped without a sign of it.
-        if (kindOf(forward_, node) == GCNodeKind::Loop && untapedLoops_.contains(node)) {
+        if (kindOf(forwardTransaction_, node) == GCNodeKind::Loop && untapedLoops_.contains(node)) {
             // The condition and the body are regions: what the loop depends on is what they read
             // from around them, not only what the node itself is passed.
-            std::vector<gc_node_ref_t> reads{forward_.normInputsOf(node).begin(),
-                                             forward_.normInputsOf(node).end()};
+            std::vector<gc_node_ref_t> reads{forward.normInputsOf(node).begin(),
+                                             forward.normInputsOf(node).end()};
             reads.insert(
-                reads.end(), forward_.withInputsOf(node).begin(), forward_.withInputsOf(node).end());
+                reads.end(), forward.withInputsOf(node).begin(), forward.withInputsOf(node).end());
             for (gc_node_ref_t read :
-                 rt::LoopDraftView(*forward_.program(), forward_, node).externalInputs(false)) {
+                 rt::LoopDraftView(*forward.program(), forward, node).externalInputs(false)) {
                 reads.push_back(read);
             }
             for (gc_node_ref_t input : reads) {
                 if (active_.contains(input) || tainted_.contains(input)) {
                     failAt(
-                        forward_.nodeOrigin(node),
+                        forward.nodeOrigin(node),
                         std::format(
                             "a 'loop' depends on a differentiated parameter, but its "
                             "value of type '{}' has no gradient channel. Gradients cannot "
@@ -3534,7 +3603,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                             "loop's value, or the value it reads, something that can carry "
                             "a gradient",
                             type->toString(),
-                            whereIs(forward_.nodeOrigin(node))));
+                            whereIs(forward.nodeOrigin(node))));
                 }
             }
         }
@@ -3555,7 +3624,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
             }
             continue;
         }
-        if (kindOf(forward_, node) == GCNodeKind::Oper &&
+        if (kindOf(forwardTransaction_, node) == GCNodeKind::Oper &&
             camel::core::oper::isVariableRead(operId(node))) {
             continue;
         }
@@ -3569,7 +3638,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         // stops here without a diagnostic. Refuse the use rather than return a partial answer.
         if (!structural(node, type) && inputTainted) {
             const gc_node_ref_t source = [&] {
-                for (auto inputs : {forward_.normInputsOf(node), forward_.withInputsOf(node)}) {
+                for (auto inputs : {forward.normInputsOf(node), forward.withInputsOf(node)}) {
                     for (gc_node_ref_t input : inputs) {
                         if (tainted_.contains(input)) {
                             return input;
@@ -3579,19 +3648,19 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                 return kInvalidNodeRef;
             }();
             failAt(
-                forward_.nodeOrigin(node),
+                forward.nodeOrigin(node),
                 std::format(
                     "a value of type '{}' depends on a differentiated parameter but has no "
                     "gradient channel, and it is used as data here{}; the parameter's "
                     "contribution would be dropped without a diagnostic. Use a value that can "
                     "carry a gradient (a float, or an aggregate of floats){}",
-                    typeOf(forward_, source)->toString(),
-                    whereIs(forward_.nodeOrigin(node)),
+                    typeOf(forwardTransaction_, source)->toString(),
+                    whereIs(forward.nodeOrigin(node)),
                     source == kInvalidNodeRef
                         ? std::string()
                         : std::format(
                               "; the value with no channel comes from {}",
-                              whereIs(forward_.nodeOrigin(source)))));
+                              whereIs(forward.nodeOrigin(source)))));
         }
         active_.insert(node);
     }
@@ -3619,7 +3688,7 @@ void Backward::reportRefusals(const std::vector<gc_node_ref_t> &order) {
     while (!work.empty()) {
         const gc_node_ref_t node = work.back();
         work.pop_back();
-        for (auto inputs : {forward_.normInputsOf(node), forward_.withInputsOf(node)}) {
+        for (auto inputs : {forward().normInputsOf(node), forward().withInputsOf(node)}) {
             for (gc_node_ref_t input : inputs) {
                 if (before.insert(input).second) {
                     work.push_back(input);
@@ -3630,14 +3699,14 @@ void Backward::reportRefusals(const std::vector<gc_node_ref_t> &order) {
     const std::unordered_set<gc_node_ref_t> met(refused_.begin(), refused_.end());
     for (gc_node_ref_t node : order) {
         const bool unreached = before.contains(node) && active_.contains(node) &&
-                               kindOf(forward_, node) == GCNodeKind::Call &&
+                               kindOf(forwardTransaction_, node) == GCNodeKind::Call &&
                                !sites_.contains(node) &&
-                               machineryTangentTypeOf(typeOf(forward_, node)) != nullptr;
+                               machineryTangentTypeOf(typeOf(forwardTransaction_, node)) != nullptr;
         if (met.contains(node) || unreached) {
             const gc_node_ref_t chosen = chosenFunction(node);
             refusals_.push_back(Refusal{
-                .origin = forward_.nodeOrigin(node),
-                .chosen = chosen == kInvalidNodeRef ? 0 : forward_.nodeOrigin(chosen),
+                .origin = forward().nodeOrigin(node),
+                .chosen = chosen == kInvalidNodeRef ? 0 : forward().nodeOrigin(chosen),
                 .reason = refusalReason(node)});
         }
     }
@@ -3645,13 +3714,13 @@ void Backward::reportRefusals(const std::vector<gc_node_ref_t> &order) {
 
 gc_node_ref_t Backward::activeFunctionInput(gc_node_ref_t call) const {
     const auto carries = [&](gc_node_ref_t node) {
-        return holdsFunction(typeOf(forward_, node)) && active_.contains(node);
+        return holdsFunction(typeOf(forwardTransaction_, node)) && active_.contains(node);
     };
-    auto withInputs = forward_.withInputsOf(call);
-    if (kindOf(forward_, call) == GCNodeKind::Call && !withInputs.empty()) {
-        const gc_node_ref_t closure = ungated(forward_, withInputs.front());
-        if (kindOf(forward_, closure) == GCNodeKind::Fill) {
-            for (gc_node_ref_t captured : forward_.withInputsOf(closure)) {
+    auto withInputs = forward().withInputsOf(call);
+    if (kindOf(forwardTransaction_, call) == GCNodeKind::Call && !withInputs.empty()) {
+        const gc_node_ref_t closure = ungated(forward(), withInputs.front());
+        if (kindOf(forwardTransaction_, closure) == GCNodeKind::Fill) {
+            for (gc_node_ref_t captured : forward().withInputsOf(closure)) {
                 if (carries(captured)) {
                     return captured;
                 }
@@ -3659,7 +3728,7 @@ gc_node_ref_t Backward::activeFunctionInput(gc_node_ref_t call) const {
         }
         withInputs = withInputs.subspan(1);
     }
-    for (auto inputs : {withInputs, forward_.normInputsOf(call)}) {
+    for (auto inputs : {withInputs, forward().normInputsOf(call)}) {
         for (gc_node_ref_t input : inputs) {
             if (carries(input)) {
                 return input;
@@ -3676,11 +3745,11 @@ gc_node_ref_t Backward::chosenFunction(gc_node_ref_t call) const {
     if (const gc_node_ref_t input = activeFunctionInput(call); input != kInvalidNodeRef) {
         return input;
     }
-    const auto withInputs = forward_.withInputsOf(call);
+    const auto withInputs = forward().withInputsOf(call);
     if (withInputs.empty()) {
         return kInvalidNodeRef;
     }
-    return ungated(forward_, withInputs.front());
+    return ungated(forward(), withInputs.front());
 }
 
 std::string Backward::refusalReason(gc_node_ref_t call) const {
@@ -3690,20 +3759,20 @@ std::string Backward::refusalReason(gc_node_ref_t call) const {
         "passed: ";
     static constexpr std::string_view head =
         "cannot differentiate through this call of a function value: ";
-    if (kindOf(forward_, call) == GCNodeKind::Func) {
+    if (kindOf(forwardTransaction_, call) == GCNodeKind::Func) {
         return std::format(
             "cannot differentiate through this call of '{}': {}{}",
-            calleeOf(forward_, call)->name(), // left alone, so its callee is a graph
+            calleeOf(forwardTransaction_, call)->name(), // left alone, so its callee is a graph
             passed,
             whyNotEvident(activeFunctionInput(call)));
     }
-    const auto withInputs = forward_.withInputsOf(call);
+    const auto withInputs = forward().withInputsOf(call);
     if (withInputs.empty()) {
         return std::string(head) + "the call names no function";
     }
-    const gc_node_ref_t callee = ungated(forward_, withInputs.front());
-    if (kindOf(forward_, callee) == GCNodeKind::Data ||
-        kindOf(forward_, callee) == GCNodeKind::Fill) {
+    const gc_node_ref_t callee = ungated(forward(), withInputs.front());
+    if (kindOf(forwardTransaction_, callee) == GCNodeKind::Data ||
+        kindOf(forwardTransaction_, callee) == GCNodeKind::Fill) {
         // The function called is known; the call was left alone all the same.
         if (const gc_node_ref_t input = activeFunctionInput(call); input != kInvalidNodeRef) {
             return std::string(head) + std::string(passed) + whyNotEvident(input);
@@ -3717,8 +3786,8 @@ std::string Backward::refusalReason(gc_node_ref_t call) const {
 }
 
 std::string Backward::whyNotEvident(gc_node_ref_t function) const {
-    function = ungated(forward_, function);
-    switch (kindOf(forward_, function)) {
+    function = ungated(forward(), function);
+    switch (kindOf(forwardTransaction_, function)) {
     case GCNodeKind::Port:
         if (!scope_.recursive.empty()) {
             return std::format(
@@ -3758,7 +3827,7 @@ std::string Backward::whyNotEvident(gc_node_ref_t function) const {
         return std::format(
             "the function is the result of a call of '{}', and what that returns is not a "
             "function that is named or built in it",
-            calleeOf(forward_, function)->name());
+            calleeOf(forwardTransaction_, function)->name());
     case GCNodeKind::Call:
         return "the function is the result of a call of another function value";
     case GCNodeKind::Data:
@@ -3773,12 +3842,12 @@ std::string Backward::whyNotEvident(gc_node_ref_t function) const {
 }
 
 std::string_view Backward::operUri(gc_node_ref_t node) const {
-    const auto payload = forward_.payloadOf(node);
+    const auto payload = forward().payloadOf(node);
     return reinterpret_cast<const rt::GCOperBody *>(payload.data())->uri();
 }
 
 camel::core::OperId Backward::operId(gc_node_ref_t node) const {
-    const auto payload = forward_.payloadOf(node);
+    const auto payload = forward().payloadOf(node);
     return reinterpret_cast<const rt::GCOperBody *>(payload.data())->oper;
 }
 
@@ -3800,14 +3869,14 @@ void Backward::checkVariableReads(const std::vector<gc_node_ref_t> &order) {
             return known->second;
         }
         dependsMemo[node] = false; // bounds the recursion; data edges have no cycle
-        Type *type        = typeOf(forward_, node);
+        Type *type        = typeOf(forwardTransaction_, node);
         bool depends      = false;
         if (!isCellType(type)) {
-            if (kindOf(forward_, node) == GCNodeKind::Port) {
+            if (kindOf(forwardTransaction_, node) == GCNodeKind::Port) {
                 depends = machineryTangentTypeOf(type) != nullptr;
-            } else if (!(kindOf(forward_, node) == GCNodeKind::Oper &&
+            } else if (!(kindOf(forwardTransaction_, node) == GCNodeKind::Oper &&
                          camel::core::oper::isVariableRead(operId(node)))) {
-                for (auto inputs : {forward_.normInputsOf(node), forward_.withInputsOf(node)}) {
+                for (auto inputs : {forward().normInputsOf(node), forward().withInputsOf(node)}) {
                     for (gc_node_ref_t input : inputs) {
                         depends = depends || dependsOnParameter(input);
                     }
@@ -3818,9 +3887,9 @@ void Backward::checkVariableReads(const std::vector<gc_node_ref_t> &order) {
         return depends;
     };
     for (gc_node_ref_t read : order) {
-        if (kindOf(forward_, read) != GCNodeKind::Oper ||
+        if (kindOf(forwardTransaction_, read) != GCNodeKind::Oper ||
             !camel::core::oper::isVariableRead(operId(read)) ||
-            machineryTangentTypeOf(typeOf(forward_, read)) == nullptr) {
+            machineryTangentTypeOf(typeOf(forwardTransaction_, read)) == nullptr) {
             continue;
         }
         if (!inPlace_) {
@@ -3831,19 +3900,19 @@ void Backward::checkVariableReads(const std::vector<gc_node_ref_t> &order) {
                 "written there, can be taken as a constant. Pass the value instead of the "
                 "variable");
         }
-        gc_node_ref_t cell = forward_.normInputsOf(read).front();
+        gc_node_ref_t cell = forward().normInputsOf(read).front();
         // A read of a cell takes the version it reads from -- the write that made it, whose own
         // first input is the cell (the rule on the var version node) -- so a read written after an
         // assignment names that assignment here, not the cell. What the checks below are about is
         // the cell: the write it reads is one of the cell's users either way.
-        if (kindOf(forward_, cell) == GCNodeKind::Oper &&
+        if (kindOf(forwardTransaction_, cell) == GCNodeKind::Oper &&
             camel::core::OperatorTable::instance().isAssignment(operId(cell))) {
-            const auto written = forward_.normInputsOf(cell);
+            const auto written = forward().normInputsOf(cell);
             if (!written.empty()) {
                 cell = written.front();
             }
         }
-        if (kindOf(forward_, cell) != GCNodeKind::Port) {
+        if (kindOf(forwardTransaction_, cell) != GCNodeKind::Port) {
             fail(
                 "a variable of a differentiable type that is declared inside the differentiated "
                 "function is read there. Gradients do not flow through variables: bind the "
@@ -3856,9 +3925,10 @@ void Backward::checkVariableReads(const std::vector<gc_node_ref_t> &order) {
             const gc_node_ref_t node = work.back();
             work.pop_back();
             for (auto users :
-                 {forward_.normUsersOf(node),
-                  forward_.withUsersOf(node),
-                  forward_.ctrlUsersOf(node)}) {
+                 {forward().normUsersOf(node),
+                  forward().withUsersOf(node),
+                  forward().ctrlUsersOf(node),
+                  forward().syncUsersOf(node)}) {
                 for (gc_node_ref_t user : users) {
                     if (after.insert(user).second) {
                         work.push_back(user);
@@ -3866,17 +3936,17 @@ void Backward::checkVariableReads(const std::vector<gc_node_ref_t> &order) {
                 }
             }
         }
-        for (auto users : {forward_.normUsersOf(cell), forward_.withUsersOf(cell)}) {
+        for (auto users : {forward().normUsersOf(cell), forward().withUsersOf(cell)}) {
             for (gc_node_ref_t user : users) {
                 if (after.contains(user)) {
                     continue;
                 }
-                const bool isOper = kindOf(forward_, user) == GCNodeKind::Oper;
+                const bool isOper = kindOf(forwardTransaction_, user) == GCNodeKind::Oper;
                 if (isOper && camel::core::oper::isVariableRead(operId(user))) {
                     continue;
                 }
                 if (isOper && camel::core::OperatorTable::instance().isAssignment(operId(user))) {
-                    const auto stored = forward_.normInputsOf(user);
+                    const auto stored = forward().normInputsOf(user);
                     if (stored.size() > 1 && !dependsOnParameter(stored[1])) {
                         continue; // plain data: whenever it is stored, the read is a constant
                     }
@@ -3902,7 +3972,7 @@ void Backward::visit(gc_node_ref_t node) {
         visitCallSite(node, site->second);
         return;
     }
-    switch (kindOf(forward_, node)) {
+    switch (kindOf(forwardTransaction_, node)) {
     case GCNodeKind::Oper:
         visitOper(node);
         return;
@@ -3944,16 +4014,16 @@ void Backward::visit(gc_node_ref_t node) {
         // pass. A loop that was not rewritten has no tangent of its own (nothing can flow through
         // it), so a gradient cannot arrive here. Reaching this is a defect in the rewrite.
         failAt(
-            forward_.nodeOrigin(node),
+            forward().nodeOrigin(node),
             std::format(
                 "cannot differentiate through a 'loop' expression{}: the loop was not given a "
                 "tape although a gradient reached it (a defect)",
-                whereIs(forward_.nodeOrigin(node))));
+                whereIs(forward().nodeOrigin(node))));
     default:
         fail(
             std::format(
                 "cannot differentiate through node kind {}",
-                static_cast<int>(kindOf(forward_, node))));
+                static_cast<int>(kindOf(forwardTransaction_, node))));
     }
 }
 
@@ -3965,12 +4035,12 @@ void Backward::visitCallSite(gc_node_ref_t node, const CallSite &site) {
     const gc_node_ref_t dy       = gradient(node);
     const gc_node_ref_t pullback = ref(site.pullback);
     const gc_node_ref_t tangents =
-        addCall(target_, site.plan.tangentsType, pullback, std::span<const gc_node_ref_t>(&dy, 1));
+        addCall(targetTransaction_, site.plan.tangentsType, pullback, std::span<const gc_node_ref_t>(&dy, 1));
     for (size_t i = 0; i < site.inputs.size(); ++i) {
         if (const auto position = site.plan.tangentIndex(i)) {
             accumulate(
                 site.inputs[i],
-                addAccs(target_, machineryTangentTypeOf(site.plan.portTypes[i]), tangents, *position));
+                addAccs(targetTransaction_, machineryTangentTypeOf(site.plan.portTypes[i]), tangents, *position));
         }
     }
 }
@@ -3985,8 +4055,8 @@ void Backward::visitRuleSite(gc_node_ref_t node, const CallSite &site) {
     }
     args.push_back(gradient(node));
     const gc_node_ref_t rule =
-        target_.materializeStaticValue(toSlot<::Function *>(site.rule), ruleType);
-    const gc_node_ref_t result = addCall(target_, ruleType->exitType(), rule, args);
+        target().materializeStaticValue(toSlot<::Function *>(site.rule), ruleType);
+    const gc_node_ref_t result = addCall(targetTransaction_, ruleType->exitType(), rule, args);
     const size_t count         = site.plan.tangentsType->size();
     // The rule's declared result type is what it is; a rule whose gradient is a different width
     // than the value it differentiates is refused below, at this call.
@@ -3997,14 +4067,14 @@ void Backward::visitRuleSite(gc_node_ref_t node, const CallSite &site) {
                 site.inputs[i],
                 count == 1
                     ? result
-                    : addAccs(target_, machineryTangentTypeOf(site.plan.portTypes[i]), result, *position));
+                    : addAccs(targetTransaction_, machineryTangentTypeOf(site.plan.portTypes[i]), result, *position));
         }
     }
     producing_ = kInvalidNodeRef;
 }
 
 void Backward::visitOper(gc_node_ref_t node) {
-    const auto payload = forward_.payloadOf(node);
+    const auto payload = forward().payloadOf(node);
     const auto *body   = reinterpret_cast<const rt::GCOperBody *>(payload.data());
     const std::string uri(body->uri());
     // Operators without an active input (conversions from integers, arithmetic on shapes) pass
@@ -4019,13 +4089,13 @@ void Backward::visitOper(gc_node_ref_t node) {
         size_t index; // in the call's with inputs, from 0
     };
     bool active = false;
-    for (gc_node_ref_t input : forward_.normInputsOf(node)) {
+    for (gc_node_ref_t input : forward().normInputsOf(node)) {
         active |= active_.contains(input);
     }
     std::vector<ValueWith> valueWith;
     size_t withIndex = 0;
-    for (gc_node_ref_t input : forward_.withInputsOf(node)) {
-        if (active_.contains(input) && machineryTangentTypeOf(typeOf(forward_, input)) != nullptr) {
+    for (gc_node_ref_t input : forward().withInputsOf(node)) {
+        if (active_.contains(input) && machineryTangentTypeOf(typeOf(forwardTransaction_, input)) != nullptr) {
             valueWith.push_back(ValueWith{.input = input, .index = withIndex});
             active = true;
         }
@@ -4042,39 +4112,39 @@ void Backward::visitOper(gc_node_ref_t node) {
     // the kernel.
     if (engine_.implBodyKernelUris().contains(uri)) {
         failAt(
-            forward_.nodeOrigin(node),
+            forward().nodeOrigin(node),
             std::format(
                 "operator '{}' implements the Camel body of an '#impl' function, and the call of "
                 "that function was not expanded into the body before the reverse pass, so its "
                 "derivative is the body's and not the kernel's (design principles 10.4){}",
                 uri,
-                whereIs(forward_.nodeOrigin(node))));
+                whereIs(forward().nodeOrigin(node))));
     }
     const camel::core::VjpRule rule = DerivativeRegistry::instance().findRule(uri);
     if (rule == nullptr) {
         if (!valueWith.empty()) {
             failValueWith(
-                forward_.nodeOrigin(node),
+                forward().nodeOrigin(node),
                 uri,
                 valueWith.front().index,
-                typeOf(forward_, valueWith.front().input),
+                typeOf(forwardTransaction_, valueWith.front().input),
                 "no derivative rule is registered for it");
         }
         failAt(
-            forward_.nodeOrigin(node),
+            forward().nodeOrigin(node),
             std::format(
                 "no derivative rule for operator '{}' of type '{}'{}: a differentiated value "
                 "passes through it, so its gradient cannot be dropped silently",
                 uri,
-                typeOf(forward_, node)->toString(),
-                whereIs(forward_.nodeOrigin(node))));
+                typeOf(forwardTransaction_, node)->toString(),
+                whereIs(forward().nodeOrigin(node))));
     }
     std::vector<gc_node_ref_t> inputs;
-    for (gc_node_ref_t input : forward_.normInputsOf(node)) {
+    for (gc_node_ref_t input : forward().normInputsOf(node)) {
         inputs.push_back(ref(input));
     }
     std::vector<gc_node_ref_t> withInputs;
-    for (gc_node_ref_t input : forward_.withInputsOf(node)) {
+    for (gc_node_ref_t input : forward().withInputsOf(node)) {
         withInputs.push_back(ref(input));
     }
     // A rule reads the arguments as the kernel does (OperatorTraits::withAfterNorm).
@@ -4098,30 +4168,30 @@ void Backward::visitOper(gc_node_ref_t node) {
             .inputs     = inputs,
             .withInputs = withInputs,
             .output     = ref(node),
-            .origin     = forward_.nodeOrigin(node),
-            .attrs      = forward_.nodeAttrs(node)});
+            .origin     = forward().nodeOrigin(node),
+            .attrs      = forward().nodeAttrs(node)});
     producing_ = kInvalidNodeRef;
     for (size_t i = 0; i < valueWith.size(); ++i) {
         const auto found = contributions_.find(valueWith[i].input);
         const uint64_t now = found == contributions_.end() ? 0 : found->second;
         if (now == before[i]) {
             failValueWith(
-                forward_.nodeOrigin(node),
+                forward().nodeOrigin(node),
                 uri,
                 valueWith[i].index,
-                typeOf(forward_, valueWith[i].input),
+                typeOf(forwardTransaction_, valueWith[i].input),
                 "its derivative rule added no gradient for it");
         }
     }
 }
 
 void Backward::visitAccs(gc_node_ref_t node) {
-    const gc_node_ref_t source = forward_.normInputsOf(node).front();
-    Type *sourceType           = typeOf(forward_, source);
+    const gc_node_ref_t source = forward().normInputsOf(node).front();
+    Type *sourceType           = typeOf(forwardTransaction_, source);
     if (!isAggregate(sourceType) || !active_.contains(source)) {
         return;
     }
-    const auto payload = forward_.payloadOf(node);
+    const auto payload = forward().payloadOf(node);
     const auto *body   = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
     size_t index       = body->value;
     if (body->accsKind == rt::GCAccsKind::StructKey) {
@@ -4139,9 +4209,9 @@ void Backward::visitAccs(gc_node_ref_t node) {
 }
 
 void Backward::visitFill(gc_node_ref_t node) {
-    const auto payload = forward_.payloadOf(node);
+    const auto payload = forward().payloadOf(node);
     const auto *body   = reinterpret_cast<const rt::GCFillBody *>(payload.data());
-    Type *type         = typeOf(forward_, node);
+    Type *type         = typeOf(forwardTransaction_, node);
     if (body->fillKind == rt::GCFillKind::Array) {
         // An array literal built from active values: the gradient of the array is the array of
         // its elements' gradients, so each element's gradient is read back out at its position
@@ -4151,7 +4221,7 @@ void Backward::visitFill(gc_node_ref_t node) {
         if (moved.value == kInvalidNodeRef) {
             return;
         }
-        const auto values    = copyOf(forward_.withInputsOf(node));
+        const auto values    = copyOf(forward().withInputsOf(node));
         const auto slots     = body->slots();
         const auto *array    = tt::as_ptr<type::ArrayType>(type);
         Type *elementTangent = machineryTangentTypeOf(array->elemType());
@@ -4162,11 +4232,11 @@ void Backward::visitFill(gc_node_ref_t node) {
             if (!active_.contains(values[i])) {
                 continue;
             }
-            const gc_node_ref_t index = target_.materializeStaticValue(
+            const gc_node_ref_t index = target().materializeStaticValue(
                 toSlot<int64_t>(static_cast<int64_t>(slots[i])), Type::Int64());
             const std::array<gc_node_ref_t, 2> at{moved.value, index};
             accumulate(
-                values[i], autodiff::addOper(target_, elementTangent, ":op/idx_arr", at));
+                values[i], autodiff::addOper(targetTransaction_, elementTangent, ":op/idx_arr", at));
         }
         return;
     }
@@ -4174,7 +4244,7 @@ void Backward::visitFill(gc_node_ref_t node) {
         fail("cannot differentiate through this kind of literal yet");
     }
     Tangent moved     = std::move(gradients_[node]);
-    const auto values = copyOf(forward_.withInputsOf(node));
+    const auto values = copyOf(forward().withInputsOf(node));
     const auto slots  = body->slots();
     for (size_t i = 0; i < values.size(); ++i) {
         const auto slot = static_cast<size_t>(slots[i]);
@@ -4191,20 +4261,20 @@ void Backward::visitFill(gc_node_ref_t node) {
 }
 
 void Backward::visitForward(gc_node_ref_t node, bool convert) {
-    const auto inputs = forward_.normInputsOf(node);
+    const auto inputs = forward().normInputsOf(node);
     if (inputs.empty()) {
         return;
     }
     const gc_node_ref_t source = inputs.front();
-    Type *sourceType           = typeOf(forward_, source);
+    Type *sourceType           = typeOf(forwardTransaction_, source);
     Type *sourceTangent        = machineryTangentTypeOf(sourceType);
     if (sourceTangent == nullptr) {
         return;
     }
     gc_node_ref_t g = gradient(node);
-    if (convert && !sourceTangent->equals(machineryTangentTypeOf(typeOf(forward_, node)))) {
-        const gc_node_ref_t cast = target_.addCastNode(sourceTangent);
-        target_.setNormInputs(cast, std::span<const gc_node_ref_t>(&g, 1));
+    if (convert && !sourceTangent->equals(machineryTangentTypeOf(typeOf(forwardTransaction_, node)))) {
+        const gc_node_ref_t cast = target().addCastNode(sourceTangent);
+        target().setNormInputs(cast, std::span<const gc_node_ref_t>(&g, 1));
         g = cast;
     }
     accumulate(source, g);
@@ -4214,13 +4284,13 @@ std::vector<gc_node_ref_t> Backward::finishCaptures() {
     std::vector<gc_node_ref_t> kept;
     for (gc_node_ref_t primal : captures_) {
         const gc_node_ref_t node = toTarget_.at(primal);
-        const bool used = !target_.normUsersOf(node).empty() ||
-                          !target_.withUsersOf(node).empty() || target_.outputNode() == node;
+        const bool used = !target().normUsersOf(node).empty() ||
+                          !target().withUsersOf(node).empty() || target().outputNode() == node;
         if (used) {
             kept.push_back(primal);
         } else {
-            target_.removeClosureNode(node);
-            target_.eraseNode(node);
+            target().removeClosureNode(node);
+            target().eraseNode(node);
         }
     }
     return kept;
@@ -4251,7 +4321,7 @@ const PullbackPlan &Engine::planFor(GCGraph *callee) {
         reserve(callee->name(), makePlanTypes(portTypesOf(callee), callee->funcType()->exitType()));
     pending_.push_back(Pending{
         .plan   = plan,
-        .source = GraphDraft::decode(inlining_.work(), callee),
+        .source = rt::GraphTransaction::decode(inlining_.work(), callee),
         .scope  = GraphScope{.role = GraphRole::Callee},
         .graph  = callee,
     });
@@ -4264,8 +4334,9 @@ const PullbackPlan &Engine::planForClosure(GCGraph *graph) {
     }
     // The function's graph with its captured values as trailing norm ports: calling it with
     // the captures as extra arguments equals calling the closure.
-    auto lifted        = GraphDraft::decode(inlining_.work(), graph);
-    FunctionType *type = lifted->funcType();
+    auto lifted        = rt::GraphTransaction::decode(inlining_.work(), graph);
+    auto &liftedDraft  = lifted->edit();
+    FunctionType *type = liftedDraft.funcType();
     param_vec_t withParams, normParams;
     for (size_t i = 0; i < type->withTypesCount(); ++i) {
         withParams.emplace_back(type->withTypeAt(i), type->withIsVarAt(i));
@@ -4274,16 +4345,16 @@ const PullbackPlan &Engine::planForClosure(GCGraph *graph) {
         normParams.emplace_back(type->normTypeAt(i), type->normIsVarAt(i));
     }
     std::vector<Type *> portTypes = portTypesOf(graph);
-    for (gc_node_ref_t capture : copyOf(lifted->closureNodes())) {
+    for (gc_node_ref_t capture : copyOf(liftedDraft.closureNodes())) {
         Type *captured = typeOf(*lifted, capture);
-        lifted->removeClosureNode(capture);
-        lifted->appendNormPort(capture);
+        liftedDraft.removeClosureNode(capture);
+        liftedDraft.appendNormPort(capture);
         normParams.emplace_back(captured, false);
         portTypes.push_back(captured);
     }
-    lifted->setFuncType(
+    liftedDraft.setFuncType(
         FunctionType::create(withParams, normParams, type->exitType()));
-    lifted->setClosureType(nullptr);
+    liftedDraft.setClosureType(nullptr);
     PullbackPlan plan =
         reserve(graph->name(), makePlanTypes(std::move(portTypes), type->exitType()));
     pending_.push_back(
@@ -4297,8 +4368,8 @@ const PullbackPlan &Engine::planForClosure(GCGraph *graph) {
 }
 
 PullbackPlan Engine::planForDraft(
-    std::unique_ptr<GraphDraft> source, const std::string &name, const PullbackPlan &types,
-    GraphScope scope) {
+    std::unique_ptr<rt::GraphTransaction> source, const std::string &name,
+    const PullbackPlan &types, GraphScope scope) {
     PullbackPlan plan = reserve(name, types);
     pending_.push_back(
         Pending{.plan = plan, .source = std::move(source), .scope = std::move(scope)});
@@ -4378,7 +4449,7 @@ void Engine::refuse() {
 
 void Engine::build(Pending &pending) {
     const PullbackPlan &plan = pending.plan;
-    GraphDraft &forward      = *pending.source;
+    auto &forward = pending.source->edit();
 
     if (pending.graph != nullptr && recursions_.contains(pending.graph)) {
         pending.scope.recursive = pending.graph->name();
@@ -4387,7 +4458,7 @@ void Engine::build(Pending &pending) {
         // A call of the function from its own graph is its recursion: it is not followed.
         pending.scope.enclosing.insert(pending.graph);
     }
-    ForwardRewrite rewrite(*this, forward, pending.scope);
+    ForwardRewrite rewrite(*this, *pending.source, pending.scope);
     rewrite.run();
     // The rewrite may have found that the function calls itself (a call left as it is): the
     // refusals it records name the function as recursive.
@@ -4395,14 +4466,15 @@ void Engine::build(Pending &pending) {
         recursions_.contains(pending.graph)) {
         pending.scope.recursive = pending.graph->name();
     }
-    const gc_node_ref_t value = valueNode(forward);
+    const gc_node_ref_t value = valueNode(*pending.source);
 
-    auto pullback = std::make_unique<GraphDraft>();
-    pullback->setFuncType(plan.pullbackType);
-    const gc_node_ref_t dy = addPort(*pullback, machineryTangentTypeOf(plan.valueType));
-    pullback->appendNormPort(dy);
+    auto pullbackOwner = rt::GraphTransaction::open(plan.pullback);
+    auto &pullback     = pullbackOwner->edit();
+    pullback.setFuncType(plan.pullbackType);
+    const gc_node_ref_t dy = addPort(*pullbackOwner, machineryTangentTypeOf(plan.valueType));
+    pullback.appendNormPort(dy);
 
-    const auto ports = portsOf(forward);
+    const auto ports = portsOf(*pending.source);
     std::vector<gc_node_ref_t> differentiated;
     for (size_t i = 0; i < ports.size(); ++i) {
         if (plan.tangentIndex(i)) {
@@ -4410,11 +4482,11 @@ void Engine::build(Pending &pending) {
         }
     }
     Backward backward(
-        *this, forward, *pullback, rewrite.sites(), pending.scope, refusals_,
+        *this, *pending.source, *pullbackOwner, rewrite.sites(), pending.scope, refusals(),
         std::move(differentiated), /*residualPorts=*/false, {}, rewrite.untapedLoops());
     backward.seed(value, dy);
     const auto edges = siteEdges(rewrite.sites());
-    backward.run(valueOrder(forward, value, 0, &edges));
+    backward.run(valueOrder(*pending.source, value, 0, &edges));
 
     std::vector<gc_node_ref_t> tangents;
     for (size_t i = 0; i < ports.size(); ++i) {
@@ -4422,22 +4494,22 @@ void Engine::build(Pending &pending) {
             tangents.push_back(backward.gradient(ports[i]));
         }
     }
-    setResult(*pullback, addAggregate(*pullback, plan.tangentsType, tangents));
-    pruneUnreachable(*pullback);
+    setResult(*pullbackOwner, addAggregate(*pullbackOwner, plan.tangentsType, tangents));
+    pruneUnreachable(*pullbackOwner);
 
     const std::vector<gc_node_ref_t> captures = backward.finishCaptures();
     std::vector<Type *> captureTypes;
     for (gc_node_ref_t capture : captures) {
-        captureTypes.push_back(typeOf(forward, capture));
+        captureTypes.push_back(typeOf(*pending.source, capture));
     }
     TupleType *closureType = TupleType::create(std::move(captureTypes));
-    pullback->setClosureType(closureType);
+    pullback.setClosureType(closureType);
 
     const gc_node_ref_t closure =
-        addClosure(group_, forward, plan.pullback, plan.pullbackType, closureType, captures);
+        addClosure(group_, *pending.source, plan.pullback, plan.pullbackType, closureType, captures);
     const std::array<gc_node_ref_t, 2> pair{value, closure};
-    setResult(forward, addAggregate(forward, plan.forwardValueType, pair));
-    pruneUnreachable(forward);
+    setResult(*pending.source, addAggregate(*pending.source, plan.forwardValueType, pair));
+    pruneUnreachable(*pending.source);
 
     FunctionType *sourceType = forward.funcType();
     param_vec_t withParams, normParams;
@@ -4454,12 +4526,13 @@ void Engine::build(Pending &pending) {
             plan.forwardValueType));
 
     group_.define(plan.forward, std::move(pending.source));
-    group_.define(plan.pullback, std::move(pullback));
+    group_.define(plan.pullback, std::move(pullbackOwner));
 }
 
 const LoopBodyPlan &Engine::loopBodyPlanFor(
-    GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, bool iterates, bool arrayGradient) {
-    const auto key = std::make_pair(&draft, loop);
+    rt::GraphTransaction &transaction, gc_node_ref_t loop, size_t stateCount, bool iterates,
+    bool arrayGradient) {
+    const auto key = std::make_pair(&transaction, loop);
     if (auto it = loopBodyPlans_.find(key); it != loopBodyPlans_.end()) {
         ASSERT(
             it->second.stateTypes.size() == stateCount,
@@ -4474,7 +4547,7 @@ const LoopBodyPlan &Engine::loopBodyPlanFor(
             "a 'loop' whose body needs its own tape (a loop nested in the body of the same loop) "
             "cannot be differentiated");
     }
-    LoopBodyPlan plan = buildLoopBody(draft, loop, stateCount, iterates, arrayGradient);
+    LoopBodyPlan plan = buildLoopBody(transaction, loop, stateCount, iterates, arrayGradient);
     loopBodiesBeingBuilt_.erase(key);
     return loopBodyPlans_.emplace(key, std::move(plan)).first->second;
 }
@@ -4485,8 +4558,10 @@ const LoopBodyPlan &Engine::loopBodyPlanFor(
 // body, the pullback closure the round's call returned, which is a value like any other). They
 // are what the forward loop collects, so the tape is arrays of those types.
 LoopBodyPlan Engine::buildLoopBody(
-    GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, bool iterates, bool arrayGradient) {
+    rt::GraphTransaction &transaction, gc_node_ref_t loop, size_t stateCount, bool iterates,
+    bool arrayGradient) {
     LoopBodyPlan plan;
+    auto &draft                        = transaction.edit();
     const LoopDraftView view(*draft.program(), draft, loop);
     const uint32_t bodyRegion = view.bodyRegion();
     ASSERT(
@@ -4496,7 +4571,7 @@ LoopBodyPlan Engine::buildLoopBody(
     // inputs before the initial states.
     const std::vector<gc_node_ref_t> external = view.externalInputs(false);
     for (gc_node_ref_t value : external) {
-        plan.captureTypes.push_back(typeOf(draft, value));
+        plan.captureTypes.push_back(typeOf(transaction, value));
     }
     for (size_t j = 0; j < stateCount; ++j) {
         plan.stateTypes.push_back(view.stateType(j));
@@ -4515,7 +4590,7 @@ LoopBodyPlan Engine::buildLoopBody(
         ASSERT(iterates, "autodiff: a loop that does not iterate has no element gradient.");
         const auto element = view.bodyElementParam();
         ASSERT(element.has_value(), "autodiff: a 'for' loop body has no element parameter.");
-        plan.elementType = typeOf(draft, *element);
+        plan.elementType = typeOf(transaction, *element);
         ASSERT(
             carriesGradient(plan.elementType),
             "autodiff: an iterated array with a tangent has an element without one.");
@@ -4537,7 +4612,7 @@ LoopBodyPlan Engine::buildLoopBody(
     // The calls and the nested loops of the body are differentiated in place, in the body
     // region.
     const GraphScope scope{.role = GraphRole::LoopBody};
-    ForwardRewrite rewrite(*this, draft, scope, bodyRegion);
+    ForwardRewrite rewrite(*this, transaction, scope, bodyRegion);
     rewrite.run();
 
     // The body's result: the next state, followed by the collections the builder already gave
@@ -4546,7 +4621,7 @@ LoopBodyPlan Engine::buildLoopBody(
     // value, not with the whole tuple.
     const gc_node_ref_t value = view.nextState();
     size_t existingCollections = 0;
-    if (kindOf(draft, value) == GCNodeKind::Fill) {
+    if (kindOf(transaction, value) == GCNodeKind::Fill) {
         const auto withIns = draft.withInputsOf(value);
         const auto payload = draft.payloadOf(value);
         if (payload.size() >= sizeof(rt::GCFillBody)) {
@@ -4564,13 +4639,13 @@ LoopBodyPlan Engine::buildLoopBody(
     for (size_t j = 0; j < stateCount; ++j) {
         stateNext[j] = (stateCount == 1 && existingCollections == 0)
                            ? value
-                           : addAccs(draft, plan.stateTypes[j], value, j);
+                           : addAccs(transaction, plan.stateTypes[j], value, j);
     }
     const auto existingComponents = draft.withInputsOf(value);
     for (size_t c = 0; c < existingCollections; ++c) {
         const gc_node_ref_t collection = existingComponents[stateCount + c];
         existingValues.push_back(collection);
-        Type *const elementType = typeOf(draft, collection);
+        Type *const elementType = typeOf(transaction, collection);
         plan.existingCollectionElemTypes.push_back(elementType);
         plan.existingCollectionTypes.push_back(ArrayType::create(elementType));
     }
@@ -4578,16 +4653,17 @@ LoopBodyPlan Engine::buildLoopBody(
         existingCollections == 0
             ? value
             : (stateCount == 1 ? stateNext.front()
-                               : addAggregate(draft, plan.stateValueType, stateNext));
+                               : addAggregate(transaction, plan.stateValueType, stateNext));
 
     // The body's pullback: everything the body computes that its rules read again is a residual;
     // everything it reads from outside it (its state and the values around the loop) is a
     // boundary value the pullback takes as a parameter too. The order is the order the backward
     // pass first reads them, which is the order the tape collects them in.
-    auto pullback = std::make_unique<GraphDraft>();
-    pullback->setFuncType(plan.graphs.pullbackType);
-    const gc_node_ref_t dy = addPort(*pullback, plan.dyType);
-    pullback->appendNormPort(dy);
+    auto pullbackOwner = rt::GraphTransaction::open(plan.graphs.pullback);
+    auto &pullback     = pullbackOwner->edit();
+    pullback.setFuncType(plan.graphs.pullbackType);
+    const gc_node_ref_t dy = addPort(*pullbackOwner, plan.dyType);
+    pullback.appendNormPort(dy);
     std::vector<gc_node_ref_t> boundary(external.begin(), external.end());
     for (size_t j = 0; j < stateCount; ++j) {
         boundary.push_back(view.bodyStateParam(j));
@@ -4604,10 +4680,11 @@ LoopBodyPlan Engine::buildLoopBody(
     }
     const std::unordered_set<gc_node_ref_t> boundarySet(boundary.begin(), boundary.end());
     Backward backward(
-        *this, draft, *pullback, rewrite.sites(), scope, refusals_, std::move(differentiated),
+        *this, transaction, *pullbackOwner, rewrite.sites(), scope, refusals(),
+        std::move(differentiated),
         /*residualPorts=*/true, boundarySet, rewrite.untapedLoops());
     backward.seed(stateValue, dy);
-    std::vector<gc_node_ref_t> order = valueOrder(draft, stateValue, bodyRegion);
+    std::vector<gc_node_ref_t> order = valueOrder(transaction, stateValue, bodyRegion);
     order.insert(order.begin(), boundary.begin(), boundary.end());
     backward.run(order);
 
@@ -4630,16 +4707,16 @@ LoopBodyPlan Engine::buildLoopBody(
     }
     const std::vector<gc_node_ref_t> residuals = backward.residuals();
     for (gc_node_ref_t residual : residuals) {
-        plan.residualTypes.push_back(typeOf(draft, residual));
+        plan.residualTypes.push_back(typeOf(transaction, residual));
     }
-    setResult(*pullback, addAggregate(*pullback, plan.graphs.tangentsType, tangents));
-    pruneUnreachable(*pullback);
-    pullback->setClosureType(nullptr);
+    setResult(*pullbackOwner, addAggregate(*pullbackOwner, plan.graphs.tangentsType, tangents));
+    pruneUnreachable(*pullbackOwner);
+    pullback.setClosureType(nullptr);
     param_vec_t pullbackParams{{plan.dyType, false}};
     for (Type *residual : plan.residualTypes) {
         pullbackParams.emplace_back(residual, false);
     }
-    pullback->setFuncType(
+    pullback.setFuncType(
         FunctionType::create(param_vec_t{}, pullbackParams, plan.graphs.tangentsType));
 
     // The body the loop runs: the next state, then the values one round collects. The builder's
@@ -4649,14 +4726,14 @@ LoopBodyPlan Engine::buildLoopBody(
     plan.collectionElemTypes = plan.existingCollectionElemTypes;
     for (gc_node_ref_t residual : residuals) {
         components.push_back(residual);
-        plan.collectionElemTypes.push_back(typeOf(draft, residual));
+        plan.collectionElemTypes.push_back(typeOf(transaction, residual));
     }
     if (residuals.empty()) {
         // Nothing to recollect: one slot counts the rounds, so the reverse pass knows how many
         // there were. It is a value the body produces, not a residual of the pullback.
         plan.roundCounter = true;
         plan.collectionElemTypes.push_back(Type::Int64());
-        components.push_back(addLoopInt(draft, 1));
+        components.push_back(addLoopInt(transaction, 1));
     }
     plan.tapeCollectionTypes.clear();
     for (size_t c = plan.existingCollectionElemTypes.size(); c < plan.collectionElemTypes.size(); ++c) {
@@ -4673,12 +4750,12 @@ LoopBodyPlan Engine::buildLoopBody(
     }
     std::vector<Type *> resultTypes = plan.stateTypes;
     resultTypes.insert(resultTypes.end(), plan.collectionElemTypes.begin(), plan.collectionElemTypes.end());
-    const gc_node_ref_t fill = addAggregate(draft, TupleType::create(resultTypes), components);
+    const gc_node_ref_t fill = addAggregate(transaction, TupleType::create(resultTypes), components);
     // Keep the order the body's own result had: the tape is written after the statements.
     const gc_node_ref_t oldResult = draft.region(bodyRegion).result;
     gc_node_ref_t bodyResult      = fill;
     if (oldResult != kInvalidNodeRef && oldResult != fill) {
-        bodyResult = draft.addGateNode(typeOf(draft, fill));
+        bodyResult = draft.addGateNode(typeOf(transaction, fill));
         draft.setNormInputs(bodyResult, std::span<const gc_node_ref_t>(&fill, 1));
         draft.setCtrlInputs(bodyResult, std::span<const gc_node_ref_t>(&oldResult, 1));
     }
@@ -4690,13 +4767,13 @@ LoopBodyPlan Engine::buildLoopBody(
     }
     draft.setInsertRegion(savedRegion);
 
-    group_.define(plan.graphs.pullback, std::move(pullback));
+    group_.define(plan.graphs.pullback, std::move(pullbackOwner));
     return plan;
 }
 
-GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
+GCGraph *Engine::gradient(GCGraph *function, bool withValue, bool hasAux) {
     FunctionType *type   = function->funcType();
-    const auto signature = gradientSignature(type, withValue);
+    const auto signature = gradientSignature(type, withValue, hasAux);
     // A function the compiler refused (NotDifferentiable) has no signature. Reaching this point
     // with one means the compile-time check was bypassed: an internal defect, not a user error.
     ASSERT(signature.has_value(), "autodiff: a function the compiler accepted has no gradient.");
@@ -4705,25 +4782,38 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     }
 
     const GraphScope scope{.role = GraphRole::Differentiated};
-    auto draft = GraphDraft::decode(inlining_.work(), function);
-    ForwardRewrite rewrite(*this, *draft, scope);
+    auto transaction = rt::GraphTransaction::decode(inlining_.work(), function);
+    auto &draft      = transaction->edit();
+    ForwardRewrite rewrite(*this, *transaction, scope);
     rewrite.run();
-    const gc_node_ref_t value = valueNode(*draft);
-    const auto edges         = siteEdges(rewrite.sites());
-    const std::vector<gc_node_ref_t> order = valueOrder(*draft, value, 0, &edges);
+    // The pair the function returns, and -- of a `has_aux` call -- its two elements: the gradient
+    // is taken of the first, and the second is handed back as it is. Reading the pair's element
+    // node is how the auxiliary value stays part of the transform's result while the backward pass
+    // is seeded at the value alone (the pair itself, being a tuple, has no gradient of its own).
+    const gc_node_ref_t pair  = valueNode(*transaction);
+    gc_node_ref_t value       = pair;
+    gc_node_ref_t aux         = kInvalidNodeRef;
+    if (hasAux) {
+        Type *pairType = typeOf(*transaction, pair);
+        value          = addAccs(*transaction, aggregateElement(pairType, 0), pair, 0);
+        aux            = addAccs(*transaction, aggregateElement(pairType, 1), pair, 1);
+    }
+    const auto edges                       = siteEdges(rewrite.sites());
+    const std::vector<gc_node_ref_t> order = valueOrder(*transaction, value, 0, &edges);
 
-    const auto withPorts = draft->withPorts();
+    const auto withPorts = draft.withPorts();
     // `grad` and `with_grad` differentiate the first `with` parameter only. The other `with`
     // parameters and every ordinary parameter are data, even when their type has a tangent.
     Backward backward(
-        *this, *draft, *draft, rewrite.sites(), scope, refusals_,
+        *this, *transaction, *transaction, rewrite.sites(), scope, refusals(),
         withPorts.empty() ? std::vector<gc_node_ref_t>{}
                           : std::vector<gc_node_ref_t>{withPorts.front()},
         /*residualPorts=*/false, {}, rewrite.untapedLoops());
-    const slot_t one = type->exitType()->code() == TypeCode::Float32
+    Type *valueType  = typeOf(*transaction, value);
+    const slot_t one = valueType->code() == TypeCode::Float32
                            ? toSlot<camel::core::rtdata::Float32>(1.0f)
                            : toSlot<camel::core::rtdata::Float64>(1.0);
-    backward.seed(value, draft->materializeStaticValue(one, type->exitType()));
+    backward.seed(value, draft.materializeStaticValue(one, valueType));
     backward.run(order);
 
     // The differential form differentiates the first `with` parameter (9.9); the other `with`
@@ -4732,30 +4822,41 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     // gradient of the same type as `m`, a discrete member of `m` included, whatever the tape
     // carried for it (`userGradient`).
     gc_node_ref_t result = backward.userGradient(withPorts.front());
-    if (withValue) {
-        const std::array<gc_node_ref_t, 2> pair{value, result};
-        result = addAggregate(*draft, signature->functionType->exitType(), pair);
+    if (hasAux) {
+        // `(gradient, aux)`, or `((value, aux), gradient)`: the same order as JAX's `grad` and
+        // `value_and_grad` with `has_aux=True`. The pair the function returned is the value half of
+        // `with_grad`'s result as it is, so the auxiliary value is read from it, not rebuilt.
+        if (withValue) {
+            const std::array<gc_node_ref_t, 2> both{pair, result};
+            result = addAggregate(*transaction, signature->functionType->exitType(), both);
+        } else {
+            const std::array<gc_node_ref_t, 2> both{result, aux};
+            result = addAggregate(*transaction, signature->functionType->exitType(), both);
+        }
+    } else if (withValue) {
+        const std::array<gc_node_ref_t, 2> valueAndGradient{value, result};
+        result = addAggregate(*transaction, signature->functionType->exitType(), valueAndGradient);
     }
     // The gradient function runs the function. Its result is the gradient, which need not
     // depend on everything the function did: what the function's own result waited for (a
     // print after the last value the gradient reads) is not an input of the gradient. The
     // gradient waits for it, so that the function's effects all happen, in their order.
-    const gc_node_ref_t ran = draft->exitNode();
-    if (ran != kInvalidNodeRef && ran != result && hasOrdering(*draft, ran)) {
-        const gc_node_ref_t gate = draft->addGateNode(typeOf(*draft, result));
-        draft->setNormInputs(gate, std::span<const gc_node_ref_t>(&result, 1));
-        draft->setCtrlInputs(gate, std::span<const gc_node_ref_t>(&ran, 1));
+    const gc_node_ref_t ran = draft.exitNode();
+    if (ran != kInvalidNodeRef && ran != result && hasOrdering(*transaction, ran)) {
+        const gc_node_ref_t gate = draft.addGateNode(typeOf(*transaction, result));
+        draft.setNormInputs(gate, std::span<const gc_node_ref_t>(&result, 1));
+        draft.setCtrlInputs(gate, std::span<const gc_node_ref_t>(&ran, 1));
         result = gate;
     }
-    setResult(*draft, result);
-    pruneUnreachable(*draft);
-    draft->setFuncType(signature->functionType);
+    setResult(*transaction, result);
+    pruneUnreachable(*transaction);
+    draft.setFuncType(signature->functionType);
 
     const std::string suffix = uniqueSuffix();
     const rt::GraphId key    = group_.reserve(
         "autodiff.grad/" + function->mangledName() + suffix,
         "grad(" + function->name() + ")");
-    group_.define(key, std::move(draft));
+    group_.define(key, std::move(transaction));
     while (!pending_.empty()) {
         Pending pending = std::move(pending_.front());
         pending_.pop_front();
@@ -4837,8 +4938,29 @@ std::optional<std::pair<std::string, Type *>> memberWithoutTangent(
 
 } // namespace
 
-std::string differentiationRefusal(FunctionType *function) {
+std::string differentiationRefusal(FunctionType *function, bool hasAux) {
     Type *valueType = function->exitType();
+    // With `has_aux` the result is the pair `(value, aux)`: the first element is what is
+    // differentiated, the second is handed back unchanged, and the pair itself is not a value a
+    // gradient could be taken of (JAX's has_aux, which is what this parameter follows).
+    if (hasAux) {
+        if (valueType == nullptr || valueType->code() != TypeCode::Tuple ||
+            tt::as_ptr<TupleType>(valueType)->size() != 2) {
+            return std::format(
+                "`has_aux` differentiates the first element of a pair, and it returns {}; write "
+                "the function's result as `(value, aux)`",
+                valueType ? valueType->toString() : "nothing");
+        }
+        auto *pair = tt::as_ptr<TupleType>(valueType);
+        valueType  = pair->typeAt(0);
+        if (valueType == nullptr ||
+            (valueType->code() != TypeCode::Float64 && valueType->code() != TypeCode::Float32)) {
+            return std::format(
+                "`has_aux` differentiates the first element of the pair it returns, and that "
+                "element is {}, not a float",
+                valueType ? valueType->toString() : "nothing");
+        }
+    }
     if (valueType == nullptr ||
         (valueType->code() != TypeCode::Float64 && valueType->code() != TypeCode::Float32)) {
         return std::format(
@@ -4878,8 +5000,9 @@ std::string differentiationRefusal(FunctionType *function) {
     return {};
 }
 
-std::optional<GradientSignature> gradientSignature(FunctionType *function, bool withValue) {
-    if (!differentiationRefusal(function).empty()) {
+std::optional<GradientSignature> gradientSignature(
+    FunctionType *function, bool withValue, bool hasAux) {
+    if (!differentiationRefusal(function, hasAux).empty()) {
         return std::nullopt;
     }
     GradientSignature signature;
@@ -4888,9 +5011,27 @@ std::optional<GradientSignature> gradientSignature(FunctionType *function, bool 
     // caller passes the variable and the function's writes reach it.
     signature.gradientType = gradientTypeOf(function->withTypeAt(0));
     Type *valueType        = function->exitType();
-    Type *result           = withValue
-                                 ? TupleType::create(std::vector<Type *>{valueType, signature.gradientType})
-                                 : signature.gradientType;
+    // `has_aux` splits the pair the function returns: what is differentiated is its first element,
+    // and the second is part of the transform's result, unchanged. The result is the gradient
+    // followed by the auxiliary value, or -- of `with_grad` -- the pair the function gives
+    // followed by the gradient, which is the order JAX's grad and value_and_grad use.
+    Type *auxType = nullptr;
+    if (hasAux) {
+        auto *pair = tt::as_ptr<TupleType>(valueType);
+        valueType  = pair->typeAt(0);
+        auxType    = pair->typeAt(1);
+    }
+    Type *result = nullptr;
+    if (hasAux && withValue) {
+        Type *valueAndAux = TupleType::create(std::vector<Type *>{valueType, auxType});
+        result            = TupleType::create(std::vector<Type *>{valueAndAux, signature.gradientType});
+    } else if (hasAux) {
+        result = TupleType::create(std::vector<Type *>{signature.gradientType, auxType});
+    } else {
+        result = withValue
+                     ? TupleType::create(std::vector<Type *>{valueType, signature.gradientType})
+                     : signature.gradientType;
+    }
     param_vec_t withParams, normParams;
     for (size_t i = 0; i < function->withTypesCount(); ++i) {
         withParams.emplace_back(function->withTypeAt(i), function->withIsVarAt(i));
@@ -4904,11 +5045,11 @@ std::optional<GradientSignature> gradientSignature(FunctionType *function, bool 
 
 GradientGraph buildGradientGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    GCGraph *function, bool withValue) {
+    GCGraph *function, bool withValue, bool hasAux) {
     // The gradient reads the function's own graph: its loops and its branch arms are regions
     // there, and the transformation rewrites them where they are.
     Engine engine(context, program, function);
-    GCGraph *graph = engine.gradient(function, withValue);
+    GCGraph *graph = engine.gradient(function, withValue, hasAux);
     // The gradient's function value is installed in the graph that calls it (a static DATA
     // node), and the collector roots every program named by the function values of a rooted
     // graph (GCGraphManager::rebuildGcRoots, functionsInStatics). Tracking the program here

@@ -1,0 +1,14 @@
+// Two rules of one module with the same head: a transform looks a rule up by the head of its left
+// side, so the second one has no way to be chosen. It is refused where it is written.
+rule first_rule(x: float, w: float) {
+    x + w => (dx: float, dw: float) => dx
+}
+
+rule second_rule(x: float, w: float) {
+    x + w => (dx: float, dw: float) => dw
+}
+
+func main(): int sync {
+    println(1)
+    return 0
+}

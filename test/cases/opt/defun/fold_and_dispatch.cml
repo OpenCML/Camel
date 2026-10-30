@@ -1,0 +1,17 @@
+/**
+ * The same function value called two ways: once by name in this graph, where the tag is known and
+ * no match is built, and once through a parameter, where it is not.
+ */
+
+func apply(f: (x: int) => int, x: int): int {
+    return f(x)
+}
+
+func main(): int sync {
+    let a = 2
+    let add_a = (x: int) => x + a
+    let folded = add_a(10)
+    let dispatched = apply(add_a, 10)
+    'FOLD folded={} dispatched={}'->format<folded, dispatched>->println
+    return 0
+}

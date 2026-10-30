@@ -21,6 +21,12 @@ class ArrayData : public CompositeData {
     std::vector<size_t> holeIndices_;
     std::vector<data_ptr_t> data_;
 
+    // Whether the value is a rank-zero array: no dimension and one element (design principles 5.4
+    // -- the rank-zero array is the element itself). The type cannot say it (`f32[..]` takes every
+    // rank, and `f32[]` is one dimension of length none), so the value keeps it, and the run makes
+    // of it the array with no dimension that a slot of `T[..]` reads.
+    bool rankZero_ = false;
+
     // Used only by ArrayDataFactory::build() to avoid recomputing Type.
     ArrayData(type::Type *arrayType, data_vec_t &&data);
 
@@ -31,6 +37,12 @@ class ArrayData : public CompositeData {
 
     static std::shared_ptr<ArrayData> create(type::Type *elemType, data_list_t data = {});
     static std::shared_ptr<ArrayData> from(type::Type *elemType, const data_vec_t &data);
+    /// A rank-zero value: a `T[..]` (the only type that takes rank zero) whose one element is
+    /// `element` and which has no dimension. It prints and compares as the element itself, so a
+    /// program that hands the element to a `T[..]` position sees the value it handed in.
+    static std::shared_ptr<ArrayData>
+    rankZero(type::ArrayType *arrayType, const data_ptr_t &element);
+    bool isRankZero() const { return rankZero_; }
 
     const std::vector<data_ptr_t> &raw() const { return data_; }
 
@@ -68,5 +80,12 @@ class ArrayDataFactory {
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };
+
+/// The value a position of `type` takes: `value->convertTo(type)`, and on the edge from `T` to
+/// `T[..]` the rank-zero value of the element instead (design principles 5.4: a rank-zero array is
+/// the element itself, the same value). A literal in such a position becomes that value here, the
+/// constant side of the edge the compiler converts at a computed value; the two say the same thing
+/// about the same value.
+data_ptr_t convertDataTo(const data_ptr_t &value, type::Type *type);
 
 } // namespace camel::core::data

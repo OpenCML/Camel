@@ -800,7 +800,7 @@ const camel::runtime::Program *bindEntryArguments(
     }
 
     camel::runtime::RuntimeGraphDraftSession session(context, program);
-    camel::runtime::GraphDraft &draft = session.rootDraft();
+    auto &draft = session.rootDraft().edit();
     for (auto &[formal, loaded] : bound) {
         const gc_node_ref_t port = draft.draftIdOfSourceRef(formal->port);
         const slot_t value       = loaded.slot();

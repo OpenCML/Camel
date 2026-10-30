@@ -633,9 +633,9 @@ const std::vector<FateRow> &fateTable() {
             notNode,
             notNode,
             "a declaration fact: no node carries it.");
-        add("autodiff::vjp",
+        add("prelude::vjp",
             "*",
-            "autodiff's `tag vjp::<F>(rule: F) on func when is_function::<F>()` declaration",
+            "prelude's `tag vjp::<F>(rule: F) on func when is_function::<F>()` declaration",
             notNode,
             notNode,
             notNode,
@@ -646,17 +646,17 @@ const std::vector<FateRow> &fateTable() {
         // a linear function's transpose rule. A pass reads them through the function it was
         // given (GCGraph::declarationFacts), which is cold metadata of the graph, never an
         // attribute of a node.
-        add("autodiff::jvp",
+        add("prelude::jvp",
             "*",
-            "autodiff's `tag jvp::<F>(rule: F) on func when is_function::<F>()` declaration",
+            "prelude's `tag jvp::<F>(rule: F) on func when is_function::<F>()` declaration",
             notNode,
             notNode,
             notNode,
             notNode,
             "a declaration fact (the graph of a forward-mode rule): no node carries it.");
-        add("autodiff::transpose",
+        add("prelude::transpose",
             "*",
-            "autodiff's `tag transpose::<F>(rule: F) on func when is_function::<F>()` declaration",
+            "prelude's `tag transpose::<F>(rule: F) on func when is_function::<F>()` declaration",
             notNode,
             notNode,
             notNode,

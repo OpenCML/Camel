@@ -1,0 +1,24 @@
+/**
+ * `has_aux: false` is refused, and the refusal says what to write.
+ *
+ * The `has_aux` form exists for a function whose result is the pair `(value, aux)`, and it splits
+ * that pair. Whether the pair is split cannot follow a value the program computes -- a call has one
+ * result type -- so the argument has to be the constant `true`; `false` asks for the plain form,
+ * which is written `grad(f)` without the argument. Accepting `false` silently would make the
+ * argument a switch whose two positions are spelled the same, which is what this case pins against.
+ *
+ * The wording is part of the pin: it names the argument and the call to write instead.
+ */
+
+import { grad } from autodiff
+
+with <x: float>
+func loss(): (float, float) {
+    return (x * x, x * 3.0)
+}
+
+func main(): int sync {
+    let d = grad(loss, has_aux: false)<2.0>()
+    println(d)
+    return 0
+}

@@ -119,6 +119,17 @@ void attachNativeReduction(Program &program, size_t node) {
         law.initBits = 0xff800000ULL;
         law.empty = sem::LawEmpty::Fault;
     }
+    if (value.op == "argmax_axis" || value.op == "argmin_axis") {
+        // The position law: the pair (value, position) starts at the first contribution, orders
+        // exactly and answers in i64.
+        law.kind             = value.op == "argmax_axis" ? sem::LawKind::ArgMax : sem::LawKind::ArgMin;
+        law.result           = camel::core::type::TypeCode::Int64;
+        law.accumulator      = f32;
+        law.init             = sem::LawInit::FirstContribution;
+        law.empty            = sem::LawEmpty::Fault;
+        law.exactAssociative = true;
+        law.exactCommutative = true;
+    }
     if (value.op == "mean_all" || value.op == "mean_axis")
         law.finalize = sem::LawFinalize::DivideByCount;
     if (value.op == "mean_all")
@@ -211,5 +222,27 @@ void checkReductionDomains() {
     if (canonicalAxisReduction(emptyOutput, emptyOutput.nodes[1]) ||
         emptyOutput.launches[0].implementation != "standard" || emptyOutput.launches[0].elements != 0)
         throw std::runtime_error("empty output entered an overflowing physical axis fast path");
+    // A position result: the law gate accepts the pair form, the plan has one launch, and that
+    // launch's body keeps two slots and stores the loop index as i64.
+    Program positional;
+    positional.nodes = {
+        {.op = "input", .shape = {2, 3}, .data = std::vector<float>{1, 5, 3, 4, 4, 2}},
+        {.op = "argmax_axis", .shape = {2}, .dtype = DType::I64, .inputs = {0}, .attributes = {1}}};
+    positional.outputs = {1};
+    attachNativeReduction(positional, 1);
+    generate(positional);
+    if (positional.launches.size() != 1 || canonicalAxisReduction(positional, positional.nodes[1]))
+        throw std::runtime_error("a position reduction did not take the generic reduction path");
+    if (reductionAccess(positional, positional.nodes[1], IndexExpr(0), IndexExpr(0)).count != 3)
+        throw std::runtime_error("a position reduction lost its contribution count");
+    const auto body = serialBody(positional, positional.launches[0]);
+    validateBody(body);
+    const auto source = emitBody(body);
+    if (source.find("k_pos=((long long)(k_r));") == std::string::npos ||
+        source.find("long long k_pos=") == std::string::npos ||
+        positional.source.find("k_pos=((long long)(k_r));") == std::string::npos)
+        throw std::runtime_error("the planned position reduction does not store its loop index");
+    std::cout << "tiles position reduction: an argmax plan keeps the value and stores the loop index "
+                 "as i64 in its planned body and source\n";
     std::cout << "tiles reduction domains: core extents, output permutations, canonical contributions and empty faults passed\n";
 }

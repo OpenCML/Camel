@@ -1,0 +1,15 @@
+// Two rules over the same token, different primitives: `-x` is `__neg__` and `x - w` is `__sub__`.
+// The index keys a rule by the operator and how many operands it takes, so both are filed and
+// neither is refused: a key without the count would call them one rule and refuse the second.
+rule neg_rule(x: float) {
+    -x => (dx: float) => -dx
+}
+
+rule sub_rule(x: float, w: float) {
+    x - w => (dx: float, dw: float) => dx - dw
+}
+
+func main(): int sync {
+    println(1)
+    return 0
+}

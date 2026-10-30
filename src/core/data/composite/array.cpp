@@ -25,6 +25,27 @@ ArrayDataFactory::~ArrayDataFactory() = default;
 
 ArrayDataFactory &ArrayDataFactory::add(const data_ptr_t &e) {
     data_ptr_t value = e;
+    // The element in a position of `T[..]` is the rank-zero value that position promises (design
+    // principles 5.4), and it is written at the element type the position states: `[1.5, 2.5]` at
+    // `f32[..][2]` holds two rank-zero `f32` values, not two `float`s the element type cannot take.
+    // This is the same edge `convertDataTo` makes, applied to each element, because this is where
+    // the elements of an array literal are collected.
+    if (impl_->elemType != nullptr && impl_->elemType->code() == TypeCode::Array &&
+        !impl_->elemType->equals(value->type())) {
+        if (auto *slotArrayType = tt::as_ptr<ArrayType>(impl_->elemType);
+            slotArrayType != nullptr) {
+            if (Type *element = slotArrayType->rankZeroType(); element != nullptr) {
+                data_ptr_t asElement =
+                    element->equals(value->type()) ? value : convertDataTo(value, element);
+                if (asElement != nullptr) {
+                    if (data_ptr_t zero = convertDataTo(asElement, impl_->elemType);
+                        zero != nullptr) {
+                        value = zero;
+                    }
+                }
+            }
+        }
+    }
     if (!impl_->elemType) {
         impl_->elemType = value->type();
     } else if (impl_->elemType->code() == TypeCode::Ref && value->type()->code() != TypeCode::Ref) {
@@ -159,6 +180,34 @@ std::shared_ptr<ArrayData> ArrayData::create(Type *elemType, data_list_t data) {
     return f.build();
 }
 
+std::shared_ptr<ArrayData> ArrayData::rankZero(ArrayType *arrayType, const data_ptr_t &element) {
+    ASSERT(
+        arrayType != nullptr && arrayType->rankZeroType() != nullptr,
+        "A rank-zero value is an element of an open rank.");
+    data_vec_t raw;
+    raw.push_back(element);
+    std::shared_ptr<ArrayData> value(new ArrayData(arrayType, std::move(raw)));
+    value->rankZero_ = true;
+    return value;
+}
+
+data_ptr_t camel::core::data::convertDataTo(const data_ptr_t &value, Type *type) {
+    if (value == nullptr || type == nullptr) {
+        return nullptr;
+    }
+    if (type->code() == TypeCode::Array) {
+        auto *arrayType = tt::as_ptr<ArrayType>(type);
+        Type *element   = arrayType != nullptr ? arrayType->rankZeroType() : nullptr;
+        if (element != nullptr && element->assignableFrom(value->type())) {
+            // The element in a position of `T[..]` is the rank-zero value the position promises
+            // (design principles 5.4): the same value, kept as the value with no dimension it is,
+            // so the run has an array to read and the program still sees the element.
+            return ArrayData::rankZero(arrayType, value);
+        }
+    }
+    return value->convertTo(type);
+}
+
 std::shared_ptr<ArrayData> ArrayData::from(Type *elemType, const data_vec_t &data) {
     if (data.empty()) {
         return std::shared_ptr<ArrayData>(new ArrayData(ArrayType::create(elemType), data_vec_t{}));
@@ -201,6 +250,11 @@ data_ptr_t ArrayData::clone(bool deep) const {
     if (data_.empty()) {
         return std::shared_ptr<ArrayData>(new ArrayData(type_, data_vec_t{}));
     }
+    if (rankZero_) {
+        // The value with no dimension is the element itself: a clone of it is a rank-zero value of
+        // the same type holding a clone of the element, not an array of one element.
+        return rankZero(tt::as_ptr<ArrayType>(type_), deep ? data_[0]->clone(true) : data_[0]);
+    }
     ArrayDataFactory f;
     for (const auto &e : data_) {
         f.add(deep ? e->clone(deep) : e);
@@ -209,6 +263,10 @@ data_ptr_t ArrayData::clone(bool deep) const {
 }
 
 const string ArrayData::toString() const {
+    // A rank-zero value has no dimension to write brackets for: it is written as the element.
+    if (rankZero_ && !data_.empty()) {
+        return data_[0]->toString();
+    }
     string str = "[";
     for (const auto &e : data_) {
         str += e->toString() + ", ";

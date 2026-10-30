@@ -155,7 +155,7 @@ inline camel::core::mm::IAllocator &staticFunctionAllocator(const compile_graph_
 
 inline TupleType *currentClosureTupleType(const compile_graph_ptr_t &graph) {
     type_vec_t closureTypes;
-    auto &draft = graph->draft();
+    auto &draft = graph->transaction().edit();
     closureTypes.reserve(draft.closureNodes().size());
     for (draft_node_ref_t nodeId : draft.closureNodes()) {
         const auto *header = draft.header(nodeId);
@@ -391,8 +391,10 @@ inline compile_graph_ptr_t createCompileGraph(
     runtime::GraphId id, FunctionType *funcType, const compile_graph_ptr_t &outer,
     std::string name = "",
     const std::vector<camel::source::origin_id_t> &parameterOrigins = {}) {
-    auto graph = std::make_shared<DraftGraphBuilder>(funcType ? funcType : FunctionType::create());
-    graph->draft().setId(id);
+    // The graph's identity is taken by the transaction it is built in: this is the one place a
+    // compile graph comes into being, and it comes into being inside a transaction.
+    auto graph = std::make_shared<DraftGraphBuilder>(runtime::GraphTransaction::open(
+        id, funcType ? funcType : FunctionType::create()));
     if (name.empty()) {
         name = std::format("__g_{}__", runtime::toValue(id));
     }
@@ -504,7 +506,7 @@ inline bool nodeStandsForItsRegion(node_handle_t node) {
     if (kind != runtime::GCNodeKind::Brch && kind != runtime::GCNodeKind::Loop) {
         return false;
     }
-    const runtime::GraphDraft *draft = nodeDraftOf(node);
+    const auto *draft = nodeDraftOf(node);
     for (uint32_t region = 1; region < draft->regionCount(); ++region) {
         if (draft->region(region).owner == nodeIdOf(node)) {
             return true;
@@ -544,6 +546,8 @@ inline bool nodeTakesAnOrder(node_handle_t node) {
 /// Whether an edge that says "after" and not "value" says anything at all: two different nodes of
 /// one graph, and one is not already the other's data input. Only the exact, local skip: the
 /// predecessor is already a direct data input of the target, so the edge would say nothing new.
+/// This is the question a control edge stands in for an owed data edge asks (docs/design/effects/
+/// edges.cn.md 5.6): there the value is already taken, so the edge only repeats the order.
 /// This is not a count of users and cannot be one. Whether a value is shared -- whether the storage
 /// of the value a variable holds may be reused by an update -- is decided by the execution plan
 /// from the graph itself: a read that keeps the value ends the proof (`:var/get`), a read that
@@ -554,8 +558,57 @@ inline bool chainEdgeSaysSomething(node_handle_t from, node_handle_t to) {
     return linkCheek(from, to) && !hasDirectDataDependency(from, to);
 }
 
-/// Whether the chain of the block being built has to name this pair: the same question the chain
-/// sites ask under the name the design writes them under (docs/design/effects/plan.cn.md 5.5).
+/// Whether `node` is a read of a variable the lowerer writes as an operator of its own
+/// (`:var/get`, `:var/peek`): the one kind of node a `sync` block puts in its chain for the place
+/// a read is written at, when the variable is a `var` parameter (`Builder::readVariableThrough`,
+/// docs/design/effects/edges.cn.md 5.5).
+inline bool nodeIsVariableRead(node_handle_t node) {
+    if (node == nullptr || nodeKindOf(node) != runtime::GCNodeKind::Oper) {
+        return false;
+    }
+    const auto &op = nodeGraphOf(node)->operTarget(node);
+    const auto id  = op == nullptr
+                         ? std::optional<camel::core::OperId>{}
+                         : camel::core::OperatorTable::instance().lookup(op->uri());
+    return id.has_value() && camel::core::oper::isVariableRead(*id);
+}
+
+/// Whether `from` is a read of a `var` that `to` takes as an argument: the previous chain node is
+/// one of the statement's own argument reads. This is the one shape in which the chain edge must be
+/// written even though `to` already reads the order of `from` from its data edge: the read's chain
+/// place is the read's, not the statement's, so without the edge the statement has no place of its
+/// own on the block's chain (docs/design/effects/edges.cn.md 5.3, 5.5).
+inline bool fromIsArgumentReadOf(node_handle_t from, node_handle_t to) {
+    if (from == nullptr || to == nullptr || nodeGraphOf(from) != nodeGraphOf(to)) {
+        return false;
+    }
+    if (!nodeIsVariableRead(from)) {
+        return false;
+    }
+    const draft_node_ref_t id = nodeIdOf(from);
+    return std::ranges::find(normInputsOf(to), id) != normInputsOf(to).end() ||
+           std::ranges::find(withInputsOf(to), id) != withInputsOf(to).end();
+}
+
+/// Whether a `sync` block's chain has to name this pair: a statement of the block follows the one
+/// written before it by a sync edge, and that edge carries "used" as well as "after" (5.3). The
+/// data-dependency skip still stands wherever it did: a node the model lets a pass arrange freely --
+/// pure and unable to fault (3.4) -- is not on the chain, and neither is a statement whose link
+/// carries something beyond the order. The one pair the skip must not take is an effectful or
+/// faulting statement that reads a `var` through a place of its own (`fromIsArgumentReadOf`): the
+/// read's chain place is the read's, so without the edge the statement has no place on the chain.
+inline bool chainLinkSaysSomething(node_handle_t from, node_handle_t to) {
+    return linkCheek(from, to) &&
+           (!hasDirectDataDependency(from, to) ||
+            (nodeTakesAnOrder(to) && fromIsArgumentReadOf(from, to)));
+}
+
+/// Whether a control edge that stands in for the data edge a pair is still owed says anything: the
+/// same relation the chain sites ask, under the name those sites write it under
+/// (docs/design/effects/plan.cn.md 5.5). A statement of a `sync` block asks
+/// `chainLinkSaysSomething` instead: on the chain the edge also carries "used", so the one shape
+/// where the target would otherwise have no place of its own keeps it
+/// (docs/design/effects/edges.cn.md 5.3).
 inline bool shouldAddSyncCtrlLink(node_handle_t from, node_handle_t to) {
     return chainEdgeSaysSomething(from, to);
 }
@@ -634,12 +687,12 @@ inline void writeSyncStatement(node_handle_t from, node_handle_t to) {
 }
 
 /// A link of the chain between two statements of a `sync` block, written only if it says something
-/// (`chainEdgeSaysSomething`). What is not here: the edge that orders a `var` write and the read of
+/// (`chainLinkSaysSomething`). What is not here: the edge that orders a `var` write and the read of
 /// it. The read has no data edge from the write yet, and an edge that only orders would leave it
 /// with the value from before the write (Builder::orderAfterLastWriter, builder_expr.cpp) -- that
 /// pair waits until the read is a data edge from the nearest write.
 inline void linkSyncStatement(node_handle_t from, node_handle_t to) {
-    if (!chainEdgeSaysSomething(from, to)) {
+    if (!chainLinkSaysSomething(from, to)) {
         return;
     }
     writeSyncStatement(from, to);
@@ -1067,6 +1120,45 @@ inline ConditionSeparation separateWhenConditions(
         }
     }
     return unanswerable ? ConditionSeparation::NotComputable : ConditionSeparation::Disjoint;
+}
+
+/// Whether a value's type goes from `T` to `T[..]`, or back from `T[..]` to `T`: the two edges the
+/// run represents with a rank-zero array (design principles 5.4 -- a rank-zero array *is* the
+/// element, so the conversion is invisible to the program: the same value, the same printing, the
+/// same comparison). `Builder::coerceTo` is where the conversion is inserted, and a call argument --
+/// the one entrance that is not some position's `coerceTo` -- asks this same question before it
+/// enters (builder_operators.cpp), so both entrances answer with one rule.
+inline bool isRankZeroEdge(Type *target, Type *source) {
+    if (target == nullptr || source == nullptr || target->equals(source)) {
+        return false;
+    }
+    const bool targetIsArray = target->code() == TypeCode::Array;
+    if (targetIsArray == (source->code() == TypeCode::Array)) {
+        return false;
+    }
+    if (targetIsArray) {
+        // `T` into `T[..]`: the value of the element type is the value of the open rank, and the
+        // slot keeps it as the rank-zero array the run holds.
+        const auto *arrayTarget = tt::as_ptr<const ArrayType>(target);
+        return arrayTarget != nullptr && arrayTarget->rankZeroType() != nullptr &&
+               arrayTarget->assignableFrom(source);
+    }
+    // `T[..]` into `T`: only the open rank has a value with no dimension to read the element from;
+    // `T[]` and `T[3, ..]` state dimensions and are not this edge.
+    const auto *arraySource = tt::as_ptr<const ArrayType>(source);
+    Type *element          = arraySource != nullptr ? arraySource->rankZeroType() : nullptr;
+    return element != nullptr && target->assignableFrom(element);
+}
+
+/// The element type a position of `T[..]` holds, or null when the position is not an open rank with
+/// no prefix. A rank-zero value is that element (design principles 5.4), which is what a literal in
+/// such a position is too: `show(1.0)` with `v: f32[..]` is the element `1.0`.
+inline Type *rankZeroElementOf(Type *type) {
+    if (type == nullptr || type->code() != TypeCode::Array) {
+        return nullptr;
+    }
+    const auto *array = tt::as_ptr<const ArrayType>(type);
+    return array != nullptr ? array->rankZeroType() : nullptr;
 }
 
 } // namespace camel::compile::gir

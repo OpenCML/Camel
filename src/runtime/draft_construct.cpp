@@ -14,6 +14,7 @@
 #include "camel/runtime/draft.h"
 
 #include "camel/core/type/base.h"
+#include "camel/core/type/composite/func.h"
 
 #include <algorithm>
 #include <cstring>
@@ -537,6 +538,17 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
     const uint32_t name       = draftNode->header.name;
     const GCNodeKind oldKind  = draftNode->header.kind;
     replaceNodeStorage(id, rebuildNode(id, init));
+    // A node's type and the slot it writes are one answer. The frame layout the collector traces
+    // against is built from `runtimeSlotTypes_` (allocateRuntimeSlot records the type a slot was
+    // allocated with), so a node whose type changes here changes its slot's declaration with it, in
+    // this same place. Retyping the slot afterwards would let the two say different things -- a value
+    // of one form in a slot that declared another, which the collector reads as the wrong type; a
+    // `Variant` held in a function-typed slot is exactly that (the crash at Variant::updateRefs).
+    if (init.dataType != nullptr && init.dataIndex > 0 &&
+        static_cast<size_t>(init.dataIndex) < runtimeSlotTypes_.size() &&
+        runtimeSlotTypes_[static_cast<size_t>(init.dataIndex)] != init.dataType) {
+        runtimeSlotTypes_[static_cast<size_t>(init.dataIndex)] = init.dataType;
+    }
     if (init.kind != oldKind) {
         noteNodeKind(id, init.kind);
     }
@@ -619,7 +631,34 @@ void GraphDraft::removeNormPort(gc_node_ref_t id) {
 void GraphDraft::removeWithPort(gc_node_ref_t id) {
     requireOneWriting("removeWithPort");
     ++mutations_;
-    std::erase(withPorts_, id);
+    const auto it = std::find(withPorts_.begin(), withPorts_.end(), id);
+    if (it == withPorts_.end()) {
+        return;
+    }
+    const size_t port = static_cast<size_t>(it - withPorts_.begin());
+    withPorts_.erase(it);
+    // The declared `with` parameters are the first with ports and the captures follow them
+    // (callValueTypeOf, runtimeFuncValue read them that way). A graph that loses a declared one
+    // loses its type with it: a type that keeps it makes the graph state a parameter it no longer
+    // has, and every reader places the captures one port too late. The call's value type then
+    // leaves out the new versions the callee hands on, and a scheduler that reads them runs past
+    // the end of the call's With inputs.
+    if (funcType_ != nullptr && port < funcType_->withTypesCount()) {
+        camel::core::type::param_vec_t withTypes;
+        withTypes.reserve(funcType_->withTypesCount() - 1);
+        for (size_t i = 0; i < funcType_->withTypesCount(); ++i) {
+            if (i != port) {
+                withTypes.emplace_back(funcType_->withTypeAt(i), funcType_->withIsVarAt(i));
+            }
+        }
+        camel::core::type::param_vec_t normTypes;
+        normTypes.reserve(funcType_->normTypesCount());
+        for (size_t i = 0; i < funcType_->normTypesCount(); ++i) {
+            normTypes.emplace_back(funcType_->normTypeAt(i), funcType_->normIsVarAt(i));
+        }
+        funcType_ = camel::core::type::FunctionType::create(
+            withTypes, normTypes, funcType_->exitType());
+    }
 }
 
 void GraphDraft::removeClosureNode(gc_node_ref_t id) {

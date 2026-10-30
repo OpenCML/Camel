@@ -1,0 +1,16 @@
+/**
+ * A generator whose head writes no `sync`: the write between the two `yield`s is an effect like
+ * any other, so the ordinary rule decides what happens to it (design principles 3.2, 3.4).
+ */
+
+func count(): int.. {
+    var i = 0
+    yield i
+    i = 5
+    yield i
+}
+
+func main(): int sync {
+    println(loop acc = 0 for v in count() do acc * 10 + v)
+    return 0
+}

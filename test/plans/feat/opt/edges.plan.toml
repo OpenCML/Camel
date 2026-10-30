@@ -17,10 +17,10 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 
 [[tests]]
 name = "valid_edit_is_accepted"
-desc = "Control: a node that breaks no invariant commits."
+desc = "Control: a node that breaks no invariant commits, and the session hands out one graph at one address for as long as it edits it (the pass keeps its graph by reference)."
 args = ["${case}", "test::edges_ok"]
-expect_stdout_contains = ["EDGES accepted"]
-expect_output_not_contains = ["refused"]
+expect_stdout_contains = ["EDGES accepted", "EDGES transaction stable"]
+expect_output_not_contains = ["refused", "transaction moved"]
 
 [[tests]]
 name = "cycle_is_refused"
@@ -39,14 +39,14 @@ name = "order_edge_survives_the_commit"
 desc = "An order edge is not a port and not a control input: it is written once, it is kept out of the node's input runs, and the graph the commit makes holds it in its own array, from which it is read back by the user's predecessors (docs/design/effects/edges.cn.md 1.5, 5)."
 case = "../../../cases/opt/generic/generic_passes.cml"
 args = ["${case}", "test::edges_order_ok"]
-expect_stdout_contains = ["ORDER wrote=1 twice=0", "ORDER preds=1 users=1", "EDGES accepted", "ORDER frozen_agrees=1 some_node_ordered=1"]
+expect_stdout_contains = ["ORDER wrote=1 twice=0", "ORDER preds=1 users=1", "ORDER wrote_reversed=11", "EDGES accepted", "ORDER frozen_agrees=1 some_node_ordered=1 frozen_sorted=1"]
 
 [[tests]]
 name = "order_edge_on_a_pure_node_is_refused"
-desc = "Nothing orders a pure node: a constant computes a value from nothing a resource owns, so an order edge on it is a graph the builder must not have produced, and the seal check names it (docs/design/effects/edges.cn.md 4.6)."
+desc = "Nothing orders a pure node: a constant computes a value from nothing a resource owns, so an order edge on it is a graph the builder must not have produced, and the seal check names it (docs/design/effects/edges.cn.md 4.6). The negative case is built on the finished graph, where the check owns the rule: a draft no longer produces such a graph at all (the encoder drops the edge and the committed graph has none), so the bad graph is written straight into the frozen records the check reads."
 case = "../../../cases/opt/generic/generic_passes.cml"
 args = ["${case}", "test::edges_order_pure"]
-expect_stdout_contains = ["ORDER wrote=1", "EDGES refused", "is on a pure node"]
+expect_stdout_contains = ["ORDER wrote=1", "ORDER frozen_edges=0", "EDGES refused", "is on a pure node"]
 
 [[tests]]
 name = "order_edge_orders_the_nodes_that_run"
@@ -128,3 +128,10 @@ desc = "A session that started from a program another session has replaced, and 
 case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
 args = ["${case}", "test::commit_merge"]
 expect_stdout_contains = ["MERGE stale=1", "MERGE installed=1 first_kept=1 second_kept=1 root_edited=1"]
+
+[[tests]]
+name = "a_sync_cycle_is_refused"
+desc = "A cycle on sync edges: two statements that each follow the other. The draft's check and the freeze's walk are one function over one list of edge kinds (camel/runtime/cycle.h), so the pass prints what the draft's side reports -- the cycle found, with both nodes on the chain it returns -- and then commits the same graph, which the freeze refuses with the cycle named. A freeze that walked four kinds again would accept this graph and hand it to a back end; nothing else in the layer would notice, since no program composes the shape."
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "test::edges_sync_cycle"]
+expect_stdout_contains = ["SYNCCYCLE a=", "found=1 on_cycle_a=1 on_cycle_b=1", "EDGES refused", "lies on a cycle of inputs"]

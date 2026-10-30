@@ -14,7 +14,8 @@ DropCallArgumentTestPass::apply(const camel::runtime::Program *program, std::ost
     using camel::runtime::GCNodeKind;
     camel::runtime::RuntimeGraphDraftSession session(context_, program);
     for (camel::runtime::GCGraph *owner : session.collectReachableRuntimeGraphs()) {
-        camel::runtime::GraphDraft &draft = session.edit(owner);
+        auto &transaction = session.edit(owner);
+        auto &draft       = transaction.edit();
         for (camel::runtime::gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
             const auto *header = draft.header(id);
             if (!header || header->kind != GCNodeKind::Func || draft.normInputsOf(id).empty()) {
@@ -44,7 +45,8 @@ const camel::runtime::Program *breakFirstBranchOfMain(
         if (owner->name() != "main") {
             continue;
         }
-        camel::runtime::GraphDraft &draft = session.edit(owner);
+        auto &transaction = session.edit(owner);
+        auto &draft       = transaction.edit();
         for (camel::runtime::gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
             const auto *header = draft.header(id);
             if (!header || header->kind != GCNodeKind::Brch) {
@@ -53,7 +55,7 @@ const camel::runtime::Program *breakFirstBranchOfMain(
             const auto join = reinterpret_cast<const camel::runtime::DraftBrchPayload *>(
                                   draft.payloadOf(id).data())
                                   ->join;
-            breakBranch(draft, id, join);
+            breakBranch(transaction, id, join);
             return session.commit();
         }
     }
@@ -67,9 +69,10 @@ LeakBranchArmTestPass::apply(const camel::runtime::Program *program, std::ostrea
     return breakFirstBranchOfMain(
         context_,
         program,
-        [](camel::runtime::GraphDraft &draft,
+        [](camel::runtime::GraphTransaction &transaction,
            camel::runtime::gc_node_ref_t brch,
            camel::runtime::gc_node_ref_t join) {
+            auto &draft = transaction.edit();
             // A node that runs because of the BRCH and that no arm's result depends on.
             const auto stray = anchorNode(draft);
             draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, stray, brch);
@@ -82,9 +85,10 @@ ShareBranchArmTestPass::apply(const camel::runtime::Program *program, std::ostre
     return breakFirstBranchOfMain(
         context_,
         program,
-        [](camel::runtime::GraphDraft &draft,
+        [](camel::runtime::GraphTransaction &transaction,
            camel::runtime::gc_node_ref_t,
            camel::runtime::gc_node_ref_t join) {
+            auto &draft = transaction.edit();
             // The second arm's result now depends on the first arm's.
             const auto tails = draft.withInputsOf(join);
             if (tails.size() >= 2 && tails[0] != tails[1]) {

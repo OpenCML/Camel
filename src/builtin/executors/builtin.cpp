@@ -166,6 +166,7 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 
         // variables
         {"var/new", __builtin__var_new__},
+        {"var/new/empty", __builtin__var_new_empty__},
         {"var/get", __builtin__var_get__},
         {"var/peek", __builtin__var_peek__},
         // `xs = xs->sort` as a statement (Builder::inPlaceRebindingOf); with :op/assn_owned
@@ -495,7 +496,9 @@ void registerBuiltinOperatorTraits() {
     // Declared never to fault, where the implementation has no fault path at all: integer
     // addition and subtraction wrap, floating-point arithmetic and ordering cannot fail, and
     // the strict boolean operators only read their operands. Everything else keeps the
-    // default (may fault). No pass acts on this declaration yet (operator_table.h).
+    // default (may fault). No pass acts on this declaration yet (operator_table.h). Each entry
+    // here is one operator of docs/handover/reports/faults-table-audit.md, which reads its
+    // implementation against this list.
     static const std::unordered_set<std::string_view> kNeverFaults = {
         "op/add_i",
         "op/add_l",
@@ -575,6 +578,47 @@ void registerBuiltinOperatorTraits() {
         "op/le_f6",
         "op/gt_f6",
         "op/ge_f6",
+        // `pow` of the wide scalar types and of the complex ones is the library call of the same
+        // name (ops.cpp#__builtin__pow__, ops.cpp#complexPowBinary): outside its domain it returns
+        // inf or NaN, and a negative whole exponent is the reciprocal of an integer power, which
+        // cannot fault either. The two reduced-precision entries above already say the same.
+        "op/pow_i",
+        "op/pow_l",
+        "op/pow_f",
+        "op/pow_d",
+        "op/pow_c",
+        "op/pow_c_i",
+        "op/pow_c_l",
+        "op/pow_z",
+        "op/pow_z_i",
+        "op/pow_z_l",
+        // `len` reads a stored count or, for a string, counts its code points
+        // (struct.cpp#__len_arr__, struct.cpp#__len_str__, collection.cpp#__coll_len__): there is
+        // no fault path, and none of the three has numeric semantics of its own, so the trait is
+        // where the declaration lives.
+        "struct/len_arr",
+        "struct/len_str",
+        "coll/len",
+        // The predicates over a collection: `has` and `contains` walk the entries looking for a
+        // key, `eq` and `neq` compare two collections by content, and `set_is_subset` walks one
+        // looking for each element of the other (collection.cpp#__coll_has__, #__coll_eq__,
+        // #__coll_neq__, #__coll_set_is_subset__). None of them builds a value, so none of them
+        // can run out of memory either, which is the one fault the rest of `coll/` does have.
+        "coll/has",
+        "coll/set_contains",
+        "coll/eq",
+        "coll/neq",
+        "coll/set_is_subset",
+        // The read-only helpers of `prelude.cml`: `contains` over an array walks it comparing
+        // elements by content, `contains` over a string searches it, `len` of `Bytes` reads a
+        // length and `==`/`!=` of two `Bytes` compare them (struct.cpp#__contains_arr__,
+        // #__contains_str__, #__len_bytes__, #__eq_bytes__, #__ne_bytes__). None of them builds a
+        // value, so a failed allocation is not among their paths either.
+        "struct/contains_arr",
+        "struct/contains_str",
+        "struct/len_bytes",
+        "op/eq_bytes",
+        "op/ne_bytes",
     };
     // The conversions of an array apply to each element on its own.
     const auto isArrayConversion = [](std::string_view key) {

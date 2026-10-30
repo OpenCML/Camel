@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "camel/parse/ast/builder.h"
+#include "camel/parse/ast/rule_head.h"
 #include "camel/parse/ast/type_case_words.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/operator_semantics.h"
@@ -803,15 +804,16 @@ bool Builder::rejectParenthesizedName(cst::FuncAnno context) {
 
 bool Builder::rejectVjpAnnotation(cst::FuncAnno context) {
     const std::string annotation = context->get<cst::IdentRef>()->text();
-    if (annotation != "vjp") {
+    if (annotation != "vjp" && annotation != "jvp") {
         return false;
     }
+    const std::string tag    = annotation == "vjp" ? "vjp" : "jvp";
     diags_->of(SemanticDiag::InvalidAnnotation)
         .at(rangeOf(context->firstToken(), context->lastToken()))
         .commit(
             annotation,
-            "a custom derivative rule is a declaration tag now: write '#vjp(rule)' before the "
-            "function (design principles 6.2, 8)");
+            "a derivative rule is a declaration tag now: write '#" + tag +
+                "(rule)' before the function (design principles 6.2, 8)");
     return true;
 }
 
@@ -885,6 +887,18 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     }
     const auto body   = context->get<cst::RuleBody>();
     const auto sides  = body->exprs();
+    // The head of the rule's left side, read here, where the left side is still syntax: at the
+    // stage a module's declarations are read a rule's `__lhs` has no body, so nothing later can
+    // read the head from the graphs. Only a ruleset module is indexed -- its name says so -- and
+    // the module is named explicitly, by the diagnostics the module is being read with.
+    if (diags_ != nullptr && sides[0]) {
+        std::string shape;
+        uint32_t arity     = 0;
+        std::string head   = leftHeadOf(sides[0], shape, arity);
+        const auto range   = extractTokenRangeFromContext(context);
+        collectRuleHead(
+            diags_->moduleName(), std::move(head), name, std::move(shape), arity, range.start, range.end);
+    }
     const bool twoWay = body->has(TK::Equiv);
     const auto params = context->get<cst::ParentParams>();
     // The rule's `with` parameters, written before `export` as a function writes them (design

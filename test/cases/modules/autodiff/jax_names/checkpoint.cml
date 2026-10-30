@@ -1,0 +1,21 @@
+/**
+ * `checkpoint` is not a value, and it is not the name of a transform here: the word in this tree
+ * means the persistence module `ckpt` (stdlib/ckpt.cml), which writes a tree of leaves to a
+ * directory and reads it back. The transform that recomputes a section in the backward pass instead
+ * of keeping it -- JAX's `jax.checkpoint`, whose other name Camel takes -- is `remat`
+ * (jax_names/remat.cml), so the two meanings never share a word.
+ *
+ * The call below is the shape JAX writes for that transform, refused here because the name belongs
+ * to persistence: a program that wants to save a tree calls `ckpt`, and one that wants recomputation
+ * has nothing to call yet (docs/handover/reviews/questions-2026-10-30-jax.md, J8).
+ */
+
+func square(x: float): float {
+    return x * x
+}
+
+func main(): int sync {
+    let g = checkpoint(square)
+    println('jax_checkpoint g={}'->format<g(2.0)>)
+    return 0
+}

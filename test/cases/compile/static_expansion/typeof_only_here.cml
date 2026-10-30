@@ -1,0 +1,11 @@
+/**
+ * An expression written only inside a `typeof` is checked nowhere else, so the inference that
+ * cannot type it reports, once, at the `typeof`: `1 / 'x'` has no `int` division with a `string`,
+ * and that is the one error of this program.
+ */
+
+func main(): int sync {
+    let a: typeof(1 / 'x') = 5
+    println(a)
+    return 0
+}

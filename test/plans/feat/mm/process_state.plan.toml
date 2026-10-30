@@ -58,7 +58,7 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/two_contexts_grad.cml"
 args = ["--devices", "cpu", "${case}", "test::derivatives", "${run_fvm}"]
 expect_exit = 0
-expect_stdout_contains = ["DERIVATIVES tensor=1 before_total=4 after_total=4 after_tensor=1"]
+expect_stdout_contains = ["DERIVATIVES tensor=1 before_total=6 after_total=6 after_tensor=1"]
 verify_script = """
 ({ input, assert }) => {
 const line = /DERIVATIVES tensor=[0-9]+ before_total=[0-9]+ after_total=[0-9]+ after_tensor=[0-9]+/.exec(input.normalized.stdout)

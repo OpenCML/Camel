@@ -95,15 +95,27 @@ Domain domain(const Program &p, const Node &n) {
     // A whole-tensor reduction's result is the elements' own type (design principles 7.3), which
     // is the node's annotation; an axis reduction keeps the f32 result it always had.
     const auto wholeResult = n.dtype == DType::F32 ? f32 : f64;
-    require(
-        law.input == f32 && law.result == (all ? wholeResult : f32) &&
-            law.init == sem::LawInit::Constant &&
-            law.order == sem::LawOrder::Ascending &&
-            law.kind == (maximum ? sem::LawKind::Max : sem::LawKind::Add) &&
-            law.accumulator == (maximum || n.op == "sum_to" ? f32 : f64) &&
-            law.initBits == (maximum ? 0xff800000ULL : 0) &&
-            law.finalize == (mean ? sem::LawFinalize::DivideByCount : sem::LawFinalize::None),
-        "unsupported numerical law");
+    // A position is not accumulated: the pair (value, position) starts at the first contribution,
+    // orders exactly and answers in i64, so it shares no field with the additive laws.
+    const bool positional = law.kind == sem::LawKind::ArgMax || law.kind == sem::LawKind::ArgMin;
+    if (positional)
+        require(
+            law.input == f32 && law.result == core::type::TypeCode::Int64 && law.accumulator == f32 &&
+                law.init == sem::LawInit::FirstContribution &&
+                law.order == sem::LawOrder::Ascending &&
+                law.finalize == sem::LawFinalize::None &&
+                law.kind == (n.op == "argmax_axis" ? sem::LawKind::ArgMax : sem::LawKind::ArgMin),
+            "unsupported numerical law");
+    else
+        require(
+            law.input == f32 && law.result == (all ? wholeResult : f32) &&
+                law.init == sem::LawInit::Constant &&
+                law.order == sem::LawOrder::Ascending &&
+                law.kind == (maximum ? sem::LawKind::Max : sem::LawKind::Add) &&
+                law.accumulator == (maximum || n.op == "sum_to" ? f32 : f64) &&
+                law.initBits == (maximum ? 0xff800000ULL : 0) &&
+                law.finalize == (mean ? sem::LawFinalize::DivideByCount : sem::LawFinalize::None),
+            "unsupported numerical law");
     require(result.count || law.empty != sem::LawEmpty::Fault, "empty reduction domain");
     return result;
 }
@@ -136,6 +148,10 @@ reductionAccess(const Program &p, const Node &n, const IndexExpr &row, const Ind
     return {geometry.count, affineAddress(*n.indexing, n.indexing->norm[0], shape, point)};
 }
 bool canonicalAxisReduction(const Program &p, const Node &n) {
+    // A position result is i64 and the physical axis kernels answer in the operand's float type;
+    // the generic reduction carries the second slot, so this is never the specialized path.
+    if (n.op == "argmax_axis" || n.op == "argmin_axis")
+        return false;
     try {
         const auto geometry = domain(p, n);
         // Empty outputs need no specialized launch. Avoid multiplying artificial

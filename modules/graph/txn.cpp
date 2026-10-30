@@ -149,9 +149,10 @@ TxnState &openState(ArgsView &norm, size_t index, const char *site) {
     return *wrapper->resourceAs<TxnState>();
 }
 
-/// The draft of the graph a Node handle names, and the node. The handle must belong to the
-/// Program the transaction was opened on.
-std::pair<GraphDraft &, camel::runtime::gc_node_ref_t>
+/// The transaction that owns the draft of the graph a Node handle names, and the node. The handle
+/// must belong to the Program the transaction was opened on. The transaction, not the draft: a
+/// caller that hands the draft on to a rewrite loses the only thing that says which graph it edits.
+std::pair<camel::runtime::GraphTransaction &, camel::runtime::gc_node_ref_t>
 draftOf(TxnState &state, const Handle *node, const char *site) {
     if (node->program() != state.base) {
         err::throwRuntimeFault(
@@ -163,11 +164,11 @@ draftOf(TxnState &state, const Handle *node, const char *site) {
     if (graph == nullptr || !graph->containsNodeRef(node->index())) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the node is not in its graph");
     }
-    GraphDraft &draft = state.session.edit(graph);
-    if (!draft.alive(node->index())) {
+    auto &transaction = state.session.edit(graph);
+    if (!transaction.edit().alive(node->index())) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the node was removed");
     }
-    return {draft, node->index()};
+    return {transaction, node->index()};
 }
 
 /// The function a commit makes: the one the transaction was opened on, over the committed graphs.
@@ -200,36 +201,43 @@ slot_t replaceKernel(ArgsView &, ArgsView &norm, Context &) {
     TxnState &state = openState(norm, 0, "graph.replace");
     const auto *from = norm.get<Handle *>(1);
     const auto *to   = norm.get<Handle *>(2);
-    auto [draft, fromRef] = draftOf(state, from, "graph.replace");
-    if (to->program() != state.base || to->graph() != from->graph() ||
-        !draft.alive(to->index())) {
+    auto [transaction, fromRef] = draftOf(state, from, "graph.replace");
+    auto &draft                = transaction.edit();
+    // The replacement names this graph either way it can be named: through the program it came
+    // from, or through the transaction that owns the draft a fold wrote it into.
+    const bool sameGraph = to->graph() == from->graph();
+    const bool knownOwner =
+        to->program() == state.base ||
+        (to->transaction() != nullptr && to->transaction()->id() == to->graph());
+    if (!sameGraph || !knownOwner || !draft.alive(to->index())) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
             "graph.replace",
             "the replacement is not a node of the same graph");
     }
     const auto toRef = to->index();
-    if (!camel::passes::generic::isReplaceable(draft, fromRef)) {
+    if (!camel::passes::generic::isReplaceable(transaction, fromRef)) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
             "graph.replace",
             "the node anchors its graph (an exit, an output, a return or the end of a branch arm)");
     }
-    if (fromRef == toRef || camel::passes::generic::reaches(draft, fromRef, toRef)) {
+    if (fromRef == toRef || camel::passes::generic::reaches(transaction, fromRef, toRef)) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
             "graph.replace",
             "the replacement is the node itself or is computed from it");
     }
-    camel::passes::generic::replaceNode(draft, fromRef, toRef);
+    camel::passes::generic::replaceNode(transaction, fromRef, toRef);
     return NullSlot;
 }
 
 /// Removes a node nothing reads the value of.
 slot_t eraseKernel(ArgsView &, ArgsView &norm, Context &) {
     TxnState &state = openState(norm, 0, "graph.erase");
-    auto [draft, ref] = draftOf(state, norm.get<Handle *>(1), "graph.erase");
-    if (!camel::passes::generic::isReplaceable(draft, ref)) {
+    auto [transaction, ref] = draftOf(state, norm.get<Handle *>(1), "graph.erase");
+    auto &draft             = transaction.edit();
+    if (!camel::passes::generic::isReplaceable(transaction, ref)) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
             "graph.erase",
@@ -241,7 +249,7 @@ slot_t eraseKernel(ArgsView &, ArgsView &norm, Context &) {
             "graph.erase",
             "the value of the node is still read");
     }
-    camel::passes::generic::replaceNode(draft, ref, kInvalidNodeRef);
+    camel::passes::generic::replaceNode(transaction, ref, kInvalidNodeRef);
     return NullSlot;
 }
 
@@ -265,7 +273,8 @@ class StaticArgsView final : public ArgsView {
 /// The static value and its type, or nothing: what `eval` reads its operands from and what the
 /// C++ fold's `staticValueOf` reads (minus its walk through a GATE, which the module's reads do
 /// not make; docs/technical/45_graph_module.md).
-std::optional<std::pair<slot_t, Type *>> staticValue(const GraphDraft &draft, gc_node_ref_t ref) {
+template <class Draft>
+std::optional<std::pair<slot_t, Type *>> staticValue(const Draft &draft, gc_node_ref_t ref) {
     const auto *h = draft.header(ref);
     if (h == nullptr || h->kind != GCNodeKind::Data || h->dataIndex >= 0) {
         return std::nullopt;
@@ -293,7 +302,8 @@ std::optional<std::pair<slot_t, Type *>> staticValue(const GraphDraft &draft, gc
 slot_t evalKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     static const char *site = "<graph::eval>";
     TxnState &state         = openState(norm, 0, site);
-    auto [draft, ref]       = draftOf(state, norm.get<Handle *>(1), site);
+    auto [transaction, ref] = draftOf(state, norm.get<Handle *>(1), site);
+    auto &draft             = transaction.edit();
     const auto *header      = draft.header(ref);
     if (header == nullptr || header->kind != GCNodeKind::Oper ||
         header->dataType == nullptr || !draft.withInputsOf(ref).empty()) {
@@ -345,14 +355,11 @@ slot_t evalKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the graph does not exist");
     }
     const gc_node_ref_t value = draft.materializeStaticValue(result, header->dataType);
+    // The node exists in the draft and nowhere else, so the handle that names it names the
+    // transaction holding it: a program-backed handle here would claim a published node that
+    // does not exist yet.
     return makeSome(
-        toSlot(Handle::create(
-            HandleKind::Node,
-            state.base,
-            graph->id(),
-            value,
-            nullptr,
-            mm::autoSpace())),
+        toSlot(Handle::createInTransaction(transaction, value, mm::autoSpace())),
         TupleType::nullable(HandleType::get(HandleKind::Node)));
 }
 
@@ -434,15 +441,12 @@ slot_t addConstantKernel(ArgsView &, ArgsView &norm, Context &) {
         auto *text = fromSlot<::String *>(value);
         value      = toSlot<::String *>(static_cast<::String *>(text->clone(mm::permSpace(), type)));
     }
-    GraphDraft &draft                 = state.session.edit(graph);
+    auto &transaction = state.session.edit(graph);
+    auto &draft       = transaction.edit();
     const camel::runtime::gc_node_ref_t id = draft.materializeStaticValue(value, type);
-    return toSlot(Handle::create(
-        HandleKind::Node,
-        state.base,
-        graph->id(),
-        id,
-        nullptr,
-        mm::autoSpace()));
+    // The node was just made in the draft, so the handle names the transaction: naming the
+    // program would claim a published node that is not there.
+    return toSlot(Handle::createInTransaction(transaction, id, mm::autoSpace()));
 }
 
 // The fixed operators of a transaction: their signature is in stdlib/graph.cml, so the table

@@ -24,13 +24,19 @@ export func nop::<F>(f: F): F! when is_function::<F>()
 /// the passes that follow.
 export func macro::<F>(f: F): F! when is_function::<F>()
 
-/// Lowers the calls made through function values into direct calls, ahead of the passes that
-/// follow: a call through a parameter whose call site passes a function the program can name
-/// becomes a call of that function, and a call of a closure built in the same graph becomes a call
-/// of its body with the captured values as arguments. A value it cannot name at the call site is
-/// left as it is, and the graph that still calls it is reported by a warning. It takes no
-/// parameters: one copy is made per (function, value) pair and nothing else grows, so it always
-/// completes.
+/// Gives every function value the form the design asks for: one variant of the enum of its type,
+/// with the values the function captured as that variant's data, so the tag is in the value's type.
+/// Every call through such a value becomes a direct call of the function it names -- the captures
+/// travel as trailing arguments -- and a tag only known at run time becomes one match on it. A
+/// value the pass cannot see whole is left as it is and reported by a warning.
+///
+/// The pipeline runs it ahead of `std::opt` whether or not the program names it: no call through a
+/// value and no closure is left when the optimizer starts. Naming it runs it there and only there.
+with <
+    /// Write what the pass did and what it left, as `DEFUNCTIONALIZE` lines and a warning per family:
+    /// a program that names the pass is asking, and the step the pipeline inserts stays silent.
+    report: bool = true
+>
 export func defunctionalize::<F>(f: F): F! when is_function::<F>()
 
 // -----------------------------------------------------------------------------
@@ -213,6 +219,12 @@ with <
     fanout_all: bool = false,
     /// Print the decision for every graph and why a graph stays node by node.
     diag: bool = false,
+    /// Print the segments of the plan as it stands, not the segments it might have been cut
+    /// into: how many items each segment holds (a segment is the top level of a graph or one
+    /// branch arm), which chain of a segment runs after which, and where each operator lands.
+    /// Use it to tell "no segment could be cut" from "a segment was cut but not scheduled": a
+    /// graph that is one segment says so, and one evaluated node by node says why.
+    segments: bool = false,
     /// Hand graphs that need no parallelism to the bytecode interpreter.
     bytecode: bool = true,
     /// 1: print the task graphs and collections of the run when it ends; 2: also one per

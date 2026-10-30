@@ -1,0 +1,10 @@
+import { tanh } from tensor
+
+// `tanh` is a pure tensor operator with no device program, so it is exactly one gap: the census
+// names it and counts it, and the operator beside it remains the device's.
+
+func main(): int sync {
+    let a = tanh([1.0, 2.0] as f32[])
+    println(a + [1.0, 1.0] as f32[])
+    return 0
+}

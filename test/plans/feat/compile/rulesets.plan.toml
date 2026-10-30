@@ -1,0 +1,66 @@
+id = "compile.rulesets"
+order = 1007
+tier = "fast"
+tags = ["feat", "compile", "rulesets", "transforms"]
+desc = "A ruleset is a module of the standard library the transforms read: `rulesets.jvp` exports `Lift<T>` (a value and the tangent of that value) and `lift`, which turns a value into itself plus the zero tangent of its type -- the zero number for a float, the zero tensor for a tensor, and the empty tuple where the type has no tangent"
+
+[[tests]]
+name = "rulesets.jvp_lift"
+desc = "`lift(3.0)` is `(3.0, 0.0)`: a float's tangent is a float and the zero of it is the zero number. `lift(7)` is `7` with the empty tuple -- the `()` annotation is the type assertion, not a printed value."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/jvp_lift.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "3.0\n0.0\n7\n2\n2\n1\n2.0\n2.0\n0.25\n0.25\n0.125\n0.125\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rulesets_rule_heads"
+desc = "The index of a module's rules is built from the heads of their left sides, read where the rules are written: `x + w` is filed under `+`, `x * w` under `*`, and `-x` under `-`. The probe prints one line per rule, so the index is read rather than assumed."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/rulesets.probe_rule_heads.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "RULESET rulesets.probe_rule_heads +/2 -> add_rule\nRULESET rulesets.probe_rule_heads */2 -> mul_rule\nRULESET rulesets.probe_rule_heads -/1 -> neg_rule\n1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rulesets_duplicate_head_refused"
+desc = "A second rule under one head is refused, and the refusal names both rules and the head: the transform would otherwise choose between them by the order they are written in."
+kind = "negative"
+case = "../../../cases/compile/rulesets/rulesets.err_duplicate_head.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DuplicateRuleForOperator"
+expect_diagnostic_code = "0x03000205"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "rulesets_left_not_operator_refused"
+desc = "A rule whose left side is a bare name is refused, and the refusal says what was written: the shape is named, because the writer cannot see that the index needs an operator at the head."
+kind = "negative"
+case = "../../../cases/compile/rulesets/rulesets.err_left_not_operator.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RuleLeftIsNotAnOperator"
+expect_diagnostic_code = "0x03000204"
+expect_diagnostic_line = 3
+
+[[tests]]
+name = "rulesets_arity_keeps_two_primitives_apart"
+desc = "`-x` and `x - w` write the same operator token and are two primitives (`__neg__` and `__sub__`). The index files a rule by the operator and the number of operands, so one module holds a rule for each and neither is refused as the other's duplicate."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/rulesets.probe_arity.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "RULESET rulesets.probe_arity -/1 -> neg_rule\nRULESET rulesets.probe_arity -/2 -> sub_rule\n1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

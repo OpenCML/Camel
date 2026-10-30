@@ -1,0 +1,139 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * The `jvp` ruleset: how a forward transform lifts a value (design principles 9.9, program
+ * transforms).
+ *
+ *     let (y, dy) = lift(3.0);   // 3.0 and its zero tangent
+ *
+ * `Lift<T>` is a value and the tangent of that value, and `lift(x)` is the value plus the zero
+ * tangent of its type. A constant and a captured value are lifted this way, so a straight-line
+ * program is lifted node by node and a call hands its parameters on in the same shape.
+ *
+ * Every rule here is `export`ed: the caller that attaches one to an operator lives in another
+ * module, and a rule that is not exported is refused where it is imported.
+ *
+ * Adding a rule changes docs/stdlib-reference.md; regenerate it with
+ * `node scripts/stdlib-reference.mjs --write`.
+ *
+ */
+
+import { is_float, is_same, Tangent } from types
+import { zeros_like } from tensor
+import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
+
+/// A value of type `T` with its tangent: what a forward transform carries for one value.
+/// @example is_same::<Lift<float>, (float, float)>()    // true
+/// @example is_same::<Lift<int>, (int, ())>()    // true
+export type Lift<T> = (T, Tangent<T>)
+
+/// `x` lifted: the value, and the zero tangent of its type -- the empty tuple for a type that has
+/// no tangent, a tensor of zeros for a tensor, and each member's own zero for a tuple or a struct.
+/// @example lift(3.0)    // (3.0, 0.0)
+export func lift::<T>(x: T): Lift<T> {
+    return (x, zero_tangent(x))
+}
+
+// A zero of the tangent type of `x`. The tangent of a tuple and of a struct is taken member by
+// member, in the member's own place, and a zero of that has the same shape; a literal cannot head a
+// computed type (`Tangent<T> { ... }` does not parse), so the aggregate arm waits for the transform
+// that lifts one, and a type the arms below do not cover is refused where the types meet.
+func zero_tangent::<T>(x: T): Tangent<T> {
+    return match type T {
+        case float => 0.0
+        case f32 => f32(0.0)
+        case bf16 => bf16(0.0)
+        case f16 => f16(0.0)
+        case float[..] => float(zeros_like(x))
+        case f32[..] => f32(zeros_like(x))
+        case f16[..] => f16(zeros_like(x))
+        case bf16[..] => bf16(zeros_like(x))
+        case f32[?] => f32(zeros_like(x))
+        case f64[?] => float(zeros_like(x))
+        case _ => ()
+    }
+}
+
+/// The forward rule of `+` on two 32-bit floats: the tangents of the two addends add up. A rule
+/// is an ordinary function; the tag that attaches it to the operator is written where the
+/// operator is declared.
+/// @example add_jvp(f32(1.0), f32(2.0), (f32(0.5), f32(0.25)))    // (3.0, 0.75)
+func add_jvp(x: f32, y: f32, d: (f32, f32)): (f32, Tangent<f32>) {
+    let (dx, dy) = d
+    return (x + y, dx + dy)
+}
+/// The forward rule of `*` on two 32-bit floats: the product rule, `x*dy + y*dx`.
+/// @example mul_jvp(f32(2.0), f32(3.0), (f32(0.5), f32(0.25)))    // (6.0, 3.0)
+export func mul_jvp(x: f32, y: f32, d: (f32, f32)): (f32, Tangent<f32>) {
+    let (dx, dy) = d
+    return (x * y, x * dy + y * dx)
+}
+
+/// The forward rule of `*` on two 64-bit floats.
+/// @example mul_jvp(2.0, 3.0, (0.5, 0.25))    // (6.0, 3.0)
+export func mul_jvp(x: float, y: float, d: (float, float)): (float, Tangent<float>) {
+    let (dx, dy) = d
+    return (x * y, x * dy + y * dx)
+}
+/// The forward rule of `-` on two 32-bit floats: the tangents subtract the same way.
+/// @example sub_jvp(f32(5.0), f32(3.0), (f32(0.5), f32(0.25)))    // (2.0, 0.25)
+export func sub_jvp(x: f32, y: f32, d: (f32, f32)): (f32, Tangent<f32>) {
+    let (dx, dy) = d
+    return (x - y, dx - dy)
+}
+
+/// The forward rule of `-` on two 64-bit floats.
+/// @example sub_jvp(5.0, 3.0, (0.5, 0.25))    // (2.0, 0.25)
+export func sub_jvp(x: float, y: float, d: (float, float)): (float, Tangent<float>) {
+    let (dx, dy) = d
+    return (x - y, dx - dy)
+}
+
+/// The forward rule of `/` on two 32-bit floats: the quotient rule, `(y*dx - x*dy) / (y*y)`.
+/// @example div_jvp(f32(6.0), f32(2.0), (f32(1.0), f32(0.25)))    // (3.0, 0.125)
+export func div_jvp(x: f32, y: f32, d: (f32, f32)): (f32, Tangent<f32>) {
+    let (dx, dy) = d
+    return (x / y, (y * dx - x * dy) / (y * y))
+}
+
+/// The forward rule of `/` on two 64-bit floats.
+/// @example div_jvp(6.0, 2.0, (1.0, 0.25))    // (3.0, 0.125)
+export func div_jvp(x: float, y: float, d: (float, float)): (float, Tangent<float>) {
+    let (dx, dy) = d
+    return (x / y, (y * dx - x * dy) / (y * y))
+}
+
+// ---- the forward rules of the scalar arithmetic ----
+// A rule is filed in its ruleset module under the operator its left side is written with and the
+// number of operands it takes, and a transform reads it from there; a rule is not a function a
+// program calls, so the rules below and the functions above are two things and their names do not
+// collide (`jvp_add` is the rule, `add_jvp` is the function a program can call and compare).
+//
+// One law, one writing: each right side names the tangent function the library keeps, so what the
+// transform produces and what a test can compute are the same statement.
+
+/// `d(x + w) = dx + dw`.
+export rule jvp_add::<T>(x: T, w: T) when is_float::<T>() {
+    x + w => (dx: T, dw: T) => add_tangent(x, w, dx, dw)
+}
+
+/// `d(x - w) = dx - dw`.
+export rule jvp_sub::<T>(x: T, w: T) when is_float::<T>() {
+    x - w => (dx: T, dw: T) => sub_tangent(x, w, dx, dw)
+}
+
+/// `d(x * w) = dx * w + x * dw`.
+export rule jvp_mul::<T>(x: T, w: T) when is_float::<T>() {
+    x * w => (dx: T, dw: T) => mul_tangent(x, w, dx, dw)
+}
+
+/// `d(x / w) = dx / w - x * dw / (w * w)`.
+export rule jvp_div::<T>(x: T, w: T) when is_float::<T>() {
+    x / w => (dx: T, dw: T) => div_tangent(x, w, dx, dw)
+}
+
+/// `d(-x) = -dx`.
+export rule jvp_neg::<T>(x: T) when is_float::<T>() {
+    -x => (dx: T) => neg_tangent(x, dx)
+}

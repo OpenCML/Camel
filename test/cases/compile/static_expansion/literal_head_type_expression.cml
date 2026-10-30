@@ -1,0 +1,38 @@
+/**
+ * The head of a same-shape comprehension is a type position, so a type expression may stand
+ * there, not only a type name (design principles 5.6).
+ *
+ * `Tangent<T> { ... }` is the case that needs it: the tangent space of a value is a computed
+ * type, so the zero tangent of an aggregate is built member by member from the one type it
+ * names. The head gives the field names and the kind, each member's type comes from that round's
+ * value, and the head need only be the same shape as the type the generator walks
+ * (`Tangent<T>` is the same shape as `T`).
+ */
+
+import { Tangent, is_same } from types
+
+/// The tangent space of one value, by its type: a float is its own tangent space, everything
+/// else carries no data.
+func zero_of::<F>(x: F): Tangent<F> {
+    return match type F {
+        case float => 0.0
+        case _ => ()
+    }
+}
+
+/// `Tangent<(float, int)>` is `(float, ())`: each member's tangent has the member's place.
+func zeros(x: (float, int)): Tangent<(float, int)> {
+    return Tangent<(float, int)> { static for n, F in fields (float, int) => zero_of(x.[n]) }
+}
+
+/// The tangent space of two floats is the same two floats, so the rounds give floats.
+func pair_zero(x: (float, float)): Tangent<(float, float)> {
+    return Tangent<(float, float)> { static for n, F in fields (float, float) => 0.0 }
+}
+
+func main(): int sync {
+    println(is_same::<Tangent<(float, int)>, (float, ())>())
+    println(zeros((1.0, 7)))
+    println(pair_zero((3.0, 4.0)))
+    return 0
+}

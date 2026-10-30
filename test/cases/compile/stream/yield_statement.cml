@@ -8,9 +8,12 @@
  * the slice is docs/design/io-concurrency-streams/plan.cn.md:290 (`pairs`), and the acceptance
  * asks for one `yield` in a `loop` and one in an `if`.
  *
- * The bodies below are only read here (`camel check -s`, `camel inspect --ast`): what produces
- * the stream is the state machine of that plan's slice E, which is not built yet, and the
- * compiler refuses a body that writes `yield` by name (cases/compile/stream/yield_lowering.cml).
+ * The bodies below are only read here (`camel check -s`, `camel inspect --ast`), so this file
+ * holds the shape of the statement and not what the stream it produces is: `pairs` carries one
+ * value across its `yield` in a `while` loop and `sign` yields from both arms of an `if`, and both
+ * are lowered now -- cases/compile/stream/generators_loop.cml and generators.cml are what pin what
+ * they hand out. It also compiles: the one shape the compiler still refuses by name is a loop that
+ * carries two values (cases/compile/stream/yield_lowering.cml), which neither function writes.
  */
 func pairs(n: int): (int, int).. {
     loop i = 0 while i < n do {

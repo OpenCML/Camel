@@ -88,3 +88,26 @@ assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[0].name === 'SemanticDiag::UnusedPureResult', input.diagnostics[0].name)
 assert(input.diagnostics[0].line === 7 && input.diagnostics[0].column === 5, JSON.stringify(input.diagnostics[0]))
 """
+
+[[tests]]
+name = "unused_values.loop_statements_used"
+desc = "What a loop takes from its own statements is used -- the condition it asks and the body's value that becomes the next state -- so neither is UnusedPureResult, and a body that drops what it gives (the empty arm of an `if` without `else`) is judged by its own last statement, not by a loop body at the same address: the loop's condition and body arms die when the loop is built, and a body map keyed by their addresses reported `s + b` here (exit 1, seed of the shape)."
+kind = "behavior"
+case = "../../../cases/compile/unused_values/loop_statements_used.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "6\n"
+verify_script = """
+assert(input.diagnostics.length === 0, JSON.stringify(input.diagnostics))
+"""
+
+[[tests]]
+name = "unused_values.one_input_one_answer"
+desc = "The same program compiled forty times in forty processes gives forty answers: exit 0 and no diagnostic. The example is the one the address-keyed body map failed on about once in ten compiles, reporting a value nobody took at somebody else's line (`param_count`'s `n + count_block(b)` at 13:38, `>=` at 131:58, `+` at 169:30). This is the net for another map of that kind, not a repro: with the fix reverted it still passes forty times, because which body collides depends on the layout of the binary -- `unused_values.loop_statements_used` is the shape that reds every time."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/compile/unused_values/repeat_compile.py"
+args = ["${case}", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["one input, one answer: PASS (40 compiles"]
+timeout_ms = 120000
