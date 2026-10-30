@@ -189,9 +189,9 @@ void forwardingGateConsumers() {
     const auto reader = node(draft), control = node(draft, {gate});
     draft.setNormInputs(reader, std::span(&gate, 1));
     size_t budget = 0;
-    check(!bypassValueGate(draft, gate, budget), "zero budget bypassed a gate");
+    check(!bypassValueGate(*owner, gate, budget), "zero budget bypassed a gate");
     budget = 64;
-    check(bypassValueGate(draft, gate, budget), "ordinary forwarding gate survived");
+    check(bypassValueGate(*owner, gate, budget), "ordinary forwarding gate survived");
     check(
         !draft.header(gate) && draft.normInputsOf(reader).front() == value,
         "reader did not receive the original value");
@@ -206,7 +206,7 @@ void forwardingGateConsumers() {
     draft.setCtrlInputs(conditional, std::span(&wait, 1));
     const auto join = draft.addNode(DraftNodeInit{.kind = GCNodeKind::Join});
     draft.setWithInputs(join, std::span(&conditional, 1));
-    check(!bypassValueGate(draft, conditional, budget), "arm-local wait moved to JOIN");
+    check(!bypassValueGate(*owner, conditional, budget), "arm-local wait moved to JOIN");
     check(draft.ctrlInputsOf(join).empty(), "JOIN acquired an unconditional arm dependency");
 
     const auto barrier = draft.addGateNode(nullptr);
@@ -219,7 +219,7 @@ void forwardingGateConsumers() {
         const auto user = node(draft);
         draft.setNormInputs(user, std::span(&barrier, 1));
     }
-    check(!bypassValueGate(draft, barrier, budget), "shared barrier caused excess edge growth");
+    check(!bypassValueGate(*owner, barrier, budget), "shared barrier caused excess edge growth");
 
     const auto output = draft.addGateNode(nullptr);
     draft.setNormInputs(output, std::span(&value, 1));
@@ -227,7 +227,7 @@ void forwardingGateConsumers() {
     const auto outputReader = node(draft);
     draft.setNormInputs(outputReader, std::span(&output, 1));
     draft.setOutputNode(output);
-    check(!bypassValueGate(draft, output, budget), "output anchor lost its identity");
+    check(!bypassValueGate(*owner, output, budget), "output anchor lost its identity");
 }
 /// A node with many readers: the readers are added and erased in an order unlike the order they
 /// were added in, as dead code is after inlining. Each step costs the reader, not the readers
@@ -287,7 +287,7 @@ void syncChainOrdering() {
         check(draft.setSyncPredecessor(gate, tail), "a gate did not take the chain's tail");
         const auto reader = node(draft);
         draft.setNormInputs(reader, std::span<const gc_node_ref_t>(&gate, 1));
-        const auto sources = camel::passes::generic::orderedSources(draft, reader);
+        const auto sources = camel::passes::generic::orderedSources(*owner, reader);
         check(
             sources.size() == 1 && sources.front() == gate,
             "a gate that waits only on the sync chain does not carry the order");
@@ -304,7 +304,7 @@ void syncChainOrdering() {
         check(draft.setSyncPredecessor(plain, tail), "a node did not take the chain's tail");
         const auto reader = node(draft);
         draft.setNormInputs(reader, std::span<const gc_node_ref_t>(&plain, 1));
-        const auto sources = camel::passes::generic::orderedSources(draft, reader);
+        const auto sources = camel::passes::generic::orderedSources(*owner, reader);
         check(
             std::ranges::find(sources, tail) != sources.end(),
             "the walk did not follow the sync chain");

@@ -168,7 +168,9 @@ std::optional<T> constant(
 
 template <typename T>
 bool simplify(
-    GraphDraft &draft, gc_node_ref_t node, const Arithmetic &ops, const WrittenSlots &written) {
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t node, const Arithmetic &ops,
+    const WrittenSlots &written) {
+    auto &draft = transaction.edit();
     if constexpr (!std::is_integral_v<T>) {
         return false;
     } else {
@@ -178,11 +180,11 @@ bool simplify(
         }
         auto *ty = draft.header(node)->dataType;
         if (draft.header(inputs[0])->dataType != ty || draft.header(inputs[1])->dataType != ty ||
-            written(inputs[0]) || written(inputs[1]) || !isReplaceable(draft, node)) {
+            written(inputs[0]) || written(inputs[1]) || !isReplaceable(transaction, node)) {
             return false;
         }
         const auto a = inputs[0], b = inputs[1];
-        const auto op = operIdOf(draft, node);
+        const auto op = operIdOf(transaction, node);
         const auto ca = constant<T>(draft, a, ops, written),
                    cb = constant<T>(draft, b, ops, written);
         const auto isNeutral = [](const std::optional<T> &c, const std::optional<uint64_t> &n) {
@@ -201,7 +203,7 @@ bool simplify(
         if (replacement == kInvalidNodeRef) {
             return false;
         }
-        replaceNode(draft, node, replacement);
+        replaceNode(transaction, node, replacement);
         return true;
     }
 }
@@ -228,10 +230,10 @@ size_t algebraDraft(camel::runtime::GraphTransaction &transaction, bool safeFp, 
         work.pop_front();
         queued[id]    = false;
         const auto *h = draft.header(id);
-        if (!h || !h->dataType || !isPureOper(draft, id) || written(id)) {
+        if (!h || !h->dataType || !isPureOper(transaction, id) || written(id)) {
             continue;
         }
-        const Arithmetic *ops = families->match(operIdOf(draft, id), h->dataType);
+        const Arithmetic *ops = families->match(operIdOf(transaction, id), h->dataType);
         if (ops == nullptr) {
             continue;
         }
@@ -240,10 +242,10 @@ size_t algebraDraft(camel::runtime::GraphTransaction &transaction, bool safeFp, 
         bool done = false;
         switch (ops->element) {
         case type::TypeCode::Int32:
-            done = simplify<uint32_t>(draft, id, *ops, written);
+            done = simplify<uint32_t>(transaction, id, *ops, written);
             break;
         case type::TypeCode::Int64:
-            done = simplify<uint64_t>(draft, id, *ops, written);
+            done = simplify<uint64_t>(transaction, id, *ops, written);
             break;
         default:
             break;
@@ -275,6 +277,7 @@ AlgebraPass::apply(const camel::runtime::Program *program, std::ostream &) {
         program,
         "std::opt::algebra",
         [&](camel::runtime::GraphTransaction &transaction) {
+    auto &draft = transaction.edit();
             return camel::passes::generic::algebraDraft(transaction, false, neutralOnly_);
         },
         nullptr,

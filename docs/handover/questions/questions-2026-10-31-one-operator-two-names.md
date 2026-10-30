@@ -78,3 +78,68 @@ TILES_OPERATOR_DECLARATION tensor:reshape declared major=1
 
 **无论选哪条，判据都是同一条读数**：`TILES_OPERATOR_DECLARATION <节点携带的那个 URI> declared major=1`。
 在这一行出现之前，A 组最后一条不进表（缺口停在 26、`operations()` 停在 21）。
+## 四、第三处（导出）的读数：名字取自 URI，而 lowering 表键的是另一条身份
+
+三条读数，同一个程序（`f32[2,3]` 上 `argmax<1>()` 与 `reshape<[3,2]>`），主机无卡：
+
+1. **`std::jgir`** 打印的是节点携带的 URI：
+   ```
+   "label": "tensor:reshape"
+   "label": "array:argmax_axis"
+   ```
+   （argmax 外面还套一层标准库函数的调用节点 `array::argmax<f32>`，算子节点本身是 `array:argmax_axis`。）
+
+2. **`onnx::export` 今天对 `argmax` 直接拒绝**（这是读数，不是待修）：
+   ```
+   error[RuntimeDiag::TranslationRefused]: Translation pass 'onnx::export_model' refused the graph:
+   operator 'array:argmax_axis' has no ONNX lowering at opset 17 but receives a value that depends on the model input
+   ```
+
+3. **对照**：`tensor:reshape` 导出的 `.onnx` 里 op 类型是 `['Reshape', 'Identity']`。
+
+**为什么**：lowering 表按 **URI** 键注册，`modules/onnx/lowering.cpp:1349` 注册的名字是
+**`tensor:argmax_axis`**；节点带的是 `array:argmax_axis`，查不到，于是拒绝。**导出用的是 URI，不是别名表**——
+导出这边早就认 `tensor:` 这个拼法，只有标准库的 `#op` 声明说 `array:`。
+
+**结论一句**：导出用的是**算子 URI**（与进表同一个 `OperatorTable`），lowering 表按 URI 注册——所以
+**若 `array:` 定为别名、`tensor:` 为正名（建议 (b)），导出会自动恢复**（它本来就在 `tensor:` 上注册着）；
+**若 `array:` 定为正名（(a)），`modules/onnx/lowering.cpp` 那张表的键要跟着改**，否则 `argmax` 永远导不出去——
+今天就已经导不出去，上面第 2 条就是证据。
+
+**这使 (a)/(b) 从"两处改动"变成可算的三处账**：
+
+| 选择 | 进表 | `std::jgir` | `onnx::export` |
+| --- | --- | --- | --- |
+| (b) `tensor:` 正名 | 写 `tensor:argmax_axis` | 名字会变成 `tensor:…`（读数变化，无功能影响） | **不改**（已注册） |
+| (a) `array:` 正名 | 写 `array:argmax_axis` | 不变 | **要改** `lowering.cpp:1349` 的键 |
+
+## 五、这不是孤例：六条轴归约都有两条身份
+
+`argmax` 不是特例。`stdlib` 里同一个算子被**两处**声明，拼法不同：
+
+| 声明处 | 拼法 |
+| --- | --- |
+| `stdlib/array.cml`（用户调用的 `argmax`/`sum` 落在这里） | `array:argmax_axis`、`array:sum_axis`、`array:mean_axis`、`array:min_axis`、`array:max_axis`、`array:argmin_axis` |
+| `stdlib/signatures/tensor.cml`（tensor 模块签名） | `tensor:argmax_axis`、`tensor:sum_axis`、…（同一批六个） |
+
+`modules/onnx/lowering.cpp` 的键全在 `tensor:` 一侧：
+
+```
+add("tensor:sum_axis",  reduceAxisOp("ReduceSum"));
+add("tensor:mean_axis", reduceAxisOp("ReduceMean"));
+add("tensor:max_axis",  reduceAxisOp("ReduceMax"));
+add("tensor:min_axis",   reduceAxisOp("ReduceMin"));
+add("tensor:argmax_axis", lowerArgMax, 12);
+```
+
+于是**节点带 `array:`、lowering 键是 `tensor:`，逐个都导不出去**——已实测两条：
+
+- `x->sum<0>()`：jgir 写 `array:sum_axis`，导出报 `operator 'array:sum_axis' has no ONNX lowering at opset 17`；
+- `x->argmax<1>()`：jgir 写 `array:argmax_axis`，导出报同样一句。
+
+**判据**：凡 `#op` 说 `array:` 而 lowering 登记在 `tensor:` 上的算子，今天都导不出去。这条分裂覆盖**六个**轴归约
+（`sum`、`mean`、`min`、`max`、`argmax`、`argmin`），不是一批里漏改了一个——**是命名分裂的系统性后果**。
+
+同一分裂也解释了区域侧：表里写的是 `tensor:sum_axis`、`tensor:mean_axis`、`tensor:max_axis`，
+而节点带 `array:sum_axis` 等，**表里那三条对真实程序是空的**——缺口账本"有实现 8"这一栏是**表**的读数，
+不是节点的读数。这一条要按节点重新量，才能知道 `sum_axis`/`mean_axis`/`max_axis` 到底算不算"有实现"。

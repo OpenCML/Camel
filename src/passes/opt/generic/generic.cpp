@@ -56,7 +56,8 @@ namespace {
  * may only be merged when they lie in exactly the same ones, so the survivor runs whenever the
  * replaced node would have.
  */
-std::vector<std::vector<uint64_t>> armRegions(const GraphDraft &draft) {
+std::vector<std::vector<uint64_t>> armRegions(const camel::runtime::GraphTransaction &transaction) {
+    const auto &draft = transaction.graph();
     std::vector<std::vector<uint64_t>> regions(draft.nodeSlotCount());
     for (gc_node_ref_t n = 0; n < regions.size(); ++n) {
         if (!draft.alive(n)) {
@@ -214,7 +215,8 @@ bool fitsConstantBudget(slot_t value, type::Type *type, size_t budget) {
 /// This proves a value, not permission to discard its producer: replaceNode retains ordering.
 /// A shared budget bounds gate walks; nested JOINs are not recursively expanded.
 std::optional<std::pair<slot_t, type::Type *>>
-staticValueOf(const GraphDraft &draft, gc_node_ref_t id) {
+staticValueOf(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
     size_t budget     = 128;
     const auto ungate = [&](gc_node_ref_t node) {
         while (budget) {
@@ -284,22 +286,25 @@ staticValueOf(const GraphDraft &draft, gc_node_ref_t id) {
 /// gate that waits carries the chain behind it: the statements of its block run because the graph's
 /// result is reached through them (edges.cn.md 2), so folding it to its own input detaches every
 /// one of them.
-bool isFoldable(const GraphDraft &draft, gc_node_ref_t id) {
+bool isFoldable(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
     const bool waits = !draft.ctrlInputsOf(id).empty() || !draft.syncInputsOf(id).empty();
-    const bool valueAnchor = isReplaceable(draft, id) || (id == draft.returnNode() && !waits);
-    return valueAnchor && !isWrittenInPlace(draft, id) && readsNoWrittenSlot(draft, id);
+    const bool valueAnchor = isReplaceable(transaction, id) || (id == draft.returnNode() && !waits);
+    return valueAnchor && !isWrittenInPlace(draft, id) && readsNoWrittenSlot(transaction, id);
 }
 
 /// Replaces `id` by `replacement` (see replaceNode) and makes the replacement the graph's exit,
 /// output and returned value wherever `id` was one of them. `replaceNode` re-points the value
 /// anchors it knows (output, return), but erasing the node clears the exit anchor, so all three
 /// are set again on the replacement.
-void replaceFoldResult(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement) {
+void replaceFoldResult(
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, gc_node_ref_t replacement) {
+    auto &draft          = transaction.edit();
     const bool wasExit   = draft.exitNode() == id;
     const bool wasOutput = draft.outputNode() == id;
     const bool wasReturn = draft.returnNode() == id;
     const auto kind      = draft.returnKind();
-    replaceNode(draft, id, replacement);
+    replaceNode(transaction, id, replacement);
     if (replacement == kInvalidNodeRef) {
         return;
     }
@@ -315,11 +320,12 @@ void replaceFoldResult(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replac
 }
 
 std::optional<StaticArgsView>
-staticArgs(const GraphDraft &draft, std::span<const gc_node_ref_t> inputs) {
+staticArgs(const camel::runtime::GraphTransaction &transaction, std::span<const gc_node_ref_t> inputs) {
+    const auto &draft = transaction.graph();
     std::vector<slot_t> slots;
     std::vector<type::Type *> types;
     for (gc_node_ref_t in : inputs) {
-        auto value = staticValueOf(draft, in);
+        auto value = staticValueOf(transaction, in);
         if (!value || !value->second) {
             return std::nullopt;
         }
@@ -332,12 +338,13 @@ staticArgs(const GraphDraft &draft, std::span<const gc_node_ref_t> inputs) {
 // ---------------------------------------------------------------- branch pruning
 
 /// The arm a BRCH takes, when its condition (and, for a match, every case) is a static scalar.
-std::optional<size_t> staticArmOf(const GraphDraft &draft, gc_node_ref_t brch) {
+std::optional<size_t> staticArmOf(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t brch) {
+    const auto &draft = transaction.graph();
     const auto conds = draft.normInputsOf(brch);
     if (conds.size() != 1) {
         return std::nullopt;
     }
-    const auto cond = staticValueOf(draft, conds[0]);
+    const auto cond = staticValueOf(transaction, conds[0]);
     if (!cond || !cond->second || type::isGCTraced(cond->second->code())) {
         return std::nullopt;
     }
@@ -347,7 +354,7 @@ std::optional<size_t> staticArmOf(const GraphDraft &draft, gc_node_ref_t brch) {
         return camel::core::rtdata::fromSlot<bool>(cond->first) ? 0 : 1;
     }
     for (size_t i = 0; i < cases.size(); ++i) {
-        const auto value = staticValueOf(draft, cases[i]);
+        const auto value = staticValueOf(transaction, cases[i]);
         if (!value || !value->second || type::isGCTraced(value->second->code())) {
             return std::nullopt;
         }
@@ -363,7 +370,8 @@ std::optional<size_t> staticArmOf(const GraphDraft &draft, gc_node_ref_t brch) {
  * included), or nullopt when an arm has no region.
  */
 std::optional<std::vector<std::vector<gc_node_ref_t>>>
-branchArmNodes(const GraphDraft &draft, gc_node_ref_t brch, size_t armCount) {
+branchArmNodes(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t brch, size_t armCount) {
+    const auto &draft = transaction.graph();
     std::vector<uint32_t> armRegion(armCount, 0);
     for (uint32_t r = 1; r < draft.regionCount(); ++r) {
         const auto &region = draft.region(r);
@@ -406,7 +414,8 @@ branchArmNodes(const GraphDraft &draft, gc_node_ref_t brch, size_t armCount) {
 /// the head and the tail of the chain the block's statements make, or two invalid refs when they do
 /// not make one.
 std::pair<gc_node_ref_t, gc_node_ref_t>
-joinBlockFragments(GraphDraft &draft, gc_node_ref_t anchor) {
+joinBlockFragments(camel::runtime::GraphTransaction &transaction, gc_node_ref_t anchor) {
+    auto &draft = transaction.edit();
     const std::pair<gc_node_ref_t, gc_node_ref_t> none{kInvalidNodeRef, kInvalidNodeRef};
     if (anchor == kInvalidNodeRef || !draft.alive(anchor)) {
         return none;
@@ -524,8 +533,9 @@ joinBlockFragments(GraphDraft &draft, gc_node_ref_t anchor) {
     return {heads.front(), tails.back()};
 }
 
-bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
-    const auto arm = staticArmOf(draft, brch);
+bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t brch) {
+    auto &draft = transaction.edit();
+    const auto arm = staticArmOf(transaction, brch);
     if (!arm) {
         return false;
     }
@@ -539,7 +549,7 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     }
     const gc_node_ref_t result = draft.withInputsOf(join)[*arm];
 
-    auto found = branchArmNodes(draft, brch, armCount);
+    auto found = branchArmNodes(transaction, brch, armCount);
     if (!found) {
         return false;
     }
@@ -564,7 +574,7 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     // The branch also ran after what its condition was ordered after: a condition whose value
     // is known may still wait on an effect (the result of a call that prints, seen through a
     // GATE). With the BRCH gone nothing else may reach that effect, and it was silently dropped.
-    for (gc_node_ref_t source : orderedSources(draft, brch)) {
+    for (gc_node_ref_t source : orderedSources(transaction, brch)) {
         if (source != brch && std::ranges::find(brchPreds, source) == brchPreds.end()) {
             brchPreds.push_back(source);
         }
@@ -635,7 +645,7 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     gc_node_ref_t armChainHead = kInvalidNodeRef;
     gc_node_ref_t armChainTail = kInvalidNodeRef;
     if (armBlockNode != kInvalidNodeRef) {
-        const auto chain  = joinBlockFragments(draft, armBlockNode);
+        const auto chain  = joinBlockFragments(transaction, armBlockNode);
         armChainHead      = chain.first;
         armChainTail      = chain.second;
     }
@@ -852,7 +862,7 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
                 lost.push_back(read);
                 continue;
             }
-            for (gc_node_ref_t source : orderedSources(draft, read)) {
+            for (gc_node_ref_t source : orderedSources(transaction, read)) {
                 if (std::ranges::find(lost, source) == lost.end()) {
                     lost.push_back(source);
                 }
@@ -869,7 +879,7 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
                 }
                 return;
             }
-            for (gc_node_ref_t source : orderedSources(draft, n)) {
+            for (gc_node_ref_t source : orderedSources(transaction, n)) {
                 if (source != n && std::ranges::find(lost, source) == lost.end() &&
                     std::ranges::find(targets, source) == targets.end()) {
                     targets.push_back(source);
@@ -927,12 +937,14 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
 }
 
 /// Replaces an element access on a constant tuple or struct by the element's value.
-bool foldStaticAccess(GraphDraft &draft, gc_node_ref_t id, size_t constantBudget) {
+bool foldStaticAccess(
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, size_t constantBudget) {
+    auto &draft       = transaction.edit();
     const auto sources = draft.normInputsOf(id);
     if (sources.size() != 1) {
         return false;
     }
-    const auto source  = staticValueOf(draft, sources[0]);
+    const auto source  = staticValueOf(transaction, sources[0]);
     type::Type *result = draft.header(id)->dataType;
     if (!source || !source->second || !result || source->first == NullSlot) {
         return false;
@@ -962,14 +974,16 @@ bool foldStaticAccess(GraphDraft &draft, gc_node_ref_t id, size_t constantBudget
         return false; // the element is a value of its own, and one too large to hold
     }
     // The element is reachable from the constant it was read from, which the graph keeps.
-    replaceFoldResult(draft, id, draft.materializeStaticValue(value, result));
+    replaceFoldResult(
+        transaction, id, draft.materializeStaticValue(value, result));
     return true;
 }
 
 /// Replaces a FILL whose template and values are all constants by the object it builds.
 bool foldStaticFill(
-    GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots,
-    size_t constantBudget) {
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t id,
+    std::deque<camel::core::mm::RootHandle> &roots, size_t constantBudget) {
+    auto &draft = transaction.edit();
     const auto sources = draft.normInputsOf(id);
     type::Type *result = draft.header(id)->dataType;
     if (sources.size() != 1 || !result || !type::isGCTraced(result->code())) {
@@ -980,13 +994,13 @@ bool foldStaticFill(
     if (body->fillKind == camel::runtime::GCFillKind::FunctionClosure) {
         return false; // closures stay calls std::opt can devirtualize
     }
-    const auto source = staticValueOf(draft, sources[0]);
+    const auto source = staticValueOf(transaction, sources[0]);
     if (!source || source->first == NullSlot) {
         return false;
     }
     std::vector<slot_t> slots;
     for (gc_node_ref_t in : draft.withInputsOf(id)) {
-        const auto value = staticValueOf(draft, in);
+        const auto value = staticValueOf(transaction, in);
         if (!value) {
             return false;
         }
@@ -1006,8 +1020,7 @@ bool foldStaticFill(
     roots.emplace_back(camel::core::mm::autoSpace(), object, result, "std::opt::fold");
     camel::execute::writeRuntimeFillSlots(object, result, body, slots);
     replaceFoldResult(
-        draft,
-        id,
+        transaction, id,
         draft.materializeStaticValue(camel::core::rtdata::toSlot(object), result));
     return true;
 }
@@ -1021,14 +1034,15 @@ bool foldStaticFill(
  * graph, to fail with its own located error when the program runs.
  */
 bool foldStaticCast(
-    GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots,
-    size_t constantBudget) {
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t id,
+    std::deque<camel::core::mm::RootHandle> &roots, size_t constantBudget) {
+    auto &draft = transaction.edit();
     const auto sources = draft.normInputsOf(id);
     type::Type *target = draft.header(id)->dataType;
     if (sources.size() != 1 || !target || !draft.withInputsOf(id).empty()) {
         return false;
     }
-    const auto source = staticValueOf(draft, sources[0]);
+    const auto source = staticValueOf(transaction, sources[0]);
     if (!source || !source->second) {
         return false;
     }
@@ -1080,16 +1094,18 @@ bool foldStaticCast(
             "std::opt::fold");
     }
     const gc_node_ref_t data = draft.materializeStaticValue(result, target);
-    replaceFoldResult(draft, id, data);
+    replaceFoldResult(
+        transaction, id, data);
     return true;
 }
 
 /// Replaces a pure operator by the constant its argument types fix, through the operator's
 /// registered type folder. Returns false when there is none or the types do not fix the result.
 bool foldFromTypes(
-    GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots,
-    size_t constantBudget) {
-    const auto *folder     = camel::core::OperatorTable::instance().typeFolder(operIdOf(draft, id));
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t id,
+    std::deque<camel::core::mm::RootHandle> &roots, size_t constantBudget) {
+    auto &draft = transaction.edit();
+    const auto *folder     = camel::core::OperatorTable::instance().typeFolder(operIdOf(transaction, id));
     type::Type *resultType = draft.header(id)->dataType;
     // The arguments as the operator's kernel reads them (with-arguments after the ordinary ones
     // when it takes them so); an operator with other with-arguments is not folded.
@@ -1105,7 +1121,7 @@ bool foldFromTypes(
             return false;
         }
         types.push_back(h->dataType);
-        const auto value = staticValueOf(draft, in);
+        const auto value = staticValueOf(transaction, in);
         statics.push_back(value ? std::optional<slot_t>(value->first) : std::nullopt);
     }
     const auto result = (*folder)(types, statics, camel::core::mm::autoSpace());
@@ -1123,20 +1139,22 @@ bool foldFromTypes(
             resultType,
             "std::opt::fold");
     }
-    replaceFoldResult(draft, id, draft.materializeStaticValue(*result, resultType));
+    replaceFoldResult(
+        transaction, id, draft.materializeStaticValue(*result, resultType));
     return true;
 }
 
 size_t foldDraft(
-    GraphDraft &draft, camel::core::context::Context &ctx,
+    camel::runtime::GraphTransaction &transaction, camel::core::context::Context &ctx,
     std::deque<camel::core::mm::RootHandle> &roots, size_t constantBudget) {
+    auto &draft  = transaction.edit();
     size_t folded = 0;
     for (bool changed = true; changed;) {
         changed = false;
         for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
             // A branch whose condition is static is replaced by the taken arm.
             if (const auto *h = draft.header(id); h && h->kind == GCNodeKind::Brch) {
-                if (pruneBranch(draft, id)) {
+                if (pruneBranch(transaction, id)) {
                     ++folded;
                     changed = true;
                 }
@@ -1145,13 +1163,14 @@ size_t foldDraft(
             // An element projected out of a tuple built in this graph is the value filled there;
             // an element of a constant tuple or struct is a constant.
             if (const auto *h = draft.header(id);
-                h && h->kind == GCNodeKind::Accs && isFoldable(draft, id)) {
+                h && h->kind == GCNodeKind::Accs && isFoldable(transaction, id)) {
                 const gc_node_ref_t value = camel::runtime::resolveTupleProjection(draft, id);
                 if (value != id) {
-                    replaceFoldResult(draft, id, value);
+                    replaceFoldResult(
+        transaction, id, value);
                     ++folded;
                     changed = true;
-                } else if (foldStaticAccess(draft, id, constantBudget)) {
+                } else if (foldStaticAccess(transaction, id, constantBudget)) {
                     ++folded;
                     changed = true;
                 }
@@ -1159,8 +1178,8 @@ size_t foldDraft(
             }
             // A tuple, struct or array built from constants is a constant.
             if (const auto *h = draft.header(id);
-                h && h->kind == GCNodeKind::Fill && isFoldable(draft, id)) {
-                if (foldStaticFill(draft, id, roots, constantBudget)) {
+                h && h->kind == GCNodeKind::Fill && isFoldable(transaction, id)) {
+                if (foldStaticFill(transaction, id, roots, constantBudget)) {
                     ++folded;
                     changed = true;
                 }
@@ -1168,28 +1187,28 @@ size_t foldDraft(
             }
             // A conversion of a constant is a constant, when the conversion succeeds.
             if (const auto *h = draft.header(id);
-                h && h->kind == GCNodeKind::Cast && isFoldable(draft, id)) {
-                if (foldStaticCast(draft, id, roots, constantBudget)) {
+                h && h->kind == GCNodeKind::Cast && isFoldable(transaction, id)) {
+                if (foldStaticCast(transaction, id, roots, constantBudget)) {
                     ++folded;
                     changed = true;
                 }
                 continue;
             }
-            if (!isPureOper(draft, id)) {
+            if (!isPureOper(transaction, id)) {
                 continue;
             }
             // A node that cannot be replaced (the head of a branch arm) is still evaluated, to
             // tell the user of a constant that faults where it is written.
-            const bool foldable = isFoldable(draft, id);
-            auto with           = staticArgs(draft, draft.withInputsOf(id));
-            auto norm           = staticArgs(draft, draft.normInputsOf(id));
+            const bool foldable = isFoldable(transaction, id);
+            auto with           = staticArgs(transaction, draft.withInputsOf(id));
+            auto norm           = staticArgs(transaction, draft.normInputsOf(id));
             if (!with || !norm) {
                 if (!foldable) {
                     continue;
                 }
                 // Not all arguments are constants, but their types may fix the result (e.g. the
                 // shape of a tensor whose type carries it).
-                if (foldFromTypes(draft, id, roots, constantBudget)) {
+                if (foldFromTypes(transaction, id, roots, constantBudget)) {
                     ++folded;
                     changed = true;
                 }
@@ -1251,7 +1270,8 @@ size_t foldDraft(
                     "std::opt::fold");
             }
             const gc_node_ref_t value = draft.materializeStaticValue(result, resultType);
-            replaceFoldResult(draft, id, value);
+            replaceFoldResult(
+        transaction, id, value);
             ++folded;
             changed = true;
         }
@@ -1268,7 +1288,7 @@ size_t foldDraft(
 
 size_t cseDraft(camel::runtime::GraphTransaction &transaction) {
     auto &draft = transaction.edit();
-    const auto regions = armRegions(draft);
+    const auto regions = armRegions(transaction);
     // The numeric permissions are part of the key: two otherwise identical operations granted
     // different permissions (design principles 7.5) may compute different bits, and merging
     // them would give one of them permissions it was not granted, or take some away. They are
@@ -1297,13 +1317,13 @@ size_t cseDraft(camel::runtime::GraphTransaction &transaction) {
         if (const auto *h = draft.header(id); h && h->kind == GCNodeKind::Join) {
             continue;
         }
-        const auto value = staticValueOf(draft, id);
+        const auto value = staticValueOf(transaction, id);
         if (!value || !value->second || type::isGCTraced(value->second->code())) {
             continue;
         }
         auto [it, inserted] = constants.try_emplace({value->second, value->first, regions[id]}, id);
-        if (!inserted && isReplaceable(draft, id) && !reaches(draft, id, it->second)) {
-            replaceNode(draft, id, it->second);
+        if (!inserted && isReplaceable(transaction, id) && !reaches(transaction, id, it->second)) {
+            replaceNode(transaction, id, it->second);
             ++merged;
         }
     }
@@ -1321,7 +1341,7 @@ size_t cseDraft(camel::runtime::GraphTransaction &transaction) {
                 if (isWrittenInPlace(draft, in) ||
                     (h && h->kind == GCNodeKind::Oper &&
                      camel::core::OperatorTable::instance().touchesClass(
-                         operIdOf(draft, in),
+                         operIdOf(transaction, in),
                          camel::core::sem::ResourceClass::Variable))) {
                     return true;
                 }
@@ -1334,7 +1354,7 @@ size_t cseDraft(camel::runtime::GraphTransaction &transaction) {
     // camel/runtime/draft.h; docs/design/effects/edges.cn.md 4.6 and 5.3). The gate keeps its place
     // and its wait either way, so this merges the computation and leaves the order it carried.
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-        if (!isPureOper(draft, id) || isWrittenInPlace(draft, id) || readsVariable(id)) {
+        if (!isPureOper(transaction, id) || isWrittenInPlace(draft, id) || readsVariable(id)) {
             continue;
         }
         const auto norm = draft.normInputsOf(id);
@@ -1358,9 +1378,9 @@ size_t cseDraft(camel::runtime::GraphTransaction &transaction) {
             camel::core::tag::permissionsOf(draft, id)};
         std::vector<gc_node_ref_t> &candidates = seen[std::move(key)];
         bool replaced                          = false;
-        if (isReplaceable(draft, id)) {
+        if (isReplaceable(transaction, id)) {
             for (gc_node_ref_t kept : candidates) {
-                if (reaches(draft, id, kept)) {
+                if (reaches(transaction, id, kept)) {
                     continue;
                 }
                 const auto attrs =
@@ -1369,7 +1389,7 @@ size_t cseDraft(camel::runtime::GraphTransaction &transaction) {
                     continue;
                 }
                 draft.setNodeAttrs(kept, *attrs);
-                replaceNode(draft, id, kept);
+                replaceNode(transaction, id, kept);
                 ++merged;
                 replaced = true;
                 break;
@@ -1399,7 +1419,7 @@ bool gateInputsSurvive(const camel::runtime::GraphTransaction &transaction, gc_n
                         draft.ctrlInputsOf(gate),
                         draft.syncInputsOf(gate)}) {
         for (gc_node_ref_t in : inputs) {
-            if (isValueOnly(draft, in)) {
+            if (isValueOnly(transaction, in)) {
                 continue;
             }
             size_t users = 0;
@@ -1428,7 +1448,7 @@ size_t dceDraft(camel::runtime::GraphTransaction &transaction, bool valuesOnly =
     for (bool changed = true; changed;) {
         changed = false;
         for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-            if (!valuesOnly && bypassValueGate(draft, id, gateEdgeBudget)) {
+            if (!valuesOnly && bypassValueGate(transaction, id, gateEdgeBudget)) {
                 ++removed;
                 changed = true;
                 continue;
@@ -1445,9 +1465,9 @@ size_t dceDraft(camel::runtime::GraphTransaction &transaction, bool valuesOnly =
             const bool isDeadGate =
                 !valuesOnly && h && h->kind == GCNodeKind::Gate &&
                 (!draft.waitUsersOf(id).empty() || gateInputsSurvive(transaction, id));
-            if ((isDeadWhenUnread(draft, id) || isDeadGate) && draft.normUsersOf(id).empty() &&
-                draft.withUsersOf(id).empty() && isReplaceable(draft, id)) {
-                replaceNode(draft, id, kInvalidNodeRef);
+            if ((isDeadWhenUnread(transaction, id) || isDeadGate) && draft.normUsersOf(id).empty() &&
+                draft.withUsersOf(id).empty() && isReplaceable(transaction, id)) {
+                replaceNode(transaction, id, kInvalidNodeRef);
                 ++removed;
                 changed = true;
             }
@@ -1467,7 +1487,7 @@ ConstantFoldPass::apply(const camel::runtime::Program *program, std::ostream &) 
         "std::opt::fold",
         [&](camel::runtime::GraphTransaction &transaction) {
             auto &draft = transaction.edit();
-            return foldDraft(draft, *context_, roots, constantBudgetBytes_);
+            return foldDraft(transaction, *context_, roots, constantBudgetBytes_);
         },
         nullptr,
         nullptr,
@@ -1555,7 +1575,7 @@ const camel::runtime::Program *simplifyGraph(
             "std::opt::fold",
             [&](camel::runtime::GraphTransaction &transaction) {
                 auto &draft = transaction.edit();
-                return foldDraft(draft, *context, roots, config.constantBudgetBytes);
+                return foldDraft(transaction, *context, roots, config.constantBudgetBytes);
             },
             &folded,
             &memo,

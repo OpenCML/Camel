@@ -68,10 +68,11 @@ inline bool isComputedAfter(
 
 /// Records on `node` that a `sync` block wrote it as a statement, which is what a sync edge has to
 /// join at both ends (docs/design/effects/edges.cn.md 4.6).
-/// Still takes a draft: its two call sites are `handOverSyncWait` and `replaceNode`, and those are
-/// reached from functions that receive a draft (`foldDraft`, the graph module's `replace`), so a
-/// transaction has nowhere to come from yet. Counted as blocked by branch A, not converted.
-inline void markSyncStatement(GraphDraft &draft, gc_node_ref_t node) {
+/// Took a draft while its callers did (`handOverSyncWait`, `replaceNode`); both name the owner now,
+/// so it names it too and asks it for the draft it writes.
+inline void markSyncStatement(
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t node) {
+    auto &draft        = transaction.edit();
     const auto *header = draft.header(node);
     if (header != nullptr) {
         draft.setNodeRuntimeFlags(
@@ -88,8 +89,11 @@ inline void markSyncStatement(GraphDraft &draft, gc_node_ref_t node) {
 /// and the predecessor has no other follower, because a chain never forks
 /// (docs/design/effects/edges.cn.md 4.6). Returns whether the wait was written; a caller that gets
 /// `false` hands it on the way it did before.
-/// Still takes a draft: `replaceNode` and `bypassValueGate` call it, and both receive one.
-inline bool handOverSyncWait(GraphDraft &draft, gc_node_ref_t pred, gc_node_ref_t user) {
+/// Took a draft while `replaceNode` and `bypassValueGate` did; both name the owner now, so the wait
+/// is handed on through the transaction too -- and to `markSyncStatement` in the same form.
+inline bool handOverSyncWait(
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t pred, gc_node_ref_t user) {
+    auto &draft = transaction.edit();
     if (!draft.alive(pred) || !draft.alive(user) || pred == user) {
         return false;
     }
@@ -102,7 +106,7 @@ inline bool handOverSyncWait(GraphDraft &draft, gc_node_ref_t pred, gc_node_ref_
         draft.nodeRegion(pred) != draft.nodeRegion(user)) {
         return false;
     }
-    const auto mark = [&](gc_node_ref_t node) { markSyncStatement(draft, node); };
+    const auto mark = [&](gc_node_ref_t node) { markSyncStatement(transaction, node); };
     mark(pred);
     mark(user);
     const gc_node_ref_t only[1] = {pred};
@@ -122,37 +126,36 @@ size_t algebraDraft(camel::runtime::GraphTransaction &transaction, bool safeFp =
 
 /// Bypass a non-anchor forwarding gate by putting its waits on mandatory consumers.
 /// Conditional value consumers and costly shared barriers stay gates; edgeBudget bounds growth.
-bool bypassValueGate(GraphDraft &draft, gc_node_ref_t id, size_t &edgeBudget);
+bool bypassValueGate(camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, size_t &edgeBudget);
 
 /// URI of an OPER node, or an empty view for other nodes. For messages: passes recognise an
 /// operator by operIdOf.
 std::string_view operUriOf(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id);
 
 /// The operator an OPER node calls (camel/core/operator_table.h), or kNoOper for other nodes.
-camel::core::OperId operIdOf(const GraphDraft &draft, gc_node_ref_t id);
+camel::core::OperId operIdOf(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id);
 
 /// True for an OPER node a pass may compute ahead of time or merge with an identical call: its
 /// operator is pure and foldable. Whether the node may also be dropped, moved or reordered is a
 /// different question, which only `nodeIsFreelySchedulable` (camel/runtime/graph.h) answers.
-/// Still takes a draft: `foldDraft` calls it with the draft it receives (branch B).
-bool isPureOper(const GraphDraft &draft, gc_node_ref_t id);
+bool isPureOper(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id);
 
 /// True for nodes whose only observable result is their value, so that a pass may arrange them
 /// anywhere: static DATA and the COPY/ACCS/FILL/CAST/OPER nodes that are freely schedulable (pure
 /// and unable to fault).
-bool isValueOnly(const GraphDraft &draft, gc_node_ref_t id);
+bool isValueOnly(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id);
 
 /// True for an unread node that may be removed: a value-only node, or a pure computation that
 /// may fault and sits on no chain -- nothing waits for it and it waits for nothing -- which never
 /// ran (design principles 3.1: a node runs if and only if this run uses it). A pure node that may
 /// fault and is on a `sync` chain stays: its fault is observable (3.4).
-bool isDeadWhenUnread(const GraphDraft &draft, gc_node_ref_t id);
+bool isDeadWhenUnread(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id);
 
 /// True unless `id` anchors the graph (exit, output, return, or a branch-arm head/tail).
-bool isReplaceable(const GraphDraft &draft, gc_node_ref_t id);
+bool isReplaceable(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id);
 
 /// True when `to` is reachable from `from` along value or control edges (to is downstream).
-bool reaches(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to);
+bool reaches(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t from, gc_node_ref_t to);
 
 /**
  * The ordered nodes `id`'s value is computed from: walking up its value inputs, and the control
@@ -161,7 +164,7 @@ bool reaches(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to);
  * alone, which replacing `id` by a constant, or inlining a call that ignores an argument,
  * removes.
  */
-std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t id);
+std::vector<gc_node_ref_t> orderedSources(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id);
 
 /**
  * True when nothing the value of `id` is computed from reads a slot the program writes: walking up
@@ -169,7 +172,7 @@ std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t
  * inside a `sync` block -- the walk meets no node written in place. Replacing such a computation by
  * one value gives every reader the value of a single read of that slot.
  */
-bool readsNoWrittenSlot(const GraphDraft &draft, gc_node_ref_t id);
+bool readsNoWrittenSlot(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id);
 
 /**
  * Replaces node `id` by `replacement` (or just removes it when `replacement` is invalid, which
@@ -180,10 +183,8 @@ bool readsNoWrittenSlot(const GraphDraft &draft, gc_node_ref_t id);
  * orders code after its producer and a constant replacing it would not. This cannot create a
  * cycle (predecessors run before `id`, which runs before its users). The caller must ensure
  * `replacement` is not downstream of `id` (see reaches()).
- * Still takes a draft: `replaceFoldResult` (branch B) and the graph module's `replace` call it,
- * and both hold a transaction only one frame further out.
  */
-void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement);
+void replaceNode(camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, gc_node_ref_t replacement);
 
 /**
  * The graphs the passes of one run found nothing to rewrite in. What a pass of this file does to

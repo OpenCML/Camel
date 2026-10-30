@@ -1164,7 +1164,7 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
     // that ordering nor has an effect of its own to hang it on (a recursion's base
     // case, a constant result), nothing else keeps the predecessor reachable, and a
     // write the program made was silently dropped.
-    auto argSources = camel::passes::generic::orderedSources(draft, funcNodeId);
+    auto argSources = camel::passes::generic::orderedSources(transaction, funcNodeId);
     // And the other way round: the call ran after the ordered sources of ALL its
     // arguments, so the body must too, also where it does not read the argument
     // that carried the ordering (a read of a variable feeding an argument the
@@ -1182,7 +1182,7 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
         // as data. Waiting on it would also wrap the cell in a GATE when the call is spliced,
         // and a consumer that follows a variable by its cell (the ONNX exporter) would no
         // longer see it as local.
-        if (camel::passes::generic::operIdOf(draft, source) == camel::core::oper::VarNew) {
+        if (camel::passes::generic::operIdOf(transaction, source) == camel::core::oper::VarNew) {
             continue;
         }
         if (draft.alive(source)) {
