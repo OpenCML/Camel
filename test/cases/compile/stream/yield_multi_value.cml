@@ -1,0 +1,14 @@
+/**
+ * `yield` with two values: the element is the tuple `(1, 2)`, the same element
+ * `yield (1, 2)` writes. Two pulls make the tuple `(1, 2)` and `(3, 4)`.
+ */
+
+func pairs(): (int, int).. sync {
+    yield 1, 2
+    yield 3, 4
+}
+
+func main(): int sync {
+    println(loop acc = 0 for q in pairs() do acc * 100 + q.0 * 10 + q.1)
+    return 0
+}
