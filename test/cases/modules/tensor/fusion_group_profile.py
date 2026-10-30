@@ -91,6 +91,12 @@ GOLDEN_JSON = HERE / "fusion_group_none.profile.golden.json"
 # the byte counts, the hint, the loop's step numbers and the values the program prints are the same,
 # and the JSON golden is untouched (it carries no phase table). A program that wants a ruleset's
 # rules imports the ruleset; `with_grad` is a macro of `autodiff` and does not.
+#
+# The fourteen rows are the whole of it, and that is what makes the re-record safe: not one number
+# the program computes moved -- the first line is still `none steps=3 w=92.44482 value=16.0`, and the
+# operator rows, their calls, the block payloads and the byte counts are byte-identical to the
+# previous golden. The rows went because `autodiff` stopped declaring rules, so it no longer
+# declares the two modules the rule machinery lives in.
 
 # The measured numbers a report prints: durations, shares and byte counts. Everything else in the
 # report is a count or a name, and must not change.
