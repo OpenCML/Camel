@@ -1,0 +1,10 @@
+// `T[]` states one dimension, so the literal the open rank takes as the element is a value it
+// cannot hold (design principles 5.4): refused at the literal, not wrapped around and not cut
+// off. The element itself is `rank_one_refuses_element.cml`; this is the same refusal written
+// with a literal, the other place a declaration gives its value a type.
+
+func main(): int sync {
+    let y: f32[] = 1.0
+    println(y)
+    return 0
+}

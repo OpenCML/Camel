@@ -1758,17 +1758,17 @@ The literal '{0}' cannot be represented as type '{1}': {2}.
 A literal the type cannot hold is not wrapped around or cut off, and a value is never cut to fit a type. Write a value the type holds, or give the literal a wider type.
 ```
 
-**Example** (`test/cases/compile/generics/err_literal.cml`, run as `camel test/cases/compile/generics/err_literal.cml`)
+**Example** (`test/cases/compile/array_shape/rank_one_refuses_literal.cml`, run as `camel test/cases/compile/array_shape/rank_one_refuses_literal.cml std::nvm`)
 
 ```camel
-func zero_of::<T>(x: T): T {
-    let z: T = 0.5
-    return z
-}
+// `T[]` states one dimension, so the literal the open rank takes as the element is a value it
+// cannot hold (design principles 5.4): refused at the literal, not wrapped around and not cut
+// off. The element itself is `rank_one_refuses_element.cml`; this is the same refusal written
+// with a literal, the other place a declaration gives its value a type.
 
 func main(): int sync {
-    println(zero_of(5))
-    println(zero_of(2.5))
+    let y: f32[] = 1.0
+    println(y)
     return 0
 }
 ```
