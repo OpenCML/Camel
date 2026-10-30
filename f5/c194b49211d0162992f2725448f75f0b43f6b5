@@ -1,0 +1,22 @@
+## lane-gate：`GATE` 控制入边按裁定重写（文档车道）
+
+**路线**：`21c1cada1` → 两笔（`78d86a1a3` 文档重写、`d7c664481` 裁定转存）→ 两次 `--no-ff` 合入 develop（`4e51c0d41`、`086d44635`）→ 推送 `086d44635..f5c194b49`。纯文档，代码一行未改。
+
+### 1. 裁定是什么（采纳第 2 条）
+
+`GATE` 是**纯传值节点**：一个数据端口读一个值、一个等待，等待满足后把同一个值原样放行；**`Norm>=1`**（没有就是构图错误），**它的等待就是同步前驱**。删掉"数据-控制聚合门控"整套说法。代码里封存检查"同步前驱与控制入边任一即可"是过渡态，归**第 9 条**（删控制边）收掉；4.1 里指向问题页的**口径注**一并删除。
+
+### 2. 改了哪几段
+
+- `docs/technical/05_graph_ir.md` **4.1**：标题与正文按 5.3 重写（纯传值、`Norm>=1`、等待即同步前驱、不能删也不能换成它的输入、典型场景＝链尾与值出口），口径注删除。**4.8**：出口可以是"接住同步链链尾的 `GATE`"，边约束同 §4.1，删掉指向口径注的那半句。
+- **三处连带**：§4 节点表的 `GATE` 行、§7.1 `inlineCallable` 那句"需要会合的值-控门控"、§7.5 "把控制完成点锚到值路径"。理由：**口径注一删，前两处原文里"见 §4.1 与那里的口径注"就成了悬空引用**，而三处又都还在讲已作废的"聚合"，不改就自相矛盾。只改措辞，不动任何代码事实。
+- 问题页 `docs/handover/questions/questions-2026-10-30-gate-control-edge.md` → `docs/handover/reviews/`（`git mv`），页首加「已由作者裁定（第 2 条）：`GATE` 只认同步前驱，代码侧归第 9 条收口」，正文一字未删。
+
+### 3. 裁定原文为什么由我们转存
+
+作者把裁定写在 **`origin/fsh-dev` 的 `910e1c4cb`**，而 **`fsh-dev` 从不合进 `develop`**，所以 develop 上的 `questions-2026-10-29.md` 先前没有这一段。故在 `docs/handover/reviews/questions-2026-10-29.md` 末尾按原文转存，标题「裁定（`GATE` 控制入边）——已由作者答复，采纳第 2 条」，并注明「原文见 `origin/fsh-dev` 的 `910e1c4cb`；因 `fsh-dev` 不合入 `develop`，此处按原文转存」，供后来人倒查。
+
+### 4. 六项检查与闸门
+
+- `diagnostics-catalog --check`：300 codes ✓｜`--verify-doc`：`docs/diagnostics.md` up to date ✓｜`stdlib-reference --verify-doc`：up to date ✓｜`check-grammar --check`：126 productions / 29 contextual keywords ✓｜`check-doc-links --all`：no broken links in 369 document(s) ✓｜**`check-doc-links --citations`：497/497 符号引用 verified、2107 条路径引用、5492 文件** ✓
+- 闸门 `-Plan all -Tier fast -Jobs 8`（`f5c194b49`，含最新 develop）：**total 7852 / pass 7848 / fail 0 / skip 2 / known 2**，`RUN_EXIT=0`。基线 `7810` 是 `21c1cada1` 上的数；develop 到 `086d44635` 已长到 7852（新增 JAX 与 generator 用例），不是本车道引入的。
