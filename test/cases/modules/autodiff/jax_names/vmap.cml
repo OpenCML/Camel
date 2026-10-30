@@ -1,0 +1,20 @@
+/**
+ * `vmap` is JAX's batching transform, and Camel has no name for it yet: the batching that exists is
+ * `map` at a leading axis (test/cases/modules/autodiff/jax_batching.cml).
+ *
+ * This program pins the absence. The name resolves to nothing, so the call is refused before
+ * anything runs, and the shape of the call is the one the transform is expected to take. When
+ * `vmap` lands, this case becomes the batched function it writes here, and the assertion in
+ * test/plans/feat/modules/jax_alignment.plan.toml changes with it
+ * (docs/handover/reviews/questions-2026-10-30-jax.md).
+ */
+
+func double(x: float): float {
+    return x + x
+}
+
+func main(): int sync {
+    let doubled = vmap(double)([1.0, 2.0, 3.0])
+    println(doubled)
+    return 0
+}

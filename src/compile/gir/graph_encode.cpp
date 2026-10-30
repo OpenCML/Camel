@@ -4,10 +4,11 @@
 /*
  * DraftGraphBuilder -> GCGraph encoding.
  *
- * Compile-time GIR now lives entirely on DraftGraphBuilder and GraphDraft.
- * Runtime materialization therefore becomes a direct draft-to-GCGraph export:
+ * Compile-time GIR lives entirely on DraftGraphBuilder and GraphDraft, and the frozen graph is
+ * built from that draft: there is no second draft, the nodes the graph has are the draft's own
+ * (the part its roots reach), and every byte of the payload comes out of the draft itself.
  * - collect the reachable compile graph tree
- * - clone every compile draft into a runtime draft view
+ * - take each compile draft's live nodes and the payload shape they make
  * - preallocate all GCGraph memory so self/cyclic references have stable addresses
  * - canonicalize static slots from compile StaticFunction objects to runtime Function objects
  * - emit final immutable GCGraph payloads in one pass
@@ -37,7 +38,9 @@
 #include <cstring>
 #include <format>
 #include <memory>
+#include <optional>
 #include <ranges>
+#include <span>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -59,7 +62,6 @@ using camel::core::type::TypeCode;
 using camel::runtime::createGraphDebugRecord;
 using camel::runtime::describeDraftNativePayload;
 using camel::runtime::DraftBrchPayload;
-using camel::runtime::DraftNodeInit;
 using camel::runtime::emitDraftNativePayload;
 using camel::runtime::GCAccsBody;
 using camel::runtime::GCBrchBody;
@@ -109,13 +111,6 @@ camel::runtime::GCFillKind classifyFillKind(Type *type) {
         ASSERT(false, std::format("Unsupported FILL type '{}'.", type->toString()));
         return camel::runtime::GCFillKind::Tuple;
     }
-}
-
-template <typename Body> std::vector<std::byte> toPayloadBytes(const Body &body) {
-    static_assert(std::is_trivially_copyable_v<Body>);
-    std::vector<std::byte> bytes(sizeof(Body));
-    std::memcpy(bytes.data(), &body, sizeof(Body));
-    return bytes;
 }
 
 void collectCompileStaticGraphRefsRecursive(
@@ -209,7 +204,12 @@ std::vector<graph_ptr_t> staticGraphRefsOf(const graph_ptr_t &source) {
 
 struct PreparedGraph {
     graph_ptr_t source;
-    std::unique_ptr<GraphDraft> draft;
+    /// The runtime graph's identity, taken before anything can refer to the graph.
+    camel::runtime::GraphId runtimeId = camel::runtime::kInvalidGraphId;
+    /// The draft nodes the runtime graph is built from, sorted: the part of the graph's own draft
+    /// that its entry, exit, output, return, ports and closure nodes reach. The runtime graph is
+    /// built from these and nothing is copied into a draft of its own.
+    std::vector<draft_node_ref_t> liveNodes;
     std::vector<slot_t> staticSlots;
     GCGraphPayloadShape payloadShape;
     void *memory     = nullptr;
@@ -217,6 +217,13 @@ struct PreparedGraph {
     GCGraph *runtime = nullptr;
     bool constructed = false;
 };
+
+/// The nodes of `prepared`'s draft that its runtime graph is built from, in the form the payload
+/// functions take (see describeDraftNativePayload): a graph of no node is still a subset of the
+/// draft, not "every node of it".
+std::optional<std::span<const draft_node_ref_t>> liveNodesOf(const PreparedGraph &prepared) {
+    return std::span<const draft_node_ref_t>{prepared.liveNodes};
+}
 
 std::vector<draft_node_ref_t> collectLiveDraftNodes(const GraphDraft &draft) {
     std::unordered_set<draft_node_ref_t> visited;
@@ -292,34 +299,6 @@ std::vector<draft_node_ref_t> collectLiveDraftNodes(const GraphDraft &draft) {
     return live;
 }
 
-draft_node_ref_t
-remapNodeRef(draft_node_ref_t sourceRef, const std::vector<draft_node_ref_t> &mapping) {
-    if (sourceRef == runtime::kInvalidNodeRef) {
-        return runtime::kInvalidNodeRef;
-    }
-    ASSERT(sourceRef < mapping.size(), "Compile encode encountered an out-of-range node ref.");
-    const draft_node_ref_t mapped = mapping[sourceRef];
-    if (mapped == runtime::kInvalidNodeRef) {
-        throw std::runtime_error(
-            std::format("Compile encode encountered an unmapped live node ref {}.", sourceRef));
-    }
-    return mapped;
-}
-
-/// The mapping's place for a predecessor whose edge carries no liveness of its own, or
-/// `kInvalidNodeRef` when it has none: an order predecessor nothing else reaches is dead code and
-/// the runtime graph does not name it (see the note at the order and sync inputs below). The node
-/// being live is what `remapNodeRef` above is the seal for; this is the edge that may name a dead
-/// node and must not.
-draft_node_ref_t
-remapNodeRefIfMapped(draft_node_ref_t sourceRef, const std::vector<draft_node_ref_t> &mapping) {
-    if (sourceRef == runtime::kInvalidNodeRef) {
-        return runtime::kInvalidNodeRef;
-    }
-    ASSERT(sourceRef < mapping.size(), "Compile encode encountered an out-of-range node ref.");
-    return mapping[sourceRef];
-}
-
 class EncodeSession {
   public:
     EncodeSession(
@@ -344,7 +323,7 @@ class EncodeSession {
         try {
             preallocateRuntimeGraphs();
             for (auto &prepared : prepared_) {
-                program_.bind(prepared.draft->id(), prepared.runtime);
+                program_.bind(prepared.runtimeId, prepared.runtime);
             }
             program_.setRoot(resolvePreparedGraph(rootGraph_)->runtime);
             for (auto &prepared : prepared_) {
@@ -434,34 +413,19 @@ class EncodeSession {
     PreparedGraph prepareGraph(const graph_ptr_t &graph) {
         PreparedGraph prepared;
         prepared.source = graph;
-        prepared.draft  = std::make_unique<GraphDraft>();
-        prepared.draft->setInheritsRegions(false);
-        // Graph properties fixed before encoding: the macro flag of a `#macro` function is the
-        // one that matters here; a runtime graph keeps it for std::macro (design principles 8).
-        prepared.draft->setFlags(graph->draft().flags());
-        // The kernel an `#impl` body implements (design principles 10.4): cold metadata of the
-        // source graph, carried onto the runtime graph like the macro flag above, because it is
-        // the only link from a direct call of the function (one OPER of that kernel) back to
-        // its Camel body.
-        prepared.draft->setImplKernelUri(graph->draft().implKernelUri());
-        // The facts of the declaration the graph is (design principles 6.2): cold metadata that
-        // stays with the graph, so a pass reads `#jvp(rule)` through the function it was given
-        // instead of the module that declares it.
-        prepared.draft->setDeclarationFacts(graph->draft().declarationFacts());
         CAMEL_LOG_INFO_S("GIREncode", "Prepare compile graph '{}'.", graph->name());
-        prepared.draft->setId(freshIds_ ? freshIds_->allocate() : graph->graphId());
-        prepared.draft->setFuncType(graph->funcType());
-        prepared.draft->setCaptureNames(graph->draft().captureNames());
+        // The graph the encoder is handed is the graph the front end or a rewrite built. Its
+        // runtime counterpart is built from the draft's own nodes, with nothing copied into a
+        // draft of its own: the macro flag, the `#impl` kernel, the declaration's facts, the
+        // captures and the signature the frozen graph keeps are the draft's own, and the graph is
+        // built from them where it is built (finalizeRuntimeGraph).
+        prepared.runtimeId = freshIds_ ? freshIds_->allocate() : graph->graphId();
         // Every compiled graph has a frame layout, one without slots included.
-        prepared.draft->setRuntimeSlotTypes(graph->draft().runtimeSlotTypes());
-        prepared.draft->setClosureType(graph->closureType());
-
-        const auto sourceStaticSlots = graph->draft().staticSlots();
-        const auto sourceStaticTypes = graph->draft().staticSlotTypes();
-        prepared.staticSlots.assign(sourceStaticSlots.begin(), sourceStaticSlots.end());
-        for (size_t i = 1; i < sourceStaticSlots.size() && i < sourceStaticTypes.size(); ++i) {
-            prepared.draft->appendStaticSlot(sourceStaticSlots[i], sourceStaticTypes[i]);
+        if (!graph->draft().hasFrameLayout()) {
+            graph->draft().setRuntimeSlotTypes({});
         }
+        const auto sourceStaticSlots = graph->draft().staticSlots();
+        prepared.staticSlots.assign(sourceStaticSlots.begin(), sourceStaticSlots.end());
 
         // The front-end freeze dissolves a GATE that waits on nothing and has a value user: it is
         // plain forwarding, and both places a graph is submitted dissolve it (the review of
@@ -474,36 +438,16 @@ class EncodeSession {
         // input -- and one with no value input are not this case and keep their node.
         graph->draft().dissolveUnorderedGates();
 
-        const std::vector<draft_node_ref_t> liveNodes = collectLiveDraftNodes(graph->draft());
+        // The runtime graph is the part of the draft that its roots reach; the draft keeps the
+        // rest (a rewrite need not have erased a node nothing reads) and the graph does not name
+        // it.
+        prepared.liveNodes = collectLiveDraftNodes(graph->draft());
         CAMEL_LOG_INFO_S(
             "GIREncode",
             "Prepare compile graph '{}' reachable nodes={}.",
             graph->name(),
-            liveNodes.size());
-        std::unordered_set<draft_node_ref_t> liveSet(liveNodes.begin(), liveNodes.end());
-        std::vector<draft_node_ref_t> sourceToPrepared(
-            graph->draft().nodeSlotCount(),
-            runtime::kInvalidNodeRef);
-        std::vector<std::vector<draft_node_ref_t>> pendingNormInputs;
-        std::vector<std::vector<draft_node_ref_t>> pendingWithInputs;
-        std::vector<std::vector<draft_node_ref_t>> pendingCtrlInputs;
-        std::vector<std::vector<draft_node_ref_t>> pendingOrderInputs;
-        std::vector<std::vector<draft_node_ref_t>> pendingSyncInputs;
-        draft_node_ref_t nextPreparedId = 0;
-        for (draft_node_ref_t sourceId = 0; sourceId < graph->draft().nodeSlotCount(); ++sourceId) {
-            if (graph->draft().alive(sourceId) && liveSet.contains(sourceId)) {
-                sourceToPrepared[sourceId] = nextPreparedId++;
-            }
-        }
-        pendingNormInputs.reserve(nextPreparedId);
-        pendingWithInputs.reserve(nextPreparedId);
-        pendingCtrlInputs.reserve(nextPreparedId);
-        pendingOrderInputs.reserve(nextPreparedId);
-        pendingSyncInputs.reserve(nextPreparedId);
-        for (draft_node_ref_t sourceId = 0; sourceId < graph->draft().nodeSlotCount(); ++sourceId) {
-            if (!graph->draft().alive(sourceId) || !liveSet.contains(sourceId)) {
-                continue;
-            }
+            prepared.liveNodes.size());
+        for (draft_node_ref_t sourceId : prepared.liveNodes) {
             const auto *header = graph->draft().header(sourceId);
             ASSERT(header != nullptr, "Live compile draft node cannot have a null header.");
             if (header->kind == GCNodeKind::Dref) {
@@ -513,233 +457,9 @@ class EncodeSession {
                         graph->name(),
                         sourceId));
             }
-            DraftNodeInit init{
-                .dataIndex    = header->dataIndex,
-                .dataType     = header->dataType,
-                .kind         = header->kind,
-                .runtimeFlags = header->runtimeFlags,
-                .origin       = header->origin,
-                .permissions  = header->permissions,
-                .attrs        = header->attrs,
-                .region       = header->region,
-                .name         = header->name,
-            };
-            std::vector<std::byte> payloadStorage;
-
-            switch (header->kind) {
-            case GCNodeKind::Func: {
-                // The callee's index is patched in once every runtime graph has its place
-                // (patchPreparedFuncPayloads); the rest of the payload is the node's own and
-                // says which captured variables the call writes, which is what its value
-                // carries the new versions of (GCFuncRef::reserved).
-                camel::runtime::GCFuncRef body{};
-                const auto source = graph->draft().payloadOf(sourceId);
-                if (source.size_bytes() >= sizeof(body)) {
-                    std::memcpy(&body, source.data(), sizeof(body));
-                }
-                body.ref       = camel::runtime::kNoLoopGraph;
-                payloadStorage = toPayloadBytes(body);
-            } break;
-            case GCNodeKind::Loop: {
-                // The graphs are patched in once every runtime graph has its place
-                // (patchPreparedFuncPayloads), as for a FUNC node.
-                const auto *source = reinterpret_cast<const camel::runtime::GCLoopRef *>(
-                    graph->draft().payloadOf(sourceId).data());
-                payloadStorage = toPayloadBytes(
-                    camel::runtime::GCLoopRef{
-                        .kind            = source->kind,
-                        .iterableForm    = source->iterableForm,
-                        .collectionCount = source->collectionCount,
-                    });
-            } break;
-            case GCNodeKind::Call:
-                payloadStorage.assign(
-                    graph->draft().payloadOf(sourceId).begin(),
-                    graph->draft().payloadOf(sourceId).end());
-                if (payloadStorage.empty()) {
-                    payloadStorage = toPayloadBytes(GCCallBody{});
-                }
-                break;
-            case GCNodeKind::Fill: {
-                if (!graph->draft().payloadOf(sourceId).empty()) {
-                    payloadStorage.assign(
-                        graph->draft().payloadOf(sourceId).begin(),
-                        graph->draft().payloadOf(sourceId).end());
-                } else {
-                    std::vector<size_t> slots;
-                    slots.reserve(graph->draft().withInputsOf(sourceId).size());
-                    for (size_t i = 0; i < graph->draft().withInputsOf(sourceId).size(); ++i) {
-                        slots.push_back(i);
-                    }
-                    payloadStorage =
-                        camel::runtime::makeFillPayload(classifyFillKind(header->dataType), slots);
-                }
-            } break;
-            case GCNodeKind::Brch: {
-                const auto *sourceBody = reinterpret_cast<const DraftBrchPayload *>(
-                    graph->draft().payloadOf(sourceId).data());
-                ASSERT(sourceBody != nullptr, "Compile BRCH node is missing payload.");
-                std::vector<std::byte> bytes(sizeof(DraftBrchPayload));
-                DraftBrchPayload body{
-                    .join     = remapNodeRef(sourceBody->join, sourceToPrepared),
-                    .armCount = sourceBody->armCount,
-                };
-                std::memcpy(bytes.data(), &body, sizeof(body));
-                payloadStorage = std::move(bytes);
-            } break;
-            case GCNodeKind::Join: {
-                const auto sourcePayload = graph->draft().payloadOf(sourceId);
-                if (sourcePayload.size_bytes() < sizeof(GCJoinBody)) {
-                    throw std::runtime_error(
-                        std::format(
-                            "Source JOIN node {} in graph '{}' has truncated payload ({} bytes).",
-                            sourceId,
-                            graph->name(),
-                            sourcePayload.size_bytes()));
-                }
-                const auto *sourceBody = reinterpret_cast<const GCJoinBody *>(sourcePayload.data());
-                if (sourceBody->armCount != graph->draft().withInputsOf(sourceId).size()) {
-                    throw std::runtime_error(
-                        std::format(
-                            "Source JOIN node {} in graph '{}' has mismatched arm count: body={}, "
-                            "inputs={}.",
-                            sourceId,
-                            graph->name(),
-                            sourceBody->armCount,
-                            graph->draft().withInputsOf(sourceId).size()));
-                }
-                auto bytes = std::vector<std::byte>(
-                    graph->draft().payloadOf(sourceId).begin(),
-                    graph->draft().payloadOf(sourceId).end());
-                if (bytes.size() >= sizeof(GCJoinBody)) {
-                    auto *body = reinterpret_cast<GCJoinBody *>(bytes.data());
-                    body->brch = remapNodeRef(body->brch, sourceToPrepared);
-                }
-                payloadStorage = std::move(bytes);
-            } break;
-            default:
-                payloadStorage.assign(
-                    graph->draft().payloadOf(sourceId).begin(),
-                    graph->draft().payloadOf(sourceId).end());
-                break;
-            }
-
-            init.payload = std::span<const std::byte>(payloadStorage.data(), payloadStorage.size());
-            pendingNormInputs.emplace_back();
-            pendingWithInputs.emplace_back();
-            pendingCtrlInputs.emplace_back();
-            pendingOrderInputs.emplace_back();
-            pendingSyncInputs.emplace_back();
-            auto remapInputs = [&](std::span<const draft_node_ref_t> sourceInputs,
-                                   std::vector<draft_node_ref_t> &target) {
-                target.reserve(sourceInputs.size());
-                for (draft_node_ref_t input : sourceInputs) {
-                    target.push_back(remapNodeRef(input, sourceToPrepared));
-                }
-            };
-            // Order and sync edges carry no liveness of their own: an order predecessor that
-            // nothing else reaches is dead code, and the runtime graph does not name it. A sync
-            // predecessor is live by definition (the statement before it is "used"), so it is
-            // always there.
-            auto remapLiveInputs = [&](std::span<const draft_node_ref_t> sourceInputs,
-                                       std::vector<draft_node_ref_t> &target,
-                                       bool predecessorMayBeDead) {
-                target.reserve(sourceInputs.size());
-                for (draft_node_ref_t input : sourceInputs) {
-                    const draft_node_ref_t mapped = predecessorMayBeDead
-                                                        ? remapNodeRefIfMapped(input, sourceToPrepared)
-                                                        : remapNodeRef(input, sourceToPrepared);
-                    if (mapped != runtime::kInvalidNodeRef) {
-                        target.push_back(mapped);
-                    }
-                }
-            };
-            remapInputs(graph->draft().normInputsOf(sourceId), pendingNormInputs.back());
-            remapInputs(graph->draft().withInputsOf(sourceId), pendingWithInputs.back());
-            remapInputs(graph->draft().ctrlInputsOf(sourceId), pendingCtrlInputs.back());
-            remapLiveInputs(
-                graph->draft().orderInputsOf(sourceId), pendingOrderInputs.back(), true);
-            remapLiveInputs(
-                graph->draft().syncInputsOf(sourceId), pendingSyncInputs.back(), false);
-
-            sourceToPrepared[sourceId] = prepared.draft->addNode(init);
         }
-
-        size_t preparedOrdinal = 0;
-        for (draft_node_ref_t sourceId = 0; sourceId < graph->draft().nodeSlotCount(); ++sourceId) {
-            if (!graph->draft().alive(sourceId) || !liveSet.contains(sourceId)) {
-                continue;
-            }
-            const auto preparedId = sourceToPrepared[sourceId];
-            prepared.draft->setNormInputs(preparedId, pendingNormInputs[preparedOrdinal]);
-            prepared.draft->setWithInputs(preparedId, pendingWithInputs[preparedOrdinal]);
-            prepared.draft->setCtrlInputs(preparedId, pendingCtrlInputs[preparedOrdinal]);
-            if (!pendingOrderInputs[preparedOrdinal].empty()) {
-                prepared.draft->setOrderInputs(preparedId, pendingOrderInputs[preparedOrdinal]);
-            }
-            if (!pendingSyncInputs[preparedOrdinal].empty()) {
-                prepared.draft->setSyncInputs(preparedId, pendingSyncInputs[preparedOrdinal]);
-            }
-            ++preparedOrdinal;
-        }
-        for (draft_node_ref_t nodeId : graph->draft().normPorts()) {
-            prepared.draft->appendNormPort(sourceToPrepared[nodeId]);
-        }
-        for (draft_node_ref_t nodeId : graph->draft().withPorts()) {
-            prepared.draft->appendWithPort(sourceToPrepared[nodeId]);
-        }
-        for (draft_node_ref_t nodeId : graph->draft().closureNodes()) {
-            prepared.draft->appendClosureNode(sourceToPrepared[nodeId]);
-        }
-
-        if (graph->draft().entryNode() != runtime::kInvalidNodeRef) {
-            prepared.draft->setEntryNode(sourceToPrepared[graph->draft().entryNode()]);
-        }
-        if (graph->draft().exitNode() != runtime::kInvalidNodeRef) {
-            prepared.draft->setExitNode(sourceToPrepared[graph->draft().exitNode()]);
-        }
-        if (graph->draft().outputNode() != runtime::kInvalidNodeRef) {
-            prepared.draft->setOutputNode(sourceToPrepared[graph->draft().outputNode()]);
-        }
-        if (graph->draft().returnNode() != runtime::kInvalidNodeRef) {
-            prepared.draft->setReturnNode(
-                sourceToPrepared[graph->draft().returnNode()],
-                graph->draft().returnKind());
-        }
-
-        // The regions keep their ids; one whose owner is not reachable is dead.
-        const GraphDraft &built = graph->draft();
-        const auto mapped       = [&](runtime::gc_node_ref_t ref) {
-            return ref == runtime::kInvalidNodeRef ? ref : sourceToPrepared[ref];
-        };
-        // The body region (0) is usually not in the table at all. When it carries a fact (a tag
-        // written on the function), it must survive the encoding: setRegionAttrs makes it.
-        if (built.regionCount() > 0 && built.region(0).attrs != camel::core::attr::kNoAttrs) {
-            prepared.draft->setRegionAttrs(0, built.region(0).attrs);
-        }
-        for (uint32_t r = 1; r < built.regionCount(); ++r) {
-            const runtime::GCRegion &region = built.region(r);
-            const bool controls             = region.kind == runtime::GCRegionKind::Arm ||
-                                  region.kind == runtime::GCRegionKind::LoopCond ||
-                                  region.kind == runtime::GCRegionKind::LoopBody;
-            const runtime::gc_node_ref_t owner = mapped(region.owner);
-            const bool dead           = controls && owner == runtime::kInvalidNodeRef;
-            const uint32_t id         = prepared.draft->addRegion(
-                dead ? runtime::GCRegionKind::Dead : region.kind,
-                region.parent,
-                owner,
-                region.index);
-            prepared.draft->setRegionResult(id, mapped(region.result));
-            prepared.draft->setRegionOrigin(id, region.origin);
-            prepared.draft->setRegionAttrs(id, region.attrs);
-            prepared.draft->setRegionParams(id, region.params);
-            std::vector<runtime::gc_node_ref_t> ports;
-            for (runtime::gc_node_ref_t port : built.regionPortsOf(r)) {
-                ports.push_back(mapped(port));
-            }
-            prepared.draft->setRegionPorts(id, ports);
-        }
-        prepared.payloadShape = describeDraftNativePayload(*prepared.draft);
+        prepared.payloadShape =
+            describeDraftNativePayload(graph->draft(), liveNodesOf(prepared));
         CAMEL_LOG_INFO_S(
             "GIREncode",
             "Prepared compile graph '{}' with {} draft nodes.",
@@ -773,14 +493,14 @@ class EncodeSession {
                 ruleGraphPtrs,
                 prepared.payloadShape,
                 prepared.staticSlots,
-                prepared.draft->frameSlotTypes());
+                prepared.source->draft().frameSlotTypes());
             try {
                 prepared.memory =
                     camel::core::mm::graphSpace().alloc(prepared.bytes, alignof(GCGraph));
             } catch (const camel::core::mm::MemoryExhausted &e) {
                 throw e.during(
                     std::format("encoding graph '{}'", prepared.source->name()),
-                    prepared.draft->firstNodeOrigin());
+                    prepared.source->draft().firstNodeOrigin());
             }
             prepared.runtime = reinterpret_cast<GCGraph *>(prepared.memory);
             CAMEL_LOG_INFO_S(
@@ -792,23 +512,18 @@ class EncodeSession {
     }
 
     void patchPreparedFuncPayloads(PreparedGraph &prepared) {
-        const std::vector<draft_node_ref_t> liveNodes =
-            collectLiveDraftNodes(prepared.source->draft());
-        std::unordered_set<draft_node_ref_t> liveSet(liveNodes.begin(), liveNodes.end());
-        draft_node_ref_t preparedId = 0;
-        for (draft_node_ref_t sourceId = 0; sourceId < prepared.source->draft().nodeSlotCount();
-             ++sourceId) {
-            if (!prepared.source->draft().alive(sourceId) || !liveSet.contains(sourceId)) {
-                continue;
-            }
+        // A FUNC node of the graph names its callee by the callee's runtime GraphId; the draft it
+        // is built from names the callee by the compile graph it was made from (DraftGraphBuilder's
+        // function targets), so the callee is written into the draft's own payload here, before
+        // the graph is built from it. The draft is the graph under construction; nothing is copied.
+        for (draft_node_ref_t sourceId : prepared.liveNodes) {
             const auto *header = prepared.source->draft().header(sourceId);
             ASSERT(header != nullptr, "Live source draft node cannot have a null header.");
             if (header->kind == GCNodeKind::Func) {
-                prepared.draft->setCalleeGraph(
-                    preparedId,
-                    resolvePreparedGraph(prepared.source->funcTarget(sourceId))->draft->id());
+                prepared.source->draft().setCalleeGraph(
+                    sourceId,
+                    resolvePreparedGraph(prepared.source->funcTarget(sourceId))->runtimeId);
             }
-            ++preparedId;
         }
     }
 
@@ -833,7 +548,7 @@ class EncodeSession {
             ASSERT(funcObj != nullptr, "Compile static function slot payload is null.");
             auto *runtimeFunc = ::Function::create(
                 &program_,
-                resolvePreparedGraph(funcObj->graph())->draft->id(),
+                resolvePreparedGraph(funcObj->graph())->runtimeId,
                 funcObj->tupleType(),
                 camel::core::mm::autoSpace());
             objectCache.emplace(object, runtimeFunc);
@@ -936,14 +651,12 @@ class EncodeSession {
     void finalizeRuntimeGraph(PreparedGraph &prepared) {
         auto *source = prepared.source.get();
         ASSERT(source != nullptr, "Prepared graph finalization requires a source graph.");
-        for (draft_node_ref_t nodeId = 0; nodeId < prepared.draft->nodeSlotCount(); ++nodeId) {
-            const auto *header = prepared.draft->header(nodeId);
-            if (header == nullptr) {
-                continue;
-            }
-            const auto payload = prepared.draft->payloadOf(nodeId);
+        for (draft_node_ref_t nodeId : prepared.liveNodes) {
+            const auto *header = source->draft().header(nodeId);
+            ASSERT(header != nullptr, "A live draft node of the graph being built has a header.");
+            const auto payload = source->draft().payloadOf(nodeId);
             if (header->kind == GCNodeKind::Func) {
-                if (!camel::runtime::isValid(prepared.draft->calleeIdOf(nodeId))) {
+                if (!camel::runtime::isValid(source->draft().calleeIdOf(nodeId))) {
                     throw std::runtime_error(
                         std::format(
                             "Prepared FUNC node {} in graph '{}' carries a null callee "
@@ -962,7 +675,7 @@ class EncodeSession {
                             payload.size_bytes()));
                 }
                 const auto *body = reinterpret_cast<const GCJoinBody *>(payload.data());
-                if (body->armCount != prepared.draft->withInputsOf(nodeId).size()) {
+                if (body->armCount != source->draft().withInputsOf(nodeId).size()) {
                     throw std::runtime_error(
                         std::format(
                             "Prepared JOIN node {} in graph '{}' has mismatched arm count: "
@@ -970,12 +683,12 @@ class EncodeSession {
                             nodeId,
                             source->name(),
                             body->armCount,
-                            prepared.draft->withInputsOf(nodeId).size()));
+                            source->draft().withInputsOf(nodeId).size()));
                 }
             }
         }
         auto *debugRecord = createGraphDebugRecord(source->name(), source->name());
-        recordDraftDebugData(debugRecord, *prepared.draft);
+        recordDraftDebugData(debugRecord, source->draft(), liveNodesOf(prepared));
 
         const auto &deps = source->dependencyGraphs();
         const auto &subs = source->subGraphs();
@@ -984,14 +697,14 @@ class EncodeSession {
         depPtrs.reserve(deps.size());
         subPtrs.reserve(subs.size());
         for (const auto &dep : deps) {
-            depPtrs.push_back(resolvePreparedGraph(dep)->draft->id());
+            depPtrs.push_back(resolvePreparedGraph(dep)->runtimeId);
         }
         for (const auto &sub : subs) {
-            subPtrs.push_back(resolvePreparedGraph(sub)->draft->id());
+            subPtrs.push_back(resolvePreparedGraph(sub)->runtimeId);
         }
         std::vector<Type *> runtimeStaticTypes(
-            prepared.draft->staticSlotTypes().begin(),
-            prepared.draft->staticSlotTypes().end());
+            source->draft().staticSlotTypes().begin(),
+            source->draft().staticSlotTypes().end());
         CAMEL_LOG_INFO_S(
             "GIREncode",
             "Graph '{}' static-slot counts: values={}, types={}.",
@@ -1025,7 +738,6 @@ class EncodeSession {
                     source->name());
                 prepared.staticSlots[i] = NullSlot;
                 runtimeStaticTypes[i]   = Type::Void();
-                prepared.draft->setStaticSlot(i, NullSlot);
                 CAMEL_LOG_INFO_S(
                     "GIREncode",
                     "Static slot {} for graph '{}' nulling completed.",
@@ -1045,7 +757,6 @@ class EncodeSession {
                     i,
                     source->name());
             }
-            prepared.draft->setStaticSlot(i, prepared.staticSlots[i]);
         }
         CAMEL_LOG_INFO_S(
             "GIREncode",
@@ -1060,13 +771,13 @@ class EncodeSession {
             source->name(),
             compileStaticRefs.size());
         for (const auto &graph : compileStaticRefs) {
-            staticGraphRefs.push_back(resolvePreparedGraph(graph)->draft->id());
+            staticGraphRefs.push_back(resolvePreparedGraph(graph)->runtimeId);
         }
         std::vector<graph_ptr_t> compileRuleRefs = prepared.source->ruleGraphs();
         std::vector<camel::runtime::GraphId> ruleGraphs;
         ruleGraphs.reserve(compileRuleRefs.size());
         for (const auto &graph : compileRuleRefs) {
-            ruleGraphs.push_back(resolvePreparedGraph(graph)->draft->id());
+            ruleGraphs.push_back(resolvePreparedGraph(graph)->runtimeId);
         }
         CAMEL_LOG_INFO_S(
             "GIREncode",
@@ -1098,7 +809,7 @@ class EncodeSession {
                 source->name(),
                 outer->name(),
                 outerPrepared != nullptr);
-            runtimeOuterGraph = outerPrepared != nullptr ? outerPrepared->draft->id()
+            runtimeOuterGraph = outerPrepared != nullptr ? outerPrepared->runtimeId
                                                          : camel::runtime::kInvalidGraphId;
         }
         CAMEL_LOG_INFO_S(
@@ -1112,14 +823,14 @@ class EncodeSession {
         prepared.runtime = GCGraphBuildAccess::constructInPlace(
             prepared.memory,
             prepared.bytes,
-            prepared.draft->id(),
+            prepared.runtimeId,
             camel::runtime::GCGraphDerivation{
-                camel::runtime::kInvalidGraphId, prepared.draft->flags()},
+                camel::runtime::kInvalidGraphId, source->draft().flags()},
             debugRecord,
-            prepared.draft->funcType(),
-            prepared.draft->frameSlotTypes(),
+            source->draft().funcType(),
+            source->draft().frameSlotTypes(),
             staticDataType,
-            prepared.draft->closureType(),
+            source->draft().closureType(),
             runtimeOuterGraph,
             depPtrs,
             subPtrs,
@@ -1135,7 +846,7 @@ class EncodeSession {
                     arena.nodeCount,
                     arena.payloadWordCount,
                     arena.edgeCount);
-                emitDraftNativePayload(*prepared.draft, arena);
+                emitDraftNativePayload(source->draft(), arena, liveNodesOf(prepared));
                 CAMEL_LOG_INFO_S(
                     "GIREncode",
                     "Emit runtime payload finished for graph '{}'.",
