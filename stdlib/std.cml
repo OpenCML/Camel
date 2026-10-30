@@ -93,7 +93,10 @@ export func stats::<F>(f: F): F! when is_function::<F>()
 /// of that name was built.
 with <
     /// The lookups to answer, empty to only list the index.
-    query: string = ""
+    query: string = "",
+    /// Also print what the forward rules of the scalar operators resolve to in the index
+    /// (`FORWARD <uri> <family> <head>/<arity> -> <rule>`), which is what a transform reads.
+    forward: bool = false
 >
 export func rulesets::<F>(f: F): F! when is_function::<F>()
 

@@ -38,23 +38,24 @@ namespace {
 /// of it. The rules' Program keeps the objects alive; this only updates the copies.
 class EngineRootScope {
   public:
-    EngineRootScope(GraphDraft &draft, std::span<const Rule> rules) : draft_(draft), rules_(rules) {
+    EngineRootScope(GraphTransaction &transaction, std::span<const Rule> rules)
+        : transaction_(transaction), rules_(rules) {
         camel::core::mm::autoSpace().registerExternalRootTracer(
             this,
             "rewrite.engineRoots",
             [this](const camel::core::mm::GenerationalAllocatorWithGC::RefRelocator &relocate) {
-                draft_.relocateStaticValues(relocate);
+                transaction_.edit().relocateStaticValues(relocate);
                 traceRuleConstants(rules_, relocate);
             });
 #ifndef NDEBUG
         // The Debug-only safepoint draft-root check counts this scope for this draft only: a
         // session that rewrites several graphs still needs its RootScope for the others.
-        debugDraftRootOpened(draft_);
+        debugDraftRootOpened(transaction_.graph());
 #endif
     }
     ~EngineRootScope() {
 #ifndef NDEBUG
-        debugDraftRootClosed(draft_);
+        debugDraftRootClosed(transaction_.graph());
 #endif
         camel::core::mm::autoSpace().unregisterExternalRootTracer(this);
     }
@@ -62,7 +63,7 @@ class EngineRootScope {
     EngineRootScope &operator=(const EngineRootScope &) = delete;
 
   private:
-    GraphDraft &draft_;
+    GraphTransaction &transaction_;
     std::span<const Rule> rules_;
 };
 
@@ -87,7 +88,8 @@ camel::core::type::Type *writingType(
 /// value of a static constant (bounded, so a large constant does not turn a proof into a data
 /// dump). This is the text an attribution step keeps, because a node a rewrite erases has no
 /// later text to read. It is made only when a log was asked for.
-std::string nodeText(const GraphDraft &draft, gc_node_ref_t id) {
+std::string nodeText(const GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft             = transaction.graph();
     const DraftNodeHeader *header = draft.header(id);
     if (header == nullptr) {
         return "%" + std::to_string(id);
@@ -449,8 +451,9 @@ namespace {
 
 template <typename Written>
 bool readsVariable(
-    const GraphDraft &draft, std::span<const gc_node_ref_t> norm,
+    const GraphTransaction &transaction, std::span<const gc_node_ref_t> norm,
     std::span<const gc_node_ref_t> with, Written &&written) {
+    const auto &draft = transaction.graph();
     for (auto inputs : {norm, with}) {
         for (gc_node_ref_t in : inputs) {
             const auto *h = draft.header(in);
@@ -471,8 +474,9 @@ bool readsVariable(
 /// make the value different (design principles 3.3, 3.4), so a pure computation with a
 /// control input is a pure computation still.
 bool shapeTakesPart(
-    const GraphDraft &draft, GCNodeKind kind, gc_slot_idx_t dataIndex, const Type *type,
-    std::span<const std::byte> payload) {
+    const GraphTransaction &transaction, GCNodeKind kind, gc_slot_idx_t dataIndex,
+    const Type *type, std::span<const std::byte> payload) {
+    const auto &draft = transaction.graph();
     switch (kind) {
     case GCNodeKind::Data: {
         if (dataIndex >= 0) {
@@ -581,11 +585,11 @@ uint8_t DraftWritings::shapeOf(gc_node_ref_t node) {
         const auto *h = draft_.header(node);
         bool yes =
             h != nullptr && draft_.alive(node) &&
-            shapeTakesPart(draft_, h->kind, h->dataIndex, h->dataType, draft_.payloadOf(node)) &&
+            shapeTakesPart(transaction(), h->kind, h->dataIndex, h->dataType, draft_.payloadOf(node)) &&
             !writtenInPlace(node);
         if (yes && h->kind == GCNodeKind::Oper) {
             yes = !readsVariable(
-                draft_,
+                transaction(),
                 draft_.normInputsOf(node),
                 draft_.withInputsOf(node),
                 [&](gc_node_ref_t in) { return writtenInPlace(in); });
@@ -607,9 +611,10 @@ namespace {
 /// The key of a node of the given parts; `canonOf` names the class of an input.
 template <typename CanonOf>
 NodeKey makeKey(
-    const GraphDraft &draft, GCNodeKind kind, camel::core::sem::PermissionMask perms, uint32_t region, const Type *type,
-    gc_slot_idx_t dataIndex, std::span<const std::byte> payload,
+    const GraphTransaction &transaction, GCNodeKind kind, camel::core::sem::PermissionMask perms,
+    uint32_t region, const Type *type, gc_slot_idx_t dataIndex, std::span<const std::byte> payload,
     std::span<const gc_node_ref_t> norm, std::span<const gc_node_ref_t> with, CanonOf &&canonOf) {
+    const auto &draft = transaction.graph();
     NodeKey key;
     key.kind   = static_cast<uint8_t>(kind);
     key.perms  = perms;
@@ -681,7 +686,7 @@ void DraftWritings::index(gc_node_ref_t node) {
     const camel::core::sem::PermissionMask context = contextOf(node);
     const auto *h         = draft_.header(node);
     NodeKey key           = makeKey(
-        draft_,
+        transaction(),
         h->kind,
         h->permissions,
         draft_.nodeRegion(node),
@@ -796,12 +801,12 @@ gc_node_ref_t DraftWritings::lookupOrAdd(
     auto &ix = *index_;
     std::optional<NodeKey> key;
     if (!greedy_ &&
-        shapeTakesPart(draft_, init.kind, init.dataIndex, init.dataType, init.payload) &&
-        !(init.kind == GCNodeKind::Oper && readsVariable(draft_, norm, with, [&](gc_node_ref_t in) {
+        shapeTakesPart(transaction(), init.kind, init.dataIndex, init.dataType, init.payload) &&
+        !(init.kind == GCNodeKind::Oper && readsVariable(transaction(), norm, with, [&](gc_node_ref_t in) {
               return writtenInPlace(in);
           }))) {
         key = makeKey(
-            draft_,
+            transaction(),
             init.kind,
             init.permissions,
             init.region,
@@ -861,7 +866,7 @@ class NodeCountModel : public CostModel {
 class WeightedModel : public CostModel {
   public:
     double nodeCost(const CostContext &context, gc_node_ref_t node) const override {
-        const GraphDraft &draft = context.draft;
+        const auto &draft       = context.transaction.graph();
         const auto *h           = draft.header(node);
         switch (h->kind) {
         case GCNodeKind::Data:
@@ -918,7 +923,7 @@ WritingChoice
 DraftWritings::choiceByCost(const CostModel &model, camel::core::context::Context *context) {
     rebuild();
     const size_t slots = draft_.nodeSlotCount();
-    const CostContext costContext{draft_, context};
+    const CostContext costContext{*transaction_, context};
     constexpr double kInfinite = std::numeric_limits<double>::infinity();
 
     // The value each node is a writing of, and how many writings the value has.
@@ -1976,7 +1981,7 @@ RewriteStats DraftWritings::rewrite(
         throw std::logic_error("A rewrite needs a draft with one writing per value.");
     }
     GraphDraft::WritingScope scope(draft_);
-    EngineRootScope roots(draft_, rules);
+    EngineRootScope roots(transaction(), rules);
     greedy_ = true;
     RewriteStats stats;
     auto &ix = *index_;
@@ -2067,7 +2072,7 @@ RewriteStats DraftWritings::rewrite(
             }
             if (step != nullptr) {
                 step->erased.push_back(node);
-                step->erasedText.push_back(nodeText(draft_, node));
+                step->erasedText.push_back(nodeText(transaction(), node));
             }
             draft_.eraseNode(node);
             ++stats.erased;
@@ -2172,7 +2177,7 @@ RewriteStats DraftWritings::rewrite(
                     step->ruleId = rule.id;
                     step->round  = stats.rounds;
                     step->matched.push_back(node);
-                    step->matchedText.push_back(nodeText(draft_, node));
+                    step->matchedText.push_back(nodeText(transaction(), node));
                     for (gc_node_ref_t bound : *chosen) {
                         if (bound == kInvalidNodeRef ||
                             std::find(step->matched.begin(), step->matched.end(), bound) !=
@@ -2180,10 +2185,10 @@ RewriteStats DraftWritings::rewrite(
                             continue;
                         }
                         step->matched.push_back(bound);
-                        step->matchedText.push_back(nodeText(draft_, bound));
+                        step->matchedText.push_back(nodeText(transaction(), bound));
                     }
                     step->produced     = made;
-                    step->producedText = nodeText(draft_, made);
+                    step->producedText = nodeText(transaction(), made);
                     recorded           = &*step;
                 }
                 draft_.takeStatementPlace(node, made);
@@ -2225,7 +2230,7 @@ RewriteStats DraftWritings::rewrite(
     return stats;
 }
 
-std::string DraftWritings::textOf(gc_node_ref_t node) { return nodeText(draft_, node); }
+std::string DraftWritings::textOf(gc_node_ref_t node) { return nodeText(transaction(), node); }
 
 namespace {
 std::string_view operatorText(camel::core::OperId oper) {
@@ -2246,7 +2251,7 @@ RuleMiss DraftWritings::whyNot(const Rule &rule, gc_node_ref_t node) {
         miss.detail = std::format(
             "{} is not a value a rewrite may read: control, branch, region and anchor nodes order "
             "the computation, they do not compute a value",
-            nodeText(draft_, node));
+            nodeText(transaction(), node));
         return miss;
     }
     const camel::core::sem::PermissionMask context = contextOf(node);
@@ -2296,13 +2301,13 @@ RuleMiss DraftWritings::whyNot(const Rule &rule, gc_node_ref_t node) {
         case Pattern::Kind::Var: {
             if (p.constOnly && !constantOf(at)) {
                 return std::format(
-                    "{} is {} where the pattern writes a constant", where, nodeText(draft_, at));
+                    "{} is {} where the pattern writes a constant", where, nodeText(transaction(), at));
             }
             const DraftNodeHeader *header = draft_.header(at);
             if (header == nullptr || !acceptsType(p.type, header->dataType)) {
                 return std::format(
                     "{} is {} where the pattern expects a value of type {}", where,
-                    nodeText(draft_, at),
+                    nodeText(transaction(), at),
                     p.type != nullptr ? p.type->toString() : std::string("any"));
             }
             if (state.bound[p.var]) {
@@ -2310,7 +2315,7 @@ RuleMiss DraftWritings::whyNot(const Rule &rule, gc_node_ref_t node) {
                     return std::format(
                         "{} is {}, but the pattern's parameter is already {} (one parameter is one "
                         "value)",
-                        where, nodeText(draft_, at), nodeText(draft_, state.node[p.var]));
+                        where, nodeText(transaction(), at), nodeText(transaction(), state.node[p.var]));
                 }
                 return std::nullopt;
             }
@@ -2322,7 +2327,7 @@ RuleMiss DraftWritings::whyNot(const Rule &rule, gc_node_ref_t node) {
             const auto found = constantOf(at);
             if (!found || !sameConstantValue(found->first, found->second, p.value, p.type)) {
                 return std::format(
-                    "{} is {} where the pattern writes a constant", where, nodeText(draft_, at));
+                    "{} is {} where the pattern writes a constant", where, nodeText(transaction(), at));
             }
             return std::nullopt;
         }
@@ -2331,37 +2336,37 @@ RuleMiss DraftWritings::whyNot(const Rule &rule, gc_node_ref_t node) {
             if (header == nullptr || header->kind != GCNodeKind::Oper) {
                 return std::format(
                     "{} is {} where the pattern writes the operator {}", where,
-                    nodeText(draft_, at), operatorText(p.oper));
+                    nodeText(transaction(), at), operatorText(p.oper));
             }
             if (header->permissions != matchPerms_) {
                 return std::format(
                     "{} is {}, in a different permission class than the value the rule matched; a "
                     "rewrite may not cross one",
-                    where, nodeText(draft_, at));
+                    where, nodeText(transaction(), at));
             }
             if (!acceptsType(p.type, header->dataType)) {
                 return std::format(
                     "{} is {} where the pattern expects a value of type {}", where,
-                    nodeText(draft_, at),
+                    nodeText(transaction(), at),
                     p.type != nullptr ? p.type->toString() : std::string("any"));
             }
             // The operator is the pattern's own: a different one accepts no operand (the engine
             // compares the operator indexes, not their shapes).
             if (reinterpret_cast<const GCOperBody *>(draft_.payloadOf(at).data())->oper != p.oper) {
                 return std::format(
-                    "{} is {} where the pattern writes the operator {}", where, nodeText(draft_, at),
+                    "{} is {} where the pattern writes the operator {}", where, nodeText(transaction(), at),
                     operatorText(p.oper));
             }
             if (!takesPart(at)) {
                 return std::format(
-                    "{} is {}, which no rewrite may read", where, nodeText(draft_, at));
+                    "{} is {}, which no rewrite may read", where, nodeText(transaction(), at));
             }
             const KernelArguments arguments = kernelArgumentsOf(draft_, at);
             const auto &inputs              = arguments.norm;
             if (inputs.size() != p.args.size() || !arguments.with.empty()) {
                 return std::format(
                     "{} is {}: it has {} value input(s){} where the pattern writes {} operand(s)",
-                    where, nodeText(draft_, at), inputs.size(),
+                    where, nodeText(transaction(), at), inputs.size(),
                     arguments.with.empty() ? "" : " and with-inputs", p.args.size());
             }
             const auto attempt =
@@ -2417,7 +2422,7 @@ RuleMiss DraftWritings::whyNot(const Rule &rule, gc_node_ref_t node) {
                     if (!values.empty()) {
                         values += ", ";
                     }
-                    values += nodeText(draft_, var);
+                    values += nodeText(transaction(), var);
                 }
                 miss.kind   = RuleMiss::Kind::Condition;
                 miss.detail = std::format(
@@ -2443,7 +2448,7 @@ RuleMiss DraftWritings::whyNot(const Rule &rule, gc_node_ref_t node) {
 SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget &budget) {
     SaturateStats stats;
     GraphDraft::WritingScope scope(draft_);
-    EngineRootScope roots(draft_, rules);
+    EngineRootScope roots(transaction(), rules);
     rebuild();
     struct Found {
         size_t rule;

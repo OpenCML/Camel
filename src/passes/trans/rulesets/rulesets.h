@@ -25,8 +25,9 @@
 
 class RulesetsPass : public RuntimeGraphRewritePass {
   public:
-    RulesetsPass(const camel::core::context::context_ptr_t &ctx, std::string query)
-        : RuntimeGraphRewritePass(ctx), query_(std::move(query)) {}
+    RulesetsPass(
+        const camel::core::context::context_ptr_t &ctx, std::string query, bool forward)
+        : RuntimeGraphRewritePass(ctx), query_(std::move(query)), forward_(forward) {}
 
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
@@ -34,4 +35,7 @@ class RulesetsPass : public RuntimeGraphRewritePass {
   private:
     // What the caller asked, empty when it asked nothing: `family|head|arity`, `;`-separated.
     std::string query_;
+    // Whether to print the forward rules the operators were bound to, and what the index answers
+    // for them now (`forward=true`): the reading that shows the index is what a transform reads.
+    bool forward_ = false;
 };
