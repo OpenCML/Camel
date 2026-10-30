@@ -384,6 +384,30 @@ template <class Draft> gc_node_ref_t emitCallThroughValue(
     std::span<const gc_node_ref_t> arguments, std::span<const gc_node_ref_t> withArguments,
     gc_node_ref_t value, ty::Type *resultType, uint32_t region, gc_node_ref_t place) {
     const gc_cnt_t count = static_cast<gc_cnt_t>(family.variants.size());
+    // A value this pass dispatches on has to be the enum of its function type, and that is checked
+    // here, where the tag is about to be read. `:enum/tag` and `:enum/field` read a tagged pair; a
+    // value that is still a plain reference to a function has no tag at those offsets, and reading
+    // one out of it is undefined behaviour that shows up as a crash far from here. Such a value
+    // means some site that builds it was not lowered -- a family lowered on one site and left
+    // written on another -- so it is named and raised: the rule of this pass is that a family is
+    // either lowered whole or left whole and named, never half of each (docs/design-principles.cn.md
+    // on whole families), and a dispatch on a value of the wrong form is the pass's own defect, not
+    // the program's.
+    if (const DraftNodeHeader *dispatched = draft.header(value); dispatched != nullptr) {
+        ty::Type *dispatchedType = dispatched->dataType;
+        if (dispatchedType == nullptr || dispatchedType->code() != ty::EnumType::typeCode()) {
+            const std::string familyName =
+                !family.members.empty() && family.members.front()->type != nullptr
+                    ? family.members.front()->type->toString()
+                    : (!family.variants.empty() ? family.variants.front().name : std::string("?"));
+            throw std::runtime_error(std::format(
+                "the call through a value of '{}' dispatches on a value of type '{}', which is not "
+                "the enum of its function type: the site that builds that value was not lowered, so "
+                "it has no tag to read (a defect of the pass, not of the program)",
+                familyName,
+                dispatchedType != nullptr ? dispatchedType->toString() : std::string("<none>")));
+        }
+    }
     // The values a variant captured, taken out of the value: the tag and the field's index are
     // what `:enum/field` reads.
     const auto argumentsOf = [&](const Variant &variant, bool ownTypes) {
