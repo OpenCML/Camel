@@ -1,0 +1,31 @@
+# b4 的两片计划（账本 §13／§14）
+
+推入 develop：`2d953f985`（计划那一笔 `a736836bf`，docs-only）。三个数未动：**66 / 535 / 3 / 6**。
+闸门：**total 7898 / pass 7889 / fail 0 / skip 7 / known 2**，指纹 `2a58a22c…`，clean。
+
+## 第一片：handle 存事务（4 个事务内构造点 + 7 个调用点）
+
+- **文件**：`modules/graph/handle.h`、`handle.cpp`、`read.cpp`（165 的 `createInDraft`、637 的 `*node.draft`、672 的 decode）、`modules/rewrite/fact.cpp:422`、`modules/rewrite/module.cpp:332、360`。
+- **调用点 7**：`read.cpp:136/164/446` 的 `handle->draft()`、`read.cpp:637` 的 `*node.draft`、`read.cpp:672` 的 `GraphDraft::decode`、`fact.cpp:825`、`handle.cpp:271` 的 clone。
+- **验收**：decode **6 → 5**；`handle->draft()` **3 → 0**；拼写 15 → 11；`never_rises` 绿、`fail 0`；`equals()`／`updateRefs` 的注释改成说事务。
+- **做完之后还有谁拿 handle**：13 个"从 program 造"的构造点（第二片的对象）。
+
+## 第二片：从 program 造 handle 的那 13 处
+
+- **文件**：`read.cpp`（8）、`txn.cpp`（3）、`fact.cpp:424`、`module.cpp:1544`。
+- **验收**：`modules/graph` 拼写 15 → 0；每个 handle 指得到一个所有者（事务，或已发布程序），没有第三种。
+- **可能得出"program-backed handle 保留 program 就够"的结论**——那也是结论，写进账本，别硬造事务。
+
+## 判据第二版（§14）：收益有三种
+
+| 类型 | 怎么量 | 例子 |
+|---|---|---|
+| ① 删行／删局部 | 行数 | b2.4、b5a–b5e |
+| ② 消掉一个显式点 | decode／构造点／`->draft()` 的计数 | b4 第一片：decode 6 → 5、`->draft()` 3 → 0 |
+| ③ 消掉一条生存期漏洞 | "有没有东西活得比所有者久" | b4 第一片：草稿不再能脱离事务被 handle 持有 |
+
+**三样都没有才是净负**；第二、三种收益必须写进提交信息，否则按"删行数"看 b4 第一片是 0 行，会被误判成扩散。
+
+## 状态
+
+第一片**未开始**（今晚只交了计划和判据）。理由：它要动 handle 的所有权语义（谁持有、是否参与 `updateRefs`、`equals()` 的身份），不是拼写笔；午夜起一笔动不完就是半成品，而今晚已经有三条车道因为"想多做一点"一件都没落地。明早第一步固定：先改 `handle.h`（类型与注释）→ `handle.cpp`（`createInDraft`、clone、`equals`、`updateRefs`）→ `read.cpp` 三处 → `fact.cpp`／`module.cpp`，然后一次整闸。
