@@ -803,15 +803,16 @@ bool Builder::rejectParenthesizedName(cst::FuncAnno context) {
 
 bool Builder::rejectVjpAnnotation(cst::FuncAnno context) {
     const std::string annotation = context->get<cst::IdentRef>()->text();
-    if (annotation != "vjp") {
+    if (annotation != "vjp" && annotation != "jvp") {
         return false;
     }
+    const std::string tag    = annotation == "vjp" ? "vjp" : "jvp";
     diags_->of(SemanticDiag::InvalidAnnotation)
         .at(rangeOf(context->firstToken(), context->lastToken()))
         .commit(
             annotation,
-            "a custom derivative rule is a declaration tag now: write '#vjp(rule)' before the "
-            "function (design principles 6.2, 8)");
+            "a derivative rule is a declaration tag now: write '#" + tag +
+                "(rule)' before the function (design principles 6.2, 8)");
     return true;
 }
 
