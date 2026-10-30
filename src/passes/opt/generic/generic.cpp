@@ -525,7 +525,7 @@ joinBlockFragments(camel::runtime::GraphTransaction &transaction, gc_node_ref_t 
         markStatement(tails[i - 1]);
         const gc_node_ref_t only[1] = {tails[i - 1]};
         draft.setSyncInputs(heads[i], only);
-        camel::runtime::appendControlDependency(draft, tails[i - 1], heads[i]);
+        camel::runtime::appendControlDependency(transaction, tails[i - 1], heads[i]);
     }
     if (!joined) {
         return none;
@@ -640,7 +640,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         markStatement(pred);
         const gc_node_ref_t only[1] = {pred};
         draft.setSyncInputs(user, only);
-        camel::runtime::appendControlDependency(draft, pred, user);
+        camel::runtime::appendControlDependency(transaction, pred, user);
     };
     gc_node_ref_t armChainHead = kInvalidNodeRef;
     gc_node_ref_t armChainTail = kInvalidNodeRef;
@@ -690,7 +690,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         }
         draft.unlinkInput(camel::runtime::DraftEdgeKind::Ctrl, user, brch);
         for (gc_node_ref_t pred : preds) {
-            camel::runtime::appendControlDependency(draft, pred, user);
+            camel::runtime::appendControlDependency(transaction, pred, user);
         }
     }
 
@@ -721,7 +721,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         for (gc_node_ref_t user : joinValueUsers) {
             for (gc_node_ref_t pred : after) {
                 if (pred != result && !dropped[pred]) {
-                    camel::runtime::appendControlDependency(draft, pred, user);
+                    camel::runtime::appendControlDependency(transaction, pred, user);
                 }
             }
         }
@@ -730,7 +730,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         draft.unlinkInput(camel::runtime::DraftEdgeKind::Ctrl, user, join);
         for (gc_node_ref_t pred : after) {
             if (!dropped[pred]) {
-                camel::runtime::appendControlDependency(draft, pred, user);
+                camel::runtime::appendControlDependency(transaction, pred, user);
             }
         }
     }
@@ -921,7 +921,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
                     isComputedAfter(draft, source, target)) {
                     continue;
                 }
-                camel::runtime::appendControlDependency(draft, source, target);
+                camel::runtime::appendControlDependency(transaction, source, target);
             }
         }
     }
