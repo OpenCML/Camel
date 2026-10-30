@@ -2,7 +2,9 @@
 
 > **一页一问；索引按"堵住多少工作"排序，因为作者的时间应该花在最贵的那页上。**
 
-> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来（今天有两条车道手上各压着一页），落进来就在待裁表加一行。
+> **索引的价值在于与目录一一对应；一旦少一页，读者就会以为没有那一问。**
+
+> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来（今天四页，来自三条车道），落进来就在待裁表加一行。
 >
 > **哪些未决值得成页**：不是所有未决都值得成页——只有**今天有人被它堵住**的才值得。其余留在原则里，等它真的挡住一条车道再成页。所以第 15 节那 8 条不占待裁表，清单在文末，每条写明今天堵着谁。
 
@@ -14,10 +16,10 @@
 
 | 页 | 问什么 | 状态 | 堵着谁 |
 |---|---|---|---|
-| [`two-references-write-one-object-outside-a-sync-block`](questions-2026-10-31-two-references-write-one-object-outside-a-sync-block.md) | 同一可变对象被两条引用写、第二条在这一层看不见时，读拿谁的版本 | 待裁 | 效应那一族的别名收尾；高阶函数把闭包经参数传进来之后的写；`a-version-port-that-must-carry-a-value` 的边界 |
-| [`parallel-map-fault-what-runs-after`](questions-2026-10-31-parallel-map-fault-what-runs-after.md) | 并行 `map` 一处故障后，下标更小、还没开始的元素是否仍执行 | 待裁 | 并行 `map` 的失败报告语义；跨后端一致性用例（`attempt.plan.toml:207`）；3.6 的措辞 |
-| [`a-version-port-that-must-carry-a-value`](questions-2026-10-31-a-version-port-that-must-carry-a-value.md) | `void` 调用写过的变量，它的读该靠什么后于那次调用（`:var/get` 的版本口必须运一个值） | 待裁 | 变更那一族的收尾；`a-version-port-that-must-carry-a-value` 本身 |
-| [`who-consumes-the-ruleset-index`](questions-2026-10-31-who-consumes-the-ruleset-index.md) | 规则集索引建好了、打印得出来，但没有 pass 查它：`jvp`/`transpose` 这两个变换算子（设计 9.9）什么时候落地，在那之前"缺规则"该由谁发出 | 待裁 | `jvp` 包装与两个变换算子本身；设计第 3 节那条"缺规则必须拒绝（9.9）"的诊断挂在哪一阶段 |
+| [`two-references-write-one-object-outside-a-sync-block`](questions-2026-10-31-two-references-write-one-object-outside-a-sync-block.md) | 同一可变对象被两条引用写、第二条在这一层看不见时，读拿谁的版本 | 待裁 | 效应那一族的别名收尾（`mutable_reference.*`、`callback_write_ignored.cml`）；`lane-eff-rule` 的高阶函数写；`a-version-port-that-must-carry-a-value` 的边界 |
+| [`parallel-map-fault-what-runs-after`](questions-2026-10-31-parallel-map-fault-what-runs-after.md) | 并行 `map` 一处故障后，下标更小、还没开始的元素是否仍执行 | 待裁 | 并行 `map` 的失败报告语义；`attempt.plan.toml:207` 的跨后端一致性用例；3.6 的措辞 |
+| [`a-version-port-that-must-carry-a-value`](questions-2026-10-31-a-version-port-that-must-carry-a-value.md) | `void` 调用写过的变量，它的读该靠什么后于那次调用（`:var/get` 的版本口必须运一个值） | 待裁 | `:var/get` 版本口本身（`valueVersionOf` 遇到 `void` 调用写者时返回什么）；`autodiff` 第 3 步的调用写版本 |
+| [`who-consumes-the-ruleset-index`](questions-2026-10-31-who-consumes-the-ruleset-index.md) | 规则集索引建好了、打印得出来，但没有 pass 查它：`jvp`/`transpose` 这两个变换算子（设计 9.9）什么时候落地，在那之前"缺规则"该由谁发出 | 待裁 | `lane-recheck` 的 `jvp`/`transpose` 两个变换算子（设计 9.9）；"缺规则必须拒绝"的诊断挂在哪一阶段 |
 
 原则第 15 节另列着 6 条未决（另 2 条已成页），见文末。
 
@@ -89,3 +91,4 @@
 - 一页一问，文件名 `questions-YYYY-MM-DD-<主题>.md`。
 - 三段：现象（`file:line`）、两条路的代价、我方默认建议；末尾一句要作者答的话，选项要能照字面执行。
 - 裁回来：`git mv` 到 `reviews/`，页首写 `裁定：`（结论 + 落在哪个提交）；`questions/` 空 = 没有待裁。
+- **已裁的页必须带 `裁定：` 行**，否则读者不知道是哪个裁定；`who-consumes-the-ruleset-index` 落进 `reviews/` 时就是这么做的（好先例）。
