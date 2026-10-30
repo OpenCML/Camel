@@ -646,6 +646,11 @@ void writeBody(gc_payload_word_t *payload, const GCNode &node, const Body &body)
 
 struct PlannedDraftNode {
     bool dead               = false; // the place of an erased node (ids are kept)
+    /// True when the finished node takes no order edge (nodeTakesNoOrder, asked here of the node
+    /// as it will be once the payload is emitted): its order inputs are dropped, not carried into
+    /// the graph. The answer is taken once, in the plan, and both the shape and the emission read
+    /// it, so the two cannot disagree about how many order edges the graph has.
+    bool dropsOrder         = false;
     gc_node_ref_t draftId   = kInvalidNodeRef;
     gc_node_ref_t ref       = kInvalidNodeRef;
     gc_off_t payload        = kNoPayload; // word offset in the payload area
@@ -767,8 +772,32 @@ DraftPayloadPlan planDraftPayload(
         for (gc_node_ref_t ref : draft.ctrlInputsOf(draftId)) {
             requireAlive(draftId, ref, "ctrl-input");
         }
+        // The finished node answers for itself here, and this is the one owner of that answer: the
+        // payload the graph will hold is the one the draft holds, so the question the seal check asks
+        // of the frozen graph (nodeTakesNoOrder, graph_edges.cpp) is asked of this node before it is
+        // written, and the answer decides both the edge count and the edges emitted. It cannot be
+        // asked where the edge is written: a node still being built has no payload, so
+        // nodeIsFreelySchedulable answers for a half-made node and every writer believes the edge is
+        // wanted. Asked here, once, the two answers cannot disagree.
+        bool dropsOrder = false;
+        if (const DraftNodeHeader *ordered = draft.header(draftId);
+            ordered != nullptr && ordered->kind != GCNodeKind::Dead &&
+            ordered->kind != GCNodeKind::Cast && nodeIsFreelySchedulable(draft, draftId)) {
+            dropsOrder = true;
+            if (ordered->kind == GCNodeKind::Brch || ordered->kind == GCNodeKind::Loop) {
+                for (uint32_t region = 1; region < draft.regionCount(); ++region) {
+                    if (draft.region(region).owner == draftId) {
+                        dropsOrder = false; // it stands for its region and carries its order
+                        break;
+                    }
+                }
+            }
+        }
         size_t keptOrderInputs = 0;
         for (gc_node_ref_t ref : draft.orderInputsOf(draftId)) {
+            if (dropsOrder) {
+                continue; // the edge says nothing on a node that arranges itself freely
+            }
             if (subset && !inGraph(ref)) {
                 continue; // dropped with the node it orders after
             }
@@ -785,9 +814,11 @@ DraftPayloadPlan planDraftPayload(
             "A runtime graph is addressed with 32 bits; this one has no room left.");
         plan.nodes.push_back(
             PlannedDraftNode{
-                .draftId = draftId,
-                .ref     = static_cast<gc_node_ref_t>(nodeCount),
-                .payload = words == 0 ? kNoPayload : static_cast<gc_off_t>(payloadWords),
+                .dead       = false,
+                .dropsOrder = dropsOrder,
+                .draftId    = draftId,
+                .ref        = static_cast<gc_node_ref_t>(nodeCount),
+                .payload    = words == 0 ? kNoPayload : static_cast<gc_off_t>(payloadWords),
                 .payloadWordCount = words,
             });
         plan.runtimeRefsByDraftId[draftId] = static_cast<gc_node_ref_t>(nodeCount);
@@ -1047,7 +1078,7 @@ void emitDraftPayload(
     // one node by the predecessor's number (which is what makes the arrays sorted by (user, pred),
     // the order every reader and every dump of them relies on).
     const auto emitSideEdges = [&](auto *edges, gc_cnt_t count, const auto &inputsOf,
-                                   bool dropUnmapped) {
+                                   bool dropUnmapped, bool dropOnFreeUser) {
         if (count == 0) {
             return;
         }
@@ -1056,6 +1087,9 @@ void emitDraftPayload(
         for (const PlannedDraftNode &planned : plan.nodes) {
             if (planned.dead) {
                 continue;
+            }
+            if (dropOnFreeUser && planned.dropsOrder) {
+                continue; // the plan counted none of its order inputs (nodeTakesNoOrder)
             }
             // The draft appends a side edge where the rewrite that wrote it happened to stand: a
             // pass that collects what orders a node from a container of its own appends them in
@@ -1085,10 +1119,10 @@ void emitDraftPayload(
     };
     emitSideEdges(
         payload.orderEdges, payload.orderEdgeCount,
-        [&](gc_node_ref_t id) { return draft.orderInputsOf(id); }, true);
+        [&](gc_node_ref_t id) { return draft.orderInputsOf(id); }, true, true);
     emitSideEdges(
         payload.syncEdges, payload.syncEdgeCount,
-        [&](gc_node_ref_t id) { return draft.syncInputsOf(id); }, false);
+        [&](gc_node_ref_t id) { return draft.syncInputsOf(id); }, false, false);
 
     for (size_t i = 0; i < draft.normPorts().size(); ++i) {
         payload.normPorts[i] = plan.runtimeRefsByDraftId[draft.normPorts()[i]];

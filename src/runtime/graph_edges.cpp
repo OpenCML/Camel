@@ -344,7 +344,7 @@ class EdgeChecker {
                 bad("orders a node after itself");
                 continue;
             }
-            if (isFreelySchedulable(edge.user) && !standsForItsRegion(edge.user)) {
+            if (nodeTakesNoOrder(graph_, edge.user)) {
                 bad("is on a pure node, which nothing orders");
             }
             if (const uint32_t region = crossedControlRegion(edge.pred, edge.user); region != 0) {
@@ -418,22 +418,7 @@ class EdgeChecker {
     /// order on that node -- the `BRCH` or the `LOOP` -- and not one that reaches inside the region.
     /// Such a node computes nothing itself, and still carries an order edge, which is why the rule
     /// "a pure node carries none" reads it out here.
-    bool standsForItsRegion(gc_node_ref_t ref) const {
-        const GCNode *node = graph_.node(ref);
-        if (node == nullptr) {
-            return false;
-        }
-        if (node->kind != GCNodeKind::Brch && node->kind != GCNodeKind::Loop) {
-            return false;
-        }
-        for (uint32_t region = 1; region < graph_.regionCount(); ++region) {
-            const GCRegion *record = graph_.region(region);
-            if (record != nullptr && record->owner == ref) {
-                return true;
-            }
-        }
-        return false;
-    }
+    bool standsForItsRegion(gc_node_ref_t ref) const { return nodeStandsForItsRegion(graph_, ref); }
 
     /// The rule of 4.6's third clause, read off the shared classification so that the seal check
     /// and the passes that write order edges cannot drift: only a node the model lets a pass
@@ -708,4 +693,33 @@ void validateRuntimeGraphEdges(const Program &program, const GCGraph *graph, Gra
     throw std::runtime_error(text);
 }
 
+
+/// The two questions the seal check asks of an order edge's user, kept here so that the check and
+/// the writers that carry order edges across a rewrite ask one question and not two.
+bool nodeStandsForItsRegion(const GCGraph &graph, gc_node_ref_t ref) {
+    const GCNode *node = graph.node(ref);
+    if (node == nullptr) {
+        return false;
+    }
+    if (node->kind != GCNodeKind::Brch && node->kind != GCNodeKind::Loop) {
+        return false;
+    }
+    for (uint32_t region = 1; region < graph.regionCount(); ++region) {
+        const GCRegion *record = graph.region(region);
+        if (record != nullptr && record->owner == ref) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool nodeTakesNoOrder(const GCGraph &graph, gc_node_ref_t ref) {
+    // A conversion that was ordered when it could fail keeps its place: a pass that refines the
+    // types can make it infallible, and dropping the order is the pass's choice, not a defect.
+    const GCNode *node = graph.node(ref);
+    if (node != nullptr && node->kind == GCNodeKind::Cast) {
+        return false;
+    }
+    return nodeIsFreelySchedulable(graph, ref) && !nodeStandsForItsRegion(graph, ref);
+}
 } // namespace camel::runtime
