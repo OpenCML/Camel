@@ -1,3 +1,5 @@
+> 已由作者答复，裁定原文见 `docs/handover/reviews/questions-2026-10-29.md` 末节与 `questions-2026-10-30-gate-control-edge.md`；本页留档，不再更新。
+
 # `RowsOf<T>` 这个名字沿不沿用
 
 裁定：待裁（作者 2026-10-30 尚未定；当前按"默认建议"做，即已在 `lane-jax2` 上按 `RowsOf<T>` 落地）

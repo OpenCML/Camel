@@ -1,3 +1,5 @@
+> 已由作者答复，裁定原文见 `docs/handover/reviews/questions-2026-10-29.md` 末节与 `questions-2026-10-30-gate-control-edge.md`；本页留档，不再更新。
+
 # 表达式里的嵌套调用：它的「值」靠什么存活？
 
 日期：2026-10-30　车道：`lane-eff-rule`（第 1 条按裁定实现后未提交）

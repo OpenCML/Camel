@@ -1,3 +1,5 @@
+> 已由作者答复，裁定原文见 `docs/handover/reviews/questions-2026-10-29.md` 末节与 `questions-2026-10-30-gate-control-edge.md`；本页留档，不再更新。
+
 # "写之前读是编译错误"由谁证
 
 裁定：待裁（作者 2026-10-30 尚未定；当前按"默认建议"做）

@@ -1,3 +1,5 @@
+> 已由作者答复，裁定原文见 `docs/handover/reviews/questions-2026-10-29.md` 末节与 `questions-2026-10-30-gate-control-edge.md`；本页留档，不再更新。
+
 # tiles：裁定说 22 条期望应回到 10，改完读到 12
 
 日期：2026-10-30　车道：`lane-eff-rule`（第 2 条按裁定实现后未提交）

@@ -1,3 +1,5 @@
+> 已由作者答复，裁定原文见 `docs/handover/reviews/questions-2026-10-29.md` 末节与 `questions-2026-10-30-gate-control-edge.md`；本页留档，不再更新。
+
 # `sync` 块里「谁算语句」：建图与 tiles 用的是两个定义
 
 日期：2026-10-30　现状分支：`lane-eff-rule`
