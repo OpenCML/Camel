@@ -76,7 +76,9 @@ struct RegionStep {
 
 /// The control regions around `region`, innermost first. Regions that only annotate are looked
 /// through: they say where a value came from, not when it runs.
-std::vector<RegionStep> controlRegionsAround(const GraphDraft &draft, uint32_t region) {
+std::vector<RegionStep>
+controlRegionsAround(const runtime::GraphTransaction &transaction, uint32_t region) {
+    const auto &draft = transaction.graph();
     std::vector<RegionStep> steps;
     const uint32_t regions = static_cast<uint32_t>(draft.regionCount());
     for (uint32_t at = region; at != 0 && at < regions && steps.size() < 64;) {
@@ -261,7 +263,9 @@ void Builder::settleStreamLinearity() {
     }
 
     // Whether a node of a graph takes a node of that graph as one of its inputs.
-    const auto readsNode = [](const GraphDraft &draft, draft_node_ref_t id, node_handle_t which) {
+    const auto readsNode = [](const runtime::GraphTransaction &transaction, draft_node_ref_t id,
+                              node_handle_t which) {
+        const auto &draft = transaction.graph();
         for (draft_node_ref_t value : draft.normInputsOf(id)) {
             if (draft.ref(value) == which) {
                 return true;
@@ -291,7 +295,7 @@ void Builder::settleStreamLinearity() {
         const GraphDraft &draft = *known->second.draft;
         const size_t slots      = draft.nodeSlotCount();
         for (draft_node_ref_t id = 0; id < slots; ++id) {
-            if (!draft.alive(id) || !readsNode(draft, id, violation.port)) {
+            if (!draft.alive(id) || !readsNode(violation.graph->transaction(), id, violation.port)) {
                 continue;
             }
             // A call reads the value it applies and the arguments it hands on; a direct call reads
@@ -344,7 +348,8 @@ void Builder::settleStreamLinearity() {
         for (const Reader &reader : list) {
             const GraphFacts &known = facts[reader.graph];
             const GraphDraft &draft = *known.draft;
-            const auto around       = controlRegionsAround(draft, draft.nodeRegion(reader.node));
+            const auto around =
+                controlRegionsAround(reader.graph->transaction(), draft.nodeRegion(reader.node));
             steps.push_back(around);
             const bool inRound =
                 std::any_of(around.begin(), around.end(), [](const RegionStep &step) {

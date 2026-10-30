@@ -110,8 +110,9 @@ ResourceSignature uniteReach(const ResourceSignature &a, const ResourceSignature
 
 } // namespace
 
-void Builder::numberBodyPorts(BodyReach &walk, const runtime::GraphDraft &draft,
+void Builder::numberBodyPorts(BodyReach &walk, const runtime::GraphTransaction &transaction,
                               const FunctionType &type) const {
+    const auto &draft = transaction.graph();
     // Which parameter a port is, in the numbering a call uses: `with` parameters first, then the
     // ordinary ones (a `constas` parameter is not a runtime value and has no port).
     const size_t withCount = type.withTypesCount();
@@ -177,11 +178,11 @@ void Builder::addParamUse(BodyReach &walk, size_t index, sem::ResourceClass cls,
     found->mode = sem::uniteAccess(found->mode, mode);
 }
 
-std::optional<std::string>
-Builder::moduleVariableOf(const runtime::GraphDraft &draft, draft_node_ref_t port) const {
+std::optional<std::string> Builder::moduleVariableOf(const runtime::GraphTransaction &transaction,
+                                                    draft_node_ref_t port) const {
     // A capture port stands for the node it captured, which may itself be a capture port of the
     // function around: follow the chain to the cell, and ask whether it is a module's variable.
-    node_handle_t at = draft.ref(port);
+    node_handle_t at = transaction.graph().ref(port);
     for (size_t hops = 0; hops < 64; ++hops) {
         if (const auto cell = moduleVariableResources_.find(at);
             cell != moduleVariableResources_.end()) {
@@ -209,7 +210,7 @@ void Builder::addAmbientUse(BodyReach &walk, const std::string &name, sem::Acces
     found->mode = sem::uniteAccess(found->mode, mode);
 }
 
-bool Builder::readCalleeSignature(BodyReach &walk, const runtime::GraphDraft &draft,
+bool Builder::readCalleeSignature(BodyReach &walk, const runtime::GraphTransaction &transaction,
                                   const ResourceSignature &sig, size_t calleeWithCount, bool isCall,
                                   draft_node_ref_t id) const {
     // What one node's signature amounts to for this body: its own parameters, in the numbering the
@@ -226,8 +227,9 @@ bool Builder::readCalleeSignature(BodyReach &walk, const runtime::GraphDraft &dr
         // enclosing function it is cannot be read from here.
         return false;
     }
-    const auto norm = draft.normInputsOf(id);
-    const auto with = draft.withInputsOf(id);
+    const auto &draft = transaction.graph();
+    const auto norm   = draft.normInputsOf(id);
+    const auto with   = draft.withInputsOf(id);
     for (const auto &use : sig.params) {
         draft_node_ref_t operand = 0;
         if (use.index < calleeWithCount) {
@@ -245,7 +247,8 @@ bool Builder::readCalleeSignature(BodyReach &walk, const runtime::GraphDraft &dr
             operand = norm[at];
         }
         if (walk.captured.contains(operand)) {
-            if (const auto variable = moduleVariableOf(draft, operand); variable.has_value()) {
+            if (const auto variable = moduleVariableOf(transaction, operand);
+                variable.has_value()) {
                 addAmbientUse(walk, *variable, use.mode); // a variable of a module's top level
                 continue;
             }
@@ -288,9 +291,11 @@ void Builder::readUnknownValue(BodyReach &walk) const {
     walk.reach.external = true;
 }
 
-bool Builder::reachOfOper(DraftGraphBuilder *graph, const runtime::GraphDraft &draft,
-                          BodyReach &walk, draft_node_ref_t id) const {
-    const auto &op = graph->operTarget(draft.ref(id));
+bool Builder::reachOfOper(
+    DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction, BodyReach &walk,
+    draft_node_ref_t id) const {
+    const auto &draft = transaction.graph();
+    const auto &op    = graph->operTarget(draft.ref(id));
     if (op == nullptr) {
         return false;
     }
@@ -336,7 +341,7 @@ bool Builder::reachOfOper(DraftGraphBuilder *graph, const runtime::GraphDraft &d
             return false;
         }
         if (walk.captured.contains(inputs[at])) {
-            if (const auto variable = moduleVariableOf(draft, inputs[at]);
+            if (const auto variable = moduleVariableOf(transaction, inputs[at]);
                 variable.has_value()) {
                 addAmbientUse(walk, *variable, access.mode); // a variable of a module's top level
                 continue;
@@ -353,8 +358,10 @@ bool Builder::reachOfOper(DraftGraphBuilder *graph, const runtime::GraphDraft &d
     return true;
 }
 
-bool Builder::reachOfFunc(DraftGraphBuilder *graph, const runtime::GraphDraft &draft,
-                          BodyReach &walk, draft_node_ref_t id) const {
+bool Builder::reachOfFunc(
+    DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction, BodyReach &walk,
+    draft_node_ref_t id) const {
+    const auto &draft                = transaction.graph();
     const compile_graph_ptr_t callee = graph->funcTarget(draft.ref(id));
     if (callee == nullptr) {
         return false;
@@ -374,29 +381,29 @@ bool Builder::reachOfFunc(DraftGraphBuilder *graph, const runtime::GraphDraft &d
                               ? inferredResources_.find(callee.get())
                               : inferredResources_.end();
     if (inferred != inferredResources_.end()) {
-        return readCalleeSignature(walk, draft, inferred->second, calleeType->withTypesCount(),
-                                   false, id);
+        return readCalleeSignature(walk, transaction, inferred->second,
+                                   calleeType->withTypesCount(), false, id);
     }
     if (calleeType->resources().mode != ResourceSignature::Mode::Concrete) {
         readUnknownValue(walk);
         return true;
     }
-    return readCalleeSignature(walk, draft, calleeType->resources(), calleeType->withTypesCount(),
-                               false, id);
+    return readCalleeSignature(walk, transaction, calleeType->resources(),
+                               calleeType->withTypesCount(), false, id);
 }
 
-bool Builder::reachOfCall(const runtime::GraphDraft &draft, BodyReach &walk,
-                          draft_node_ref_t id) const {
+bool Builder::reachOfCall(
+    const runtime::GraphTransaction &transaction, BodyReach &walk, draft_node_ref_t id) const {
     // A call through a function value: what it runs is the value's signature, which is the first
     // `with` input of the call (isEffectNode reads it the same way). A value of a function that
     // wrote no clause carries the set its body was measured to reach; the only function type that
     // says nothing is a parameter of function type, whose clause the callee writes at each
     // instantiation -- so this is read conservatively.
-    const auto callee = draft.withInputsOf(id);
+    const auto callee = transaction.graph().withInputsOf(id);
     if (callee.empty()) {
         return false;
     }
-    Type *calleeType = nodeTypeOf(draft.ref(callee[0]));
+    Type *calleeType = nodeTypeOf(transaction.graph().ref(callee[0]));
     if (calleeType == nullptr || calleeType->code() != TypeCode::Function) {
         return false;
     }
@@ -405,8 +412,8 @@ bool Builder::reachOfCall(const runtime::GraphDraft &draft, BodyReach &walk,
         readUnknownValue(walk);
         return true;
     }
-    return readCalleeSignature(walk, draft, calleeFunc->resources(), calleeFunc->withTypesCount(),
-                               true, id);
+    return readCalleeSignature(walk, transaction, calleeFunc->resources(),
+                               calleeFunc->withTypesCount(), true, id);
 }
 
 void Builder::addVarParameters(BodyReach &walk, const FunctionType &type) const {
@@ -435,24 +442,25 @@ Builder::footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> o
     if (type == nullptr) {
         return std::nullopt; // the body did not build (an error was reported)
     }
-    const runtime::GraphDraft &draft = graph->draft();
+    const runtime::GraphTransaction &transaction = graph->transaction();
+    const auto &draft                            = transaction.graph();
     BodyReach walk;
     walk.reach.mode = ResourceSignature::Mode::Concrete;
     // The result part is the conservative answer, not the default a `Fresh` result would claim: the
     // runtime reads this on the type once the measurement is published there, and a body that
     // returns the caller's cell is not a body whose result nothing else refers to.
     walk.reach.result = sem::ResultAlias{.kind = sem::ResultAlias::Kind::Unknown};
-    numberBodyPorts(walk, draft, *type);
+    numberBodyPorts(walk, transaction, *type);
     // One node's own reach, asked for by the report of a violation or by the ordering of the
     // effects on one resource, is one node's walk: nothing else of the body is looked at.
     const auto walkNode = [&](draft_node_ref_t id) {
         switch (nodeKindOf(draft.ref(id))) {
         case runtime::GCNodeKind::Oper:
-            return reachOfOper(graph, draft, walk, id);
+            return reachOfOper(graph, transaction, walk, id);
         case runtime::GCNodeKind::Func:
-            return reachOfFunc(graph, draft, walk, id);
+            return reachOfFunc(graph, transaction, walk, id);
         case runtime::GCNodeKind::Call:
-            return reachOfCall(draft, walk, id);
+            return reachOfCall(transaction, walk, id);
         default:
             return true;
         }
