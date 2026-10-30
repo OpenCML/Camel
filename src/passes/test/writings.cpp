@@ -123,7 +123,7 @@ void congruence(Report &r, const Program &program) {
     }
     const auto transaction = GraphTransaction::decode(program, graph);
     auto &draft            = transaction->edit();
-    DraftWritings writings(*transaction);
+    DraftWritings writings(draft);
     writings.build();
     const auto ports = portsOf(*transaction);
     r.check("params_are_two", ports.size() == 2);
@@ -155,7 +155,7 @@ void apart(Report &r, const Program &program) {
     }
     const auto transaction = GraphTransaction::decode(program, graph);
     auto &draft            = transaction->edit();
-    DraftWritings writings(*transaction);
+    DraftWritings writings(draft);
     writings.build();
     std::vector<gc_node_ref_t> zeros, events;
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
@@ -206,7 +206,7 @@ void roundtrip(Report &r, const camel::core::context::context_ptr_t &ctx, const 
     auto &transaction = first.edit(const_cast<GCGraph *>(graph));
     auto &draft       = transaction.edit();
     {
-        DraftWritings writings(transaction);
+        DraftWritings writings(draft);
         writings.build();
         const auto ports = portsOf(transaction);
         writings.assertEqual(ports[0], ports[1]);
@@ -255,10 +255,9 @@ void roundtrip(Report &r, const camel::core::context::context_ptr_t &ctx, const 
     // Nothing added: the same version.
     RuntimeGraphDraftSession second(ctx, tabled);
     second.setGraphState(GraphState::Tabled);
-    auto &redraftTransaction = second.edit(const_cast<GCGraph *>(after));
-    auto &redraft            = redraftTransaction.edit();
+    auto &redraft = second.edit(const_cast<GCGraph *>(after)).edit();
     {
-        DraftWritings writings(redraftTransaction);
+        DraftWritings writings(redraft);
         writings.build();
         writings.save();
     }
@@ -270,7 +269,7 @@ void roundtrip(Report &r, const camel::core::context::context_ptr_t &ctx, const 
     auto &thirdTransaction = third.edit(const_cast<GCGraph *>(after));
     auto &more             = thirdTransaction.edit();
     {
-        DraftWritings writings(thirdTransaction);
+        DraftWritings writings(more);
         const auto ports = portsOf(thirdTransaction);
         std::vector<gc_node_ref_t> others;
         for (gc_node_ref_t node = 0; node < more.nodeSlotCount(); ++node) {
@@ -340,7 +339,7 @@ const Program *extraction(
         RuntimeGraphDraftSession session(ctx, &program);
         auto &transaction = session.edit(const_cast<GCGraph *>(graph));
         auto &draft       = transaction.edit();
-        DraftWritings writings(transaction);
+        DraftWritings writings(draft);
         writings.build();
         const gc_node_ref_t add = firstOperWith(transaction, "add");
         const auto inputs       = std::vector<gc_node_ref_t>(
@@ -374,7 +373,7 @@ const Program *extraction(
         RuntimeGraphDraftSession session(ctx, extracted);
         auto &transaction = session.edit(const_cast<GCGraph *>(extracted->graph(id)));
         auto &draft       = transaction.edit();
-        DraftWritings writings(transaction);
+        DraftWritings writings(draft);
         writings.build();
         const gc_node_ref_t mul = firstOperWith(transaction, "mul");
         const auto payload = std::vector<std::byte>(
@@ -420,7 +419,7 @@ void facts(Report &r, const camel::core::context::context_ptr_t &ctx, const Prog
     RuntimeGraphDraftSession session(ctx, &program);
     auto &transaction = session.edit(const_cast<GCGraph *>(graph));
     auto &draft       = transaction.edit();
-    DraftWritings writings(transaction);
+    DraftWritings writings(draft);
     writings.build();
     const gc_node_ref_t add = firstOperWith(transaction, "add");
     const auto inputs       = std::vector<gc_node_ref_t>(
@@ -490,7 +489,7 @@ TabledTestPass::apply(const camel::runtime::Program *program, std::ostream &os) 
     session.setGraphState(GraphState::Tabled);
     auto &transaction = session.edit(const_cast<GCGraph *>(graph));
     auto &draft       = transaction.edit();
-    DraftWritings writings(transaction);
+    DraftWritings writings(draft);
     writings.build();
     const gc_node_ref_t add = firstOperWith(transaction, "add");
     const auto inputs       = std::vector<gc_node_ref_t>(
