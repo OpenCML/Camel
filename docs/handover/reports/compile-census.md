@@ -203,3 +203,23 @@ shape'）；`f32[..]` 与静态形状的不统一，是程序把声明写松了�
 **读数**：`perf/training_steps` **6 / 6 / 0**（此前 4/6），`mlp_step.nvm` 与 `mlp_step.fvm` 都 PASS，`transformer_step` 两条仍是 PASS。
 
 **顺手一查**：`git grep -n 'f32\[\.\.\]' -- test/cases/perf` 共 **42 处、8 个文件**（`gemm_threads_curve.cml` 17、`transformer_step.cml` 6、`fusion_step.cml` 5、`dependency_chain.cml` 4、`fusion_chain.cml` 3、`gemm_canonical_shapes.cml` 3、`mlp_step.cml` 3、`step_budget.py` 1）。**其中并非都是参数树**（`mlp_step` 剩下的 3 处是 `logits`/`loss` 的形参与返回类型），是否还有同形状的第二处，未查、未改。
+
+## 预算类断言的量纲
+
+**判据**：**预算类断言的量纲是「单跑 CPU 秒」。用并行下的 wall 或别人的机器写预算，等于给未来每一次失败预先埋一个假因。**
+
+**报计数时数字面量个数，不是行数。**
+
+### 预算重写之后：`startup.cost` 仍然红，但红在另一条断言上
+
+按单跑 CPU 重写为 `cpu_budget_ms = 17500` 后（`test/plans/perf/startup.plan.toml`），重跑：
+
+```
+[FAIL] startup.cost  14.99 s cpu of 17.50 s budget, 15.02 s wall
+[stdout] startup.cost version PASS / imports_nothing PASS / inspect_ops PASS / imports_all PASS
+[stdout] startup-cost: FAILED declaration.cost: cpu median 132.7 us per declaration exceeds ceiling 60 us
+[stdout] startup-cost: FAILED declaration.cost: the declaration modules' cpu total 40.1 ms exceeds ceiling 20 ms
+```
+
+**总预算不再是失败原因：14.99 s < 17.50 s，四条子断言也全 PASS。这条红改由同一个工具里的 `declaration.cost` 承担**：
+**每声明 132.7 µs（上限 60）、绝对总量 40.1 ms（上限 20）**——**同一类「上限是按另一台机器/另一时刻的读数写的」问题，未改，未归因到某笔。**
