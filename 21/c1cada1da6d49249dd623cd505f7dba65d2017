@@ -1,0 +1,52 @@
+# 第 9 条收尾：把被调体的链段接进调用方的链
+
+这支落的是第 9 条的**可证明那一半**：`std::opt` 内联时，被调体带着的链在 splice 之后要接进
+调用方那条链。规则那半（建图该给谁写同步边）不在这里，见第 3 节。
+
+## 1. 那根线，和它的守卫
+
+**缺的线**：`src/runtime/draft_inline.cpp` 的 `bodyHasChain = bodyHeads == 1 && bodyTails == 1`。
+被调体 `check` 的链在 splice 之后碎成 4 段，heads=4、tails=4，于是交接块一次都不跑，调用改走
+`spliceChainAnchor`——而 `check` 这个调用自己没有同步前驱（只有 ctrl 前驱），链进不了函数体。
+执行级证据（改前 `std::opt` 图从 EXIT 沿 data+SYNC 回溯）：只到 355/1027 个节点，13 个 `println`
+里 12 个不可达，正是"只打 1 行"。
+
+**改法**：splice 里把被调体那几段链接成一段——某个体语句在块里没人跟随时，把它写到它沿值端口
+能读到的最近那条体语句之后（这个顺序体外层的 data 边本来就给定了），成对写 SYNC+CTRL 并标语句位，
+再让既有的交接把调用那段位置交过去。只动 `src/runtime/draft_inline.cpp` 一个文件。
+
+**守卫**（`test/plans/feat/opt/splice_place.plan.toml`，`nn_grad_check.spliced_body_chain_is_one_chain`）：
+不数行，点边。内联后 `main` 这一层（cluster 深度 1；函数体定义嵌在它里面、深度 2，所以定义自己的
+`println` 不计）六个 `check` 副本里，**每个 `:io/println` 恰好一条 SYNC 前驱、一条 SYNC 后继，
+且这两对的同一个节点对上都还压着 CTRL**。
+
+**A/B**：把 `draft_inline.cpp` 那根线短路（`if (false && callHasChainPlace && ...)`）→ **只有这一条红**，
+报文 `Error: N0166: 0 SYNC predecessors, expected one`（同计划 44 过 1 红）；装回 → 45/45。
+
+## 2. 为什么用 `nn_grad_check`，而不是自造一个更小的用例
+
+按形状自造过两个最小 `sync` 体（`let y = x + 1` / `println(y)` / `let z = y * 2` / `println(z)` 一类），
+实测内联后每个 `println` 都是 `syncIn=0`：**它们的链在 base 上本来就是一整段**，接不接这根线都一样，
+拿它们做守卫只会假绿。`check` 是语料里唯一在 base 上就碎成 4 段、真正到达这根线的形状
+（探针：6 次 splice 全是 `heads>1 → 1/1`）。
+
+**"更小的用例"不等于"更好的守卫"**：守卫的价值在 A/B 下会红，不在用例的行数。
+将来若要更小的用例，先把"段怎么碎"定下来（那正是 `questions/` 里"谁算语句"那页要裁的），
+在那之前用能红的那个。
+
+## 3. 规则那半在哪
+
+规则的改动（`nodeMayFault` / `isEffectNode` / `statementKeepsItsChainPlace`，以及它带来的两条
+链形断言改写）留在分支 **`lane-eff-rule`（tip `55d359744`，5 笔，一支没丢）**，等作者裁定
+`docs/handover/questions/` 那两页（"可能出故障"的边界、"谁算语句"）。它在这套语料上的读数是
+`total 7804 / fail 70`，其中 tiles 区域计数 22 条、algebra/cse/fold/dce/saturate 19 条、
+图快照与行为读数约 29 条，**一条都不符合"仅 SYNC+CTRL 成对、端口编号没挪"，所以一条都没重录**。
+
+那句要记住的话：**`opt` 的 0 闭包是复制换来的**——`std::opt` 之所以没有不可达节点，是因为
+内联把被调体复制进了调用方（再靠链让它活着），不是因为它有一条"把语句挂上链"的规则。
+所以第 9 条的洞不会在"规则"里自己补上，只会在"复制之后有没有接上链"这里补上；这一支补的就是这里。
+
+## 4. 落地的读数
+
+`total 7803, pass 7799, fail 0, skip 2, known failures 2`；`nn_grad_check` `std::macro std::opt std::fvm`
+= 6 行（与 base 一致）。相对 base 的 `total 7802` 多出的那一条就是上面的守卫。
