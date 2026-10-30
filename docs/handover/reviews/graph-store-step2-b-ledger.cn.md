@@ -286,3 +286,15 @@ b4 只有一个人口：`modules/graph/handle.h` 里那个 `const GraphDraft *dr
 | ③ 消掉一条生存期漏洞 | "有没有东西活得比它的所有者久" | b4 第一片：草稿不再能脱离事务被 handle 持有 |
 
 **判据**：一笔要么删行，要么消点，要么堵漏；**三样都没有才是净负**。提交信息里必须写出它是哪一种——否则按"删行数"看，b4 第一片是 0 行，会被误判成扩散。
+
+## 15. b4 第一片：停在哪（可构建的中间态）
+
+**停在哪**：`modules/graph/handle.h`、`modules/graph/handle.cpp` 两个文件改完并**构建绿**——
+`Handle` 现在同时能指名**事务**（`transaction_` + `transaction()` + `createInTransaction` + `clone` 走事务分支）和**草稿**（旧的 `draft_`、`createInDraft` 原封不动）。
+`equals()` 把 `transaction_` 并进身份比较；`updateRefs` 多了三行注释，写明**事务是借来的、不参与追踪、句柄活得比它久就什么也不指名**。
+
+**为什么这样切**：这是一次纯新增的中间态——**没有任何调用者用 `createInTransaction`**，所以行为与上一笔逐字节相同，树随时能构建、能整闸。类型一换就成了"必须原子完成"的笔，那正是今晚不该做的。
+
+**下一步第一件**：`modules/graph/read.cpp:165` 的 `nodeHandle(from, node)` —— 它现在从 `from->draft()` 取草稿，改成从 `from->transaction()` 取事务、用 `createInTransaction`；同一段里 `from->draft()` 的判空顺带改成 `from->transaction()` 判空。**这一步做完，`read.cpp` 的 `->draft()` 从 3 处降到 2 处。**
+
+**树能不能构建**：**能**（`-Plan compile` 全绿：1845/1845、`fail 0`，build 16.2 s）。三个数仍是 66 / 535 / 3 / 6——这一笔只加能力、不删拼写，账要等调用点搬过去才动。
