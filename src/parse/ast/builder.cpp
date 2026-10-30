@@ -896,8 +896,16 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         uint32_t arity     = 0;
         std::string head   = leftHeadOf(sides[0], shape, arity);
         const auto range   = extractTokenRangeFromContext(context);
+        std::string rhsCallee = sides[1] ? rightCalleeOf(sides[1]) : std::string();
         collectRuleHead(
-            diags_->moduleName(), std::move(head), name, std::move(shape), arity, range.start, range.end);
+            diags_->moduleName(),
+            std::move(head),
+            name,
+            std::move(rhsCallee),
+            std::move(shape),
+            arity,
+            range.start,
+            range.end);
     }
     const bool twoWay = body->has(TK::Equiv);
     const auto params = context->get<cst::ParentParams>();

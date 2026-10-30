@@ -18,6 +18,10 @@ std::map<std::string, std::vector<RuleHead>> registry;
 // The index a ruleset module answers questions from: family -> ("head@arity" -> rule name). A
 // sorted map, so a lookup is one binary search and a family's rules are printable in a fixed order.
 std::map<std::string, std::map<std::string, std::string>> indexed;
+// family -> rule name -> the function the rule's right side calls (`add_tangent`, ...). Kept by
+// rule name because that is what a lookup answers with: a transform reads the rule, then asks what
+// it calls.
+std::map<std::string, std::map<std::string, std::string>> callees;
 
 } // namespace
 
@@ -83,17 +87,75 @@ std::string leftHeadOf(syntax::Node left, std::string &shape, uint32_t &arity) {
     return {};
 }
 
+namespace {
+
+/// The first call inside `node`, as the name it calls: a node with no operator token of its own
+/// and at least two children, the callee and its argument list (`f(a, b)`). The right side of a
+/// rule is `(dx, dw) => add_tangent(x, w, dx, dw)`, so this finds `add_tangent`.
+std::string firstCallIn(syntax::Node node) {
+    if (!node) {
+        return {};
+    }
+    size_t tokens = 0;
+    size_t nodes  = 0;
+    syntax::Node first;
+    syntax::Node second;
+    for (size_t index = 0; index < node->childCount(); ++index) {
+        const syntax::Child child = node->child(index);
+        if (child->isToken()) {
+            ++tokens;
+        } else if (child->isNode()) {
+            if (nodes == 0) {
+                first = child->node();
+            } else if (nodes == 1) {
+                second = child->node();
+            }
+            ++nodes;
+        }
+    }
+    if (tokens == 0 && nodes >= 2 && first && second &&
+        std::string_view(syntax::nodeKindName(second->kind())) == "ParentArgues") {
+        return first->text();
+    }
+    // The layers above an expression hold one child each for the precedence levels; a lambda
+    // holds its parameters and its body. Descend into every child and take the first answer.
+    for (size_t index = 0; index < node->childCount(); ++index) {
+        const syntax::Child child = node->child(index);
+        if (!child->isNode()) {
+            continue;
+        }
+        std::string found = firstCallIn(child->node());
+        if (!found.empty()) {
+            return found;
+        }
+    }
+    return {};
+}
+
+} // namespace
+
+std::string rightCalleeOf(syntax::Node right) {
+    return firstCallIn(right);
+}
+
 void collectRuleHead(
     const std::string &module,
     std::string head,
     std::string rule,
+    std::string rhsCallee,
     std::string shape,
     uint32_t arity,
     uint32_t tokenStart,
     uint32_t tokenEnd) {
     std::lock_guard<std::mutex> lock(registryMutex);
     registry[module].push_back(RuleHead{
-        std::move(head), std::move(rule), std::move(shape), arity, tokenStart, tokenEnd});
+        std::move(head),
+        std::move(rule),
+        std::move(rhsCallee),
+        std::move(shape),
+        arity,
+        tokenStart,
+        tokenEnd});
 }
 
 std::vector<RuleHead> takeRuleHeads(const std::string &module) {
@@ -114,6 +176,7 @@ std::string indexRule(const std::string &family, const RuleHead &rule) {
     const auto at         = rules.find(key);
     if (at == rules.end()) {
         rules.emplace(key, rule.rule);
+        callees[family][rule.rule] = rule.rhsCallee;
         return {};
     }
     if (at->second == rule.rule) {
@@ -133,6 +196,16 @@ RuleMatch lookupRule(const std::string &family, const std::string &head, uint32_
         return RuleMatch{RuleLookup::NoRuleForPrimitive, {}};
     }
     return RuleMatch{RuleLookup::Found, at->second};
+}
+
+std::string rhsCalleeOf(const std::string &family, const std::string &rule) {
+    std::lock_guard<std::mutex> lock(registryMutex);
+    const auto at = callees.find(family);
+    if (at == callees.end()) {
+        return {};
+    }
+    const auto ruleAt = at->second.find(rule);
+    return ruleAt == at->second.end() ? std::string() : ruleAt->second;
 }
 
 std::vector<std::string> ruleFamilies() {
