@@ -514,7 +514,7 @@ func canonical(x: float, y: float): float {
 
 ### 7.6.2 Tags: `#`
 
-`#` writes a **tag** (design principles 6.2); the `#!` of the first line is ignored to the end of the line. A tag is a name in the same namespace as functions and types: declared in this module, imported by name, or qualified as `module::tag`.
+`#` writes a **tag** (design principles 6.2); the `#!` of the first line is ignored to the end of the line. A tag keeps the name it is written with and does **not** enter the value namespace (language author, 2026-10-30): a function, a type or a value of the same name and the tag leave each other's names alone, `#name` finds only tags, and a tag name written where a value belongs is not a value (`SemanticDiag::TagNameAsValue`) — a value of that name takes a declaration of its own. A tag is declared in this module, imported by name, or qualified as `module::tag`, which is how a function is imported too.
 
 A tag is declared at the top level of a module; after `on` come the positions it may be written at:
 

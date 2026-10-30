@@ -745,7 +745,15 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TagUndeclared",
                 "No tag '{0}' is declared.",
-                "Tags share the namespace of functions and types: import the module that declares it, or declare it with 'tag {0} on ...'.",
+                "A tag has a space of its own, separate from functions, types and values, and the tag itself is not a value: import the module that declares it, or declare it with 'tag {0} on ...'.",
+            },
+        },
+        {
+            SemanticDiag::TagNameAsValue,
+            {
+                "TagNameAsValue",
+                "'{0}' names a tag, and a tag is not a value: write '#{0}' where the tag belongs.",
+                "A tag is a compile-time fact attached to a declaration or to the nodes of a region (design principles 6.2): it is read before the program runs, never called and never passed. A value of that name takes a declaration of its own -- a function, a constant or a variable.",
             },
         },
         {

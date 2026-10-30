@@ -603,3 +603,47 @@ expect_diagnostic_code = "0x03000202"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 2
 expect_output_contains = ["The tag 'jvp' cannot take 'mul_rule' as an argument: it names a declaration of this program that is not one function."]
+
+[[tests]]
+name = "tag_name_as_value"
+desc = "A tag name where a value belongs: a tag keeps its name and does not enter the value namespace (design principles 6.2, the author's ruling of 2026-10-30), so the report names the tag instead of telling the writer the name is undeclared."
+kind = "negative"
+case = "../../../cases/compile/tags/err_tag_as_value.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagNameAsValue"
+expect_diagnostic_code = "0x03000203"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 13
+expect_output_contains = ["'label' names a tag, and a tag is not a value: write '#label' where the tag belongs."]
+
+[[tests]]
+name = "tag_name_called"
+desc = "A tag name called as a function is the same report at the callee: a tag is read at '#', never called."
+kind = "negative"
+case = "../../../cases/compile/tags/err_tag_called.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagNameAsValue"
+expect_diagnostic_code = "0x03000203"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 12
+expect_output_contains = ["'label' names a tag, and a tag is not a value: write '#label' where the tag belongs."]
+
+[[tests]]
+name = "tag_and_function_same_name"
+desc = "A tag and a function of one name in one module compile together and each keeps its own name: the tag is read with '#', the function is called by its name."
+kind = "positive"
+case = "../../../cases/compile/tags/same_name.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_output_contains = ["1 2"]
+
+[[tests]]
+name = "imported_tag_and_function_same_name"
+desc = "An imported tag beside a local function of the same name: the tag is reached through '#' and the function by its name, so the two names never meet."
+kind = "positive"
+case = "../../../cases/compile/tags/imported_same_name.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_output_contains = ["1 2"]

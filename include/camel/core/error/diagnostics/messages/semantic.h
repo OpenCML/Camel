@@ -153,6 +153,7 @@ enum class SemanticDiag : uint32_t {
     // Tags (design principles 6.2): 0x160 and up.
     TagNotAtPosition       = 0x000161,
     TagUndeclared          = 0x000162,
+    TagNameAsValue         = 0x000203,
     TagArgumentCount       = 0x000163,
     TagArgumentNotConstant = 0x000164,
     TagOnUnnamedField      = 0x000167,

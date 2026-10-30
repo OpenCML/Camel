@@ -17,8 +17,10 @@
  *     that declares it (tag::attachToDeclaration / attachToField), and read by a C++ module with
  *     tag::ofDeclaration / ofField.
  *
- * A tag is a name of the module's entity namespace, so `#tag` resolves like a function call:
- * declared here, imported by name, or qualified through an imported module.
+ * A tag keeps the name it is written with and does not enter the value namespace (design
+ * principles 6.2, the author's ruling of 2026-10-30): `#tag` resolves among the tags -- declared
+ * here, imported by name, or qualified through an imported module -- and a function, a type or a
+ * value of that name is a different name, which `#tag` neither finds nor hides.
  */
 
 #include "builder.h"
@@ -271,8 +273,9 @@ std::optional<camel::core::tag::TagId> Builder::tagNamed(const std::string &writ
             return core;
         }
     }
-    // A tag is a name of the entity namespace: an imported one resolves exactly as an imported
-    // function does, by name or through the module that exports it.
+    // An imported tag is reached the way an imported function is -- by name, or through the module
+    // that exports it -- and its name is its own: a function, a type or a value of that name is a
+    // different name and leaves the tag where it is (design principles 6.2).
     const Reference ref(written);
     if (auto entity = importedEntity(ref); entity.has_value() && entity->isTag()) {
         return entity->tagId();

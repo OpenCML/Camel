@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 219
+**Semantic — errors** (`SemanticDiag`) — 220
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -153,6 +153,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `NotDifferentiable` | The function cannot be differentiated: {0}. |
 | `TagNotAtPosition` | The tag '{0}' may not be written at a {1}: it is declared for {2}. |
 | `TagUndeclared` | No tag '{0}' is declared. |
+| `TagNameAsValue` | '{0}' names a tag, and a tag is not a value: write '#{0}' where the tag belongs. |
 | `TagArgumentCount` | The tag '{0}' takes {1} parameter(s), but {2} argument(s) are written. |
 | `TagArgumentNotConstant` | The argument '{0}' of the tag '{1}' is not a compile-time value. |
 | `TagOnUnnamedField` | A tag on the field '{0}' of an unnamed struct type belongs to no declaration. |
