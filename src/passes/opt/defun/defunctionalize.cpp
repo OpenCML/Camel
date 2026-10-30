@@ -80,6 +80,7 @@
 #include "camel/execute/pass/warnings.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/graph_txn.h"
 #include "camel/runtime/program.h"
 #include "camel/runtime/retype.h"
 
@@ -342,6 +343,41 @@ template <class Draft> void parameterizeCaptures(Draft &draft) {
     factory.setExitType(type->hasExitType() ? type->exitType() : ty::Type::Void());
     draft.setFuncType(factory.build());
     draft.setClosureType(nullptr);
+}
+
+/// A graph the pass writes itself. A new graph is a draft given an id from the context's allocator
+/// before it is encoded (draft.h: a draft of a new graph is given one with `setId`), and the graph
+/// the commit finds is the one the session already knows (draft_session.h: `adoptGraph`); the
+/// functions its body calls are read in the session's work program.
+///
+/// The body is one `PORT` per parameter and the direct call of the function the graph stands for,
+/// and that call is what the graph gives. The call carries the graph's own exit type, so a
+/// signature that declares `void` drops what the function gives by that alone (a result position is
+/// the one place `void` takes any type: type/composite/func.h, `acceptsAsResult`).
+///
+/// The draft is a template parameter like every other helper here: the editable graph is going away,
+/// and the ledger that counts the places still wired straight to it may only fall
+/// (`test/cases/runtime/graph_draft_ledger`).
+template <class Draft> GCGraph *writeCallGraph(
+    Draft &draft, RuntimeGraphDraftSession &session, const GCGraph &callee,
+    ty::FunctionType *signature, const std::string &name) {
+    draft.setProgram(&session.work());
+    std::vector<gc_node_ref_t> ports;
+    for (ty::Type *type : signature->normTypesSpan()) {
+        const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
+        draft.appendNormPort(port);
+        ports.push_back(port);
+    }
+    const gc_node_ref_t call = draft.addFuncNode(callee.id(), signature->exitType());
+    draft.setNormInputs(call, ports);
+    draft.setExitNode(call);
+    // The payload names the callee by its place in the graph's reference table, and the reference
+    // table is the list of graphs the encoder was told this graph calls: naming the callee in the
+    // payload alone leaves a FUNC node whose callee is not in that table, which the encoder refuses.
+    draft.addDependency(callee.id());
+    GCGraph *encoded = draft.encode(name, name);
+    session.adoptGraph(encoded);
+    return encoded;
 }
 
 } // namespace
@@ -987,6 +1023,30 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
     // is one session, so nothing of an attempt that cannot be committed reaches the program.
     try {
         RuntimeGraphDraftSession session(context_, program);
+        // The graph the widening's parameter type will need, written here before anything else: an
+        // id of the context's, one `PORT` per parameter, the direct call of a function the program
+        // already has, and that call as the graph's result. Nothing refers to it yet, so the commit
+        // leaves it behind and the program is the one that was handed in.
+        for (const Family *family : accepted) {
+            const Variant &variant = family->variants.front();
+            if (!variant.captures.empty()) {
+                continue;
+            }
+            const GCGraph *callee = session.work().graph(variant.graph);
+            const ty::Type *own   = family->members.front()->type;
+            if (callee == nullptr || own == nullptr || own->code() != TypeCode::Function) {
+                continue;
+            }
+            // The graph's own identity comes from the context's allocator, and the transaction stays
+            // open until the graph it holds is encoded.
+            auto transaction = GraphTransaction::open(
+                session.context()->graphIds().allocate(),
+                const_cast<ty::FunctionType *>(static_cast<const ty::FunctionType *>(own)));
+            writeCallGraph(
+                transaction->edit(), session, *callee,
+                const_cast<ty::FunctionType *>(static_cast<const ty::FunctionType *>(own)),
+                std::format("{}$call", callee->name()));
+        }
         for (GCGraph *graph : session.program()->graphs()) {
             auto &transaction = session.edit(graph);
             auto &draft       = transaction.edit();
