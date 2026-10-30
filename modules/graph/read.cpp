@@ -453,7 +453,7 @@ slot_t typeNameKernel(ArgsView &, ArgsView &norm, Context &) {
 /// call (and a rule's pattern cannot match one).
 slot_t calleeKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle = norm.get<Handle *>(0);
-    if (handle->draft() != nullptr) {
+    if (handle->transaction() != nullptr || handle->draft() != nullptr) {
         return NullSlot;
     }
     const GCNode &node   = nodeOfFrozen(handle, "graph.callee");
