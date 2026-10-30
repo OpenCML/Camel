@@ -666,6 +666,8 @@ function parseArgs(argv) {
             const install = arg.slice('--camel='.length)
             if (install === '') throw new Error('--camel needs the path of the install to measure')
             options.camel = path.resolve(process.cwd(), install)
+        } else if (arg === '--compile-only') {
+            options.compileOnly = true
         } else if (arg === '--jobs' && i + 1 < argv.length) {
             options.jobs = positiveInteger(argv[++i], '--jobs')
         } else if (arg.startsWith('--jobs=')) {
@@ -1602,7 +1604,30 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         scope.backend = passes
     }
     const args = expandArgs(test.args || [], scope)
-    const env = { ...process.env }
+    // `--compile-only`: the same entry, the same case, the same environment and the same arguments
+    // that are not passes -- but the pipeline stops once the program is built. Every word that
+    // names a pass is dropped and one compile pass is appended (`std::gir` builds the program and
+    // returns an empty graph), so nothing the entry would have executed is executed. This is what
+    // makes a case outside the fast tier visible without paying for its run.
+    // Only an entry that hands the compiler a case and a pipeline is judged: a tool entry, one that
+    // drives the CLI (`--timeit`, `--output-format`), or one whose first word is a flag is asking
+    // something else, and a compile of it would answer a question nobody asked.
+    const judgedByCompile =
+        logContext.options.compileOnly &&
+        !test.tool &&
+        args.length > 0 &&
+        !String(args[0]).startsWith('--') &&
+        !args.some((word) => String(word).startsWith('--timeit'))
+    if (logContext.options.compileOnly && !judgedByCompile) {
+        test.__notJudged = true
+    }
+    if (judgedByCompile) {
+        const firstPass = args.findIndex((word) => /^[A-Za-z_][\w:-]*::/.test(word))
+        if (firstPass >= 0) args.length = firstPass
+        const timeit = args.findIndex((word) => word === '--timeit' || word === '--output-format')
+        if (timeit >= 0) args.length = Math.min(args.length, timeit)
+        args.push('std::gir')
+    }    const env = { ...process.env }
     // Assertions on diagnostics (name, code, line, column) read the one-line text format.
     // A test of the format with source excerpts passes --error-format text, which wins.
     env.CAMEL_ERROR_FORMAT = 'short'
@@ -1711,8 +1736,22 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
 
     // The verification reads this test's output: executePlans removes the scratch directory
     // only after this returns.
-    const failures = await validateTest(test, result, { ...logContext, scope })
-    // The cost judgement of a test that declares `cpu_budget_ms`, in the unit
+    // A compile-only run has no output to hold the entry's assertions to: what it asks is whether
+    // the program builds, and the entry's own expectations -- stdout, exit code, diagnostics -- are
+    // the name of a run that did not happen. So the verdict is the compiler's alone, and it names
+    // the case that failed to build.
+    const expectsRefusal = typeof test.expect_exit === 'number' && test.expect_exit !== 0
+    if (test.__notJudged) result.notJudged = true
+    const failures =
+        logContext.options.compileOnly && !test.tool
+            ? test.__notJudged || result.exitCode === 0 || expectsRefusal
+                ? []
+                : [
+                      `does not compile (${test.case}): ` +
+                          ((result.output.match(/^error\[[^\n]*/m) || [''])[0] ||
+                              `exit ${result.exitCode}`),
+                  ]
+            : await validateTest(test, result, { ...logContext, scope })    // The cost judgement of a test that declares `cpu_budget_ms`, in the unit
     // the rule asks for:
     //
     //   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）

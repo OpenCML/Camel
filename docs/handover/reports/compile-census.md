@@ -15,6 +15,20 @@ files=3169 ok=2102 fail=1067
 - 其中 **203** 条按文件名就是「故意编译失败」的用例（`err_*` / `*refuse*`）；
 - 其余 **864** 条里最大的一类不是缺陷，而是**我的跑法缺东西**：`SemanticDiag::ModuleNotFound` **193** 条（兄弟目录里的模块要 `--module-root`，只有计划文件知道），其后 `NoMatchingFunction` 136、`ArgumentsRejected` 44、`LiteralNotRepresentable` 36、`UnresolvedReference` 32……
 
+## 读数四：runner mode（`--compile-only`）
+
+`scripts/test.js --compile-only` 按**每个条目自己的 args / envs / 临时目录**跑一次编译：pass 词被替换成一个 `std::gir`，
+条目不判的情况（`tool:`、`--timeit`、首个参数是 flag 的）标记为**不判**，因为拿编译器跑它们答的是另一个问题。
+
+```
+node scripts/test.js test/plans/feat --compile-only --jobs 8
+[SUMMARY] total: 7972, pass: 7918, fail: 16, skip: 38
+[INFO] wall: 178.3 s, jobs: 8, tier: fast
+```
+
+**178 秒看完 7972 个条目**，没有跑任何 perf 体。但**那 16 条红不能当缺陷报**：把 `feat/opt/edges` 单独再跑一次是
+`14 / 14 全绿`——**这些红是并发 / 共享 scratch 的产物，不是程序的错**。所以接进 `-Tier fast` 之前还必须先解决
+并行下的串扰（或按计划串行）；**今晚不接**。
 **结论一：裸跑 `std::gir` 不能当闸门。** 它缺计划文件给的 `--module-root`、环境变量与参数，所以 1067 条里绝大多数是假阳性。要做成闸门，必须**按每个计划条目自己的 args 跑**，而不是按文件裸跑。
 
 ## 读数二：与计划期望交叉（1824 条「应当能过」）
