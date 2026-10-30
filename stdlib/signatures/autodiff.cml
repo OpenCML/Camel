@@ -30,8 +30,9 @@
  * and no declaration of them reaches the develop branch before the transform works. The function
  * `vjp` and the tag `#vjp(rule)` are different names in different spaces: a tag is written with `#`
  * and is read back by structure (`stdlib/graph.cml`), never as a value, so a transform called `jvp`
- * and the tag `#jvp(rule)` coexist without ambiguity, and neither name is renamed -- the author's
- * ruling of 2026-10-30 keeps the tag `#jvp` and the value `jvp` as they are.
+ * and the tag `#jvp(rule)` coexist without ambiguity, and neither name is renamed -- design
+ * principles 6.2 and the author's ruling of 2026-10-30 keep the tag `#jvp` and the value `jvp` as
+ * they are (the two names in one module are what `test/cases/compile/tags/same_name.cml` pins).
  *
  * For reference only: these declarations are not compiled. They are checked against the operators
  * the module registers, and docs/stdlib-reference.md is generated from them.
