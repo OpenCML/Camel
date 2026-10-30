@@ -454,41 +454,6 @@ void RewriteMemo::remember(std::string_view passName, const GCGraph *graph) {
     }
 }
 
-namespace {
-
-/// Reads a draft for `camel::runtime::findInputCycle`: the draft keeps all five edge kinds as runs
-/// of refs, so the adaptor is only a switch over the kind. Template over the draft type so that it
-/// names no type it does not have to: the ledger of direct connections to the editable graph
-/// (test/cases/runtime/graph_draft_ledger) may only fall.
-template <class Draft>
-class DraftCycleEdges {
-  public:
-    explicit DraftCycleEdges(const Draft &draft) : draft_(draft) {}
-
-    size_t slotCount() const { return draft_.nodeSlotCount(); }
-    bool present(gc_node_ref_t id) const { return draft_.alive(id); }
-    std::span<const gc_node_ref_t>
-    inputsOf(gc_node_ref_t id, camel::runtime::CycleEdgeKind kind) const {
-        switch (kind) {
-        case camel::runtime::CycleEdgeKind::Norm:
-            return draft_.normInputsOf(id);
-        case camel::runtime::CycleEdgeKind::With:
-            return draft_.withInputsOf(id);
-        case camel::runtime::CycleEdgeKind::Ctrl:
-            return draft_.ctrlInputsOf(id);
-        case camel::runtime::CycleEdgeKind::Sync:
-            return draft_.syncInputsOf(id);
-        case camel::runtime::CycleEdgeKind::Order:
-            return draft_.orderInputsOf(id);
-        }
-        return {};
-    }
-
-  private:
-    const Draft &draft_;
-};
-
-} // namespace
 const camel::runtime::Program *rewriteReachableGraphs(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     std::string_view passName, const std::function<size_t(GraphDraft &)> &rewrite,
@@ -516,7 +481,7 @@ const camel::runtime::Program *rewriteReachableGraphs(
         // the freeze's own (camel/runtime/cycle.h: one list of edge kinds, one walk), and the drop is
         // counted so that a rule composing a cycle shows up in std::stats instead of quietly doing
         // less work.
-        DraftCycleEdges edges(session.edit(g).graph());
+        camel::runtime::DraftCycleEdges edges(session.edit(g).graph());
         if (camel::runtime::findInputCycle(edges) != camel::runtime::kInvalidNodeRef) {
             camel::runtime::recordCycleDroppedSession();
             return program;

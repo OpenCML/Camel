@@ -94,6 +94,9 @@ struct SegmentDeviceOps {
     std::string uploadUri = "tiles:upload", executeUri, downloadUri = "tiles:download";
 };
 void registerRegionPass(SegmentDeviceOps preferred);
+// The pass that reads a program's operator surface and prints it grouped by whether a `#gpu`
+// scope can run it (`modules/tiles/src/census.cpp`).
+void registerCensusPass();
 // Rewrites the graphs reachable from `root`, a graph of `program`, and returns the program of
 // the rewritten graphs (`program` itself when no region was outlined, `count` is 0 then); null
 // executor produces ordinary CPU CALL nodes. Non-null executors use the supplied stable
