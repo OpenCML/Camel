@@ -1,0 +1,14 @@
+S4: the data layer holds a rank-zero value (design principles 5.4). `ArrayData::rankZero` -- one
+element, no dimension, said by the value because the type cannot say it -- makes the run
+`Array::createRankZero` (rank 0, one element, size 1, prints as the element), and `convertDataTo` is
+the data conversion every position uses, so a struct field or tuple element of `T[..]` is the element
+at the constant level too. `{ v: 1.5 }` for `Box = { v: f32[..] }` printed `1.5` on all four
+backends after this commit and was refused with LiteralNotRepresentable before it.
+
+A/B: with the declaration's deferral to the position's conversion disabled, exactly
+rank_zero_field_literal and rank_zero_field_literal_fvm are red. Gate 7949 / 7940 / 0.
+
+The two paths are still two, deliberately: a computed element goes through the edge's CAST
+(Builder::coerceTo), a literal becomes the value in the data layer, and both end in the same
+rank-zero value the slot holds. Merging them was proposed in S2/S3 as the alternative and is not
+done here.
