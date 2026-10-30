@@ -456,14 +456,14 @@ void RewriteMemo::remember(std::string_view passName, const GCGraph *graph) {
 
 const camel::runtime::Program *rewriteReachableGraphs(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    std::string_view passName, const std::function<size_t(GraphDraft &)> &rewrite,
+    std::string_view passName, const std::function<size_t(camel::runtime::GraphTransaction &)> &rewrite,
     size_t *rewrites, RewriteMemo *memo, bool (*mayRewrite)(const GCGraph &),
     bool checkScreens) {
     camel::runtime::RuntimeGraphDraftSession session(context, program);
     size_t total = 0;
     for (GCGraph *g : session.collectReachableRuntimeGraphs()) {
         if ((mayRewrite && !mayRewrite(*g)) || (memo && memo->leftAlone(passName, g))) {
-            if (checkScreens && rewrite(session.edit(g).edit()) != 0) {
+            if (checkScreens && rewrite(session.edit(g)) != 0) {
                 throw std::runtime_error(
                     std::format(
                         "{} rewrote graph '{}', which its screen or memo had skipped.",
@@ -472,7 +472,7 @@ const camel::runtime::Program *rewriteReachableGraphs(
             }
             continue;
         }
-        const size_t made = rewrite(session.edit(g).edit());
+        const size_t made = rewrite(session.edit(g));
         // A rewrite's own edges are not the only ones it moves: a merge hands a node's waits to the
         // users of the node it removes, so the graph has to be judged as a whole once the rewrite is
         // written, not predicted from the node pair the rewrite names. Nothing here can undo a merge
