@@ -66,14 +66,16 @@ OperatorSurface operatorSurface(const rt::Program &program) {
     return surface;
 }
 
-/// One line of counts, then one line per operator no device program exists for, so the gap a run
-/// reads is a list of names as well as a number. Both are sorted, so two runs of the same program
-/// print the same lines.
+/// One line of counts, then one line per operator of each group, so what the surface holds is a
+/// list of names as well as a number: the device's, then the gap's. Each is sorted, so two runs of
+/// the same program print the same lines.
 std::string censusReport(const rt::Program &program) {
     const OperatorSurface surface = operatorSurface(program);
     std::string report            = "TILES_CENSUS ops=" + std::to_string(surface.operators()) +
                          " device=" + std::to_string(surface.device.size()) +
                          " gap=" + std::to_string(surface.gap.size()) + '\n';
+    for (const std::string &name : surface.device)
+        report += "TILES_CENSUS_DEVICE " + name + '\n';
     for (const std::string &name : surface.gap)
         report += "TILES_CENSUS_GAP " + name + '\n';
     return report;

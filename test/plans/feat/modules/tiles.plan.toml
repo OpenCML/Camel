@@ -1327,7 +1327,7 @@ case = "../../../cases/modules/tiles/census.cml"
 args = ["${case}", "tiles::census"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
-expect_stdout_exact = "TILES_CENSUS ops=4 device=4 gap=0\n"
+expect_stdout_exact = "TILES_CENSUS ops=4 device=4 gap=0\nTILES_CENSUS_DEVICE tensor:add\nTILES_CENSUS_DEVICE tensor:multiply\nTILES_CENSUS_DEVICE tensor:relu\nTILES_CENSUS_DEVICE tensor:sum\n"
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 30000
 
@@ -1339,6 +1339,6 @@ case = "../../../cases/modules/tiles/census_gap.cml"
 args = ["${case}", "tiles::census"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
-expect_stdout_exact = "TILES_CENSUS ops=2 device=1 gap=1\nTILES_CENSUS_GAP tensor:tanh\n"
+expect_stdout_exact = "TILES_CENSUS ops=2 device=1 gap=1\nTILES_CENSUS_DEVICE tensor:add\nTILES_CENSUS_GAP tensor:tanh\n"
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 30000
