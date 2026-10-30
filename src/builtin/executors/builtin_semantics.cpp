@@ -236,9 +236,10 @@ void declareBuiltinOperatorSemantics() {
     constexpr PermissionMask kDiv = kApproxMath | kChangePrecision | kFiniteMath;
     // `+ - *`, negation and the comparisons have no fault path: integer arithmetic wraps,
     // floating-point arithmetic rounds and a comparison only compares. `div` and `%` are the two
-    // of a numeric type that fault (a zero divisor). `mul` and `neg` pass no list and take the
-    // empty one from the trait (src/builtin/executors/builtin.cpp#kNeverFaults), which
-    // `declareSemantics` merges into the record: both spellings read `[]` there.
+    // of a numeric type that fault (a zero divisor). The scalar `mul` and `neg` pass no list and
+    // take the empty one from the trait (src/builtin/executors/builtin.cpp#kNeverFaults), which
+    // `declareSemantics` merges into the record; the complex ones have no entry in that trait, so
+    // the list is written at their declaration below.
     for (const NumericType &t : kNumericTypes) {
         if (t.isFloat) {
             declare("add", t, rounded(t, kAddMul, "a + b, rounded once"), none);
@@ -295,7 +296,9 @@ void declareBuiltinOperatorSemantics() {
         div.compute = part;
         declare("add", t, std::move(add), none);
         declare("sub", t, std::move(sub), none);
-        declare("mul", t, std::move(mul), std::nullopt);
+        // Each part is rounded, never range-checked, so neither of these has a fault path; the
+        // complex operators have no entry in the trait, so the list is written here.
+        declare("mul", t, std::move(mul), none);
         declare("div", t, std::move(div), zeroDivisor);
         declare(
             "neg",
@@ -306,7 +309,7 @@ void declareBuiltinOperatorSemantics() {
                 .sensitiveTo = kFiniteMath,
                 .algorithm   = "-a: the sign of each part flipped",
             },
-            std::nullopt);
+            none);
     }
     declareUnorderedReduce();
     declareElementCalls();
