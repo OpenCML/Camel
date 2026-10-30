@@ -1358,10 +1358,13 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
     };
 
     size_t rewroteValues = 0, rewroteCalls = 0;
-    // A rewrite that would break the graph must not be handed on: the program as written is
-    // correct, so the step leaves the program it was given and the pipeline runs that. The rewrite
-    // is one session, so nothing of an attempt that cannot be committed reaches the program.
-    try {
+    // The rewrite is one session, so nothing of an attempt that cannot be committed reaches the
+    // program. What breaks inside it -- a graph the encoder refuses, a signature that does not match
+    // its ports -- is the pass's own work and not the program's, so it is raised rather than caught:
+    // a pass that throws is reported as `PassInternalError` (execute/pass.cpp), while catching here
+    // would turn a defect into a warning and hand the pipeline the program as written, which is the
+    // one state this step exists to keep out of a graph.
+    {
         RuntimeGraphDraftSession session(context_, program);
         // The wrappers the widenings need, written before anything is rewritten: a variant of the
         // parameter's family names one, and every call through that family reaches it. Each takes
@@ -1678,8 +1681,12 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
         }
         const Program *done = session.commit();
         if (done == nullptr) {
-            os << "DEFUNCTIONALIZE commit_failed=1\n";
-            return program;
+            // The session refuses to commit the rewrite. That is the pass's own work failing, not a
+            // shape of the program: it is raised so the pipeline reports it as `PassInternalError`
+            // and names the program, instead of running the program as written and leaving the
+            // defect for the next reader of a warning to find.
+            throw std::runtime_error(
+                "the rewritten program does not commit (a defect of the pass, not of the program)");
         }
         if (!report_) {
             return done;
@@ -1702,19 +1709,5 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
             os << " values=" << family->values << " calls=" << family->calls << "\n";
         }
         return done;
-    } catch (const std::exception &error) {
-        if (report_) {
-            os << "DEFUNCTIONALIZE broke_invariant=1\n";
-            if (context_ != nullptr) {
-                raisePassWarning(
-                    *context_,
-                    camel::core::error::RuntimeDiag::DefunctionalizationIncomplete,
-                    camel::source::kInvalidOriginId,
-                    std::format("the rewrite would break the graph, so the program is left as "
-                                "written ({})",
-                                error.what()));
-            }
-        }
-        return program;
     }
 }
