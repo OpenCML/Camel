@@ -95,6 +95,8 @@ ScalarType::ScalarType(DType type) : kind(F32) {
         kind = F32;
     else if (type == DType::F64)
         kind = F64;
+    else if (type == DType::I64)
+        kind = I64; // A tensor element type and a register type with the same width and meaning.
     else
         throw std::invalid_argument("invalid tensor scalar type");
 }

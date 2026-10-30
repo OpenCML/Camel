@@ -7,5 +7,6 @@
 - **环丢弃的会话数看得见**：`std::stats` 输出的 `cycle_dropped_sessions`（`src/passes/trans/stats/stats.cpp`）。
 - **`develop` 上造不出"多条改写合成的环"**：`opt-cycle-composition-not-found-on-develop.md`——拿掉守卫那一支，fast 层 7898 条一条不红。
 - **一次落地值不值，看一个数**：闸门的 `[SUMMARY] total / pass / fail / skip / known failures`，不是"我看过了"。
+- **`known failures: 2` 这个数只有在两条都登记了失败形态与认领人时才有意义**：否则它只是"两个不知道"——查法见 `known-failures-two.md`（两条都在 `effects_model_edges.plan.toml`，都在等第 9 条第二半，而车主 `lane-order-region` 已不在）。
 - **中转仓库里某条引用该不该删**：`git merge-base --is-ancestor <sha> refs/camel-tmp/develop`（`build-host-staging-refs.md`）。
 - **在主机上手动跑任何测试之前**：先复刻闸门的导出（`LD_LIBRARY_PATH=$HOME/camel-eval/conda/envs/clang/lib`、`CAMEL_HOME=<树>/out/latest`、`CAMEL_TEST_SHOW_OUTPUT=1`），否则 `camel` 报 `GLIBCXX_3.4.36 not found`，读到的红全是自己造的。
