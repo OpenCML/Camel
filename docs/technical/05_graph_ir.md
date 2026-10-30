@@ -78,7 +78,7 @@
 | BIND   | 部分应用（绑定参数） |
 | FUNC   | 直接子图调用；负载是被调图在引用表里的下标（`GCFuncRef`） |
 | OPER   | 原子算子；负载是算子表里的 `OperId` 与调度器解析出的实现（`GCOperBody`） |
-| GATE   | **数据与控制依赖的聚合门控节点**（无私有数据；见下节语义约定） |
+| GATE   | **纯传值节点**：至少一条 `Norm` 入边，等待是同步前驱，值原样放行（无私有数据；见 §4.1） |
 | DREF   | 临时解引用节点（图构造用，通常不加入图） |
 | LOOP   | 循环节点：条件与体是这张图的两个区域，端口是初始状态、各区域的结果与轮次计数；值与收集槽的读法见 `include/camel/runtime/loop.h` |
 | DEAD   | 改写删掉的节点留下的位置（无输入；遍历节点的消费者跳过它，编号不复用） |
@@ -89,15 +89,14 @@
 
 `LOOP` 与 `DEAD` 在上表里有行、§4 里没有专节：`LOOP` 的端口与区域语义见 `docs/design/graph-model/README.cn.md` 3.5 的 `LOOP` 卡片与 `include/camel/runtime/loop.h`；`DEAD` 没有语义，只表示"这个位置曾有一个节点"。
 
-### 4.1 `GATE`：数据-控制聚合门控
+### 4.1 `GATE`：纯传值节点
 
-在 GIR 中，`GATE` **特指**在同一点上把**值依赖**与**控制依赖**会合起来的门控节点，用来表达“在指定控制序完成之后再沿值边传播”的语义。
+在 GIR 中，`GATE` 是**纯传值节点**：一个数据端口读一个值、一个等待，等待满足后把同一个值原样放行；它自己不算、不拷贝、不改值（`docs/design/effects/edges.cn.md` 5.3）。
 
-- **边约束（角色定义）**：作为上述门控使用时，`GATE` **至少应有一条 `Norm` 入边**（值来源）与 **至少一条 `Ctrl` 入边**（控制完成或控制序）。二者缺一则不再是该语义下的 `GATE`，而应视为构图错误或尚未完成的中间态。
-- **放行语义**：调度/执行上可理解为：**仅当 `Ctrl` 侧所表达的控制序已满足时，才沿 `Norm` 边向下游“放行”该值**（具体实现由 VM 与算子约定；图上则体现为同时依赖两类边）。
-- **典型场景**：子图出口上，若“值出口”与“控制完成点”不是同一节点（例如存在经 `println` 等副作用控制路径），则通过 `GATE` 将控制锚到值路径，供 `BRCH/JOIN` 臂或调用点统一消费；详见 [`16_inline_rewrite_algorithm.md`](16_inline_rewrite_algorithm.md)。
-
-> **口径注（2026-10-30）：与另一份设计文档冲突，待裁。** 本节要求 `GATE` 至少一条 `Ctrl` 入边；`docs/design/effects/edges.cn.md` 5.3 与运行图的封存检查（`src/runtime/graph.cpp#validateRuntimeGraphPayloadImpl`）却把 `GATE` 说成纯传值节点、等待是**同步前驱**，控制输入只是旧图仍在用的写法（`graph.cpp#validateRuntimeGraphPayloadImpl` 两种都接受）。是改本节还是改 5.3、默认建议走哪条，见 [`questions-2026-10-30-gate-control-edge.md`](../handover/questions/questions-2026-10-30-gate-control-edge.md)；裁定前本节正文保持原样。
+- **边约束**：`GATE` **至少一条 `Norm` 入边**（值来源），没有就是构图错误（封存检查 `src/runtime/graph.cpp#validateRuntimeGraphPayloadImpl` 拒绝它）。它的等待是**同步前驱**：构图器要给块的值接上链尾时生成一个 `GATE`，同步边从链尾接到它（`src/compile/gir/builder_helpers.h#writeSyncStatement`，§4.5）。
+- **放行语义**：`GATE` 只在顺序上说了什么——同步前驱完成后，读 `Norm` 输入得到的值就是它的值；语义上它就是那个值本身，匹配与求值时**透过**它看它的值，节点本身不产生计算。
+- **不能删、也不能换成它的输入**：换掉会让同步边转到它读的那个值节点上，那个值的其他使用者于是被排到链后、还把链拉活；只有它的同步前驱已经不存在时，这个转发才可以溶解（`docs/design/effects/edges.cn.md` 5.3、[`17_graph_rewrite_api_contracts.md`](17_graph_rewrite_api_contracts.md) 2.4）。
+- **典型场景**：块的链尾（§4.5）与函数的值出口（§4.8）。块的值节点不归这个块独有时（形参、常量、别处也用到的节点），就用 `GATE` 接住链尾，下游的 `BRCH`/`JOIN` 臂与调用点照常消费这个值。
 
 ### 4.2 `DATA` 与 `PORT`
 
@@ -168,8 +167,8 @@
 
 ### 4.8 值出口锚点（`exitNode`）
 
-- **语义**：图的**唯一返回值锚点**。`GCGraph::exitNode()` 直接返回最终值节点；该节点可以是普通值节点，也可以是用于值-控会合的 `GATE`。  
-- **约束**：编码要求存在 `exitNode`（`GraphDraft::setOutputNode`）；从该锚点反向可达定义了“本会执行到的子图区域”。`GATE` 的入边要求见 §4.1 与那里的口径注。
+- **语义**：图的**唯一返回值锚点**。`GCGraph::exitNode()` 直接返回最终值节点；该节点可以是普通值节点，也可以是接住同步链链尾的 `GATE`（§4.1）。  
+- **约束**：编码要求存在 `exitNode`（`GraphDraft::setOutputNode`）；从该锚点反向可达定义了“本会执行到的子图区域”。出口是 `GATE` 时，它的边约束与别处相同：**至少一条 `Norm` 入边**，等待是**同步前驱**——效果语句正是靠这条链活着走到出口（§4.1、§4.5）。
 
 ### 4.8.1 函数声明事实在出口节点
 
@@ -240,7 +239,7 @@
 
 **内联相关类型**：
 
-- **`inlineCallable()`**（`inlineCallableInDraft`，`include/camel/runtime/draft_inline.h`）返回 **`DraftInlineResult`**（`callNode`、`valueExit`、`ctrlEntry`、`ctrlExit`），作为唯一内联入口；入口不再插入 `SYNC` 节点——多个入口根时每个根各自接上外部控制前驱，`ctrlEntry` 取第一个（`docs/technical/16_inline_rewrite_algorithm.md` 7.3）；需要会合的值-控门控 `GATE` 在 `inlineCallable` 内部完成。
+- **`inlineCallable()`**（`inlineCallableInDraft`，`include/camel/runtime/draft_inline.h`）返回 **`DraftInlineResult`**（`callNode`、`valueExit`、`ctrlEntry`、`ctrlExit`），作为唯一内联入口；入口不再插入 `SYNC` 节点——多个入口根时每个根各自接上外部控制前驱，`ctrlEntry` 取第一个（`docs/technical/16_inline_rewrite_algorithm.md` 7.3）；需要接住链尾的 `GATE` 由 `inlineCallable` 内部建好。
 - **让 draft 看见别的图**：旧的 `GraphImportMode` / `importSubGraph` / `importDependency` / `cloneIntoDraft` / `ReferenceOnly` / `CloneIntoDraft` 都已移除。今天：要读别的程序或图，用 `RuntimeGraphDraftSession::adoptProgram(program)` / `adoptGraph(graph)`（`include/camel/runtime/draft_session.h`）；要把一张图变成可写副本，用 `GraphDraft::decode(program, graph)`，新图由 `GraphDraftGroup::reserve()` 登记；把图登记为依赖或子图，用 `GraphDraft::addDependency` / `addSubGraph`（`include/camel/runtime/draft.h#addDependency`）。
 
 ### 7.2 GraphDraft
@@ -291,7 +290,7 @@
   - 默认启用“SCC 入口 callee 保护”：SCC 内若调用目标是该 SCC 的入口 callee（被 SCC 外调用），则不内联。详见 [`16_inline_rewrite_algorithm.md`](16_inline_rewrite_algorithm.md) §1.1 / §6.1。
 - **SCC 内目标冻结**：每个 SCC 只处理进入该 SCC 时捕获到的初始 inline target；处理中新增的 FUNC 不在同轮继续展开，避免振荡。
 - **重定向完整性**：编码前不允许残留 legacy 图引用。实现上以断言检查 `FUNC` 的被调图与 `DATA(Function)` 的图不再指向 source graph。
-- **GATE 门控保留**：当分支内联存在 value + side-effect ctrl 两路出口时，使用 `GATE` 把控制完成点锚到值路径，避免 `BRCH/JOIN` 臂语义破坏（`GATE` 的入边要求见 §4.1 与那里的口径注）。
+- **GATE 门控保留**：当分支内联存在 value + side-effect ctrl 两路出口时，在值出口上放一个 `GATE` 接住同步链的链尾，避免 `BRCH/JOIN` 臂语义破坏（`GATE` 的入边要求见 §4.1）。
 - **值出口门控契约**：`inlineCallable` 以 `valueExit` 为完成锚点；若值与控制完成点分离，则先插入 `GATE` 再导出 `valueExit`，不再依赖专用 `EXIT.ctrlInputs` 契约。`GATE` 结构由编码时的 `validateRuntimeGraphPayload` 检查（§2.2）。
 - **slot-safe prune**：内联后的不可达裁剪不再直接调用通用 `pruneUnreachable` 全量删点；先从 `exitNode` 反向求 live 集，再对 BRCH/JOIN 槽位相关节点做 pin（`BRCH.ctrlOutputs` / `JOIN.withInputs` / `JOIN.ctrlInputs` / `JOIN.normInputs`），仅删除非 live 且非 pinned 节点，避免 arm-slot 对齐被 detach/unlink 破坏。
 

@@ -368,6 +368,20 @@ export func zip_with::<T, U, V>(xs: T[], ys: U[]): V[] {
     return zip(xs, ys)->map<((a, b)) => f(a, b)>
 }
 
+// ---- batching ----
+
+/// The batching of a function as a value: `vmap(f)` is the function that applies f to every
+/// element of an array and gives the results in order, which is JAX's `vmap(fun)` for the one
+/// argument and the one axis an array has. `T[]` is rank one, so axis 0 is the only axis there is;
+/// a function of two parameters is refused rather than batched over its first one, a second array
+/// to batch together is refused, and an axis is not a parameter -- there is nothing to name. Being
+/// a value, it is stored once and applied to several arrays (`let batched = vmap(square)`), which
+/// is what makes it a transform rather than a call form of `map`.
+/// @example vmap((x: float) => x * x)([0.0, 1.0, 2.0])    // [0.0, 1.0, 4.0]
+export func vmap::<T, U>(f: (item: T) => U): (xs: T[]) => U[] {
+    return (xs: T[]): U[] => xs->map<f>
+}
+
 // ---- native atoms and kernels ----
 
 // The flat view: the elements of an array of any rank in row-major order, as an array of one

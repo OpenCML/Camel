@@ -1223,7 +1223,7 @@ class Engine {
     }
     ~Engine() { currentSource = outerSource_; }
 
-    GCGraph *gradient(GCGraph *function, bool withValue);
+    GCGraph *gradient(GCGraph *function, bool withValue, bool hasAux);
     const camel::core::context::context_ptr_t &context() const { return context_; }
 
     /// The session the inlining helpers of the runtime layer work in. Nothing is committed
@@ -2691,12 +2691,17 @@ void ForwardRewrite::rewriteClosureCall(
         return nullptr;
     }
     const auto *body = reinterpret_cast<const rt::GCOperBody *>(draft_.payloadOf(callee).data());
-    // The two operators of this module that take a function, recognised by id. (A custom rule
-    // is a declaration tag now, `#vjp(rule)`: it is not a call of an operator.)
+    // The operators of this module that take a function, recognised by id. (A custom rule
+    // is a declaration tag now, `#vjp(rule)`: it is not a call of an operator.) The `has_aux`
+    // forms are the same transforms over a function whose result is the pair `(value, aux)`.
     static const camel::core::OperId kGrad =
         camel::core::OperatorTable::instance().intern("autodiff:grad");
     static const camel::core::OperId kValueAndGrad =
         camel::core::OperatorTable::instance().intern("autodiff:with_grad");
+    static const camel::core::OperId kGradAux =
+        camel::core::OperatorTable::instance().intern("autodiff:grad_aux");
+    static const camel::core::OperId kValueAndGradAux =
+        camel::core::OperatorTable::instance().intern("autodiff:with_grad_aux");
     const camel::core::OperId oper = body->oper;
     const auto staticFunction      = [&](gc_node_ref_t node) -> ::Function      *{
         const auto value = staticValue(draft_, node);
@@ -2705,7 +2710,10 @@ void ForwardRewrite::rewriteClosureCall(
     };
     const auto norm    = draft_.normInputsOf(callee);
     ::Function *result = nullptr;
-    if ((oper == kGrad || oper == kValueAndGrad) && norm.size() == 1) {
+    const bool withValue = oper == kValueAndGrad || oper == kValueAndGradAux;
+    const bool hasAux    = oper == kGradAux || oper == kValueAndGradAux;
+    const bool takesFunction = oper == kGrad || oper == kValueAndGrad || hasAux;
+    if (takesFunction && norm.size() == (hasAux ? 2u : 1u)) {
         ::Function *function = staticFunction(norm.front());
         if (function == nullptr) {
             return nullptr;
@@ -2714,7 +2722,8 @@ void ForwardRewrite::rewriteClosureCall(
             engine_.context(),
             function->program(),
             function->graph(),
-            oper == kValueAndGrad);
+            withValue,
+            hasAux);
         // The gradient reads the same captured values as f.
         result = ::Function::create(
             gradient.program,
@@ -4695,9 +4704,9 @@ LoopBodyPlan Engine::buildLoopBody(
     return plan;
 }
 
-GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
+GCGraph *Engine::gradient(GCGraph *function, bool withValue, bool hasAux) {
     FunctionType *type   = function->funcType();
-    const auto signature = gradientSignature(type, withValue);
+    const auto signature = gradientSignature(type, withValue, hasAux);
     // A function the compiler refused (NotDifferentiable) has no signature. Reaching this point
     // with one means the compile-time check was bypassed: an internal defect, not a user error.
     ASSERT(signature.has_value(), "autodiff: a function the compiler accepted has no gradient.");
@@ -4709,8 +4718,19 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     auto draft = GraphDraft::decode(inlining_.work(), function);
     ForwardRewrite rewrite(*this, *draft, scope);
     rewrite.run();
-    const gc_node_ref_t value = valueNode(*draft);
-    const auto edges         = siteEdges(rewrite.sites());
+    // The pair the function returns, and -- of a `has_aux` call -- its two elements: the gradient
+    // is taken of the first, and the second is handed back as it is. Reading the pair's element
+    // node is how the auxiliary value stays part of the transform's result while the backward pass
+    // is seeded at the value alone (the pair itself, being a tuple, has no gradient of its own).
+    const gc_node_ref_t pair  = valueNode(*draft);
+    gc_node_ref_t value       = pair;
+    gc_node_ref_t aux         = kInvalidNodeRef;
+    if (hasAux) {
+        Type *pairType = typeOf(*draft, pair);
+        value          = addAccs(*draft, aggregateElement(pairType, 0), pair, 0);
+        aux            = addAccs(*draft, aggregateElement(pairType, 1), pair, 1);
+    }
+    const auto edges                       = siteEdges(rewrite.sites());
     const std::vector<gc_node_ref_t> order = valueOrder(*draft, value, 0, &edges);
 
     const auto withPorts = draft->withPorts();
@@ -4721,10 +4741,11 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
         withPorts.empty() ? std::vector<gc_node_ref_t>{}
                           : std::vector<gc_node_ref_t>{withPorts.front()},
         /*residualPorts=*/false, {}, rewrite.untapedLoops());
-    const slot_t one = type->exitType()->code() == TypeCode::Float32
+    Type *valueType  = typeOf(*draft, value);
+    const slot_t one = valueType->code() == TypeCode::Float32
                            ? toSlot<camel::core::rtdata::Float32>(1.0f)
                            : toSlot<camel::core::rtdata::Float64>(1.0);
-    backward.seed(value, draft->materializeStaticValue(one, type->exitType()));
+    backward.seed(value, draft->materializeStaticValue(one, valueType));
     backward.run(order);
 
     // The differential form differentiates the first `with` parameter (9.9); the other `with`
@@ -4733,9 +4754,20 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     // gradient of the same type as `m`, a discrete member of `m` included, whatever the tape
     // carried for it (`userGradient`).
     gc_node_ref_t result = backward.userGradient(withPorts.front());
-    if (withValue) {
-        const std::array<gc_node_ref_t, 2> pair{value, result};
-        result = addAggregate(*draft, signature->functionType->exitType(), pair);
+    if (hasAux) {
+        // `(gradient, aux)`, or `((value, aux), gradient)`: the same order as JAX's `grad` and
+        // `value_and_grad` with `has_aux=True`. The pair the function returned is the value half of
+        // `with_grad`'s result as it is, so the auxiliary value is read from it, not rebuilt.
+        if (withValue) {
+            const std::array<gc_node_ref_t, 2> both{pair, result};
+            result = addAggregate(*draft, signature->functionType->exitType(), both);
+        } else {
+            const std::array<gc_node_ref_t, 2> both{result, aux};
+            result = addAggregate(*draft, signature->functionType->exitType(), both);
+        }
+    } else if (withValue) {
+        const std::array<gc_node_ref_t, 2> valueAndGradient{value, result};
+        result = addAggregate(*draft, signature->functionType->exitType(), valueAndGradient);
     }
     // The gradient function runs the function. Its result is the gradient, which need not
     // depend on everything the function did: what the function's own result waited for (a
@@ -4838,8 +4870,29 @@ std::optional<std::pair<std::string, Type *>> memberWithoutTangent(
 
 } // namespace
 
-std::string differentiationRefusal(FunctionType *function) {
+std::string differentiationRefusal(FunctionType *function, bool hasAux) {
     Type *valueType = function->exitType();
+    // With `has_aux` the result is the pair `(value, aux)`: the first element is what is
+    // differentiated, the second is handed back unchanged, and the pair itself is not a value a
+    // gradient could be taken of (JAX's has_aux, which is what this parameter follows).
+    if (hasAux) {
+        if (valueType == nullptr || valueType->code() != TypeCode::Tuple ||
+            tt::as_ptr<TupleType>(valueType)->size() != 2) {
+            return std::format(
+                "`has_aux` differentiates the first element of a pair, and it returns {}; write "
+                "the function's result as `(value, aux)`",
+                valueType ? valueType->toString() : "nothing");
+        }
+        auto *pair = tt::as_ptr<TupleType>(valueType);
+        valueType  = pair->typeAt(0);
+        if (valueType == nullptr ||
+            (valueType->code() != TypeCode::Float64 && valueType->code() != TypeCode::Float32)) {
+            return std::format(
+                "`has_aux` differentiates the first element of the pair it returns, and that "
+                "element is {}, not a float",
+                valueType ? valueType->toString() : "nothing");
+        }
+    }
     if (valueType == nullptr ||
         (valueType->code() != TypeCode::Float64 && valueType->code() != TypeCode::Float32)) {
         return std::format(
@@ -4879,8 +4932,9 @@ std::string differentiationRefusal(FunctionType *function) {
     return {};
 }
 
-std::optional<GradientSignature> gradientSignature(FunctionType *function, bool withValue) {
-    if (!differentiationRefusal(function).empty()) {
+std::optional<GradientSignature> gradientSignature(
+    FunctionType *function, bool withValue, bool hasAux) {
+    if (!differentiationRefusal(function, hasAux).empty()) {
         return std::nullopt;
     }
     GradientSignature signature;
@@ -4889,9 +4943,27 @@ std::optional<GradientSignature> gradientSignature(FunctionType *function, bool 
     // caller passes the variable and the function's writes reach it.
     signature.gradientType = gradientTypeOf(function->withTypeAt(0));
     Type *valueType        = function->exitType();
-    Type *result           = withValue
-                                 ? TupleType::create(std::vector<Type *>{valueType, signature.gradientType})
-                                 : signature.gradientType;
+    // `has_aux` splits the pair the function returns: what is differentiated is its first element,
+    // and the second is part of the transform's result, unchanged. The result is the gradient
+    // followed by the auxiliary value, or -- of `with_grad` -- the pair the function gives
+    // followed by the gradient, which is the order JAX's grad and value_and_grad use.
+    Type *auxType = nullptr;
+    if (hasAux) {
+        auto *pair = tt::as_ptr<TupleType>(valueType);
+        valueType  = pair->typeAt(0);
+        auxType    = pair->typeAt(1);
+    }
+    Type *result = nullptr;
+    if (hasAux && withValue) {
+        Type *valueAndAux = TupleType::create(std::vector<Type *>{valueType, auxType});
+        result            = TupleType::create(std::vector<Type *>{valueAndAux, signature.gradientType});
+    } else if (hasAux) {
+        result = TupleType::create(std::vector<Type *>{signature.gradientType, auxType});
+    } else {
+        result = withValue
+                     ? TupleType::create(std::vector<Type *>{valueType, signature.gradientType})
+                     : signature.gradientType;
+    }
     param_vec_t withParams, normParams;
     for (size_t i = 0; i < function->withTypesCount(); ++i) {
         withParams.emplace_back(function->withTypeAt(i), function->withIsVarAt(i));
@@ -4905,11 +4977,11 @@ std::optional<GradientSignature> gradientSignature(FunctionType *function, bool 
 
 GradientGraph buildGradientGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    GCGraph *function, bool withValue) {
+    GCGraph *function, bool withValue, bool hasAux) {
     // The gradient reads the function's own graph: its loops and its branch arms are regions
     // there, and the transformation rewrites them where they are.
     Engine engine(context, program, function);
-    GCGraph *graph = engine.gradient(function, withValue);
+    GCGraph *graph = engine.gradient(function, withValue, hasAux);
     // The gradient's function value is installed in the graph that calls it (a static DATA
     // node), and the collector roots every program named by the function values of a rooted
     // graph (GCGraphManager::rebuildGcRoots, functionsInStatics). Tracking the program here
