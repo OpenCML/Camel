@@ -10,8 +10,13 @@ program prints `2.5`. Cause: the edge from the value to the slot was not convert
 conversion at the one place a value's type goes from `T` to `T[..]` (`Builder::coerceTo`), with the
 call-argument edge routed through the same question, and the run-time half in `castSlotFrom`.
 
-Still open after cae413dbf: a struct field of `T[..]` built from a composite literal whose element
-is computed (`let b: Box = { v: one }`) reads the field as an array that is not there -- the
-composite literal's FILL links its element nodes without `coerceTo`, and the pure-literal form of
-the same literal is refused with `LiteralNotRepresentable`. That entrance needs the conversion
-before a `T[..]` field can hold a value.
+The struct field that was still open after cae413dbf (`let b: Box = { v: one }` read as an array)
+is closed by a95e26ec5: the FILL converts its element inputs with the same question and call.
+
+The entrances into a slot that do not go through `coerceTo`, counted: the call argument (fixed in
+cae413dbf), the composite literal's FILL element input (fixed in a95e26ec5), and nothing else at the
+value level -- a write `=` and an index write `t[i] = v` are operator calls, so they use the first.
+What remains is the constant form of the same edges: `compositeDataInType`, `literalElementInType`
+and `compositeWithHolesInType` judge a literal as data, and data has no rank-zero array, so an
+all-literal `{ v: 1.5 }` for `Box` is refused with LiteralNotRepresentable instead of converted.
+That is a gap in the data layer, not a fourth entrance, and it refuses rather than crashes.
