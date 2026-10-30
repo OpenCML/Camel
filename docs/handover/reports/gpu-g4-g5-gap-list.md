@@ -4,6 +4,10 @@
 > 轴归约一族就是反例：表里写 `tensor:sum_axis`，节点带的是 `array:sum_axis`，于是「表里有」而「程序里没有」。
 > 旧的三个数是这样数错的：**旧数按表读，新数按节点读**（见文末「按节点重量」）。
 
+**两种量法**（五行以内）：按表量问的是"我们注册了什么"，按节点量问的是"程序里真的出现了什么"；
+两者不等时，**以节点为准**。今天不等的情形有两类：表里有名字而程序里没有节点带它（	ensor:sum_axis
+对只调 rray.sum 的程序），以及程序里有节点而表里没有那条名字（rray:argmax_axis）。
+
 这是 G4 的"缺口为 0 才算完成"（`docs/handover/reports/gpu-g4-g5-plan.md` G4 第 1 条）的唯一账本。数由遍
 `tiles::census` 读出：程序可达图里的面内算子（`tensor` 的数组与 `nn` 的参数树）按
 `modules/tiles/src/graph_regions.cpp#operations` 那张表分成"有 device 实现"与"缺口"两组，逐条打印名字。
@@ -119,3 +123,26 @@ operator of the backward pass (`broadcast_like`, which the device back end does 
 **而这一族的 6 条不在那 26 条缺口里**——账本把它们读成"有实现"，所以缺口数被低估了 3（按表有、按节点无），
 另 3 条（`min`、`argmax`、`argmin`）本来就没进过表面清单。**26 这个数因此不是"还剩多少没做"，而是"按表读数
 还剩多少"**；按节点重量的完整 26 行需要各跑一次 `tiles::census` 取节点名（这一步未做，不在本页冒充完成）。
+
+### 按节点重量（一）：C2 的 21 条，节点名与表名一致
+
+读法：`tiles::census` 给出表名与分组；`std::jgir` 的 `"label"` 给出节点携带的 URI；两者逐条比对。
+
+**读数**：`TILES_CENSUS ops=21 device=8 gap=13`，而 jgir 的算子标签里，那 21 个名字**逐条存在且拼法相同**
+（`tensor:abs`、`tensor:add`、`tensor:matmul`、`tensor:multiply`、`tensor:relu`、`tensor:subtract`、
+`tensor:sum`、`tensor:sum_to` + `nn:adam`、`nn:adam_state`、`nn:softmax_cross_entropy_labels`、
+`nn:softmax_cross_entropy_labels_grad`、`tensor:argmax_axis`、`tensor:cast_like`、`tensor:gt`、
+`tensor:matmul_grad_lhs`、`tensor:matmul_grad_rhs`、`tensor:numel`、`tensor:shape`、`tensor:strict_eq`、
+`tensor:take`）。**C2 的 21 条在节点级成立：8 有实现、13 缺口，旧数与新数一致。**
+
+### 按节点重量（二）：一处上一笔说错的地方，改正
+
+上一笔说"`tensor:sum_axis`/`tensor:mean_axis`/`tensor:max_axis` 三条对真实程序是空的"。
+**按节点重量后这句要收窄**：C2 与 transformer 这两个 showcase 走的是 `stdlib/signatures/tensor.cml`
+的函数，节点带的就是 `tensor:` 拼法，那三条对它们是**有意义的**。空的只发生在**调 `array` 模块函数**的
+程序上（`x->sum<0>()`、`x->argmax<1>()`），那些节点带 `array:`。**所以这不是"表错了"，是"有两个入口"**：
+`tensor.argmax_axis` 与 `array.argmax_axis` 是同一个算子的两个入口，账本只量过前者。
+
+**第三个面**因此存在且未被账本覆盖：`stdlib/array.cml` 里那批函数（`sum`、`mean`、`min`、`max`、`argmax`、
+`argmin`、`sort`、`argsort`、`merge_sorted`）在程序里出现时，节点带的都是 `array:` 名字，账本的 21 条**与它们
+没有交集**。**缺口真实数 = 账本的 21 条（C2，节点级已确认）+ 这批 `array:` 入口中未进表的名字（未逐个量完）**。
