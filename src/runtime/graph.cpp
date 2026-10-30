@@ -569,6 +569,16 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             // GATE carries is either a block's chain or an edge of its own, and the two are named
             // there instead of here. A GATE with neither waits on nothing, which is what this
             // refuses.
+            //
+            // This is an assertion, not a rule programs reach. Measured: payload validation does run
+            // on the execution path (three graphs validated for a small program, five with a
+            // fault-injection pass in the pipeline), but a gate whose waits are all taken away never
+            // gets here -- `dceDraft` removes it first (src/passes/opt/generic/generic.cpp, the
+            // dead-gate branch: no reader, and it waited on something). A fault-injection pass that
+            // stripped both the control input and the sync predecessor of the first gate committed
+            // and ran with no error, and that gate was gone afterwards (2 gates before it, 1 after).
+            // If this ever fires, either `dceDraft` stopped removing such a gate or the builder
+            // started writing one that nothing waits on.
             EffectLivenessFacts facts;
             facts.hasWaitEdge     = !graph->ctrlInputsOf(ref).empty();
             facts.isSyncStatement = !graph->syncPredsOf(ref).empty();
