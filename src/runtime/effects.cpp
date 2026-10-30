@@ -120,11 +120,11 @@ EffectStanding effectStandingOf(const EffectLivenessFacts &facts) {
     if (facts.hasDataUser || facts.isSyncStatement || facts.isWriterWithLaterRead) {
         return EffectStanding::Alive;
     }
-    // The open case, and it is not `HasNoCredential`: what a call through a function value writes
-    // is known to the run time and not to the type, so "nothing reads it" has not been shown.
-    if (facts.isCallThroughValue) {
-        return EffectStanding::PendingIndirectCallVersion;
-    }
+    // A call through a function value is not a third answer: the writer table records it as the
+    // variable's write, the call is that variable's new version, and the read written after it
+    // takes a data edge from the call (Builder::valueVersionOf). A write nothing here knows about
+    // is left to the sync blocks and the resource order (docs/design-principles.cn.md 3.3); it is
+    // not a credential of this layer, which is why it does not make a node alive.
     return EffectStanding::HasNoCredential;
 }
 

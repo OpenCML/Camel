@@ -921,7 +921,10 @@ GCGraph *specializeClosureBoundGraph(
     return specializeGraphWithBindings(session, targetGraph, bindings, "closure", nonce);
 }
 
-void bindPortValueUses(GraphDraft &draft, gc_node_ref_t portNodeId, gc_node_ref_t actualInputId) {
+void bindPortValueUses(
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t portNodeId,
+    gc_node_ref_t actualInputId) {
+    auto &draft = transaction.edit();
     if (portNodeId == kInvalidNodeRef || actualInputId == kInvalidNodeRef) {
         return;
     }
@@ -935,7 +938,7 @@ void bindPortValueUses(GraphDraft &draft, gc_node_ref_t portNodeId, gc_node_ref_
     const std::vector<gc_node_ref_t> waiting = draft.waitUsersOf(portNodeId);
     for (gc_node_ref_t user : waiting) {
         draft.unlinkInput(DraftEdgeKind::Ctrl, user, portNodeId);
-        appendControlDependency(draft, actualInputId, user);
+        appendControlDependency(transaction, actualInputId, user);
     }
 }
 
@@ -1182,7 +1185,7 @@ bool specializeDirectFuncInDraft(
                 break;
             }
             if (!draft.waitInputsOf(current).empty()) {
-                appendControlDependency(draft, current, funcNodeId);
+                appendControlDependency(transaction, current, funcNodeId);
                 break;
             }
             if (header->kind != GCNodeKind::Gate && header->kind != GCNodeKind::Copy &&
@@ -1235,12 +1238,14 @@ gc_node_ref_t resolveTupleProjection(const GraphDraft &draft, gc_node_ref_t id) 
 /// ordering (in sync code the callee is gated after the previous statement), the FUNC keeps it
 /// as a control input, so the statements before still run first. A callee that waits on nothing
 /// (a constant, a closure built from values) carries no ordering.
-void keepCalleeOrdering(GraphDraft &draft, gc_node_ref_t funcNodeId, gc_node_ref_t callee) {
+void keepCalleeOrdering(
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t funcNodeId, gc_node_ref_t callee) {
+    auto &draft                   = transaction.edit();
     const DraftNodeHeader *header = draft.header(callee);
     if (!header || draft.waitInputsOf(callee).empty()) {
         return;
     }
-    appendControlDependency(draft, callee, funcNodeId);
+    appendControlDependency(transaction, callee, funcNodeId);
 }
 
 namespace {
@@ -1289,8 +1294,9 @@ GCGraph *liftClosureGraph(RuntimeGraphDraftSession &session, GCGraph *base, size
 
 /// A CALL of a closure built by FILL in this graph becomes a direct FUNC of the lifted graph.
 bool devirtualizeClosureCallInDraft(
-    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId,
-    gc_node_ref_t fillNodeId) {
+    RuntimeGraphDraftSession &session, camel::runtime::GraphTransaction &transaction,
+    gc_node_ref_t callNodeId, gc_node_ref_t fillNodeId) {
+    auto &draft = transaction.edit();
     const auto *fill = reinterpret_cast<const GCFillBody *>(draft.payloadOf(fillNodeId).data());
     if (fill->fillKind != GCFillKind::FunctionClosure ||
         draft.normInputsOf(fillNodeId).size() != 1) {
@@ -1345,7 +1351,7 @@ bool devirtualizeClosureCallInDraft(
     init.withInputs                 = directWith;
     const gc_node_ref_t calleeInput = withInputs.front();
     draft.rewriteNode(callNodeId, init);
-    keepCalleeOrdering(draft, callNodeId, calleeInput);
+    keepCalleeOrdering(transaction, callNodeId, calleeInput);
     CAMEL_LOG_INFO_S(
         "DraftOpt",
         "Devirtualized closure CALL node {} to direct FUNC '{}'.",
@@ -1477,7 +1483,7 @@ bool devirtualizeStaticCallInDraft(
     const gc_node_ref_t callee = resolveTupleProjection(draft, calleeRef);
     if (const auto *calleeHeader = draft.header(callee);
         calleeHeader && calleeHeader->kind == GCNodeKind::Fill) {
-        return devirtualizeClosureCallInDraft(session, draft, callNodeId, callee);
+        return devirtualizeClosureCallInDraft(session, transaction, callNodeId, callee);
     }
 
     DraftStaticValue calleeStatic = tryResolveStaticValue(draft, calleeRef);
@@ -1534,7 +1540,7 @@ bool devirtualizeStaticCallInDraft(
     const gc_node_ref_t calleeInput = withInputs.front();
     init.withInputs                 = directWith;
     draft.rewriteNode(callNodeId, init);
-    keepCalleeOrdering(draft, callNodeId, calleeInput);
+    keepCalleeOrdering(transaction, callNodeId, calleeInput);
     CAMEL_LOG_INFO_S(
         "DraftOpt",
         "Devirtualized CALL node {} to direct FUNC '{}'.",
@@ -1738,7 +1744,7 @@ DraftInlineResult inlineCallableInDraft(
             ctrlPreds.push_back(syncPred);
         }
     }
-    ctrlPreds                  = controlFrontier(draft, ctrlPreds);
+    ctrlPreds                  = controlFrontier(transaction, ctrlPreds);
     const bool hasExternalCtrl = !ctrlPreds.empty();
     // The statement(s) written after the call in its block: the call is replaced by the body's
     // result and the chain goes on from there, so 5.7's order edges have to reach exactly the nodes
@@ -1890,7 +1896,7 @@ DraftInlineResult inlineCallableInDraft(
     size_t actualIndex = 0;
     for (const auto &[kind, portId] : clonedFormalNodes) {
         (void)kind;
-        bindPortValueUses(draft, portId, boundActualInputs[actualIndex++]);
+        bindPortValueUses(transaction, portId, boundActualInputs[actualIndex++]);
     }
     CAMEL_LOG_INFO_S(
         "DraftInline",

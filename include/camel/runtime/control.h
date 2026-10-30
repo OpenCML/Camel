@@ -14,17 +14,20 @@ namespace camel::runtime {
 /// Proves an existing CTRL-only path from predecessor to user, without crossing BRCH/JOIN.
 /// Exhausting maxWork means "not proven", so callers must retain the edge.
 bool hasControlDependency(
-    const GraphDraft &draft, gc_node_ref_t predecessor, gc_node_ref_t user, size_t maxWork = 64);
+    const camel::runtime::GraphTransaction &transaction, gc_node_ref_t predecessor,
+    gc_node_ref_t user, size_t maxWork = 64);
 
 /// Retains a sufficient frontier of predecessors before a rewrite transfers their ordering.
 /// Uses one shared search budget for the entire list and preserves uncertain dependencies.
 std::vector<gc_node_ref_t> controlFrontier(
-    const GraphDraft &draft, std::span<const gc_node_ref_t> inputs, size_t maxWork = 128);
+    const camel::runtime::GraphTransaction &transaction, std::span<const gc_node_ref_t> inputs,
+    size_t maxWork = 128);
 
 /// Avoids direct value-covered edges and edges already implied by CTRL paths (bounded search).
 /// Keeps explicit argument ordering on FUNC/CALL for later splicing, and a GATE's first CTRL.
 bool appendControlDependency(
-    GraphDraft &draft, gc_node_ref_t predecessor, gc_node_ref_t user, size_t maxWork = 32);
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t predecessor, gc_node_ref_t user,
+    size_t maxWork = 32);
 
 /// Removes CTRL edges implied by mandatory data paths, and the ones a `sync` block's chain already
 /// orders for the kinds that no longer read the control kind themselves. Branch boundaries and arm

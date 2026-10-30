@@ -33,17 +33,17 @@ void chainAndBudget() {
     auto &draft = owner->edit();
     const auto a = node(draft), b = node(draft, {a}), c = node(draft, {b});
     const auto d = node(draft, {a, c});
-    check(!hasControlDependency(draft, a, c, 0), "zero-budget query must be conservative");
+    check(!hasControlDependency(*owner, a, c, 0), "zero-budget query must be conservative");
     check(reduceControlDependencies(*owner, 0) == 0, "zero-budget reduction changed edges");
     check(reduceControlDependencies(*owner, 1) == 0, "incomplete search removed an unproven edge");
     const std::vector<gc_node_ref_t> before{a, b, c};
-    const auto frontier = controlFrontier(draft, before);
+    const auto frontier = controlFrontier(*owner, before);
     check(frontier.size() == 1 && frontier.front() == c, "rewrite frontier retained ancestors");
     check(reduceControlDependencies(*owner) == 1, "transitive CTRL edge was not removed");
     check(
         draft.ctrlInputsOf(d).size() == 1 && draft.ctrlInputsOf(d).front() == c,
         "latest predecessor was not retained");
-    check(!appendControlDependency(draft, a, d), "rewrite reinserted an implied edge");
+    check(!appendControlDependency(*owner, a, d), "rewrite reinserted an implied edge");
     check(reduceControlDependencies(*owner) == 0, "small graph reduction is not idempotent");
 }
 void mandatoryDataPaths() {
@@ -63,14 +63,14 @@ void mandatoryDataPaths() {
         "context data path did not cover a single control");
     const auto e = node(draft);
     draft.setNormInputs(e, std::span<const gc_node_ref_t>(&a, 1));
-    check(!appendControlDependency(draft, a, e), "rewrite added a direct data-covered control");
+    check(!appendControlDependency(*owner, a, e), "rewrite added a direct data-covered control");
     const auto call = draft.addNode(
         DraftNodeInit{
             .kind       = GCNodeKind::Func,
             .normInputs = std::span<const gc_node_ref_t>(&a, 1),
         });
     check(
-        appendControlDependency(draft, a, call),
+        appendControlDependency(*owner, a, call),
         "argument ordering needed by an imminent inline was skipped");
     // The explicit edge can be reduced on a stable graph, but not skipped before splicing.
     draft.setCtrlInputs(call, {});
@@ -79,7 +79,7 @@ void mandatoryDataPaths() {
             .kind       = GCNodeKind::Gate,
             .normInputs = std::span<const gc_node_ref_t>(&a, 1),
         });
-    check(appendControlDependency(draft, a, gate), "GATE lost its required first control");
+    check(appendControlDependency(*owner, a, gate), "GATE lost its required first control");
     check(
         reduceControlDependencies(*owner) == 0 && draft.ctrlInputsOf(gate).size() == 1,
         "GATE lost its last control");
@@ -195,9 +195,9 @@ void forwardingGateConsumers() {
     check(
         !draft.header(gate) && draft.normInputsOf(reader).front() == value,
         "reader did not receive the original value");
-    check(hasControlDependency(draft, wait, reader), "reader lost its wait");
+    check(hasControlDependency(*owner, wait, reader), "reader lost its wait");
     check(
-        hasControlDependency(draft, wait, control) && hasControlDependency(draft, value, control),
+        hasControlDependency(*owner, wait, control) && hasControlDependency(*owner, value, control),
         "control-only consumer lost value completion or explicit wait");
     check(draft.ctrlInputsOf(value).empty(), "wait moved onto the value producer");
 

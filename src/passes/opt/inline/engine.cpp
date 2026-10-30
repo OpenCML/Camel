@@ -1186,7 +1186,7 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
             continue;
         }
         if (draft.alive(source)) {
-            camel::runtime::appendControlDependency(draft, source, funcNodeId);
+            camel::runtime::appendControlDependency(transaction, source, funcNodeId);
         }
     }
     for (gc_node_ref_t pred : draft.waitInputsOf(funcNodeId)) {
@@ -1287,7 +1287,7 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
             continue;
         }
         for (gc_node_ref_t source : sources) {
-            camel::runtime::appendControlDependency(draft, source, user);
+            camel::runtime::appendControlDependency(transaction, source, user);
         }
     }
     return inlineResult;
