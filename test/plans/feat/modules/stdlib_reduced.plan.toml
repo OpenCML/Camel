@@ -51,6 +51,21 @@ expect_stdout = "[128, 68] [88, 64] [128, 64] [122, 68] [0, 193]\n1024.0 3.375 4
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
+# The compound forms: one rounding per statement, against the value a wider cell would give.
+
+[[tests]]
+name = "reduced_compound_assign"
+desc = "`+= -= *= /= ^=` on a bf16 and on an f16 cell read the stored element, compute in f32 and round once into the element type, and the cell keeps that element type: each form answers the two bytes of the same binary operator written beside it (1.5 + 2.25 = 3.75, bf16 0x4070 [112, 64] and f16 0x4380 [128, 67]; 3.75 - 0.5 = 3.25, 0x4050 [80, 64] and 0x4280 [128, 66]; 3.25 * 2.0 = 6.5, 0x40D0 [208, 64] and 0x4680 [128, 70]; 6.5 / 4.0 = 1.625, 0x3FD0 [208, 63] and 0x3E80 [128, 62]; 1.625 ^ 2.0 = 2.640625, 0x4029 [41, 64] and 0x4148 [72, 65]), all five exact in both types so the lines separate the operator from the element type. The form is `a = a op b` (design principles 4.2, Builder::compoundAssignmentByRebinding), so what it follows is the plain narrow operator: removing the plain arm reds this case, while removing the group's `:op/assn_pow` arm changes nothing, which is why the plain arm is the one the reading pins. The rounding is pinned by a chain of two `+=` of the half ulp on a cell starting at 1.0: each statement rounds the exact halfway to the even neighbour, so the bf16 cell stays 1.0 ([128, 63]) and the f16 cell stays 1.0 ([0, 60]), while a cell that kept f32 between the statements would hold 1.0078125 ([129, 63]) and 1.0009765625 ([1, 60]) -- the case writes those wider values and compares, so `chain == bf16(1.0078125)` must be false and the one-rounding reading cannot pass vacuously. A one-element `bf16[]` of the chain is two bytes, and the inexact `^= 0.5` of 3.0 gives each type's nearest (0x3FDE, 0x3EEE) within the type's own epsilon of the exact power in f64."
+kind = "behavior"
+case = "../../../cases/modules/stdlib/reduced_compound_assign.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "[112, 64] [112, 64]\n[80, 64] [80, 64]\n[208, 64] [208, 64]\n[208, 63] [208, 63]\n[41, 64] [41, 64]\n2.640625\n[128, 67] [128, 67]\n[128, 66] [128, 66]\n[128, 70] [128, 70]\n[128, 62] [128, 62]\n[72, 65] [72, 65]\n2.640625\n[128, 63] false 2\n[0, 60] false 2\n[222, 63] 1.734375 true\n[238, 62] 1.7324219 true\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
 # The reduction the rule re-pointed: the refusal this case asserted became a computation.
 
 [[tests]]
