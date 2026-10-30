@@ -1,0 +1,21 @@
+/// The tangent space of a type (design principles 9.9): a float and a tensor of floats are their
+/// own tangent space, a tuple and a struct take the tangent space of each member in the member's
+/// own place, and a value that carries no continuous quantity -- an integer, a `bool`, a `string`
+/// -- takes the empty tuple.
+import { is_same, Tangent } from types
+
+type Point = { x: float, y: int }
+
+type Pair = (float, int)
+
+func main(): int sync {
+    println(is_same::<Tangent<float>, float>())
+    println(is_same::<Tangent<f32[2, 3]>, f32[2, 3]>())
+    println(is_same::<Tangent<int>, int>())
+    println(is_same::<Tangent<int>, ()>())
+    println(is_same::<Tangent<string>, ()>())
+    println(is_same::<Tangent<Pair>, (float, ())>())
+    println(is_same::<Tangent<(float, int)>, (float, ())>())
+    println(is_same::<Tangent<Point>, Point>())
+    return 0
+}
