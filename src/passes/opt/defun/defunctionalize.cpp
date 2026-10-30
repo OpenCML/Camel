@@ -463,6 +463,11 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
     // ---------------------------------------------------------------------------------------
     // (3) What else reads a value, and every call through the type.
     // ---------------------------------------------------------------------------------------
+    // A value handed to a parameter of another function type widens at the call: the two are one
+    // family and one enum, so the parameter's type joins the family the value belongs to and is
+    // substituted with its enum like any other member. Keyed by the widened type's id, naming the
+    // type of the value that flows into it.
+    std::map<TypeId, TypeId> mergedInto; // widened parameter type id -> the value's type id
     for (const GCGraph *graph : program->graphs()) {
         // The static function a closure is built on is not a value: the closure packs it into a
         // tag, and the node is dropped with the closure.
@@ -553,10 +558,18 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                         refuseIfUnsaid(
                             planned->second, "the value is read by a node that is not a call");
                     }
-                    // A value handed to a parameter declared as another function type is widened
-                    // at the call -- a lambda that returns the value of its write where the
-                    // parameter says `void`, say. The tag would reach a signature that still says
-                    // the function type, so the family stays as written.
+                    // A value handed to a parameter declared as another function type is a widening
+                    // at the call: a lambda that returns the value of its write is written where the
+                    // parameter says `void`, which is a function type of its own. The value flows
+                    // from its family into that parameter's type, and the two are one family here:
+                    // the parameter's type becomes the enum of the family the value belongs to, so
+                    // no second form of a function value is left in the program. That is only a
+                    // substitution while the parameter's own type builds no value -- a `void`
+                    // function the program writes is a family of its own, and turning one type into
+                    // the other would call it with the wrong tag. That case needs a wrapper (a
+                    // function of the parameter's type that calls the value and drops its result),
+                    // which this pass cannot build: it stops the pipeline and names the program
+                    // rather than leave the half-lowered graph the step exists to remove.
                     if (readsAsArgument) {
                         const ty::FunctionType *signature = nullptr;
                         if (node.kind == GCNodeKind::Call && !withs.empty()) {
@@ -580,9 +593,46 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                                 }
                             }
                             if (!declared) {
-                                refuseIfUnsaid(
-                                    planned->second,
-                                    "the value is handed to a parameter of another function type");
+                                for (const auto &span :
+                                     {signature->withTypesSpan(), signature->normTypesSpan()}) {
+                                    for (const ty::Type *param : span) {
+                                        auto *written = const_cast<ty::Type *>(param);
+                                        if (written->code() != TypeCode::Function ||
+                                            written->equals(inputType) ||
+                                            sameFamily(written, inputType)) {
+                                            continue;
+                                        }
+                                        // A function type of the parameter's own kind that
+                                        // builds a value somewhere is a family of its own: the
+                                        // widening would have to be written as a conversion, and
+                                        // that needs a wrapper this pass cannot make. Stopping
+                                        // names the program, which is what a defect of the compiler
+                                        // owes the reader -- not a half-lowered graph.
+                                        bool buildsOwn = false;
+                                        for (const auto &[otherId, other] : plans) {
+                                            buildsOwn = buildsOwn ||
+                                                        (other.values > 0 &&
+                                                         (other.type->equals(written) ||
+                                                          sameFamily(other.type, written)));
+                                        }
+                                        if (buildsOwn) {
+                                            throw std::runtime_error(std::format(
+                                                "the value of '{}' is handed to a parameter of "
+                                                "'{}', which builds values of its own; writing that "
+                                                "conversion needs a wrapper function this pass "
+                                                "cannot make (a defect of the pass, not of the "
+                                                "program)",
+                                                inputType->toString(),
+                                                written->toString()));
+                                        }
+                                        mergedInto[written->typeId()] =
+                                            planned->second.type->typeId();
+                                        // The widened type is a member of the family from here on,
+                                        // so it is a plan like any other: its calls are counted
+                                        // there, and its objects follow the substitution.
+                                        planOf(plans, written);
+                                    }
+                                }
                             }
                         }
                     }
@@ -614,13 +664,28 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
     std::vector<Family> families;
     std::set<TypeId> assigned;
     for (auto &[id, plan] : plans) {
-        if (assigned.count(id) != 0) {
+        // A widened type is not a family of its own: it joins the family the value that flows into
+        // it belongs to, and its calls are that family's calls.
+        if (assigned.count(id) != 0 || mergedInto.count(id) != 0) {
             continue;
         }
         families.emplace_back();
         Family &family = families.back();
         for (auto &[otherId, other] : plans) {
-            if (assigned.count(otherId) != 0 || !sameFamily(plan.type, other.type)) {
+            if (assigned.count(otherId) != 0) {
+                continue;
+            }
+            // A widened type joins the family of the value that flows into it. The value's own type
+            // may be another object of that family, so the relation is to its signature and not to
+            // the id the widening was recorded with.
+            bool same = sameFamily(plan.type, other.type);
+            if (!same) {
+                const auto merge  = mergedInto.find(otherId);
+                const auto target = merge != mergedInto.end() ? plans.find(merge->second)
+                                                             : plans.end();
+                same = target != plans.end() && sameFamily(plan.type, target->second.type);
+            }
+            if (!same) {
                 continue;
             }
             assigned.insert(otherId);
@@ -706,9 +771,14 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
     //
     // A lowered family may not hold, or be held by, a family left as written: its signature would
     // still say the other's function type -- `(int, () => int..)`, say -- while a value of it became
-    // a tag, and a graph that carries both forms is one no later pass can type. Widening the
-    // refusal to the fixed point keeps a program whole: families that cannot be separated are
-    // lowered together or not at all.
+    // a tag, and a graph that carries both forms is one no later pass can type. A family whose
+    // signature names another is one value's signature: the inner function type in the outer
+    // signature becomes the inner family's enum, which is the same rule as the widening above -- a
+    // value flowing from one family into another, one form and one enum for both.
+    //
+    // Until that lowering is written, such a family is refused rather than half lowered. This is the
+    // second half of the same defect, not an allowance: the pass leaves a family as written here
+    // only while the nested lowering does not exist.
     for (bool changed = true; changed;) {
         changed = false;
         for (Family &family : families) {
@@ -779,6 +849,7 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
     // program on the old type, which is the state the rebuild cannot run in.
     // ---------------------------------------------------------------------------------------
     std::map<TypeId, std::set<ty::Type *>> equivalents; // member type id -> equal objects
+
     const auto noteType = [&](ty::Type *type) {
         if (type == nullptr) {
             return;
@@ -792,6 +863,7 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                 if (type->equals(member->type) || sameFamily(type, member->type)) {
                     equivalents[member->type->typeId()].insert(type);
                 }
+
             }
         }
     };
@@ -840,6 +912,7 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
             for (ty::Type *type : equivalents[member->type->typeId()]) {
                 types.replace(type, enumType);
             }
+
             types.replace(member->type, enumType);
         }
         familyOfEnum.emplace(enumType->typeId(), family);
