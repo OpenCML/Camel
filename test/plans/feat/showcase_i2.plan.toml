@@ -95,7 +95,13 @@ name = "diffusion_step.gpu.denoise"
 desc = "The denoiser's forward pass on the device against the same call on the host: the sum of squared differences over every element is zero, so the device's arithmetic and the host's agree on the step's own expression (matmul, add, relu, matmul, add)."
 kind = "behavior"
 case = "../../../showcase/i2-diffusion-step/step_gpu.cml"
-args = ["${case}"]
+# The card is the runner's to pick, never an ordinal written here: `--devices 0` names the one card
+# the child can see, whichever ordinal the host gave it, and `cuda_free_device` makes the runner
+# choose a card with room before the run starts. A red that depends on what someone else is running
+# is not a test, it is news.
+cuda_free_device = true
+args = ["--devices", "0", "${case}"]
+skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
 expect_exit = 0
 expect_stdout_contains = ["i2gpu device=", "i2gpu gap=0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

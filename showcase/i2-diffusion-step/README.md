@@ -149,3 +149,10 @@ optimizer state, which the device path does not have yet. So this is the device 
 **The ordinal is the machine's.** `--devices 5` names a card with free memory on the host this was
 written on; on a host with one free GPU, drop it. `nvidia-smi` says which one is free -- a card held
 by another process fails with `CUDA_ERROR_OUT_OF_MEMORY`, which is the environment, not the example.
+
+**The test does not do what the command above does**, and the difference is deliberate: the plan entry
+sets `cuda_free_device = true` and passes `--devices 0`, which names the one card the child can see
+whichever ordinal the host gave it. The runner picks a card with room before the run starts, so the
+entry reads the same on a host whose device 0 is busy. An ordinal written into a plan is the second
+thing to break on someone else's machine -- a red that depends on what another process is running is
+not a test, it is news.
