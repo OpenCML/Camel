@@ -667,8 +667,12 @@ function parseArgs(argv) {
             if (install === '') throw new Error('--camel needs the path of the install to measure')
             options.camel = path.resolve(process.cwd(), install)
         } else if (arg === '--compile-only') {
-            options.compileOnly = true
-        } else if (arg === '--jobs' && i + 1 < argv.length) {
+            // Answers one question: which programs in the entries the fast layer does not run fail
+            // to compile. It does not answer whether those tests pass -- their own criteria are
+            // comparisons and budgets that judge nothing without a run -- so it reports two columns,
+            // the compilation failures and the entries whose question is not this one, and it is not
+            // part of the gate.
+            options.compileOnly = true        } else if (arg === '--jobs' && i + 1 < argv.length) {
             options.jobs = positiveInteger(argv[++i], '--jobs')
         } else if (arg.startsWith('--jobs=')) {
             options.jobs = positiveInteger(arg.slice('--jobs='.length), '--jobs')
@@ -1620,6 +1624,9 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         !args.some((word) => String(word).startsWith('--timeit'))
     if (logContext.options.compileOnly && !judgedByCompile) {
         test.__notJudged = true
+        // The second column, said out loud: this entry asks something other than whether a program
+        // compiles, so the sweep does not count it either way.
+        console.log(`[NOT-JUDGED] ${test.name} (${test.case || test.tool}) -- not a compilation question`)
     }
     if (judgedByCompile) {
         const firstPass = args.findIndex((word) => /^[A-Za-z_][\w:-]*::/.test(word))
@@ -1742,16 +1749,19 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // the case that failed to build.
     const expectsRefusal = typeof test.expect_exit === 'number' && test.expect_exit !== 0
     if (test.__notJudged) result.notJudged = true
-    const failures =
-        logContext.options.compileOnly && !test.tool
-            ? test.__notJudged || result.exitCode === 0 || expectsRefusal
-                ? []
-                : [
-                      `does not compile (${test.case}): ` +
-                          ((result.output.match(/^error\[[^\n]*/m) || [''])[0] ||
-                              `exit ${result.exitCode}`),
-                  ]
-            : await validateTest(test, result, { ...logContext, scope })    // The cost judgement of a test that declares `cpu_budget_ms`, in the unit
+    // The sweep answers one question, so it has two columns and no third: a program that does not
+    // compile is the question, and everything the entry would have judged besides compiling is
+    // "not this question" -- never a failure, and never silently dropped either, because a red
+    // nobody explains gets read as a defect.
+    const failures = logContext.options.compileOnly
+        ? test.__notJudged || result.exitCode === 0 || expectsRefusal
+            ? []
+            : [
+                  `does not compile (${test.case}): ` +
+                      ((result.output.match(/^error\[[^\n]*/m) || [''])[0] ||
+                          `exit ${result.exitCode}`),
+              ]
+        : await validateTest(test, result, { ...logContext, scope })    // The cost judgement of a test that declares `cpu_budget_ms`, in the unit
     // the rule asks for:
     //
     //   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）
