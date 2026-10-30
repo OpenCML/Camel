@@ -7,6 +7,7 @@
 #include "camel/passes/test/control.h"
 #include "../opt/generic/rewrite.h"
 #include "camel/runtime/control.h"
+#include "camel/runtime/graph_txn.h"
 
 #include <cstring>
 #include <stdexcept>
@@ -28,7 +29,8 @@ void check(bool condition, const char *message) {
     }
 }
 void chainAndBudget() {
-    GraphDraft draft;
+    auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
+    auto &draft = owner->edit();
     const auto a = node(draft), b = node(draft, {a}), c = node(draft, {b});
     const auto d = node(draft, {a, c});
     check(!hasControlDependency(draft, a, c, 0), "zero-budget query must be conservative");
@@ -45,7 +47,8 @@ void chainAndBudget() {
     check(reduceControlDependencies(draft) == 0, "small graph reduction is not idempotent");
 }
 void mandatoryDataPaths() {
-    GraphDraft draft;
+    auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
+    auto &draft = owner->edit();
     const auto a = node(draft), b = node(draft);
     draft.setNormInputs(b, std::span<const gc_node_ref_t>(&a, 1));
     const auto c = node(draft, {a, b});
@@ -82,7 +85,8 @@ void mandatoryDataPaths() {
         "GATE lost its last control");
 }
 void conditionalDataIsNotMandatory() {
-    GraphDraft draft;
+    auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
+    auto &draft = owner->edit();
     const auto a = node(draft), b = node(draft);
     const gc_node_ref_t alternatives[] = {a, b};
     const auto join                    = draft.addNode(
@@ -98,7 +102,8 @@ void conditionalDataIsNotMandatory() {
         "an unselected JOIN arm was treated as mandatory");
 }
 void dataBudget() {
-    GraphDraft draft;
+    auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
+    auto &draft = owner->edit();
     const auto first = node(draft);
     auto previous    = first;
     for (size_t i = 0; i < 300; ++i) {
@@ -113,7 +118,8 @@ void dataBudget() {
         "data search exceeded its per-target budget");
 }
 void branchBoundaries() {
-    GraphDraft draft;
+    auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
+    auto &draft = owner->edit();
     const auto a = node(draft);
     DraftBrchPayload body{.armCount = 1};
     std::vector<std::byte> bytes(sizeof(body));
@@ -138,7 +144,8 @@ void branchBoundaries() {
         "the wait on a BRCH was reduced");
 }
 void denseChain() {
-    GraphDraft draft;
+    auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
+    auto &draft = owner->edit();
     std::vector<gc_node_ref_t> predecessors;
     constexpr size_t count = 128;
     for (size_t i = 0; i < count; ++i) {
@@ -158,7 +165,8 @@ void denseChain() {
     }
 }
 void denseDataChain() {
-    GraphDraft draft;
+    auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
+    auto &draft = owner->edit();
     std::vector<gc_node_ref_t> predecessors;
     for (size_t i = 0; i < 128; ++i) {
         const auto current = node(draft);
@@ -172,7 +180,8 @@ void denseDataChain() {
 }
 void forwardingGateConsumers() {
     using camel::passes::generic::bypassValueGate;
-    GraphDraft draft;
+    auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
+    auto &draft = owner->edit();
     const auto value = node(draft), wait = node(draft);
     const auto gate = draft.addGateNode(nullptr);
     draft.setNormInputs(gate, std::span(&value, 1));
@@ -224,7 +233,8 @@ void forwardingGateConsumers() {
 /// were added in, as dead code is after inlining. Each step costs the reader, not the readers
 /// so far; the plan's time limit is what fails a quadratic implementation.
 void manyReaders() {
-    GraphDraft draft;
+    auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
+    auto &draft = owner->edit();
     const auto producer = node(draft);
     constexpr size_t kReaders = 200000;
     std::vector<gc_node_ref_t> readers;
@@ -268,7 +278,8 @@ void syncChainOrdering() {
     // A gate whose only wait is the chain's tail: one data port, one sync predecessor and no
     // control input at all (5.3).
     {
-        GraphDraft draft;
+        auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
+        auto &draft = owner->edit();
         const auto tail  = node(draft);
         const auto value = node(draft);
         const auto gate  = draft.addGateNode(camel::core::type::Type::Float32());
@@ -284,7 +295,8 @@ void syncChainOrdering() {
     // A node that carries no order of its own: the walk reaches what ordered it through the chain
     // it stands in, not only through the control edge it used to be written as.
     {
-        GraphDraft draft;
+        auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
+        auto &draft = owner->edit();
         const auto tail  = node(draft);
         const auto value = node(draft);
         const auto plain = draft.addNode(DraftNodeInit{.kind = GCNodeKind::Copy});
@@ -301,7 +313,8 @@ void syncChainOrdering() {
     // already orders one of the two ends before the other, so the edge that spells it says nothing
     // (docs/design/effects/edges.cn.md 5.4). Reading order edges alone, the pass finds nothing.
     {
-        GraphDraft draft;
+        auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
+        auto &draft = owner->edit();
         const auto head = node(draft);
         const auto next = node(draft);
         check(draft.setSyncPredecessor(next, head), "a node did not take a sync predecessor");
@@ -329,7 +342,8 @@ void syncChainOrdering() {
 void documentOrdering() {
     // An `order` edge a data path covers: the document drops it, the pass keeps it.
     {
-        GraphDraft draft;
+        auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
+        auto &draft = owner->edit();
         const auto read = node(draft), step = node(draft);
         draft.setNormInputs(step, std::span<const gc_node_ref_t>(&read, 1));
         const auto write = node(draft);
@@ -342,7 +356,8 @@ void documentOrdering() {
     // A `sync` edge a data path covers: a document reads the chain link the same way, and the pass
     // never considers a sync edge.
     {
-        GraphDraft draft;
+        auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
+        auto &draft = owner->edit();
         const auto first = node(draft), step = node(draft);
         draft.setNormInputs(step, std::span<const gc_node_ref_t>(&first, 1));
         const auto next = node(draft);
@@ -355,7 +370,8 @@ void documentOrdering() {
     // What nothing implies stays, and a pair two kinds spell is one ordering rather than two: the
     // builder writes a control wait beside the sync link it makes, and neither covers the other.
     {
-        GraphDraft draft;
+        auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
+        auto &draft = owner->edit();
         const auto first = node(draft), second = node(draft, {first});
         check(draft.setSyncPredecessor(second, first), "a node did not take a sync predecessor");
         check(reduceDocumentOrdering(draft) == 0, "a direct pair was reduced away");
