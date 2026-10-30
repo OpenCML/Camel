@@ -5549,6 +5549,53 @@ bool readsOwnName(const AST::node_ptr_t &node, const std::string &name) {
     return false;
 }
 
+/// The reference `node` makes to the name `name`, or null where it makes none: `readsOwnName`
+/// in the form the report needs, so that the error stands on the name and not on the statement
+/// around it.
+AST::node_ptr_t nameUseIn(const AST::node_ptr_t &node, const std::string &name) {
+    if (node == nullptr) {
+        return nullptr;
+    }
+    if (node->type() == AST::LoadType::Stmt) {
+        const auto &load = node->loadAs<AST::StmtLoad>();
+        if (load->stmtType() == AST::StmtType::Func) {
+            return nullptr;
+        }
+        if (load->stmtType() == AST::StmtType::Data) {
+            bool declares = false;
+            for (const Reference &ref : node->loadAs<AST::DataDeclLoad>()->refs()) {
+                if (ref.toString() == name) {
+                    declares = true;
+                }
+            }
+            if (declares) {
+                for (size_t i = 1; i < node->size(); ++i) {
+                    if (AST::node_ptr_t use = nameUseIn(node->at(i), name); use != nullptr) {
+                        return use;
+                    }
+                }
+                return nullptr;
+            }
+        }
+    }
+    if (node->type() == AST::LoadType::Data) {
+        const auto &load = node->loadAs<AST::DataLoad>();
+        if (load->dataType() == AST::DataType::Ref &&
+            node->loadAs<AST::RefDataLoad>()->ref().toString() == name) {
+            return node;
+        }
+        if (load->dataType() == AST::DataType::Func) {
+            return nullptr;
+        }
+    }
+    for (size_t i = 0; i < node->size(); ++i) {
+        if (AST::node_ptr_t use = nameUseIn(node->at(i), name); use != nullptr) {
+            return use;
+        }
+    }
+    return nullptr;
+}
+
 AST::node_ptr_t firstOwnYield(const AST::node_ptr_t &node) {
     if (node == nullptr) {
         return nullptr;
@@ -5710,7 +5757,8 @@ node_ptr_t Builder::visitGeneratorBody(
     };
     // The body's declarations that became cells: the statement that writes each, where it stands
     // in `bodyStmts`, and the cell's name. A cell is written where its declaration stands, so an
-    // arm that starts after that statement finds it written and one that starts before does not.
+    // arm that starts after that statement finds it written and a read that stands before it is
+    // a name used before it is declared.
     struct HoistedCell {
         const AST::Node *decl;
         size_t index;
@@ -5835,29 +5883,22 @@ node_ptr_t Builder::visitGeneratorBody(
             node_ptr_t last = nullptr;
             for (size_t i = from; i < stmts->size(); ++i) {
                 const auto &stmt = stmts->at(i);
-                // Invariant: a cell is written before it is read.
-                //
-                // A cell's name is bound where the stream is created, so it is in scope for the
-                // whole body: a statement that stands before the declaration can name it, and
-                // source order does not stop it. What stops it is this check, made where the arms
-                // are made: an arm starting at `from` has run `stmts[0..from)` in the pulls before
-                // it, so a cell whose declaration stands at or after `i` has not been written yet
-                // and reading it would find the cell made and empty. Such a program is not
-                // expressible in the language (a name stands only after its declaration), so this
-                // is an internal error rather than a diagnostic; a diagnostic is owed the day a
-                // declaration without a value is allowed.
+                // A cell's name is bound where the stream is created, so the name is in scope
+                // for the whole body -- but names of the body resolve in source order, like the
+                // names of any function: a read that stands before the statement that writes the
+                // cell is a name used before it is declared, and is the same
+                // `UnresolvedReference` such a read gets in any function.
                 for (const HoistedCell &cell : hoisted) {
-                    if (i > cell.index || !readsOwnName(stmt, cell.name)) {
+                    if (i > cell.index) {
                         continue;
                     }
-                    ASSERT(false, "A cell is read before it is written.");
-                    // A debug build aborts above; a release build reports the compiler defect
-                    // instead of letting the read find the cell made and empty.
-                    diags_->of(InternalDiag::UnknownInternalError)
-                        .at(stmt->load()->tokenRange())
-                        .commit(
-                            "the generator body reads '" + cell.name +
-                            "' before the statement that writes it");
+                    const AST::node_ptr_t use = nameUseIn(stmt, cell.name);
+                    if (use == nullptr) {
+                        continue;
+                    }
+                    diags_->of(SemanticDiag::UnresolvedReference)
+                        .at(use->load()->tokenRange())
+                        .commit(cell.name);
                     popScope();
                     return;
                 }

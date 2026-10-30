@@ -706,21 +706,6 @@ class Builder {
     // Inside a `var` declaration: the names it binds are variables.
     bool declaresVariable_ = false;
 
-    // ---- The cells of a generator body that no statement has written yet ----
-    // A generator body's local is a cell of the body, made where the stream is created and
-    // written where its declaration stands. The cell's name is bound where it is made, which
-    // encloses every arm of the machine, so a read that stands before that statement would find
-    // it made and empty. Names of a body resolve in source order, like the names of any function
-    // (the author's ruling of 2026-10-31), so such a read is a name used before it is declared
-    // and is reported as `UnresolvedReference`; the write itself -- the cell read the compiler
-    // makes for `__assn__`, which has no origin of the program -- declares it.
-    std::unordered_map<std::string, node_handle_t> cellsAwaitingWrite_;
-
-    // Inside the build of a 	ypeof expression: what it reads is read where the type is
-    // written, not where the value runs, so it declares nothing about a cell (see
-    // cellsAwaitingWrite_).
-    bool inferringTypeOf_ = false;
-
     // ---- Reporting several errors without their consequences ----
     // A statement that fails is skipped and the next one is checked (visitExecNode). What the
     // failed statement would have declared is then missing, and every use of it would be

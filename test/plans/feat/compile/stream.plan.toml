@@ -1084,6 +1084,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 [[tests]]
+name = "stream.generator_read_before_declaration"
+desc = "A generator body resolves names in source order, like any function: `e` is read in a `yield` that stands before the statement declaring it, so the program is refused with `UnresolvedReference` at the name -- the same sentence `let x = e` before `let e = 5` gets in a plain function, not a compiler defect. The name of a cell is in scope for the whole body (the cell is made where the stream is created), so the refusal is the statement-order check, and it stands on the name."
+kind = "negative"
+case = "../../../cases/compile/stream/generators_read_before_declaration.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+expect_diagnostic_code = "0x0300000B"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 11
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+[[tests]]
 name = "stream.generator_destructured_local"
 desc = "A declaration of a generator body that binds several names to one value (`let (a, b) = pair()`) is a cell per name: the value is evaluated once, where the statement stands, and put in a cell of its own, and each name is a cell typed by one element of it, so a pull after a `yield` reads what the pull before it wrote. The stream carries `b` and then `3b`. It used to be refused as a local read after a `yield`."
 kind = "behavior"

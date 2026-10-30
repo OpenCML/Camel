@@ -1,0 +1,16 @@
+/**
+ * A generator body resolves names in source order, like any function: `e` is read before the
+ * statement that declares it, so the program is refused with `UnresolvedReference` at the name in
+ * the `yield` -- the sentence a plain function gets for a name used before it is declared, not a
+ * compiler defect.
+ */
+
+func g(): int.. sync {
+    yield e
+    let e = 5
+}
+
+func main(): int sync {
+    loop acc = 0 for v in g() do sync { let _ = println(v); acc + 1 }
+    return 0
+}
