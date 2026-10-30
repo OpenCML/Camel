@@ -78,3 +78,32 @@ camel <case> std::defunctionalize std::jgir
 两条边界，都改成**两边一起拒绝**而不是只拒绝一边（只拒一边就是半降级）：形参或值的签名声明了 `with` 参数（这一遍写的图没有自己的 with 参数可以往下传），以及值那一族本身没被降级（枚举装不下函数值）。
 
 读数（`defun.widened_parameter.wrapped`）：`DEFUNCTIONALIZE types=2 values=2 calls=1 refused=0`，形参那一族是 `void_g,wrap$1`；过完这一遍 `closures=0`、`indirect_calls=1`（只剩 entry 那次），再过 `std::opt` 是 `closures=0`、`indirect_calls=0`；程序仍旧只打印 `void_g 1`（`x * 10` 的结果被丢掉）。
+
+## 六、签名里套着另一族：一次重写里一起降
+
+`nested_signature.cml` 里三层：`twice` 的参数是 `(f: (x: int) => int, x: int) => int`，后者的参数又是 `(x: int) => int`；三层都有值，所以三层都要变成枚举。签名里写着内层的**函数类型**的地方，必须改写成内层的**枚举**，否则外层函数体里那个调用会拿着 tag 去撞一个还写着函数类型的参数。
+
+真正挡住它的**不是**类型替换（那一步一直都会钻进签名里），而是“一个函数值被谁读”的许可：`checkReader` 只认 `FUNC` 节点的 norm 入参是“实参位置”，而**穿过值调用的实参写在 `CALL` 节点的 norm 入参里**（`CALL` 的 with 入参第 0 个是被调的值）。于是 `twice` 里 `h(inc, x)` 的 `inc` 被判成“被一个不是调用的节点读了”，内层族被拒，外层族跟着按 (5b) 被拒——三层全部照原样留下。
+
+许可改成“`FUNC` 和 `CALL` 的 norm 入参都是实参位置”之后，一次重写就把三层一起降了。`std::jgir` 里的签名（也就是“内层枚举写进了签名”这条证据）：
+
+```text
+"signature": "(f: FnValue_inc_0, x: int) => int"        // apply / apply_twice
+"signature": "(h: FnValue_apply_1, x: int) => int"      // twice
+"signature": "(x: int) => int pure"                     // inc
+```
+
+`std::gir` 里两条 PORT 与那次分派：
+
+```text
+N07 [label="f", type="PORT", ..., value_type="FnValue_inc_0"];      // apply 的参数
+N0A [label="h", type="PORT", ..., value_type="FnValue_apply_1"];    // twice 的参数
+N0F [label=":enum/tag", type="OPER", value_type="int"];             // twice 里对 h 分派
+N13 [label="apply_twice", type="FUNC", value_type="int"];           // 两个 arm 各自直调
+```
+
+三层枚举各自在自己的族里，**没有任何 `wrap$k`**：`inc` 是它自己那一族的变体，`twice` 传下去的就是那个枚举，调用走到的是签名本来就声明的那个参数——不是把内层的值塞进一个假枚举，也不是两个包装串起来。
+
+读数（`defun.nested_signature.lowered`）：`DEFUNCTIONALIZE types=3 values=6 calls=5 refused=0`（中间那族 `variants='apply,apply_twice'`）；过完这一遍 `closures=0`、`indirect_calls=1`、`branches=1`（`twice` 里那一次分派），再过 `std::opt` 是 `closures=0`、`indirect_calls=0`；程序打印 `NESTED 3 5 5 7`，不加这一遍也是这一行。
+
+**A/B：能改回去，而且读数就红在 ③。** 把许可改回只认 `FUNC`（一行），同一个程序：`DEFUNCTIONALIZE types=0 values=0 calls=0 refused=3`（两条“被一个不是调用的节点读了”，一条 (5b)），`indirect_calls` 过完这一遍 `6`、再过 `std::opt` 反而涨到 `9`。程序**照样打印那一行**（它退回“照原样跑”），所以这个用例的可判之处只有降级读数——这正是要“一起降”的理由：不一起降不是慢一点，是三层一起留在原地。

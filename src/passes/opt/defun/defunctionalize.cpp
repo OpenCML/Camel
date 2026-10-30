@@ -728,11 +728,15 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                     const bool readsAsCallee =
                         node.kind == GCNodeKind::Call && !withs.empty() && withs.front() == input;
                     // A value handed to another function is read where the callee declares it, and
-                    // that declaration is the same type: it is substituted with the value's.
+                    // that declaration is the same type: it is substituted with the value's. A call
+                    // writes its arguments in the norm inputs whether the callee is named (a `FUNC`
+                    // node) or is a value the graph reads (a `CALL` node, whose callee is its first
+                    // with input): both are the callee's own parameters, and a parameter of a
+                    // function type is where a value of another family arrives.
                     const auto norms = graph->normInputsOf(ref);
+                    const bool callsSomeone = node.kind == GCNodeKind::Func || node.kind == GCNodeKind::Call;
                     bool readsAsArgument =
-                        node.kind == GCNodeKind::Func &&
-                        std::find(norms.begin(), norms.end(), input) != norms.end();
+                        callsSomeone && std::find(norms.begin(), norms.end(), input) != norms.end();
                     if (!readsAsArgument && node.kind == GCNodeKind::Call) {
                         readsAsArgument =
                             std::find(withs.begin() + (withs.empty() ? 0 : 1), withs.end(), input) !=
@@ -972,9 +976,13 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
     // signature becomes the inner family's enum, which is the same rule as the widening above -- a
     // value flowing from one family into another, one form and one enum for both.
     //
-    // Until that lowering is written, such a family is refused rather than half lowered. This is the
-    // second half of the same defect, not an allowance: the pass leaves a family as written here
-    // only while the nested lowering does not exist.
+    // The nested lowering is one rewrite: a family is lowered together with every family its
+    // signature holds, and every enum is declared before any graph is retyped, so the signature of a
+    // function of the outer type says the inner family's enum where it wrote the inner function
+    // type, and a call it makes reaches a tag it can dispatch on. So this rule now says one thing
+    // only: a family is left as written when a family its signature holds is left as written,
+    // because then there is no inner enum to write in its place. It is not an allowance for
+    // lowering half a nesting -- that state is the one the rule exists to prevent.
     //
     // `tee_result_is_tuple.cml` does not reach this rule today: its inner family is refused first,
     // because a stream operator reads the function value inside the operator rather than calling it

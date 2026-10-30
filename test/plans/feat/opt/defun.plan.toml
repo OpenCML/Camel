@@ -353,3 +353,37 @@ assert(lines[lines.length - 1] === 'void_g 1', 'the program prints what it print
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 20000
+
+# Three families, each written inside the next one's signature: a function of the outer type takes a
+# value of the middle one, which takes a value of the inner one. All three are lowered in one pass --
+# the signature that wrote the inner function types says their enums instead, so the call the outer
+# function makes reaches a tag it can dispatch on -- and nothing is routed through a wrapper.
+[[tests]]
+name = "defun.nested_signature.lowered"
+desc = "A program whose signatures hold one another is lowered in one pass: the outer signature says the middle family's enum where it wrote its function type, the middle says the inner one's, the call in the outer function dispatches over the tag, and the program prints what it prints without the pass."
+kind = "behavior"
+case = "../../../cases/opt/defun/nested_signature.cml"
+args = ["${case}", "std::defunctionalize", "std::stats", "std::opt", "std::stats", "std::nvm"]
+expect_exit = 0
+verify_script = """
+const lines = input.normalized.stdout.trim().split('\n')
+const summary = lines.find((line) => line.startsWith('DEFUNCTIONALIZE types='))
+assert(/^DEFUNCTIONALIZE types=3 values=6 calls=5 refused=0$/.test(summary), 'three families, together, nothing refused: ' + summary)
+const families = lines.filter((line) => line.startsWith("DEFUNCTIONALIZE type='"))
+assert(families.length === 3, 'three families: ' + JSON.stringify(families))
+// Each is written inside the next one, and the middle one is not a wrapper: two variants, both of
+// the program's own functions.
+const middle = families.find((line) => line.includes('(f: (x: int) => int, x: int) => int'))
+assert(middle !== undefined && middle.includes("variants='apply,apply_twice'"), 'the middle family holds its own two functions: ' + middle)
+assert(families.every((line) => !line.includes('wrap$')), 'no wrapper is made for any of them: ' + JSON.stringify(families))
+const stats = lines.filter((line) => line.startsWith('GRAPH_STATS ')).map((line) => JSON.parse(line.replace('GRAPH_STATS ', '')))
+assert(stats.length === 2, 'two readings: ' + stats.length)
+assert(stats[0].closures === 0, 'no closure is left: ' + JSON.stringify(stats[0]))
+assert(stats[0].indirect_calls === 1, 'only the entry call is left: ' + JSON.stringify(stats[0]))
+assert(stats[0].branches === 1, 'the one call the outer function makes reads a tag: ' + JSON.stringify(stats[0]))
+assert(stats[1].closures === 0, 'no closure after the optimizer: ' + JSON.stringify(stats[1]))
+assert(stats[1].indirect_calls === 0, 'no call through a value after the optimizer: ' + JSON.stringify(stats[1]))
+assert(lines[lines.length - 1] === 'NESTED 3 5 5 7', 'the program prints what it prints: ' + JSON.stringify(lines.slice(-2)))
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 20000
