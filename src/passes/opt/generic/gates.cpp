@@ -4,6 +4,7 @@
 /* Move a forwarding gate's waits to its consumers without moving the value's producer. */
 
 #include "camel/runtime/control.h"
+#include "camel/runtime/effect_liveness.h"
 #include "rewrite.h"
 
 #include <algorithm>
@@ -15,15 +16,24 @@ using namespace camel::runtime;
 bool bypassValueGate(GraphDraft &draft, gc_node_ref_t id, size_t &edgeBudget) {
     const auto *gate = draft.header(id);
     if (!gate || gate->kind != GCNodeKind::Gate || !edgeBudget || !isReplaceable(draft, id) ||
-        draft.normInputsOf(id).size() != 1 || !draft.withInputsOf(id).empty() ||
-        draft.ctrlInputsOf(id).empty()) {
+        draft.normInputsOf(id).size() != 1 || !draft.withInputsOf(id).empty()) {
+        return false;
+    }
+    // What a gate carries is a wait (docs/design/effects/plan.cn.md 5.5, the enabling condition of
+    // this rewrite): a gate with no wait is a plain forwarding node and has nothing to move. This
+    // is asked through the one place that answers what a wait is worth (no gate is an effect of its
+    // own, so `effectStandingOf` is not the question here -- `hasWaitEdge` is).
+    EffectLivenessFacts facts;
+    facts.hasWaitEdge      = !draft.ctrlInputsOf(id).empty();
+    facts.isSyncStatement  = !draft.syncInputsOf(id).empty();
+    if (!facts.hasWaitEdge) {
         return false;
     }
     // A gate that waits through the sync edge of a block's chain carries that chain: the statements
     // before it run because the graph's result is reached through them (docs/design/effects/
     // edges.cn.md 2 and 5.3), so moving its wait to its consumers steps over them. It stays, the
     // way the gate a function returns through stays (isFoldable, generic.cpp).
-    if (!draft.syncInputsOf(id).empty()) {
+    if (facts.isSyncStatement) {
         return false;
     }
     const size_t valueUses = draft.normUsersOf(id).size() + draft.withUsersOf(id).size();

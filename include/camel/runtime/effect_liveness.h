@@ -52,6 +52,11 @@ struct EffectLivenessFacts {
     /// The node is a call through a function value that may write captures (`EffectSummary`:
     /// a call whose callee is not known).
     bool isCallThroughValue = false;
+    /// The node carries a wait: an edge that exists only to order it (today the control edge,
+    /// docs/design/effects/plan.cn.md 5.5). A GATE carries no effect of its own -- it carries a
+    /// wait -- and what a pass may do with it depends on whether that wait is a chain's
+    /// (`isSyncStatement`) or an edge of its own.
+    bool hasWaitEdge = false;
 };
 
 /// The answer. A call through a function value that has no data user and is on no chain is
