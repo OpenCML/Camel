@@ -31,7 +31,8 @@ using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
 using camel::runtime::kInvalidNodeRef;
 
-std::string_view operUriOf(const GraphDraft &draft, gc_node_ref_t id) {
+std::string_view operUriOf(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
     const auto *h = draft.header(id);
     if (!h || h->kind != GCNodeKind::Oper) {
         return {};

@@ -68,6 +68,9 @@ inline bool isComputedAfter(
 
 /// Records on `node` that a `sync` block wrote it as a statement, which is what a sync edge has to
 /// join at both ends (docs/design/effects/edges.cn.md 4.6).
+/// Still takes a draft: its two call sites are `handOverSyncWait` and `replaceNode`, and those are
+/// reached from functions that receive a draft (`foldDraft`, the graph module's `replace`), so a
+/// transaction has nowhere to come from yet. Counted as blocked by branch A, not converted.
 inline void markSyncStatement(GraphDraft &draft, gc_node_ref_t node) {
     const auto *header = draft.header(node);
     if (header != nullptr) {
@@ -85,6 +88,7 @@ inline void markSyncStatement(GraphDraft &draft, gc_node_ref_t node) {
 /// and the predecessor has no other follower, because a chain never forks
 /// (docs/design/effects/edges.cn.md 4.6). Returns whether the wait was written; a caller that gets
 /// `false` hands it on the way it did before.
+/// Still takes a draft: `replaceNode` and `bypassValueGate` call it, and both receive one.
 inline bool handOverSyncWait(GraphDraft &draft, gc_node_ref_t pred, gc_node_ref_t user) {
     if (!draft.alive(pred) || !draft.alive(user) || pred == user) {
         return false;
@@ -122,7 +126,7 @@ bool bypassValueGate(GraphDraft &draft, gc_node_ref_t id, size_t &edgeBudget);
 
 /// URI of an OPER node, or an empty view for other nodes. For messages: passes recognise an
 /// operator by operIdOf.
-std::string_view operUriOf(const GraphDraft &draft, gc_node_ref_t id);
+std::string_view operUriOf(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id);
 
 /// The operator an OPER node calls (camel/core/operator_table.h), or kNoOper for other nodes.
 camel::core::OperId operIdOf(const GraphDraft &draft, gc_node_ref_t id);
@@ -130,6 +134,7 @@ camel::core::OperId operIdOf(const GraphDraft &draft, gc_node_ref_t id);
 /// True for an OPER node a pass may compute ahead of time or merge with an identical call: its
 /// operator is pure and foldable. Whether the node may also be dropped, moved or reordered is a
 /// different question, which only `nodeIsFreelySchedulable` (camel/runtime/graph.h) answers.
+/// Still takes a draft: `foldDraft` calls it with the draft it receives (branch B).
 bool isPureOper(const GraphDraft &draft, gc_node_ref_t id);
 
 /// True for nodes whose only observable result is their value, so that a pass may arrange them
@@ -175,6 +180,8 @@ bool readsNoWrittenSlot(const GraphDraft &draft, gc_node_ref_t id);
  * orders code after its producer and a constant replacing it would not. This cannot create a
  * cycle (predecessors run before `id`, which runs before its users). The caller must ensure
  * `replacement` is not downstream of `id` (see reaches()).
+ * Still takes a draft: `replaceFoldResult` (branch B) and the graph module's `replace` call it,
+ * and both hold a transaction only one frame further out.
  */
 void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement);
 

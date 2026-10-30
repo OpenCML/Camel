@@ -1350,7 +1350,7 @@ size_t cseDraft(camel::runtime::GraphTransaction &transaction) {
             withKey.push_back(camel::runtime::ungated(draft, in));
         }
         Key key{
-            std::string(operUriOf(draft, id)),
+            std::string(operUriOf(transaction, id)),
             draft.header(id)->dataType,
             std::move(normKey),
             std::move(withKey),
@@ -1392,7 +1392,8 @@ size_t cseDraft(camel::runtime::GraphTransaction &transaction) {
  * either kind: a statement of a `sync` block is waited on through the sync edge, and one of those
  * would be reached by nothing once the gate goes unless it has a user of its own.
  */
-bool gateInputsSurvive(const GraphDraft &draft, gc_node_ref_t gate) {
+bool gateInputsSurvive(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t gate) {
+    const auto &draft = transaction.graph();
     for (auto inputs : {draft.normInputsOf(gate),
                         draft.withInputsOf(gate),
                         draft.ctrlInputsOf(gate),
@@ -1443,7 +1444,7 @@ size_t dceDraft(camel::runtime::GraphTransaction &transaction, bool valuesOnly =
             const auto *h          = draft.header(id);
             const bool isDeadGate =
                 !valuesOnly && h && h->kind == GCNodeKind::Gate &&
-                (!draft.waitUsersOf(id).empty() || gateInputsSurvive(draft, id));
+                (!draft.waitUsersOf(id).empty() || gateInputsSurvive(transaction, id));
             if ((isDeadWhenUnread(draft, id) || isDeadGate) && draft.normUsersOf(id).empty() &&
                 draft.withUsersOf(id).empty() && isReplaceable(draft, id)) {
                 replaceNode(draft, id, kInvalidNodeRef);
