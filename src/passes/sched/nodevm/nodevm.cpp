@@ -63,35 +63,84 @@ using camel::runtime::kInvalidNodeRef;
 void bindMarkedFunctionFrame(
     Frame *frame, Function *func, std::span<const slot_t> normArgs,
     std::span<const slot_t> withArgs = {}) {
-    ASSERT(frame != nullptr, "Marked operator call frame is null.");
-    ASSERT(func != nullptr && func->graph() != nullptr, "Marked operator callee is null.");
+    GUARD(
+        frame != nullptr,
+        std::format(
+            "binding the call frame of a marked operator: there is no frame for this call, so its "
+            "{} norm argument(s) have nowhere to go",
+            normArgs.size()));
+    GUARD(
+        func != nullptr && func->graph() != nullptr,
+        std::format(
+            "calling a marked operator with {} norm argument(s): the value being called is null or "
+            "names no graph, so there are no ports to bind them to",
+            normArgs.size()));
     auto *graph             = func->graph();
     const auto normPorts    = graph->normPorts();
     const auto withPorts    = graph->withPorts();
     const auto closureNodes = graph->closureNodes();
-    ASSERT(normArgs.size() == normPorts.size(), "Marked operator norm-arity mismatch.");
-    ASSERT(withArgs.size() == withPorts.size(), "Marked operator with-arity mismatch.");
+    GUARD(
+        normArgs.size() == normPorts.size(),
+        std::format(
+            "calling a marked operator with {} norm argument(s), but the callee declares {} norm "
+            "port(s): the graph does not describe the call it makes",
+            normArgs.size(),
+            normPorts.size()));
+    GUARD(
+        withArgs.size() == withPorts.size(),
+        std::format(
+            "calling a marked operator with {} with argument(s), but the callee declares {} with "
+            "port(s): the graph does not describe the call it makes",
+            withArgs.size(),
+            withPorts.size()));
 
     Tuple *closure = func->tuple();
-    ASSERT(closureNodes.empty() || closure != nullptr, "Marked operator closure tuple is null.");
-    ASSERT(
+    GUARD(
+        closureNodes.empty() || closure != nullptr,
+        std::format(
+            "the callee declares {} closure node(s), but the function value carries no closure "
+            "tuple: the graph does not describe the call it makes",
+            closureNodes.size()));
+    GUARD(
         closure == nullptr || closure->size() == closureNodes.size(),
-        "Marked operator closure-arity mismatch.");
+        std::format(
+            "the callee declares {} closure node(s), but the closure tuple holds {}: the graph does "
+            "not describe the call it makes",
+            closureNodes.size(),
+            closure == nullptr ? 0 : closure->size()));
 
     for (size_t i = 0; i < normPorts.size(); ++i) {
         const auto *port = graph->node(normPorts[i]);
-        ASSERT(port != nullptr, "Marked operator norm port is missing.");
+        GUARD(
+            port != nullptr,
+            std::format(
+                "binding norm argument {} of a marked operator call: the callee names node {} in its "
+                "norm port list, but its graph has no node there",
+                i,
+                normPorts[i]));
         frame->set(port->dataIndex, normArgs[i]);
     }
     for (size_t i = 0; i < withPorts.size(); ++i) {
         const auto *port = graph->node(withPorts[i]);
-        ASSERT(port != nullptr, "Marked operator with port is missing.");
+        GUARD(
+            port != nullptr,
+            std::format(
+                "binding with argument {} of a marked operator call: the callee names node {} in its "
+                "with port list, but its graph has no node there",
+                i,
+                withPorts[i]));
         frame->set(port->dataIndex, withArgs[i]);
     }
     if (closure != nullptr) {
         for (size_t i = 0; i < closureNodes.size(); ++i) {
             const auto *port = graph->node(closureNodes[i]);
-            ASSERT(port != nullptr, "Marked operator closure node is missing.");
+            GUARD(
+                port != nullptr,
+                std::format(
+                    "binding closure slot {} of a marked operator call: the callee names node {} in "
+                    "its closure node list, but its graph has no node there",
+                    i,
+                    closureNodes[i]));
             frame->set(port->dataIndex, closure->get<slot_t>(i));
         }
     }
