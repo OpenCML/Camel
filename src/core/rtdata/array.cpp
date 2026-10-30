@@ -87,6 +87,17 @@ Array *Array::create(
     return create(allocator, arrayType, std::span<const int64_t>(&extent, 1), zeroInit);
 }
 
+Array *Array::createRankZero(
+    camel::core::mm::IAllocator &allocator, const type::ArrayType *arrayType, slot_t value) {
+    ASSERT(arrayType != nullptr, "A rank-zero array needs its type");
+    // No extents at all: the value has no dimension, and `create` gives it the one element an
+    // empty product counts (design principles 5.4 -- a rank-zero array is the element itself).
+    Array *array = create(allocator, arrayType, std::span<const int64_t>(), false);
+    ASSERT(array->rank() == 0 && array->numel() == 1, "A rank-zero array holds one element");
+    array->setSlot(0, value, arrayType);
+    return array;
+}
+
 Array *
 Array::view(Array *source, std::span<const int64_t> extents, uint64_t elementOffset) {
     ASSERT(source != nullptr, "A view needs a source array");
@@ -182,7 +193,9 @@ Array *Array::createSlotsRank(
     }
     fillStrides(extents, array->strides_);
 
-    array->size_     = extents.empty() ? 0 : static_cast<uint64_t>(extents[0]);
+    // A value with no dimension holds its one element: size is that element's count, not the 0
+    // an empty extent would give (design principles 5.4).
+    array->size_     = extents.empty() ? numel : static_cast<uint64_t>(extents[0]);
     array->numel_    = numel;
     array->capacity_ = std::max(capacity, kInlineSlots);
 
@@ -232,7 +245,9 @@ Array *Array::createCompact(
     array->elementSize_  = static_cast<uint32_t>(elemSize);
     array->rank_         = static_cast<uint32_t>(rank);
     array->numel_        = numel;
-    array->size_         = extents.empty() ? 0 : static_cast<uint64_t>(extents[0]);
+    // A value with no dimension holds its one element (design principles 5.4): size is that
+    // element's count, not the 0 an empty extent would give.
+    array->size_         = extents.empty() ? numel : static_cast<uint64_t>(extents[0]);
     array->view_         = view;
     array->slotShaped_   = layout != nullptr && layout->slotShaped;
     array->extents_      = reinterpret_cast<int64_t *>(array + 1);
