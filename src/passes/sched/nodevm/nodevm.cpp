@@ -297,9 +297,9 @@ slot_t NodeVMSchedPass::call(
     camel::execute::ActivationScope observedActivation;
     currRecursionDepth_++;
     slot_t result = NullSlot;
-    ASSERT(
+    GUARD(
         rootRuntimeGraph != nullptr,
-        "NodeVM runtime graph must be materialized before execution.");
+        std::format("running this program: its root graph was never materialized, so node 0 has no " "frame to run in"));
 
     Frame *currFrame       = rootFrame;
     Frame *tailLow         = nullptr; // tail-call frames above rootFrame, in stack order
@@ -614,9 +614,9 @@ slot_t NodeVMSchedPass::call(
                     currFrame->get<Function *>(planDataIndex(*currPlan, withInputs.front()));
                 ASSERT(func != nullptr, "NodeVM CALL resolved a null Function callee.");
                 auto *funcRuntimeGraph = programs_.graphOf(func);
-                ASSERT(
+                GUARD(
                     funcRuntimeGraph != nullptr,
-                    "NodeVM indirect CALL requires a materialized runtime graph target.");
+                    std::format("an indirect call reaches a graph whose runtime form was never materialized, so " "the call has no code to enter"));
 
                 requireRecursionRoom(currRuntimeGraph);
                 Frame *funcFrame = framePool_.acquire(funcRuntimeGraph);
@@ -634,9 +634,9 @@ slot_t NodeVMSchedPass::call(
 
             case GCNodeKind::Func: {
                 auto *runtimeTarget      = currProgram->graph(currPlan->directCallTargetIds[i]);
-                ASSERT(
+                GUARD(
                     runtimeTarget != nullptr,
-                    "NodeVM direct FUNC target must have a materialized runtime graph.");
+                    std::format("a direct call names a function whose graph is not in the program's graph table"));
                 const bool isTailCall = currPlan->directCallTailEligible[i] != 0 ||
                                         currPlan->directCallFeedsTailJoin[i] != 0;
                 if (isTailCall) {
@@ -739,10 +739,10 @@ slot_t NodeVMSchedPass::call(
                 // events of the plan and the state is its value. A loop of the old graph form (a
                 // condition graph and a body graph, run a call per round) is not executed; the
                 // plans above prove no such loop reaches this point.
-                ASSERT(
+                GUARD(
                     hasLoopRegions(*currRuntimeGraph, nodeRef),
                     "NodeVM: a LOOP node is not a region of its graph (the graph form of a loop "
-                    "must not remain).");
+                    "must not remain): the step that lowers loop regions did not run");
                 break;
 
             case GCNodeKind::Port:
@@ -753,10 +753,10 @@ slot_t NodeVMSchedPass::call(
                 break;
 
             default: {
-                ASSERT(
+                GUARD(
                     false,
                     std::format(
-                        "Node type {} should not appear in NodeVM execution.",
+                        "Node type {} should not appear in NodeVM execution: it belongs to another scheduler.",
                         static_cast<int>(n->kind)));
             } break;
             }
