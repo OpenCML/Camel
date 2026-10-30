@@ -29,7 +29,15 @@ export func macro::<F>(f: F): F! when is_function::<F>()
 /// Every call through such a value becomes a direct call of the function it names -- the captures
 /// travel as trailing arguments -- and a tag only known at run time becomes one match on it. A
 /// value the pass cannot see whole is left as it is and reported by a warning.
-export func defun_value::<F>(f: F): F! when is_function::<F>()
+///
+/// The pipeline runs it ahead of `std::opt` whether or not the program names it: no call through a
+/// value and no closure is left when the optimizer starts. Naming it runs it there and only there.
+with <
+    /// Write what the pass did and what it left, as `DEFUNCTIONALIZE` lines and a warning per family:
+    /// a program that names the pass is asking, and the step the pipeline inserts stays silent.
+    report: bool = true
+>
+export func defunctionalize::<F>(f: F): F! when is_function::<F>()
 
 // -----------------------------------------------------------------------------
 // Dumps and translations of the graph
