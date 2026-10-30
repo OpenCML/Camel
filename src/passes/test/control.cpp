@@ -34,17 +34,17 @@ void chainAndBudget() {
     const auto a = node(draft), b = node(draft, {a}), c = node(draft, {b});
     const auto d = node(draft, {a, c});
     check(!hasControlDependency(draft, a, c, 0), "zero-budget query must be conservative");
-    check(reduceControlDependencies(draft, 0) == 0, "zero-budget reduction changed edges");
-    check(reduceControlDependencies(draft, 1) == 0, "incomplete search removed an unproven edge");
+    check(reduceControlDependencies(*owner, 0) == 0, "zero-budget reduction changed edges");
+    check(reduceControlDependencies(*owner, 1) == 0, "incomplete search removed an unproven edge");
     const std::vector<gc_node_ref_t> before{a, b, c};
     const auto frontier = controlFrontier(draft, before);
     check(frontier.size() == 1 && frontier.front() == c, "rewrite frontier retained ancestors");
-    check(reduceControlDependencies(draft) == 1, "transitive CTRL edge was not removed");
+    check(reduceControlDependencies(*owner) == 1, "transitive CTRL edge was not removed");
     check(
         draft.ctrlInputsOf(d).size() == 1 && draft.ctrlInputsOf(d).front() == c,
         "latest predecessor was not retained");
     check(!appendControlDependency(draft, a, d), "rewrite reinserted an implied edge");
-    check(reduceControlDependencies(draft) == 0, "small graph reduction is not idempotent");
+    check(reduceControlDependencies(*owner) == 0, "small graph reduction is not idempotent");
 }
 void mandatoryDataPaths() {
     auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
@@ -52,14 +52,14 @@ void mandatoryDataPaths() {
     const auto a = node(draft), b = node(draft);
     draft.setNormInputs(b, std::span<const gc_node_ref_t>(&a, 1));
     const auto c = node(draft, {a, b});
-    check(reduceControlDependencies(draft) == 1, "mandatory data path was not used as proof");
+    check(reduceControlDependencies(*owner) == 1, "mandatory data path was not used as proof");
     check(
         draft.ctrlInputsOf(c).size() == 1 && draft.ctrlInputsOf(c).front() == b,
         "data/control path lost its required predecessor");
     const auto d = node(draft, {a});
     draft.setWithInputs(d, std::span<const gc_node_ref_t>(&b, 1));
     check(
-        reduceControlDependencies(draft) == 1 && draft.ctrlInputsOf(d).empty(),
+        reduceControlDependencies(*owner) == 1 && draft.ctrlInputsOf(d).empty(),
         "context data path did not cover a single control");
     const auto e = node(draft);
     draft.setNormInputs(e, std::span<const gc_node_ref_t>(&a, 1));
@@ -81,7 +81,7 @@ void mandatoryDataPaths() {
         });
     check(appendControlDependency(draft, a, gate), "GATE lost its required first control");
     check(
-        reduceControlDependencies(draft) == 0 && draft.ctrlInputsOf(gate).size() == 1,
+        reduceControlDependencies(*owner) == 0 && draft.ctrlInputsOf(gate).size() == 1,
         "GATE lost its last control");
 }
 void conditionalDataIsNotMandatory() {
@@ -96,7 +96,7 @@ void conditionalDataIsNotMandatory() {
         });
     const auto user = node(draft, {a, join});
     draft.setNormInputs(user, std::span<const gc_node_ref_t>(&join, 1));
-    check(reduceControlDependencies(draft) == 1, "completed JOIN was not an endpoint proof");
+    check(reduceControlDependencies(*owner) == 1, "completed JOIN was not an endpoint proof");
     check(
         draft.ctrlInputsOf(user).size() == 1 && draft.ctrlInputsOf(user).front() == a,
         "an unselected JOIN arm was treated as mandatory");
@@ -114,7 +114,7 @@ void dataBudget() {
     const auto last = node(draft, {first});
     draft.setNormInputs(last, std::span<const gc_node_ref_t>(&previous, 1));
     check(
-        reduceControlDependencies(draft) == 0 && draft.ctrlInputsOf(last).size() == 1,
+        reduceControlDependencies(*owner) == 0 && draft.ctrlInputsOf(last).size() == 1,
         "data search exceeded its per-target budget");
 }
 void branchBoundaries() {
@@ -136,7 +136,7 @@ void branchBoundaries() {
     const auto tail = node(draft, {a, head});
     draft.setNormInputs(tail, std::span<const gc_node_ref_t>(&head, 1));
     (void)tail;
-    (void)reduceControlDependencies(draft);
+    (void)reduceControlDependencies(*owner);
     // The BRCH keeps what it waits on, and what waits on it keeps waiting.
     check(draft.ctrlInputsOf(branch).size() == 1, "the controls of a boundary were reduced");
     check(
@@ -156,7 +156,7 @@ void denseChain() {
             });
         predecessors.push_back(current);
     }
-    check(reduceControlDependencies(draft) == 8001, "dense CTRL chain did not reduce to its spine");
+    check(reduceControlDependencies(*owner) == 8001, "dense CTRL chain did not reduce to its spine");
     for (size_t i = 1; i < count; ++i) {
         check(
             draft.ctrlInputsOf(predecessors[i]).size() == 1 &&
@@ -176,7 +176,7 @@ void denseDataChain() {
         }
         predecessors.push_back(current);
     }
-    check(reduceControlDependencies(draft) == 8128, "dense data chain retained covered controls");
+    check(reduceControlDependencies(*owner) == 8128, "dense data chain retained covered controls");
 }
 void forwardingGateConsumers() {
     using camel::passes::generic::bypassValueGate;
@@ -321,7 +321,7 @@ void syncChainOrdering() {
         const auto user             = node(draft);
         const gc_node_ref_t ordered[] = {head, next};
         draft.setOrderInputs(user, ordered);
-        check(reduceOrderDependencies(draft) == 1, "the pass did not read the sync chain");
+        check(reduceOrderDependencies(*owner) == 1, "the pass did not read the sync chain");
         check(
             draft.orderInputsOf(user).size() == 1 && draft.orderInputsOf(user).front() == next,
             "the pass dropped the order the chain does not give");
@@ -349,8 +349,8 @@ void documentOrdering() {
         const auto write = node(draft);
         draft.setNormInputs(write, std::span<const gc_node_ref_t>(&step, 1));
         draft.setOrderInputs(write, std::span<const gc_node_ref_t>(&read, 1));
-        check(reduceOrderDependencies(draft) == 0, "the pass dropped a single order edge");
-        check(reduceDocumentOrdering(draft) == 1, "a data path did not cover an order edge");
+        check(reduceOrderDependencies(*owner) == 0, "the pass dropped a single order edge");
+        check(reduceDocumentOrdering(*owner) == 1, "a data path did not cover an order edge");
         check(draft.orderInputsOf(write).empty(), "the covered order edge was kept");
     }
     // A `sync` edge a data path covers: a document reads the chain link the same way, and the pass
@@ -363,8 +363,8 @@ void documentOrdering() {
         const auto next = node(draft);
         draft.setNormInputs(next, std::span<const gc_node_ref_t>(&step, 1));
         check(draft.setSyncPredecessor(next, first), "a node did not take a sync predecessor");
-        check(reduceOrderDependencies(draft) == 0, "the pass touched a sync edge");
-        check(reduceDocumentOrdering(draft) == 1, "a data path did not cover a sync edge");
+        check(reduceOrderDependencies(*owner) == 0, "the pass touched a sync edge");
+        check(reduceDocumentOrdering(*owner) == 1, "a data path did not cover a sync edge");
         check(draft.syncInputsOf(next).empty(), "the covered sync edge was kept");
     }
     // What nothing implies stays, and a pair two kinds spell is one ordering rather than two: the
@@ -374,7 +374,7 @@ void documentOrdering() {
         auto &draft = owner->edit();
         const auto first = node(draft), second = node(draft, {first});
         check(draft.setSyncPredecessor(second, first), "a node did not take a sync predecessor");
-        check(reduceDocumentOrdering(draft) == 0, "a direct pair was reduced away");
+        check(reduceDocumentOrdering(*owner) == 0, "a direct pair was reduced away");
         check(
             draft.syncInputsOf(second).size() == 1 && draft.ctrlInputsOf(second).size() == 1,
             "one pair lost one of the kinds that spell it");
