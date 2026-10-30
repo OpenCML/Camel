@@ -1,0 +1,7 @@
+**同一 seed 加 `--arg lr=0` → `1.202875 / 1.202875 / 1.202875`（平的），所以"损失逐次下降"那条断言会红，不是恒真——反证做在交付里，而不是只写在断言里。**
+
+- 示例：`showcase/i2-diffusion-step/`（`step.cml`：DDPM 一步，4×4 图，两层去噪网络写成参数树，`with_grad` + `adam`）。三次迭代读数 `1.202875 → 1.103411 → 1.020298`，训练后 `0.944348`；读数全来自 `random` 的计数器式生成器，不读时钟，所以同 seed 两次跑逐字相同。
+- 计划：`test/plans/feat/showcase_i2.plan.toml` 四条，四种错误各有一条能红——钉文本（`seed7.default`）、钉跨后端相同（`seed7.prl`）、钉同参数可复现（`seed7.twice`）、钉换 seed 仍下降（`seed8.default`）。另在 `test/plan-selection.json` 加了规则：改 `showcase/i2-diffusion-step/` 就跑这个计划。
+- 并行在哪里（README 两节）：`std::prl segments=true` 打出 `[taskflow] segments 'main': no segments, evaluated node by node: it has a loop`；`predicted_noise` 是 1 段 0 链 5 个算子 inline，`loss` 1 段 0 链 7 个算子，`alpha_bar` 3 段（if/else 的臂）。即**并行在张量内核里，不在任务之间**，任务图没有独立的东西可调度——这也是两档数字必须相同的原因。
+- 没上 GPU 的原因写在两个 README：引 `docs/handover/reviews/questions-2026-10-29.md` 的 "H237 杀手级示例、H13 官方示例（D4 MCTS、扩散模型训练步）：GPU 那一路能跑之后接上"，CPU 版是前置。
+- 闸门（本树）：**total 7925 / pass 7916 / fail 0 / skip 7 / known 2**，指纹 `01bdc8774cda / clean`。两个提交：示例 `f22d1f107`、README 分段节 `a2b30a242`。
