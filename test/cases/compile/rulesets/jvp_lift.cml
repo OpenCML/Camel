@@ -9,5 +9,7 @@ func main(): int sync {
     let b = lift(7)
     let b_has_no_tangent: () = b.1
     println(b.0)
+    let h = lift(f16(0.5))
+    let h_zero: f16 = h.1
     return 0
 }

@@ -545,6 +545,8 @@ void registerBuiltinDerivatives() {
 
     registry.setTangentSpace(TypeCode::Float64, floatTangentSpace<F64>());
     registry.setTangentSpace(TypeCode::Float32, floatTangentSpace<F32>());
+    registry.setTangentSpace(TypeCode::BFloat16, floatTangentSpace<BF16>());
+    registry.setTangentSpace(TypeCode::Float16, floatTangentSpace<F16>());
     // Arrays have no entry of their own either: their tangent is the array of their elements'
     // tangents, and adding two of them is elementwise (design principles 9.9).
     TangentSpace arraySpace;
