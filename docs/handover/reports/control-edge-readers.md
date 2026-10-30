@@ -4,6 +4,10 @@
 
 **三种边不通用（不再讨论）**：**同步边带链语义**（`writeSyncStatement` 会 `markSyncStatement` 两侧，`checkSyncEdges` 按链校验）；**`var` 的写只排序它的读，按设计原则 3.5 是顺序边**；**控制边只表达"门的等待"**。所以 `Ctrl → ...` 要**一处处判它到底是哪一种，不许整批替换**。反证：把 `coerceArmExit`、赋值门、`void` 门三处 `Ctrl → Sync` 试过，`test/plans/feat/linear` 整层 **141 条红**（`mutable_reference.*`、`var_*`、`order_edges_regions.*`）。
 
+**判据的方向不通用（不再讨论）**：**"有 X 才允许"与"有 X 就拒绝"是两条判据，不是同一条的两种写法**。`gates.cpp:19` 的 `ctrlInputsOf(id).empty()` 是**使能条件**——"**有** ctrl 等待的门才可以被绕过（等待搬到消费者）"——把符号翻过来等于把优化整条掐掉，`control.topology` 立刻报 `ordinary forwarding gate survived`。**这条判据等 ② 停造 ctrl 之后要重新设计，不是改符号。**
+
+**"断言与规则同一笔改"的验证方式**：`passes/test/control.cpp` 的 26 处最后**一行没改**就绿了——**说明"同一笔改"的正确结果是"改完发现断言本来就该不动"，而不是"先把断言改软再看"**。反过来，`gates.cpp` 那次误翻是被断言当场拦下的，不是被我看出来的。
+
 **一句话结论**：写侧 18 处 `linkNodes(LinkType::Ctrl` + 24 处 `setCtrlInputs`；读侧 **40 个文件已经是"`ctrl` 或 `sync` 取其一"**（`writeSyncStatement` 成对写，注释原话 "nothing is judged by it"）；**真正只认 `ctrl` 的判据只剩 6 处**，这就是第 ① 步的全部范围。
 
 | 角色 | 在哪 | 读它做什么 | ① 换成读什么 |
@@ -25,7 +29,11 @@
 
 那处 CTRL 来自 `writeSyncStatement` 的成对写，不是被改的那一处——**成对写让任何单点修改都不会立刻见效**，这就是"不能先摘标记"的证据。已回退。
 
-**第二条前提也要修正**：三处"孤立的 ctrl 等待"（`coerceArmExit`、赋值门、`void` 门）**不能改成 sync**。试过：`test/plans/feat/linear` 整层 **141 条红**（`mutable_reference.*`、`var_*`、`order_edges_regions.*`）。原因是 sync 边带链的语义（`writeSyncStatement` 会 `markSyncStatement` 两侧，`checkSyncEdges` 按链校验），而"`var` 的写排序它的读"按设计原则 3.5 是**只排序**的边——它该是 **order 边**，不是同步边。所以这三处等待属于 ②（造边那一步里把 `Ctrl` 换成 `Order`），不属于 ①。
+**第二条前提也要修正（实测三轮才定下来）**：三处"孤立的 ctrl 等待"里**只有一处能改**，另两处两种改法都红。
+- 全改 `Ctrl → Sync`：`test/plans/feat/linear` 整层 **141 条红**（`mutable_reference.*`、`var_*`、`order_edges_regions.*`）。
+- 全改 `Ctrl → Order`（按 3.5 "只排序"的读法）：**81 条红**，还是 `var_*` 与 `mutable_reference.*`——**"顺序边只排序"不假，但"读要从写拿到版本"这件事顺序边不负责**，`std::opt::order` 会把这条顺序边当成可推导的冗余删掉。
+- **只改 `coerceArmExit`（臂值被字面量顶替的那个门）→ `Sync`：整层绿（872 过、2 XFAIL），整闸也绿。** 它是 5.3 明写的形状（一个数据口 + 一个同步前驱）。
+- **留下的两处**（`builder_operators.cpp:4403` 赋值门、`:4427` `void` 门）**不是"还没改"，是"没有答案"**：5.3 只说链上的门，没说"值在门后等一次写/一次调用"该由哪种边承担。**这是设计问题，要作者裁决**——在它落定之前，停造 ctrl 会把这两处的等待整个丢掉。
 
 **① 落地状态（按实测改的，不是按计划）**：
 - **已落地**：`graph_runtime_support.cpp:472` 先读同步前驱、ctrl 只作旧图退路（纯增量，没有同步前驱的图一字不变）。
