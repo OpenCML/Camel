@@ -97,6 +97,8 @@
 - **放行语义**：调度/执行上可理解为：**仅当 `Ctrl` 侧所表达的控制序已满足时，才沿 `Norm` 边向下游“放行”该值**（具体实现由 VM 与算子约定；图上则体现为同时依赖两类边）。
 - **典型场景**：子图出口上，若“值出口”与“控制完成点”不是同一节点（例如存在经 `println` 等副作用控制路径），则通过 `GATE` 将控制锚到值路径，供 `BRCH/JOIN` 臂或调用点统一消费；详见 [`16_inline_rewrite_algorithm.md`](16_inline_rewrite_algorithm.md)。
 
+> **口径注（2026-10-30）：与另一份设计文档冲突，待裁。** 本节要求 `GATE` 至少一条 `Ctrl` 入边；`docs/design/effects/edges.cn.md` 5.3 与运行图的封存检查（`src/runtime/graph.cpp:561`）却把 `GATE` 说成纯传值节点、等待是**同步前驱**，控制输入只是旧图仍在用的写法（`graph.cpp:568` 两种都接受）。是改本节还是改 5.3、默认建议走哪条，见 [`2026-10-30-gate-control-edge.md`](../handover/questions/2026-10-30-gate-control-edge.md)；裁定前本节正文保持原样。
+
 ### 4.2 `DATA` 与 `PORT`
 
 - **`DATA`（常量 / 静态字面）**  
@@ -167,7 +169,7 @@
 ### 4.8 值出口锚点（`exitNode`）
 
 - **语义**：图的**唯一返回值锚点**。`GCGraph::exitNode()` 直接返回最终值节点；该节点可以是普通值节点，也可以是用于值-控会合的 `GATE`。  
-- **约束**：编码要求存在 `exitNode`（`GraphDraft::setOutputNode`）；从该锚点反向可达定义了“本会执行到的子图区域”。`GATE` 的入边要求见 §4.1。
+- **约束**：编码要求存在 `exitNode`（`GraphDraft::setOutputNode`）；从该锚点反向可达定义了“本会执行到的子图区域”。`GATE` 的入边要求见 §4.1 与那里的口径注。
 
 ### 4.8.1 函数声明事实在出口节点
 
@@ -289,7 +291,7 @@
   - 默认启用“SCC 入口 callee 保护”：SCC 内若调用目标是该 SCC 的入口 callee（被 SCC 外调用），则不内联。详见 [`16_inline_rewrite_algorithm.md`](16_inline_rewrite_algorithm.md) §1.1 / §6.1。
 - **SCC 内目标冻结**：每个 SCC 只处理进入该 SCC 时捕获到的初始 inline target；处理中新增的 FUNC 不在同轮继续展开，避免振荡。
 - **重定向完整性**：编码前不允许残留 legacy 图引用。实现上以断言检查 `FUNC` 的被调图与 `DATA(Function)` 的图不再指向 source graph。
-- **GATE 门控保留**：当分支内联存在 value + side-effect ctrl 两路出口时，使用 `GATE` 把控制完成点锚到值路径，避免 `BRCH/JOIN` 臂语义破坏（`GATE` 的入边要求见 §4.1）。
+- **GATE 门控保留**：当分支内联存在 value + side-effect ctrl 两路出口时，使用 `GATE` 把控制完成点锚到值路径，避免 `BRCH/JOIN` 臂语义破坏（`GATE` 的入边要求见 §4.1 与那里的口径注）。
 - **值出口门控契约**：`inlineCallable` 以 `valueExit` 为完成锚点；若值与控制完成点分离，则先插入 `GATE` 再导出 `valueExit`，不再依赖专用 `EXIT.ctrlInputs` 契约。`GATE` 结构由编码时的 `validateRuntimeGraphPayload` 检查（§2.2）。
 - **slot-safe prune**：内联后的不可达裁剪不再直接调用通用 `pruneUnreachable` 全量删点；先从 `exitNode` 反向求 live 集，再对 BRCH/JOIN 槽位相关节点做 pin（`BRCH.ctrlOutputs` / `JOIN.withInputs` / `JOIN.ctrlInputs` / `JOIN.normInputs`），仅删除非 live 且非 pinned 节点，避免 arm-slot 对齐被 detach/unlink 破坏。
 
