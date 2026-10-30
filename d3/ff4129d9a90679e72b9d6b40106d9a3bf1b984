@@ -1,0 +1,37 @@
+S5 (the ruling of 20:40, 477d76091): three commits, in the order the author asked for.
+
+72dbd696e -- the training workload`s gradient check registered as a known failure, in the shape of
+known-failures-two.md: known_fail + known_fail_note (failure form: `failed (-11)` from
+benchmarks/train.py, the stack is Variant::updateRefs+31 <- scanRelocatedObjects; owner
+lane-defun5; why it is the pass`s defect and not the program`s: the same model completes the
+training workload without the pass, inference with the pass exits 0, and the small mlp crashes
+exactly like mlp_big). A page explains it: docs/handover/reports/known-failure-run-training.md.
+It needed a one-entry `backends` list because known_fail is a per-back-end mark. A/B both ways: with
+the type fix the entry is XFAIL with `known failures: 1`; on the tree before it, the entry passes and
+the runner reds with `marked known_fail on `nvm` but passes: remove the mark`.
+
+d3ff4129d -- the capture field`s type comes from the variant (`variant.captures[field]`), not from
+the call`s type; `enumOf`/`asEnum` gone. With that the commit goes through and the training workload
+crashes: gdb stack in the commit message, verbatim -- #0 Variant::updateRefs+31, #1
+scanRelocatedObjects, #2 minorGCUnlocked, #4 safepoint, #5-#10 NodeVMSchedPass::call (three of them
+at the same address: six frames, bounded, so not stack depth), #11 apply. mlp and mlp_big both
+crash, so it is not scale; the fault is in the first statements of updateRefs, before the field
+loop, so the remaining defect is in what the value carries and how long it lives, one level below
+the dispatch. Not fixed in this commit.
+
+547b887ee -- the page says the entry is slow-tier, so a fast gate`s `known failures: 2` does not
+include it; the command that shows the mark working is named there, with `[XFAIL]` and
+`known failures: 1` recorded.
+
+5e3de4f82 -- the catch deleted, quoting the ruling ("better red than a green that was bought by
+giving up"). The `commit_failed=1` path goes with it. The known-fail mark stays: it registers the
+crash, which is still there, and the commit that fixes the crash removes it.
+
+Gate after 5e3de4f82 (fast, -Jobs 8): 7952 / 7943 / 0 / 7 / 2. Slow layer of
+test/plans/feat/modules/autodiff.plan.toml: total 245, pass 244, fail 0, known failures 1, exit 0 --
+`[XFAIL] benchmark_gradients_vs_torch.nvm`. (Under a bare ssh without the bench venv on PATH the
+same entry is SKIP: its skip_unless asks `${python}` for torch.)
+
+Open: the crash itself. The smallest reproducer is still owed -- a hand-written 20-line closure over
+a captured struct with 900 recursion levels does not crash, so the trigger needs the run_training
+shape (a closure capturing the six-field struct, through the stateful training loop).
