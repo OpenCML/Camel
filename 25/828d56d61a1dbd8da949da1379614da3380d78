@@ -11,4 +11,4 @@
 
 接线（一个没人跑的快层检查和不存在没区别）：用例 `test/cases/runtime/graph_draft_ledger/check.mjs`、基线 `.../baseline.json`、计划 `test/plans/feat/runtime/graph_draft_ledger.plan.toml`（`tier = "fast"`，所以 `-Tier fast` 与 `npm run test` 都跑它）；`test/plan-selection.json` 的 `src/runtime/` 与 `include/camel/runtime/` 两条规则也点名，`--changed` 因此会选它，用例目录到计划的镜像由 `test/cases/` 目录规则给出。
 
-闸门（h-ledger，并入 origin/develop 56ee83341 之后，-Plan all -Tier fast -Jobs 8）：total 7869 / pass 7860 / fail 0 / skip 7 / known failures 2；e stamp revision 25828d56d6、clean、fingerprint 77152821eca4（1222 源文件）。并入 develop 的前后三个数一字未动（73/562、3、12），合并本身没有新建任何直连。
+闸门（h-ledger，并入 origin/develop 56ee83341 之后，-Plan all -Tier fast -Jobs 8）：total 7869 / pass 7860 / fail 0 / skip 7 / known failures 2；stamp revision 25828d56d6、clean、fingerprint 77152821eca4（1222 源文件）。并入 develop 的前后三个数一字未动（73/562、3、12），合并本身没有新建任何直连。
