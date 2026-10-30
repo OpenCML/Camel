@@ -506,3 +506,26 @@ expect_exit = 0
 expect_stdout_exact = "1\n1\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "open_rank_literal_element"
+desc = "A literal in a position declared `T[..]` is the element (design principles 5.4): the position includes rank zero, which is the element itself, so `let x: f32[..] = 1.0` is the f32, `let t: (int, f32)[..] = (7, 2.5)` is the tuple, and an array literal keeps the rank it has: `[1.0, 2.0]` enters as the rank-1 array it is. The arithmetic on the name runs in the element type, so no array was made for it."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/open_rank_literal_element.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "2.0\n[1.0, 2.0]\n(7, 2.5)\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rank_one_refuses_literal"
+desc = "`f32[]` states one dimension, so the literal the open rank takes as the element is a value the type cannot hold: refused at the literal with LiteralNotRepresentable, not wrapped around and not cut off."
+kind = "negative"
+case = "../../../../cases/compile/array_shape/rank_one_refuses_literal.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
+expect_output_contains = ["f32[]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

@@ -4409,20 +4409,36 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
         // element (field) type — they are positions with an expected type too (design
         // principles 5.1). Converting its data now would keep the type its values give it.
         if (!isUnresolvedLiteral(value->data())) {
+            // `T[..]` includes rank zero, which is the element itself (design principles 5.4): a
+            // literal that is that element -- a number, a text, a tuple -- takes the element
+            // type, and the declaration's `T[..]` is read by the annotation CAST below, whose
+            // reading is the same one (Builder::visitCastNode). `T[]` states one dimension and
+            // `T[3, ..]` a prefix the value must have; neither states a rank zero
+            // (ArrayType::rankZeroType answers nullptr there), so a literal is refused there as
+            // before.
+            Type *literalType = type;
+            if (type->code() == TypeCode::Array &&
+                value->data()->type()->code() != TypeCode::Array) {
+                if (Type *rankZero = tt::as_ptr<ArrayType>(type)->rankZeroType();
+                    rankZero != nullptr) {
+                    literalType = rankZero;
+                }
+            }
             // A text field of a composite literal is reported at the field itself, as a type
             // mismatch; a lone text value keeps the declaration's position, as the same check reports it
             // (`let x: int = '42'` is a mismatch at the declaration), and anything else the
             // conversion cannot take is reported for the literal as a whole below.
             if (isComposite(value->data()->type()->code()) &&
-                rejectTextInLiteral(value->data(), type, value->origin())) {
+                rejectTextInLiteral(value->data(), literalType, value->origin())) {
                 throw BuildAbortException();
             }
-            data_ptr_t converted = value->data()->convertTo(type);
-            if (converted != nullptr && converted->type()->equals(type)) {
+            data_ptr_t converted = value->data()->convertTo(literalType);
+            if (converted != nullptr && converted->type()->equals(literalType)) {
                 return tree_->makeData(converted);
             }
             if (converted == nullptr) {
-                reportLiteralCastFailure(diags_, ast->load()->tokenRange(), value->data(), type);
+                reportLiteralCastFailure(
+                    diags_, ast->load()->tokenRange(), value->data(), literalType);
                 throw BuildAbortException();
             }
             // A conversion that comes back as another type is not what the declaration says:
