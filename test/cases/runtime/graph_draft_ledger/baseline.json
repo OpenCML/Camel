@@ -1,16 +1,14 @@
 {
   "comment": "The baseline of the direct-connection ledger (graph-store step 2 b): the numbers below may only fall, and the last step is all of them at zero. `sites` records where each number comes from, as `file#symbol` (a line number moves with every edit above it, a symbol does not); it is diagnostics for a red and never decides the verdict. Record a new row after a commit with check.mjs --record.",
   "numbers": {
-    "files": 45,
-    "references": 389,
+    "files": 42,
+    "references": 372,
     "constructions": 2,
     "decode": 4
   },
   "sites": {
     "files": {
       "include/camel/compile/gir/draft_graph_builder.h": 1,
-      "include/camel/compile/gir/graph.h": 1,
-      "include/camel/compile/gir/nodes.h": 1,
       "include/camel/core/tags.h": 1,
       "include/camel/core/type/composite/func.h": 1,
       "include/camel/runtime/definitions.h": 1,
@@ -35,7 +33,6 @@
       "modules/tiles/src/region_outline.cpp": 1,
       "modules/tiles/src/region_test_pass.cpp": 1,
       "src/compile/gir/builder_support.h": 1,
-      "src/compile/gir/debug_json.cpp": 1,
       "src/compile/gir/draft_graph_builder.cpp": 1,
       "src/compile/gir/graph_encode.cpp": 1,
       "src/core/tags.cpp": 1,
@@ -55,9 +52,7 @@
       "src/runtime/writings.cpp": 1
     },
     "references": {
-      "include/camel/compile/gir/draft_graph_builder.h#-": 5,
-      "include/camel/compile/gir/graph.h#-": 1,
-      "include/camel/compile/gir/nodes.h#-": 1,
+      "include/camel/compile/gir/draft_graph_builder.h#-": 3,
       "include/camel/core/tags.h#-": 3,
       "include/camel/core/tags.h#effectivePermissions": 3,
       "include/camel/core/type/composite/func.h#-": 1,
@@ -79,8 +74,7 @@
       "include/camel/runtime/loop.h#loopOf": 4,
       "include/camel/runtime/node_ref.h#-": 4,
       "include/camel/runtime/operator_instance.h#-": 1,
-      "include/camel/runtime/writings.h#-": 1,
-      "include/camel/runtime/writings.h#extractWritings": 4,
+      "include/camel/runtime/writings.h#extractWritings": 2,
       "modules/graph/txn.cpp#-": 1,
       "modules/onnx/exporter.cpp#bindCaptures": 1,
       "modules/rewrite/proof.h#-": 1,
@@ -93,11 +87,8 @@
       "modules/tiles/src/region_outline.cpp#transferAggregate": 1,
       "modules/tiles/src/region_test_pass.cpp#checkBindingKinds": 1,
       "src/compile/gir/builder_support.h#nodeDraftOf": 1,
-      "src/compile/gir/debug_json.cpp#-": 1,
-      "src/compile/gir/draft_graph_builder.cpp#-": 1,
       "src/compile/gir/draft_graph_builder.cpp#draftOwners": 2,
       "src/compile/gir/draft_graph_builder.cpp#fromDraft": 1,
-      "src/compile/gir/graph_encode.cpp#-": 1,
       "src/compile/gir/graph_encode.cpp#collectLiveDraftNodes": 1,
       "src/compile/gir/graph_encode.cpp#compileGraphOpaque": 1,
       "src/core/tags.cpp#declaresIndependentElements": 1,
@@ -340,18 +331,12 @@
       "src/runtime/loop.cpp#LoopDraftView": 1,
       "src/runtime/loop.cpp#fallBackToCopyingAppend": 1,
       "src/runtime/operator_instance.cpp#kernelArgumentsOf": 1,
-      "src/runtime/writings.cpp#-": 2,
       "src/runtime/writings.cpp#DraftWritings": 1,
       "src/runtime/writings.cpp#constantNode": 1,
-      "src/runtime/writings.cpp#costModels": 1,
       "src/runtime/writings.cpp#extract": 1,
       "src/runtime/writings.cpp#lookupOrAdd": 1,
-      "src/runtime/writings.cpp#makeKey": 1,
-      "src/runtime/writings.cpp#nodeText": 1,
-      "src/runtime/writings.cpp#readsVariable": 1,
       "src/runtime/writings.cpp#rewrite": 1,
-      "src/runtime/writings.cpp#saturate": 1,
-      "src/runtime/writings.cpp#shapeTakesPart": 1
+      "src/runtime/writings.cpp#saturate": 1
     },
     "constructions": {
       "modules/tiles/src/region_extract.cpp#extractRegion": 1,
