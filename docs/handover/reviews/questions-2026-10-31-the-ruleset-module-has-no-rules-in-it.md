@@ -60,3 +60,11 @@ stdlib/rulesets/jvp.cml:0
   `*program-transforms*` 只命中这一个目录）。所以那一笔的"英文版同段"没有目标文件，我没有造一个。
 - **索引的键是模块名，没有环境状态**：`visitRuleDecl` 直接把 `diags_->moduleName()` 传进去，不用
   `thread_local`，所以将来并行编模块也不会把规则记到别人的模块名下。
+
+## 更正：这里的结论已被裁定推翻
+
+> **这一段与本文其余部分不是同一时刻的结论；以裁定为准，原文保留是因为它是当时的判断，不是因为它还对。**
+
+上面把 **(a)** 写成"一个模块两种身份、零搬迁"，当它可以选、只是有代价。**22:10 裁定**（2026-10-30，`reviews/questions-2026-10-29.md:746`）说：**一个模块不兼任库和规则集，所以 (a) 不选。** 所以 (a) **不存在**，不是**贵**；这一页的两条路里，只有 (b)。
+
+这件事已按 (b) 落地：`67b4c17bc`（"Move the scalar rules into the ruleset modules they belong to"，2026-10-31 06:31）把标量规则搬进 `stdlib/rulesets/jvp.cml` 与 `stdlib/rulesets/transpose.cml` 两个规则集模块。**注意它在 `develop` 上，不在本车道 HEAD 上**：本树（`lane-namenature`）今天仍是 `stdlib/autodiff.cml` 10 条 `export rule`、`stdlib/rulesets/jvp.cml` 0 条，所以上面"现象"一节的读数在本树仍然成立；落地状态以 `develop` 为准。
