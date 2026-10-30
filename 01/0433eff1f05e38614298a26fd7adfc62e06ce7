@@ -1,0 +1,17 @@
+秩 0 = 元素本身：`T[..]` 收元素本身，`T[]` 与 `T[3, ..]` 不收。
+
+① 判定只落在一处：include/camel/core/type/composite/array.h#ArrayType::rankZeroType —— anyRank 且前缀为空时给出元素类型；`T[]`（秩 1）与 `T[3, ..]`（前缀要求维数）返回 nullptr。src/core/type/composite/array.cpp#ArrayType::assignableFrom 与 src/compile/gir/builder_expr.cpp#Builder::visitCastNode 都只问它，不在两处各写一份条件。
+
+② `visitCastNode` 在给秩 0 建 CAST 之前返回原值，值保持元素类型：运行期的数组是 Array，秩 0 没有单独的数组类型，所以一个 CAST 节点写 `T[..]` 就是把元素说成数组。没有这一条，`f32[..]` 名字打印后 exit null（A/B 第 ④ 向）。
+
+③ 改的是旧用例，不是金标：test/plans/feat/modules/tensor/dtype.plan.toml 的 whole_value_equality 原把 `bool` 写进 `bool[..]` 当"应被拒"，那是按旧读法写的。5.4 原文：「秩 0 就是元素本身：`T[..]` 包括秩 0，秩为 0 的数组就是那个元素，运行期是同一个值，类型上也没有单独的"秩 0 数组"」。在这句话下它该通过，所以用例改用 `bool[]`（秩 1，一个 `bool` 不是它），继续守 4.2「`==` 对两个数组按内容比较、答案是一个 `bool`」；`--update-golden` 一次没跑，其它用例一条没动。判断依据是那段原文，不是"实现现在这样"：旧写法断言的正是 5.4 明确要收的那一支，改实现去迁就它才叫拿规则迁就代码。
+
+④ 未开（给下一个人划界）：
+- 字面量落 `T[..]`：`let x: f32[..] = 1.0`、`want(1.0)` 仍报不可表示，走 GCT::Builder::declaredValue 与 literal::kindEnters，本轮没动；
+- 秩 0 的运行期表示：按设计没有独立的秩 0 数组类型，本轮没有新建任何数组或包装；
+- 同一段的另一句：`t: f32[..]` 的 `t[0]` 设计说结果仍是 `f32[..]`，实现给的是元素类型（早于本轮，未动）。
+
+用例：test/cases/compile/array_shape/open_rank_element.cml、rank_one_refuses_element.cml、open_rank_tuple_element.cml（计划 test/plans/feat/compile/array_shape/array_shape.plan.toml）。
+A/B 四向：见合并提交信息（每向只红该红的那条，还原后 42/42）。
+
+闸门（本轮树，-Plan all -Tier fast -Jobs 8）：total 7903 / pass 7892 / fail 0 / skip 9 / known 2；基线是当时主干 e8d92a8ec，对它的差集只有本轮加的 3 条（7900 → 7903），skip 随显卡占用浮动。
