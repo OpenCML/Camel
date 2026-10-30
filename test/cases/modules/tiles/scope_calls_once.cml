@@ -1,0 +1,14 @@
+/// The single call `scope_reuse.mjs` measures against: one `#gpu` function, one static shape, one
+/// call. Its device work is the baseline the two-call program is compared with.
+
+import { reshape, sum } from tensor
+
+#gpu
+func scale(x: f32[3]): f32[3] {
+    return x * x
+}
+
+func main() {
+    let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
+    println(sum(scale(x)))
+}
