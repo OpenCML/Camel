@@ -110,3 +110,31 @@ node scripts/test.js test/plans/perf --compile-only --jobs 8
 3. **安装印记类**：`registry.*` 三条（以及 `edges.no_ctrl_edge_kind.gir`）**都是 fast 层条目**，新范围把它们自然排除——这一堆在新范围下不复存在。
 
 **结论：这个模式现在还不能进闸门**（>1 分钟，且有 2 类非编译判据），按裁定的「单独一条 plan、每趟一次」也还要先把第 1、2 类处理干净。
+
+## 读数七：两栏（编译失败 / 判据不适用），以及 `perf/training_steps` 的复核
+
+**工具的用途只有一句**：**回答「这一片里有哪些程序编不过」，不回答「这些测试是否通过」；不进闸门，不进 fast 层。**
+
+**两栏**：一条「只回答一个问题的工具，输出里只该有两栏：被问的那件事，和『不是这件事』。第三栏（『判据不适用』）必须显式写出，否则它会被读成失败。**
+
+`perf` 两栏读数：
+
+```
+[SUMMARY] total: 47, pass: 42, fail: 1, skip: 4
+[NOT-JUDGED] … 40 条（--timeit / 工具 / 比较判据）-- not a compilation question
+[INFO] does not compile (../../cases/perf/transformer_step.cml): exit 1
+```
+
+**「编译失败」这一栏今天不是 0，而是 1——而且正是 `transformer_step.cml`**，就是那条躺在 `perf` 里没人看的坏程序。**这不是工具的瑕疵，是它的第一个真实产出。**
+
+### `perf/training_steps` 复核（在 `lane-gpu` 上，含 `9e01683d6`）
+
+```
+[PASS] dependency_chain.nvm / .fvm
+[PASS] transformer_step.nvm
+[PASS] transformer_step.profile
+[FAIL] mlp_step.nvm / mlp_step.fvm   expected exit 0, got 1
+[SUMMARY] total: 6, pass: 4, fail: 2
+```
+
+**`gpu` 的修复有效：`transformer_step` 两条从「编译不过」变成 PASS。** 但这条计划**不是 6/6/0**：`mlp_step` 的两条仍红（`expected exit 0, got 1`），**诊断原文未取到**，这里不猜原因。**「那个坏程序修好了」有读数；「这条计划绿了」没有。**
