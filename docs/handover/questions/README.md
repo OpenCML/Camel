@@ -22,8 +22,9 @@
 | 页 | 问题 | 状态 |
 |---|---|---|
 | `questions-2026-10-30-grad-builds-its-graph-at-runtime.md` | 第 7 条的验收数不到 `grad` 在运行期造出的函数值：这一段归第 6 条还是第 7 条 | 待裁 |
+| `questions-2026-10-30-cycle-guard-edge-kinds.md` | 环的判据：守卫走 5 类边（含 `sync`）、冻结走 4 类，这个差是有意还是缺陷 | 待裁 |
 
-表里只剩上一行；其余七页已答复并挪到 `docs/handover/reviews/`。
+表里只剩上面两行；其余七页已答复并挪到 `docs/handover/reviews/`。
 
 2026-10-30 05:40 的裁定答的是 A 的取值形状（错误值进单元、`pairs(n)` 的跨 `yield` 携带量、
 `return`、可错元素）；cell-type 与 write-before-read 各自末尾问的那一句，由 2026-10-30 07:20 的裁定
