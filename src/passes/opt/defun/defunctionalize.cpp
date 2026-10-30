@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * std::defun_value: a function value is a tag with the environment it captured.
+ * std::defunctionalize: a function value is a tag with the environment it captured.
  *
  * The design gives a function value one form: a value of an `enum` type, one variant per function
  * the program takes as a value, and the values that function captured as that variant's data --
@@ -36,10 +36,23 @@
  *    to something that expects a function;
  *  - a function that is called directly somewhere: its captures are not arguments of that call, so
  *    turning them into parameters would break it;
- *  - a call whose callee waits on something, a callee that is neither a value nor a parameter, and
- *    a type that is an argument of the entry function: the pass refuses what it cannot see rather
+ *  - a call whose callee waits on something, a callee that is neither a value nor a parameter, a
+ *    value handed to a parameter declared as another function type (a lambda that returns its write
+ *    where the parameter says `void`, say), a type that is an argument of the entry function, or a
+ *    type that holds another family left as written: the pass refuses what it cannot see rather
  *    than leaving half the program on the old type;
  *  - a type the program gives no value to: there is nothing to build.
+ *
+ * A family that is no value's business is left out of the count rather than refused: the entry
+ * function's own value is the shell's, which builds it and calls it, so no program gets its entry
+ * point re-encoded.
+ *
+ * The rewrite is one session, and a session whose commit would break an invariant leaves the program
+ * as it was: a lowering step that cannot lower a program must not break it. Those are the programs
+ * where a call the pass made direct meets an order edge the graph keeps on an effectful node, and
+ * the rewritten node carries the enum, which has no resources, so the graph would be one no
+ * scheduler may run (`test/cases/modules/autodiff` has two of them). That is a defect of this pass
+ * and not of the program: the fix is to keep the effect on the node, not to catch it here.
  *
  * The type substitution and the node rewrite are one commit. `retype.h` says why: after the
  * rebuild the graph says the value is the enum while the static area still holds the function
@@ -55,7 +68,7 @@
  * instance for it.
  */
 
-#include "defun_value.h"
+#include "defunctionalize.h"
 
 #include "camel/core/error/diagnostics/messages/runtime.h"
 #include "camel/core/operator_table.h"
@@ -141,9 +154,10 @@ struct CallSite {
     return function != nullptr && function->graph() != nullptr ? function : nullptr;
 }
 
-/// Whether `type` holds `target` in its signature: as itself, or inside a function type it names.
-/// An aggregate keeps its components by name or by element type, and a value handed to one is read
-/// by a node that is not a call -- which is what the reader check refuses.
+/// Whether `type` holds `target` in its signature: as itself, or inside a function type or an
+/// aggregate it names. A value handed to an aggregate is taken apart by a node that is not a call
+/// -- which is what the reader check refuses -- and a family whose signature holds a function type
+/// this pass leaves as written cannot be lowered on its own (see (5b)).
 bool mentions(const ty::Type *type, const ty::Type *target, int depth) {
     if (type == nullptr || target == nullptr || depth > 8) {
         return false;
@@ -151,6 +165,17 @@ bool mentions(const ty::Type *type, const ty::Type *target, int depth) {
     if (type == target || type->typeId() == target->typeId() ||
         type->equals(const_cast<ty::Type *>(target))) {
         return true;
+    }
+    if (type->code() == TypeCode::Tuple) {
+        for (const ty::Type *member : static_cast<const ty::TupleType *>(type)->types()) {
+            if (mentions(member, target, depth + 1)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    if (type->code() == TypeCode::Array) {
+        return mentions(static_cast<const ty::ArrayType *>(type)->elemType(), target, depth + 1);
     }
     if (type->code() != TypeCode::Function) {
         return false;
@@ -322,7 +347,7 @@ template <class Draft> void parameterizeCaptures(Draft &draft) {
 } // namespace
 
 const camel::runtime::Program *
-DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostream &os) {
+DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::ostream &os) {
     using namespace camel::runtime;
 
     if (program == nullptr || program->root() == nullptr) {
@@ -429,7 +454,9 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
     }
 
     if (plans.empty()) {
-        os << "DEFUN_VALUE types=0 values=0 calls=0 refused=0\n";
+        if (report_) {
+            os << "DEFUNCTIONALIZE types=0 values=0 calls=0 refused=0\n";
+        }
         return program;
     }
 
@@ -526,6 +553,39 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
                         refuseIfUnsaid(
                             planned->second, "the value is read by a node that is not a call");
                     }
+                    // A value handed to a parameter declared as another function type is widened
+                    // at the call -- a lambda that returns the value of its write where the
+                    // parameter says `void`, say. The tag would reach a signature that still says
+                    // the function type, so the family stays as written.
+                    if (readsAsArgument) {
+                        const ty::FunctionType *signature = nullptr;
+                        if (node.kind == GCNodeKind::Call && !withs.empty()) {
+                            ty::Type *calleeType = typeOf(withs.front());
+                            if (calleeType != nullptr && calleeType->code() == TypeCode::Function) {
+                                signature = static_cast<const ty::FunctionType *>(calleeType);
+                            }
+                        } else if (node.kind == GCNodeKind::Func) {
+                            if (const GCGraph *callee = program->calleeOf(*graph, ref)) {
+                                signature = callee->funcType();
+                            }
+                        }
+                        if (signature != nullptr) {
+                            bool declared = false;
+                            for (const auto &span :
+                                 {signature->withTypesSpan(), signature->normTypesSpan()}) {
+                                for (const ty::Type *param : span) {
+                                    auto *written = const_cast<ty::Type *>(param);
+                                    declared = declared || written->equals(inputType) ||
+                                               sameFamily(written, inputType);
+                                }
+                            }
+                            if (!declared) {
+                                refuseIfUnsaid(
+                                    planned->second,
+                                    "the value is handed to a parameter of another function type");
+                            }
+                        }
+                    }
                 }
             };
             checkReader(graph->normInputsOf(ref));
@@ -621,6 +681,7 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
     // (5) The entry function.
     // ---------------------------------------------------------------------------------------
     if (const auto *rootFunction = program->root()->funcType()) {
+        auto *rootFunctionAsType = const_cast<ty::Type *>(static_cast<const ty::Type *>(rootFunction));
         for (const ty::Type *param : rootFunction->normTypesSpan()) {
             for (Family &family : families) {
                 for (TypePlan *member : family.members) {
@@ -628,6 +689,44 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
                         family.refuse = "the type is an argument of the entry function";
                     }
                 }
+            }
+        }
+        // The entry function's own value is the runtime's: the shell builds it, hands it its
+        // arguments and calls it, so there is no program value here to give a form. The family is
+        // not one this pass has anything to say about -- leaving it out rather than refusing it
+        // keeps the pass from re-encoding an entry point and from reporting the program's own
+        // entry as something it gave up on.
+        std::erase_if(families, [&](const Family &family) {
+            return sameFamily(family.members.front()->type, rootFunctionAsType);
+        });
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // (5b) Families that hold one another.
+    //
+    // A lowered family may not hold, or be held by, a family left as written: its signature would
+    // still say the other's function type -- `(int, () => int..)`, say -- while a value of it became
+    // a tag, and a graph that carries both forms is one no later pass can type. Widening the
+    // refusal to the fixed point keeps a program whole: families that cannot be separated are
+    // lowered together or not at all.
+    for (bool changed = true; changed;) {
+        changed = false;
+        for (Family &family : families) {
+            if (!family.refuse.empty()) {
+                continue;
+            }
+            const ty::Type *own = family.members.front()->type;
+            for (const Family &other : families) {
+                const ty::Type *theirs = other.members.front()->type;
+                if (other.refuse.empty() || &other == &family ||
+                    !(mentions(own, theirs, 0) || mentions(theirs, own, 0))) {
+                    continue;
+                }
+                family.refuse = std::format(
+                    "its type and '{}' name one another, and that one is left as written",
+                    theirs->toString());
+                changed = true;
+                break;
             }
         }
     }
@@ -639,26 +738,34 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
         }
     }
     // A pass that silently gives up looks exactly like one that found nothing to do: every family
-    // it leaves as written is named with the reason, on the report line and as a warning.
+    // it leaves as written is named with the reason, on the report line and as a warning. A pass the
+    // pipeline inserted says nothing: its report would be written on the program's own output, and
+    // the program did not ask for it.
     const auto reportRefused = [&] {
+        if (!report_) {
+            return;
+        }
         for (Family &family : families) {
             if (family.refuse.empty()) {
                 continue;
             }
             const std::string type = family.members.front()->type->toString();
-            os << "DEFUN_VALUE refused='" << type << "' reason='" << family.refuse << "'\n";
+            os << "DEFUNCTIONALIZE refused='" << type << "' reason='" << family.refuse << "'\n";
             if (context_ != nullptr) {
+                // The diagnostic's own text is "Defunctionalization left {0} as written.", so the
+                // argument is the type and the reason as one clause, not a second sentence.
                 raisePassWarning(
                     *context_,
                     camel::core::error::RuntimeDiag::DefunctionalizationIncomplete,
                     camel::source::kInvalidOriginId,
-                    std::format(
-                        "Defunctionalization left '{}' as written: {}", type, family.refuse));
+                    std::format("'{}' ({})", type, family.refuse));
             }
         }
     };
     if (accepted.empty()) {
-        os << "DEFUN_VALUE types=0 values=0 calls=0 refused=" << families.size() << "\n";
+        if (report_) {
+            os << "DEFUNCTIONALIZE types=0 values=0 calls=0 refused=" << families.size() << "\n";
+        }
         reportRefused();
         return program;
     }
@@ -678,7 +785,11 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
         }
         for (Family *family : accepted) {
             for (TypePlan *member : family->members) {
-                if (type->equals(member->type)) {
+                // A family is its signature with every resource clause it is written with (design
+                // principles 5.2), so an object that differs from a member only in the clause is a
+                // member too: a call would otherwise hand the tag to a signature that still says the
+                // function type.
+                if (type->equals(member->type) || sameFamily(type, member->type)) {
                     equivalents[member->type->typeId()].insert(type);
                 }
             }
@@ -743,6 +854,7 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
     // signature of a function that is one of them keeps its shape.
     options.leaveSignatures = true;
 
+
     // ---------------------------------------------------------------------------------------
     // (7) One commit: the type of every value, its constructor and its call change together.
     // ---------------------------------------------------------------------------------------
@@ -769,7 +881,10 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
     };
 
     size_t rewroteValues = 0, rewroteCalls = 0;
-    {
+    // A rewrite that would break the graph must not be handed on: the program as written is
+    // correct, so the step leaves the program it was given and the pipeline runs that. The rewrite
+    // is one session, so nothing of an attempt that cannot be committed reaches the program.
+    try {
         RuntimeGraphDraftSession session(context_, program);
         for (GCGraph *graph : session.program()->graphs()) {
             auto &transaction = session.edit(graph);
@@ -1056,15 +1171,18 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
         }
         const Program *done = session.commit();
         if (done == nullptr) {
-            os << "DEFUN_VALUE commit_failed=1\n";
+            os << "DEFUNCTIONALIZE commit_failed=1\n";
             return program;
         }
-        os << "DEFUN_VALUE types=" << accepted.size() << " values=" << rewroteValues
+        if (!report_) {
+            return done;
+        }
+        os << "DEFUNCTIONALIZE types=" << accepted.size() << " values=" << rewroteValues
            << " calls=" << rewroteCalls << " refused=" << (families.size() - accepted.size())
            << "\n";
         reportRefused();
         for (Family *family : accepted) {
-            os << "DEFUN_VALUE type='" << family->members.front()->type->toString() << "' ";
+            os << "DEFUNCTIONALIZE type='" << family->members.front()->type->toString() << "' ";
             if (family->variants.size() == 1) {
                 os << "variant='" << family->variants.front().name << "'";
             } else {
@@ -1077,5 +1195,19 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
             os << " values=" << family->values << " calls=" << family->calls << "\n";
         }
         return done;
+    } catch (const std::exception &error) {
+        if (report_) {
+            os << "DEFUNCTIONALIZE broke_invariant=1\n";
+            if (context_ != nullptr) {
+                raisePassWarning(
+                    *context_,
+                    camel::core::error::RuntimeDiag::DefunctionalizationIncomplete,
+                    camel::source::kInvalidOriginId,
+                    std::format("the rewrite would break the graph, so the program is left as "
+                                "written ({})",
+                                error.what()));
+            }
+        }
+        return program;
     }
 }
