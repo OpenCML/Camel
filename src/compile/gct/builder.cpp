@@ -5708,6 +5708,34 @@ node_ptr_t Builder::visitGeneratorBody(
         mark(vari, ast, "gct.generator.cell");
         *outer << vari;
     };
+    // A cell of a value that is written where its statement stands: the cell's type position holds
+    // `typeof <that value's expression>`, so the cell has a type and no value yet, and the body
+    // that creates the stream evaluates nothing (design principles 5.4). The value is written
+    // where the statement is reached, in the arm that reaches it.
+    const auto addTypedCell = [&](
+                                  const std::string &name,
+                                  const AST::node_ptr_t &init,
+                                  const AST::node_ptr_t &ast) {
+        node_ptr_t ref = tree_->makeNRef(name);
+        *ref << tree_->makeType(TypeOfType::create(visitData(init)));
+        node_ptr_t vari = tree_->makeVari();
+        *vari << ref;
+        mark(vari, ast, "gct.generator.cell");
+        *outer << vari;
+    };
+    // The body's declarations that became cells: the statement that writes each, where it stands
+    // in `bodyStmts`, and the cell's name. A cell is written where its declaration stands, so an
+    // arm that starts after that statement finds it written and one that starts before does not.
+    struct HoistedCell {
+        const AST::Node *decl;
+        size_t index;
+        std::string name;
+    };
+    std::vector<HoistedCell> hoisted;
+    // A first value the loop would start from in any arm: a constant or a lambda, which reads its
+    // cells when it is called and not now. A cell's value is written where the loop stands, so a
+    // computed first value would be read there too -- and the arms a `yield` splits the loop into
+    // are not lowered for that yet.
     const auto hoistable = [](const AST::node_ptr_t &init) {
         if (init == nullptr) {
             return true;
@@ -5722,7 +5750,6 @@ node_ptr_t Builder::visitGeneratorBody(
     addCell(pcName, intLiteral(0), at);
     addCell(haltName, intLiteral(0), at);
     std::vector<std::string> cellNames = {pcName, haltName};
-    std::vector<size_t> hoisted; // the body's statements that became cells
     for (size_t i = 0; i < bodyStmts->size(); ++i) {
         const auto &stmt = bodyStmts->at(i);
         if (stmt->type() != AST::LoadType::Stmt ||
@@ -5731,17 +5758,17 @@ node_ptr_t Builder::visitGeneratorBody(
         }
         const auto &decl = stmt->loadAs<AST::DataDeclLoad>();
         if (decl->refs().size() != 1) {
-            continue;
+            continue; // refused where it is read across a `yield`
         }
-        const auto &inits = stmt->atAs<AST::RepeatedLoad>(1);
+        const auto &inits         = stmt->atAs<AST::RepeatedLoad>(1);
         const AST::node_ptr_t init = inits->size() == 1 ? inits->at(0) : nullptr;
-        if (!hoistable(init)) {
-            continue; // refused where the statement is reached
+        if (init == nullptr) {
+            continue; // a declaration with no value: there is no expression to take the type from
         }
         const std::string name = decl->refs()[0].toString();
-        addCell(name, init != nullptr ? visitData(init) : tree_->makeData(Data::null()), stmt);
+        addTypedCell(name, init, stmt);
         cellNames.push_back(name);
-        hoisted.push_back(i);
+        hoisted.push_back({stmt.get(), i, name});
     }
 
     // The arms: one per point of the body. Arm 0 is where a pull starts; the others are reached
@@ -5787,6 +5814,32 @@ node_ptr_t Builder::visitGeneratorBody(
             node_ptr_t last = nullptr;
             for (size_t i = from; i < stmts->size(); ++i) {
                 const auto &stmt = stmts->at(i);
+                // Invariant: a cell is written before it is read.
+                //
+                // A cell's name is bound where the stream is created, so it is in scope for the
+                // whole body: a statement that stands before the declaration can name it, and
+                // source order does not stop it. What stops it is this check, made where the arms
+                // are made: an arm starting at `from` has run `stmts[0..from)` in the pulls before
+                // it, so a cell whose declaration stands at or after `i` has not been written yet
+                // and reading it would find the cell made and empty. Such a program is not
+                // expressible in the language (a name stands only after its declaration), so this
+                // is an internal error rather than a diagnostic; a diagnostic is owed the day a
+                // declaration without a value is allowed.
+                for (const HoistedCell &cell : hoisted) {
+                    if (i > cell.index || !readsOwnName(stmt, cell.name)) {
+                        continue;
+                    }
+                    ASSERT(false, "A cell is read before it is written.");
+                    // A debug build aborts above; a release build reports the compiler defect
+                    // instead of letting the read find the cell made and empty.
+                    diags_->of(InternalDiag::UnknownInternalError)
+                        .at(stmt->load()->tokenRange())
+                        .commit(
+                            "the generator body reads '" + cell.name +
+                            "' before the statement that writes it");
+                    popScope();
+                    return;
+                }
                 const bool isStmt =
                     stmt->type() == AST::LoadType::Stmt;
                 const auto stmtType =
@@ -5829,8 +5882,17 @@ node_ptr_t Builder::visitGeneratorBody(
                     return;
                 }
                 if (isStmt && stmtType == AST::StmtType::Data) {
-                    // A local of the body that became a cell: its cell is written already.
-                    if (std::find(hoisted.begin(), hoisted.end(), i) != hoisted.end()) {
+                    // A declaration of the body that became a cell: the cell is made where the
+                    // stream is created, and its value is written here, where the statement
+                    // stands -- by the arm that reaches it, in source order.
+                    if (std::any_of(
+                            hoisted.begin(),
+                            hoisted.end(),
+                            [&](const HoistedCell &cell) { return cell.decl == stmt.get(); })) {
+                        const auto &inits = stmt->atAs<AST::RepeatedLoad>(1);
+                        *exec << writeCell(
+                            stmt->loadAs<AST::DataDeclLoad>()->refs()[0].toString(),
+                            visitData(inits->at(0)));
                         continue;
                     }
                     // One that did not: its value depends on this point, so it is built here and
@@ -5869,8 +5931,11 @@ node_ptr_t Builder::visitGeneratorBody(
                         const AST::node_ptr_t init = inits->size() == 1 ? inits->at(0) : nullptr;
                         // What the machine carries is exactly one value, and that value is read
                         // once, where the loop stands: a `for` has a sequence and a binder the
-                        // arms do not run, and a first value that depends on the point it stands
-                        // at cannot be the cell's value.
+                        // arms do not run. A first value that is a constant or a lambda is the
+                        // one the loop would start from in any arm; one that depends on the point
+                        // the loop stands at is not lowered yet (a cell whose type is inferred is
+                        // in place, but reading the cells a computed first value names across
+                        // the arm boundary is the next step).
                         if (init == nullptr || loopLoad->state().size() != 1 || loopLoad->hasFor() ||
                             !hoistable(init)) {
                             refuse(stmt);
@@ -5882,7 +5947,7 @@ node_ptr_t Builder::visitGeneratorBody(
                             // another loop's state): a second cell of it is a second writing.
                             refuse(stmt);
                         }
-                        addCell(stateName, visitData(init), stmt);
+                        addTypedCell(stateName, init, stmt);
                         cellNames.push_back(stateName);
                         // The four points of the loop: past it, at the condition, in the body,
                         // and the step back to the condition.
@@ -5916,8 +5981,9 @@ node_ptr_t Builder::visitGeneratorBody(
                             stepPc,
                             stateName);
                         *arms[static_cast<size_t>(stepPc)] << jumpTo(condPc);
-                        // The pull that reaches the loop only enters it: the arms of the body are
-                        // the points a pull after a `yield` goes on from.
+                        // The pull that reaches the loop enters it after writing the state the first round starts
+                        // from: the initial value is evaluated here, where the loop stands.
+                        *exec << writeCell(stateName, visitData(init));
                         *exec << jumpTo(condPc);
                         popScope();
                         return;

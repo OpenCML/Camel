@@ -1761,10 +1761,11 @@ A literal the type cannot hold is not wrapped around or cut off, and a value is 
 **Example** (`test/cases/compile/array_shape/rank_one_refuses_literal.cml`, run as `camel test/cases/compile/array_shape/rank_one_refuses_literal.cml std::nvm`)
 
 ```camel
-// `T[]` states one dimension, so the literal the open rank takes as the element is a value it
-// cannot hold (design principles 5.4): refused at the literal, not wrapped around and not cut
-// off. The element itself is `rank_one_refuses_element.cml`; this is the same refusal written
-// with a literal, the other place a declaration gives its value a type.
+// `T[]` states one dimension, so a value of rank zero is not a value of it (design principles
+// 5.4): the literal the open rank takes as the element is refused here, at the literal, as a
+// value the type cannot hold. The element itself is `rank_one_refuses_element.cml`; this is the
+// same refusal written with a literal instead of a name, which is the other place a declaration
+// gives its value a type.
 
 func main(): int sync {
     let y: f32[] = 1.0

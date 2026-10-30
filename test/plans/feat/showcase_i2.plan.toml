@@ -1,0 +1,86 @@
+id = "showcase_i2_diffusion"
+order = 913
+tier = "fast"
+tags = ["feat", "showcase", "i2", "diffusion", "training"]
+
+# I2, the CPU precursor of the diffusion training step (showcase/i2-diffusion-step).  The whole
+# standard output is pinned at a stated seed, timestep and learning rate: every number comes from
+# the counter-based generator in `random`, so the loss of each step is reproducible, and a trainer
+# that mixed up the forward process, the objective or the update would print another curve.  Two
+# back ends only -- the default one and `std::prl` -- because the example is there to be read, not
+# to cover every scheduler, and both must print the same numbers.
+#
+# The verify scripts check the property a reader can check by hand: at a fixed seed the loss falls
+# from the first step to the last, and the trained reading falls below the last step's.  No test
+# here asserts a duration: the example's point is the numbers, not the clock.
+
+[[tests]]
+name = "diffusion_step.seed7.default"
+desc = "Three DDPM steps at seed 7, timestep 1 of the four, on the default back end: the loss of each step falls (1.202875 -> 1.103411 -> 1.020298) and the reading on the trained parameters falls below the last of them."
+kind = "behavior"
+case = "../../../showcase/i2-diffusion-step/step.cml"
+args = ["${case}", "--arg", "seed=7", "--arg", "steps=3", "--arg", "lr=0.02", "--arg", "t=1"]
+expect_exit = 0
+expect_stdout_exact = "i2 config seed=7 steps=3 lr=0.02 t=1 bar=0.93100 image=4x4 batch=4\ni2 step=0 loss=1.202875\ni2 step=1 loss=1.103411\ni2 step=2 loss=1.020298\ni2 trained t=1 loss=0.944348\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+const losses = []
+for (const line of lines) {
+  const m = /^i2 step=([0-9]+) loss=([0-9.]+)$/.exec(line)
+  if (m === null) continue
+  assert(Number(m[1]) === losses.length, 'the steps are printed in order: ' + line)
+  losses.push(Number(m[2]))
+}
+assert(losses.length === 3, 'three steps, got ' + losses.length)
+assert(losses[0] > losses[1], 'the loss falls from step 0 to 1: ' + losses.join(' -> '))
+assert(losses[1] > losses[2], 'the loss falls from step 1 to 2: ' + losses.join(' -> '))
+const trained = /^i2 trained t=[0-9]+ loss=([0-9.]+)$/m.exec(input.normalized.stdout)
+assert(trained !== null, 'no reading on the trained parameters')
+assert(Number(trained[1]) < losses[2], 'the trained reading is below the last step: ' + trained[1])
+}
+"""
+
+[[tests]]
+name = "diffusion_step.seed7.prl"
+desc = "The same three steps under std::prl: the same loss for every step, so the scheduler does not change a training run's numbers."
+kind = "behavior"
+case = "../../../showcase/i2-diffusion-step/step.cml"
+args = ["${case}", "--arg", "seed=7", "--arg", "steps=3", "--arg", "lr=0.02", "--arg", "t=1", "std::prl"]
+expect_exit = 0
+expect_stdout_exact = "i2 config seed=7 steps=3 lr=0.02 t=1 bar=0.93100 image=4x4 batch=4\ni2 step=0 loss=1.202875\ni2 step=1 loss=1.103411\ni2 step=2 loss=1.020298\ni2 trained t=1 loss=0.944348\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const losses = [...input.normalized.stdout.matchAll(/^i2 step=[0-9]+ loss=([0-9.]+)$/gm)].map(m => Number(m[1]))
+assert(losses.length === 3, 'three steps, got ' + losses.length)
+assert(losses[0] > losses[1] && losses[1] > losses[2], 'the loss falls under std::prl too: ' + losses.join(' -> '))
+}
+"""
+
+[[tests]]
+name = "diffusion_step.seed7.twice"
+desc = "The whole point of seeding the generator: two runs with the same arguments print byte-identical output, so a training run's numbers are an assertion rather than a look."
+kind = "behavior"
+case = "../../../showcase/i2-diffusion-step/step.cml"
+args = ["${case}", "--arg", "seed=7", "--arg", "steps=3", "--arg", "lr=0.02", "--arg", "t=1"]
+expect_exit = 0
+expect_stdout_exact = "i2 config seed=7 steps=3 lr=0.02 t=1 bar=0.93100 image=4x4 batch=4\ni2 step=0 loss=1.202875\ni2 step=1 loss=1.103411\ni2 step=2 loss=1.020298\ni2 trained t=1 loss=0.944348\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "diffusion_step.seed8.default"
+desc = "Another seed, another starting model and another noise: the loss still falls, which is the property that does not depend on the seed."
+kind = "behavior"
+case = "../../../showcase/i2-diffusion-step/step.cml"
+args = ["${case}", "--arg", "seed=8", "--arg", "steps=3", "--arg", "lr=0.02", "--arg", "t=1"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const losses = [...input.normalized.stdout.matchAll(/^i2 step=[0-9]+ loss=([0-9.]+)$/gm)].map(m => Number(m[1]))
+assert(losses.length === 3, 'three steps, got ' + losses.length)
+assert(losses[0] > losses[1] && losses[1] > losses[2], 'the loss falls at seed 8 too: ' + losses.join(' -> '))
+}
+"""
