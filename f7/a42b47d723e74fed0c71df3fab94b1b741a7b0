@@ -1,0 +1,56 @@
+# lane-gen：`typeof` 只求类型、不求值——所有类型位置一样
+
+基 sha `1cd955ea5`（= 当时的 `origin/develop`）。分支 `lane-gen`，本轮的改动提交 `30587f705`，其上三个 merge 之后的头是下面那个 sha。裁定原文在
+`docs/handover/reviews/questions-2026-10-29.md` 末节（作者 16:30 那条：A，收回"先建 step
+再回填"）。
+
+## 落了什么
+
+一句话：`typeof e` 在任何类型位置都只推导 `e` 的类型——`e` 一个节点都不落、不进链、不执行。
+于是 `let a: typeof(f()) = g()` 与 `x as typeof(f)` 都能写，值按 `f` 的类型检查，字面量取
+这个类型。
+
+- `src/compile/gir/builder_generics.cpp#Builder::inferTypeOf`：新建。把 `e` 建在一张**不属于
+  任何图**的临时图里（`createCompileGraph` + `setOuterGraph`，不 `addSubGraph`），诊断进自己的
+  接收器。推断结束时把图、链尾、作用域、`chainedNodes_` 与按图地址留下的
+  `capturedValues_`/`valueUsedGraphs_` 条目一并恢复/抹掉。推断失败时把接收器里第一条错误在
+  `typeof` 处报一次，然后中止——`typeof` 是它唯一的检查处，所以只报一次。
+- `src/compile/gir/builder_generics.cpp#Builder::resolveTypeNode` 的 `TypeOf` 分支改成调用它
+  （原来在那里把 `e` 建出来取类型）。这条规则在**解析书写类型的唯一入口**里，所以七个用到它的
+  位置一起变成"只推导"：`visitTypeNode`（字段类型、`match type`、静态参数）、
+  `builder_static.cpp` 里那四处、`type_arguments.cpp` 的泛型实参，以及下面这个新的。
+- `src/compile/gir/builder_expr.cpp#Builder::visitCastNode`：目标类型是 `typeof` 时先解析，
+  再走原有分支（声明与 `as` 两种写法都经过这里）；解析出来的类型同时作为字面量的期望类型。
+  这一处以前根本不解析占位符，所以声明位上的 `typeof` 是 `DeclaredTypeMismatch: ... 'typeof'`。
+- `src/compile/gct/builder.cpp`：`declaredValue` 与 `as` 两处的字面量转换都跳过 `typeof`
+  （`containsTypeOf`），交给 CAST 在解析后做——和类型变量已有的做法一致。
+
+## 用例与 A/B
+
+新增 `test/cases/compile/static_expansion/typeof_{inferred_not_evaluated,declaration_type,only_here}.cml`，
+四条计划：
+
+- `typeof.inferred_not_evaluated`：只打印 `10`，`mark('inferred')`、`mark('cast')` 都没跑；
+- `typeof.no_node_of_its_expression`：`main` 的图里没有任何函数类型的节点，即没有对 `mark` 的调用；
+- `typeof.declaration_type`：`DeclaredTypeMismatch`，读作 `string` 而不是 `typeof`；
+- `typeof.reported_once`：`1 / 'x'` 恰好报一条 `NoMatchingFunction`。
+
+A/B：把三处机制同时反回去（建立处改回原地求值、CAST 不解析 `typeof`、不重放错误）→ 恰好这四条
+新断言全红、其余 78 条全绿；恢复后 82/82。
+
+## 没落的：单元的类型位置与两处拒绝
+
+- `Builder::visitGeneratorBody` 的 `addCell` 仍把初值本身作为单元的类型来源，没有改成
+  `typeof <第一次写的表达式>`；`FeatureNotSupported('generators')` 与「`yield` 之后读局部」
+  两处拒绝**一条没删**（删除数 = 0）。
+- 为什么停在这里：单元的类型有了，但"每个局部都变单元"之后，单元名在创建体里就可见，早于声明
+  的读会读到未赋值的单元；要把 `refuseLocalAcrossYield` 拆掉，得先有"写之前读"的编译期证明
+  （另一条裁定的范围），否则就是"旧错误点消失、新错误点不给"的限制版。
+- 附带一条：`typeof` 不求值之后，`docs/handover/reviews/questions-2026-10-30-cell-type.md` 里
+  担心的"三层嵌套的探针要读未赋值单元、只能保一层"不再成立——探针只求类型、不读值，任意深度
+  都可；`for v in f()` 同理。那页的"路 1 的代价"现在不成立，可以按无代价的 A 落单元。
+
+## 闸门
+
+`total 7924 / pass 7915 / fail 0 / skip 7 / known 2`（在本轮第二个 merge 上跑；
+`catalog.doc_is_generated` 绿——新用例没有抢走 `docs/diagnostics.md` 的样例）。
