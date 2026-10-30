@@ -1761,7 +1761,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TypeFunctionNotApplicable",
                 "The type function '{0}' is not applicable: {1}.",
-                "A type function computes a type from types at compile time (design principles 21): `ElementOf<T>` is the element of an array or a set, `PayloadOf<T>` the `U` of `U?` or `U!`, and `KeyOf<T>` and `ValueOf<T>` the key and value types of a map; a program writes its own with `type F<T> = ...`, whose body may be a `match type`. It is called with `F<...>` where a type is written, and it accepts only the types it is defined for.",
+                "A type function computes a type from types at compile time (design principles 21): `ElementOf<T>` is the element of an array or a set, `PayloadOf<T>` the `U` of `U?` or `U!`, and `KeyOf<T>` and `ValueOf<T>` the key and value types of a map, and `RowsOf<T>` the array whose first-dimension elements are `T`; a program writes its own with `type F<T> = ...`, whose body may be a `match type`. It is called with `F<...>` where a type is written, and it accepts only the types it is defined for.",
             },
         },
         {

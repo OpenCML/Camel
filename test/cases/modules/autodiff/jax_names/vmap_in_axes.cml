@@ -2,10 +2,10 @@
  * `in_axes` is not a parameter of `vmap`.
  *
  * JAX's `vmap(fun, in_axes=...)` says which axis of which argument is batched. Camel's `vmap`
- * batches the one axis an array has -- `T[]` is rank one -- so there is no axis to name, and the
- * parameter was not added for that: a call that names it is refused as the unknown parameter it is,
- * with the name in the diagnostic. A second axis is not something the transform can do quietly, so
- * it is not something a call can ask for quietly either.
+ * batches the leading axis -- the element `x[i]` takes, at every rank -- so there is no axis to
+ * name, and the parameter was not added for that: a call that names it is refused as the unknown
+ * parameter it is, with the name in the diagnostic. Another axis is not something the transform can
+ * do quietly, so it is not something a call can ask for quietly either.
  *
  * `vmap` is generic, so the diagnostic spells the callee by its signature rather than by its name;
  * the parameter it refuses is named either way.

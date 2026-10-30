@@ -2,15 +2,16 @@
  * `vmap` batches one parameter, and a function of two is refused.
  *
  * JAX's `vmap(fun, in_axes=(0, None))` batches chosen arguments of a function of several; Camel's
- * `vmap` batches the one parameter the function has, so a function of two has no meaning here and
- * the call is refused where it is written. The refusal has to be visible: batching `add` over its
- * first parameter alone would silently answer a question the program did not ask (`add` with the
- * second one left out).
+ * `vmap` batches the one parameter the function has. A function of two would be two batching
+ * parameters at once, so the call is refused where it is written: batching `add` over its first
+ * parameter alone would silently answer a question the program did not ask (`add` with the second
+ * one left out).
  *
- * The diagnostic shows both shapes -- the argument's two parameters, and the one-parameter
- * function the transform takes -- so the unsupported half is what the message prints. The second
- * half is batched in JAX only because `in_axes` says so, and there is no such parameter here
- * (jax_names/vmap_in_axes.cml): it cannot be asked for at all.
+ * The diagnostic shows both shapes -- the argument's two parameters `(a: float, b: float)`, and the
+ * one-parameter row function the transform takes `f: (row: T) => U` -- so the call says which
+ * parameters it had and which form it needed. The second half is batched in JAX only because
+ * `in_axes` says so, and there is no such parameter here (jax_names/vmap_in_axes.cml): it cannot be
+ * asked for at all.
  */
 
 import { vmap } from array

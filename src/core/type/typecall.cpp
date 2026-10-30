@@ -26,7 +26,15 @@ TypeCode TypeCallType::typeCode() {
 namespace {
 
 constexpr std::string_view kTypeFunctions[] = {
-    "ElementOf", "PayloadOf", "KeyOf", "ValueOf", "WithElement", "ParamsOf", "WithOf", "ResultOf"};
+    "ElementOf",
+    "PayloadOf",
+    "KeyOf",
+    "ValueOf",
+    "WithElement",
+    "RowsOf",
+    "ParamsOf",
+    "WithOf",
+    "ResultOf"};
 
 constexpr std::string_view kPackName   = "$pack";
 constexpr std::string_view kExpandName = "$expand";
@@ -98,6 +106,25 @@ Type *TypeCallType::evaluate(
         }
         error = type->toString() + " is neither an array nor a set";
         return nullptr;
+    }
+    if (name == "RowsOf") {
+        // The array whose first-dimension elements are `type`: one dimension more, its length not
+        // known (a batch), the dimensions the argument states kept as they are. This is the
+        // inverse of ArrayType::firstDimensionElement(), which is the rule `x[i]` and `for x in
+        // xs` follow (design principles 5.4), so `x[i]` on `RowsOf<T>` is a `T` again. A type with
+        // no dimension (`f32`, a struct) is one element of the batch: `f32[?]`.
+        const ArrayType *array = asArrayType(type);
+        if (array == nullptr) {
+            return ArrayType::create(type);
+        }
+        std::vector<ExtentForm> forms;
+        forms.reserve(array->rank() + 1);
+        forms.push_back(ExtentForm::unknown());
+        forms.insert(forms.end(), array->extents().begin(), array->extents().end());
+        if (array->anyRank()) {
+            return ArrayType::openRank(array->elemType(), forms);
+        }
+        return ArrayType::create(array->elemType(), forms, array->packName());
     }
     if (name == "PayloadOf") {
         if (TupleType *tagged = asTagged(type)) {
