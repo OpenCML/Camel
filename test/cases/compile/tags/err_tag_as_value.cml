@@ -1,0 +1,10 @@
+/// A tag name written where a value belongs. A tag keeps its name and does not enter the value
+/// namespace (design principles 6.2, the author's ruling of 2026-10-30), so the report says the
+/// name is a tag -- not that the name is undeclared, which it is not.
+
+tag label(x: int) on func
+
+func main(): int sync {
+    let f = label
+    return 0
+}

@@ -1152,6 +1152,14 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
     if (isPoisonedName(name)) {
         throw BuildAbortException();
     }
+    // A name used as a value that is a tag. A tag keeps the name it is written with and does not
+    // enter the value namespace (design principles 6.2, the author's ruling of 2026-10-30), so a
+    // tag and a value of one name may coexist and the tag is reached only through `#`. Saying that
+    // beats telling the writer to check that a name the program declares is declared.
+    if (tagNamed(name).has_value()) {
+        diags_->of(SemanticDiag::TagNameAsValue).atOrigin(gct->origin()).commit(name);
+        throw BuildAbortException();
+    }
     diags_->of(SemanticDiag::UnresolvedReference).atOrigin(gct->origin()).commit(name);
     throw BuildAbortException();
 }

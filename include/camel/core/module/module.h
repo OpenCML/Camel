@@ -52,8 +52,8 @@ class Entity {
         return std::get<camel::core::data::data_ptr_t>(storage_);
     }
     /// A tag declared by a module (`tag kernel on nodes`, design principles 6.2): its id in
-    /// camel/core/tags.h. A tag shares the namespace of functions and types, so it is
-    /// imported and qualified like them.
+    /// camel/core/tags.h. A tag is imported and qualified like a function, and its name is its
+    /// own: a tag is not a value, and a value of the same name is a different name.
     bool isTag() const { return std::holds_alternative<tag_payload_t>(storage_); }
     uint32_t tagId() const { return std::get<tag_payload_t>(storage_); }
 
