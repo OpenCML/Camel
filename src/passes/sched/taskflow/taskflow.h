@@ -289,6 +289,9 @@ struct TaskflowOptions {
     bool fanOutAll = false;
     /// Print the decision for every graph and the reason when a graph stays node by node.
     bool diag = false;
+    /// Print the segments the plan cut (`segments=true`): how many items each holds, which
+    /// segment depends on which, and where each operator lands. The plan is read, not changed.
+    bool segments = false;
     /// Hand graphs that need no parallelism to the bytecode interpreter; off: every graph is
     /// evaluated by the scheduler itself.
     bool bytecode = true;
@@ -434,6 +437,9 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         // False: the graph does not fit the scope model (or task graphs are switched off); it
         // is evaluated node by node in linear order, its calls still as task graphs.
         bool structured = false;
+        // Why the graph stayed node by node ("it has a loop", "an edge runs against the linear
+        // order", ...); empty while it is structured.
+        std::string refusal;
         std::vector<std::unique_ptr<PlanScope>> scopes; // [0]: top level
         std::vector<PlanBranch> branches;
         std::vector<camel::runtime::gc_node_ref_t> topo;
@@ -592,6 +598,9 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     GraphPlan *planFor(camel::runtime::GCGraph *graph);
     std::unique_ptr<GraphPlan> buildGraphPlan(camel::runtime::GCGraph *graph);
     void buildStructuredPlan(GraphPlan &plan);
+    /// `segments=true`: print what buildStructuredPlan cut, one line per segment, per chain and
+    /// per edge between chains, then one line per operator saying where it landed.
+    void printSegments(const GraphPlan &plan) const;
 
     slot_t evalGraphTF(camel::runtime::GCGraph *graph, ctx::Frame *frame);
     // Evaluates `graph` on `frame`, tail calls included. May be entered inside `region`;
