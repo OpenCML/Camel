@@ -4,7 +4,7 @@
 /*
  * Macro draft rewriting.
  *
- * Evaluated macro values are materialized into the owner GraphDraft. Source
+ * Evaluated macro values are materialized into the graph one transaction owns. Source
  * runtime graphs remain read-only; RuntimeGraphDraftSession commit later
  * rebuilds the reachable runtime closure and remaps static function carriers.
  */
@@ -23,7 +23,9 @@ using camel::runtime::gc_node_ref_t;
 using camel::runtime::GCNodeKind;
 
 gc_node_ref_t bridgeMacroRewriteControl(
-    camel::runtime::GraphDraft &draft, gc_node_ref_t replacedNodeId, gc_node_ref_t valueNodeId) {
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t replacedNodeId,
+    gc_node_ref_t valueNodeId) {
+    auto &draft = transaction.edit();
     const std::vector<gc_node_ref_t> ctrlPreds(
         draft.ctrlInputsOf(replacedNodeId).begin(),
         draft.ctrlInputsOf(replacedNodeId).end());
@@ -73,7 +75,8 @@ bool applyMacroRewrite(
         return false;
     }
 
-    auto &draft = session.edit(candidate.runtimeGraph).edit();
+    auto &transaction = session.edit(candidate.runtimeGraph);
+    auto &draft       = transaction.edit();
     const gc_node_ref_t draftNodeId   = draft.draftIdOfSourceRef(candidate.nodeRef);
     if (draftNodeId == camel::runtime::kInvalidNodeRef || !draft.alive(draftNodeId)) {
         return false;
@@ -82,7 +85,7 @@ bool applyMacroRewrite(
     const gc_node_ref_t valueNodeId =
         draft.materializeStaticValue(result.value(), result.type, result.runtimeFlags);
     const gc_node_ref_t replacementNodeId =
-        bridgeMacroRewriteControl(draft, draftNodeId, valueNodeId);
+        bridgeMacroRewriteControl(transaction, draftNodeId, valueNodeId);
 
     draft.takeStatementPlace(draftNodeId, replacementNodeId);
     draft.replaceAllValueUses(draftNodeId, replacementNodeId);
