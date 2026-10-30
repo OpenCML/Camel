@@ -15,3 +15,5 @@
 A/B 四向：见合并提交信息（每向只红该红的那条，还原后 42/42）。
 
 闸门（本轮树，-Plan all -Tier fast -Jobs 8）：total 7903 / pass 7892 / fail 0 / skip 9 / known 2；基线是当时主干 e8d92a8ec，对它的差集只有本轮加的 3 条（7900 → 7903），skip 随显卡占用浮动。
+
+推法：这一笔和另外九笔是一棵树验过的——lane 头 010433eff 一次 fast-forward 落到 develop，闸门与这条 note 都对着这个头（中间每笔的树没有单独跑闸门，十笔 = 5 笔改动 + 5 笔 develop 合并）。
