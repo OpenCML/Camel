@@ -1437,6 +1437,15 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
                 }
             }
             if (!converted) {
+                // The value may still be a literal the position converts element by element: a
+                // composite literal whose field is `T[..]` becomes the rank-zero value of the
+                // element there (design principles 5.4), and a position converts its literal in
+                // one place (`Builder::coerceTo`). Refusing here would refuse a value the
+                // declaration itself makes, so the position is asked first.
+                if (node_handle_t entered = coerceTo(valueNode, targetType, gct->at(0)); entered != nullptr) {
+                    LEAVE("CAST");
+                    return entered;
+                }
                 diags_->of(SemanticDiag::DeclaredTypeMismatch)
                     .atOrigin(gct->origin())
                     .commit(have->toString(), targetType->toString());
