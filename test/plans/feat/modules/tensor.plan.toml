@@ -1024,3 +1024,31 @@ expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
 expect_output_contains = ["No candidate of 'shape' applies to", "every candidate's 'when' condition is false", "(t: T[..]) => int[] — when is_numeric::<T>()"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+# The kernel-timing table is a pass parameter (`std::profile opstats=true`): a run that asks for
+# nothing prints no table, and one that asks prints the module's own rows.
+
+[[tests]]
+name = "op_stats.table"
+desc = "`std::profile opstats=true` prints the kernel-timing table: one line per operator that ran, with its calls and its time, the module's kernels measured through timing trampolines instead of the kernels themselves."
+kind = "behavior"
+case = "../../../cases/modules/tensor/op_stats.cml"
+args = ["${case}", "std::profile", "report=false", "hints=false", "opstats=true", "${backend}"]
+backends = ["nvm", "fvm"]
+expect_exit = 0
+expect_stdout_contains = ["8"]
+expect_stderr_contains = ["tensor op stats:", "  operator                      calls     total ms    us/call      %", "  zeros ", "  add ", "  multiply ", "  sum "]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "op_stats.off_by_default"
+desc = "The same program with `std::profile report=false hints=false` and no `opstats`: no table, no timing trampolines, and the program's own output unchanged."
+kind = "behavior"
+case = "../../../cases/modules/tensor/op_stats.cml"
+args = ["${case}", "std::profile", "report=false", "hints=false", "${backend}"]
+backends = ["nvm", "fvm"]
+expect_exit = 0
+expect_stdout_contains = ["8"]
+expect_output_not_contains = ["tensor op stats:"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000

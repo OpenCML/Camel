@@ -195,6 +195,13 @@ ReportOptions reportOptions();
 void setJsonPath(std::string path);
 std::string jsonPath();
 
+/// The kernel-timing table (`std::profile opstats=true`). When it is on, a module that serves
+/// its kernels from a dispatch map (tensor today) hands out timing trampolines instead of the
+/// kernels and prints one row per operator when the run ends: calls, total time, time per call.
+/// It is a reading of its own, not a part of the report, and it does not start the session.
+void setKernelTiming(bool on);
+bool kernelTiming() noexcept;
+
 /// Writes the text report (what `std::profile` prints) to `os`, and stops recording.
 void reportText(std::ostream &os, const ReportOptions &options);
 /// The same report as one JSON object, without stopping the recording (for tests and tools).

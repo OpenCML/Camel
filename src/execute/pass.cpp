@@ -510,7 +510,8 @@ PassMaker profilePass() {
             pathArgument(args, "json"),
             gcStats < 0 ? 0 : static_cast<int>(gcStats),
             args.getBool("type_stats"),
-            pathArgument(args, "effect_trace"));
+            pathArgument(args, "effect_trace"),
+            args.getBool("opstats"));
     };
 }
 
