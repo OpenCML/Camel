@@ -920,3 +920,40 @@ HANDLE_PROBE refused: InvalidArgument
 * `01ea89d6f`（02:15）"let the tests hand the writings a draft, as they did before"——改了 `test/writings.cpp` 等四个文件
 
 **所以"`writings` 那 1 个"正被另一条车道在做。按规矩：报，不自己合。** 要先把这个车道快进到 develop 再决定。
+
+## 43. `test/` 收口：**测试里再没有一处自己造的草稿**（`29ee885c6`）
+
+**先回答那一问："测试里谁能造草稿？"** 答案取 **(a)**：**没有谁**。
+* **理由一**：b6 的验收要是"`GraphDraft` 的构造只出现在事务里"，**测试里留一个 `make_unique<GraphDraft>` 就等于验收永远差一步**。
+* **理由二**：`GraphTransaction::open(id, type)` **本来就是为"没有所有者的草稿"开的门**（`graph_txn.h:27`），测试正是它的用户；不借这个门，测试就得自己造一个**连任何转换过的 API 都递不进去**的草稿——那已经是一座孤岛。
+* **理由三**：测试是"唯一不受产品约束的调用者"这句话**不成立**——它约束的正是"谁能造"。**约束一条，就不该给它开例外。**
+
+**做了什么**：
+* `resources.cpp`：`makeDraft` 从 `make_unique<rt::GraphDraft>()` 改成 `rt::GraphTransaction::open(id, type)`；三个 helper（`addPort`／`finish`／`encode`）改收事务，草稿在函数体内借。
+* `anchor.h`：`anchorNode`／`blankNode` 改收事务；**33 个调用点散在 7 个文件，一片做完**（`edges` 17、`chunks` 1、`keepfn` 2、`graph_release` 1、`fault` 1、`facts` 1）。每个调用点手上本来就有事务——`session.edit(...)` 或一个绑定好的 owner。
+
+**三个数**：**消失的参数 6 个**（`resources` 4、`anchor` 2）；**删掉的行数 156**；**保留 1 个**（`test/writings.cpp:216` 的 `GraphDraft::WritingScope`——**类型自己的作用域守卫，不是参数**）。
+
+**四个数：45 / 389 / 2 / 4。**（**`constructions` 3 → 2**：测试里那一处构造没了，只剩事务内部的两处。）
+
+---
+
+## 44. b6 的开工清单（**最终表**，`29ee885c6` 之后）
+
+**余 389 处 / 45 个文件**（`git grep -o -w GraphDraft`；**另有事务自己那 10 处不计入判据**）。
+
+| 类 | 处数 | 在哪 | 下一步 |
+|---|---|---|---|
+| **墙：类型自己的家** | **296** | `src/runtime/draft.cpp` 129、`draft_construct.cpp` 39、`draft_inline.cpp` 25、`draft_session.cpp` 23、`draft_regions.cpp` 20、`include/camel/runtime/draft.h` 20、`draft_clone.cpp` 13、`draft_types.cpp` 7、`draft_session.h` 7、`draft_clone.h` 4、`draft_writes.*` 6、`draft_inline.h` 2、`draft_types.h` 1 | **不收**：这是类型自己的定义与成员实现 |
+| **墙：图的两层** | **25** | `graph.cpp` 11、`graph.h` 5、`graph_build.h` 4、`node_ref.h` 4、`definitions.h` 1 | **不收**：`DraftNodeRef` 拿草稿当键、`encode` 的入参 |
+| **边界一：`LoopDraftView`** | **6** | `loop.h` 4、`loop.cpp` 2 | **不收**（第 1 条） |
+| **边界二：`fallBackToCopyingAppend`** | 含在上行 | `loop.cpp:657` | **不收**（第 2 条） |
+| **边界三：真的复制一份时** | — | — | **不收**（第 3 条 `ungated`／`fallBackToCopyingAppend`／`LoopDraftView` 三者合为三条） |
+| **边界四：`tags` 的草稿重载** | **11** | `core/tags.h` 6、`tags.cpp` 5 | **不收**（第 4 条，§41 的原话） |
+| **待做：`writings`** | **19** | `writings.cpp` 13、`writings.h` 5、`passes/test/writings.cpp` 1 | **另一条车道正在做**（`1e70b99ac`／`01ea89d6f`），**本车道不碰** |
+| **待做：`compile/gir`** | **16** | `draft_graph_builder.h` 5、`draft_graph_builder.cpp` 4、`graph_encode.cpp` 3、`builder_support.h` 1、`debug_json.cpp` 1、`gir/graph.h` 1、`nodes.h` 1 | **访问器本身**（`nodeDraftOf` 66 个调用点）与 `draftOwners` 的键——"草稿就是我的键"那一类 |
+| **待做：`tiles`** | **10** | `region_extract.cpp` 3、`graph_values.*` 4、`regions.h` 1、`region_outline.cpp` 1、`region_test_pass.cpp` 1 | **下一片** |
+| **待做：其它** | **5** | `operator_instance.*` 2、`composite/func.h` 1、`modules/graph/txn.cpp` 1、`proof.h` 1 | **下一片** |
+| **待做：`onnx`** | **1** | `exporter.cpp:4815` | **最后一片** |
+
+**合计：296 + 25 + 17（四条边界）+ 51（待做）= 389。**
