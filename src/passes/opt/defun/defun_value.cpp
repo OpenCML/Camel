@@ -30,8 +30,12 @@
  * A *family* is the set of signatures one value is, not one signature: a function type is
  * structural (design principles 5.2), and the same function value is written `(x: int) => int` in
  * one place and `(x: int) => int pure` in the one that takes it. The two are one value at run
- * time, so one enum is made per family -- and the members are found by assignability, not by
- * spelling.
+ * time, so one enum is made per family -- and the members are the signatures with the same
+ * parameters and the same result, compared with the effect qualifiers left out (5.2: an effect
+ * qualifier is a subtype relation, not another type). Not the ones that happen to be assignable to
+ * each other: assignability is neither symmetric nor transitive, a `() => void` takes a
+ * `() => int` without being the same family, and a family is one type, so its grouping is an
+ * equality.
  *
  * The type substitution and the node rewrite are one commit. `retype.h` says why: after the
  * rebuild the graph says the value is the enum while the static area still holds the function
@@ -79,8 +83,10 @@ struct TypePlan {
     size_t calls  = 0;
 };
 
-/// The signatures one value is: the members are mutually assignable, so one function value is
-/// written as any of them and the run time holds one thing.
+/// The signatures one value is: the members have the same parameters and result, so one function
+/// value is written as any of them and the run time holds one thing. Effects are left out of that
+/// comparison (design principles 5.2), so a member may promise `pure` where another promises
+/// nothing -- and, being the same type, they are one family whichever direction a value flows.
 struct Family {
     std::vector<TypePlan *> members;
     GraphId target = GraphId::Invalid;
@@ -162,8 +168,13 @@ std::span<const std::byte> payloadOf(const void *body, size_t size) {
     return std::span<const std::byte>(static_cast<const std::byte *>(body), size);
 }
 
-bool assignableEitherWay(ty::Type *left, ty::Type *right) {
-    return left->assignableFrom(right) || right->assignableFrom(left);
+/// Whether two signatures are one value's type: the same parameters and the same result, in
+/// structure, with the effect qualifiers left out. `pure` and a resource clause say which
+/// executions a value may take part in, and a `pure` value goes where the plain signature is
+/// expected without a conversion, so they do not make another type (design principles 5.2).
+bool sameFamily(ty::Type *left, ty::Type *right) {
+    return left != nullptr && right != nullptr && left->code() == TypeCode::Function &&
+           right->code() == TypeCode::Function && ty::typeEqualsIgnoringResources(left, right);
 }
 
 } // namespace
@@ -306,7 +317,7 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
     }
 
     // ---------------------------------------------------------------------------------------
-    // (3) One family per structural value: the signatures that are mutually assignable.
+    // (3) One family per type: the signatures that are one value's type, effect qualifiers aside.
     // ---------------------------------------------------------------------------------------
     std::vector<Family> families;
     std::set<TypeId> assigned;
@@ -316,21 +327,12 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
         }
         families.emplace_back();
         Family &family = families.back();
-        std::vector<TypeId> pending{id};
-        while (!pending.empty()) {
-            const TypeId current = pending.back();
-            pending.pop_back();
-            if (!assigned.insert(current).second) {
+        for (auto &[otherId, other] : plans) {
+            if (assigned.count(otherId) != 0 || !sameFamily(plan.type, other.type)) {
                 continue;
             }
-            TypePlan &member = plans[current];
-            family.members.push_back(&member);
-            for (auto &[otherId, other] : plans) {
-                if (assigned.count(otherId) == 0 && member.type != nullptr &&
-                    other.type != nullptr && assignableEitherWay(member.type, other.type)) {
-                    pending.push_back(otherId);
-                }
-            }
+            assigned.insert(otherId);
+            family.members.push_back(&other);
         }
     }
     for (Family &family : families) {
