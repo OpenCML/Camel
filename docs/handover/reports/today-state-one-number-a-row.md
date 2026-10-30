@@ -8,7 +8,7 @@
 |---|---|---|---|
 | 整闸 | 7997 / 7988 / 0 / 7 / 2（total / pass / fail / skip / xfail） | `c85878ac9` | `node scripts/test.js all --jobs 8`（看 `[SUMMARY]` 行） |
 | 账本（graph-store step 2b） | 45 / 389 / 2 / 4（files / references / constructions / decode）；`constructions` 两处按 baseline 原文：`region_extract.cpp#extractRegion`、`draft.cpp#decode` | `lane-gs2b@9dc8b2082` | `node test/cases/runtime/graph_draft_ledger/check.mjs`（读 `baseline.json`；`--record` 才改写） |
-| `ASSERT` / `GUARD` / release 会说话 | 1163 / 61 / 273 @ `7467dd094`（9 处转 `GUARD` 之后）；1174 / 62 @ `e65a4766b`（在它之前） | 两个 sha 见左；release 那栏本次未复量 | `git grep -o "ASSERT(" -- src include modules tools test ':!include/camel/utils/assert.h' \| Measure-Object`；`GUARD(` 同法；release 那一栏按 `reports/assert-release-hole.md` 的三种命运分类数 |
+| `ASSERT` / `GUARD` | **1127 / 62** @ `src include`（canonical）｜**1183 / 63** 全树 | `audit` 最新 | `git grep -o 'ASSERT(' -- src include \| wc -l`（canonical）；全树把路径换成 `-- src include modules tools test`；`GUARD(` 同法 |
 | `perf` 层 | 47 / 42 / 5（total / pass / fail；4 条是修复还在分支上，1 条 `startup.cost` 是机器条件） | `b5d86e610` | `node scripts/test.js test/plans/perf --jobs 8` |
 | `perf` 层（新口径） | 47 / 46 / 1 | `audit` 最新（待它给 sha） | `node scripts/test.js test/plans/perf --jobs 8`（与上一行同一命令，两个 sha 各跑一次） |
 | `perf` 的编译面 | 3670 条里编译失败 1（`transformer_step.cml`，现已修）；认 `[INFO] does not compile` 那一行，不认 `[FAIL]`——两栏模式的定义 | `b5d86e610` | `node scripts/test.js test/plans --compile-only --jobs 8`（`[SUMMARY] total: 3670`；`[INFO] does not compile` 那一行 = 1） |
@@ -16,11 +16,11 @@
 | 规则集 | `rule` 10 条（`jvp` 5 / `transpose` 5）；索引键含元数（`head@arity`）；消费者是 `reinterp<H>` | 本树 `ad017fa16` | `git grep -c "^export rule" -- stdlib/rulesets`；键在 `src/compile/gir/program.cpp:680` |
 | 环境变量开关 | `CAMEL_RULESET_INDEX` 已清（本车道 HEAD 仍有 `program.cpp:662`，见下）；onnx/tensor/tiles 那批在队列里 | `origin/develop` | `git -C D:\Projects\Camel grep -n "CAMEL_RULESET_INDEX" origin/develop -- src`（0 命中） |
 
-> **同类数字在不同 sha 上不同是正常的**（`faults` 上 9 处 `ASSERT` 转 `GUARD` 就会让 1174/62 变成 1163/61），所以第四栏必须是**稠命令 + 取数 sha**；换 sha 读数变了不是"表错了"。
+> **同类数字在不同 sha 上不同是正常的**（同一套命令，`src include` 上是 1127/62，全树是 1183/63——范围变了数就变；`faults` 上 9 处 `ASSERT` 转 `GUARD` 也会动这一行），所以第四栏必须是**稠命令 + 取数 sha**；换 sha 读数变了不是"表错了"。
 
 ## 复量差异（本次核过的，按上面命令）
 
-- **`ASSERT` / `GUARD`**：两个数都对，量的是两个 sha——`7467dd094`（9 处转 `GUARD` 之后）是 **1163 / 61**；`e65a4766b`（在它之前）是 **1174 / 62**。`audit` 正在复核这两个数，表里先按两个 sha 并列。release 会说话 273 与空语句 951 本次没有复量。
+- **`ASSERT` / `GUARD`**：口径由 `audit` 定：**`src include` 里 1127 / 62（canonical）**，**全树 1183 / 63**。本树今天按同一条命令量到 ASSERT 1139（`src include`）/ 1188（全树）、GUARD 53 / 53，与 audit 的 62 / 63 有差——差在 sha 与分类口径，以 audit 为准。"release 会说话 273"只有 `reports/assert-release-hole.md` 的值，本页不再单列。
 - **账本的两处 `constructions`**：`lane-gs2b@9dc8b2082` 的 `baseline.json` 原文是 `modules/tiles/src/region_extract.cpp#extractRegion` 与 `src/runtime/draft.cpp#decode`。**`gs2b` 口头的"两处都在 `graph_txn.cpp`"是错的，已被 baseline 原文推翻**——这是今晚又一次"两处答案"，表按原文写。数字 45/389/2/4 与这份 baseline 逐字对上。
 - **`CAMEL_RULESET_INDEX`**：这条要在**当前 develop 的 sha** 上跑：`git -C D:\Projects\Camel grep -n "CAMEL_RULESET_INDEX" origin/develop -- src` → 0 命中。**本车道 HEAD（`ad017fa16`）的 `src/compile/gir/program.cpp:662` 里还在**——本车道合的 develop 早于清掉它的那一笔，"已清"说的是 develop，不是本车道。
 - **整闸 / perf 两行**：本机不构建，这些行本次**没有复量**，按给出的 sha 原样抄；复量命令已在第四栏。`perf` 的 `47 / 46 / 1`（`audit` 最新）与 `47 / 42 / 5`（`b5d86e610`）是两个 sha 的读数，不是谁对谁错。
