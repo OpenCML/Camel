@@ -36,10 +36,23 @@
  *    to something that expects a function;
  *  - a function that is called directly somewhere: its captures are not arguments of that call, so
  *    turning them into parameters would break it;
- *  - a call whose callee waits on something, a callee that is neither a value nor a parameter, and
- *    a type that is an argument of the entry function: the pass refuses what it cannot see rather
+ *  - a call whose callee waits on something, a callee that is neither a value nor a parameter, a
+ *    value handed to a parameter declared as another function type (a lambda that returns its write
+ *    where the parameter says `void`, say), a type that is an argument of the entry function, or a
+ *    type that holds another family left as written: the pass refuses what it cannot see rather
  *    than leaving half the program on the old type;
  *  - a type the program gives no value to: there is nothing to build.
+ *
+ * A family that is no value's business is left out of the count rather than refused: the entry
+ * function's own value is the shell's, which builds it and calls it, so no program gets its entry
+ * point re-encoded.
+ *
+ * The rewrite is one session, and a session whose commit would break an invariant leaves the program
+ * as it was: a lowering step that cannot lower a program must not break it. Those are the programs
+ * where a call the pass made direct meets an order edge the graph keeps on an effectful node, and
+ * the rewritten node carries the enum, which has no resources, so the graph would be one no
+ * scheduler may run (`test/cases/modules/autodiff` has two of them). That is a defect of this pass
+ * and not of the program: the fix is to keep the effect on the node, not to catch it here.
  *
  * The type substitution and the node rewrite are one commit. `retype.h` says why: after the
  * rebuild the graph says the value is the enum while the static area still holds the function
@@ -540,6 +553,39 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                         refuseIfUnsaid(
                             planned->second, "the value is read by a node that is not a call");
                     }
+                    // A value handed to a parameter declared as another function type is widened
+                    // at the call -- a lambda that returns the value of its write where the
+                    // parameter says `void`, say. The tag would reach a signature that still says
+                    // the function type, so the family stays as written.
+                    if (readsAsArgument) {
+                        const ty::FunctionType *signature = nullptr;
+                        if (node.kind == GCNodeKind::Call && !withs.empty()) {
+                            ty::Type *calleeType = typeOf(withs.front());
+                            if (calleeType != nullptr && calleeType->code() == TypeCode::Function) {
+                                signature = static_cast<const ty::FunctionType *>(calleeType);
+                            }
+                        } else if (node.kind == GCNodeKind::Func) {
+                            if (const GCGraph *callee = program->calleeOf(*graph, ref)) {
+                                signature = callee->funcType();
+                            }
+                        }
+                        if (signature != nullptr) {
+                            bool declared = false;
+                            for (const auto &span :
+                                 {signature->withTypesSpan(), signature->normTypesSpan()}) {
+                                for (const ty::Type *param : span) {
+                                    auto *written = const_cast<ty::Type *>(param);
+                                    declared = declared || written->equals(inputType) ||
+                                               sameFamily(written, inputType);
+                                }
+                            }
+                            if (!declared) {
+                                refuseIfUnsaid(
+                                    planned->second,
+                                    "the value is handed to a parameter of another function type");
+                            }
+                        }
+                    }
                 }
             };
             checkReader(graph->normInputsOf(ref));
@@ -739,7 +785,11 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
         }
         for (Family *family : accepted) {
             for (TypePlan *member : family->members) {
-                if (type->equals(member->type)) {
+                // A family is its signature with every resource clause it is written with (design
+                // principles 5.2), so an object that differs from a member only in the clause is a
+                // member too: a call would otherwise hand the tag to a signature that still says the
+                // function type.
+                if (type->equals(member->type) || sameFamily(type, member->type)) {
                     equivalents[member->type->typeId()].insert(type);
                 }
             }
@@ -804,6 +854,7 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
     // signature of a function that is one of them keeps its shape.
     options.leaveSignatures = true;
 
+
     // ---------------------------------------------------------------------------------------
     // (7) One commit: the type of every value, its constructor and its call change together.
     // ---------------------------------------------------------------------------------------
@@ -830,7 +881,10 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
     };
 
     size_t rewroteValues = 0, rewroteCalls = 0;
-    {
+    // A rewrite that would break the graph must not be handed on: the program as written is
+    // correct, so the step leaves the program it was given and the pipeline runs that. The rewrite
+    // is one session, so nothing of an attempt that cannot be committed reaches the program.
+    try {
         RuntimeGraphDraftSession session(context_, program);
         for (GCGraph *graph : session.program()->graphs()) {
             auto &draft = session.edit(graph).edit();
@@ -1140,5 +1194,19 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
             os << " values=" << family->values << " calls=" << family->calls << "\n";
         }
         return done;
+    } catch (const std::exception &error) {
+        if (report_) {
+            os << "DEFUNCTIONALIZE broke_invariant=1\n";
+            if (context_ != nullptr) {
+                raisePassWarning(
+                    *context_,
+                    camel::core::error::RuntimeDiag::DefunctionalizationIncomplete,
+                    camel::source::kInvalidOriginId,
+                    std::format("the rewrite would break the graph, so the program is left as "
+                                "written ({})",
+                                error.what()));
+            }
+        }
+        return program;
     }
 }
