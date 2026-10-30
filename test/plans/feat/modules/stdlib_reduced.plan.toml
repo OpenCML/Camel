@@ -82,6 +82,21 @@ expect_stdout = "[80, 64] 3.25\n[0, 191] -0.5\n[112, 192] -3.75\n[128, 63] true\
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
+# Unary negation of a value that was computed: a sign bit and nothing else.
+
+[[tests]]
+name = "reduced_negate"
+desc = "`-x` on a bf16 and on an f16 value that was computed rather than written as a literal is a change of the sign bit alone: it does not round, does not widen to f32 and back, and does not touch the significand. On x = 1.0 / 3.0, which no literal writes down (bf16 0x3EAB [171, 62], f16 0x3555 [85, 53]), -x is 0xBEAB [171, 190] and 0xB555 [85, 181] -- the low byte the same and the high byte 128 more, which is the same statement in bytes -- and -(-x) is 0x3EAB again, so neither of two sign flips rounded. A negation after a statement that rounded takes the sign of the rounded result: -(1.0 + 2^-8) is -1.0 (0xBF80 [128, 191], 0xBC00 [0, 188]). Zero keeps the sign a negation gives it: -(1.5 - 1.5) is -0.0 (0x8000 [0, 128]) and -(-0.0) is +0.0 (0x0000), so a negation that normalized zero fails. -(max + max) is -infinity (0xFF80 [128, 255], 0xFC00 [0, 252]) and not -max: the overflow is the sum's, the negation keeps it. -(x * x) and (-x) * x are the same element, because rounding to nearest even is symmetric about zero, so a negation that rounded would break the equality. The result keeps the operands' element type: a one-element array of it is two bytes."
+kind = "behavior"
+case = "../../../cases/modules/stdlib/reduced_negate.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "[171, 62] [171, 190]\ntrue true\n[171, 62]\n[128, 191]\n[0, 128]\n[0, 0]\n[128, 255]\ntrue\n[85, 53] [85, 181]\ntrue true\n[85, 53]\n[0, 188]\n[0, 128]\n[0, 0]\n[0, 252]\ntrue\n2 2\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
 # The reduction the rule re-pointed: the refusal this case asserted became a computation.
 
 [[tests]]

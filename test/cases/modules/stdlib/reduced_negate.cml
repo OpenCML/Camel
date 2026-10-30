@@ -1,0 +1,104 @@
+/**
+ * Unary `-` applied to a reduced-precision value that was computed, not written as a literal.
+ *
+ * A negation is a change of the sign bit and nothing else: it does not round, does not widen to
+ * f32 and back, and does not touch the significand. So the negation of an element is that element's
+ * two bytes with the top bit set, and this case pins that on values no literal could write down --
+ * 1/3 rounded once into the type, a sum that rounded, a difference that cancelled.
+ *
+ *   1. an inexact element      x = 1.0 / 3.0, bf16 0x3EAB [171, 62]; -x is 0xBEAB [171, 190]:
+ *                              the low byte is the same and the high byte is 128 more, which is
+ *                              what "only the sign bit moved" says in bytes. A negation that
+ *                              widened to f32 and rounded again, or that rounded to the type after
+ *                              a negation in f32, would move the significand and change both.
+ *   2. negation is its own      -(-x) is 0x3EAB again: two sign flips in a row come back to the
+ *      inverse                 element that was there, so neither flip rounded.
+ *   3. after a rounding        -(1.0 + 2^-8) is -1.0, 0xBF80: the sum rounded the tie to 1.0 and
+ *                              the negation took the sign of that result, not of the exact sum.
+ *   4. zero keeps its sign     -(1.5 - 1.5) is -0.0, 0x8000, and -(-0.0) is +0.0, 0x0000. A
+ *                              negation that normalized zero would answer +0.0 for the first.
+ *   5. infinity               -(max + max) is -infinity, 0xFF80 (bf16) and 0xFC00 (f16), and not
+ *                              -max: the overflow happens in the sum, the negation keeps it.
+ *   6. sign and rounding      -(x * x) and (-x) * x are the same element, because rounding to the
+ *      commute                 nearest even is symmetric about zero: a negation that rounded would
+ *                              break the equality.
+ *
+ * The result keeps the operands' element type -- a one-element array of it is two bytes -- and no
+ * conversion is written anywhere, so a neg answering in f32 fails the declared type and the size.
+ *
+ *   probe                    bf16            f16
+ *   1.0 / 3.0                0x3EAB [171,62] 0x3555 [85,53]
+ *   -(1.0 / 3.0)             0xBEAB [171,190] 0xB555 [85,181]
+ *   -(1.0 + half ulp)        0xBF80 [128,191] 0xBC00 [0,188]
+ *   -(1.5 - 1.5)             0x8000 [0,128]  0x8000 [0,128]
+ *   -(-0.0)                  0x0000 [0,0]    0x0000 [0,0]
+ *   -(max + max)             0xFF80 [128,255] 0xFC00 [0,252]
+ */
+
+import { to_bytes } from tensor
+import { to_array } from bytes
+
+/// The little-endian bytes of one element of a one-element array of the type.
+func bitsOfBf16(value: bf16): int[] {
+    let one: bf16[] = [value]
+    return to_array(to_bytes(one))
+}
+
+func bitsOfF16(value: f16): int[] {
+    let one: f16[] = [value]
+    return to_array(to_bytes(one))
+}
+
+func main(): int sync {
+    // ---- bf16 ----
+    let x: bf16 = bf16(1.0) / bf16(3.0)
+    let nx: bf16 = -x
+    println(bitsOfBf16(x), bitsOfBf16(nx))
+    // only the sign bit moved: the low byte the same, the high byte 128 more
+    println(bitsOfBf16(nx)[0] == bitsOfBf16(x)[0], bitsOfBf16(nx)[1] == bitsOfBf16(x)[1] + 128)
+    let back: bf16 = -nx
+    println(bitsOfBf16(back))
+
+    // a negation after a statement that rounded, and after a subtraction that cancelled
+    let afterSum: bf16 = -(bf16(1.0) + bf16(0.00390625))
+    let afterDifference: bf16 = -(bf16(1.5) - bf16(1.5))
+    println(bitsOfBf16(afterSum))
+    println(bitsOfBf16(afterDifference))
+    println(bitsOfBf16(-afterDifference))
+
+    // past the range
+    let bfMax: bf16 = 3.3895314e38
+    let over: bf16 = -(bfMax + bfMax)
+    println(bitsOfBf16(over))
+
+    // sign and rounding commute
+    let negative: bf16 = -x
+    println(bitsOfBf16(-(x * x)) == bitsOfBf16(negative * x))
+
+    // ---- f16: the same ----
+    let h: f16 = f16(1.0) / f16(3.0)
+    let nh: f16 = -h
+    println(bitsOfF16(h), bitsOfF16(nh))
+    println(bitsOfF16(nh)[0] == bitsOfF16(h)[0], bitsOfF16(nh)[1] == bitsOfF16(h)[1] + 128)
+    let backHalf: f16 = -nh
+    println(bitsOfF16(backHalf))
+
+    let afterSumHalf: f16 = -(f16(1.0) + f16(0.00048828125))
+    let afterDifferenceHalf: f16 = -(f16(1.5) - f16(1.5))
+    println(bitsOfF16(afterSumHalf))
+    println(bitsOfF16(afterDifferenceHalf))
+    println(bitsOfF16(-afterDifferenceHalf))
+
+    let f16Max: f16 = 65504.0
+    let overHalf: f16 = -(f16Max + f16Max)
+    println(bitsOfF16(overHalf))
+
+    let negativeHalf: f16 = -h
+    println(bitsOfF16(-(h * h)) == bitsOfF16(negativeHalf * h))
+
+    // ---- the result keeps the operands' element type ----
+    let bfOne: bf16[] = [nx]
+    let f16One: f16[] = [nh]
+    println(len(to_bytes(bfOne)), len(to_bytes(f16One)))
+    return 0
+}
