@@ -84,9 +84,9 @@ check(lines == expected, f"the answers are {expected}, got {lines}")
 listed = [line for line in asked.splitlines() if line.startswith("RULESET ")]
 check(len(listed) == 10, f"the index lists ten rules, got {len(listed)}: {listed}")
 check(
-    "RULESET rulesets.jvp -/1 -> jvp_neg" in listed
-    and "RULESET rulesets.transpose -/2 -> sub_t" in listed,
-    f"the listing names the rule each key is filed under: {listed}",
+    "RULESET rulesets.jvp -/1 -> jvp_neg (rhs neg_tangent)" in listed
+    and "RULESET rulesets.transpose -/2 -> sub_t (rhs sub_cotangent)" in listed,
+    f"the listing names the rule each key is filed under, and the function it calls: {listed}",
 )
 check("1.0" in asked, f"the pass hands the program on unchanged:\n{asked}")
 

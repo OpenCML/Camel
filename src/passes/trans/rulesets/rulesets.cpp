@@ -46,7 +46,15 @@ RulesetsPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     for (const std::string &family : camel::parse::ast::ruleFamilies()) {
         for (const auto &entry : camel::parse::ast::rulesOf(family)) {
             os << "RULESET " << family << ' ' << entry.head << '/' << entry.arity << " -> "
-               << entry.rule << '\n';
+               << entry.rule;
+            // The function the rule calls is what a replacement has to call, and it is written in
+            // the rule: printing it shows the two halves of a replacement -- which rule, and what
+            // to call -- without either half being copied into C++.
+            const std::string callee = camel::parse::ast::rhsCalleeOf(family, entry.rule);
+            if (!callee.empty()) {
+                os << " (rhs " << callee << ')';
+            }
+            os << '\n';
         }
     }
     if (forward_) {
