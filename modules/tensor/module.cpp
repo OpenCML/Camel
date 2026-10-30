@@ -58,16 +58,22 @@ class TensorExecutor : public Executor {
 /// the result's element type, so its signature is computed (`loadNpyOperatorGroup`, recorded in
 /// `stdlib/signatures/tensor.cml`).
 constexpr std::string_view kDeclaredOperators[] = {
+    "argmax_axis",
+    "argmin_axis",
     "dim",
     "gemm_backend",
     "gemm_library",
     "gemm_library_threads",
     "gemm_threads",
     "num_threads",
+    "max_axis",
+    "mean_axis",
+    "min_axis",
     "numel",
     "save_npy",
     "set_num_threads",
     "shape",
+    "sum_axis",
     "show",
     "to_bytes",
 };
