@@ -55,8 +55,10 @@ gate 后的输入 / 区域 / 权限）和 `reaches`（`norm`/`with`/`ctrl`/`sync
 
 ## 一个会咬人的细节
 
-守卫走 **5** 类边（含 `sync`，`rewrite.cpp:489`），冻结只走 **4** 类（`graph_edges.cpp:508`）。
-所以「守卫触发」不等于「拿掉守卫会报 `PassInternalError`」：只在 `sync` 上成的环，守卫会静默丢弃
+守卫 `draftHasCycle` 在 `src/passes/opt/generic/rewrite.cpp:470`，调用点是同一文件的 `:552`；它的遍历走 **5** 类边（`norm` / `with` / `ctrl` / `sync` / `order`，`while (top.group < 5)` 在
+`rewrite.cpp:489`）。冻结的 `findCycle` 在 `src/runtime/graph_edges.cpp:489`，只走 **4** 类
+（`norm` / `with` / `ctrl` / `order`，`while (top.group < 4)` 在 `graph_edges.cpp:508`），**不含
+`sync`**。所以「守卫触发」不等于「拿掉守卫会报 `PassInternalError`」：只在 `sync` 上成的环，守卫会静默丢弃
 会话，程序照常跑。将来写这条用例时，A/B 要红必须是 4 类边上的环；只在 `sync` 上成的环要换判据。
 
 ## 没做的
