@@ -1112,3 +1112,67 @@ expect_stdout_exact = "0\n1\n2\n-\n0\n1\nend\n"
 expect_output_not_contains = ["[Error]", "[Warn]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+[[tests]]
+name = "stream.generator_cell_type_from_first_write"
+desc = "The type of a cell of a generator's own body is the type of its first write. `var s = \"one\"` is that write, and language reference 7.2 makes a `var` without a written type take the type of its initializer, so the cell is `var string`: the machine neither re-types it from the later write `s = \"two\"` nor gives it a type of its own. `std::jgir` prints the cell in the graph of the function it belongs to, which is where the type is read."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_cell_type.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const doc = JSON.parse(input.normalized.stdout)
+const labels = doc.graphs.find((g) => g.name === 'labels')
+assert(labels, `labels is missing from ${doc.graphs.map((g) => g.name).join(', ')}`)
+const named = labels.nodes.filter((n) => n.name === 's')
+assert(named.length === 1, `${named.length} nodes of 'labels' are named 's'`)
+assert(named[0].outputType === 'var string', `the cell 's' is '${named[0].outputType}', not 'var string'`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.generator_cell_across_pulls"
+desc = "The cell outlives the `yield` that reads it: both pulls give the value the body last wrote into it (`one`, then `two`), and a later write of the same type as the first is accepted. This is the plain run of the program whose cell type `stream.generator_cell_type_from_first_write` reads, and the four back ends plus the default path agree on it."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_cell_type.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "one\ntwo\n"
+expect_output_not_contains = ["[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "stream.generator_cell_write_type"
+desc = "A later write of another type does not re-type the cell and is not converted: the cell is `var int` because `var x = 1` is its first write (language reference 7.2), and design principles 3.2 converts nothing between variable types, so `x = \"text\"` has no `=` overload. The reading is the one the same two writes get outside a generator - the same diagnostic at the same `=`, naming the same overloads - so the machine neither accepts the write nor keeps a second cell of another type for it."
+kind = "negative"
+case = "../../../cases/compile/stream/generators_cell_retype.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 5
+expect_output_contains = ["No matching function found for argument types: <> (int, string)", "(var int, int) => var int"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.generator_body_fault_ends_stream"
+desc = "A fault in the body of a generator is not an element: the pull that builds that element faults, and the stream ends there (design principles 5.4: the fault happens at the pull that produces the element; 3.9: a fault is not a value). The body hands out `1`, divides by zero on the next pull and writes `1234` after it; the consumer prints what it takes. So `1` is the whole stdout, the runtime diagnostic follows it, and neither `1234` nor the consumer's `after` appears - an error element would have been handed out as a value, and a stream that went on would have printed `1234`."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_body_fault.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 1
+expect_stdout_starts_with = "1\n"
+expect_output_contains = ["Attempted division by zero"]
+expect_output_not_contains = ["1234", "after"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

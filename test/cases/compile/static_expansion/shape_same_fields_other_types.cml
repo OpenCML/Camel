@@ -1,0 +1,20 @@
+/**
+ * Two structs that name the same fields in the same order are the same shape, whatever their
+ * member types are (design principles 5.5). `A = {a: int}` over `B = {a: f32}` is the shape
+ * `A` names filled from the rounds of `B`: the head gives the names, and each field's type is the
+ * round's value type -- here `f32`, so the field reads as a `float` and holds 1.5, where the
+ * head's `int` would have refused the value.
+ */
+
+type A = {a: int}
+type B = {a: f32}
+
+func main(): int sync {
+    let x: B = {a: 1.5}
+    let y = A { static for n, F in fields B => x.[n] }
+    // The field's type is the round's, not the head's: `int` does not read as a `float`.
+    let asFloat: f32 = y.a
+    println(asFloat + 1.0)
+    println(y)
+    return 0
+}
