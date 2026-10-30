@@ -80,8 +80,8 @@ reverted, the rest of the commit in place) makes `stream.generator_local_across_
 single red test -- `FeatureNotSupported`, i.e. the refusal this commit removes -- and the other
 105 of the stream plan stay green; restored, 106/106.
 
-Trunk was `7927ed48c` when this was written and is `45bc25f47` now, so the lane is one merge
-behind: the commit has not been pushed.
+Trunk moved while this was written (`7927ed48c` -> `45bc25f47` -> `b3b314350`), so the
+lane merges before it pushes: the commit has not been pushed yet.
 What is still refused, and the rule that shape broke: a loop state whose first value is
 computed (`loop j = i + 1` inside another loop) is refused in the compiler today, and it is
 refused because the shape that was tried instead was unacceptable: with the first value read
