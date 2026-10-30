@@ -131,6 +131,10 @@
    连语义记录都没有（`builtin_semantics.cpp` 的文件头也这么写）。两处实现走的是同一个
    `std::pow`，都没有出错路径；差别在声明，不在实现，改它同样是一次扩张。
 
+这三处连同 `len` 与 tensor/math 那一大片，写成了
+`docs/handover/questions/questions-2026-10-30-undeclared-faults.md` 的一页：没声明是第三态还是没写完的
+表。裁定之前它们按原样读——没声明就是“可能出错”。
+
 ## 这份清单怎么复核
 
 一条命令就是这套断言：`node scripts/test.js test/plans/feat/modules/operator_faults.plan.toml`。
