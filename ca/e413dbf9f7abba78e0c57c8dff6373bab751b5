@@ -1,0 +1,8 @@
+S2: the conversion on the `T` <-> `T[..]` edges (Builder::coerceTo; the call-argument entrance calls
+the same question, and a literal of the element type in a `T[..]` position is accepted as the
+element). Readings on std::nvm / std::fvm / std::jit: show(1.0) -> 1.0, show(2.5) -> 2.5 (exit 139
+before this commit), let/var/return/read-back all agree. Gate 7939 / 7930 / 0.
+
+Not covered: a struct field of `T[..]` built from a composite literal (computed element) -- the FILL
+links its element nodes without coerceTo, so the field is not a rank-zero value yet; the
+all-literal form is refused with LiteralNotRepresentable. That entrance is the next commit.
