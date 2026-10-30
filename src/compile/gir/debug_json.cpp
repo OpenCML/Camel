@@ -5,7 +5,7 @@
  * Draft-based GIR debugger JSON export.
  *
  * The debugger only needs a cold-path structural dump. This implementation
- * walks DraftGraphBuilder and GraphDraft directly, without depending on the
+ * walks the builder and the draft directly, without depending on the
  * deleted compile-time Graph/Node class hierarchy.
  */
 
