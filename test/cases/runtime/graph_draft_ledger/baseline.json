@@ -2,7 +2,7 @@
   "comment": "The baseline of the direct-connection ledger (graph-store step 2 b): the numbers below may only fall, and the last step is all of them at zero. `sites` records where each number comes from, as `file#symbol` (a line number moves with every edit above it, a symbol does not); it is diagnostics for a red and never decides the verdict. Record a new row after a commit with check.mjs --record.",
   "numbers": {
     "files": 62,
-    "references": 515,
+    "references": 517,
     "constructions": 3,
     "decode": 4
   },
@@ -102,7 +102,7 @@
       "include/camel/runtime/node_ref.h#-": 4,
       "include/camel/runtime/operator_instance.h#-": 1,
       "include/camel/runtime/writings.h#-": 1,
-      "include/camel/runtime/writings.h#extractWritings": 3,
+      "include/camel/runtime/writings.h#extractWritings": 4,
       "modules/autodiff/pullback.cpp#-": 1,
       "modules/autodiff/pullback.cpp#addAccs": 1,
       "modules/autodiff/pullback.cpp#addAggregate": 1,
@@ -454,6 +454,7 @@
       "src/runtime/loop.cpp#fallBackToCopyingAppend": 1,
       "src/runtime/operator_instance.cpp#kernelArgumentsOf": 1,
       "src/runtime/writings.cpp#-": 2,
+      "src/runtime/writings.cpp#DraftWritings": 1,
       "src/runtime/writings.cpp#constantNode": 1,
       "src/runtime/writings.cpp#costModels": 1,
       "src/runtime/writings.cpp#extract": 1,

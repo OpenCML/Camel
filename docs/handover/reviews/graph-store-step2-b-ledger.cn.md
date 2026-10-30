@@ -418,3 +418,19 @@ helper 只借一次草稿、并不持有它，所以改成收模板参数（`tem
 **四项实测：62 / 515 / 3 / 4**（files 64 → 62，references 521 → 515，decode 5 → 4）。
 
 **"还有没有可删的调用点"——在今晚动过的范围里是 0**：`handle.h`／`handle.cpp` 0、`read.cpp` 0、`fact.cpp` 0、`module.cpp` 0。**`modules/graph/txn.cpp` 还剩 2 处，都不是台账住户**：一处是 `using`，一处是事务 API 自己的返回类型 `std::pair<GraphDraft &, gc_node_ref_t>`——事务的墙（§0 第 1 条）本来就不在账里。剩下的 `GraphDraft` 全在 `draft*.cpp` 与各 pass 里，那是**这个类型本身该在的地方**，不是"直连"。
+
+## 24. 裁定改口径：C 落地，账本只允许一次上涨
+
+**作者 18:15 的裁定**：*"可编辑的图只存在于事务里。所以 B 不选，读端不允许'同时问事务和指针'。实现上取 C：`Writings` 没拿到外部事务时，就自己开一个并拥有它，`createInDraft` 随之删掉，测试一行不用改。"*
+
+**落地**（`1e70b99ac` + `01ea89d6f`）：`GraphTransaction::borrow(GraphDraft&)` 开一个**借来的**事务（自己不拥有草稿，草稿本来就有主）；`DraftWritings(GraphDraft&)` 内部持有它，**生命周期到 `Writings` 析构**；那 17 处调用点**逐字还原**（`git revert 404c77db4`）。`graphWritings` 的 (a) 保留。
+
+**这是唯一一次允许上涨：C 的入口必须命名它收的类型（`writings.h:411`、`writings.cpp:431` 两行）。上涨是裁定的代价，不是漏出去的洞。**
+
+**终点改成可检查的形状（原先那句"三个数归零、删掉 `GraphDraft`"到此作废）**：
+
+> **`handle`／`read`／`fact`／`module` 侧归零；`writings.h` 留一个入口，因为它必须命名收进来的类型。**
+
+`check.mjs` 现在**直接查这件事**（`ZERO_FILES`）：`modules/graph/handle.h`、`handle.cpp`、`modules/graph/read.cpp`、`modules/rewrite/fact.cpp`、`modules/rewrite/module.cpp` 五处，任何一处出现这个类型名即红，与四个总数无关。
+
+**A 那半边照旧成立，不因为改成 C 就说回去**：`createInDraft` 零调用者、`Handle::draft_` 已删、`nodeHandleOf` 单形态。
