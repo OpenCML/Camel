@@ -134,6 +134,22 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, camel::core::mm::IAllo
     case TypeCode::Array: {
         auto arrayData        = tt::as_shared<camel::core::data::ArrayData>(data);
         const auto *arrayType = tt::as_ptr<camel::core::type::ArrayType>(arrayData->type());
+        if (arrayData->isRankZero()) {
+            // A value with no dimension is the element it holds (design principles 5.4): the run
+            // makes of it the rank-zero array a slot of `T[..]` reads, not an array of one
+            // element, so it prints and compares as the element itself.
+            slot_t element = NullSlot;
+            if (!arrayData->raw().empty()) {
+                const auto &held = arrayData->raw().front();
+                if (held->type()->isGCTraced()) {
+                    element = camel::core::rtdata::toSlot(
+                        makeGCRefFromGCTracedData(held, allocator));
+                } else if (camel::core::type::isPrimitive(held->type()->code())) {
+                    element = makeSlotFromPrimitiveData(held);
+                }
+            }
+            return Array::createRankZero(allocator, arrayType, element);
+        }
         // The shape a type states as constants is the value's shape (design principles 5.4): a
         // rank-2 constant written as a nested literal is one array of that shape, not a flat run
         // of its elements. A type that states none (`f32[]`, `f32[n]`) keeps the length the

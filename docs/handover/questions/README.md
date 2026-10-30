@@ -1,12 +1,16 @@
 # 问题：交给作者的地方
 
+> **判据：一个页在 `questions/` 里活着的唯一理由，是有一个还没答的问题。**
+> 已经有裁定、或者已经修掉的页，挪到 `docs/handover/reviews/` 留档（`git mv`，不删，页首留 `裁定：` 一行）；
+> 只是记录、没有问题的页也不留在这里。
+
 放在这里的每一页是**一个**尚未裁定、需要作者决定的问题；文件名照 `reviews/` 的规矩：`questions-YYYY-MM-DD-<主题>.md`，一问一页，几页之间不互相引用。
 
 写清楚三件事：现象（现在的行为，出处到文件与行）、为什么不能自己定（压到设计原则的哪一条），以及**两个（至多三个）可以照字面执行的选项**——选项要写成作者圈一个就能派工的样子，不要问开放题。
 
-裁定回来后，把这一页挪到 `docs/handover/reviews/` 留档，并在答复落在的那一页（通常是 `docs/handover/reviews/questions-YYYY-MM-DD.md` 的裁定节）里写回一句"已答复，见 …"；`questions/` 只留还没答的。
+裁定回来后，把这一页用 `git mv` 挪到 `docs/handover/reviews/` 留档，页首写一行 `裁定：`（结论 + 落在哪个提交）；`questions/` 只留还没答的。
 
-作者每轮先读这个目录，所以这里空着就是"没有待裁定问题"，不要放占位文件。
+作者每轮先读这个目录，所以这里空着就是"没有待裁定问题"。
 
 ## 一页怎么写（第 11 条那一路的写法，可以照抄）
 
@@ -22,11 +26,29 @@
 | 页 | 问题 | 状态 |
 |---|---|---|
 | `questions-2026-10-31-tag-argument-of-a-rule.md` | 标签参数能否携带一个 `rule`（`#jvp(add_jvp)` 里的 `add_jvp`）：今天的判据只收"程序里的一个函数" | 待裁 |
-| `questions-2026-10-30-tangent-in-prelude.md` | 三个标签搬进 `prelude` 后编译失败（`string`/`attempt` 连锁报错），标签与规则该放哪一层 | 已修，见页首裁定 |
-| `questions-2026-10-30-probe-plan-kept-or-dropped.md` | `probe.machine` 这条自称「用例集完成前会被删掉」的探针计划：删掉、改写说明、还是变成 `std::gir` 快照 | 待裁 |
-| `questions-2026-10-30-grad-builds-its-graph-at-runtime.md` | 第 7 条的验收数不到 `grad` 在运行期造出的函数值：这一段归第 6 条还是第 7 条 | 待裁（`reviews/` 里暂无落档的裁定原文） |
+| `questions-2026-10-31-what-carries-a-wait-for-a-write.md` | 一个"等一次写"由谁携带（`edges` 车道即将交页，本行占位，页到了再补问题原文） | 待裁（页未到） |
+| `generator-cell-type-by-inference.cn.md` | 单元的类型由"只求类型的推导"定，还是由运行时状态的首个写入定 | 待裁 |
+| `defun-tag-in-the-type.cn.md` | 文档是否取代 `defun.cpp` 那句"函数值已经是标签 + 环境"；老 `std::defunctionalize` 是否退役 | 待裁 |
+| `function-type-structural-vs-enum.cn.md` | 函数类型是结构别名（5.2），"每个函数类型一个 enum"是名义类型，两者如何并存 | 待裁 |
+| `questions-2026-10-30-grad-builds-its-graph-at-runtime.md` | 去函数化的验收数不到 `grad` 造出的那个函数值：这一段归第 6 条还是第 7 条 | 待裁 |
+| `questions-2026-10-30-jvp-family-anchor.md` | `#jvp` 这一族规则没有挂点：补原语声明、标签挂到 `rule` 上、还是按算子 id 查表 | 待裁 |
+| `questions-2026-10-30-literal-head-type-expression.md` | 算出来的类型能不能当字面量的头：这条规则铺到哪为止 | 待裁 |
+| `questions-2026-10-30-match-type-guard.md` | `match type` 里能不能用类型函数做守卫 | 待裁 |
+| `questions-2026-10-30-narrow-float-tangent.md` | 窄浮点算不算"浮点"：`Tangent<f16>` 的射程 | 待裁 |
+| `questions-2026-10-30-operator-family-names.md` | 算子族在 stdlib 里怎么露出名字：`add` 能不能重载成两个参数 | 待裁 |
+| `questions-2026-10-30-reinterp-rule-set.md` | `reinterp<H>`：规则集 `H` 以什么形式交给算子 | 待裁 |
+| `questions-2026-10-30-reserved-name-in-library.md` | 库里的声明能不能叫保留名：`__add__` 与 `ReservedIdentifier` | 待裁 |
 
-已修的两页留在原处（页首有一行裁定）：作者要的是"下一个人要知道这条路为什么长这样"，`reviews/` 放的是答复归档的当时一页；本表只把"待裁"和"已修"分开，不把两者混在一起。
+13 页里有 12 页在等裁定；表里 13 行，第 2 行是 `edges` 车道的占位（页还没交上来）。
+
+今晚从这张表里挪走的（`git mv` 到 `docs/handover/reviews/`，页首有 `裁定：` 一行）：
+
+- `questions-2026-10-30-tangent-in-prelude.md`、`questions-2026-10-31-tag-import-rechecks-prelude.md`——已修（`1ab619a57` / `d1b3531b4`）；
+- `questions-2026-10-30-generator-read-before-write.md`——作者的答复已落地（`5803e9039`）；
+- `questions-2026-10-30-jvp-tag-scope.md`——裁定 ① 已落地（`d1b3531b4`）；
+- `questions-2026-10-30-region-count-account.md`、`questions-2026-10-30-two-behaviour-diffs-left.md`——不是问题，是记录（页首已写明）。
+
+`questions-2026-10-30-probe-plan-kept-or-dropped.md` 这一行删掉了：那一页在树里已经不存在（`questions/` 与 `reviews/` 都没有），行留着只会让人去找一个不在的页。
 
 `questions-2026-10-30-allocation-failure-in-the-faults-table.md` 已于 2026-10-30 答复：分配失败
 不算 `faults` 表该声明的故障（(b)，进程级界限），页已挪到 `docs/handover/reviews/`。
