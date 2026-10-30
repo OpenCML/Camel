@@ -14,7 +14,7 @@
 | `reports/gpu-g4-g5-plan.md:13`、`:27` | "今天（表内）20 个名字" | **24** | `graph_regions.cpp:49-78`（22 个字面 + 2 条 `emplace`） |
 | `reports/code-review-onnx-tiles.md:82` | "`operations()`（17 个算子……）" | **24** | 同上 |
 | `reports/signature-mirrors-and-whether-they-drift.md:57` | "改它不改变任何行为，不改它也不会让任何测试变红" | **有闸门**：`registry.signatures_match` 在 `test/plans/feat/modules/stdlib_registry.plan.toml:81`，每次 `npm run test` 都跑 `--verify-ops`（`:87`）；它拿 `camel inspect --ops` 与声明文件比对，整条签名都比（含形参名，`scripts/stdlib-reference.mjs:1476`），改错名字或条数会红。缺口只剩"签名文字与 C++ 注册类型的逐字对应"（`inspect --ops` 读的是声明侧）。闸门读数（2026-10-31）：550 条重载与声明对比 | `stdlib_registry.plan.toml:81`、`:87`；`scripts/stdlib-reference.mjs:1476` |
-| `reviews/questions-2026-10-31-the-ruleset-module-has-no-rules-in-it.md:1`（正文 `:19`） | "规则集模块里是空的 / 索引到的是空的" | `rule` **0 条是对的**，但模块不空：9 个 `func` + 1 个 `type`（`Lift<T>`），其中 7 个是 `*_jvp`；文件 4449 字节，被 `test/cases/compile/rulesets/jvp_lift.cml:3` 导入。空的是**规则索引**——10 条 `rule` 在 `autodiff.cml`，它不以 `rulesets.` 开头 | `git grep -c "^export rule" -- stdlib/autodiff.cml stdlib/rulesets/jvp.cml` → 10 / 0；`Select-String stdlib\rulesets\jvp.cml -Pattern '^(export )?func '` → 9，`-Pattern '^(export )?type '` → 1 |
+| `reviews/questions-2026-10-31-the-ruleset-module-has-no-rules-in-it.md:1`（正文 `:19`） | "规则集模块里是空的 / 索引到的是空的" | `rule` **0 条是对的**（写这页时），但模块不空：9 个 `func` + 1 个 `type`（`Lift<T>`），其中 7 个是 `*_jvp`；文件 4449 字节，被 `test/cases/compile/rulesets/jvp_lift.cml:3` 导入。空的是**规则索引**——10 条 `rule` 当时在 `autodiff.cml`，它不以 `rulesets.` 开头。裁定搬完后（`67b4c17bc`）：`autodiff` 0 条、`rulesets/jvp.cml` 5 条、`rulesets/transpose.cml` 5 条 | `git grep -c "^export rule" -- stdlib/autodiff.cml stdlib/rulesets` → 0 / 5 / 5；`Select-String stdlib\rulesets\jvp.cml -Pattern '^(export )?(func|type) '` → 9 func + 1 type |
 | `reports/assert-release-hole.md:37`（`:33`、`:35` 是前两批） | 第三批后："`ASSERT` 1199、`GUARD` 25、release 里会说话的 237" | 今天按同一算法：`ASSERT` **1203**、`GUARD` **37**（`release 里会说话的` 本次没复核） | `git grep -o "ASSERT(" -- src include modules tools test ':!include/camel/utils/assert.h' \| Measure-Object` → 1203；`git grep -o "GUARD(" -- src include modules tools test \| Measure-Object` → 37 |
 
 ## 为什么是这四类先过时
@@ -27,8 +27,8 @@
 ## 核过、今天没变的
 
 - `stdlib/signatures/{autodiff,ckpt,nn,tensor,tiles}.cml`：4/1/20/43/7 = **75** 条（`git grep -c "func " -- stdlib/signatures`）。
-- `stdlib/autodiff.cml` 的 `export rule` = **10**；`stdlib/rulesets/jvp.cml` = **0**。
-- 规则集模块的声明：**9 个 `func` + 1 个 `type`**。
+- `stdlib/autodiff.cml` 的 `export rule` = **0**（`67b4c17bc` 之后）；`stdlib/rulesets/jvp.cml` = **5**，`transpose.cml` = **5**。
+- 规则集模块的声明：`jvp.cml` **9 个 `func` + 1 个 `type` + 5 条 `rule`**；`transpose.cml` **5 条 `rule`、0 个 `func`**。
 
 ## 这张表不做什么
 

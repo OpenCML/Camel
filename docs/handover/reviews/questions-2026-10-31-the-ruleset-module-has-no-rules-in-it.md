@@ -72,4 +72,4 @@ stdlib/rulesets/jvp.cml:0
 
 上面把 **(a)** 写成"一个模块两种身份、零搬迁"，当它可以选、只是有代价。**22:10 裁定**（2026-10-30，`reviews/questions-2026-10-29.md:746`）说：**一个模块不兼任库和规则集，所以 (a) 不选。** 所以 (a) **不存在**，不是**贵**；这一页的两条路里，只有 (b)。
 
-这件事已按 (b) 落地：`67b4c17bc`（"Move the scalar rules into the ruleset modules they belong to"，2026-10-31 06:31）把标量规则搬进 `stdlib/rulesets/jvp.cml` 与 `stdlib/rulesets/transpose.cml` 两个规则集模块。**注意它在 `develop` 上，不在本车道 HEAD 上**：本树（`lane-namenature`）今天仍是 `stdlib/autodiff.cml` 10 条 `export rule`、`stdlib/rulesets/jvp.cml` 0 条，所以上面"现象"一节的读数在本树仍然成立；落地状态以 `develop` 为准。
+这件事已按 (b) 落地：`67b4c17bc`（"Move the scalar rules into the ruleset modules they belong to"，2026-10-31 06:31）把标量规则搬进 `stdlib/rulesets/jvp.cml` 与 `stdlib/rulesets/transpose.cml` 两个规则集模块；本车道已并入 develop，今天本树是 `autodiff` 0 条 `rule`、`rulesets/jvp.cml` 5 条、`rulesets/transpose.cml` 5 条（`git grep -c "^export rule" -- stdlib/autodiff.cml stdlib/rulesets`）。上面"现象"一节的 10 / 0 是裁定之前的读数，保留作当时的判断。
