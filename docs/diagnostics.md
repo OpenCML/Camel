@@ -10604,7 +10604,7 @@ func main(): int sync {
 
 **Fix**
 
-None: choice: which function a value turns out to be is the program's, and a call that stays indirect is a correct program that runs one call slower
+None: choice: which function a value turns out to be is the program's, and a family left on the old form is a correct program that runs one call through a value slower
 
 **Message**
 
@@ -10615,26 +10615,23 @@ Defunctionalization left {0} as written.
 **Help**
 
 ```text
-A higher-order value is lowered by turning the call through it into a direct call of the one function it can be, which is a rewriting of the call sites the program writes. A function value this pass cannot name at the call site is left as it is: a parameter the program fills with several different functions (the dispatch is then a choice at run time), a closure whose captured values are not values where the call is, or a function value the program receives from outside itself. Guessing one of them would change which effects run, so nothing is guessed.
+A function value is lowered by giving it the form the design asks for (one variant of the enum of its type, with the values it captured) and turning the call through it into a direct call of the function the tag names, or one match on the tag where only the run time knows it. A family this pass cannot see whole is left as it is, and the whole family stays on the old form: a value read by a node that is not a call (a higher-order operator such as map calls it inside the operator), a function that is called directly as well as held as a value, a call whose callee waits on something, or a type that is an argument of the entry function. Guessing one of them would change which effects run, so nothing is guessed.
 ```
 
-**Example** (`test/cases/opt/defun/captured.cml`, run as `camel test/cases/opt/defun/captured.cml std::defunctionalize std::nvm`)
+**Example** (`test/cases/opt/defun/native_map.cml`, run as `camel test/cases/opt/defun/native_map.cml std::defun_value std::stats std::nvm`)
 
 ```camel
-func apply(f: (x: int) => int, x: int): int {
-    return f(x)
-}
-
-func plus_one(x: int): int {
-    return x + 1
+func apply_n(f: (x: int) => int, xs: int[]): int[] {
+    return xs->map<f>
 }
 
 func main(): int sync {
     let k = 10
     let with_k = (x: int) => x + k
-    let captured = apply(with_k, 5)
-    let named = apply(plus_one, 5)
-    'CAPTURED captured={} named={}'->format<captured, named>->println
+    let ys = apply_n(with_k, [1, 2, 3])
+    let zs = apply_n((x: int) => x * 2, [1, 2, 3])
+    let pairs = zip([1, 2], [10, 20])
+    'MAP ys={} zs={} pairs={}'->format<ys, zs, pairs>->println
     return 0
 }
 ```

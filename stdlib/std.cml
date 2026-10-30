@@ -24,20 +24,11 @@ export func nop::<F>(f: F): F! when is_function::<F>()
 /// the passes that follow.
 export func macro::<F>(f: F): F! when is_function::<F>()
 
-/// Lowers the calls made through function values into direct calls, ahead of the passes that
-/// follow: a call through a parameter whose call site passes a function the program can name
-/// becomes a call of that function, and a call of a closure built in the same graph becomes a call
-/// of its body with the captured values as arguments. A value it cannot name at the call site is
-/// left as it is, and the graph that still calls it is reported by a warning. It takes no
-/// parameters: one copy is made per (function, value) pair and nothing else grows, so it always
-/// completes.
-export func defunctionalize::<F>(f: F): F! when is_function::<F>()
-
-/// Gives a function value that captures nothing and names one function the form the design asks
-/// for: an enum value with one variant and no data, so the tag is in the value's type. Every call
-/// through such a value becomes a direct call of that function, and with one variant there is no
-/// dispatch left to write. A function type the program also gives another function, or a closure,
-/// is left as it is; the pass says which and why in its DEFUN_VALUE line.
+/// Gives every function value the form the design asks for: one variant of the enum of its type,
+/// with the values the function captured as that variant's data, so the tag is in the value's type.
+/// Every call through such a value becomes a direct call of the function it names -- the captures
+/// travel as trailing arguments -- and a tag only known at run time becomes one match on it. A
+/// value the pass cannot see whole is left as it is and reported by a warning.
 export func defun_value::<F>(f: F): F! when is_function::<F>()
 
 // -----------------------------------------------------------------------------

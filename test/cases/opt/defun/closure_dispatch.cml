@@ -1,0 +1,26 @@
+/**
+ * The whole shape in one family: three functions a parameter may hold, two of which are closures
+ * over different values. A call through the parameter reads the tag, takes the captures out of the
+ * value and calls the function the tag names; the arm of the function that captured nothing passes
+ * no extra argument. The program prints the same three numbers with the pass and without it.
+ */
+
+func apply(f: (x: int) => int, x: int): int {
+    return f(x)
+}
+
+func plus(x: int): int {
+    return x + 1
+}
+
+func main(): int sync {
+    let a = 2
+    let b = 3
+    let add_a = (x: int) => x + a
+    let scale_b = (x: int) => x * b
+    let p = apply(plus, 10)
+    let q = apply(add_a, 10)
+    let r = apply(scale_b, 10)
+    'DISPATCH p={} q={} r={}'->format<p, q, r>->println
+    return 0
+}
