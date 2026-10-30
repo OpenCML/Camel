@@ -782,3 +782,16 @@ graph-store 的账（b5 收尾、b4 入口）收下："删行数为 0 的片不�
 这样用例也能钉住这些读数。这是 21:35 说的"更好的做法"的落地。
 
 四页挪到 `reviews/` 留档。
+
+## 排入队列（2026-10-30 23:10）：清掉剩下的环境变量开关
+
+`CAMEL_RULESET_INDEX` 已经改成遍输出（`fdb4a9ae9`），收下。全仓还有一批 `getenv("CAMEL_*")`：
+- `modules/onnx/exporter.cpp` 的 `CAMEL_ONNX_TRACE`、`CAMEL_ONNX_DUMP`、`CAMEL_ONNX_PREP_STATS`；
+- `modules/tensor` 的 `CAMEL_TENSOR_ISA`、`CAMEL_TENSOR_OPSTATS`；
+- `modules/tiles` 的 `CAMEL_TILES_NVRTC`，以及 `region_test_pass.cpp` 的 `CAMEL_TILES_TEST_INVALIDATION`、`_REASONS`、`_I64`、`_DECLARATIONS`。
+
+作为一条收尾线逐个改：
+- 诊断输出改成遍的参数或翻译遍，用例可以钉住；
+- 选择类的设置（ISA、NVRTC 路径）改成命令行选项或安装配置。
+
+改完加一条快层检查：`src/`、`modules/` 里出现 `getenv("CAMEL_` 就红，只放行 `CAMEL_HOME` 和测试框架自己的变量。不阻塞主线，排在窄浮点算子之后。
