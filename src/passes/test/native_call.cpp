@@ -45,7 +45,7 @@ NativeCallbackTestPass::apply(const camel::runtime::Program *program, std::ostre
                 continue;
             if (owner->normInputsOf(id).size() != 2 || !owner->withInputsOf(id).empty())
                 throw std::runtime_error("test native_callback helper must take (function, int)");
-            auto &draft = session.edit(owner);
+            auto &draft = session.edit(owner).edit();
             auto *type  = owner->node(id)->dataType();
             const auto call =
                 draft.addOperNode(type, &invokeOriginal, uri, draft.allocateRuntimeSlot(type));

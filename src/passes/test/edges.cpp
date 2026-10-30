@@ -32,7 +32,7 @@ const Program *commitEdit(
         return program;
     }
     RuntimeGraphDraftSession session(context, program);
-    GraphDraft &draft = session.edit(program->root());
+    auto &draft = session.edit(program->root()).edit();
     switch (edit) {
     case Edit::Cycle: {
         const gc_node_ref_t a = blankNode(draft);
@@ -49,9 +49,26 @@ const Program *commitEdit(
         draft.setNormInputs(copy, std::span<const gc_node_ref_t>(&value, 1));
         break;
     }
-    case Edit::Ok:
-        blankNode(draft);
+    case Edit::Ok: {
+        // The session hands out one graph per graph it edits, and it stays where the session put
+        // it: a pass binds that graph by reference and keeps it while it edits. An accessor that
+        // made a new object per call would leave the pass writing into a graph the commit never
+        // sees, and a value where a reference is expected is not a compile error at the call site.
+        // The identity is what can be looked at here; the type is held by the static_assert in
+        // draft_session.h. Nothing here names the graph's type: what the session hands out is
+        // what a pass edits, and the test is about the one it hands out, not about its name.
+        auto *first     = &session.edit(program->root());
+        auto *second    = &session.edit(program->root());
+        blankNode(first->edit());
+        auto *afterEdit = &session.edit(program->root());
+        if (first == second && first == afterEdit) {
+            os << "EDGES transaction stable\n";
+        } else {
+            os << "EDGES transaction moved: " << first << " " << second << " " << afterEdit << "\n";
+        }
+        blankNode(first->edit());
         break;
+    }
     }
     try {
         const Program *next = session.commit();
@@ -91,7 +108,7 @@ EdgesOrderOkTestPass::apply(const camel::runtime::Program *program, std::ostream
     }
     const GraphId rootId = program->root()->id();
     RuntimeGraphDraftSession session(context_, program);
-    GraphDraft &draft = session.edit(program->root());
+    auto &draft = session.edit(program->root()).edit();
     const gc_node_ref_t first  = anchorNode(draft);
     const gc_node_ref_t second = anchorNode(draft);
     const gc_node_ref_t third  = anchorNode(draft);
@@ -140,7 +157,7 @@ EdgesOrderPureTestPass::apply(const camel::runtime::Program *program, std::ostre
         return program;
     }
     RuntimeGraphDraftSession session(context_, program);
-    GraphDraft &draft = session.edit(program->root());
+    auto &draft = session.edit(program->root()).edit();
     const gc_node_ref_t anchor = anchorNode(draft);
     // A constant is a pure node: nothing about it can be ordered.
     const gc_node_ref_t constant = draft.materializeStaticValue(
@@ -165,7 +182,7 @@ EdgesOrderScheduleTestPass::apply(const camel::runtime::Program *program, std::o
     }
     const GraphId rootId = program->root()->id();
     RuntimeGraphDraftSession session(context_, program);
-    GraphDraft &draft = session.edit(program->root());
+    auto &draft = session.edit(program->root()).edit();
     const gc_node_ref_t exit = draft.exitNode();
     if (exit == kInvalidNodeRef) {
         os << "ORDER no_exit=1\n";
@@ -241,7 +258,7 @@ const Program *writeOrderChain(
     }
     rootId = program->root()->id();
     RuntimeGraphDraftSession session(context, program);
-    GraphDraft &draft = session.edit(program->root());
+    auto &draft = session.edit(program->root()).edit();
     chain.a           = anchorNode(draft);
     chain.b           = anchorNode(draft);
     chain.c           = anchorNode(draft);
@@ -277,7 +294,7 @@ EdgesOrderSpliceTestPass::apply(const camel::runtime::Program *program, std::ost
     printOrderEdges(withChain, rootId, os);
     // The same call a dead-code pass makes to drop a statement the graph no longer needs.
     RuntimeGraphDraftSession session(context_, withChain);
-    session.edit(withChain->graph(rootId)).eraseNode(chain.b);
+    session.edit(withChain->graph(rootId)).edit().eraseNode(chain.b);
     const Program *committed = nullptr;
     try {
         committed = session.commit();
@@ -303,7 +320,7 @@ EdgesOrderReplaceTestPass::apply(const camel::runtime::Program *program, std::os
     }
     printOrderEdges(withChain, rootId, os);
     RuntimeGraphDraftSession session(context_, withChain);
-    GraphDraft &draft = session.edit(withChain->graph(rootId));
+    auto &draft = session.edit(withChain->graph(rootId)).edit();
     const gc_node_ref_t replacement = anchorNode(draft);
     draft.takeStatementPlace(chain.b, replacement);
     draft.eraseNode(chain.b);
@@ -346,8 +363,8 @@ CommitMergeTestPass::apply(const camel::runtime::Program *program, std::ostream 
     const GCGraph *otherBefore = program->graph(other->id());
     RuntimeGraphDraftSession first(context_, program);
     RuntimeGraphDraftSession second(context_, program);
-    blankNode(first.edit(program->root()));
-    blankNode(second.edit(other));
+    blankNode(first.edit(program->root()).edit());
+    blankNode(second.edit(other).edit());
     const Program *one = first.commit();
     os << "MERGE stale=" << (context_->currentRuntimeProgram() == one ? 1 : 0) << "\n";
     // The second session started from the program the first replaced; its graph (and nothing it
@@ -384,10 +401,10 @@ CommitConflictTestPass::apply(const camel::runtime::Program *program, std::ostre
     RuntimeGraphDraftSession first(context_, program);
     RuntimeGraphDraftSession second(context_, program);
     RuntimeGraphDraftSession third(context_, program);
-    blankNode(first.edit(program->root()));
-    blankNode(second.edit(program->root()));
+    blankNode(first.edit(program->root()).edit());
+    blankNode(second.edit(program->root()).edit());
     if (other != nullptr) {
-        third.edit(other);
+        third.edit(other).edit();
     }
     os << "CONFLICTS before=" << second.conflicts().size() << "\n";
     const Program *next = first.commit();
@@ -409,7 +426,7 @@ EdgesSyncForkTestPass::apply(const camel::runtime::Program *program, std::ostrea
         return program;
     }
     RuntimeGraphDraftSession session(context_, program);
-    GraphDraft &draft = session.edit(program->root());
+    auto &draft = session.edit(program->root()).edit();
     const auto markStatement = [&](gc_node_ref_t node) {
         draft.setNodeRuntimeFlags(node, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
     };
@@ -442,7 +459,7 @@ EdgesSyncForkGateTestPass::apply(const camel::runtime::Program *program, std::os
         return program;
     }
     RuntimeGraphDraftSession session(context_, program);
-    GraphDraft &draft = session.edit(program->root());
+    auto &draft = session.edit(program->root()).edit();
     const auto markStatement = [&](gc_node_ref_t node) {
         draft.setNodeRuntimeFlags(node, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
     };
@@ -479,7 +496,7 @@ EdgesSyncGateTestPass::apply(const camel::runtime::Program *program, std::ostrea
     }
     const GraphId rootId = program->root()->id();
     RuntimeGraphDraftSession session(context_, program);
-    GraphDraft &draft = session.edit(program->root());
+    auto &draft = session.edit(program->root()).edit();
     // The chain's tail: a statement a `sync` block wrote. A pass stands in for the builder here, so
     // it records the same fact the builder records (kGCNodeFlagSyncStatement): the seal check reads
     // it back, and a sync edge may only join statements of the block.

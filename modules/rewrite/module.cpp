@@ -278,7 +278,7 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
         const RuleObject *current = call.rule != nullptr ? call.rule->getAs<RuleObject>() : nullptr;
         return current != nullptr ? current->name() : std::string_view(call.name);
     };
-    camel::runtime::GraphDraft &draft = match.writings.draft();
+    auto &draft = match.writings.draft();
     // One slot per parameter: a rooted Node handle for a node parameter, a rooted object for a
     // constant the collector can move, and nothing for a constant whose bits are copied below.
     std::vector<std::unique_ptr<mm::RootHandle>> roots;
@@ -884,7 +884,7 @@ Application applyRewrite(
         if (isRuleSide(*graph)) {
             continue;
         }
-        camel::runtime::GraphDraft &draft = session.edit(graph);
+        auto &draft = session.edit(graph).edit();
         camel::runtime::DraftWritings writings(draft, policy);
         const size_t from = log != nullptr ? log->size() : 0;
         const camel::runtime::RewriteStats stats = writings.rewrite(compiled, maxRounds, log);
@@ -1400,8 +1400,8 @@ const uint64_t ruleId = ruleNow()->ruleId();
                         std::format("`{}` compiles to no rule", instanceText));
                 }
                 camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), programNow());
-                camel::runtime::GraphDraft &draft =
-                    session.edit(const_cast<camel::runtime::GCGraph *>(programNow()->graph(graphId)));
+                auto &draft =
+                    session.edit(const_cast<camel::runtime::GCGraph *>(programNow()->graph(graphId))).edit();
                 camel::runtime::DraftWritings writings(
                     draft, record.strict ? camel::core::sem::NumericPolicy::strict()
                                          : camel::core::sem::NumericPolicy::relaxed());
@@ -1446,8 +1446,8 @@ const uint64_t ruleId = ruleNow()->ruleId();
             return answer(std::format("`{}` compiles to no rule", ruleNow()->name()));
         }
         camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), programNow());
-        camel::runtime::GraphDraft &draft =
-            session.edit(const_cast<camel::runtime::GCGraph *>(programNow()->graph(graphId)));
+        auto &draft =
+            session.edit(const_cast<camel::runtime::GCGraph *>(programNow()->graph(graphId))).edit();
         camel::runtime::DraftWritings writings(
             draft, record.strict ? camel::core::sem::NumericPolicy::strict()
                                  : camel::core::sem::NumericPolicy::relaxed());
@@ -1488,7 +1488,7 @@ slot_t saturateKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
             if (isRuleSide(*graph)) {
                 continue;
             }
-            camel::runtime::GraphDraft &draft = session.edit(graph);
+            auto &draft = session.edit(graph).edit();
             camel::runtime::DraftWritings writings(
                 draft,
                 strict ? camel::core::sem::NumericPolicy::strict()
@@ -3495,8 +3495,8 @@ void checkOneRule(
                 ctx.shared_from_this(),
                 program,
                 const_cast<camel::runtime::GCGraph *>(lhsGraph));
-            camel::runtime::GraphDraft &draft =
-                session.edit(const_cast<camel::runtime::GCGraph *>(lhsGraph));
+            auto &draft =
+                session.edit(const_cast<camel::runtime::GCGraph *>(lhsGraph)).edit();
             const std::vector<camel::runtime::gc_node_ref_t> ports(
                 draft.normPorts().begin(),
                 draft.normPorts().end());

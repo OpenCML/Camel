@@ -1822,7 +1822,7 @@ node_handle_t Builder::visitPipeLink(
         scratch.mode     = PipeMode::Scratch;
         scratch.previous = pipe_;
         unusedStatement_                 = nullptr;
-        runtime::GraphDraft &draft       = currGraph_->draft();
+        auto &draft                      = currGraph_->transaction().edit();
         const draft_node_ref_t firstNode = static_cast<draft_node_ref_t>(draft.nodeSlotCount());
         // Nothing the dropped arm built stays in the graph: a node of it that had an effect would
         // be reported as one that never runs, and one that did would run.

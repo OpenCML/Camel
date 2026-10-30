@@ -461,7 +461,7 @@ const camel::runtime::Program *rewriteReachableGraphs(
     size_t total = 0;
     for (GCGraph *g : session.collectReachableRuntimeGraphs()) {
         if ((mayRewrite && !mayRewrite(*g)) || (memo && memo->leftAlone(passName, g))) {
-            if (checkScreens && rewrite(session.edit(g)) != 0) {
+            if (checkScreens && rewrite(session.edit(g).edit()) != 0) {
                 throw std::runtime_error(
                     std::format(
                         "{} rewrote graph '{}', which its screen or memo had skipped.",
@@ -470,7 +470,7 @@ const camel::runtime::Program *rewriteReachableGraphs(
             }
             continue;
         }
-        const size_t made = rewrite(session.edit(g));
+        const size_t made = rewrite(session.edit(g).edit());
         total += made;
         if (memo && made == 0) {
             memo->remember(passName, g);

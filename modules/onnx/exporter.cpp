@@ -4888,7 +4888,7 @@ Model exportBound(
     {
         camel::runtime::RuntimeGraphDraftSession session(context, fn->program(), graph);
         if (!captures.empty()) {
-            bindCaptures(session.rootDraft(), captures);
+            bindCaptures(session.rootDraft().edit(), captures);
         }
         // Captured values are constants of the model: they get the types their values fix.
         std::vector<type::Type *> captureTypes;

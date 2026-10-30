@@ -261,7 +261,7 @@ FactStoreTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     (void)store.obtain<int>(k.cone, Anchor{program, main, 0});
     {
         RuntimeGraphDraftSession session(context_, program);
-        (void)session.edit(main);
+        (void)session.edit(main).edit();
         program       = session.commit();
         GCGraph *same = program->root();
         os << "FACTS unchanged_revision_main "
@@ -280,7 +280,7 @@ FactStoreTestPass::apply(const camel::runtime::Program *program, std::ostream &o
 
     // ---- A commit that changes main only (one unused constant more) -----------------------
     RuntimeGraphDraftSession session(context_, program);
-    (void)session.edit(main).materializeStaticValue(
+    (void)session.edit(main).edit().materializeStaticValue(
         camel::core::rtdata::toSlot<int64_t>(7), camel::core::type::Type::Int64());
     const camel::runtime::Program *program2 = session.commit();
     GCGraph *root2                          = program2->root();
@@ -625,7 +625,7 @@ FactPersistTestPass::apply(const camel::runtime::Program *program, std::ostream 
 
     // Change main (an unused constant more), then load again.
     RuntimeGraphDraftSession session(context_, program);
-    GraphDraft &main = session.edit(named(*program, graph, "main"));
+    auto &main = session.edit(named(*program, graph, "main")).edit();
     (void)main.materializeStaticValue(
         camel::core::rtdata::toSlot<int64_t>(7), camel::core::type::Type::Int64());
     const camel::runtime::Program *changedProgram = session.commit();
@@ -661,7 +661,7 @@ FactNodeTestPass::apply(const camel::runtime::Program *program, std::ostream &os
 
     // A node more at the end of the root: its revision changes, the record of `kept` does not.
     RuntimeGraphDraftSession session(context_, program);
-    (void)blankNode(session.edit(root));
+    (void)blankNode(session.edit(root).edit());
     const camel::runtime::Program *grown = session.commit();
     GCGraph *grownRoot                   = grown->root();
     const Anchor grownAnchor{grown, grownRoot, kept};
@@ -676,12 +676,12 @@ FactNodeTestPass::apply(const camel::runtime::Program *program, std::ostream &os
     // after it puts the index back, so that the program this pass returns runs as it did.
     const gc_slot_idx_t index = grownRoot->node(kept)->dataIndex;
     RuntimeGraphDraftSession edit(context_, grown);
-    edit.edit(grownRoot).setNodeDataIndex(kept, index + 1);
+    edit.edit(grownRoot).edit().setNodeDataIndex(kept, index + 1);
     const camel::runtime::Program *changed = edit.commit();
     os << "FACTS node_self node="
        << statusName(store.probe(k.node, std::vector<Anchor>{Anchor{changed, changed->root(), kept}}))
        << "\n";
     RuntimeGraphDraftSession restore(context_, changed);
-    restore.edit(changed->root()).setNodeDataIndex(kept, index);
+    restore.edit(changed->root()).edit().setNodeDataIndex(kept, index);
     return restore.commit();
 }

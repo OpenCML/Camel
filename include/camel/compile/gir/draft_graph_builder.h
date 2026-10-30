@@ -18,7 +18,7 @@
 #include "camel/compile/gir/types.h"
 #include "camel/core/data.h"
 #include "camel/core/operator.h"
-#include "camel/runtime/draft.h"
+#include "camel/runtime/graph_txn.h"
 #include "camel/utils/exstore.h"
 
 #include <cstddef>
@@ -39,7 +39,9 @@ class DraftGraphBuilder {
     using FuncTarget = graph_ptr_t;
     using DrefTarget = std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>;
 
-    explicit DraftGraphBuilder(camel::core::type::FunctionType *funcType = nullptr);
+    /// A builder for the graph `transaction` owns: the front end never makes a graph of its own,
+    /// it writes in the one it was handed.
+    explicit DraftGraphBuilder(std::shared_ptr<runtime::GraphTransaction> transaction);
     ~DraftGraphBuilder();
 
     DraftGraphBuilder(const DraftGraphBuilder &)            = delete;
@@ -47,16 +49,18 @@ class DraftGraphBuilder {
     DraftGraphBuilder(DraftGraphBuilder &&)                 = delete;
     DraftGraphBuilder &operator=(DraftGraphBuilder &&)      = delete;
 
-    runtime::GraphDraft &draft() const { return *draft_; }
+    runtime::GraphDraft &draft() const { return transaction_->edit(); }
+    /// The transaction the graph belongs to: the only handle to the graph being built.
+    runtime::GraphTransaction &transaction() const { return *transaction_; }
     static DraftGraphBuilder *fromDraft(const runtime::GraphDraft *draft);
     graph_arena_ptr_t arena() const { return arena_; }
     const std::string &name() const { return name_; }
     /// The graph's identity (camel/runtime/graph_id.h), the id of the runtime graph it encodes to.
-    runtime::GraphId graphId() const { return draft_->id(); }
-    camel::core::type::FunctionType *funcType() const { return draft_->funcType(); }
-    camel::core::type::TupleType *closureType() const { return draft_->closureType(); }
-    bool hasFrameLayout() const { return draft_->hasFrameLayout(); }
-    size_t frameSize() const { return draft_->frameSize(); }
+    runtime::GraphId graphId() const { return draft().id(); }
+    camel::core::type::FunctionType *funcType() const { return draft().funcType(); }
+    camel::core::type::TupleType *closureType() const { return draft().closureType(); }
+    bool hasFrameLayout() const { return draft().hasFrameLayout(); }
+    size_t frameSize() const { return draft().frameSize(); }
     bool parameterized() const { return parameterized_; }
     void setName(std::string name) { name_ = std::move(name); }
     void setOuterGraph(const graph_ptr_t &graph) { outerGraph_ = graph; }
@@ -83,7 +87,7 @@ class DraftGraphBuilder {
     /// The names the function captures, in capture order (runtime::GraphDraft::captureNames).
     std::vector<std::string_view> captureNames() const;
     /// Records that the function captures `name` (one entry per capture port, in order).
-    void addCaptureName(std::string_view name) { draft_->addCaptureName(name); }
+    void addCaptureName(std::string_view name) { draft().addCaptureName(name); }
     void setClosureType(camel::core::type::TupleType *closureType);
 
     runtime::gc_slot_idx_t addStaticSlot(slot_t slot);
@@ -153,39 +157,39 @@ class DraftGraphBuilder {
 
     const std::string &nodePortName(runtime::DraftNodeRef node) const;
     const std::string &nodePortName(runtime::gc_node_ref_t nodeId) const {
-        return nodePortName(runtime::DraftNodeRef(draft_.get(), nodeId));
+        return nodePortName(runtime::DraftNodeRef(&draft(), nodeId));
     }
     const FuncTarget &funcTarget(runtime::DraftNodeRef node) const;
     const FuncTarget &funcTarget(runtime::gc_node_ref_t nodeId) const {
-        return funcTarget(runtime::DraftNodeRef(draft_.get(), nodeId));
+        return funcTarget(runtime::DraftNodeRef(&draft(), nodeId));
     }
     const DrefTarget &drefTarget(runtime::DraftNodeRef node) const;
     const DrefTarget &drefTarget(runtime::gc_node_ref_t nodeId) const {
-        return drefTarget(runtime::DraftNodeRef(draft_.get(), nodeId));
+        return drefTarget(runtime::DraftNodeRef(&draft(), nodeId));
     }
     const oper_idx_ptr_t &operTarget(runtime::DraftNodeRef node) const;
     const oper_idx_ptr_t &operTarget(runtime::gc_node_ref_t nodeId) const {
-        return operTarget(runtime::DraftNodeRef(draft_.get(), nodeId));
+        return operTarget(runtime::DraftNodeRef(&draft(), nodeId));
     }
     void registerNodePortName(runtime::DraftNodeRef node, std::string name);
     void registerNodePortName(runtime::gc_node_ref_t nodeId, std::string name) {
-        registerNodePortName(runtime::DraftNodeRef(draft_.get(), nodeId), std::move(name));
+        registerNodePortName(runtime::DraftNodeRef(&draft(), nodeId), std::move(name));
     }
     void registerFuncTarget(runtime::DraftNodeRef node, FuncTarget target);
     void registerFuncTarget(runtime::gc_node_ref_t nodeId, FuncTarget target) {
-        registerFuncTarget(runtime::DraftNodeRef(draft_.get(), nodeId), std::move(target));
+        registerFuncTarget(runtime::DraftNodeRef(&draft(), nodeId), std::move(target));
     }
     void registerDrefTarget(runtime::DraftNodeRef node, DrefTarget target);
     void registerDrefTarget(runtime::gc_node_ref_t nodeId, DrefTarget target) {
-        registerDrefTarget(runtime::DraftNodeRef(draft_.get(), nodeId), std::move(target));
+        registerDrefTarget(runtime::DraftNodeRef(&draft(), nodeId), std::move(target));
     }
     void registerOperTarget(runtime::DraftNodeRef node, oper_idx_ptr_t target);
     void registerOperTarget(runtime::gc_node_ref_t nodeId, oper_idx_ptr_t target) {
-        registerOperTarget(runtime::DraftNodeRef(draft_.get(), nodeId), std::move(target));
+        registerOperTarget(runtime::DraftNodeRef(&draft(), nodeId), std::move(target));
     }
     void eraseNodeColdData(runtime::DraftNodeRef node);
     void eraseNodeColdData(runtime::gc_node_ref_t nodeId) {
-        eraseNodeColdData(runtime::DraftNodeRef(draft_.get(), nodeId));
+        eraseNodeColdData(runtime::DraftNodeRef(&draft(), nodeId));
     }
 
     ::OperatorIndex *registerOperIndex(std::shared_ptr<::OperatorIndex> idx);
@@ -193,13 +197,15 @@ class DraftGraphBuilder {
 
   private:
     runtime::DraftNodeRef ref(runtime::gc_node_ref_t id) const {
-        return draft_->alive(id) ? runtime::DraftNodeRef(draft_.get(), id) : runtime::DraftNodeRef();
+        return draft().alive(id) ? runtime::DraftNodeRef(&draft(), id) : runtime::DraftNodeRef();
     }
     static slot_t makeStaticSlot(
         const camel::core::data::data_ptr_t &data, camel::core::mm::IAllocator &allocator);
 
     graph_arena_ptr_t arena_;
-    std::unique_ptr<runtime::GraphDraft> draft_;
+    /// The graph's owner. The builder holds it but does not own the graph's shape: it writes in
+    /// the storage the transaction keeps.
+    std::shared_ptr<runtime::GraphTransaction> transaction_;
     std::string name_;
     graph_ptr_t outerGraph_;
     bool parameterized_ = false;
