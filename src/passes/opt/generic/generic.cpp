@@ -1266,7 +1266,8 @@ size_t foldDraft(
 
 // ---------------------------------------------------------------- cse
 
-size_t cseDraft(GraphDraft &draft) {
+size_t cseDraft(camel::runtime::GraphTransaction &transaction) {
+    auto &draft = transaction.edit();
     const auto regions = armRegions(draft);
     // The numeric permissions are part of the key: two otherwise identical operations granted
     // different permissions (design principles 7.5) may compute different bits, and merging
@@ -1419,7 +1420,8 @@ bool gateInputsSurvive(const GraphDraft &draft, gc_node_ref_t gate) {
 
 /// With valuesOnly, only the nodes that are no more than their value: constants and pure
 /// operations (also casts, copies, accesses and fills) that no node reads; gates and syncs stay.
-size_t dceDraft(GraphDraft &draft, bool valuesOnly = false) {
+size_t dceDraft(camel::runtime::GraphTransaction &transaction, bool valuesOnly = false) {
+    auto &draft = transaction.edit();
     size_t removed        = 0;
     size_t gateEdgeBudget = std::min<size_t>(8192, draft.nodeSlotCount() * 8);
     for (bool changed = true; changed;) {
@@ -1462,7 +1464,8 @@ ConstantFoldPass::apply(const camel::runtime::Program *program, std::ostream &) 
         context_,
         program,
         "std::opt::fold",
-        [&](GraphDraft &draft) {
+        [&](camel::runtime::GraphTransaction &transaction) {
+            auto &draft = transaction.edit();
             return foldDraft(draft, *context_, roots, constantBudgetBytes_);
         },
         nullptr,
@@ -1488,7 +1491,10 @@ DeadCodePass::apply(const camel::runtime::Program *program, std::ostream &) {
         context_,
         program,
         "std::opt::dce",
-        [&](GraphDraft &draft) { return dceDraft(draft, valuesOnly_); },
+        [&](camel::runtime::GraphTransaction &transaction) {
+            auto &draft = transaction.edit();
+            return dceDraft(transaction, valuesOnly_);
+        },
         nullptr,
         nullptr,
         mayRemoveDead);
@@ -1500,8 +1506,11 @@ OrderReductionPass::apply(const camel::runtime::Program *program, std::ostream &
         context_,
         program,
         "std::opt::order",
-        [](GraphDraft &draft) { return camel::runtime::reduceOrderDependencies(draft) +
-                   camel::runtime::reduceControlDependencies(draft); },
+        [](camel::runtime::GraphTransaction &transaction) {
+            auto &draft = transaction.edit();
+            return camel::runtime::reduceOrderDependencies(draft) +
+                   camel::runtime::reduceControlDependencies(draft);
+        },
         nullptr,
         nullptr,
         mayReduceOrder);
@@ -1524,8 +1533,11 @@ const camel::runtime::Program *simplifyGraph(
             context,
             result,
             "std::opt::order",
-            [](GraphDraft &draft) { return camel::runtime::reduceOrderDependencies(draft) +
-                   camel::runtime::reduceControlDependencies(draft); },
+            [](camel::runtime::GraphTransaction &transaction) {
+            auto &draft = transaction.edit();
+            return camel::runtime::reduceOrderDependencies(draft) +
+                   camel::runtime::reduceControlDependencies(draft);
+        },
             nullptr,
             &memo,
             mayReduceOrder,
@@ -1540,7 +1552,8 @@ const camel::runtime::Program *simplifyGraph(
             context,
             program,
             "std::opt::fold",
-            [&](GraphDraft &draft) {
+            [&](camel::runtime::GraphTransaction &transaction) {
+                auto &draft = transaction.edit();
                 return foldDraft(draft, *context, roots, config.constantBudgetBytes);
             },
             &folded,
@@ -1574,7 +1587,7 @@ const camel::runtime::Program *simplifyGraph(
             context,
             program,
             "std::opt::dce",
-            [](GraphDraft &draft) { return dceDraft(draft); },
+            [](camel::runtime::GraphTransaction &transaction) { return dceDraft(transaction); },
             &removed,
             &memo,
             mayRemoveDead,
