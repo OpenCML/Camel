@@ -26,6 +26,10 @@ class GraphTransaction {
     static std::unique_ptr<GraphTransaction>
     open(GraphId id, camel::core::type::FunctionType *funcType = nullptr);
 
+    /// A transaction on `graph`, a version of `program`: the graph's editable form is decoded from
+    /// it and stands for it while the transaction is open.
+    static std::unique_ptr<GraphTransaction> decode(const Program &program, const GCGraph *graph);
+
     GraphTransaction(const GraphTransaction &)            = delete;
     GraphTransaction &operator=(const GraphTransaction &) = delete;
 

@@ -43,6 +43,9 @@ DraftGraphBuilder::DraftGraphBuilder(std::shared_ptr<runtime::GraphTransaction> 
     : arena_(std::make_shared<GraphArena>(kInitialArenaBlockBytes)),
       transaction_(std::move(transaction)) {
     ASSERT(transaction_ != nullptr, "A compile graph is built in a transaction.");
+    // The front end places every node itself, so a read across the border of an arm is left for
+    // the validator to report rather than moving the reader into the arm.
+    draft().setInheritsRegions(false);
     draftOwners()[&draft()] = this;
 }
 

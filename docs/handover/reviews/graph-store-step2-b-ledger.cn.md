@@ -29,6 +29,7 @@ git grep -o 'GraphDraft::decode' -- src include modules | grep -v -e graph_txn.h
 |---|---|---|---|---|
 | `3d8cee417`（基点 `origin/develop`） | — | 95 / 885 | 9 | 16 |
 | `2cdd65681` | 前端改由 `GraphTransaction` 拥图：`createCompileGraph` 开事务并在此取号，`DraftGraphBuilder` 不再 `make_unique<GraphDraft>`、`draft()` 答自 `transaction_->edit()` | 95 / 883 | 8 | 16 |
+| b2.1（本笔，sha 见下一行） | 会话改由事务拥图：`RuntimeGraphDraftSession::DraftEntry` 持一份 `GraphTransaction`（不再持 `unique_ptr<GraphDraft>`），`tryDraft`/`ensureDraft`/`edit`/`rootDraft` 从 `transaction->edit()`、`transaction->graph()` 回答，**30+ 调用点一个字没动**；`GraphTransaction` 增加 `decode`；`open` 不再替前端决定区域继承，改回 `DraftGraphBuilder` 自己说 | 95 / 882 | 8 | 15 |
 
 b1 的 −2 是从哪掉的：`src/compile/gir/draft_graph_builder.cpp` 的 `make_unique<runtime::GraphDraft>`
 与 `include/camel/compile/gir/draft_graph_builder.h` 的 `std::unique_ptr<runtime::GraphDraft> draft_`

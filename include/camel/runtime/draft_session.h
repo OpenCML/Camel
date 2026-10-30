@@ -19,6 +19,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/mm/alloc/growable.h"
 #include "camel/runtime/draft.h"
+#include "camel/runtime/graph_txn.h"
 #include "camel/runtime/program.h"
 
 #include <cstdint>
@@ -244,7 +245,9 @@ class RuntimeGraphDraftSession {
 
   private:
     struct DraftEntry {
-        std::unique_ptr<GraphDraft> draft;
+        /// The graph the session rewrites. The transaction owns it: a session reaches the storage
+        /// the same way every other handle does, and the graph it commits is the transaction's.
+        std::unique_ptr<GraphTransaction> transaction;
         RuntimeDraftIdentity identity;
     };
 

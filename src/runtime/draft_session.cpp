@@ -1061,7 +1061,7 @@ GraphDraft *RuntimeGraphDraftSession::tryDraft(const GCGraph *graph) {
         return nullptr;
     }
     if (auto it = drafts_.find(const_cast<GCGraph *>(graph)); it != drafts_.end()) {
-        return it->second->draft.get();
+        return &it->second->transaction->edit();
     }
     return nullptr;
 }
@@ -1071,7 +1071,7 @@ const GraphDraft *RuntimeGraphDraftSession::tryDraft(const GCGraph *graph) const
         return nullptr;
     }
     if (auto it = drafts_.find(const_cast<GCGraph *>(graph)); it != drafts_.end()) {
-        return it->second->draft.get();
+        return &it->second->transaction->edit();
     }
     return nullptr;
 }
@@ -1086,8 +1086,8 @@ GraphDraft &RuntimeGraphDraftSession::ensureDraft(GCGraph *graph) {
             "DraftSession",
             "Decoding runtime graph '{}' into editable draft.",
             graph->name());
-        entry->draft = GraphDraft::decode(*work_, graph);
-        entry->draft->setRefsEpoch(refsEpoch_.get());
+        entry->transaction = GraphTransaction::decode(*work_, graph);
+        entry->transaction->edit().setRefsEpoch(refsEpoch_.get());
         CAMEL_LOG_INFO_S(
             "DraftSession",
             "Decoded runtime graph '{}' into editable draft.",
@@ -1099,10 +1099,10 @@ GraphDraft &RuntimeGraphDraftSession::ensureDraft(GCGraph *graph) {
         }
         draftedIds_[index] = 1;
 #ifndef NDEBUG
-        noteDraftOpened(*debugRoots_, it->second->draft.get());
+        noteDraftOpened(*debugRoots_, &it->second->transaction->edit());
 #endif
     }
-    return *it->second->draft;
+    return it->second->transaction->edit();
 }
 
 GraphDraft &RuntimeGraphDraftSession::edit(GCGraph *graph) {
@@ -1143,7 +1143,7 @@ void RuntimeGraphDraftSession::traceStaticSlots(
     // object. Without it a key names whatever is at the old address next.
     std::vector<std::pair<slot_t, slot_t>> moves;
     for (auto &[graph, entry] : drafts_) {
-        GraphDraft &draft        = *entry->draft;
+        GraphDraft &draft        = entry->transaction->edit();
         const auto slots         = draft.staticSlots();
         const auto types         = draft.staticSlotTypes();
         const size_t slotCount   = std::min(slots.size(), types.size());
@@ -1381,7 +1381,7 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
 
 const std::vector<std::pair<GraphId, const Program *>> &
 RuntimeGraphDraftSession::draftRefs(GCGraph *graph) const {
-    const GraphDraft &draft = *drafts_.at(graph)->draft;
+    const GraphDraft &draft = drafts_.at(graph)->transaction->graph();
     DraftRefs &refs         = draftRefs_[graph];
     if (!refs.valid || refs.revision != draft.revision()) {
         refs.graphs.clear();
@@ -1442,10 +1442,10 @@ std::vector<GraphId> RuntimeGraphDraftSession::conflictsWithProgram(const Progra
 
 std::vector<gc_node_ref_t> RuntimeGraphDraftSession::committedNodeRefs(GCGraph *graph) const {
     const auto found = drafts_.find(graph);
-    if (found == drafts_.end() || found->second->draft == nullptr) {
+    if (found == drafts_.end() || found->second->transaction == nullptr) {
         return {};
     }
-    return draftRuntimeNodeRefs(*found->second->draft);
+    return draftRuntimeNodeRefs(found->second->transaction->graph());
 }
 
 const Program *RuntimeGraphDraftSession::commitChecked() {
@@ -1552,7 +1552,7 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
             GCGraphBuildAccess::addFlags(graph, kGraphFlagGatesDissolved);
 #ifndef NDEBUG
             // Before the draft is destroyed: the Debug record must never name a freed draft.
-            noteDraftClosed(*debugRoots_, drafts_.at(graph)->draft.get());
+            noteDraftClosed(*debugRoots_, &drafts_.at(graph)->transaction->edit());
 #endif
             drafts_.erase(graph);
             draftedIds_[toValue(graph->id())] = 0;
@@ -1585,8 +1585,8 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     const auto allocate = [&](GCGraph *graph) {
         ensureDraft(graph);
         const DraftEntry &entry = *drafts_.at(graph);
-        const size_t bytes      = draftGraphBytes(context_, *entry.draft, graph);
-        GCGraph *copy           = allocateGraph(context_, entry.identity, *entry.draft, bytes);
+        const size_t bytes      = draftGraphBytes(context_, entry.transaction->graph(), graph);
+        GCGraph *copy           = allocateGraph(context_, entry.identity, entry.transaction->graph(), bytes);
         fresh.emplace(graph, copy);
         allocatedBytes.emplace(graph, bytes);
         order.push_back(graph);
@@ -1594,11 +1594,12 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     };
     const auto encode = [&](GCGraph *graph) {
         const DraftEntry &entry = *drafts_.at(graph);
-        entry.draft->setFlags(entry.draft->flags() | kGraphFlagGatesDissolved);
+        GraphDraft &draft = entry.transaction->edit();
+        draft.setFlags(draft.flags() | kGraphFlagGatesDissolved);
         encodeDraftGraph(
             context_,
             entry.identity,
-            *entry.draft,
+            draft,
             committed,
             fresh.at(graph),
             allocatedBytes.at(graph));
@@ -1610,7 +1611,7 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         // A graph that was asked for editing and not changed is the graph it was.
         if (heldBefore(graph) && edited_.contains(graph)) {
             const auto draft = drafts_.find(graph);
-            if (draft != drafts_.end() && draft->second->draft->mutations() == 0) {
+            if (draft != drafts_.end() && draft->second->transaction->graph().mutations() == 0) {
                 edited_.erase(graph);
             }
         }
