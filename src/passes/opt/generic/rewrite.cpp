@@ -51,7 +51,8 @@ camel::core::OperId operIdOf(const GraphDraft &draft, gc_node_ref_t id) {
 /// Whether the pass may treat a call of the operator as a value of its own: fold it, move it,
 /// merge it with an identical call or drop it. An operator that must run where the program writes
 /// it is not one, whatever its effect (a rule's value and an `analysis` are pure and unfoldable).
-bool isPureOper(const GraphDraft &draft, gc_node_ref_t id) {
+bool isPureOper(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
     const auto *h = draft.header(id);
     if (!h || h->kind != GCNodeKind::Oper) {
         return false;
@@ -170,7 +171,9 @@ std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t
     return sources;
 }
 
-void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement) {
+void replaceNode(
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, gc_node_ref_t replacement) {
+    auto &draft = transaction.edit();
     const auto copy = [](std::span<const gc_node_ref_t> refs) {
         return std::vector<gc_node_ref_t>(refs.begin(), refs.end());
     };
@@ -261,7 +264,7 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
             // statement of the block follows the same predecessor through a sync edge
             // (docs/handover/README.cn.md 5.21 item 4).
             if (std::ranges::find(chainWait, pred) != chainWait.end() &&
-                handOverSyncWait(draft, pred, user)) {
+                handOverSyncWait(transaction, pred, user)) {
                 continue;
             }
             camel::runtime::appendControlDependency(draft, pred, user);
@@ -301,8 +304,8 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
         const std::vector<gc_node_ref_t> chainPreds(
             draft.syncInputsOf(id).begin(), draft.syncInputsOf(id).end());
         const auto chainTo = [&](gc_node_ref_t user, gc_node_ref_t pred) {
-            markSyncStatement(draft, user);
-            markSyncStatement(draft, pred);
+            markSyncStatement(transaction, user);
+            markSyncStatement(transaction, pred);
             const gc_node_ref_t only[1] = {pred};
             draft.setSyncInputs(user, only);
             camel::runtime::appendControlDependency(draft, pred, user);
@@ -352,7 +355,7 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
             // The chain takes the tail as a wait of its own kind when it can (`handOverSyncWait`),
             // which is what the block's value does: it waits on the statement written before it
             // (docs/design/effects/edges.cn.md 4.6, 5.3 item 3). Otherwise the wait is control.
-            if (!handOverSyncWait(draft, pred, user)) {
+            if (!handOverSyncWait(transaction, pred, user)) {
                 camel::runtime::appendControlDependency(draft, pred, user);
             }
         }

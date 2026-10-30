@@ -12,7 +12,9 @@
 namespace camel::passes::generic {
 using namespace camel::runtime;
 
-bool bypassValueGate(GraphDraft &draft, gc_node_ref_t id, size_t &edgeBudget) {
+bool bypassValueGate(
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, size_t &edgeBudget) {
+    auto &draft = transaction.edit();
     const auto *gate = draft.header(id);
     if (!gate || gate->kind != GCNodeKind::Gate || !edgeBudget || !isReplaceable(draft, id) ||
         draft.normInputsOf(id).size() != 1 || !draft.withInputsOf(id).empty() ||
@@ -79,7 +81,7 @@ bool bypassValueGate(GraphDraft &draft, gc_node_ref_t id, size_t &edgeBudget) {
         // the consumer that is a statement of the block follows the same predecessor through the
         // sync edge (docs/handover/README.cn.md 5.21 item 4).
         for (gc_node_ref_t predecessor : draft.syncInputsOf(id)) {
-            handOverSyncWait(draft, predecessor, user.id);
+            handOverSyncWait(transaction, predecessor, user.id);
         }
         for (auto predecessor : predecessors) {
             appendControlDependency(draft, predecessor, user.id);

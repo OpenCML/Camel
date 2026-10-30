@@ -168,7 +168,9 @@ std::optional<T> constant(
 
 template <typename T>
 bool simplify(
-    GraphDraft &draft, gc_node_ref_t node, const Arithmetic &ops, const WrittenSlots &written) {
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t node, const Arithmetic &ops,
+    const WrittenSlots &written) {
+    auto &draft = transaction.edit();
     if constexpr (!std::is_integral_v<T>) {
         return false;
     } else {
@@ -201,7 +203,7 @@ bool simplify(
         if (replacement == kInvalidNodeRef) {
             return false;
         }
-        replaceNode(draft, node, replacement);
+        replaceNode(transaction, node, replacement);
         return true;
     }
 }
@@ -228,7 +230,7 @@ size_t algebraDraft(camel::runtime::GraphTransaction &transaction, bool safeFp, 
         work.pop_front();
         queued[id]    = false;
         const auto *h = draft.header(id);
-        if (!h || !h->dataType || !isPureOper(draft, id) || written(id)) {
+        if (!h || !h->dataType || !isPureOper(transaction, id) || written(id)) {
             continue;
         }
         const Arithmetic *ops = families->match(operIdOf(draft, id), h->dataType);
@@ -240,10 +242,10 @@ size_t algebraDraft(camel::runtime::GraphTransaction &transaction, bool safeFp, 
         bool done = false;
         switch (ops->element) {
         case type::TypeCode::Int32:
-            done = simplify<uint32_t>(draft, id, *ops, written);
+            done = simplify<uint32_t>(transaction, id, *ops, written);
             break;
         case type::TypeCode::Int64:
-            done = simplify<uint64_t>(draft, id, *ops, written);
+            done = simplify<uint64_t>(transaction, id, *ops, written);
             break;
         default:
             break;
