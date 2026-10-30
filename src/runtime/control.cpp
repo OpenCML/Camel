@@ -99,7 +99,8 @@ bool appendControlDependency(
     // removes the call and may discard an unused argument. That edge must reach the body.
     // A GATE must still have at least one CTRL input while its wait is only a control edge
     // (`docs/design/effects/edges.cn.md` 5.3): its wait is the sync predecessor, so a gate that has
-    // one needs no control input at all, and nothing here appends one for its sake.
+    // one needs no control input at all, and nothing here appends one for its sake. The owner of these
+    // rules is the finished graph, executed by the seal check at commit, not the draft's writers.
     const auto *source = draft.header(predecessor);
     if (h && source && source->kind != GCNodeKind::Brch && h->kind != GCNodeKind::Loop &&
         h->kind != GCNodeKind::Func && h->kind != GCNodeKind::Call && !isBoundary(draft, user) &&
@@ -169,7 +170,8 @@ size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork) {
     // Epochs avoid clearing graph-sized scratch arrays for every target. Mandatory value inputs
     // seed the walk directly; the other control inputs seed only their parents, so a control edge
     // cannot prove itself. JOIN arm values are alternatives, never mandatory predecessors: a walk
-    // may reach a completed JOIN/LOOP as its endpoint but cannot walk through it.
+    // may reach a completed JOIN/LOOP as its endpoint but cannot walk through it. The owner of these
+    // rules is the finished graph, executed by the seal check at commit, not the draft's writers.
     //
     // The sweep runs twice, for two readings of the graph. The first is the value-path reduction the
     // pass has always made. The second reads the sync edge as an ordering of its own: it is the edge

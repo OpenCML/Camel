@@ -16,7 +16,8 @@
  * -shaped comment without naming its owner, so the vocabulary can settle before anything is gated.
  *
  * Usage:
- *   node scripts/check-invariant-owner.mjs [--base <rev>] [--rev <rev>]
+ *   node scripts/check-invariant-owner.mjs [--base <rev> | --since <sha>] [--rev <rev>]
+ *   node scripts/check-invariant-owner.mjs --census
  *
  * The owner vocabulary, in the order a reader should prefer them:
  *   the finished graph / the frozen graph / 完工的图
@@ -35,7 +36,8 @@ const option = (name, fallback) => {
     const at = argv.indexOf(name);
     return at >= 0 && at + 1 < argv.length ? argv[at + 1] : fallback;
 };
-const base = option("--base", "origin/develop");
+const since = option("--since", null);
+const base = since ?? option("--base", "origin/develop");
 const rev = option("--rev", "HEAD");
 
 const OWNERS = [

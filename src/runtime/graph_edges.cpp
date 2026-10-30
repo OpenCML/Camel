@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The edge invariants of an encoded graph, checked at every commit (docs/design/graph-store 5.4):
+ * The edge invariants of an encoded graph, checked at every commit (docs/design/graph-store 5.4).
+ * The owner of these rules is the finished graph, executed by the seal check at commit, not the
+ * draft's writers: a node still being built answers a different question.
  *
  *  - no cycle: following the inputs of a node (value, `with` and control alike) never comes back
  *    to it. A graph calls itself through other graphs, never through an edge;
@@ -245,7 +247,8 @@ class EdgeChecker {
     /// reads the first half back; this is the second. Two statements of one block following the
     /// same statement is a chain that forks, which is no chain: the layout takes one of the two and
     /// the other is reached by nothing, so its work does not happen and a program that prints twice
-    /// prints once.
+    /// prints once. The owner of this rule is the finished graph, executed by the seal check at
+    /// commit, not the draft's writers.
     ///
     /// What counts is the chain 5.3 and 3.4 make. A node the model lets a pass arrange freely is not
     /// on the chain at all (3.4: a sync block orders its effects, and a node that is pure and cannot
@@ -354,7 +357,8 @@ class EdgeChecker {
         }
     }
 
-    /// The control region an order edge would cross, 0 when it crosses none. An order edge orders
+    /// The control region an order edge would cross, 0 when it crosses none. The owner of this rule is
+    /// the finished graph, executed by the seal check at commit, not the draft's writers. An order edge orders
     /// two nodes that both run, and an arm or a part of a loop runs as a whole with the node that
     /// owns it: the order such a region has with the code around it is an order on the owner (the
     /// `BRCH` or the `LOOP`), never one that reaches inside the region (docs/design/effects/
@@ -438,7 +442,8 @@ class EdgeChecker {
         // Whether a conversion can fail depends on the types it converts between, and a pass that
         // refines the types (specialization, inlining) can make a conversion that was ordered when
         // it was written one that cannot fail. The order it was given then stays: dropping it is
-        // the passes' choice, and an edge on such a node is not a defect of the graph.
+        // the passes' choice, and an edge on such a node is not a defect of the graph. The owner of
+        // this rule is the finished graph, executed by the seal check at commit, not the draft's writers.
         const GCNode *node = graph_.node(ref);
         if (node != nullptr && node->kind == GCNodeKind::Cast) {
             return false;

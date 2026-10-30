@@ -872,7 +872,9 @@ void emitDraftPayload(
 
     // A GATE forwards its (last) norm input: FastVM reads the producer, NodeVM reads the gate's
     // slot, so the slot must be the input's. Rewrites that rebind a gate's input (inlining binds
-    // parameter gates to the caller's arguments) leave a stale slot, so it is derived here.
+    // parameter gates to the caller's arguments) leave a stale slot, so it is derived here. The owner
+    // of this rule is the encoder -- the payload plan in this file -- not the draft's writers: it is
+    // the place that decides what the frozen graph holds, which is where the order-edge filter sits too.
     const auto slotOf = [&](gc_node_ref_t id) {
         for (size_t hops = 0; hops < plan.nodes.size() + 1; ++hops) {
             const DraftNodeHeader *h = draft.header(id);

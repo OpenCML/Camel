@@ -8,24 +8,24 @@ planDraftPayload 里——**拥有者是完工的图，不是写边的地方**�
 每一条「某某必须……」的注释，它有没有点名拥有者，若没有，按今天的事实它应该属于哪一类。
 **词表就三加一，不再扩**：完工的图 / 草稿 / 编码器 / 安全网（只作兜底）。
 
-**43 invariant comments in 7 files; 33 name no owner**
+**43 invariant comments in 7 files; 26 name no owner**
 
 ## 表
 
 | file:line | first sentence | owner named | should belong to |
 |---|---|---|---|
-| src/runtime/graph_edges.cpp:5 | * The edge invariants of an encoded graph, checked at every commit (docs/design/graph-store 5.4): * * - no cyc | **none** | finished graph (the seal check) |
-| src/runtime/graph_edges.cpp:251 | /// The other half of 5.3, and the one a splice can break: a block's statements are one chain, /// so one stat | **none** | finished graph (the seal check) |
-| src/runtime/graph_edges.cpp:360 | /// The control region an order edge would cross, 0 when it crosses none. | **none** | finished graph (the seal check) |
-| src/runtime/graph_edges.cpp:435 | /// The rule of 4.6's third clause, read off the shared classification so that the seal check /// and the pass | seal check (backstop only) | finished graph (the seal check) |
-| src/runtime/graph_edges.cpp:440 | // Whether a conversion can fail depends on the types it converts between, and a pass that // refines the type | **none** | finished graph (the seal check) |
+| src/runtime/graph_edges.cpp:5 | * The edge invariants of an encoded graph, checked at every commit (docs/design/graph-store 5.4). | finished graph | finished graph (the seal check) |
+| src/runtime/graph_edges.cpp:254 | /// The other half of 5.3, and the one a splice can break: a block's statements are one chain, /// so one stat | finished graph | finished graph (the seal check) |
+| src/runtime/graph_edges.cpp:364 | /// The control region an order edge would cross, 0 when it crosses none. | finished graph | finished graph (the seal check) |
+| src/runtime/graph_edges.cpp:439 | /// The rule of 4.6's third clause, read off the shared classification so that the seal check /// and the pass | seal check (backstop only) | finished graph (the seal check) |
+| src/runtime/graph_edges.cpp:444 | // Whether a conversion can fail depends on the types it converts between, and a pass that // refines the type | finished graph | finished graph (the seal check) |
 | src/runtime/draft.cpp:1352 | // A predecessor of the node this chain closes over that belongs to another block cannot become // the success | **none** | draft |
 | src/runtime/draft.cpp:1375 | A sync edge joins two statements of one block, so a predecessor of the node this chain // closes over that bel | **none** | draft |
 | src/runtime/draft.cpp:1499 | // What ordered the replaced node orders its replacer (docs/design/effects/edges.cn.md 4). | **none** | draft |
 | src/runtime/draft.cpp:1511 | // What the replaced node ordered is ordered by its replacer. | seal check (backstop only) | draft |
 | src/runtime/draft.cpp:1822 | // Both are the statement's own place in the chain: a node already in one chain cannot be // put into another, | **none** | draft |
 | src/runtime/draft.cpp:2065 | // A value of `never` never exists (design principles 3.9): the expression that has this type // gives no valu | **none** | draft |
-| src/runtime/graph.cpp:874 | // A GATE forwards its (last) norm input: FastVM reads the producer, NodeVM reads the gate's // slot, so the s | **none** | encoder (the payload plan) |
+| src/runtime/graph.cpp:874 | // A GATE forwards its (last) norm input: FastVM reads the producer, NodeVM reads the gate's // slot, so the s | finished graph | encoder (the payload plan) |
 | src/runtime/draft_session.cpp:441 | The type of the draft's static area. | draft | draft |
 | src/runtime/draft_session.cpp:481 | Encodes `draft` into `target` (`bytes` reserved), rewriting every graph reference through // `rewritten`, whic | draft | draft |
 | src/runtime/draft_session.cpp:654 | * The commit encoded `after` from the draft of `before`, and they have the same content: the * same records, e | draft | draft |
@@ -55,8 +55,10 @@ planDraftPayload 里——**拥有者是完工的图，不是写边的地方**�
 | src/runtime/draft_inline.cpp:1927 | // A gate waits on the predecessors themselves; | **none** | draft |
 | src/runtime/draft_inline.cpp:2120 | // The chain the call stood in has to run through the body once the body is spliced in: its // statements are  | **none** | draft |
 | src/runtime/draft_inline.cpp:2254 | // The statements written directly after the call keep their place in the chain of the block // they are writt | **none** | draft |
-| src/runtime/control.cpp:99 | // A direct value input already orders ordinary users after its producer. | **none** | finished graph (the scheduler reads it) |
-| src/runtime/control.cpp:171 | // Epochs avoid clearing graph-sized scratch arrays for every target. | **none** | finished graph (the scheduler reads it) |
+| src/runtime/control.cpp:99 | // A direct value input already orders ordinary users after its producer. | finished graph | finished graph (the scheduler reads it) |
+| src/runtime/control.cpp:172 | // Epochs avoid clearing graph-sized scratch arrays for every target. | finished graph | finished graph (the scheduler reads it) |
+
+
 
 
 ## 读法
@@ -69,3 +71,21 @@ planDraftPayload 里——**拥有者是完工的图，不是写边的地方**�
   覆盖面，不是精确率，等词表定下来之后再谈闸门。
 - **检查器不给自己面子**：它对今晚那笔 ec5fce53 也照报两条（graph.h、graph_edges.cpp 的注释只说
   谓词的意思、没说拥有者），这个脾气要留着——它不是为了让输出好看而存在的。
+
+## 「属于草稿」的那一组，为什么一条都没动
+
+表里属于**草稿**的二十几条（`draft.cpp` / `draft_session.cpp` / `draft_inline.cpp`）**有意不加拥有者**：
+它们在改写过程中成立，图冻结后就不再被问——所以它们都不该变成提交前检查，也不需要 `GraphDraft` 写者之外的
+拥有者。给它们补一句「拥有者是草稿」，等于把「改写期间的临时约束」写成「提交时必须成立」，那正是今晚那条
+顺序边教过的错。**这一组的拥有者就是写它的那些函数，不必再说一遍。**
+
+## 补过的那一组（2026-10-31）
+
+「事实上已经由安全网执行、只是没说」的那一组补上了拥有者，一句一条：
+
+* `src/runtime/graph_edges.cpp` 四处（文件头的边不变式、`5.3` 的链、`crossedControlRegion`、CAST 例外）；
+* `src/runtime/control.cpp` 两处（派发前的直接值输入、控制边的播种）；
+* `src/runtime/graph.cpp` 一处（GATE 的槽位）——这条归**编码器**，它就在 payload-plan 那一族里，
+  下一次找顺序边过滤的人会顺着它找到 `planDraftPayload`。
+
+**补完重跑：43 条里 26 条仍没点名（补前 33 条）。** 剩下的是草稿那一组（有意不补）与噪声。
