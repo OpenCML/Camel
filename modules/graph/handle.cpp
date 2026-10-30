@@ -254,9 +254,12 @@ Handle *Handle::createInTransaction(
     if (mem == nullptr) {
         throw std::bad_alloc();
     }
+    // Both pointers are set while the readers still ask for the draft: the draft is reached
+    // through the transaction it belongs to, and dropping draft_ is then a change in the readers
+    // alone, not in every handle that names one.
     const auto &draft = transaction.graph();
     return new (mem)
-        Handle(HandleKind::Node, nullptr, nullptr, &transaction, draft.id(), node, nullptr);
+        Handle(HandleKind::Node, nullptr, &draft, &transaction, draft.id(), node, nullptr);
 }
 
 bool Handle::equals(const rtdata::Object *other, const Type *type, bool deep) const {
