@@ -957,3 +957,32 @@ HANDLE_PROBE refused: InvalidArgument
 | **待做：`onnx`** | **1** | `exporter.cpp:4815` | **最后一片** |
 
 **合计：296 + 25 + 17（四条边界）+ 51（待做）= 389。**
+
+## 45. `writings` 那 19 处：**哪一种"拿草稿"能被删掉**（`3232bf888`）
+
+**判据一句话**：**一处能删掉的 `GraphDraft` 参数，等于删掉一次"谁有权力写这张图"的含糊。**
+
+**分类表（19 处 → 改 10、留 9）**：
+
+| 处 | 位置 | 判定 |
+|---|---|---|
+| 1 | `writings.h:116` `CostContext::draft` | **改**：成本模型是**读者**，收事务、自己问 `.graph()` |
+| 2 | `writings.h:426` `DraftWritings::draft()` | **删**：调用者说 `transaction().edit()` 更诚实 |
+| 3 | `writings.h:423` 注释里的 `GraphDraft::setWritings` | **改**：写成 `` `setWritings` `` |
+| 4 | `writings.cpp:90` `nodeText` | **改**：收事务（17 个调用点） |
+| 5 | `writings.cpp:451` `readsVariable` | **改**：收事务 |
+| 6 | `writings.cpp:473` `shapeTakesPart` | **改**：收事务 |
+| 7 | `writings.cpp:613` `makeKey` | **改**：收事务（2 个调用点） |
+| 8 | `writings.cpp:41/65` `EngineRootScope` 的形参与成员 | **改**：收事务；`relocateStaticValues` 走 `edit()`，`debugDraftRootOpened` 走 `graph()` |
+| 9 | `writings.cpp:864` `const GraphDraft &draft = context.draft;` | **改**：`context.transaction.graph()` |
+| 10 | `writings.cpp:921` `CostContext{draft_, context}` | **改**：`{*transaction_, context}` |
+| 11 | `writings.h:411` + `writings.cpp:434` **只收草稿的构造函数** | **留**：**这是另一条车道 4 小时前才立的门**（"a draft alone has no owner"），删它等于替他们改决定；要删得先问 |
+| 12 | `writings.h:557` 成员 `GraphDraft &draft_` | **留**：**草稿就是这份 writings 的研究对象**，不是伸手要 |
+| 13–17 | `writings.cpp:824/1003/1435/1982/2449` 五处 `GraphDraft::WritingScope` | **留**：**类型自己的作用域守卫**，同 §41 判过的那条 |
+| 18–19 | `test/writings.cpp:216` | **留**：同上（上一片已判） |
+
+**三个数**：**消失的参数 6 个**（第 1、4、5、6、7、8 项）+ **一个访问器**（第 2 项）；**删掉的行数 55**；**保留 9 个**。
+
+**四个数：45 / 379 / 2 / 4。**（`references` 389 → 379。）
+
+**一个插曲**：这一片第一次跑整闸时 `runner.backend_matrix` 红了（嵌套自检 36 条里 7 条失败）。**A/B 一度指向这一片，但那是假象**：同一条用例单独再跑就绿（11.64 s vs 22.73 s），**它自己带一条按 CPU 时间判的余量规则，整闸刚跑完时的负载会把它顶红**。**记在这里，免得下一次有人把它算到 writings 头上。**
