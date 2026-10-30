@@ -862,8 +862,15 @@ func main(): int sync {
 - 类型表达式要不要有类型运算（交、差、并之类）。文法里现在没有类型运算，没有预留的运算符；要加的时候，写法和含义一起定。
 - `typeof` 作用于常量值时的含义，以及它在泛型里的用法。
 - 类型函数求值失败或不终止时的处理。
-- 同一个可变对象在同步块之外被多处通过引用写入时的行为。
+- 同一个可变对象在同步块之外被多处通过引用写入时的行为。**已裁（22:50），见 [`reviews/questions-2026-10-31-two-references-write-one-object-outside-a-sync-block.md`](handover/reviews/questions-2026-10-31-two-references-write-one-object-outside-a-sync-block.md)。**
 - 能否在声明之外给别处的声明补贴标签（调度是否例外）。
+- **并行的 `map` 出了故障之后，下标更小、还没开始的元素是否仍然执行**（`parallel-fault-lower-elements`）：
+  `(0..64)->map<bad>` 每个元素都出故障，而工作线程恰好先跑了第 40 个。现在的实现：只有下标大于 40 的不再开始，0 到 39 仍然执行，于是报的总是第 0 个，与线性后端相同、每次运行一致。
+  候选：出故障后一律不再开始任何元素；这样"下标最小的"只在碰巧已开始的元素里取，每次运行可能不同。
+- **并行的 `map` 出了故障之后，下标更小、还没开始的元素是否仍然执行**（`parallel-fault-lower-elements`）：
+  `(0..64)->map<bad>` 每个元素都出故障，而工作线程恰好先跑了第 40 个。现在的实现：只有下标大于 40 的不再开始，0 到 39 仍然执行，于是报的总是第 0 个，与线性后端相同、每次运行一致。
+  候选：出故障后一律不再开始任何元素；这样"下标最小的"只在碰巧已开始的元素里取，每次运行可能不同。
+  **已裁（22:50），见 [`reviews/questions-2026-10-31-parallel-map-fault-what-runs-after.md`](handover/reviews/questions-2026-10-31-parallel-map-fault-what-runs-after.md)。**
 - **内建算子的实参是否自动装入**（`entering-operator-args`）：`xs->append<5>`（`xs: (int?)[]`）。
   现在的实现：不装入，要写 `5 as int?`；因为内建算子的形参类型由 C++ 的类型规则从实参算出，调用之前没有目标类型。
   候选：让类型规则能报出"我接受的类型"，使内建算子与用户函数一致。
