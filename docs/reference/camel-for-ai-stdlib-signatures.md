@@ -199,7 +199,7 @@ tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 tree_unzip: (r: R, s: S) => ?
 ```
 
-**`tensor`** — import { ... } from tensor — 55 name(s)
+**`tensor`** — import { ... } from tensor — 61 name(s)
 
 ```text
 zeros: (shape: int[]) => T[..] when is_numeric::<T>()
@@ -259,6 +259,12 @@ gemm_backend: () => string
 gemm_threads: () => int
 gemm_library_threads: () => int
 gemm_library: () => string
+sum_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
+mean_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
+min_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
+max_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
+argmax_axis: (xs: T[..], axis: int, keepdims: bool) => int[] when is_numeric::<T>()
+argmin_axis: (xs: T[..], axis: int, keepdims: bool) => int[] when is_numeric::<T>()
 ```
 
 **`types`** — import { ... } from types — 16 name(s)
