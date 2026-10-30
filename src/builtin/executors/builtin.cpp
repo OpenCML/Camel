@@ -495,7 +495,9 @@ void registerBuiltinOperatorTraits() {
     // Declared never to fault, where the implementation has no fault path at all: integer
     // addition and subtraction wrap, floating-point arithmetic and ordering cannot fail, and
     // the strict boolean operators only read their operands. Everything else keeps the
-    // default (may fault). No pass acts on this declaration yet (operator_table.h).
+    // default (may fault). No pass acts on this declaration yet (operator_table.h). Each entry
+    // here is one operator of docs/handover/reports/faults-table-audit.md, which reads its
+    // implementation against this list.
     static const std::unordered_set<std::string_view> kNeverFaults = {
         "op/add_i",
         "op/add_l",
