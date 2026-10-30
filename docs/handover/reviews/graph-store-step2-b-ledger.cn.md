@@ -367,3 +367,18 @@ helper 只借一次草稿、并不持有它，所以改成收模板参数（`tem
 > **先让新的事实到达读端所读的那个字段，再改读端。**
 
 两次实测：§16（生产者先把事务送进 handle，读端后改）与 §17.1（`createInTransaction` 同时设两个指针）都是这条的应用；反过来就是 §16 那颗地雷。配套的第一条（另一条线实测）是**新造图先 `setId` 再 `encode`**。两条都属于"顺序错了会静默错、不会编译错"，所以抄在同一个地方。
+
+## 21. `read.cpp` 的 `->draft()` 归零：数没动，问题却浮出来了
+
+`1cdeced1`（`read.cpp` 三处全改成只问 `transaction()`）。**references 仍是 532**——三处退路本来就是 `auto`，没有类型名可删，**改的只是"问谁"**。所以这一笔的收益不是"消点"，是**把一条隐含的依赖翻到了明面上**。
+
+**翻出来的是什么**：一个**只指名草稿、不指名事务**的 handle，现在读端当它"在已发布的图里"，会拿 `program_`（空）去 `nodeOfFrozen`。**套件里没有任何路径会这样走到**（所以整闸绿：7927 / 7916 / 0 / 9 / 2），但 `createInDraft` 还在造这种 handle（`module.cpp:258` 的退路、`fact.cpp:422`、`handle.cpp:291` 的 clone）。
+
+**这就是"删 `draft_` 之前要回答的那个具体问题"**：*测试自建草稿的那些构造点，改完之后它们从哪里拿到草稿？* **答案：拿不到。** 它们手里的 `DraftWritings` 没有事务（`src/passes/test/writings.cpp`、`saturate.cpp` 用收 `GraphDraft &` 的旧构造），而 `rules.cpp:72` 虽然从 `probe.edit(...)` 拿到的是事务里的草稿，**但也是走草稿构造进去的**，所以 `writings.transaction()` 为空，`nodeHandleOf` 只能退回 `createInDraft`。
+
+**结论：还缺一个"无事务写入"的合法裁定**，三条路：
+- **A**：承认它就是非法——把 `createInDraft` 与 `Handle::draft_` 一起删掉，测试改用事务（`rules.cpp` 已有事务可用，`writings.cpp`／`saturate.cpp` 需要给它们一个 `RuntimeGraphDraftSession`）；
+- **B**：承认它合法——读端必须**同时问事务与指针，任一为真即是草稿**（协调者那条规矩），此时 `->draft()` 会回到 3；
+- **C**：让 `Writings` 在没有事务时**自己开一个**（拥有型），`createInDraft` 随之消失，测试不用改。
+
+**我停在这里，等裁定。** 在裁定之前不动 `handle.h` 的 `draft_`——按 §20，删字段是"删用法之后"的事，而用法的合法性还没有结论。
