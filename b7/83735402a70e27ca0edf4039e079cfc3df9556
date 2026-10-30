@@ -1,0 +1,8 @@
+窄浮点切空间这一轮走完了三步，最后一笔是 `b78373540`。
+
+1. **第一步（给 `globals.cpp` 补 `:op/add_bf`/`:op/add_f6` 声明）是错的，已撤回。** 二者本来就已经由执行器表注册，再声明一次是重复声明，二进制启动即 `std::logic_error`。作者裁定"补上加法算子和零值"并不矛盾：**真正缺的只有"零值"那一半**，也就是 trait 里的 `halfFromFloat`（半精度有自己的转换，不走 `toSlot`）。以后读到那条裁定的人不要再补声明。
+2. **A/B 红得具体**：拿掉 `registerBuiltinDerivatives` 里 `setTangentSpace` 的那两行，恰好 `rulesets.jvp_lift` 里 `f16` 那条红（`Return type 'f16' does not match the function's declared return type '()'`），其余仍绿；还原后 2/2。
+3. **一处期望值随事实更新**：`process_state.second_context_tangent_space` 打印注册表里切空间的总数，从 4 变 6；该用例守的是"第二个上下文不会新增"，所以起点跟着登记册走。
+4. **`.NET` 静默写错位置的根因**：`.NET` 静态文件 API 用的是进程目录，不是 PowerShell 的 `$PWD`；`cd` 只改后者，所以相对路径落到了主检出。今晚三次"改了没反应"都是这个。此后只用 cmdlet + 工作树相对路径，写完当场 `git status --porcelain`。
+
+闸门（`-Plan all -Tier fast -Jobs 8`）：total 7862 / fail 0 / skip 6 / known 2。窄浮点的**字节码后端落点**（`fastvm` opcode 表只有 `FADD`/`DADD`）仍未触碰，是独立一笔。
