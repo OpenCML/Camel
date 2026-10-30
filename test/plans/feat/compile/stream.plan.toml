@@ -970,6 +970,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 [[tests]]
+name = "stream.generator_yield_multi_value"
+desc = "`yield a, b` hands out the tuple `(a, b)`, the same element `yield (a, b)` writes: two pulls make the tuple (1, 2) and (3, 4), and the accumulator reads 1234. All four back ends agree."
+kind = "behavior"
+case = "../../../cases/compile/stream/yield_multi_value.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "1234\n"
+expect_output_not_contains = ["[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
 name = "stream.generator_no_sync"
 desc = "A generator head without `sync`: what the body writes between two `yield`s is an effect like any other, and the program is told so rather than the write quietly taking place or quietly going away."
 kind = "behavior"
