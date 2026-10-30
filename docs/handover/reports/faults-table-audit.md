@@ -17,9 +17,10 @@
 并说明为什么没有），这张表现在是哪种写法，以及钉住它的用例名。每一行都是读实现读出来的，
 不是从算子的名字推出来的；实现里没有出错路径的，就留空表加这一行说明——空表加说明也是交付。
 
-77 行是这棵树现在声明“永不出故障”的全部内置算子：73 条来自 `kNeverFaults`，4 条（复数的
-`+` 和 `-`）只写在语义记录里。77 行全部核对过，没有一行与它的实现不符，所以这一笔没有改任何
-一条声明。核对里唯一看上去不一致的一处，查下去是同一件事：
+94 行是这棵树现在声明“永不出故障”的全部内置算子：86 条来自 `kNeverFaults`，8 条（复数的
+`+`、`-`、`*`、取负）只写在语义记录里。第一轮的 77 行全部核对过，没有一行与它的实现不符；
+裁定之后又补了 17 行（`pow` 的十个、`len` 的三个、复数 `mul`/`neg` 的四个），见下面
+“这一轮补上的 17 行”。核对里唯一看上去不一致的一处，查下去是同一件事：
 
 - `mul_i`、`mul_l`、`mul_f`、`mul_d`、`neg_i`、`neg_l`、`neg_f`、`neg_d` 在记录里传的是
   `std::nullopt`，而 `add`/`sub`/比较传的是 `none`，于是看起来“`+ - *` 与取负里只有 `+` 和
@@ -115,25 +116,69 @@
 
 用例一栏写 `—` 的行没有单独的用例：它的声明与同一实现函数那一行是同一个 `kNeverFaults` 集合
 里的两条条目（或同一个 `none` 参数），内核已经被那一行钉住。`declared_records` 逐个点名记录
-这一侧的 36 个算子；`declared_traits` 给每个内核各钉一个代表，另加一个 `:op/div_i` 作对照——
+这一侧的 40 个算子；`declared_traits` 给每个内核各钉一个代表，另加一个 `:op/div_i` 作对照——
 “这份清单也能读出可能出错”。
 
-## 看到、但没有跟着改的三处
+## 这一轮补上的 17 行（裁定之后）
+
+裁定是“没声明按可能出故障读（第三态有意义，读数保守），但表要补完：先落已经核对过的族，
+其余按 reach”。这 17 行就是“已经核对过的族”：它们的实现上一轮就读过，只是当时没有声明。
+补的时候照该族既有写法：`pow` 跟着 `pow_bf`/`pow_f6` 走 trait，`len` 三个没有数值语义、
+也走 trait，复数 `mul`/`neg` 跟着同族的 `add`/`sub` 走记录的 `none`，两条路都没有混用。
+
+| 算子 | 实现 | 实现里的出错路径 | 声明 | 用例 |
+|---|---|---|---|---|
+| `:op/pow_i` | `src/builtin/operators/ops.cpp#__builtin__pow__` | `std::pow` 在 double 上算再转回元素类型；定义域外得 NaN、溢出得 inf，负指数是倒数，同样只得到 inf/NaN——实现里没有抛点（唯一的抛点是类型分派的 `default`，对写定类型的 URI 不可达） | trait | — |
+| `:op/pow_l` | `src/builtin/operators/ops.cpp#__builtin__pow__` | 同上 | trait | `declared_traits` |
+| `:op/pow_f` | `src/builtin/operators/ops.cpp#__builtin__pow__` | 同上 | trait | — |
+| `:op/pow_d` | `src/builtin/operators/ops.cpp#__builtin__pow__` | 同上 | trait | — |
+| `:op/pow_c` | `src/builtin/operators/ops.cpp#complexPowBinary` | 指数是复数时走 `std::pow`，整数指数走 `#integerPower` 的平方求幂；两者都只得到 inf/NaN，负指数是一次复数除法 `1/result`，除数为零也只得 inf/NaN | trait | — |
+| `:op/pow_c_i` | `src/builtin/operators/ops.cpp#complexPowBinary` | 整数指数，走 `#integerPower`；同上 | trait | — |
+| `:op/pow_c_l` | `src/builtin/operators/ops.cpp#complexPowBinary` | 同上 | trait | — |
+| `:op/pow_z` | `src/builtin/operators/ops.cpp#complexPowBinary` | 同上，宽度是 double | trait | — |
+| `:op/pow_z_i` | `src/builtin/operators/ops.cpp#complexPowBinary` | 同上 | trait | — |
+| `:op/pow_z_l` | `src/builtin/operators/ops.cpp#complexPowBinary` | 同上 | trait | — |
+| `:struct/len_arr` | `src/builtin/operators/struct.cpp#__len_arr__` | 读数组已存的元素个数 `arr->size()`，只读一个字段 | trait | `declared_traits` |
+| `:struct/len_str` | `src/builtin/operators/struct.cpp#__len_str__` | 按码点数长度（`src/utils/utf8.h#count`），一个纯循环；输入已保证是合法 UTF-8，没有抛点 | trait | `declared_traits` |
+| `:coll/len` | `src/builtin/operators/collection.cpp#__coll_len__` | 读 Map/Set 已存的条目数 `table->size()`，只读一个字段 | trait | — |
+| `:op/mul_c` | `src/builtin/operators/ops.cpp#complexBinary` | 四个部分各做一乘一加，各舍入一次；与 `add`/`sub` 同一个内核，没有抛点 | 记录 | `declared_records`、`declared_traits` |
+| `:op/mul_z` | `src/builtin/operators/ops.cpp#complexBinary` | 同上，宽度是 double | 记录 | `declared_records` |
+| `:op/neg_c` | `src/builtin/operators/ops.cpp#__builtin__neg_c__` | 两个部分各翻一次符号，精确 | 记录 | `declared_records` |
+| `:op/neg_z` | `src/builtin/operators/ops.cpp#__builtin__neg_z__` | 同上，宽度是 double | 记录 | `declared_records` |
+
+补完之后新出现的一处口径差，记在这儿而不是顺手改：`:op/div_d` 在除数为零时报
+`division_by_zero`，而 `:op/pow_d` 的 `0 ^ -1`、`:op/pow_c` 的零的负次幂在实现里只得 inf
+（`1/result` 是一次复数除法，见 `#integerPower`）。也就是说同一个“除以零”，在 `div` 上是故障、
+在 `pow` 上是 inf。这是两个算子的语义口径要作者定的事，不是声明与实现不符：声明写的是实现的
+样子，`pow` 的实现确实不抛。
+
+## 看到、但没有跟着改的
 
 1. `:op/and`、`:op/or`、`:op/not` 从程序里写不出来：`&&`/`||` 是分支不是算子，这三个 URI 只由
    降级后的图（`modules/onnx/lowering.cpp`）和 C++ 后端（`src/passes/trans/cpp/operator_rules.cpp`）
    产生，所以这棵树上没有一条用例能把它们的 trait 读出来。它们的实现只读 bool，没有出错路径。
-2. `:op/mul_c`、`:op/mul_z`、`:op/neg_c`、`:op/neg_z` 的实现同样没有出错路径（`complexBinary`、
-   `complexNegate`），但它们不在 `kNeverFaults` 里，语义记录也不带空表：现在算“可能出错”。
-   把空表补上去会改变这四个算子的 trait，那是这张表的一次扩张，不属于“把已经写下的空表
-   核对成实现的样子”，所以留着不动。
-3. `:op/pow_bf`、`:op/pow_f6` 声明为空表，而 `:op/pow_i`、`:op/pow_l`、`:op/pow_f`、`:op/pow_d`
-   连语义记录都没有（`builtin_semantics.cpp` 的文件头也这么写）。两处实现走的是同一个
-   `std::pow`，都没有出错路径；差别在声明，不在实现，改它同样是一次扩张。
+2. tensor、math 两张表和其余没有语义记录的算子仍然“没声明”。它们的实现这一轮没有核对，按裁定
+   一律读作可能出错——`declared_traits` 里 `tensor::sum` 那一条就是这个状态的钉子：它今天读 1，
+   而且它的记录里 `faults` 成员整个不出现。补它们按下面“按 reach 补的规矩”走。
 
-这三处连同 `len` 与 tensor/math 那一大片，写成了
-`docs/handover/questions/questions-2026-10-30-undeclared-faults.md` 的一页：没声明是第三态还是没写完的
-表。裁定之前它们按原样读——没声明就是“可能出错”。
+## 按 reach 补的规矩
+
+裁定让其余算子“按 reach”补。这是它唯一可执行的形态：
+
+- **谁是“碰到”**：改了那个算子的实现（`src/builtin/operators/` 里的内核或它的调度条目）或它的
+  声明（`src/builtin/executors/builtin.cpp#kNeverFaults`、`builtin_semantics.cpp` 的记录）的那个人。
+  只读代码、只改用例的不算。
+- **碰到时做什么**：一次做完三件事——读实现的出错路径；按这一族既有的写法补 `faults`（trait 或
+  记录里的 `none`，不许混用）；把它挂到 `test/plans/feat/modules/operator_faults.plan.toml` 的
+  两条断言上（记录侧点名，trait 侧读 `effects(...).may_fault`），并在这张清单里补一行。
+- **为什么不能一次补完**：这张表不是注释，是 `effects(...).may_fault` 的输入
+  （`src/runtime/effects.cpp#ofNodes`）。一次补齐等于一次全局语义改动：一批图的 `may_fault`
+  从 1 变 0，而读它的地方不止一处；一处读错，错的是调度与优化能假定什么。所以补齐要跟着
+  “有人核对过这个内核”走，不能跟着“表看起来缺”走。
+- **没碰到但不放心**：写进 `docs/handover/questions/` 的一页，不要在这里顺手补。
+
+这一轮之前“没声明是第三态还是没写完的表”提的那一问，答在这一页：
+`docs/handover/questions/questions-2026-10-30-undeclared-faults.md`。
 
 ## 这份清单怎么复核
 
@@ -150,3 +195,15 @@
   one”）。
 
 两处都恢复之后，两条用例都绿。
+
+补上的 17 行也各打红了一次，打红的是它们各自那一侧：
+
+- 第三处（trait）：把 `:op/pow_l` 与 `:struct/len_arr` 从 `kNeverFaults` 删掉。`declared_traits`
+  在第十六行（`a ^ b`，注意源程序的 `int` 是 i64，`^` 落到 `:op/pow_l`，`:op/pow_i` 从程序里
+  写不出来）与第十八行（`len(xs)`）变红，`declared_records` 仍是绿的——只写在 trait 里的声明
+  在 `--ops` 里根本不出现，这也是这一族只能用 trait 那一半钉住的原因。
+- 第四处（记录）：把复数 `mul` 的声明改回 `std::nullopt`。`declared_records` 在 `:op/mul_c` 变红
+  （“declares no fault list, expected the empty one”），`declared_traits` 绿。
+
+第四处正是记录侧与 trait 侧的差别：复数乘没有 trait 条目，空表只能写在记录里，也只有
+`declared_records` 读得到。

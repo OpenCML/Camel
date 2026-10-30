@@ -139,6 +139,25 @@ struct CallSite {
     bool known        = false;
 };
 
+/// A value of one function type handed to a parameter of another where both types build values of
+/// their own: the two stay two families and the value is wrapped in a variant of the parameter's
+/// family, whose one field is the value family's enum and whose function is the wrapper.
+struct WrapEdge {
+    gc_node_ref_t node  = kInvalidNodeRef; // the node the value is handed to
+    gc_node_ref_t value = kInvalidNodeRef; // the value, as it was written
+    ty::Type *into      = nullptr;         // the parameter's declared type
+    ty::Type *from      = nullptr;         // the value's type
+};
+
+/// The wrapper a widening is written with: the family it is a variant of, the family it dispatches
+/// over, the graph that does the dispatch, and the variant's tag in the parameter's enum.
+struct Wrapper {
+    Family *into       = nullptr;
+    const Family *from = nullptr;
+    GraphId graph      = GraphId::Invalid;
+    size_t tag         = 0;
+};
+
 ::Function *staticFunctionOf(const GCGraph &graph, const GCNode &node) {
     if (node.dataIndex >= 0 || !graph.staticArea()) {
         return nullptr;
@@ -345,21 +364,117 @@ template <class Draft> void parameterizeCaptures(Draft &draft) {
     draft.setClosureType(nullptr);
 }
 
-/// A graph the pass writes itself. A new graph is a draft given an id from the context's allocator
-/// before it is encoded (draft.h: a draft of a new graph is given one with `setId`), and the graph
-/// the commit finds is the one the session already knows (draft_session.h: `adoptGraph`); the
-/// functions its body calls are read in the session's work program.
+/// A call through a value of `family` where the variant is not known until the program runs: the
+/// tag is read with `:enum/tag`, one arm of a `BRCH` per variant takes that variant's values out of
+/// the value with `:enum/field` and calls the function the variant names, and the `JOIN` hands back
+/// what the taken arm gave. One variant needs no branch: its values come out of the value and the
+/// call names its function.
 ///
-/// The body is one `PORT` per parameter and the direct call of the function the graph stands for,
-/// and that call is what the graph gives. The call carries the graph's own exit type, so a
-/// signature that declares `void` drops what the function gives by that alone (a result position is
-/// the one place `void` takes any type: type/composite/func.h, `acceptsAsResult`).
+/// Every call it writes carries `resultType`, so a family whose signature declares `void` drops what
+/// its functions give by the call alone (type/composite/func.h, `acceptsAsResult`); that is what
+/// "drops the result" means here, and it is also how a wrapper of a `void` parameter passes on a
+/// value that returns something.
 ///
-/// The draft is a template parameter like every other helper here: the editable graph is going away,
-/// and the ledger that counts the places still wired straight to it may only fall
-/// (`test/cases/runtime/graph_draft_ledger`).
-template <class Draft> GCGraph *writeCallGraph(
-    Draft &draft, RuntimeGraphDraftSession &session, const GCGraph &callee,
+/// `place` is the node the dispatch is written in place of -- the call the program wrote. A caller
+/// that has no such node (a graph the pass writes itself) passes `kInvalidNodeRef` and gets the node
+/// it made back as the result. The graphs the calls name are the caller's to put in its reference
+/// table: this only names them in the payloads.
+template <class Draft> gc_node_ref_t emitCallThroughValue(
+    Draft &draft, const Family &family, ty::EnumType *asEnum,
+    std::span<const gc_node_ref_t> arguments, std::span<const gc_node_ref_t> withArguments,
+    gc_node_ref_t value, ty::Type *resultType, uint32_t region, gc_node_ref_t place) {
+    const gc_cnt_t count = static_cast<gc_cnt_t>(family.variants.size());
+    // The values a variant captured, taken out of the value: the tag and the field's index are
+    // what `:enum/field` reads.
+    const auto argumentsOf = [&](const Variant &variant, bool ownTypes) {
+        std::vector<gc_node_ref_t> norm(arguments.begin(), arguments.end());
+        for (size_t field = 0; field < variant.captures.size(); ++field) {
+            const gc_node_ref_t variantTag = draft.materializeStaticValue(
+                camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
+                    static_cast<camel::core::rtdata::Int64>(variant.tag)),
+                ty::Type::Int64());
+            const gc_node_ref_t fieldIndex = draft.materializeStaticValue(
+                camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
+                    static_cast<camel::core::rtdata::Int64>(field)),
+                ty::Type::Int64());
+            ty::Type *taken = asEnum != nullptr
+                                  ? asEnum->fieldType(variant.tag, field)
+                                  : (ownTypes ? variant.captures[field] : ty::Type::Int64());
+            const gc_node_ref_t take = draft.addOperNode(taken, nullptr, ":enum/field");
+            const std::vector<gc_node_ref_t> operands{variantTag, fieldIndex, value};
+            draft.setNormInputs(take, operands);
+            norm.push_back(take);
+        }
+        return norm;
+    };
+
+    if (count == 1) {
+        // One variant: there is nothing to branch on. The values come out of the value and the call
+        // names its function, as a folded call does when the callee is a value this graph builds.
+        const Variant &variant                = family.variants.front();
+        const std::vector<gc_node_ref_t> norm = argumentsOf(variant, false);
+        if (place == kInvalidNodeRef) {
+            const gc_node_ref_t call = draft.addFuncNode(variant.graph, resultType, 0, 0, 0);
+            draft.setNormInputs(call, norm);
+            draft.setWithInputs(call, withArguments);
+            return call;
+        }
+        GCFuncRef callee{.ref = draft.payloadGraphIndexOf(variant.graph)};
+        DraftNodeInit init = snapshotOf(draft, place);
+        init.kind          = GCNodeKind::Func;
+        init.payload       = payloadOf(&callee, sizeof(callee));
+        init.normInputs    = norm;
+        init.withInputs    = withArguments;
+        draft.rewriteNode(place, init);
+        return place;
+    }
+
+    // The `BRCH` names the `JOIN` and the `JOIN` names the `BRCH`: when the caller has no node for
+    // the result, the `JOIN` is made first so the branch can name it, and its payload is written
+    // once the branch exists.
+    const gc_node_ref_t join =
+        place != kInvalidNodeRef ? place : draft.addJoinNode(resultType, kInvalidNodeRef, count);
+    const gc_node_ref_t tag = draft.addOperNode(ty::Type::Int64(), nullptr, ":enum/tag");
+    draft.setNormInputs(tag, std::span<const gc_node_ref_t>(&value, 1));
+    std::vector<gc_node_ref_t> cases;
+    for (size_t k = 0; k + 1 < family.variants.size(); ++k) {
+        cases.push_back(draft.materializeStaticValue(
+            camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
+                static_cast<camel::core::rtdata::Int64>(k)),
+            ty::Type::Int64()));
+    }
+    const gc_node_ref_t brch = draft.addBrchNode(ty::Type::Int64(), join, count);
+    draft.setNormInputs(brch, std::span<const gc_node_ref_t>(&tag, 1));
+    draft.setWithInputs(brch, cases);
+    std::vector<gc_node_ref_t> armResults;
+    for (size_t k = 0; k < family.variants.size(); ++k) {
+        const Variant &variant   = family.variants[k];
+        const uint32_t armRegion = draft.addRegion(GCRegionKind::Arm, region, brch, k);
+        draft.setInsertRegion(armRegion);
+        const std::vector<gc_node_ref_t> norm = argumentsOf(variant, true);
+        const gc_node_ref_t call              = draft.addFuncNode(variant.graph, resultType, 0, 0, 0);
+        draft.setNormInputs(call, norm);
+        draft.setWithInputs(call, withArguments);
+        draft.setRegionResult(armRegion, call);
+        draft.setInsertRegion(region);
+        armResults.push_back(call);
+    }
+    GCJoinBody body{.brch = brch, .armCount = count};
+    DraftNodeInit init = snapshotOf(draft, join);
+    init.kind          = GCNodeKind::Join;
+    init.payload       = payloadOf(&body, sizeof(body));
+    init.normInputs    = std::span<const gc_node_ref_t>(&brch, 1);
+    init.withInputs    = armResults;
+    draft.rewriteNode(join, init);
+    return join;
+}
+
+/// The wrapper a widening is written with: a graph of the parameter's type whose last parameter is
+/// the enum of the family the value belongs to. Its body dispatches over that enum exactly as a call
+/// through a value does, and its own exit type is the parameter's -- so a parameter that says `void`
+/// drops what the function it reaches gives, by the call alone.
+template <class Draft> GCGraph *writeWrapperGraph(
+    Draft &draft, RuntimeGraphDraftSession &session, const Family &from, ty::EnumType *fromEnum,
     ty::FunctionType *signature, const std::string &name) {
     draft.setProgram(&session.work());
     std::vector<gc_node_ref_t> ports;
@@ -368,13 +483,17 @@ template <class Draft> GCGraph *writeCallGraph(
         draft.appendNormPort(port);
         ports.push_back(port);
     }
-    const gc_node_ref_t call = draft.addFuncNode(callee.id(), signature->exitType());
-    draft.setNormInputs(call, ports);
-    draft.setExitNode(call);
-    // The payload names the callee by its place in the graph's reference table, and the reference
-    // table is the list of graphs the encoder was told this graph calls: naming the callee in the
-    // payload alone leaves a FUNC node whose callee is not in that table, which the encoder refuses.
-    draft.addDependency(callee.id());
+    // The functions the dispatch calls belong to the value's family: this graph names them, so they
+    // are in its reference table as well as in the payloads the dispatch writes.
+    for (const Variant &variant : from.variants) {
+        draft.addDependency(variant.graph);
+    }
+    const std::vector<gc_node_ref_t> arguments(ports.begin(), ports.end() - 1);
+    const gc_node_ref_t value      = ports.back();
+    const gc_node_ref_t result     = emitCallThroughValue(
+        draft, from, fromEnum, arguments, std::span<const gc_node_ref_t>{}, value,
+        signature->exitType(), 0, kInvalidNodeRef);
+    draft.setExitNode(result);
     GCGraph *encoded = draft.encode(name, name);
     session.adoptGraph(encoded);
     return encoded;
@@ -527,6 +646,12 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
     // substituted with its enum like any other member. Keyed by the widened type's id, naming the
     // type of the value that flows into it.
     std::map<TypeId, TypeId> mergedInto; // widened parameter type id -> the value's type id
+    // A widening that is written as a wrapper instead: the parameter's type id -> the types of the
+    // values handed to it. Both types stay families, so the value keeps its enum and the parameter's
+    // family gains a variant that holds it.
+    std::map<TypeId, std::set<TypeId>> wrapsInto;
+    // The edges that carry such a value, per graph, to be wrapped once the enums exist.
+    std::map<uint64_t, std::vector<WrapEdge>> wrapEdges;
     for (const GCGraph *graph : program->graphs()) {
         // The static function a closure is built on is not a value: the closure packs it into a
         // tag, and the node is dropped with the closure.
@@ -619,16 +744,18 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                     }
                     // A value handed to a parameter declared as another function type is a widening
                     // at the call: a lambda that returns the value of its write is written where the
-                    // parameter says `void`, which is a function type of its own. The value flows
-                    // from its family into that parameter's type, and the two are one family here:
-                    // the parameter's type becomes the enum of the family the value belongs to, so
-                    // no second form of a function value is left in the program. That is only a
-                    // substitution while the parameter's own type builds no value -- a `void`
-                    // function the program writes is a family of its own, and turning one type into
-                    // the other would call it with the wrong tag. That case needs a wrapper (a
-                    // function of the parameter's type that calls the value and drops its result),
-                    // which this pass cannot build: it stops the pipeline and names the program
-                    // rather than leave the half-lowered graph the step exists to remove.
+                    // parameter says `void`, which is a function type of its own. Two ways to write
+                    // it, and which one depends on what the parameter's own type is:
+                    //
+                    // * the parameter's type builds no value: the value flows from its family into
+                    //   that type and the two are one family -- the parameter's type becomes the
+                    //   enum of the family the value belongs to, so no second form of a function
+                    //   value is left;
+                    // * the parameter's type builds values of its own: folding the two into one enum
+                    //   would call those values with a tag that is not theirs, so the two stay two
+                    //   families and the value is wrapped -- the parameter's family gains a variant
+                    //   whose one field is the value family's enum, and the wrapper that variant
+                    //   names calls the value and drops what it gives.
                     if (readsAsArgument) {
                         const ty::FunctionType *signature = nullptr;
                         if (node.kind == GCNodeKind::Call && !withs.empty()) {
@@ -675,14 +802,24 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                                                           sameFamily(other.type, written)));
                                         }
                                         if (buildsOwn) {
-                                            throw std::runtime_error(std::format(
-                                                "the value of '{}' is handed to a parameter of "
-                                                "'{}', which builds values of its own; writing that "
-                                                "conversion needs a wrapper function this pass "
-                                                "cannot make (a defect of the pass, not of the "
-                                                "program)",
-                                                inputType->toString(),
-                                                written->toString()));
+                                            // The parameter's own type builds values, so it stays a
+                                            // family of its own: folding the two into one enum would
+                                            // call those values with a tag that is not theirs. The
+                                            // widening is written instead -- the parameter's family
+                                            // gains a variant whose one field is the value family's
+                                            // enum, and the wrapper that variant names calls the
+                                            // value and drops what it gives. This edge is the place
+                                            // the value is wrapped, once the enums exist.
+                                            wrapsInto[written->typeId()].insert(
+                                                planned->second.type->typeId());
+                                            planOf(plans, written);
+                                            wrapEdges[toValue(graph->id())].push_back(
+                                                WrapEdge{
+                                                    .node  = ref,
+                                                    .value = input,
+                                                    .into  = written,
+                                                    .from  = planned->second.type});
+                                            return;
                                         }
                                         mergedInto[written->typeId()] =
                                             planned->second.type->typeId();
@@ -905,6 +1042,107 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
     }
 
     // ---------------------------------------------------------------------------------------
+    // (5c) The families a widening wraps, and the order their enums are declared in.
+    //
+    // A wrapper variant holds the enum of the family it wraps, so that enum has to exist first: the
+    // relation is acyclic or the widening cannot be written, and a cycle is named rather than half
+    // lowered. A value whose family is left as written is refused here too -- an enum cannot hold a
+    // function value.
+    // ---------------------------------------------------------------------------------------
+    std::map<TypeId, Family *> familyOfType; // a member type's id -> its family
+    for (Family *family : accepted) {
+        for (const TypePlan *member : family->members) {
+            familyOfType[member->type->typeId()] = family;
+        }
+    }
+    std::map<const Family *, std::vector<const Family *>> wraps; // family -> the families it wraps
+    for (const auto &[intoId, fromIds] : wrapsInto) {
+        const auto intoFound = familyOfType.find(intoId);
+        if (intoFound == familyOfType.end()) {
+            continue;
+        }
+        Family *into = intoFound->second;
+        for (TypeId fromId : fromIds) {
+            const auto fromFound = familyOfType.find(fromId);
+            if (fromFound == familyOfType.end()) {
+                // The value's family is not lowered: a variant cannot hold a function value, so the
+                // parameter's family is left as written and named.
+                if (into->refuse.empty()) {
+                    into->refuse = "its parameter takes a value of a function type that is left as "
+                                   "written";
+                }
+                continue;
+            }
+            const Family *from = fromFound->second;
+            if (from == into) {
+                continue; // the two are one family already
+            }
+            const auto *intoType = static_cast<const ty::FunctionType *>(into->members.front()->type);
+            const auto *fromType = static_cast<const ty::FunctionType *>(from->members.front()->type);
+            // The wrapper is one function of the parameter's type: its with-parameters would have to
+            // be handed on to the value, and a graph the pass writes has no with-parameter of its
+            // own. A signature that declares one is named instead of written wrongly -- and both
+            // sides are named, because leaving only one of them lowered is the half-lowered graph
+            // this step exists to remove.
+            if (intoType->withTypesCount() != 0 || fromType->withTypesCount() != 0) {
+                if (into->refuse.empty()) {
+                    into->refuse = "the widening needs a wrapper and the signature declares "
+                                   "with-parameters";
+                }
+                if (from->refuse.empty()) {
+                    const_cast<Family *>(from)->refuse =
+                        "a value of it is widened into a signature that declares with-parameters";
+                }
+                continue;
+            }
+            const auto seen = wraps.find(into);
+            if (seen == wraps.end() || std::find(seen->second.begin(), seen->second.end(), from) ==
+                                           seen->second.end()) {
+                wraps[into].push_back(from);
+            }
+        }
+    }
+    if (!wraps.empty()) {
+        // The enums are declared depth first: a family's wrappers are declared before it.
+        std::vector<Family *> ordered;
+        std::set<const Family *> done, active;
+        const auto visit = [&](Family *family, const auto &self) -> void {
+            if (done.contains(family)) {
+                return;
+            }
+            if (active.contains(family)) {
+                throw std::runtime_error(std::format(
+                    "the widening of '{}' needs a wrapper that would call itself (a defect of the "
+                    "pass, not of the program)",
+                    family->members.front()->type->toString()));
+            }
+            active.insert(family);
+            const auto found = wraps.find(family);
+            if (found != wraps.end()) {
+                for (const Family *from : found->second) {
+                    self(const_cast<Family *>(from), self);
+                }
+            }
+            active.erase(family);
+            done.insert(family);
+            ordered.push_back(family);
+        };
+        for (Family *family : accepted) {
+            visit(family, visit);
+        }
+        accepted = std::move(ordered);
+        // A family refused while the wrapper relation was read is not lowered after all.
+        std::erase_if(accepted, [](const Family *family) { return !family->refuse.empty(); });
+        if (accepted.empty()) {
+            if (report_) {
+                os << "DEFUNCTIONALIZE types=0 values=0 calls=0 refused=" << families.size() << "\n";
+            }
+            reportRefused();
+            return program;
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
     // (6) The enum per family, and the table that retypes every object equal to a member.
     //
     // A function type is structural: the same signature may be a different object with a different
@@ -950,6 +1188,8 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
     GraphTypeSubstitution types;
     std::map<TypeId, Family *> familyOfEnum;         // enum type id -> the family it stands for
     std::map<GraphId, const Family *> familyOfGraph; // a variant's function -> its family
+    std::map<const Family *, ty::EnumType *> enumOfFamily;
+    std::vector<Wrapper> wrappers;
     size_t index = 0;
     for (Family *family : accepted) {
         const std::string name = "FnValue_" +
@@ -970,6 +1210,32 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
             }
             variants.push_back(std::move(declared));
         }
+        // One more variant for each widening this family wraps: its one field is the enum of the
+        // family the value belongs to, and its function is the wrapper that dispatches over it. The
+        // wrapper's graph is written in the commit below, so the variant is added to the family now
+        // and names its graph then; until it is named no call can reach it.
+        const auto wrappedHere = wraps.find(family);
+        if (wrappedHere != wraps.end()) {
+            for (const Family *from : wrappedHere->second) {
+                const auto fromEnum = enumOfFamily.find(from);
+                if (fromEnum == enumOfFamily.end() || family->refuse.length() != 0) {
+                    continue;
+                }
+                ty::EnumVariant declared;
+                const size_t tag = variants.size();
+                declared.name    = std::format("wrap${}", tag);
+                declared.shape   = ty::VariantShape::Tuple;
+                declared.fieldTypes = {fromEnum->second};
+                declared.fieldOrigins.assign(1, camel::source::kInvalidOriginId);
+                variants.push_back(std::move(declared));
+                Variant wrapped;
+                wrapped.name     = std::format("wrap${}", tag);
+                wrapped.tag      = tag;
+                wrapped.captures = {fromEnum->second};
+                family->variants.push_back(wrapped);
+                wrappers.push_back(Wrapper{.into = family, .from = from, .tag = tag});
+            }
+        }
         decl->define(std::move(variants));
         ty::EnumType *enumType = decl->prototype();
         for (TypePlan *member : family->members) {
@@ -980,8 +1246,12 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
             types.replace(member->type, enumType);
         }
         familyOfEnum.emplace(enumType->typeId(), family);
+        enumOfFamily.emplace(family, enumType);
         for (const Variant &variant : family->variants) {
-            familyOfGraph.emplace(variant.graph, family);
+            // A wrapper variant names its graph in the commit below; until then it has none.
+            if (variant.graph != GraphId::Invalid) {
+                familyOfGraph.emplace(variant.graph, family);
+            }
         }
     }
 
@@ -1023,31 +1293,55 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
     // is one session, so nothing of an attempt that cannot be committed reaches the program.
     try {
         RuntimeGraphDraftSession session(context_, program);
-        // The graph the widening's parameter type will need, written here before anything else: an
-        // id of the context's, one `PORT` per parameter, the direct call of a function the program
-        // already has, and that call as the graph's result. Nothing refers to it yet, so the commit
-        // leaves it behind and the program is the one that was handed in.
-        for (const Family *family : accepted) {
-            const Variant &variant = family->variants.front();
-            if (!variant.captures.empty()) {
+        // The wrappers the widenings need, written before anything is rewritten: a variant of the
+        // parameter's family names one, and every call through that family reaches it. Each takes
+        // the parameter's own parameters and, last, the enum of the family the value belongs to.
+        std::set<GraphId> wrappedGraphs;
+        for (Wrapper &wrapper : wrappers) {
+            const auto fromEnum = enumOfFamily.find(wrapper.from);
+            if (fromEnum == enumOfFamily.end() || wrapper.into->members.empty()) {
                 continue;
             }
-            const GCGraph *callee = session.work().graph(variant.graph);
-            const ty::Type *own   = family->members.front()->type;
-            if (callee == nullptr || own == nullptr || own->code() != TypeCode::Function) {
+            const auto *intoType =
+                static_cast<const ty::FunctionType *>(wrapper.into->members.front()->type);
+            if (intoType == nullptr || intoType->code() != TypeCode::Function) {
                 continue;
             }
-            // The graph's own identity comes from the context's allocator, and the transaction stays
-            // open until the graph it holds is encoded.
+            // The signature is rebuilt rather than replaced, as the captured parameters are: it
+            // keeps the names of the parameters, their kinds and the effects it publishes.
+            ty::FunctionTypeFactory factory;
+            const bool named = intoType->hasArgNames();
+            factory.setHasCompileInfo(named);
+            factory.setResources(intoType->resources());
+            const size_t withCount = intoType->withTypesCount();
+            for (size_t i = 0; i < intoType->normTypesCount(); ++i) {
+                const std::string paramName =
+                    named ? std::string(intoType->argNameAt(withCount + i)) : std::string();
+                factory.addNormArg(paramName, intoType->normTypeAt(i), intoType->normIsVarAt(i));
+            }
+            factory.addNormArg(std::string(), fromEnum->second, false);
+            factory.setExitType(intoType->hasExitType() ? intoType->exitType()
+                                                        : ty::Type::Void());
+            ty::FunctionType *signature = factory.build();
             auto transaction = GraphTransaction::open(
-                session.context()->graphIds().allocate(),
-                const_cast<ty::FunctionType *>(static_cast<const ty::FunctionType *>(own)));
-            writeCallGraph(
-                transaction->edit(), session, *callee,
-                const_cast<ty::FunctionType *>(static_cast<const ty::FunctionType *>(own)),
-                std::format("{}$call", callee->name()));
+                session.context()->graphIds().allocate(), signature);
+            GCGraph *made = writeWrapperGraph(
+                transaction->edit(), session, *wrapper.from, fromEnum->second, signature,
+                std::format("{}$wrap", wrapper.into->variants.front().name));
+            wrapper.graph = made->id();
+            wrappedGraphs.insert(made->id());
+            familyOfGraph.emplace(made->id(), wrapper.into);
+            for (Variant &variant : wrapper.into->variants) {
+                if (variant.tag == wrapper.tag && variant.graph == GraphId::Invalid) {
+                    variant.graph = made->id();
+                }
+            }
         }
         for (GCGraph *graph : session.program()->graphs()) {
+            // A graph the pass wrote is already in the form the program is being lowered to.
+            if (wrappedGraphs.contains(graph->id())) {
+                continue;
+            }
             auto &transaction = session.edit(graph);
             auto &draft       = transaction.edit();
             retypeDraft(transaction, types, options);
@@ -1196,6 +1490,65 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                 }
             }
 
+            // A value of another family handed to a parameter of this one: the parameter's family
+            // takes it wrapped in the variant that names the wrapper. The edge itself changes -- a
+            // node inserted beside it would leave the value in two forms in one graph, which no
+            // later pass can type. The value is rewritten by now, so what is wrapped is the enum.
+            for (const WrapEdge &edge : wrapEdges[toValue(graph->id())]) {
+                const auto intoFound = familyOfType.find(edge.into->typeId());
+                const auto fromFound = familyOfType.find(edge.from->typeId());
+                if (intoFound == familyOfType.end() || fromFound == familyOfType.end()) {
+                    continue;
+                }
+                const Family *into = intoFound->second;
+                const Family *from = fromFound->second;
+                const auto wrapped  = std::find_if(
+                    wrappers.begin(), wrappers.end(), [&](const Wrapper &one) {
+                        return one.into == into && one.from == from;
+                    });
+                const auto intoEnum = enumOfFamily.find(into);
+                if (wrapped == wrappers.end() || wrapped->graph == GraphId::Invalid ||
+                    intoEnum == enumOfFamily.end()) {
+                    continue;
+                }
+                const gc_node_ref_t node  = draftIdOf(draft, edge.node);
+                const gc_node_ref_t value = draftIdOf(draft, edge.value);
+                if (!draft.alive(node) || !draft.alive(value)) {
+                    continue;
+                }
+                const gc_node_ref_t tagNode = draft.materializeStaticValue(
+                    camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
+                        static_cast<camel::core::rtdata::Int64>(wrapped->tag)),
+                    ty::Type::Int64());
+                const uint32_t region    = draft.nodeRegion(node);
+                const uint32_t insertAt  = draft.insertRegion();
+                if (region != insertAt) {
+                    draft.setInsertRegion(region);
+                }
+                const gc_node_ref_t made =
+                    draft.addOperNode(intoEnum->second, nullptr, ":enum/make");
+                const std::vector<gc_node_ref_t> operands{tagNode, value};
+                draft.setNormInputs(made, operands);
+                if (region != insertAt) {
+                    draft.setInsertRegion(insertAt);
+                }
+                std::vector<gc_node_ref_t> norms(draft.normInputsOf(node).begin(),
+                                                 draft.normInputsOf(node).end());
+                const auto inNorms = std::find(norms.begin(), norms.end(), value);
+                if (inNorms != norms.end()) {
+                    *inNorms = made;
+                    draft.setNormInputs(node, norms);
+                    continue;
+                }
+                std::vector<gc_node_ref_t> withs(draft.withInputsOf(node).begin(),
+                                                 draft.withInputsOf(node).end());
+                const auto inWiths = std::find(withs.begin(), withs.end(), value);
+                if (inWiths != withs.end()) {
+                    *inWiths = made;
+                    draft.setWithInputs(node, withs);
+                }
+            }
+
             for (const CallSite &site : sites) {
                 const gc_node_ref_t id = draftIdOf(draft, site.ref);
                 if (!draft.alive(id)) {
@@ -1247,96 +1600,9 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                 }
 
                 // Only the run time knows the tag: `:enum/tag`, one arm per variant, `JOIN`.
-                ty::Type *resultType  = header->dataType;
-                ty::EnumType *asEnum  = enumOf(resultType);
-                const uint32_t region = draft.nodeRegion(id);
-                const gc_node_ref_t at = withs.front();
-                if (owner->variants.size() == 1) {
-                    // One variant: there is nothing to branch on. The captures come out of the
-                    // value and the call names its function, as the folded case does when the
-                    // callee is a value this graph builds.
-                    const Variant &variant          = owner->variants.front();
-                    std::vector<gc_node_ref_t> norm = arguments;
-                    for (size_t field = 0; field < variant.captures.size(); ++field) {
-                        const gc_node_ref_t variantTag = draft.materializeStaticValue(
-                            camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
-                                static_cast<camel::core::rtdata::Int64>(variant.tag)),
-                            ty::Type::Int64());
-                        const gc_node_ref_t fieldIndex = draft.materializeStaticValue(
-                            camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
-                                static_cast<camel::core::rtdata::Int64>(field)),
-                            ty::Type::Int64());
-                        const gc_node_ref_t take = draft.addOperNode(
-                            asEnum != nullptr ? asEnum->fieldType(variant.tag, field)
-                                              : ty::Type::Int64(),
-                            nullptr, ":enum/field");
-                        const std::vector<gc_node_ref_t> operands{variantTag, fieldIndex, at};
-                        draft.setNormInputs(take, operands);
-                        norm.push_back(take);
-                    }
-                    GCFuncRef callee{.ref = draft.payloadGraphIndexOf(variant.graph)};
-                    DraftNodeInit init = snapshotOf(draft, id);
-                    init.kind          = GCNodeKind::Func;
-                    init.payload       = payloadOf(&callee, sizeof(callee));
-                    init.normInputs    = norm;
-                    init.withInputs    = withArguments;
-                    draft.rewriteNode(id, init);
-                    ++rewroteCalls;
-                    continue;
-                }
-                const gc_node_ref_t tag = draft.addOperNode(ty::Type::Int64(), nullptr, ":enum/tag");
-                draft.setNormInputs(tag, std::span<const gc_node_ref_t>(&at, 1));
-                std::vector<gc_node_ref_t> cases;
-                for (size_t k = 0; k + 1 < owner->variants.size(); ++k) {
-                    cases.push_back(draft.materializeStaticValue(
-                        camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
-                            static_cast<camel::core::rtdata::Int64>(k)),
-                        ty::Type::Int64()));
-                }
-                const gc_node_ref_t brch =
-                    draft.addBrchNode(ty::Type::Int64(), id, owner->variants.size());
-                draft.setNormInputs(brch, std::span<const gc_node_ref_t>(&tag, 1));
-                draft.setWithInputs(brch, cases);
-                std::vector<gc_node_ref_t> armResults;
-                for (size_t k = 0; k < owner->variants.size(); ++k) {
-                    const Variant &variant   = owner->variants[k];
-                    const uint32_t armRegion = draft.addRegion(GCRegionKind::Arm, region, brch, k);
-                    draft.setInsertRegion(armRegion);
-                    std::vector<gc_node_ref_t> norm = arguments;
-                    for (size_t field = 0; field < variant.captures.size(); ++field) {
-                        const gc_node_ref_t variantTag = draft.materializeStaticValue(
-                            camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
-                                static_cast<camel::core::rtdata::Int64>(variant.tag)),
-                            ty::Type::Int64());
-                        const gc_node_ref_t fieldIndex = draft.materializeStaticValue(
-                            camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
-                                static_cast<camel::core::rtdata::Int64>(field)),
-                            ty::Type::Int64());
-                        const gc_node_ref_t take = draft.addOperNode(
-                            asEnum != nullptr ? asEnum->fieldType(variant.tag, field)
-                                              : variant.captures[field],
-                            nullptr, ":enum/field");
-                        const std::vector<gc_node_ref_t> operands{variantTag, fieldIndex, at};
-                        draft.setNormInputs(take, operands);
-                        norm.push_back(take);
-                    }
-                    const gc_node_ref_t call =
-                        draft.addFuncNode(variant.graph, resultType, 0, 0, 0);
-                    draft.setNormInputs(call, norm);
-                    draft.setWithInputs(call, withArguments);
-                    draft.setRegionResult(armRegion, call);
-                    draft.setInsertRegion(region);
-                    armResults.push_back(call);
-                }
-                GCJoinBody join{
-                    .brch     = brch,
-                    .armCount = static_cast<gc_cnt_t>(owner->variants.size())};
-                DraftNodeInit init = snapshotOf(draft, id);
-                init.kind          = GCNodeKind::Join;
-                init.payload       = payloadOf(&join, sizeof(join));
-                init.normInputs    = std::span<const gc_node_ref_t>(&brch, 1);
-                init.withInputs    = armResults;
-                draft.rewriteNode(id, init);
+                emitCallThroughValue(
+                    draft, *owner, enumOf(header->dataType), arguments, withArguments, withs.front(),
+                    header->dataType, draft.nodeRegion(id), id);
                 ++rewroteCalls;
             }
         }

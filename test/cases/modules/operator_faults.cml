@@ -9,6 +9,7 @@
  */
 
 import { Graph, graphs_of, effects } from graph
+import { sum } from tensor
 
 func add_int(a: int, b: int): int {
     return a + b
@@ -70,6 +71,28 @@ func div_int(a: int, b: int): int {
     return a / b
 }
 
+func pow_int(a: int, b: int): int {
+    return a ^ b
+}
+
+func pow_f32(a: f32, b: f32): f32 {
+    return a ^ b
+}
+
+func len_array(xs: int[]): int {
+    return len(xs)
+}
+
+func len_text(s: string): int {
+    return len(s)
+}
+
+/// A `tensor` operator, which declares no fault list at all: the answer that reads back is the
+/// third state, "nobody has checked, so assume it may fault".
+func tensor_sum(t: f32[..]): float {
+    return float(sum(t))
+}
+
 /// 1 when running the graph once may fault, 0 when it cannot.
 func may_fault_bit(g: Graph): int {
     return if effects(g).may_fault then 1 else 0
@@ -91,5 +114,10 @@ func main(): int sync {
     println(may_fault_bit(graphs_of(mul_f6)[0]))
     println(may_fault_bit(graphs_of(pow_bf)[0]))
     println(may_fault_bit(graphs_of(div_int)[0]))
+    println(may_fault_bit(graphs_of(pow_int)[0]))
+    println(may_fault_bit(graphs_of(pow_f32)[0]))
+    println(may_fault_bit(graphs_of(len_array)[0]))
+    println(may_fault_bit(graphs_of(len_text)[0]))
+    println(may_fault_bit(graphs_of(tensor_sum)[0]))
     return 0
 }
