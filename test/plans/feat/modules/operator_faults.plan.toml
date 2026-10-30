@@ -1,0 +1,63 @@
+id = "modules.operator_faults"
+order = 380
+tier = "fast"
+tags = ["feat", "modules", "semantics", "faults"]
+desc = "The `faults` a built-in scalar operator's semantics declare, each checked against the kernel that implements it: the empty list where the kernel has no fault path at all, and the zero divisor where it has one. Read twice, because the table keeps the fact in two places: the semantics record `camel inspect --ops` prints, and the trait that a graph's effects summary reads."
+
+# The record: `declareBuiltinOperatorSemantics` writes the numeric semantics of the four scalar
+# types and of the two complex ones, and each record carries the fault list of its operator.
+
+[[tests]]
+name = "declared_records"
+desc = "`camel inspect --ops` shows the fault list of every operator whose semantics carry one. `+ - *`, the negation and the four comparisons of i32, int, f32 and float declare the empty list, and so do `+` and `-` of c64 and c128; `div` of every numeric type and `%` of the two integer types declare the fault of a zero divisor. An operator whose semantics declare no fault list prints no `faults` member at all (pow of the two reduced-precision types reads as undeclared), which is what tells an empty list from an undeclared one."
+kind = "behavior"
+case = "../../../cases/modules/operator_faults.cml"
+args = ["inspect", "--ops", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const ops = input.normalized.stdout.split('\n').filter((l) => l.startsWith('OPERATOR ')).map((l) => JSON.parse(l.slice(9)))
+const byUri = new Map(ops.map((o) => [o.uri, o]))
+// No fault path in the kernel: the arithmetic of the type wraps (integers) or rounds once
+// (floats), a part of a complex value is added or subtracted the same way, and a comparison only
+// compares.
+const never = []
+for (const t of ['i', 'l', 'f', 'd']) {
+  never.push(`:op/add_${t}`, `:op/sub_${t}`, `:op/mul_${t}`, `:op/neg_${t}`)
+  for (const c of ['lt', 'le', 'gt', 'ge']) never.push(`:op/${c}_${t}`)
+}
+for (const t of ['c', 'z']) never.push(`:op/add_${t}`, `:op/sub_${t}`)
+for (const uri of never) {
+  const op = byUri.get(uri)
+  assert(op, `operator ${uri} is not listed`)
+  assert(op.semantics, `${uri} has no semantics`)
+  assert(Array.isArray(op.semantics.faults), `${uri} declares no fault list, expected the empty one`)
+  assert(op.semantics.faults.length === 0, `${uri} declares ${JSON.stringify(op.semantics.faults)}, expected []`)
+}
+const divisor = [':op/div_i', ':op/div_l', ':op/div_f', ':op/div_d', ':op/div_c', ':op/div_z',
+  ':op/mod_i', ':op/mod_l']
+for (const uri of divisor) {
+  const op = byUri.get(uri)
+  assert(op && op.semantics, `${uri} has no semantics`)
+  assert(JSON.stringify(op.semantics.faults) === '["division_by_zero"]',
+    `${uri} declares ${JSON.stringify(op.semantics.faults)}, expected the zero divisor`)
+}
+// An empty list and an undeclared one are different answers, and the listing distinguishes them.
+const pow = byUri.get(':op/pow_bf')
+assert(pow, 'operator :op/pow_bf is not listed')
+assert(pow.semantics === undefined || pow.semantics.faults === undefined,
+  ':op/pow_bf should carry no fault list')
+assert(JSON.stringify(byUri.get(':op/mul_i').semantics.faults) === '[]', ':op/mul_i should carry the empty list')
+}
+"""
+
+[[tests]]
+name = "declared_traits"
+desc = "The trait the effects summary reads carries the same answer for the operators whose semantics declare no record: a graph holding one call of `+ - *`, negation, `==`, `!=`, `<` over a number or a string, or one of `+ * ^` over a reduced-precision value, reports `may_fault` false, and a graph holding one division of two ints reports true."
+kind = "behavior"
+case = "../../../cases/modules/operator_faults.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
