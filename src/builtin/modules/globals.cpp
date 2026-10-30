@@ -174,6 +174,16 @@ resolver_ptr_t namedStaticSignature(const char *name, Type *param, Type *exit) {
 
 /// A compound assignment of a group: the target is the type and keeps it, the value is the type,
 /// and what the write gives is the version of the variable: the cell itself.
+///
+/// These arms are the group's fallback, and no program reaches them today: `a op= b` is written as
+/// `a = a op b` before an operator is resolved (design principles 4.2,
+/// `Builder::compoundAssignmentByRebinding`), so a narrow `+=` follows `:op/add_bf` and the plain
+/// operator's own arm, and the five `:op/assn_*` arms of each type exist beside the f32 group's for
+/// the same reason that group has them. Removing `:op/assn_pow_bf` leaves
+/// test/plans/feat/modules/stdlib_reduced.plan.toml green, and removing `:op/add_bf` turns its
+/// compound case red, which is the measurement behind that statement. They stay because the group
+/// is structured per operator and the assignment operators of every other type are declared here;
+/// they are not a gap and not an untested path that a program could take.
 #define CAMEL_HALF_ASSIGN(STEM)                                                                    \
     {":op/" STEM "_bf",                                                                            \
      StaticFuncTypeResolver::create(                                                               \
