@@ -506,6 +506,10 @@ node_handle_t Builder::exportedValueNode(ExportedValue &value) {
 
 void Builder::buildModuleBody(ModuleUnit &unit) {
     UnitContext context(*this, unit);
+    // A dropped body is written and read within the module it is written in (see droppedBodies_):
+    // the nodes of a finished module's tree are gone, and their addresses are handed back to the
+    // next module's tree.
+    droppedBodies_.clear();
     try {
         reportImportNameConflicts();
     } catch (const BuildAbortException &) {

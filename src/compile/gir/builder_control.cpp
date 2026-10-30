@@ -1428,6 +1428,7 @@ Builder::arm_ptr_t Builder::buildArm(
     auto arm                   = std::make_shared<ArmBuild>();
     runtime::GraphDraft &draft = currGraph_->draft();
     const uint32_t outerRegion = draft.insertRegion();
+    arm->bodyId                = nextBodyId_++;
     arm->graph                 = currGraph_.get();
     arm->region                = draft.addRegion(kind, outerRegion);
     arm->kind                  = kind;
@@ -2495,11 +2496,12 @@ node_handle_t Builder::buildBranch(
 
     // Makes `arm` the next arm of the branch.
     const auto addArm = [&](const arm_ptr_t &arm) {
+        const BodyKey key{true, arm->bodyId};
         if (dropsArmValues) {
             // The arm of an `if` without `else` gives a value nothing takes.
-            rejectDiscardedValue(arm.get());
+            rejectDiscardedValue(key);
         }
-        bodyValueStatement_.erase(arm.get());
+        bodyValueStatement_.erase(key);
         armList.push_back(arm);
         if (!joinsNoValue && !absentElse) {
             // A position that takes a value reads a cell out before the arms are joined: an arm
@@ -4159,7 +4161,7 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         // function hands on.
     } else {
         checkDeclaredReturn(currGraph_, nodeTypeOf(resNode), gct->origin(), gct->at(0));
-        if (!droppedGraphs_.contains(currGraph_.get())) {
+        if (!droppedGraphs_.contains(camel::runtime::toValue(currGraph_->graphId()))) {
             setGraphReturnFromResult(
                 currGraph_,
                 nodeIdOf(outputAnchor),
@@ -4185,9 +4187,7 @@ node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
     try {
         result = visitExecNode(gct, tailPositionType());
         if (lastBlockStatement_.first != nullptr) {
-            const void *body = activeArm() != nullptr ? static_cast<const void *>(activeArm())
-                                                      : static_cast<const void *>(currGraph_.get());
-            bodyValueStatement_[body] = lastBlockStatement_;
+            bodyValueStatement_[currentBodyKey()] = lastBlockStatement_;
         }
     } catch (...) {
         synced_         = outerSynced;

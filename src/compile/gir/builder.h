@@ -693,8 +693,13 @@ class Builder {
     node_handle_t visitDecoratedBlock(const GCT::node_ptr_t &link, bool unused);
     // The bodies whose value is dropped: a decorated block whose value nothing takes is a
     // function whose value is dropped, as a plain block drops the value of its last statement.
+    // The node is a node of the tree being built, read while that tree is still being visited;
+    // the set is emptied when a module's body begins, so a node of a finished module cannot be
+    // mistaken for one of this module's at the same address.
     std::unordered_set<const GCT::Node *> droppedBodies_;
-    std::unordered_set<const DraftGraphBuilder *> droppedGraphs_; // their graphs
+    /// Their graphs, by `GraphId`: a graph is dropped after it is built and its address is reused,
+    /// its id is not (camel/runtime/graph_id.h).
+    std::unordered_set<uint32_t> droppedGraphs_;
     // The graphs of decorated blocks: written as blocks, they are not functions a program
     // declares, and get no ignored-write check of their own.
     std::unordered_set<const DraftGraphBuilder *> blockGraphs_;
@@ -1073,6 +1078,9 @@ class Builder {
     struct ArmBuild {
         DraftGraphBuilder *graph = nullptr;
         uint32_t region          = 0;
+        /// The arm's own name, given when it begins and never reused: what a map that outlives the
+        /// arm keys it by (see BodyKey).
+        std::size_t bodyId = 0;
         /// What the region is: a branch's arm, or the condition or the body of a loop. A loop's
         /// round regions are the ones that run again on every round, which is what a stream
         /// written outside the loop is consumed by.
@@ -1113,6 +1121,8 @@ class Builder {
     using arm_ptr_t = std::shared_ptr<ArmBuild>;
     /// The arms being built, outermost first.
     std::vector<ArmBuild *> armStack_;
+    /// Hands out `ArmBuild::bodyId`: an arm's name that outlives the arm (see BodyKey).
+    std::size_t nextBodyId_ = 0;
     /// Refuses the second reader of one stream on one execution path (design principles 5.4: a stream
     /// is read once on each path). The check measures the built graphs of the whole program -- a
     /// value handed to a function is read where that call stands -- and records what it finds below;
@@ -3038,7 +3048,23 @@ class Builder {
     /// body. Where that value is dropped (a body declared `: void`, the element function of
     /// `foreach`, the arm of an `if` without `else`), rejectDiscardedValue checks it as a
     /// statement whose value nothing takes.
-    std::unordered_map<const void *, std::pair<GCT::node_ptr_t, node_handle_t>>
+    ///
+    /// The key names the body, not the address of the object that was the body: a loop's condition
+    /// and body arms die when the loop is built, their addresses are handed to the bodies built
+    /// after them, and an address-keyed map then read a dead body's last statement -- reporting a
+    /// value the loop itself takes as one nobody took. An arm is named by `ArmBuild::bodyId` and a
+    /// function body by its `GraphId`, which the program never reuses.
+    struct BodyKey {
+        bool arm       = false;
+        std::size_t id = 0;
+        bool operator==(const BodyKey &other) const { return arm == other.arm && id == other.id; }
+    };
+    struct BodyKeyHash {
+        std::size_t operator()(const BodyKey &key) const {
+            return std::hash<std::size_t>{}(key.id * 2 + (key.arm ? 1 : 0));
+        }
+    };
+    std::unordered_map<BodyKey, std::pair<GCT::node_ptr_t, node_handle_t>, BodyKeyHash>
         bodyValueStatement_;
     /// The last statement of the block visitExecNode finished most recently, and its node.
     std::pair<GCT::node_ptr_t, node_handle_t> lastBlockStatement_{};
@@ -3057,7 +3083,11 @@ class Builder {
     std::vector<StatementsAfterFail> statementsAfterFail_;
     /// UnusedPureResult at the last statement of the body of `graph` when it is a call of a
     /// pure operator: the body's value is dropped where `graph` is used (see above).
-    void rejectDiscardedValue(const void *body);
+    void rejectDiscardedValue(BodyKey body);
+    /// The key of a body being built: the arm that is being built, else the graph of the function.
+    BodyKey currentBodyKey() const;
+    /// The key of a `DraftGraphBuilder`'s body.
+    static BodyKey bodyKeyOf(const DraftGraphBuilder *graph);
     /// The graph of each function written in place (a lambda), by its construction node.
     std::unordered_map<const GCT::Node *, const DraftGraphBuilder *> lambdaGraphs_;
     std::vector<node_handle_t> syncedReads_;
@@ -3068,8 +3098,10 @@ class Builder {
     /// (`out = out->append<i>; total += len(out)` in a loop stays linear). See the definition
     /// for the conditions; a read that does not meet every one of them stays `:var/get`.
     void markNonRetainingReads();
-    /// Function graphs whose return type is not declared but taken from their body.
-    std::unordered_set<DraftGraphBuilder *> inferredExitGraphs_;
+    /// Function graphs whose return type is not declared but taken from their body, by `GraphId`:
+    /// the graph is built and dropped long before this question is asked, so its address says
+    /// nothing.
+    std::unordered_set<uint32_t> inferredExitGraphs_;
 
     /// Binds `node` to a fresh name no program can write, so that arms can capture it.
     std::string bindTemporary(node_handle_t node);
