@@ -47,6 +47,12 @@ bool takesUnwrittenResources(
     return target.mode == sem::ResourceSignature::Mode::Generic || target == source;
 }
 
+/// Two signatures that promise different things about resources are still one type: an effect
+/// qualifier is a subtype relation, not part of what the type is (design principles 5.2).
+bool ignoresResources(const sem::ResourceSignature &, const sem::ResourceSignature &) {
+    return true;
+}
+
 bool isStructured(const Type *type) {
     if (type == nullptr) {
         return false;
@@ -768,6 +774,10 @@ std::string typeToString(const Type *type) { return typeText(type, false); }
 std::string typeMangle(const Type *type) { return typeText(type, true); }
 
 bool typeEquals(const Type *a, const Type *b) { return sameTypeWith(a, b, sameResources); }
+
+bool typeEqualsIgnoringResources(const Type *a, const Type *b) {
+    return sameTypeWith(a, b, ignoresResources);
+}
 
 bool sameTypeWithUnwrittenResources(const Type *target, const Type *source) {
     return sameTypeWith(target, source, takesUnwrittenResources);

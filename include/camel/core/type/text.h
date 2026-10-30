@@ -33,6 +33,12 @@ std::string typeToString(const Type *type);
 std::string typeMangle(const Type *type);
 /// Structural equality of two types (the same relation as `Type::equals`).
 bool typeEquals(const Type *a, const Type *b);
+/// The same walk with the effect qualifiers left out: two signatures that promise different things
+/// about resources are the same type here. An effect qualifier is a subtype relation, not part of
+/// what a type is (design principles 5.2: a `pure` value goes where the plain signature is
+/// expected, and the two are one type), so a reader that asks which values share a type -- a family
+/// of function values, the enum one family is given -- asks this, not `typeEquals`.
+bool typeEqualsIgnoringResources(const Type *a, const Type *b);
 
 /**
  * Whether `target` and `source` are the same type, where a function type that writes no resource

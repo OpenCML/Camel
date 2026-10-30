@@ -1041,19 +1041,29 @@ void emitDraftPayload(
     };
 
     // The order edges and the sync edges (docs/design/effects/edges.cn.md 1.5): neither is a port,
-    // so each is written to the graph's own array, in the node order the records have (which is
-    // what makes the arrays sorted by user).
+    // so each is written to the graph's own array, in the node order the records have, and within
+    // one node by the predecessor's number (which is what makes the arrays sorted by (user, pred),
+    // the order every reader and every dump of them relies on).
     const auto emitSideEdges = [&](auto *edges, gc_cnt_t count, const auto &inputsOf,
                                    bool dropUnmapped) {
         if (count == 0) {
             return;
         }
         size_t at = 0;
+        std::vector<gc_node_ref_t> preds;
         for (const PlannedDraftNode &planned : plan.nodes) {
             if (planned.dead) {
                 continue;
             }
-            for (gc_node_ref_t pred : inputsOf(planned.draftId)) {
+            // The draft appends a side edge where the rewrite that wrote it happened to stand: a
+            // pass that collects what orders a node from a container of its own appends them in
+            // whatever order that container gives. The graph writes them by number instead, so
+            // that one graph has one array -- what a dump prints, and what a hash of it mixes, is
+            // then the same on every build (`std::gir` printed two orders of the same five order
+            // edges of one node, and the bytes differed).
+            preds.assign(inputsOf(planned.draftId).begin(), inputsOf(planned.draftId).end());
+            std::sort(preds.begin(), preds.end());
+            for (gc_node_ref_t pred : preds) {
                 ASSERT(
                     pred < plan.runtimeRefsByDraftId.size(),
                     "Draft side-edge emission encountered a node outside the payload plan.");

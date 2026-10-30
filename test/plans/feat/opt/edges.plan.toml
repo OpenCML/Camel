@@ -39,7 +39,7 @@ name = "order_edge_survives_the_commit"
 desc = "An order edge is not a port and not a control input: it is written once, it is kept out of the node's input runs, and the graph the commit makes holds it in its own array, from which it is read back by the user's predecessors (docs/design/effects/edges.cn.md 1.5, 5)."
 case = "../../../cases/opt/generic/generic_passes.cml"
 args = ["${case}", "test::edges_order_ok"]
-expect_stdout_contains = ["ORDER wrote=1 twice=0", "ORDER preds=1 users=1", "EDGES accepted", "ORDER frozen_agrees=1 some_node_ordered=1"]
+expect_stdout_contains = ["ORDER wrote=1 twice=0", "ORDER preds=1 users=1", "ORDER wrote_reversed=11", "EDGES accepted", "ORDER frozen_agrees=1 some_node_ordered=1 frozen_sorted=1"]
 
 [[tests]]
 name = "order_edge_on_a_pure_node_is_refused"

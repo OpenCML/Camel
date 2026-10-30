@@ -111,10 +111,16 @@ EdgesOrderOkTestPass::apply(const camel::runtime::Program *program, std::ostream
     auto &draft = session.edit(program->root()).edit();
     const gc_node_ref_t first  = anchorNode(draft);
     const gc_node_ref_t second = anchorNode(draft);
+    const gc_node_ref_t third  = anchorNode(draft);
     os << "ORDER wrote=" << (draft.appendOrderDependency(second, first) ? 1 : 0)
        << " twice=" << (draft.appendOrderDependency(second, first) ? 1 : 0) << "\n";
     os << "ORDER preds=" << draft.orderInputsOf(second).size()
        << " users=" << draft.orderUsersOf(first).size() << "\n";
+    // Two predecessors of one user, appended in the order that is not their numbering order: the
+    // frozen graph writes one node's side edges by the predecessor's number, so what a dump of it
+    // prints does not depend on the order a rewrite collected them in.
+    os << "ORDER wrote_reversed=" << (draft.appendOrderDependency(third, second) ? 1 : 0)
+       << (draft.appendOrderDependency(third, first) ? 1 : 0) << "\n";
     try {
         const Program *next = session.commit();
         const GCGraph *root = next->graph(rootId);
@@ -123,13 +129,20 @@ EdgesOrderOkTestPass::apply(const camel::runtime::Program *program, std::ostream
         // scheduler and pass uses) agrees with that array node for node.
         size_t seen = 0;
         size_t ordered = 0;
+        bool sorted    = true;
         for (auto it = root->nodes().begin(); it != root->nodes().end(); ++it) {
             const auto preds = root->orderPredsOf(it.ref());
             seen += preds.size();
             ordered += preds.empty() ? 0 : 1;
+            for (size_t i = 1; i < preds.size(); ++i) {
+                if (preds[i - 1].pred > preds[i].pred) {
+                    sorted = false;
+                }
+            }
         }
         os << "ORDER frozen_agrees=" << (seen == root->orderEdges().size() ? 1 : 0)
-           << " some_node_ordered=" << (ordered != 0 ? 1 : 0) << "\n";
+           << " some_node_ordered=" << (ordered != 0 ? 1 : 0)
+           << " frozen_sorted=" << (sorted ? 1 : 0) << "\n";
         return next;
     } catch (const std::exception &error) {
         os << "EDGES refused: " << error.what() << "\n";
