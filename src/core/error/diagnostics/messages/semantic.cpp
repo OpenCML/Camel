@@ -745,7 +745,15 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TagUndeclared",
                 "No tag '{0}' is declared.",
-                "Tags share the namespace of functions and types: import the module that declares it, or declare it with 'tag {0} on ...'.",
+                "A tag has a space of its own, separate from functions, types and values, and the tag itself is not a value: import the module that declares it, or declare it with 'tag {0} on ...'.",
+            },
+        },
+        {
+            SemanticDiag::TagNameAsValue,
+            {
+                "TagNameAsValue",
+                "'{0}' names a tag, and a tag is not a value: write '#{0}' where the tag belongs.",
+                "A tag is a compile-time fact attached to a declaration or to the nodes of a region (design principles 6.2): it is read before the program runs, never called and never passed. A value of that name takes a declaration of its own -- a function, a constant or a variable.",
             },
         },
         {
@@ -786,6 +794,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "TagArgumentType",
                 "The parameter '{0}' of the tag '{1}' is declared '{2}', but the argument is '{3}' ({4}).",
                 "A tag argument is a compile-time constant of the kind the parameter declares: write an integer for 'int', a real for 'float', 'true' or 'false' for 'bool', a string for 'string', and the name of a function for a parameter that carries one (the fact is the graph reference of that function).",
+            },
+        },
+        {
+            SemanticDiag::TagArgumentNotValue,
+            {
+                "TagArgumentNotValue",
+                "The tag '{1}' cannot take '{0}' as an argument: it names {2}.",
+                "A tag is read before the program runs, so an argument is a compile-time value -- a literal, a top-level constant or a string -- or, for a parameter that carries a function, the name of a function of the program (the fact is that function's graph reference). A tag and a type are declarations, not values; a rule and a body-less kernel are declarations too, and neither has the function graph such a parameter takes. Name a function, a literal or a constant.",
             },
         },
         {

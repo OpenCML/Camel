@@ -5481,6 +5481,56 @@ bool writesOwnYield(const AST::node_ptr_t &node) {
     return false;
 }
 
+/// Whether `node` reads the name `name` of its own: a function or a lambda written in it has a
+/// body and locals of its own (language reference 7.3.1), and a declaration of the same name hides
+/// this one from there on, so neither is read of it. Used for the one question the generator's
+/// machine asks of a name: whether a `yield` cuts a local in two.
+bool readsOwnName(const AST::node_ptr_t &node, const std::string &name) {
+    if (node == nullptr) {
+        return false;
+    }
+    if (node->type() == AST::LoadType::Stmt) {
+        const auto &load = node->loadAs<AST::StmtLoad>();
+        if (load->stmtType() == AST::StmtType::Func) {
+            return false;
+        }
+        if (load->stmtType() == AST::StmtType::Data) {
+            bool declares = false;
+            for (const Reference &ref : node->loadAs<AST::DataDeclLoad>()->refs()) {
+                if (ref.toString() == name) {
+                    declares = true;
+                }
+            }
+            if (declares) {
+                // The initializer is read where this declaration stands, so it sees the name the
+                // outer binding gave it; from the declaration on, the name is this one.
+                for (size_t i = 1; i < node->size(); ++i) {
+                    if (readsOwnName(node->at(i), name)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        }
+    }
+    if (node->type() == AST::LoadType::Data) {
+        const auto &load = node->loadAs<AST::DataLoad>();
+        if (load->dataType() == AST::DataType::Ref &&
+            node->loadAs<AST::RefDataLoad>()->ref().toString() == name) {
+            return true;
+        }
+        if (load->dataType() == AST::DataType::Func) {
+            return false;
+        }
+    }
+    for (size_t i = 0; i < node->size(); ++i) {
+        if (readsOwnName(node->at(i), name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 AST::node_ptr_t firstOwnYield(const AST::node_ptr_t &node) {
     if (node == nullptr) {
         return nullptr;
@@ -5542,6 +5592,23 @@ node_ptr_t Builder::visitGeneratorBody(
         diags_->of(SemanticDiag::FeatureNotSupported)
             .at((atYield != nullptr ? atYield : atNode)->load()->tokenRange())
             .commit("generators");
+        throw BuildAbortException();
+    };
+    // A local a `yield` cuts in two: its value is built where the declaration stands, inside one
+    // arm of the machine, so the pull after a `yield` runs an arm that cannot read the name. That
+    // is the named gap (the locals that live across a `yield` become cells, which is the step not
+    // taken yet) and it is refused here, at the declaration, instead of being left to fail later
+    // as an unresolved name in an arm the name was never declared in -- a message that sends the
+    // reader looking for a typo that is not there.
+    const auto refuseLocalAcrossYield = [&](const AST::node_ptr_t &decl) -> void {
+        diags_->of(SemanticDiag::FeatureNotSupported)
+            .at(decl->load()->tokenRange())
+            .note(
+                "A local that lives across a `yield` becomes a cell of the generator's own body, "
+                "which is the part of the machine that is not built yet. A local declared and "
+                "used between two `yield`s needs no cell and is accepted; so is a constant or a "
+                "lambda, whose value does not depend on the point where it stands.")
+            .commit("a local read after a `yield`");
         throw BuildAbortException();
     };
     Type *exit = funcType->exitType();
@@ -5684,11 +5751,22 @@ node_ptr_t Builder::visitGeneratorBody(
     };
 
     // Fills the arm `pc` with `stmts[from..]`; after them the body goes on at the arm `next`
-    // (-1: the stream ends there).
-    std::function<void(int, const AST::node_ptr_t &, size_t, int)> fill =
-        [&](int pc, const AST::node_ptr_t &stmts, size_t from, int next) {
+    // (-1: the stream ends there). `nextState` names the cell a loop body hands the next round
+    // (`""`: this stretch is no loop body and hands nothing over).
+    std::function<void(int, const AST::node_ptr_t &, size_t, int, const std::string &)> fill =
+        [&](int pc,
+            const AST::node_ptr_t &stmts,
+            size_t from,
+            int next,
+            const std::string &nextState) {
             node_ptr_t exec = arms[static_cast<size_t>(pc)];
             pushScope();
+            // The locals this stretch declares for itself: built here, in this arm's graph, so
+            // they live exactly as long as the arm runs (see the refusal at a `yield`).
+            std::vector<std::pair<std::string, AST::node_ptr_t>> armLocals;
+            // The last value the stretch built: a loop body's last value is the state of the
+            // next round. A stretch that ends in a `yield` builds none.
+            node_ptr_t last = nullptr;
             for (size_t i = from; i < stmts->size(); ++i) {
                 const auto &stmt = stmts->at(i);
                 const bool isStmt =
@@ -5702,8 +5780,19 @@ node_ptr_t Builder::visitGeneratorBody(
                     if (values->size() != 1) {
                         refuse(stmt);
                     }
+                    // Everything this stretch declared is thrown away by this `yield`: the pull
+                    // that goes on from here runs another arm, and a name that is not a cell is
+                    // not there to be read. Only a local the rest of the stretch reads is
+                    // refused -- one that is done with before the `yield` was never a cell.
+                    for (const auto &[name, decl] : armLocals) {
+                        for (size_t k = i + 1; k < stmts->size(); ++k) {
+                            if (readsOwnName(stmts->at(k), name)) {
+                                refuseLocalAcrossYield(decl);
+                            }
+                        }
+                    }
                     const int resume = newArm();
-                    fill(resume, stmts, i + 1, next);
+                    fill(resume, stmts, i + 1, next, nextState);
                     *exec << writeCell(pcName, intLiteral(resume));
                     *exec << writeCell(haltName, intLiteral(1));
                     node_ptr_t elem = declaredValue(visitData(values->front()), elemType, stmt);
@@ -5726,26 +5815,151 @@ node_ptr_t Builder::visitGeneratorBody(
                     if (std::find(hoisted.begin(), hoisted.end(), i) != hoisted.end()) {
                         continue;
                     }
+                    // One that did not: its value depends on this point, so it is built here and
+                    // is this stretch's own (see the refusal at a `yield`).
+                    for (const Reference &ref : stmt->loadAs<AST::DataDeclLoad>()->refs()) {
+                        armLocals.push_back({ref.toString(), stmt});
+                    }
                 }
                 if (writesOwnYield(stmt)) {
-                    // A branch, or a loop, or a `match` with a `yield` in it: each point of
-                    // those has to be an arm of its own, which is the next step of the plan.
+                    // A branch, a loop, or a `match` with a `yield` in it: each point of those
+                    // has to be an arm of its own.
                     const bool isIf =
                         isStmt && stmtType == AST::StmtType::Expr && stmt->size() > 0 &&
                         stmt->at(0)->type() == AST::LoadType::Data &&
                         stmt->at(0)->loadAs<AST::DataLoad>()->dataType() == AST::DataType::IfExpr;
-                    if (!isIf) {
+                    const bool isMatch =
+                        isStmt && stmtType == AST::StmtType::Expr && stmt->size() > 0 &&
+                        stmt->at(0)->type() == AST::LoadType::Data &&
+                        stmt->at(0)->loadAs<AST::DataLoad>()->dataType() == AST::DataType::MatchExpr;
+                    const bool isLoop =
+                        isStmt && stmtType == AST::StmtType::Expr && stmt->size() > 0 &&
+                        stmt->at(0)->type() == AST::LoadType::Data &&
+                        stmt->at(0)->loadAs<AST::DataLoad>()->dataType() == AST::DataType::LoopExpr;
+                    if (!isIf && !isMatch && !isLoop) {
                         refuse(stmt);
+                    }
+                    if (isLoop) {
+                        // A `while` loop whose body writes a `yield`. The pull that hands an
+                        // element out stops in the arm the `yield` left, so the loop can neither
+                        // be restarted from the top nor be left as one stretch: what the loop
+                        // carries is one cell, its body is an arm of its own, and the arm after
+                        // the body goes back to the condition.
+                        const auto &loopAst  = stmt->at(0);
+                        const auto &loopLoad = loopAst->loadAs<AST::LoopExprLoad>();
+                        const auto &inits    = loopAst->atAs<AST::RepeatedLoad>(0);
+                        const AST::node_ptr_t init = inits->size() == 1 ? inits->at(0) : nullptr;
+                        // What the machine carries is exactly one value, and that value is read
+                        // once, where the loop stands: a `for` has a sequence and a binder the
+                        // arms do not run, and a first value that depends on the point it stands
+                        // at cannot be the cell's value.
+                        if (init == nullptr || loopLoad->state().size() != 1 || loopLoad->hasFor() ||
+                            !hoistable(init)) {
+                            refuse(stmt);
+                        }
+                        const std::string stateName = loopLoad->state()[0].toString();
+                        if (std::find(cellNames.begin(), cellNames.end(), stateName) !=
+                            cellNames.end()) {
+                            // The body already has a cell of that name (a `var` of its own, or
+                            // another loop's state): a second cell of it is a second writing.
+                            refuse(stmt);
+                        }
+                        addCell(stateName, visitData(init), stmt);
+                        cellNames.push_back(stateName);
+                        // The four points of the loop: past it, at the condition, in the body,
+                        // and the step back to the condition.
+                        const int afterPc = newArm();
+                        fill(afterPc, stmts, i + 1, next, nextState);
+                        const int condPc = newArm();
+                        const int bodyPc = newArm();
+                        const int stepPc = newArm();
+                        const auto &condAst = loopAst->optAtAs<AST::DataLoad>(2);
+                        if (condAst) {
+                            node_ptr_t brch = tree_->makeBrch();
+                            *brch << visitData(condAst);
+                            node_ptr_t trueCase = tree_->makeCase(CaseType::True);
+                            *trueCase << jumpTo(bodyPc);
+                            node_ptr_t elseCase = tree_->makeCase(CaseType::Else);
+                            *elseCase << jumpTo(afterPc);
+                            *brch << trueCase << elseCase;
+                            mark(brch, stmt, "gct.generator.branch");
+                            *arms[static_cast<size_t>(condPc)] << brch;
+                        } else {
+                            // No condition: the body is entered and the loop ends only where
+                            // the body does.
+                            *arms[static_cast<size_t>(condPc)] << jumpTo(bodyPc);
+                        }
+                        // The body: its last value is the state of the next round, so it is
+                        // written into the cell before the round goes on at the step arm.
+                        fill(
+                            bodyPc,
+                            loopAst->atAs<AST::StmtBlockLoad>(3)->atAs<AST::RepeatedLoad>(0),
+                            0,
+                            stepPc,
+                            stateName);
+                        *arms[static_cast<size_t>(stepPc)] << jumpTo(condPc);
+                        // The pull that reaches the loop only enters it: the arms of the body are
+                        // the points a pull after a `yield` goes on from.
+                        *exec << jumpTo(condPc);
+                        popScope();
+                        return;
+                    }
+                    if (isMatch) {
+                        // The subject is read at this point, and the arm the value picks becomes
+                        // the point the next round of the same pull runs.
+                        const auto &matchAst = stmt->at(0);
+                        const int afterMatch = newArm();
+                        fill(afterMatch, stmts, i + 1, next, nextState);
+                        node_ptr_t brch = tree_->makeBrch();
+                        *brch << visitData(matchAst->atAs<AST::DataLoad>(0));
+                        for (const auto &caseNode : *matchAst->atAs<AST::RepeatedLoad>(1)) {
+                            const auto &pattern = caseNode->at(0);
+                            if (pattern->type() == AST::LoadType::Data &&
+                                (pattern->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Ref ||
+                                 pattern->loadAs<AST::DataLoad>()->dataType() ==
+                                     AST::DataType::EnumPattern)) {
+                                // The arm binds a name; a binding lives in the arm's own graph, so
+                                // it would have to become a cell to outlive the `yield`.
+                                refuse(caseNode);
+                            }
+                            const int armPc = newArm();
+                            fill(
+                                armPc,
+                                caseNode->atAs<AST::StmtBlockLoad>(1)->atAs<AST::RepeatedLoad>(0),
+                                0,
+                                afterMatch,
+                                nextState);
+                            if (pattern->type() == AST::LoadType::Null) {
+                                // `case _`: the arm every other value takes.
+                                node_ptr_t gCase = tree_->makeCase(CaseType::Else);
+                                *gCase << jumpTo(armPc);
+                                *brch << gCase;
+                                continue;
+                            }
+                            node_ptr_t gCase = tree_->makeCase(CaseType::Value);
+                            *gCase << visitData(caseNode->atAs<AST::DataLoad>(0))
+                                   << jumpTo(armPc);
+                            *brch << gCase;
+                        }
+                        mark(brch, stmt, "gct.generator.match");
+                        *exec << brch;
+                        popScope();
+                        return;
                     }
                     const auto &ifAst = stmt->at(0);
                     const int after   = newArm();
-                    fill(after, stmts, i + 1, next);
+                    fill(after, stmts, i + 1, next, nextState);
                     const int thenPc = newArm();
-                    fill(thenPc, ifAst->atAs<AST::StmtBlockLoad>(1)->atAs<AST::RepeatedLoad>(0), 0, after);
+                    fill(
+                        thenPc,
+                        ifAst->atAs<AST::StmtBlockLoad>(1)->atAs<AST::RepeatedLoad>(0),
+                        0,
+                        after,
+                        nextState);
                     const int elsePc = newArm();
                     const auto &elseBlock = ifAst->optAtAs<AST::StmtBlockLoad>(2);
                     if (elseBlock) {
-                        fill(elsePc, elseBlock->atAs<AST::RepeatedLoad>(0), 0, after);
+                        fill(elsePc, elseBlock->atAs<AST::RepeatedLoad>(0), 0, after, nextState);
                     } else {
                         *arms[static_cast<size_t>(elsePc)] << jumpTo(after);
                     }
@@ -5761,7 +5975,26 @@ node_ptr_t Builder::visitGeneratorBody(
                     popScope();
                     return;
                 }
-                *exec << visitStmt(stmt);
+                // The value the statement built. A stretch that hands a value to the next round
+                // (`nextState`) keeps the last one for that cell instead of running it in the
+                // arm's own chain: a node has one parent, so the write is the only place it
+                // stands, and the write is the arm's last step.
+                node_ptr_t value = visitStmt(stmt);
+                if (!nextState.empty() && i + 1 == stmts->size()) {
+                    last = value;
+                } else {
+                    *exec << value;
+                }
+            }
+            if (!nextState.empty()) {
+                // A loop body hands the next round the last value it built. A stretch that
+                // builds none (one that ends in a `yield`, or whose last statement is a `var`
+                // already written as a cell) would go round without moving: refused by name
+                // here rather than run as a loop that never advances.
+                if (last == nullptr) {
+                    refuse(from < stmts->size() ? stmts->at(from) : stmts);
+                }
+                *exec << writeCell(nextState, last);
             }
             if (next >= 0) {
                 *exec << writeCell(pcName, intLiteral(next));
@@ -5771,7 +6004,7 @@ node_ptr_t Builder::visitGeneratorBody(
             }
             popScope();
         };
-    fill(first, bodyStmts, 0, -1);
+    fill(first, bodyStmts, 0, -1, std::string());
 
     // `step`: one round of the loop runs the arm `pc` names, until one of them answers.
     node_ptr_t stepBody = makeExec(synced);

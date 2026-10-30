@@ -1,0 +1,33 @@
+/**
+ * A `yield` inside a `while` loop (design principles 5.4, language reference 7.3.1). The loop is
+ * four points of the machine -- past it, at the condition, in the body, and back at the condition --
+ * and the value it carries (`i` here) is a cell of the function's own body, written from the body's
+ * last value. So the pull that hands an element out stops at the `yield`, and the pull after it goes
+ * on from there: the loop is not restarted from the top, and the state is not kept on the side of
+ * the machine where a later pull could not read it.
+ *
+ * The three consumers hold the three readings:
+ *   - `count(3)` hands out `0 1 2` and then ends: the condition is judged again after the body, on
+ *     the cell the body wrote, so the loop ends where `i < n` is false and not before or after;
+ *   - `count(0)` hands out nothing: the condition is false before the body runs, so no pull reaches
+ *     a `yield` at all;
+ *   - `count(5)` stopped after two elements hands out `0 1`: the resume point is the `yield`, so the
+ *     round that runs the tail of the body and the condition after it does not hand out an element
+ *     of its own.
+ */
+
+func count(n: int): int.. sync {
+    loop i = 0 while i < n do {
+        yield i
+        i + 1
+    }
+}
+
+func main(): int sync {
+    loop acc = 0 for v in count(3) do sync { println(v); acc + 1 }
+    println("-")
+    loop acc = 0 for v in count(0) do sync { println(v); acc + 1 }
+    loop acc = 0 for v in count(5) while acc < 2 do sync { println(v); acc + 1 }
+    println("end")
+    return 0
+}

@@ -487,7 +487,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.yield_statement_is_read"
-desc = "The syntax of a generator: `yield` is the third alternative of `retStmt`, so `yield e` parses wherever a statement stands, in a `loop` and in an `if` (the two shapes the plan's acceptance names) and in a body whose head writes the stream type (design principles 5.4). It is read without compiling: what produces the stream is the state machine of the plan's slice E, which is not built yet."
+desc = "The syntax of a generator: `yield` is the third alternative of `retStmt`, so `yield e` parses wherever a statement stands, in a `loop` and in an `if` (the two shapes the plan's acceptance names) and in a body whose head writes the stream type (design principles 5.4). This entry is the parse of the statement and nothing more: what the two functions hand out is pinned by stream.generator_loop (the loop) and stream.generator (the `if` arms), and the file compiles as a whole since the machine lowers both shapes."
 kind = "behavior"
 case = "../../../cases/compile/stream/yield_statement.cml"
 args = ["check", "-s", "${case}"]
@@ -526,14 +526,14 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.yield_lowering_refused"
-desc = "A body that writes `yield` is refused by name until the generator state machine lands (the plan's slice E): the graph builder reports SemanticDiag::FeatureNotSupported with `'generators'`, at the `yield` itself, instead of running it as a `return` and giving a wrong value."
+desc = "A body that writes `yield` is refused by name where the generator machine cannot carry it: a `while` loop with one carried value is lowered (stream.generator_loop), so what this holds is the narrowing -- a loop that carries two values across the `yield`, each depending on the round before it, still gets the named gap instead of running with one of them left behind. The graph builder reports SemanticDiag::FeatureNotSupported with `'generators'`, at the `yield` itself."
 kind = "negative"
 case = "../../../cases/compile/stream/yield_lowering.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::FeatureNotSupported"
 expect_diagnostic_code = "0x03000040"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 13
 expect_diagnostic_column = 9
 expect_output_contains = ["generators"]
 expect_output_not_contains = ["UnknownInternalError"]
@@ -980,3 +980,135 @@ expect_stdout_exact = "5\n"
 expect_output_not_contains = ["[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "stream.generator_match"
+desc = "A `yield` in each arm of a `match`: the arm the value picks is the point the next pull goes on from, so the element after the arm's `yield` is the one this pull hands out next. Both arms are taken in one program."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_match.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "100\n200\n"
+expect_output_not_contains = ["[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "stream.generator_sync_order"
+desc = "The statements of a generator body that writes `sync` are one sync chain, so the prints written between its `yield`s run in source order: one written between the first and the second element is printed after the consumer took the `1` and before the `2`, so the exact output is `1 a 2 b 3`, not `a 1 2 b 3` and not `a b 1 2 3`; and a print written before the first `yield` runs in the pull that starts the body while one written after the last runs in the pull that finds the stream over (`start 1 end`). All four back ends agree, and the default path is the fifth."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_sync_order.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "1\na\n2\nb\n3\n6\nstart\n1\nend\n1\n"
+expect_output_not_contains = ["[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "stream.generator_sync_order_default"
+desc = "The same program with no pass named: the default path is std::nvm, and it is the fifth back end the print order of a `sync` generator body is pinned on."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_sync_order.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "1\na\n2\nb\n3\n6\nstart\n1\nend\n1\n"
+expect_output_not_contains = ["[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "stream.generator_early_stop"
+desc = "A stream stopped before its end: the pulls that are not asked for do not run, so the effects written after the last one asked for do not happen. Taking two elements prints `1 a 2` and neither `b` nor `c`; taking one prints `1` alone, so the print written directly after the first `yield` needs a pull of its own. A body that runs on past the stop prints `1 a 2 b` and a pull that hands its element out without running what is written before it prints `1 2`, so the exact string refuses both. All four back ends agree, and the default path is the fifth."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_early_stop.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "1\na\n2\n-\n1\nend\n"
+expect_output_not_contains = ["[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "stream.generator_early_stop_default"
+desc = "The same program with no pass named: the default path is std::nvm, and it is the fifth back end the stop-before-the-end of a stream is pinned on."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_early_stop.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "1\na\n2\n-\n1\nend\n"
+expect_output_not_contains = ["[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "stream.generator_error_element"
+desc = "A stream whose elements can be wrong (`int!..`, design principles 5.4): the pull answers an error element as the `int!` value it is, so the consumer reads `error Boom: bad` where the body yielded `error('Boom','bad')` and `error Bad: no` where a fallible call answered, and a good element reads its number. An error element is a value, not a fault (3.9), so nothing about it ends the stream -- the body's end does. An element that silently became the success value would print a number instead, so the exact string holds the reading. All four back ends agree, and the default path is the fifth."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_error_element.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "1\nerror Boom: bad\n-\n1\nerror Bad: no\nend\n"
+expect_output_not_contains = ["[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "stream.generator_error_element_default"
+desc = "The same program with no pass named: the default path is std::nvm, and it is the fifth back end the error element of a stream is pinned on."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_error_element.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "1\nerror Boom: bad\n-\n1\nerror Bad: no\nend\n"
+expect_output_not_contains = ["[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "stream.generator_local_across_yield"
+desc = "A local of a generator body that has to live across a `yield` is not lowered yet, and the compiler says that at the declaration: `e` is built where it stands, inside one arm of the machine, and the pull after a `yield` runs an arm that declares no `e`. Before this the reader got `UnresolvedReference: 'e'` at the `yield` that reads it, as though the name were a typo, which pointed away from the reason -- so the case holds both the named gap and the absence of that message."
+kind = "negative"
+case = "../../../cases/compile/stream/generators_local_across_yield.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FeatureNotSupported"
+expect_diagnostic_code = "0x03000040"
+expect_diagnostic_line = 20
+expect_diagnostic_column = 5
+expect_output_contains = ["The feature 'a local read after a `yield`' is not supported yet", "becomes a cell of the generator's own body"]
+expect_output_not_contains = ["UnresolvedReference"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.generator_loop"
+desc = "A `yield` inside a `while` loop: the loop is four points of the machine (past it, at the condition, in the body and back at the condition) and the one value it carries is a cell of the function's own body, written from the body's last value. So the pull that hands an element out stops at the `yield` and the pull after it goes on from there. `count(3)` hands out `0 1 2` and then ends, `count(0)` hands out nothing (the condition is judged before the body runs), and `count(5)` stopped after two elements hands out `0 1` (the resume point is the `yield`, not the top of the loop). All four back ends agree, and the default path is the fifth."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_loop.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "0\n1\n2\n-\n0\n1\nend\n"
+expect_output_not_contains = ["[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "stream.generator_loop_default"
+desc = "The same program with no pass named: the default path is std::nvm, and it is the fifth back end the loop of a generator body is pinned on."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_loop.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "0\n1\n2\n-\n0\n1\nend\n"
+expect_output_not_contains = ["[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

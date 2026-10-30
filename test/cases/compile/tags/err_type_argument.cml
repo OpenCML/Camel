@@ -1,0 +1,11 @@
+/// A tag argument that names a type: a type is a declaration, not a value, so the refusal says so
+/// instead of reporting the parameter's declared type against the name.
+
+tag rule::<F>(f: F) on func when is_function::<F>()
+
+type Wide = { a: int }
+
+#rule(Wide)
+func use_it(x: int): int { return x }
+
+func main(): int sync { return 0 }
