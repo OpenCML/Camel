@@ -2,7 +2,7 @@
   "comment": "The baseline of the direct-connection ledger (graph-store step 2 b): the numbers below may only fall, and the last step is all of them at zero. `sites` records where each number comes from, as `file#symbol` (a line number moves with every edit above it, a symbol does not); it is diagnostics for a red and never decides the verdict. Record a new row after a commit with check.mjs --record.",
   "numbers": {
     "files": 59,
-    "references": 450,
+    "references": 444,
     "constructions": 3,
     "decode": 4
   },
@@ -77,7 +77,7 @@
       "include/camel/core/type/composite/func.h#-": 1,
       "include/camel/passes/test/anchor.h#anchorNode": 1,
       "include/camel/passes/test/anchor.h#blankNode": 1,
-      "include/camel/runtime/control.h#appendControlDependency": 4,
+      "include/camel/runtime/control.h#appendControlDependency": 1,
       "include/camel/runtime/control.h#controlFrontier": 1,
       "include/camel/runtime/control.h#hasControlDependency": 1,
       "include/camel/runtime/definitions.h#-": 1,
@@ -164,9 +164,6 @@
       "src/runtime/control.cpp#controlPath": 1,
       "src/runtime/control.cpp#hasControlDependency": 2,
       "src/runtime/control.cpp#isBoundary": 1,
-      "src/runtime/control.cpp#reduceControlDependencies": 1,
-      "src/runtime/control.cpp#reduceDocumentOrdering": 1,
-      "src/runtime/control.cpp#reduceOrderDependencies": 1,
       "src/runtime/control.cpp#reduceOrderingEdges": 1,
       "src/runtime/draft.cpp#addCaptureName": 1,
       "src/runtime/draft.cpp#addDependency": 1,

@@ -29,6 +29,9 @@ N0105 [label="PORT", type="PORT", param_kind="normal", param_index="0", value_ty
 
 - `lane-defun5`：`c0b48aba9`（断言）← `82f8d47a3`（负例改写）← `6ffdf65ec`（合流）；filter 在 `f6f0dddd1`。
 - 未落：**没有未落的补丁了**——类型修复 `d3ff4129d`、catch 删除 `5e3de4f82`、读数断言 `ab124a00e` 都已落。`D:\Temp\defun-fix-and-diag.patch`（1439 B）只有诊断打印，类型修复在 `D:\Temp\defun-attempt3.patch`（12563 B）。
-- 已知红：`benchmark_gradients_vs_torch`（训练负载），**按返工令 `477d76091` 已登记为 `known_fail`**（slow 层，形状见 `known-failure-run-training.md`）——绿不再被允许。
+- 已知红：**无**。`benchmark_gradients_vs_torch`（训练负载）随这一笔转红为绿：`known_fail` 标记与 `known-failure-run-training.md` 那一页在同一笔里撤掉，按裁定“crash is fixed and the mark is removed in that same commit”。
 - 取栈结论（`std::macro std::opt std::nvm`，训练负载）：`Variant::updateRefs+31` ← `scanRelocatedObjects` ← `minorGCUnlocked` ← `safepoint` ← `NodeVMSchedPass::call`（6 层嵌套，不随模型长）。**`mlp` 与 `mlp_big` 同样崩、栈顶三帧一模一样，所以早先“只在 mlp_big 规模上暴露”的说法作废，与规模无关**，也不是栈深度。
-- 读数结论（`ab124a00e`）：GC 拿到的类型是 `(x: f32[..]) => float`（`code` `1610612746` = `0x6000000A` = `TypeCode::Function`），槽里是 `Variant`（`tag=0`、`fields=1`）——**值成了 enum，位置还写着函数类型**：表示转换只做在值上、没做在位置上。**最小程序仍欠**：手写 20 行（闭包捕获小结构体 + 900 层递归 + 每层 256 元素数组）不崩，触发需要 `run_training` 的形状。
+- 读数结论（`ab124a00e`）：GC 拿到的类型是 `(x: f32[..]) => float`（`code` `1610612746` = `0x6000000A` = `TypeCode::Function`），槽里是 `Variant`（`tag=0`、`fields=1`）——**值成了 enum，位置还写着函数类型**：表示转换只做在值上、没做在位置上。落点（`CAMEL_TRACE_VARIANT=1` 的槽来源）：`Frame@…[23]`、`[24]`、`[25]`——**调用者那一帧的三个寄存器**，声明类型原文分别是 `(x: f32[..]) => float`、`(x: f32[..], dir: string) => int`、`(x: f32[..]) => int`。
+- 修法：**值的形式与槽的类型由同一处决定**。`rewriteNode` 把值节点改成 `:enum/make` 时，`init.dataType` 由原来的“抄旧类型”改成**这个家族的 enum 类型**，并在同一处 `draft.retypeRuntimeSlot(init.dataIndex, enumType)` 把帧布局里那个槽的声明类型一起改掉（`GraphDraft::retypeRuntimeSlot`，新 API）。没有在图生成之后再补一次类型：布局是编码时从 `runtimeSlotTypes_` 建的，改的就是它。
+- **反向验证**：把这两行关掉就是 `ab124a00e` 那棵树——`mlp` 训练负载 `exit 134`，带以上的读数 `abort`，不是无声的 `139`。断言的价值就在这里：无声的崩变成了点名的话。
+- **最小程序仍欠**：手写 20 行（闭包捕获小结构体 + 900 层递归 + 每层 256 元素数组）不崩，触发需要 `run_training` 的形状。

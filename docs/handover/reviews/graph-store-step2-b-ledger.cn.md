@@ -657,3 +657,35 @@ HANDLE_PROBE refused: InvalidArgument
 **三个数**：**消失的参数 15 个**；**删掉的行数 15**（净 `0`：进 89 出 89，签名换行与绑定行正好抵平——**这一片是纯形状，行数不动**）；**保留 0 个**（`generic` 这一族到此清空，只剩 C（`runtime/control.cpp` 那三个）与 `rewrite.h` 里两个 inline 的边界）。
 
 **四个数：59 / 450 / 3 / 4**（`472 → 450`，**files 61 → 59**：`algebra.cpp` 与 `gates.cpp` 一起不再拼那个类型名）。
+
+## 34. C：两个模块，同一个问题，两个已经对上的答案（`2b8f372cf`）
+
+**`control.cpp` 这半小时没动**（最后一次是 04:05 的 `5d4231797`，比动手时早一个多小时），所以按约定做了。
+
+三个函数转了签名，**它们看什么边一点没改**：`edges` 的 ②a（"pass 该不该继续造控制边"）还没定，
+所以在 `reduceOrderDependencies` 上留了一句：*"它仍然读控制等待：一个 pass 能不能干脆不再造它们这件事（edges 2a）还没定，
+在那之前，一个忽略它们的归约会去回答一个关于"编译器并不构建的图"的问题。"*
+
+**这一片的证据不在 `control.cpp`，在两个调用者身上**：
+
+| 调用者 | 它手里原本有什么 | 改了什么 |
+|---|---|---|
+| `generic` 的两处 lambda | 事务（B 之后） | 传 `transaction` |
+| `src/passes/trans/json/gir_canonical.cpp:237` | **两行之上刚 `GraphTransaction::decode(program_, graph)`** | 传 `*transaction` |
+| `src/passes/test/control.cpp`（18 处） | 每个用例函数第二行就是 `auto owner = GraphTransaction::open(...)` | 传 `*owner` |
+
+**没有一处需要新造事务**。**"调用点上能不能拿到事务"这条判据，到现在为止的答案是：能——只要那个模块已经按自己的方式回答过一次。**
+
+**还剩几个（"该不该收尾"的数）**：
+
+| 位置 | 剩下 | 是什么性质 |
+|---|---|---|
+| `src/passes/opt/generic/` | **3** | `rewrite.h:26` 的 `using`、`rewrite.h:34` 的 `isComputedAfter`（inline 读）、`algebra.cpp:154` 的 `constant`（模板读） |
+| `src/runtime/control.cpp` + `control.h` | **10** | 3 个导出 API（`hasControlDependency`、`controlFrontier`、`appendControlDependency`）+ 内部 4 个 + 头文件里的声明 |
+
+**这 13 处和前面 400 多处不是同一种**：它们全是**读谓词与内部实现**，而且**都在"已经收事务的函数"体内被调用**——
+转它们是"再往里一层"，收益是拼写数，不是判据。**下一片做不做，由你按"还能不能给出一句新判据"决定。**
+
+**三个数**：**消失的参数 3 个**；**删掉的行数 3**（净 `+5`：三行绑定 + 那段"仍然读控制边"的注释）；**保留 13 个**（上表）。
+
+**四个数：59 / 444 / 3 / 4**（`450 → 444`）。

@@ -43,6 +43,9 @@ if (!gate || gate->kind != GCNodeKind::Gate || !edgeBudget || !isReplaceable(tra
     // Unread gates have their own DCE rule. Bound both local inspection and potential fanout
     // before allocating scratch storage; retaining a shared barrier can be cheaper than
     // materializing the Cartesian product of waits and consumers.
+    // The control inputs are counted for the fan-out bound: they multiply the waits this
+    // rewrite moves to the consumers. They stop existing with the kind (see hasWaitEdge,
+    // camel/runtime/effect_liveness.h), and this bound goes with the rewrite above it.
     if (!valueUses || allUses > 64 || draft.ctrlInputsOf(id).size() > 64)
         return false;
 
