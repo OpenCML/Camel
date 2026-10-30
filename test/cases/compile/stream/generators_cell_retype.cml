@@ -1,0 +1,21 @@
+/**
+ * A later write of another type does not re-type a cell of a generator's own body: the cell is
+ * `var int` because `var x = 1` is its first write (language reference 7.2), and design principles
+ * 3.2 converts nothing between variable types, so `x = "text"` has no `=` overload.
+ *
+ * The reading is the one a `var` outside a generator gets for the same two writes -- the same
+ * diagnostic, at the same `=`, naming the same overloads -- so the machine neither accepts the
+ * write nor invents a second cell of another type for it.
+ */
+
+func mixed(): int.. sync {
+    var x = 1
+    yield x
+    x = "text"
+    yield x
+}
+
+func main(): int sync {
+    let _ = mixed()
+    return 0
+}
