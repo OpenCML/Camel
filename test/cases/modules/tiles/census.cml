@@ -1,0 +1,13 @@
+import { relu, sum } from tensor
+
+// A program whose operators are all in the device's capability table. `tiles::census` groups the
+// operators of the graphs the root reaches by whether the table names them and lists the ones no
+// device program exists for; here every operator is the device's and the gap is empty. `println` is
+// not counted: it is the core's, and the surface is what the device is asked to compute.
+
+func main(): int sync {
+    let a = relu([1.0, 2.0, 3.0] as f32[] + [4.0, 5.0, 6.0] as f32[])
+    let b = a * [2.0, 2.0, 2.0] as f32[]
+    println(sum(b))
+    return 0
+}

@@ -577,6 +577,27 @@ void registerBuiltinOperatorTraits() {
         "op/le_f6",
         "op/gt_f6",
         "op/ge_f6",
+        // `pow` of the wide scalar types and of the complex ones is the library call of the same
+        // name (ops.cpp#__builtin__pow__, ops.cpp#complexPowBinary): outside its domain it returns
+        // inf or NaN, and a negative whole exponent is the reciprocal of an integer power, which
+        // cannot fault either. The two reduced-precision entries above already say the same.
+        "op/pow_i",
+        "op/pow_l",
+        "op/pow_f",
+        "op/pow_d",
+        "op/pow_c",
+        "op/pow_c_i",
+        "op/pow_c_l",
+        "op/pow_z",
+        "op/pow_z_i",
+        "op/pow_z_l",
+        // `len` reads a stored count or, for a string, counts its code points
+        // (struct.cpp#__len_arr__, struct.cpp#__len_str__, collection.cpp#__coll_len__): there is
+        // no fault path, and none of the three has numeric semantics of its own, so the trait is
+        // where the declaration lives.
+        "struct/len_arr",
+        "struct/len_str",
+        "coll/len",
     };
     // The conversions of an array apply to each element on its own.
     const auto isArrayConversion = [](std::string_view key) {

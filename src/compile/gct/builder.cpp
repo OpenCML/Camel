@@ -3147,7 +3147,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
             rejectDuplicateLiteralKeys(dataNode->data(), dstType, ast);
         }
         if (dataNode->type() == NodeKind::DATA && !containsTypeVar(dstType) &&
-            asTagged(dstType) == nullptr && !intoCollection) {
+            !containsTypeOf(dstType) && asTagged(dstType) == nullptr && !intoCollection) {
             const auto &data = dataNode->data();
             const CastSafety safety = dstType->castSafetyFrom(data->type());
             if (safety == CastSafety::Forbidden && data->type()->isPrimitive() &&
@@ -4350,8 +4350,10 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
     // A literal of the declared type, converted now (`let x: float = 1`). A declared `T?` /
     // `T!` and a type written with a type variable (decided when the generic function is
     // instantiated) are left to the CAST, and so is a function type, which a literal cannot
-    // have.
-    if (value->type() == NodeKind::DATA && asTagged(type) == nullptr && !containsTypeVar(type)) {
+    // have. A type written as `typeof e` is left to the CAST too: it is inferred in the graph
+    // builder, and until then it is not a type a literal could be converted to.
+    if (value->type() == NodeKind::DATA && asTagged(type) == nullptr &&
+        !containsTypeVar(type) && !containsTypeOf(type)) {
         // The value the literal was written as, exactly (design principles 5.1): `let x: f32 =
         // 0.1` is the f32 nearest to one tenth, not the same double rounded twice, and `let x:
         // float = 1` is 1.0 (an integer literal takes the float type its context asks for).

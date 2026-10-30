@@ -1,4 +1,8 @@
+> 已由作者答复，裁定原文见 `docs/handover/reviews/questions-2026-10-29.md`（落笔提交 `97654e650`）；本页留档，不再更新。
+
 # 问题：环的守卫走 5 类边，冻结走 4 类——这个差是有意的吗
+
+裁定：C——两处走全部边类、共用一条判据；冻结在同步边上发现环就报 `PassInternalError`；守卫的「静默丢弃会话」另加一个计数，让它在读数上看得见。
 
 ## 现象
 
@@ -30,11 +34,24 @@
 真环还是判据过严；若守卫减到 4 类，`sync` 上成的环会被写进图并交给后端，而冻结不报，等于把一个
 后端排不出顺序的图放过去。
 
-## 我方默认建议
+## 已按裁定落地
 
-没裁定前按 A 做：守卫保持 5 类（丢一次会话的代价可以接受），**不**给冻结加 `sync`，把这条不对称
-当作「守卫比冻结宽」的既定状态。按它做留下的限制：守卫丢会话时没有观测手段；将来写
-`PassInternalError` 那条用例，必须选 4 类边上的环，只在 `sync` 上成的环「拿掉守卫也不会红」。
+按 C 做完了，一处判据、三处调用：
+
+- 判环合成一个函数 `camel::runtime::findInputCycle`（`include/camel/runtime/cycle.h`），走哪些边类也只
+  列一次（`CycleEdgeKind` 五个值与 `kCycleEdgeKindCount`）。守卫那边读草稿（`DraftCycleEdges`），冻结
+  那边读冻结图（`FrozenCycleEdges`，`order`/`sync` 是记录型边，用一块 scratch 转成 span）。原来那两段
+  各写各的遍历已删除，所以「把冻结改回 4 类」不再是一处局部改动，而是改共享清单。
+- 冻结现在走 `sync`，成环照旧报 `PassInternalError`（`src/runtime/graph_edges.cpp`，`lies on a cycle
+  of inputs`）。整闸在新树上跑过：`fail 0`，没有程序在 `sync` 上成环，与作者预期一致。
+- 丢弃计数：`GRAPH_STATS` 的 `cycle_dropped_sessions`，在丢弃点那一处加（`recordCycleDroppedSession`），
+  由 `std::stats` 读；用例 `test/cases/opt/generic/cycle_drops.cml` 钉住 0，A/B 读数 7 → 0。
+- 这个判据现在有两种形态可验：程序侧钉住「今天没有环」，单元侧 `test::edges_sync_cycle` 手工造一对互
+  相依赖的 `sync` 边，断言草稿侧找到环且链上含两个节点、提交被拒；把冻结临时退回 4 类时这条用例变红
+  （`EDGES accepted`），是它存在的理由。
+
+留下的限制：`cycle_dropped_sessions` 是进程级计数，一次运行里每行 `GRAPH_STATS` 都读同一个数，多个程序
+共用一个进程时会累加；`sync` 环仍然没有真实程序能拼出来（只有构造出来的图能验），所以它防的仍是将来。
 
 ## 要作者答的一句
 

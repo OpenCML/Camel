@@ -107,6 +107,52 @@ PASS，没有可修的红。** 这一段记下来，是为了将来有人重建�
 即：两个切片的臂各成一条链、合并等它们（`chain 1 -> 4`），段 2 跑成任务图。所以“1 段 0 链”是这两个
 程序的形状，不是这个参数的退化。
 
+5 条链还可以被怀疑是偶然；11 条链的 `merge_sort_small.cml` 那张（`mergesort`）不像：
+
+```
+[taskflow] segments 'mergesort': 3 segment(s), 11 chain(s), 9 operator(s)
+[taskflow] segments 'mergesort' segment 0 (top): 3 item(s), 0 chain(s), inline
+[taskflow] segments 'mergesort' segment 1 (arm of #5): 1 item(s), 0 chain(s), inline, after segment 0 item 2
+[taskflow] segments 'mergesort' segment 2 (arm of #5): 14 item(s), 11 chain(s), as tasks, after segment 0 item 2
+[taskflow] segments 'mergesort' segment 2 chain 0: 2 item(s)
+[taskflow] segments 'mergesort' segment 2 chain 1: 2 item(s)
+[taskflow] segments 'mergesort' segment 2 chain 2: 1 item(s)
+[taskflow] segments 'mergesort' segment 2 chain 3: 1 item(s)
+[taskflow] segments 'mergesort' segment 2 chain 4: 2 item(s)
+[taskflow] segments 'mergesort' segment 2 chain 5: 1 item(s)
+[taskflow] segments 'mergesort' segment 2 chain 6: 1 item(s)
+[taskflow] segments 'mergesort' segment 2 chain 7: 1 item(s)
+[taskflow] segments 'mergesort' segment 2 chain 8: 1 item(s)
+[taskflow] segments 'mergesort' segment 2 chain 9: 1 item(s)
+[taskflow] segments 'mergesort' segment 2 chain 10: 1 item(s)
+[taskflow] segments 'mergesort' segment 2 chain 0 -> 1
+[taskflow] segments 'mergesort' segment 2 chain 0 -> 4
+[taskflow] segments 'mergesort' segment 2 chain 1 -> 2
+[taskflow] segments 'mergesort' segment 2 chain 1 -> 7
+[taskflow] segments 'mergesort' segment 2 chain 2 -> 6
+[taskflow] segments 'mergesort' segment 2 chain 3 -> 4
+[taskflow] segments 'mergesort' segment 2 chain 4 -> 5
+[taskflow] segments 'mergesort' segment 2 chain 4 -> 8
+[taskflow] segments 'mergesort' segment 2 chain 5 -> 6
+[taskflow] segments 'mergesort' segment 2 chain 6 -> 10
+[taskflow] segments 'mergesort' segment 2 chain 7 -> 9
+[taskflow] segments 'mergesort' segment 2 chain 8 -> 9
+[taskflow] segments 'mergesort' segment 2 chain 9 -> 10
+[taskflow] segments 'mergesort' oper :struct/len_arr #1: segment 0, inline
+[taskflow] segments 'mergesort' oper :op/le_l #3: segment 0, inline
+[taskflow] segments 'mergesort' oper :struct/len_arr #7: segment 2 chain 0
+[taskflow] segments 'mergesort' oper :op/div_l #9: segment 2 chain 0
+[taskflow] segments 'mergesort' oper :op/slice_sub #14: segment 2 chain 1
+[taskflow] segments 'mergesort' oper :struct/len_arr #19: segment 2 chain 3
+[taskflow] segments 'mergesort' oper :op/slice_sub #22: segment 2 chain 4
+[taskflow] segments 'mergesort' oper array:merge_sorted_l #26: segment 2 chain 6
+[taskflow] segments 'mergesort' oper :op/add_l #27: segment 2 chain 9
+```
+
+11 条链、13 条链间边：段 2 这一臂的 14 个条目被切成 11 条可并发的链，其中 6 条装着 7 个算子（另外
+5 条装的是调用，所以没有算子行）；`array:merge_sorted_l` 落在 `chain 6`，只等 `chain 2` 与 `chain 5`
+汇合到它，而不是等全部 11 条。这就是“分段与成链在细粒度上真的在工作”的正面证据。
+
 ## 没做
 
 没有提交任何“修红”的改动（两条在 develop 上不复现，也没有放宽任何断言、没有动金标）。
