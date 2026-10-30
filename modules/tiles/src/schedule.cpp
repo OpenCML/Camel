@@ -131,6 +131,9 @@ std::vector<Lifetime> lifetimes(const Program &p) {
 
 bool elementwise(const std::string &op) { return unary(op) || binary(op); }
 
+// The two reductions whose result is a position rather than an accumulated value.
+bool positional(const std::string &op) { return op == "argmax_axis" || op == "argmin_axis"; }
+
 void validate(const Program &p, InputBindings bindings) {
     require(!p.nodes.empty() && !p.outputs.empty(), "missing output");
     auto &table                 = core::OperatorTable::instance();
@@ -274,10 +277,14 @@ void validate(const Program &p, InputBindings bindings) {
                 "scalar conversion type");
             continue;
         }
-        require(n.dtype == DType::F32, "unsupported operation dtype");
+        // An index-carrying reduction answers in i64; every other operation still answers in f32.
+        require(
+            n.dtype == DType::F32 || (n.dtype == DType::I64 && positional(n.op)),
+            "unsupported operation dtype");
         for (auto in : n.inputs)
             require(p.nodes[in].dtype == DType::F32, "operand dtype mismatch");
-        const bool reduction = n.op == "sum_axis" || n.op == "max_axis" || n.op == "mean_axis";
+        const bool reduction = n.op == "sum_axis" || n.op == "max_axis" || n.op == "mean_axis" ||
+                               positional(n.op);
         require(
             elementwise(n.op) || reduction || n.op == "sum_to" || n.op == "reshape" ||
                 n.op == "matmul" || n.op == "reindex",
