@@ -289,3 +289,54 @@ assert(input.normalized.stderr === '', 'nothing to report: ' + input.normalized.
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 8000
+
+# A value handed to a parameter declared as another function type widens at the call: a lambda that
+# returns the value of its write is written where the parameter says `void`. The two types are one
+# family and one enum here -- the widened parameter swallows the value's family -- so no second form
+# of a function value is left. The two calls that remained: the entry function's own value, which is
+# the shell's and which the pass leaves to the runtime, and, after `std::opt` has taken that one too,
+# nothing.
+[[tests]]
+name = "defun.widened_parameter.merged"
+desc = "A lambda that returns its write is handed to a parameter that says void: the family is lowered into one enum, the call inside the callee dispatches on it, and the program prints what it prints without the pass."
+kind = "behavior"
+case = "../../../cases/effects/callback_write_through_parameter.cml"
+args = ["${case}", "std::defunctionalize", "std::stats", "std::opt", "std::stats", "std::nvm"]
+expect_exit = 0
+verify_script = """
+const lines = input.normalized.stdout.trim().split('\n')
+const summary = lines.find((line) => line.startsWith('DEFUNCTIONALIZE types='))
+assert(/^DEFUNCTIONALIZE types=1 values=2 calls=1 refused=0$/.test(summary), 'one family, both values: ' + summary)
+const families = lines.filter((line) => line.startsWith("DEFUNCTIONALIZE type='"))
+assert(families.length === 1, 'the widened parameter is the value family, not one of its own: ' + JSON.stringify(families))
+const stats = lines.filter((line) => line.startsWith('GRAPH_STATS ')).map((line) => JSON.parse(line.replace('GRAPH_STATS ', '')))
+assert(stats.length === 2, 'two readings: ' + stats.length)
+// After the step, before the optimizer: what is left of a function value is the entry function's
+// own -- the shell builds it and calls it -- and nothing the program wrote.
+assert(stats[0].closures === 1, 'only the entry closure is left: ' + JSON.stringify(stats[0]))
+assert(stats[0].indirect_calls === 1, 'only the entry call is left: ' + JSON.stringify(stats[0]))
+assert(stats[1].closures === 0, 'no closure after the optimizer: ' + JSON.stringify(stats[1]))
+assert(stats[1].indirect_calls === 0, 'no call through a value after the optimizer: ' + JSON.stringify(stats[1]))
+assert(lines[lines.length - 2] === '1 40' && lines[lines.length - 1] === '7 50', 'the program prints what it prints: ' + lines.slice(-2))
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 20000
+
+# The widening the pass cannot write yet: the parameter's own type builds values of its own, so
+# turning it into the value family's enum would call them with the wrong tag. The pass stops and
+# names the program -- a defect of the compiler, not of the program -- and this pins that.
+[[tests]]
+name = "defun.widened_parameter.defect"
+desc = "A program that widens into a function type which builds values of its own stops the pipeline with an internal error that names both types, rather than leaving a graph with two forms of a function value."
+kind = "behavior"
+case = "../../../cases/opt/defun/widened_own_values.cml"
+args = ["${case}", "std::defunctionalize", "std::nvm"]
+expect_exit = 1
+verify_script = """
+assert(input.normalized.stderr.includes('needs a wrapper function this pass cannot make'), 'the defect is named: ' + input.normalized.stderr.slice(0, 600))
+assert(input.normalized.stderr.includes('(x: int) => int'), 'the value type is named: ' + input.normalized.stderr.slice(0, 600))
+assert(input.normalized.stderr.includes('(x: int) => void'), 'the widened type is named: ' + input.normalized.stderr.slice(0, 600))
+assert(input.normalized.stderr.includes('a defect of the pass, not of the program'), 'the report says whose defect it is: ' + input.normalized.stderr.slice(0, 600))
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 20000
