@@ -292,8 +292,8 @@
             "plans": ["feat/tools/portability.plan.toml", "feat/tools/clean.plan.toml"]
         },
         {
-            "comment": "The diagnostics registry: compile.diag_catalog runs --check, the failure-path proof, --verify-doc and --coverage; the registry is the one declaration file and the generated tables live beside the code they number.",
-            "paths": ["scripts/diagnostics-catalog.mjs", "diagnostics/registry.tsv", "test/cases/diagnostics/registry_proof.mjs"],
+            "comment": "The diagnostics registry and the example pins: compile.diag_catalog runs --check, the failure-path proof, --verify-doc and --coverage; the registry is the one declaration file, the pins are the one record of which case each page example shows, and the generated tables live beside the code they number.",
+            "paths": ["scripts/diagnostics-catalog.mjs", "diagnostics/registry.tsv", "diagnostics/examples.tsv", "test/cases/diagnostics/registry_proof.mjs"],
             "plans": ["feat/compile/diag_catalog.plan.toml"]
         },
         {
