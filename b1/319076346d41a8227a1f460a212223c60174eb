@@ -1,0 +1,8 @@
+类型位置清单的合盖用例（lane-lithd → develop b131907634）
+
+上一笔把「字面量的头部」补成类型表达式；其余 8 处本来就对，但没有任何一条用例把这件事钉住。这一笔用一个程序把同一个算出来的类型（`Tangent<…>`，由类型函数算出元组）写进 5.6 清单的全部 9 处：参数、let、结构体成员类型的 `:` 之后，`as` 之后，调用处 `::<…>` 里，`match type` 的主语，`case` 模式，`fields` 之后，类型函数尖括号里，以及 `type X =` 之后。一条 `expect_stdout_exact` 作总括断言：以后谁把某处改回只吃类型名，先红在这条，而不是红在碰巧用得上它的程序里。
+
+用例 `test/cases/compile/static_expansion/type_expression_positions.cml`，plan 条目 `feat.compile.static_expansion.type_expression_positions`。写的时候踩到一件旧事：`Holder { t: …, n: … }` 这种「类型名 + 具名字段」的结构体字面量不是语言的一部分（值的类型由位置给出），所以那条写成 `let h: Holder = { … }`。
+
+闸门：干净树 `b131907634`，`[SUMMARY] total 7898 / pass 7887 / fail 0 / skip 9 / known 2`；戳 `b131907634 (clean) / 1223 source files / fingerprint 2a58a22cad35`。
+推送：develop 在闸门期间前移了 5 次（0faa9d4b→…→841fbc7d），每次 `merge --no-ff` + 整闸后重推，最后 `841fbc7d2..b13190763` fast-forward 落地。代价是本笔一共留下 8 个合并提交（「Take develop into the lane before the literal head's type expression goes back」3 个、「…before the type-position test goes back」5 个），都是闸门期间 develop 前移造成的真实整合，没有 amend、没有 force-push。
