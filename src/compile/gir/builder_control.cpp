@@ -1243,7 +1243,7 @@ void Builder::coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_
         // statements of a sync arm) is still waited for.
         node_handle_t gate = currGraph_->addGateNode(target);
         linkNodes(LinkType::Norm, coerced, gate);
-        linkNodes(LinkType::Ctrl, output, gate);
+        linkNodes(LinkType::Sync, output, gate);
         coerced = gate;
     }
     draft.setInsertRegion(outerRegion);
