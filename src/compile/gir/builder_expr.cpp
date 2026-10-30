@@ -1343,6 +1343,19 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
         LEAVE("CAST");
         return valueNode;
     }
+    if (targetType->code() == TypeCode::Array && asTagged(targetType) == nullptr) {
+        // `T[..]` includes rank zero, which is the element itself (design principles 5.4): a value
+        // of that element's type is the value the position names -- the same value, not an array
+        // holding it. Nothing is converted, and the value keeps the element type: the type has no
+        // separate rank-zero array, and a CAST node typed `T[..]` would say the value is an array
+        // the run cannot read (`T[]` states one dimension and is not this case; rankZeroType()
+        // answers nullptr for it).
+        Type *rankZero = tt::as_ptr<ArrayType>(targetType)->rankZeroType();
+        if (rankZero != nullptr && rankZero->assignableFrom(valueTypeOf(sourceType))) {
+            LEAVE("CAST");
+            return valueNode;
+        }
+    }
     if (gct->annotation() && asTagged(targetType) == nullptr) {
         // The type a declaration is written with (`let x: T = e`; GCT Builder::declaredValue):
         // `e` must already have it. A value of that very type passes as it is (converting a

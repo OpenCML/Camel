@@ -605,8 +605,16 @@ bool ArrayType::assignableFrom(Type *sourceType) const {
     if (this == sourceType) {
         return true;
     }
-    if (!sourceType || sourceType->code() != TypeCode::Array) {
+    if (!sourceType) {
         return false;
+    }
+    if (sourceType->code() != TypeCode::Array) {
+        // An open rank with no prefix takes rank zero too, and a rank-zero array is the element
+        // itself (design principles 5.4): a value of the element type is a value of `T[..]` --
+        // the same value, not an array holding it. `T[]` does not take it: it states one
+        // dimension, and the element type is rank zero, not rank one. Neither does an open rank
+        // with a prefix (`T[3, ..]`), whose prefix states dimensions the value must have.
+        return rankZeroType() != nullptr && resolved() && elemType_->assignableFrom(sourceType);
     }
     const auto *source = static_cast<const ArrayType *>(sourceType);
     // A type that still holds the `Ref` placeholder is not one a value can have (design
