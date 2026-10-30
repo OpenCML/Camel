@@ -724,6 +724,15 @@ node_handle_t Builder::valueVersionOf(node_handle_t variable) {
     // the version of it.
     const auto value = callValues_.find(*modifier);
     if (value == callValues_.end()) {
+        // The call's captured writes are not known at this layer (its callee is a function value,
+        // so there is no mask and no parts to take). The writer registry recorded the call as this
+        // variable's write all the same (recordWrite, throughCallee), so the call is the variable's
+        // new version: the read takes `:var/after(cell, call)`, which is the cell as it stands
+        // after that call, and the edge from the call is what makes it run (3.1). The call's value
+        // may be `void` -- this operator does not read it.
+        if (nodeKindOf(*modifier) == camel::runtime::GCNodeKind::Call) {
+            return variableAfterCall(variable, *modifier);
+        }
         return nullptr;
     }
     const bool wrapped = value->second.hasReturn || value->second.variables.size() > 1;
@@ -1568,6 +1577,29 @@ node_handle_t Builder::variableOperator(camel::core::OperId oper, node_handle_t 
     node_handle_t node = currGraph_->addOperNode(*op, 0);
     stampPermissions(node);
     linkNodes(LinkType::Norm, input, node);
+    return node;
+}
+
+node_handle_t Builder::variableAfterCall(node_handle_t variable, node_handle_t call) {
+    // The variable as it stands after `call`: `:var/after(cell, call)`. Its second argument is the
+    // call, whose value may be `void` and is not read -- the edge is what makes the call run when the
+    // read takes this version (docs/design-principles.cn.md 3.1, 3.5) -- and its result is the cell
+    // itself, so the read above it is a read of the variable after that write.
+    const auto group = internalOperatorGroup(camel::core::oper::VarAfter);
+    const std::vector<StaticArg> statics(1);
+    const auto op = group->resolve({}, {nodeTypeOf(variable), nodeTypeOf(call)}, statics);
+    if (!op.has_value()) {
+        throw std::runtime_error(
+            std::format(
+                "a variable after a call rejected its operands: the variable is {} and the call is "
+                "{}",
+                nodeTypeOf(variable) != nullptr ? nodeTypeOf(variable)->toString() : "<no type>",
+                nodeTypeOf(call) != nullptr ? nodeTypeOf(call)->toString() : "<no type>"));
+    }
+    node_handle_t node = currGraph_->addOperNode(*op, 0);
+    stampPermissions(node);
+    linkNodes(LinkType::Norm, variable, node);
+    linkNodes(LinkType::Norm, call, node);
     return node;
 }
 
