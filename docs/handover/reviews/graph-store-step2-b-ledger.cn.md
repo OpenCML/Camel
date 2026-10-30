@@ -890,3 +890,33 @@ HANDLE_PROBE refused: InvalidArgument
 **删掉的行数 73**；**保留 13 个**（表里标"留"与"不收"的）。
 
 **四个数：51 / 399 / 3 / 4。**
+
+## 42. `compile/gir` 收口：**造草稿的地方只剩一处，而它收的是事务**（`49716f337`）
+
+**每个点先回答"造还是用"**：
+
+| 位置 | 造还是用 | 改成了什么 |
+|---|---|---|
+| `builder_control.cpp:132` | **用**（读一张已有的草稿） | `const auto &draft = *nodeDraftOf(node);` |
+| `builder_helpers.h:509` | **用** | `const auto *draft = nodeDraftOf(node);` |
+| `builder_operators.cpp:4021` | **用** | `auto *draft = nodeDraftOf(a);` |
+| `builder.cpp:1424` `InsertRegionScope` | **用它，而且要活过语句** | **改收 `runtime::GraphTransaction *transaction`**——它自己的析构里用 `transaction->edit()` |
+
+**那句区别（下一人会问的）**：**这个 builder 不造草稿，它用一张**——唯一造草稿的是 `DraftGraphBuilder` 的构造函数，
+而它**本来就收 `std::shared_ptr<GraphTransaction>`**。**所以"造草稿的地方也能收事务"的答案是：造的时候收事务（那是所有者），
+用的时候收它借来的那张草稿；而一个要活过语句的作用域，收的必须是所有者，不是被它借出去的东西。**
+
+**`compile/gir` 现在剩下的**：`nodeDraftOf` 这个访问器本身与两处 `unordered_map<const GraphDraft *, ...>`（`draftOwners` 的键）
+——**它们是"草稿就是我的键"这一类，不是参数**。（`nodeDraftOf` 的 66 个调用点仍用它，那是下一步的事。）
+
+**三个数**：**消失的拼写 4 处（参数 0 个——这四处本来就不是参数，是借用）**；**删掉的行数 22**；**保留 0 个**。
+
+**四个数：47 / 395 / 3 / 4。**
+
+### ⚠ `writings` 那 1 个：**撞车了，没动**
+
+`origin/develop` **比本车道领先 121 个提交**，其中**两笔正好在 `writings` 上**：
+* `1e70b99ac`（02:14）"let the writings open the transaction a draft alone has no owner for"——改了 `writings.h`／`writings.cpp`／`graph_txn.*`
+* `01ea89d6f`（02:15）"let the tests hand the writings a draft, as they did before"——改了 `test/writings.cpp` 等四个文件
+
+**所以"`writings` 那 1 个"正被另一条车道在做。按规矩：报，不自己合。** 要先把这个车道快进到 develop 再决定。
