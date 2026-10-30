@@ -505,12 +505,12 @@ timeout_ms = 8000
 
 [[tests]]
 name = "whole_value_equality"
-desc = "`==` on two arrays compares them by content and answers one `bool`, the elementwise comparison reduced (design principles 4.2), so its result is not an array: an array type is refused for it while the scalar reading is accepted. The elementwise comparison a mask needs is `===`, whose result is the array this refusal is about."
+desc = "`==` on two arrays compares them by content and answers one `bool`, the elementwise comparison reduced (design principles 4.2), so its result is not an array: an array type is refused for it while the scalar reading is accepted. The type written here is `bool[]`, one dimension, which a `bool` is not -- the open rank `bool[..]` would take it, because rank zero is the element itself (design principles 5.4). The elementwise comparison a mask needs is `===`, whose result is the array this refusal is about."
 kind = "negative"
 case = "../../../../cases/modules/tensor/dtype/whole_value_equality.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
-expect_output_contains = ["This value has type 'bool', which is not the declared type 'bool[..]'."]
+expect_output_contains = ["This value has type 'bool', which is not the declared type 'bool[]'."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
