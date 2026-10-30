@@ -203,3 +203,42 @@ shape'）；`f32[..]` 与静态形状的不统一，是程序把声明写松了�
 **读数**：`perf/training_steps` **6 / 6 / 0**（此前 4/6），`mlp_step.nvm` 与 `mlp_step.fvm` 都 PASS，`transformer_step` 两条仍是 PASS。
 
 **顺手一查**：`git grep -n 'f32\[\.\.\]' -- test/cases/perf` 共 **42 处、8 个文件**（`gemm_threads_curve.cml` 17、`transformer_step.cml` 6、`fusion_step.cml` 5、`dependency_chain.cml` 4、`fusion_chain.cml` 3、`gemm_canonical_shapes.cml` 3、`mlp_step.cml` 3、`step_budget.py` 1）。**其中并非都是参数树**（`mlp_step` 剩下的 3 处是 `logits`/`loss` 的形参与返回类型），是否还有同形状的第二处，未查、未改。
+
+## `startup.cost`：单跑 16.22 s，是真的变慢，不是争抢
+
+**判据**：**一条预算类断言在 8 路并行下红了，先问「单跑是多少」；不问就放宽，等于把机器争抢记成程序变慢。**
+
+读数（`lane-gpu-check`，含 `6c8eaa0f1` 与本页那笔 `mlp_step` 修复）：
+
+```
+-jobs 8（整层）：[FAIL] startup.cost  16.23 s cpu of 13.00 s budget, 20.17 s wall
+-jobs 1（只这条）：[FAIL] startup.cost  16.22 s cpu of 13.00 s budget, 19.17 s wall
+[INFO] used 16.22 s of CPU against a cpu_budget_ms of 13.00 s: the test's own work grew
+```
+
+**两个数几乎相同，而且超的是 CPU 不是 wall——CPU 是这个指标里不受负载影响的那一半。所以判断是「真的变慢」，不是 8 路争抢。**
+**超了多少**：`16.22 - 13.00 = 3.22 s`，**+24.8%**。
+**从什么时候开始超**：**未定位**。预算由 `04c451728`「bound the CPU-heavy slow entries by their own CPU time」写下，其依据是 2026-10-23 在 load 106–130 上的读数；**要答「哪一笔开始超」得二分，我没有做**。**未放宽**（单跑即超，没有放宽的依据）。
+
+## `f32[..]` 的 N/M 分类（`test/cases/perf`）
+
+按「是否出现在 `type X { … }` 的字段里」分（脚本按花括号深度判定，`D:\Temp\classify2.mjs`）：
+
+**字段里 19 处、其余 45 处，共 64 处**（`git grep` 的 42 是**行数**，一处一行不等于一处一字面量）。字段里最多的是 `gemm_threads_curve.cml`（13 处，`type Shapes` 的字段）、`fusion_chain.cml`（3）、`fusion_step.cml`（3）。**未改。**
+
+**报计数时数字面量个数，不是行数。** `git grep` 数的是命中行：`f32[..]` 那次 42 是行数，字面量是 64——一行里可以有两处，两处就是两个可以各自成为 bug 的地方。
+
+### 二分表（每题只跑这一条，`--jobs 1`，均为当前主机）
+
+| sha | 日期 | 读数 |
+| --- | --- | --- |
+| `04c451728`（写下预算那一笔） | — | `15.80 s cpu of 13.00 s budget` |
+| `368ae4f27` | 2026-10-22 | `15.59 s cpu` |
+| `f3922c5c7` | 2026-10-25 | `15.55 s cpu` |
+| `d7e579446` | 2026-10-28 | `15.71 s cpu` |
+| `c85878ac9`（`origin/develop` 尖端） | 2026-10-31 | `16.18 s cpu` |
+
+**这五天里没有台阶：全部在 15.5–16.2 s 之间，波动 4%。而写下 13 s 预算的那一笔自己就读 15.80 s。**
+
+**判定**：**不是这八天里变慢的，是那条预算与这台主机的读数从一开始就不符**——按裁定的分支，**这属于「预算放错对象」，不是「程序变慢」**。**没有台阶**这一点也说明不是某笔代码的锅。
+**不能由这张表判定的是**：更早（`04c451728` 之前）的读数，以及这台主机是不是换了机器/降了频——**CPU 秒数不受负载影响，但受硬件与频率影响**。要把它做成一条可信的预算，需要在一台固定主机上按单跑 CPU 重写，并在页里记下主机与负载。
