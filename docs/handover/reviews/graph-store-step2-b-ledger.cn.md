@@ -332,6 +332,16 @@ b4 只有一个人口：`modules/graph/handle.h` 里那个 `const GraphDraft *dr
 
 **撞号的正面产出**：§18 那条注记不是"另一条线的插曲"，它正好印证 §15 的规矩在 **b4 之外**第一次应验——`defunctionalize.cpp` 的 helper 只借一次草稿，写成 `template <class Draft>` 而不是 `GraphDraft &`，三个数当场回到 66 / 535 / 3 / 6。**规矩立在这一笔，第一次被用到在另一条线，两边记在同一个号下（它改成 §18，内容一句没丢）。**
 
+### 17.1 事实源的草稿改从事务取（§17 的下一步）
+
+三处，一处一笔构建：
+
+1. **`handle.cpp#createInTransaction` 同时设两个指针**：草稿从它所属的事务里拿到（`&transaction.graph()`，**不写类型名**）。这样"删掉 `draft_`"就变成**只改读端**，而不是一次改掉每一个指名草稿的 handle。
+2. **`module.cpp` 的条件参数**新增 `nodeHandleOf(writings, ref)`：writings 有事务就 `createInTransaction`，没有（测试自建草稿）才 `createInDraft`；两处调用点（普通参数、`const` 的隐藏节点参数）都走它。
+3. **`fact.cpp:825`**：`const auto *draft = transaction != nullptr ? &transaction->graph() : first->draft();`——**字节是同一份，改的只是"说谁拥有它"**。
+
+**账本**：references **535 → 534**（`fact.cpp` 那行不再写 `GraphDraft`），已 `--record` 锁进基线；files 66 / constructions 3 / decode 6 未变。**这是这一层第一次出现"消点"而不是"涨点"之外的动作：数字往下走了一格。**
+
 ## 18. 这条规矩在 b4 之外的第一次应验（另一条线记，协调者留在账本里）
 
 `src/passes/opt/defun/defunctionalize.cpp` 新增了一处写图的 helper：一个遍第一次自己造一张图（id 取 `Context::graphIds`、一个 `PORT`、直接调用、`exit`、`encode`／`adoptGraph`）。它先写成 `GraphDraft &draft = transaction->edit();`，账本当场红：files 66 → 67、references 535 → 536。
@@ -339,3 +349,21 @@ b4 只有一个人口：`modules/graph/handle.h` 里那个 `const GraphDraft *dr
 helper 只借一次草稿、并不持有它，所以改成收模板参数（`template <class Draft>`，调用点传 `transaction->edit()`），三个数回到 **66 / 535 / 3 / 6**。
 
 这不是"台账省一格"的老故事，是 §15 的规矩第一次在 b4 之外被用到：**点名就是宣告所有权**，借的一次写 `auto` 或写模板，所有者留在事务那里。数没动，所以不记新行，只记这条用例——下一笔若有人在遍里直接写 `GraphDraft`，先问它是不是真的持有。
+
+## 19. 读端三处：每一处都改问事务（每处一笔、每处构建一次）
+
+| 笔 | 改了什么 | references |
+|---|---|---|
+| `eb20adf78` | `read.cpp#viewOf`：先问 `handle->transaction()`，草稿从 `&transaction->graph()` 拿，`handle->draft()` 只作退路 | 534 → **533** |
+| `997e712b6` | `read.cpp#nodeHandle(from, node)`：`from` 有事务就 `createInTransaction`，没有才 `createInDraft` | 533 → **532** |
+| `092196630` | `read.cpp#calleeKernel`：判"这是不是草稿的节点"先问 `transaction()`，再退到 `draft()` | 532（不变） |
+
+**掉的两格是哪两处**：都是 `const GraphDraft *draft = …` 那一行——`viewOf` 一处、`nodeHandle` 一处改成 `const auto *`，因为草稿的来源变成 `&transaction->graph()`，**类型名不再需要写**。第三处只把"问谁"的先后换了、没有可删的类型名，所以数不动：**"改一处就该掉一格"不是必然，问的顺序变了而类型名还在的，那格不算收益。**
+
+**第三笔顺带关掉一条缝**：`calleeKernel` 原来只问 `draft()`，一旦某个 handle 只有事务、没有草稿指针，它会把草稿节点当成已发布的图交给 `nodeOfFrozen`；现在先问事务。
+
+## 20. 第二条顺序规矩（可引用）
+
+> **先让新的事实到达读端所读的那个字段，再改读端。**
+
+两次实测：§16（生产者先把事务送进 handle，读端后改）与 §17.1（`createInTransaction` 同时设两个指针）都是这条的应用；反过来就是 §16 那颗地雷。配套的第一条（另一条线实测）是**新造图先 `setId` 再 `encode`**。两条都属于"顺序错了会静默错、不会编译错"，所以抄在同一个地方。

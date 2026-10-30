@@ -822,7 +822,11 @@ slot_t factKernel(ArgsView &, ArgsView &norm, camel::core::context::Context &ctx
         parts.push_back(handle->index());
     }
     auto *first = norm.get<camel::graphmod::Handle *>(nodeBegin);
-    const GraphDraft *draft = first->draft();
+    // The draft a fact reads comes through the transaction that owns it when the handle names
+    // one, and from the handle itself only for a draft no transaction owns (a test's own draft).
+    // The bytes are the same ones either way; what changes is who is said to own them.
+    const auto *transaction = first->transaction();
+    const auto *draft = transaction != nullptr ? &transaction->graph() : first->draft();
     const bool fromDraft    = draft != nullptr;
     const Program *program = fromDraft ? nullptr : first->program();
     const camel::runtime::GraphId graphId =
