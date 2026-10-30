@@ -1,0 +1,71 @@
+# lane-jax2：JAX 六答的落地（has_aux / vmap / remat 命名 / 标签不改名 / 不加 argnums）
+
+合入 develop 4e51c0d41 后推送，develop 头 **086d44635**。分支本身七笔：a6471ef3c has_aux、
+8275d460d vmap、865591499 remat 命名、1b5a95c2b #jvp 引用、b0c555e19 生成文档、c43a687b5 五后端、
+086d44635 标签引用注释；中间 488268bd7 为合入 develop 的合并提交。
+
+## 六答各自落地在哪
+
+- **has_aux**：`grad(f, has_aux: true)` 给 `(gradient, aux)`，`with_grad(f, has_aux: true)` 给
+  `((value, aux), gradient)`。每个名字两条规则（`autodiff:grad_aux`、`autodiff:with_grad_aux`），
+  参数只收常量 `true`（一次调用只有一个结果类型，拆分不能跟着值走）；`false` 与非恒定值都带理由拒。
+  实现：`Engine::gradient(..., hasAux)`、`differentiationRefusal(..., hasAux)`、`GradResolver` 的
+  分片与 `signatureOf`；声明在 `stdlib/signatures/autodiff.cml`（`GradientAndAux`、
+  `ValueAndGradientAndAux`）。
+- **vmap**：`stdlib/array.cml` 的 `vmap::<T, U>(f: (item: T) => U): (xs: T[]) => U[]`，一个参数、
+  轴 0；语义直接由 `map` 给出（把 `map` 柯里成一个值），所以能存起来（`let batched = vmap(square)`）
+  并对多个数组复用。
+- **remat**：只命名、不实现。`remat` 在 `autodiff` 里预留、现在不导出，
+  `test/cases/modules/autodiff/jax_names/remat.cml` 写 `import { remat } from autodiff`，被拒为
+  `SemanticDiag::ImportNameNotExported`（0x03000015）；导出那天这条自动翻成 `jax_remat g=4.0`。
+- **#jvp / transpose / with_grad 不改名**：只改了 `stdlib/signatures/autodiff.cml` 里那句"若编译器
+  分不开就改标签名"——标签不进值命名空间、按结构读回，两个名字共存不冲突；依据写成 design
+  principles 6.2 与作者 2026-10-30 的裁定，并指向同步进 develop 的
+  `test/cases/compile/tags/same_name.cml`（一个模块里 `tag label` 与 `func label` 并存）。
+- **不加 argnums**：被微分的仍是第一个 `with` 参数（9.9），不是位置。
+- **无改名、无兼容层——这是结论，不是漏项。** 全树 `remat` 在 `src`/`modules`/`stdlib` 零命中，
+  `checkpoint` 一词已属持久化（`ckpt` 模块的 `save_tree`/`load_tree`），所以没有"已存在的名字"需要
+  改，也就没有兼容说明需要留。两个名字各管什么写进了模块说明：`stdlib/autodiff.cml`（变换家族，含
+  remat）与 `stdlib/ckpt.cml`（这里的 checkpoint 是写下来，不是重算）。
+
+## 每条裁定配哪条会红的断言（A/B，均 revert 后复绿）
+
+- 删掉两条 aux 规则 → **5 红**：`derivatives.has_aux`×3、`absent.argnums`、`refused.has_aux_false`
+  （只剩单规则时命名参数走 `ParamArgumentCallee`，`argnums` 不再被点名）。
+- 删 `GradResolver::parameterNames` → 同三组 **3 红**（命名面全在这一个 override 上，没有更小单位）。
+- 关掉"结果不是 float 就拒" → **恰好** `refused.has_aux_missing` 1 红。
+- vmap 体改成只批第一个元素 → **恰好** `batching.vmap` 3 红。
+- 给 `vmap` 声明加 `in_axes: int = 0` → **恰好** `absent.in_axes` 1 红（exit 0，打印 `[1.0, 4.0]`）。
+- `autodiff` 导出 `remat` → **恰好** `absent.remat` 1 红，并翻成 `jax_remat g=4.0`。
+
+## 拒绝要点名
+
+- `vmap` 两参（`vmap(add)`）：`SemanticDiag::GenericArgumentsMismatch` 0x03000053，同一条消息里既点名
+  实参 `(a: float, b: float) => float pure`，也点名被调的 `'f: (item: T) => U'`——**没有静默按第一个
+  参数批**。
+- `argnums`、`in_axes`：`SemanticDiag::ParamArgumentUnknown` 0x030001CD，点名参数本身
+  （`'argnums' is not a parameter of 'grad'`；`'in_axes' is not a parameter of …`，`vmap` 是泛型故被调方
+  按签名打印）。
+- 两条 `has_aux` 拒绝：`SemanticDiag::NotDifferentiable` 0x03000150，
+  `it returns (float, float), not a float` 与 `` `has_aux` is false, which is the plain transform: write
+  `grad(f)` … ``。
+
+## 五后端读数
+
+`derivatives.has_aux.{nvm,fvm,jit,prl,inline_jit}` 与 `batching.vmap.{nvm,fvm,jit,prl,inline_jit}`
+全 PASS（400/309/253/289/323 ms；370/289/484/369/466 ms），`backends_agree = ["stdout_normalized"]`
+逐个与 nvm 一致。四个正向已从三后端扩到五后端（c43a687b5）：并行调度器与内联后再 JIT 打印的数字
+与另外三个相同。
+
+## vmap 为什么落在 stdlib/array.cml
+
+prelude 只编到 `Declared` 阶段：带函数体的名字在 prelude 不注册，`vmap(square)` 会报
+`Unresolved reference: 'vmap'`（实测过一次，正是这个原因）。`array` 是"写在 `map` 等算子上的 Camel
+函数"的模块，`flat_map`/`zip_with` 就在那里，所以 `vmap` 落在 `array`，调用方
+`import { vmap } from array`。
+
+## 闸门
+
+合入 develop 后跑 smoke + test/plans/feat，fast，8 jobs：**total 7844, pass 7840, fail 0, skip 2,
+known failures 2**；`stdlib-reference` 与 `check-doc-links` 两个检查各 0 失败。合入前本路自跑的
+全量 gate 为 total 7813 / fail 0。
