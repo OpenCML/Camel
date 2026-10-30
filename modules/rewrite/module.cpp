@@ -884,8 +884,9 @@ Application applyRewrite(
         if (isRuleSide(*graph)) {
             continue;
         }
-        auto &draft = session.edit(graph).edit();
-        camel::runtime::DraftWritings writings(draft, policy);
+        auto &transaction = session.edit(graph);
+        auto &draft       = transaction.edit();
+        camel::runtime::DraftWritings writings(transaction, policy);
         const size_t from = log != nullptr ? log->size() : 0;
         const camel::runtime::RewriteStats stats = writings.rewrite(compiled, maxRounds, log);
         if (log != nullptr) {
@@ -1400,11 +1401,12 @@ const uint64_t ruleId = ruleNow()->ruleId();
                         std::format("`{}` compiles to no rule", instanceText));
                 }
                 camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), programNow());
-                auto &draft =
-                    session.edit(const_cast<camel::runtime::GCGraph *>(programNow()->graph(graphId))).edit();
+                auto &transaction = session.edit(
+                    const_cast<camel::runtime::GCGraph *>(programNow()->graph(graphId)));
+                auto &draft = transaction.edit();
                 camel::runtime::DraftWritings writings(
-                    draft, record.strict ? camel::core::sem::NumericPolicy::strict()
-                                         : camel::core::sem::NumericPolicy::relaxed());
+                    transaction, record.strict ? camel::core::sem::NumericPolicy::strict()
+                                               : camel::core::sem::NumericPolicy::relaxed());
                 const camel::runtime::RuleMiss miss = writings.whyNot(compiled.front(), *draftNode);
                 return answer(std::format(
                     "`{}` did not fire at {}: {}",
@@ -1446,11 +1448,12 @@ const uint64_t ruleId = ruleNow()->ruleId();
             return answer(std::format("`{}` compiles to no rule", ruleNow()->name()));
         }
         camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), programNow());
-        auto &draft =
-            session.edit(const_cast<camel::runtime::GCGraph *>(programNow()->graph(graphId))).edit();
+        auto &transaction = session.edit(
+            const_cast<camel::runtime::GCGraph *>(programNow()->graph(graphId)));
+        auto &draft = transaction.edit();
         camel::runtime::DraftWritings writings(
-            draft, record.strict ? camel::core::sem::NumericPolicy::strict()
-                                 : camel::core::sem::NumericPolicy::relaxed());
+            transaction, record.strict ? camel::core::sem::NumericPolicy::strict()
+                                       : camel::core::sem::NumericPolicy::relaxed());
         const camel::runtime::RuleMiss miss = writings.whyNot(compiled.front(), *draftNode);
         return answer(std::format(
             "`{}` did not fire at {}: {}", ruleNow()->name(), writings.textOf(*draftNode),
@@ -1488,9 +1491,10 @@ slot_t saturateKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
             if (isRuleSide(*graph)) {
                 continue;
             }
-            auto &draft = session.edit(graph).edit();
+            auto &transaction = session.edit(graph);
+            auto &draft       = transaction.edit();
             camel::runtime::DraftWritings writings(
-                draft,
+                transaction,
                 strict ? camel::core::sem::NumericPolicy::strict()
                        : camel::core::sem::NumericPolicy::relaxed());
             writings.build();
@@ -3495,8 +3499,9 @@ void checkOneRule(
                 ctx.shared_from_this(),
                 program,
                 const_cast<camel::runtime::GCGraph *>(lhsGraph));
-            auto &draft =
-                session.edit(const_cast<camel::runtime::GCGraph *>(lhsGraph)).edit();
+            auto &transaction =
+                session.edit(const_cast<camel::runtime::GCGraph *>(lhsGraph));
+            auto &draft       = transaction.edit();
             const std::vector<camel::runtime::gc_node_ref_t> ports(
                 draft.normPorts().begin(),
                 draft.normPorts().end());
@@ -3512,7 +3517,7 @@ void checkOneRule(
                     draft.replaceAllValueUses(ports[i], constant);
                 }
             }
-            camel::runtime::DraftWritings writings(draft, policy);
+            camel::runtime::DraftWritings writings(transaction, policy);
             const auto stats = writings.rewrite(std::span<const camel::runtime::Rule>(&one, 1));
             if (stats.applied == 0) {
                 continue;

@@ -1,0 +1,18 @@
+/**
+ * `typeof e` reads the type `e` would have and does not evaluate it: nothing written where the
+ * type is written is a statement of the body, so neither `mark('inferred')` nor `mark('cast')` is
+ * called. A type position is any position a type is written in -- a declaration's and a cast's --
+ * and the inferred type is the one the value is then taken as (`a` is an `int`, `b` is an `int`).
+ */
+
+func mark(tag: string): int sync {
+    println(tag)
+    return 1
+}
+
+func main(): int sync {
+    let a: typeof(mark('inferred')) = 7
+    let b = 3 as typeof(mark('cast'))
+    println(a + b)
+    return 0
+}

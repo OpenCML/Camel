@@ -12,6 +12,7 @@
 #include "camel/passes/test/anchor.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/runtime/draft_session.h"
+#include "camel/runtime/cycle.h"
 #include "camel/runtime/exec_plan.h"
 
 #include <exception>
@@ -541,6 +542,52 @@ EdgesSyncGateTestPass::apply(const camel::runtime::Program *program, std::ostrea
         os << "SYNCGATE frozen_sync_edges=" << syncEdges << " gates=" << gates
            << " gates_waiting_on_the_chain=" << gatesWaited << " gates_with_ctrl=" << gatesCtrl
            << "\n";
+        return next;
+    } catch (const std::exception &error) {
+        os << "EDGES refused: " << error.what() << "\n";
+        return program;
+    }
+}
+
+// The shared judgement, on the side that has no back end to protect it: two statements that each
+// follow the other is a cycle on sync edges (docs/design/effects/edges.cn.md section 1), and
+// camel/runtime/cycle.h walks sync with the other four kinds, so both the draft's check and the
+// freeze's walk must name it. The pass prints what the draft's side reports -- found, and whether
+// the chain it returns holds both nodes -- and then what the commit does with the same graph.
+const camel::runtime::Program *
+EdgesSyncCycleTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    using namespace camel::runtime;
+    if (program == nullptr || program->root() == nullptr) {
+        return program;
+    }
+    RuntimeGraphDraftSession session(context_, program);
+    auto &draft = session.edit(program->root()).edit();
+    const auto markStatement = [&](gc_node_ref_t node) {
+        draft.setNodeRuntimeFlags(node, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
+    };
+    const gc_node_ref_t a = anchorNode(draft);
+    const gc_node_ref_t b = anchorNode(draft);
+    markStatement(a);
+    markStatement(b);
+    const gc_node_ref_t afterA[1] = {a};
+    const gc_node_ref_t afterB[1] = {b};
+    draft.setSyncInputs(a, afterB);
+    draft.setSyncInputs(b, afterA);
+    DraftCycleEdges edges(draft);
+    std::vector<gc_node_ref_t> path;
+    const gc_node_ref_t closes = findInputCycle(edges, &path);
+    bool hasA                  = false;
+    bool hasB                  = false;
+    for (gc_node_ref_t node : path) {
+        hasA = hasA || node == a;
+        hasB = hasB || node == b;
+    }
+    os << "SYNCCYCLE a=" << a << " b=" << b << " found="
+       << (closes == kInvalidNodeRef ? 0 : 1) << " on_cycle_a=" << (hasA ? 1 : 0)
+       << " on_cycle_b=" << (hasB ? 1 : 0) << "\n";
+    try {
+        const Program *next = session.commit();
+        os << "EDGES accepted\n";
         return next;
     } catch (const std::exception &error) {
         os << "EDGES refused: " << error.what() << "\n";

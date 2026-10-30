@@ -1,0 +1,123 @@
+/*
+ * What the `faults` of an operator's semantics answer, read through the graph facts a program can
+ * ask for: one function per operator under test, each one operation, and the `may_fault` of its
+ * graph printed as 1 or 0.
+ *
+ * An operator that declares the empty list (`:op/add_i`, `:op/mul_f`, `:op/eq_s`, the halves)
+ * answers 0; `:op/div_i`, the one of this set that declares a fault, answers 1, so a listing that
+ * printed 0 for everything would not pass.
+ */
+
+import { Graph, graphs_of, effects } from graph
+import { sum } from tensor
+
+func add_int(a: int, b: int): int {
+    return a + b
+}
+
+func sub_int(a: int, b: int): int {
+    return a - b
+}
+
+func mul_int(a: int, b: int): int {
+    return a * b
+}
+
+func neg_int(a: int): int {
+    return -a
+}
+
+func mul_f32(a: f32, b: f32): f32 {
+    return a * b
+}
+
+func neg_f32(a: f32): f32 {
+    return -a
+}
+
+func eq_int(a: int, b: int): bool {
+    return a == b
+}
+
+func eq_text(a: string, b: string): bool {
+    return a == b
+}
+
+func ne_text(a: string, b: string): bool {
+    return a != b
+}
+
+func lt_int(a: int, b: int): bool {
+    return a < b
+}
+
+func lt_text(a: string, b: string): bool {
+    return a < b
+}
+
+func add_bf(a: bf16, b: bf16): bf16 {
+    return a + b
+}
+
+func mul_f6(a: f16, b: f16): f16 {
+    return a * b
+}
+
+func pow_bf(a: bf16, b: bf16): bf16 {
+    return a ^ b
+}
+
+func div_int(a: int, b: int): int {
+    return a / b
+}
+
+func pow_int(a: int, b: int): int {
+    return a ^ b
+}
+
+func pow_f32(a: f32, b: f32): f32 {
+    return a ^ b
+}
+
+func len_array(xs: int[]): int {
+    return len(xs)
+}
+
+func len_text(s: string): int {
+    return len(s)
+}
+
+/// A `tensor` operator, which declares no fault list at all: the answer that reads back is the
+/// third state, "nobody has checked, so assume it may fault".
+func tensor_sum(t: f32[..]): float {
+    return float(sum(t))
+}
+
+/// 1 when running the graph once may fault, 0 when it cannot.
+func may_fault_bit(g: Graph): int {
+    return if effects(g).may_fault then 1 else 0
+}
+
+func main(): int sync {
+    println(may_fault_bit(graphs_of(add_int)[0]))
+    println(may_fault_bit(graphs_of(sub_int)[0]))
+    println(may_fault_bit(graphs_of(mul_int)[0]))
+    println(may_fault_bit(graphs_of(neg_int)[0]))
+    println(may_fault_bit(graphs_of(mul_f32)[0]))
+    println(may_fault_bit(graphs_of(neg_f32)[0]))
+    println(may_fault_bit(graphs_of(eq_int)[0]))
+    println(may_fault_bit(graphs_of(eq_text)[0]))
+    println(may_fault_bit(graphs_of(ne_text)[0]))
+    println(may_fault_bit(graphs_of(lt_int)[0]))
+    println(may_fault_bit(graphs_of(lt_text)[0]))
+    println(may_fault_bit(graphs_of(add_bf)[0]))
+    println(may_fault_bit(graphs_of(mul_f6)[0]))
+    println(may_fault_bit(graphs_of(pow_bf)[0]))
+    println(may_fault_bit(graphs_of(div_int)[0]))
+    println(may_fault_bit(graphs_of(pow_int)[0]))
+    println(may_fault_bit(graphs_of(pow_f32)[0]))
+    println(may_fault_bit(graphs_of(len_array)[0]))
+    println(may_fault_bit(graphs_of(len_text)[0]))
+    println(may_fault_bit(graphs_of(tensor_sum)[0]))
+    return 0
+}

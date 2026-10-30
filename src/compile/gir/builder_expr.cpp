@@ -1229,16 +1229,23 @@ bool Builder::valueNameExists(const std::string &written, const GCT::node_ptr_t 
 
 node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     ENTER("CAST");
-    ExpectedValueScope expectedScope(expectedValueType_, boundType(gct->targetType()));
+    // A type written as `typeof e` (`let a: typeof(f()) = g()`, `x as typeof(f)`) is inferred
+    // before anything is built with it, so that the expected type a literal takes is the inferred
+    // one, and so that `e` is not evaluated by being written there (design principles 5.4).
+    Type *written      = gct->targetType();
+    const bool inferred = written != nullptr && written->code() == TypeCode::TypeOf;
+    if (inferred) {
+        written = resolveTypeNode(written, gct);
+    }
+    ExpectedValueScope expectedScope(expectedValueType_, boundType(written));
     if (const auto &operand = gct->at(0);
-        operand->type() == GCT::NodeKind::DATA && containsTypeVar(gct->targetType()) &&
-        asTagged(gct->targetType()) == nullptr &&
-        asCollectionTypeOrPrototype(gct->targetType()) == nullptr) {
+        operand->type() == GCT::NodeKind::DATA && (inferred || containsTypeVar(written)) &&
+        asTagged(written) == nullptr && asCollectionTypeOrPrototype(written) == nullptr) {
         // A literal converted to a type written with a type variable (`let zero: T = 0`,
         // `0 as T`). The GCT converts a literal to a concrete type itself; here the type is
         // only known now, so the same conversion is applied now.
         const data_ptr_t &data = operand->data();
-        Type *targetType       = boundType(gct->targetType());
+        Type *targetType       = boundType(written);
         const bool literal =
             !isComposite(data->type()->code()) || tt::as_shared<CompositeData>(data)->resolved();
         if (literal) {
@@ -1273,7 +1280,7 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
             return node;
         }
     }
-    Type *targetType = boundType(gct->targetType());
+    Type *targetType = boundType(written);
     if (targetType != nullptr && targetType->code() == TypeCode::Function) {
         // A function type written for a function: it says which function a name stands for
         // (the instance of a generic function, one of several overloads, a partial

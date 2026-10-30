@@ -7,6 +7,7 @@
 
 #include "rewrite.h"
 #include "camel/runtime/control.h"
+#include "camel/runtime/cycle.h"
 
 #include "camel/core/operator_traits.h"
 #include "camel/runtime/draft_session.h"
@@ -453,78 +454,6 @@ void RewriteMemo::remember(std::string_view passName, const GCGraph *graph) {
     }
 }
 
-namespace {
-
-/// Whether the draft's inputs contain a cycle.
-///
-/// A cycle is not a rule that a rewrite gets wrong. Each rewrite in a pass is legal by its own rule,
-/// and a cycle can be composed out of several of them: a merge hands one node's waits to another
-/// node's users, a splice moves a body's chain into its caller, and two such rewrites can leave the
-/// graph running the other way round than either of them alone would. Nothing at the rule layer can
-/// see that, so the judgement is made here instead, once, after the rewrite has been written.
-///
-/// What is done with the answer is not a repair: the session is dropped and the program keeps the
-/// graph it had. A dropped session means this graph is not optimised by this pass -- the result is
-/// correct and one optimisation was skipped, which is the only choice available once the rewritten
-/// graph has been shown to be one the freeze refuses.
-bool draftHasCycle(const camel::runtime::GraphTransaction &transaction) {
-    const auto &draft = transaction.graph();
-    const size_t slots = draft.nodeSlotCount();
-    std::vector<uint8_t> state(slots, 0); // 0 unvisited, 1 on the stack, 2 finished
-    std::vector<gc_node_ref_t> orderInputs;
-    struct Frame {
-        gc_node_ref_t node;
-        uint8_t group;
-        size_t next;
-    };
-    for (gc_node_ref_t start = 0; start < slots; ++start) {
-        if (!draft.alive(start) || state[start] != 0) {
-            continue;
-        }
-        std::vector<Frame> stack{{start, 0, 0}};
-        state[start] = 1;
-        while (!stack.empty()) {
-            Frame &top = stack.back();
-            std::span<const gc_node_ref_t> inputs;
-            while (top.group < 5) {
-                if (top.group == 4) {
-                    const auto order = draft.orderInputsOf(top.node);
-                    orderInputs.assign(order.begin(), order.end());
-                    inputs = std::span<const gc_node_ref_t>(orderInputs);
-                } else {
-                    inputs = top.group == 0   ? draft.normInputsOf(top.node)
-                             : top.group == 1 ? draft.withInputsOf(top.node)
-                             : top.group == 2 ? draft.ctrlInputsOf(top.node)
-                                              : draft.syncInputsOf(top.node);
-                }
-                if (top.next < inputs.size()) {
-                    break;
-                }
-                ++top.group;
-                top.next = 0;
-            }
-            if (top.group >= 5) {
-                state[top.node] = 2;
-                stack.pop_back();
-                continue;
-            }
-            const gc_node_ref_t input = inputs[top.next++];
-            if (!draft.alive(input)) {
-                continue;
-            }
-            if (state[input] == 1) {
-                return true;
-            }
-            if (state[input] == 0) {
-                state[input] = 1;
-                stack.push_back({input, 0, 0});
-            }
-        }
-    }
-    return false;
-}
-
-} // namespace
 const camel::runtime::Program *rewriteReachableGraphs(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     std::string_view passName, const std::function<size_t(GraphDraft &)> &rewrite,
@@ -548,8 +477,13 @@ const camel::runtime::Program *rewriteReachableGraphs(
         // users of the node it removes, so the graph has to be judged as a whole once the rewrite is
         // written, not predicted from the node pair the rewrite names. Nothing here can undo a merge
         // that has been written -- so the session is dropped and the program keeps the graph it had,
-        // which is a correct graph where the rewritten one was not proved to be.
-        if (draftHasCycle(session.edit(g))) {
+        // which is a correct graph where the rewritten one was not proved to be. The judgement is
+        // the freeze's own (camel/runtime/cycle.h: one list of edge kinds, one walk), and the drop is
+        // counted so that a rule composing a cycle shows up in std::stats instead of quietly doing
+        // less work.
+        camel::runtime::DraftCycleEdges edges(session.edit(g).graph());
+        if (camel::runtime::findInputCycle(edges) != camel::runtime::kInvalidNodeRef) {
+            camel::runtime::recordCycleDroppedSession();
             return program;
         }
         total += made;

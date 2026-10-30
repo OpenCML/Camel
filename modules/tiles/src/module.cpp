@@ -763,6 +763,9 @@ class TilesModule final : public BuiltinModule {
              "tiles:retain_preferred",
              "tiles:run_preferred_resident",
              "tiles:download"});
+        // The operator surface of a program, grouped by what the device can run: the reading the
+        // support surface's gap list is measured with.
+        registerCensusPass();
         registerRegionTestPasses(
             &runCompiledKernel,
             {&uploadKernel,

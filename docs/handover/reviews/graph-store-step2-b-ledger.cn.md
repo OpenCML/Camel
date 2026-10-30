@@ -302,3 +302,40 @@ b4 只有一个人口：`modules/graph/handle.h` 里那个 `const GraphDraft *dr
 **从这一笔里出来的一条规矩：新代码里点名就算数，`auto` 是这一层的写法。**
 起因很小：`createInTransaction` 里先写成 `const camel::runtime::GraphDraft &draft = transaction.graph();`，账本当场判红（535 → 536），改成 `const auto &draft = …` 才绿。但它说明的不是"台账要省一格"，而是**这一层的类型名是借来的，写类型名等于宣告所有权**——写下 `GraphDraft` 的人，等于说"这份草稿归我管"。
 所以 b4／b6 从此按这一条判断：**谁在代码里写出 `GraphDraft`，谁就是在宣告自己持有它**；只想借来用一次的，写 `auto`，让所有者留在它该在的地方（事务、会话、存储自身）。
+
+## 16. b4 第一片停在这里：它前面还有一层 `Writings`（§12 的"4 个在事务里"要改）
+
+原计划下一件是 `read.cpp:165`：把 `nodeHandle(from, node)` 从 `from->draft()` 改成 `from->transaction()`。**试读之后不能做**，证据两条：
+
+1. **读端先改，会让所有草稿 handle 变成"看不见"**：`viewOf` 与 `nodeHandle` 判"这是不是草稿"用的就是 `handle->draft()`；先换成 `transaction()`，那些由 `createInDraft` 造出的 handle（`transaction_` 为 null）会被当成已发布的图，落到 `nodeOfFrozen` 上，而它们的 `program_` 是 null。
+2. **写端也换不了**：`module.cpp:259` 是 `auto &draft = match.writings.draft();`，而 `Writings` 存的是 **`GraphDraft &draft_`（`writings.h:414`／`542`），它手里没有事务**；`fact.cpp` 的 `Source.draft` 又是从 handle 借的（`fact.cpp:859`）。
+
+**所以 §12 那句"4 个在事务里造"是错的：这 4 个不是"在事务里"，是"在存储里"**——草稿来自 `Writings`。**17 个构造点里，0 个手里有事务。**
+
+**两条路，都是别人那一层的题：**
+- **A（推荐）**：先让 `Writings` 通过事务持有草稿（它的构造本来就从会话拿草稿，`writings.h:405`），handle 随后跟上。这**不是 b4 第一片，是 b6 的第一小步**。
+- **B**：`draft_` 留在 handle 里，等 b6 随类型一起消失（第一片不做）。
+
+**状态**：这一轮没有改代码（树干净、构建绿）；已落地的是纯加能力的 `e467242e3`（`transaction_`／`createInTransaction`，无调用者）。协调者选了 **A**，见 §17。
+
+**一条由此得来的规矩**：**判"是不是草稿"的每一处，都是搬家的前置条件，不是搬家的对象。** 谁把 `handle->draft()` 改成 `handle->transaction()`，就必须先让被问的那个东西有事务；先改读端，等于把"有草稿"这个判据抽掉。
+
+## 17. b6 的第一小步：`DraftWritings` 记下它的事务（A 的后半）
+
+**做了什么**：`DraftWritings` 新增一个收 `GraphTransaction &` 的构造（旧的收 `GraphDraft &` 的构造**原封不动**），成员多了 `transaction_` 与访问器 `transaction()`；重写模块里 5 个构造点从"传草稿"改成"传 `session.edit(graph)`"。**handle 侧一行没改。**
+
+**为什么它是 b6 的第一小步**：`DraftWritings` 是重写引擎里"草稿"的**存储侧所有者**——`Match::writings.draft()` 就是 `module.cpp:259` 取草稿的地方。它先拿到事务，"草稿有个不来自 handle 的所有者"才成立；下一步才轮得到 `fact.cpp#Source.draft` 不再从 handle 借。
+
+**验收（照 §14 的三种收益）**：① 删行 0；② 消点 0；③ **消掉一条生存期漏洞的一半**——草稿从此能指认它的所有者（事务），只是还没有读端用它。**三个数一个没涨：66 / 535 / 3 / 6**；`read.cpp` 的 `->draft()` 仍是 3；行为逐字节相同（`transaction_` 没有被任何代码读）。构建：`-Plan compile` 1860/1860、`fail 0`。
+
+**下一步第一件**：`fact.cpp#Source.draft` 改从 `DraftWritings` 取（不再从 handle 借）。
+
+**撞号的正面产出**：§18 那条注记不是"另一条线的插曲"，它正好印证 §15 的规矩在 **b4 之外**第一次应验——`defunctionalize.cpp` 的 helper 只借一次草稿，写成 `template <class Draft>` 而不是 `GraphDraft &`，三个数当场回到 66 / 535 / 3 / 6。**规矩立在这一笔，第一次被用到在另一条线，两边记在同一个号下（它改成 §18，内容一句没丢）。**
+
+## 18. 这条规矩在 b4 之外的第一次应验（另一条线记，协调者留在账本里）
+
+`src/passes/opt/defun/defunctionalize.cpp` 新增了一处写图的 helper：一个遍第一次自己造一张图（id 取 `Context::graphIds`、一个 `PORT`、直接调用、`exit`、`encode`／`adoptGraph`）。它先写成 `GraphDraft &draft = transaction->edit();`，账本当场红：files 66 → 67、references 535 → 536。
+
+helper 只借一次草稿、并不持有它，所以改成收模板参数（`template <class Draft>`，调用点传 `transaction->edit()`），三个数回到 **66 / 535 / 3 / 6**。
+
+这不是"台账省一格"的老故事，是 §15 的规矩第一次在 b4 之外被用到：**点名就是宣告所有权**，借的一次写 `auto` 或写模板，所有者留在事务那里。数没动，所以不记新行，只记这条用例——下一笔若有人在遍里直接写 `GraphDraft`，先问它是不是真的持有。

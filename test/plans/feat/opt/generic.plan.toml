@@ -2014,3 +2014,26 @@ expect_exit = 0
 expect_stdout_exact = "@CALL 0\n@OUT 0.020604833960533142\n@CALL 1\n@OUT 0.020604833960533142\n@CALL 2\n@OUT 0.020604833960533142\n@CALL 3\n@OUT 0.020604833960533142\n@CALL 4\n@OUT 0.020604833960533142\n@END\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "cycle_drops.none"
+desc = "No rewrite session was dropped for closing a cycle: after std::opt both readings print cycle_dropped_sessions 0, and the program prints its two lines in order."
+kind = "behavior"
+case = "../../../cases/opt/generic/cycle_drops.cml"
+args = ["${case}", "std::stats", "std::opt", "std::stats"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+    const lines = input.normalized.stdout.split('\n').filter(line => line.startsWith('GRAPH_STATS '))
+    assert(lines.length === 2, `expected two GRAPH_STATS lines, got ${lines.length}`)
+    for (const line of lines) {
+        const stats = JSON.parse(line.slice('GRAPH_STATS '.length))
+        assert(stats.cycle_dropped_sessions === 0, `a rewrite session was dropped: ${line}`)
+    }
+    const out = input.normalized.stdout.split('\n').filter(line => !line.startsWith('GRAPH_STATS '))
+    assert(out[0] === 'before', `first program line is ${JSON.stringify(out[0])}`)
+    assert(/^cycle p=1 q=1 d=4 r=6$/.test(out[1]), `second program line is ${JSON.stringify(out[1])}`)
+}
+"""
+timeout_ms = 10000

@@ -80,6 +80,7 @@
 #include "camel/execute/pass/warnings.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/graph_txn.h"
 #include "camel/runtime/program.h"
 #include "camel/runtime/retype.h"
 
@@ -342,6 +343,146 @@ template <class Draft> void parameterizeCaptures(Draft &draft) {
     factory.setExitType(type->hasExitType() ? type->exitType() : ty::Type::Void());
     draft.setFuncType(factory.build());
     draft.setClosureType(nullptr);
+}
+
+/// A graph the pass writes itself. A new graph is a draft given an id from the context's allocator
+/// before it is encoded (draft.h: a draft of a new graph is given one with `setId`), and the graph
+/// the commit finds is the one the session already knows (draft_session.h: `adoptGraph`); the
+/// functions its body calls are read in the session's work program.
+///
+/// The body is one `PORT` per parameter and the direct call of the function the graph stands for,
+/// and that call is what the graph gives. The call carries the graph's own exit type, so a
+/// signature that declares `void` drops what the function gives by that alone (a result position is
+/// the one place `void` takes any type: type/composite/func.h, `acceptsAsResult`).
+///
+/// The draft is a template parameter like every other helper here: the editable graph is going away,
+/// and the ledger that counts the places still wired straight to it may only fall
+/// (`test/cases/runtime/graph_draft_ledger`).
+template <class Draft> GCGraph *writeCallGraph(
+    Draft &draft, RuntimeGraphDraftSession &session, const GCGraph &callee,
+    ty::FunctionType *signature, const std::string &name) {
+    draft.setProgram(&session.work());
+    std::vector<gc_node_ref_t> ports;
+    for (ty::Type *type : signature->normTypesSpan()) {
+        const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
+        draft.appendNormPort(port);
+        ports.push_back(port);
+    }
+    const gc_node_ref_t call = draft.addFuncNode(callee.id(), signature->exitType());
+    draft.setNormInputs(call, ports);
+    draft.setExitNode(call);
+    // The payload names the callee by its place in the graph's reference table, and the reference
+    // table is the list of graphs the encoder was told this graph calls: naming the callee in the
+    // payload alone leaves a FUNC node whose callee is not in that table, which the encoder refuses.
+    draft.addDependency(callee.id());
+    GCGraph *encoded = draft.encode(name, name);
+    session.adoptGraph(encoded);
+    return encoded;
+}
+
+/// A call through a value of `family` where the variant is not known until the program runs: the
+/// tag is read with `:enum/tag`, one arm of a `BRCH` per variant takes that variant's values out of
+/// the value with `:enum/field` and calls the function the variant names, and the `JOIN` hands back
+/// what the taken arm gave. One variant needs no branch: its values come out of the value and the
+/// call names its function.
+///
+/// Every call it writes carries `resultType`, so a family whose signature declares `void` drops what
+/// its functions give by the call alone (type/composite/func.h, `acceptsAsResult`); that is what
+/// "drops the result" means here, and it is also how a wrapper of a `void` parameter passes on a
+/// value that returns something.
+///
+/// `place` is the node the dispatch is written in place of -- the call the program wrote. A caller
+/// that has no such node (a graph the pass writes itself) passes `kInvalidNodeRef` and gets the node
+/// it made back as the result. The graphs the calls name are the caller's to put in its reference
+/// table: this only names them in the payloads.
+template <class Draft> gc_node_ref_t emitCallThroughValue(
+    Draft &draft, const Family &family, ty::EnumType *asEnum,
+    std::span<const gc_node_ref_t> arguments, std::span<const gc_node_ref_t> withArguments,
+    gc_node_ref_t value, ty::Type *resultType, uint32_t region, gc_node_ref_t place) {
+    const gc_cnt_t count = static_cast<gc_cnt_t>(family.variants.size());
+    // The values a variant captured, taken out of the value: the tag and the field's index are
+    // what `:enum/field` reads.
+    const auto argumentsOf = [&](const Variant &variant, bool ownTypes) {
+        std::vector<gc_node_ref_t> norm(arguments.begin(), arguments.end());
+        for (size_t field = 0; field < variant.captures.size(); ++field) {
+            const gc_node_ref_t variantTag = draft.materializeStaticValue(
+                camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
+                    static_cast<camel::core::rtdata::Int64>(variant.tag)),
+                ty::Type::Int64());
+            const gc_node_ref_t fieldIndex = draft.materializeStaticValue(
+                camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
+                    static_cast<camel::core::rtdata::Int64>(field)),
+                ty::Type::Int64());
+            ty::Type *taken = asEnum != nullptr
+                                  ? asEnum->fieldType(variant.tag, field)
+                                  : (ownTypes ? variant.captures[field] : ty::Type::Int64());
+            const gc_node_ref_t take = draft.addOperNode(taken, nullptr, ":enum/field");
+            const std::vector<gc_node_ref_t> operands{variantTag, fieldIndex, value};
+            draft.setNormInputs(take, operands);
+            norm.push_back(take);
+        }
+        return norm;
+    };
+
+    if (count == 1) {
+        // One variant: there is nothing to branch on. The values come out of the value and the call
+        // names its function, as a folded call does when the callee is a value this graph builds.
+        const Variant &variant                = family.variants.front();
+        const std::vector<gc_node_ref_t> norm = argumentsOf(variant, false);
+        if (place == kInvalidNodeRef) {
+            const gc_node_ref_t call = draft.addFuncNode(variant.graph, resultType, 0, 0, 0);
+            draft.setNormInputs(call, norm);
+            draft.setWithInputs(call, withArguments);
+            return call;
+        }
+        GCFuncRef callee{.ref = draft.payloadGraphIndexOf(variant.graph)};
+        DraftNodeInit init = snapshotOf(draft, place);
+        init.kind          = GCNodeKind::Func;
+        init.payload       = payloadOf(&callee, sizeof(callee));
+        init.normInputs    = norm;
+        init.withInputs    = withArguments;
+        draft.rewriteNode(place, init);
+        return place;
+    }
+
+    // The `BRCH` names the `JOIN` and the `JOIN` names the `BRCH`: when the caller has no node for
+    // the result, the `JOIN` is made first so the branch can name it, and its payload is written
+    // once the branch exists.
+    const gc_node_ref_t join =
+        place != kInvalidNodeRef ? place : draft.addJoinNode(resultType, kInvalidNodeRef, count);
+    const gc_node_ref_t tag = draft.addOperNode(ty::Type::Int64(), nullptr, ":enum/tag");
+    draft.setNormInputs(tag, std::span<const gc_node_ref_t>(&value, 1));
+    std::vector<gc_node_ref_t> cases;
+    for (size_t k = 0; k + 1 < family.variants.size(); ++k) {
+        cases.push_back(draft.materializeStaticValue(
+            camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
+                static_cast<camel::core::rtdata::Int64>(k)),
+            ty::Type::Int64()));
+    }
+    const gc_node_ref_t brch = draft.addBrchNode(ty::Type::Int64(), join, count);
+    draft.setNormInputs(brch, std::span<const gc_node_ref_t>(&tag, 1));
+    draft.setWithInputs(brch, cases);
+    std::vector<gc_node_ref_t> armResults;
+    for (size_t k = 0; k < family.variants.size(); ++k) {
+        const Variant &variant   = family.variants[k];
+        const uint32_t armRegion = draft.addRegion(GCRegionKind::Arm, region, brch, k);
+        draft.setInsertRegion(armRegion);
+        const std::vector<gc_node_ref_t> norm = argumentsOf(variant, true);
+        const gc_node_ref_t call              = draft.addFuncNode(variant.graph, resultType, 0, 0, 0);
+        draft.setNormInputs(call, norm);
+        draft.setWithInputs(call, withArguments);
+        draft.setRegionResult(armRegion, call);
+        draft.setInsertRegion(region);
+        armResults.push_back(call);
+    }
+    GCJoinBody body{.brch = brch, .armCount = count};
+    DraftNodeInit init = snapshotOf(draft, join);
+    init.kind          = GCNodeKind::Join;
+    init.payload       = payloadOf(&body, sizeof(body));
+    init.normInputs    = std::span<const gc_node_ref_t>(&brch, 1);
+    init.withInputs    = armResults;
+    draft.rewriteNode(join, init);
+    return join;
 }
 
 } // namespace
@@ -987,6 +1128,30 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
     // is one session, so nothing of an attempt that cannot be committed reaches the program.
     try {
         RuntimeGraphDraftSession session(context_, program);
+        // The graph the widening's parameter type will need, written here before anything else: an
+        // id of the context's, one `PORT` per parameter, the direct call of a function the program
+        // already has, and that call as the graph's result. Nothing refers to it yet, so the commit
+        // leaves it behind and the program is the one that was handed in.
+        for (const Family *family : accepted) {
+            const Variant &variant = family->variants.front();
+            if (!variant.captures.empty()) {
+                continue;
+            }
+            const GCGraph *callee = session.work().graph(variant.graph);
+            const ty::Type *own   = family->members.front()->type;
+            if (callee == nullptr || own == nullptr || own->code() != TypeCode::Function) {
+                continue;
+            }
+            // The graph's own identity comes from the context's allocator, and the transaction stays
+            // open until the graph it holds is encoded.
+            auto transaction = GraphTransaction::open(
+                session.context()->graphIds().allocate(),
+                const_cast<ty::FunctionType *>(static_cast<const ty::FunctionType *>(own)));
+            writeCallGraph(
+                transaction->edit(), session, *callee,
+                const_cast<ty::FunctionType *>(static_cast<const ty::FunctionType *>(own)),
+                std::format("{}$call", callee->name()));
+        }
         for (GCGraph *graph : session.program()->graphs()) {
             auto &transaction = session.edit(graph);
             auto &draft       = transaction.edit();
@@ -1187,96 +1352,9 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                 }
 
                 // Only the run time knows the tag: `:enum/tag`, one arm per variant, `JOIN`.
-                ty::Type *resultType  = header->dataType;
-                ty::EnumType *asEnum  = enumOf(resultType);
-                const uint32_t region = draft.nodeRegion(id);
-                const gc_node_ref_t at = withs.front();
-                if (owner->variants.size() == 1) {
-                    // One variant: there is nothing to branch on. The captures come out of the
-                    // value and the call names its function, as the folded case does when the
-                    // callee is a value this graph builds.
-                    const Variant &variant          = owner->variants.front();
-                    std::vector<gc_node_ref_t> norm = arguments;
-                    for (size_t field = 0; field < variant.captures.size(); ++field) {
-                        const gc_node_ref_t variantTag = draft.materializeStaticValue(
-                            camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
-                                static_cast<camel::core::rtdata::Int64>(variant.tag)),
-                            ty::Type::Int64());
-                        const gc_node_ref_t fieldIndex = draft.materializeStaticValue(
-                            camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
-                                static_cast<camel::core::rtdata::Int64>(field)),
-                            ty::Type::Int64());
-                        const gc_node_ref_t take = draft.addOperNode(
-                            asEnum != nullptr ? asEnum->fieldType(variant.tag, field)
-                                              : ty::Type::Int64(),
-                            nullptr, ":enum/field");
-                        const std::vector<gc_node_ref_t> operands{variantTag, fieldIndex, at};
-                        draft.setNormInputs(take, operands);
-                        norm.push_back(take);
-                    }
-                    GCFuncRef callee{.ref = draft.payloadGraphIndexOf(variant.graph)};
-                    DraftNodeInit init = snapshotOf(draft, id);
-                    init.kind          = GCNodeKind::Func;
-                    init.payload       = payloadOf(&callee, sizeof(callee));
-                    init.normInputs    = norm;
-                    init.withInputs    = withArguments;
-                    draft.rewriteNode(id, init);
-                    ++rewroteCalls;
-                    continue;
-                }
-                const gc_node_ref_t tag = draft.addOperNode(ty::Type::Int64(), nullptr, ":enum/tag");
-                draft.setNormInputs(tag, std::span<const gc_node_ref_t>(&at, 1));
-                std::vector<gc_node_ref_t> cases;
-                for (size_t k = 0; k + 1 < owner->variants.size(); ++k) {
-                    cases.push_back(draft.materializeStaticValue(
-                        camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
-                            static_cast<camel::core::rtdata::Int64>(k)),
-                        ty::Type::Int64()));
-                }
-                const gc_node_ref_t brch =
-                    draft.addBrchNode(ty::Type::Int64(), id, owner->variants.size());
-                draft.setNormInputs(brch, std::span<const gc_node_ref_t>(&tag, 1));
-                draft.setWithInputs(brch, cases);
-                std::vector<gc_node_ref_t> armResults;
-                for (size_t k = 0; k < owner->variants.size(); ++k) {
-                    const Variant &variant   = owner->variants[k];
-                    const uint32_t armRegion = draft.addRegion(GCRegionKind::Arm, region, brch, k);
-                    draft.setInsertRegion(armRegion);
-                    std::vector<gc_node_ref_t> norm = arguments;
-                    for (size_t field = 0; field < variant.captures.size(); ++field) {
-                        const gc_node_ref_t variantTag = draft.materializeStaticValue(
-                            camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
-                                static_cast<camel::core::rtdata::Int64>(variant.tag)),
-                            ty::Type::Int64());
-                        const gc_node_ref_t fieldIndex = draft.materializeStaticValue(
-                            camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
-                                static_cast<camel::core::rtdata::Int64>(field)),
-                            ty::Type::Int64());
-                        const gc_node_ref_t take = draft.addOperNode(
-                            asEnum != nullptr ? asEnum->fieldType(variant.tag, field)
-                                              : variant.captures[field],
-                            nullptr, ":enum/field");
-                        const std::vector<gc_node_ref_t> operands{variantTag, fieldIndex, at};
-                        draft.setNormInputs(take, operands);
-                        norm.push_back(take);
-                    }
-                    const gc_node_ref_t call =
-                        draft.addFuncNode(variant.graph, resultType, 0, 0, 0);
-                    draft.setNormInputs(call, norm);
-                    draft.setWithInputs(call, withArguments);
-                    draft.setRegionResult(armRegion, call);
-                    draft.setInsertRegion(region);
-                    armResults.push_back(call);
-                }
-                GCJoinBody join{
-                    .brch     = brch,
-                    .armCount = static_cast<gc_cnt_t>(owner->variants.size())};
-                DraftNodeInit init = snapshotOf(draft, id);
-                init.kind          = GCNodeKind::Join;
-                init.payload       = payloadOf(&join, sizeof(join));
-                init.normInputs    = std::span<const gc_node_ref_t>(&brch, 1);
-                init.withInputs    = armResults;
-                draft.rewriteNode(id, init);
+                emitCallThroughValue(
+                    draft, *owner, enumOf(header->dataType), arguments, withArguments, withs.front(),
+                    header->dataType, draft.nodeRegion(id), id);
                 ++rewroteCalls;
             }
         }
