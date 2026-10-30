@@ -1,6 +1,6 @@
 """The step a program takes to give its function values the form the design asks for.
 
-`std::defun_value` gives every function the program takes as a value one variant of the enum of its
+`std::defunctionalize` gives every function the program takes as a value one variant of the enum of its
 type, with the values it captured as that variant's data, and turns every call through such a value
 into a direct call. What it may not do is change what the program does: this reads four cases of
 `test/cases/opt/defun` with and without the step, on all four backends, and compares the observed
@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[4]
 EXE = ROOT / "out/latest/bin" / ("camel.exe" if os.name == "nt" else "camel")
 CASES = ROOT / "test/cases/opt/defun"
 
-PASS = "std::defun_value"
+PASS = "std::defunctionalize"
 BACKENDS = ("std::nvm", "std::fvm", "std::fastvm::jit", "std::taskflow")
 
 
@@ -32,7 +32,7 @@ def run(case, *passes):
 
 def program_lines(result):
     """What the program printed, without the report lines the pass writes before it."""
-    return [line for line in result.stdout.splitlines() if not line.startswith("DEFUN_VALUE ")]
+    return [line for line in result.stdout.splitlines() if not line.startswith("DEFUNCTIONALIZE ")]
 
 
 def stats(case, *passes):
@@ -65,12 +65,13 @@ for case in ("higher_order.cml", "effects.cml", "captured.cml", "native_map.cml"
 
 # 2. Nothing is left of the function values `higher_order.cml` writes: three functions of one family
 #    called through a parameter become one match, and two functions of one family called directly
-#    become direct calls. No call through a value and no closure remains.
+#    become direct calls. No closure remains, and the one call through a value that is left is the
+#    shell's call of the entry function: the pass does not rewrite the program's entry point.
 before, _ = stats("higher_order.cml")
 after, program_output = stats("higher_order.cml", PASS)
 assert before["closures"] == after["closures"] == 0, (before, after)
 assert before["indirect_calls"] > 0, before
-assert after["indirect_calls"] == 0, after
+assert after["indirect_calls"] == 1, after
 assert after["direct_calls"] > before["direct_calls"], (before, after)
 assert after["branches"] == 2, after
 assert program_output == [
@@ -78,10 +79,10 @@ assert program_output == [
 ], program_output
 
 # 3. A closure is a function value with the values it captured, and it is lowered like any other:
-#    `captured.cml` keeps no call through a value and no closure, and has nothing to report.
+#    `captured.cml` keeps no closure and no call through a value it wrote, and has nothing to report.
 captured, captured_output = stats("captured.cml", PASS)
 assert captured["closures"] == 0, captured
-assert captured["indirect_calls"] == 0, captured
+assert captured["indirect_calls"] == 1, captured
 assert captured["branches"] == 1, captured
 assert captured_output == ["CAPTURED captured=15 named=6"], captured_output
 quiet = run("captured.cml", PASS, "std::nvm")
