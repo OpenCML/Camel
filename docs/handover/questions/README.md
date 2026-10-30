@@ -28,7 +28,7 @@
 | 页 | 问题 | 状态 |
 |---|---|---|
 | `questions-2026-10-31-what-carries-a-wait-for-a-write.md` | 值在门后等一次写、或等一次调用，这件事该由哪种边承担（`lane-edges` 交的页，取自 `13e5784b1`） | 待裁 |
-| `questions-2026-10-31-the-ruleset-module-has-no-rules-in-it.md` | 规则集模块里一条规则都没有（`stdlib/rulesets/jvp.cml` 计数 0，四条前向规则在 `autodiff`）：`autodiff` 算不算 `jvp` 那一族的规则集模块 | 待裁 |
+| `questions-2026-10-31-who-consumes-the-ruleset-index.md` | 索引建好了、打印得出来，但没有任何 pass 查它：`jvp`/`transpose` 这两个变换算子（设计 9.9）什么时候落地，在那之前"缺规则"该由谁发出 | 待裁 |
 | `questions-2026-10-31-generator-cell-type-by-inference.md` | 单元的类型由"只求类型的推导"定，还是由运行时状态的首个写入定 | 待裁 |
 | `questions-2026-10-30-defun-tag-in-the-type.md` | 文档是否取代 `defun.cpp` 那句"函数值已经是标签 + 环境"；老 `std::defunctionalize` 是否退役 | 待裁 |
 | `questions-2026-10-30-function-type-structural-vs-enum.md` | 函数类型是结构别名（5.2），"每个函数类型一个 enum"是名义类型，两者如何并存 | 待裁 |
@@ -50,6 +50,7 @@
 - `questions-2026-10-30-jvp-tag-scope.md`——裁定 ① 已落地（`d1b3531b4`）；
 - `questions-2026-10-31-tag-argument-of-a-rule.md`——作者 20:10 裁定"可以是一条 `rule`"，落地 `00d14e76f`；
 - `questions-2026-10-31-where-the-tag-for-an-operator-can-sit.md`——作者 20:50 裁定"没有跨模块挂标签这回事"，内置原语的规则只来自规则集模块（按左边建索引）；页作废留档。
+- `questions-2026-10-31-the-ruleset-module-has-no-rules-in-it.md`——作者 22:10 裁定"搬进规则集模块"，落地 `3bf5324e2` / `67b4c17bc` / `13d385530`；页首已写裁定。
 - `questions-2026-10-30-region-count-account.md`、`questions-2026-10-30-two-behaviour-diffs-left.md`——不是问题，是记录（页首已写明）。
 
 `questions-2026-10-30-probe-plan-kept-or-dropped.md` 这一行删掉了：那一页从来没进过主干——它是在
