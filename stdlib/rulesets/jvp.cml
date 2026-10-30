@@ -46,3 +46,12 @@ func zero_tangent::<T>(x: T): Tangent<T> {
         case _ => ()
     }
 }
+
+/// The forward rule of `+` on two 32-bit floats: the tangents of the two addends add up. A rule
+/// is an ordinary function; the tag that attaches it to the operator is written where the
+/// operator is declared.
+/// @example add_jvp(f32(1.0), f32(2.0), (f32(0.5), f32(0.25)))    // (3.0, 0.75)
+func add_jvp(x: f32, y: f32, d: (f32, f32)): (f32, Tangent<f32>) {
+    let (dx, dy) = d
+    return (x + y, dx + dy)
+}
