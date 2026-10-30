@@ -2,17 +2,22 @@
 
 > **一页一问；索引按"堵住多少工作"排序，因为作者的时间应该花在最贵的那页上。**
 
-> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来（今天有两条车道手上各压着一页），落进来就在下表加一行。
+> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来（今天有两条车道手上各压着一页），落进来就在待裁表加一行。
 >
-> **哪些未决值得成页**：不是所有未决都值得成页——只有**今天有人被它堵住**的才值得。其余留在原则里，等它真的挡住一条车道再成页。所以第 15 节那 8 条不占下表，清单在文末，每条写明今天堵着谁。
+> **哪些未决值得成页**：不是所有未决都值得成页——只有**今天有人被它堵住**的才值得。其余留在原则里，等它真的挡住一条车道再成页。所以第 15 节那 8 条不占待裁表，清单在文末，每条写明今天堵着谁。
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
 
-## 现在在等作者：0 页
+## 现在在等作者：2 页
 
-`questions/` 里只剩这份索引。最近一次合并把最后 15 页整体挪进了 `reviews/`，裁定按时间记在 [`reviews/questions-2026-10-29.md`](../reviews/questions-2026-10-29.md)。旧表写着"13 页待裁"，是一张过期的表。
+`questions/` 里有两页在等：一条是别名（同一对象被两条引用写），一条是并行 `map` 的故障边界。上一批 15 页在最近一次合并里整体挪进了 `reviews/`，裁定按时间记在 [`reviews/questions-2026-10-29.md`](../reviews/questions-2026-10-29.md)；旧表写着"13 页待裁"，是一张过期的表。
 
-这不是"没有问题"，是"没有还成页的问题"：原则第 15 节另列着 8 条未决，见文末。
+| 页 | 问什么 | 状态 | 堵着谁 |
+|---|---|---|---|
+| [`two-references-write-one-object-outside-a-sync-block`](questions-2026-10-31-two-references-write-one-object-outside-a-sync-block.md) | 同一可变对象被两条引用写、第二条在这一层看不见时，读拿谁的版本 | 待裁 | 效应那一族的别名收尾；高阶函数把闭包经参数传进来之后的写；`a-version-port-that-must-carry-a-value` 的边界 |
+| [`parallel-map-fault-what-runs-after`](questions-2026-10-31-parallel-map-fault-what-runs-after.md) | 并行 `map` 一处故障后，下标更小、还没开始的元素是否仍执行 | 待裁 | 并行 `map` 的失败报告语义；跨后端一致性用例（`attempt.plan.toml:207`）；3.6 的措辞 |
+
+原则第 15 节另列着 6 条未决（另 2 条已成页），见文末。
 
 ## 已裁：按还堵着的活排
 
@@ -56,18 +61,18 @@
 
 `code-review-types`、`principles-audit-2026-10-26`、`code-review-indexing`、`code-review-index`、`code-review-macro-modules-gc`、`code-review-onnx-tiles`、`code-review-python`、`defun-dispatch-notes`、`gpu-g4-g5-plan`。这些词是技术用语（未定类型、未定 extent、仍未定的机制），没有一页在等作者；要等裁定的问题一律单独成页。
 
-## 还没成页的待定：原则第 15 节
+## 原则第 15 节的 8 条：2 条已成页，6 条还在原则里
 
-下面 8 条都还没成页。判据同上：只有今天有人被它堵住的才值得成页，其余留在这里，等它真的挡住一条车道再动。原文在 [`docs/design-principles.cn.md`](../../design-principles.cn.md) 第 15 节。
+判据同上：只有今天有人被它堵住的才值得成页，其余留在这里，等它真的挡住一条车道再动。原文在 [`docs/design-principles.cn.md`](../../design-principles.cn.md) 第 15 节。
 
 | 条目 | 问什么 | 今天堵着谁 |
 |---|---|---|
 | 类型运算 | 类型表达式要不要有交、差、并这类运算（文法里没有，也没预留运算符） | 无；要加的时候写法和含义一起定 |
 | `typeof` 常量 | `typeof` 作用于常量值时的含义，以及它在泛型里的用法 | 无；GCT 只用 `typeof <变量>`，口径已按 16:30 定成"只求类型" |
 | 类型函数失败 | 类型函数求值失败或不终止时怎么办 | 无；`Tangent`/`ParamsOf` 才刚开始写，还没人写坏过 |
-| 块外多处引用写 | 同一可变对象在同步块之外被两条引用写，按什么排 | **效应那一族遍的收尾**：liveness 只看得见登记过的写；车道手上还压着一页 `a-version-port-that-must-carry-a-value`（同一条边界） |
+| 块外多处引用写 | 同一可变对象在同步块之外被两条引用写，按什么排 | **已成页**（待裁，见上表）；与车道手上 `a-version-port-that-must-carry-a-value` 相邻但不是同一问 |
 | 补贴标签 | 能不能在别处给一个声明补贴标签，调度是否例外 | 无；20:50 已把内置原语的规则定到规则集模块 |
-| 并行 map 故障 | 并行 `map` 出故障后，下标更小、还没开始的元素是否仍执行 | **并行 `map` 的失败报告语义**；`code-review-backends.md:37` 记着代码里还留着 `DESIGN-QUESTION(parallel-fault-lower-elements)` 标记 |
+| 并行 map 故障 | 并行 `map` 出故障后，下标更小、还没开始的元素是否仍执行 | **已成页**（待裁，见上表）；`code-review-backends.md:37` 记着代码里还留着 `DESIGN-QUESTION(parallel-fault-lower-elements)` 标记 |
 | 算子实参装入 | 内建算子的实参是否自动装入（`xs->append<5>`，`xs: (int?)[]`） | 无车道被堵；但审计 A25 记着今天要写 `5 as int?` |
 | 源码声明流水线 | 是否允许入口文件写出 `pipeline std::macro, tiles::compile, std::nvm` | 无；流水线仍只在命令行拼 |
 
