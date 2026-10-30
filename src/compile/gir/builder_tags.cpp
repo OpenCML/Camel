@@ -390,10 +390,10 @@ Builder::tagValueOf(const camel::core::tag::Decl &decl, const GCT::TagUse &use) 
         }
         if (const auto it = unit_->values.find(written); it != unit_->values.end()) {
             const GCT::node_ptr_t &declaration = it->second == nullptr ? nullptr : it->second->gct;
-            if (declaration != nullptr &&
-                declaration->type() == GCT::NodeKind::FUNC && declaration->ruleBinding()) {
-                return ArgumentDeclaration::Rule;
-            }
+            // A `rule` with `with` parameters never arrives here as a FUNC: a use of its name as a
+            // value becomes the call `name()` (`ruleBindingValueOf`, builder_expr.cpp), so a tag
+            // argument takes the maker branch below. If some input ever does arrive here, what
+            // changed is that rewriting, and this is not the place to bring back a case for it.
             if (declaration != nullptr && declaration->type() == GCT::NodeKind::NREF &&
                 declaration->size() == 1 && ruleMakerCalled(declaration->at(0))) {
                 return ArgumentDeclaration::Rule;
