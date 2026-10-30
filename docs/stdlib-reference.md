@@ -77,6 +77,7 @@ Not in this reference: the profiler (`perf`).
 | [nn](#nn) | `import { ... } from nn` | C++ |
 | [optim](#optim) | `import { ... } from optim` | Camel |
 | [autodiff](#autodiff) | `import { ... } from autodiff` | C++ |
+| [rulesets.jvp](#rulesets.jvp) | `import { ... } from rulesets.jvp` | Camel |
 | [sim](#sim) | `import { ... } from sim` | C++ |
 | [onnx](#onnx) | `import { ... } from onnx` | C++ |
 | [built-in](#built-in-functions) | none |  |
@@ -110,6 +111,7 @@ Not in this reference: the profiler (`perf`).
 | [nn](#nn) | `import { ... } from nn` |  |
 | [optim](#optim) | `import { ... } from optim` |  |
 | [autodiff](#autodiff) | `import { ... } from autodiff` |  |
+| [rulesets.jvp](#rulesets.jvp) | `import { ... } from rulesets.jvp` |  |
 | [sim](#sim) | `import { ... } from sim` |  |
 | [onnx](#onnx) | `import { ... } from onnx` |  |
 
@@ -6452,6 +6454,31 @@ neg_cotangent: (x: T, ct: T) => T when is_float::<T>()
 The cotangent of `x` in `-x`: `-ct`.
 
 - Example: `neg_cotangent(3.0, 2.0)` gives `-2.0`
+
+<a id="rulesets.jvp"></a>
+
+## `rulesets.jvp`: how a forward transform lifts a value
+
+The `jvp` ruleset: how a forward transform lifts a value (design principles 9.9, program
+transforms).
+
+    let (y, dy) = lift(3.0);   // 3.0 and its zero tangent
+
+`Lift<T>` is a value and the tangent of that value, and `lift(x)` is the value plus the zero
+tangent of its type. A constant and a captured value are lifted this way, so a straight-line
+program is lifted node by node and a call hands its parameters on in the same shape.
+
+#### `lift`
+
+```camel
+lift: (x: T) => Lift<T>
+```
+
+`x` lifted: the value, and the zero tangent of its type -- the empty tuple for a type that has
+no tangent, a tensor of zeros for a tensor, and each member's own zero for a tuple or a struct.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `lift(3.0)` gives `(3.0, 0.0)`
 
 <a id="sim"></a>
 

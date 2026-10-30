@@ -347,6 +347,16 @@ const MODULES = [
         computed: 'signatures/autodiff.cml',
     },
     {
+        name: 'rulesets.jvp',
+        title: '`rulesets.jvp`: how a forward transform lifts a value',
+        kind: 'camel',
+        // A ruleset is a module of the library, found under its dotted name: a dotted module name
+        // is a subdirectory of the library, so `rulesets.jvp` is `stdlib/rulesets/jvp.cml`. Its
+        // declarations are Camel, and `--verify-docs` compiles their examples like any other
+        // module's.
+        source: 'rulesets/jvp.cml',
+    },
+    {
         name: 'sim',
         title: '`sim`: Monte Carlo simulation',
         kind: 'cpp',
