@@ -1,0 +1,9 @@
+两笔：参考文档把 `rulesets.jvp` 收进模块表（`c21f637d9`），`Tangent<T> { … }` 不能解析另写一页（`8912a3f16`）。第 3 步的验收（标量 `jvp`）仍未跑通。
+
+1. **文档侧今晚第二次"看着被覆盖、其实没人跑"的缝**：上一处是**新模块不进参考表**（模块不在 `scripts/stdlib-reference.mjs` 的表里，就既不进 `docs/stdlib-reference.md`，`@example` 也不被 `--verify-docs` 编译）。补上 `rulesets.jvp` 后 `--write` 468 条目（原 467），编译例数 **385 → 386**。**准确答案：只编译了 `lift` 那一条——参考文档只渲染函数条目，类型声明（`Lift<T>`、`Tangent<T>`）没有条目，它们的 `@example` 至今谁也没编译过。** 这是同一条缝的另一半。
+
+2. **第二跳**：这张模块表还喂 `docs/reference/camel-for-ai-stdlib-signatures.md`（`scripts/camel-for-ai.mjs --write`，468 entries）；只加进参考表而没重录这一页，`docs.ai_reference.current` 直接红——第一次跑闸门就是它红的。
+
+3. **`Tangent<T> { … }` 那页**：`stdlib/rulesets/jvp.cml#zero_tangent` 对聚合体只能靠"头是算出来的类型"的字面量，而今天解析不了；`match type`、`fields` 后面却已是类型位置——同一个问题两种规则。页里给三档射程（只放宽字面量头部／铺到所有类型位置／库侧绕路，默认①）。**在裁定前聚合体是被类型拒绝，不是拿到错的零**，元组与结构体两条用例也不落地。
+
+4. **闸门**（`-Plan all -Tier fast -Jobs 8`）：total 7862 / fail 0 / skip 6 / known 2。下一轮做 `zero_tangent` 的标量/张量臂（一条覆盖所有浮点标量含 `f16`/`bf16`，一条覆盖任意秩张量）＋ `f16`、二维张量两条用例，各自 A/B。
