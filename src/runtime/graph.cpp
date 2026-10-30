@@ -11,6 +11,7 @@
  * blob, one unified edge arena, and a compact branch-arm arena.
  */
 
+#include "camel/runtime/effect_liveness.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/exec_plan.h"
@@ -563,9 +564,25 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             // there at all: it is a pure value-forwarding node with one data port and one sync
             // predecessor). The control input is what that wait used to be written as; the paths
             // this lane has not moved onto the sync edge yet still carry one, and the ones that
-            // have carry the sync edge instead. A GATE with neither waits on nothing, which is
-            // what this refuses.
-            if (graph->syncPredsOf(ref).empty() && graph->ctrlInputsOf(ref).empty()) {
+            // have carry the sync edge instead.
+            // Asked through the facts every pass asks (camel/runtime/effect_liveness.h): the wait a
+            // GATE carries is either a block's chain or an edge of its own, and the two are named
+            // there instead of here. A GATE with neither waits on nothing, which is what this
+            // refuses.
+            //
+            // This is an assertion, not a rule programs reach. Measured: payload validation does run
+            // on the execution path (three graphs validated for a small program, five with a
+            // fault-injection pass in the pipeline), but a gate whose waits are all taken away never
+            // gets here -- `dceDraft` removes it first (src/passes/opt/generic/generic.cpp, the
+            // dead-gate branch: no reader, and it waited on something). A fault-injection pass that
+            // stripped both the control input and the sync predecessor of the first gate committed
+            // and ran with no error, and that gate was gone afterwards (2 gates before it, 1 after).
+            // If this ever fires, either `dceDraft` stopped removing such a gate or the builder
+            // started writing one that nothing waits on.
+            EffectLivenessFacts facts;
+            facts.hasWaitEdge     = !graph->ctrlInputsOf(ref).empty();
+            facts.isSyncStatement = !graph->syncPredsOf(ref).empty();
+            if (!facts.hasWaitEdge && !facts.isSyncStatement) {
                 throw std::runtime_error(
                     std::format(
                         "Runtime graph '{}' has GATE node {} without a wait: no sync predecessor "
@@ -646,6 +663,11 @@ void writeBody(gc_payload_word_t *payload, const GCNode &node, const Body &body)
 
 struct PlannedDraftNode {
     bool dead               = false; // the place of an erased node (ids are kept)
+    /// True when the finished node takes no order edge (nodeTakesNoOrder, asked here of the node
+    /// as it will be once the payload is emitted): its order inputs are dropped, not carried into
+    /// the graph. The answer is taken once, in the plan, and both the shape and the emission read
+    /// it, so the two cannot disagree about how many order edges the graph has.
+    bool dropsOrder         = false;
     gc_node_ref_t draftId   = kInvalidNodeRef;
     gc_node_ref_t ref       = kInvalidNodeRef;
     gc_off_t payload        = kNoPayload; // word offset in the payload area
@@ -767,8 +789,32 @@ DraftPayloadPlan planDraftPayload(
         for (gc_node_ref_t ref : draft.ctrlInputsOf(draftId)) {
             requireAlive(draftId, ref, "ctrl-input");
         }
+        // The finished node answers for itself here, and this is the one owner of that answer: the
+        // payload the graph will hold is the one the draft holds, so the question the seal check asks
+        // of the frozen graph (nodeTakesNoOrder, graph_edges.cpp) is asked of this node before it is
+        // written, and the answer decides both the edge count and the edges emitted. It cannot be
+        // asked where the edge is written: a node still being built has no payload, so
+        // nodeIsFreelySchedulable answers for a half-made node and every writer believes the edge is
+        // wanted. Asked here, once, the two answers cannot disagree.
+        bool dropsOrder = false;
+        if (const DraftNodeHeader *ordered = draft.header(draftId);
+            ordered != nullptr && ordered->kind != GCNodeKind::Dead &&
+            ordered->kind != GCNodeKind::Cast && nodeIsFreelySchedulable(draft, draftId)) {
+            dropsOrder = true;
+            if (ordered->kind == GCNodeKind::Brch || ordered->kind == GCNodeKind::Loop) {
+                for (uint32_t region = 1; region < draft.regionCount(); ++region) {
+                    if (draft.region(region).owner == draftId) {
+                        dropsOrder = false; // it stands for its region and carries its order
+                        break;
+                    }
+                }
+            }
+        }
         size_t keptOrderInputs = 0;
         for (gc_node_ref_t ref : draft.orderInputsOf(draftId)) {
+            if (dropsOrder) {
+                continue; // the edge says nothing on a node that arranges itself freely
+            }
             if (subset && !inGraph(ref)) {
                 continue; // dropped with the node it orders after
             }
@@ -785,9 +831,11 @@ DraftPayloadPlan planDraftPayload(
             "A runtime graph is addressed with 32 bits; this one has no room left.");
         plan.nodes.push_back(
             PlannedDraftNode{
-                .draftId = draftId,
-                .ref     = static_cast<gc_node_ref_t>(nodeCount),
-                .payload = words == 0 ? kNoPayload : static_cast<gc_off_t>(payloadWords),
+                .dead       = false,
+                .dropsOrder = dropsOrder,
+                .draftId    = draftId,
+                .ref        = static_cast<gc_node_ref_t>(nodeCount),
+                .payload    = words == 0 ? kNoPayload : static_cast<gc_off_t>(payloadWords),
                 .payloadWordCount = words,
             });
         plan.runtimeRefsByDraftId[draftId] = static_cast<gc_node_ref_t>(nodeCount);
@@ -864,7 +912,12 @@ void emitDraftPayload(
                 draftRef < plan.runtimeRefsByDraftId.size(),
                 "Draft edge emission encountered a node outside the payload plan.");
             const gc_node_ref_t runtimeRef = plan.runtimeRefsByDraftId[draftRef];
-            ASSERT(runtimeRef != kInvalidNodeRef, "Draft edge emission encountered a dead node.");
+            GUARD(
+                runtimeRef != kInvalidNodeRef,
+                std::format(
+                    "emitting the inputs of a node from the payload plan: draft node {} is in the plan "
+                    "but has no runtime node (it was dropped), so the input list would name nothing",
+                    draftRef));
             payload.inputs[inputCursor++] = runtimeRef;
         }
         return begin;
@@ -872,7 +925,9 @@ void emitDraftPayload(
 
     // A GATE forwards its (last) norm input: FastVM reads the producer, NodeVM reads the gate's
     // slot, so the slot must be the input's. Rewrites that rebind a gate's input (inlining binds
-    // parameter gates to the caller's arguments) leave a stale slot, so it is derived here.
+    // parameter gates to the caller's arguments) leave a stale slot, so it is derived here. The owner
+    // of this rule is the encoder -- the payload plan in this file -- not the draft's writers: it is
+    // the place that decides what the frozen graph holds, which is where the order-edge filter sits too.
     const auto slotOf = [&](gc_node_ref_t id) {
         for (size_t hops = 0; hops < plan.nodes.size() + 1; ++hops) {
             const DraftNodeHeader *h = draft.header(id);
@@ -1011,7 +1066,12 @@ void emitDraftPayload(
             break;
         case GCNodeKind::Brch: {
             const auto *draftBody = reinterpret_cast<const DraftBrchPayload *>(payloadBytes.data());
-            ASSERT(draftBody != nullptr, "Draft BRCH payload is missing.");
+            GUARD(
+                draftBody != nullptr,
+                std::format(
+                    "emitting a BRCH node: its payload table holds no DraftBrchPayload, so the join "
+                    "and the arms it names cannot be read (it needs {} bytes of it)",
+                    sizeof(DraftBrchPayload)));
             writeBody(
                 payload.payload,
                 header,
@@ -1045,7 +1105,7 @@ void emitDraftPayload(
     // one node by the predecessor's number (which is what makes the arrays sorted by (user, pred),
     // the order every reader and every dump of them relies on).
     const auto emitSideEdges = [&](auto *edges, gc_cnt_t count, const auto &inputsOf,
-                                   bool dropUnmapped) {
+                                   bool dropUnmapped, bool dropOnFreeUser) {
         if (count == 0) {
             return;
         }
@@ -1054,6 +1114,9 @@ void emitDraftPayload(
         for (const PlannedDraftNode &planned : plan.nodes) {
             if (planned.dead) {
                 continue;
+            }
+            if (dropOnFreeUser && planned.dropsOrder) {
+                continue; // the plan counted none of its order inputs (nodeTakesNoOrder)
             }
             // The draft appends a side edge where the rewrite that wrote it happened to stand: a
             // pass that collects what orders a node from a container of its own appends them in
@@ -1071,7 +1134,13 @@ void emitDraftPayload(
                 if (runtimePred == kInvalidNodeRef && dropUnmapped) {
                     continue;
                 }
-                ASSERT(at < count, "Draft side-edge emission wrote past the planned edges.");
+                GUARD(
+                    at < count,
+                    std::format(
+                        "the side-edge counter says {} edges were planned, but the writer is already at "
+                        "edge {}: the graph about to be sealed does not hold what the plan emits",
+                        count,
+                        at));
                 ASSERT(
                     runtimePred != kInvalidNodeRef,
                     "Draft side-edge emission encountered a dead node.");
@@ -1079,14 +1148,20 @@ void emitDraftPayload(
                 ++at;
             }
         }
-        ASSERT(at == count, "Draft side-edge emission wrote the wrong count.");
+        GUARD(
+            at == count,
+            std::format(
+                "the side-edge counter says {} edges were emitted, but the target port list planned "
+                "{}: the graph about to be sealed does not describe what its builder wrote",
+                at,
+                count));
     };
     emitSideEdges(
         payload.orderEdges, payload.orderEdgeCount,
-        [&](gc_node_ref_t id) { return draft.orderInputsOf(id); }, true);
+        [&](gc_node_ref_t id) { return draft.orderInputsOf(id); }, true, true);
     emitSideEdges(
         payload.syncEdges, payload.syncEdgeCount,
-        [&](gc_node_ref_t id) { return draft.syncInputsOf(id); }, false);
+        [&](gc_node_ref_t id) { return draft.syncInputsOf(id); }, false, false);
 
     for (size_t i = 0; i < draft.normPorts().size(); ++i) {
         payload.normPorts[i] = plan.runtimeRefsByDraftId[draft.normPorts()[i]];
@@ -2496,7 +2571,12 @@ void collectStaticGraphRefsRecursive(
             return;
         }
         const GraphId target = funcObj->graphId();
-        ASSERT(isValid(target), "Runtime static graph references must name a graph.");
+        GUARD(
+            isValid(target),
+            std::format(
+                "collecting the static graph references of a function value: it names graph {}, which "
+                "is not a graph in this program, so the reference would point at nothing",
+                static_cast<int>(target)));
         pushUnique(refs, target);
 
         if (::Tuple *closure = funcObj->tuple()) {

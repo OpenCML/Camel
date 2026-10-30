@@ -1,5 +1,17 @@
 # `argmax_axis` 进表之前：一页纸
 
+## 零、先说三件已经付出过代价的事（先读这里）
+
+1. **同一个谎有两个入口。** `schedule.cpp#bytes` 曾经"f64 八字节，其余四字节"，`graph_regions.cpp`
+   的 `candidate.dtype` 曾经"非 f64 一律 F32"——两处都会把八字节的下标按四字节写／读，而数字看起来都对。
+   加元素类型时，**宽度表和 dtype 映射两处都要查**；只改一处，另一处会安静地把下标读成半个。
+2. **`tiles::source` 不能用来读 i64 结果的核**：它的签名是 `NumericAggregate → string`，i64 结果实测
+   `NoMatchingFunction`。要读核源码，走 `tiles::compile` + 计划级读数，别在这条死路上再试一次。
+3. **进表之前先确认节点携带的 URI，不要按前缀推断。** `argmax` 由 `stdlib/array.cml` 的
+   `#op('array:argmax_axis')` 声明，图里的节点是 **`array:argmax_axis`**；表里其余名字都走 `tensor:`
+   前缀，这一条不走。按前缀写表项会得到一个**没人携带的名字**，作用域照旧被拒（实测：
+   `TILES_REGION_REASON array:argmax_axis unsupported_operator`，表里写的 `tensor:argmax_axis` 完全没被查到）。
+
 这是 A 组最后一条（`tensor:argmax_axis`）的前置笔记，**只写判断，不写代码**。理由：它要动的是
 类型系统与归约契约，不是设备程序；先有一页纸，才有一笔代码。这一条今天**不在**
 `modules/tiles/src/graph_regions.cpp#operations` 表里，缺口账本
@@ -237,3 +249,54 @@ tiles position reduction: an argmax plan keeps the value and stores the loop ind
   `softmax_cross_entropy_labels_grad`、`argmax_axis`、`cast_like`、`gt`、`matmul_grad_lhs`、
   `matmul_grad_rhs`、`numel`、`shape`、`strict_eq`、`take`）。其中 12 条是 B 组（等作者的语义声明那页），
   `argmax_axis` 是本文这一条。
+## 六、两个探针，和"声明缺失"的四格读数
+
+**探针是通用件，不专属 argmax**（`region_test_pass.cpp`，由 `CAMEL_TILES_TEST_REASONS=1` 打开）：
+
+```
+TILES_REGION_REASON <uri> <reason>            # 该节点为什么不在任何区域里；eligible 表示进了区域
+TILES_OPERATOR_DECLARATION <uri> <declared|undeclared> major=<n>
+```
+
+任何"算子进不了区域"的问题，这两行都能直接回答"谁、为什么"，不必再读分析代码。
+
+**四格读数**（同一个作用域，`--devices cpu`）：
+
+| URI | 声明 | `major` |
+| --- | --- | --- |
+| `array:argmax_axis`（图里真正携带的那个） | **undeclared** | **-1** |
+| `tensor:reshape`（已在表里，作对照） | declared | 1 |
+
+**结论一句话：要修的是"注册"，不是"版本"**——`array:argmax_axis` 这个 `OperId` 上**根本没有语义声明**，
+所以 `graph_regions.cpp:142` 的 `!decl || major != 1` 里命中的是前半句，而不是后半句。两种修法二选一，
+都必须先有一条读数证明"声明挂上了、major 是 1"再动表：
+
+1. 让 tensor 侧把 `positionLaw` 挂到 `array:argmax_axis` 这个 id 上（如果它和 tensor 注册的是同一个算子）；
+2. 或者承认两者是**两个** `OperId`，在区域那一侧把 array 的名字映射到有声明的那一个（映射必须是
+   显式的、带读数的，不能靠前缀猜）。
+
+### 六之二、"同一个算子两个 URI"——这里停下，要作者裁
+
+读数（`CAMEL_TILES_TEST_REASONS=1`，同一条作用域）：
+
+```
+TILES_OPERATOR_ID array:argmax_axis id=340 tensor_spelling=422
+TILES_OPERATOR_ID tensor:reshape id=406 tensor_spelling=422
+```
+
+`array:argmax_axis` 是 **340**，`tensor:argmax_axis` 是 **422**，**两个都已在表里存在**（`lookup` 都查得到），
+**是两个 `OperId`**，不是同一个算子的两种拼法。图里的节点带 340，而语义声明挂在 422 上——所以 340 上
+`undeclared`，`graph_regions.cpp:142` 命中 `!decl`。
+
+**决定：不在区域侧加映射把它盖过去。** 两个 URI 意味着同一个算子有两条身份，这会同时影响**进表**和
+**导出格式**（`onnx::export`、`std::jgir` 里的算子名），区域侧加一层映射只会让第三处知道这件事、前两处继续不一致。
+这一步要作者裁：哪个拼法是正名，另一个是别名还是应当不存在。
+
+在等答复期间并行的事：330/422 之外的 A 组工作已经没有了，缺口停在 26、`operations()` 停在 21。
+
+### 六之三、B 组不是一类，是两类（口径已改在账本原位）
+
+`CAMEL_TILES_TEST_DECLARATIONS=1` 的读数：5 条 `nn:*`（`sgd`、`adam`、`adam_state`、
+`softmax_cross_entropy_labels`、`softmax_cross_entropy_labels_grad`）**`lookup` 返回 none——不在算子表里**；
+16 条 `tensor:*` 在表里但 `undeclared major=-1`。**前者要注册，后 15 条要写声明，排期不能合并。**另外第六条读数推翻了"B 组"这个划分本身：**`tensor:softmax`（id 424）已有声明 `major=1`**，它属于 A 组，缺的只是表里一个名字与 device 程序——所以 21 条是**三类**，不是两类。
+缺口账本 `gpu-g4-g5-gap-list.md:39` 那句已原位改掉（不是另起一段），否则下一个人照旧读到旧口径。

@@ -129,7 +129,7 @@ bool isEmptyArrayLiteral(node_handle_t node) {
     }
     if (nodeIsKind(node, runtime::GCNodeKind::Data)) {
         // A typed `[]` is a static array: its length says whether the literal was empty.
-        const runtime::GraphDraft &draft = *nodeDraftOf(node);
+        const auto &draft = *nodeDraftOf(node);
         const int32_t dataIndex          = draft.node(nodeIdOf(node))->header.dataIndex;
         if (dataIndex < 0 && static_cast<size_t>(-dataIndex) < draft.staticSlots().size()) {
             const auto *array = camel::core::rtdata::fromSlot<::Array *>(
@@ -629,6 +629,15 @@ node_handle_t Builder::convertStructValue(
                     return nullptr;
                 }
                 field = typed;
+            } else if (isRankZeroEdge(targetFieldType, sourceFieldType)) {
+                // The field's type goes from `T` to `T[..]` here (design principles 5.4): the value
+                // is the element, and the slot holds the rank-zero array that *is* the element.
+                // Same question and same call as every other position.
+                node_handle_t wrapped = coerceTo(access, targetFieldType, origin);
+                if (wrapped == nullptr) {
+                    return nullptr;
+                }
+                field = wrapped;
             } else if (!targetFieldType->assignableFrom(sourceFieldType)) {
                 // A field of another type (a refined module type is assignable; a number of
                 // another type is not).
@@ -4177,7 +4186,7 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     for (node_handle_t ctrlInput : syncInputs) {
         if (linkCheek(ctrlInput, outputAnchor) &&
             !runtime::hasControlDependency(
-                *nodeDraftOf(outputAnchor),
+                *nodeTransactionOf(outputAnchor),
                 nodeIdOf(ctrlInput),
                 nodeIdOf(outputAnchor))) {
             if (ctrlInput == lastSyncedNode_) {

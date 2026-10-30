@@ -72,4 +72,43 @@ void handle_assert_failure(
     std::abort();
 }
 
+void fail_invariant(
+    const std::string &expression, const std::string &reading,
+    const std::source_location location) {
+    AssertHandlerFn handler = get_assert_handler();
+    if (handler) {
+        handler(expression, reading, location);
+        std::abort();
+    }
+    // Not "Debug", and not "Assertion": this one is here in the build that ships, so its report has
+    // to read like a diagnosis of the program rather than like a developer's reminder.
+    std::cerr << "\n\033[1;31mCamel Invariant Violation:\033[0m\n"
+              << "\033[1;32m    Location   : \033[0m" << location.file_name() << "("
+              << location.line() << ")\n"
+              << "\033[1;32m    Function   : \033[0m" << location.function_name() << "\n"
+              << "\033[1;32m    Guarantee  : \033[0m" << expression << "\n"
+              << "\033[1;32m    Reading    : \033[0m" << reading << "\n";
+
+#ifdef _WIN32
+    disableWindowsAbortDialogs();
+
+    std::cerr << "\n\033[1;31mStack Trace:\033[0m\n";
+    auto trace                  = std::stacktrace::current();
+    constexpr size_t skip_front = 1;
+
+    const size_t frame_count = trace.size();
+    if (frame_count <= skip_front) {
+        std::cerr << "(stack trace too short)\n";
+    } else {
+        for (size_t i = skip_front; i < frame_count; ++i) {
+            std::cerr << "<\033[1;36m" << i << "\033[0m> " << trace[i] << "\n";
+        }
+    }
+#else
+    std::cerr << "\n\033[1;31mStack Trace:\033[0m (not available on this platform)\n";
+#endif
+
+    std::abort();
+}
+
 } // namespace cml

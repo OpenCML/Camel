@@ -1,0 +1,21 @@
+// The parameter slot, both writings of the argument: `show(1.0)` and `show(one)` with `v: f32[..]`.
+// The call argument and the parameter are one edge -- the argument enters the parameter's type where
+// the call is made -- so a separate "argument" case would test the same bytes; this is the row and
+// the reason the matrix folds the two.
+//
+// What this case pins: the value a call hands over is the value the callee reads, for a literal and
+// for a computed value alike (design principles 5.4).
+
+func show(v: f32[..]) {
+    println(v)
+}
+
+func main(): int sync {
+    let one: f32 = 1.0
+    let two: f32 = 2.5
+    show(1.0)
+    show(2.5)
+    show(one)
+    show(two)
+    return 0
+}

@@ -154,6 +154,16 @@ expect_stdout_contains = ["tiles core views: quasi-affine maps, strided simplifi
 timeout_ms = 10000
 
 [[tests]]
+name = "argmax_axis_scope_reasons"
+kind = "behavior"
+case = "../../../cases/modules/tiles/argmax_axis_scope.cml"
+args = ["--devices", "cpu", "${case}", "tiles::test_outline_compiled", "std::nvm"]
+envs = ["CAMEL_TILES_TEST_REASONS=1", "CAMEL_TILES_TEST_DECLARATIONS=1"]
+expect_exit = 0
+expect_stdout_contains = ["TILES_OUTLINED 0", "TILES_REGION_REASON array:argmax_axis unsupported_operator", "TILES_OPERATOR_DECLARATION array:argmax_axis undeclared major=-1", "TILES_OPERATOR_ID array:argmax_axis id=340 tensor_spelling=422", "TILES_DECLARATIONS_3 tensor:layer_norm_grad 463 undeclared major=-1; tensor:softmax 424 declared major=1;", "TILES_OPERATOR_DECLARATION tensor:reshape declared major=1"]
+timeout_ms = 10000
+
+[[tests]]
 name = "source"
 kind = "behavior"
 case = "../../../cases/modules/tiles/source.cml"

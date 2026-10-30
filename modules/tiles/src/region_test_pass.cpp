@@ -297,9 +297,94 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
                 (void)compileTypes(function, context_->facts());
         }
         os << "TILES_OUTLINED " << count << '\n';
+        // Why each operator node of the result is in no region, in the analysis's own words. The
+        // count alone says a scope was not planned; it does not say which node refused it.
+        if (std::getenv("CAMEL_TILES_TEST_REASONS")) {
+            runtime::RuntimeGraphDraftSession session(context_, result);
+            for (auto *graph : session.collectReachableRuntimeGraphs()) {
+                const auto analysis = analyzeRegions(*result, *graph, context_->facts(), nullptr);
+                for (size_t id = 0; id < graph->nodeCount(); ++id) {
+                    if (graph->node(id)->kind != runtime::GCNodeKind::Oper)
+                        continue;
+                    const auto &oper = graph->nodeBodyAs<runtime::GCOperBody>(id)->oper;
+                    const std::string name(core::OperatorTable::instance().uri(oper));
+                    const auto &reason = analysis.exclusions[id];
+                    // The two halves of `!decl || major != 1` reported apart: no declaration and
+                    // the wrong contract version are different repairs, and a reason string that
+                    // says only "semantic_declaration" leaves that unsaid.
+                    const auto *semantics = core::OperatorTable::instance().semantics(oper);
+                    os << "TILES_OPERATOR_DECLARATION " << name << ' '
+                       << (semantics ? "declared" : "undeclared") << " major="
+                       << (semantics ? static_cast<long long>(semantics->key.major) : -1LL) << '\n';
+                    // Whether one operator is spelled two ways: the id a node carries, and the id
+                    // the same name interns under another module's prefix. Two ids means the
+                    // declaration registered for one of them is invisible to the other.
+                    const auto tensorSpelling =
+                        core::OperatorTable::instance().lookup("tensor:argmax_axis");
+                    os << "TILES_OPERATOR_ID " << name
+                       << " id=" << static_cast<long long>(oper) << " tensor_spelling="
+                       << (tensorSpelling ? std::to_string(static_cast<long long>(*tensorSpelling))
+                                          : std::string("none"))
+                       << '\n';
+                    os << "TILES_REGION_REASON " << name << ' '
+                       << (reason.empty() ? "eligible" : reason) << '\n';
+                }
+            }
+        }
         if (std::getenv("CAMEL_TILES_TEST_I64") && !i64Reported) {
             i64Reported = true;
             os << "TILES_I64 " << i64LeafReport() << '\n';
+        }
+        // The operators the gap ledger calls the B group, read once: the URI, the id it interns to,
+        // whether a semantic declaration is attached and its version. The ledger classifies them by
+        // reading the declaration tables in source; this prints the same answer from the table the
+        // region analysis actually asks.
+        if (std::getenv("CAMEL_TILES_TEST_DECLARATIONS")) {
+            static const char *const grouped[] = {
+                "nn:sgd",
+                "nn:adam",
+                "nn:adam_state",
+                "nn:softmax_cross_entropy_labels",
+                "nn:softmax_cross_entropy_labels_grad",
+                "tensor:gelu",
+                "tensor:gelu_grad",
+                "tensor:layer_norm",
+                "tensor:layer_norm_grad",
+                "tensor:softmax",
+                "tensor:softmax_grad",
+                "tensor:permute_inverse",
+                "tensor:matmul_grad_lhs",
+                "tensor:matmul_grad_rhs",
+                "tensor:zeros_like",
+                "tensor:cast_like",
+                "tensor:gt",
+                "tensor:strict_eq",
+                "tensor:take",
+                "tensor:numel",
+                "tensor:shape"};
+            std::string row;
+            size_t pending = 0;
+            size_t batch   = 1;
+            for (const char *uri : grouped) {
+                const auto found = core::OperatorTable::instance().lookup(uri);
+                const auto *semantics =
+                    found ? core::OperatorTable::instance().semantics(*found) : nullptr;
+                // Four per line: the runner's failure dump truncates a long line, and a table split
+                // over twenty-one lines loses its head. Six short lines survive whole.
+                row += std::string(uri) + ' ' +
+                       (found ? std::to_string(static_cast<long long>(*found))
+                              : std::string("none")) +
+                       ' ' + (semantics ? "declared" : "undeclared") + " major=" +
+                       (semantics ? std::to_string(static_cast<long long>(semantics->key.major))
+                                  : std::string("-1")) +
+                       "; ";
+                if (++pending == 4 || uri == grouped[std::size(grouped) - 1]) {
+                    os << "TILES_DECLARATIONS_" << batch << ' ' << row << '\n';
+                    row.clear();
+                    pending = 0;
+                    ++batch;
+                }
+            }
         }
         return result;
     }

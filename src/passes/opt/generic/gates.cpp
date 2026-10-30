@@ -4,6 +4,7 @@
 /* Move a forwarding gate's waits to its consumers without moving the value's producer. */
 
 #include "camel/runtime/control.h"
+#include "camel/runtime/effect_liveness.h"
 #include "rewrite.h"
 
 #include <algorithm>
@@ -12,18 +13,29 @@
 namespace camel::passes::generic {
 using namespace camel::runtime;
 
-bool bypassValueGate(GraphDraft &draft, gc_node_ref_t id, size_t &edgeBudget) {
+bool bypassValueGate(
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, size_t &edgeBudget) {
+    auto &draft = transaction.edit();
     const auto *gate = draft.header(id);
-    if (!gate || gate->kind != GCNodeKind::Gate || !edgeBudget || !isReplaceable(draft, id) ||
-        draft.normInputsOf(id).size() != 1 || !draft.withInputsOf(id).empty() ||
-        draft.ctrlInputsOf(id).empty()) {
+if (!gate || gate->kind != GCNodeKind::Gate || !edgeBudget || !isReplaceable(transaction, id) ||
+        draft.normInputsOf(id).size() != 1 || !draft.withInputsOf(id).empty()) {
+        return false;
+    }
+    // What a gate carries is a wait (docs/design/effects/plan.cn.md 5.5, the enabling condition of
+    // this rewrite): a gate with no wait is a plain forwarding node and has nothing to move. This
+    // is asked through the one place that answers what a wait is worth (no gate is an effect of its
+    // own, so `effectStandingOf` is not the question here -- `hasWaitEdge` is).
+    EffectLivenessFacts facts;
+    facts.hasWaitEdge      = !draft.ctrlInputsOf(id).empty();
+    facts.isSyncStatement  = !draft.syncInputsOf(id).empty();
+    if (!facts.hasWaitEdge) {
         return false;
     }
     // A gate that waits through the sync edge of a block's chain carries that chain: the statements
     // before it run because the graph's result is reached through them (docs/design/effects/
     // edges.cn.md 2 and 5.3), so moving its wait to its consumers steps over them. It stays, the
     // way the gate a function returns through stays (isFoldable, generic.cpp).
-    if (!draft.syncInputsOf(id).empty()) {
+    if (facts.isSyncStatement) {
         return false;
     }
     const size_t valueUses = draft.normUsersOf(id).size() + draft.withUsersOf(id).size();
@@ -31,6 +43,9 @@ bool bypassValueGate(GraphDraft &draft, gc_node_ref_t id, size_t &edgeBudget) {
     // Unread gates have their own DCE rule. Bound both local inspection and potential fanout
     // before allocating scratch storage; retaining a shared barrier can be cheaper than
     // materializing the Cartesian product of waits and consumers.
+    // The control inputs are counted for the fan-out bound: they multiply the waits this
+    // rewrite moves to the consumers. They stop existing with the kind (see hasWaitEdge,
+    // camel/runtime/effect_liveness.h), and this bound goes with the rewrite above it.
     if (!valueUses || allUses > 64 || draft.ctrlInputsOf(id).size() > 64)
         return false;
 
@@ -59,7 +74,7 @@ bool bypassValueGate(GraphDraft &draft, gc_node_ref_t id, size_t &edgeBudget) {
     }
     for (auto user : draft.ctrlUsersOf(id))
         addUser(user, true);
-    const auto predecessors = controlFrontier(draft, draft.ctrlInputsOf(id));
+    const auto predecessors = controlFrontier(transaction, draft.ctrlInputsOf(id));
     const auto controlUsers = std::ranges::count_if(users, [](const auto &u) { return u.control; });
     const size_t cost       = predecessors.size() * users.size() + controlUsers;
     if (cost > 64 || cost > edgeBudget ||
@@ -73,16 +88,16 @@ bool bypassValueGate(GraphDraft &draft, gc_node_ref_t id, size_t &edgeBudget) {
             draft.unlinkInput(DraftEdgeKind::Ctrl, user.id, id);
             // A control-only user also waited for value production, not just the gate's
             // explicit CTRL inputs. Keep that completion (and any fault in the producer).
-            appendControlDependency(draft, value, user.id);
+            appendControlDependency(transaction, value, user.id);
         }
         // A wait the gate carried through the chain of its `sync` block is handed on in that kind:
         // the consumer that is a statement of the block follows the same predecessor through the
         // sync edge (docs/handover/README.cn.md 5.21 item 4).
         for (gc_node_ref_t predecessor : draft.syncInputsOf(id)) {
-            handOverSyncWait(draft, predecessor, user.id);
+            handOverSyncWait(transaction, predecessor, user.id);
         }
         for (auto predecessor : predecessors) {
-            appendControlDependency(draft, predecessor, user.id);
+            appendControlDependency(transaction, predecessor, user.id);
         }
     }
     draft.eraseNode(id);

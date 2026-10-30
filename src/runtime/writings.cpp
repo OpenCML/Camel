@@ -10,6 +10,7 @@
 #include "camel/core/type/intern.h"
 #include "camel/core/type/text.h"
 #include "camel/runtime/draft_session.h"
+#include "camel/runtime/effect_liveness.h"
 #include "camel/runtime/draft_writes.h"
 #include "camel/runtime/graph_txn.h"
 
@@ -1131,6 +1132,16 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
         if (multi[node] && chosen[classOf[node]] == node) {
             for (gc_node_ref_t member : store_.members(contextOf(node), node)) {
                 if (member == node) {
+                    continue;
+                }
+                // What the member carries, read where every pass reads it
+                // (camel/runtime/effect_liveness.h): the wait it has, and whether it sits on a
+                // block's chain. Only the wait is moved today; the chain is read here so that the
+                // day the control edge stops there is already a fact of the member to move.
+                EffectLivenessFacts memberFacts;
+                memberFacts.hasWaitEdge     = !draft_.ctrlInputsOf(member).empty();
+                memberFacts.isSyncStatement = !draft_.syncInputsOf(member).empty();
+                if (!memberFacts.hasWaitEdge) {
                     continue;
                 }
                 for (gc_node_ref_t wait : draft_.ctrlInputsOf(member)) {

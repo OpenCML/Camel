@@ -43,10 +43,10 @@ expect_stdout_contains = ["ORDER wrote=1 twice=0", "ORDER preds=1 users=1", "ORD
 
 [[tests]]
 name = "order_edge_on_a_pure_node_is_refused"
-desc = "Nothing orders a pure node: a constant computes a value from nothing a resource owns, so an order edge on it is a graph the builder must not have produced, and the seal check names it (docs/design/effects/edges.cn.md 4.6)."
+desc = "Nothing orders a pure node: a constant computes a value from nothing a resource owns, so an order edge on it is a graph the builder must not have produced, and the seal check names it (docs/design/effects/edges.cn.md 4.6). The negative case is built on the finished graph, where the check owns the rule: a draft no longer produces such a graph at all (the encoder drops the edge and the committed graph has none), so the bad graph is written straight into the frozen records the check reads."
 case = "../../../cases/opt/generic/generic_passes.cml"
 args = ["${case}", "test::edges_order_pure"]
-expect_stdout_contains = ["ORDER wrote=1", "EDGES refused", "is on a pure node"]
+expect_stdout_contains = ["ORDER wrote=1", "ORDER frozen_edges=0", "EDGES refused", "is on a pure node"]
 
 [[tests]]
 name = "order_edge_orders_the_nodes_that_run"

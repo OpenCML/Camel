@@ -115,7 +115,7 @@ uint64_t originKeyOf(
 /// that lowering count once (the coalesce positions this function collects first); every other node
 /// counts for itself, so a function is measured by the compute nodes it is written as.
 ///
-/// The count is read off the graph the round began with -- GraphDraft::calleeGraphOf answers the
+/// The count is read off the graph the round began with -- the draft's `calleeGraphOf` answers the
 /// committed graph, not the draft -- so what a round splices or folds cannot move it: the same
 /// function answers the same twice in one round, and its answer changes only when a round commits a
 /// change to that function.
@@ -294,8 +294,9 @@ std::vector<const GCGraph *> directCallees(
 }
 
 /// The nodes `id` runs after other than through `skip` (its transitive inputs of every kind).
-std::vector<bool>
-upstreamOf(const camel::runtime::GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t skip) {
+std::vector<bool> upstreamOf(
+    const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, gc_node_ref_t skip) {
+    const auto &draft = transaction.graph();
     std::vector<bool> seen(draft.nodeSlotCount(), false);
     std::vector<gc_node_ref_t> work;
     for (auto inputs : {draft.normInputsOf(id),
@@ -321,7 +322,9 @@ upstreamOf(const camel::runtime::GraphDraft &draft, gc_node_ref_t id, gc_node_re
     return seen;
 }
 
-bool isDraftBranchArmHead(const camel::runtime::GraphDraft &draft, gc_node_ref_t nodeId) {
+bool isDraftBranchArmHead(
+    const camel::runtime::GraphTransaction &transaction, gc_node_ref_t nodeId) {
+    const auto &draft = transaction.graph();
     if (!draft.alive(nodeId)) {
         return false;
     }
@@ -1045,7 +1048,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                     acyclic,
                     calls,
                     returnsClosure(calleeGraph));
-                const bool isArm = isDraftBranchArmHead(draft, id);
+                const bool isArm = isDraftBranchArmHead(transaction, id);
                 const bool suppressNonRecursiveArmInlining =
                     config.inlineConfig.inlineStrategy == InlineTargetStrategy::Hybrid &&
                     isSmallRuntimeSubgraphForInline(nextGraph, config.inlineConfig, source) &&
@@ -1164,7 +1167,7 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
     // that ordering nor has an effect of its own to hang it on (a recursion's base
     // case, a constant result), nothing else keeps the predecessor reachable, and a
     // write the program made was silently dropped.
-    auto argSources = camel::passes::generic::orderedSources(draft, funcNodeId);
+    auto argSources = camel::passes::generic::orderedSources(transaction, funcNodeId);
     // And the other way round: the call ran after the ordered sources of ALL its
     // arguments, so the body must too, also where it does not read the argument
     // that carried the ordering (a read of a variable feeding an argument the
@@ -1182,11 +1185,11 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
         // as data. Waiting on it would also wrap the cell in a GATE when the call is spliced,
         // and a consumer that follows a variable by its cell (the ONNX exporter) would no
         // longer see it as local.
-        if (camel::passes::generic::operIdOf(draft, source) == camel::core::oper::VarNew) {
+        if (camel::passes::generic::operIdOf(transaction, source) == camel::core::oper::VarNew) {
             continue;
         }
         if (draft.alive(source)) {
-            camel::runtime::appendControlDependency(draft, source, funcNodeId);
+            camel::runtime::appendControlDependency(transaction, source, funcNodeId);
         }
     }
     for (gc_node_ref_t pred : draft.waitInputsOf(funcNodeId)) {
@@ -1206,7 +1209,7 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
                     callUsers.end()) {
                     continue;
                 }
-                const auto before = upstreamOf(draft, user, funcNodeId);
+                const auto before = upstreamOf(transaction, user, funcNodeId);
                 std::vector<gc_node_ref_t> missing;
                 for (gc_node_ref_t source : argSources) {
                     if (source != user && !before[source]) {
@@ -1287,7 +1290,7 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
             continue;
         }
         for (gc_node_ref_t source : sources) {
-            camel::runtime::appendControlDependency(draft, source, user);
+            camel::runtime::appendControlDependency(transaction, source, user);
         }
     }
     return inlineResult;

@@ -25,6 +25,27 @@ ArrayDataFactory::~ArrayDataFactory() = default;
 
 ArrayDataFactory &ArrayDataFactory::add(const data_ptr_t &e) {
     data_ptr_t value = e;
+    // The element in a position of `T[..]` is the rank-zero value that position promises (design
+    // principles 5.4), and it is written at the element type the position states: `[1.5, 2.5]` at
+    // `f32[..][2]` holds two rank-zero `f32` values, not two `float`s the element type cannot take.
+    // This is the same edge `convertDataTo` makes, applied to each element, because this is where
+    // the elements of an array literal are collected.
+    if (impl_->elemType != nullptr && impl_->elemType->code() == TypeCode::Array &&
+        !impl_->elemType->equals(value->type())) {
+        if (auto *slotArrayType = tt::as_ptr<ArrayType>(impl_->elemType);
+            slotArrayType != nullptr) {
+            if (Type *element = slotArrayType->rankZeroType(); element != nullptr) {
+                data_ptr_t asElement =
+                    element->equals(value->type()) ? value : convertDataTo(value, element);
+                if (asElement != nullptr) {
+                    if (data_ptr_t zero = convertDataTo(asElement, impl_->elemType);
+                        zero != nullptr) {
+                        value = zero;
+                    }
+                }
+            }
+        }
+    }
     if (!impl_->elemType) {
         impl_->elemType = value->type();
     } else if (impl_->elemType->code() == TypeCode::Ref && value->type()->code() != TypeCode::Ref) {

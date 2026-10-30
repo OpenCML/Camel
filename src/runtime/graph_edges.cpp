@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The edge invariants of an encoded graph, checked at every commit (docs/design/graph-store 5.4):
+ * The edge invariants of an encoded graph, checked at every commit (docs/design/graph-store 5.4).
+ * The owner of these rules is the finished graph, executed by the seal check at commit, not the
+ * draft's writers: a node still being built answers a different question.
  *
  *  - no cycle: following the inputs of a node (value, `with` and control alike) never comes back
  *    to it. A graph calls itself through other graphs, never through an edge;
@@ -124,7 +126,7 @@ class EdgeChecker {
                         node.typeId));
             }
         }
-        ASSERT(
+        GUARD(
             violations_.empty(),
             "A frozen graph names a type id that did not come from the type table's interning "
             "path (see typeIdOf in src/runtime/graph.cpp).");
@@ -245,7 +247,8 @@ class EdgeChecker {
     /// reads the first half back; this is the second. Two statements of one block following the
     /// same statement is a chain that forks, which is no chain: the layout takes one of the two and
     /// the other is reached by nothing, so its work does not happen and a program that prints twice
-    /// prints once.
+    /// prints once. The owner of this rule is the finished graph, executed by the seal check at
+    /// commit, not the draft's writers.
     ///
     /// What counts is the chain 5.3 and 3.4 make. A node the model lets a pass arrange freely is not
     /// on the chain at all (3.4: a sync block orders its effects, and a node that is pure and cannot
@@ -341,7 +344,7 @@ class EdgeChecker {
                 bad("orders a node after itself");
                 continue;
             }
-            if (isFreelySchedulable(edge.user) && !standsForItsRegion(edge.user)) {
+            if (nodeTakesNoOrder(graph_, edge.user)) {
                 bad("is on a pure node, which nothing orders");
             }
             if (const uint32_t region = crossedControlRegion(edge.pred, edge.user); region != 0) {
@@ -354,7 +357,8 @@ class EdgeChecker {
         }
     }
 
-    /// The control region an order edge would cross, 0 when it crosses none. An order edge orders
+    /// The control region an order edge would cross, 0 when it crosses none. The owner of this rule is
+    /// the finished graph, executed by the seal check at commit, not the draft's writers. An order edge orders
     /// two nodes that both run, and an arm or a part of a loop runs as a whole with the node that
     /// owns it: the order such a region has with the code around it is an order on the owner (the
     /// `BRCH` or the `LOOP`), never one that reaches inside the region (docs/design/effects/
@@ -414,22 +418,7 @@ class EdgeChecker {
     /// order on that node -- the `BRCH` or the `LOOP` -- and not one that reaches inside the region.
     /// Such a node computes nothing itself, and still carries an order edge, which is why the rule
     /// "a pure node carries none" reads it out here.
-    bool standsForItsRegion(gc_node_ref_t ref) const {
-        const GCNode *node = graph_.node(ref);
-        if (node == nullptr) {
-            return false;
-        }
-        if (node->kind != GCNodeKind::Brch && node->kind != GCNodeKind::Loop) {
-            return false;
-        }
-        for (uint32_t region = 1; region < graph_.regionCount(); ++region) {
-            const GCRegion *record = graph_.region(region);
-            if (record != nullptr && record->owner == ref) {
-                return true;
-            }
-        }
-        return false;
-    }
+    bool standsForItsRegion(gc_node_ref_t ref) const { return nodeStandsForItsRegion(graph_, ref); }
 
     /// The rule of 4.6's third clause, read off the shared classification so that the seal check
     /// and the passes that write order edges cannot drift: only a node the model lets a pass
@@ -438,7 +427,8 @@ class EdgeChecker {
         // Whether a conversion can fail depends on the types it converts between, and a pass that
         // refines the types (specialization, inlining) can make a conversion that was ordered when
         // it was written one that cannot fail. The order it was given then stays: dropping it is
-        // the passes' choice, and an edge on such a node is not a defect of the graph.
+        // the passes' choice, and an edge on such a node is not a defect of the graph. The owner of
+        // this rule is the finished graph, executed by the seal check at commit, not the draft's writers.
         const GCNode *node = graph_.node(ref);
         if (node != nullptr && node->kind == GCNodeKind::Cast) {
             return false;
@@ -703,4 +693,33 @@ void validateRuntimeGraphEdges(const Program &program, const GCGraph *graph, Gra
     throw std::runtime_error(text);
 }
 
+
+/// The two questions the seal check asks of an order edge's user, kept here so that the check and
+/// the writers that carry order edges across a rewrite ask one question and not two.
+bool nodeStandsForItsRegion(const GCGraph &graph, gc_node_ref_t ref) {
+    const GCNode *node = graph.node(ref);
+    if (node == nullptr) {
+        return false;
+    }
+    if (node->kind != GCNodeKind::Brch && node->kind != GCNodeKind::Loop) {
+        return false;
+    }
+    for (uint32_t region = 1; region < graph.regionCount(); ++region) {
+        const GCRegion *record = graph.region(region);
+        if (record != nullptr && record->owner == ref) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool nodeTakesNoOrder(const GCGraph &graph, gc_node_ref_t ref) {
+    // A conversion that was ordered when it could fail keeps its place: a pass that refines the
+    // types can make it infallible, and dropping the order is the pass's choice, not a defect.
+    const GCNode *node = graph.node(ref);
+    if (node != nullptr && node->kind == GCNodeKind::Cast) {
+        return false;
+    }
+    return nodeIsFreelySchedulable(graph, ref) && !nodeStandsForItsRegion(graph, ref);
+}
 } // namespace camel::runtime

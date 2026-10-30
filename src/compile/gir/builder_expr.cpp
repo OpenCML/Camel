@@ -253,12 +253,33 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             };
             for (size_t h = 0; h < holeSlots.size() && h < refNodes.size(); ++h) {
                 Type *slotType = filledSlotType(holeSlots[h]);
-                if (slotType == nullptr ||
-                    !isRankZeroEdge(slotType, valueTypeOf(nodeTypeOf(refNodes[h])))) {
+                Type *elementType = slotType != nullptr ? valueTypeOf(nodeTypeOf(refNodes[h])) : nullptr;
+                if (slotType == nullptr || elementType == nullptr) {
                     continue;
                 }
-                if (node_handle_t entered = coerceTo(refNodes[h], slotType, gct); entered != nullptr) {
-                    refNodes[h] = entered;
+                if (isRankZeroEdge(slotType, elementType)) {
+                    if (node_handle_t entered = coerceTo(refNodes[h], slotType, gct);
+                        entered != nullptr) {
+                        refNodes[h] = entered;
+                    }
+                    continue;
+                }
+                // A nested literal in the slot is the named type the position states (design
+                // principles 5.2), not the unnamed type its own fields give it: without this the
+                // fill put a `{ v: f32 }` where the field is `Inner`, and the read of the field
+                // read a value of another type. The copy is field by field, the same one a
+                // position makes for an unnamed struct value.
+                if (slotType->code() == TypeCode::Struct && elementType->code() == TypeCode::Struct &&
+                    !slotType->equals(elementType)) {
+                    auto *slotStruct     = tt::as_ptr<StructType>(slotType);
+                    auto *elementStruct  = tt::as_ptr<StructType>(elementType);
+                    if (slotStruct != nullptr && elementStruct != nullptr && slotStruct->named() &&
+                        !elementStruct->named()) {
+                        if (node_handle_t copied = convertStructValue(refNodes[h], slotStruct, gct);
+                            copied != nullptr) {
+                            refNodes[h] = copied;
+                        }
+                    }
                 }
             }
             auto payload    = runtime::makeFillPayload(fillKindForType(filledType), holeSlots);
@@ -1532,7 +1553,18 @@ node_handle_t Builder::variableOperator(camel::core::OperId oper, node_handle_t 
     const auto group = internalOperatorGroup(oper);
     const std::vector<StaticArg> statics(1);
     const auto op = group->resolve({}, {nodeTypeOf(input)}, statics);
-    ASSERT(op.has_value(), "Variable operator rejected its operand.");
+    if (!op.has_value()) {
+        // ASSERT is an empty statement under NDEBUG, so the line below dereferenced an empty
+        // optional and this was a 139 -- the second one tonight that a sentence would have
+        // prevented (the first was Variant::updateRefs). The reading says which operand and what
+        // node it is: a variable operator needs a version that carries a value, and `void` is not
+        // one.
+        throw std::runtime_error(
+            std::format(
+                "a variable operator got an operand with no value type: `:var/get` needs a version "
+                "that carries a value, and the node it was given is a node of kind {} with none",
+                static_cast<int>(nodeKindOf(input))));
+    }
     node_handle_t node = currGraph_->addOperNode(*op, 0);
     stampPermissions(node);
     linkNodes(LinkType::Norm, input, node);

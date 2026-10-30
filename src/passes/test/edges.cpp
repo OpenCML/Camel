@@ -11,11 +11,16 @@
 
 #include "camel/passes/test/anchor.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/core/type/composite/func.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/cycle.h"
 #include "camel/runtime/exec_plan.h"
+#include "runtime/graph_build.h"
 
 #include <exception>
+#include <optional>
+#include <span>
+#include <vector>
 
 using camel::passes::test::anchorNode;
 using camel::passes::test::blankNode;
@@ -157,22 +162,69 @@ EdgesOrderPureTestPass::apply(const camel::runtime::Program *program, std::ostre
     if (program == nullptr || program->root() == nullptr) {
         return program;
     }
+    // A negative case must be built in the layer that owns the invariant. The seal check owns "no
+    // order edge on a pure node" (docs/design/effects/edges.cn.md 4.6) and it reads a finished
+    // graph; the draft only writes the edges a rewrite asks for. Since the encoder drops an order
+    // edge whose user takes no order (planDraftPayload), a bad graph built through a draft is never
+    // written at all: the case would print "wrote=1" and then watch the commit accept a graph
+    // without the edge. So the case builds the bad graph *here*, on the frozen records, and hands it
+    // to the seal check. The draft's half is asserted to be "no longer produced" instead.
     RuntimeGraphDraftSession session(context_, program);
     auto &draft = session.edit(program->root()).edit();
     const gc_node_ref_t anchor = anchorNode(draft);
     // A constant is a pure node: nothing about it can be ordered.
     const gc_node_ref_t constant = draft.materializeStaticValue(
-        camel::core::rtdata::toSlot<float>(1.0f),
-        camel::core::type::Type::Float32());
+        camel::core::rtdata::toSlot<float>(1.0f), camel::core::type::Type::Float32());
     os << "ORDER wrote=" << (draft.appendOrderDependency(constant, anchor) ? 1 : 0) << "\n";
+    // The encoder's own reading: the edge was asked for and the plan drops it, because the node it
+    // would order takes no order -- so the graph the draft hands the commit does not have it.
+    const GraphId rootId = program->root()->id();
+    const Program *next  = session.commit();
+    const GCGraph *root  = next != nullptr ? next->graph(rootId) : nullptr;
+    os << "ORDER frozen_edges=" << (root != nullptr ? root->orderEdges().size() : 0) << "\n";
+
+    // The bad graph itself: two pure nodes and an order edge on the user of them. It is written
+    // straight into the frozen form the seal check reads, so nothing in the builder can drop it.
+    GCGraphPayloadShape shape;
+    shape.nodeCount       = 2;
+    shape.orderEdgeCount  = 1;
+    std::vector<GraphId> noGraphs;
+    const auto sameType = camel::core::type::Type::Float32()->typeId();
+    GCGraph *bad        = GCGraphBuildAccess::create(
+        context_->graphIds().allocate(),
+        GCGraphDerivation{},
+        createGraphDebugRecord("test$order_pure", "test$order_pure"),
+        camel::core::type::FunctionType::create(),
+        std::nullopt,
+        nullptr,
+        nullptr,
+        kInvalidGraphId,
+        noGraphs,
+        noGraphs,
+        noGraphs,
+        noGraphs,
+        shape,
+        [&](GCGraphPayloadArena &arena) {
+            for (gc_node_ref_t ref = 0; ref < 2; ++ref) {
+                GCNode node;
+                node.kind   = GCNodeKind::Data;
+                node.typeId = sameType;
+                arena.nodes[ref] = node;
+            }
+            arena.nodes[2] = GCNode{};
+            arena.orderEdges[0] = GCGraphOrderEdge{.user = 0, .pred = 1};
+            arena.entryNode  = 0;
+            arena.exitNode   = 1;
+            arena.outputNode = 0;
+        },
+        std::span<const slot_t>{});
     try {
-        session.commit();
+        validateRuntimeGraphEdges(*program, bad);
         os << "EDGES accepted\n";
-        return program;
     } catch (const std::exception &error) {
         os << "EDGES refused: " << error.what() << "\n";
-        return program;
     }
+    return program;
 }
 
 const camel::runtime::Program *
