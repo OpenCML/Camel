@@ -593,16 +593,39 @@ expect_output_contains = ["The tag 'rule' cannot take 'Wide' as an argument: it 
 
 [[tests]]
 name = "argument_rule"
-desc = "The shape the transform design writes, `#jvp(mul_jvp)` with a `rule` for the argument: a rule is a declaration of the program and no function, so the refusal says that, at the tag, and never that the name is no function of the program."
+desc = "The shape the transform design writes, `#jvp(mul_rule)` with a `rule` for the argument: a tag parameter that carries a function takes a rule's name (the ruling of 2026-10-31), and the program compiles and runs."
+kind = "behavior"
+case = "../../../cases/compile/tags/rule_argument.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "6.0\n"
+expect_output_not_contains = ["[Error]", "TagArgumentNotValue"]
+
+[[tests]]
+name = "argument_value_still_refused"
+desc = "A tag argument that names a value of the program, not a function and not a rule: the ruling that lets a rule be named leaves values refused, and the refusal says what the name is."
 kind = "negative"
-case = "../../../cases/compile/tags/err_rule_argument.cml"
+case = "../../../cases/compile/tags/err_rule_value_argument.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagArgumentNotValue"
 expect_diagnostic_code = "0x03000202"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 9
 expect_diagnostic_column = 2
-expect_output_contains = ["The tag 'jvp' cannot take 'mul_rule' as an argument: it names a declaration of this program that is not one function."]
+expect_output_contains = ["The tag 'vjp' cannot take 'three' as an argument: it names a declaration of this program that is not one function."]
+
+[[tests]]
+name = "argument_nothing_refused"
+desc = "A tag argument that names nothing the program declares: the refusal says so."
+kind = "negative"
+case = "../../../cases/compile/tags/err_rule_nothing_argument.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagArgumentNotValue"
+expect_diagnostic_code = "0x03000202"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 2
+expect_output_contains = ["The tag 'vjp' cannot take 'nowhere' as an argument: it names nothing this program declares."]
 
 [[tests]]
 name = "tag_name_as_value"

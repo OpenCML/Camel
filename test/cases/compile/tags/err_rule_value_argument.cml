@@ -1,0 +1,12 @@
+/// A tag argument that names a value of the program rather than a function or a rule: the ruling
+/// that lets a rule be named (2026-10-31) leaves values refused, and the refusal says what the name
+/// is, at the tag.
+
+tag vjp::<F>(rule: F) on func when is_function::<F>()
+
+let three = 3
+
+#vjp(three)
+func label(x: int): int { return x }
+
+func main(): int sync { return 0 }
