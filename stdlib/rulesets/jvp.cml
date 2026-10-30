@@ -10,6 +10,9 @@
  * `Lift<T>` is a value and the tangent of that value, and `lift(x)` is the value plus the zero
  * tangent of its type. A constant and a captured value are lifted this way, so a straight-line
  * program is lifted node by node and a call hands its parameters on in the same shape.
+ *
+ * Every rule here is xportd: the caller that attaches one to an operator lives in another
+ * module, and a rule that is not exported is refused where it is imported.
  */
 
 import { is_same, Tangent } from types
@@ -59,12 +62,39 @@ func add_jvp(x: f32, y: f32, d: (f32, f32)): (f32, Tangent<f32>) {
 /// @example mul_jvp(f32(2.0), f32(3.0), (f32(0.5), f32(0.25)))    // (6.0, 3.0)
 export func mul_jvp(x: f32, y: f32, d: (f32, f32)): (f32, Tangent<f32>) {
     let (dx, dy) = d
-    return (x * y, x * dy)
+    return (x * y, x * dy + y * dx)
 }
 
 /// The forward rule of `*` on two 64-bit floats.
 /// @example mul_jvp(2.0, 3.0, (0.5, 0.25))    // (6.0, 3.0)
 export func mul_jvp(x: float, y: float, d: (float, float)): (float, Tangent<float>) {
     let (dx, dy) = d
-    return (x * y, x * dy)
+    return (x * y, x * dy + y * dx)
+}
+/// The forward rule of `-` on two 32-bit floats: the tangents subtract the same way.
+/// @example sub_jvp(f32(5.0), f32(3.0), (f32(0.5), f32(0.25)))    // (2.0, 0.25)
+export func sub_jvp(x: f32, y: f32, d: (f32, f32)): (f32, Tangent<f32>) {
+    let (dx, dy) = d
+    return (x - y, dx - dy)
+}
+
+/// The forward rule of `-` on two 64-bit floats.
+/// @example sub_jvp(5.0, 3.0, (0.5, 0.25))    // (2.0, 0.25)
+export func sub_jvp(x: float, y: float, d: (float, float)): (float, Tangent<float>) {
+    let (dx, dy) = d
+    return (x - y, dx - dy)
+}
+
+/// The forward rule of `/` on two 32-bit floats: the quotient rule, `(y*dx - x*dy) / (y*y)`.
+/// @example div_jvp(f32(6.0), f32(2.0), (f32(1.0), f32(0.25)))    // (3.0, 0.125)
+export func div_jvp(x: f32, y: f32, d: (f32, f32)): (f32, Tangent<f32>) {
+    let (dx, dy) = d
+    return (x / y, (y * dx - x * dy) / (y * y))
+}
+
+/// The forward rule of `/` on two 64-bit floats.
+/// @example div_jvp(6.0, 2.0, (1.0, 0.25))    // (3.0, 0.125)
+export func div_jvp(x: float, y: float, d: (float, float)): (float, Tangent<float>) {
+    let (dx, dy) = d
+    return (x / y, (y * dx - x * dy) / (y * y))
 }
