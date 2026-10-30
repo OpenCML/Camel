@@ -37,20 +37,40 @@ const option = (name, fallback) => {
     return at >= 0 && at + 1 < argv.length ? argv[at + 1] : fallback;
 };
 const since = option("--since", null);
-const base = since ?? option("--base", "origin/develop");
-const rev = option("--rev", "HEAD");
+/// Where "the work on this branch" starts: the given commit, or the merge base with the trunk, so the
+/// entry point below needs no argument.
+const mergeBase = () => {
+    try {
+        return execFileSync("git", ["merge-base", "origin/develop", "HEAD"], {
+            encoding: "utf8",
+        }).trim();
+    } catch {
+        return null;
+    }
+};
+// `--since <sha>` on its own asks about the change that commit introduced (its own diff); with
+// `--rev <rev>` it asks about the range from there to that revision. No argument at all asks about
+// everything this branch added since the merge base, which is the question a pull request asks.
+const rev = option("--rev", since !== null ? since : "HEAD");
+const base = since !== null ? `${since}^` : option("--base", null) ?? mergeBase() ?? "origin/develop";
 
+/// An owner is *named*, not mentioned: the sentence has to say the rule belongs to one of these, in
+/// the form "the owner of this rule is the finished graph". A comment that merely talks about a draft
+/// or a graph names nobody, which is exactly the case this check exists to find.
 const OWNERS = [
-    ["finished graph", /finished graph|frozen graph|完工的图/],
-    ["draft", /\bdraft\b|草稿/],
-    ["encoder", /\bencoder\b|payload plan|编码器/],
-    ["seal check (backstop only)", /seal check|封印检查/],
+    ["finished graph", /owner[s]? (?:of (?:this|these) rules? )?is the (?:finished|frozen) graph|拥有者是[^\n]{0,8}完工的图/],
+    ["draft", /owner[s]? (?:of (?:this|these) rules? )?is the draft|拥有者是[^\n]{0,8}草稿/],
+    ["encoder", /owner[s]? (?:of (?:this|these) rules? )?is the encoder|拥有者是[^\n]{0,8}编码器/],
+    ["seal check (backstop only)", /seal check (?:at commit )?(?:is|as) the (?:backstop|net)|安全网/],
 ];
 
 const INVARIANT = /invariant|不变式|must hold|cannot drift|same question|one question|只能|may only/i;
 /// The wider question the census asks: a comment that states a rule, not only one that says "invariant".
 const RULE = /invariant|不变式|\bmust\b|必须|never\b|cannot\b/i;
-const COMMENT = /^\s*(?:\/\/|\*|#)/;
+const COMMENT = /^\s*(?:\/\/|\*|\/\*)/;
+/// Only code carries a rule the compiler or a check can own; a page about invariants is prose.
+const CODE = /\.(cpp|cc|h|hpp|mjs|cjs|js|ts)$/;
+const SELF = "scripts/check-invariant-owner.mjs";
 
 const git = (args) =>
     execFileSync("git", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
@@ -151,11 +171,14 @@ for (const line of diff.split("\n")) {
         file = line.slice(6);
         continue;
     }
-    if (file === null || !line.startsWith("+") || line.startsWith("+++")) {
+    if (file === null || file === SELF || !CODE.test(file)) {
+        continue;
+    }
+    if (!line.startsWith("+") || line.startsWith("+++")) {
         continue;
     }
     const text = line.slice(1);
-    if (!COMMENT.test(text) || !INVARIANT.test(text)) {
+    if (!COMMENT.test(text)) {
         continue;
     }
     if (!added.has(file)) {
@@ -167,8 +190,13 @@ for (const line of diff.split("\n")) {
 const unnamed = [];
 for (const [where, lines] of added) {
     const joined = lines.join("\n");
+    // The file has to state a rule before the question means anything; if it does, the owner may be
+    // named anywhere in what it adds -- the sentence usually sits beside the rule, not inside it.
+    if (!INVARIANT.test(joined)) {
+        continue;
+    }
     if (!OWNERS.some(([, pattern]) => pattern.test(joined))) {
-        unnamed.push({ where, first: lines[0] });
+        unnamed.push({ where, first: lines.find((line) => INVARIANT.test(line)) ?? lines[0] });
     }
 }
 
