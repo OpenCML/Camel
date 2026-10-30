@@ -564,3 +564,22 @@ HANDLE_PROBE refused: InvalidArgument
 **A 与 `pullback` 那 18 行是同一族**：形状一样（草稿作为自由函数的参数一路传下来，入口处本来就有事务），**只是两处实例**——`generic` 的 `draft` 与 `pullback` 的 `draft`/`forward`/`pullback`。**表能看出它们是同一族：判据一样、链条一样、原子一样。**
 
 **三个数（这一片未动代码）：0 / 0 / 28（保留，等分批）**。**四个数：62 / 504 / 3 / 4（未变）。**
+
+## 30. 那一族的原子换了形状（`71151fc20`）
+
+**只改类型与签名，一条规则体都没动，一个叶子都没搬**：
+
+| 位置 | 改前 | 改后 |
+|---|---|---|
+| `rewriteReachableGraphs` 的入口（`rewrite.cpp:457`） | `rewrite(session.edit(g).edit())` | `rewrite(session.edit(g))` |
+| 回调类型（`rewrite.h:218`、`rewrite.cpp:459`） | `std::function<size_t(GraphDraft &)>` | `std::function<size_t(camel::runtime::GraphTransaction &)>` |
+| 六个 lambda（`generic.cpp` 四处、`finish` 一处、`algebra.cpp:277`） | `(GraphDraft &draft)` | `(GraphTransaction &transaction)` + 首行 `auto &draft = transaction.edit();` |
+| 第 2 层三个 pass 函数（`algebraDraft`、`cseDraft`、`dceDraft`） | `(GraphDraft &draft)` | `(GraphTransaction &transaction)` + 同一行 |
+
+**用 `edit()` 不是 `graph()`**：`graph()` 是 `const GraphDraft &`，而这几个 pass 函数要改图——**这正是"所有权"在类型上的第一次显形**：写的人要拿 `edit()`，读的人拿 `graph()`。编译器的第一轮报错（`setNodeAttrs` 作用在 `const GraphDraft` 上）就是这个区分的证据。
+
+**验收（可检查的一条）**：`git grep -n "std::function<size_t(GraphDraft &)>" -- src` → **无输出（exit 1）**。**"类型没了"比"能编过"更能说明这一笔真的改了形状。**
+
+**三个数**：**消失的参数 13 个**（11 处签名／lambda 的 `GraphDraft` 参数 + 入口两处 `.edit()` 的二次解包）；**删掉的行数 0**（净 `+15`，都是 lambda 首行的绑定与折行）；**保留 28 个**（叶子一个没动）。
+
+**四个数：62 / 491 / 3 / 4**（`504 → 491`）。
