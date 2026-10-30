@@ -17,7 +17,11 @@ FUNC node 1 calls a graph that is not among the graphs this graph calls (its ref
 * 造它的遍，在它自己的草稿里 `addDependency`；
 * 被改写去调用它的那些图的草稿，也要 `addDependency(包装图的 id)`——否则同样是这一句红，而这次它是在**一次真的改写之后**才出现，很容易被当成改写本身写坏了。
 
-那张只为验证“遍里能造图”的调用图后来**删掉了**：包装图用的是同一条路，留着它等于每次降级都白造一张图、白烧一个 `graph id`。删的是 `writeCallGraph` 和它在会话开头的那次调用，`context_->graphIds().allocate()` 的调用点因此少一处（只剩包装图那一处）。
+那张只为验证“遍里能造图”的调用图后来**删掉了**：包装图用的是同一条路，留着它等于每次降级都白造一张图、白烧一个 `graph id`。删的是 `writeCallGraph` 和它在会话开头的那次调用。
+
+两个数比“三个数没动”更能说明删对了：`graphIds()` 的调用点 **2 → 1**（以前每个被降级的族都白取一个 id），`adoptGraph` 的调用点 **2 → 1**（现在会话 adopt 的永远是被引用的图）。
+
+**四个账本数一个没动**（66 / 535 / 3 / 6）。这不是“没证据”，是**有解释**：删掉的那个 helper 是模板，本来就没点名 `GraphDraft`。**“改一处就该掉一格”不是必然**——账本自己遇过同样的情形（另一条线在同一页上记过）。
 
 ## 二、借一次的手不许点名类型
 
@@ -74,3 +78,34 @@ camel <case> std::defunctionalize std::jgir
 两条边界，都改成**两边一起拒绝**而不是只拒绝一边（只拒一边就是半降级）：形参或值的签名声明了 `with` 参数（这一遍写的图没有自己的 with 参数可以往下传），以及值那一族本身没被降级（枚举装不下函数值）。
 
 读数（`defun.widened_parameter.wrapped`）：`DEFUNCTIONALIZE types=2 values=2 calls=1 refused=0`，形参那一族是 `void_g,wrap$1`；过完这一遍 `closures=0`、`indirect_calls=1`（只剩 entry 那次），再过 `std::opt` 是 `closures=0`、`indirect_calls=0`；程序仍旧只打印 `void_g 1`（`x * 10` 的结果被丢掉）。
+
+## 六、签名里套着另一族：一次重写里一起降
+
+**这一笔的规矩，一句话**：**一个函数值的实参位置，是 `FUNC` 与 `CALL` 的 norm 入参**；只认前者，会把每个穿过值传递的实参判成“被一个不是调用的节点读了”，于是每一层嵌套的内层族都被拒、外层族跟着被拒，整个嵌套退回原样。
+
+`nested_signature.cml` 里三层：`twice` 的参数是 `(f: (x: int) => int, x: int) => int`，后者的参数又是 `(x: int) => int`；三层都有值，所以三层都要变成枚举。签名里写着内层的**函数类型**的地方，必须改写成内层的**枚举**，否则外层函数体里那个调用会拿着 tag 去撞一个还写着函数类型的参数。
+
+真正挡住它的**不是**类型替换（那一步一直都会钻进签名里），而是上面那条许可：`checkReader` 当时只认 `FUNC` 节点的 norm 入参，而**穿过值调用的实参写在 `CALL` 节点的 norm 入参里**（`CALL` 的 with 入参第 0 个才是被调的值）。于是 `twice` 里 `h(inc, x)` 的 `inc` 被判成“被一个不是调用的节点读了”，内层族被拒，外层族跟着按 (5b) 被拒——三层全部照原样留下。
+
+许可改成 `FUNC` 与 `CALL` 都算之后，一次重写就把三层一起降了。`std::jgir` 里的签名（也就是“内层枚举写进了签名”这条证据）：
+
+```text
+"signature": "(f: FnValue_inc_0, x: int) => int"        // apply / apply_twice
+"signature": "(h: FnValue_apply_1, x: int) => int"      // twice
+"signature": "(x: int) => int pure"                     // inc
+```
+
+`std::gir` 里两条 PORT 与那次分派：
+
+```text
+N07 [label="f", type="PORT", ..., value_type="FnValue_inc_0"];      // apply 的参数
+N0A [label="h", type="PORT", ..., value_type="FnValue_apply_1"];    // twice 的参数
+N0F [label=":enum/tag", type="OPER", value_type="int"];             // twice 里对 h 分派
+N13 [label="apply_twice", type="FUNC", value_type="int"];           // 两个 arm 各自直调
+```
+
+**棋盘怎么摆，一句话说清**：每一族按自己的签名造自己的变体；签名里嵌的那一层不是包装，是**另一族自己的变体**。判据是 **`wrap$k` 出现 0 次**，不是两个 enum 合成一个——合成一个 enum 是另一种语义（那等于说两族本来就是同一族），这一笔不要它。
+
+读数（`defun.nested_signature.lowered`）：`DEFUNCTIONALIZE types=3 values=6 calls=5 refused=0`（中间那族 `variants='apply,apply_twice'`）；过完这一遍 `closures=0`、`indirect_calls=1`、`branches=1`（`twice` 里那一次分派），再过 `std::opt` 是 `closures=0`、`indirect_calls=0`；程序打印 `NESTED 3 5 5 7`，不加这一遍也是这一行。
+
+**A/B：能改回去，而且读数就红在 ③。** 把许可改回只认 `FUNC`（一行），同一个程序：`DEFUNCTIONALIZE types=0 values=0 calls=0 refused=3`（两条“被一个不是调用的节点读了”，一条 (5b)），`indirect_calls` 过完这一遍 `6`、再过 `std::opt` 反而涨到 `9`。程序**照样打印那一行**（它退回“照原样跑”），所以这个用例的可判之处只有降级读数——这正是要“一起降”的理由：不一起降不是慢一点，是三层一起留在原地。

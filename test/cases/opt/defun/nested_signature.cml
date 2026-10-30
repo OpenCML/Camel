@@ -1,0 +1,40 @@
+/**
+ * Three families, one nested in the next, lowered in one rewrite.
+ *
+ * `twice` takes a value of `(f: (x: int) => int, x: int) => int`, which itself takes a value of
+ * `(x: int) => int`: the two inner types are written inside the outer's signature, one level in the
+ * other. All three are families with values of their own, so all three become enums -- and the
+ * signature of a function of the outer type has to say the inner enums where it wrote their function
+ * types, or the call it makes would hand a tag to something that still expects a function.
+ *
+ * The signature is rewritten in the same pass that declares the enums, not in a second one: a family
+ * is lowered with every family its signature holds, and a family that holds one left as written is
+ * left as written itself. Nothing is routed through a wrapper here -- the value `inc` that `twice`
+ * passes on is a variant of its own family, and the call it reaches is one the nested signature
+ * already declares.
+ *
+ * The program prints the same line with and without the pass.
+ */
+
+func inc(x: int): int {
+    return x + 1
+}
+
+func apply(f: (x: int) => int, x: int): int {
+    return f(x)
+}
+
+func apply_twice(f: (x: int) => int, x: int): int {
+    return f(f(x))
+}
+
+func twice(h: (f: (x: int) => int, x: int) => int, x: int): int {
+    return h(inc, x)
+}
+
+func main(): int sync {
+    let h: (f: (x: int) => int, x: int) => int = apply_twice
+    let k: (h: (f: (x: int) => int, x: int) => int, x: int) => int = twice
+    'NESTED {} {} {} {}'->format<apply(inc, 2), twice(h, 3), k(apply, 4), twice(apply_twice, 5)>->println
+    return 0
+}
