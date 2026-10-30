@@ -51,7 +51,6 @@ using camel::runtime::GCNode;
 using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
 using camel::runtime::GCRegion;
-using camel::runtime::GraphDraft;
 using camel::runtime::GraphId;
 using camel::runtime::kInvalidNodeRef;
 using camel::runtime::Program;
@@ -120,15 +119,16 @@ const GCNode &nodeOf(const Handle *handle, const char *site) {
 struct NodeView {
     const GCNode *frozen               = nullptr;
     const DraftNodeHeader *draftHeader = nullptr;
-    const GraphDraft *draft            = nullptr;
+    const camel::runtime::GraphTransaction *transaction = nullptr;
     gc_node_ref_t ref                  = kInvalidNodeRef;
 
-    bool isDraft() const { return draft != nullptr; }
+    bool isDraft() const { return transaction != nullptr; }
+    const auto &draft() const { return transaction->graph(); }
     GCNodeKind kind() const { return isDraft() ? draftHeader->kind : frozen->kind; }
     Type *dataType() const { return isDraft() ? draftHeader->dataType : frozen->dataType(); }
     int64_t dataIndex() const { return isDraft() ? draftHeader->dataIndex : frozen->dataIndex; }
     bool hasPayload() const {
-        return isDraft() ? !draft->payloadOf(ref).empty() : frozen->hasPayload();
+        return isDraft() ? !draft().payloadOf(ref).empty() : frozen->hasPayload();
     }
 };
 
@@ -137,12 +137,11 @@ NodeView viewOf(const Handle *handle, const char *site) {
     // A node is in the draft exactly when its handle names the transaction that owns the draft:
     // there is no other way to be in a draft, and the handle keeps no draft pointer of its own.
     const auto *transaction = handle->transaction();
-    const auto *draft = transaction != nullptr ? &transaction->graph() : nullptr;
-    if (draft != nullptr) {
-        view.draft       = draft;
+    if (transaction != nullptr) {
+        view.transaction = transaction;
         view.ref         = handle->index();
-        view.draftHeader = draft->header(view.ref);
-        if (view.draftHeader == nullptr || !draft->alive(view.ref) ||
+        view.draftHeader = transaction->graph().header(view.ref);
+        if (view.draftHeader == nullptr || !transaction->graph().alive(view.ref) ||
             view.draftHeader->kind == GCNodeKind::Dead) {
             err::throwRuntimeFault(
                 err::RuntimeDiag::InvalidArgument,
@@ -252,16 +251,16 @@ slot_t inputsOf(ArgsView &norm, const char *site, int group) {
     if (view.isDraft()) {
         switch (group) {
         case 0:
-            take(view.draft->normInputsOf(view.ref));
+            take(view.draft().normInputsOf(view.ref));
             break;
         case 1:
-            take(view.draft->withInputsOf(view.ref));
+            take(view.draft().withInputsOf(view.ref));
             break;
         case 2:
-            take(view.draft->syncInputsOf(view.ref));
+            take(view.draft().syncInputsOf(view.ref));
             break;
         default:
-            take(view.draft->orderInputsOf(view.ref));
+            take(view.draft().orderInputsOf(view.ref));
             break;
         }
     } else {
@@ -316,7 +315,7 @@ slot_t valueUsersKernel(ArgsView &, ArgsView &norm, Context &) {
     const NodeView view = viewOf(handle, "graph.value_users");
     std::vector<gc_node_ref_t> users;
     if (view.isDraft()) {
-        for (auto refs : {view.draft->normUsersOf(view.ref), view.draft->withUsersOf(view.ref)}) {
+        for (auto refs : {view.draft().normUsersOf(view.ref), view.draft().withUsersOf(view.ref)}) {
             users.insert(users.end(), refs.begin(), refs.end());
         }
     } else {
@@ -348,9 +347,9 @@ slot_t usersKernel(ArgsView &, ArgsView &norm, Context &) {
     std::vector<gc_node_ref_t> users;
     if (view.isDraft()) {
         for (auto refs :
-             {view.draft->normUsersOf(view.ref),
-              view.draft->withUsersOf(view.ref),
-              view.draft->ctrlUsersOf(view.ref)}) {
+             {view.draft().normUsersOf(view.ref),
+              view.draft().withUsersOf(view.ref),
+              view.draft().ctrlUsersOf(view.ref)}) {
             users.insert(users.end(), refs.begin(), refs.end());
         }
     } else {
@@ -393,7 +392,7 @@ slot_t opKernel(ArgsView &, ArgsView &norm, Context &) {
     }
     camel::core::OperId oper = camel::core::kNoOper;
     if (node.isDraft()) {
-        const auto bytes = node.draft->payloadOf(node.ref);
+        const auto bytes = node.draft().payloadOf(node.ref);
         if (bytes.size() < sizeof(GCOperBody)) {
             return NullSlot;
         }
@@ -417,7 +416,7 @@ slot_t isPureKernel(ArgsView &, ArgsView &norm, Context &) {
     if (node.kind() == GCNodeKind::Oper && node.hasPayload()) {
         camel::core::OperId oper = camel::core::kNoOper;
         if (node.isDraft()) {
-            const auto bytes = node.draft->payloadOf(node.ref);
+            const auto bytes = node.draft().payloadOf(node.ref);
             if (bytes.size() >= sizeof(GCOperBody)) {
                 oper = reinterpret_cast<const GCOperBody *>(bytes.data())->oper;
             }
@@ -472,7 +471,7 @@ slot_t tagsKernel(ArgsView &, ArgsView &norm, Context &) {
     // The one query for the facts of a node (camel/core/tags.h): the attributes of a node are its
     // tags.
     const auto facts = node.isDraft()
-                           ? camel::core::tag::factsOf(*node.draft, node.ref)
+                           ? camel::core::tag::factsOf(node.draft(), node.ref)
                            : camel::core::tag::factsOf(graphOf(handle, "graph.tags"), handle->index());
     return stringSlot(camel::core::attr::text(facts.tags));
 }
@@ -640,7 +639,7 @@ slot_t isAnchorKernel(ArgsView &, ArgsView &norm, Context &) {
     const NodeView node = viewOf(handle, "graph.is_anchor");
     const auto ref      = handle->index();
     if (node.isDraft()) {
-        const GraphDraft &draft = *node.draft;
+        const auto &draft = node.draft();
         return toSlot<Bool>(
             ref == draft.exitNode() || ref == draft.outputNode() || ref == draft.returnNode());
     }
@@ -663,7 +662,7 @@ slot_t isWrittenSlotKernel(ArgsView &, ArgsView &norm, Context &) {
     const NodeView node = viewOf(handle, "graph.is_written_slot");
     if (node.isDraft()) {
         // The draft changes in place, so there is no version to cache an answer under.
-        return toSlot<Bool>(camel::runtime::WrittenSlots(*node.draft)(node.ref));
+        return toSlot<Bool>(camel::runtime::WrittenSlots(node.draft())(node.ref));
     }
     const GCGraph &graph = graphOf(handle, "graph.is_written_slot");
     std::shared_ptr<camel::runtime::WrittenSlots> written;
@@ -675,9 +674,11 @@ slot_t isWrittenSlotKernel(ArgsView &, ArgsView &norm, Context &) {
             if (cache.size() > 64) {
                 cache.clear();
             }
-            const auto draft = camel::runtime::GraphDraft::decode(*handle->program(), &graph);
-            found =
-                cache.emplace(key, std::make_shared<camel::runtime::WrittenSlots>(*draft)).first;
+            // The copy is opened by a transaction, which is the only owner a draft has; it is never
+            // committed, because the answer is computed from the copy and nothing is handed back.
+            const auto copy = camel::runtime::GraphTransaction::decode(*handle->program(), &graph);
+            found = cache.emplace(key, std::make_shared<camel::runtime::WrittenSlots>(copy->edit()))
+                        .first;
         }
         written = found->second;
     }
@@ -688,7 +689,7 @@ slot_t originKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle    = norm.get<Handle *>(0);
     const NodeView node   = viewOf(handle, "graph.origin");
     const uint64_t origin = node.isDraft()
-                                ? node.draft->nodeOrigin(node.ref)
+                                ? node.draft().nodeOrigin(node.ref)
                                 : graphOf(handle, "graph.origin").nodeOrigin(handle->index());
     return toSlot<Int64>(static_cast<int64_t>(origin));
 }
@@ -706,18 +707,18 @@ slot_t constantKernel(ArgsView &, ArgsView &norm, Context &) {
     if (node.kind() != GCNodeKind::Data || type == nullptr || type->code() != wanted->code() ||
         node.dataIndex() >= 0 ||
         !(node.isDraft()
-              ? node.draft->normInputsOf(node.ref).empty()
+              ? node.draft().normInputsOf(node.ref).empty()
               : graphOf(handle, "graph.constant").normInputsOf(handle->index()).empty()) ||
         !(node.isDraft()
-              ? node.draft->withInputsOf(node.ref).empty()
+              ? node.draft().withInputsOf(node.ref).empty()
               : graphOf(handle, "graph.constant").withInputsOf(handle->index()).empty()) ||
         !(node.isDraft()
-              ? node.draft->ctrlInputsOf(node.ref).empty()
+              ? node.draft().ctrlInputsOf(node.ref).empty()
               : graphOf(handle, "graph.constant").ctrlInputsOf(handle->index()).empty())) {
         return NullSlot;
     }
     if (node.isDraft()) {
-        const auto slots = node.draft->staticSlots();
+        const auto slots = node.draft().staticSlots();
         if (static_cast<size_t>(index) >= slots.size()) {
             return NullSlot;
         }
@@ -810,7 +811,7 @@ slot_t showKernel(ArgsView &, ArgsView &norm, Context &) {
     text += tag ? nodeKindName(*tag) : "?";
     if (node.kind() == GCNodeKind::Oper && node.hasPayload()) {
         if (node.isDraft()) {
-            const auto bytes = node.draft->payloadOf(node.ref);
+            const auto bytes = node.draft().payloadOf(node.ref);
             if (bytes.size() >= sizeof(GCOperBody)) {
                 text +=
                     " " + std::string(reinterpret_cast<const GCOperBody *>(bytes.data())->uri());

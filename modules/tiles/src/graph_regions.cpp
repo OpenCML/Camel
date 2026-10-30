@@ -62,7 +62,14 @@ const std::unordered_map<core::OperId, std::string> &operations() {
               "sum_axis",
               "mean_axis",
               "max_axis",
-              "sum_to"})
+              "sum_to",
+              // The layout operators are not computed: a device program for one is the address the
+              // core's own index instance gives (`kernel::coreViewAddress`), so the region reads the
+              // operand through it and writes nothing of its own.
+              "transpose",
+              "permute",
+              "reshape",
+              "broadcast_like"})
             result.emplace(table.intern(std::string("tensor:") + name), name);
         result.emplace(table.intern("tensor:sum"), "sum_all");
         result.emplace(table.intern("tensor:mean"), "mean_all");
@@ -92,6 +99,12 @@ std::vector<char> chainMembers(const rt::GCGraph &graph) {
 /// Whether the node is one the chain holds, read from the set `chainMembers` computed once per graph.
 inline bool inChain(const std::vector<char> &chain, rt::gc_node_ref_t id) {
     return id < chain.size() && chain[id] != 0;
+}
+
+/// Whether the operation is a layout one: its result is the operand read in another order, so there
+/// is no kernel to write for it, only an address (`kernel::coreViewAddress`) to read it through.
+bool layoutOperator(const std::string &op) {
+    return op == "transpose" || op == "permute" || op == "broadcast_like";
 }
 
 std::string eligibility(
@@ -172,7 +185,43 @@ std::string eligibility(
         program.nodes.push_back(Node{.op = "input", .shape = *input, .inputs = {}});
     }
     try {
-        if (elementwise(candidate.op)) {
+        if (layoutOperator(candidate.op)) {
+            // One data operand: `broadcast_like`'s second operand only names the shape the result
+            // takes, and the source map the core declared for the call reads the first one
+            // (modules/tensor/ops/indexing.cpp, broadcastLikeIndexing).
+            if (candidate.inputs.empty())
+                return "operand_arity";
+            Node view   = candidate;
+            view.op     = "reindex";
+            view.inputs = {candidate.inputs.front()};
+            (void)kernel::coreViewAddress(program, view, kernel::IndexExpr(0));
+        } else if (candidate.op == "reshape") {
+            // A reshape writes no element: it names the same buffer in another shape, and the
+            // compiler keeps the buffer only while the element count is the one the result has.
+            if (candidate.inputs.size() != 1)
+                return "operand_arity";
+            if (elements(program.nodes[candidate.inputs.front()].shape) != elements(candidate.shape))
+                return "unsupported_index_contract";
+        } else if (candidate.op == "sum_to") {
+            // `sum_to` names the shape its sum goes to in a second operand that the compiler reads
+            // as the result's shape and never as data (compiler.cpp). With that shape already the
+            // operand's, it reduces nothing and the instance writes each element once: the same
+            // address a view has, and the node the compiler keeps is a copy of it. Otherwise the
+            // sum is the reduction the first operand alone describes.
+            if (candidate.inputs.empty())
+                return "operand_arity";
+            Node single = candidate;
+            single.inputs = {candidate.inputs.front()};
+            if (inst.output.mode == sem::WriteMode::Unique) {
+                single.op = "reindex";
+                (void)kernel::coreViewAddress(program, single, kernel::IndexExpr(0));
+            } else
+                (void)kernel::reductionAccess(
+                    program,
+                    single,
+                    kernel::IndexExpr(0),
+                    kernel::IndexExpr(0));
+        } else if (elementwise(candidate.op)) {
             for (size_t side = 0; side < candidate.inputs.size(); ++side)
                 (void)kernel::pointwiseAddress(program, candidate, side, kernel::IndexExpr(0));
         } else if (candidate.op == "matmul") {
