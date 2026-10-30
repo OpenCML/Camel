@@ -238,3 +238,51 @@ b2.3e 我先报的是"60 处"（`rewrite.h` 17、`generic.cpp` 23、`rewrite.cpp
 | `passes/test/anchor.cpp` | 0 | 0 | 0 | 已是 0 |
 
 **结论**：b5 到这里只剩"住户"——构造点、handle 的存图、存储的 RAII 守卫、编码器的回调签名；它们的名字要随类型一起消失，那是 b6（handle 那条还牵着 b4）。**b5 不再有正收益的层可做**；再往下该开 b4／b6，而不是在 b5 里继续找。
+
+**b5 收尾（本页到此为止，不再往下推）**：b5 剩余八处，能删行数全为 0；剩下的住户是构造点、handle 的存图、`WritingScope`、编码器回调——归 b6（handle 还牵 b4）。**b5 到此为止。** 加一句给后来人：**别再把 b5 的边界往后推——能删行数为 0 的层就是边界。**
+
+## 12. b4 的入口：handle 一片，四个数 + 构造点一分为二
+
+b4 只有一个人口：`modules/graph/handle.h` 里那个 `const GraphDraft *draft_`。b4 的难点不是签名，是"**有人要先拿到图才能拿到 handle**"，量的时候把它单列。
+
+**四个数**：
+1. **handle 走图的处数**：**15 处 / 4 文件**（`handle.h` 5、`handle.cpp` 1、`read.cpp` 6、`txn.cpp` 3）。
+2. **调用点数**：**7**——`read.cpp` 的 `handle->draft()` 3（136、164、446）、`*node.draft` 1（637）、`GraphDraft::decode` 1（672）、`fact.cpp:825` 的 `first->draft()` 1、`handle.cpp:271` 的 `createInDraft(*draft_, …)`（clone）1。
+3. **若把 handle 换成事务能删几行**：**0 行**。`draft_` 换成 `transaction_` 是同数目的成员，`draft()` 访问器改成 `graph()` 也是同 1 行；**但它顺手消掉一个 decode 点（6 → 5）和一条"草稿活得比事务久"的路**——所以它的价值不在行数，在把 b6 的前提挪到位。
+4. **换完谁还会去拿 handle**：**13 个构造点是"从 program 拿图"造出来的**（`read.cpp` 8、`txn.cpp` 3、`fact.cpp:424` 1、`module.cpp:1544` 1），这些调用者手里只有 `Program`／`Function`、没有事务；**这批人就是 b4 的第二片**（Camel 侧的 `graph::` 函数与 rewrite 模块的 `whenArg`）。
+
+**构造点一分为二（决定 b4 是一笔还是三笔）**：**4 个在事务里造**（`createInDraft`：`read.cpp:165`、`fact.cpp:422`、`module.cpp:332`、`module.cpp:360`），**13 个在事务外造**（`Handle::create`，从 `program` 造）。**四六开、而且"事务外"那侧全是同一个形状（`program` → `Handle::create`）**，所以 b4 更像"一片（把 4 个在事务里的先收）+ 一片（13 个从 program 造的，要先给他们事务）"，而不是三笔。
+
+**一条结构事实，写在这里免得下一个人以为这是改名**：`handle.cpp:281` 的 `updateRefs` 只 trace `program_`，`draft_` 是**借来的裸指针、不参与 GC 追踪**；`equals()` 又拿 `draft_` 指针当身份。换成事务要同时回答"谁持有它、它参不参与 `updateRefs`、身份怎么比"——**这是所有权问题，不是拼写问题**，也正因为如此，它必须排在 b6 之前、且不能并进 b5。
+
+## 13. b4 写成两片（每片当天能绿，规则一条一笔）
+
+作者的规矩是"一条规则一笔、每笔当天合入"，所以 b4 不写成一大笔，写成**两片**：第一片收"已经在事务里造"的那 4 个构造点，第二片才是"从 program 造"的那 13 个。
+
+### 第一片：handle 存事务（4 个事务内构造点 + 7 个调用点）
+
+- **动哪些文件**：`modules/graph/handle.h`、`modules/graph/handle.cpp`、`modules/graph/read.cpp`（165 的 `createInDraft`、637 的 `*node.draft`、672 的 decode 一条线）、`modules/rewrite/fact.cpp`（422）、`modules/rewrite/module.cpp`（332、360）。
+- **哪些调用点**：7 个——`read.cpp:136/164/446` 的 `handle->draft()`、`read.cpp:637` 的 `*node.draft`、`read.cpp:672` 的 `GraphDraft::decode`、`fact.cpp:825` 的 `first->draft()`、`handle.cpp:271` 的 `createInDraft(*draft_, …)`（clone）。
+- **验收怎么量**：① **decode 6 → 5**（`git grep -nw GraphDraft` 里那处 decode 变成 `GraphTransaction::decode`）；② **`handle->draft()` 3 处消失**（`git grep -n '\->draft()' modules/graph` 应为 0）；③ `GraphDraft` 拼写 15 → **11**（4 个 `createInDraft` 的签名与 1 个成员改名）；④ `never_rises` 绿、闸门 `fail 0`；⑤ `equals()` 与 `updateRefs` 的注释改成说事务，不再说草稿。
+- **做完之后还有谁去拿 handle**：**13 个"从 program 造"的构造点**（`read.cpp` 8、`txn.cpp` 3、`fact.cpp:424`、`module.cpp:1544`）。它们是**第二片的对象**；这一片之后，"草稿活得比事务久"的路只剩 `GraphTransaction::decode` 与 b6 的存储自身。
+
+### 第二片：从 program 造 handle 的那 13 处
+
+- **动哪些文件**：`modules/graph/read.cpp`（8 处构造 + 它们的 `program` 来源）、`modules/graph/txn.cpp`（3）、`modules/rewrite/fact.cpp:424`、`modules/rewrite/module.cpp:1544`。
+- **哪些调用点**：这 13 处构造；以及它们上游"先拿到图才能拿到 handle"的那批（Camel 侧 `graph::` 函数、rewrite 模块的 `whenArg`）。
+- **验收怎么量**：① `modules/graph` 的 `GraphDraft` 15 → **0**；② 每个 `Handle` 都指得到一个所有者（**事务**，或**已发布程序**），没有第三种；③ 闸门 `fail 0`、`never_rises` 绿。
+- **做完之后还有谁去拿 handle**：**没有第三种持有者**。这一片可能得出"program-backed handle 保留 program 就够、不必造事务"的结论——**那也是它的结论**，写进账本，别硬造事务。
+
+**两片的顺序不能反**：第一片是"把已经在事务里的那 4 个收进屋"，尺寸小、风险低；第二片要回答"读已发布的程序要不要事务"，那是设计问题，得等第一片把 handle 的形状定下来。
+
+## 14. 判据的第二版：收益有三种，不能只记"删了几行"
+
+§10 的判据只记了第一种收益（删行数），会被 b4 第一片判成净负——因为它删 0 行。补齐：
+
+| 收益类型 | 怎么量 | 例子 |
+|---|---|---|
+| ① 删掉的行／局部变量 | 行数 | b2.4、b5a–b5e（拼写与绑定一起消失） |
+| ② 消掉一个显式点 | 计数点（decode、构造点、`->draft()`） | b4 第一片：decode **6 → 5**、`handle->draft()` **3 → 0** |
+| ③ 消掉一条生存期漏洞 | "有没有东西活得比它的所有者久" | b4 第一片：草稿不再能脱离事务被 handle 持有 |
+
+**判据**：一笔要么删行，要么消点，要么堵漏；**三样都没有才是净负**。提交信息里必须写出它是哪一种——否则按"删行数"看，b4 第一片是 0 行，会被误判成扩散。

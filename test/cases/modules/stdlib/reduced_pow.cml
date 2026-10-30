@@ -11,7 +11,7 @@
  * Every line below is a number, or the little-endian bytes of one stored element, that only that
  * rule gives. Two comparisons follow the values: the same expression computed in f32 and rounded
  * once into the element type, which must agree bit for bit, and the exact power computed in f64,
- * which the stored element must be within the type's own epsilon of (2^-8 for bf16, 2^-11 for
+ * which the stored element must be within one rounding's relative bound of (2^-8 for bf16, 2^-11 for
  * f16, the spacing of the type at 1).
  *
  *   x       ^   y      bf16                   f16                     why
@@ -65,7 +65,7 @@ func f16AgreesWithF32(x: f16, y: f16): bool {
     return r == f16(pow(float(x), float(y)))
 }
 
-/// Whether the stored element is within the type's own epsilon of the exact power, computed in
+/// Whether the stored element is within one rounding's relative bound of the exact power, computed in
 /// f64 from the two widening values. The tolerance is the spacing of the type at 1 -- 2^-8 for
 /// bf16 and 2^-11 for f16 -- and not the f32 one (2^-23), which no 16-bit result could meet.
 func bf16WithinEps(x: bf16, y: bf16): bool {
@@ -80,7 +80,7 @@ func f16WithinEps(x: f16, y: f16): bool {
     return abs(f64(r) - exact) / abs(exact) <= 0.00048828125
 }
 
-/// The same comparison at the other type's epsilon. It must answer false for the inexact bf16
+/// The same comparison with the other type's bound. It must answer false for the inexact bf16
 /// probe: 1.734375 is 1.34e-3 from the exact power, which passes bf16's 3.9e-3 and fails f16's
 /// 4.9e-4. A tolerance that passed everything would answer true here, so this line is what says
 /// the check above can fail at all.
@@ -139,10 +139,10 @@ func main(): int sync {
     println(bf16AgreesWithF32(bf16(3.0), bf16(0.5)), f16AgreesWithF32(f16(3.0), f16(0.5)))
     println(bf16AgreesWithF32(bf16(10.0), bf16(3.0)), f16AgreesWithF32(f16(10.0), f16(3.0)))
 
-    // ---- the exact power in f64, within the type's own epsilon ----
+    // ---- the exact power in f64, within one rounding's relative bound ----
     println(bf16WithinEps(bf16(3.0), bf16(0.5)), f16WithinEps(f16(3.0), f16(0.5)))
     println(bf16WithinEps(bf16(1.5), bf16(3.0)), f16WithinEps(f16(1.5), f16(3.0)))
-    // The bf16 probe inside f16's epsilon: false, so the tolerance above is the type's own.
+    // The bf16 probe inside f16's bound: false, so the tolerance above is each type's own.
     println(bf16WithinF16Eps(bf16(3.0), bf16(0.5)), bf16WithinEps(bf16(3.0), bf16(0.5)))
     return 0
 }
