@@ -1135,11 +1135,10 @@ void GraphDraft::replaceNodeStorage(gc_node_ref_t id, DraftNode *nodePtr) {
     GUARD(
         id < nodesById_.size(),
         std::format(
-            "replacing the storage of draft node {}: either this graph holds only {} nodes (the id "
-            "is out of range), or it holds that many but node {} has no storage yet",
+            "replacing the storage of draft node {}: this graph holds only {} nodes, so the id is "
+            "out of range",
             id,
-            nodesById_.size(),
-            id));
+            nodesById_.size()));
     GUARD(
         nodePtr != nullptr,
         std::format(
