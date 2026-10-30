@@ -1,0 +1,26 @@
+# 文档车道：图页收口（05_graph_ir §8 内存模型、引用格式、rules.plan 自述数）
+
+## 05_graph_ir.md §8 内存模型：四处过时已改
+
+- `graph_ptr_t` 是 `std::shared_ptr<DraftGraphBuilder>`（`include/camel/compile/gir/types.h`），builder 拥有 `GraphDraft` 与 `GraphArena`；旧的 `Graph` 类与 `ownedNodes_` 已移除。
+- draft 节点来自 `DraftNodePool`（头 + 64/96/128 字节的尾，每 4 KB 一页），不在 `GraphArena` 上构造。
+- 冻结图是 `GCGraph` 在图空间里的一次分配；节点按 `kNodeChunkNodes`=256 一块，版本之间共享未改动的块。
+- `GraphArena` 今天只服务建图期的静态函数值（`staticFunctionAllocator`）；Draft/Frozen 两区、guard band、`reserveFrozenBytes`、延迟回收都只在这个范围内成立。
+- 删掉两处不存在的说法：指标里没有 `allocFailCount`；`releaseDraftRegion` 也没有"检测到 metaSpace 损坏就跳过回收"的分支。
+
+## 待核（未核，写在这一页正文里）
+
+- §9「与字节码/后端的对应」：本轮未核。
+- 节点块在版本间共享：只按 `GCNodeChunk` 的注释与 `shares` 字段认定，未跑代码验证。
+
+## 引用规范（今晚唯一"格式即规矩"的坑）
+
+本仓文档引用源码要写 `路径#符号`，不是 `path:line`；带行号即缺陷，`docs.links.citations` 会把每一处报成 "names a line"。这一轮我自己造了 87 处，闸门 `fail 1` 才发现——**五项本地检查（stdlib / diagnostics ×2 / grammar / links）里没有这一项**，最容易漏掉的正是没写进检查表的那条规矩。后来人改文档先跑 `node scripts/check-doc-links.mjs --citations`。已全部改成 `路径#符号`（497 个符号引用、2101 条路径引用全过）。
+
+## rules.plan.toml 的自述数
+
+`test/plans/feat/modules/rules.plan.toml:1349` 的 "43 exported rules" / "42 of the library's 43" 是自述不是期望，改成库实有的 37；"68 of 69" 改成今天实测的 37 of 37（`check_every_rule.cml` 命中全部 37，`check_library.cml` 33）。改完跑了那份计划本身：173/173、fail 0。
+
+## 合并与闸门
+
+`git merge --no-ff origin/develop`（379d52ee2）无冲突；合并后重跑 `-Plan all -Tier fast -Jobs 8`：total 7802 / pass 7798 / fail 0 / skip 2 / known failures 2。新问题页按 `docs/handover/questions/README.md` 的命名改成 `questions-2026-10-30-gate-control-edge.md`（内容不变）。
