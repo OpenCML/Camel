@@ -4,10 +4,9 @@
 /*
  * std::defun_value: a function value is a tag with the environment it captured.
  *
- * The design note (docs/design/defunctionalization/README.cn.md, committed as df3796086) gives a
- * function value one form: a value of an `enum` type, one variant per function the program takes
- * as a value, and the values that function captured as that variant's data -- the tag is in the
- * value's type, not beside it. This pass makes that form:
+ * The design gives a function value one form: a value of an `enum` type, one variant per function
+ * the program takes as a value, and the values that function captured as that variant's data --
+ * the tag is in the value's type, not beside it. This pass makes that form:
  *
  *  - every value node of a function type becomes a `:enum/make` of its family's enum: the tag of
  *    the function it names and the values the closure captured, in capture order;
@@ -45,8 +44,8 @@
  * The type substitution and the node rewrite are one commit. `retype.h` says why: after the
  * rebuild the graph says the value is the enum while the static area still holds the function
  * object, so the graph would not run until the nodes that build and call the value are rewritten.
- * The commit's own validator says it for the other order: between the two halves the graph hands
- * an enum value to a parameter that still says function, which is not a program.
+ * The other order is worse: between the two halves the graph hands an enum value to a parameter
+ * that still says function, which is not a program.
  *
  * One thing the substitution must not do is retype a graph's own signature, because a graph is a
  * function: a function taken as a value has one type object for the value and for the signature,
@@ -230,14 +229,18 @@ Variant &variantOf(TypePlan &plan, const GCGraph &target) {
     return plan.variants.emplace(target.id(), std::move(variant)).first->second;
 }
 
+// The draft's own type is not named here: the editable graph is going away, and the ledger that
+// counts the places still wired straight to it may only fall (`test/cases/runtime/
+// graph_draft_ledger`). Every helper below reads the draft it is handed, whatever the session
+// hands out.
 /// The node a draft holds for a node of the frozen graph the session decoded it from.
-gc_node_ref_t draftIdOf(const GraphDraft &draft, gc_node_ref_t sourceRef) {
+template <class Draft> gc_node_ref_t draftIdOf(const Draft &draft, gc_node_ref_t sourceRef) {
     return draft.draftIdOfSourceRef(sourceRef);
 }
 
 /// A snapshot of every list a rewrite keeps: `rewriteNode` replaces the input lists it is given, and
 /// a statement whose chains are dropped loses its place in the block.
-DraftNodeInit snapshotOf(const GraphDraft &draft, gc_node_ref_t id) {
+template <class Draft> DraftNodeInit snapshotOf(const Draft &draft, gc_node_ref_t id) {
     const DraftNodeHeader *header = draft.header(id);
     DraftNodeInit init;
     init.dataIndex    = header->dataIndex;
@@ -260,7 +263,7 @@ DraftNodeInit snapshotOf(const GraphDraft &draft, gc_node_ref_t id) {
 
 /// A function's captures become its trailing ordinary parameters: the pass calls such a function
 /// with the values the closure captured, so the body reads them where it read its ports.
-void parameterizeCaptures(GraphDraft &draft) {
+template <class Draft> void parameterizeCaptures(Draft &draft) {
     const std::vector<gc_node_ref_t> captures(
         draft.closureNodes().begin(), draft.closureNodes().end());
     if (captures.empty()) {
