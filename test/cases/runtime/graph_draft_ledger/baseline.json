@@ -2,7 +2,7 @@
   "comment": "The baseline of the direct-connection ledger (graph-store step 2 b): the numbers below may only fall, and the last step is all of them at zero. `sites` records where each number comes from, as `file#symbol` (a line number moves with every edit above it, a symbol does not); it is diagnostics for a red and never decides the verdict. Record a new row after a commit with check.mjs --record.",
   "numbers": {
     "files": 62,
-    "references": 517,
+    "references": 514,
     "constructions": 3,
     "decode": 4
   },
@@ -121,7 +121,6 @@
       "modules/autodiff/pullback.cpp#externalInputsOf": 1,
       "modules/autodiff/pullback.cpp#hasOrdering": 1,
       "modules/autodiff/pullback.cpp#kindOf": 1,
-      "modules/autodiff/pullback.cpp#makePlanTypes": 3,
       "modules/autodiff/pullback.cpp#orderingOf": 1,
       "modules/autodiff/pullback.cpp#packState": 1,
       "modules/autodiff/pullback.cpp#portsOf": 1,
