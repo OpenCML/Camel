@@ -13,7 +13,7 @@
 | 边 | 能承担 | 不能承担 |
 |---|---|---|
 | **Sync** | 链：`writeSyncStatement` 会 `markSyncStatement` 两侧，`checkSyncEdges` 按链校验（同一块、相邻） | **不是链的连接**——写→值、"调用已返回"这类，硬连会把不属于一条链的两个节点标成同块 |
-| **Order** | 只排序：谁先谁后，不传值、不传版本 | **版本**——"读要从写拿到它之后的值"；`std::opt::order` 还会把它当可推导的冗余删掉（`docs/technical/gir-interchange.md` 的 reduction 一节） |
+| **Order** | 只排序：谁先谁后，不传值 | **效果的存在**——见"裁决后的第一步"：换成 order 边之后，写节点被当死代码删掉 |
 | **Ctrl** | 今天唯一能表达"这个节点必须等那次写/那次调用"的 | 按 `edges.cn.md` 1，**这个种类整体要消失** |
 
 ## 三种改法的实测数（都在 `lane-edges` 上跑过，同一个闸门）
@@ -43,10 +43,44 @@
 ## 我的建议：**(b)**，理由三条
 
 1. **代价小一个数量级**：一句手册 vs 一种边类 + 两个导出格式 + 143 条存档边 + 53 个读点逐点重判。
-2. **这个区分在代码里已经存在，且到处都是**：`std::opt::ctrl` 的规则、门的绕过判据（`gates.cpp:19` 的**使能**条件）、`waitUsersOf`、`hasControlDependency`——所有实现都把"效果等待"当成一种与链不同的东西在处理；(a) 只是给它换个名字加个编号，却要求全体读者跟着搬家。
+2. **这个区分在代码里已经存在，且到处都是**：`src/runtime/control.cpp` 的规则、门的绕过判据（`gates.cpp:19` 的**使能**条件）、`waitUsersOf`、`hasControlDependency`——所有实现都把"效果等待"当成一种与链不同的东西在处理；(a) 只是给它换个名字加个编号，却要求全体读者跟着搬家。
 3. **今晚已经付过一次学费**：把 ctrl 换 sync 或换 order 各红一次（141 / 81），说明这个区分**不是命名问题，是语义真的不同**——那就该在模型里给它一个位置，而不是把它塞进已有的两种里。
 
 **若作者倾向 (a)**，我建议的最便宜形态是：**不新增边类，而是让"效果等待"只出现在门的一个侧口上**（门有两个入边位置：值、以及"等谁做完"），导出格式里这个位置本来就存在（门今天就有 ctrl 入边，只是类型名要换）；这样两个 version 各改一行而非各加一类。
+
+## 裁决后的第一步：把"Order 不担版本"收窄（已验）
+
+我原来把 Order 那 81 条红写成"Order 不担版本"，**验完要收窄**——不是"顺序边传不了版本"，是**顺序边不让一次写成为可观察的效果**。
+
+验法：把三处 `Ctrl` 换成 `Order`，对 `var.cml`、`var_params.cml`、`var_tensor_reference.cml` 各取 `std::gir` 前后对比。三张图里**消失的不是边，是节点**：
+
+```
+-            N04 [label=":op/assn_l", type="OPER", ... value_type="var int"];
+-            N05 [label="GATE", type="GATE", value_type="int"];
+-            N05 -> O02 [label="0", type="EXIT"];
++            N02 -> O02 [label="0", type="EXIT"];
+-            N04 -> N05 [label="0|0", type="CTRL"];
+```
+
+**写节点和它的门一起没了**，图尾直接取表达式的值。也就是说：**那条等待今天是"这次写是活的"的唯一凭据**；换成 order 边之后写被当死代码删掉，读于是读到旧值。这与"门被 `bypassValueGate` 绕过"**不是**一回事——门根本没被绕过，它和写一起消失了。
+
+**所以裁决要回答的其实是**：什么边能让一次写/一次调用**成为可观察的效果**？（不是"排序"，排序已经够了。）这也让 (b) 的理由更硬：今天没有任何一种边承担"效果活着"，只有 ctrl 承担。
+
+## ②a 的可逆演练：停造 ctrl 会红多少（已跑，工作树已复原、无提交）
+
+把 **17 处 `linkNodes(LinkType::Ctrl`**（`builder_control.cpp` 8、`builder_expr.cpp` 5、`builder_operators.cpp` 3、`builder_helpers.h` 1）全注释掉，编一次，跑闸门：
+
+| 项 | 结果 |
+|---|---|
+| 整闸 | **fail 584 / total 7940**（pass 7349、skip 7） |
+| `control.topology` | **PASS**（自检自己造边，不查 ctrl 存不存在） |
+| `control.test_pass_runs_when_named` | **PASS** |
+| `control.pipeline_contract` | **FAIL**（Python 侧契约用例） |
+| 存档图 8 个 | **4 个变**：`01_scalar_boundary` −4、`02_branch_shape_contract` −5、`08_structured_control_flow` −9、`05_effect_order` **+10 / −15** |
+
+**那 10 行新增是什么**：**全是索引重编号，不是新边**——少一条 ctrl 后，同一节点剩下的 ctrl 边 `label="i|j"` 前移（`N0D -> N11` 从 `1|0` 变 `0|0`）。所以它在这里不是语义变化；但 ②a 重录时仍要逐条确认没有第二种来源。
+
+**584 条红的形状**：`gir.*_snapshot`、`boundaries.*`、`consecutive_sync_calls.*`(9)、`simplify_arm_write_lost.*`(8)、`unread_gate.*`、`dropped_effects`、`graph.null_then*`——**全是"效果/写/门"这一族**，与上面收窄后的结论同源：**停造 ctrl 之后，效果没有边来宣告它活着**。这就是 ②a 必须等裁决、不能"红了自己修"的原因。
 
 ## 边界（现状，给作者看）
 
