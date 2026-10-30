@@ -1,0 +1,11 @@
+**`sort_rebinding` 的 `main` 是 1 段 0 链 37 个算子 inline、`gpu_fallback` 的 `main` 是 1 段 0 链 14 个算子 inline —— 这两条用例的程序里根本没有可切的东西。**
+
+所以 08:30 那句 "prl running empty is located in its segmentation" 要修正：不是它分不出段，是这两个程序只排得出一条全序；08:49 说的"没守住同步链和顺序边"是行为缺陷，与分段无关。
+
+推入 develop：`ee02ddc4d`（参数 `a200f3bc7` + 措辞与页面 `d69fe0381` + 并入 develop 四笔）。闸门同树：**total 7916 / pass 7907 / fail 0 / skip 7 / known 2**，指纹 `ad685a2007d5 / clean`。
+
+- 两条用例：`test/plans/feat/modules/tiles.plan.toml` 的 `gpu_preference.no_device.prl`（打印顺序错）、`test/plans/feat/consistency/new_values.plan.toml` 的 `new_values.sort_rebinding.prl`（零输出）；来源 `origin/fsh-dev@766e3f72f`（08:49）与 `@ea5845184`（08:29）。
+- 在 develop 上两条都 PASS：`-Jobs 1` 下 `new_values` 计划 51/51、`tiles` 计划 101（96 pass / 5 skip）。红只出现过在 `lane-eff-rule` 的中间图上，那条线的建图改动没有落地。
+- 这一笔加了 `std::prl segments=true`：声明 `stdlib/std.cml#taskflow` 的 `with` 块（紧跟 `diag`），读取 `src/execute/pass.cpp#taskflowPass`，打印 `src/passes/sched/taskflow/taskflow.cpp#TaskflowExecSchedPass::printSegments`。打印的是**当前计划**的分段，不是应当的分段；`GraphPlan#refusal` 记住"退成逐节点"的原因，是"分不出段"与"退成逐节点"的分界线。
+- 用例 `new_values.sort_rebinding.segments` 守"每个算子恰被点名一次、且落在切出的段与链内"；拿掉打印重建恰好这一条红。
+- 页面：`docs/handover/reports/prl-two-reds-and-segments.md`
