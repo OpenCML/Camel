@@ -242,3 +242,23 @@ shape'）；`f32[..]` 与静态形状的不统一，是程序把声明写松了�
 
 **判定**：**不是这八天里变慢的，是那条预算与这台主机的读数从一开始就不符**——按裁定的分支，**这属于「预算放错对象」，不是「程序变慢」**。**没有台阶**这一点也说明不是某笔代码的锅。
 **不能由这张表判定的是**：更早（`04c451728` 之前）的读数，以及这台主机是不是换了机器/降了频——**CPU 秒数不受负载影响，但受硬件与频率影响**。要把它做成一条可信的预算，需要在一台固定主机上按单跑 CPU 重写，并在页里记下主机与负载。
+
+## 预算类断言的量纲
+
+**判据**：**预算类断言的量纲是「单跑 CPU 秒」。用并行下的 wall 或别人的机器写预算，等于给未来每一次失败预先埋一个假因。**
+
+**报计数时数字面量个数，不是行数。**
+
+### 预算重写之后：`startup.cost` 仍然红，但红在另一条断言上
+
+按单跑 CPU 重写为 `cpu_budget_ms = 17500` 后（`test/plans/perf/startup.plan.toml`），重跑：
+
+```
+[FAIL] startup.cost  14.99 s cpu of 17.50 s budget, 15.02 s wall
+[stdout] startup.cost version PASS / imports_nothing PASS / inspect_ops PASS / imports_all PASS
+[stdout] startup-cost: FAILED declaration.cost: cpu median 132.7 us per declaration exceeds ceiling 60 us
+[stdout] startup-cost: FAILED declaration.cost: the declaration modules' cpu total 40.1 ms exceeds ceiling 20 ms
+```
+
+**总预算不再是失败原因：14.99 s < 17.50 s，四条子断言也全 PASS。这条红改由同一个工具里的 `declaration.cost` 承担**：
+**每声明 132.7 µs（上限 60）、绝对总量 40.1 ms（上限 20）**——**同一类「上限是按另一台机器/另一时刻的读数写的」问题，未改，未归因到某笔。**
