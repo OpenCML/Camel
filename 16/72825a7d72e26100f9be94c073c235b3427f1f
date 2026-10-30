@@ -1,0 +1,29 @@
+S7: the crash is fixed, the mark is gone in the same commit, and the reading is reversed.
+
+The slot: `CAMEL_TRACE_VARIANT=1` named it -- Frame[23] `(x: f32[..]) => float`, Frame[24]
+`(x: f32[..], dir: string) => int`, Frame[25] `(x: f32[..]) => int`: the caller frame's registers,
+declared as the function types they held before the lowering.
+
+1672825a7 -- the fix. The lowering had rewritten the value node in place with `init.dataType =
+draft.header(id)->dataType`, so the node kept its function type while its operator became `:enum/make`,
+and the slot (allocated earlier for the function) kept it too. Now the pass sets the node's type to the
+family's enum type, and `GraphDraft::rewriteNode` keeps a node's slot declaration in step with the
+node's type whenever a rewrite changes it for a node that writes a dynamic slot -- one place decides,
+no new entry point, the direct-connection ledger unchanged (62 / 492 / 3 / 4, [LEDGER] ok). The index
+guard in it is a branch, not an assertion (an ASSERT there died with double free / heap corruption).
+
+Proof: mlp and mlp_big training, both `std::macro std::defunctionalize std::nvm` and `std::macro
+std::opt std::nvm`, exit 0 with final_params_loss 0.17998181283473969 and 0.17826463282108307 (the
+same number in both configurations per model); the autodiff slow layer 245 / 245 / 0 with [PASS]
+benchmark_gradients_vs_torch (913.05 s cpu of 1600.00, 71.34 s wall); the fast gate 7952 / 7943 / 0 /
+7 / 2. Reverse, with the fix off (the tree of ab124a00e): exit 134 with "the type it was traced with
+has code 1610612746, which is not an enum's", not the silent 139.
+
+The mark and its page are removed in 1672825a7, as the ruling asks: `known_fail` and `backends` come
+off benchmark_gradients_vs_torch (restored to its pre-mark entry), and
+docs/handover/reports/known-failure-run-training.md, which existed only for the debt, goes with it.
+
+6ab617ed5 -- ASSERT is `((void)0)` under NDEBUG, recorded as a finding with both instances from
+tonight (the GC trace's assertions; an index bound that was an ASSERT and turned the crash into
+"double free or corruption (out)"), the rule to sort by, and the size of the surface: 1191 `ASSERT(`
+sites in 148 files. That is too large to review in one commit and should be triaged separately.
