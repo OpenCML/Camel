@@ -1,0 +1,28 @@
+# graph-store 第 2 步 b（b5d）：宏改写桥收事务，事务外引用到 535 处
+
+分支 `lane-gs2b`；推入 develop 的提交 `ef6dcac85`。
+
+## 做了什么
+
+`execute/macro/rewrite.cpp` 的 `bridgeMacroRewriteControl` 改收 `GraphTransaction&`（体首一行
+`auto &draft = transaction.edit();`，函数体其余未动）；唯一调用者 `applyMacroRewrite` 先绑事务、
+再 `.edit()` 给后续的读。文件头那句 "materialized into the owner GraphDraft" 随之改成
+"into the graph one transaction owns"，因为这个函数的墙确实换了。这个文件从此不再出现这个名字。
+
+## 数
+
+事务外引用 **67 文件 / 537 处 → 66 / 535**；构造点 3、decode 6 一笔未动。
+`check.mjs --record` 已记：`[LEDGER] recorded files 66 references 535 constructions 3 decode 6`。
+
+## 闸门与戳
+
+7877 / pass 7868 / fail 0 / skip 7 / known 2；stamp `ef6dcac850 / clean / 72bd64d29ec7`；
+`runtime.graph_draft_ledger.never_rises` 绿。
+
+## 故意没做的一处
+
+`graph.cpp` 的 5 处 read-only 助手（`draftRuntimeNodeRefs`、`nodeIsFreelySchedulable`、
+`isUnanchoredPure`、`carriesOrdering`、`describeDraftPayload`）在账本 §6 里归 **b4**（`graph.*`）
+／**b6**（`draft.h`，存储自身）。量过两个数：**5 处签名、12 个调用点，其中 9 个在拿不到事务的
+持有者手里**（`opt/generic/rewrite.cpp`、`opt/generic/generic.cpp`、`writings.cpp`、
+`draft_inline.cpp`）——正是 §8 表里那三类持有者。现在动它等于把 b4 拽进来，所以留给 b4。
