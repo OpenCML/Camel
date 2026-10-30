@@ -31,12 +31,15 @@
 
 #include "camel/core/mm.h"
 #include "camel/core/module/userdef.h"
+#include "camel/parse/ast/rule_head.h"
 #include "camel/runtime/graph.h"
 
 #include <algorithm>
 #include <cctype>
 #include <format>
 #include <functional>
+#include <iostream>
+#include <unordered_map>
 #include <unordered_set>
 
 using namespace camel::core::error;
@@ -647,6 +650,42 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
             camel::core::error::setPipelineStage("");
         }
         unit->failed = inError(unit);
+        // A ruleset is a module of rules, and a transform finds a rule for a primitive by the head
+        // of the rule's left side. The heads were read while the module's declarations were read
+        // (a rule's `__lhs` has no body at that stage, so nothing here could read them); they are
+        // indexed here, where the module and its diagnostics are in hand: one index per ruleset,
+        // taken once, and a second rule under one head is refused rather than chosen by order.
+        if (!unit->failed && unit->module &&
+            unit->module->name().rfind("rulesets.", 0) == 0) {
+            const std::string ruleset = unit->module->name();
+            std::vector<camel::parse::ast::RuleHead> rules =
+                camel::parse::ast::takeRuleHeads(ruleset);
+            if (rules.empty()) {
+                rules = camel::parse::ast::takeRuleHeads(unit->diags->moduleName());
+            }
+            std::unordered_map<std::string, std::string> ruleOfHead;
+            for (const auto &rule : rules) {
+                if (!rule.shape.empty()) {
+                    auto diag = unit->diags->of(SemanticDiag::RuleLeftIsNotAnOperator);
+                    diag.at(TokenRange{rule.tokenStart, rule.tokenEnd});
+                    diag.commit(rule.rule, rule.shape);
+                    continue;
+                }
+                const auto inserted = ruleOfHead.emplace(rule.head, rule.rule);
+                if (!inserted.second) {
+                    auto diag = unit->diags->of(SemanticDiag::DuplicateRuleForOperator);
+                    diag.at(TokenRange{rule.tokenStart, rule.tokenEnd});
+                    diag.commit(inserted.first->second, rule.rule, rule.head);
+                    continue;
+                }
+                // A probe of the index itself: it prints what the ruleset holds, so a reader can
+                // see the heads the transform will look up rather than trusting that they are
+                // there. It is not the transform: no rule is applied here.
+                std::cout << "RULESET " << ruleset << ' ' << rule.head << " -> " << rule.rule
+                          << '\n';
+            }
+            unit->failed = inError(unit);
+        }
     }
     bool ok = std::none_of(order.begin(), order.end(), inError);
 

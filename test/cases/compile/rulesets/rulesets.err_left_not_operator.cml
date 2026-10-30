@@ -1,0 +1,10 @@
+// A left side that names no one operator: the index files a rule under the head of its left side,
+// and `x` alone names nothing a primitive could look up. It is refused where it is written.
+rule id_rule(x: float) {
+    x => (dx: float) => dx
+}
+
+func main(): int sync {
+    println(1)
+    return 0
+}

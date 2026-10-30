@@ -36,31 +36,36 @@ func zip::<..A>(..xs: ..A): (..ElementOf<A>)[] when ..is_array::<A>()
 
 ## 3. 原语的规则
 
-规则是普通的 `rule` 声明（规则语言第二版），用标签挂在原语上（原则 6.2，标签参数用圆括号）。三种，按需要写：
+内置原语（`prelude` 里的 `func operator +` 等，以及 tensor、math 的原语）的规则写在**规则集模块**里，
+例如 `stdlib/rulesets/jvp.cml`。一条规则属于 `jvp` 这一族，是因为它声明在这个模块里；**它是哪个原语的
+规则，由它的左边决定**——`rule add_jvp { x + y => … }` 的左边头就是 `+`。变换按"原语 → 规则集模块里
+左边以它为头的规则"建一张索引，一条规则集一张。
 
 ```camel
-#jvp(mul_jvp) #transpose(mul_t)
-func mul::<T>(x: T, w: T): T when is_float::<T>()
+// 规则集模块里（例如 stdlib/rulesets/jvp.cml）：左边的头就是这条规则所属的原语
+rule add_jvp::<T>(x: T, w: T) when is_float::<T>() {
+    x + w => (dx: T, dw: T) => dx + dw
+}
 
-// 前向：右边是"输入切向量 => 输出切向量"，对切向量线性
 rule mul_jvp::<T>(x: T, w: T) when is_float::<T>() {
     x * w => (dx: T, dw: T) => dx * w + x * dw
 }
+```
 
-// 转置：只对线性的实参写；c 在转置时是已知值
-rule mul_t::<T>(x: T, c: T) when is_float::<T>() {
-    x * c => (ct: T) => ct * c
-}
+程序自己写的函数才用标签（相当于 JAX 的 `custom_jvp`）：标签放在 `prelude`，规则写在用户自己的模块里，
+可以 `import`。
 
-// 直接给回传：jvp 加转置写起来不自然的原语（softmax、排序类）用它
-#vjp(softmax_vjp)
-func softmax…
-rule softmax_vjp::<T>(x: T[..]) when is_float::<T>() {
-    softmax(x) => (softmax(x), (ct) => …)
+```camel
+#jvp(my_jvp)
+func my_fn(x: float): float { … }
+
+rule my_jvp(x: float) {
+    my_fn(x) => (dx: float) => …
 }
 ```
 
-- 规则右边的计算全部写成 Camel，能读、能测、能被规则系统改写。
+- **同一原语在同一规则集里有两条左边相同的规则，报编译错误**：否则谁生效取决于书写顺序。
+- **用户函数既有 `#jvp` 标签、规则集里又有以它为头的规则时，以标签为准。**
 - **缺规则必须拒绝**（原则 9.9）：变换遇到一个没有对应规则的原语，在那个原语处给编译期诊断，点名原语与缺的是哪种规则。
 - 线性原语只有十几个（加、减、取负、乘以已知值、矩阵乘、求和、广播、改形状、切片、拼接、转置、`where` 的选择），`#transpose` 规则只给它们写。
 

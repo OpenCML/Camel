@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-300 diagnostics: 279 errors, 21 warnings. 15 carry a machine-applicable edit, 285 say why they carry none.
+302 diagnostics: 281 errors, 21 warnings. 15 carry a machine-applicable edit, 287 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -264,6 +264,8 @@ prints one entry.
 | `0x03000201` | [SemanticDiag::StatementAfterReturn](#statementafterreturn) | Error | no |
 | `0x03000202` | [SemanticDiag::TagArgumentNotValue](#tagargumentnotvalue) | Error | no |
 | `0x03000203` | [SemanticDiag::TagNameAsValue](#tagnameasvalue) | Error | no |
+| `0x03000204` | [SemanticDiag::RuleLeftIsNotAnOperator](#ruleleftisnotanoperator) | Error | no |
+| `0x03000205` | [SemanticDiag::DuplicateRuleForOperator](#duplicateruleforoperator) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8622,6 +8624,50 @@ func main(): int sync {
     return 0
 }
 ```
+
+### RuleLeftIsNotAnOperator
+
+`0x03000204` · Error · `SemanticDiag::RuleLeftIsNotAnOperator`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The rule '{0}' has a left side that is not one operator; it is written as '{1}', and a ruleset indexes its rules by the head of the left side.
+```
+
+**Help**
+
+```text
+A ruleset is a module of rules, and the transform finds a rule for a primitive by the head of the rule's left side: `a + b` puts its rule under `+`, `-a` under `-`, and `f(a, b)` under `f`. A left side that is a literal, a tuple, or a chain of operators at one level names no one primitive, so no primitive can find it. Write the left side as one operator applied to the operands, or move the rule to the module that owns the shape it matches.
+```
+
+*No example: no test small enough to show raises it.*
+
+### DuplicateRuleForOperator
+
+`0x03000205` · Error · `SemanticDiag::DuplicateRuleForOperator`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The rule '{0}' and the rule '{1}' both have '{2}' as the head of their left side, and one ruleset has one rule per operator.
+```
+
+**Help**
+
+```text
+A transform looks up the rules of a primitive by the head of their left side, so a second rule under the same head has no way to be chosen: which of the two applies would be decided by the order they are written in, and the program would mean different things depending on where a rule sits. Merge the two into one rule whose right side covers both cases, or give one of them a left side with a different head.
+```
+
+*No example: no test small enough to show raises it.*
 
 ### IgnoredSideEffect
 

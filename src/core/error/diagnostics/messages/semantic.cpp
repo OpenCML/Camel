@@ -1773,6 +1773,22 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::RuleLeftIsNotAnOperator,
+            {
+                "RuleLeftIsNotAnOperator",
+                "The rule '{0}' has a left side that is not one operator; it is written as '{1}', and a ruleset indexes its rules by the head of the left side.",
+                "A ruleset is a module of rules, and the transform finds a rule for a primitive by the head of the rule's left side: `a + b` puts its rule under `+`, `-a` under `-`, and `f(a, b)` under `f`. A left side that is a literal, a tuple, or a chain of operators at one level names no one primitive, so no primitive can find it. Write the left side as one operator applied to the operands, or move the rule to the module that owns the shape it matches.",
+            },
+        },
+        {
+            SemanticDiag::DuplicateRuleForOperator,
+            {
+                "DuplicateRuleForOperator",
+                "The rule '{0}' and the rule '{1}' both have '{2}' as the head of their left side, and one ruleset has one rule per operator.",
+                "A transform looks up the rules of a primitive by the head of their left side, so a second rule under the same head has no way to be chosen: which of the two applies would be decided by the order they are written in, and the program would mean different things depending on where a rule sits. Merge the two into one rule whose right side covers both cases, or give one of them a left side with a different head.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",
