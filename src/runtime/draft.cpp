@@ -1199,7 +1199,7 @@ void GraphDraft::setNodePermissions(gc_node_ref_t id, camel::core::sem::Permissi
     requireOneWriting("setNodePermissions");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot set the permissions of a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("set the permissions of draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     draftNode->header.permissions = permissions;
 }
 
@@ -1211,7 +1211,7 @@ uint32_t GraphDraft::nodeAttrs(gc_node_ref_t id) const {
 void GraphDraft::setNodeAttrs(gc_node_ref_t id, uint32_t attrs) {
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot set the attributes of a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("set the attributes of draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     draftNode->header.attrs = attrs;
 }
 
@@ -1223,14 +1223,14 @@ uint32_t GraphDraft::nodeName(gc_node_ref_t id) const {
 void GraphDraft::setNodeName(gc_node_ref_t id, uint32_t name) {
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot set the name of a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("set the name of draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     draftNode->header.name = name;
 }
 
 void GraphDraft::setNodeOrigin(gc_node_ref_t id, uint64_t origin) {
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot set the origin of a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("set the origin of draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     draftNode->header.origin = origin;
 }
 
@@ -1630,7 +1630,7 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
     requireOneWriting("eraseNode");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot erase a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("erase draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     if (draftNode->header.kind == GCNodeKind::Brch || draftNode->header.kind == GCNodeKind::Loop) {
         dissolveRegionsOf(id);
     }
@@ -1712,7 +1712,7 @@ void GraphDraft::setNormInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> 
     requireOneWriting("setNormInputs");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot set norm inputs for a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("set norm inputs for draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     for (gc_node_ref_t oldInput : DraftNodeView::normInputs(draftNode)) {
         removeUserRef(oldInput, id, DraftEdgeSlot::NormalPorts);
     }
@@ -1730,7 +1730,7 @@ void GraphDraft::setWithInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> 
     requireOneWriting("setWithInputs");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot set with inputs for a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("set with inputs for draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     for (gc_node_ref_t oldInput : DraftNodeView::withInputs(draftNode)) {
         removeUserRef(oldInput, id, DraftEdgeSlot::ContextPorts);
     }
@@ -1748,7 +1748,7 @@ void GraphDraft::setCtrlInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> 
     requireOneWriting("setCtrlInputs");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot set ctrl inputs for a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("set ctrl inputs for draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     for (gc_node_ref_t oldInput : DraftNodeView::ctrlInputs(draftNode)) {
         removeUserRef(oldInput, id, DraftEdgeSlot::Ctrl);
     }
@@ -1766,7 +1766,7 @@ void GraphDraft::setOrderInputs(gc_node_ref_t id, std::span<const gc_node_ref_t>
     requireOneWriting("setOrderInputs");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot set order inputs for a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("set order inputs for draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     for (gc_node_ref_t input : inputs) {
         if (input == id) {
             throw std::logic_error("An order edge cannot order a node after itself.");
@@ -1789,7 +1789,7 @@ void GraphDraft::setSyncInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> 
     requireOneWriting("setSyncInputs");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot set sync inputs for a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("set sync inputs for draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     for (gc_node_ref_t input : inputs) {
         if (input == id) {
             throw std::logic_error("A sync edge cannot chain a node to itself.");
@@ -1847,7 +1847,7 @@ void GraphDraft::setPorts(
     requireOneWriting("setPorts");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot set ports for a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("set ports for draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     for (gc_node_ref_t oldInput : DraftNodeView::normInputs(draftNode)) {
         removeUserRef(oldInput, id, DraftEdgeSlot::NormalPorts);
     }
