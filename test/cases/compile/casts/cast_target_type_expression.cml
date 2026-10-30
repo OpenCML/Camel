@@ -1,0 +1,19 @@
+/**
+ * The right side of `as` is a type position, so a type expression may stand there, not only a
+ * type name (design principles 5.6): a cast to a computed type names the type it converts to,
+ * and converting a value to the type it already has does nothing.
+ */
+
+import { Tangent } from types
+
+func tangent_of::<T>(x: T): Tangent<T> {
+    return x as Tangent<T>
+}
+
+func main(): int sync {
+    let v: (float, ()) = (1.0, ())
+    println(v as Tangent<(float, int)>)
+    println(tangent_of::<(float, float)>((2.0, 3.0)))
+    println((4.0, 5.0) as (float, float))
+    return 0
+}
