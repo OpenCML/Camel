@@ -789,6 +789,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::TagArgumentNotValue,
+            {
+                "TagArgumentNotValue",
+                "The tag '{1}' cannot take '{0}' as an argument: it names {2}.",
+                "A tag is read before the program runs, so an argument is a compile-time value -- a literal, a top-level constant or a string -- or, for a parameter that carries a function, the name of a function of the program (the fact is that function's graph reference). A tag and a type are declarations, not values; a rule and a body-less kernel are declarations too, and neither has the function graph such a parameter takes. Name a function, a literal or a constant.",
+            },
+        },
+        {
             SemanticDiag::TagNotAPermission,
             {
                 "TagNotAPermission",

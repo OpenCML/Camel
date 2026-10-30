@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-298 diagnostics: 277 errors, 21 warnings. 15 carry a machine-applicable edit, 283 say why they carry none.
+299 diagnostics: 278 errors, 21 warnings. 15 carry a machine-applicable edit, 284 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -262,6 +262,7 @@ prints one entry.
 | `0x030001FF` | [SemanticDiag::ExtentNotADimension](#extentnotadimension) | Error | no |
 | `0x03000200` | [SemanticDiag::VarArgumentTypeMismatch](#varargumenttypemismatch) | Error | no |
 | `0x03000201` | [SemanticDiag::StatementAfterReturn](#statementafterreturn) | Error | no |
+| `0x03000202` | [SemanticDiag::TagArgumentNotValue](#tagargumentnotvalue) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8547,6 +8548,28 @@ func main(): int sync {
     return 0
 }
 ```
+
+### TagArgumentNotValue
+
+`0x03000202` · Error · `SemanticDiag::TagArgumentNotValue`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The tag '{1}' cannot take '{0}' as an argument: it names {2}.
+```
+
+**Help**
+
+```text
+A tag is read before the program runs, so an argument is a compile-time value -- a literal, a top-level constant or a string -- or, for a parameter that carries a function, the name of a function of the program (the fact is that function's graph reference). A tag and a type are declarations, not values; a rule and a body-less kernel are declarations too, and neither has the function graph such a parameter takes. Name a function, a literal or a constant.
+```
+
+*No example: no test small enough to show raises it.*
 
 ### IgnoredSideEffect
 

@@ -564,3 +564,42 @@ expect_diagnostic_code = "0x03000168"
 expect_diagnostic_line = 5
 expect_diagnostic_column = 7
 expect_output_contains = ["A tag argument is positional: 'NamedData: w' is named."]
+
+[[tests]]
+name = "argument_tag"
+desc = "A tag argument that names a tag: a tag is a declaration, not a value (the author's ruling of 2026-10-30: a tag keeps its name and does not enter the value namespace), so the refusal at the tag says what the name is instead of reporting the parameter's declared type against it."
+kind = "negative"
+case = "../../../cases/compile/tags/err_tag_argument.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagArgumentNotValue"
+expect_diagnostic_code = "0x03000202"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 2
+expect_output_contains = ["The tag 'vjp' cannot take 'vjp' as an argument: it names a tag, and a tag is not a value."]
+
+[[tests]]
+name = "argument_type"
+desc = "A tag argument that names a type: a type is a declaration, not a value, so the same located refusal names it, and no declared-type-against-argument message is written."
+kind = "negative"
+case = "../../../cases/compile/tags/err_type_argument.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagArgumentNotValue"
+expect_diagnostic_code = "0x03000202"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 2
+expect_output_contains = ["The tag 'rule' cannot take 'Wide' as an argument: it names a type, and a type is not a value."]
+
+[[tests]]
+name = "argument_rule"
+desc = "The shape the transform design writes, `#jvp(mul_jvp)` with a `rule` for the argument: a rule is a declaration of the program and no function, so the refusal says that, at the tag, and never that the name is no function of the program."
+kind = "negative"
+case = "../../../cases/compile/tags/err_rule_argument.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagArgumentNotValue"
+expect_diagnostic_code = "0x03000202"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 2
+expect_output_contains = ["The tag 'jvp' cannot take 'mul_rule' as an argument: it names a declaration of this program that is not one function."]

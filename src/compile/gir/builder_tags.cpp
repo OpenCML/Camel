@@ -231,6 +231,15 @@ const char *kindName(ArgKind kind) {
     }
 }
 
+/// What a name written as a tag argument declares, when it is a declaration rather than the value
+/// the tag carries (SemanticDiag::TagArgumentNotValue). A tag argument is resolved at the tag, not as an
+/// expression: `#vjp(rule)` names a function, and everything else a program can write there is a
+/// declaration with no value of the kind the parameter takes. A tag and a type are declarations,
+/// not values; a top-level value that is not a function (a rule, a kernel) has no function graph
+/// for the fact to be. None of them is a name the program does not know, which is what "not a
+/// function of the program" would say.
+enum class ArgumentDeclaration { Tag, Type, Value, Nothing };
+
 /// The positions of a declaration as the source writes them (`func, nodes`).
 std::string positionsText(camel::core::tag::Positions positions) {
     std::string text;
@@ -334,6 +343,49 @@ Builder::tagValueOf(const camel::core::tag::Decl &decl, const GCT::TagUse &use) 
         }
         return written;
     };
+    // Which declaration a name written in the argument's place is, when it is not the value the
+    // parameter takes (ArgumentDeclaration). The refusal then says what the argument is instead of
+    // reporting a kind mismatch on a name the program declares.
+    const auto declarationOf = [&](const std::string &written) -> ArgumentDeclaration {
+        if (tagNamed(written).has_value()) {
+            return ArgumentDeclaration::Tag;
+        }
+        const Reference ref(written);
+        if (unit_->typeDecls.contains(ref) ||
+            importedType(ref, camel::core::module::ImportLayer::All).has_value()) {
+            return ArgumentDeclaration::Type;
+        }
+        if (unit_->values.contains(written) || module_->getNativeEntity(ref).has_value()) {
+            return ArgumentDeclaration::Value;
+        }
+        return ArgumentDeclaration::Nothing;
+    };
+    // The words the refusal uses for each of them. A tag argument is a compile-time value or the
+    // name of a function; the rest are declarations, and the message says which one it is (design
+    // principles 6.2: a tag is not a value).
+    const auto declarationText = [](ArgumentDeclaration declaration) -> std::string {
+        switch (declaration) {
+        case ArgumentDeclaration::Tag:
+            return "a tag, and a tag is not a value";
+        case ArgumentDeclaration::Type:
+            return "a type, and a type is not a value";
+        case ArgumentDeclaration::Value:
+            return "a declaration of this program that is not one function";
+        default:
+            return "nothing this program declares";
+        }
+    };
+    // A name that is not the value the parameter takes: reported at the tag, naming what the name
+    // is. `#jvp(mul_jvp)` -- the shape docs/design/program-transforms/README.cn.md section 3
+    // writes, whose argument is a `rule` -- reaches this report: a rule is a declaration, and
+    // whether a tag parameter may carry one is open (questions-2026-10-29-transforms.md), so the
+    // writer is told what was written instead of being told the name is unknown.
+    const auto reportNotValue = [&](const std::string &written) {
+        const ArgumentDeclaration declaration = declarationOf(written);
+        diags_->of(SemanticDiag::TagArgumentNotValue)
+            .atOrigin(use.origin)
+            .commit(written, use.name, declarationText(declaration));
+    };
     bool takesFunction = false;
     for (const camel::core::tag::TagParam &param : decl.params) {
         takesFunction = takesFunction || kindOfDeclaredType(decl, param.type) == ArgKind::Func;
@@ -356,14 +408,7 @@ Builder::tagValueOf(const camel::core::tag::Decl &decl, const GCT::TagUse &use) 
                     graph = functionGraphNamed(arg->name());
                 }
                 if (!graph.has_value()) {
-                    diags_->of(SemanticDiag::TagArgumentType)
-                        .atOrigin(use.origin)
-                        .commit(
-                            param.name,
-                            use.name,
-                            param.type,
-                            arg == nullptr ? std::string{} : arg->name(),
-                            "not a function of the program");
+                    reportNotValue(arg == nullptr ? std::string{} : arg->name());
                     throw BuildAbortException();
                 }
                 // A parameter whose type is written out as a function type fixes the signature
@@ -390,9 +435,18 @@ Builder::tagValueOf(const camel::core::tag::Decl &decl, const GCT::TagUse &use) 
                 continue;
             }
             if (arg == nullptr || arg->type() != GCT::NodeKind::DATA) {
-                diags_->of(SemanticDiag::TagArgumentNotConstant)
-                    .atOrigin(use.origin)
-                    .commit(arg == nullptr ? std::string{} : arg->name(), use.name);
+                const std::string written = arg == nullptr ? std::string{} : arg->name();
+                // A parameter of a constant kind takes a literal, a constant or a string. A name
+                // that is a declaration of the program is not one of those, and saying so beats
+                // telling the writer that what they wrote is not a compile-time value: a tag and a
+                // type are declarations, and a rule or a kernel is a declaration too.
+                if (declarationOf(written) != ArgumentDeclaration::Nothing) {
+                    reportNotValue(written);
+                } else {
+                    diags_->of(SemanticDiag::TagArgumentNotConstant)
+                        .atOrigin(use.origin)
+                        .commit(written, use.name);
+                }
                 throw BuildAbortException();
             }
             if (declared == ArgKind::Other) {
