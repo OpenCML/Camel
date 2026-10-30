@@ -267,7 +267,7 @@ export let simplify = [mul_one, add_assoc, fuse_map]
 
 ### 9.2 第 1 步清单里已落地的部分（不再重复做）
 
-- **`GraphId`**（`4.4`）：每程序一个 `GraphIdAllocator`（`Context::graphIds()`，`include/camel/core/context/context.h#graphIds`），建图处取号：`src/compile/gir/builder.cpp#graphIds`、`src/compile/gir/builder_generics.cpp#graphIds`，改写造的新图由编码取新号（`src/compile/gir/graph_encode.cpp#setId`）。
+- **`GraphId`**（`4.4`）：每程序一个 `GraphIdAllocator`（`Context::graphIds()`，`include/camel/core/context/context.h#graphIds`），建图处取号：`src/compile/gir/builder.cpp#graphIds`、`src/compile/gir/builder_generics.cpp#graphIds`，改写造的新图由编码取新号（`src/compile/gir/graph_encode.cpp#prepareGraph`）。
 - **函数值持（快照，`GraphId`）**：`Function::program()` 与 `Function::graphId()`，取图走 `program->graph(id)`（`include/camel/core/rtdata/func.h#graphId`）。
 - **程序快照**：`Program`（`include/camel/runtime/program.h`），`GraphId → 该图的一个版本`；快照与图版本由 GC 管（`GCGraphManager`，`include/camel/runtime/graph.h#GCGraphManager`），不是引用计数——这是第 8 节第 12 条，第 7 节第 1 步括号里的"（引用计数）"已被它取代，代码取第 12 条。
 - **`stableId`、`lineage`、`serial` 退役**：`include/`、`src/`、`modules/` 里已无这三个名字。
