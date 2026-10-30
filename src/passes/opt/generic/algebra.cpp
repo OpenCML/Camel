@@ -151,8 +151,9 @@ class Families {
 /// is only the documented integer neutral mode.
 template <typename T>
 std::optional<T> constant(
-    const GraphDraft &draft, gc_node_ref_t id, const Arithmetic &ops,
+    const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, const Arithmetic &ops,
     const WrittenSlots &written) {
+    const auto &draft = transaction.graph();
     const auto *h = draft.header(id);
     if (!h || h->kind != GCNodeKind::Data || h->dataType == nullptr || h->dataIndex >= 0 ||
         h->dataType->code() != ops.element || !draft.normInputsOf(id).empty() ||
@@ -185,8 +186,8 @@ bool simplify(
         }
         const auto a = inputs[0], b = inputs[1];
         const auto op = operIdOf(transaction, node);
-        const auto ca = constant<T>(draft, a, ops, written),
-                   cb = constant<T>(draft, b, ops, written);
+        const auto ca = constant<T>(transaction, a, ops, written),
+                   cb = constant<T>(transaction, b, ops, written);
         const auto isNeutral = [](const std::optional<T> &c, const std::optional<uint64_t> &n) {
             return c && n && *c == static_cast<T>(*n);
         };
