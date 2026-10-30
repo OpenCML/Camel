@@ -2,7 +2,7 @@
   "comment": "The baseline of the direct-connection ledger (graph-store step 2 b): the numbers below may only fall, and the last step is all of them at zero. `sites` records where each number comes from, as `file#symbol` (a line number moves with every edit above it, a symbol does not); it is diagnostics for a red and never decides the verdict. Record a new row after a commit with check.mjs --record.",
   "numbers": {
     "files": 66,
-    "references": 534,
+    "references": 533,
     "constructions": 3,
     "decode": 6
   },
@@ -146,7 +146,6 @@
       "modules/graph/read.cpp#isWrittenSlotKernel": 1,
       "modules/graph/read.cpp#nodeHandle": 1,
       "modules/graph/read.cpp#nodeOf": 1,
-      "modules/graph/read.cpp#viewOf": 1,
       "modules/graph/txn.cpp#-": 1,
       "modules/graph/txn.cpp#openState": 1,
       "modules/graph/txn.cpp#staticValue": 1,

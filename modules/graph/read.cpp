@@ -27,6 +27,7 @@
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_writes.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/graph_txn.h"
 #include "camel/runtime/program.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/assert.h"
@@ -133,7 +134,12 @@ struct NodeView {
 
 NodeView viewOf(const Handle *handle, const char *site) {
     NodeView view;
-    if (const GraphDraft *draft = handle->draft()) {
+    // The draft is reached through the transaction that owns it when the handle names one. The
+    // handle's own pointer is the fallback for a draft no transaction owns (a test that builds
+    // one), and it is what disappears once every draft has an owner.
+    const auto *transaction = handle->transaction();
+    const auto *draft = transaction != nullptr ? &transaction->graph() : handle->draft();
+    if (draft != nullptr) {
         view.draft       = draft;
         view.ref         = handle->index();
         view.draftHeader = draft->header(view.ref);
