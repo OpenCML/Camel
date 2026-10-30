@@ -210,6 +210,32 @@ case = "../../../cases/consistency/attempt/lowest_index.cml"
 golden = "golden/attempt_lowest_index.txt"
 timeout_ms = 60000
 
+[[tests]]
+name = "attempt.partial_fault"
+desc = "One element of a parallel map faults at once while the elements below it are still queued (element 40 of 64, the others slow before they end): every element below it starts and runs to its end, whether or not it had started, the fault reported is element 40's, and the four back ends agree -- design principles 3.6 as ruled on 2026-10-31. What became of the elements above 40 is not asserted: one that had started ends, and which had started is the scheduler's."
+kind = "behavior"
+case = "../../../cases/consistency/attempt/partial_fault.cml"
+# The property below is what the four back ends agree on; the text is not, because an element of a
+# parallel map that had already started ends after the fault is known and which ones had started is
+# the scheduler's business (design principles 3.6).
+backends_agree = ["exit_code"]
+timeout_ms = 60000
+verify_script = """
+const lines = input.normalized.stdout.trimEnd().split('\n')
+const numbersOf = (prefix) => new Set(lines.filter((l) => l.startsWith(prefix)).map((l) => Number(l.slice(prefix.length))))
+const started = numbersOf('start ')
+const ended = numbersOf('end ')
+assert(started.has(40), 'the faulting element did not start: ' + JSON.stringify(lines.slice(0, 8)))
+assert(!ended.has(40), 'the faulting element ended')
+// Every element below the smallest fault is still started and run to its end.
+for (let x = 0; x < 40; x++) {
+    assert(started.has(x), 'element ' + x + ' below the fault did not start')
+    assert(ended.has(x), 'element ' + x + ' below the fault did not end')
+}
+const last = lines[lines.length - 1]
+assert(last === 'Index 140 is out of range for an array of length 3.', 'the fault reported is not element 40: ' + last)
+"""
+
 # --- what is not isolated ------------------------------------------------------------------
 
 [[tests]]

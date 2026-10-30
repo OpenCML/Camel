@@ -2,7 +2,13 @@
 
 日期：2026-10-31　车道：`lane-recheck`
 
-**要作者答的一句：索引已经建好、`CAMEL_RULESET_INDEX=1` 就能打印出十条规则的键，但今天没有任何
+裁定：2026-10-30 22:50（`301c3790e`）——**`reinterp<H>` 就是这张索引的消费者。** 下一笔是
+`reinterp<jvp>`：按索引逐个原语替换，遇到没有规则的原语就在那个原语处报编译期诊断（9.9），验收是
+标量函数的 `jvp`。在那之前不另造"没有变换也报缺规则"的检查：诊断必须发在 `reinterp` 遇到缺规则的
+那个原语上。索引的查询（`lookupRule`）与读数（`std::rulesets` 遍）是这一步的前提，已落地
+`288a05147` / `fdb4a9ae9`。
+
+**原来是问：索引已经建好、`CAMEL_RULESET_INDEX=1` 就能打印出十条规则的键，但今天没有任何
 pass 查它——`jvp`/`transpose` 这两个变换算子（设计 9.9）什么时候落地？在那之前，"缺规则"的报错该由谁
 发出（还是不报）？**
 
@@ -58,9 +64,9 @@ LOOKUP rulesets.nope -/1 -> no such family
 ```
 
 建表与查重现在是同一个动作（`indexRule` 返回同键下已有的另一条规则名），所以索引不可能为一个原语
-存两条规则。**但 `lookupRule` 今天的调用者只有那个探针**（`CAMEL_RULESET_LOOKUP`，在
-`src/compile/gir/program.cpp`）：**索引建出来了、打得出来、也查得动了，却仍然没有一个 pass 去查它。**
-`jvp` / `transpose` 这两个变换算子
+存两条规则。读这些答案的是 `std::rulesets` 遍（翻译遍，打印索引、回答 `query=`、把图原样传下去，
+`src/passes/trans/rulesets/`），不是环境变量。**但除了这个遍，今天没有第二个消费者：索引建出来了、
+打得出来、也查得动了，却仍然没有一个变换去查它。** `jvp` / `transpose` 这两个变换算子
 （设计 `docs/design/program-transforms/README.cn.md` 第 4 节"三个图算子"）还没有实现：`git grep
 "func jvp" -- stdlib` 无结果，库里只有 `grad`、`with_grad` 两个宏（`stdlib/signatures/autodiff.cml:45-68`），
 它们展开宏、不查规则集。

@@ -9,6 +9,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/execute/function_call.h"
 #include "camel/execute/pass/opt.h"
+#include "camel/execute/pass/params.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/facts.h"
 #include "modules/tensor/tensor.h"
@@ -255,13 +256,17 @@ std::string i64LeafReport() {
 class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
     operator_t run_;
     std::optional<SegmentDeviceOps> device_;
+    bool reasons_;
+    bool declarations_;
     static inline bool i64Reported = false;
 
   public:
     RegionOutlineTestPass(
         const core::context::context_ptr_t &context, operator_t run = nullptr,
-        std::optional<SegmentDeviceOps> device = {})
-        : RuntimeGraphRewritePass(context), run_(run), device_(device) {}
+        std::optional<SegmentDeviceOps> device = {}, bool reasons = false,
+        bool declarations = false)
+        : RuntimeGraphRewritePass(context), run_(run), device_(device), reasons_(reasons),
+          declarations_(declarations) {}
     const runtime::Program *apply(const runtime::Program *program, std::ostream &os) override {
         size_t count = 0;
         auto *result = outlineRegions(
@@ -299,7 +304,7 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
         os << "TILES_OUTLINED " << count << '\n';
         // Why each operator node of the result is in no region, in the analysis's own words. The
         // count alone says a scope was not planned; it does not say which node refused it.
-        if (std::getenv("CAMEL_TILES_TEST_REASONS")) {
+        if (reasons_) {
             runtime::RuntimeGraphDraftSession session(context_, result);
             for (auto *graph : session.collectReachableRuntimeGraphs()) {
                 const auto analysis = analyzeRegions(*result, *graph, context_->facts(), nullptr);
@@ -339,7 +344,7 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
         // whether a semantic declaration is attached and its version. The ledger classifies them by
         // reading the declaration tables in source; this prints the same answer from the table the
         // region analysis actually asks.
-        if (std::getenv("CAMEL_TILES_TEST_DECLARATIONS")) {
+        if (declarations_) {
             static const char *const grouped[] = {
                 "nn:sgd",
                 "nn:adam",
@@ -397,11 +402,19 @@ void registerRegionTestPasses(
     core::OperatorTable::instance().set(
         "tiles:test_compiled_call",
         {.pure = false, .callsGraphs = true, .readsGraphs = true});
-    registerModulePass(
-        "tiles::test_outline_compiled",
-        [](const core::context::context_ptr_t &ctx) {
-            return std::make_unique<RegionOutlineTestPass>(ctx, &testCompiledCall);
-        });
+    // `reasons` and `declarations` are pass parameters, not environment variables: a reading a
+    // test cannot pass and assert is a reading no test pins, and a case that turns one on has to
+    // say so in its own args.
+    {
+        PassDescriptor descriptor;
+        descriptor.readsTags = true;
+        descriptor.make = [](const core::context::context_ptr_t &ctx, const PassArgs &args) {
+            return std::make_unique<RegionOutlineTestPass>(
+                ctx, &testCompiledCall, std::optional<SegmentDeviceOps>{}, args.getBool("reasons"),
+                args.getBool("declarations"));
+        };
+        registerModulePass("tiles::test_outline_compiled", std::move(descriptor));
+    }
     registerModulePass(
         "tiles::test_outline_preferred",
         [preferred](const core::context::context_ptr_t &ctx) {

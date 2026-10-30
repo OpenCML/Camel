@@ -10,7 +10,7 @@ TILES_OPERATOR_ID array:argmax_axis id=340 tensor_spelling=422
 TILES_OPERATOR_ID tensor:reshape id=406 tensor_spelling=422
 ```
 
-取数方式：`camel <case> tiles::test_outline_compiled std::nvm`，`CAMEL_TILES_TEST_REASONS=1`，
+取数方式：`camel <case> tiles::test_outline_compiled std::nvm`，`reasons=true`，
 作用域是 `f32[2,3] → int[2]` 的 argmax；主机无卡，读数与设备无关（pass 只读程序与表）。
 
 `tensor:reshape` 那一行是**对照**：它的 `id=406` 与 `tensor_spelling=422` 不同也说明不了什么——那只是

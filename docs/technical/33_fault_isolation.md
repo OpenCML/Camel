@@ -334,9 +334,12 @@ For the report not to depend on which element a worker picked first, "does not s
 to the elements *after* the smallest faulting index: an element before it still runs, as it
 would have run first on a back end that takes the elements in order. So the fault reported is
 the one `std::nvm` and `std::fvm` report, on every run (`lowest_index.cml`, and
-`faults/parallel_lowest_index.cml` for a fault that ends the run).
-`DESIGN-QUESTION(parallel-fault-lower-elements)`: the alternative, starting nothing at all
-after the first fault met, makes the report differ from run to run.
+`faults/parallel_lowest_index.cml` for a fault that ends the run). The author ruled this the
+rule on 2026-10-31 (3.6), not an implementation detail: "同一输入同一输出" counts for more than
+stopping as early as possible, what runs in addition is only elements below the reported index,
+and 3.6 does not order effects between elements, so no program can tell.
+`partial_fault.cml` pins it: one element faults at once while the elements below it are still
+queued, and every one of them starts and runs to its end on all four back ends.
 
 ## 4. Clean-up
 

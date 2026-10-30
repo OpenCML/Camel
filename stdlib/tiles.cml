@@ -60,3 +60,13 @@ export func compile::<F>(f: F): F! uses driver when is_function::<F>()
 /// stands, which is why `std::macro` is written before it when a derived graph's operators are to be
 /// counted.
 export func census::<F>(f: F): F! when is_function::<F>()
+/// The outline pass the tests drive directly, with the readings they assert as parameters rather
+/// than as environment variables: `reasons=true` prints, per operator node of the result, the
+/// declaration and the reason it is in no region (`TILES_OPERATOR_DECLARATION`,
+/// `TILES_OPERATOR_ID`, `TILES_REGION_REASON`), and `declarations=true` prints the six batches of
+/// the twenty-one operators of the B group with their ids and contracts (`TILES_DECLARATIONS_1`
+/// through `TILES_DECLARATIONS_6`). Both default to false: a pipeline that does not ask prints
+/// `TILES_OUTLINED` and nothing else.
+/// @fails error value `GpuScopeUnsupported` when the outlined region holds an operator the device cannot run
+with <reasons: bool = false, declarations: bool = false>
+export func test_outline_compiled::<F>(f: F): F! when is_function::<F>()
