@@ -5481,6 +5481,56 @@ bool writesOwnYield(const AST::node_ptr_t &node) {
     return false;
 }
 
+/// Whether `node` reads the name `name` of its own: a function or a lambda written in it has a
+/// body and locals of its own (language reference 7.3.1), and a declaration of the same name hides
+/// this one from there on, so neither is read of it. Used for the one question the generator's
+/// machine asks of a name: whether a `yield` cuts a local in two.
+bool readsOwnName(const AST::node_ptr_t &node, const std::string &name) {
+    if (node == nullptr) {
+        return false;
+    }
+    if (node->type() == AST::LoadType::Stmt) {
+        const auto &load = node->loadAs<AST::StmtLoad>();
+        if (load->stmtType() == AST::StmtType::Func) {
+            return false;
+        }
+        if (load->stmtType() == AST::StmtType::Data) {
+            bool declares = false;
+            for (const Reference &ref : node->loadAs<AST::DataDeclLoad>()->refs()) {
+                if (ref.toString() == name) {
+                    declares = true;
+                }
+            }
+            if (declares) {
+                // The initializer is read where this declaration stands, so it sees the name the
+                // outer binding gave it; from the declaration on, the name is this one.
+                for (size_t i = 1; i < node->size(); ++i) {
+                    if (readsOwnName(node->at(i), name)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        }
+    }
+    if (node->type() == AST::LoadType::Data) {
+        const auto &load = node->loadAs<AST::DataLoad>();
+        if (load->dataType() == AST::DataType::Ref &&
+            node->loadAs<AST::RefDataLoad>()->ref().toString() == name) {
+            return true;
+        }
+        if (load->dataType() == AST::DataType::Func) {
+            return false;
+        }
+    }
+    for (size_t i = 0; i < node->size(); ++i) {
+        if (readsOwnName(node->at(i), name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 AST::node_ptr_t firstOwnYield(const AST::node_ptr_t &node) {
     if (node == nullptr) {
         return nullptr;
@@ -5542,6 +5592,23 @@ node_ptr_t Builder::visitGeneratorBody(
         diags_->of(SemanticDiag::FeatureNotSupported)
             .at((atYield != nullptr ? atYield : atNode)->load()->tokenRange())
             .commit("generators");
+        throw BuildAbortException();
+    };
+    // A local a `yield` cuts in two: its value is built where the declaration stands, inside one
+    // arm of the machine, so the pull after a `yield` runs an arm that cannot read the name. That
+    // is the named gap (the locals that live across a `yield` become cells, which is the step not
+    // taken yet) and it is refused here, at the declaration, instead of being left to fail later
+    // as an unresolved name in an arm the name was never declared in -- a message that sends the
+    // reader looking for a typo that is not there.
+    const auto refuseLocalAcrossYield = [&](const AST::node_ptr_t &decl) -> void {
+        diags_->of(SemanticDiag::FeatureNotSupported)
+            .at(decl->load()->tokenRange())
+            .note(
+                "A local that lives across a `yield` becomes a cell of the generator's own body, "
+                "which is the part of the machine that is not built yet. A local declared and "
+                "used between two `yield`s needs no cell and is accepted; so is a constant or a "
+                "lambda, whose value does not depend on the point where it stands.")
+            .commit("a local read after a `yield`");
         throw BuildAbortException();
     };
     Type *exit = funcType->exitType();
@@ -5689,6 +5756,9 @@ node_ptr_t Builder::visitGeneratorBody(
         [&](int pc, const AST::node_ptr_t &stmts, size_t from, int next) {
             node_ptr_t exec = arms[static_cast<size_t>(pc)];
             pushScope();
+            // The locals this stretch declares for itself: built here, in this arm's graph, so
+            // they live exactly as long as the arm runs (see the refusal at a `yield`).
+            std::vector<std::pair<std::string, AST::node_ptr_t>> armLocals;
             for (size_t i = from; i < stmts->size(); ++i) {
                 const auto &stmt = stmts->at(i);
                 const bool isStmt =
@@ -5701,6 +5771,17 @@ node_ptr_t Builder::visitGeneratorBody(
                     const auto &values = stmt->atAs<AST::RepeatedLoad>(0);
                     if (values->size() != 1) {
                         refuse(stmt);
+                    }
+                    // Everything this stretch declared is thrown away by this `yield`: the pull
+                    // that goes on from here runs another arm, and a name that is not a cell is
+                    // not there to be read. Only a local the rest of the stretch reads is
+                    // refused -- one that is done with before the `yield` was never a cell.
+                    for (const auto &[name, decl] : armLocals) {
+                        for (size_t k = i + 1; k < stmts->size(); ++k) {
+                            if (readsOwnName(stmts->at(k), name)) {
+                                refuseLocalAcrossYield(decl);
+                            }
+                        }
                     }
                     const int resume = newArm();
                     fill(resume, stmts, i + 1, next);
@@ -5725,6 +5806,11 @@ node_ptr_t Builder::visitGeneratorBody(
                     // A local of the body that became a cell: its cell is written already.
                     if (std::find(hoisted.begin(), hoisted.end(), i) != hoisted.end()) {
                         continue;
+                    }
+                    // One that did not: its value depends on this point, so it is built here and
+                    // is this stretch's own (see the refusal at a `yield`).
+                    for (const Reference &ref : stmt->loadAs<AST::DataDeclLoad>()->refs()) {
+                        armLocals.push_back({ref.toString(), stmt});
                     }
                 }
                 if (writesOwnYield(stmt)) {
