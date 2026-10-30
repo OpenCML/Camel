@@ -234,6 +234,11 @@ void declareBuiltinOperatorSemantics() {
     constexpr PermissionMask kAddMul = kReassociate | kContract | kChangePrecision | kFiniteMath;
     // Division: an approximate reciprocal or division is approx_math.
     constexpr PermissionMask kDiv = kApproxMath | kChangePrecision | kFiniteMath;
+    // `+ - *`, negation and the comparisons have no fault path: integer arithmetic wraps,
+    // floating-point arithmetic rounds and a comparison only compares. `div` and `%` are the two
+    // of a numeric type that fault (a zero divisor). `mul` and `neg` pass no list and take the
+    // empty one from the trait (src/builtin/executors/builtin.cpp#kNeverFaults), which
+    // `declareSemantics` merges into the record: both spellings read `[]` there.
     for (const NumericType &t : kNumericTypes) {
         if (t.isFloat) {
             declare("add", t, rounded(t, kAddMul, "a + b, rounded once"), none);
