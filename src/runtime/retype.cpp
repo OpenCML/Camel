@@ -314,7 +314,7 @@ GCGraph *retypeGraph(
     RuntimeGraphDraftSession &session, GCGraph *source, const GraphTypeSubstitution &types,
     const GraphRetypeOptions &options, GraphRetypeReport *report) {
     ASSERT(source != nullptr, "A graph rebuild needs a graph.");
-    const GraphRetypeReport one = retypeDraft(session.edit(source), types, options);
+    const GraphRetypeReport one = retypeDraft(session.edit(source).edit(), types, options);
     if (report != nullptr) {
         *report = one;
     }
@@ -329,7 +329,7 @@ const Program *retypeProgram(
     const std::vector<GCGraph *> graphs = session.collectReachableRuntimeGraphs();
     mine.graphs                         = graphs.size();
     for (GCGraph *graph : graphs) {
-        const GraphRetypeReport one = retypeDraft(session.edit(graph), types, options);
+        const GraphRetypeReport one = retypeDraft(session.edit(graph).edit(), types, options);
         mine.retypedNodes += one.retypedNodes;
         mine.retypedStatic += one.retypedStaticSlots;
         mine.leftStatic += one.leftStaticSlots;

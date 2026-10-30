@@ -3,12 +3,14 @@ order = 900
 tier = "slow"
 tags = ["gpu", "modules", "tiles"]
 
-# This layer runs against the cards: a Python test here drives camel or a native check on a
-# device, and the runner's Python default (docs/test-plans.md, "CUDA visibility") would otherwise
-# hide the devices from it and let it measure the CPU. The declaration is the plan's because every
-# test of the layer wants the same thing.
+# This layer runs against a card: a Python test here drives camel or a native check on a device,
+# and the runner's Python default (docs/test-plans.md, "CUDA visibility") would otherwise hide the
+# devices from it and let it measure the CPU. It asks for an idle card rather than the host's own
+# value because the lowest ordinal is the one a co-tenant usually fills, and a test that dies of
+# `CUDA_ERROR_OUT_OF_MEMORY` on a shared host reads as a defect in the code under test. The
+# declaration is the plan's because every test of the layer wants the same thing.
 [defaults]
-cuda_devices = true
+cuda_free_device = true
 
 [[tests]]
 name = "runtime_scalars"
@@ -1236,6 +1238,24 @@ assert(report.device_work.kernels >= 1, JSON.stringify(report.device_work))
 }
 """
 timeout_ms = 60000
+
+[[tests]]
+name = "scope.one_compilation_for_two_calls"
+kind = "behavior"
+desc = "The unit of device compilation is the scope, not the call: the same `#gpu` function called twice launches twice the work and compiles nothing more."
+tool = "node"
+case = "../../cases/modules/tiles/scope_reuse.mjs"
+# Both readings come from `std::profile json=` of one program run twice (once called, twice
+# called), so the assertion is a relation and not an absolute number: an artifact that is not
+# stored makes the second run compile twice as much.
+args = ["${case}", "--camel", "${camel}"]
+cuda_free_device = true
+# A host with no card at all is not a busy host (docs/test-plans.md, "A card that is not device 0"):
+# the runner hands out nothing there, so this case says for itself that it needs one.
+skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
+expect_exit = 0
+expect_stdout_contains = ["scope reuse:"]
+timeout_ms = 120000
 
 [[tests]]
 name = "nofallback.operator_without_a_program_is_a_compile_error"

@@ -203,7 +203,7 @@ TensorFusePass::apply(const camel::runtime::Program *program, std::ostream &) {
     RuntimeGraphDraftSession session(context_, program);
     size_t changed = 0, library = 0, canonical = 0, groups = 0;
     for (GCGraph *g : session.collectReachableRuntimeGraphs()) {
-        GraphDraft &draft = session.edit(g);
+        auto &draft = session.edit(g).edit();
         changed += markKernels(draft, policy, library, canonical);
         groups += markGroups(draft);
     }

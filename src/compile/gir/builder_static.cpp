@@ -1471,7 +1471,7 @@ node_handle_t Builder::fillStaticValues(
         tuple
             ? core::rtdata::toSlot(::Tuple::create(values.size(), core::mm::autoSpace()))
             : core::rtdata::toSlot(::Struct::create(values.size(), core::mm::autoSpace()));
-    auto &draft = currGraph_->draft();
+    auto &draft = currGraph_->transaction().edit();
     auto base   = draft.ref(draft.materializeStaticValue(empty, type));
     std::vector<size_t> slots(values.size());
     std::iota(slots.begin(), slots.end(), 0);

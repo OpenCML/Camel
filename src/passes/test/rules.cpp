@@ -69,7 +69,7 @@ const camel::runtime::Program *run(
             if (rule.twoWay) {
                 try {
                     RuntimeGraphDraftSession probe(context_, program);
-                    DraftWritings writings(probe.edit(const_cast<GCGraph *>(program->root())));
+                    DraftWritings writings(probe.edit(const_cast<GCGraph *>(program->root())).edit());
                     writings.rewrite(std::span<const Rule>(&rule, 1));
                 } catch (const std::invalid_argument &e) {
                     os << "RULES refused: " << e.what() << "\n";
@@ -87,7 +87,7 @@ const camel::runtime::Program *run(
         if (!kTargets.contains(graph->name())) {
             continue;
         }
-        GraphDraft &draft = session.edit(graph);
+        auto &draft = session.edit(graph).edit();
         DraftWritings writings(draft);
         if (greedy) {
             const RewriteStats stats = writings.rewrite(rules);

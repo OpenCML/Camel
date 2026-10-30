@@ -798,7 +798,7 @@ class Builder {
     // value captured, so a read written after it is ordered after it (readVariableThrough).
     node_handle_t lastIndirectCall_ = nullptr;
     std::optional<std::string>
-    moduleVariableOf(const runtime::GraphDraft &draft, draft_node_ref_t port) const;
+    moduleVariableOf(const runtime::GraphTransaction &transaction, draft_node_ref_t port) const;
     // The value the port of a machine's region stands for: a round takes the sequence it iterates
     // and the states it starts from out of its ports, so the port is that value inside the round,
     // exactly as a capture port is what it captured (design principles 3.7, rule C1). The machine
@@ -2315,26 +2315,28 @@ class Builder {
     // The walk of one body, in the named steps it is made of: the body's ports, the uses one node
     // adds, and the three node kinds whose resources are not their own type's -- an operator, a
     // direct call and a call through a value. Each step says whether the node could be placed.
+    // Every step reads the graph through the transaction that owns it, never the storage by name.
     void numberBodyPorts(
-        BodyReach &walk, const runtime::GraphDraft &draft, const FunctionType &type) const;
+        BodyReach &walk, const runtime::GraphTransaction &transaction, const FunctionType &type)
+        const;
     void addParamUse(
         BodyReach &walk, size_t index, camel::core::sem::ResourceClass cls, const std::string &name,
         camel::core::sem::AccessMode mode) const;
     void addAmbientUse(
         BodyReach &walk, const std::string &name, camel::core::sem::AccessMode mode) const;
     bool readCalleeSignature(
-        BodyReach &walk, const runtime::GraphDraft &draft,
+        BodyReach &walk, const runtime::GraphTransaction &transaction,
         const camel::core::sem::ResourceSignature &sig, size_t calleeWithCount, bool isCall,
         draft_node_ref_t id) const;
     void readUnknownValue(BodyReach &walk) const;
     bool reachOfOper(
-        DraftGraphBuilder *graph, const runtime::GraphDraft &draft, BodyReach &walk,
+        DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction, BodyReach &walk,
         draft_node_ref_t id) const;
     bool reachOfFunc(
-        DraftGraphBuilder *graph, const runtime::GraphDraft &draft, BodyReach &walk,
+        DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction, BodyReach &walk,
         draft_node_ref_t id) const;
     bool reachOfCall(
-        const runtime::GraphDraft &draft, BodyReach &walk, draft_node_ref_t id) const;
+        const runtime::GraphTransaction &transaction, BodyReach &walk, draft_node_ref_t id) const;
     void addVarParameters(BodyReach &walk, const FunctionType &type) const;
     // The resources a body touches, from what its nodes already publish: an operator's own
     // signature, a callee's, and the signature of the function value a call goes through. Empty

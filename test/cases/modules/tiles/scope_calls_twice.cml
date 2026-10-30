@@ -1,0 +1,20 @@
+/// The same scope called twice, as two separate statements. `scope_reuse.mjs` requires its device
+/// work to be twice the one-call program's launches and the one-call program's compilations: the
+/// artifact belongs to the scope, so a second call submits and does not compile.
+///
+/// The shape is static and both calls pass the same one, so both reach the same specialization;
+/// `scale` is the program's only scope.
+
+import { reshape, sum } from tensor
+
+#gpu
+func scale(x: f32[3]): f32[3] {
+    return x * x
+}
+
+func main() {
+    let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
+    let a = sum(scale(x))
+    let b = sum(scale(x))
+    println(a + b)
+}

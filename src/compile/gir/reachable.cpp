@@ -55,7 +55,7 @@ void forEachReachableGraph(
             }
         }
 
-        const auto &draft = curr->draft();
+        const auto &draft = curr->transaction().graph();
         for (draft_node_ref_t nodeId = 0; nodeId < draft.nodeSlotCount(); ++nodeId) {
             const auto *header = draft.header(nodeId);
             if (!header || header->kind != runtime::GCNodeKind::Func) {

@@ -14,7 +14,7 @@ DropCallArgumentTestPass::apply(const camel::runtime::Program *program, std::ost
     using camel::runtime::GCNodeKind;
     camel::runtime::RuntimeGraphDraftSession session(context_, program);
     for (camel::runtime::GCGraph *owner : session.collectReachableRuntimeGraphs()) {
-        camel::runtime::GraphDraft &draft = session.edit(owner);
+        auto &draft = session.edit(owner).edit();
         for (camel::runtime::gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
             const auto *header = draft.header(id);
             if (!header || header->kind != GCNodeKind::Func || draft.normInputsOf(id).empty()) {
@@ -44,7 +44,7 @@ const camel::runtime::Program *breakFirstBranchOfMain(
         if (owner->name() != "main") {
             continue;
         }
-        camel::runtime::GraphDraft &draft = session.edit(owner);
+        auto &draft = session.edit(owner).edit();
         for (camel::runtime::gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
             const auto *header = draft.header(id);
             if (!header || header->kind != GCNodeKind::Brch) {

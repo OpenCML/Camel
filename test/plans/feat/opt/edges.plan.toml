@@ -17,10 +17,10 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 
 [[tests]]
 name = "valid_edit_is_accepted"
-desc = "Control: a node that breaks no invariant commits."
+desc = "Control: a node that breaks no invariant commits, and the session hands out one graph at one address for as long as it edits it (the pass keeps its graph by reference)."
 args = ["${case}", "test::edges_ok"]
-expect_stdout_contains = ["EDGES accepted"]
-expect_output_not_contains = ["refused"]
+expect_stdout_contains = ["EDGES accepted", "EDGES transaction stable"]
+expect_output_not_contains = ["refused", "transaction moved"]
 
 [[tests]]
 name = "cycle_is_refused"

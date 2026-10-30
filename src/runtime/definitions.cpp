@@ -479,9 +479,10 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
 // ---- Expansion -----------------------------------------------------------------------------
 
 ExpandResult expandDefinition(
-    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t node,
+    RuntimeGraphDraftSession &session, GraphTransaction &transaction, gc_node_ref_t node,
     ExpandOptions options) {
     ExpandResult result;
+    auto &draft                   = transaction.edit();
     const DraftNodeHeader *header = draft.header(node);
     if (header == nullptr || header->kind != GCNodeKind::Oper) {
         result.problem = "not an OPER node";
@@ -572,7 +573,7 @@ ExpandResult expandDefinition(
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         before[id] = draft.alive(id);
     }
-    const DraftInlineResult inlined = inlineCallableInDraft(session, draft, call);
+    const DraftInlineResult inlined = inlineCallableInDraft(session, transaction, call);
     if (!inlined) {
         result.value = call; // expanded, kept as a call
         return result;
