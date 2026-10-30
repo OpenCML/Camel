@@ -335,6 +335,57 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
             i64Reported = true;
             os << "TILES_I64 " << i64LeafReport() << '\n';
         }
+        // The operators the gap ledger calls the B group, read once: the URI, the id it interns to,
+        // whether a semantic declaration is attached and its version. The ledger classifies them by
+        // reading the declaration tables in source; this prints the same answer from the table the
+        // region analysis actually asks.
+        if (std::getenv("CAMEL_TILES_TEST_DECLARATIONS")) {
+            static const char *const grouped[] = {
+                "nn:sgd",
+                "nn:adam",
+                "nn:adam_state",
+                "nn:softmax_cross_entropy_labels",
+                "nn:softmax_cross_entropy_labels_grad",
+                "tensor:gelu",
+                "tensor:gelu_grad",
+                "tensor:layer_norm",
+                "tensor:layer_norm_grad",
+                "tensor:softmax",
+                "tensor:softmax_grad",
+                "tensor:permute_inverse",
+                "tensor:matmul_grad_lhs",
+                "tensor:matmul_grad_rhs",
+                "tensor:zeros_like",
+                "tensor:cast_like",
+                "tensor:gt",
+                "tensor:strict_eq",
+                "tensor:take",
+                "tensor:numel",
+                "tensor:shape"};
+            std::string row;
+            size_t pending = 0;
+            size_t batch   = 1;
+            for (const char *uri : grouped) {
+                const auto found = core::OperatorTable::instance().lookup(uri);
+                const auto *semantics =
+                    found ? core::OperatorTable::instance().semantics(*found) : nullptr;
+                // Four per line: the runner's failure dump truncates a long line, and a table split
+                // over twenty-one lines loses its head. Six short lines survive whole.
+                row += std::string(uri) + ' ' +
+                       (found ? std::to_string(static_cast<long long>(*found))
+                              : std::string("none")) +
+                       ' ' + (semantics ? "declared" : "undeclared") + " major=" +
+                       (semantics ? std::to_string(static_cast<long long>(semantics->key.major))
+                                  : std::string("-1")) +
+                       "; ";
+                if (++pending == 4 || uri == grouped[std::size(grouped) - 1]) {
+                    os << "TILES_DECLARATIONS_" << batch << ' ' << row << '\n';
+                    row.clear();
+                    pending = 0;
+                    ++batch;
+                }
+            }
+        }
         return result;
     }
 };

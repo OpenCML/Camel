@@ -13,6 +13,7 @@
         "cnt": "node ./scripts/cnt.js",
         "init": "node ./scripts/install.js",
         "check": "node ./scripts/check.js",
+        "check:invariant-owner": "node ./scripts/check-invariant-owner.mjs",
         "test": "node ./scripts/test.js --tier fast",
         "test:all": "node ./scripts/test.js --all --tier all",
         "release-gate": "node ./scripts/release-gate.mjs",
