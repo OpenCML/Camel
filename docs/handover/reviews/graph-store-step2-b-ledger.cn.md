@@ -492,3 +492,21 @@ HANDLE_PROBE refused: InvalidArgument
 **为什么是 0 行**：这个文件里没有一处"多余的草稿参数"——每一处都是**读一个节点、写一个节点、或取一个图 id**。真正的删法是另一件事：**那些只被 `draft()` 调用的自由函数，本来该是 `PullbackContext` 的成员**，转成成员后签名里那个 `const GraphDraft &draft` 就消失了（对象自己知道它的草稿）。改法不是"删参数"，是"换归属"——那是下一片的事，不是这一片。
 
 **四个数：62 / 514 / 3 / 4**（`517 → 514`）。
+
+## 27. B 第二片：那张表只放行 5 行，不是 18 行
+
+**判据就是 §26 那句**：*只被 `draft()` 调用的自由函数，本来就该是成员的*。按它把 `pullback.cpp` 的 28 个收草稿的自由函数逐个过一遍，**只有 5 行满足**（`4eb159b5a`）：
+
+| 函数 | 原参数 | 转成员后消失的参数 | 调用者数 | 全部传 `draft()`？ |
+|---|---|---|---|---|
+| `readsCallVersion` | `const GraphDraft &draft` | 这个 | 2 | **是** |
+| `componentProjectionOf` | 同上 | 这个 | 1 | **是** |
+| `orderingOf` | 同上 | 这个 | 2 | **是** |
+| `takeSyncPlace` | `GraphDraft &draft` | 这个 | 3 | **是** |
+| `evidentFunction` | `const GraphDraft &draft` | 这个 | 3 | **是** |
+
+**为什么其余 23 行不转——它们不是"多传东西"，是"传的东西不一样"**：同一个 helper 被**三种草稿**调用——重写自己的 `draft()`、反向传播的 `forward()`（`Backward::forward`，1051）、反向传播的 `target()`。`calleeOf` 四传 `draft()`、两传 `forward()`；`valueNode`、`portsOf`、`externalInputsOf`、`staticValue`、`addPort`、`setResult`、`pruneUnreachable` 同样跨着好几个草稿。**转成某一个对象的成员，就等于替另一个对象认错了图**——这正是 §25.1 那条规矩的另一面。它们该去的地方是**事务**（谁拥有这张图），不是某一个重写器；那要动 `GraphTransaction` 的接口，属于下一层。
+
+**三个数**：删掉的行数 **0**（每个函数是搬进类里，不是删掉）；消失的参数 **5 个**；保留 **23 个**（每个都是一句"它服务的不止一张图"）。
+
+**四个数：62 / 509 / 3 / 4**（`514 → 509`）。
