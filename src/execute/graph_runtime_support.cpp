@@ -480,8 +480,10 @@ gc_node_ref_t resolveRuntimeTailValueRef(camel::runtime::GCGraph *graph) {
         // A legacy picture: a graph encoded before a GATE's wait was a sync predecessor carries
         // that wait as a control input and has no sync edge to follow, so the control kind is read
         // here and nowhere else. The fallback can go when no stored picture and no cached program
-        // predates the sync form -- the same condition that lets the control kind leave the
-        // encoder (docs/technical/gir-interchange.md records the version it arrives in).
+        // predates the sync form -- the same condition that lets the encoder stop writing the kind,
+        // which is the `control` row of the table in docs/technical/gir-interchange.md, "Ordering
+        // edges in the two versions": version 1 (default) and version 2 (`canonical=true`) both
+        // write the control waits today, so the fallback ends with the version that stops.
         const auto ctrlInputs = graph->ctrlInputsOf(current);
         if (!ctrlInputs.empty()) {
             current = ctrlInputs.back();
