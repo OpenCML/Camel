@@ -1,0 +1,58 @@
+# lane-tag：第 6 条 2–5 步的标签参数（2026-10-30）
+
+基底 origin/develop 3d8cee417（起工）→ 28310b602（变基后重跑闸门），分支 lane-tag，两笔：
+319e582ef 标签实参是声明就按声明报（SemanticDiag::TagArgumentNotValue，0x03000202）
+460631a2d 标签有自己的名字：写在值的位置上不是值（SemanticDiag::TagNameAsValue，0x03000203）
+
+## 1 改了 design-principles 6.3 一句话：原文、裁定原文、为什么这是对齐不是开口子
+
+原文（6.3 第二条，中英各一句）：
+  - 标签与其他名字共用命名空间，按同样方式导入，可写限定名 `#[tiles::kernel]`。
+  - Tags share the namespace with other names, are imported in the same way, and can be written qualified, `#[tiles::kernel]`。
+裁定原文（语言作者 2026-10-30，已记入 docs/design-principles-log.cn.md）：
+  标签 `#jvp` 不改名；标签保持源码里写的那个名字，与函数、类型、值各有各的名字空间——
+  同名的函数与标签可以并存，`#名字` 只找标签，标签名写在值的位置上是“标签不是值”。
+现在（6.3 第二条）：
+  - 标签有自己的一套名字，与函数、类型和值不共用（语言作者 2026-10-30）：同名的函数与标签可以并存，
+    `#名字` 只找标签，标签名写在值的位置上不是值（`SemanticDiag::TagNameAsValue`，名字与值的命名空间互不占用）；
+    按同样方式导入与导出，可写限定名 `#[tiles::kernel]`。
+为什么这不是“我们顺手改了原则”：
+  (1) 这句话与裁定**逐字冲突**（“共用命名空间” vs “各有各的名字空间”），留着它就是原则与裁定互相矛盾；
+  (2) 改动只有这一条：导入方式、限定名写法、以及 6.2/6.4 之后的所有条目一字未动，没有借裁定新增任何规则；
+  (3) 判定的来源写成“语言作者 2026-10-30”，同一条也进了裁定记录，历史可从日志倒查；
+  (4) 落地只有两处：`tagNamed` 的注释、以及新诊断 `TagNameAsValue`——即“值的位置上不找标签”这一条，
+      其余（`#` 找标签、导入、限定名）都是今天本来就在跑的行为（见 note 第 3 节实测）。
+
+## 2 消掉的两条误导诊断
+
+(a) 标签实参写成声明（`#jvp(mul_rule)`、`#vjp(vjp)`、`#rule(Wide)`），改前同一句套话：
+    The parameter 'rule' of the tag 'jvp' is declared 'F', but the argument is 'mul_jvp' (not a function of the program).
+    ——把一个程序自己声明的名字说成“不知道的名字”，还读成对 'F' 种别不符。改后同一句话拆成三种指路：
+    The tag 'jvp' cannot take 'mul_rule' as an argument: it names a declaration of this program that is not one function. (12:2)
+    The tag 'vjp' cannot take 'vjp' as an argument: it names a tag, and a tag is not a value. (8:2)
+    The tag 'rule' cannot take 'Wide' as an argument: it names a type, and a type is not a value. (8:2)
+    常量形参的实参写声明时同样走新报告，不再说“不是编译期值”。
+(b) 标签名写在值的位置上（`let f = label` 8:13、`label(1)` 7:12），改前：
+    Unresolved reference: 'label'. Make sure the name is declared and in scope.
+    ——名字明明声明了。改后：
+    'label' names a tag, and a tag is not a value: write '#label' where the tag belongs.
+规则实参仍拒绝：是否允许规则作标签实参是 questions-2026-10-29-transforms.md 问题 1，作者未裁，本车道不代裁。
+
+## 3 第 3 步的实测（先测后改）
+
+`tag label on func` 与 `func label` 同模块、`import { jvp } from autodiff` 与本地 `func jvp` 同名，
+在改前都已编过并打印 `1 2`（`#` 找标签、名字找函数）。所以第 3 步只补“另一头”的诊断与文档，
+并存本身是既有行为，用 same_name.cml / imported_same_name.cml 两条正向用例锁住（回归锁，不是新行为）。
+
+## 4 第 4、5 步“没有可落的工作”是结论，证据如下
+
+`reinterp` 在 src/include/modules/stdlib 词匹配 **0 个文件**；`transpose` 18 个文件全是 tensor 布局
+（`tensor:transpose`、`modules/tensor/*`）或标签读者的注释；`split` 57 个文件全是 str/random/tensor。
+三个算子都还不存在，README §7“转置规则里哪些实参是线性的”是待裁问题——编一条假活不如报“没有”。
+
+## 5 验收
+
+A/B：319e582ef 拿掉分类 → 恰好 argument_tag/argument_type/argument_rule 三条红（42 例 pass 39）；
+460631a2d 拿掉检查 → 恰好 tag_name_as_value/tag_name_called 两条红（46 例 pass 44）；恢复后 42/42、46/46。
+闸门（变基到 28310b602 后）：-Plan all -Tier fast -Jobs 8 → total 7809, pass 7805, fail 0, skip 2,
+known failures 2，无 snapshot differs；-Check all 10 项全 exit 0。两笔均未推送。
