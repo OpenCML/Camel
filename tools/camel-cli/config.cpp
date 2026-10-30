@@ -15,6 +15,7 @@
 #include "build_stamp.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
+#include "camel/execute/cpu_isa.h"
 #include "camel/execute/devices.h"
 #include "camel/execute/limits.h"
 #include "camel/execute/pass/params.h"
@@ -325,6 +326,7 @@ string blockLimitOpt        = ""; // raw --block-limit (megabytes)
 string graphGcMbOpt         = ""; // raw --graph-gc-mb (megabytes)
 string nativeStackGuardOpt  = ""; // raw --native-stack-guard (on|off)
 string devicesOpt           = ""; // raw --devices (cpu|ordinal[,ordinal...])
+string tensorIsaOpt         = ""; // raw --tensor-isa (native|generic)
 string profileModeOpt       = ""; // raw --profile-mode (normal|full)
 size_t maxRecursionDepth    = 0;  // 0: not given on the command line
 size_t maxMacroDepth        = 0;
@@ -658,6 +660,9 @@ bool parseArgs(int argc, char *argv[]) {
          (option("--devices") & value("cpu|ordinal[,ordinal...]", devicesOpt)) %
              "devices a pipeline may use: cpu (the host only) or CUDA ordinals in order (e.g. 0 "
              "or 0,1); a device named here must be there",
+         (option("--tensor-isa") & value("native|generic", tensorIsaOpt)) %
+             "instruction set the kernels may use: native (default; what the processor reports) or "
+             "generic (the portable units only, whatever the processor has)",
          (option("--profile-mode") & value("normal|full", profileModeOpt)) %
              "mode of the profiler of --profile: full also opens the Perfetto UI when the report "
              "is written",
@@ -965,6 +970,19 @@ bool parseArgs(int argc, char *argv[]) {
                 std::exit(1);
             }
             camel::execute::selectDevices(*selection);
+        }
+
+        // --tensor-isa: the instruction set the kernels may use. Read before the first kernel is
+        // chosen, because a module selects its unit from it once.
+        if (!Run::tensorIsaOpt.empty()) {
+            std::string why;
+            const auto isa = camel::execute::parseCpuIsa(Run::tensorIsaOpt, why);
+            if (!isa) {
+                std::cerr << "Error: --tensor-isa '" << Run::tensorIsaOpt << "': " << why << "."
+                          << std::endl;
+                std::exit(1);
+            }
+            camel::execute::selectCpuIsa(*isa);
         }
 
         // --profile-mode: the mode of the advanced profiler that --profile starts.

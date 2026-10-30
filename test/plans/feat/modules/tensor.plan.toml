@@ -725,11 +725,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "gemm_canonical.generic_unit"
-desc = "The portable GEMM unit (CAMEL_TENSOR_ISA=generic hides AVX2/AVX-512) gives the same bits as the vector units: it writes each fused multiply-add explicitly (on an x86-64 processor without FMA it used to round twice)."
+desc = "The portable GEMM unit (--tensor-isa generic hides AVX2/AVX-512) gives the same bits as the vector units: it writes each fused multiply-add explicitly (on an x86-64 processor without FMA it used to round twice)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gemm_canonical.cml"
-args = ["${case}", "tensor::fuse safe_fp=true"]
-envs = ["CAMEL_TENSOR_ISA=generic"]
+args = ["--tensor-isa", "generic", "${case}", "tensor::fuse safe_fp=true"]
 expect_exit = 0
 expect_stdout_exact = """gemm product_sum=-152.11356
 gemm affine_sum=-159.64394 relu_sum=3094.4185
@@ -754,8 +753,7 @@ name = "gemm_canonical.bits.generic_unit"
 desc = "The same bit guard in the portable GEMM unit: the band-major packing is shared, so its bits must not move either."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gemm_canonical_bits.cml"
-args = ["${case}"]
-envs = ["CAMEL_TENSOR_ISA=generic"]
+args = ["--tensor-isa", "generic", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "gemm_bits small_n=2806496542438e70a88c5c1952eb62c7b4fbc1fbb077cbdf39af9975c0b076ca\ngemm_bits two_blocks=6fd4d0768e02365caf2501fbcbcb32573796ec59676f5b8a82e4019d2a4e0569\ngemm_bits edges=8ea973273e7e990e72f4ab90e6ff58011181e2f9663cee0a875cc66f2711514c\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -774,10 +772,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "gelu_grad.bits.generic_unit"
-desc = "The same bit guard in the portable unit (CAMEL_TENSOR_ISA=generic), which is the one whose bits do not depend on the processor: that unit has no fused multiply-add, so the tangent's expansion cannot contract there and a machine without FMA gives these digests too. The polynomial and the slope are the vector unit's bits as well; the large shape's tangent is where the two part, inside vmath::tanh's declared error (modules/tensor/CMakeLists.txt is the unary units' same setting)."
+desc = "The same bit guard in the portable unit (--tensor-isa generic), which is the one whose bits do not depend on the processor: that unit has no fused multiply-add, so the tangent's expansion cannot contract there and a machine without FMA gives these digests too. The polynomial and the slope are the vector unit's bits as well; the large shape's tangent is where the two part, inside vmath::tanh's declared error (modules/tensor/CMakeLists.txt is the unary units' same setting)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gelu_grad_bits.cml"
-args = ["${case}"]
+args = ["--tensor-isa", "generic", "${case}"]
 envs = ["CAMEL_TENSOR_ISA=generic"]
 expect_exit = 0
 expect_stdout_exact = "gelu_grad_bits ffn=7d29df4309e84b58ddea304f7cbf89c8389f99b103beb9975ae8c23d1d3f1199\ngelu_grad_bits tail=294f48ede40d6baef3432e1e4df86fe997657b7b9862e8eb2c4493709a521b2e\ngelu_grad_bits single=cddf8a6de1c1396d8be68b1c2638a1a2df081d7cb5e6611946552a1eded1fb27\n"
@@ -789,8 +787,7 @@ name = "numeric_contract.generic_unit"
 desc = "The numeric-contract program in the portable kernel units: the same output as the default units."
 kind = "behavior"
 case = "../../../cases/modules/tensor/numeric_contract.cml"
-args = ["${case}"]
-envs = ["CAMEL_TENSOR_ISA=generic"]
+args = ["--tensor-isa", "generic", "${case}"]
 expect_exit = 0
 expect_stdout_contains = ["matmul fma_step=0.00048834085\nmatmul chain=16777216.0\nsoftmax equal=0.0\nsoftmax axis=[nan, nan, nan]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
