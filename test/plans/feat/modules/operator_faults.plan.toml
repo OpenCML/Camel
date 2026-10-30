@@ -64,6 +64,28 @@ kind = "behavior"
 case = "../../../cases/modules/operator_faults.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout = "0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n1\n0\n0\n0\n0\n1\n"
+expect_stdout = "0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n1\n0\n0\n0\n0\n1\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "fault_free_behavior"
+desc = "The collection predicates that declare the empty list do not fault where a fault would be plausible: `has` on a key the map does not have, `contains` on an element a set does not have, `==` and `!=` between an empty map and a filled one, and `is_subset` with an empty and with a smaller right-hand set. Each line prints the value it got; a fault would end the program instead, which is what makes the empty list a claim about running the code rather than about the declaration alone."
+kind = "behavior"
+case = "../../../cases/modules/coll_predicates.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "false\ntrue false\nfalse true false\ntrue true false true\ntrue true false true\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "read_only_helpers"
+desc = "The `prelude.cml` helpers that only read do not fault where a fault would be plausible: `contains` on an element the array does not have and on an empty array, `contains` on a substring the string does not have (and on the empty one, which every string has), `len` of an empty `Bytes`, and `==`/`!=` between two `Bytes` that differ. Each line prints the value it got; a fault would end the program instead."
+kind = "behavior"
+case = "../../../cases/modules/struct_predicates.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "true false false\ntrue false true\n0 2\ntrue false true true\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

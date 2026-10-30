@@ -1084,6 +1084,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 [[tests]]
+name = "stream.generator_destructured_local"
+desc = "A declaration of a generator body that binds several names to one value (`let (a, b) = pair()`) is a cell per name: the value is evaluated once, where the statement stands, and put in a cell of its own, and each name is a cell typed by one element of it, so a pull after a `yield` reads what the pull before it wrote. The stream carries `b` and then `3b`. It used to be refused as a local read after a `yield`."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_destructured_local.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "b\n3b\n"
+expect_output_not_contains = ["[Error]", "FeatureNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
 name = "stream.generator_loop"
 desc = "A `yield` inside a `while` loop: the loop is four points of the machine (past it, at the condition, in the body and back at the condition) and the one value it carries is a cell of the function's own body, written from the body's last value. So the pull that hands an element out stops at the `yield` and the pull after it goes on from there. `count(3)` hands out `0 1 2` and then ends, `count(0)` hands out nothing (the condition is judged before the body runs), and `count(5)` stopped after two elements hands out `0 1` (the resume point is the `yield`, not the top of the loop). All four back ends agree, and the default path is the fifth."
 kind = "behavior"

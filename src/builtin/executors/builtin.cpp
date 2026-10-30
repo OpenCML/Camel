@@ -599,6 +599,26 @@ void registerBuiltinOperatorTraits() {
         "struct/len_arr",
         "struct/len_str",
         "coll/len",
+        // The predicates over a collection: `has` and `contains` walk the entries looking for a
+        // key, `eq` and `neq` compare two collections by content, and `set_is_subset` walks one
+        // looking for each element of the other (collection.cpp#__coll_has__, #__coll_eq__,
+        // #__coll_neq__, #__coll_set_is_subset__). None of them builds a value, so none of them
+        // can run out of memory either, which is the one fault the rest of `coll/` does have.
+        "coll/has",
+        "coll/set_contains",
+        "coll/eq",
+        "coll/neq",
+        "coll/set_is_subset",
+        // The read-only helpers of `prelude.cml`: `contains` over an array walks it comparing
+        // elements by content, `contains` over a string searches it, `len` of `Bytes` reads a
+        // length and `==`/`!=` of two `Bytes` compare them (struct.cpp#__contains_arr__,
+        // #__contains_str__, #__len_bytes__, #__eq_bytes__, #__ne_bytes__). None of them builds a
+        // value, so a failed allocation is not among their paths either.
+        "struct/contains_arr",
+        "struct/contains_str",
+        "struct/len_bytes",
+        "op/eq_bytes",
+        "op/ne_bytes",
     };
     // The conversions of an array apply to each element on its own.
     const auto isArrayConversion = [](std::string_view key) {

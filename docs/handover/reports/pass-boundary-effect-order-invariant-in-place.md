@@ -44,12 +44,24 @@ lane `lane-inv`，基线 `origin/develop` = `0faa9d4bf`（会话开始时），�
 | `develop` 的 `abbc9c229`（10-29 21:10 的构建，主机 `camel-work/Camel`） | `std::nvm` / `std::opt std::nvm` / `std::opt::inline std::opt std::nvm` | `before / older / 1 1 / after`，三遍都对 |
 | 本车道 `1636a849d`（基线 develop `e8d92a8ec` + 本页的五笔） | 同上三遍 | 同上，三遍都对 |
 
-**没有可点名的「修好它的 sha」**：我能构建的最早一棵树（`abbc9c229`，10-29）已经是绿的，而那一笔加用例
-的时间在 10-30，所以 `develop` 上不存在一段「红 → 后来绿」的区间可以二分。`lane-eff-rule` 那一笔自己
-动了 `src/passes/opt/generic/generic.cpp`、`src/runtime/draft_inline.cpp`、`src/compile/gir/builder*` 与
-`modules/tiles/src/graph_regions.cpp`——它更像**带着修复**的一笔，而它上面的红是「修复前」的状态。
-要给出一个 sha，需要先有一棵能复现红的树（`lane-eff-rule` 修复前那一版即可，一次构建），这不是本车道
-能独立回答的问题。
+As stated at the time: **the colour "on develop" is undefined** — a case that is not in the tree has no
+colour there, and that is why the request "name the commit that fixed it" could only be answered with
+"none".
+
+Two follow-ups closed it.
+
+The case is now on a lane of its own, based on `origin/develop` = `45bc25f47`, carrying only the case
+file and its plan entry (no source change from the lane it came from): `5cdcb9692`. The whole fast gate
+on that tree is `total 7928, pass 7917, fail 0, skip 9, known failures 2`, and
+`feat.consistency.if_without_else` is 17 of 17.
+
+The bisect was done as promised, and the answer is that **the red is not in any commit**. `4af274872`'s
+parent `d86f50660` ("Judge the rewritten graph as a whole, and drop the session when it has a cycle")
+was built and run against the same program: `std::nvm`, `std::opt` and `std::opt::inline std::opt` all
+print `before / older / 1 1 / after`. Every tree that can be built — `d86f50660`, `abbc9c229`,
+`1636a849d`, `45bc25f47` — is green, so **there is no commit to name as the fix**: the red lived only
+inside that lane's working tree while the fix was being written, and the commit that carries the case
+carries the fix with it.
 
 ## 给作者的一句话
 

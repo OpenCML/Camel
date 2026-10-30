@@ -403,12 +403,9 @@ const Program *extractWritings(
 /// op-semantics 6.4).
 class DraftWritings : private WritingObserver {
   public:
-    explicit DraftWritings(
-        GraphDraft &draft,
-        camel::core::sem::NumericPolicy policy = camel::core::sem::NumericPolicy::relaxed());
-    /// The same, for a draft a transaction owns. The writings record the transaction, so the
-    /// draft has an owner that is not a handle: this is what a handle can name once it stops
-    /// naming a bare draft. Nothing reads `transaction()` yet; the two forms behave the same.
+    /// The writings of the draft a transaction owns. The transaction is recorded, so the draft
+    /// has an owner that is not a handle: a handle in a draft names this transaction and nothing
+    /// else. There is no form of these writings made from a bare draft.
     explicit DraftWritings(
         GraphTransaction &transaction,
         camel::core::sem::NumericPolicy policy = camel::core::sem::NumericPolicy::relaxed());
@@ -420,9 +417,9 @@ class DraftWritings : private WritingObserver {
     /// until it is encoded.
     void save() { draft_.setWritings(std::vector<WritingUnion>(store_.log().begin(), store_.log().end())); }
     GraphDraft &draft() { return draft_; }
-    /// The transaction the draft belongs to, or null when these writings were made from a bare
-    /// draft (a test that builds one).
-    GraphTransaction *transaction() { return transaction_; }
+    /// The transaction the draft belongs to. It is never null: a draft no transaction owns has
+    /// no writings.
+    GraphTransaction &transaction() { return *transaction_; }
     WritingStore &store() { return store_; }
 
     /// Indexes every node of the draft and merges the congruent ones.

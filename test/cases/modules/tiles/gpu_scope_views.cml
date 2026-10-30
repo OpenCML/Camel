@@ -1,0 +1,21 @@
+import { permute, reshape, transpose } from tensor
+
+// A layout operator writes no element: its result is the operand read in another order, and the
+// device program for it is the address the core's own index instance gives. The three here are the
+// ones a training step turns a tensor with, and the pass accepts a scope that holds them.
+#gpu
+func turned(x: f32[2, 3]): f32[3, 2] { return permute<[1, 0]>(x) }
+
+#gpu
+func swapped(x: f32[2, 3]): f32[3, 2] { return transpose(x) }
+
+#gpu
+func flattened(x: f32[2, 3]): f32[6] { return reshape<[6]>(x) }
+
+func main(): int sync {
+    let x = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]) as f32[2, 3]
+    println(turned(x))
+    println(swapped(x))
+    println(flattened(x))
+    return 0
+}
