@@ -57,4 +57,36 @@ C2：面内 21 = 有实现 8（`tensor:abs`、`tensor:add`、`tensor:matmul`、`
 ## 怎么读这张账本
 
 缺口清空 G4 才允许记完成；这份文件只记读数，一个算子都不在这里补。账本是快照：表长一个名字、程序多一个
-算子，数就变；重跑上面两条命令即可。表本身今天 20 个名字，全在 `tensor:`，`nn:` 一个都没有 device 实现。
+算子，数就变；重跑上面两条命令即可。表本身今天 24 个名字，全在 `tensor:`，`nn:` 一个都没有 device 实现。
+
+## A 组的四条视图清完之后（同一命令复算）
+
+表里加了 `tensor:transpose`、`tensor:permute`、`tensor:reshape`、`tensor:broadcast_like` 四条，表从 20 个
+名字变成 24 个（仍全在 `tensor:`）。`tensor:argmax_axis` 这一条**没有加**，原因在下面。复算的三条读数：
+
+- `transformer_step`（带 `std::macro`）：22 = 9 + **13**（原来 22 = 5 + 17）。表内多了 `broadcast_like`、
+  `permute`、`reshape`、`transpose` 四条。
+- `transformer_step`（不带 `std::macro`）：12 = 7 + **5**（原来 12 = 4 + 8）。剩 `nn:sgd`、`gelu`、
+  `layer_norm`、`shape`、`softmax`；`broadcast_like` 只在派生图里出现，所以这一组没有它。
+- C2：21 = 8 + **13**，**没变**。A 组在 C2 里只有 `argmax_axis` 一条，而它没进表。
+
+缺口总数 30 → **26**（17+13 → 13+13）。四条视图各自的"device 程序"一句话：
+
+- `tensor:transpose` / `tensor:permute`：不是算出来的，是同一块缓冲区按另一个下标读。`eligibility` 把调用
+  的实例改写成 `reindex` 后交给 `kernel::coreViewAddress` 校验（`modules/tiles/src/graph_regions.cpp#eligibility`），
+  与 `modules/tiles/src/compiler.cpp` 给这两条算子落的节点是同一条路——没有核可写，只有地址。
+- `tensor:reshape`：同一块缓冲区换一个形状标签，元素数必须相等，与 `compiler.cpp` 的 `reshape` 分支同一条
+  规矩（不等就报 `unsupported_index_contract`，不是"表里有、程序没有"）。
+- `tensor:broadcast_like`：第二个操作数只给结果的形状，地址按第一个操作数读；`coreViewAddress` 只收一个数据
+  操作数，`eligibility` 因此只把第一个传给它。
+- `tensor:argmax_axis`：**仍缺口，而且不是"表里加了、程序还没有"**——它没有可写的程序。结果是 `i64` 下标，
+  而 device 侧今天只收 f32/f64 结果（`compiler.cpp` 要求静态 f32 形状），归约契约
+  （`modules/tiles/src/reduction_kernel.cpp#reductionAccess`）产出的是数值，没有"带下标"的归约。补它要新的
+  结果类型加归约契约的一条，是后面单独的一笔；这一笔不把名字放进表，因为放进去就等于宣称有程序。
+
+另有一条同批暴露出来的账：`tensor:sum_to` 早就在表里，但此前没有任何 `#gpu` scope 走到过它。视图进表后，
+派生图第一次走到它，`eligibility` 的通用归约分支把**等形状**的 `sum_to`（实例是 `Unique` 写，其实是 copy）
+按归约校验，于是判成不支持。这一笔把它分成两条：`Unique` 写按视图地址校验，其余按归约契约校验
+（`modules/tiles/src/graph_regions.cpp#eligibility`）。读数是 `test/plans/feat/modules/tiles.plan.toml#gpu_scope.macro_expansion_publishes_the_derived_graph`
+从"拒绝这个 scope"变成"接受、且 scope 里算出的值与它的主机孪生一致（`moved 0.0`、`wrong 0.0`）"——这条
+计划条目原来把拒绝当成事实记着，事实变了，条目也一起改了（`negative` → `behavior`）。
