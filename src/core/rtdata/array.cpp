@@ -21,6 +21,7 @@
 #include "camel/utils/number_text.h"
 
 #include <cmath>
+#include <format>
 #include <cstdio>
 #include <functional>
 #include <memory>
@@ -563,7 +564,11 @@ materializeAggregate(const std::byte *bytes, const type::Type *type, camel::core
 
 
 slot_t Array::getSlotSlow(uint64_t flatIndex) const {
-    ASSERT(flatIndex < numel_, "Array flat index out of range");
+    GUARD(
+        flatIndex < numel_,
+        std::format(
+            "reading element {} of an array that holds {} (rank {}), so the read is past its end",
+            flatIndex, numel_, rank_));
     if (isSlots()) {
         return reinterpret_cast<const slot_t *>(dataPtr_)[flatIndex];
     }
@@ -606,7 +611,12 @@ slot_t Array::getSlotSlow(uint64_t flatIndex) const {
 void Array::setSlotSlow(uint64_t flatIndex, slot_t value, const type::ArrayType *arrayType) {
     // Inclusive: an append stores at `numel_` before the count grows (see Array::setSlot). The old
     // exclusive bound aborted every compact append in a Debug build.
-    ASSERT(flatIndex <= numel_, "Array flat index out of range");
+    GUARD(
+        flatIndex <= numel_,
+        std::format(
+            "storing element {} of an array that holds {} (rank {}); an append may store at the "
+            "end ({}) and nowhere past it",
+            flatIndex, numel_, rank_, numel_));
     if (isSlots()) {
         CAMEL_ASSERT_NOT_VIEW(value, elemType_, "an array element");
         rtdata::Object *owner =
@@ -675,7 +685,10 @@ void Array::setSlotSlow(uint64_t flatIndex, slot_t value, const type::ArrayType 
 }
 
 double Array::getAsDouble(uint64_t flatIndex) const {
-    ASSERT(flatIndex < numel_, "Array flat index out of range");
+    GUARD(
+        flatIndex < numel_,
+        std::format(
+            "reading a number out of element {} of an array that holds {}", flatIndex, numel_));
     switch (elemTypeCode_) {
     case TypeCode::Float32:
         return static_cast<double>(dataAs<float>()[flatIndex]);
@@ -697,7 +710,10 @@ double Array::getAsDouble(uint64_t flatIndex) const {
 }
 
 int64_t Array::getAsInt64(uint64_t flatIndex) const {
-    ASSERT(flatIndex < numel_, "Array flat index out of range");
+    GUARD(
+        flatIndex < numel_,
+        std::format(
+            "reading an integer out of element {} of an array that holds {}", flatIndex, numel_));
     switch (elemTypeCode_) {
     case TypeCode::Float32:
         return static_cast<int64_t>(dataAs<float>()[flatIndex]);
@@ -719,7 +735,10 @@ int64_t Array::getAsInt64(uint64_t flatIndex) const {
 }
 
 bool Array::getAsBool(uint64_t flatIndex) const {
-    ASSERT(flatIndex < numel_, "Array flat index out of range");
+    GUARD(
+        flatIndex < numel_,
+        std::format(
+            "reading a bool out of element {} of an array that holds {}", flatIndex, numel_));
     switch (elemTypeCode_) {
     case TypeCode::Float32:
         return dataAs<float>()[flatIndex] != 0.0f;
@@ -741,7 +760,10 @@ bool Array::getAsBool(uint64_t flatIndex) const {
 }
 
 void Array::setFromDouble(uint64_t flatIndex, double value) {
-    ASSERT(flatIndex < numel_, "Array flat index out of range");
+    GUARD(
+        flatIndex < numel_,
+        std::format(
+            "writing a number to element {} of an array that holds {}", flatIndex, numel_));
     switch (elemTypeCode_) {
     case TypeCode::Float32:
         dataAs<float>()[flatIndex] = static_cast<float>(value);
@@ -770,7 +792,10 @@ void Array::setFromDouble(uint64_t flatIndex, double value) {
 }
 
 void Array::setFromInt64(uint64_t flatIndex, int64_t value) {
-    ASSERT(flatIndex < numel_, "Array flat index out of range");
+    GUARD(
+        flatIndex < numel_,
+        std::format(
+            "writing an integer to element {} of an array that holds {}", flatIndex, numel_));
     switch (elemTypeCode_) {
     case TypeCode::Float32:
         dataAs<float>()[flatIndex] = static_cast<float>(value);
@@ -799,7 +824,10 @@ void Array::setFromInt64(uint64_t flatIndex, int64_t value) {
 }
 
 void Array::setFromBool(uint64_t flatIndex, bool value) {
-    ASSERT(flatIndex < numel_, "Array flat index out of range");
+    GUARD(
+        flatIndex < numel_,
+        std::format(
+            "writing a bool to element {} of an array that holds {}", flatIndex, numel_));
     switch (elemTypeCode_) {
     case TypeCode::Float32:
         dataAs<float>()[flatIndex] = value ? 1.0f : 0.0f;

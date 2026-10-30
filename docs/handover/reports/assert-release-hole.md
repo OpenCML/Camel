@@ -34,6 +34,24 @@
 
 也就是说：**1224 处断言里，只有 212 处（17%）在 `NDEBUG` 下仍然会说话。** 剩下 1012 处在 release 里是空语句。
 
+**只有 17% 的断言在 release 里还会说话；1012 处是空语句。这个比例本身就是一个待办项，不是一次性修得完的——所以按危险度分批，而不是按目录。**
+
+## 第一批：`Array` 的下标（已落地）
+
+`include/camel/utils/assert.h` 多了一个 `GUARD(condition, reading)`：条件与原处相同、位置相同，`NDEBUG` 下照样活着，失败时打印 `Guarantee`（条件原文）与 `Reading`（值、界），然后 `abort`。`src/core/rtdata/array.cpp` 的八个下标检查从 `ASSERT` 换成它：`getSlotSlow`、`setSlotSlow`、`getAsDouble`、`getAsInt64`、`getAsBool`、`setFromDouble`、`setFromInt64`、`setFromBool`。
+
+读数长这样（喂进一个越界下标时的真实输出）：
+
+```
+Camel Invariant Violation:
+    Location   : ../src/core/rtdata/array.cpp(557)
+    Function   : slot_t Array::getSlotSlow(uint64_t) const
+    Guarantee  : flatIndex < numel_
+    Reading    : reading element 3 of an array that holds 2 (rank 1), so the read is past its end
+```
+
+代价：一条永不成立的分支。`benchmarks/mlp/model.cml std::nvm` 连跑 6 次，最小延迟 0.347 ms → 0.344 ms（−0.9%，在这台机器的噪声带以内）；而且这条负载根本不走这些慢路径——把越界下标注入进 `getSlotSlow` 后 `mlp` 一行都没变，换一个读结构体数组的小程序才触发了它。
+
 ## 最危险的 10 处（守指针、下标、`Variant` 类型、GC 句柄）
 
 | # | 位置 | 守什么 | 假设不成立时退化成 |

@@ -63,7 +63,38 @@ inline AssertHandlerFn get_assert_handler() { return get_assert_handler_ref(); }
     const std::string &expression, const std::string &suggestion,
     const std::source_location location = std::source_location::current());
 
+/// The release path of `GUARD`: the same report and the same abort as an `ASSERT`, in every build.
+///
+/// `expression` is the condition as written; `reading` is what a person needs in order to know what
+/// went wrong -- the value and the bound it crossed, not just the name of the rule.
+[[noreturn]] void fail_invariant(
+    const std::string &expression, const std::string &reading, const std::source_location location =
+                                                                  std::source_location::current());
+
 } // namespace cml
+
+#if defined(__GNUC__) || defined(__clang__)
+#define CAMEL_UNLIKELY(condition) __builtin_expect(!!(condition), 0)
+#else
+#define CAMEL_UNLIKELY(condition) (condition)
+#endif
+
+/// A check that is alive in every build, for a condition the code *relies* on being true.
+///
+/// `ASSERT` records what the code believes; under `NDEBUG` it is `((void)0)`, so a site whose
+/// failure makes the code write past a buffer, follow a stale pointer or read a value as the wrong
+/// type has no check at all in the build that ships. `GUARD` is that check: unchanged condition at
+/// the same place, a report that names the value and the bound, and an abort. The branch it adds is
+/// never taken, so it predicts and costs what a predicted branch costs.
+///
+/// Use it where `ASSERT` would be lying about being a guard; write `reading` so that the line says
+/// which value crossed which bound.
+#define GUARD(condition, reading)                                                                  \
+    do {                                                                                           \
+        if (CAMEL_UNLIKELY(!(condition))) {                                                        \
+            ::cml::fail_invariant(#condition, (reading));                                          \
+        }                                                                                          \
+    } while (false)
 
 #ifdef NDEBUG
 
