@@ -510,3 +510,32 @@ HANDLE_PROBE refused: InvalidArgument
 **三个数**：删掉的行数 **0**（每个函数是搬进类里，不是删掉）；消失的参数 **5 个**；保留 **23 个**（每个都是一句"它服务的不止一张图"）。
 
 **四个数：62 / 509 / 3 / 4**（`514 → 509`）。
+
+## 28. B 第三片：那 23 个的边界在"调用点上手里有没有事务"
+
+**判据（这一层的那句话，写在这里）**：*同一个 helper 被三种草稿调用——重写自己的 `draft()`、反向传播的 `forward()`、`target()`。转成某一个对象的成员，就是替另一个对象认错了图。**它们该去的地方是**事务**（谁拥有这张图），不是某个重写器。***
+
+**于是表问的是另一件事**：不是"谁是它的主人"，而是**"它的调用点上，手里有没有事务"**——有就换成收 `const rt::GraphTransaction &`，没有（只拿到一个 draft 参数的）就得先转那个自由函数。
+
+| helper | 今天被哪些草稿调用 | 能从事务到达 | 本片 |
+|---|---|---|---|
+| `staticValue` | `draft()`、`forward()`、`target()` | **是** | **改** |
+| `calleeOf` | `draft()`、`forward()` | **是** | **改** |
+| `externalInputsOf` | `draft()`、`forward()` | **是** | **改** |
+| `portsOf` | `forward()` | **是** | **改** |
+| `addCall` | `target()` | **是** | **改** |
+| `typeOf` | `draft`、`draft()`、`forward`、`forward()`、`liftedDraft`、`target()` | 否 | 留 |
+| `kindOf` | `draft`、`draft()`、`forward()`、`target()` | 否 | 留 |
+| `regionMember` | `draft`、`draft()` | 否 | 留 |
+| `valueNode` | `draft`、`forward` | 否 | 留 |
+| `hasOrdering` | `draft` | 否 | 留 |
+| `addAccs`／`addField`／`addOper`／`addPort`／`addAggregate`／`addFill` | `draft`、`draft()`、`target()`、`pullback` | 否 | 留 |
+| `setResult`／`pruneUnreachable` | `draft`、`forward`、`pullback` | 否 | 留 |
+| `addLoopInt`／`stampLoopOrigin`／`addZeroTangent`／`addTangentSum`／`buildReverseCond` | `draft` | 否 | 留 |
+| `addClosure` | `engine_.group()` 与 `draft()`／`forward`／`draft` | 否 | 留 |
+
+**"否"的那 18 行是哪一种**：它们都经**自由函数的 `draft` 参数**到达——`buildReverseBody`、`buildReverseClosure`、`packState` 那一族。**它们的调用点上没有事务，只有草稿**；要转就得把那一族一起转，而那一族目前的调用者里还有人只传草稿。**这就是这次重构的边界，写在这张表里，不是留在脑子里。**
+
+**三个数**：删掉的行数 **10**（净 `-10`）；**消失／换掉的参数 5 个**（五处 `const GraphDraft &draft` / `GraphDraft &draft` → 所有者）；**保留 18 个**。
+
+**四个数：62 / 504 / 3 / 4**（`509 → 504`）。
