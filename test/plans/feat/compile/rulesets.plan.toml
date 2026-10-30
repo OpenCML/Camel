@@ -1,0 +1,18 @@
+id = "compile.rulesets"
+order = 1007
+tier = "fast"
+tags = ["feat", "compile", "rulesets", "transforms"]
+desc = "A ruleset is a module of the standard library the transforms read: `rulesets.jvp` exports `Lift<T>` (a value and the tangent of that value) and `lift`, which turns a value into itself plus the zero tangent of its type -- the zero number for a float, the zero tensor for a tensor, and the empty tuple where the type has no tangent"
+
+[[tests]]
+name = "rulesets.jvp_lift"
+desc = "`lift(3.0)` is `(3.0, 0.0)`: a float's tangent is a float and the zero of it is the zero number. `lift(7)` is `7` with the empty tuple -- the `()` annotation is the type assertion, not a printed value."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/jvp_lift.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "3.0\n0.0\n7\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

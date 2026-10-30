@@ -1,0 +1,42 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * The `jvp` ruleset: how a forward transform lifts a value (design principles 9.9, program
+ * transforms).
+ *
+ *     let (y, dy) = lift(3.0);   // 3.0 and its zero tangent
+ *
+ * `Lift<T>` is a value and the tangent of that value, and `lift(x)` is the value plus the zero
+ * tangent of its type. A constant and a captured value are lifted this way, so a straight-line
+ * program is lifted node by node and a call hands its parameters on in the same shape.
+ */
+
+import { is_same, Tangent } from types
+import { zeros_like } from tensor
+
+/// A value of type `T` with its tangent: what a forward transform carries for one value.
+/// @example is_same::<Lift<float>, (float, float)>()    // true
+/// @example is_same::<Lift<int>, (int, ())>()    // true
+export type Lift<T> = (T, Tangent<T>)
+
+/// `x` lifted: the value, and the zero tangent of its type -- the empty tuple for a type that has
+/// no tangent, a tensor of zeros for a tensor, and each member's own zero for a tuple or a struct.
+/// @example lift(3.0)    // (3.0, 0.0)
+export func lift::<T>(x: T): Lift<T> {
+    return (x, zero_tangent(x))
+}
+
+// A zero of the tangent type of `x`. The tangent of a tuple and of a struct is taken member by
+// member, in the member's own place, and a zero of that has the same shape; a literal cannot head a
+// computed type (`Tangent<T> { ... }` does not parse), so the aggregate arm waits for the transform
+// that lifts one, and a type the arms below do not cover is refused where the types meet.
+func zero_tangent::<T>(x: T): Tangent<T> {
+    return match type T {
+        case float => 0.0
+        case f32 => f32(0.0)
+        case f32[?] => f32(zeros_like(x))
+        case f64[?] => float(zeros_like(x))
+        case _ => ()
+    }
+}

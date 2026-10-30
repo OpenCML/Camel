@@ -1,0 +1,13 @@
+/// `lift` of the `jvp` ruleset: a value and the zero tangent of its type. A float takes the zero
+/// number, and a value with no tangent takes the empty tuple.
+import { Lift, lift } from rulesets.jvp
+
+func main(): int sync {
+    let a: Lift<float> = lift(3.0)
+    println(a.0)
+    println(a.1)
+    let b = lift(7)
+    let b_has_no_tangent: () = b.1
+    println(b.0)
+    return 0
+}
