@@ -27,7 +27,6 @@
 
 | 页 | 问题 | 状态 |
 |---|---|---|
-| `questions-2026-10-31-tag-argument-of-a-rule.md` | 标签参数能否携带一个 `rule`（`#jvp(add_jvp)` 里的 `add_jvp`）：今天的判据只收"程序里的一个函数" | 待裁 |
 | `questions-2026-10-31-what-carries-a-wait-for-a-write.md` | 值在门后等一次写、或等一次调用，这件事该由哪种边承担（`lane-edges` 交的页，取自 `13e5784b1`） | 待裁 |
 | `questions-2026-10-31-generator-cell-type-by-inference.md` | 单元的类型由"只求类型的推导"定，还是由运行时状态的首个写入定 | 待裁 |
 | `questions-2026-10-30-defun-tag-in-the-type.md` | 文档是否取代 `defun.cpp` 那句"函数值已经是标签 + 环境"；老 `std::defunctionalize` 是否退役 | 待裁 |
@@ -41,13 +40,14 @@
 | `questions-2026-10-30-reinterp-rule-set.md` | `reinterp<H>`：规则集 `H` 以什么形式交给算子 | 待裁 |
 | `questions-2026-10-30-reserved-name-in-library.md` | 库里的声明能不能叫保留名：`__add__` 与 `ReservedIdentifier` | 待裁 |
 
-13 页、表里 13 行，**全部在等裁定**。
+12 页、表里 12 行，**全部在等裁定**。
 
 今晚从这张表里挪走的（`git mv` 到 `docs/handover/reviews/`，页首有 `裁定：` 一行）：
 
 - `questions-2026-10-30-tangent-in-prelude.md`、`questions-2026-10-31-tag-import-rechecks-prelude.md`——已修（`1ab619a57` / `d1b3531b4`）；
 - `questions-2026-10-30-generator-read-before-write.md`——作者的答复已落地（`5803e9039`）；
 - `questions-2026-10-30-jvp-tag-scope.md`——裁定 ① 已落地（`d1b3531b4`）；
+- `questions-2026-10-31-tag-argument-of-a-rule.md`——作者 20:10 裁定"可以是一条 `rule`"，落地 `00d14e76f`；
 - `questions-2026-10-30-region-count-account.md`、`questions-2026-10-30-two-behaviour-diffs-left.md`——不是问题，是记录（页首已写明）。
 
 `questions-2026-10-30-probe-plan-kept-or-dropped.md` 这一行删掉了：那一页从来没进过主干——它是在
