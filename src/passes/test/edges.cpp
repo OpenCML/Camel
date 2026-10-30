@@ -49,9 +49,26 @@ const Program *commitEdit(
         draft.setNormInputs(copy, std::span<const gc_node_ref_t>(&value, 1));
         break;
     }
-    case Edit::Ok:
-        blankNode(draft);
+    case Edit::Ok: {
+        // The session hands out one graph per graph it edits, and it stays where the session put
+        // it: a pass binds that graph by reference and keeps it while it edits. An accessor that
+        // made a new object per call would leave the pass writing into a graph the commit never
+        // sees, and a value where a reference is expected is not a compile error at the call site.
+        // The identity is what can be looked at here; the type is held by the static_assert in
+        // draft_session.h. Nothing here names the graph's type: what the session hands out is
+        // what a pass edits, and the test is about the one it hands out, not about its name.
+        auto *first     = &session.edit(program->root());
+        auto *second    = &session.edit(program->root());
+        blankNode(*first);
+        auto *afterEdit = &session.edit(program->root());
+        if (first == second && first == afterEdit) {
+            os << "EDGES transaction stable\n";
+        } else {
+            os << "EDGES transaction moved: " << first << " " << second << " " << afterEdit << "\n";
+        }
+        blankNode(*first);
         break;
+    }
     }
     try {
         const Program *next = session.commit();

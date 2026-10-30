@@ -28,8 +28,10 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace camel::runtime {
@@ -162,6 +164,12 @@ class RuntimeGraphDraftSession {
     /// nodes says Tabled.
     void setGraphState(GraphState state) { graphState_ = state; }
 
+    /// The graph of `graph`, to edit in place, and the root graph's. **Handed out by reference**:
+    /// a pass binds it and keeps it, so the session answers the one graph it holds for that
+    /// graph, at one address, for as long as it holds it -- never a fresh object per call. The
+    /// static_assert after this class keeps an accessor from being changed to return by value,
+    /// which a call site could not see: `auto &draft = session.edit(g)` would bind the graph of a
+    /// temporary transaction that dies at the end of the statement.
     GraphDraft &edit(GCGraph *graph);
     GraphDraft &rootDraft();
 
@@ -369,5 +377,14 @@ class GraphDraftGroup {
     Program *program_ = nullptr;
     bool encoded_     = false;
 };
+
+// A session hands out the graph it edits by reference, and a pass binds what it is given for as
+// long as it edits: an accessor that returned the graph by value would put the graph of a
+// temporary transaction in the caller's hands, and nothing at the call site would say so.
+static_assert(
+    std::is_reference_v<
+        decltype(std::declval<RuntimeGraphDraftSession &>().edit(std::declval<GCGraph *>()))>,
+    "RuntimeGraphDraftSession::edit hands out the graph by reference: a caller binds it and keeps "
+    "it, so a graph returned by value would be a temporary's.");
 
 } // namespace camel::runtime
