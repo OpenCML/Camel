@@ -161,7 +161,7 @@ func main(): int sync {
 
 ## 6.7 Other operators
 
-The operators of the following sections (except `&&`, `||` and `as`) are calls of functions: `a + b` is `__add__(a, b)`, and the tables list the built-in overloads. A program can add overloads for its own types (`func operator +`, [7.4.5](07_statements.md#745-operator-overloading)); they form one set with the built-in overloads and those of C++ modules, and the types of the operands choose among them.
+The operators of the following sections (except `&&`, `||` and `as`) are calls of functions: `a + b` is `__add__(a, b)`, and the tables list the built-in overloads. A program can add overloads for its own types (`func operator +`, [7.4.5](07_statements.md#745-operator-overloading)); they form one set with the built-in overloads and those of C++ modules, and the types of the operands choose among them. Overloads are grouped by the number of parameters: a one-parameter `operator -` (negation) and a two-parameter one (subtraction) can both be declared and each is selected on its own, so one name does not hinder telling them apart.
 
 ### 6.7.1 Arithmetic
 
