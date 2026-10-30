@@ -69,24 +69,6 @@ using type::TypeCode;
 
 namespace {
 
-/// CAMEL_ONNX_TRACE=1 prints every lowered call with the facts of its arguments to stderr.
-bool traceEnabled() {
-    static const bool enabled = [] {
-        const char *v = std::getenv("CAMEL_ONNX_TRACE");
-        return v && *v && std::string_view(v) != "0";
-    }();
-    return enabled;
-}
-
-/// CAMEL_ONNX_DUMP=1 prints the simplified graph that is translated (as std::rgir does).
-bool dumpEnabled() {
-    static const bool enabled = [] {
-        const char *v = std::getenv("CAMEL_ONNX_DUMP");
-        return v && *v && std::string_view(v) != "0";
-    }();
-    return enabled;
-}
-
 std::string describe(const Value &v) {
     const TensorFacts f = factsOf(v);
     std::string shape   = "?";
@@ -3760,7 +3742,7 @@ Value Evaluator::applyOper(
     if (def && def->index) {
         instance = tensor::ops::instantiate(*def, inferContext);
     }
-    if (traceEnabled()) {
+    if (options_.trace) {
         std::string args;
         for (const Value &v : norm) {
             args += (args.empty() ? "" : ", ") + describe(v);
@@ -3770,7 +3752,7 @@ Value Evaluator::applyOper(
     try {
         Value result = lowering->lower(
             LowerContext(emitter_, uri, norm, std::move(facts), resultType, std::move(instance)));
-        if (traceEnabled()) {
+        if (options_.trace) {
             std::cerr << std::format("[onnx]   -> {}\n", describe(result));
         }
         return result;
@@ -5014,7 +4996,7 @@ Model translatePrepared(
     const camel::runtime::Program *programBeforeSimplify = program;
     // Measurement aid: what the bound function looks like when the export receives it and
     // after the export's own simplification (one line each on stderr).
-    const bool prepStats = std::getenv("CAMEL_ONNX_PREP_STATS") != nullptr;
+    const bool prepStats = options.prepStats;
     if (prepStats) {
         std::cerr << "ONNX_PREP_STATS received " << reachableStats(*program, root) << std::endl;
     }
@@ -5066,7 +5048,7 @@ Model translatePrepared(
     if (prepStats) {
         std::cerr << "ONNX_PREP_STATS simplified " << reachableStats(*program, root) << std::endl;
     }
-    if (dumpEnabled()) {
+    if (options.dump) {
         GraphVizDumpPass(context).apply(program, std::cerr);
     }
 
