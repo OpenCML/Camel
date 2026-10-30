@@ -1,5 +1,8 @@
 > **裁定：①**（作者预先授权修）——**隐式已加载的模块被 import 时不得重新检查**；不选②（它会让诊断看引入顺序）。
 >
+> **裁定：已修。根因不是标签，是 `checkPreludeDeclarations` 造了 prelude 却没登记进 `modulesByPath_`，
+> 于是同一文件被检查第二遍。修在 `1ab619a57`。** 页不删，留着：下一个人要知道这条路为什么长这样。
+>
 > 根因已定位：`Context::checkPreludeDeclarations` 读出的那份模块没有登记进 `modulesByPath_`，于是
 > `import` 一个 `prelude` 的名字时 `Context::importModule` 在路径缓存里查不到它，把同一个文件读第二遍、
 > 检查第二遍——第二遍没有 `builtinClaims_` 那一手，文件里两条 `#op` 声明（`string` / `:op/*tos`、
