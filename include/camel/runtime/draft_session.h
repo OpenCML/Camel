@@ -342,10 +342,12 @@ class GraphDraftGroup {
 
     /// Reserves a member with an empty draft and returns its id.
     GraphId reserve(std::string mangledName, std::string name);
-    /// The draft of a member.
+    /// The graph of a member, to build in.
     GraphDraft &draft(GraphId id);
-    /// Replaces the draft of a member.
-    void define(GraphId id, std::unique_ptr<GraphDraft> draft);
+    /// The transaction the member's graph is built in.
+    GraphTransaction &transaction(GraphId id);
+    /// Replaces the graph of a member.
+    void define(GraphId id, std::unique_ptr<GraphTransaction> transaction);
 
     /// Makes the graphs of `program` that the group's program lacks visible to the members (the
     /// specializations and copies the transformation made on the way, which members call).
@@ -364,7 +366,8 @@ class GraphDraftGroup {
   private:
     struct Member {
         RuntimeDraftIdentity identity;
-        std::unique_ptr<GraphDraft> draft;
+        /// The member's graph, held the way every graph is: by the transaction it is built in.
+        std::unique_ptr<GraphTransaction> transaction;
         GCGraph *encoded = nullptr;
     };
 

@@ -1830,12 +1830,11 @@ GraphDraftGroup::GraphDraftGroup(
 GraphDraftGroup::~GraphDraftGroup() = default;
 
 GraphId GraphDraftGroup::reserve(std::string mangledName, std::string name) {
-    auto member      = std::make_unique<Member>();
-    member->draft    = std::make_unique<GraphDraft>();
-    const GraphId id = context_->graphIds().allocate();
-    member->draft->setId(id);
-    member->draft->setProgram(program_);
-    member->identity = RuntimeDraftIdentity{
+    const GraphId id    = context_->graphIds().allocate();
+    auto member         = std::make_unique<Member>();
+    member->transaction = GraphTransaction::open(id);
+    member->transaction->edit().setProgram(program_);
+    member->identity    = RuntimeDraftIdentity{
         .sourceGraph = nullptr,
         .mangledName = std::move(mangledName),
         .name        = std::move(name),
@@ -1845,13 +1844,16 @@ GraphId GraphDraftGroup::reserve(std::string mangledName, std::string name) {
     return id;
 }
 
-GraphDraft &GraphDraftGroup::draft(GraphId id) { return *member(id).draft; }
+GraphDraft &GraphDraftGroup::draft(GraphId id) { return member(id).transaction->edit(); }
 
-void GraphDraftGroup::define(GraphId id, std::unique_ptr<GraphDraft> draft) {
-    ASSERT(draft != nullptr, "Graph draft group member draft cannot be null.");
-    draft->setId(id);
-    draft->setProgram(program_);
-    member(id).draft = std::move(draft);
+GraphTransaction &GraphDraftGroup::transaction(GraphId id) { return *member(id).transaction; }
+
+void GraphDraftGroup::define(GraphId id, std::unique_ptr<GraphTransaction> transaction) {
+    ASSERT(transaction != nullptr, "Graph draft group member transaction cannot be null.");
+    GraphDraft &draft = transaction->edit();
+    draft.setId(id);
+    draft.setProgram(program_);
+    member(id).transaction = std::move(transaction);
 }
 
 void GraphDraftGroup::adopt(const Program &program) { program_->adoptMissing(program); }
@@ -1861,9 +1863,10 @@ void GraphDraftGroup::encode() {
     std::unordered_map<GraphId, GCGraph *> graphs;
     std::unordered_map<GraphId, size_t> bytes;
     for (GraphId id : order_) {
-        Member &m = member(id);
-        bytes.emplace(id, draftGraphBytes(context_, *m.draft, nullptr));
-        graphs.emplace(id, allocateGraph(context_, m.identity, *m.draft, bytes.at(id)));
+        Member &m         = member(id);
+        GraphDraft &graph = m.transaction->edit();
+        bytes.emplace(id, draftGraphBytes(context_, graph, nullptr));
+        graphs.emplace(id, allocateGraph(context_, m.identity, graph, bytes.at(id)));
     }
     // The members form a program with the graphs of the one the group is made over.
     for (GraphId id : order_) {
@@ -1874,8 +1877,9 @@ void GraphDraftGroup::encode() {
     }
     for (GraphId id : order_) {
         const Member &m = member(id);
+        GraphDraft &draft = m.transaction->edit();
         GCGraph *graph =
-            encodeDraftGraph(context_, m.identity, *m.draft, program_, graphs.at(id), bytes.at(id));
+            encodeDraftGraph(context_, m.identity, draft, program_, graphs.at(id), bytes.at(id));
         validateRuntimeGraphPayload(*program_, graph);
     }
     for (GraphId id : order_) {
