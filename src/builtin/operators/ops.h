@@ -9,6 +9,7 @@
 
 slot_t __builtin__var_new__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__var_new_empty__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__var_after__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__var_get__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__var_peek__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

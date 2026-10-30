@@ -167,6 +167,7 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         // variables
         {"var/new", __builtin__var_new__},
         {"var/new/empty", __builtin__var_new_empty__},
+        {"var/after", __builtin__var_after__},
         {"var/get", __builtin__var_get__},
         {"var/peek", __builtin__var_peek__},
         // `xs = xs->sort` as a statement (Builder::inPlaceRebindingOf); with :op/assn_owned
@@ -667,6 +668,7 @@ void registerBuiltinOperatorTraits() {
     // Creating and reading a variable changes nothing outside the program's variables.
     registry.set(":var/new", {.stateOnly = true});
     registry.set(":var/get", {.stateOnly = true});
+    registry.set(":var/after", {.stateOnly = true});
     registry.set(":var/peek", {.stateOnly = true});
     registry.set(":var/take", {.stateOnly = true});
     // The in-place element set of a path assignment (Builder::pathAssignmentOf) writes the

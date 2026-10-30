@@ -234,6 +234,15 @@ slot_t __builtin__var_new_empty__(ArgsView &with, ArgsView &norm, Context &ctx) 
     return toSlot(Tuple::create(1, mm::autoSpace()));
 }
 
+slot_t __builtin__var_after__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    // The cell, taken after the call that wrote it: the result is the cell itself, and the call is
+    // an input so that reading the variable runs the call (design principles 3.1). The call's value
+    // may be `void` and is not read: the edge is the whole of what this operator asks of it.
+    (void)with;
+    (void)ctx;
+    return norm.slot(0);
+}
+
 slot_t __builtin__var_get__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
     // The value leaves the variable: from here on something else may refer to it, so what the
