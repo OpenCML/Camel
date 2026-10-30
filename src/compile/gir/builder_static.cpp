@@ -440,8 +440,13 @@ bool Builder::typeCaseMatches(Type *subject, const GCT::node_ptr_t &caseNode) co
             continue;
         }
         if (pattern->openRank()) {
+            // Rank zero is the element itself (design principles: an array of rank zero is
+            // that element, and there is no separate rank-zero array in the types).
+            auto *want = static_cast<ArrayType *>(pattern);
+            if (typeEquals(subject, want->elemType())) {
+                return true;
+            }
             if (subject->code() == TypeCode::Array) {
-                auto *want = static_cast<ArrayType *>(pattern);
                 auto *have = static_cast<ArrayType *>(subject);
                 if (typeEquals(have->elemType(), want->elemType())) {
                     return true;
