@@ -1,0 +1,16 @@
+直连账的三个数变成快层检查：`GraphDraft` 还在，但"还有多少处直接连到它"从此不靠自觉。
+
+**三个数与口径**（照账页 `graph-store-step2-b-ledger.cn.md` 第 0 节，不自立口径）：① 事务外引用 **73 文件 / 562 处**（`git grep -lw GraphDraft` 数文件、`git grep -ow GraphDraft` 数处，剔掉事务自己的 `graph_txn.h` / `graph_txn.cpp`）；② 构造点 **3**（`make_unique<[^>]*GraphDraft>`）；③ `decode` 点 **12**（`GraphDraft::decode` 出现处，含 `draft.cpp` 的定义与 `proof.h` 注释里那一句）。
+**`-l` 数文件、`-o` 数处，这个区别得写下来**：不带 `-o` 时一行写两处只算一行，于是同一棵树两个人能数出两个数；不带 `-l` 时反过来把"处"当"文件"。用例注释里就是这两条。
+
+**账页旧行写构造点 1，这里记 3——先查口径，别悄悄对齐数字。** b3a 起那几行数的是不带限定的 `make_unique<GraphDraft>`（只 1 处）；第 0 节的正则 `make_unique<[^>]*GraphDraft>` 还收 `modules/tiles/src/region_extract.cpp` 与 `src/passes/test/resources.cpp` 里两处 `std::make_unique<rt::GraphDraft>`——那两处是真的在直接造一张可编辑图，正是这个数要管的，所以按第 0 节记 3。这条写在账页第 0 节的定义旁边，不留给下一个人去对。
+
+**判据是"当前值 ≤ 基线值"，不是相等**：这一步的目标就是让数往下走，所以降是绿（并提示 `--record` 把收益记进基线，好让后面一笔等量涨回去时藏不住），涨是红（打印哪个数从几升到几，以及新位置的 `文件#line#符号`）。`--record` 遇到会涨的数默认拒绝，除非显式 `--force`——默认 `--force` 等于没有闸门，所以不给。
+
+**A/B（Linux 主机、真 runner、`-NoBuild -AllowStale`）**：在 `modules/tiles/src/region_extract.cpp` 手工加一处 `rt::GraphDraft *` 引用 → `[FAIL] runtime.graph_draft_ledger.never_rises`，total 1 / pass 0 / fail 1，信息为 `references rose from 562 to 563 (+1)`、`modules/tiles/src/region_extract.cpp#extractRegion`、新行 `:152`；`git checkout` 还原 → `[PASS]` total 1 / pass 1。
+
+接线（一个没人跑的快层检查和不存在没区别）：用例 `test/cases/runtime/graph_draft_ledger/check.mjs`、基线 `.../baseline.json`、计划 `test/plans/feat/runtime/graph_draft_ledger.plan.toml`（`tier = "fast"`，所以 `-Tier fast` 与 `npm run test` 都跑它）；`test/plan-selection.json` 的 `src/runtime/` 与 `include/camel/runtime/` 两条规则也点名，`--changed` 因此会选它，用例目录到计划的镜像由 `test/cases/` 目录规则给出。
+
+闸门（h-ledger @ 23d49e4d7，并入 origin/develop a02716c02 之后，-Plan all -Tier fast -Jobs 8）：total 7869 / pass 7860 / fail 0 / skip 7 / known failures 2；stamp revision 23d49e4d78、clean、fingerprint 77152821eca4（1222 源文件）。送进 develop 用的是 `git push origin HEAD:develop`，快进 `a02716c02..23d49e4d7`，没有 force。并入前后三个数一字未动（73/562、3、12），合并本身没有新建任何直连。
+
+**一条纪律**：报"develop 新头"必须来自 `git rev-parse origin/develop` 的输出，不是本地合并结果的 sha——在本车道上合并出 `25828d56d` 并把 develop（当时 `56ee83341`）并进自己分支，develop 一点没动，那一句把方向说反了；真正送进 develop 的是 `git push origin HEAD:develop`，而头要以 `origin/develop` 的 sha 为证。
