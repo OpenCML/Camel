@@ -148,7 +148,8 @@ Type *applyTo(Type *type, const GraphTypeSubstitution &types) {
     }
 }
 
-size_t inputCountOf(const GraphDraft &draft, gc_node_ref_t ref) {
+size_t inputCountOf(const GraphTransaction &transaction, gc_node_ref_t ref) {
+    const auto &draft = transaction.graph();
     return draft.dataPortsOf(ref).size() + draft.ctrlInputsOf(ref).size() +
            draft.orderInputsOf(ref).size() + draft.syncInputsOf(ref).size();
 }
@@ -190,7 +191,9 @@ Type *GraphTypeSubstitution::apply(Type *type) const {
 }
 
 GraphRetypeReport retypeDraft(
-    GraphDraft &draft, const GraphTypeSubstitution &types, const GraphRetypeOptions &options) {
+    GraphTransaction &transaction, const GraphTypeSubstitution &types,
+    const GraphRetypeOptions &options) {
+    auto &draft = transaction.edit();
     GraphRetypeReport report;
     if (types.empty() && !options.nodeType) {
         return report;
@@ -205,7 +208,7 @@ GraphRetypeReport retypeDraft(
         const DraftNodeHeader *header = draft.header(ref);
         ASSERT(header != nullptr, "A live draft node has no header.");
         ++report.nodes;
-        report.edges += inputCountOf(draft, ref);
+        report.edges += inputCountOf(transaction, ref);
         Type *oldType = header->dataType;
         if (oldType == nullptr) {
             continue;
@@ -213,7 +216,7 @@ GraphRetypeReport retypeDraft(
         Type *mapped = types.apply(oldType);
         if (options.nodeType) {
             if (Type *own =
-                    options.nodeType(draft, ref, header->kind, oldType, mapped)) {
+                    options.nodeType(transaction, ref, header->kind, oldType, mapped)) {
                 mapped = own;
             }
         }
@@ -318,7 +321,7 @@ GCGraph *retypeGraph(
     RuntimeGraphDraftSession &session, GCGraph *source, const GraphTypeSubstitution &types,
     const GraphRetypeOptions &options, GraphRetypeReport *report) {
     ASSERT(source != nullptr, "A graph rebuild needs a graph.");
-    const GraphRetypeReport one = retypeDraft(session.edit(source).edit(), types, options);
+    const GraphRetypeReport one = retypeDraft(session.edit(source), types, options);
     if (report != nullptr) {
         *report = one;
     }
@@ -333,7 +336,7 @@ const Program *retypeProgram(
     const std::vector<GCGraph *> graphs = session.collectReachableRuntimeGraphs();
     mine.graphs                         = graphs.size();
     for (GCGraph *graph : graphs) {
-        const GraphRetypeReport one = retypeDraft(session.edit(graph).edit(), types, options);
+        const GraphRetypeReport one = retypeDraft(session.edit(graph), types, options);
         mine.retypedNodes += one.retypedNodes;
         mine.retypedStatic += one.retypedStaticSlots;
         mine.leftStatic += one.leftStaticSlots;
