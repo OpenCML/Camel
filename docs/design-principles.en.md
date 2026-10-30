@@ -195,7 +195,7 @@ A `sync` written before a block (including the postfix form on a function body, 
 - **There is no execution order among the elements of `map` and `filter`**: a synchronous block does not affect the execution order inside `map`; a parallel scheduler may execute the elements concurrently, and the results are arranged by element position; this is exactly where the speed-up from parallelism comes from (see `test/cases/para/core/monte_carlo_pi.cml`). `foreach` and `reduce` execute in element order; their unordered parallel versions are `unordered_foreach` and `unordered_reduce` of the `para` module. There is no `ordered_map` or `unordered_map` operator in the repository. The order of effects inside the element function is not guaranteed under a parallel `map` and is the user's responsibility.
 - **The parallelism of a higher-order function comes from a declared property** (the elements do not depend on each other), not from the name; a function written by a user that declares the same property can also run in parallel.
 - **The granularity of parallel scheduling**: not down to the atomic level. Creating a task for every very small function call is pointless and only adds burden.
-- **When one element of a parallel `map` faults**: the elements already started run to the end, and those not yet started are not started. When several elements fault at the same time, the one with the smallest index is reported.
+- **When one element of a parallel `map` faults**: the elements already started run to the end; of the elements not yet started, those whose index is greater than the smallest fault known are not started, and those with a smaller index still are; the fault with the smallest index is reported.
 
 ### 3.7 Branches and `match`
 
@@ -864,9 +864,6 @@ When you meet any of the following, ask the language author:
 - How to handle a type function whose evaluation fails or does not terminate.
 - The behaviour when one mutable object is written through references in several places outside a synchronous block.
 - Whether a tag can be attached to a declaration elsewhere, apart from the declaration itself (whether scheduling is an exception).
-- **After a parallel `map` faults, whether elements with a smaller index that have not yet started still execute** (`parallel-fault-lower-elements`):
-  every element of `(0..64)->map<bad>` faults, and the worker threads happen to have run the 40th first. The current implementation: only those with an index greater than 40 are no longer started, 0 to 39 are still executed, so what is reported is always the 0th, the same as the linear back end and the same on every run.
-  Candidate: after a fault, start no element at all; then "the smallest index" is taken only among the elements that happened to have started, and may differ from run to run.
 - **Whether the arguments of built-in operators are entered automatically** (`entering-operator-args`): `xs->append<5>` (`xs: (int?)[]`).
   Current implementation: not entered; the former needs `5 as int?`, and the `[]` of the latter has no element type and gives no error; because the parameter types of built-in operators are computed from the arguments by C++ type rules, and before the call there is no target type.
   Candidate: let the type rules report "the type I accept", making built-in operators consistent with user functions.
