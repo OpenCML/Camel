@@ -2205,7 +2205,13 @@ GraphId GraphDraft::payloadGraphAt(uint32_t index) const {
 
 GraphId GraphDraft::calleeIdOf(gc_node_ref_t id) const {
     const DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr && draftNode->header.kind == GCNodeKind::Func, "Not a FUNC node.");
+    GUARD(
+        draftNode != nullptr && draftNode->header.kind == GCNodeKind::Func,
+        std::format(
+            "reading the callee of node {}, whose kind is {}: a callee is a GCFuncRef payload, which "
+            "only a FUNC node (kind 10) carries, so what this node holds is not a graph index",
+            id,
+            draftNode == nullptr ? -1 : static_cast<int>(draftNode->header.kind)));
     return payloadGraphAt(DraftNodeView::payloadAs<GCFuncRef>(draftNode)->ref);
 }
 
@@ -2218,14 +2224,26 @@ void GraphDraft::setCalleeGraph(gc_node_ref_t id, GraphId callee) {
     requireOneWriting("setCalleeGraph");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr && draftNode->header.kind == GCNodeKind::Func, "Not a FUNC node.");
+    GUARD(
+        draftNode != nullptr && draftNode->header.kind == GCNodeKind::Func,
+        std::format(
+            "pointing node {}, whose kind is {}, at a callee: the payload slot holds a GCFuncRef only "
+            "when the node is a FUNC node (kind 10)",
+            id,
+            draftNode == nullptr ? -1 : static_cast<int>(draftNode->header.kind)));
     touchRefs();
     DraftNodeView::payloadAs<GCFuncRef>(draftNode)->ref = payloadGraphIndexOf(callee);
 }
 
 GCLoopBody GraphDraft::loopGraphsOf(gc_node_ref_t id) const {
     const DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr && draftNode->header.kind == GCNodeKind::Loop, "Not a LOOP node.");
+    GUARD(
+        draftNode != nullptr && draftNode->header.kind == GCNodeKind::Loop,
+        std::format(
+            "reading the loop graphs of node {}, whose kind is {}: a loop body is a GCLoopRef payload, "
+            "which only a LOOP node carries, so what this node holds is not a pair of graph indices",
+            id,
+            draftNode == nullptr ? -1 : static_cast<int>(draftNode->header.kind)));
     const auto *ref = DraftNodeView::payloadAs<GCLoopRef>(draftNode);
     return GCLoopBody{
         .condGraph       = payloadGraphAt(ref->condRef),
@@ -2240,7 +2258,13 @@ void GraphDraft::setLoopGraphs(gc_node_ref_t id, GraphId cond, GraphId body) {
     requireOneWriting("setLoopGraphs");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr && draftNode->header.kind == GCNodeKind::Loop, "Not a LOOP node.");
+    GUARD(
+        draftNode != nullptr && draftNode->header.kind == GCNodeKind::Loop,
+        std::format(
+            "pointing node {}, whose kind is {}, at a loop body: the payload slot holds a GCLoopRef only "
+            "when the node is a LOOP node",
+            id,
+            draftNode == nullptr ? -1 : static_cast<int>(draftNode->header.kind)));
     touchRefs();
     auto *ref    = DraftNodeView::payloadAs<GCLoopRef>(draftNode);
     ref->condRef = payloadGraphIndexOf(cond);
