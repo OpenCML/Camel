@@ -24,6 +24,7 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/runtime/cycle.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
 #include "camel/utils/assert.h"
@@ -40,6 +41,48 @@ namespace camel::runtime {
 using namespace camel::core::type;
 
 namespace {
+
+/// Reads a frozen graph for `camel::runtime::findInputCycle`: the data, `with`, control and sync
+/// edges are runs of refs; an order edge is a record (`GCGraphOrderEdge`), so the adaptor collects
+/// the predecessors it was asked for and hands out that scratch until the next call.
+class FrozenCycleEdges {
+  public:
+    explicit FrozenCycleEdges(const GCGraph &graph) : graph_(graph) {}
+
+    size_t slotCount() const { return graph_.nodeCount(); }
+    bool present(gc_node_ref_t ref) const {
+        return graph_.containsNodeRef(ref) && graph_.node(ref)->kind != GCNodeKind::Dead;
+    }
+    std::span<const gc_node_ref_t> inputsOf(gc_node_ref_t ref, CycleEdgeKind kind) {
+        switch (kind) {
+        case CycleEdgeKind::Norm:
+            return graph_.normInputsOf(ref);
+        case CycleEdgeKind::With:
+            return graph_.withInputsOf(ref);
+        case CycleEdgeKind::Ctrl:
+            return graph_.ctrlInputsOf(ref);
+        case CycleEdgeKind::Sync:
+            sideEdges_.clear();
+            for (const GCGraphSyncEdge &edge : graph_.syncPredsOf(ref)) {
+                sideEdges_.push_back(edge.pred);
+            }
+            return std::span<const gc_node_ref_t>(sideEdges_);
+        case CycleEdgeKind::Order:
+            sideEdges_.clear();
+            for (const GCGraphOrderEdge &edge : graph_.orderPredsOf(ref)) {
+                sideEdges_.push_back(edge.pred);
+            }
+            return std::span<const gc_node_ref_t>(sideEdges_);
+        }
+        return {};
+    }
+
+  private:
+    const GCGraph &graph_;
+    /// The predecessors of the edge kind asked for last: sync and order edges are records, not
+    /// runs of refs, so the adaptor hands out this scratch until the next call.
+    std::vector<gc_node_ref_t> sideEdges_;
+};
 
 class EdgeChecker {
   public:
@@ -482,77 +525,22 @@ class EdgeChecker {
                 what));
     }
 
-    /// Depth-first over the edges with an explicit stack; a node reached while it is open is on a
-    /// cycle. An order edge takes part: it constrains the order the back ends lay the graph out
-    /// in, so a cycle of them is a graph no scheduler can run (docs/design/effects/edges.cn.md
-    /// 1.5, 2).
+    /// The judgement the draft's check makes, on the frozen graph (camel/runtime/cycle.h): every
+    /// edge kind takes part, the sync and order ones included. Each of them makes one node run after
+    /// another -- a sync edge is a real ordering (docs/design/effects/edges.cn.md, section 1) -- so a
+    /// cycle of them is a graph no back end can run, and it is refused here rather than handed on.
     void findCycle() {
-        const size_t count = graph_.nodeCount();
-        std::vector<uint8_t> state(count, 0); // 0 new, 1 open, 2 done
-        std::vector<gc_node_ref_t> orderPreds;
-        struct Frame {
-            gc_node_ref_t node;
-            uint8_t group;
-            size_t next;
-        };
-        for (auto it = graph_.nodes().begin(); it != graph_.nodes().end(); ++it) {
-            const gc_node_ref_t start = it.ref();
-            if (state[start] != 0) {
-                continue;
-            }
-            std::vector<Frame> stack{{start, 0, 0}};
-            state[start] = 1;
-            while (!stack.empty()) {
-                Frame &top = stack.back();
-                std::span<const gc_node_ref_t> inputs;
-                while (top.group < 4) {
-                    if (top.group == 3) {
-                        orderPreds.clear();
-                        for (const GCGraphOrderEdge &edge : graph_.orderPredsOf(top.node)) {
-                            orderPreds.push_back(edge.pred);
-                        }
-                        inputs = std::span<const gc_node_ref_t>(orderPreds);
-                    } else {
-                        inputs = top.group == 0   ? graph_.normInputsOf(top.node)
-                                 : top.group == 1 ? graph_.withInputsOf(top.node)
-                                                  : graph_.ctrlInputsOf(top.node);
-                    }
-                    if (top.next < inputs.size()) {
-                        break;
-                    }
-                    ++top.group;
-                    top.next = 0;
-                }
-                if (top.group == 4) {
-                    state[top.node] = 2;
-                    stack.pop_back();
-                    continue;
-                }
-                const gc_node_ref_t input = inputs[top.next++];
-                if (!graph_.containsNodeRef(input)) {
-                    continue; // reported by the reference check
-                }
-                if (state[input] == 1) {
-                    std::string path;
-                    bool on = false;
-                    for (const Frame &frame : stack) {
-                        on = on || frame.node == input;
-                        if (on) {
-                            path += std::format(
-                                "{}({}) <- ",
-                                frame.node,
-                                static_cast<int>(graph_.node(frame.node)->kind));
-                        }
-                    }
-                    report(input, "lies on a cycle of inputs: " + path + std::to_string(input));
-                    return;
-                }
-                if (state[input] == 0) {
-                    state[input] = 1;
-                    stack.push_back({input, 0, 0});
-                }
-            }
+        FrozenCycleEdges edges(graph_);
+        std::vector<gc_node_ref_t> path;
+        const gc_node_ref_t closes = findInputCycle(edges, &path);
+        if (closes == kInvalidNodeRef) {
+            return;
         }
+        std::string chain;
+        for (gc_node_ref_t node : path) {
+            chain += std::format("{}({}) <- ", node, static_cast<int>(graph_.node(node)->kind));
+        }
+        report(closes, "lies on a cycle of inputs: " + chain + std::to_string(closes));
     }
 
     void checkNode(gc_node_ref_t ref, const GCNode &node) {
