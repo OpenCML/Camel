@@ -349,3 +349,21 @@ b4 只有一个人口：`modules/graph/handle.h` 里那个 `const GraphDraft *dr
 helper 只借一次草稿、并不持有它，所以改成收模板参数（`template <class Draft>`，调用点传 `transaction->edit()`），三个数回到 **66 / 535 / 3 / 6**。
 
 这不是"台账省一格"的老故事，是 §15 的规矩第一次在 b4 之外被用到：**点名就是宣告所有权**，借的一次写 `auto` 或写模板，所有者留在事务那里。数没动，所以不记新行，只记这条用例——下一笔若有人在遍里直接写 `GraphDraft`，先问它是不是真的持有。
+
+## 19. 读端三处：每一处都改问事务（每处一笔、每处构建一次）
+
+| 笔 | 改了什么 | references |
+|---|---|---|
+| `eb20adf78` | `read.cpp#viewOf`：先问 `handle->transaction()`，草稿从 `&transaction->graph()` 拿，`handle->draft()` 只作退路 | 534 → **533** |
+| `997e712b6` | `read.cpp#nodeHandle(from, node)`：`from` 有事务就 `createInTransaction`，没有才 `createInDraft` | 533 → **532** |
+| `092196630` | `read.cpp#calleeKernel`：判"这是不是草稿的节点"先问 `transaction()`，再退到 `draft()` | 532（不变） |
+
+**掉的两格是哪两处**：都是 `const GraphDraft *draft = …` 那一行——`viewOf` 一处、`nodeHandle` 一处改成 `const auto *`，因为草稿的来源变成 `&transaction->graph()`，**类型名不再需要写**。第三处只把"问谁"的先后换了、没有可删的类型名，所以数不动：**"改一处就该掉一格"不是必然，问的顺序变了而类型名还在的，那格不算收益。**
+
+**第三笔顺带关掉一条缝**：`calleeKernel` 原来只问 `draft()`，一旦某个 handle 只有事务、没有草稿指针，它会把草稿节点当成已发布的图交给 `nodeOfFrozen`；现在先问事务。
+
+## 20. 第二条顺序规矩（可引用）
+
+> **先让新的事实到达读端所读的那个字段，再改读端。**
+
+两次实测：§16（生产者先把事务送进 handle，读端后改）与 §17.1（`createInTransaction` 同时设两个指针）都是这条的应用；反过来就是 §16 那颗地雷。配套的第一条（另一条线实测）是**新造图先 `setId` 再 `encode`**。两条都属于"顺序错了会静默错、不会编译错"，所以抄在同一个地方。
