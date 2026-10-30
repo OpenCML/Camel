@@ -249,41 +249,10 @@ std::vector<Type *> callVersionsOf(Type *callValueType, uint32_t writtenCaptures
     return versions;
 }
 
-/// Whether `node` reads a version a call handed on: an access node that takes a component past
-/// the callee's value (callValueTypeOf).
-bool readsCallVersion(const GraphDraft &draft, gc_node_ref_t node) {
-    if (kindOf(draft, node) != GCNodeKind::Accs) {
-        return false;
-    }
-    const auto payload = draft.payloadOf(node);
-    if (payload.size() < sizeof(rt::GCAccsBody)) {
-        return false;
-    }
-    const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
-    return accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value >= 1;
-}
-
-/// The projection of `node`'s value: the access node that takes component `index` of it, or
-/// `kInvalidNodeRef` when nothing projects that component. A call has at most one of them per
-/// component (the builder caches the access node it makes for a call's value).
-gc_node_ref_t componentProjectionOf(const GraphDraft &draft, gc_node_ref_t node, uint32_t index) {
-    for (gc_node_ref_t user : draft.normUsersOf(node)) {
-        if (kindOf(draft, user) != GCNodeKind::Accs) {
-            continue;
-        }
-        const auto payload = draft.payloadOf(user);
-        if (payload.size() < sizeof(rt::GCAccsBody)) {
-            continue;
-        }
-        const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
-        if (accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value == index) {
-            return user;
-        }
-    }
-    return kInvalidNodeRef;
-}
-
-std::optional<slot_t> staticValue(const GraphDraft &draft, gc_node_ref_t node) {
+/// A static value the node holds, where the graph is the one the transaction owns: the owner is
+/// what a caller has, so the owner is what it passes.
+std::optional<slot_t> staticValue(const rt::GraphTransaction &transaction, gc_node_ref_t node) {
+    const auto &draft  = transaction.graph();
     const auto *header = draft.header(node);
     if (!header || header->kind != GCNodeKind::Data || header->dataIndex >= 0) {
         return std::nullopt;
@@ -313,75 +282,9 @@ bool holdsFunction(Type *type) {
 /// answer a comparison of two computations in the optimizer asks for.
 using camel::runtime::ungated;
 
-/// What `node` and the gates it passes through wait for, the gated value's own ordering included.
-/// A wait is read in either kind: a node of a `sync` block waits through the sync edge of the
-/// block's chain as well as through the control edge beside it
-/// (docs/design/effects/edges.cn.md 1, 4.6).
-std::vector<gc_node_ref_t> orderingOf(const GraphDraft &draft, gc_node_ref_t node) {
-    std::vector<gc_node_ref_t> ctrl;
-    while (true) {
-        for (auto waits : {draft.ctrlInputsOf(node), draft.syncInputsOf(node)}) {
-            for (gc_node_ref_t before : waits) {
-                if (std::find(ctrl.begin(), ctrl.end(), before) == ctrl.end()) {
-                    ctrl.push_back(before);
-                }
-            }
-        }
-        if (kindOf(draft, node) != GCNodeKind::Gate || draft.normInputsOf(node).empty()) {
-            return ctrl;
-        }
-        node = draft.normInputsOf(node).back();
-    }
-}
 
-/// A node that stands for another takes the chain place of the one it replaces as well: a
-/// statement of a `sync` block is written after the statement before it through the sync edge, and
-/// a clone or a direct call that keeps only the control edge beside it leaves the block's chain
-/// broken (docs/design/effects/edges.cn.md 1, 4.6; docs/handover/README.cn.md 5.21 item 4).
-void takeSyncPlace(GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to) {
-    const auto inputs = copyOf(draft.syncInputsOf(from));
-    if (inputs.empty() || from == to) {
-        return;
-    }
-    if (const auto *header = draft.header(to); header != nullptr) {
-        draft.setNodeRuntimeFlags(
-            to,
-            static_cast<uint8_t>(header->runtimeFlags |
-                                 camel::runtime::kGCNodeFlagSyncStatement));
-    }
-    draft.setSyncInputs(to, inputs);
-    for (gc_node_ref_t user : copyOf(draft.syncUsersOf(from))) {
-        draft.replaceInput(rt::DraftEdgeKind::Sync, user, from, to);
-    }
-}
-
-/// The function a function value is, where the graph itself says so: a constant function, or a
-/// closure built in this graph (FILL) over a constant function. Null for anything else (a
-/// port, the result of a branch or of a call, an element of a container).
-::Function *evidentFunction(const GraphDraft &draft, gc_node_ref_t node) {
-    node = ungated(draft, node);
-    if (!isFunctionType(typeOf(draft, node))) {
-        return nullptr;
-    }
-    gc_node_ref_t constant = node;
-    if (kindOf(draft, node) == GCNodeKind::Fill) {
-        const auto *body = reinterpret_cast<const rt::GCFillBody *>(draft.payloadOf(node).data());
-        if (body->fillKind != rt::GCFillKind::FunctionClosure ||
-            draft.normInputsOf(node).size() != 1) {
-            return nullptr;
-        }
-        constant = draft.normInputsOf(node).front();
-        if (!isFunctionType(typeOf(draft, constant))) {
-            return nullptr;
-        }
-    }
-    const auto value = staticValue(draft, constant);
-    auto *function   = value ? fromSlot<::Function *>(*value) : nullptr;
-    return function != nullptr && function->graph() != nullptr ? function : nullptr;
-}
-
-GCGraph *calleeOf(const GraphDraft &draft, gc_node_ref_t node) {
-    return draft.calleeGraphOf(node);
+GCGraph *calleeOf(const rt::GraphTransaction &transaction, gc_node_ref_t node) {
+    return transaction.graph().calleeGraphOf(node);
 }
 
 gc_node_ref_t addAccs(GraphDraft &draft, Type *type, gc_node_ref_t source, size_t index) {
@@ -409,7 +312,10 @@ addOper(GraphDraft &draft, Type *type, std::string_view uri, std::span<const gc_
 }
 
 gc_node_ref_t
-addCall(GraphDraft &draft, Type *type, gc_node_ref_t callee, std::span<const gc_node_ref_t> args) {
+addCall(
+    rt::GraphTransaction &transaction, Type *type, gc_node_ref_t callee,
+    std::span<const gc_node_ref_t> args) {
+    auto &draft              = transaction.edit();
     const gc_node_ref_t node = draft.addCallNode(type);
     draft.setWithInputs(node, std::span<const gc_node_ref_t>(&callee, 1));
     draft.setNormInputs(node, args);
@@ -569,7 +475,8 @@ std::vector<gc_node_ref_t> valueOrder(
 
 /// The nodes outside `region` that its nodes read, in the order they are first read. The
 /// constants are left out: a rule copies them, it does not capture them.
-std::vector<gc_node_ref_t> externalInputsOf(const GraphDraft &draft, uint32_t region) {
+std::vector<gc_node_ref_t> externalInputsOf(const rt::GraphTransaction &transaction, uint32_t region) {
+    const auto &draft = transaction.graph();
     std::vector<gc_node_ref_t> nodes;
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         if (draft.alive(id) && draft.regionWithin(draft.nodeRegion(id), region)) {
@@ -698,7 +605,8 @@ std::vector<Type *> portTypesOf(const GCGraph *graph) {
     return types;
 }
 
-std::vector<gc_node_ref_t> portsOf(const GraphDraft &draft) {
+std::vector<gc_node_ref_t> portsOf(const rt::GraphTransaction &transaction) {
+    const auto &draft = transaction.graph();
     std::vector<gc_node_ref_t> ports = copyOf(draft.withPorts());
     for (gc_node_ref_t port : draft.normPorts()) {
         ports.push_back(port);
@@ -923,6 +831,113 @@ class ForwardRewrite {
     bool member(gc_node_ref_t node) const {
         return regionMember(draft(), draft().nodeRegion(node), part_);
     }
+
+    // The five readers below ask this rewrite's own graph, so they are members: a free function
+    // that took the draft as its first parameter was taking something the object already knows,
+    // and every caller passed exactly `draft()`.
+
+    /// Whether `node` reads a version a call handed on: an access node that takes a component past
+    /// the callee's value (callValueTypeOf).
+    bool readsCallVersion(gc_node_ref_t node) const {
+        if (kindOf(draft(), node) != GCNodeKind::Accs) {
+            return false;
+        }
+        const auto payload = draft().payloadOf(node);
+        if (payload.size() < sizeof(rt::GCAccsBody)) {
+            return false;
+        }
+        const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
+        return accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value >= 1;
+    }
+
+    /// The projection of `node`'s value: the access node that takes component `index` of it, or
+    /// `kInvalidNodeRef` when nothing projects that component. A call has at most one of them per
+    /// component (the builder caches the access node it makes for a call's value).
+    gc_node_ref_t componentProjectionOf(gc_node_ref_t node, uint32_t index) const {
+        for (gc_node_ref_t user : draft().normUsersOf(node)) {
+            if (kindOf(draft(), user) != GCNodeKind::Accs) {
+                continue;
+            }
+            const auto payload = draft().payloadOf(user);
+            if (payload.size() < sizeof(rt::GCAccsBody)) {
+                continue;
+            }
+            const auto *accs = reinterpret_cast<const rt::GCAccsBody *>(payload.data());
+            if (accs->accsKind == rt::GCAccsKind::TupleIndex && accs->value == index) {
+                return user;
+            }
+        }
+        return kInvalidNodeRef;
+    }
+
+    /// What `node` and the gates it passes through wait for, the gated value's own ordering
+    /// included. A wait is read in either kind: a node of a `sync` block waits through the sync
+    /// edge of the block's chain as well as through the control edge beside it
+    /// (docs/design/effects/edges.cn.md 1, 4.6).
+    std::vector<gc_node_ref_t> orderingOf(gc_node_ref_t node) const {
+        std::vector<gc_node_ref_t> ctrl;
+        while (true) {
+            for (auto waits : {draft().ctrlInputsOf(node), draft().syncInputsOf(node)}) {
+                for (gc_node_ref_t before : waits) {
+                    if (std::find(ctrl.begin(), ctrl.end(), before) == ctrl.end()) {
+                        ctrl.push_back(before);
+                    }
+                }
+            }
+            if (kindOf(draft(), node) != GCNodeKind::Gate || draft().normInputsOf(node).empty()) {
+                return ctrl;
+            }
+            node = draft().normInputsOf(node).back();
+        }
+    }
+
+    /// A node that stands for another takes the chain place of the one it replaces as well: a
+    /// statement of a `sync` block is written after the statement before it through the sync
+    /// edge, and a clone or a direct call that keeps only the control edge beside it leaves the
+    /// block's chain broken (docs/design/effects/edges.cn.md 1, 4.6; docs/handover/README.cn.md
+    /// 5.21 item 4).
+    void takeSyncPlace(gc_node_ref_t from, gc_node_ref_t to) const {
+        const auto inputs = copyOf(draft().syncInputsOf(from));
+        if (inputs.empty() || from == to) {
+            return;
+        }
+        if (const auto *header = draft().header(to); header != nullptr) {
+            draft().setNodeRuntimeFlags(
+                to,
+                static_cast<uint8_t>(
+                    header->runtimeFlags | camel::runtime::kGCNodeFlagSyncStatement));
+        }
+        draft().setSyncInputs(to, inputs);
+        for (gc_node_ref_t user : copyOf(draft().syncUsersOf(from))) {
+            draft().replaceInput(rt::DraftEdgeKind::Sync, user, from, to);
+        }
+    }
+
+    /// The function a function value is, where the graph itself says so: a constant function, or a
+    /// closure built in this graph (FILL) over a constant function. Null for anything else (a
+    /// port, the result of a branch or of a call, an element of a container).
+    ::Function *evidentFunction(gc_node_ref_t node) const {
+        node = ungated(draft(), node);
+        if (!isFunctionType(typeOf(draft(), node))) {
+            return nullptr;
+        }
+        gc_node_ref_t constant = node;
+        if (kindOf(draft(), node) == GCNodeKind::Fill) {
+            const auto *body =
+                reinterpret_cast<const rt::GCFillBody *>(draft().payloadOf(node).data());
+            if (body->fillKind != rt::GCFillKind::FunctionClosure ||
+                draft().normInputsOf(node).size() != 1) {
+                return nullptr;
+            }
+            constant = draft().normInputsOf(node).front();
+            if (!isFunctionType(typeOf(draft(), constant))) {
+                return nullptr;
+            }
+        }
+        const auto value = staticValue(transaction_, constant);
+        auto *function   = value ? fromSlot<::Function *>(*value) : nullptr;
+        return function != nullptr && function->graph() != nullptr ? function : nullptr;
+    }
     /// Brings the functions that function values stand for into this graph, so that the calls
     /// of those values become calls of closures built here (see the definition).
     void followFunctionValues();
@@ -1090,7 +1105,7 @@ class Backward final : public VjpBuilder {
     // VjpBuilder
     Type *nodeType(vjp_node_t node) const override { return typeOf(target(), node); }
     std::optional<slot_t> staticValueOf(vjp_node_t node) const override {
-        return staticValue(target(), node);
+        return staticValue(targetTransaction_, node);
     }
     vjp_node_t addStatic(slot_t value, Type *type) override {
         return target().materializeStaticValue(value, type);
@@ -1275,14 +1290,17 @@ class Engine {
         std::unique_ptr<rt::GraphTransaction> source, const std::string &name,
         const PullbackPlan &types, GraphScope scope);
 
-    /// The functions whose bodies, brought into an arm region, the arm came with.
-    const std::unordered_set<GCGraph *> &ownersOf(const GraphDraft *draft, uint32_t region) const {
+    /// The functions whose bodies, brought into an arm region, the arm came with. The key is the
+    /// transaction that owns the draft, not the draft: a draft is reached through its owner, so
+    /// naming the storage here would make this bookkeeping depend on where the storage lives.
+    const std::unordered_set<GCGraph *> &
+    ownersOf(const rt::GraphTransaction *transaction, uint32_t region) const {
         static const std::unordered_set<GCGraph *> none;
-        auto it = regionOwners_.find({draft, region});
+        auto it = regionOwners_.find({transaction, region});
         return it == regionOwners_.end() ? none : it->second;
     }
-    void noteArmOwner(const GraphDraft *draft, uint32_t region, GCGraph *owner) {
-        regionOwners_[{draft, region}].insert(owner);
+    void noteArmOwner(const rt::GraphTransaction *transaction, uint32_t region, GCGraph *owner) {
+        regionOwners_[{transaction, region}].insert(owner);
     }
     void noteArmOwner(GCGraph *arm, GCGraph *owner) { armOwners_[arm].insert(owner); }
     const std::unordered_set<GCGraph *> &ownersOf(GCGraph *arm) const {
@@ -1342,7 +1360,7 @@ class Engine {
     rt::RuntimeGraphDraftSession inlining_;
     size_t followed_ = 0;
     std::unordered_map<GCGraph *, std::unordered_set<GCGraph *>> armOwners_;
-    std::map<std::pair<const GraphDraft *, uint32_t>, std::unordered_set<GCGraph *>> regionOwners_;
+    std::map<std::pair<const rt::GraphTransaction *, uint32_t>, std::unordered_set<GCGraph *>> regionOwners_;
     std::unordered_set<GCGraph *> recursions_;
     std::vector<Refusal> refusals_;
     // The semantic bodies of the program's `#impl` functions (see implBodiesByKernel), read
@@ -1394,8 +1412,8 @@ void ForwardRewrite::followFunctionValues() {
             // The function whose body would come in (for a closure, the function it closes).
             GCGraph *const function =
                 kind == GCNodeKind::Func
-                    ? calleeOf(draft(), id)
-                    : engine_.graphOf(evidentFunction(draft(), draft().withInputsOf(id).front()));
+                    ? calleeOf(transaction_, id)
+                    : engine_.graphOf(evidentFunction(draft().withInputsOf(id).front()));
             if (scope_.enclosing.contains(function)) {
                 engine_.noteRecursion(function);
                 left.insert(id);
@@ -1410,7 +1428,7 @@ void ForwardRewrite::followFunctionValues() {
                     if (draft().alive(join) && kindOf(draft(), join) == GCNodeKind::Join) {
                         for (gc_node_ref_t arm : draft().withInputsOf(join)) {
                             if (kindOf(draft(), arm) == GCNodeKind::Func) {
-                                graphs.insert(calleeOf(draft(), arm));
+                                graphs.insert(calleeOf(transaction_, arm));
                             }
                         }
                     }
@@ -1446,7 +1464,7 @@ void ForwardRewrite::followFunctionValues() {
                 // The body came into this region; a function it calls from here that calls
                 // itself is this function's recursion.
                 if (part_ != 0 && draft().region(part_).kind == rt::GCRegionKind::Arm) {
-                    engine_.noteArmOwner(&draft(), part_, function);
+                    engine_.noteArmOwner(&transaction_, part_, function);
                 }
             } else {
                 left.insert(id);
@@ -1460,7 +1478,7 @@ void ForwardRewrite::followFunctionValues() {
 /// its callee, as an argument or a captured value, or gets a function value back from it.
 bool ForwardRewrite::carriesFunctionValue(gc_node_ref_t call) const {
     const auto evident = [&](gc_node_ref_t node) {
-        return evidentFunction(draft(), node) != nullptr;
+        return evidentFunction(node) != nullptr;
     };
     // A macro, and a function with a derivative rule of its own, are not differentiated
     // through their bodies.
@@ -1470,7 +1488,7 @@ bool ForwardRewrite::carriesFunctionValue(gc_node_ref_t call) const {
     GCGraph *graph  = nullptr;
     auto withInputs = draft().withInputsOf(call);
     if (kindOf(draft(), call) == GCNodeKind::Func) {
-        graph = calleeOf(draft(), call);
+        graph = calleeOf(transaction_, call);
         if (opaque(graph)) {
             return false;
         }
@@ -1478,7 +1496,7 @@ bool ForwardRewrite::carriesFunctionValue(gc_node_ref_t call) const {
         if (withInputs.empty()) {
             return false;
         }
-        const ::Function *function = evidentFunction(draft(), withInputs.front());
+        const ::Function *function = evidentFunction(withInputs.front());
         if (function == nullptr || opaque(function->graph())) {
             return false;
         }
@@ -1628,7 +1646,7 @@ void ForwardRewrite::expandKernelBodies() {
         draft().setWithInputs(direct, withInputs);
         draft().setNormInputs(direct, normInputs);
         draft().setCtrlInputs(direct, copyOf(draft().ctrlInputsOf(id)));
-        takeSyncPlace(draft(), id, direct);
+        takeSyncPlace(id, direct);
         draft().replaceAllValueUses(id, direct);
         for (gc_node_ref_t user : copyOf(draft().ctrlUsersOf(id))) {
             draft().replaceInput(rt::DraftEdgeKind::Ctrl, user, id, direct);
@@ -1740,12 +1758,12 @@ void ForwardRewrite::redirectCallValue(
     // value: its users project it, and the projection takes the pair now, whose component 0 is
     // the value it named.
     for (gc_node_ref_t user : copyOf(draft().normUsersOf(call))) {
-        if (!readsCallVersion(draft(), user)) {
+        if (!readsCallVersion(user)) {
             draft().replaceInput(rt::DraftEdgeKind::Data, user, call, pair, rt::PortRole::Normal);
         }
     }
     for (gc_node_ref_t user : copyOf(draft().withUsersOf(call))) {
-        if (!readsCallVersion(draft(), user)) {
+        if (!readsCallVersion(user)) {
             draft().replaceInput(rt::DraftEdgeKind::Data, user, call, pair, rt::PortRole::Context);
         }
     }
@@ -1808,7 +1826,7 @@ void ForwardRewrite::split(
         // The tangent of the call's value accumulates on the node that projects it, and a fresh
         // node holding the same value would take none of it: the projection the graph already
         // has becomes the value node.
-        value = componentProjectionOf(draft(), node, 0);
+        value = componentProjectionOf(node, 0);
         if (value == kInvalidNodeRef) {
             value = draft().addAccsNode(plan.valueType, 0u);
         }
@@ -2513,7 +2531,7 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
     }
     // The callee value, behind the gates that order it.
     const gc_node_ref_t fill = ungated(draft(), withInputs.front());
-    auto calleeValue         = staticValue(draft(), fill);
+    auto calleeValue         = staticValue(transaction_, fill);
     auto *function           = calleeValue ? fromSlot<::Function *>(*calleeValue) : nullptr;
     // A closure built in this graph: FILL(function, captured values...).
     std::vector<gc_node_ref_t> filled; // captured values by closure slot, where filled here
@@ -2521,7 +2539,7 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
     if (function == nullptr && kindOf(draft(), fill) == GCNodeKind::Fill &&
         draft().normInputsOf(fill).size() == 1) {
         const auto *body = reinterpret_cast<const rt::GCFillBody *>(draft().payloadOf(fill).data());
-        const auto base  = staticValue(draft(), draft().normInputsOf(fill).front());
+        const auto base  = staticValue(transaction_, draft().normInputsOf(fill).front());
         auto *target     = base ? fromSlot<::Function *>(*base) : nullptr;
         if (body->fillKind == rt::GCFillKind::FunctionClosure && target != nullptr &&
             target->graph() != nullptr) {
@@ -2607,13 +2625,13 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
     draft().setNormInputs(direct, copyOf(draft().normInputsOf(call)));
     // The call ran after its callee value was there; keep what that value waited for.
     std::vector<gc_node_ref_t> ctrl = copyOf(draft().ctrlInputsOf(call));
-    for (gc_node_ref_t before : orderingOf(draft(), withInputs.front())) {
+    for (gc_node_ref_t before : orderingOf(withInputs.front())) {
         if (std::find(ctrl.begin(), ctrl.end(), before) == ctrl.end()) {
             ctrl.push_back(before);
         }
     }
     draft().setCtrlInputs(direct, ctrl);
-    takeSyncPlace(draft(), call, direct);
+    takeSyncPlace(call, direct);
     draft().replaceAllValueUses(call, direct);
     for (gc_node_ref_t user : copyOf(draft().ctrlUsersOf(call))) {
         draft().replaceInput(rt::DraftEdgeKind::Ctrl, user, call, direct);
@@ -2680,13 +2698,13 @@ void ForwardRewrite::rewriteClosureCall(
     draft().setNormInputs(direct, norm);
     // The call ran after the closure was built; keep what the closure waited for.
     std::vector<gc_node_ref_t> ctrl = copyOf(draft().ctrlInputsOf(call));
-    for (gc_node_ref_t before : orderingOf(draft(), calleeValue)) {
+    for (gc_node_ref_t before : orderingOf(calleeValue)) {
         if (std::find(ctrl.begin(), ctrl.end(), before) == ctrl.end()) {
             ctrl.push_back(before);
         }
     }
     draft().setCtrlInputs(direct, ctrl);
-    takeSyncPlace(draft(), call, direct);
+    takeSyncPlace(call, direct);
     // Everything that named the call names the direct call now: its users, the site records that
     // already read its value, the graph's own result, and the region whose result it is (a loop
     // body or an arm whose value is the closure call). `split` then carries the same uses to the
@@ -2718,7 +2736,7 @@ void ForwardRewrite::rewriteClosureCall(
         camel::core::OperatorTable::instance().intern("autodiff:with_grad_aux");
     const camel::core::OperId oper = body->oper;
     const auto staticFunction      = [&](gc_node_ref_t node) -> ::Function      *{
-        const auto value = staticValue(draft(), node);
+        const auto value = staticValue(transaction_, node);
         auto *function   = value ? fromSlot<::Function *>(*value) : nullptr;
         return function && function->graph() ? function : nullptr;
     };
@@ -2758,7 +2776,7 @@ void ForwardRewrite::rewriteClosureCall(
 }
 
 void ForwardRewrite::rewriteCall(gc_node_ref_t call) {
-    GCGraph *callee = calleeOf(draft(), call);
+    GCGraph *callee = calleeOf(transaction_, call);
     if (callee == nullptr) {
         fail("found a call without a callee graph");
     }
@@ -2865,7 +2883,7 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
         ArmRewrite &arm       = rewritten[i];
         arm.scope             = GraphScope{
                         .role      = GraphRole::BranchArm,
-                        .enclosing = engine_.ownersOf(&draft(), region),
+                        .enclosing = engine_.ownersOf(&transaction_, region),
                         .recursive = scope_.recursive,
         };
         // The function whose graph holds the arm: a call of it from the arm is its recursion.
@@ -2902,7 +2920,7 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
     const std::vector<gc_node_ref_t> armValues = copyOf(draft().withInputsOf(join));
     std::vector<gc_node_ref_t> shared;
     for (size_t i = 0; i < regions.size(); ++i) {
-        for (gc_node_ref_t input : externalInputsOf(draft(), regions[i])) {
+        for (gc_node_ref_t input : externalInputsOf(transaction_, regions[i])) {
             if (std::find(shared.begin(), shared.end(), input) == shared.end()) {
                 shared.push_back(input);
             }
@@ -3007,7 +3025,7 @@ gc_node_ref_t Backward::ref(gc_node_ref_t primal) {
         return it->second;
     }
     gc_node_ref_t node;
-    if (auto value = staticValue(forward(), primal)) {
+    if (auto value = staticValue(forwardTransaction_, primal)) {
         // Constants are copied rather than captured.
         node = target().materializeStaticValue(*value, typeOf(forward(), primal));
     } else if (residualPorts_) {
@@ -3398,7 +3416,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                 if (region == 0) {
                     continue;
                 }
-                for (gc_node_ref_t inner : externalInputsOf(forward(), region)) {
+                for (gc_node_ref_t inner : externalInputsOf(forwardTransaction_, region)) {
                     if (self(inner, self)) {
                         return true;
                     }
@@ -3510,7 +3528,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                     if (region == 0) {
                         continue;
                     }
-                    for (gc_node_ref_t read : externalInputsOf(forward(), region)) {
+                    for (gc_node_ref_t read : externalInputsOf(forwardTransaction_, region)) {
                         if (readsActive(read, readsActive)) {
                             inputActive = true;
                             break;
@@ -3719,7 +3737,7 @@ std::string Backward::refusalReason(gc_node_ref_t call) const {
     if (kindOf(forward(), call) == GCNodeKind::Func) {
         return std::format(
             "cannot differentiate through this call of '{}': {}{}",
-            calleeOf(forward(), call)->name(), // left alone, so its callee is a graph
+            calleeOf(forwardTransaction_, call)->name(), // left alone, so its callee is a graph
             passed,
             whyNotEvident(activeFunctionInput(call)));
     }
@@ -3784,7 +3802,7 @@ std::string Backward::whyNotEvident(gc_node_ref_t function) const {
         return std::format(
             "the function is the result of a call of '{}', and what that returns is not a "
             "function that is named or built in it",
-            calleeOf(forward(), function)->name());
+            calleeOf(forwardTransaction_, function)->name());
     case GCNodeKind::Call:
         return "the function is the result of a call of another function value";
     case GCNodeKind::Data:
@@ -3992,7 +4010,7 @@ void Backward::visitCallSite(gc_node_ref_t node, const CallSite &site) {
     const gc_node_ref_t dy       = gradient(node);
     const gc_node_ref_t pullback = ref(site.pullback);
     const gc_node_ref_t tangents =
-        addCall(target(), site.plan.tangentsType, pullback, std::span<const gc_node_ref_t>(&dy, 1));
+        addCall(targetTransaction_, site.plan.tangentsType, pullback, std::span<const gc_node_ref_t>(&dy, 1));
     for (size_t i = 0; i < site.inputs.size(); ++i) {
         if (const auto position = site.plan.tangentIndex(i)) {
             accumulate(
@@ -4013,7 +4031,7 @@ void Backward::visitRuleSite(gc_node_ref_t node, const CallSite &site) {
     args.push_back(gradient(node));
     const gc_node_ref_t rule =
         target().materializeStaticValue(toSlot<::Function *>(site.rule), ruleType);
-    const gc_node_ref_t result = addCall(target(), ruleType->exitType(), rule, args);
+    const gc_node_ref_t result = addCall(targetTransaction_, ruleType->exitType(), rule, args);
     const size_t count         = site.plan.tangentsType->size();
     // The rule's declared result type is what it is; a rule whose gradient is a different width
     // than the value it differentiates is refused below, at this call.
@@ -4431,7 +4449,7 @@ void Engine::build(Pending &pending) {
     const gc_node_ref_t dy = addPort(pullback, machineryTangentTypeOf(plan.valueType));
     pullback.appendNormPort(dy);
 
-    const auto ports = portsOf(forward);
+    const auto ports = portsOf(*pending.source);
     std::vector<gc_node_ref_t> differentiated;
     for (size_t i = 0; i < ports.size(); ++i) {
         if (plan.tangentIndex(i)) {

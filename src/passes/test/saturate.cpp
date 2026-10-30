@@ -203,10 +203,9 @@ const Program *saturateProgram(
         if (!targets.contains(graph->name())) {
             continue;
         }
-        auto &transaction = session.edit(graph);
-        auto &draft       = transaction.edit();
+        auto &draft = session.edit(graph).edit();
         const auto t0 = std::chrono::steady_clock::now();
-        DraftWritings writings(transaction, policy);
+        DraftWritings writings(draft, policy);
         writings.build();
         os << "SATURATE-TIME " << graph->name() << " build_ms="
            << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -261,9 +260,8 @@ const Program *saturateProgramChecked(
             if (!kCorpusTargets.contains(graph->name())) {
                 continue;
             }
-            auto &transaction = session.edit(graph);
-            auto &draft       = transaction.edit();
-            DraftWritings writings(transaction, policy);
+            auto &draft = session.edit(graph).edit();
+            DraftWritings writings(draft, policy);
             writings.build();
             const SaturateStats first = writings.saturate(rules, budget);
             const SaturateStats again = writings.saturate(rules, budget);
@@ -281,9 +279,8 @@ const Program *saturateProgramChecked(
         if (!kCorpusTargets.contains(graph->name())) {
             continue;
         }
-        auto &transaction = session.edit(graph);
-        auto &draft       = transaction.edit();
-        DraftWritings writings(transaction, policy);
+        auto &draft = session.edit(graph).edit();
+        DraftWritings writings(draft, policy);
         writings.build();
         const SaturateStats stats = writings.saturate(rules, budget);
         const SaturateStats &first = probe[run].first;

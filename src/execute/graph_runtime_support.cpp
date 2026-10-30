@@ -469,6 +469,19 @@ gc_node_ref_t resolveRuntimeTailValueRef(camel::runtime::GCGraph *graph) {
             current = normInputs.back();
             continue;
         }
+        // The value a GATE forwards is its data input; when it has none, what it waits on is all
+        // there is to show, so the walk follows the wait instead: the sync predecessor carries it
+        // (docs/design/effects/edges.cn.md 5.3).
+        const auto syncInputs = graph->syncPredsOf(current);
+        if (!syncInputs.empty()) {
+            current = syncInputs.back().pred;
+            continue;
+        }
+        // A legacy picture: a graph encoded before a GATE's wait was a sync predecessor carries
+        // that wait as a control input and has no sync edge to follow, so the control kind is read
+        // here and nowhere else. The fallback can go when no stored picture and no cached program
+        // predates the sync form -- the same condition that lets the control kind leave the
+        // encoder (docs/technical/gir-interchange.md records the version it arrives in).
         const auto ctrlInputs = graph->ctrlInputsOf(current);
         if (!ctrlInputs.empty()) {
             current = ctrlInputs.back();
