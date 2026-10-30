@@ -89,3 +89,12 @@ if (!table.isPure(oper) || table.hasExternalEffect(oper))
 | 恢复三处守卫 | `total 7854, pass 7750, fail 94, skip 8` |
 
 **它们不是「永不触发的检查」，不许再撤。**
+## 8. 这一批为什么不能独立
+
+合并 `develop` 之后整闸是 `total 7880, pass 7681, fail 190, skip 7, known 2`，而在合并之前这条车道是 `7854 / 7750 / fail 94 / skip 8`。**合并让它变红了一倍，不是变绿。**
+
+差集是这样来的：合并只有一个冲突，在 `src/passes/opt/generic/rewrite.cpp`——`develop` 把 `session.edit(g)` 改成了 `session.edit(g).edit()`。按新签名改一处调用点、保留环检查之后，构建是绿的（`BUILD_EXIT=0`），闸门是 190 红的。**其余十二个文件的改动都是在旧 API 语义下写的**：`graph_regions.cpp`、`builder.h`/`builder_calls.cpp`/`builder_control.cpp`/`builder_helpers.h`/`builder_operators.cpp`、`gates.cpp`、`generic.cpp`、`taskflow.cpp`、`draft_inline.cpp`，加上测试侧四个文件。它们与那 93 条红绑在一起，测不出来，也不该推。
+
+**能独立的只有 `rewrite.cpp` 一个文件 + 一个适配点**（`session.edit(g)` → `session.edit(g).edit()`）。它的独立性由 A/B 证明，不靠整闸：拿掉那一支 → `algebra.cml` 经 `devirtualize specialize inline fold cse` 报 `lies on a cycle of inputs` 两次；还原 → 零次。它的重放已由另一条从 `develop` 直接起的车道负责。
+
+**为什么要写下这个负结果**：在旧树上做完再合并，会吃到一次 API 变更，而这次变更把一条 94 红的车道变成 190 红。**一晚的代价换来的是这条：车道的寿命要按“`develop` 变了几次 API”来算，不是按“我改完了几处隐患”来算。**`a6a239f4f` 这个 merge 提交留在树上，就是为了让下一个接手的人看见 190 这个数是怎么来的。
