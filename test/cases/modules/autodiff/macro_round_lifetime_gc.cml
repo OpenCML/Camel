@@ -2,7 +2,8 @@
 // Every rule is used; the regression requires safepoint stress, without importing Tiles.
 // The differentiated tensor is the first `with` parameter of every loss.
 import { reshape, shape, sum, zeros } from tensor
-import { grad, vjp } from autodiff
+import { grad } from autodiff
+import { vjp } from prelude
 
 let weights = reshape<[2, 3]>([1.0, -2.0, 3.0, -4.0, 5.0, -6.0] as f32[])
 func rule(x: f32[..], dy: f32[..]): f32[..] { return reshape<[3, 2]>(dy) }

@@ -9910,7 +9910,8 @@ A derivative rule returns a gradient of the parameter's element type. Convert th
 **Example** (`test/cases/modules/autodiff/refuse_gradient_element_type_rule.cml`, run as `camel test/cases/modules/autodiff/refuse_gradient_element_type_rule.cml std::nvm`)
 
 ```camel
-import { grad, vjp } from autodiff
+import { grad } from autodiff
+import { vjp } from prelude
 
 func pick_rule(xs: float[], i: int, dy: float): f32 {
     return f32(0.0)

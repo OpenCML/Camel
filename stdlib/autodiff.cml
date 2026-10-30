@@ -53,24 +53,11 @@
  * is the primitive, one family at a time, starting with the scalar arithmetic.
  */
 
-import { is_float, is_function } from types
+import { is_float } from types
 
-/// The rule of the function it is written on for forward mode: along the tangents of the
-/// function's arguments it gives the tangent of its result. The rule has the signature of the
-/// forward derivative of the function (`stdlib/signatures/autodiff.cml`). The tag is written
-/// where `vjp` is and takes the same kind of argument.
-export tag jvp::<F>(rule: F) on func when is_function::<F>()
-
-/// The rule of the function it is written on for the transpose, when the function is linear in
-/// its arguments: from the cotangent of the result it gives the cotangents of the arguments. The
-/// values the function was given are known when the transpose runs, so a rule is written only for
-/// the arguments that carry the data.
-export tag transpose::<F>(rule: F) on func when is_function::<F>()
-
-/// The custom derivative of the function it is written on: calls of that function use `rule`
-/// instead of differentiating its body. The rule has the signature of the pullback of the
-/// function (`stdlib/signatures/autodiff.cml`).
-export tag vjp::<F>(rule: F) on func when is_function::<F>()
+// The three tags a derivative rule is written with (`#jvp`, `#transpose`, `#vjp`) are declared
+// in `prelude`, beside the operators they are written on: a tag is a fact about any function,
+// the library's own operators included, and every program reads the prelude.
 
 /// Gives its argument unchanged and cuts the gradient at this point: a value passed through
 /// `stop_gradient` is a constant to `grad`. Any value is accepted, and the result has the

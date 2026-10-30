@@ -745,6 +745,12 @@ std::string Context::checkPreludeDeclarations() {
         auto prelude = std::static_pointer_cast<UserDefinedModule>(
             UserDefinedModule::fromFile("prelude", path, shared_from_this()));
         preludeModule_ = prelude;
+        // A module read with every program is registered under its path before this function
+        // returns: `Context::importModule` finds it there instead of reading the file again, and a
+        // second read reports the file's `#op` declarations as naming an operator no loaded module
+        // implements (`SemanticDiag::NativeDeclarationNotLoaded`), because only this pass holds the
+        // built-in claims those declarations name.
+        modulesByPath_[canonicalPathKey(path)] = prelude;
         try {
             prelude->compile(CompileStage::Declared);
         } catch (...) {
