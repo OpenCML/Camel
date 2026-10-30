@@ -83,9 +83,9 @@
 | LOOP   | 循环节点：条件与体是这张图的两个区域，端口是初始状态、各区域的结果与轮次计数；值与收集槽的读法见 `include/camel/runtime/loop.h` |
 | DEAD   | 改写删掉的节点留下的位置（无输入；遍历节点的消费者跳过它，编号不复用） |
 
-`SYNC` 曾是一个节点种类（旧编号 12），已从模型里删除：`GCNodeKind` 里那个编号空着（`include/camel/runtime/graph.h`），`sync` 块里语句的先后改由**同步边**表达（§3、§4.5）。`LOOP` 是 15、`DEAD` 是 255（同文件）。
+`SYNC` 曾是一个节点种类（旧编号 12），已从模型里删除：`GCNodeKind` 里那个编号空着（`graph.h:97`），`sync` 块里语句的先后改由**同步边**表达（§3、§4.5）。`LOOP` 是 15、`DEAD` 是 255（同文件）。
 
-除上表一行摘要外，**§4.1–§4.9** 按类型补充**角色、典型 `Norm`/`With`/`Ctrl` 连边约定**及与调度后端的关系；命名与 `GCNodeKind`（`include/camel/runtime/graph.h`）一致，编译期的节点是 `DraftNodeRef` 句柄，不再有节点子类（`include/camel/compile/gir/nodes.h` 今天只是一个弃用转发头）。
+除上表一行摘要外，**§4.1–§4.9** 按类型补充**角色、典型 `Norm`/`With`/`Ctrl` 连边约定**及与调度后端的关系；命名与 `GCNodeKind`（`graph.h:456`）一致，编译期的节点是 `DraftNodeRef` 句柄，不再有节点子类（`include/camel/compile/gir/nodes.h` 今天只是一个弃用转发头）。
 
 `LOOP` 与 `DEAD` 在上表里有行、§4 里没有专节：`LOOP` 的端口与区域语义见 `docs/design/graph-model/README.cn.md` 3.5 的 `LOOP` 卡片与 `include/camel/runtime/loop.h`；`DEAD` 没有语义，只表示"这个位置曾有一个节点"。
 
@@ -137,7 +137,7 @@
 
 ### 4.5 同步链（原 `SYNC` 节点）
 
-`SYNC` 节点已从模型里删掉，`GCNodeKind` 里它原来的编号 12 空着（`include/camel/runtime/graph.h`）；原来由它承担的"把多条控制前驱收敛成一个后继"改由**同步边**表达（`docs/design/effects/edges.cn.md` 5.3）。
+`SYNC` 节点已从模型里删掉，`GCNodeKind` 里它原来的编号 12 空着（`graph.h:111`）；原来由它承担的"把多条控制前驱收敛成一个后继"改由**同步边**表达（`docs/design/effects/edges.cn.md` 5.3）。
 
 - **语义**：`sync` 块里一条语句跟在书写在它前面的那条语句之后，且前者因此**被用到**——不只是先后（`docs/design/effects/edges.cn.md` 1）。一条语句最多跟一条、也最多被一条跟，所以链不分支（封存检查 `checkSyncEdges` 与 `checkSyncChainForks`，`src/runtime/graph_edges.cpp`）。
 - **表示**：`LinkType::Sync`（`include/camel/compile/gir/types.h`）；运行图上不进输入端口列，单独存一列 `GCGraphSyncEdge`（`GCGraph::syncPredsOf()` / `graph.syncEdges()`；draft 侧是 `GraphDraft::syncInputsOf()` / `setSyncPredecessor()`）。
@@ -317,37 +317,26 @@
 
 ## 8. 内存与所有权模型
 
-### 8.1 Graph 的所有权
+### 8.1 图的所有权
 
-- `Graph` 仍由 `graph_ptr_t`（`std::shared_ptr<Graph>`）管理生命周期。
-- Graph 析构时会一并释放：
-  - `ownedNodes_` 记录的节点对象（由 `GraphArena` tracked dtor 统一析构）；
-  - `arena_`；
-  - Graph 侧集中持有的字符串与注册表。
+- **编译期**：一张图是 `graph_ptr_t`，也就是 `std::shared_ptr<DraftGraphBuilder>`（`include/camel/compile/gir/types.h:46`）；builder 拥有 `GraphDraft`（`draft()`）与 `GraphArena`（`arena()`），两者随 builder 释放。
+- **运行期**：`GCGraph` 是 `camel::core::rtdata::Object`，由 `Program` 持有；它占图空间里的一次分配（`mm::graphSpace().alloc`，`src/runtime/graph.cpp:1594`），图空间到上限时抛 `MemoryExhausted`。节点块按 `kNodeChunkNodes`（256）一块单独分配（`graph.h:456`），版本之间共享未改动的块。
+- 旧的 `Graph` 类与它的 `ownedNodes_` 已移除（§5）。
 
-### 8.2 Draft 节点与 Frozen 节点
+### 8.2 Draft 节点与冻结节点
 
-- **Draft 节点**
-  - 在 `GraphArena` 上构造，`Graph` 通过 `ownedNodes_` 记录节点集合。
-  - 使用 `std::vector<Node *>` 维护邻接关系。
-  - 支持增删改边。
+- **Draft 节点**：来自 `DraftNodePool`（`include/camel/runtime/draft.h:219`），不是 `GraphArena`。池按存储类切块——节点头（`DraftNodeHeader`）加 64/96/128 字节的尾，超过 128 的走 Oversize——每 4 KB 一页（`draft.h:238`），页用 `std::byte[]` 一次申请、随 draft 释放（`src/runtime/draft.cpp:350`）。邻接表在尾块里，所以节点可以增删边。
+- **冻结节点**：`GCNode` 记录在节点块里，与边表、负载、静态区同属这张图的分配；对外只有指针/span 视图，结构不可改（要改先 `GraphDraft::decode`，§2.2）。
 
-- **Frozen 节点**
-  - 对象本身与邻接数据都位于 `GraphArena` 生命周期域内。
-  - 对外只暴露 span 只读视图。
-  - 任何结构修改都会被断言拦截。
+### 8.3 GraphArena
 
-### 8.3 GraphArena（metaSpace 分段区域）
+`GraphArena`（`include/camel/compile/gir/arena.h:24`）今天只服务建图期的静态函数值（`staticFunctionAllocator`，`src/compile/gir/builder_helpers.h:152`）；draft 节点与冻结图都不在它里面。
 
-`GraphArena` 是图私有的 **metaSpace 分段 arena**：
-
-- 底层不再直接 `malloc`，而是按 block 向 `metaSpace` 申请；
-- 内部区分 `DraftRegion` / `FrozenRegion` 两个逻辑区，支持 `releaseDraftRegion()`；
-- Node 对象通过 tracked dtor 托管析构，邻接冻结数组与静态槽打包落在 FrozenRegion；
-- 提供图级指标：`peakBytes`、`wasteBytes`、`blockCount`、`draftFreedBytes`、`allocFailCount`；
-- 支持 seal 前容量预热（`reserveFrozenBytes`），降低大图 finalize 期间扩块抖动。
-- 每个 block 带前后 guard band（debug 检查），用于尽早暴露 arena 用户侧越界写。
-- `releaseDraftRegion()` 当前采用“逻辑释放 + 延迟物理回收”：seal 后先释放 draft 对象生命周期（tracked dtor），物理块回收延迟到 `GraphArena` 析构统一处理；若检测到 `metaSpace` 已损坏则跳过回收并直接丢弃块引用，避免 teardown 二次崩溃。
+- 按 block 向 `metaSpace` 申请（`arena.h:159`），内部区分 Draft / Frozen 两区。
+- 每个 block 前后各 64 字节 guard band（`kGuardBytes_`，`arena.h:136`），Debug 构建在回收前校验两端图案（`arena.h:294`–`:302`），越界写尽早暴露。
+- 图级指标只有 `peakBytes`、`wasteBytes`、`blockCount`、`draftFreedBytes`（`arena.h:27`–`:32`）。
+- `reserveFrozenBytes()` 在编码前预热容量（`arena.h:82`），减少扩块抖动。
+- `releaseDraftRegion()` 是“逻辑释放 + 延迟物理回收”：先跑 tracked dtor 并记 `draftFreedBytes`，块本身留到 `GraphArena` 析构再还给 `metaSpace`——注释给的理由是，提前还回去会让任何悬垂指针当场破坏空闲表（`arena.h:265`–`:272`）。
 
 ## 9. 与字节码/后端的对应
 
