@@ -1,0 +1,21 @@
+/**
+ * The effect of a statement's argument runs where the statement is, not at the head of the block:
+ * a call whose body has an effect, written in an expression of a later statement, is ordered after
+ * the statements written before it (docs/design/effects/edges.cn.md 4.6, 5.7).
+ *
+ * Minimal form of `if_without_else.statement`: with `std::nvm` this prints `before / older / 1 1 /
+ * after`; through `std::opt` it printed `older / before / ...`, so the effect ran first. The scale
+ * is what makes it useful -- two statements, one branch, one backend.
+ */
+
+func older(c: bool): int sync {
+    if c then sync { println('older'); null }
+    return 1
+}
+
+func main(): int sync {
+    println('before')
+    println(older(true), older(false))
+    println('after')
+    return 0
+}

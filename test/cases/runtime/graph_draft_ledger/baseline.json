@@ -1,10 +1,10 @@
 {
   "comment": "The baseline of the direct-connection ledger (graph-store step 2 b): the numbers below may only fall, and the last step is all of them at zero. `sites` records where each number comes from, as `file#symbol` (a line number moves with every edit above it, a symbol does not); it is diagnostics for a red and never decides the verdict. Record a new row after a commit with check.mjs --record.",
   "numbers": {
-    "files": 66,
-    "references": 535,
+    "files": 62,
+    "references": 515,
     "constructions": 3,
-    "decode": 6
+    "decode": 4
   },
   "sites": {
     "files": {
@@ -28,12 +28,8 @@
       "include/camel/runtime/operator_instance.h": 1,
       "include/camel/runtime/writings.h": 1,
       "modules/autodiff/pullback.cpp": 1,
-      "modules/graph/handle.cpp": 1,
-      "modules/graph/handle.h": 1,
-      "modules/graph/read.cpp": 1,
       "modules/graph/txn.cpp": 1,
       "modules/onnx/exporter.cpp": 1,
-      "modules/rewrite/fact.cpp": 1,
       "modules/rewrite/proof.h": 1,
       "modules/tiles/include/tiles/internal/graph_values.h": 1,
       "modules/tiles/include/tiles/internal/regions.h": 1,
@@ -106,7 +102,7 @@
       "include/camel/runtime/node_ref.h#-": 4,
       "include/camel/runtime/operator_instance.h#-": 1,
       "include/camel/runtime/writings.h#-": 1,
-      "include/camel/runtime/writings.h#extractWritings": 4,
+      "include/camel/runtime/writings.h#extractWritings": 3,
       "modules/autodiff/pullback.cpp#-": 1,
       "modules/autodiff/pullback.cpp#addAccs": 1,
       "modules/autodiff/pullback.cpp#addAggregate": 1,
@@ -139,21 +135,9 @@
       "modules/autodiff/pullback.cpp#typeOf": 1,
       "modules/autodiff/pullback.cpp#valueNode": 1,
       "modules/autodiff/pullback.cpp#valueOrder": 1,
-      "modules/graph/handle.cpp#createInDraft": 1,
-      "modules/graph/handle.h#-": 5,
-      "modules/graph/read.cpp#-": 1,
-      "modules/graph/read.cpp#isAnchorKernel": 1,
-      "modules/graph/read.cpp#isWrittenSlotKernel": 1,
-      "modules/graph/read.cpp#nodeHandle": 1,
-      "modules/graph/read.cpp#nodeOf": 1,
-      "modules/graph/read.cpp#viewOf": 1,
       "modules/graph/txn.cpp#-": 1,
       "modules/graph/txn.cpp#openState": 1,
-      "modules/graph/txn.cpp#staticValue": 1,
       "modules/onnx/exporter.cpp#bindCaptures": 1,
-      "modules/rewrite/fact.cpp#-": 1,
-      "modules/rewrite/fact.cpp#factKernel": 1,
-      "modules/rewrite/fact.cpp#factText": 1,
       "modules/rewrite/proof.h#-": 1,
       "modules/tiles/include/tiles/internal/graph_values.h#packGraphAggregate": 2,
       "modules/tiles/include/tiles/internal/regions.h#-": 1,
@@ -470,11 +454,9 @@
       "src/runtime/loop.cpp#fallBackToCopyingAppend": 1,
       "src/runtime/operator_instance.cpp#kernelArgumentsOf": 1,
       "src/runtime/writings.cpp#-": 2,
-      "src/runtime/writings.cpp#DraftWritings": 1,
       "src/runtime/writings.cpp#constantNode": 1,
       "src/runtime/writings.cpp#costModels": 1,
       "src/runtime/writings.cpp#extract": 1,
-      "src/runtime/writings.cpp#graphWritings": 2,
       "src/runtime/writings.cpp#lookupOrAdd": 1,
       "src/runtime/writings.cpp#makeKey": 1,
       "src/runtime/writings.cpp#nodeText": 1,
@@ -489,12 +471,10 @@
       "src/runtime/draft.cpp#decode": 1
     },
     "decode": {
-      "modules/graph/read.cpp#isWrittenSlotKernel": 1,
       "modules/rewrite/proof.h#-": 1,
       "src/runtime/draft.cpp#decode": 1,
       "src/runtime/draft_inline.cpp#liftClosureGraph": 1,
-      "src/runtime/draft_inline.cpp#specializeGraphWithBindings": 1,
-      "src/runtime/writings.cpp#graphWritings": 1
+      "src/runtime/draft_inline.cpp#specializeGraphWithBindings": 1
     }
   }
 }

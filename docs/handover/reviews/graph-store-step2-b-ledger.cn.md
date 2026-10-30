@@ -1,5 +1,7 @@
 # graph-store 第 2 步 b：直连账（逐步填）
 
+**这一路的账：535 → 534 → 533 → 532 → 530 → 521**（files 66 → 64，decode 6 → 5）。它**不是线性**的：`534`（`fact.cpp` 的两处退路）、`530`（转储在 decode 副本上开事务）各掉一格，而中间三笔**一格没掉**——`calleeKernel` 把 `|| handle->draft()` 收成只问事务、`read.cpp` 三处把 `->draft()` 归零（退路本就是 `auto`，没有类型名可删）、删探针（探针不碰草稿）——**"改一处就该掉一格不是必然"，每一格都能指名。**
+
 b 的落点是"可编辑图归图仓的事务所有、前端一开始就在里面建图"，最后一笔删掉 `GraphDraft`。
 本页只做一件事：把"还有多少处直接连到 `GraphDraft`"记成三个数，**每一笔提交填一行**。叙述可以说"删净了"，这三个数不会。
 
@@ -332,6 +334,16 @@ b4 只有一个人口：`modules/graph/handle.h` 里那个 `const GraphDraft *dr
 
 **撞号的正面产出**：§18 那条注记不是"另一条线的插曲"，它正好印证 §15 的规矩在 **b4 之外**第一次应验——`defunctionalize.cpp` 的 helper 只借一次草稿，写成 `template <class Draft>` 而不是 `GraphDraft &`，三个数当场回到 66 / 535 / 3 / 6。**规矩立在这一笔，第一次被用到在另一条线，两边记在同一个号下（它改成 §18，内容一句没丢）。**
 
+### 17.1 事实源的草稿改从事务取（§17 的下一步）
+
+三处，一处一笔构建：
+
+1. **`handle.cpp#createInTransaction` 同时设两个指针**：草稿从它所属的事务里拿到（`&transaction.graph()`，**不写类型名**）。这样"删掉 `draft_`"就变成**只改读端**，而不是一次改掉每一个指名草稿的 handle。
+2. **`module.cpp` 的条件参数**新增 `nodeHandleOf(writings, ref)`：writings 有事务就 `createInTransaction`，没有（测试自建草稿）才 `createInDraft`；两处调用点（普通参数、`const` 的隐藏节点参数）都走它。
+3. **`fact.cpp:825`**：`const auto *draft = transaction != nullptr ? &transaction->graph() : first->draft();`——**字节是同一份，改的只是"说谁拥有它"**。
+
+**账本**：references **535 → 534**（`fact.cpp` 那行不再写 `GraphDraft`），已 `--record` 锁进基线；files 66 / constructions 3 / decode 6 未变。**这是这一层第一次出现"消点"而不是"涨点"之外的动作：数字往下走了一格。**
+
 ## 18. 这条规矩在 b4 之外的第一次应验（另一条线记，协调者留在账本里）
 
 `src/passes/opt/defun/defunctionalize.cpp` 新增了一处写图的 helper：一个遍第一次自己造一张图（id 取 `Context::graphIds`、一个 `PORT`、直接调用、`exit`、`encode`／`adoptGraph`）。它先写成 `GraphDraft &draft = transaction->edit();`，账本当场红：files 66 → 67、references 535 → 536。
@@ -339,3 +351,70 @@ b4 只有一个人口：`modules/graph/handle.h` 里那个 `const GraphDraft *dr
 helper 只借一次草稿、并不持有它，所以改成收模板参数（`template <class Draft>`，调用点传 `transaction->edit()`），三个数回到 **66 / 535 / 3 / 6**。
 
 这不是"台账省一格"的老故事，是 §15 的规矩第一次在 b4 之外被用到：**点名就是宣告所有权**，借的一次写 `auto` 或写模板，所有者留在事务那里。数没动，所以不记新行，只记这条用例——下一笔若有人在遍里直接写 `GraphDraft`，先问它是不是真的持有。
+
+## 19. 读端三处：每一处都改问事务（每处一笔、每处构建一次）
+
+| 笔 | 改了什么 | references |
+|---|---|---|
+| `eb20adf78` | `read.cpp#viewOf`：先问 `handle->transaction()`，草稿从 `&transaction->graph()` 拿，`handle->draft()` 只作退路 | 534 → **533** |
+| `997e712b6` | `read.cpp#nodeHandle(from, node)`：`from` 有事务就 `createInTransaction`，没有才 `createInDraft` | 533 → **532** |
+| `092196630` | `read.cpp#calleeKernel`：判"这是不是草稿的节点"先问 `transaction()`，再退到 `draft()` | 532（不变） |
+
+**掉的两格是哪两处**：都是 `const GraphDraft *draft = …` 那一行——`viewOf` 一处、`nodeHandle` 一处改成 `const auto *`，因为草稿的来源变成 `&transaction->graph()`，**类型名不再需要写**。第三处只把"问谁"的先后换了、没有可删的类型名，所以数不动：**"改一处就该掉一格"不是必然，问的顺序变了而类型名还在的，那格不算收益。**
+
+**第三笔顺带关掉一条缝**：`calleeKernel` 原来只问 `draft()`，一旦某个 handle 只有事务、没有草稿指针，它会把草稿节点当成已发布的图交给 `nodeOfFrozen`；现在先问事务。
+
+## 20. 第二条顺序规矩（可引用）
+
+> **先让新的事实到达读端所读的那个字段，再改读端。**
+
+两次实测：§16（生产者先把事务送进 handle，读端后改）与 §17.1（`createInTransaction` 同时设两个指针）都是这条的应用；反过来就是 §16 那颗地雷。配套的第一条（另一条线实测）是**新造图先 `setId` 再 `encode`**。两条都属于"顺序错了会静默错、不会编译错"，所以抄在同一个地方。
+
+## 21. `read.cpp` 的 `->draft()` 归零：数没动，问题却浮出来了
+
+`1cdeced1`（`read.cpp` 三处全改成只问 `transaction()`）。**references 仍是 532**——三处退路本来就是 `auto`，没有类型名可删，**改的只是"问谁"**。所以这一笔的收益不是"消点"，是**把一条隐含的依赖翻到了明面上**。
+
+**翻出来的是什么**：一个**只指名草稿、不指名事务**的 handle，现在读端当它"在已发布的图里"，会拿 `program_`（空）去 `nodeOfFrozen`。**套件里没有任何路径会这样走到**（所以整闸绿：7927 / 7916 / 0 / 9 / 2），但 `createInDraft` 还在造这种 handle（`module.cpp:258` 的退路、`fact.cpp:422`、`handle.cpp:291` 的 clone）。
+
+**这就是"删 `draft_` 之前要回答的那个具体问题"**：*测试自建草稿的那些构造点，改完之后它们从哪里拿到草稿？* **答案：拿不到。** 它们手里的 `DraftWritings` 没有事务（`src/passes/test/writings.cpp`、`saturate.cpp` 用收 `GraphDraft &` 的旧构造），而 `rules.cpp:72` 虽然从 `probe.edit(...)` 拿到的是事务里的草稿，**但也是走草稿构造进去的**，所以 `writings.transaction()` 为空，`nodeHandleOf` 只能退回 `createInDraft`。
+
+**结论：还缺一个"无事务写入"的合法裁定**，三条路：
+- **A**：承认它就是非法——把 `createInDraft` 与 `Handle::draft_` 一起删掉，测试改用事务（`rules.cpp` 已有事务可用，`writings.cpp`／`saturate.cpp` 需要给它们一个 `RuntimeGraphDraftSession`）；
+- **B**：承认它合法——读端必须**同时问事务与指针，任一为真即是草稿**（协调者那条规矩），此时 `->draft()` 会回到 3；
+- **C**：让 `Writings` 在没有事务时**自己开一个**（拥有型），`createInDraft` 随之消失，测试不用改。
+
+**我停在这里，等裁定。** 在裁定之前不动 `handle.h` 的 `draft_`——按 §20，删字段是"删用法之后"的事，而用法的合法性还没有结论。
+
+## 22. A 落地：`draft_` 与 `createInDraft` 一起消失
+
+裁定是 **A**（C 被否：*"自己开一个事务"意味着有一张图永远不会被 commit，那正是 `draft_` 今天在做的事*）。
+
+| 笔 | 做了什么 | 四个账本数 |
+|---|---|---|
+| `404c77db4` | 17 处收草稿的 `DraftWritings` 构造改收事务（测试 10／3／2 + `extractWritings` 1） | 66 / 532 / 3 / 6 |
+| `11e83bec5` | `graphWritings` 转储：在 decode 副本上开事务、**永不 commit**，注释写明"这张图是副本，事务在这里只是写作面" | 66 / **530** / 3 / **5** |
+| 本笔 | 删 `Handle::createInDraft`、`draft_`、`draft()`、构造第 3 个参数、`class GraphDraft` 前置声明；`DraftWritings` 只剩收事务的构造，`transaction()` 返回引用（永不为空）；`fact.cpp#Source` 由草稿指针改为事务指针 | **64 / 521 / 3 / 5** |
+
+**数字怎么掉的**：`files 66 → 64` 是 `handle.h` 与 `handle.cpp` 里再没有 `GraphDraft` 这个词（`createInDraft` 的声明与定义各带走一处）；`references 530 → 521` 是 `draft()`、`draft_`、`fact.cpp#Source` 的八个分支一起走。**同一棵树上一笔 -9 references、-2 files，是今晚涨落最大的一笔。**
+
+**"无事务写入"这种形态现在不存在了**：`DraftWritings` 只认事务、`Handle` 只认事务、`createInDraft` 没有调用者。§21 问的那个问题（*测试自建草稿的构造点改完从哪里拿草稿*）的答案是**它们不再需要草稿**——测试改成开事务，模拟的正是真实世界里写图的样子。
+
+**§21 那条更正到此生效**：判"是不是草稿"**只问事务**。§21 里 B 的版本（同时问事务与指针）**只适用于两种形态并存的时期**；A 落地后它不再成立。
+
+**"删得干净"的判据是这一句，不是"测试全绿"**：*`createInDraft` 零调用者，所以删得干净。* 套件全绿只能说明没人踩到，零调用者才说明这条路不存在了。
+
+## 23. 收尾清扫：`read.cpp` 不再提这个类型，账本一格没白掉
+
+**判据提前写在前面（这一笔的预期是"账本数大概不动"）**：这三处本来就拿着事务，只是写法还是老的——所以掉数不是这一笔的目的，**写法和事务一致**才是。
+
+| 改了什么 | 为什么现在能改 |
+|---|---|
+| `NodeView` 从"借一个 `const GraphDraft *`"改成"借事务"，`draft()` 访问器返回 `transaction->graph()`（`auto` 推导） | 视图的唯一来源就是事务；**`read.cpp` 里 `GraphDraft` 的出现次数 4 → 0，整个文件从账本里消失** |
+| `is_written_slot` 的缓存键值：`GraphDraft::decode` → `GraphTransaction::decode` + `.edit()`，注释写明"副本、永不 commit" | 和 `graphWritings` 同一种形态；decode 点 5 → 4 |
+| `fact.cpp` 删掉已无用的 `using camel::runtime::GraphDraft;` | 上一笔把 `Source` 改成事务之后它就没人用 |
+| `txn.cpp#staticValue` 收 `const Draft` 模板参数 | 它只是借读，不该在签名上宣称拥有 |
+| `is_anchor` 里 `const GraphDraft &draft = *node.draft;` → `const auto &` | 借读用 `auto`（§15 的老规矩） |
+
+**四项实测：62 / 515 / 3 / 4**（files 64 → 62，references 521 → 515，decode 5 → 4）。
+
+**"还有没有可删的调用点"——在今晚动过的范围里是 0**：`handle.h`／`handle.cpp` 0、`read.cpp` 0、`fact.cpp` 0、`module.cpp` 0。**`modules/graph/txn.cpp` 还剩 2 处，都不是台账住户**：一处是 `using`，一处是事务 API 自己的返回类型 `std::pair<GraphDraft &, gc_node_ref_t>`——事务的墙（§0 第 1 条）本来就不在账里。剩下的 `GraphDraft` 全在 `draft*.cpp` 与各 pass 里，那是**这个类型本身该在的地方**，不是"直连"。

@@ -428,9 +428,6 @@ struct DraftWritings::Index {
     std::vector<uint8_t> written;
 };
 
-DraftWritings::DraftWritings(GraphDraft &draft, camel::core::sem::NumericPolicy policy)
-    : draft_(draft), policy_(policy), store_(draft.writings()), index_(std::make_unique<Index>()) {}
-
 DraftWritings::DraftWritings(
     GraphTransaction &transaction, camel::core::sem::NumericPolicy policy)
     : draft_(transaction.edit()), transaction_(&transaction), policy_(policy),
@@ -1224,8 +1221,8 @@ const Program *extractWritings(
         if (graph->executable()) {
             continue;
         }
-        auto &draft = session->edit(graph).edit();
-        DraftWritings writings(draft);
+        auto &transaction = session->edit(graph);
+        DraftWritings writings(transaction);
         writings.extract(model, context.get());
     }
     return session->commit(detached);
@@ -1246,17 +1243,21 @@ GraphWritings graphWritings(
     if (graph == nullptr || graph->executable()) {
         return classes;
     }
-    const std::unique_ptr<GraphDraft> draft = GraphDraft::decode(program, graph);
-    if (draft == nullptr) {
+    // The graph is a decoded copy, and the transaction is opened on it only to give the writings
+    // a face to write on: it is never committed, because the caller gets a printed result and no
+    // program is handed back. A commit here would be a lifecycle the dump has no use for.
+    const auto transaction = GraphTransaction::decode(program, graph);
+    if (transaction == nullptr) {
         return classes;
     }
+    auto &draft = transaction->edit();
     // The same policy the driver's extraction uses (`extractWritings`), so the classes and the
     // choice the dump shows are the ones the pipeline would act on.
-    DraftWritings writings(*draft);
+    DraftWritings writings(*transaction);
     writings.build();
     const WritingChoice choice = writings.choiceByCost(model, context);
-    for (gc_node_ref_t node = 0; node < draft->nodeSlotCount(); ++node) {
-        if (!draft->alive(node)) {
+    for (gc_node_ref_t node = 0; node < draft.nodeSlotCount(); ++node) {
+        if (!draft.alive(node)) {
             continue;
         }
         classes.nodes[node] = GraphWritings::Node{

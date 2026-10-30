@@ -4409,20 +4409,36 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
         // element (field) type — they are positions with an expected type too (design
         // principles 5.1). Converting its data now would keep the type its values give it.
         if (!isUnresolvedLiteral(value->data())) {
+            // `T[..]` includes rank zero, which is the element itself (design principles 5.4): a
+            // literal that is that element -- a number, a text, a tuple -- takes the element
+            // type, and the declaration's `T[..]` is read by the annotation CAST below, whose
+            // reading is the same one (Builder::visitCastNode). `T[]` states one dimension and
+            // `T[3, ..]` a prefix the value must have; neither states a rank zero
+            // (ArrayType::rankZeroType answers nullptr there), so a literal is refused there as
+            // before.
+            Type *literalType = type;
+            if (type->code() == TypeCode::Array &&
+                value->data()->type()->code() != TypeCode::Array) {
+                if (Type *rankZero = tt::as_ptr<ArrayType>(type)->rankZeroType();
+                    rankZero != nullptr) {
+                    literalType = rankZero;
+                }
+            }
             // A text field of a composite literal is reported at the field itself, as a type
             // mismatch; a lone text value keeps the declaration's position, as the same check reports it
             // (`let x: int = '42'` is a mismatch at the declaration), and anything else the
             // conversion cannot take is reported for the literal as a whole below.
             if (isComposite(value->data()->type()->code()) &&
-                rejectTextInLiteral(value->data(), type, value->origin())) {
+                rejectTextInLiteral(value->data(), literalType, value->origin())) {
                 throw BuildAbortException();
             }
-            data_ptr_t converted = value->data()->convertTo(type);
-            if (converted != nullptr && converted->type()->equals(type)) {
+            data_ptr_t converted = value->data()->convertTo(literalType);
+            if (converted != nullptr && converted->type()->equals(literalType)) {
                 return tree_->makeData(converted);
             }
             if (converted == nullptr) {
-                reportLiteralCastFailure(diags_, ast->load()->tokenRange(), value->data(), type);
+                reportLiteralCastFailure(
+                    diags_, ast->load()->tokenRange(), value->data(), literalType);
                 throw BuildAbortException();
             }
             // A conversion that comes back as another type is not what the declaration says:
@@ -5533,6 +5549,53 @@ bool readsOwnName(const AST::node_ptr_t &node, const std::string &name) {
     return false;
 }
 
+/// The reference `node` makes to the name `name`, or null where it makes none: `readsOwnName`
+/// in the form the report needs, so that the error stands on the name and not on the statement
+/// around it.
+AST::node_ptr_t nameUseIn(const AST::node_ptr_t &node, const std::string &name) {
+    if (node == nullptr) {
+        return nullptr;
+    }
+    if (node->type() == AST::LoadType::Stmt) {
+        const auto &load = node->loadAs<AST::StmtLoad>();
+        if (load->stmtType() == AST::StmtType::Func) {
+            return nullptr;
+        }
+        if (load->stmtType() == AST::StmtType::Data) {
+            bool declares = false;
+            for (const Reference &ref : node->loadAs<AST::DataDeclLoad>()->refs()) {
+                if (ref.toString() == name) {
+                    declares = true;
+                }
+            }
+            if (declares) {
+                for (size_t i = 1; i < node->size(); ++i) {
+                    if (AST::node_ptr_t use = nameUseIn(node->at(i), name); use != nullptr) {
+                        return use;
+                    }
+                }
+                return nullptr;
+            }
+        }
+    }
+    if (node->type() == AST::LoadType::Data) {
+        const auto &load = node->loadAs<AST::DataLoad>();
+        if (load->dataType() == AST::DataType::Ref &&
+            node->loadAs<AST::RefDataLoad>()->ref().toString() == name) {
+            return node;
+        }
+        if (load->dataType() == AST::DataType::Func) {
+            return nullptr;
+        }
+    }
+    for (size_t i = 0; i < node->size(); ++i) {
+        if (AST::node_ptr_t use = nameUseIn(node->at(i), name); use != nullptr) {
+            return use;
+        }
+    }
+    return nullptr;
+}
+
 AST::node_ptr_t firstOwnYield(const AST::node_ptr_t &node) {
     if (node == nullptr) {
         return nullptr;
@@ -5596,23 +5659,9 @@ node_ptr_t Builder::visitGeneratorBody(
             .commit("generators");
         throw BuildAbortException();
     };
-    // A local a `yield` cuts in two: its value is built where the declaration stands, inside one
-    // arm of the machine, so the pull after a `yield` runs an arm that cannot read the name. That
-    // is the named gap (the locals that live across a `yield` become cells, which is the step not
-    // taken yet) and it is refused here, at the declaration, instead of being left to fail later
-    // as an unresolved name in an arm the name was never declared in -- a message that sends the
-    // reader looking for a typo that is not there.
-    const auto refuseLocalAcrossYield = [&](const AST::node_ptr_t &decl) -> void {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(decl->load()->tokenRange())
-            .note(
-                "A local that lives across a `yield` becomes a cell of the generator's own body, "
-                "which is the part of the machine that is not built yet. A local declared and "
-                "used between two `yield`s needs no cell and is accepted; so is a constant or a "
-                "lambda, whose value does not depend on the point where it stands.")
-            .commit("a local read after a `yield`");
-        throw BuildAbortException();
-    };
+    // A local that lives across a `yield` is a cell of the body (see `addTypedCell`), so there is
+    // no declaration shape left that the machine cannot read: the refusal this place used to hold
+    // -- "a local read after a `yield`" -- is gone with the shape it named.
     Type *exit = funcType->exitType();
     if (exit == nullptr || exit->code() != TypeCode::Stream) {
         refuse(bodyStmts->size() > 0 ? bodyStmts->at(0) : bodyAst);
@@ -5692,6 +5741,42 @@ node_ptr_t Builder::visitGeneratorBody(
         mark(vari, ast, "gct.generator.cell");
         *outer << vari;
     };
+    // A cell of a value that is written where its statement stands: the cell's type position holds
+    // `typeof <that value's expression>`, so the cell has a type and no value yet, and the body
+    // that creates the stream evaluates nothing (design principles 5.4). The value is written
+    // where the statement is reached, in the arm that reaches it.
+    const auto addTypedCell = [&](const std::string &name,
+                                  const node_ptr_t &expr,
+                                  const AST::node_ptr_t &ast) {
+        node_ptr_t ref = tree_->makeNRef(name);
+        *ref << tree_->makeType(TypeOfType::create(expr));
+        node_ptr_t vari = tree_->makeVari();
+        *vari << ref;
+        mark(vari, ast, "gct.generator.cell");
+        *outer << vari;
+    };
+    // The body's declarations that became cells: the statement that writes each, where it stands
+    // in `bodyStmts`, and the cell's name. A cell is written where its declaration stands, so an
+    // arm that starts after that statement finds it written and a read that stands before it is
+    // a name used before it is declared.
+    struct HoistedCell {
+        const AST::Node *decl;
+        size_t index;
+        std::string name;
+    };
+    std::vector<HoistedCell> hoisted;
+    // A declaration that binds several names to one value: the cell the value is put in, and the
+    // cells its elements are written into where the statement stands.
+    struct Destructured {
+        const AST::Node *decl;
+        std::string tupleName;
+        std::vector<std::string> names;
+    };
+    std::vector<Destructured> destructured;
+    // A first value the loop would start from in any arm: a constant or a lambda, which reads its
+    // cells when it is called and not now. A cell's value is written where the loop stands, so a
+    // computed first value would be read there too -- and the arms a `yield` splits the loop into
+    // are not lowered for that yet.
     const auto hoistable = [](const AST::node_ptr_t &init) {
         if (init == nullptr) {
             return true;
@@ -5706,26 +5791,56 @@ node_ptr_t Builder::visitGeneratorBody(
     addCell(pcName, intLiteral(0), at);
     addCell(haltName, intLiteral(0), at);
     std::vector<std::string> cellNames = {pcName, haltName};
-    std::vector<size_t> hoisted; // the body's statements that became cells
     for (size_t i = 0; i < bodyStmts->size(); ++i) {
         const auto &stmt = bodyStmts->at(i);
         if (stmt->type() != AST::LoadType::Stmt ||
             stmt->loadAs<AST::StmtLoad>()->stmtType() != AST::StmtType::Data) {
             continue;
         }
-        const auto &decl = stmt->loadAs<AST::DataDeclLoad>();
-        if (decl->refs().size() != 1) {
+        const auto &decl  = stmt->loadAs<AST::DataDeclLoad>();
+        const auto &refs  = decl->refs();
+        const auto &inits = stmt->atAs<AST::RepeatedLoad>(1);
+        // `let a, b = 1, 2`: one statement, one value for each name.
+        if (refs.size() > 1 && refs.size() == inits->size()) {
+            for (size_t k = 0; k < refs.size(); ++k) {
+                const std::string name = refs[k].toString();
+                addTypedCell(name, visitData(inits->atAs<AST::DataLoad>(k)), stmt);
+                cellNames.push_back(name);
+                hoisted.push_back({stmt.get(), i, name});
+            }
             continue;
         }
-        const auto &inits = stmt->atAs<AST::RepeatedLoad>(1);
-        const AST::node_ptr_t init = inits->size() == 1 ? inits->at(0) : nullptr;
-        if (!hoistable(init)) {
-            continue; // refused where the statement is reached
+        if (refs.empty() || inits->size() != 1) {
+            // No value to take the type from (a native declaration), or a shape the parser does
+            // not build: there is no expression the cell could be typed by.
+            continue;
         }
-        const std::string name = decl->refs()[0].toString();
-        addCell(name, init != nullptr ? visitData(init) : tree_->makeData(Data::null()), stmt);
-        cellNames.push_back(name);
-        hoisted.push_back(i);
+        const AST::node_ptr_t init = inits->at(0);
+        if (refs.size() == 1) {
+            const std::string name = refs[0].toString();
+            addTypedCell(name, visitData(init), stmt);
+            cellNames.push_back(name);
+            hoisted.push_back({stmt.get(), i, name});
+            continue;
+        }
+        // `let (a, b) = e`: one value, several names. It is read once, into a cell of its own,
+        // and each name is a cell typed by one element of that value. The value is evaluated
+        // where the statement stands, and the elements are taken from the cell it was put in,
+        // so an arm after a `yield` reads the same value the pull before it read.
+        const std::string tupleName = "__gen_tuple_" + std::to_string(idIndex_++);
+        addTypedCell(tupleName, visitData(init), stmt);
+        cellNames.push_back(tupleName);
+        std::vector<std::string> names;
+        for (size_t k = 0; k < refs.size(); ++k) {
+            node_ptr_t element = tree_->makeAccs(k);
+            *element << visitData(init);
+            const std::string name = refs[k].toString();
+            addTypedCell(name, element, stmt);
+            cellNames.push_back(name);
+            hoisted.push_back({stmt.get(), i, name});
+            names.push_back(name);
+        }
+        destructured.push_back({stmt.get(), tupleName, names});
     }
 
     // The arms: one per point of the body. Arm 0 is where a pull starts; the others are reached
@@ -5763,14 +5878,30 @@ node_ptr_t Builder::visitGeneratorBody(
             const std::string &nextState) {
             node_ptr_t exec = arms[static_cast<size_t>(pc)];
             pushScope();
-            // The locals this stretch declares for itself: built here, in this arm's graph, so
-            // they live exactly as long as the arm runs (see the refusal at a `yield`).
-            std::vector<std::pair<std::string, AST::node_ptr_t>> armLocals;
             // The last value the stretch built: a loop body's last value is the state of the
             // next round. A stretch that ends in a `yield` builds none.
             node_ptr_t last = nullptr;
             for (size_t i = from; i < stmts->size(); ++i) {
                 const auto &stmt = stmts->at(i);
+                // A cell's name is bound where the stream is created, so the name is in scope
+                // for the whole body -- but names of the body resolve in source order, like the
+                // names of any function: a read that stands before the statement that writes the
+                // cell is a name used before it is declared, and is the same
+                // `UnresolvedReference` such a read gets in any function.
+                for (const HoistedCell &cell : hoisted) {
+                    if (i > cell.index) {
+                        continue;
+                    }
+                    const AST::node_ptr_t use = nameUseIn(stmt, cell.name);
+                    if (use == nullptr) {
+                        continue;
+                    }
+                    diags_->of(SemanticDiag::UnresolvedReference)
+                        .at(use->load()->tokenRange())
+                        .commit(cell.name);
+                    popScope();
+                    return;
+                }
                 const bool isStmt =
                     stmt->type() == AST::LoadType::Stmt;
                 const auto stmtType =
@@ -5781,17 +5912,6 @@ node_ptr_t Builder::visitGeneratorBody(
                     const auto &values = stmt->atAs<AST::RepeatedLoad>(0);
                     if (values->size() != 1) {
                         refuse(stmt);
-                    }
-                    // Everything this stretch declared is thrown away by this `yield`: the pull
-                    // that goes on from here runs another arm, and a name that is not a cell is
-                    // not there to be read. Only a local the rest of the stretch reads is
-                    // refused -- one that is done with before the `yield` was never a cell.
-                    for (const auto &[name, decl] : armLocals) {
-                        for (size_t k = i + 1; k < stmts->size(); ++k) {
-                            if (readsOwnName(stmts->at(k), name)) {
-                                refuseLocalAcrossYield(decl);
-                            }
-                        }
                     }
                     const int resume = newArm();
                     fill(resume, stmts, i + 1, next, nextState);
@@ -5813,15 +5933,40 @@ node_ptr_t Builder::visitGeneratorBody(
                     return;
                 }
                 if (isStmt && stmtType == AST::StmtType::Data) {
-                    // A local of the body that became a cell: its cell is written already.
-                    if (std::find(hoisted.begin(), hoisted.end(), i) != hoisted.end()) {
+                    // A declaration of the body that became a cell: the cell is made where the
+                    // stream is created, and its value is written here, where the statement
+                    // stands -- by the arm that reaches it, in source order.
+                    const auto destr = std::find_if(
+                        destructured.begin(),
+                        destructured.end(),
+                        [&](const Destructured &one) { return one.decl == stmt.get(); });
+                    if (destr != destructured.end()) {
+                        // The value once, into its own cell, then one element per name.
+                        const auto &inits = stmt->atAs<AST::RepeatedLoad>(1);
+                        *exec << writeCell(destr->tupleName, visitData(inits->at(0)));
+                        for (size_t k = 0; k < destr->names.size(); ++k) {
+                            node_ptr_t element = tree_->makeAccs(k);
+                            *element << readCell(destr->tupleName);
+                            *exec << writeCell(destr->names[k], element);
+                        }
+                        continue;
+                    }
+                    if (std::any_of(
+                            hoisted.begin(),
+                            hoisted.end(),
+                            [&](const HoistedCell &cell) { return cell.decl == stmt.get(); })) {
+                        const auto &decl  = stmt->loadAs<AST::DataDeclLoad>();
+                        const auto &inits = stmt->atAs<AST::RepeatedLoad>(1);
+                        for (size_t k = 0; k < decl->refs().size(); ++k) {
+                            *exec << writeCell(
+                                decl->refs()[k].toString(),
+                                visitData(inits->atAs<AST::DataLoad>(k < inits->size() ? k : 0)));
+                        }
                         continue;
                     }
                     // One that did not: its value depends on this point, so it is built here and
-                    // is this stretch's own (see the refusal at a `yield`).
-                    for (const Reference &ref : stmt->loadAs<AST::DataDeclLoad>()->refs()) {
-                        armLocals.push_back({ref.toString(), stmt});
-                    }
+                    // is this stretch's own. Only a declaration with no value at all comes this
+                    // far (a native one), and the arms have no cell to reach for it.
                 }
                 if (writesOwnYield(stmt)) {
                     // A branch, a loop, or a `match` with a `yield` in it: each point of those
@@ -5853,8 +5998,11 @@ node_ptr_t Builder::visitGeneratorBody(
                         const AST::node_ptr_t init = inits->size() == 1 ? inits->at(0) : nullptr;
                         // What the machine carries is exactly one value, and that value is read
                         // once, where the loop stands: a `for` has a sequence and a binder the
-                        // arms do not run, and a first value that depends on the point it stands
-                        // at cannot be the cell's value.
+                        // arms do not run. A first value that is a constant or a lambda is the
+                        // one the loop would start from in any arm; one that depends on the point
+                        // the loop stands at is not lowered yet (a cell whose type is inferred is
+                        // in place, but reading the cells a computed first value names across
+                        // the arm boundary is the next step).
                         if (init == nullptr || loopLoad->state().size() != 1 || loopLoad->hasFor() ||
                             !hoistable(init)) {
                             refuse(stmt);
@@ -5866,7 +6014,7 @@ node_ptr_t Builder::visitGeneratorBody(
                             // another loop's state): a second cell of it is a second writing.
                             refuse(stmt);
                         }
-                        addCell(stateName, visitData(init), stmt);
+                        addTypedCell(stateName, visitData(init), stmt);
                         cellNames.push_back(stateName);
                         // The four points of the loop: past it, at the condition, in the body,
                         // and the step back to the condition.
@@ -5900,8 +6048,9 @@ node_ptr_t Builder::visitGeneratorBody(
                             stepPc,
                             stateName);
                         *arms[static_cast<size_t>(stepPc)] << jumpTo(condPc);
-                        // The pull that reaches the loop only enters it: the arms of the body are
-                        // the points a pull after a `yield` goes on from.
+                        // The pull that reaches the loop enters it after writing the state the first round starts
+                        // from: the initial value is evaluated here, where the loop stands.
+                        *exec << writeCell(stateName, visitData(init));
                         *exec << jumpTo(condPc);
                         popScope();
                         return;

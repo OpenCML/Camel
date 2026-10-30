@@ -234,17 +234,7 @@ Handle *Handle::create(
     if (mem == nullptr) {
         throw std::bad_alloc();
     }
-    return new (mem) Handle(kind, program, nullptr, nullptr, graph, index, typeRef);
-}
-
-Handle *Handle::createInDraft(
-    const camel::runtime::GraphDraft &draft, camel::runtime::gc_node_ref_t node,
-    mm::IAllocator &allocator) {
-    void *mem = allocator.alloc(sizeof(Handle), alignof(Handle));
-    if (mem == nullptr) {
-        throw std::bad_alloc();
-    }
-    return new (mem) Handle(HandleKind::Node, nullptr, &draft, nullptr, draft.id(), node, nullptr);
+    return new (mem) Handle(kind, program, nullptr, graph, index, typeRef);
 }
 
 Handle *Handle::createInTransaction(
@@ -254,9 +244,10 @@ Handle *Handle::createInTransaction(
     if (mem == nullptr) {
         throw std::bad_alloc();
     }
+    // A node handle names the transaction and nothing else: the draft it reads is reached
+    // through that transaction, so no draft pointer is kept here at all.
     const auto &draft = transaction.graph();
-    return new (mem)
-        Handle(HandleKind::Node, nullptr, nullptr, &transaction, draft.id(), node, nullptr);
+    return new (mem) Handle(HandleKind::Node, nullptr, &transaction, draft.id(), node, nullptr);
 }
 
 bool Handle::equals(const rtdata::Object *other, const Type *type, bool deep) const {
@@ -273,7 +264,7 @@ bool Handle::equals(const rtdata::Object *other, const Type *type, bool deep) co
     // structure name the same type, whatever names (dimensions, parameters) they were written with.
     const bool sameType = typeRef_ == that->typeRef_ ||
                           (kind_ == HandleKind::TypeRef && type::sameCanonicalType(typeRef_, that->typeRef_));
-    return kind_ == that->kind_ && program_ == that->program_ && draft_ == that->draft_ &&
+    return kind_ == that->kind_ && program_ == that->program_ &&
            transaction_ == that->transaction_ && graph_ == that->graph_ &&
            index_ == that->index_ && sameType;
 }
@@ -283,9 +274,6 @@ rtdata::Object *Handle::clone(mm::IAllocator &allocator, const Type *type, bool 
     (void)deep;
     if (transaction_ != nullptr) {
         return createInTransaction(*transaction_, index_, allocator);
-    }
-    if (draft_ != nullptr) {
-        return createInDraft(*draft_, index_, allocator);
     }
     return create(kind_, program_, graph_, index_, typeRef_, allocator);
 }

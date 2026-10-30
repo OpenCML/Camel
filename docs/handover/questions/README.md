@@ -21,26 +21,9 @@
 
 | 页 | 问题 | 状态 |
 |---|---|---|
-| `generator-cell-type-by-inference.cn.md` | 生成器单元的类型由「只求类型的推导」定，还是由运行时状态的首个写入定 | 待裁 |
-| `questions-2026-10-30-grad-builds-its-graph-at-runtime.md` | 第 7 条的验收数不到 `grad` 在运行期造出的函数值：这一段归第 6 条还是第 7 条 | 待裁 |
-| `questions-2026-10-30-cycle-guard-edge-kinds.md` | 环的判据：守卫走 5 类边（含 `sync`）、冻结走 4 类，这个差是有意还是缺陷 | 待裁 |
+| `questions-2026-10-30-tangent-in-prelude.md` | 三个标签搬进 `prelude` 后编译失败（`string`/`attempt` 连锁报错），标签与规则该放哪一层 | 待裁 |
+| `questions-2026-10-30-probe-plan-kept-or-dropped.md` | `probe.machine` 这条自称「用例集完成前会被删掉」的探针计划：删掉、改写说明、还是变成 `std::gir` 快照 | 待裁 |
+| `questions-2026-10-30-grad-builds-its-graph-at-runtime.md` | 第 7 条的验收数不到 `grad` 在运行期造出的函数值：这一段归第 6 条还是第 7 条 | 待裁（`reviews/` 里暂无落档的裁定原文） |
 
-表里三行就是现在待裁的全部；已答复的页都挪到了 `docs/handover/reviews/`。
-
-2026-10-30 05:40 的裁定答的是 A 的取值形状（错误值进单元、`pairs(n)` 的跨 `yield` 携带量、
-`return`、可错元素）；cell-type 与 write-before-read 各自末尾问的那一句，由 2026-10-30 07:20 的裁定
-一并答复；rows-of-name 那页由 08:10 的裁定答复（`RowsOf<T>` 沿用）。七页的裁定原文见
-`docs/handover/reviews/questions-2026-10-29.md` 末节与 `docs/handover/reviews/questions-2026-10-30-gate-control-edge.md`。
-
-## 已答复（2026-10-30，现在在 `docs/handover/reviews/`）
-
-| 页 | 问题 |
-|---|---|
-| `questions-2026-10-30-what-counts-as-a-statement.md` | `sync` 块里「谁算语句」 |
-| `questions-2026-10-30-may-fault-boundary.md` | `sync` 链上「可能出故障」的边界 |
-| `questions-2026-10-30-cell-type.md` | A 的"只带类型"的单元，类型从哪来 |
-| `questions-2026-10-30-write-before-read.md` | "写之前读是编译错误"由谁证 |
-| `questions-2026-10-30-what-keeps-a-nested-calls-value-alive.md` | 嵌套调用的值靠什么存活 |
-| `questions-2026-10-30-tiles-12-not-10.md` | tiles 读到 12 |
-| `questions-2026-10-30-rows-of-name.md` | 类型函数原语 `RowsOf<T>` 这个名字沿不沿用 |
-| `questions-2026-10-30-undeclared-faults.md` | 没声明 `faults` 是第三态还是没写完的表：答「第三态有意义、读数保守，表按 reach 补完」 |
+`questions-2026-10-30-allocation-failure-in-the-faults-table.md` 已于 2026-10-30 答复：分配失败
+不算 `faults` 表该声明的故障（(b)，进程级界限），页已挪到 `docs/handover/reviews/`。

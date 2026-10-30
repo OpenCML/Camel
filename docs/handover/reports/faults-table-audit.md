@@ -17,10 +17,28 @@
 并说明为什么没有），这张表现在是哪种写法，以及钉住它的用例名。每一行都是读实现读出来的，
 不是从算子的名字推出来的；实现里没有出错路径的，就留空表加这一行说明——空表加说明也是交付。
 
-94 行是这棵树现在声明“永不出故障”的全部内置算子：86 条来自 `kNeverFaults`，8 条（复数的
+**两条判据，先说在前面。**
+
+- **“没有出错路径”按裁定指“算子自己判断不出失败”。** `faults` 表只记算子看着自己的操作数就能
+  判定的失败（除零、越界、空归约、转换超范围、形状不符）。**内存耗尽是进程级的界限**，和栈溢出
+  同一类，由运行时在进程边界上报 `MemoryExhausted`，不属于任何算子的语义——所以 `faults = []`
+  说的是“这个算子不会自己说不”，**不保证进程不会耗尽内存**。裁定与落地见
+  `docs/handover/reviews/questions-2026-10-30-allocation-failure-in-the-faults-table.md`。
+  由此还有一条白送的收益：优化在两个效应之间移动一个分配，不算改变效应顺序（`edges.cn.md` 第 4.6 条
+  的“纯且不会出故障的节点可自由安排”因此不再被分配挡住）。
+  （这一条在裁定之前写作“包括不分配”，下面第二节“第二批”“第三批”挑族时用的就是那个读法；
+  那两批补的算子此后按新读法仍然成立——它们既不抛点，也不造值。留档不改。）
+- **两条反向用例分工不同。** 声明那一侧（`declared_records` / `declared_traits`）读的是**宣言**，
+  把它删掉就红——它只证明宣言还在；运行那一侧（`fault_free_behavior`、`read_only_helpers`）
+  跑的是**实现**，给它加一个抛点就红——它才证明这条保证是真的。一个“永不出故障”的声明要两半都钉住，
+  缺一半就只钉住了半边。
+
+104 行是这棵树现在声明“永不出故障”的全部内置算子：96 条来自 `kNeverFaults`，8 条（复数的
 `+`、`-`、`*`、取负）只写在语义记录里。第一轮的 77 行全部核对过，没有一行与它的实现不符；
-裁定之后又补了 17 行（`pow` 的十个、`len` 的三个、复数 `mul`/`neg` 的四个），见下面
-“这一轮补上的 17 行”。核对里唯一看上去不一致的一处，查下去是同一件事：
+裁定之后又补了 27 行：17 行是裁定点名的那些族（`pow` 的十个、`len` 的三个、复数 `mul`/`neg`
+的四个），5 行是按可达性补的第一族（集合上的谓词），5 行是第二族（`prelude.cml` 里只读的
+那几个：两个 `contains`、`Bytes` 的 `len`、`Bytes` 的 `==`/`!=`）。核对里唯一看上去不一致的一处，
+查下去是同一件事：
 
 - `mul_i`、`mul_l`、`mul_f`、`mul_d`、`neg_i`、`neg_l`、`neg_f`、`neg_d` 在记录里传的是
   `std::nullopt`，而 `add`/`sub`/比较传的是 `none`，于是看起来“`+ - *` 与取负里只有 `+` 和
@@ -152,6 +170,50 @@
 在 `pow` 上是 inf。这是两个算子的语义口径要作者定的事，不是声明与实现不符：声明写的是实现的
 样子，`pow` 的实现确实不抛。
 
+## 第二批：集合上的谓词（5 行，按可达性挑的）
+
+裁定之后按可达性排的第一族。挑它是因为三件事同时成立：`stdlib/prelude.cml` 直接声明了这几个
+算子并且每个都带示例（`#op(':coll/has')`、`'set_contains'`、`'eq'`、`'neq'`、`'set_is_subset'`），
+测试在用，而且它们的实现不造任何值（这一族的同门里，造值的那些当时被“不分配”那条读法挡在门外；
+裁定之后那条读法更正为“算子自己判断不出失败”，所以它们以后可以按新判据逐个读，见本节末尾）。
+
+| 算子 | 实现 | 实现里的出错路径 | 声明 | 用例 |
+|---|---|---|---|---|
+| `:coll/has` | `src/builtin/operators/collection.cpp#__coll_has__` | 在表里走一遍找键（`table::has`），找不到返回 false；不造值、不抛 | trait | `declared_traits`、`fault_free_behavior` |
+| `:coll/set_contains` | `src/builtin/operators/collection.cpp#__coll_has__` | 与 `has` 同一个内核，返回的是“是不是元素” | trait | `declared_traits` |
+| `:coll/eq` | `src/builtin/operators/collection.cpp#__coll_eq__` | 按内容比较两张表（`Table::equals`，递归比键与值），只读 | trait | `declared_traits` |
+| `:coll/neq` | `src/builtin/operators/collection.cpp#__coll_neq__` | 同一个比较取反 | trait | `declared_traits` |
+| `:coll/set_is_subset` | `src/builtin/operators/collection.cpp#__coll_set_is_subset__` | 逐个元素在另一张表里找（`table::isSubset`），只读 | trait | `declared_traits` |
+
+这一族的反向验证有两半，正好各打红一次：
+
+- 把 `coll/has` 从 `kNeverFaults` 删掉，`declared_traits` 在 `map->has<'a'>` 那一行变红（读到 1）。
+- 给 `__coll_has__` 加一个“找不到就抛”：`declared_traits` 仍是绿（声明没动，读数只看声明），
+  但 `fault_free_behavior` 那条**运行**的用例变红——它把返回的 false 换成了一段诊断。这就是
+  “这条断言能在它其实会 fault 时红”的意思：空表是声明的样子，运行出来的值是实现的样子。
+
+## 第三批：`prelude.cml` 里只读的那几个（5 行）
+
+和第二批同一条判据，换一族：`stdlib/prelude.cml` 直接声明、带示例、被测试用到的只读辅助——
+`contains` 查数组（`#__contains_arr__`）、`contains` 查字符串（`#__contains_str__`）、`Bytes`
+的 `len`（`#__len_bytes__`）、`Bytes` 的 `==`/`!=`（`#__eq_bytes__`/`#__ne_bytes__`）。
+会分配的同门兄弟（`concat_arr`、`append_arr`、`add_bytes`、`slice_bytes`、`zip`、`range`）
+当时按“不分配”那条读法没补；裁定把那条读法更正之后，它们不再因为分配被排除，但 `zip`（长度不符）
+与 `range`（步长为 0）自己的内核**真的判定失败**，所以这一族要按新判据逐个读、而不是整族补。
+
+| 算子 | 实现 | 实现里的出错路径 | 声明 | 用例 |
+|---|---|---|---|---|
+| `:struct/contains_arr` | `src/builtin/operators/struct.cpp#__contains_arr__` | 走一遍数组、逐个按元素类型的内容相等比较（`valuesEqualByContent`）；找不到返回 false，不造值 | trait | `declared_traits`、`read_only_helpers` |
+| `:struct/contains_str` | `src/builtin/operators/struct.cpp#__contains_str__` | `std::string_view::find`，只是扫描；空串在实现里天然命中（`find` 返回 0） | trait | `declared_traits` |
+| `:struct/len_bytes` | `src/builtin/operators/struct.cpp#__len_bytes__` | 读 `Bytes` 的视图长度 | trait | `declared_traits` |
+| `:op/eq_bytes` | `src/builtin/operators/struct.cpp#__eq_bytes__` | 两个视图按字节比较 | trait | `declared_traits`、`read_only_helpers` |
+| `:op/ne_bytes` | `src/builtin/operators/struct.cpp#__ne_bytes__` | 同一个比较取反 | trait | `declared_traits` |
+
+反向验证同样是两半，一次运行同时打红：删掉 `struct/contains_arr` 与 `op/eq_bytes` 两条 trait，
+`declared_traits` 在 `xs->contains<2>` 与 `a == b` 两行变红（读到 1）；再给 `__contains_arr__`
+加一个“找不到就抛”，`read_only_helpers` 第一行变红（读到诊断而不是 `true`），而 `declared_traits`
+与上一族的 `fault_free_behavior` 仍是绿。恢复之后四条用例全绿。
+
 ## 看到、但没有跟着改的
 
 1. `:op/and`、`:op/or`、`:op/not` 从程序里写不出来：`&&`/`||` 是分支不是算子，这三个 URI 只由
@@ -175,10 +237,14 @@
   （`src/runtime/effects.cpp#ofNodes`）。一次补齐等于一次全局语义改动：一批图的 `may_fault`
   从 1 变 0，而读它的地方不止一处；一处读错，错的是调度与优化能假定什么。所以补齐要跟着
   “有人核对过这个内核”走，不能跟着“表看起来缺”走。
+- **判据**：一条“不会故障”的声明成立，指的是那个内核**自己不判定失败**——没有 `throwRuntimeFault`
+  那类抛点，也不调用会判定失败的算子。分配不在判据里：内存耗尽是进程级界限，在表外
+  （见上面“两条判据”第一条与那一页的裁定）。所以造值的算子（数组、字符串、表、装箱）只要内核
+  自己不判定失败，就可以补；今天没补它们只是因为还没按这一条逐个读过。
 - **没碰到但不放心**：写进 `docs/handover/questions/` 的一页，不要在这里顺手补。
 
 这一轮之前“没声明是第三态还是没写完的表”提的那一问，答在这一页：
-`docs/handover/questions/questions-2026-10-30-undeclared-faults.md`。
+`docs/handover/reviews/questions-2026-10-30-undeclared-faults.md`。
 
 ## 这份清单怎么复核
 
@@ -207,3 +273,18 @@
 
 第四处正是记录侧与 trait 侧的差别：复数乘没有 trait 条目，空表只能写在记录里，也只有
 `declared_records` 读得到。
+
+第五处（集合谓词，两半各红一次）：把 `coll/has` 从 `kNeverFaults` 删掉，`declared_traits` 在
+`m->has<'a'>` 那一行红；恢复之后给 `__coll_has__` 加一个“找不到就抛”，`declared_traits` 仍绿、
+`fault_free_behavior` 红（它读到的是诊断而不是 `false`）。这一处说明了为什么这一族要有第二条
+用例：声明那一侧只证明“宣言还在”，运行那一侧才证明“这个保证是真的”。
+
+第六处（只读辅助，一次运行同时红两侧）：删掉 `struct/contains_arr` 与 `op/eq_bytes` 两条 trait，
+并给 `__contains_arr__` 加一个“找不到就抛”。`declared_traits` 在 `xs->contains<2>` 与 `a == b`
+两行红，`read_only_helpers` 第一行红（读到诊断），`declared_records` 与上一族的
+`fault_free_behavior` 绿。恢复之后四条用例全绿。
+
+复核一条命令之后的读数（今天）：`declared_records` 点名 40 个带记录的算子（36 个空表、
+`div`×6 与 `mod`×2 的零除数、外加 `tensor:sum` 的“没有这张表”），`declared_traits` 是 30 行
+（28 个 0，`:op/div_i` 与 `tensor::sum` 两个 1），`fault_free_behavior` 5 行、`read_only_helpers`
+4 行输出。

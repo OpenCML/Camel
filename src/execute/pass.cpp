@@ -38,6 +38,7 @@
 #include "camel/passes/test/control.h"
 #include "camel/passes/test/loop_collect.h"
 #include "camel/passes/test/exhaust_perm_space.h"
+#include "camel/passes/test/throw_bad_alloc.h"
 #include "camel/passes/test/exec_plan.h"
 #include "camel/passes/test/regions.h"
 #include "camel/passes/test/retype.h"
@@ -988,6 +989,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kLoopInputsTestPass, LoopInputsTestPass),
         TEST_PASS(kExecPlanTestPass, ExecPlanTestPass),
         TEST_PASS(kExhaustPermSpaceTestPass, ExhaustPermSpaceTestPass),
+        TEST_PASS(kThrowBadAllocTestPass, ThrowBadAllocTestPass),
         TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),
         TEST_PASS(kLoopCollectSummaryTestPass, LoopCollectSummaryTestPass),
         TEST_PASS(kFactStoreTestPass, FactStoreTestPass),
@@ -2586,6 +2588,29 @@ PassApplyResult applyPassesDetailed(
                     diag.atOrigin(origin);
                 }
                 diag.commit(std::format(" in pass '{}'", p), std::string(e.what()));
+                CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (memory exhausted)", p);
+                return {nullptr, PassApplyStatus::Failed};
+            } catch (const std::bad_alloc &) {
+                // A library container's `operator new` failed: that throws a bare `std::bad_alloc`,
+                // which the runtime's own `mm::MemoryExhausted` (a class derived from it) does not
+                // cover, so the clause above never sees it, and the clause below would read it as a
+                // defect of the compiler. From the program's side it is the same limit as any other
+                // allocation failure -- the memory ran out while a pass was running -- so it is
+                // reported with the same diagnostic. Only the room is missing: no space of the
+                // runtime can be named and there is no usage or limit of its own to print, because
+                // the limit is the host's.
+                setPipelineStage("pass:" + specName(p));
+                auto diag = ctx->rtmDiags()->of(RuntimeDiag::MemoryExhausted);
+                if (ctx->sourceContext() != nullptr) {
+                    const uint64_t origin = ctx->sourceContext()->currentRuntimeOrigin();
+                    if (origin != camel::source::kInvalidOriginId) {
+                        diag.atOrigin(origin);
+                    }
+                }
+                diag.commit(
+                    std::format(" in pass '{}'", p),
+                    "the host has no memory left: an allocation outside the runtime's own spaces "
+                    "failed");
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (memory exhausted)", p);
                 return {nullptr, PassApplyStatus::Failed};
             } catch (const std::exception &e) {

@@ -247,6 +247,12 @@ struct WhenCall {
     std::string name;
 };
 
+/// A node handle for a parameter of a condition: it names the transaction the writings belong to,
+/// which is the only way a handle can be in a draft.
+Handle *nodeHandleOf(camel::runtime::DraftWritings &writings, camel::runtime::gc_node_ref_t ref) {
+    return Handle::createInTransaction(writings.transaction(), ref, mm::autoSpace());
+}
+
 /// Whether a rule's condition holds at this match (rewrite design 2 (second version) 1). A `const`
 /// parameter is the constant's value, of the type the parameter is declared with, so the guard is
 /// written on the value (`c > 0.0`) instead of reading it out of a node. Every other parameter is
@@ -278,7 +284,8 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
         const RuleObject *current = call.rule != nullptr ? call.rule->getAs<RuleObject>() : nullptr;
         return current != nullptr ? current->name() : std::string_view(call.name);
     };
-    auto &draft = match.writings.draft();
+    auto &draft    = match.writings.draft();
+    auto &writings = match.writings;
     // One slot per parameter: a rooted Node handle for a node parameter, a rooted object for a
     // constant the collector can move, and nothing for a constant whose bits are copied below.
     std::vector<std::unique_ptr<mm::RootHandle>> roots;
@@ -329,7 +336,7 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
             }
             const camel::runtime::gc_node_ref_t ref =
                 i < match.vars.size() ? match.vars[i] : camel::runtime::kInvalidNodeRef;
-            Handle *handle = Handle::createInDraft(draft, ref, mm::autoSpace());
+            Handle *handle = nodeHandleOf(writings, ref);
             roots.push_back(
                 std::make_unique<mm::RootHandle>(
                     mm::autoSpace(),
@@ -357,7 +364,7 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
                 ruleName(),
                 i + 1));
         }
-        Handle *handle = Handle::createInDraft(draft, bound, mm::autoSpace());
+        Handle *handle = nodeHandleOf(writings, bound);
         roots.push_back(
             std::make_unique<mm::RootHandle>(
                 mm::autoSpace(),
