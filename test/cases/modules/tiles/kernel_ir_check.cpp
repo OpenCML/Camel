@@ -103,8 +103,43 @@ void checkScalarI64() {
 }
 } // namespace
 
+// The position an index-carrying reduction stores is the loop index itself, not a number derived
+// from it. The storage half is expressible today: an i64 slot and a store of it validate. The
+// update half is not -- a loop binds its index as an index, so reading it into a register is an
+// unbound scalar. This check states that boundary rather than working around it.
+void checkI64PositionRead() {
+    const auto refused = [](const KernelBody &body, const char *message) {
+        try {
+            validateBody(body);
+        } catch (const std::exception &error) {
+            if (std::string(error.what()).find(message) != std::string::npos)
+                return;
+            throw;
+        }
+        throw std::runtime_error(std::string("accepted an i64 position statement: ") + message);
+    };
+    validateBody(KernelBody{{{MemorySpace::Shared, ScalarType::I64, 0, 4, true}},
+                            {ScalarBinding{"k_pos", ScalarExpr::literal(ScalarValue::i64(-1))},
+                             Store{{0, IndexExpr(0), Predicate(true)},
+                                   ScalarExpr::symbol("k_pos", ScalarType::I64)}}});
+    refused(
+        KernelBody{{{MemorySpace::Shared, ScalarType::I64, 0, 4, true}},
+                   {ScalarBinding{"k_pos", ScalarExpr::literal(ScalarValue::i64(-1))},
+                    Loop{"k_r",
+                         IndexExpr(0),
+                         IndexExpr(3),
+                         1,
+                         {Assignment{"k_pos", ScalarExpr::symbol("k_r", ScalarType::I64)}}},
+                    Store{{0, IndexExpr(0), Predicate(true)},
+                          ScalarExpr::symbol("k_pos", ScalarType::I64)}}},
+        "unbound scalar");
+    std::cout << "tiles i64 position: an i64 slot and its store validate, and reading the loop index "
+                 "into that slot is refused as an unbound scalar\n";
+}
+
 void checkKernelIR() {
     checkScalarI64();
+    checkI64PositionRead();
     checkPointwiseContracts();
     checkReductionContracts();
     checkGeneralReductions();
