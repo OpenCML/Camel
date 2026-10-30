@@ -56,6 +56,7 @@
 #include "camel/passes/trans/json/gir.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/draft.h"
+#include "camel/runtime/graph_txn.h"
 #include "camel/runtime/reachable.h"
 
 #include <algorithm>
@@ -226,19 +227,22 @@ class CanonicalDocument {
         if (found != orderings_.end())
             return found->second;
         Ordering &ordering = orderings_[graph];
-        std::unique_ptr<GraphDraft> draft = GraphDraft::decode(program_, graph);
+        // The graph is read through the transaction that owns its editable form: the reader names
+        // nothing of the storage below it, and the reduction it asks for edits that same graph.
+        const auto transaction = GraphTransaction::decode(program_, graph);
+        auto &draft            = transaction->edit();
         // A graph holding writings is a state of a rewrite, not a program: its nodes are the
         // several writings of one value and no draft of it may be edited.
-        if (draft->writings().empty())
-            reduceDocumentOrdering(*draft);
-        for (gc_node_ref_t id = 0; id < draft->nodeSlotCount(); ++id) {
-            if (draft->header(id) == nullptr)
+        if (draft.writings().empty())
+            reduceDocumentOrdering(draft);
+        for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+            if (draft.header(id) == nullptr)
                 continue;
-            const gc_node_ref_t node = draft->sourceRefOf(id);
-            for (gc_node_ref_t pred : draft->syncInputsOf(id))
-                ordering.sync[node].push_back(draft->sourceRefOf(pred));
-            for (gc_node_ref_t pred : draft->orderInputsOf(id))
-                ordering.order[node].push_back(draft->sourceRefOf(pred));
+            const gc_node_ref_t node = draft.sourceRefOf(id);
+            for (gc_node_ref_t pred : draft.syncInputsOf(id))
+                ordering.sync[node].push_back(draft.sourceRefOf(pred));
+            for (gc_node_ref_t pred : draft.orderInputsOf(id))
+                ordering.order[node].push_back(draft.sourceRefOf(pred));
         }
         return ordering;
     }
