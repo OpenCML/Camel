@@ -135,10 +135,11 @@ double ScalarValue::asF64() const {
     return std::bit_cast<double>(bits);
 }
 struct ScalarExpr::Node {
-    enum class Kind { Literal, Symbol, Operation } kind;
+    enum class Kind { Literal, Symbol, Operation, Index } kind;
     ScalarType type;
     ScalarValue value{DType::F32, 0};
     std::string name;
+    IndexExpr index{0};
     ScalarOp op = ScalarOp::Neg;
     std::vector<ScalarExpr> inputs;
 };
@@ -164,6 +165,21 @@ ScalarExpr ScalarExpr::symbol(std::string name, ScalarType type) {
     return ScalarExpr(
         std::make_shared<Node>(
             Node{.kind = Node::Kind::Symbol, .type = type, .name = std::move(name)}));
+}
+ScalarExpr ScalarExpr::fromIndex(IndexExpr index, ScalarType type) {
+    checkType(type);
+    // An index is 64 bits wide; a narrow register would truncate a position at run time instead
+    // of here, and the truncated position is a wrong number rather than a refusal.
+    if (type != ScalarType::I64)
+        throw std::invalid_argument("an index reads into an i64 register only");
+    if (index.symbols().empty())
+        throw std::invalid_argument("an index read names no loop");
+    return ScalarExpr(
+        std::make_shared<Node>(
+            Node{.kind = Node::Kind::Index, .type = type, .index = std::move(index)}));
+}
+const IndexExpr *ScalarExpr::index() const {
+    return node->kind == Node::Kind::Index ? &node->index : nullptr;
 }
 ScalarExpr ScalarExpr::apply(ScalarOp op, std::vector<ScalarExpr> inputs) {
     if (inputs.size() != arity(op))
@@ -227,6 +243,21 @@ ScalarExpr::evaluate(const std::unordered_map<std::string, ScalarValue> &binding
         throw std::runtime_error("scalar reference requires round-to-nearest mode");
     if (node->kind == Node::Kind::Literal)
         return node->value;
+    if (node->kind == Node::Kind::Index) {
+        // The host has no loop index: the binding map supplies one for tests of the lowering,
+        // and an unbound name is the same refusal an unbound symbol gets.
+        std::unordered_map<std::string, uint64_t> positions;
+        for (const auto &each : node->index.symbols()) {
+            const auto found = bindings.find(each);
+            if (found == bindings.end())
+                throw std::runtime_error("unbound index symbol " + each);
+            if (found->second.type != ScalarType::I64 && found->second.type != ScalarType::I32 &&
+                found->second.type != ScalarType::U32)
+                throw std::runtime_error("index binding type mismatch");
+            positions.emplace(each, found->second.bits);
+        }
+        return ScalarValue::i64(static_cast<int64_t>(node->index.evaluate(positions)));
+    }
     if (node->kind == Node::Kind::Symbol) {
         const auto found = bindings.find(node->name);
         if (found == bindings.end())
@@ -314,6 +345,12 @@ ScalarExpr ScalarExpr::substitute(const std::string &name, const ScalarExpr &rep
 std::unordered_map<std::string, ScalarType> ScalarExpr::symbols() const {
     if (node->kind == Node::Kind::Symbol)
         return {{node->name, type()}};
+    if (node->kind == Node::Kind::Index) {
+        std::unordered_map<std::string, ScalarType> result;
+        for (const auto &each : node->index.symbols())
+            result.emplace(each, ScalarType::I64);
+        return result;
+    }
     std::unordered_map<std::string, ScalarType> result;
     for (const auto &input : node->inputs)
         for (const auto &[name, dtype] : input.symbols()) {
@@ -334,6 +371,10 @@ std::string ScalarExpr::cuda() const {
     if (node->kind == Node::Kind::Literal)
         return f32 ? "__uint_as_float(" + std::to_string(node->value.bits) + "U)"
                    : "__longlong_as_double(" + std::to_string(node->value.bits) + "ULL)";
+    if (node->kind == Node::Kind::Index)
+        // The loop variable itself, made explicit as the i64 read it is: no arithmetic happens, and
+        // the cast is what turns an unsigned index into the signed register the slot holds.
+        return "((long long)(" + node->index.cuda() + "))";
     if (node->kind == Node::Kind::Symbol)
         return node->name;
     std::vector<std::string> x;
