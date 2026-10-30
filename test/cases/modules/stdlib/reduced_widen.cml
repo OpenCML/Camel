@@ -1,0 +1,91 @@
+/**
+ * Widening a reduced-precision value to f32, which is exact.
+ *
+ * Every bf16 and every f16 is an f32 -- the f16 format's five exponent bits and ten significand
+ * bits, and the bf16's eight and seven, all fit -- so `f32(x)` is a rearrangement of the bits and
+ * no rounding at all. The case pins the four little-endian bytes of the widened f32 for values that
+ * would move if the widening went anywhere near a decimal or an f64:
+ *
+ *   probe                        f16        f32 bytes
+ *   largest finite 65504         0x7BFF     [0, 224, 127, 71]
+ *   -0.5                         0xB800     [0, 0, 0, 191]
+ *   1/3 computed in the type     0x3555     [0, 160, 170, 62]
+ *   smallest subnormal           0x0001     [0, 0, 128, 51]
+ *   largest subnormal            0x03FF     [0, 192, 127, 56]
+ *   smallest normal              0x0400     [0, 0, 128, 56]
+ *   -0.0                         0x8000     [0, 0, 0, 128]
+ *   infinity                     0x7C00     [0, 0, 128, 127]
+ *
+ * The last four are the reason this is worth pinning: a widening that went through a decimal text
+ * (or through an f64 that was then rounded the wrong way) can still land on 1.0 and on 65504 by
+ * luck, but the subnormals and 1/3 leave nothing to luck -- the smallest f16 subnormal is a normal
+ * f32 whose exponent is 24 below it, and 1/3 in f16 is 0.333251953125 exactly in f32.
+ *
+ * The decimal contrast is written into the case rather than argued: `f32(f16(0.1))` is
+ * [0, 192, 204, 61] and `f32(0.1)` is [205, 204, 204, 61], and the comparison between them is
+ * false. A widening that read the literal `0.1` again, or that kept only the value's shortest
+ * text, answers the second one -- so the pair says the widened value is the element that was
+ * stored, and it is the element's value and not the decimal that was written. The same pair is
+ * pinned for bf16, whose 0.1 is a different element again.
+ *
+ * Two properties are asserted rather than assumed: the widened f32 equals the same value computed
+ * in f64 (widening is exact, so the two agree by construction only if nothing rounded), and
+ * `f16(f32(x)) == x` comes back to the element it started from, which is the round trip the narrow
+ * store would fail if the widening had rounded. The widened value is an f32 and not a narrow
+ * element: two of them are eight bytes.
+ *
+ * The infinity probe goes through a variable on purpose: `65504.0 + 65504.0` written as a literal
+ * expression and stored in an f16 is refused at compile time ("the literal ... cannot be
+ * represented as type 'f16': the value 131008 is out of range"), because the folders check the
+ * folded value against the declared type. `f16Max + f16Max` is the same sum at run time, where the
+ * element type's overflow rule (infinity, not saturation) is what answers.
+ */
+
+import { to_bytes } from tensor
+import { to_array } from bytes
+
+func bitsOfF32(value: f32): int[] {
+    let one: f32[] = [value]
+    return to_array(to_bytes(one))
+}
+
+func main(): int sync {
+    // ---- f16 to f32, at both ends of the range and in the subnormals ----
+    let largest: f16 = 65504.0
+    println(bitsOfF32(f32(largest)))
+    let negative: f16 = -0.5
+    println(bitsOfF32(f32(negative)))
+    let third: f16 = f16(1.0) / f16(3.0)
+    println(bitsOfF32(f32(third)))
+    let smallest: f16 = 5.960464477539063e-8
+    println(bitsOfF32(f32(smallest)))
+    let largestSubnormal: f16 = 0.00006097555160522461
+    println(bitsOfF32(f32(largestSubnormal)))
+    let smallestNormal: f16 = 0.00006103515625
+    println(bitsOfF32(f32(smallestNormal)))
+    let negativeZero: f16 = -0.0
+    println(bitsOfF32(f32(negativeZero)))
+    let f16Max: f16 = 65504.0
+    let infinite: f16 = f16Max + f16Max
+    println(bitsOfF32(f32(infinite)))
+
+    // the element that was stored, not the decimal that was written
+    let tenth: f16 = 0.1
+    println(bitsOfF32(f32(tenth)), bitsOfF32(f32(0.1)), f32(tenth) == f32(0.1))
+
+    // exact against f64, and the round trip back into the element
+    println(f32(largest) == f32(f64(largest)), f16(f32(third)) == third)
+
+    // ---- bf16 to f32 ----
+    let bfLargest: bf16 = 3.3895314e38
+    println(bitsOfF32(f32(bfLargest)))
+    let bfThird: bf16 = bf16(1.0) / bf16(3.0)
+    println(bitsOfF32(f32(bfThird)))
+    let bfTenth: bf16 = 0.1
+    println(bitsOfF32(f32(bfTenth)), bitsOfF32(f32(0.1)), f32(bfTenth) == f32(0.1))
+
+    // ---- the widened value is an f32: two of them are eight bytes ----
+    let two: f32[] = [f32(third), f32(bfThird)]
+    println(len(to_bytes(two)))
+    return 0
+}

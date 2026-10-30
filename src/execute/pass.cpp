@@ -48,7 +48,7 @@
 #include "macro/macro.h"
 #include "pass_declarations.h"
 #include "pass_spec.h"
-#include "passes/opt/defun/defun_value.h"
+#include "passes/opt/defun/defunctionalize.h"
 #include "passes/opt/devirtualize/devirtualize.h"
 #include "passes/opt/generic/generic.h"
 #include "passes/opt/inline/inline.h"
@@ -399,6 +399,15 @@ PassMaker optimizePass() {
     };
 }
 
+/// The lowering step itself. `report` is declared in stdlib/std.cml with a default of true: a
+/// program that names the pass is asking what it did, and the pipeline runs it with the parameter
+/// off (`fixedLoweringSteps`), so an inserted step writes nothing on the program's own output.
+PassMaker defunctionalizePass() {
+    return [](const context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<DefunctionalizeRewritePass>(ctx, args.getBool("report"));
+    };
+}
+
 PassMaker inlinePass(std::optional<InlineTargetStrategy> strategy, std::string passName) {
     return [strategy, passName = std::move(passName)](
                const context_ptr_t &ctx, const PassArgs &args) {
@@ -548,7 +557,7 @@ void registerCoreKernel(const char *name, PassMaker make, bool readsTags = false
 void registerCoreKernels() {
     registerCoreKernel("nop", makePass<NullGraphIRPass>());
     registerCoreKernel("macro", makePass<MacroRewritePass>());
-    registerCoreKernel("defun_value", makePass<DefunValueRewritePass>());
+    registerCoreKernel("defunctionalize", defunctionalizePass());
     registerCoreKernel("gir", makeGraphVizPass({}));
     registerCoreKernel("rgir", makeGraphVizPass(GraphVizDumpConfig{.rich = true}));
     registerCoreKernel("gir_regions", makeGraphVizPass(GraphVizDumpConfig{.regions = true}));
@@ -2010,6 +2019,49 @@ const camel::runtime::Program *runRulesAlgebra(
 
 } // namespace
 
+namespace {
+
+/// A step the pipeline runs ahead of another pass, whether or not the writer names it: a lowering
+/// step is the input a later pass is written against, not another optimization a writer has to
+/// remember to ask for.
+struct FixedLoweringStep {
+    const char *pass;
+    const char *before;
+};
+
+/// Defunctionalization is the step the optimizer is written against: no call through a function
+/// value and no closure is left when `std::opt` starts, so specialization meets a call it can
+/// specialize rather than a tag it would have to guess at.
+constexpr FixedLoweringStep fixedLoweringSteps[] = {
+    // The step says nothing about itself here: a program that wants the report names the pass.
+    {"std::defunctionalize report=false", "std::opt"},
+};
+
+/// The plan the pipeline runs: `passes` with each fixed step inserted ahead of the pass it belongs
+/// before, unless the writer named it already, and nothing at all when the pass it belongs before is
+/// not in the plan -- the pipeline runs what the program asked for, plus the steps that pass needs.
+std::vector<std::string> expandFixedLoweringSteps(const std::vector<std::string> &passes) {
+    std::vector<std::string> plan = passes;
+    for (const FixedLoweringStep &step : fixedLoweringSteps) {
+        const auto target = std::find_if(
+            plan.begin(), plan.end(),
+            [&](const std::string &spec) { return specName(spec) == step.before; });
+        if (target == plan.end()) {
+            continue;
+        }
+        const bool named = std::any_of(plan.begin(), plan.end(), [&](const std::string &spec) {
+            return specName(spec) == step.pass;
+        });
+        if (named) {
+            continue;
+        }
+        plan.insert(target, std::string(step.pass));
+    }
+    return plan;
+}
+
+} // namespace
+
 void requireKnownPasses(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     for (size_t i = 0; i < passes.size(); ++i) {
         const auto &name = passes[i];
@@ -2222,8 +2274,11 @@ std::vector<Diagnostic> tagsNeverReadWarnings(
 }
 
 PassApplyResult applyPassesDetailed(
-    const camel::runtime::Program *program, const std::vector<std::string> &passes,
+    const camel::runtime::Program *program, const std::vector<std::string> &written,
     const context_ptr_t &ctx, std::ostream &os) {
+    // What runs is what was written plus the fixed steps a written pass needs; the log and every
+    // check below read the plan, so a step that runs is a step the log names.
+    const std::vector<std::string> passes = expandFixedLoweringSteps(written);
     if (!passes.empty() && Logger::ShouldEmit(LogLevel::Info, "Pass")) {
         std::ostringstream seq;
         for (size_t i = 0; i < passes.size(); ++i) {

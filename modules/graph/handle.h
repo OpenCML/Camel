@@ -24,6 +24,7 @@
 namespace camel::runtime {
 class Program;
 class GraphDraft;
+class GraphTransaction;
 } // namespace camel::runtime
 
 namespace camel::graphmod {
@@ -116,9 +117,28 @@ class Handle final : public rtdata::Object {
         const camel::runtime::GraphDraft &draft, camel::runtime::gc_node_ref_t node,
         mm::IAllocator &allocator);
 
+    /// A Node handle that names a node of the graph one transaction owns. This is the shape the
+    /// draft form above becomes: the owner is named, so no draft is held that a transaction does
+    /// not own.
+    ///
+    /// Ownership, tracing and identity, in that order:
+    /// - **Who holds it.** The session that opened the transaction holds it; a handle only
+    ///   borrows it. The handle does not keep it alive, and must not outlive it.
+    /// - **Tracing.** `updateRefs` traces the Program and nothing else: a transaction is an
+    ///   ordinary C++ object outside the collector's graph, so it takes no part in tracing, and
+    ///   the handle cannot be reached by the collector after the session closed it.
+    /// - **Identity.** Two handles name the same node when they name the same owner — the same
+    ///   transaction pointer, or the same Program — and the same node in it.
+    static Handle *createInTransaction(
+        const camel::runtime::GraphTransaction &transaction, camel::runtime::gc_node_ref_t node,
+        mm::IAllocator &allocator);
+
     HandleKind kind() const { return kind_; }
     const camel::runtime::Program *program() const { return program_; }
     const camel::runtime::GraphDraft *draft() const { return draft_; }
+    /// The transaction this handle names a node of, or null for a handle of a published Program
+    /// (and, while the draft form is being retired, for a handle made from a bare draft).
+    const camel::runtime::GraphTransaction *transaction() const { return transaction_; }
     camel::runtime::GraphId graph() const { return graph_; }
     uint32_t index() const { return index_; }
     type::Type *typeRef() const { return typeRef_; }
@@ -134,14 +154,16 @@ class Handle final : public rtdata::Object {
   private:
     Handle(
         HandleKind kind, const camel::runtime::Program *program,
-        const camel::runtime::GraphDraft *draft, camel::runtime::GraphId graph, uint32_t index,
-        type::Type *typeRef)
-        : kind_(kind), program_(program), draft_(draft), graph_(graph), index_(index),
-          typeRef_(typeRef) {}
+        const camel::runtime::GraphDraft *draft,
+        const camel::runtime::GraphTransaction *transaction, camel::runtime::GraphId graph,
+        uint32_t index, type::Type *typeRef)
+        : kind_(kind), program_(program), draft_(draft), transaction_(transaction), graph_(graph),
+          index_(index), typeRef_(typeRef) {}
 
     HandleKind kind_;
     const camel::runtime::Program *program_;
     const camel::runtime::GraphDraft *draft_;
+    const camel::runtime::GraphTransaction *transaction_;
     camel::runtime::GraphId graph_;
     uint32_t index_;
     type::Type *typeRef_;

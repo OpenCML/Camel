@@ -1,0 +1,61 @@
+/**
+ * Every type position takes a type expression, not only a type name (design principles 5.6).
+ * One program writes a computed type -- `Tangent<...>` over a tuple, which the type numbers out
+ * to `(float, ())` -- in each of them, so that a position later narrowed back to a name alone
+ * fails here instead of in the program that needed it.
+ *
+ * The positions, in the order the answers below are printed:
+ *
+ *   after `:` in a parameter      `take(t: Tangent<(float, int)>)`
+ *   after `:` in a let            `let v: Tangent<(float, int)>`
+ *   after `:` in a struct type    `type Holder = { t: Tangent<(float, float)>, n: int }`
+ *   after `as`                    `v as Tangent<(float, int)>`
+ *   inside `::<...>` at a call    `is_same::<Tangent<(float, int)>, (float, ())>()`
+ *   `match type` subject          `match type Tangent<T>`
+ *   `case` pattern                `case (float, ())`
+ *   after `fields`                `fields Tangent<(float, float)>`
+ *   a type function's brackets    `Tangent<Tangent<(float, float)>>`
+ *   after `type X =`              `type PairTangent = Tangent<(float, float)>`
+ */
+
+import { Tangent, is_same } from types
+
+type PairTangent = Tangent<(float, float)>
+
+type Holder = { t: Tangent<(float, float)>, n: int }
+
+func take(t: Tangent<(float, int)>): string {
+    return 'ok'
+}
+
+/// The subject after `match type` is a type expression, and so is the `case` pattern.
+func kind_of::<T>(): string {
+    return match type Tangent<T> {
+        case (float, ()) => 'float and unit'
+        case (float, float) => 'two floats'
+        case _ => 'other'
+    }
+}
+
+/// A tuple read back from the type after `fields`: `Tangent<(float, float)>` is `(float, float)`,
+/// whose members the rounds walk.
+func zeros(): Tangent<(float, float)> {
+    return Tangent<(float, float)> { static for n, _ in fields Tangent<(float, float)> => 0.0 }
+}
+
+func main(): int sync {
+    let v: Tangent<(float, int)> = (1.0, ())
+    println(take(v))
+    println(v)
+    println(v as Tangent<(float, int)>)
+    println(is_same::<Tangent<(float, int)>, (float, ())>())
+    println(kind_of::<(float, int)>())
+    println(kind_of::<(float, float)>())
+    let h: Holder = { t: (1.0, 2.0), n: 3 }
+    println(h)
+    println(zeros())
+    let z: PairTangent = (4.0, 5.0)
+    println(z)
+    println(is_same::<Tangent<Tangent<(float, float)>>, (float, float)>())
+    return 0
+}
