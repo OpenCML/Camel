@@ -27,13 +27,6 @@ enum class EffectStanding : uint8_t {
     /// Nothing keeps it: no read of what it produced, no chain, no later read of what it wrote.
     /// Running it is not part of the program (design principles 3.4, 3.5).
     HasNoCredential,
-    /// A call through a function value writes captures that the type does not name: which ones is
-    /// known to the run time (`GCFuncRef::reserved`) and not here, so the version a later read
-    /// should take cannot be handed back statically. Today such a call waits through a control
-    /// edge (`builder_expr.cpp`, `orderAfterLastWriter`, "the data edge it is owed"), which is the
-    /// one thing the edge model has no replacement for.
-    /// docs/handover/questions/questions-2026-10-31-how-an-indirect-call-hands-back-a-version.md
-    PendingIndirectCallVersion,
 };
 
 /// The four facts the question is answered from. A caller reads them where it stands -- a pass
@@ -50,7 +43,8 @@ struct EffectLivenessFacts {
     /// it takes that variable (the writer table).
     bool isWriterWithLaterRead = false;
     /// The node is a call through a function value that may write captures (`EffectSummary`:
-    /// a call whose callee is not known).
+    /// a call whose callee is not known). It does not decide the standing: such a call is the new
+    /// version of what it wrote, and the reader takes its data edge from the call.
     bool isCallThroughValue = false;
     /// The node carries a wait: an edge that exists only to order it (today the control edge,
     /// docs/design/effects/plan.cn.md 5.5). A GATE carries no effect of its own -- it carries a
@@ -67,13 +61,14 @@ struct EffectLivenessFacts {
     bool isWaitedOn = false;
 };
 
-/// The answer. A call through a function value that has no data user and is on no chain is
-/// `PendingIndirectCallVersion` and not `HasNoCredential`: the question is open, and a caller that
-/// treats it as dead would drop a write that may be read (see the page named above).
+/// The answer. There are two of them: an effect is kept by a data use, a chain, or a later read of
+/// what it wrote, and a call through a function value is no third case -- the call is itself the
+/// new version of what it wrote, and the read takes a data edge from it (`Builder::valueVersionOf`).
+/// A write the writer table does not know is left to the sync blocks and the resource order
+/// (docs/design-principles.cn.md 3.3): it is not a credential of this layer.
 EffectStanding effectStandingOf(const EffectLivenessFacts &facts);
 
-/// Whether running the node is part of the program, as far as the liveness question goes: `Alive`,
-/// or the open case, which no caller may treat as dead until the author has ruled.
+/// Whether running the node is part of the program, as far as the liveness question goes.
 bool keepsEffectAlive(EffectStanding standing);
 
 } // namespace camel::runtime
