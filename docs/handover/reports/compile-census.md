@@ -151,3 +151,27 @@ node scripts/test.js test/plans --compile-only --jobs 8
 
 **fast 层外的 3670 个条目里，只有一个程序编不过——就是 `transformer_step.cml`，那个从没被跑过的。** 其余红全部消失：
 它们此前要么是「判据不适用」（现在显式标为 NOT-JUDGED，295 条），要么是我漏关的 CPU 判据。
+
+### 两条诊断原文（照抄，不解释）
+
+`transformer_step.cml`（快层外那条唯一的编译失败，`58dcb949c` 上）：
+
+```
+error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> ({ g1: f32[8], g2: f32[8], wq: f32[8, 8], wk: f32[8, 8], wv: f32[8, 8], wo: f32[8, 8], w1: f32[8, 16], b1: f32[16], w2: f32[16, 8], b2: f32[8] }, { g1: f32[..], g2: f32[..], wq: f32[..], wk: f32[..], wv: f32[..], wo: f32[..], w1: f32[..], b1: f32[..], w2: f32[..], b2: f32[..] }, OptimizerState, float).
+   --> test/cases/perf/transformer_step.cml:90:28
+ 90 |             let next = adam(b, gradient, opt, lr)
+help: Available overloads: <nn:adam>: (params: P, grads: grad of P, state: OptimizerState, lr: float, beta1?, beta2?, eps?) => (P, OptimizerState)
+```
+
+`mlp_step.cml`（`lane-gpu`/`d7b3ed065` 上仍红的那两条）：
+
+```
+error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> ({ w1: f32[784, 128], b1: f32[128], w2: f32[128, 10], b2: f32[10] }, { w1: f32[..], b1: f32[..], w2: f32[..], b2: f32[..] }, OptimizerState, float).
+   --> test/cases/perf/mlp_step.cml:55:28
+ 55 |             let next = adam(m, gradient, opt, lr)
+help: Available overloads: <nn:adam>: (params: P, grads: grad of P, state: OptimizerState, lr: float, beta1?, beta2?, eps?) => (P, OptimizerState)
+```
+
+**判断：程序没写错，是编译器（类型）这一侧的缺口。** 判据两条：一是 `gpu` 的 `9e01683d6` 只改了 `type Block` 的字段形状，`transformer_step` 就从「编不过」变成 PASS——**同一个文件、同一行 `adam(...)`，改的是类型声明，不是程序**；二是 `mlp_step` 是**逐字同构**的 `grad of P` 失配（参数是静态形状的 struct，梯度是无界 `f32[..]`），说明缺口没被那笔修完，而不是两个程序各自写坏。**不修，只记读数**；修要单独立一笔。
+
+**`--compile-only` 第一次跑出 1 条时，那个 1 不是噪声，是这条工具存在的理由。**
