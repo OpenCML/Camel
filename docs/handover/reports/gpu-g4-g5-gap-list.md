@@ -1,9 +1,8 @@
 # GPU 支持面：`tiles::census` 的缺口账本
 
-这是 G4 的"缺口为 0 才算完成"（`docs/handover/reports/gpu-g4-g5-plan.md` G4 第 1 条）的唯一账本。
-数由遍 `tiles::census` 直接读出：它取程序可达图里的面内算子（`tensor` 的数组与 `nn` 的参数树），
-按 `modules/tiles/src/graph_regions.cpp#operations` 那张表分成"有 device 实现"与"缺口"两组，逐条
-打印名字。
+这是 G4 的"缺口为 0 才算完成"（`docs/handover/reports/gpu-g4-g5-plan.md` G4 第 1 条）的唯一账本。数由遍
+`tiles::census` 读出：程序可达图里的面内算子（`tensor` 的数组与 `nn` 的参数树）按
+`modules/tiles/src/graph_regions.cpp#operations` 那张表分成"有 device 实现"与"缺口"两组，逐条打印名字。
 
 ## 怎么取数
 
@@ -47,6 +46,14 @@
 - 比较（2）：`tensor:gt`、`tensor:strict_eq`
 - 形状与索引查询（2）：`tensor:shape`、`tensor:numel`
 - 类型（1）：`tensor:cast_like`
+
+## 缺的是哪一半：名字已列，性质未查
+
+17 条与 13 条都是**已注册**的算子（它们出现在能编、能跑、在主机上算得出数的图里），所以缺的是设备的
+那一半，不是注册。但每一条究竟只是"表里少一个名字 + 少一个 device 程序"，还是"连语义声明或下标映射都
+还没写"，**这一笔没有逐条查**。查法在 `modules/tiles/src/graph_regions.cpp#eligibility`：它把拒绝分成
+`unsupported_operator` 与 `semantic_declaration`、`unsupported_index_contract` 两类，下一笔按条落时
+先用那条路把 30 条各自归组，再决定补表、补语义还是补下标映射。
 
 ## 怎么读这张账本
 
