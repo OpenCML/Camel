@@ -27,6 +27,10 @@ git grep -o 'GraphDraft::decode' -- src include modules | grep -v -e graph_txn.h
 **三个数只能单调降，b6 必须全 0。涨了就是那一笔在新建直连，停下解释。**
 `decode` 取"出现处"（16 起）而不是"调用点"（14 起），把定义与注释也数进去，省得口径随人变。
 
+**这条规则当场抓到了自己人**：b2.1b 的地址用例第一版在 `edges.cpp` 里写了三个 `GraphDraft *`，
+数立刻从 709 涨到 714；改成 `auto *`（测试要的是"会话递出来的那一个"，不是它的名字）才归位。
+规则不是摆设。
+
 ## 1. 表
 
 | 提交 | 这一步做了什么 | 事务外引用（文件 / 引用） | 构造点 | `decode` 点 |
@@ -43,6 +47,8 @@ b1 的 −2 是从哪掉的：`src/compile/gir/draft_graph_builder.cpp` 的 `mak
 `decode` 点的历史：**基点和 b1 都是 16**，b1 没动它（口头报过的 15 是漏数了 `src/runtime/draft.cpp`
 里那句定义）。b2.1 从 16 降到 15，是会话那一处 `GraphDraft::decode` 搬进了事务自己的
 `graph_txn.cpp`——按口径不计，所以是真正的下降，不是口径漂移。
+
+| b2.2 | `edit()`/`rootDraft()`/`ensureDraft` 返回 `GraphTransaction&`；全树 69 个调用点改绑：命名形式 `GraphDraft &d = session.edit(g)` → `auto &d = session.edit(g).edit()`（**不再点类型名**），chained 形式 `x.edit(g).foo()` → `x.edit(g).edit().foo()`；`&session.edit(g)`（地址用例要的事务本身）保持不加 `.edit()` | 80 / 661 | 8 | 15 |
 
 ## 2. 那一处生死线：`edit()` 只能给引用
 

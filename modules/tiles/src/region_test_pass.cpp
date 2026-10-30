@@ -189,7 +189,7 @@ void checkInvalidation(::Function *function, core::context::Context &context) {
         context.shared_from_this(),
         function->program(),
         function->graph());
-    auto &draft  = session.rootDraft();
+    auto &draft  = session.rootDraft().edit();
     bool changed = false;
     for (runtime::gc_node_ref_t id = 0; id < function->graph()->nodeCount(); ++id) {
         if (function->graph()->node(id)->kind == runtime::GCNodeKind::Oper) {

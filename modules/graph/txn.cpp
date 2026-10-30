@@ -163,7 +163,7 @@ draftOf(TxnState &state, const Handle *node, const char *site) {
     if (graph == nullptr || !graph->containsNodeRef(node->index())) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the node is not in its graph");
     }
-    GraphDraft &draft = state.session.edit(graph);
+    auto &draft = state.session.edit(graph).edit();
     if (!draft.alive(node->index())) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the node was removed");
     }
@@ -434,7 +434,7 @@ slot_t addConstantKernel(ArgsView &, ArgsView &norm, Context &) {
         auto *text = fromSlot<::String *>(value);
         value      = toSlot<::String *>(static_cast<::String *>(text->clone(mm::permSpace(), type)));
     }
-    GraphDraft &draft                 = state.session.edit(graph);
+    auto &draft                 = state.session.edit(graph).edit();
     const camel::runtime::gc_node_ref_t id = draft.materializeStaticValue(value, type);
     return toSlot(Handle::create(
         HandleKind::Node,

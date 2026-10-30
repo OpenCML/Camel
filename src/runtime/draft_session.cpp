@@ -1076,7 +1076,7 @@ const GraphDraft *RuntimeGraphDraftSession::tryDraft(const GCGraph *graph) const
     return nullptr;
 }
 
-GraphDraft &RuntimeGraphDraftSession::ensureDraft(GCGraph *graph) {
+GraphTransaction &RuntimeGraphDraftSession::ensureDraft(GCGraph *graph) {
     ASSERT(graph != nullptr, "Runtime graph draft decode requires a non-null graph.");
     auto [it, inserted] = drafts_.try_emplace(graph);
     if (inserted) {
@@ -1102,15 +1102,15 @@ GraphDraft &RuntimeGraphDraftSession::ensureDraft(GCGraph *graph) {
         noteDraftOpened(*debugRoots_, &it->second->transaction->edit());
 #endif
     }
-    return it->second->transaction->edit();
+    return *it->second->transaction;
 }
 
-GraphDraft &RuntimeGraphDraftSession::edit(GCGraph *graph) {
+GraphTransaction &RuntimeGraphDraftSession::edit(GCGraph *graph) {
     edited_.insert(graph);
     return ensureDraft(graph);
 }
 
-GraphDraft &RuntimeGraphDraftSession::rootDraft() { return edit(runtimeRoot_); }
+GraphTransaction &RuntimeGraphDraftSession::rootDraft() { return edit(runtimeRoot_); }
 
 RuntimeGraphDraftSession::RootScope::RootScope(RuntimeGraphDraftSession &session)
     : session_(session) {
@@ -1546,7 +1546,7 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         if (!drafted && (graph->flags() & kGraphFlagGatesDissolved)) {
             continue;
         }
-        if (ensureDraft(graph).dissolveUnorderedGates() > 0) {
+        if (ensureDraft(graph).edit().dissolveUnorderedGates() > 0) {
             edited_.insert(graph);
         } else if (!drafted) {
             GCGraphBuildAccess::addFlags(graph, kGraphFlagGatesDissolved);

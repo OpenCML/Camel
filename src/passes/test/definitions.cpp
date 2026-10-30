@@ -156,7 +156,7 @@ ExpandDefinitionsTestPass::apply(const camel::runtime::Program *program, std::os
         if (nodes.empty()) {
             continue;
         }
-        rt::GraphDraft &draft = session.edit(g);
+        auto &draft = session.edit(g).edit();
         for (rt::gc_node_ref_t ref : nodes) {
             const std::string uri(g->nodeBodyAs<rt::GCOperBody>(ref)->uri());
             const rt::ExpandResult result =

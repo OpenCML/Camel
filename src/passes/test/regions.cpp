@@ -29,7 +29,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
         return program;
     }
     RuntimeGraphDraftSession session(context_, program);
-    GraphDraft &draft = session.edit(largest);
+    auto &draft = session.edit(largest).edit();
     std::vector<gc_node_ref_t> live;
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount() && live.size() < 6; ++id) {
         if (draft.alive(id)) {
@@ -60,7 +60,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
 
     // A decode and an encode with no change in between give the same version.
     RuntimeGraphDraftSession again(context_, next);
-    again.edit(const_cast<GCGraph *>(after));
+    again.edit(const_cast<GCGraph *>(after)).edit();
     const Program *last = again.commit();
     os << "REGIONS recommit same=" << (last->graph(largest->id()) == after ? 1 : 0) << "\n";
     // The recommit installed `last`; a pass returns the program the pipeline is to use, and that

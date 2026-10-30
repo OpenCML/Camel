@@ -4888,7 +4888,7 @@ Model exportBound(
     {
         camel::runtime::RuntimeGraphDraftSession session(context, fn->program(), graph);
         if (!captures.empty()) {
-            bindCaptures(session.rootDraft(), captures);
+            bindCaptures(session.rootDraft().edit(), captures);
         }
         // Captured values are constants of the model: they get the types their values fix.
         std::vector<type::Type *> captureTypes;
@@ -4898,7 +4898,7 @@ Model exportBound(
                     exactTypeOf(captured->get<slot_t>(i), fn->tupleType()->typeAt(i)));
             }
         }
-        camel::runtime::bindFunctionCall(session.rootDraft(), fn, inputTypes, captureTypes);
+        camel::runtime::bindFunctionCall(session.rootDraft().edit(), fn, inputTypes, captureTypes);
         prepared = session.commit();
     }
     std::unordered_map<slot_t, std::string> names;

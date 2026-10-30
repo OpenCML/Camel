@@ -898,7 +898,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                 "OptimizePass",
                 "Runtime rewrite scanning graph '{}' for enabled phases.",
                 nextGraph->name());
-            camel::runtime::GraphDraft &draft = session.edit(nextGraph);
+            auto &draft = session.edit(nextGraph).edit();
             std::vector<gc_node_ref_t> funcNodes;
             std::vector<gc_node_ref_t> callNodes;
             funcNodes.reserve(draft.nodeCount());

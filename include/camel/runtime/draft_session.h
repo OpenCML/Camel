@@ -170,8 +170,8 @@ class RuntimeGraphDraftSession {
     /// static_assert after this class keeps an accessor from being changed to return by value,
     /// which a call site could not see: `auto &draft = session.edit(g)` would bind the graph of a
     /// temporary transaction that dies at the end of the statement.
-    GraphDraft &edit(GCGraph *graph);
-    GraphDraft &rootDraft();
+    GraphTransaction &edit(GCGraph *graph);
+    GraphTransaction &rootDraft();
 
     /// The specialization made for `key`, if this session or the program it works on already has
     /// it: the session's own copies first, then the program's table (specializations.h), whose
@@ -259,7 +259,7 @@ class RuntimeGraphDraftSession {
         RuntimeDraftIdentity identity;
     };
 
-    GraphDraft &ensureDraft(GCGraph *graph);
+    GraphTransaction &ensureDraft(GCGraph *graph);
     std::vector<GCGraph *> collectCommitClosure() const;
     /// The graphs the draft of `graph` refers to (visitDraftGraphs), in visiting order. Kept while
     /// the draft's revision is the same, so that asking for the closure of the program again
