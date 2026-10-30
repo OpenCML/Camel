@@ -244,7 +244,7 @@ The operator that isolates a fault at a subgraph boundary is `attempt` ([6.10.1]
 
 **`exit(n)`** ends the program immediately with exit code `n`; earlier output is written out as usual.
 
-**Recursion depth.** A call in tail position does not occupy a stack frame, and tail recursion can be arbitrarily deep. The number of calls open at the same time in non-tail recursion has a limit, 1000 by default; exceeding it is the fault `RuntimeDiag::MaxRecursionDepthExceeded`; adjust it with `--max-recursion-depth <n>` or the environment variable `CAMEL_MAX_RECURSION_DEPTH`. The count includes calls through function values and the calls a higher-order operator makes for each element. The default is the same on every back end, and the parallel scheduler counts like the others.
+**Recursion depth.** A call in tail position does not occupy a stack frame, and tail recursion can be arbitrarily deep. The number of calls open at the same time in non-tail recursion has a limit, 1000 by default; exceeding it is the fault `RuntimeDiag::MaxRecursionDepthExceeded`; adjust it with `--max-recursion-depth <n>`. The count includes calls through function values and the calls a higher-order operator makes for each element. The default is the same on every back end, and the parallel scheduler counts like the others.
 
 ```cml
 func depth(n: int): int {

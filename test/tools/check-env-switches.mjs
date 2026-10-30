@@ -69,30 +69,6 @@ const LEDGER = [
         why: 'reads the settings of the collection tree (CAMEL_COLL_*) by name; still a switch',
     },
     {
-        at: 'src/execute/limits.cpp:depthLimitFromEnvironment',
-        reads: null,
-        owner: 'the environment-variable queue, core batch (lane-envsw)',
-        why: 'reads CAMEL_MAX_RECURSION_DEPTH by name behind --max-depth; still a switch',
-    },
-    {
-        at: 'src/execute/limits.cpp:macroRoundLimit',
-        reads: null,
-        owner: 'the environment-variable queue, core batch (lane-envsw)',
-        why: 'reads kMaxMacroRoundsEnvVar (CAMEL_MAX_MACRO_ROUNDS) by name, after --max-macro-rounds; still a switch',
-    },
-
-    {
-        at: 'src/core/rtdata/variant.cpp:traceWanted',
-        reads: 'CAMEL_TRACE_VARIANT',
-        owner: 'the environment-variable queue, core batch (lane-envsw)',
-        why: 'a trace of the relocations of the variant; still a switch',
-    },
-    {
-        at: 'src/passes/opt/defun/defunctionalize.cpp:emitCallThroughValue',
-        reads: 'CAMEL_DEFUN_DEBUG',
-        owner: 'the environment-variable queue, core batch (lane-envsw)',
-        why: 'a temporary diagnostic marked as such in the pass; still a switch',
-    },    {
         at: 'modules/tiles/src/cuda_backend.cpp:nvrtcPaths',
         reads: 'CAMEL_TILES_NVRTC',
         owner: 'none: it stays',

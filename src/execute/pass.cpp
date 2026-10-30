@@ -406,7 +406,8 @@ PassMaker optimizePass() {
 /// off (`fixedLoweringSteps`), so an inserted step writes nothing on the program's own output.
 PassMaker defunctionalizePass() {
     return [](const context_ptr_t &ctx, const PassArgs &args) {
-        return std::make_unique<DefunctionalizeRewritePass>(ctx, args.getBool("report"));
+        return std::make_unique<DefunctionalizeRewritePass>(
+            ctx, args.getBool("report"), args.getBool("debug"));
     };
 }
 
@@ -511,7 +512,8 @@ PassMaker profilePass() {
             gcStats < 0 ? 0 : static_cast<int>(gcStats),
             args.getBool("type_stats"),
             pathArgument(args, "effect_trace"),
-            args.getBool("opstats"));
+            args.getBool("opstats"),
+            args.getBool("variant_trace"));
     };
 }
 
