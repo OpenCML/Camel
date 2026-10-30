@@ -5853,7 +5853,7 @@ node_ptr_t Builder::visitGeneratorBody(
                         // once, where the loop stands: a `for` has a sequence and a binder the
                         // arms do not run, and a first value that depends on the point it stands
                         // at cannot be the cell's value.
-                        if (loopLoad->state().size() != 1 || loopLoad->hasFor() ||
+                        if (init == nullptr || loopLoad->state().size() != 1 || loopLoad->hasFor() ||
                             !hoistable(init)) {
                             refuse(stmt);
                         }
