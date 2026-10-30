@@ -999,13 +999,35 @@ timeout_ms = 8000
 
 [[tests]]
 name = "same_shape_comprehension_mismatch"
-desc = "The shape being filled and the type the generator walks must have the same shape: `A = {a: int}` over `B = {b: int, c: int}` names other fields, and a struct and a tuple are different kinds."
+desc = "The shape being filled and the type the generator walks must have as many members as it states: `A = {a: int}` over `B = {b: int, c: int}` fills one member where the walked type has two. The names on their own are `same_shape_comprehension_name_mismatch`, and the member types are not part of the shape (`same_shape_comprehension_other_types`)."
 kind = "negative"
 case = "../../../cases/compile/static_expansion/shape_mismatch.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::SameShapeComprehensionMismatch"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "same_shape_comprehension_name_mismatch"
+desc = "The shape is the field names, not only their number (design principles 5.5): `A = {a: int}` over `B = {b: int}` agrees on the kind, the count and the member types, and is refused because `b` is not the name `A` states -- the head names the fields."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/shape_name_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::SameShapeComprehensionMismatch"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "same_shape_comprehension_other_types"
+desc = "The same shape is the same field names and count, not the same member types (design principles 5.5): `A = {a: int}` over `B = {a: f32}` is accepted, and the field's type is the round's value type, not the head's -- `y.a` reads as a `float` and holds 1.5, which the head's `int` would have refused, so the head gives the names and the rounds give the types."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/shape_same_fields_other_types.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "2.5\n{ a: 1.5 }\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]

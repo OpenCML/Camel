@@ -1,0 +1,24 @@
+/**
+ * The type of a cell of a generator's own body is the type of its first write.
+ *
+ * `var s = "one"` is that first write, and language reference 7.2 says a `var` without a written
+ * type takes the type of its initializer, so the cell is `var string`. The later write `s = "two"`
+ * is a value of that type and is accepted, and both elements reach the consumer, so the cell keeps
+ * the type it was given before any `yield` -- it is not re-typed by a later write, and the machine
+ * does not fall back to a type of its own.
+ *
+ * `std::jgir` prints the cell and its type, which is where the reading is pinned; the plain run is
+ * the one that says the cell is shared across the pulls (`one`, `two`).
+ */
+
+func labels(): string.. sync {
+    var s = "one"
+    yield s
+    s = "two"
+    yield s
+}
+
+func main(): int sync {
+    loop acc = 0 for v in labels() do sync { println(v); acc + 1 }
+    return 0
+}
