@@ -1,0 +1,12 @@
+/**
+ * A program that imports both rulesets and computes nothing: the case next to it asks the index
+ * questions through the `std::rulesets` pass (`query=`), so this program's only job is to build both
+ * families.
+ */
+import { lift } from rulesets.jvp
+import rulesets.transpose
+
+func main(): int sync {
+    println(lift(1.0).0)
+    return 0
+}

@@ -659,8 +659,6 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
         if (!unit->failed && unit->module &&
             unit->module->name().rfind("rulesets.", 0) == 0) {
             const std::string ruleset = unit->module->name();
-            const char *wanted        = std::getenv("CAMEL_RULESET_INDEX");
-            const bool showIndex      = (wanted != nullptr && *wanted != '\0') || unit->entry;
             std::vector<camel::parse::ast::RuleHead> rules =
                 camel::parse::ast::takeRuleHeads(ruleset);
             if (rules.empty()) {
@@ -669,7 +667,11 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
             // The key is the operator and how many operands it was given, not the token alone:
             // `-x` and `x - w` are two primitives (`__neg__` and `__sub__`) that write the same
             // token, so a key without the count files two rules as one and refuses the second.
-            std::unordered_map<std::string, std::string> ruleOfHead;
+            //
+            // Filing is the same act as refusing a duplicate: `indexRule` answers the rule already
+            // under that key when it is a different one, so the index cannot hold two rules for one
+            // primitive and the table the transform will ask is the table built here -- one place,
+            // not a table built to be thrown away.
             for (const auto &rule : rules) {
                 if (!rule.shape.empty()) {
                     auto diag = unit->diags->of(SemanticDiag::RuleLeftIsNotAnOperator);
@@ -677,30 +679,20 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                     diag.commit(rule.rule, rule.shape);
                     continue;
                 }
-                const std::string key = rule.head + "@" + std::to_string(rule.arity);
-                const auto inserted   = ruleOfHead.emplace(key, rule.rule);
-                if (!inserted.second) {
+                const std::string first =
+                    camel::parse::ast::indexRule(ruleset, rule);
+                if (!first.empty()) {
                     auto diag = unit->diags->of(SemanticDiag::DuplicateRuleForOperator);
                     diag.at(TokenRange{rule.tokenStart, rule.tokenEnd});
-                    diag.commit(
-                        inserted.first->second, rule.rule, rule.head, std::to_string(rule.arity));
+                    diag.commit(first, rule.rule, rule.head, std::to_string(rule.arity));
                     continue;
-                }
-                // A probe of the index itself: it prints what the ruleset holds, so a reader can
-                // see the heads the transform will look up rather than trusting that they are
-                // there. It is not the transform: no rule is applied here, and it stays quiet
-                // unless it is asked, because a program that imports a ruleset is not a program
-                // that asked to have its rules listed: the entry module of a probe prints its own
-                // index, and `CAMEL_RULESET_INDEX` asks for every ruleset's.
-                if (showIndex) {
-                    std::cout << "RULESET " << ruleset << ' ' << rule.head << '/' << rule.arity
-                              << " -> " << rule.rule << '\n';
                 }
             }
             unit->failed = inError(unit);
         }
     }
     bool ok = std::none_of(order.begin(), order.end(), inError);
+
 
     // Step three: link.
     if (ok) {

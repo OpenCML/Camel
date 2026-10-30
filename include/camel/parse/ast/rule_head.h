@@ -49,4 +49,41 @@ void collectRuleHead(
 /// once where the module is built.
 std::vector<RuleHead> takeRuleHeads(const std::string &module);
 
+/// Why a lookup of a rule answered the way it did.
+enum class RuleLookup {
+    Found,              // the family has a rule for that operator with that many operands
+    NoSuchFamily,       // no ruleset module of that name was built into this program
+    NoRuleForPrimitive, // the family is there and holds no rule for that operator and count
+};
+
+/// What `lookupRule` answers: the rule's name when there is one, and why there is not otherwise.
+struct RuleMatch {
+    RuleLookup status = RuleLookup::NoSuchFamily;
+    std::string rule; // the rule's name, when `status` is Found; empty otherwise
+};
+
+/// Files `rule` in `family`'s index under the head of its left side and that head's operand count.
+/// The name of a *different* rule already filed under that key is returned -- the caller reports the
+/// duplicate, and the two are never silently merged -- and an empty string means the rule was filed,
+/// or was already there under the same name (a module built twice files its rules twice).
+std::string indexRule(const std::string &family, const RuleHead &rule);
+
+/// The rule of `family` whose left side is `head` with `arity` operands. A ruleset that is only
+/// built and printed answers nothing, and reads as if it did: this is the question a transform asks
+/// it, and the answer says which of the two ways there is no rule.
+RuleMatch lookupRule(const std::string &family, const std::string &head, uint32_t arity);
+
+/// The families built so far, in name order: what a reader can ask `lookupRule` about.
+std::vector<std::string> ruleFamilies();
+
+/// One rule as a reader of the index sees it: what it is filed under, and what it is called.
+struct RuleEntry {
+    std::string head; // the operator of the rule's left side
+    uint32_t arity = 0;
+    std::string rule;
+};
+
+/// Everything `family` holds, in key order (`head` then `arity`): what a printer of the index reads.
+std::vector<RuleEntry> rulesOf(const std::string &family);
+
 } // namespace camel::parse::ast
