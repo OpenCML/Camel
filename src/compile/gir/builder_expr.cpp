@@ -225,6 +225,42 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
                     literalData = converted;
                 }
             }
+            // The computed element enters the slot the position gives it, and where the two types
+            // stand on the edge between `T` and `T[..]` the value is converted as it enters
+            // (design principles 5.4): the slot of an open rank holds a rank-zero array, and a
+            // FILL links its element nodes as they are. This is the last entrance that did not go
+            // through `Builder::coerceTo` -- a call argument was the first -- so it is converted
+            // here, by the same question and the same call, rather than left to be read as an
+            // array that is not there.
+            const auto filledSlotType = [&](size_t slot) -> Type * {
+                if (filledType->code() == TypeCode::Array) {
+                    const auto *arrayType = tt::as_ptr<ArrayType>(filledType);
+                    return arrayType != nullptr ? arrayType->elemType() : nullptr;
+                }
+                if (filledType->code() == TypeCode::Struct) {
+                    const auto *structType = tt::as_ptr<StructType>(filledType);
+                    return structType != nullptr && slot < structType->size()
+                               ? structType->typeAt(slot)
+                               : nullptr;
+                }
+                if (filledType->code() == TypeCode::Tuple) {
+                    const auto *tupleType = tt::as_ptr<TupleType>(filledType);
+                    return tupleType != nullptr && slot < tupleType->size()
+                               ? tupleType->typeAt(slot)
+                               : nullptr;
+                }
+                return nullptr;
+            };
+            for (size_t h = 0; h < holeSlots.size() && h < refNodes.size(); ++h) {
+                Type *slotType = filledSlotType(holeSlots[h]);
+                if (slotType == nullptr ||
+                    !isRankZeroEdge(slotType, valueTypeOf(nodeTypeOf(refNodes[h])))) {
+                    continue;
+                }
+                if (node_handle_t entered = coerceTo(refNodes[h], slotType, gct); entered != nullptr) {
+                    refNodes[h] = entered;
+                }
+            }
             auto payload    = runtime::makeFillPayload(fillKindForType(filledType), holeSlots);
             node_handle_t srcNode = currGraph_->addStaticDataNode(literalData, filledType);
             node                  = currGraph_->addFillNode(filledType, payload);
