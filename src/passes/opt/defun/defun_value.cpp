@@ -58,12 +58,14 @@
 
 #include "defun_value.h"
 
+#include "camel/core/error/diagnostics/messages/runtime.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/text.h"
+#include "camel/execute/pass/warnings.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
@@ -71,6 +73,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <format>
 #include <map>
 #include <set>
 #include <string>
@@ -632,8 +635,28 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
             accepted.push_back(&family);
         }
     }
+    // A pass that silently gives up looks exactly like one that found nothing to do: every family
+    // it leaves as written is named with the reason, on the report line and as a warning.
+    const auto reportRefused = [&] {
+        for (Family &family : families) {
+            if (family.refuse.empty()) {
+                continue;
+            }
+            const std::string type = family.members.front()->type->toString();
+            os << "DEFUN_VALUE refused='" << type << "' reason='" << family.refuse << "'\n";
+            if (context_ != nullptr) {
+                raisePassWarning(
+                    *context_,
+                    camel::core::error::RuntimeDiag::DefunctionalizationIncomplete,
+                    camel::source::kInvalidOriginId,
+                    std::format(
+                        "Defunctionalization left '{}' as written: {}", type, family.refuse));
+            }
+        }
+    };
     if (accepted.empty()) {
         os << "DEFUN_VALUE types=0 values=0 calls=0 refused=" << families.size() << "\n";
+        reportRefused();
         return program;
     }
 
@@ -1035,13 +1058,7 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
         os << "DEFUN_VALUE types=" << accepted.size() << " values=" << rewroteValues
            << " calls=" << rewroteCalls << " refused=" << (families.size() - accepted.size())
            << "\n";
-        for (Family &family : families) {
-            if (family.refuse.empty()) {
-                continue;
-            }
-            os << "DEFUN_VALUE refused='" << family.members.front()->type->toString()
-               << "' reason='" << family.refuse << "'\n";
-        }
+        reportRefused();
         for (Family *family : accepted) {
             os << "DEFUN_VALUE type='" << family->members.front()->type->toString() << "' ";
             if (family->variants.size() == 1) {
