@@ -1677,6 +1677,9 @@ struct EffectSite {
     /// copy and the node it came from; this is what tells them apart across the boundary, and it is
     /// read from the region the node sits in, which every frozen graph carries.
     uint64_t copySite    = 0;
+    /// The node itself, and its place in its own graph's order: what the consistency check below
+    /// reads to be sure a place it names is a place that holds the node.
+    camel::runtime::gc_node_ref_t node = camel::runtime::kInvalidNodeRef;
     std::vector<std::string> resources; // the ambient resources it names, sorted and deduplicated
 };
 
@@ -1819,6 +1822,7 @@ ProgramEffects collectEffects(const camel::runtime::Program &program) {
             site.graph    = order.id;
             site.position = position;
             site.copySite = inlinedCopySite(*graph, ref);
+            site.node     = ref;
             const camel::runtime::NodeResources resources =
                 camel::runtime::resourcesOf(program, *graph, ref);
             for (const camel::runtime::NodeAccess &access : resources.accesses) {
@@ -2013,25 +2017,68 @@ GraphPlace placeOfGraph(const ProgramEffects &effects, size_t graph) {
 /// question is asked of the outermost graph both of them reach, lifting the one whose graph is
 /// nested one level at a time. Only pairs the comparison above flagged are asked: an effect whose
 /// graph nothing holds (a program graph) stays where it is.
-bool orderedInProgram(const ProgramEffects &effects, EffectSite earlier, EffectSite later) {
+/// What one question of the order found: whether the one waits for the other, and, when it took a
+/// lift to ask, the graph the answer was read in and the call that lifted them there.
+struct OrderVerdict {
+    bool ordered    = false;
+    bool lifted     = false;
+    size_t graph    = 0;
+    uint64_t call   = 0; // source origin of the call the lift went through, 0 for none
+};
+
+/// Whether the place an effect is asked about is a place that holds a node: the effect's own graph
+/// must have its node at the position named, and a lift must land on the node that owns the graph.
+/// A place that does not is a bug in this check, not in the program, so it is caught here and not
+/// reported against a pass; debug builds stop on it.
+bool placeHoldsEffect(const ProgramEffects &effects, const EffectSite &site) {
+    const auto graph = effects.graphAt.find(site.graph);
+    if (graph == effects.graphAt.end()) {
+        return false;
+    }
+    const GraphOrder &order = effects.graphs[graph->second];
+    return site.position < order.nodes.size() && order.nodes[site.position] == site.node;
+}
+
+OrderVerdict orderedInProgram(const ProgramEffects &effects, EffectSite earlier, EffectSite later) {
+    OrderVerdict verdict;
     for (int step = 0; step < 64; ++step) {
         if (earlier.graph == later.graph) {
-            return waitsFor(effects, earlier, later);
+            if (!placeHoldsEffect(effects, earlier) || !placeHoldsEffect(effects, later)) {
+                return verdict; // the place does not hold the node: do not answer from it
+            }
+            verdict.ordered = waitsFor(effects, earlier, later);
+            verdict.graph   = earlier.graph;
+            return verdict;
         }
         const GraphPlace place = placeOfGraph(effects, later.graph);
         if (place.found) {
-            later.graph = place.graph;
+            const auto holder = effects.graphAt.find(place.graph);
+            const GraphOrder &order =
+                effects.graphs[holder->second];
+            if (place.position >= order.nodes.size()) {
+                return verdict;
+            }
+            verdict.lifted = true;
+            later.node     = order.nodes[place.position];
+            later.graph    = place.graph;
             later.position = place.position;
             continue;
         }
         const GraphPlace earlierPlace = placeOfGraph(effects, earlier.graph);
         if (!earlierPlace.found) {
-            return false;
+            return verdict;
         }
+        const auto holder = effects.graphAt.find(earlierPlace.graph);
+        const GraphOrder &order = effects.graphs[holder->second];
+        if (earlierPlace.position >= order.nodes.size()) {
+            return verdict;
+        }
+        verdict.lifted   = true;
+        earlier.node     = order.nodes[earlierPlace.position];
         earlier.graph    = earlierPlace.graph;
         earlier.position = earlierPlace.position;
     }
-    return false;
+    return verdict;
 }
 
 /// The one effect-order violation of a pass, as the text its diagnostic carries; empty when every
@@ -2063,24 +2110,28 @@ std::string effectOrderViolation(const ProgramEffects &before, const ProgramEffe
             const EffectSite &later       = writtenFirst ? second : first;
             const EffectSite &runsEarlier = writtenFirst ? runsFirst : runsSecond;
             const EffectSite &runsLater   = writtenFirst ? runsSecond : runsFirst;
-            if (!orderedInProgram(before, earlier, later)) {
+            const OrderVerdict written = orderedInProgram(before, earlier, later);
+            if (!written.ordered) {
                 continue; // no chain before the pass: the program did not put them in this order
             }
-            if (orderedInProgram(after, runsEarlier, runsLater)) {
+            const OrderVerdict kept = orderedInProgram(after, runsEarlier, runsLater);
+            if (kept.ordered) {
                 continue; // the program's order still holds, in one graph or through the calls
             }
             const std::string moves = describeMoves(earlier, runsEarlier, later, runsLater);
+            const char *writtenIn   = written.lifted ? " (read through the call that runs it)"
+                                                     : "";
             if (runsEarlier.graph != runsLater.graph) {
                 // The pass left them in two graphs, and the calls that hold these graphs do not
                 // make the one wait for the other either: the written order is gone.
                 return std::format(
                     "the effects on '{}' are not in the order the program wrote them: the program "
-                    "wrote {} before {} in graph {}, and this pass leaves them in two graphs where "
-                    "no call makes the one wait for the other any more: {} and {} ({})",
+                    "wrote {} before {}{}, and this pass leaves them in two graphs where no call "
+                    "makes the one wait for the other any more: {} and {} ({})",
                     resource,
                     describeEffect(earlier),
                     describeEffect(later),
-                    earlier.graph,
+                    writtenIn,
                     describeEffect(runsEarlier),
                     describeEffect(runsLater),
                     moves);
