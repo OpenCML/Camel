@@ -932,6 +932,17 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
+name = "type_expression_positions"
+desc = "Every type position takes a type expression, not only a type name (design principles 5.6): one program writes the computed type `Tangent<(float, ...)>` in each of them -- after `:` in a parameter, in a let and in a struct type, after `as`, inside `::<...>` at a call, as the `match type` subject, as a `case` pattern, after `fields`, inside a type function's angle brackets, and after `type X =`. A position later narrowed back to a name alone fails here instead of in the program that needed it."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/type_expression_positions.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "ok\n(1.0, ())\n(1.0, ())\ntrue\nfloat and unit\ntwo floats\n{ t: (1.0, 2.0), n: 3 }\n(0.0, 0.0)\n(4.0, 5.0)\ntrue\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "literal_head_type_expression"
 desc = "The head of a same-shape comprehension is a type position and takes a type expression: `Tangent<(float, int)> { ... }` names the computed type `(float, ())`, gives the kind and the field names, and each member takes the type of that round's value. The same head on two floats gives two floats. Before this change only a name path was looked for ahead, so the head of `Tangent<...> { ... }` was read as a value and the program did not build."
 kind = "behavior"
