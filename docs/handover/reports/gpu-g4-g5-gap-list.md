@@ -5,7 +5,10 @@
 > 旧的三个数是这样数错的：**旧数按表读，新数按节点读**（见文末「按节点重量」）。
 
 **两种量法**（五行以内）：按表量问的是"我们注册了什么"，按节点量问的是"程序里真的出现了什么"；
-两者不等时，**以节点为准**。今天不等的情形有两类：表里有名字而程序里没有节点带它（	ensor:sum_axis
+两者不等时，**以节点为准**。
+
+**缺口数必须带算式**：只给一个数字的账页，下一轮一定被读错。写法是三段相加、去重后写成一行，
+量不到的项写"未量"，不猜：缺口 = A（C2 节点级）+ B（transformer 节点级）+ C（array: 入口里未进表的名字，去重）。今天不等的情形有两类：表里有名字而程序里没有节点带它（	ensor:sum_axis
 对只调 rray.sum 的程序），以及程序里有节点而表里没有那条名字（rray:argmax_axis）。
 
 这是 G4 的"缺口为 0 才算完成"（`docs/handover/reports/gpu-g4-g5-plan.md` G4 第 1 条）的唯一账本。数由遍
@@ -146,3 +149,18 @@ operator of the backward pass (`broadcast_like`, which the device back end does 
 **第三个面**因此存在且未被账本覆盖：`stdlib/array.cml` 里那批函数（`sum`、`mean`、`min`、`max`、`argmax`、
 `argmin`、`sort`、`argsort`、`merge_sorted`）在程序里出现时，节点带的都是 `array:` 名字，账本的 21 条**与它们
 没有交集**。**缺口真实数 = 账本的 21 条（C2，节点级已确认）+ 这批 `array:` 入口中未进表的名字（未逐个量完）**。
+
+### 算式与两个未量项（本轮到此为止，不猜）
+
+`缺口 = A（C2 节点级，13）+ B（transformer 节点级，**未量**）+ C（`array:` 入口里未进表的名字，**未量**）`
+
+- **A = 13**：C2 已按节点确认（`TILES_CENSUS ops=21 device=8 gap=13`，jgir 标签逐条同名）。
+- **B 未量，且有具体原因**：账本引用的程序 `test/cases/perf/transformer_step.cml` 在**今天的主干上不通过
+  类型检查**（`NoMatchingFunction`：`adam(b, gradient, opt, lr)` 与 `<nn:adam>(params, grads, state, lr,
+  beta1?, beta2?, eps?)` 对不上），所以它的 13 条无法复现；要量必须先让那个程序与今天的 `nn:adam` 对齐，
+  那是另一笔（会改测试程序，不属于本lane）。
+- **C 未量**：`array:` 入口已知会带 `array:` 名字的至少有 `sum`、`mean`、`min`、`max`、`argmax`、`argmin`
+  （`stdlib/array.cml` 的 `#op('array:*_axis')` 六条），`sort`/`argsort`/`merge_sorted` 另有各自拼法；
+  九个要逐个跑一次 census 才成表，**这一轮没跑**。
+
+**所以本页今天能站住的只有 A = 13；26 这个数字既不是 A、也不是 A+B+C，它是"按表读 C2+transformer"的旧量法。**
