@@ -1,0 +1,24 @@
+/**
+ * A fault in the body of a generator is not an element: the pull that builds the element faults,
+ * and the stream ends there (design principles 5.4: a fault happens at the pull that produces that
+ * element, and design principles 3.9: a fault is not a value).
+ *
+ * The body hands out one element, then divides by zero on the next pull, and a third element is
+ * written after it. The consumer prints what it takes, so the reading is: `1` printed, then the
+ * runtime diagnostic, and neither the element written after the fault nor the statement the
+ * consumer writes after its loop runs. A machine that treated the fault as an element, or that went
+ * on to the next element, would print `1234` or `after`.
+ */
+
+func halves(): int.. sync {
+    yield 1
+    let z = 0
+    yield 10 / z
+    yield 1234
+}
+
+func main(): int sync {
+    loop acc = 0 for v in halves() do sync { println(v); acc + 1 }
+    println("after")
+    return 0
+}
