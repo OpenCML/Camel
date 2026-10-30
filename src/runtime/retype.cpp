@@ -283,7 +283,11 @@ GraphRetypeReport retypeDraft(
     // 4. The graph's own types: the signature its values have, the closure it was captured with,
     // and the form ports of its regions (the arguments of a loop part).
     if (FunctionType *func = draft.funcType()) {
-        Type *mapped = types.apply(func);
+        // A graph is a function: its signature stays a function type. A substitution that names it
+        // retypes what the signature mentions (one of its parameters, say), not the signature
+        // itself, which is what a caller whose type is the substituted one needs.
+        Type *mapped = options.leaveSignatures ? rebuildFunctionType(func, types)
+                                               : types.apply(func);
         if (mapped != func) {
             draft.setFuncType(static_cast<FunctionType *>(mapped));
             report.signature = true;

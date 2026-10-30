@@ -46,7 +46,6 @@
 #include "macro/macro.h"
 #include "pass_declarations.h"
 #include "pass_spec.h"
-#include "passes/opt/defun/defun.h"
 #include "passes/opt/defun/defun_value.h"
 #include "passes/opt/devirtualize/devirtualize.h"
 #include "passes/opt/generic/generic.h"
@@ -547,7 +546,6 @@ void registerCoreKernel(const char *name, PassMaker make, bool readsTags = false
 void registerCoreKernels() {
     registerCoreKernel("nop", makePass<NullGraphIRPass>());
     registerCoreKernel("macro", makePass<MacroRewritePass>());
-    registerCoreKernel("defunctionalize", makePass<DefunctionalizeRewritePass>());
     registerCoreKernel("defun_value", makePass<DefunValueRewritePass>());
     registerCoreKernel("gir", makeGraphVizPass({}));
     registerCoreKernel("rgir", makeGraphVizPass(GraphVizDumpConfig{.rich = true}));
