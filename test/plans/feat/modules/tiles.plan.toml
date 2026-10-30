@@ -1318,3 +1318,27 @@ for (const label of ['1.0', '0.0']) {
 }
 """
 timeout_ms = 30000
+
+[[tests]]
+name = "census.device_surface_has_no_gap"
+desc = "The operator surface of a program written against the capability table: four operators the device lowers and no operator outside the table, so the gap is empty and nothing is listed. A `#gpu` scope would hold this program whole."
+kind = "behavior"
+case = "../../../cases/modules/tiles/census.cml"
+args = ["${case}", "tiles::census"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+expect_stdout_exact = "TILES_CENSUS ops=4 device=4 gap=0\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
+name = "census.names_the_operator_without_a_device_program"
+desc = "One operator the device back end does not lower (`tanh`) is one gap line, named: the census counts the surface and lists every operator outside the table, which is the list the support surface has to empty."
+kind = "behavior"
+case = "../../../cases/modules/tiles/census_gap.cml"
+args = ["${case}", "tiles::census"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+expect_stdout_exact = "TILES_CENSUS ops=2 device=1 gap=1\nTILES_CENSUS_GAP tensor:tanh\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 30000

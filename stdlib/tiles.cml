@@ -50,3 +50,12 @@ export func device(): string! uses driver
 /// chosen at run time with `--devices`, never by a pass parameter.
 /// @fails error value `GpuScopeUnsupported` when a `#gpu` scope holds an operator the device cannot run (the error names the operator and the scope)
 export func compile::<F>(f: F): F! uses driver when is_function::<F>()
+
+/// Prints the operator surface of the program and consumes it: one `TILES_CENSUS` line with the
+/// number of surface operators, how many the device's capability table names and how many it does
+/// not, then one `TILES_CENSUS_GAP` line per operator no device program exists for. The surface is
+/// what a `#gpu` scope asks the device for (the `tensor` and `nn` modules); a `#gpu` scope refuses
+/// every operator of the gap, so the list is the work the support surface has left. It reads the
+/// program where the pipeline stands, which is why `std::macro` is written before it when a derived
+/// graph's operators are to be counted.
+export func census::<F>(f: F): F! when is_function::<F>()
