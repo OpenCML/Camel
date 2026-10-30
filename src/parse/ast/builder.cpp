@@ -893,10 +893,11 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     // the module is named explicitly, by the diagnostics the module is being read with.
     if (diags_ != nullptr && sides[0]) {
         std::string shape;
-        std::string head   = leftHeadOf(sides[0], shape);
+        uint32_t arity     = 0;
+        std::string head   = leftHeadOf(sides[0], shape, arity);
         const auto range   = extractTokenRangeFromContext(context);
         collectRuleHead(
-            diags_->moduleName(), std::move(head), name, std::move(shape), range.start, range.end);
+            diags_->moduleName(), std::move(head), name, std::move(shape), arity, range.start, range.end);
     }
     const bool twoWay = body->has(TK::Equiv);
     const auto params = context->get<cst::ParentParams>();

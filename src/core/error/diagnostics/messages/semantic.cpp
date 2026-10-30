@@ -1784,8 +1784,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::DuplicateRuleForOperator,
             {
                 "DuplicateRuleForOperator",
-                "The rule '{0}' and the rule '{1}' both have '{2}' as the head of their left side, and one ruleset has one rule per operator.",
-                "A transform looks up the rules of a primitive by the head of their left side, so a second rule under the same head has no way to be chosen: which of the two applies would be decided by the order they are written in, and the program would mean different things depending on where a rule sits. Merge the two into one rule whose right side covers both cases, or give one of them a left side with a different head.",
+                "The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side, and one ruleset has one rule per operator.",
+                "A transform looks up the rules of a primitive by the operator its left side is written with and the number of operands it takes, so a second rule under the same operator with the same number of operands has no way to be chosen: which of the two applies would be decided by the order they are written in, and the program would mean different things depending on where a rule sits. Merge the two into one rule whose right side covers both cases, or give one of them a left side with a different operator -- and remember that `-x` and `x - w` are two primitives, not one.",
             },
         },
         {

@@ -269,12 +269,18 @@ std::span<const gc_node_ref_t> &initSlot(DraftNodeInit &init, DraftEdgeSlot slot
 } // namespace
 
 std::span<std::byte> DraftNodeView::payload(DraftNode *node) {
-    ASSERT(node != nullptr, "Draft payload view requires a non-null node.");
+    GUARD(
+        node != nullptr,
+        std::string("taking the payload view of a null draft node: there is no header to say how many "
+                    "payload bytes it has"));
     return {tailBytes(node), node->header.payloadBytes};
 }
 
 std::span<const std::byte> DraftNodeView::payload(const DraftNode *node) {
-    ASSERT(node != nullptr, "Draft payload view requires a non-null node.");
+    GUARD(
+        node != nullptr,
+        std::string("taking the payload view of a null draft node: there is no header to say how many "
+                    "payload bytes it has"));
     return {tailBytes(node), node->header.payloadBytes};
 }
 
@@ -780,15 +786,31 @@ gc_node_ref_t GraphDraft::translateNodeRef(
     if (sourceRef == kInvalidNodeRef) {
         return kInvalidNodeRef;
     }
-    ASSERT(sourceRef < sourceToDraft.size(), "Source node ref is out of decode map range.");
+    GUARD(
+        sourceRef < sourceToDraft.size(),
+        std::format(
+            "translating source node {} of a graph being decoded, but the map built from that graph "
+            "covers only {} of its nodes",
+            sourceRef,
+            sourceToDraft.size()));
     const gc_node_ref_t translated = sourceToDraft[sourceRef];
-    ASSERT(translated != kInvalidNodeRef, "Source node ref was not mapped during draft decode.");
+    GUARD(
+        translated != kInvalidNodeRef,
+        std::format(
+            "translating source node {} of a graph being decoded: the map has an entry for it, but "
+            "the entry is kInvalidNodeRef, so it was never mapped",
+            sourceRef));
     return translated;
 }
 
 size_t GraphDraft::payloadBytesForSourceNode(const GCGraph *graph, gc_node_ref_t sourceRef) {
     const GCNode *sourceNode = graph->node(sourceRef);
-    ASSERT(sourceNode != nullptr, "Draft decode encountered a null runtime node.");
+    GUARD(
+        sourceNode != nullptr,
+        std::format(
+            "decoding source node {} of a graph being decoded, but that graph has no node there "
+            "(its payload size is being read)",
+            sourceRef));
     if (sourceNode->kind == GCNodeKind::Brch) {
         return sizeof(DraftBrchPayload);
     }
@@ -800,7 +822,12 @@ DraftNode *GraphDraft::createDecodedNode(
     const std::vector<gc_node_ref_t> &sourceToDraft) {
     ++mutations_;
     const GCNode *sourceNode = graph->node(sourceRef);
-    ASSERT(sourceNode != nullptr, "Draft decode encountered a null source node.");
+    GUARD(
+        sourceNode != nullptr,
+        std::format(
+            "decoding source node {} of a graph being decoded, but that graph has no node there "
+            "(its kind and inputs are being read)",
+            sourceRef));
 
     const auto normInputs  = graph->normInputsOf(sourceRef);
     const auto withInputs  = graph->withInputsOf(sourceRef);
@@ -928,7 +955,13 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const Program &program, const GCG
     draft->decoded_ = true;
     draft->base_    = graph;
     for (gc_node_ref_t sourceRef = 0; sourceRef < graph->nodeCount(); ++sourceRef) {
-        ASSERT(sourceRef < sourceToDraft.size(), "Runtime node ref is out of draft decode range.");
+        GUARD(
+        sourceRef < sourceToDraft.size(),
+        std::format(
+            "decoding source node {} into the draft, but the map being filled covers only {} nodes: "
+            "the graph grew while it was being decoded",
+            sourceRef,
+            sourceToDraft.size()));
         const gc_node_ref_t draftId = static_cast<gc_node_ref_t>(draft->nodesById_.size());
         sourceToDraft[sourceRef]    = draftId;
         draft->draftIdsBySourceRef_[sourceRef] = draftId;
@@ -1099,8 +1132,19 @@ DraftNode *GraphDraft::rebuildNode(gc_node_ref_t id, const DraftNodeInit &init) 
 
 void GraphDraft::replaceNodeStorage(gc_node_ref_t id, DraftNode *nodePtr) {
     ++mutations_;
-    ASSERT(id < nodesById_.size(), "Draft node storage replacement id is out of range.");
-    ASSERT(nodePtr != nullptr, "Draft node storage replacement requires a non-null node.");
+    GUARD(
+        id < nodesById_.size(),
+        std::format(
+            "replacing the storage of draft node {}: this graph holds only {} nodes, so the id is "
+            "out of range",
+            id,
+            nodesById_.size()));
+    GUARD(
+        nodePtr != nullptr,
+        std::format(
+            "replacing the storage of draft node {} with null: the id is in range, but there is no "
+            "node to put there",
+            id));
     nodePtr->header.owner  = this;
     nodePtr->header.selfId = id;
     nodesById_[id]         = nodePtr;
@@ -2103,7 +2147,12 @@ gc_node_ref_t GraphDraft::materializeStaticValue(
 void GraphDraft::setStaticSlot(size_t index, slot_t value) {
     requireOneWriting("setStaticSlot");
     ++mutations_;
-    ASSERT(index < staticSlots_.size(), "Draft static slot index is out of range.");
+    GUARD(
+        index < staticSlots_.size(),
+        std::format(
+            "writing static slot {} of a draft that declares {} static slots",
+            index,
+            staticSlots_.size()));
     touchRefs();
     staticSlots_[index] = value;
 }

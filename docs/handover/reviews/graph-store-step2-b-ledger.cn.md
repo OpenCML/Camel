@@ -804,3 +804,119 @@ HANDLE_PROBE refused: InvalidArgument
 **B 的顺序**：**3 处核实（本节，已完成，不改代码）→ 16 个只读前向的签名 → 8 个只写目标 → 最后 4 个交界。**
 
 **三个数**：**0 / 0 / 56**（本轮只核实，未改代码）。**四个数：57 / 432 / 3 / 4（未变）。**
+
+## 39. B 第一笔：`pullback` 22 个参数一次转完，**并说明为什么"读批／写批"分不成两笔**（`1ba2a53af`）
+
+**计划与它为什么不成立**：原打算"先 16 个只读前向，再 8 个只写目标"。**做不到**——
+`addOper`／`addAggregate` 这些**造节点**的函数，自己要先问 `typeOf`／`kindOf`／`regionMember`（它们能造什么取决于读到了什么），
+所以**在一边点名事务，另一边同一句话里也得点名**。**读批与写批在调用图上是一个连通块，不是两层。**
+（`ref`／`checkGradientType`／`visitFill`／`visitForward` 那 4 个交界仍可最后做——它们是被调用者，不是调用者。）
+
+**真正需要一次一笔的是 `Backward::run`**：**它的 48 次 `forward()` 一次没动**——那是同一个方法里 48 个"这张图只读"的论据，
+不是机械替换。**它留作单独一笔。**（这一笔只改了 `run` 里调用那些已转函数的**实参**，十几行。）
+
+**转的时候必须区分的四个地址空间**（这就是 A 表那张图的用处）：
+
+| 位置 | 事务从哪来 |
+|---|---|
+| `ForwardRewrite` 成员 | `transaction_` |
+| `Backward` 成员读 | `forwardTransaction_` |
+| `Backward` 成员写 | `targetTransaction_` |
+| 自由函数 | 参数 `transaction` |
+| `Engine::build` 里那几处 | `*pending.source`（前向）、`*pullbackOwner`（回传图） |
+
+**三处不是这一族、仍然收草稿的东西**（转的时候被编译器点名，已还原）：
+`ungated()`（别的模块的助手）、`LoopDraftView` 的构造（**它是一张草稿的视图**）、`rt::fallBackToCopyingAppend`（运行时入口）。
+
+**结果**：**`modules/autodiff/pullback.cpp` 里 `GraphDraft` 的拼写归零**（`git grep -c -w GraphDraft` 退出码 1）。
+
+**三个数**：**消失的参数 22 个**；**删掉的行数 217**；**保留 0 个**。
+
+**四个数：56 / 408 / 3 / 4**（`432 → 408`，**files 57 → 56**：`modules/autodiff` 整族清零）。
+
+## 40. `run` 那一笔：32 处读，没有一处不是"只读"（`55fe8ccd0`）
+
+**A 表里那个 48 是转换前的数**：`1ba2a53af` 里已有 16 处变成"传给已转函数的实参"，**剩 32 处是 `run` 自己的直接读**，这一笔全收进一个 const 视图。
+
+**逐处看过的结论**：32 处只有六种表达式——`payloadOf`、`normInputsOf`、`withInputsOf`、`armRegionOf`、`nodeOrigin`、`program()`；
+另外 6 处 `LoopDraftView(*forward.program(), forward, node)` 是**把图当视图传**（构造一个只读视图），不是写。
+**没有一处需要可写句柄。** **"48 个论据"里没有一个反例。**
+
+**三个数（这一笔）**：**消失的参数 0 个**（`run` 本来就不收草稿——它收的是自己的成员）；**改动的行数 32**；**保留 0 个**。
+
+### b6 的"永远不收"清单（三条，各一句为什么是边界而不是漏网）
+
+| 名字 | 为什么它是边界 |
+|---|---|
+| `ungated()` | 它在**别的模块**里，收的是草稿；这里只是调用者。**改它属于那一族的工作，不属于 pyllback 的签名。** |
+| `LoopDraftView` 的构造 | **它自己就是"一张草稿的视图"**——视图要的是草稿，不是事务；收事务的应该是造视图的人。 |
+| `rt::fallBackToCopyingAppend` | **运行时入口**，调用方是 pass，它拿的是"要追加的那张图"，收事务会把运行时的边界掀开。 |
+
+**记住它们不是妥协**：**这三处是"事务之外还允许存在草稿"的全部理由**，b6 要删掉 `GraphDraft` 时，得先回答这三条。
+
+## 41. `passes/` + `core/tags` 那 22 处：转掉的、和"不该转"的（`3a128f94e`）
+
+**先给清单（一行一处）**：
+
+| # | 位置 | 那个函数收了什么 | 调用点上能不能拿事务 |
+|---|---|---|---|
+| 1 | `core/tags.h:55` | 前置声明 `class GraphDraft;` | —（声明） |
+| 2 | `core/tags.h:249` / `tags.cpp:575` | `factsOf(const GraphDraft &, node)` | **不收**：见下方"边界" |
+| 3 | `core/tags.h:256` / `tags.cpp:584` | `permissionsOf(...)` | **不收**：同上 |
+| 4 | `core/tags.h:264` / `tags.cpp:594` | `effectivePermissions(...)` | **不收**：同上 |
+| 5 | `core/tags.h:274` / `tags.cpp:619` | `declaresIndependentElements(const GraphDraft &)` | **不收**：同上 |
+| 6 | `core/tags.h:281` / `tags.cpp:637` | `markIndependentElements(GraphDraft &, attr)` | **不收**：同上 |
+| 7 | `passes/opt/generic/algebra.cpp:154` | `constant<T>(const GraphDraft &, ...)` | **能**（`simplify` 已收事务）→ **转** |
+| 8 | `passes/opt/generic/rewrite.h:26` | `using camel::runtime::GraphDraft;` | 第 9 条转完即删 → **删** |
+| 9 | `passes/opt/generic/rewrite.h:34` | `isComputedAfter(const GraphDraft &, ...)` | **能**（`replaceNode`、`pruneBranch` 都有事务）→ **转** |
+| 10 | `passes/opt/inline/engine.cpp:118` | **注释**里的 `GraphDraft::calleeGraphOf` | → **改写成"草稿的 `calleeGraphOf`"** |
+| 11 | `passes/opt/inline/engine.cpp:298` | `upstreamOf(const GraphDraft &, ...)` | **能**（内联轮次有事务）→ **转** |
+| 12 | `passes/opt/inline/engine.cpp:324` | `isDraftBranchArmHead(const GraphDraft &, ...)` | **能** → **转** |
+| 13 | `passes/test/control.cpp:19` | `node(GraphDraft &, {...})`（37 个调用点） | **能**（每个用例都有 `owner`）→ **转** |
+| 14 | `passes/test/fault.cpp:70`、`:85` | 两个 lambda `(GraphDraft &draft, brch, join)` | **能**（`breakFirstBranchOfMain` 里 `session.edit(owner)` 就是事务）→ **转** |
+| 15 | `passes/test/resources.cpp:151`、`:157`、`:162`、`:168` | 三个 lambda + `make_unique<GraphDraft>()` | **留**：这一族自己**造**草稿（构造出来的不是事务给的），要动它得先回答"谁能造草稿"——那不是这一片的判据 |
+| 16 | `passes/test/writings.cpp:216` | `GraphDraft::WritingScope scope(draft)` | **留**：它是**类型的嵌套作用域守卫**，不是参数 |
+| 17 | `passes/test/anchor.h:24`、`:36` | `anchorNode(GraphDraft &)`、`blankNode(...)` | **留**：33 个调用点散在 7 个测试文件里，是**另一片**（测试 pass 一族） |
+
+**"为什么 `core/tags` 不该转"——这一条是这张表里最重要的**：
+
+`camel/core/tags.h` **已经把同一个函数写了两遍**：一遍收 `const GraphDraft &`，一遍收 `const GCGraph &`。
+**因为它们是两个不同的类**，访问器不同；**而事务交出来的正是草稿**——所以收草稿的那一遍**恰好就是事务的调用者需要的那一遍**。
+**再加一个收事务的重载，只会多一个拼写，不会多一条保证。** 这里剩下的是**"草稿上的只读 API"**——**是边界，不是漏网。**
+
+**这一片的结果**：`files 56 → 51`，`references 408 → 399`。
+
+**三个数**：**消失的参数 9 个**（第 7、9、11、12、13、14 六项 + `using` 一行 + 注释一处不计数，实为 9 个参数）；
+**删掉的行数 73**；**保留 13 个**（表里标"留"与"不收"的）。
+
+**四个数：51 / 399 / 3 / 4。**
+
+## 42. `compile/gir` 收口：**造草稿的地方只剩一处，而它收的是事务**（`49716f337`）
+
+**每个点先回答"造还是用"**：
+
+| 位置 | 造还是用 | 改成了什么 |
+|---|---|---|
+| `builder_control.cpp:132` | **用**（读一张已有的草稿） | `const auto &draft = *nodeDraftOf(node);` |
+| `builder_helpers.h:509` | **用** | `const auto *draft = nodeDraftOf(node);` |
+| `builder_operators.cpp:4021` | **用** | `auto *draft = nodeDraftOf(a);` |
+| `builder.cpp:1424` `InsertRegionScope` | **用它，而且要活过语句** | **改收 `runtime::GraphTransaction *transaction`**——它自己的析构里用 `transaction->edit()` |
+
+**那句区别（下一人会问的）**：**这个 builder 不造草稿，它用一张**——唯一造草稿的是 `DraftGraphBuilder` 的构造函数，
+而它**本来就收 `std::shared_ptr<GraphTransaction>`**。**所以"造草稿的地方也能收事务"的答案是：造的时候收事务（那是所有者），
+用的时候收它借来的那张草稿；而一个要活过语句的作用域，收的必须是所有者，不是被它借出去的东西。**
+
+**`compile/gir` 现在剩下的**：`nodeDraftOf` 这个访问器本身与两处 `unordered_map<const GraphDraft *, ...>`（`draftOwners` 的键）
+——**它们是"草稿就是我的键"这一类，不是参数**。（`nodeDraftOf` 的 66 个调用点仍用它，那是下一步的事。）
+
+**三个数**：**消失的拼写 4 处（参数 0 个——这四处本来就不是参数，是借用）**；**删掉的行数 22**；**保留 0 个**。
+
+**四个数：47 / 395 / 3 / 4。**
+
+### ⚠ `writings` 那 1 个：**撞车了，没动**
+
+`origin/develop` **比本车道领先 121 个提交**，其中**两笔正好在 `writings` 上**：
+* `1e70b99ac`（02:14）"let the writings open the transaction a draft alone has no owner for"——改了 `writings.h`／`writings.cpp`／`graph_txn.*`
+* `01ea89d6f`（02:15）"let the tests hand the writings a draft, as they did before"——改了 `test/writings.cpp` 等四个文件
+
+**所以"`writings` 那 1 个"正被另一条车道在做。按规矩：报，不自己合。** 要先把这个车道快进到 develop 再决定。

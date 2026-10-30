@@ -16,7 +16,8 @@
 namespace {
 using namespace camel::runtime;
 
-gc_node_ref_t node(GraphDraft &draft, std::initializer_list<gc_node_ref_t> predecessors = {}) {
+gc_node_ref_t node(GraphTransaction &transaction, std::initializer_list<gc_node_ref_t> predecessors = {}) {
+    auto &draft = transaction.edit();
     return draft.addNode(
         DraftNodeInit{
             .kind       = GCNodeKind::Oper,
@@ -31,8 +32,8 @@ void check(bool condition, const char *message) {
 void chainAndBudget() {
     auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
     auto &draft = owner->edit();
-    const auto a = node(draft), b = node(draft, {a}), c = node(draft, {b});
-    const auto d = node(draft, {a, c});
+    const auto a = node(*owner), b = node(*owner, {a}), c = node(*owner, {b});
+    const auto d = node(*owner, {a, c});
     check(!hasControlDependency(*owner, a, c, 0), "zero-budget query must be conservative");
     check(reduceControlDependencies(*owner, 0) == 0, "zero-budget reduction changed edges");
     check(reduceControlDependencies(*owner, 1) == 0, "incomplete search removed an unproven edge");
@@ -49,19 +50,19 @@ void chainAndBudget() {
 void mandatoryDataPaths() {
     auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
     auto &draft = owner->edit();
-    const auto a = node(draft), b = node(draft);
+    const auto a = node(*owner), b = node(*owner);
     draft.setNormInputs(b, std::span<const gc_node_ref_t>(&a, 1));
-    const auto c = node(draft, {a, b});
+    const auto c = node(*owner, {a, b});
     check(reduceControlDependencies(*owner) == 1, "mandatory data path was not used as proof");
     check(
         draft.ctrlInputsOf(c).size() == 1 && draft.ctrlInputsOf(c).front() == b,
         "data/control path lost its required predecessor");
-    const auto d = node(draft, {a});
+    const auto d = node(*owner, {a});
     draft.setWithInputs(d, std::span<const gc_node_ref_t>(&b, 1));
     check(
         reduceControlDependencies(*owner) == 1 && draft.ctrlInputsOf(d).empty(),
         "context data path did not cover a single control");
-    const auto e = node(draft);
+    const auto e = node(*owner);
     draft.setNormInputs(e, std::span<const gc_node_ref_t>(&a, 1));
     check(!appendControlDependency(*owner, a, e), "rewrite added a direct data-covered control");
     const auto call = draft.addNode(
@@ -87,14 +88,14 @@ void mandatoryDataPaths() {
 void conditionalDataIsNotMandatory() {
     auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
     auto &draft = owner->edit();
-    const auto a = node(draft), b = node(draft);
+    const auto a = node(*owner), b = node(*owner);
     const gc_node_ref_t alternatives[] = {a, b};
     const auto join                    = draft.addNode(
         DraftNodeInit{
             .kind       = GCNodeKind::Join,
             .withInputs = alternatives,
         });
-    const auto user = node(draft, {a, join});
+    const auto user = node(*owner, {a, join});
     draft.setNormInputs(user, std::span<const gc_node_ref_t>(&join, 1));
     check(reduceControlDependencies(*owner) == 1, "completed JOIN was not an endpoint proof");
     check(
@@ -104,14 +105,14 @@ void conditionalDataIsNotMandatory() {
 void dataBudget() {
     auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
     auto &draft = owner->edit();
-    const auto first = node(draft);
+    const auto first = node(*owner);
     auto previous    = first;
     for (size_t i = 0; i < 300; ++i) {
-        const auto current = node(draft);
+        const auto current = node(*owner);
         draft.setNormInputs(current, std::span<const gc_node_ref_t>(&previous, 1));
         previous = current;
     }
-    const auto last = node(draft, {first});
+    const auto last = node(*owner, {first});
     draft.setNormInputs(last, std::span<const gc_node_ref_t>(&previous, 1));
     check(
         reduceControlDependencies(*owner) == 0 && draft.ctrlInputsOf(last).size() == 1,
@@ -120,7 +121,7 @@ void dataBudget() {
 void branchBoundaries() {
     auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
     auto &draft = owner->edit();
-    const auto a = node(draft);
+    const auto a = node(*owner);
     DraftBrchPayload body{.armCount = 1};
     std::vector<std::byte> bytes(sizeof(body));
     std::memcpy(bytes.data(), &body, sizeof(body));
@@ -130,10 +131,10 @@ void branchBoundaries() {
             .payload    = bytes,
             .ctrlInputs = std::span<const gc_node_ref_t>(&a, 1),
         });
-    const auto other = node(draft, {a});
-    const auto head  = node(draft, {branch, a, other});
+    const auto other = node(*owner, {a});
+    const auto head  = node(*owner, {branch, a, other});
     draft.setNormInputs(head, std::span<const gc_node_ref_t>(&other, 1));
-    const auto tail = node(draft, {a, head});
+    const auto tail = node(*owner, {a, head});
     draft.setNormInputs(tail, std::span<const gc_node_ref_t>(&head, 1));
     (void)tail;
     (void)reduceControlDependencies(*owner);
@@ -169,7 +170,7 @@ void denseDataChain() {
     auto &draft = owner->edit();
     std::vector<gc_node_ref_t> predecessors;
     for (size_t i = 0; i < 128; ++i) {
-        const auto current = node(draft);
+        const auto current = node(*owner);
         draft.setCtrlInputs(current, predecessors);
         if (!predecessors.empty()) {
             draft.setNormInputs(current, std::span<const gc_node_ref_t>(&predecessors.back(), 1));
@@ -182,11 +183,11 @@ void forwardingGateConsumers() {
     using camel::passes::generic::bypassValueGate;
     auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
     auto &draft = owner->edit();
-    const auto value = node(draft), wait = node(draft);
+    const auto value = node(*owner), wait = node(*owner);
     const auto gate = draft.addGateNode(nullptr);
     draft.setNormInputs(gate, std::span(&value, 1));
     draft.setCtrlInputs(gate, std::span(&wait, 1));
-    const auto reader = node(draft), control = node(draft, {gate});
+    const auto reader = node(*owner), control = node(*owner, {gate});
     draft.setNormInputs(reader, std::span(&gate, 1));
     size_t budget = 0;
     check(!bypassValueGate(*owner, gate, budget), "zero budget bypassed a gate");
@@ -213,10 +214,10 @@ void forwardingGateConsumers() {
     draft.setNormInputs(barrier, std::span(&value, 1));
     std::vector<gc_node_ref_t> waits;
     for (size_t i = 0; i < 4; ++i)
-        waits.push_back(node(draft));
+        waits.push_back(node(*owner));
     draft.setCtrlInputs(barrier, waits);
     for (size_t i = 0; i < 4; ++i) {
-        const auto user = node(draft);
+        const auto user = node(*owner);
         draft.setNormInputs(user, std::span(&barrier, 1));
     }
     check(!bypassValueGate(*owner, barrier, budget), "shared barrier caused excess edge growth");
@@ -224,7 +225,7 @@ void forwardingGateConsumers() {
     const auto output = draft.addGateNode(nullptr);
     draft.setNormInputs(output, std::span(&value, 1));
     draft.setCtrlInputs(output, std::span(&wait, 1));
-    const auto outputReader = node(draft);
+    const auto outputReader = node(*owner);
     draft.setNormInputs(outputReader, std::span(&output, 1));
     draft.setOutputNode(output);
     check(!bypassValueGate(*owner, output, budget), "output anchor lost its identity");
@@ -235,12 +236,12 @@ void forwardingGateConsumers() {
 void manyReaders() {
     auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
     auto &draft = owner->edit();
-    const auto producer = node(draft);
+    const auto producer = node(*owner);
     constexpr size_t kReaders = 200000;
     std::vector<gc_node_ref_t> readers;
     readers.reserve(kReaders);
     for (size_t i = 0; i < kReaders; ++i) {
-        const auto reader = node(draft);
+        const auto reader = node(*owner);
         draft.appendInput(DraftEdgeKind::Data, reader, producer);
         // Reading it twice does not make it two readers.
         if (i % 3 == 0) {
@@ -280,12 +281,12 @@ void syncChainOrdering() {
     {
         auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
         auto &draft = owner->edit();
-        const auto tail  = node(draft);
-        const auto value = node(draft);
+        const auto tail  = node(*owner);
+        const auto value = node(*owner);
         const auto gate  = draft.addGateNode(camel::core::type::Type::Float32());
         draft.setNormInputs(gate, std::span<const gc_node_ref_t>(&value, 1));
         check(draft.setSyncPredecessor(gate, tail), "a gate did not take the chain's tail");
-        const auto reader = node(draft);
+        const auto reader = node(*owner);
         draft.setNormInputs(reader, std::span<const gc_node_ref_t>(&gate, 1));
         const auto sources = camel::passes::generic::orderedSources(*owner, reader);
         check(
@@ -297,12 +298,12 @@ void syncChainOrdering() {
     {
         auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
         auto &draft = owner->edit();
-        const auto tail  = node(draft);
-        const auto value = node(draft);
+        const auto tail  = node(*owner);
+        const auto value = node(*owner);
         const auto plain = draft.addNode(DraftNodeInit{.kind = GCNodeKind::Copy});
         draft.setNormInputs(plain, std::span<const gc_node_ref_t>(&value, 1));
         check(draft.setSyncPredecessor(plain, tail), "a node did not take the chain's tail");
-        const auto reader = node(draft);
+        const auto reader = node(*owner);
         draft.setNormInputs(reader, std::span<const gc_node_ref_t>(&plain, 1));
         const auto sources = camel::passes::generic::orderedSources(*owner, reader);
         check(
@@ -315,10 +316,10 @@ void syncChainOrdering() {
     {
         auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
         auto &draft = owner->edit();
-        const auto head = node(draft);
-        const auto next = node(draft);
+        const auto head = node(*owner);
+        const auto next = node(*owner);
         check(draft.setSyncPredecessor(next, head), "a node did not take a sync predecessor");
-        const auto user             = node(draft);
+        const auto user             = node(*owner);
         const gc_node_ref_t ordered[] = {head, next};
         draft.setOrderInputs(user, ordered);
         check(reduceOrderDependencies(*owner) == 1, "the pass did not read the sync chain");
@@ -344,9 +345,9 @@ void documentOrdering() {
     {
         auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
         auto &draft = owner->edit();
-        const auto read = node(draft), step = node(draft);
+        const auto read = node(*owner), step = node(*owner);
         draft.setNormInputs(step, std::span<const gc_node_ref_t>(&read, 1));
-        const auto write = node(draft);
+        const auto write = node(*owner);
         draft.setNormInputs(write, std::span<const gc_node_ref_t>(&step, 1));
         draft.setOrderInputs(write, std::span<const gc_node_ref_t>(&read, 1));
         check(reduceOrderDependencies(*owner) == 0, "the pass dropped a single order edge");
@@ -358,9 +359,9 @@ void documentOrdering() {
     {
         auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
         auto &draft = owner->edit();
-        const auto first = node(draft), step = node(draft);
+        const auto first = node(*owner), step = node(*owner);
         draft.setNormInputs(step, std::span<const gc_node_ref_t>(&first, 1));
-        const auto next = node(draft);
+        const auto next = node(*owner);
         draft.setNormInputs(next, std::span<const gc_node_ref_t>(&step, 1));
         check(draft.setSyncPredecessor(next, first), "a node did not take a sync predecessor");
         check(reduceOrderDependencies(*owner) == 0, "the pass touched a sync edge");
@@ -372,7 +373,7 @@ void documentOrdering() {
     {
         auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
         auto &draft = owner->edit();
-        const auto first = node(draft), second = node(draft, {first});
+        const auto first = node(*owner), second = node(*owner, {first});
         check(draft.setSyncPredecessor(second, first), "a node did not take a sync predecessor");
         check(reduceDocumentOrdering(*owner) == 0, "a direct pair was reduced away");
         check(

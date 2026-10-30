@@ -6269,11 +6269,15 @@ module `stdlib/ckpt.cml` and stays that, so the transform takes the other word a
 second name for a reader to disambiguate. It is not implemented yet: the name is not a value, and
 a call to it is refused like any other name that does not resolve.
 
-`stop_gradient` marks a value as a constant. A transform's local rules are the tags on a
-declaration and the `rule` declarations below: the tags give a function's own rules
+`stop_gradient` marks a value as a constant, and the mathematics of the local rules is written
+here, where the library keeps one statement of it: `add_tangent` and its siblings are the tangent
+of a primitive, `add_cotangent` and its siblings its cotangent. The rules themselves -- the
+declarations that attach those statements to a primitive -- live in the ruleset modules, which is
+what a transform reads: `stdlib/rulesets/jvp.cml` for the forward rules and
+`stdlib/rulesets/transpose.cml` for the transposes. A tag gives a function's own rules
 (`#jvp(rule)` forward, `#transpose(rule)` for a linear function, `#vjp(rule)` the pullback) and
-are read back by structure (`graph::rule_of`); a primitive's rules are the rules whose pattern
-is the primitive, one family at a time, starting with the scalar arithmetic.
+is read back by structure (`graph::rule_of`); a primitive's rules are the ruleset's, by the
+operator of their left side.
 
 #### `grad`
 

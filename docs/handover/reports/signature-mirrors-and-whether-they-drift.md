@@ -31,18 +31,45 @@
 - **量了**：镜像里每一条 `func <名字>`，(a) **没有**出现在 `stdlib/<模块>.cml` 的 `#op` 声明里——即镜像没有
   登记一个"其实已经声明化"的名字；(b) 这个名字在 `modules/<模块>` 的 C++ 源里出现——即镜像没有登记一个
   模块里根本不存在的名字。
-- **没量**：① **签名的类型对不对**（镜像写的参数与返回类型，与 C++ 注册的算子类型是否一致）——那要算子表，
-  只能由 `--verify-ops` 读；② **反方向的完整性**（某个算子既没声明、也没登记进镜像，`--verify-ops` 看不见它）。
+- **没量（这张表本身没量）**：① 签名里写的**参数与返回类型逐字是否等于**算子注册的类型；② **反方向的完整性**
+  （某个算子既没声明、也没登记进镜像）。这两样要算子表。
 
-`--verify-ops` 这一轮**没跑成**，两次读数都记在这里，免得下一个人再撞：本机 `out/latest` 没有
-`build-info.json`（拒绝量不是本树的安装）；主机上跑它时脚本拉起的 `camel` 报
-`GLIBCXX_3.4.35/3.4.36 not found`（`$HOME/camel-eval/conda/envs/clang/lib` 有 3.4.35，但子进程没拿到
-`LD_LIBRARY_PATH`）。**所以上面那张表是"名字与归属"的结论，不是"类型一致"的结论。**
+## 那张表之外：`--verify-ops` 真的跑起来了，550 条
+
+镜像与算子表的一致性由 `scripts/stdlib-reference.mjs --verify-ops` 比，它在**快速闸里本来就在跑**，名字是
+`registry.signatures_match`，这一晚每次全量闸都是 `[PASS]`（它比的是：**表中每个注册的重载都被声明、每条声明
+都对着一个注册的重载、参数个数一致、`@pure`/`@effect` 与声明的纯度一致、签名文件的条目不带函数体**）。手工跑一次
+的读数：
+
+```
+$ CAMEL_TEST_EXTRA_LIB_DIRS=$HOME/camel-eval/conda/envs/clang/lib \
+    node scripts/stdlib-reference.mjs --verify-ops
+the declarations agree with the 550 registered operator overloads
+```
+
+**550 条重载，全部一致。** 所以第 34–35 行说的"没量"只是**这张表**没量类型逐字；镜像与算子表的一致性今天由闸守着。
+
+**为什么手工跑会失败、以及修的是什么。** 手工跑时报 `GLIBCXX_3.4.35/3.4.36 not found`：脚本拉起 `camel` 时
+只传了 `CAMEL_HOME`，没有把"安装需要更新的 `libstdc++`"这件事传下去；而闸里的 `test.js` 会给子进程加上
+`CAMEL_TEST_EXTRA_LIB_DIRS` 里的库目录，所以同一个二进制在闸里跑得动、手工跑不动。修的是**启动器传环境**这一段：
+`scripts/stdlib-reference.mjs#installEnvironment` 现在把 `CAMEL_TEST_EXTRA_LIB_DIRS`（`:` 分隔）加到子进程的
+`LD_LIBRARY_PATH` 前面，`--verify-ops` 与文档示例两个 spawn 都走它。对照读数（同一条命令、去掉变量）：
+
+```
+$ env -u LD_LIBRARY_PATH -u CAMEL_TEST_EXTRA_LIB_DIRS node scripts/stdlib-reference.mjs --verify-ops
+camel inspect --ops failed (exit 1): ...GLIBCXX_3.4.36 not found...
+```
 
 ## 判据（写下来，免得下次重新想）
 
 > **一个不参与编译的镜像文件，唯一的风险是漂移；它今天可信，不等于明天可信。** 要么每次声明化之后比一次，
 > 要么让它从真声明生成。
+
+> **一项检查跑不起来时，正确的状态是红，不是跳过**——跳过会让人以为它通过了。
+
+**今晚这条检查没有被当成通过记着**（它在闸里是真 `PASS`，不是 `skip`，也不是 `known failure`）；出问题的是
+"手工跑它"这条路：它给出的是一句看起来像"这项检查坏了"的加载器报错，而那是**环境没传下去**——这正是"跑不起来"
+最容易被读成"跳过"的地方，所以修的是环境传递，不是检查本身。
 
 **值得做的方案（这一轮不做）**：把镜像改成**生成物**——从 `stdlib/<模块>.cml` 的 `#op` 声明与 C++ 算子表
 （`--verify-ops` 已经有那张表的读法）生成 `stdlib/signatures/<模块>.cml`，并把它加进"生成物是一组"那套

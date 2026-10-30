@@ -912,7 +912,12 @@ void emitDraftPayload(
                 draftRef < plan.runtimeRefsByDraftId.size(),
                 "Draft edge emission encountered a node outside the payload plan.");
             const gc_node_ref_t runtimeRef = plan.runtimeRefsByDraftId[draftRef];
-            ASSERT(runtimeRef != kInvalidNodeRef, "Draft edge emission encountered a dead node.");
+            GUARD(
+                runtimeRef != kInvalidNodeRef,
+                std::format(
+                    "emitting the inputs of a node from the payload plan: draft node {} is in the plan "
+                    "but has no runtime node (it was dropped), so the input list would name nothing",
+                    draftRef));
             payload.inputs[inputCursor++] = runtimeRef;
         }
         return begin;
@@ -1061,7 +1066,12 @@ void emitDraftPayload(
             break;
         case GCNodeKind::Brch: {
             const auto *draftBody = reinterpret_cast<const DraftBrchPayload *>(payloadBytes.data());
-            ASSERT(draftBody != nullptr, "Draft BRCH payload is missing.");
+            GUARD(
+                draftBody != nullptr,
+                std::format(
+                    "emitting a BRCH node: its payload table holds no DraftBrchPayload, so the join "
+                    "and the arms it names cannot be read (it needs {} bytes of it)",
+                    sizeof(DraftBrchPayload)));
             writeBody(
                 payload.payload,
                 header,
@@ -1124,7 +1134,13 @@ void emitDraftPayload(
                 if (runtimePred == kInvalidNodeRef && dropUnmapped) {
                     continue;
                 }
-                ASSERT(at < count, "Draft side-edge emission wrote past the planned edges.");
+                GUARD(
+                    at < count,
+                    std::format(
+                        "the side-edge counter says {} edges were planned, but the writer is already at "
+                        "edge {}: the graph about to be sealed does not hold what the plan emits",
+                        count,
+                        at));
                 ASSERT(
                     runtimePred != kInvalidNodeRef,
                     "Draft side-edge emission encountered a dead node.");
@@ -1132,7 +1148,13 @@ void emitDraftPayload(
                 ++at;
             }
         }
-        ASSERT(at == count, "Draft side-edge emission wrote the wrong count.");
+        GUARD(
+            at == count,
+            std::format(
+                "the side-edge counter says {} edges were emitted, but the target port list planned "
+                "{}: the graph about to be sealed does not describe what its builder wrote",
+                at,
+                count));
     };
     emitSideEdges(
         payload.orderEdges, payload.orderEdgeCount,
@@ -2549,7 +2571,12 @@ void collectStaticGraphRefsRecursive(
             return;
         }
         const GraphId target = funcObj->graphId();
-        ASSERT(isValid(target), "Runtime static graph references must name a graph.");
+        GUARD(
+            isValid(target),
+            std::format(
+                "collecting the static graph references of a function value: it names graph {}, which "
+                "is not a graph in this program, so the reference would point at nothing",
+                static_cast<int>(target)));
         pushUnique(refs, target);
 
         if (::Tuple *closure = funcObj->tuple()) {

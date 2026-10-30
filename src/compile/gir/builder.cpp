@@ -1421,21 +1421,21 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
     // written in it are put in the region by the draft (addNode follows the insert region).
     // The region is an annotation only: it changes no order and reaches no scheduler.
     struct InsertRegionScope {
-        runtime::GraphDraft *draft = nullptr;
-        uint32_t outer             = 0;
+        runtime::GraphTransaction *transaction = nullptr;
+        uint32_t outer                         = 0;
         ~InsertRegionScope() {
-            if (draft != nullptr) {
-                draft->setInsertRegion(outer);
+            if (transaction != nullptr) {
+                transaction->edit().setInsertRegion(outer);
             }
         }
     } regionScope;
-    regionScope.draft = &currGraph_->transaction().edit();
-    regionScope.outer = regionScope.draft->insertRegion();
+    regionScope.transaction = &currGraph_->transaction();
+    regionScope.outer       = regionScope.transaction->edit().insertRegion();
     if (blockTags.nodes != camel::core::attr::kNoAttrs && gct != functionBody_) {
-        const uint32_t block = regionScope.draft->addRegion(
+        const uint32_t block = regionScope.transaction->edit().addRegion(
             runtime::GCRegionKind::Block, regionScope.outer);
-        regionScope.draft->setRegionAttrs(block, blockTags.nodes);
-        regionScope.draft->setInsertRegion(block);
+        regionScope.transaction->edit().setRegionAttrs(block, blockTags.nodes);
+        regionScope.transaction->edit().setInsertRegion(block);
     }
     // The `using namespace` written in this block are in force in it (design principles 10.2).
     UsingScope usings(*this, GCT::Tree::of(gct)->usingsOf(gct));

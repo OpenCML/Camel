@@ -2,7 +2,12 @@
 
 日期：2026-10-31　车道：`lane-recheck`
 
-**要作者答的一句：`autodiff` 就是 `jvp` 那一族的规则集模块，还是把那几条前向规则搬进
+裁定：**搬。** `autodiff` 只是库，`jvp` 那一族的前向规则搬进 `stdlib/rulesets/jvp.cml`，转置那一族
+搬进 `stdlib/rulesets/transpose.cml`（一个规则集一个原语只有一条规则，前向与转置的左边往往相同，故
+分居两个模块）；`autodiff` 只留 `grad`/`jvp`/`vjp` 的包装与那十个切线/余切函数。落地：`3bf5324e2`
+（索引键加元数）、`67b4c17bc`（搬规则）、`13d385530`（语言参考三句）。
+
+**原来是问：`autodiff` 就是 `jvp` 那一族的规则集模块，还是把那几条前向规则搬进
 `stdlib/rulesets/jvp.cml`？**
 
 ## 现象（读数，全为原文）

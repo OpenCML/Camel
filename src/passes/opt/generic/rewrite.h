@@ -23,7 +23,6 @@
 namespace camel::passes::generic {
 
 using camel::runtime::gc_node_ref_t;
-using camel::runtime::GraphDraft;
 
 /// Whether `node` is computed after `wanted`: whether what `node` reads -- its value, `with`,
 /// control and sync inputs, walked back through the nodes on the way -- reaches `wanted`. An edge
@@ -31,7 +30,9 @@ using camel::runtime::GraphDraft;
 /// check refuses (docs/design/graph-store 5.4), so a wait may only be written on a node that does
 /// not read what waits.
 inline bool isComputedAfter(
-    const GraphDraft &draft, gc_node_ref_t node, gc_node_ref_t wanted, size_t maxWork = 8192) {
+    const camel::runtime::GraphTransaction &transaction, gc_node_ref_t node, gc_node_ref_t wanted,
+    size_t maxWork = 8192) {
+    const auto &draft = transaction.graph();
     if (node == wanted || wanted == camel::runtime::kInvalidNodeRef) {
         return true;
     }
