@@ -1,0 +1,60 @@
+# merge-gs2：图从草稿自身的可达节点编码
+
+合并提交 `e947059a6`（`--no-ff`；父 `abbc9c229` = origin/develop + `a4efd791f` = lane-gs2），
+树 `941f7df2c`，与第一次（机械 subject 的 `0fefffd25`）**逐字节相同**（`git diff 0fefffd25 HEAD` 为空）。
+
+## 这一笔做了什么
+
+- `src/compile/gir/graph_encode.cpp`：不再把每个活节点克隆进第二个 `GraphDraft` 再发射，改为
+  **直接从草稿发射**；`PreparedGraph` 只留 `runtimeId` 与"根可达节点"（`liveNodes`），载荷函数
+  收 `live` 子集：草稿里没被任何根可达的节点不进图，指向它的 order 边随之丢弃；`owner` 被
+  子集排除的控制区域降为 `Dead`。图的宏标志、`#impl` 内核、声明事实、捕获名、签名、帧布局、
+  静态槽都取草稿自己的。
+- FUNC 的 callee 在发射前写回草稿自身的载荷（`patchPreparedFuncPayloads` → `GraphDraft::setCalleeGraph`），
+  收尾校验也从草稿读。
+- `src/runtime/graph.cpp` / `graph_build.h`：`planDraftPayload` / `describeDraftNativePayload` /
+  `emitDraftNativePayload` / `recordDraftDebugData` 增加 `live` 子集参数；区域整结构从草稿复制
+  （`callSite` 按新编号映射），这是旧路径丢掉 `callSite`/`inlineOf` 的地方。
+- 文档：`docs/design/graph-store/README.cn.md:270` 的 `#setId` 改为 `#prepareGraph`（论断未动）；
+  新增 `docs/handover/reviews/questions-2026-10-30-graph-store-step2.md`（本步的实质冲突与拆分问题）。
+
+## 闸门读数（主机 88，`-Plan all -Tier fast -Jobs 8`）
+
+`total: 7802 / pass: 7798 / fail: 0 / skip: 2 / known failures: 2`，新红 0，`snapshot differs` 0。
+stamp：`e947059a64b052b8fa07600e761e5b8d893b234c`（clean）· 1217 source files · fingerprint
+`ac65e136054fc7bd6e8b73f1a0fbda3d742eec59ce9125ea022ea312915bbd6b`。
+
+## 图不变：独立重做的逐行 sha256
+
+不采信车道自述，自己在合并树（`e947059a6`）与 `origin/develop`（`abbc9c229`）两棵树上，对
+`git ls-files '*.cml'` 的**全部 3,359 个文件**跑 `camel <file> std::gir`，stdout 逐行 sha256
+（诊断里的检出根路径归一为 `<ROOT>`，否则 1,158 份负例的错误文本会因绝对路径全"不同"）。
+
+- 文件集合两侧相同 3,359/3,359；exit 0 共 2,201，非 0 共 1,158（车道记的 2,201/1,158 属实）。
+- **逐字节（有序逐行 sha256）：3,357 相同，2 份不同**（行记录 393,401 同 / 22 不同）。
+  不同的两份是 `test/cases/linear/byref/var_capture_reference.cml` 与
+  `test/cases/modules/autodiff/grad_captured_var_written.cml`，差异只是几处 4 行块的**旋转**，
+  行集合完全相同。
+- **按行集合（无序）比较：3,359 相同 / 0 不同。**
+- 那两份**不是本笔引入**：在 `origin/develop` 树上同样每次运行都在摆（两棵树各跑 15 次，都得到
+  同一组两个取值 `aab89fd5…`/`51cf5641…` 与 `96fa082d…`/`0cb99476…`）。**这是既有缺陷：这两份
+  图的 DOT 行序不确定**，与本次编码改动无关，需另立一笔处理。
+- 口径修正：车道自述的"3,359 逐字节全同"应写成 **"逐字节同 3,357 + 2 份既有序抖动（按行集合
+  3,359/0）"**。
+
+## .dot：40 张，不是 36 张
+
+仓里 `*.dot` 共 **40** 张，闸门里全部被比过且全 PASS：20 张计划金标 + 8 张
+`docs/tutorial/images` + 8 张 `test/plans/feat/docs/fixture/images` + **4 张
+`exemplars/*/expected/*.dot`**（由 `exemplars/check.mjs` 比）。车道记的 36 少数了 exemplars 那 4 张。
+
+## 其它核对
+
+- `git diff --name-status origin/develop HEAD -- test` **为空**：本批不改任何期望/金标。
+- 三处副作用逐一确认（旧路径 `addRegion` + 逐字段 setter 从不写 `callSite`/`inlineOf`；新路径
+  整结构复制并映射 `callSite`，`inlineOf` 原样带上；callee 写进源草稿；文档锚点换 `#prepareGraph`），
+  且前两条**不影响 DOT**——除上述 2 份既有抖动外，3,359 份 `std::gir` 逐字节相同。
+- 静态/文档检查 11 项全绿：`diagnostics-catalog --check`/`--verify-doc`、`stdlib-reference
+  --verify-doc`/`--verify-ops`、`check-doc-links --all`（362 篇、0 坏链）、`check-doc-snippets`、
+  `stdlib-declarations --check`、`check-std-includes`、`headers --check`、`check-grammar --check`、
+  `check-conformance`（3/3 列绿）。
