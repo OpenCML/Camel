@@ -1,5 +1,18 @@
 # 不变式的家谱：全仓普查（不是闸门）
 
+## 怎么跑、什么算通过
+
+```
+npm run check:invariant-owner                      # 本分支自 origin/develop 的合并基点以来新增的注释
+node scripts/check-invariant-owner.mjs --since <sha>   # 某一笔自己的改动
+node scripts/check-invariant-owner.mjs --census        # 全仓普查表（就是下面这张）
+```
+
+**它只打印、退出码 0，不进闸门、不拦提交。** 「通过」的定义是：这段改动里凡是新增了「某某必须……」这类规则
+注释的文件，**其中至少有一条明说拥有者**——判据句形如 *the owner of this rule is the finished graph*，
+词表只有完工的图 / 草稿 / 编码器 三加一（安全网只作兜底）。**只提到 draft、graph 这些词不算点名**，这是
+这条检查存在的理由。`--census` 用来回答「我们的不变式都住在哪」，不是用来判红绿的。
+
 **一句话**：一条判据只有在对**完工的节点**问得出来的地方可查；写在「还在写」的地方，问到的只是半成品
 的答案。今晚那条顺序边为这句话付了一夜：四处写者守卫与一个 choke point 全部无效，能用的那处过滤在
 planDraftPayload 里——**拥有者是完工的图，不是写边的地方**。
