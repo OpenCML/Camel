@@ -81,3 +81,32 @@ stdlib-reference.mjs (--verify-ops): refusing to measure an install that is not 
 **判据**：**一个检查若在自己的调度下会红，它就不是在检程序，是在检调度。这和「在坏程序上变绿」是同一种错。**
 
 **代价**：8 路 **178.3 s**（约 22 ms 一条），串行 **682.5 s**；进 `-Tier fast` 意味着闸门**多约 3 分钟**（8 路）——是否每趟都跑，是裁定。
+
+## 读数六：只扫 fast 层不跑的条目（裁定后的范围）
+
+fast 层已经在跑的条目本身就编译过了，再编译一次是重复付费。所以 `--compile-only` 现在只选 `testTier(plan, test) !== 'fast'`：
+
+```
+node scripts/test.js test/plans --compile-only --jobs 8
+[SUMMARY] total: 3670, pass: 3527, fail: 9, skip: 134
+[INFO] wall: 483.7 s, jobs: 8, tier: fast
+
+node scripts/test.js test/plans/perf --compile-only --jobs 8
+[SUMMARY] total: 47, pass: 35, fail: 8, skip: 4
+[INFO] wall: 304.7 s, jobs: 8, tier: fast
+```
+
+**范围小了，时间没小下来**：3670 条 483.7 s、perf 47 条 304.7 s——慢的不是编译，是 `perf` 里那几个重程序（`collfuzz.large` 单条 30.9 s）与它们自带的验证。**「十几秒」的期待没有实现。**
+
+### 一处口径更正（读者必读）
+
+`registry.signatures_match` **本来就在闸门里跑，一直是绿的**：它比对 550 条重载与声明、参数个数、纯度、以及「不带体」。
+所以**不能**把它算作「没人守」。真正没人守的只有两件事：**签名文字是否逐字等于算子类型**，以及反方向的**「注册了但没登记」**。
+本页前面把它当例子引用过，这里更正。
+### 9 条红分三堆
+
+1. **机器条件（`no reading cpu`）**：`progen_check`、`startup.cost`、`step.budget`、`reduce_layout.ops`、`collfuzz.large`——CPU 预算判定还有一处没被 compile-only 关掉。**不是程序。**
+2. **拿不到参照的比较**：`monte_carlo_pi.speedup`、`transformer_step.profile`、`perf.instruction_counts`、`perf.instruction_counts_load`、`gc_tools.gcbench_workloads`——它们的判据是与另一次运行的比值，**这个模式下根本没在判编译**。
+3. **安装印记类**：`registry.*` 三条（以及 `edges.no_ctrl_edge_kind.gir`）**都是 fast 层条目**，新范围把它们自然排除——这一堆在新范围下不复存在。
+
+**结论：这个模式现在还不能进闸门**（>1 分钟，且有 2 类非编译判据），按裁定的「单独一条 plan、每趟一次」也还要先把第 1、2 类处理干净。

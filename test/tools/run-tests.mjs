@@ -1763,13 +1763,13 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // working crosses the timeout while its CPU budget stands still, and a program that works
     // harder crosses the budget while the wall clock may say anything at all. The reading is in
     // 10 ms ticks (USER_HZ), which is a thousandth of the budget these plans declare.
-    if (cpuBudgetMs !== null && result.timedOut) {
+    if (!logContext.options.compileOnly && cpuBudgetMs !== null && result.timedOut) {
         failures.push(
             `killed at its ${formatDurationMs(timeoutMs)} liveness bound after ` +
                 `${formatDurationMs(result.wallMs)}: a cpu_budget_ms test's timeout catches a program ` +
                 `that stopped working, and the CPU budget is what catches one that works harder`
         )
-    } else if (cpuBudgetMs !== null) {
+    } else if (!logContext.options.compileOnly && cpuBudgetMs !== null) {
         if (result.cpuMs === null) {
             failures.push(
                 `cpu_budget_ms ${cpuBudgetMs.toFixed(0)} ms has no CPU reading: ${result.cpuReason} ` +
@@ -2097,7 +2097,7 @@ export function testTier(plan, test) {
  * `tier = "debug"`. `all` therefore leaves those tests out: it runs on the Release binary, where
  * the debug layer's abort case would not abort.
  */
-function selectTier(plans, tier, namedPlans = new Set()) {
+function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
     const order = []
     for (const plan of plans) {
         for (const test of plan.tests) order.push({ plan, test })
@@ -2106,6 +2106,10 @@ function selectTier(plans, tier, namedPlans = new Set()) {
         // A plan the schema rejected fails in every layer: its tests never ran, so no layer can
         // honestly say the plan is clean.
         if (test.__planError) return true
+        // A compile-only run asks only about the entries the fast layer does not run: whatever the
+        // fast layer runs is compiled there already, and compiling it a second time is paying twice
+        // for the same answer. What this sweep buys is the part nobody looks at.
+        if (compileOnly) return testTier(plan, test) !== 'fast'
         if (tier === 'all') return testTier(plan, test) !== 'debug'
         if (tier === 'debug') return plan.debug_tier === true || testTier(plan, test) === 'debug'
         return testTier(plan, test) === tier
@@ -2154,7 +2158,7 @@ function selectTier(plans, tier, namedPlans = new Set()) {
     return selectedPlans
 }
 
-function loadPlans(targets, tier, layeredPlans = new Set()) {
+function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false) {
     // A plan file named on the command line (or by `--changed`'s self rule) runs in full; the
     // plans a directory reaches follow the layer. The same plan reached both ways is named,
     // unless `--changed` marked it `layer: true`: then the tier filter applies to it as well.
@@ -2188,7 +2192,7 @@ function loadPlans(targets, tier, layeredPlans = new Set()) {
             if (lhsOrder !== rhsOrder) return lhsOrder - rhsOrder
             return lhs.__planPath.localeCompare(rhs.__planPath)
         })
-    return selectTier(plans, tier, namedPlans)
+    return selectTier(plans, tier, namedPlans, compileOnly === true)
 }
 
 /** The result of a test the runner itself could not run: its failure is reported like any other. */
@@ -2895,7 +2899,7 @@ async function main() {
             return false
         }
     })
-    const plans = loadPlans(options.targets, options.tier, options.layeredPlans)
+    const plans = loadPlans(options.targets, options.tier, options.layeredPlans, options.compileOnly === true)
     // The pid keeps two runs started in the same second (the self-test does this) out of one
     // directory, whose logs and summary.json would otherwise overwrite each other.
     const logDir = path.join(LOG_ROOT, `${timestamp()}_${process.pid}`)
