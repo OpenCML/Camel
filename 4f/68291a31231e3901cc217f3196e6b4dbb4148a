@@ -1,0 +1,14 @@
+lane-gsb（18 笔）并入 develop：会话从此交出事务，而不是存储。前端的图、控制测试的探针、特化助手、资源走查都拿会话给的事务；每张图的事实按属主存而不按存储存；会话按引用持有自己的图并检查地址不移动；内联链与自动微积分的改写走同一次交棒——事务一关，改写里没有任何成员还握着 draft。
+
+解冲突：modules/autodiff/pullback.cpp 是唯一的 UU，4 处。准则——**语义取 origin/develop，命名取 lane-gsb**。
+1) macroCallee 的 comment 与 payloadOf：取 develop 的 has_aux 注释，命名用 lane 的 `draft()`。注意方向：develop 那侧是成员 `draft_`，lane 那侧才是访问器 `draft()`；合并后的 ForwardRewrite 类只有 `draft()`（`auto &draft() const { return transaction_.edit(); }`），所以保留 `draft_` 编不过——命名只能取 lane。
+2) gradient 的取值：取 develop 的 pair/value/aux 三分与 `hasAux` 分支，`*draft` 落成 `draft`。
+3) seed 一行：`draft.materializeStaticValue(one, valueType)`——语义取 develop 的 `valueType`，命名取 lane 的引用。
+4) 结果聚合：取 develop 的 `has_aux` 两支与 `withValue` 的 `valueAndGradient`，`*draft` → `draft`。
+机械替换范围：只在 `Engine::gradient` 一个函数内做 `*draft` → `draft`、`draft->x` → `draft.x`；函数外的指针式用法（540/1279/1284/2275/4522）是 lane 本来的写法，未动。
+
+判据（下次解同一处直接照这个查）：查 `git grep -n 'draft_' -- modules/autodiff/pullback.cpp` 为空（只应剩 `#include "camel/runtime/draft_*.h"` 的文件名），以及 `Engine::gradient` 内无 `*draft`/`draft->` 残留。**不要**查 `draft()` 为空：访问器就叫 `draft()`，全文件 218 处，按那个判会误判成没解干净。
+
+合并后暴露、git 看不见的断点（4f68291a3，本批第二个提交）：`src/passes/opt/defun/defun_value.cpp` 里 `GraphDraft &draft = session.edit(graph);` 用的是 `edit()` 的旧返回值；`edit()` 已经返回 `GraphTransaction&`（gsb 的 6fd18c265 / 台账 b2.2），此处对齐为 `auto &draft = session.edit(graph).edit();`——这是全树唯一残留的旧写法。该文件两侧没有任何一行被同时改过，所以自动合并干净，两条车道各自的闸门都看不见它，只有合起来的树编不过。
+
+闸门（m-lane-gsb @ 4f68291a3，-Plan all -Tier fast -Jobs 8，Linux 主机）：total 7864 / pass 7855 / fail 0 / skip 7 / known failures 2；stamp revision 4f68291a31、clean、fingerprint 3a34bb521175。autodiff 的 has_aux 用例全绿，说明解冲突的语义侧取对了。
