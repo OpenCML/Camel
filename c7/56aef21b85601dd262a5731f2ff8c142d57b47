@@ -1,0 +1,43 @@
+tip=c756aef21 H-defun3 返工第一笔：调用处的拓宽并进值那一族（闸门全绿）
+
+数字
+- 闸门 `-Plan all -Tier fast -Jobs 8`：`total: 7900, pass: 7891, fail: 0, skip: 7, known failures: 2`。
+  stamp：`c756aef21b (clean)`，1223 source files，fingerprint `c20d58d4de5b`。
+- develop 在此期间动了 3 次（`75e632c8d` → … → `d486dbdb3`），每次都是"fetch → `merge --no-ff` → 在新树上重跑整闸 → `fail 0` → 推送"，
+  第三次才推上去；推上去的就是 `c756aef21`。
+- 上一笔（`c99fed903`）的 note 仍在；这一笔是返工的第一笔，见下。
+
+① 形状一：在调用处被拓宽的值——并进值那一族，不再把整族留下
+- 触发点：一个值交给"另一种函数类型"的形参（lambda 返回它算出的值，形参写 `void`）。这一遍里那两处拒绝
+  （旧文案 `the value is handed to a parameter of another function type`）已经不存在了：`defunctionalize.cpp` 的读者检查里改成
+  **记录一条合流关系** `mergedInto[被拓宽的类型 id] = 值的类型 id`。
+- 机制（三步，都在同一遍内）：
+  1. 收集阶段记下 `mergedInto`，并把被拓宽的类型登记成 plan（`planOf`），它的调用从此算作那一族的调用；
+  2. 分族阶段用"签名相同 **或** 被合流到这一族"作为同族的判据（关系落在签名上，不落在某个对象 id 上——
+     值的类型可能是同一族的另一个对象）；
+  3. 替换阶段它就是一个普通成员：`types.replace(成员类型, enum)` + `equivalents` 里与它相等的对象一起换。
+- 结果：`apply` 的形参类型变成 `(x: int) => int` 那一族的 enum，`apply` 体内 `f(v)` 那条调用按 enum 的 tag 分派
+  （单变体走直接调用，多变体走 match），`main` 里两个 lambda 都成为同一族的变体。**一个程序里只剩一种函数值表示。**
+- 读数（`callback_write_through_parameter.cml`，`std::defunctionalize std::stats [std::opt std::stats] std::nvm`）：
+  `DEFUNCTIONALIZE types=1 values=2 calls=1 refused=0`、`variants='__g_49__,__g_50__'`；
+  **步骤之后、`std::opt` 之前**：`closures=1`、`indirect_calls=1`；**`std::opt` 之后**：`closures=0`、`indirect_calls=0`。
+  那一对 1 是**入口函数自己的值**（外壳 build 的 `() => int` 闭包与外壳对它的调用），作者已认可"入口函数的值不计入"。
+
+② 真降不下去的那一种：报内部错误并附最小程序（作者要求的形态）
+- 若被拓宽的类型**自己也 build 值**（程序里写了 `void` 函数并把它当值），两个族就不能合并：把一个换成另一个的 enum 会用错 tag 调用，
+  而写这个转换需要一个包装函数——这一遍造不出图（新建图的路径在 runtime 层，正在被 b4/b6 改，不能现在动）。
+- 现在它 **throw**，消息里带两个类型与"a defect of the pass, not of the program"，运行时报成
+  `Pass 'std::defunctionalize' failed with an internal error: the value of '(x: int) => int pure' is handed to a parameter of
+  '(x: int) => void', which builds values of its own; …`。**不是悄悄留成原样。**
+- 最小程序：`test/cases/opt/defun/widened_own_values.cml`，文件头写着"这是本遍的缺陷；包装落地后这条用例要反过来变成降级用例"。
+  用例 `defun.widened_parameter.defect` 钉住这段文案，用例 `defun.widened_parameter.merged` 钉住①的读数。
+
+③ 形状二（签名里含另一族）——**还没做，是下一笔**
+- 位置：`defunctionalize.cpp` 的 (5b) 不动点拒绝，理由 `its type and '<另一个>' name one another, and that one is left as written`。
+- 注释已经改成："这是同一个缺陷的后一半，不是允许；嵌套那一层降级写出来之前它只能这样。"
+  做法与①同一条规则（值从一族流进另一族）：外层签名里的内层函数类型换成内层族的 enum，两边一起降，删掉"都不降"那支。
+  验收用例：`tee_result_is_tuple`（现在 4 条 `tee_result_is_tuple.opt.*`）。
+
+④ `broke_invariant` 兜底
+- 保留，但只作为"真降不下去"的出口（作者第 5 条）：重写是一个 session，未提交即丢弃，程序一字不改；命名时报 `broke_invariant=1` 与一条警告。
+- 它**不再是**上面两种形状的出口：形状一已经真降（①②），形状二在下一笔真降。
