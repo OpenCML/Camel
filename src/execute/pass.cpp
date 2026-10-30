@@ -969,6 +969,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kEdgesSyncGateTestPass, EdgesSyncGateTestPass),
         TEST_PASS(kEdgesSyncForkTestPass, EdgesSyncForkTestPass),
         TEST_PASS(kEdgesSyncForkGateTestPass, EdgesSyncForkGateTestPass),
+        TEST_PASS(kEdgesSyncCycleTestPass, EdgesSyncCycleTestPass),
         TEST_PASS(kGraphReleaseTestPass, GraphReleaseTestPass),
         TEST_PASS(kFactNodeTestPass, FactNodeTestPass),
         TEST_PASS(kWritingsTestPass, WritingsTestPass),
