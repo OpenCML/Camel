@@ -64,6 +64,16 @@ export func operator +(x: f32, y: f32): f32
 #op(':op/add_d')
 export func operator +(x: float, y: float): float
 
+/// The difference of two 32-bit floats.
+/// @example f32(3.5) - f32(1.25)    // 2.25
+#op(':op/sub_f')
+export func operator -(x: f32, y: f32): f32
+
+/// The difference of two 64-bit floats.
+/// @example 3.5 - 1.25    // 2.25
+#op(':op/sub_d')
+export func operator -(x: float, y: float): float
+
 // ---- conversions ----
 //
 // Numeric types are never converted implicitly; these functions do it. There is one conversion
