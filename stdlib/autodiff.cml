@@ -12,6 +12,16 @@
  * parameter is a constant, and so is every ordinary parameter. To differentiate the data, bind it
  * as a `with` parameter with a lambda. A function with no `with` parameter, or whose first one has
  * no tangent, or a result that is not a scalar float, is refused where the call is compiled.
+ * There is no `argnums`: which value is differentiated is what the `with` binding says, not a
+ * position, so a call that would name one is refused as the unknown parameter it is.
+ *
+ * `has_aux: true` is for a function whose result is the pair `(value, aux)`, the shape JAX uses it
+ * for: the first element is the loss and the second is anything the caller wants carried (a count,
+ * a norm). The pair is split, the first element is differentiated and the second is handed back
+ * unchanged: `grad(f, has_aux: true)` gives `(gradient, aux)` and
+ * `with_grad(f, has_aux: true)` gives `((value, aux), gradient)`, which are JAX's orders.
+ * The argument has to be the constant `true` -- a call has one result type, so whether the pair is
+ * split cannot follow a value -- and `has_aux: false` is refused with the plain call to write.
  *
  * The gradient has the type of the parameter it is the gradient of: a struct gives a struct of
  * gradients, a tuple a tuple, an array of floats an array of the same element type and shape, a

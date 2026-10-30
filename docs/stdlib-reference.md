@@ -6197,6 +6197,16 @@ What is differentiated is the first `with` parameter of `f` (the weights); every
 parameter is a constant, and so is every ordinary parameter. To differentiate the data, bind it
 as a `with` parameter with a lambda. A function with no `with` parameter, or whose first one has
 no tangent, or a result that is not a scalar float, is refused where the call is compiled.
+There is no `argnums`: which value is differentiated is what the `with` binding says, not a
+position, so a call that would name one is refused as the unknown parameter it is.
+
+`has_aux: true` is for a function whose result is the pair `(value, aux)`, the shape JAX uses it
+for: the first element is the loss and the second is anything the caller wants carried (a count,
+a norm). The pair is split, the first element is differentiated and the second is handed back
+unchanged: `grad(f, has_aux: true)` gives `(gradient, aux)` and
+`with_grad(f, has_aux: true)` gives `((value, aux), gradient)`, which are JAX's orders.
+The argument has to be the constant `true` -- a call has one result type, so whether the pair is
+split cannot follow a value -- and `has_aux: false` is refused with the plain call to write.
 
 The gradient has the type of the parameter it is the gradient of: a struct gives a struct of
 gradients, a tuple a tuple, an array of floats an array of the same element type and shape, a
@@ -6232,6 +6242,20 @@ result with respect to its first `with` parameter, in the type of that parameter
 - Example (a fragment, not compiled): `let loss_grad = grad(loss)`
 - Why it is not compiled: `loss` must have a `with` parameter for its gradient to exist, and that takes a declaration, so the example is a fragment of a program that declares it
 
+#### `grad`
+
+```camel
+grad: (f: F, has_aux: bool) => GradientAndAux<F> when is_function::<F>()
+```
+
+The same over a function whose result is the pair `(value, aux)`: the first element is
+differentiated and the second is handed back unchanged, so the gradient function gives
+`(gradient, aux)` -- JAX's `grad(f, has_aux=True)`. `has_aux` has to be the constant `true`:
+the pair is split, or the writer means the plain form and writes `grad(f)`.
+
+- Example (a fragment, not compiled): `let loss_grad = grad(loss, has_aux: true)`
+- Why it is not compiled: the function must return a pair whose first element is the loss, and that takes a declaration, so the example is a fragment of a program that declares it
+
 #### `with_grad`
 
 ```camel
@@ -6243,6 +6267,19 @@ the pair a training step needs from one evaluation. The same compile-time refusa
 
 - Example (a fragment, not compiled): `let step = with_grad(loss)`
 - Why it is not compiled: `loss` must have a `with` parameter for its gradient to exist, and that takes a declaration, so the example is a fragment of a program that declares it
+
+#### `with_grad`
+
+```camel
+with_grad: (f: F, has_aux: bool) => ValueAndGradientAndAux<F> when is_function::<F>()
+```
+
+The value, the auxiliary value and the gradient of a function whose result is `(value, aux)`:
+the pair the function gives is returned whole, followed by the gradient --
+`((value, aux), gradient)`, JAX's `value_and_grad(f, has_aux=True)`.
+
+- Example (a fragment, not compiled): `let step = with_grad(loss, has_aux: true)`
+- Why it is not compiled: the function must return a pair whose first element is the loss, and that takes a declaration, so the example is a fragment of a program that declares it
 
 #### `stop_gradient`
 

@@ -9,11 +9,14 @@ tags = ["feat", "modules", "autodiff", "jax"]
 #
 #   * the part that already agrees with JAX, pinned with JAX's own examples (batching at a leading
 #     axis through `map`; `grad`/`with_grad` on `f(x) = x * x` at 2; `stop_gradient` cutting the
-#     derivative). These must stay green through any transform work: they are the numbers the
-#     alignment is measured against.
+#     derivative; `has_aux` splitting a pair result). These must stay green through any transform
+#     work: they are the numbers the alignment is measured against.
 #   * the names that are not values yet (`vmap`, `jvp`, `vjp`, `checkpoint`), pinned as refused with
 #     the diagnostic that names them. Each is the case that flips to a positive one when its
 #     transform lands; the flip is the proof of alignment, not a sentence in a document.
+#   * the parameter that is refused on purpose (`argnums`) and the two `has_aux` calls that are
+#     refused with a reason (a pair result without the argument, and `has_aux: false`): what the
+#     surface does not accept is pinned as exactly what it does not accept.
 #
 # docs/handover/reviews/questions-2026-10-30-jax.md holds the gap list, the split between naming
 # and semantics, and the assertions each absent name must satisfy once it exists.
@@ -44,6 +47,62 @@ expect_exit = 0
 expect_stdout_exact = "jax_derivatives\n4.0\n(4.0, 4.0)\n4.0\n"
 expect_output_not_contains = ["UnknownInternalError", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "derivatives.has_aux"
+desc = "`has_aux` splits a pair result: `f(x) = (x*x, 3x)` at 2 gives `grad(f, has_aux: true) == (4.0, 6.0)` and `with_grad(f, has_aux: true) == ((4.0, 6.0), 4.0)`, JAX's order for both; the auxiliary value is carried, not differentiated, and its type is the function's own (`(4.0, 7)` for an `int`)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/jax_has_aux.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "jax_has_aux\n(4.0, 6.0)\n((4.0, 6.0), 4.0)\n(4.0, 7)\n"
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "absent.argnums"
+desc = "`argnums` is not a parameter of `grad`: the differentiated value is the first `with` parameter (design principles 9.9), so the call names a parameter the rule does not have and is refused as that -- the diagnostic names `argnums` rather than reporting a call that does not match."
+kind = "negative"
+case = "../../../cases/modules/autodiff/jax_names/argnums.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamArgumentUnknown"
+expect_diagnostic_code = "0x030001CD"
+expect_output_contains = ["'argnums' is not a parameter of 'grad'"]
+expect_output_not_contains = ["UnknownInternalError", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "refused.has_aux_missing"
+desc = "A pair result without `has_aux` is refused, and the reason names the result type: `grad(f)` differentiates a float, and splitting the pair is written at the call."
+kind = "negative"
+case = "../../../cases/modules/autodiff/jax_names/has_aux_plain.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NotDifferentiable"
+expect_diagnostic_code = "0x03000150"
+expect_output_contains = ["it returns (float, float), not a float"]
+expect_output_not_contains = ["UnknownInternalError", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "refused.has_aux_false"
+desc = "`has_aux: false` is refused with the call to write instead: the pair is split or it is not, and that cannot follow a value a call computes, so `false` means the plain form (`grad(f)`), not a second behaviour of the same name."
+kind = "negative"
+case = "../../../cases/modules/autodiff/jax_names/has_aux_false.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NotDifferentiable"
+expect_diagnostic_code = "0x03000150"
+expect_output_contains = ["`has_aux` is false", "write `grad(f)`"]
+expect_output_not_contains = ["UnknownInternalError", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]

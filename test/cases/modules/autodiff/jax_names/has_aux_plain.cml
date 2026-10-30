@@ -1,0 +1,25 @@
+/**
+ * A function whose result is a pair is not differentiated without `has_aux`.
+ *
+ * `grad(f)` differentiates a function that returns a float; a result that is a pair is not a value
+ * a gradient can be taken of as a whole, so the call is refused instead of being guessed at --
+ * splitting the pair has to be written at the call (`grad(f, has_aux: true)`, see
+ * test/cases/modules/autodiff/jax_has_aux.cml), where the reader can see which element is the
+ * loss.
+ *
+ * This pins the refusal and its wording: the reason names the result type, so the author is told
+ * what to write instead of being told the call does not match.
+ */
+
+import { grad } from autodiff
+
+with <x: float>
+func pair_loss(): (float, float) {
+    return (x * x, x * 3.0)
+}
+
+func main(): int sync {
+    let d = grad(pair_loss)<2.0>()
+    println(d)
+    return 0
+}
