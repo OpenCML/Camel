@@ -972,7 +972,11 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const Program &program, const GCG
         for (const GCGraphOrderEdge &edge : graph->orderEdges()) {
             const gc_node_ref_t pred = translateNodeRef(edge.pred, sourceToDraft);
             const gc_node_ref_t user = translateNodeRef(edge.user, sourceToDraft);
-            if (pred != kInvalidNodeRef && user != kInvalidNodeRef) {
+            // An order edge the seal check would refuse is not carried across: an end the scheduler
+            // may arrange freely, and that stands for no region of its own, has nothing to order,
+            // and the payload already names the control source (docs/design/effects/edges.cn.md 4.6).
+            if (pred != kInvalidNodeRef && user != kInvalidNodeRef &&
+                !nodeTakesNoOrder(*draft, user)) {
                 draft->userListOf(pred, DraftEdgeSlot::Order).push_back(user);
             }
         }
@@ -1499,8 +1503,11 @@ void GraphDraft::replaceOrderEdgesAt(gc_node_ref_t oldId, gc_node_ref_t newId) {
     // ordering never leaves the region that holds it, so a predecessor of another region is not
     // moved; the replacer heads the ordering of its own region instead.
     const std::vector<gc_node_ref_t> preds(orderInputsOf(oldId).begin(), orderInputsOf(oldId).end());
+    // A replacer the scheduler may arrange freely takes no order at all: the payload names the
+    // control source, and an edge here would be one the seal check refuses (nodeTakesNoOrder).
+    const bool replacerTakesNoOrder = nodeTakesNoOrder(*this, newId);
     for (gc_node_ref_t pred : preds) {
-        if (pred == newId || !alive(pred) || nodeRegion(pred) != region) {
+        if (replacerTakesNoOrder || pred == newId || !alive(pred) || nodeRegion(pred) != region) {
             continue;
         }
         if (std::ranges::find(orderInputsOf(newId), pred) != orderInputsOf(newId).end()) {
@@ -1546,7 +1553,9 @@ void GraphDraft::spliceOrderEdgesOver(gc_node_ref_t id) {
     // edges.cn.md 4). Both ends already carried an order edge, so both are nodes an order may sit
     // on; the copy is made because appendOrderDependency rewrites the runs it reads from.
     for (gc_node_ref_t user : users) {
-        if (!alive(user)) {
+        // The user may be a node that takes no order (a pure replacer), and the edge that passed
+        // through the removed node then says nothing; the seal check refuses it (nodeTakesNoOrder).
+        if (!alive(user) || nodeTakesNoOrder(*this, user)) {
             continue;
         }
         for (gc_node_ref_t pred : preds) {
@@ -2274,6 +2283,29 @@ GCGraph *GraphDraft::encode(const std::string &mangledName, const std::string &n
         [&](GCGraphPayloadArena &payload) { emitDraftNativePayload(*this, payload); },
         staticSlots_);
 }
+/// The shared predicate of an order edge's user, asked of a draft (`nodeTakesNoOrder` in
+/// camel/runtime/graph.h is the same question of a frozen graph). A `BRCH` or a `LOOP` that owns a
+/// region stands for it and does carry an order; anything else the model lets a pass arrange freely
+/// carries none, and writing one there would be an edge the seal check refuses.
+bool nodeTakesNoOrder(const GraphDraft &draft, gc_node_ref_t id) {
+    const DraftNodeHeader *header = draft.header(id);
+    if (header == nullptr || header->kind == GCNodeKind::Dead) {
+        return false;
+    }
+    if (header->kind == GCNodeKind::Cast) {
+        return false; // an order kept when the conversion could fail is the pass's to drop
+    }
+    if (!nodeIsFreelySchedulable(draft, id)) {
+        return false;
+    }
+    if (header->kind == GCNodeKind::Brch || header->kind == GCNodeKind::Loop) {
+        for (uint32_t region = 1; region < draft.regionCount(); ++region) {
+            if (draft.region(region).owner == id) {
+                return false; // it stands for its region and carries that region's order
+            }
+        }
+    }
+    return true;
+}
 
 } // namespace camel::runtime
-
