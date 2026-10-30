@@ -17,8 +17,9 @@ std::map<std::string, std::vector<RuleHead>> registry;
 
 } // namespace
 
-std::string leftHeadOf(syntax::Node left, std::string &shape) {
+std::string leftHeadOf(syntax::Node left, std::string &shape, uint32_t &arity) {
     shape.clear();
+    arity = 0;
     if (!left) {
         shape = "nothing";
         return {};
@@ -45,6 +46,7 @@ std::string leftHeadOf(syntax::Node left, std::string &shape) {
     size_t nodeCount  = 0;
     syntax::TokenRef operatorToken;
     syntax::Node firstNode;
+    syntax::Node secondNode;
     for (size_t index = 0; index < current->childCount(); ++index) {
         const syntax::Child child = current->child(index);
         if (child->isToken()) {
@@ -53,14 +55,24 @@ std::string leftHeadOf(syntax::Node left, std::string &shape) {
         } else if (child->isNode()) {
             if (nodeCount == 0) {
                 firstNode = child->node();
+            } else if (nodeCount == 1) {
+                secondNode = child->node();
             }
             ++nodeCount;
         }
     }
     if (tokenCount == 1 && nodeCount >= 1) {
+        // How many operands the operator was given, not how it is spelled: `-a` has one and
+        // `a - b` has two, and they are `__neg__` and `__sub__` to the compiler.
+        arity = static_cast<uint32_t>(nodeCount);
         return operatorToken.text();
     }
     if (tokenCount == 0 && nodeCount >= 2 && firstNode) {
+        // `f(a, b)` is filed under `f` with one operand per argument: the second child is the
+        // argument list, and its own children are the arguments.
+        arity = secondNode && secondNode->childCount() > 0
+                    ? static_cast<uint32_t>(secondNode->childCount())
+                    : static_cast<uint32_t>(nodeCount - 1);
         return firstNode->text();
     }
     shape = std::string(syntax::nodeKindName(current->kind()));
@@ -72,11 +84,12 @@ void collectRuleHead(
     std::string head,
     std::string rule,
     std::string shape,
+    uint32_t arity,
     uint32_t tokenStart,
     uint32_t tokenEnd) {
     std::lock_guard<std::mutex> lock(registryMutex);
     registry[module].push_back(RuleHead{
-        std::move(head), std::move(rule), std::move(shape), tokenStart, tokenEnd});
+        std::move(head), std::move(rule), std::move(shape), arity, tokenStart, tokenEnd});
 }
 
 std::vector<RuleHead> takeRuleHeads(const std::string &module) {

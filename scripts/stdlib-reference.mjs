@@ -1258,14 +1258,30 @@ async function exampleSource(module, entries, entry, code, asStatement = false) 
     return lines.join('\n') + '\n'
 }
 
+// The environment a run gives the install. Two facts, both about the install rather than the shell:
+//
+//   - `CAMEL_HOME` is that install's root, not whatever the shell exported: a doc example compiles
+//     with the standard library and the runtime library of the install this run measured.
+//   - An install built with a newer toolchain needs a newer `libstdc++` than the host's, and the
+//     loader is told where to find one the same way the test runner tells its children:
+//     `CAMEL_TEST_EXTRA_LIB_DIRS`, `:`-separated (the runner joins them the same way). Without it a
+//     reader who runs this script by hand gets "GLIBCXX_3.4.36 not found" from a binary that the
+//     gate runs without trouble, and learns to skip the check rather than to set the path.
+function installEnvironment(exe) {
+    const env = { ...process.env }
+    env.CAMEL_HOME = path.dirname(path.dirname(exe))
+    const extra = process.env.CAMEL_TEST_EXTRA_LIB_DIRS
+    if (extra && process.platform !== 'win32') {
+        const dirs = extra.split(':').filter(Boolean)
+        env.LD_LIBRARY_PATH = [...dirs, env.LD_LIBRARY_PATH].filter(Boolean).join(':')
+    }
+    return env
+}
+
 function runCamelCompile(file, cwd) {
     return new Promise((resolve) => {
         const exe = thisTreeCamel('a doc example')
-        const env = { ...process.env }
-        // A doc example compiles inside the install this run measured, so its standard library and
-        // its runtime library are that install's: `CAMEL_HOME` is the install root, not whatever
-        // the shell exported.
-        env.CAMEL_HOME = path.dirname(path.dirname(exe))
+        const env = installEnvironment(exe)
         const child = spawn(exe, [file, 'std::gir'], {
             cwd,
             env,
@@ -1441,7 +1457,11 @@ function thisTreeCamel(why) {
 
 function registeredOperators() {
     const exe = thisTreeCamel('--verify-ops')
-    const run = spawnSync(exe, ['inspect', '--ops', PROBE], { encoding: 'utf8', maxBuffer: 1 << 26 })
+    const run = spawnSync(exe, ['inspect', '--ops', PROBE], {
+        encoding: 'utf8',
+        maxBuffer: 1 << 26,
+        env: installEnvironment(exe)
+    })
     // `spawnSync` reports a binary it could not start (`out/latest` never built, a stale install
     // from another tree) as `error`, with `status === null` and `stdout`/`stderr` both undefined:
     // the message below then read "failed (exit null): undefined" and left the reader to guess
