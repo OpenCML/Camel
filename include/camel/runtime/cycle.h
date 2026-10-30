@@ -40,9 +40,9 @@ inline constexpr size_t kCycleEdgeKindCount = static_cast<size_t>(CycleEdgeKind:
  * can say which chain it found.
  *
  * `Edges` is an adaptor the walk reads: `slotCount()`, `present(ref)` and `inputsOf(ref, kind)`,
- * the last returning a span that stays valid until the next call. A draft reads a GraphDraft
- * (src/passes/opt/generic/rewrite.cpp); a frozen graph reads a GCGraph, whose order edges are
- * records rather than a run of refs (src/runtime/graph_edges.cpp).
+ * the last returning a span that stays valid until the next call. An editable draft adapts its own
+ * five lists (src/passes/opt/generic/rewrite.cpp); a frozen graph adapts a GCGraph, whose order and
+ * sync edges are records rather than runs of refs (src/runtime/graph_edges.cpp).
  */
 template <class Edges>
 gc_node_ref_t findInputCycle(Edges &edges, std::vector<gc_node_ref_t> *path = nullptr) {

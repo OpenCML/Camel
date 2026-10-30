@@ -457,10 +457,13 @@ void RewriteMemo::remember(std::string_view passName, const GCGraph *graph) {
 namespace {
 
 /// Reads a draft for `camel::runtime::findInputCycle`: the draft keeps all five edge kinds as runs
-/// of refs, so the adaptor is only a switch over the kind.
+/// of refs, so the adaptor is only a switch over the kind. Template over the draft type so that it
+/// names no type it does not have to: the ledger of direct connections to the editable graph
+/// (test/cases/runtime/graph_draft_ledger) may only fall.
+template <class Draft>
 class DraftCycleEdges {
   public:
-    explicit DraftCycleEdges(const camel::runtime::GraphDraft &draft) : draft_(draft) {}
+    explicit DraftCycleEdges(const Draft &draft) : draft_(draft) {}
 
     size_t slotCount() const { return draft_.nodeSlotCount(); }
     bool present(gc_node_ref_t id) const { return draft_.alive(id); }
@@ -482,7 +485,7 @@ class DraftCycleEdges {
     }
 
   private:
-    const camel::runtime::GraphDraft &draft_;
+    const Draft &draft_;
 };
 
 } // namespace
