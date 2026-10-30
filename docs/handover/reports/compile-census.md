@@ -138,3 +138,16 @@ node scripts/test.js test/plans/perf --compile-only --jobs 8
 ```
 
 **`gpu` 的修复有效：`transformer_step` 两条从「编译不过」变成 PASS。** 但这条计划**不是 6/6/0**：`mlp_step` 的两条仍红（`expected exit 0, got 1`），**诊断原文未取到**，这里不猜原因。**「那个坏程序修好了」有读数；「这条计划绿了」没有。**
+
+### 全量两栏（fast 层外）
+
+```
+node scripts/test.js test/plans --compile-only --jobs 8
+[SUMMARY] total: 3670, pass: 3535, fail: 1, skip: 134
+[INFO] wall: 491.9 s, jobs: 8
+[NOT-JUDGED] 295 条
+[FAIL] transformer_step.profile -- does not compile (transformer_step.cml): exit 1
+```
+
+**fast 层外的 3670 个条目里，只有一个程序编不过——就是 `transformer_step.cml`，那个从没被跑过的。** 其余红全部消失：
+它们此前要么是「判据不适用」（现在显式标为 NOT-JUDGED，295 条），要么是我漏关的 CPU 判据。
