@@ -216,13 +216,13 @@ slot_t replaceKernel(ArgsView &, ArgsView &norm, Context &) {
             "the replacement is not a node of the same graph");
     }
     const auto toRef = to->index();
-    if (!camel::passes::generic::isReplaceable(draft, fromRef)) {
+    if (!camel::passes::generic::isReplaceable(transaction, fromRef)) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
             "graph.replace",
             "the node anchors its graph (an exit, an output, a return or the end of a branch arm)");
     }
-    if (fromRef == toRef || camel::passes::generic::reaches(draft, fromRef, toRef)) {
+    if (fromRef == toRef || camel::passes::generic::reaches(transaction, fromRef, toRef)) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
             "graph.replace",
@@ -237,7 +237,7 @@ slot_t eraseKernel(ArgsView &, ArgsView &norm, Context &) {
     TxnState &state = openState(norm, 0, "graph.erase");
     auto [transaction, ref] = draftOf(state, norm.get<Handle *>(1), "graph.erase");
     auto &draft             = transaction.edit();
-    if (!camel::passes::generic::isReplaceable(draft, ref)) {
+    if (!camel::passes::generic::isReplaceable(transaction, ref)) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
             "graph.erase",
