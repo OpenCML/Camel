@@ -428,6 +428,11 @@ struct DraftWritings::Index {
     std::vector<uint8_t> written;
 };
 
+DraftWritings::DraftWritings(GraphDraft &draft, camel::core::sem::NumericPolicy policy)
+    : draft_(draft), ownedTransaction_(GraphTransaction::borrow(draft)),
+      transaction_(ownedTransaction_.get()), policy_(policy), store_(draft_.writings()),
+      index_(std::make_unique<Index>()) {}
+
 DraftWritings::DraftWritings(
     GraphTransaction &transaction, camel::core::sem::NumericPolicy policy)
     : draft_(transaction.edit()), transaction_(&transaction), policy_(policy),
