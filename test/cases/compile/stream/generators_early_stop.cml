@@ -1,0 +1,35 @@
+/**
+ * A stream stopped before its end: the pulls that are not asked for do not run, so the effects
+ * written after the last pull asked for do not happen (design principles 5.4; language reference
+ * 7.3.1). A stream is a suspended body, not a body run to the end and collected, so stopping it is
+ * the consumer asking for no further pull -- and the `while` condition of a loop over a stream is
+ * judged before the pull it would ask for.
+ *
+ * `counted` prints between its elements, so where the consumer stops is where the printing stops,
+ * and the two ways of getting it wrong give two different strings:
+ *   - too late (the body goes on past the stop): `b` is printed although no pull reaches the
+ *     statement that writes it, so the first loop would print `1 a 2 b` instead of `1 a 2`;
+ *   - too early (a pull hands its element out without running what is written before it in that
+ *     pull): the `a` written between the first two `yield`s is missing, and it would print `1 2`.
+ *
+ * The first loop takes two elements and the second one takes one, so the second also says that the
+ * `a` written directly after the first `yield` needs a pull of its own: it does not ride along with
+ * the pull that produced the first element.
+ */
+
+func counted(): int.. sync {
+    yield 1
+    println("a")
+    yield 2
+    println("b")
+    yield 3
+    println("c")
+}
+
+func main(): int sync {
+    loop acc = 0 for v in counted() while acc < 2 do sync { println(v); acc + 1 }
+    println("-")
+    loop acc = 0 for v in counted() while acc < 1 do sync { println(v); acc + 1 }
+    println("end")
+    return 0
+}

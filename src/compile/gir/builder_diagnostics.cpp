@@ -985,7 +985,8 @@ void Builder::reportUnusedFallibleValues() {
     if (context_ && module_ && context_->mainModule() == module_) {
         if (auto mains = graphsAt("main");
             mains.has_value() && !mains.value()->empty() &&
-            inferredExitGraphs_.contains(mains.value()->front().get())) {
+            inferredExitGraphs_.contains(
+                camel::runtime::toValue(mains.value()->front()->graphId()))) {
             undeclaredMain = mains.value()->front().get();
         }
     }
@@ -1208,10 +1209,21 @@ void Builder::markNonRetainingReads() {
     syncedReads_.clear();
 }
 
-void Builder::rejectDiscardedValue(const void *body) {
+void Builder::rejectDiscardedValue(BodyKey body) {
     if (auto it = bodyValueStatement_.find(body); it != bodyValueStatement_.end()) {
         rejectUnusedPureResult(it->second.first, it->second.second);
     }
+}
+
+Builder::BodyKey Builder::bodyKeyOf(const DraftGraphBuilder *graph) {
+    return graph != nullptr ? BodyKey{false, camel::runtime::toValue(graph->graphId())} : BodyKey{};
+}
+
+Builder::BodyKey Builder::currentBodyKey() const {
+    // The arm that is being built is the body; a body of no arm is the graph of the function it
+    // is written in.
+    const ArmBuild *arm = activeArm();
+    return arm != nullptr ? BodyKey{true, arm->bodyId} : bodyKeyOf(currGraph_.get());
 }
 
 void Builder::rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t node) {

@@ -1,0 +1,28 @@
+/**
+ * A local of a generator body that has to live across a `yield` is not lowered yet, and the
+ * compiler says so where the local is declared.
+ *
+ * `e` is a value built where its declaration stands, so it is built inside one arm of the machine;
+ * the pull after a `yield` runs a different arm, which declares no `e`. Left alone, that reads as
+ * `UnresolvedReference: 'e'` -- at the `yield` that reads it, as though the name were a typo --
+ * which is what this case used to get. The reason is the local and not the name: a local that
+ * lives across a `yield` becomes a cell, which is the step not taken yet (design principles 5.4).
+ *
+ * The same local read before any `yield` is fine (no cell is needed for it), so the refusal
+ * belongs to the value's crossing and not to a computed local.
+ */
+
+func pick(x: int): int! {
+    return if x > 0 then x else error('Bad', 'no')
+}
+
+func g(): int!.. sync {
+    let e = pick(-1)
+    yield 1
+    yield e
+}
+
+func main(): int sync {
+    loop acc = 0 for v in g() do sync { let _ = println(v); acc + 1 }
+    return 0
+}
