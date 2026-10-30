@@ -29,4 +29,6 @@ N0105 [label="PORT", type="PORT", param_kind="normal", param_index="0", value_ty
 
 - `lane-defun5`：`c0b48aba9`（断言）← `82f8d47a3`（负例改写）← `6ffdf65ec`（合流）；filter 在 `f6f0dddd1`。
 - 未落：类型修复（`enumOf` 改从**值**取、字段类型只认 `variant.captures`）+ `CAMEL_DEFUN_DEBUG` 诊断，停在 `D:\Temp\defun-fix-and-diag.patch`；catch 移除 + `defun-wrapper-variant.md` §七，停在 `D:\Temp\defun-catch-doc.patch`。
-- 已知红：`benchmark_gradients_vs_torch`（`mlp_big`，训练负载，`exit 139`），只在类型修复落地时出现；当前的树因放弃而绿。
+  实况更正：`D:\Temp\defun-fix-and-diag.patch`（1439 B）里**只有那两处诊断打印，没有类型修复**；类型修复 + catch 移除在 `D:\Temp\defun-attempt3.patch`（12563 B）。取栈用的是后者。
+- 已知红：`benchmark_gradients_vs_torch`（`mlp_big`，训练负载，`exit 139`），只在类型修复落地时出现；当前的树因放弃而绿。**按返工令 `477d76091`，它已登记为 `known_fail`，形状见 `known-failure-run-training.md`——绿不再被允许。**
+- 取栈结论（`std::macro std::opt std::nvm`，训练负载）：`Variant::updateRefs+31` ← `scanRelocatedObjects` ← `minorGCUnlocked` ← `safepoint` ← `NodeVMSchedPass::call`（6 层嵌套，不随模型长）。`mlp` 与 `mlp_big` 同样崩，所以与规模无关，不是栈深度。
