@@ -1,0 +1,37 @@
+/**
+ * What names a function value's family: its parameters and its result, and nothing else.
+ *
+ * Two signatures with the same parameters and the same result are one type even when one writes an
+ * effect qualifier and the other does not -- an effect qualifier is a subtype relation, not another
+ * type (design principles 5.2) -- so `(x: int) => int pure` and `(x: int) => int` are one family
+ * and one enum. A `() => void` and a `() => int` are not one family, although a value of the second
+ * may stand where the first is expected: being assignable one way is not what makes a family, and
+ * using it as one would put two unlike results on one tag.
+ *
+ * The program prints the same lines with and without the pass.
+ */
+
+func notice(): void {
+    'FAMILY notice'->println
+}
+
+func inc(x: int): int {
+    return x + 1
+}
+
+func apply(f: (x: int) => int, x: int): int {
+    return f(x)
+}
+
+/// Takes the value and does nothing with it: the family of `() => void` is a type the program
+/// writes a value of, and this is what keeps that value read.
+func ignore(f: () => void): int {
+    return 0
+}
+
+func main(): int sync {
+    let n: () => void = notice
+    let f: (x: int) => int = inc
+    'FAMILY a={}'->format<apply(f, 41) + ignore(n)>->println
+    return 0
+}
