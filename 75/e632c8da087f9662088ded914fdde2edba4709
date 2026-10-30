@@ -1,0 +1,5 @@
+Still owed: a case on develop that composes the cycle.
+
+- 台账：`draftHasCycle` 改收 `const GraphTransaction&`、体首 `const auto &draft = transaction.graph();` 之后，`GraphDraft` 的拼写回到 535（`files 66 / references 535 / constructions 3 / decode 6`，`[LEDGER] ok`），不是靠把上限记涨一次。
+- 两次闸门：干净树 `total 7881 / pass 7872 / fail 0 / skip 7 / known 2`；合并 `origin/develop` 并在推上去的这棵树上重跑，`total 7898 / pass 7889 / fail 0 / skip 7 / known 2`。多出的 17 条是 develop 在这一轮轮合并里带进的新用例，与本笔无关。
+- A/B：在 develop 上不复现——拿掉守卫那一支后 `algebra.cml` 走 `devirtualize specialize inline fold cse`、两个 `compound_assign.cml` 共七次全过，`lies on a cycle of inputs` 0 次；用例 blob 与来源树相同（`algebra.cml` 6667db2、`compound_assign.cml` 0e0fc26），那两次报错来自来源树自己的图改动，不在 develop。
