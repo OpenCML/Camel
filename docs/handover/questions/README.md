@@ -8,16 +8,15 @@
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
 
-## 现在在等作者：4 页
+## 现在在等作者：3 页
 
-`questions/` 里有四页在等：一条是别名（同一对象被两条引用写），一条是并行 `map` 的故障边界，一条是一个必须运值的版本口，一条是规则集索引建好了却没有消费者。上一批 15 页在最近一次合并里整体挪进了 `reviews/`，裁定按时间记在 [`reviews/questions-2026-10-29.md`](../reviews/questions-2026-10-29.md)；旧表写着"13 页待裁"，是一张过期的表。
+`questions/` 里有三页在等：一条是别名（同一对象被两条引用写），一条是并行 `map` 的故障边界，一条是一个必须运值的版本口。上一批 15 页在最近一次合并里整体挪进了 `reviews/`，裁定按时间记在 [`reviews/questions-2026-10-29.md`](../reviews/questions-2026-10-29.md)；旧表写着"13 页待裁"，是一张过期的表。
 
 | 页 | 问什么 | 状态 | 堵着谁 |
 |---|---|---|---|
 | [`two-references-write-one-object-outside-a-sync-block`](questions-2026-10-31-two-references-write-one-object-outside-a-sync-block.md) | 同一可变对象被两条引用写、第二条在这一层看不见时，读拿谁的版本 | 待裁 | 效应那一族的别名收尾；高阶函数把闭包经参数传进来之后的写；`a-version-port-that-must-carry-a-value` 的边界 |
 | [`parallel-map-fault-what-runs-after`](questions-2026-10-31-parallel-map-fault-what-runs-after.md) | 并行 `map` 一处故障后，下标更小、还没开始的元素是否仍执行 | 待裁 | 并行 `map` 的失败报告语义；跨后端一致性用例（`attempt.plan.toml:207`）；3.6 的措辞 |
 | [`a-version-port-that-must-carry-a-value`](questions-2026-10-31-a-version-port-that-must-carry-a-value.md) | `void` 调用写过的变量，它的读该靠什么后于那次调用（`:var/get` 的版本口必须运一个值） | 待裁 | 变更那一族的收尾；`a-version-port-that-must-carry-a-value` 本身 |
-| [`who-consumes-the-ruleset-index`](questions-2026-10-31-who-consumes-the-ruleset-index.md) | 规则集索引建好了、打印得出来，但没有 pass 查它：`jvp`/`transpose` 这两个变换算子（设计 9.9）什么时候落地，在那之前"缺规则"该由谁发出 | 待裁 | `jvp` 包装与两个变换算子本身；设计第 3 节那条"缺规则必须拒绝（9.9）"的诊断挂在哪一阶段 |
 
 原则第 15 节另列着 6 条未决（另 2 条已成页），见文末。
 
@@ -25,6 +24,7 @@
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
 |---|---|---|---|---|
+| [`who-consumes-the-ruleset-index`](../reviews/questions-2026-10-31-who-consumes-the-ruleset-index.md) | 索引建好了却没人查：`jvp`/`transpose` 的变换算子什么时候落地，"缺规则"的诊断由谁发出 | 已裁未落 | 2026-10-30 22:50（`301c3790e`）——`reinterp<H>` 就是消费者；`reinterp<jvp>` 按索引逐个原语替换，缺规则就在那个原语处报 9.9 的诊断 | `reinterp<jvp>` 本身；它是标量 `jvp` 验收与"缺规则"诊断的唯一落点 |
 | [`the-ruleset-module-has-no-rules-in-it`](../reviews/questions-2026-10-31-the-ruleset-module-has-no-rules-in-it.md) | `autodiff` 算不算 `jvp` 那族的规则集模块，还是把前向规则搬进 `rulesets/jvp.cml` | 已裁已落 | 22:10——(b) 搬进 `rulesets/jvp.cml`；规则集就是 `stdlib/rulesets/` 下的模块，按路径前缀判断 | 无。已落地 `3bf5324e2`（索引键加元数）`67b4c17bc`（5 条前向进 `rulesets/jvp.cml`、5 条转置进 `rulesets/transpose.cml`）`13d385530`（语言参考三句）；`autodiff` 只留包装与切线函数 |
 | [`jvp-family-anchor`](../reviews/questions-2026-10-30-jvp-family-anchor.md) | `#jvp` 这族规则没有挂点：补声明、挂标签、还是按算子 id 查表 | 已裁未落 | 09:35 ①，20:50 改成"内置原语的规则写规则集模块、按左边归属"，22:10 补上"搬规则" | 与上一行是**同一件活**；索引已落（`program.cpp:658-659` 按 `rulesets.` 前缀建），规则还没搬 |
 | [`what-carries-a-wait-for-a-write`](../reviews/questions-2026-10-31-what-carries-a-wait-for-a-write.md) | 值在门后等一次写、或等一次调用，该由哪种边承担 | 已裁未落 | 20:35——3.1 已经答了，不加第四种边；三件事：门的等待=同步前驱、三族遍改读"数据使用+同步链"、然后停造 ctrl 重测 | **②a 停造 ctrl**；`simplify`/`unread_gate`/`dropped_effects` 三族遍；`gates.cpp:19` 的使能条件 |
