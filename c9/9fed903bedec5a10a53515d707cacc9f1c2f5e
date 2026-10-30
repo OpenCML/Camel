@@ -1,0 +1,78 @@
+tip=c99fed903 H-defun3 交付：去函数化取这个名字，并成为 `std::opt` 之前的固定一步（闸门全绿）
+
+数字
+- 闸门 `-Plan all -Tier fast -Jobs 8`：`total: 7897, pass: 7886, fail: 0, skip: 9, known failures: 2`，RUN_EXIT=0。
+  stamp：`c99fed903b (clean)`，1223 source files，fingerprint `2a58a22cad35`（每次合入 develop 后都在新树上重跑，`fail 0` 一直是门槛）。skip 由 7 变 8、再变 9 是环境漂移（有卡被别的进程占住时设备用例跳过），不是回归。
+- `origin/develop` 在推送前是 `014605830`，已作为祖先合入（`--no-ff`，没有 ff 任何东西）；推上去的就是 `c99fed903`，与远端 `refs/heads/develop` 逐字相同。
+- 本支 7 个提交（首父序）：`9a527037a`（改名 + 固定步骤）→ `163a0f90c`（合 develop）→ `cc58d58bb`（三处拒绝 + 放弃）
+  → `e0001436f`（合 develop：pass 取 transaction）→ `0f8e4356e`（合 develop：字面量头部的类型表达式）
+  → `3a980de4c`（合 develop：两条标量减法）→ `c99fed903`（合 develop：取反与加宽的窄精度用例）。
+
+① 固定步骤的位置与展开时机
+- 表在 `src/execute/pass.cpp`：`fixedLoweringSteps[]`，一项 `{"std::defunctionalize report=false", "std::opt"}`；
+  展开函数 `expandFixedLoweringSteps()`。
+- 时机：`applyPassesDetailed()` 第一件事就是展开，**在 `requireKnownPasses()` 之前**，把这一步插到**第一个**
+  `std::opt` 之前。**已经写过就不插**（不重复跑），**流水线里没有 `std::opt` 就不插**（只跑程序要的，加上那一步需要的）。
+- 日志与所有检查读的是展开后的计划，所以"跑过的步骤一定在日志里"仍然成立；`std::opt safe_fp=true` 这类带参数的写法
+  按 `specName` 认名字，照样命中。
+- 核注册 `registerCoreKernel("defunctionalize", defunctionalizePass())` 在 `:558`；`report` 参数声明在
+  `stdlib/std.cml`（默认 `true`），插入的那一步带 `report=false`，所以报告与警告**不会落在程序自己的输出上**；
+  点名运行时才写 `DEFUNCTIONALIZE ...` 行并按被拒家族报警告。
+
+② 那 10 条写着遍名的用例，名字仍然必要
+- 15 条里 10 条在 `args` 里写着遍名：`four_backends`、`higher_order.lowered`、`captured.lowered`、`effects.kept`、
+  `pipeline_order_free`、`native_map.kept`、`value_tag.tag`、`family_shape.by_structure`、`closure_dispatch.lowered`、
+  `fold_and_dispatch.folded`。
+- 其中 **9 条流水线里没有 `std::opt`**（`std::defunctionalize std::stats std::nvm` 之类），名字仍然必要；
+  **只有 `defun.pipeline_order_free`（`std::defunctionalize std::opt std::jit`）现在不写也绿**。
+- 换句话说"固定"与"可选"不是互斥的：固定说的是流水线会在 `std::opt` 前自动跑它；可选说的是仍可以点名让它在此处跑、并且只跑它。
+  **别把这 10 条的名字删掉**——删了其中 9 条会红。
+- 新增第 16 条 `defun.fixed_before_opt` 把"不写名字"这条路钉住：只写 `std::opt std::stats`，断言没有
+  `DEFUNCTIONALIZE` 行、`indirect_calls=0`、`closures=0`、程序行不变。
+  A/B：注释掉表项 → **只红这一条**（`indirect_calls: 5`），其余 15 条仍绿；恢复 → 16/16。
+
+③ 三处真缺陷（这一步开始在"每支写 `std::opt` 的程序"上跑之后才暴露）
+1. **值交给"另一种函数类型"的形参**。`func apply(f: (x: int) => void, v: int)` 收一个 `(x: int) => int` 的 lambda
+   （lambda 返回它写下的值），宽化发生在调用点。只把 lambda 那一族换成 enum，tag 就被送进还写着函数类型的签名：
+   `graph 'main' node 9 passes a FnValue___g_49___0 as ordinary argument 0 of 'apply', which takes a (x: int) => void`，
+   图直接断边，`std::opt` 之前就报 `PassInternalError`。现在这种家族整族留下
+   （理由 `the value is handed to a parameter of another function type`），用例 `test/cases/effects/callback_write_through_parameter.cml`
+   （4 条 `callback.write_through_parameter_opt.*`）。
+2. **家族签名里含被留下的家族**。`tee_result_is_tuple.cml` 里 `step` 的写法 `() => (int, int..)?` 被拒（值不是对函数的纯引用），
+   而 `sides` 的签名 `(int.., int..)`、`count` 那一侧又嵌着它；只降外层就得到"一个图里既有 tag 又有函数类型"，
+   `std::opt` 报 `breaks its edge invariants`（4 条 `tee_result_is_tuple.opt.*`）。现在在不动点上把这种家族一起拒掉
+   （理由 `its type and '<被留下的类型>' name one another, and that one is left as written`），
+   并让 `mentions()` 走进 tuple/array——它原本只看 function 的形参与返回，所以看不见元组里的函数类型。
+3. **入口函数自己的值**。每支程序都有 `() => int` 这一族；把它当普通家族降级等于重新编码入口点：它吃掉了
+   `$spec` 编号（`fib$spec123…` 变成 `fib$spec122…`，编号整体挪了一位，两条 `generic` 用例因此红），还让 16 条 defun 断言的计数全变。
+   现在**不计入、不改写**（`std::erase_if` 从家族表里移除，理由写在 (5) 那一段）。`std::opt` 自己会把外壳那唯一一条
+   间接调用变成直接调用，`defun.fixed_before_opt` 断言的就是它。
+   副作用要知道：单独跑 `std::defunctionalize` 时 `indirect_calls` 是 **1** 而不是 0——那一条是外壳对入口函数的调用，
+   不是程序写的调用（早些版本的断言从 0 改成 1，注释里写了原因）。
+
+④ 已知限制：autodiff 那两支——**本遍自己的缺陷**，不是"已修"
+- `test/cases/modules/autodiff/` 的 `tensor_grad_check`、`nn_grad_check`（`simplified`/`simplify` 共 6 条）里，`check` 图有
+  落在有效应节点上的 ORDER 边；这一步把调用变直接后，节点带的是 enum（没有 resources），图会被判成
+  `order edge 6 -> 12 is on a pure node, which nothing orders`。
+- 现在的处理是**原样放弃**：重写是一个 session，未提交即丢弃，程序一字不改；点名时报 `DEFUNCTIONALIZE broke_invariant=1`
+  与一条 `DefunctionalizationIncomplete` 警告，不加名时静默。**这只让闸门不红，并没有修好它**——修法是把 effect 留在节点上，
+  而不是在这里 catch。原因与位置写在 `defunctionalize.cpp` 的文件头注释里。
+- **下一轮第一件事**：把这两支变成一条（红着也行的）用例，别让"放弃并报错"长期把它盖住。
+
+⑤ `05_effect_order` 的 golden 重录
+- `exemplars/05_effect_order/expected/simplified.agir.dot` 与 `run.log` 重录。原因具体到调用：`visit` 里的
+  `cb(items[i])` 原本是一条通过形参的 `CALL`；这一步把 `cb` 那一族（单变体，`main` 里那个 lambda）降级后，这条调用变成
+  对该 lambda 的**直接调用**，`std::opt` 随后把它内联进 `visit`，于是 `simplified` 的 dump 与旧 golden 不同
+  （旧的 `CALL` 节点消失，lambda 的 println 出现在 `visit` 里）。三条运行路径（nvm/fvm/simplified）的输出仍逐字一致，
+  exemplar 自己的比对通过。
+
+⑥ 名字与统计的具体数
+- `std::defun_value` → `std::defunctionalize`：文件 `defunctionalize.{h,cpp}`、类 `DefunctionalizeRewritePass`、
+  报告前缀 `DEFUNCTIONALIZE`、`stdlib/std.cml` 的声明、两份 `cli` 文档、`diagnostics` 例子全部改净。
+  `git grep defun_value` 只剩两处历史记录（`docs/handover/questions/defun-tag-in-the-type.cn.md`、
+  `function-type-structural-vs-enum.cn.md`），按"问题记录不改"保留。
+- 家族读数（除去入口那一族后，`defun.plan.toml` 里逐条断言）：`higher_order` `types=2 values=5 calls=4`、
+  `captured` `1/2/1`、`value_tag` `1/2/1`、`family_shape` `2/2/1`、`closure_dispatch` `1/3/1`（`branches=1`）、
+  `fold_and_dispatch` `1/1/2`（`branches=0`）、`native_map` `0/0/0 refused=1`。
+- 三处新增的拒绝理由都进了 `RuntimeDiag::DefunctionalizationIncomplete` 的帮助文字（`registry.tsv` 与
+  `runtime.cpp` 同步，`docs/diagnostics.md` 由脚本重生成）。
