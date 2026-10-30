@@ -81,6 +81,20 @@ b1 的 −2 是从哪掉的：`src/compile/gir/draft_graph_builder.cpp` 的 `mak
 
 | b3c-1（成员不再持草稿） | `ForwardRewrite` 的 `GraphDraft &draft_` 换成 `rt::GraphTransaction &transaction_` ＋ 访问器 `auto &draft() const { return transaction_.edit(); }`，体里 246 处 `draft_` 改叫 `draft()`：不点类型名，也不用在五十个方法的体首各插一行（访问器是 `const`，`member()` 这类只读方法照样能问它要图）。`Backward` 按定下的设计收**两个事务**：`rt::GraphTransaction &forward`（它读的图）与 `&target`（它写的图），两个成员同样换成事务 ＋ `forward()`／`target()` 访问器；`inPlace_(&forward == &target)` 一字未改——同图就是同一个事务，`gradient` 里传 `*transaction, *transaction` 两次同一个地址，"现在允许复用吗"这条规则从此写在调用点上，不在签名里。四个起点逐个定：臂 `(transaction_, *pullbackOwner)`、`Engine::build` `(*pending.source, *pullbackOwner)`、循环体 `(transaction, *pullbackOwner)`、`gradient` `(*transaction, *transaction)`。**剩下的读侧**（33 个自由助手的签名与它们的调用点、`regionOwners_` 的 `const GraphDraft *` 键、`using rt::GraphDraft;`）是 b3c-2。b3a 顺手加的那个 `GraphDraftGroup::transaction(id)` 访问器在这里删掉：**没有调用者**，就是提前造的入口，b4 搬居民时自然会有第一个，那时再加签名才准 | 73 / 562 | 1 | 12 |
 
+| b5a（自己 decode 输入的遍改从事务取图） | 三处自己给输入 decode 一张可编辑图的遍，改问事务要图，构造点一处未动：`gir_canonical` 的 `orderingOf` 用 `GraphTransaction::decode`、`transaction->edit()` 读并化简顺序边；`test::graph_release` 在事务里造 20000 个空节点再 `encode`；`test::writings` 的四处 `GraphDraft::decode` 全部改事务，两个只读助手 `portsOf`／`firstOperWith` 改收 `const GraphTransaction&`、体首一行 `const auto &draft = transaction.graph();`，五个调用点先绑一次 `auto &transaction = session.edit(g)` 再 `transaction.edit()`。`writings.cpp` 只留 `GraphDraft::WritingScope` 一处——那是存储自己的 RAII 护栏，不是这里的住户。`gir_canonical.cpp` 与 `graph_release.cpp` 从此不再出现这个名字 | 71 / 553 | 3 | 6 |
+
+`b5a` 的 `check.mjs --record`：`[LEDGER] recorded files 71 references 553 constructions 3 decode 6`。命名按层走：这一笔先拿"读的最薄、调用者一两个、不依赖谁"的那片，b4（运行时会话与通用改写）没动。
+
+| b5b（遍自己的局部助手收事务） | 两个遍的局部助手不再收 `GraphDraft&`：`tensor::fuse` 的七个（`operOf`、`isPrivateIntermediate`、`setSymbol`、`kernelChoice`、`markKernels`、`markGroup`、`markGroups`）与 `test::loop_collect` 的三个建图小助手（`addAccs`、`addOper`、`addInt`）改收 `GraphTransaction&`，只读的体首一行 `const auto &draft = transaction.graph();`、要写的 `auto &draft = transaction.edit();`，函数体其余一字未改；调用点把 `session.edit(g)` 那一份事务直接传下去，不再先 `.edit()` 再传。两个文件从此不再出现这个名字 | 69 / 541 | 3 | 6 |
+
+`b5b` 的 `check.mjs --record`：`[LEDGER] recorded files 69 references 541 constructions 3 decode 6`。
+
+| b5c（类型重建收事务） | `retypeDraft` 与它内部的 `inputCountOf` 改收 `GraphTransaction&`（要写的体首一行 `auto &draft = transaction.edit();`，只读的那一句用 `transaction.graph()`）；`GraphRetypeOptions::nodeType` 这个钩子的第一个参数也从 `const GraphDraft&` 换成 `const GraphTransaction&`——它今天没有实现者，签名按"读者拿事务"写，将来第一个实现者不必再改一次。三个调用点把 `session.edit(g)` 那一份直接传下去：`retypeGraph`、`retypeProgram`、以及 `defun_value` 的整程序重建（先绑 `auto &transaction = session.edit(graph)` 再 `transaction.edit()` 给它后续的读）。头文件的说明同步改成"重建一个事务拥有的图" | 67 / 537 | 3 | 6 |
+
+`b5c` 的 `check.mjs --record`：`[LEDGER] recorded files 67 references 537 constructions 3 decode 6`。
+
+| 并入 develop（`6ed427f5e`） | 只并基线，三个数一笔未动：develop 这九笔带来的是"去函数化只剩一个遍"、`transforms` 模块及其接线、和 effect chain place 丢失的账。与这三层相交的只有 `defun_value.cpp` 里那个 `retypeDraft` 调用点，按新行号自动落位，无冲突；并后重数仍是 67 / 537 / 3 / 6，所以这一行没有新的 `--record` | 67 / 537 | 3 | 6 |
+
 命名说明：上面那行 `b2.4a（测试体）` 是本页早先写的（`control.cpp` 那 15 处），协调者后来把这一步拆成"建图器签名"和"事实表"两笔并沿用 b2.4a／b2.4b 两个字母，所以本页有两处 b2.4a；括号里的名字才是区分。
 
 ### 一处行序抖动：`test/cases/linear/byref/var_capture_reference.cml`
