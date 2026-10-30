@@ -4,6 +4,22 @@
 > 相关：`docs/design/effects/edges.cn.md` 1（边只有 data/sync/order）、3.5（写与读的顺序）、5.3（GATE = 一个数据口 + 一个同步前驱）；`docs/design-principles.cn.md` 3.1。
 > 已落地的两步：`d52823be4`（读侧不再要求门留 ctrl）、`77fd9e53f`（臂出口的门改等链）。车道 `lane-edges`。
 
+## 结论先行（裁决真正要回答的那句话）
+
+**Order 不让一次写成为可观察的效果；那条等待今天是"这次写还活着"的唯一凭据，换成 order 边之后写被当死代码删掉。裁决真正要回答的是"什么边让效果活着"，不是"什么边排序"——排序早就够了。**
+
+证据（`Ctrl → Order` 之后 `std::gir` 的前后对比，`var.cml` / `var_params.cml` / `var_tensor_reference.cml` 三张图同一个形状）：
+
+```
+-            N04 [label=":op/assn_l", type="OPER", ... value_type="var int"];
+-            N05 [label="GATE", type="GATE", value_type="int"];
+-            N04 -> N05 [label="0|0", type="CTRL"];
+-            N05 -> O02 [label="0", type="EXIT"];
++            N02 -> O02 [label="0", type="EXIT"];
+```
+
+**门没有被绕过——门和写一起没了**（gates 数 2→1、6→4、4→3），图尾直接取表达式的值。今天的写节点**没有数据入边也没有数据出边**（`N04` 的边只有 `CTRL` 与同对的 `SYNC`），所以那条等待一换种类，它就什么都不剩。
+
 ## 一句话
 
 `coerceArmExit` 那个门等的是"**一条链走完**"，5.3 给了它答案（同步前驱），改成 sync 就绿。但**赋值门**（`builder_operators.cpp:4403`）和 **`void` 门**（`:4427`）等的是"**一次写 / 一次调用**"，这两种**手册里没有**：5.3 只说链上的门。今天是控制边在承担它们，而控制边按 1 要消失。
@@ -48,24 +64,6 @@
 
 **若作者倾向 (a)**，我建议的最便宜形态是：**不新增边类，而是让"效果等待"只出现在门的一个侧口上**（门有两个入边位置：值、以及"等谁做完"），导出格式里这个位置本来就存在（门今天就有 ctrl 入边，只是类型名要换）；这样两个 version 各改一行而非各加一类。
 
-## 裁决后的第一步：把"Order 不担版本"收窄（已验）
-
-我原来把 Order 那 81 条红写成"Order 不担版本"，**验完要收窄**——不是"顺序边传不了版本"，是**顺序边不让一次写成为可观察的效果**。
-
-验法：把三处 `Ctrl` 换成 `Order`，对 `var.cml`、`var_params.cml`、`var_tensor_reference.cml` 各取 `std::gir` 前后对比。三张图里**消失的不是边，是节点**：
-
-```
--            N04 [label=":op/assn_l", type="OPER", ... value_type="var int"];
--            N05 [label="GATE", type="GATE", value_type="int"];
--            N05 -> O02 [label="0", type="EXIT"];
-+            N02 -> O02 [label="0", type="EXIT"];
--            N04 -> N05 [label="0|0", type="CTRL"];
-```
-
-**写节点和它的门一起没了**，图尾直接取表达式的值。也就是说：**那条等待今天是"这次写是活的"的唯一凭据**；换成 order 边之后写被当死代码删掉，读于是读到旧值。这与"门被 `bypassValueGate` 绕过"**不是**一回事——门根本没被绕过，它和写一起消失了。
-
-**所以裁决要回答的其实是**：什么边能让一次写/一次调用**成为可观察的效果**？（不是"排序"，排序已经够了。）这也让 (b) 的理由更硬：今天没有任何一种边承担"效果活着"，只有 ctrl 承担。
-
 ## ②a 的可逆演练：停造 ctrl 会红多少（已跑，工作树已复原、无提交）
 
 把 **17 处 `linkNodes(LinkType::Ctrl`**（`builder_control.cpp` 8、`builder_expr.cpp` 5、`builder_operators.cpp` 3、`builder_helpers.h` 1）全注释掉，编一次，跑闸门：
@@ -81,6 +79,26 @@
 **那 10 行新增是什么**：**全是索引重编号，不是新边**——少一条 ctrl 后，同一节点剩下的 ctrl 边 `label="i|j"` 前移（`N0D -> N11` 从 `1|0` 变 `0|0`）。所以它在这里不是语义变化；但 ②a 重录时仍要逐条确认没有第二种来源。
 
 **584 条红的形状**：`gir.*_snapshot`、`boundaries.*`、`consecutive_sync_calls.*`(9)、`simplify_arm_write_lost.*`(8)、`unread_gate.*`、`dropped_effects`、`graph.null_then*`——**全是"效果/写/门"这一族**，与上面收窄后的结论同源：**停造 ctrl 之后，效果没有边来宣告它活着**。这就是 ②a 必须等裁决、不能"红了自己修"的原因。
+
+**为什么 584 条红里没有一条来自那几个最像该红的地方**：`control.topology` 与 `control.test_pass_runs_when_named` 在停造 ctrl 后**仍然 PASS**——**说明这些自检自己造边、不查这一种类是否存在；所以它们不能当作“停造安全”的证据**。
+
+## 一张表：哪一类效果要靠什么活着（给作者一句话能答）
+
+行按实现里已有的分类（`include/camel/core/operator_semantics.h` 的 `Effect {Undeclared, Pure, StateOnly, Effectful}`、`FaultSpec`、`OperatorTraits::mayFault`），不自己发明。**"靠什么活着"= 这个节点在图上凭什么被保住**（有数据使用者，或有某条边把它连到出口）。
+
+| 需要"活着"的效果 | 今天靠什么活着 | 停造 ctrl 之后还剩什么 | 缺口？ |
+|---|---|---|---|
+| **一次写 `var`**（`StateOnly`，`:op/assn_l`） | **只有 ctrl**（同一对门；`writeSyncStatement` 的那条还陪一条 SYNC） | 链上的写：**SYNC**（成对写里保留） | 链外（`builder_operators.cpp:4403`）的写：**什么都不剩** ← 缺口 |
+| **一次调用，`void` 或结果没人用** | **只有 ctrl**（`:4427` 的 `void` 门） | **什么都不剩** ← 缺口 |
+| **一次调用，位置要它的返回值** | 数据边（返回值有人读）+ ctrl（等调用返回） | 数据边在，**"已返回"的凭据没了** | 语义上悬空 ← 缺口 |
+| **可能出故障的算子**（`mayFault`，如 `:op/set_index_in_place`） | ctrl（sync 块里同时有 SYNC） | 块内：SYNC；块外：**什么都不剩** | 同形，**未单独验** ← 缺口 |
+| **`Effectful` 算子**（`println`、`io/`、profiler） | 返回值一般被读（数据边）；值没人用时走 `:4427` 的门 | 数据边那一半在；用到门的那一半**什么都不剩** | ← 缺口 |
+| **`Undeclared`**（没人声明） | 按 `operator_semantics.h:431` 当作 `Effectful` 处理，同上 | 同上 | 同上 |
+| **`Pure`** | 不需要凭据（没有效果），删不删由使用者决定 | 不变 | 不是缺口 |
+
+**已实测的两行**（都在 `probe2.cml` 里看 `std::gir`）：一次写——`x = 1` 之后没人读，写节点 `N04` 的边**只有 `CTRL` 与同对的 `SYNC`**，没有数据边；一次 `void` 调用——`voidcall()` 作语句，`N08 -> N0A [CTRL]` 连着它自己的门 `N0A`。其余三行是按同一形状推的，标注"未单独验"，裁决前需要的话我可以把它们也跑一遍。
+
+**表怎么读**：**"什么都不剩"的格子就是缺口**，也就是要作者裁的那句话——**哪一种边让这类效果活着**。若答案是"ctrl 留着"，那就是出路 (b)；若答案是"新的种类"，那就是 (a)。
 
 ## 边界（现状，给作者看）
 
@@ -102,8 +120,10 @@
 
 | 对象 | 今天的用户 | ctrl 归零后 | 处置 |
 |---|---|---|---|
-| ppendControlDependency（control.cpp:90-121） | inline/engine.cpp、generic/*、untime/draft_inline.cpp | 无 ctrl 可加 | **主体消失**，连同调用点 |
-| educeControlDependencies（:124-156） | std::opt::order 的部分路径、generic/* | 无 ctrl 可约简 | **主体消失** |
+| ppendControlDependency（control.cpp:90-121） | inline/engine.cpp、generic/*、
+untime/draft_inline.cpp | 无 ctrl 可加 | **主体消失**，连同调用点 |
+| 
+educeControlDependencies（:124-156） | std::opt::order 的部分路径、generic/* | 无 ctrl 可约简 | **主体消失** |
 | hasControlDependency 及 waitUsersOf 的 ctrl 分支 | 多处 | 分支消失 | **换成等同步前驱的版本**（syncPredsOf），不是删 |
 | src/passes/test/control.cpp 11 个用例（26 处提及） | control.topology、control.test_pass_runs_when_named | 见下 | 见下 |
 
