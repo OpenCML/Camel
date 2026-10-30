@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 #include "camel/parse/ast/rule_head.h"
 
 #include "camel/parse/syntax/cst.h"

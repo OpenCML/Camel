@@ -8645,7 +8645,20 @@ The rule '{0}' has a left side that is not one operator; it is written as '{1}',
 A ruleset is a module of rules, and the transform finds a rule for a primitive by the head of the rule's left side: `a + b` puts its rule under `+`, `-a` under `-`, and `f(a, b)` under `f`. A left side that is a literal, a tuple, or a chain of operators at one level names no one primitive, so no primitive can find it. Write the left side as one operator applied to the operands, or move the rule to the module that owns the shape it matches.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/rulesets/rulesets.err_left_not_operator.cml`, run as `camel test/cases/compile/rulesets/rulesets.err_left_not_operator.cml`)
+
+```camel
+// A left side that names no one operator: the index files a rule under the head of its left side,
+// and `x` alone names nothing a primitive could look up. It is refused where it is written.
+rule id_rule(x: float) {
+    x => (dx: float) => dx
+}
+
+func main(): int sync {
+    println(1)
+    return 0
+}
+```
 
 ### DuplicateRuleForOperator
 
@@ -8667,7 +8680,24 @@ The rule '{0}' and the rule '{1}' both have '{2}' as the head of their left side
 A transform looks up the rules of a primitive by the head of their left side, so a second rule under the same head has no way to be chosen: which of the two applies would be decided by the order they are written in, and the program would mean different things depending on where a rule sits. Merge the two into one rule whose right side covers both cases, or give one of them a left side with a different head.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/rulesets/rulesets.err_duplicate_head.cml`, run as `camel test/cases/compile/rulesets/rulesets.err_duplicate_head.cml`)
+
+```camel
+// Two rules of one module with the same head: a transform looks a rule up by the head of its left
+// side, so the second one has no way to be chosen. It is refused where it is written.
+rule first_rule(x: float, w: float) {
+    x + w => (dx: float, dw: float) => dx
+}
+
+rule second_rule(x: float, w: float) {
+    x + w => (dx: float, dw: float) => dw
+}
+
+func main(): int sync {
+    println(1)
+    return 0
+}
+```
 
 ### IgnoredSideEffect
 
