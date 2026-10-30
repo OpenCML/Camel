@@ -590,3 +590,25 @@ HANDLE_PROBE refused: InvalidArgument
 函数体里用 `this`、参数表里不再出现类型名，定义处仍有一处 `GraphDraft::` 限定，于是只 `+1`，从基线 515 起到 516
 就是那一处。**所以这一层要降的不只是「谁还连着它」，还有「同一句话被写了几遍」**：一句判据只该有一个拼写，
 这也是把谓词收成成员的第二个理由（第一个是写与判同义）。
+
+## 31. A 分支：两个叶子转了，四个被 B 挡住——**这一片的结论是顺序，不是数量**
+
+**转了的两个**（`33c185186`）：`operUriOf`、`gateInputsSurvive`。两个都是纯读，所以体内是
+`const auto &draft = transaction.graph();`——**`graph()` 是读的那一半，`edit()` 是写的那一半，这一片第一次按读写分开取。**
+
+**四个被挡住的，各自在声明处留了一句"被谁挡住"**：
+
+| 叶子 | 挡住它的是谁 | 它为什么挡 |
+|---|---|---|
+| `isPureOper` | `foldDraft`（B） | 它把收到的草稿原样传下去 |
+| `markSyncStatement` | `handOverSyncWait`、`replaceNode` | 两个调用方都收草稿 |
+| `handOverSyncWait` | `replaceNode`、`bypassValueGate`（B） | 同上 |
+| `replaceNode` | `replaceFoldResult`（B）、图模块的 `replace` | 事务在它们外面一层 |
+
+**所以 A 不是"做完 6 个"，是"做完 2 个、量出 4 个的依赖"**：**这四个叶子的入口全在 B 的 pass 函数里**——
+`foldDraft`、`replaceFoldResult`、`bypassValueGate`。**这说明族的真实顺序是 B → A 的剩余 → C**，
+不是表上原先写的 A → B → C。**表又一次自己改了答案**：分支 A 不是最先能做的一层，**它是最先能"读"的那一层**。
+
+**三个数**：**消失的参数 2 个**（`const GraphDraft &draft` ×2）；**删掉的行数 0**（净 `+7`：多出的三句挡路注释、两个 `const auto &draft` 绑定）；**保留 26 个**。
+
+**四个数：62 / 488 / 3 / 4**（`491 → 488`）。
