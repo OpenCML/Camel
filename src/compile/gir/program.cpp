@@ -663,6 +663,9 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
             if (rules.empty()) {
                 rules = camel::parse::ast::takeRuleHeads(unit->diags->moduleName());
             }
+            // The key is the operator and how many operands it was given, not the token alone:
+            // `-x` and `x - w` are two primitives (`__neg__` and `__sub__`) that write the same
+            // token, so a key without the count files two rules as one and refuses the second.
             std::unordered_map<std::string, std::string> ruleOfHead;
             for (const auto &rule : rules) {
                 if (!rule.shape.empty()) {
@@ -671,18 +674,20 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                     diag.commit(rule.rule, rule.shape);
                     continue;
                 }
-                const auto inserted = ruleOfHead.emplace(rule.head, rule.rule);
+                const std::string key = rule.head + "@" + std::to_string(rule.arity);
+                const auto inserted   = ruleOfHead.emplace(key, rule.rule);
                 if (!inserted.second) {
                     auto diag = unit->diags->of(SemanticDiag::DuplicateRuleForOperator);
                     diag.at(TokenRange{rule.tokenStart, rule.tokenEnd});
-                    diag.commit(inserted.first->second, rule.rule, rule.head);
+                    diag.commit(
+                        inserted.first->second, rule.rule, rule.head, std::to_string(rule.arity));
                     continue;
                 }
                 // A probe of the index itself: it prints what the ruleset holds, so a reader can
                 // see the heads the transform will look up rather than trusting that they are
                 // there. It is not the transform: no rule is applied here.
-                std::cout << "RULESET " << ruleset << ' ' << rule.head << " -> " << rule.rule
-                          << '\n';
+                std::cout << "RULESET " << ruleset << ' ' << rule.head << '/' << rule.arity << " -> "
+                          << rule.rule << '\n';
             }
             unit->failed = inError(unit);
         }

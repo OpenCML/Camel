@@ -26,7 +26,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_exact = "RULESET rulesets.probe_rule_heads + -> add_rule\nRULESET rulesets.probe_rule_heads * -> mul_rule\nRULESET rulesets.probe_rule_heads - -> neg_rule\n1\n"
+expect_stdout_exact = "RULESET rulesets.probe_rule_heads +/2 -> add_rule\nRULESET rulesets.probe_rule_heads */2 -> mul_rule\nRULESET rulesets.probe_rule_heads -/1 -> neg_rule\n1\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -51,3 +51,16 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::RuleLeftIsNotAnOperator"
 expect_diagnostic_code = "0x03000204"
 expect_diagnostic_line = 3
+
+[[tests]]
+name = "rulesets_arity_keeps_two_primitives_apart"
+desc = "`-x` and `x - w` write the same operator token and are two primitives (`__neg__` and `__sub__`). The index files a rule by the operator and the number of operands, so one module holds a rule for each and neither is refused as the other's duplicate."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/rulesets.probe_arity.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "RULESET rulesets.probe_arity -/1 -> neg_rule\nRULESET rulesets.probe_arity -/2 -> sub_rule\n1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
