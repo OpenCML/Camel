@@ -60,7 +60,7 @@ func bitsOfF16(value: f16): int[] {
     return to_array(to_bytes(one))
 }
 
-/// The stored element within the type's own epsilon of the exact power in f64: the same tolerance
+/// The stored element within one rounding's relative bound of the exact power in f64: the tolerance
 /// reduced_pow uses, so a compound assignment that kept f32 precision or rounded twice moves it.
 func bf16WithinEps(x: bf16, y: bf16): bool {
     let r: bf16 = x ^ y

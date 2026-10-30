@@ -203,3 +203,54 @@ b2.3e 我先报的是"60 处"（`rewrite.h` 17、`generic.cpp` 23、`rewrite.cpp
 
 - **`opt/generic` 的助手签名一换，每一处调用它们的函数都必须手里有事务**；而拿不到事务的三类持有者恰好是 b3（`inlineCallInOrder`／`pullback`）、b2.4（`compile/gir/builder_*`）、b4／b5（`runtime/resources.cpp`、`definitions.cpp`、`draft_session.cpp`、`passes/trans/cml/cml.cpp`）。**b2.3e 的真正位置在它们下游。**
 - **不并进 b6**：b6 的规矩是"只做删除、diff 应几乎全是删除行"，那是它能被看懂的证据；把 15 个签名 + 77 个调用点塞进去，b6 就同时是"改名"和"删名"，证据没了。
+
+## 10. 判据：改完能删代码的数量（三处评估后不做）
+
+三个数只说明"还剩多少拼写"，不说明"这一笔值不值"。补一个判据，**改完能删掉几行代码／几个局部变量**；为 0 就是净负（调用点变长、函数体多一行绑定），不做。三处照这个判据量过，都不做：
+
+| 层 | 拼写 / 调用点 | 能删的代码 | 结论 |
+|---|---|---|---|
+| `passes/test/control.cpp`（b5d 评估） | 1 处签名 / 46 个调用点 | **0 个局部变量** | **不做** |
+| `runtime/graph.cpp` 的 5 个 read-only 助手 | 5 处签名 / 12 个调用点 | 0 | **不做，整片留 b4** |
+| `modules/tiles` | 10 处 / 6 文件 | 0 行 | **不做，留 b4** |
+
+**`control.cpp` 为什么是 0**：那 46 个调用点改成 `node(*owner)` 之后，每个测试函数的 `auto &draft = owner->edit();` 一行也删不掉——这个文件里每个测试自己都要拿草稿调被测的 API（`reduceControlDependencies(draft, …)`、`draft.ctrlInputsOf(…)`、`draft.addNode(…)`），那行绑定是测试的题目，不是直连的残渣。**换掉 1 处拼写、46 个调用点变长，净负。**代码尝试已退回，树回到 `ef6dcac85`。
+
+**`graph.cpp` 为什么整片留 b4**：那 5 个助手（`draftRuntimeNodeRefs`、`nodeIsFreelySchedulable`、`isUnanchoredPure`、`carriesOrdering`、`describeDraftPayload`）的 12 个调用点里，9 个在拿不到事务的持有者手里（`opt/generic/rewrite.cpp`、`opt/generic/generic.cpp`、`writings.cpp`、`draft_inline.cpp`）。**b5 的边界不是"还能改哪儿"，而是"改完不会把 b4 拽进来"。** 账本 §6 把 `graph.*` 归 b4、`draft.h`（存储自身）归 b6，这里以它为准。
+
+**`modules/tiles` 为什么是 0**：这 10 处里真正的住户有三个——`region_extract.cpp` 的 `std::make_unique<rt::GraphDraft>()`（**三个构造点之一**）、`regions.h` 的 `std::unique_ptr<runtime::GraphDraft> graph` 成员、`region_test_pass.cpp` 的 by-value 局部 `runtime::GraphDraft draft;`。改签名要先把这三个住户换成事务，那是 b4 的规模；只改签名则两处定义各多一行 `auto &draft = transaction.edit();`，删掉的行数是 0（`packGraphAggregate`／`packGraphTuple` 的 5 个调用点、`transferAggregate` 的 3 个调用点一个都不因此消失）。
+
+**判据的第三条（最容易违反的一条）**：**改签名而调用点不减，等于把成本从一处搬到 N 处——那不是重构，是扩散。** 判断时把两个数列出来：改前 `拼写数 / 调用点数`，改后预期 `拼写数 / 调用点数`；后者只少了拼写、调用点一个不少，且没有一行代码被删掉，就是扩散。
+
+## 11. b5 剩下的格子：三个数一次量完，全是 0
+
+按 §10 的判据把 b5 剩下的几处一次量完（处数 / 调用点数 / **改完能删的行数**），按能删行数降序——全为 0，所以**一处都不做**：
+
+| 区域 | 处数（文件） | 调用点 | 能删的行数 | 真正的住户是谁 |
+|---|---|---|---|---|
+| `modules/graph` | 15（4：`handle.h` 5、`handle.cpp` 1、`read.cpp` 6、`txn.cpp` 3） | `->draft()` 4、`GraphDraft::decode` 1，另有 handle 的构造与访问器 | **0** | handle 存的 `const GraphDraft*`；换成事务是尺寸中性的重拼 |
+| `modules/rewrite` | 4（2：`fact.cpp` 3、`proof.h` 注释 1） | 1（`first->draft()`） | **0** | 它从 handle 取图，handle 不改它没得改 |
+| `passes/test/resources.cpp` | 4 | 29 处调用（13 行） | **0** | 一个构造点 `make_unique<rt::GraphDraft>()` + 三个 `(GraphDraft&)` lambda；构造点按规矩不动 |
+| `passes/test/fault.cpp` | 2 | 2（`breakFirstBranchOfMain` 的回调签名） | **0** | 回调类型由测试辅助定，改它要动共享设施 |
+| `modules/onnx/exporter.cpp` | 1 | 1（`bindCaptures(session.rootDraft().edit(), …)`） | **0** | 只多传一个事务、少一次 `.edit()`，行数不变 |
+| `passes/test/writings.cpp` | 1 | 1（`GraphDraft::WritingScope`） | **0** | 存储自己的 RAII 守卫，归 b6 |
+| `modules/tensor`（`fuse.cpp`） | 0 | 0 | 0 | b5b 已做完 |
+| `passes/test/anchor.cpp` | 0 | 0 | 0 | 已是 0 |
+
+**结论**：b5 到这里只剩"住户"——构造点、handle 的存图、存储的 RAII 守卫、编码器的回调签名；它们的名字要随类型一起消失，那是 b6（handle 那条还牵着 b4）。**b5 不再有正收益的层可做**；再往下该开 b4／b6，而不是在 b5 里继续找。
+
+**b5 收尾（本页到此为止，不再往下推）**：b5 剩余八处，能删行数全为 0；剩下的住户是构造点、handle 的存图、`WritingScope`、编码器回调——归 b6（handle 还牵 b4）。**b5 到此为止。** 加一句给后来人：**别再把 b5 的边界往后推——能删行数为 0 的层就是边界。**
+
+## 12. b4 的入口：handle 一片，四个数 + 构造点一分为二
+
+b4 只有一个人口：`modules/graph/handle.h` 里那个 `const GraphDraft *draft_`。b4 的难点不是签名，是"**有人要先拿到图才能拿到 handle**"，量的时候把它单列。
+
+**四个数**：
+1. **handle 走图的处数**：**15 处 / 4 文件**（`handle.h` 5、`handle.cpp` 1、`read.cpp` 6、`txn.cpp` 3）。
+2. **调用点数**：**7**——`read.cpp` 的 `handle->draft()` 3（136、164、446）、`*node.draft` 1（637）、`GraphDraft::decode` 1（672）、`fact.cpp:825` 的 `first->draft()` 1、`handle.cpp:271` 的 `createInDraft(*draft_, …)`（clone）1。
+3. **若把 handle 换成事务能删几行**：**0 行**。`draft_` 换成 `transaction_` 是同数目的成员，`draft()` 访问器改成 `graph()` 也是同 1 行；**但它顺手消掉一个 decode 点（6 → 5）和一条"草稿活得比事务久"的路**——所以它的价值不在行数，在把 b6 的前提挪到位。
+4. **换完谁还会去拿 handle**：**13 个构造点是"从 program 拿图"造出来的**（`read.cpp` 8、`txn.cpp` 3、`fact.cpp:424` 1、`module.cpp:1544` 1），这些调用者手里只有 `Program`／`Function`、没有事务；**这批人就是 b4 的第二片**（Camel 侧的 `graph::` 函数与 rewrite 模块的 `whenArg`）。
+
+**构造点一分为二（决定 b4 是一笔还是三笔）**：**4 个在事务里造**（`createInDraft`：`read.cpp:165`、`fact.cpp:422`、`module.cpp:332`、`module.cpp:360`），**13 个在事务外造**（`Handle::create`，从 `program` 造）。**四六开、而且"事务外"那侧全是同一个形状（`program` → `Handle::create`）**，所以 b4 更像"一片（把 4 个在事务里的先收）+ 一片（13 个从 program 造的，要先给他们事务）"，而不是三笔。
+
+**一条结构事实，写在这里免得下一个人以为这是改名**：`handle.cpp:281` 的 `updateRefs` 只 trace `program_`，`draft_` 是**借来的裸指针、不参与 GC 追踪**；`equals()` 又拿 `draft_` 指针当身份。换成事务要同时回答"谁持有它、它参不参与 `updateRefs`、身份怎么比"——**这是所有权问题，不是拼写问题**，也正因为如此，它必须排在 b6 之前、且不能并进 b5。
