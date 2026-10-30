@@ -33,7 +33,7 @@
  *   -max - max                   0xFF80 [128,255] 0xFC00 [0,252]
  *
  * A subtraction that rounds is also read against the exact difference in f64, which the stored
- * element must be within the type's own epsilon of, and against the same expression in f32 below
+ * element must be within one rounding's relative bound of, and against the same expression in f32
  * (a result kept at f32 would answer the f32 value and not the element).
  */
 
@@ -53,7 +53,7 @@ func bitsOfF16(value: f16): int[] {
 }
 
 /// The stored element is the nearest member of the type to the exact difference: off by no more
-/// than the type's own epsilon in relative terms (2^-8 for bf16, 2^-11 for f16).
+/// than one rounding's relative bound (2^-8 for bf16, 2^-11 for f16; half each type's machine epsilon).
 func bf16Nearest(a: bf16, b: bf16): bool {
     let r: bf16 = a - b
     let exact: f64 = f64(a) - f64(b)
