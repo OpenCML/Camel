@@ -450,8 +450,9 @@ DefunValueRewritePass::apply(const camel::runtime::Program *program, std::ostrea
     {
         RuntimeGraphDraftSession session(context_, program);
         for (GCGraph *graph : session.program()->graphs()) {
-            auto &draft = session.edit(graph).edit();
-            retypeDraft(draft, types, options);
+            auto &transaction = session.edit(graph);
+            auto &draft       = transaction.edit();
+            retypeDraft(transaction, types, options);
 
             std::vector<gc_node_ref_t> tagNodes, callNodes;
             for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {

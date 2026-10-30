@@ -15,11 +15,11 @@
  * version keeps serving whoever holds it, which is exactly why this must not be an edit in place.
  *
  * What the rebuild is:
- *   - `retypeDraft` rewrites one draft: every live node's type, the layout of the runtime slots,
- *     the layout of the static area (but for a slot whose value is an object of the replaced type:
- *     see `leaveStaticObjects`), the function type, the closure type and the form ports of the
- *     regions. Node kinds, node ids, the five input lists, the region table, the ports and the
- *     reference table are left exactly as they are.
+ *   - `retypeDraft` rewrites the graph one transaction owns: every live node's type, the layout of
+ *     the runtime slots, the layout of the static area (but for a slot whose value is an object of
+ *     the replaced type: see `leaveStaticObjects`), the function type, the closure type and the
+ *     form ports of the regions. Node kinds, node ids, the five input lists, the region table, the
+ *     ports and the reference table are left exactly as they are.
  *   - `retypeGraph` decodes one frozen graph, does that, and commits: the graph it returns is the
  *     version the program now holds, and the one it was given is untouched.
  *   - `retypeProgram` does it for every graph the program reaches, in one commit. This is the form
@@ -65,6 +65,7 @@
 namespace camel::runtime {
 
 class RuntimeGraphDraftSession;
+class GraphTransaction;
 class GCGraph;
 class Program;
 
@@ -104,7 +105,7 @@ struct GraphRetypeOptions {
     /// variant -- and it must not change what the node does: kinds, inputs and payloads are not its
     /// business.
     std::function<camel::core::type::Type *(
-        const GraphDraft &draft, gc_node_ref_t node, GCNodeKind kind,
+        const GraphTransaction &transaction, gc_node_ref_t node, GCNodeKind kind,
         camel::core::type::Type *oldType, camel::core::type::Type *mapped)>
         nodeType;
 
@@ -144,12 +145,12 @@ struct GraphRetypeReport {
     }
 };
 
-/// Rewrites `draft` so that every type it names is the one the table gives for it. Kinds, ids,
-/// edges, regions and references are untouched. Throws std::runtime_error when a static value
-/// would have to be given a type its object does not have, unless `leaveStaticObjects` says to
-/// leave it.
+/// Rewrites the graph `transaction` owns so that every type it names is the one the table gives
+/// for it. Kinds, ids, edges, regions and references are untouched. Throws std::runtime_error when
+/// a static value would have to be given a type its object does not have, unless
+/// `leaveStaticObjects` says to leave it.
 GraphRetypeReport retypeDraft(
-    GraphDraft &draft, const GraphTypeSubstitution &types,
+    GraphTransaction &transaction, const GraphTypeSubstitution &types,
     const GraphRetypeOptions &options = {});
 
 /// The rebuild of one frozen graph: decode `source` into the session, retype it, commit. Returns
