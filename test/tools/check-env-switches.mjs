@@ -19,8 +19,13 @@
  * exactly one site: the file, the variable it reads (`reads: null` when the helper reads a name
  * its caller chose), and one sentence saying why it is still there or who still owes it. A line
  * whose site is gone fails too, so clearing a switch means deleting its line, and the list can
- * only shrink towards the two names that are configuration rather than behaviour: `CAMEL_HOME`
- * (the installation root) and `CAMEL_TILES_NVRTC` (where the CUDA toolchain lives).
+ * only shrink towards the one line that stays -- `CAMEL_TILES_NVRTC`, where the CUDA toolchain
+ * lives; `CAMEL_HOME` (the installation root) never needs a line at all.
+ *
+ * What the ledger is for, in one sentence: it does not record what is left to clear, it records
+ * what is still there. A line that points at a call site that is gone is a fake asset in the
+ * account -- it reads like work still owed when the work is done, and it hides the day a switch
+ * comes back, because the line would quietly allow the new site.
  *
  *   node test/tools/check-env-switches.mjs
  */
@@ -75,6 +80,7 @@ const LEDGER = [
         owner: 'the environment-variable queue, core batch (lane-envsw)',
         why: 'reads kMaxMacroRoundsEnvVar (CAMEL_MAX_MACRO_ROUNDS) by name, after --max-macro-rounds; still a switch',
     },
+
     {
         at: 'src/core/rtdata/variant.cpp:traceWanted',
         reads: 'CAMEL_TRACE_VARIANT',
@@ -86,8 +92,7 @@ const LEDGER = [
         reads: 'CAMEL_DEFUN_DEBUG',
         owner: 'the environment-variable queue, core batch (lane-envsw)',
         why: 'a temporary diagnostic marked as such in the pass; still a switch',
-    },
-    {
+    },    {
         at: 'modules/tiles/src/cuda_backend.cpp:nvrtcPaths',
         reads: 'CAMEL_TILES_NVRTC',
         owner: 'none: it stays',
@@ -101,19 +106,7 @@ const LEDGER = [
     },
     {
         at: 'modules/tiles/src/region_test_pass.cpp:RegionOutlineTestPass',
-        reads: 'CAMEL_TILES_TEST_REASONS',
-        owner: 'the tiles line (its test pass)',
-        why: 'a switch of the test pass itself',
-    },
-    {
-        at: 'modules/tiles/src/region_test_pass.cpp:RegionOutlineTestPass',
         reads: 'CAMEL_TILES_TEST_I64',
-        owner: 'the tiles line (its test pass)',
-        why: 'a switch of the test pass itself',
-    },
-    {
-        at: 'modules/tiles/src/region_test_pass.cpp:RegionOutlineTestPass',
-        reads: 'CAMEL_TILES_TEST_DECLARATIONS',
         owner: 'the tiles line (its test pass)',
         why: 'a switch of the test pass itself',
     },
