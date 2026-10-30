@@ -28,6 +28,29 @@ lane `lane-inv`，基线 `origin/develop` = `0faa9d4bf`（会话开始时），�
 | Arm / Block 归属 | 同上，但来源是 `GCRegion{kind=Arm\|Block}` 的 `owner` / `callSite` | 抬到的位置确实是运行那张图的节点，链按写下的顺序仍然存在 | 0 |
 | 「调用它的节点就拥有它」 | 上一行之外，再让任何调用某张图的节点都成为它的拥有者 | **不成立**：一张图可以被多处调用、也可以当函数值传，拥有者不唯一，抬上去的链是假的。整闸 `fail 186`（`sync_block_order.*`、`var_param.*`、`equal_branch.*` …），报文里还出现「效应在图 51 却说 in graph 47」这种混图 | 186 红，**已剔除，未进这一支** |
 
+## `older_effect_place` 今天的颜色
+
+作者问：`older_effect_place` 在 `develop` 上今天是绿是红，绿了是哪一笔修好的。
+
+**绿。** 但要先把事实说清：**这个用例不在 `develop` 的树里**。全仓只有一笔加过它——`4af274872`
+（"Hold the lane's remaining work in one place before measuring against develop"，作者 Zhenjie Wei），
+它只在 `lane-eff-rule` 分支上，没合进 `develop`。`git log --all -- test/cases/consistency/if_without_else/older_effect_place.cml`
+只有这一条，`origin/develop` 的树里既没有这个文件，也没有计划项。
+
+所以量的是**那段程序**（与那一笔里的用例同文）在两棵树上跑出来的顺序：
+
+| 树 | 三遍 | 输出 |
+|---|---|---|
+| `develop` 的 `abbc9c229`（10-29 21:10 的构建，主机 `camel-work/Camel`） | `std::nvm` / `std::opt std::nvm` / `std::opt::inline std::opt std::nvm` | `before / older / 1 1 / after`，三遍都对 |
+| 本车道 `1636a849d`（基线 develop `e8d92a8ec` + 本页的五笔） | 同上三遍 | 同上，三遍都对 |
+
+**没有可点名的「修好它的 sha」**：我能构建的最早一棵树（`abbc9c229`，10-29）已经是绿的，而那一笔加用例
+的时间在 10-30，所以 `develop` 上不存在一段「红 → 后来绿」的区间可以二分。`lane-eff-rule` 那一笔自己
+动了 `src/passes/opt/generic/generic.cpp`、`src/runtime/draft_inline.cpp`、`src/compile/gir/builder*` 与
+`modules/tiles/src/graph_regions.cpp`——它更像**带着修复**的一笔，而它上面的红是「修复前」的状态。
+要给出一个 sha，需要先有一棵能复现红的树（`lane-eff-rule` 修复前那一版即可，一次构建），这不是本车道
+能独立回答的问题。
+
 ## 给作者的一句话
 
 **这条不变量今天是「防将来」，与此前的环守卫同类**：它没有查出任何现存缺陷，是一次「某笔改写一旦把
