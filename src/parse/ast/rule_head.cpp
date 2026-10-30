@@ -14,6 +14,9 @@ namespace {
 
 std::mutex registryMutex;
 std::map<std::string, std::vector<RuleHead>> registry;
+// The index a ruleset module answers questions from: family -> ("head@arity" -> rule name). A
+// sorted map, so a lookup is one binary search and a family's rules are printable in a fixed order.
+std::map<std::string, std::map<std::string, std::string>> indexed;
 
 } // namespace
 
@@ -101,6 +104,45 @@ std::vector<RuleHead> takeRuleHeads(const std::string &module) {
         registry.erase(at);
     }
     return heads;
+}
+
+std::string indexRule(const std::string &family, const RuleHead &rule) {
+    std::lock_guard<std::mutex> lock(registryMutex);
+    std::map<std::string, std::string> &rules = indexed[family];
+    const std::string key = rule.head + "@" + std::to_string(rule.arity);
+    const auto at         = rules.find(key);
+    if (at == rules.end()) {
+        rules.emplace(key, rule.rule);
+        return {};
+    }
+    if (at->second == rule.rule) {
+        return {};
+    }
+    return at->second;
+}
+
+RuleMatch lookupRule(const std::string &family, const std::string &head, uint32_t arity) {
+    std::lock_guard<std::mutex> lock(registryMutex);
+    const auto familyAt = indexed.find(family);
+    if (familyAt == indexed.end()) {
+        return RuleMatch{RuleLookup::NoSuchFamily, {}};
+    }
+    const auto at = familyAt->second.find(head + "@" + std::to_string(arity));
+    if (at == familyAt->second.end()) {
+        return RuleMatch{RuleLookup::NoRuleForPrimitive, {}};
+    }
+    return RuleMatch{RuleLookup::Found, at->second};
+}
+
+std::vector<std::string> ruleFamilies() {
+    std::lock_guard<std::mutex> lock(registryMutex);
+    std::vector<std::string> families;
+    families.reserve(indexed.size());
+    for (const auto &[family, rules] : indexed) {
+        (void)rules;
+        families.push_back(family);
+    }
+    return families;
 }
 
 } // namespace camel::parse::ast

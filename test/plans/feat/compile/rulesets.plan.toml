@@ -64,3 +64,15 @@ expect_exit = 0
 expect_stdout_exact = "RULESET rulesets.probe_arity -/1 -> neg_rule\nRULESET rulesets.probe_arity -/2 -> sub_rule\n1\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "rulesets_lookup_answers_and_says_why_not"
+desc = "The index is asked through `lookupRule(family, head, arity)` -- the function a transform asks -- and the answers are pinned: `-` with one operand in `rulesets.jvp` is `jvp_neg`, `-` with two is `jvp_sub` (two primitives, one token), `-` with three has no rule, and a family no module declares is unknown. The two ways of not finding a rule are named apart, because the repairs differ: write the rule, or import the ruleset. A program that asks nothing prints nothing."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/compile/rulesets/rulesets_lookup.py"
+args = ["${case}", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["ruleset lookup: PASS"]
+expect_output_not_contains = ["FAIL"]
+timeout_ms = 60000
