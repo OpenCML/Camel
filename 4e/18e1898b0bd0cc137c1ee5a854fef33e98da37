@@ -1,0 +1,41 @@
+# lane-gen2：循环里的 yield 拆成四臂；锁重指到"跨 yield 携带两个值"
+
+合入 96c51c3e6 及其前 4 笔（本提交为合入 develop 的合并提交，develop 头 4e18e1898）。
+
+## 做了什么
+Builder::visitGeneratorBody 里 yield 落在 while 循环体时，把循环拆成四臂：fter / condPc /
+odyPc / stepPc。循环携带的量是函数体里的一个普通单元（与 ar 同形、按句柄进状态结构体），
+pc 在 yield 之后那一句接上继续走循环，不另造"循环状态"这一类东西——与作者 2026-10-30 05:40
+对第 11 条的裁定对号。ill 多一个
+extState：体的末值写进该单元；末值为空、初值为空
+（多于一个携带量）或同名单元已存在时按名拒。六个递归调用点与入口一致地传
+extState。
+两条实现守卫都有结构性理由：初值/同名单元必须先拒（否则读 null 或撞名），体的末值只挂在
+cell 写入这一处（Tree::append 断言一个节点只能有一个父，双挂会撞）。
+
+## 锁重指
+stream.yield_lowering_refused 从"循环里写 yield"改指 loop i = 0, s = 0（**跨 yield 携带两个
+值**）：13:9，SemanticDiag::FeatureNotSupported，0x03000040，exit 1。拒的是这一路仍缺机器的那类
+形状，不是任意形状。
+
+## 两处假话，已删（不是把红的改绿）
+stream.yield_statement_is_read 曾声称编译器"按名拒" yield，而它只跑 check -s，从不报红；
+pairs 今天已能编译（exit 0，仅 IgnoredSideEffect 警告）。**已删该断言**，用例注释与 plan desc
+改成"此处只持有语句形状"，行为钉在 stream.generator_loop（循环）与 stream.generator（if 两臂）。
+判断依据："这段本来就不该被拒"——pairs 是 plan.cn.md:290 的验收草图。不新增用例，total 不动。
+
+## 三条 A/B（同一棵树内，串行）
+1. 退成单臂（循环一律拒）：91/5，红的是**且仅是** generator_loop 五条（'generators'@21:9）。
+2.
+extState 传空：91/5，形态是编译错「+ 的结果没被使用」@22:9（体的末值必须有人收，不是"值不动"）。
+3. 去掉守卫（任何循环都收）：95/1，红的只有 yield_lowering_refused——**"放宽判据→新用例红"不成立**，
+   判据不经过新用例；这条 A/B 守的是锁，不是新用例。
+
+## 断言账本：不开新表
+一张"断言账本"要人工维护，第二个月就会失真；树内 gate.case_ledger 只核"用例文件有没有被代码
+读到"，守的也不是断言。事实记在用例注释、plan desc、提交信息三处。真正的账本是"每条断言都能被
+A/B 打红"。
+
+## 闸门
+smoke,test/plans/feat，fast，8 jobs：	otal 7824, pass 7820, fail 0, skip 2, known failures 2。
+本路新增 5 条用例（generator_loop 四后端 + _default），其余增量来自同期合入的 develop。
