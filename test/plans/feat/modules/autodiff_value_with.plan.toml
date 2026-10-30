@@ -147,6 +147,9 @@ const handled = {
   ':coll/map_put': 'refused-at-construction',
   ':coll/set_add': 'refused-at-construction',
   ':coll/set_contains': 'no-channel',
+  // The one `with` argument is a type, not a value: the node makes a cell of that type with
+  // nothing in it, so there is no value here for a gradient to come back to.
+  ':var/new/empty': 'no-channel',
 }
 const known = new Set(Object.keys(handled))
 const missing = valueWith.filter((o) => !known.has(o.uri)).map((o) => o.uri + ' <' + o.params.map((p) => p.name + ': ' + p.type).join(', ') + '>')

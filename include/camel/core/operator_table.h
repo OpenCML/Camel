@@ -115,7 +115,11 @@ inline constexpr OperId EnumField       = 16; // ":enum/field"
 inline constexpr OperId CopyArray       = 17; // ":struct/copy_arr"
 inline constexpr OperId AppendOwned     = 18; // ":struct/append_arr_owned"
 inline constexpr OperId MacroCmp        = 19; // ":macro/cmp"
-inline constexpr OperId kWellKnownCount = 20; // kNoOper included
+/// A cell with no value in it yet, of the type its single `with` argument names. What a local of a
+/// generator body becomes: its value is written where the statement stands, and not in the body
+/// that creates the stream (design principles 5.4).
+inline constexpr OperId VarNewEmpty     = 20; // ":var/new/empty"
+inline constexpr OperId kWellKnownCount = 21; // kNoOper included
 
 /// Reading a variable: `:var/get`, or `:var/peek`, the same read for a value that only goes to
 /// operations that cannot keep it (it leaves the variable's sole-reference mark set; see
@@ -146,6 +150,7 @@ inline constexpr std::string_view kWellKnownOperatorUris[oper::kWellKnownCount] 
     ":struct/copy_arr",
     ":struct/append_arr_owned",
     ":macro/cmp",
+    ":var/new/empty",
 };
 
 /**

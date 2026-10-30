@@ -2,9 +2,9 @@
   "comment": "The baseline of the direct-connection ledger (graph-store step 2 b): the numbers below may only fall, and the last step is all of them at zero. `sites` records where each number comes from, as `file#symbol` (a line number moves with every edit above it, a symbol does not); it is diagnostics for a red and never decides the verdict. Record a new row after a commit with check.mjs --record.",
   "numbers": {
     "files": 66,
-    "references": 532,
+    "references": 530,
     "constructions": 3,
-    "decode": 6
+    "decode": 5
   },
   "sites": {
     "files": {
@@ -471,7 +471,6 @@
       "src/runtime/writings.cpp#constantNode": 1,
       "src/runtime/writings.cpp#costModels": 1,
       "src/runtime/writings.cpp#extract": 1,
-      "src/runtime/writings.cpp#graphWritings": 2,
       "src/runtime/writings.cpp#lookupOrAdd": 1,
       "src/runtime/writings.cpp#makeKey": 1,
       "src/runtime/writings.cpp#nodeText": 1,
@@ -490,8 +489,7 @@
       "modules/rewrite/proof.h#-": 1,
       "src/runtime/draft.cpp#decode": 1,
       "src/runtime/draft_inline.cpp#liftClosureGraph": 1,
-      "src/runtime/draft_inline.cpp#specializeGraphWithBindings": 1,
-      "src/runtime/writings.cpp#graphWritings": 1
+      "src/runtime/draft_inline.cpp#specializeGraphWithBindings": 1
     }
   }
 }

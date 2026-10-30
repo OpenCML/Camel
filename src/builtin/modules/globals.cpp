@@ -841,6 +841,26 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
             }),
         OperatorGroup::create(
+            "__var_new_empty__",
+            {
+                {
+                    ":var/new/empty",
+                    // A cell of a type, with nothing in it: the compiler writes one for a local
+                    // of a generator body, whose value is written where its statement stands and
+                    // not in the body that creates the stream (design principles 5.4). The type
+                    // is the one `with` argument, so no value is needed to make the cell.
+                    DynamicFuncTypeResolver::create(
+                        {{1, {false}}, {0, {}}},
+                        "<T>() => var T",
+                        [](const type_vec_t &with, const type_vec_t &) -> optional<Type *> {
+                            if (with.empty() || with[0] == nullptr) {
+                                return nullopt;
+                            }
+                            return TupleType::cell(with[0]->widened());
+                        }),
+                },
+            }),
+        OperatorGroup::create(
             "__var_get__",
             {
                 {
