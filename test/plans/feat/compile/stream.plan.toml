@@ -1044,3 +1044,29 @@ expect_stdout_exact = "1\na\n2\n-\n1\nend\n"
 expect_output_not_contains = ["[Error]", "[Warn]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+[[tests]]
+name = "stream.generator_error_element"
+desc = "A stream whose elements can be wrong (`int!..`, design principles 5.4): the pull answers an error element as the `int!` value it is, so the consumer reads `error Boom: bad` where the body yielded `error('Boom','bad')` and `error Bad: no` where a fallible call answered, and a good element reads its number. An error element is a value, not a fault (3.9), so nothing about it ends the stream -- the body's end does. An element that silently became the success value would print a number instead, so the exact string holds the reading. All four back ends agree, and the default path is the fifth."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_error_element.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "1\nerror Boom: bad\n-\n1\nerror Bad: no\nend\n"
+expect_output_not_contains = ["[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "stream.generator_error_element_default"
+desc = "The same program with no pass named: the default path is std::nvm, and it is the fifth back end the error element of a stream is pinned on."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_error_element.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "1\nerror Boom: bad\n-\n1\nerror Bad: no\nend\n"
+expect_output_not_contains = ["[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
