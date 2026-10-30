@@ -1,18 +1,16 @@
 /**
- * The widening the pass cannot write, as the smallest program that shows it.
+ * The widening the pass writes with a wrapper.
  *
  * `apply` takes `(x: int) => void`, and the program writes values of that type of its own (`void_g`)
- * as well as a lambda that returns a value and is widened where `apply` is called. Lowering the
- * lambda's family turns those values into the enum of `(x: int) => int`; the parameter's own type is
- * a family with values, and turning it into the same enum would call `void_g` with the wrong tag.
- * Writing the widening needs a wrapper -- a function of the parameter's type that calls the value
- * and drops its result -- which this pass cannot build: it stops the pipeline and names this program
- * rather than leave a graph with two forms of a function value.
+ * as well as a lambda that returns a value and is widened where `apply` is called. Those are two
+ * families: one enum over both would call `void_g` with a tag that is not its own. So the
+ * parameter's family gains a variant whose one field is the enum of the lambda's family, and the
+ * function that variant names -- a graph this pass writes -- takes the parameter's own parameters
+ * and, last, that enum. It dispatches over it, calls the value, and drops what the value gives,
+ * because its own signature is the parameter's and that one says `void`.
  *
- * This is a defect of the pass and not of the program. When the wrapper lands, this test flips: the
- * program is lowered, `defun.widened_parameter.defect` becomes a lowering test, and it is renamed with
- * the rest of `defun.widened_parameter.*` -- the error these lines describe is not a shape this pass
- * keeps.
+ * Nothing of the program's is left as a function value: no closure and no call through a value
+ * remains once both families are lowered.
  */
 
 func apply(f: (x: int) => void, v: int) {
