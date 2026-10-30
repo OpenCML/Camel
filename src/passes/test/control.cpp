@@ -287,7 +287,7 @@ void syncChainOrdering() {
         check(draft.setSyncPredecessor(gate, tail), "a gate did not take the chain's tail");
         const auto reader = node(draft);
         draft.setNormInputs(reader, std::span<const gc_node_ref_t>(&gate, 1));
-        const auto sources = camel::passes::generic::orderedSources(draft, reader);
+        const auto sources = camel::passes::generic::orderedSources(*owner, reader);
         check(
             sources.size() == 1 && sources.front() == gate,
             "a gate that waits only on the sync chain does not carry the order");
@@ -304,7 +304,7 @@ void syncChainOrdering() {
         check(draft.setSyncPredecessor(plain, tail), "a node did not take the chain's tail");
         const auto reader = node(draft);
         draft.setNormInputs(reader, std::span<const gc_node_ref_t>(&plain, 1));
-        const auto sources = camel::passes::generic::orderedSources(draft, reader);
+        const auto sources = camel::passes::generic::orderedSources(*owner, reader);
         check(
             std::ranges::find(sources, tail) != sources.end(),
             "the walk did not follow the sync chain");

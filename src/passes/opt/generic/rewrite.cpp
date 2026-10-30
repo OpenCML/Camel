@@ -40,7 +40,8 @@ std::string_view operUriOf(const camel::runtime::GraphTransaction &transaction, 
     return reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data())->uri();
 }
 
-camel::core::OperId operIdOf(const GraphDraft &draft, gc_node_ref_t id) {
+camel::core::OperId operIdOf(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
     const auto *h = draft.header(id);
     if (!h || h->kind != GCNodeKind::Oper) {
         return camel::core::kNoOper;
@@ -61,7 +62,8 @@ bool isPureOper(const camel::runtime::GraphTransaction &transaction, gc_node_ref
     return camel::core::OperatorTable::instance().mayBeRecomputed(body->oper);
 }
 
-bool isValueOnly(const GraphDraft &draft, gc_node_ref_t id) {
+bool isValueOnly(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
     const auto *h = draft.header(id);
     if (!h) {
         return false;
@@ -80,20 +82,23 @@ bool isValueOnly(const GraphDraft &draft, gc_node_ref_t id) {
     }
 }
 
-bool isDeadWhenUnread(const GraphDraft &draft, gc_node_ref_t id) {
-    if (isValueOnly(draft, id)) {
+bool isDeadWhenUnread(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
+    if (isValueOnly(transaction, id)) {
         return true;
     }
     return camel::runtime::isUnanchoredPure(draft, id);
 }
 
-bool isReplaceable(const GraphDraft &draft, gc_node_ref_t id) {
+bool isReplaceable(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
     // The entry node is only a marker (erasing it resets it, and encoding then derives it from
     // the first node), so it does not pin a node; inlining often leaves it on a dead value.
     return id != draft.exitNode() && id != draft.outputNode() && id != draft.returnNode();
 }
 
-bool reaches(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to) {
+bool reaches(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t from, gc_node_ref_t to) {
+    const auto &draft = transaction.graph();
     std::vector<bool> seen(draft.nodeSlotCount(), false);
     std::vector<gc_node_ref_t> work{from};
     while (!work.empty()) {
@@ -116,7 +121,8 @@ bool reaches(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to) {
     return false;
 }
 
-bool readsNoWrittenSlot(const GraphDraft &draft, gc_node_ref_t id) {
+bool readsNoWrittenSlot(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
     std::vector<gc_node_ref_t> work{id};
     std::vector<bool> seen(draft.nodeSlotCount(), false);
     while (!work.empty()) {
@@ -142,7 +148,8 @@ bool readsNoWrittenSlot(const GraphDraft &draft, gc_node_ref_t id) {
     return true;
 }
 
-std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t id) {
+std::vector<gc_node_ref_t> orderedSources(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
     std::vector<gc_node_ref_t> sources, work;
     std::vector<bool> seen(draft.nodeSlotCount(), false);
     for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id)}) {
@@ -186,7 +193,7 @@ void replaceNode(
             preds.push_back(source);
         }
     }
-    for (gc_node_ref_t source : orderedSources(draft, id)) {
+    for (gc_node_ref_t source : orderedSources(transaction, id)) {
         if (std::ranges::find(preds, source) == preds.end()) {
             preds.push_back(source);
         }
@@ -239,7 +246,7 @@ void replaceNode(
             addInheritedWait(pred);
         }
     }
-    for (gc_node_ref_t pred : orderedSources(draft, id)) {
+    for (gc_node_ref_t pred : orderedSources(transaction, id)) {
         addInheritedWait(pred);
     }
 
@@ -280,7 +287,7 @@ void replaceNode(
     // the node.
     if (!draft.syncUsersOf(id).empty()) {
         std::vector<gc_node_ref_t> lastRead;
-        for (gc_node_ref_t source : orderedSources(draft, id)) {
+        for (gc_node_ref_t source : orderedSources(transaction, id)) {
             if (!camel::runtime::carriesOrdering(draft, source, true)) {
                 continue;
             }

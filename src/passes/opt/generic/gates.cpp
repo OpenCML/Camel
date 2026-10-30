@@ -17,7 +17,7 @@ bool bypassValueGate(
     camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, size_t &edgeBudget) {
     auto &draft = transaction.edit();
     const auto *gate = draft.header(id);
-    if (!gate || gate->kind != GCNodeKind::Gate || !edgeBudget || !isReplaceable(draft, id) ||
+if (!gate || gate->kind != GCNodeKind::Gate || !edgeBudget || !isReplaceable(transaction, id) ||
         draft.normInputsOf(id).size() != 1 || !draft.withInputsOf(id).empty()) {
         return false;
     }
