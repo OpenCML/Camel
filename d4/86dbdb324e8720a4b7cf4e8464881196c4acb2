@@ -1,0 +1,20 @@
+# b4 第一片第一步：handle 能指名事务（纯加能力）
+
+推入 develop：`d486dbdb3`（代码笔 `e467242e3` + 判据笔 `9d5f25108`，外加并入 develop）。
+闸门：**total 7898 / pass 7889 / fail 0 / skip 7 / known 2**，stamp `d486dbdb3 / clean / ac9939d4…`。
+三个数：66 / 535 / 3 / 6（只加能力、不删拼写）。
+
+## 三句
+
+1. **这一步只加能力、没有任何调用者、行为与上一笔逐字节相同**：`Handle` 新增 `transaction_`、`transaction()`、`createInTransaction`，`clone()` 多一个事务分支；旧的 `draft_`／`createInDraft` 原封不动，所以每个现有路径走的还是原来那条。
+2. **下一步第一件**：`modules/graph/read.cpp:165` 的 `nodeHandle(from, node)` —— 从 `from->transaction()` 取事务、用 `createInTransaction`；`read.cpp` 的 `->draft()` 由 3 降到 2。做完立刻构建，绿了再动剩下两处。
+3. **所有权注释先于代码**：`updateRefs` 的注释先说"只 trace `Program`，事务是借来的、在收集器图之外、不参与追踪，句柄活得比它久就什么也不指名"；`equals()` 先说"同一所有者 + 同一节点才是同一个节点"，代码再去符合它。
+
+## 一条从这笔长出来的规矩（账本 §15 末）
+
+新代码里**点名就算数**，`auto` 是这一层的写法。起因很小：`createInTransaction` 里写成 `const GraphDraft &draft = …` 当场把 535 顶到 536，改 `const auto &draft` 才绿。
+真正的含义：**这一层的类型名是借来的，写类型名等于宣告所有权**——b4／b6 从此按这条判：谁在代码里写出 `GraphDraft`，谁就是在宣告自己持有它；只借来用一次的写 `auto`，让所有者留在它该在的地方。
+
+## 树能不能构建
+
+**能**。中间态只做了 `handle.h`／`handle.cpp` 两个文件，每改完一个文件构建一次（`-Plan compile` 1845/1845、`fail 0`）；整闸 7898/7889/0/7/2。停下时树是"功能没做完"，不是"树坏了"。
