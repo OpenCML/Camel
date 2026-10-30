@@ -431,7 +431,7 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     // two names to one value; the first name wins).
     if (!ident.empty() && !std::isdigit(static_cast<unsigned char>(ident.front())) &&
         ident.front() != '$') {
-        runtime::GraphDraft &draft = currGraph_->draft();
+        auto &draft = currGraph_->transaction().edit();
         if (draft.nodeName(bound.id) == camel::core::kEmptySym) {
             draft.setNodeName(bound.id, camel::core::internSymbol(ident));
         }
@@ -1553,7 +1553,7 @@ void Builder::collapseNonEscapingVariableReads() {
     // would name a node the graph does not keep. It goes before the reads that are folded, with the
     // order edge that kept the next write after it.
     {
-        auto &graphDraft = currGraph_->draft();
+        auto &graphDraft = currGraph_->transaction().edit();
         std::vector<node_handle_t> unused;
         for (const auto &entry : variableReadSource_) {
             const node_handle_t read = entry.first;
@@ -1590,7 +1590,7 @@ void Builder::collapseNonEscapingVariableReads() {
         }
         byCell[info.cell].push_back({read, info.source});
     }
-    auto &draft = currGraph_->draft();
+    auto &draft = currGraph_->transaction().edit();
     for (auto &[cell, reads] : byCell) {
         // A `var` parameter of this graph is a resource shared with the caller, and a captured cell
         // is shared with a closure: both keep their cell.

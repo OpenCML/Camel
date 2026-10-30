@@ -1218,7 +1218,7 @@ const Program *extractWritings(
         if (graph->executable()) {
             continue;
         }
-        GraphDraft &draft = session->edit(graph);
+        auto &draft = session->edit(graph).edit();
         DraftWritings writings(draft);
         writings.extract(model, context.get());
     }

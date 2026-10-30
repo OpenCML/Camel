@@ -195,7 +195,8 @@ namespace {
 /// through: they hold no execution of their own (docs/design/effects/edges.cn.md 5.8), so they
 /// separate nothing. Region 0, the body, is not in the chain either: its code runs with the graph.
 std::vector<uint32_t> controlRegionChainOf(
-    const runtime::GraphDraft &draft, draft_node_ref_t id) {
+    const runtime::GraphTransaction &transaction, draft_node_ref_t id) {
+    const auto &draft = transaction.graph();
     std::vector<uint32_t> chain;
     for (uint32_t region = draft.nodeRegion(id); region != 0; region = draft.region(region).parent) {
         const runtime::GCRegionKind kind = draft.region(region).kind;
@@ -213,10 +214,10 @@ std::vector<uint32_t> controlRegionChainOf(
 /// false when an owner cannot be named -- a region nothing owns yet -- and the edge is then left
 /// where it was written rather than moved onto a node that is not there.
 bool orderEndsOnOneRegion(
-    const runtime::GraphDraft &draft, draft_node_ref_t pred, draft_node_ref_t user,
+    const runtime::GraphTransaction &transaction, draft_node_ref_t pred, draft_node_ref_t user,
     draft_node_ref_t &predOut, draft_node_ref_t &userOut) {
-    const std::vector<uint32_t> predChain = controlRegionChainOf(draft, pred);
-    const std::vector<uint32_t> userChain = controlRegionChainOf(draft, user);
+    const std::vector<uint32_t> predChain = controlRegionChainOf(transaction, pred);
+    const std::vector<uint32_t> userChain = controlRegionChainOf(transaction, user);
     size_t common                          = 0;
     while (common < predChain.size() && common < userChain.size() &&
            predChain[common] == userChain[common]) {
@@ -228,7 +229,7 @@ bool orderEndsOnOneRegion(
         if (common >= chain.size()) {
             return true; // the end is in the region both share
         }
-        const runtime::gc_node_ref_t owner = draft.region(chain[common]).owner;
+        const runtime::gc_node_ref_t owner = transaction.graph().region(chain[common]).owner;
         if (owner == runtime::kInvalidNodeRef) {
             return false;
         }
@@ -242,7 +243,7 @@ bool orderEndsOnOneRegion(
 
 void Builder::rehomeOrderEdges(const compile_graph_ptr_t &graph) {
     ASSERT(graph != nullptr, "A built body is a graph.");
-    runtime::GraphDraft &draft = graph->draft();
+    auto &draft = graph->transaction().edit();
     // Most bodies order nothing: their effects are on the sync chain, and a body of pure
     // computation writes no order edge at all.
     bool ordersAnything = false;
@@ -277,7 +278,7 @@ void Builder::rehomeOrderEdges(const compile_graph_ptr_t &graph) {
         for (draft_node_ref_t pred : written) {
             draft_node_ref_t from = pred;
             draft_node_ref_t to   = id;
-            if (!orderEndsOnOneRegion(draft, pred, id, from, to)) {
+            if (!orderEndsOnOneRegion(graph->transaction(), pred, id, from, to)) {
                 continue;
             }
             if (from == pred && to == id) {
@@ -1428,7 +1429,7 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
             }
         }
     } regionScope;
-    regionScope.draft = &currGraph_->draft();
+    regionScope.draft = &currGraph_->transaction().edit();
     regionScope.outer = regionScope.draft->insertRegion();
     if (blockTags.nodes != camel::core::attr::kNoAttrs && gct != functionBody_) {
         const uint32_t block = regionScope.draft->addRegion(

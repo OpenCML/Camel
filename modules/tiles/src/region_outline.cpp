@@ -332,7 +332,7 @@ const runtime::Program *outlineRegions(
         const auto &analysis = analyses.at(graph);
         if (analysis.regions.empty())
             continue;
-        auto &draft = session.edit(graph);
+        auto &draft = session.edit(graph).edit();
         std::unordered_map<size_t, rt::gc_node_ref_t> resident;
         const rt::ControlRegions control(*graph);
         // Where a segment runs: the control region of its members (docs/design/gpu/plan.cn.md 2.5). An operator

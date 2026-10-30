@@ -49,6 +49,7 @@
 #include "camel/core/operator_semantics.h"
 #include "camel/core/operator_table.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/graph_txn.h"
 
 #include <map>
 #include <memory>
@@ -219,11 +220,11 @@ struct ExpandResult {
     explicit operator bool() const { return value != kInvalidNodeRef; }
 };
 
-/// Expands the OPER node `node` of `draft` (a draft of `session`) into its operator's
-/// definition (see the file comment). Nothing changes when the operator has no definition, it
-/// cannot be built, or a required operand is missing.
+/// Expands the OPER node `node` of `transaction`'s graph (a graph of `session`) into its
+/// operator's definition (see the file comment). Nothing changes when the operator has no
+/// definition, it cannot be built, or a required operand is missing.
 ExpandResult expandDefinition(
-    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t node,
+    RuntimeGraphDraftSession &session, GraphTransaction &transaction, gc_node_ref_t node,
     ExpandOptions options = {});
 
 } // namespace camel::runtime

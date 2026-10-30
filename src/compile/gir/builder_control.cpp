@@ -104,8 +104,8 @@ void retypeValueNode(DraftGraphBuilder *graph, node_handle_t node, Type *type) {
     if (graph == nullptr || node == nullptr || type == nullptr) {
         return;
     }
-    runtime::GraphDraft &draft = graph->draft();
-    const auto id              = nodeIdOf(node);
+    auto &draft    = graph->transaction().edit();
+    const auto id  = nodeIdOf(node);
     draft.setNodeDataType(id, type);
     if (nodeIsKind(node, runtime::GCNodeKind::Data)) {
         return; // a static slot, not a frame slot
@@ -590,7 +590,7 @@ node_handle_t Builder::convertStructValue(
     std::iota(slots.begin(), slots.end(), 0);
     const slot_t empty =
         camel::core::rtdata::toSlot(::Struct::create(target->size(), camel::core::mm::autoSpace()));
-    auto &draft        = currGraph_->draft();
+    auto &draft        = currGraph_->transaction().edit();
     node_handle_t base = draft.ref(draft.materializeStaticValue(empty, target));
     node_handle_t out  = currGraph_->addFillNode(
         target,
@@ -1218,7 +1218,7 @@ void Builder::coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_
     }
     // The nodes are added to the arm's own region; no name is looked up, so the scopes of the
     // position the branch stands at do no harm.
-    runtime::GraphDraft &draft = arm->graph->draft();
+    auto &draft                = arm->graph->transaction().edit();
     const uint32_t outerRegion = draft.insertRegion();
     draft.setInsertRegion(arm->region);
     node_handle_t output  = arm->output;
@@ -1282,7 +1282,7 @@ void Builder::readArmCellValue(const arm_ptr_t &arm) {
     if (isVariable(cell)) {
         version = valueVersionOf(cell);
     }
-    runtime::GraphDraft &draft = arm->graph->draft();
+    auto &draft                = arm->graph->transaction().edit();
     const uint32_t outerRegion = draft.insertRegion();
     draft.setInsertRegion(arm->region);
     node_handle_t read = variableOperator(
@@ -1426,7 +1426,7 @@ Builder::arm_ptr_t Builder::buildArm(
     const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body,
     runtime::GCRegionKind kind, const std::function<void(ArmBuild &)> &declare) {
     auto arm                   = std::make_shared<ArmBuild>();
-    runtime::GraphDraft &draft = currGraph_->draft();
+    auto &draft                = currGraph_->transaction().edit();
     const uint32_t outerRegion = draft.insertRegion();
     arm->bodyId                = nextBodyId_++;
     arm->graph                 = currGraph_.get();
@@ -2634,7 +2634,7 @@ node_handle_t Builder::buildBranch(
     }
     // The JOIN takes what each arm gives; each arm is the region it was built in, which the
     // BRCH owns now that it is there.
-    runtime::GraphDraft &draft = currGraph_->draft();
+    auto &draft = currGraph_->transaction().edit();
     for (size_t i = 0; i < armList.size(); ++i) {
         linkNodes(LinkType::With, armList[i]->output, joinNode);
         draft.setRegionOwner(armList[i]->region, nodeIdOf(brchNode), static_cast<uint32_t>(i));
@@ -2767,7 +2767,7 @@ node_handle_t Builder::buildBranch(
 void Builder::linkArmEntries(const std::vector<arm_ptr_t> &arms, node_handle_t brchNode) {
     // The nodes of an arm that read nothing the arm computes wait for the BRCH: the arm runs
     // only when it is entered.
-    runtime::GraphDraft &draft = currGraph_->draft();
+    auto &draft                = currGraph_->transaction().edit();
     const draft_node_ref_t end = static_cast<draft_node_ref_t>(draft.nodeSlotCount());
     for (const arm_ptr_t &arm : arms) {
         const auto inArm = [&](draft_node_ref_t id) {
@@ -2871,7 +2871,7 @@ node_handle_t Builder::intervalSequenceValue(
     std::vector<Type *> bounds{Type::Int64(), Type::Int64()};
     TupleType *boundsType       = TupleType::create(bounds);
     const std::vector<size_t> slots{0, 1};
-    runtime::GraphDraft &draft = currGraph_->draft();
+    auto &draft                 = currGraph_->transaction().edit();
     node_handle_t result        = currGraph_->addFillNode(
         boundsType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
     const slot_t empty =
@@ -3268,7 +3268,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             bodyPart->output == nullptr || !isSplittableAggregate(stateType)) {
             return false;
         }
-        runtime::GraphDraft &draft = currGraph_->draft();
+        auto &draft                = currGraph_->transaction().edit();
         const size_t statePortAt   = camel::core::loopHasIterable(kind) ? 1 : 0;
         if (bodyPart->ports.size() != statePortAt + 1) {
             return false;
@@ -3579,7 +3579,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         linkNodes(LinkType::With, condPart->output, loopNode);
     }
     linkNodes(LinkType::With, currGraph_->addRegionPortNode(Type::Int64(), ""), loopNode);
-    runtime::GraphDraft &draft = currGraph_->draft();
+    auto &draft = currGraph_->transaction().edit();
     draft.setRegionOwner(bodyPart->region, nodeIdOf(loopNode), 1);
     draft.setRegionResult(bodyPart->region, nodeIdOf(bodyPart->output));
     if (condPart) {
@@ -3984,7 +3984,7 @@ node_handle_t Builder::buildStreamLoop(
         linkNodes(LinkType::With, condPart->output, loopNode);
     }
     linkNodes(LinkType::With, currGraph_->addRegionPortNode(Type::Int64(), ""), loopNode);
-    runtime::GraphDraft &draft = currGraph_->draft();
+    auto &draft = currGraph_->transaction().edit();
     draft.setRegionOwner(bodyPart->region, nodeIdOf(loopNode), 1);
     draft.setRegionResult(bodyPart->region, nodeIdOf(bodyPart->output));
     if (condPart) {
@@ -4261,7 +4261,7 @@ std::vector<Type *> Builder::collectLoopAppends(
     if (stateCount == 0 || emptyInitial.size() != stateCount || body->returned) {
         return {};
     }
-    runtime::GraphDraft &draft = currGraph_->draft();
+    auto &draft                = currGraph_->transaction().edit();
     node_handle_t returned     = loopStateValueOf(body->value);
     if (returned == nullptr) {
         return {};
