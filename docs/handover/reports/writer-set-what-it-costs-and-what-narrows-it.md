@@ -127,3 +127,35 @@
 **它比的是哪两样**：`RESOURCES node`/`RESOURCES order` 这些行（由声明 + 建好的图算出来，`src/runtime/resources.cpp:783 resourcesOf`）对**源码程序里写的 clause**（`test/cases/effects/declared.cml:20-32`），断言写在计划的内联 `verify_script` 里（`test/plans/feat/compile/effects_syntax.plan.toml:26-53`）；**没有快照文件**。
 
 **判据**：**结果说"就是那个单元"、访问却说"读了它"——两者同时成立时，账本迟早会数两次；先看哪一句是多余的，再决定改哪一边。**
+
+## 8. 重录：旧账与新账，两份都贴
+
+方法：同一份代码，合 `lane-edges` 前后各跑一次 `test::resources`，把 `RESOURCES node`/`RESOURCES order` 原样留下（`14d1052a8` 与合后 `692c053d1`）。**两段账都能解释，才叫"形状变了"。**
+
+**`test/cases/effects/declared.cml`（两次 `bump(cell)`）**
+
+旧账（`14d1052a8`）：
+```
+RESOURCES node main 8 FUNC bump: rmw variable (node 7)
+RESOURCES node main 9 FUNC bump: rmw variable (node 7)
+RESOURCES order main 8 9 resource ordered by control
+RESOURCES node main 13 :var/get: read variable (node 7); result may_alias 0
+```
+
+新账（`692c053d1`）：
+```
+RESOURCES node main 8 FUNC bump: rmw variable (node 7)
+RESOURCES node main 9 FUNC bump: rmw variable (node 10)
+RESOURCES node main 10 :var/after: read variable (node 7); result same 0
+RESOURCES order main 8 9 resource ordered by data
+RESOURCES node main 14 :var/after: read variable (node 7); result same 0
+RESOURCES node main 15 :var/get: read variable (node 14); result may_alias 0
+```
+
+读法：第二次调用的实参现在是第一次调用产出的那个版本（`:var/after`，`Same(0)`，**同一个格子**），于是两次调用之间有了 data 边——**定序种类从 control 变成 data，不是断言放宽**。计划里 `pair('bump', cells, 'data')` 加一句"第二次的节点要么是同一格，要么是第一格上的 `:var/after`"，把这条形状写死。
+
+**`test/cases/resources/effects.cml`（`core` 那几条）**：旧 `19 :var/take: rmw variable (node 18)` → 新 `20 :var/take: rmw variable (node 19)`；旧 `order main 12 35 ... by control` → 新 `order main 12 37 ... by data`；旧 `order main 19 21 ... by data` → 新 `20 22 ... by data`；账里多出 `16 :var/after: read variable (node 2)`。**这一段没有重录**，因为它重录后会撞上计划里一条全局断言，见下。
+
+**停下来的那一处（按"必须删就停"）**：按新账重录 `core` 之后，`assert(!out.includes(' unordered'), 'the program orders every conflicting pair')`（`test/plans/feat/modules/resources.plan.toml:149`）会红——新账里有一对 **`RESOURCES order main 15 16 resource unordered`**：`main` 的 `CALL` 节点 15 写 node 2，它上面那个 `:var/after` 16 也指 node 2，两者是冲突却**没有顺序**。这不是重录能解决的（删断言 = 删既有行），所以这一段退回旧账、报上去。
+
+**判据**：**重录可以是"形状变了"，不能是"数变松了"；判据是同一份代码在合入前后各跑一次，两段账都能解释。**
