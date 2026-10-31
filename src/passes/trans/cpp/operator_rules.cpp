@@ -604,10 +604,12 @@ Rules buildRules() {
         false,
     };
     // A type name applied to a one-dimensional numeric array converts every element. A value with
-    // several dimensions or an open rank is not a flat run here, and neither is bf16 or f16 -- an
-    // element type this back end does not have (`kNoSuchElementType`, and `notTranslatedBecause`
-    // says it where a value of one is refused). Those are refused, as the other array operators
-    // refuse, and the refusal does not say `yet`: that word is for work not done.
+    // several dimensions or an open rank is not a flat run here, and neither is bf16 or f16: the
+    // language's core value types (reduced-precision.md b1 -- literals, scalar arithmetic,
+    // comparison, conversion), 16 bits of storage, computed in f32 and rounded to nearest even once,
+    // the same rule `dtype.h` and the interpreter follow. C++ can carry them, so what is missing is
+    // an rt:: value and the rules over it, not an ability of the target: these are refused the way
+    // the other array operators refuse a value they have not been written for yet.
     for (const auto &[uri, element] : {std::pair<const char *, const char *>{":op/atoi", "int32_t"},
                                       {":op/atol", "int64_t"},
                                       {":op/atof", "float"},

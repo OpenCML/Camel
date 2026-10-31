@@ -46,18 +46,6 @@ bool isValueType(const Type *type);
 
 /// Whether a value of `type` ends the flow: its call throws and does not come back.
 bool endsFlow(const Type *type);
-
-/// What a refusal says when the value is one this back end has no element type for: bf16 and f16
-/// are numbers Camel has and the standalone runtime does not. It is an ability this back end does
-/// not have, and it is said as one -- the refusals that are work not yet done say "yet", and this
-/// one must not.
-inline constexpr const char *kNoSuchElementType =
-    ": this back end has no such element type -- bf16 and f16 are not among the numbers it writes";
-
-/// The clause a refusal adds for a value of that kind, or nothing for any other type.
-std::string notTranslatedBecause(const Type *type);
-
-
 /// What the refusals say std::cpp translates.
 inline constexpr const char *kTranslatedTypes =
     "std::cpp translates numbers (real and complex), bool, string, enums, arrays, tuples, structs, T?, T!, "

@@ -114,14 +114,14 @@ timeout_ms = 8000
 
 [[tests]]
 name = "refuse_narrow_float"
-desc = "A value of bf16 is a number the language has and an element type this back end does not: the refusal says which of the two it is. It names the operator and the type, says that bf16 and f16 are not among the numbers this back end writes, and does not say `yet` -- that word belongs to the refusals about work not done (`refuse_tensor` keeps it), and a writer reading the wrong one would go looking for a rule to add."
+desc = "A value of bf16 is a core value type of the language (reduced-precision.md b1: literals, scalar arithmetic, comparison, conversion), 16 bits of storage computed in f32 and rounded to nearest even once -- C++ carries it, so the refusal here is work not done, not an ability the target lacks. The sentence names the operator and the type and ends in `yet`, as every refusal about a rule that is not written does; it does not claim the back end has no such element type, which would send a reader away from the code that is missing."
 kind = "negative"
 case = "../../../cases/trans/cpp/refuse_narrow_float.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_output_contains = ["this back end has no such element type", "bf16 and f16 are not among the numbers it writes", "has type 'bf16'"]
-expect_output_not_contains = ["yet"]
+expect_output_contains = ["has type 'bf16'", "-- but not this one yet"]
+expect_output_not_contains = ["no such element type"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
