@@ -40,6 +40,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -154,11 +155,15 @@ namespace detail {
 
 /// One argument of `format`, classified as the runtime hands it to fmt.
 struct FormatArg {
-    enum class Kind { Integer, Float32, Float64, C64, C128, Text } kind;
-    int64_t integer    = 0;
-    double real        = 0;
-    double imaginary   = 0;
+    enum class Kind { Integer, Float32, Float64, C64, C128, Text, Array } kind;
+    int64_t integer  = 0;
+    double real      = 0;
+    double imaginary = 0;
     std::string text;
+    /// An array whose element is a number: its text under a specification, written element by
+    /// element. Empty for every other argument, and for an array whose element takes no
+    /// specification of its own.
+    std::function<std::string(std::string_view)> underSpec;
 };
 
 inline FormatArg formatArg(int64_t v) { return {FormatArg::Kind::Integer, v, 0, 0, {}}; }
@@ -494,10 +499,58 @@ inline std::string formatOne(const FormatArg &arg, std::string_view specText, bo
             static_cast<float>(arg.real), static_cast<float>(arg.imaginary), specText, hasSpec);
     case FormatArg::Kind::C128:
         return formatComplex(arg.real, arg.imaginary, specText, hasSpec);
+    case FormatArg::Kind::Array:
+        // A numeric array under a specification is written element by element, its brackets and
+        // its `, ` its own; an array whose element takes no specification of its own is text,
+        // and the specification lays out that text (`string[]` with `{:>8}`).
+        if (hasSpec && arg.underSpec) {
+            return arg.underSpec(specText);
+        }
+        return formatText(arg.text, parseSpec(specText));
     case FormatArg::Kind::Text:
     default:
         return formatText(arg.text, parseSpec(specText));
     }
+}
+
+/// Whether one specification acts on each element of a `T` on its own, as the interpreter
+/// decides it (`isNumericElementType` in src/builtin/operators/str.cpp): the numbers. An array of
+/// arrays is not one of them -- its element is an array, and the specification lays out the whole
+/// text, exactly as `string[]` does.
+template <typename T> struct SpecPerElement : std::false_type {};
+template <> struct SpecPerElement<int32_t> : std::true_type {};
+template <> struct SpecPerElement<int64_t> : std::true_type {};
+template <> struct SpecPerElement<float> : std::true_type {};
+template <> struct SpecPerElement<double> : std::true_type {};
+
+/// The text of a numeric array with `spec` applied to each element -- `'{:.4f}'->format<xs>` is
+/// `[0.7692, 0.7808]`: the specification acts on every element on its own, while the brackets
+/// and the `, ` between elements are the array's own form (design principles 7.7).
+template <typename T>
+void appendArrayUnder(std::string &out, const Array<T> &xs, std::string_view spec) {
+    out += '[';
+    for (std::size_t i = 0; i < xs.size(); ++i) {
+        if (i > 0) {
+            out += ", ";
+        }
+        out += formatOne(formatArg(xs[i]), spec, true);
+    }
+    out += ']';
+}
+
+/// `formatArg` for an array: the value's own text, and -- when its element is a number -- the
+/// text the specification writes element by element.
+template <typename T> FormatArg formatArg(const Array<T> &xs) {
+    FormatArg arg{FormatArg::Kind::Array, 0, 0, 0, {}};
+    appendText(arg.text, xs);
+    if constexpr (SpecPerElement<T>::value) {
+        arg.underSpec = [xs](std::string_view spec) {
+            std::string out;
+            appendArrayUnder(out, xs, spec);
+            return out;
+        };
+    }
+    return arg;
 }
 
 /// fmt::vformat over the classified arguments.

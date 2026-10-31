@@ -21,6 +21,7 @@ test/cases/linear/operators/string_ordering.cml
 test/cases/compile/literals/real_literals.cml
 test/cases/compile/literals/literal_context.cml
 test/cases/opt/progen/judgement/string_of_float_format.cml
+test/cases/trans/cpp/format_array.cml
 
 # Order of effects, branches, match.
 test/cases/consistency/values/sync_order.cml
