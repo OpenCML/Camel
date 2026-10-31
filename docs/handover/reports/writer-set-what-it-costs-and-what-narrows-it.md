@@ -93,3 +93,24 @@
 **修好的两个数都钉成了用例**：`test/cases/effects/two_calls_through_values_keep_both_writes.cml`（`12`）与 `test/cases/effects/value_made_after_a_call_captures_its_version.cml`（`5`），注释写明修前分别是 `10` 和 `1`，`callback.*` 那两条在 `test/plans/feat/compile/effects_syntax.plan.toml` 里跑四个后端。
 
 **判据**：**修好一个数之后，第一件事是把它钉成用例；不然它不是被修好了，只是这次对了。**
+
+## 6. 资源账上的那一格：`:var/after` 被数了两次
+
+**读数**：`test/cases/resources/effects.cml` 上，账里是
+`RESOURCES node main 32 :var/after: read variable (node 2); result same 0`，紧接着
+`RESOURCES node main 33 :var/get: read variable (node 32); result same 0`。node 32 就是 node 2，**同一格被数了两次**。
+
+**那句 `read` 来自声明，不是 footprint 里另加的**：`src/builtin/executors/builtin_semantics.cpp:346-350` 的 `.accesses = {cell(AccessMode::Read)}`；`src/runtime/resources.cpp:783 resourcesOf` 只是照声明算。
+
+**去掉那条 access 会被 check 5 挡（实测）**：只留 `.result = Same(0)` 后跑 `modules.resources`，五条红，报文 `resources: an operator that is not pure touches, allocates or affects something (declare it pure instead)`——`:var/after` 的 traits 是 `stateOnly = true`（`src/builtin/executors/builtin.cpp:671`），检查在 `src/core/operator_table.cpp:552`。已回退。
+
+**访问种类只有三种，没有"别名/同一份值"这一类**：
+
+- `include/camel/core/resource_semantics.h:118` —— `enum class AccessMode : uint8_t { Read, Write, ReadModifyWrite };`（`accessModeName` 在 `:120`，`writes()` 在 `:123`，`uniteAccess` 在 `:129`）
+- `include/camel/core/resource_semantics.h:131` —— `struct ResourceAccess { Resource resource; ResourceBinding binding; ResourceRegion region; AccessMode mode; }`（`mode` 在 `:135`）
+- 声明里的 `cell(mode)` 就是 `operandAccess(ResourceClass::Variable, 0, mode)`（`src/builtin/executors/builtin_semantics.cpp:322`）
+- "别名"这一层只存在于**结果**：`ResultAlias::Kind`（`:142-149`：`Fresh` / `Same` / `View` / `MayAlias` / `Unknown`），**不在访问上**
+
+**结论**：要让 `:var/after` 在账上算"同一个名字"而不是"再读一次"，**需要新增一种访问种类**（例如"它交出的就是第 k 个操作数，不另算一次访问"）。那是语言层的决定，本线不自行加。
+
+**判据**：**账上把同一格数两次，会让两条本来无关的红同时出现（`core` 与 `source.declared_resources`）；一个红数到两条，先怀疑账本重复计数，而不是两个缺陷。**
