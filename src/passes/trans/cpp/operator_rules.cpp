@@ -44,18 +44,6 @@ std::vector<std::string> marks(size_t n) {
     return out;
 }
 
-/// The integer code of the element type a tensor result names, which the bridge turns back into a
-/// type (standalone_bridge.cpp, `Type::create`): a code is what crosses, never the text of a type,
-/// because the tree writes a type's text (`typeToString`) and parses none, and a second spelling
-/// here would be one to keep in step by hand. -1 when the result is not an array type: a call that
-/// states no element type leaves the runtime its own reading, as such a call had before.
-int64_t elementCode(const Type *result) {
-    const ArrayType *array = asArrayType(result);
-    if (array == nullptr) {
-        return -1;
-    }
-    return static_cast<int64_t>(static_cast<uint32_t>(array->elemTypeCode()));
-}
 
 std::string joinedNorm(OperatorCall &call, size_t from = 0) {
     std::string out;
