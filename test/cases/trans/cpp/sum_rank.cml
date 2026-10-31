@@ -1,7 +1,8 @@
 /**
  * A reduction over the whole value answers the element type: an integer result is exact (int64 as
  * it stands) and every float element type is the f64 accumulator converted once, added from +0 in
- * the order the elements lie. The value is summed whole, so the grouping never enters.
+ * the order the elements lie. The value is summed whole, so the grouping never enters: a rank-2 or
+ * a rank-3 value is the same total of the same run as the flat one, and no dimension is read.
  *
  * The readings are the lines below; `agree_with_fvm` compares them with std::fvm byte for byte.
  */
@@ -14,5 +15,10 @@ func main(): int sync {
     println(sum(i))
     let s: f32[3] = [0.1, 0.2, 0.3]
     println(sum(s))
+    let m: float[3, 2] = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]
+    println(sum(m))
+    let t: float[2, 2, 2] = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]]
+    println(sum(t))
+    println(sum(m[0:2, 1]))
     return 0
 }

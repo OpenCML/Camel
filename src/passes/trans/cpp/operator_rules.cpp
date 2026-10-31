@@ -607,14 +607,14 @@ Rules buildRules() {
     // `tensor:sum` of the whole value (modules/tensor/ops/reduction_ops.cpp): the elements added from
     // +0 in the order they lie, answering the element type -- an integer result exactly in int64
     // (int32 truncated once into its own width) and a float one by the f64 accumulator converted
-    // once. Rank 1 only for this step: the total of a value of several dimensions is the total of
-    // its run and needs no dimension, but the axis form (`tensor:sum_axis`) is the one that does,
-    // and it is a step of its own.
+    // once. The total of a value of several dimensions is the total of its run and reads none of its
+    // dimensions, so every rank is this one rule, the open one included: what a rank would be needed
+    // for is the result's own shape, and this operator's answer has none. The axis form
+    // (`tensor:sum_axis`) is the one that reads a dimension, and it is a step of its own.
     r["tensor:sum"] = {
         [](OperatorCall &c) -> std::optional<std::string> {
             const ArrayType *value = asArrayType(c.normType(0));
-            if (c.normCount() != 1 || value == nullptr || value->anyRank() ||
-                value->rank() != 1 || value->elemType() == nullptr) {
+            if (c.normCount() != 1 || value == nullptr || value->elemType() == nullptr) {
                 return std::nullopt;
             }
             const TypeCode element = value->elemType()->code();
