@@ -1577,6 +1577,12 @@ void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
     for (size_t i = 0; i < items.size(); ++i) {
         list += (i ? ", " : "") + items[i];
     }
+    // A value of one dimension carries the dimension it has, as a constant does (the literal's rule):
+    // the elements alone are a value of no rank, and `shape`, `len` and `appendText` all read the rank
+    // -- a value of one element would print as the element, which is the one reading it is not. Written
+    // as a call, because with an element type an `{n}` can itself stand for (`rt::Array<T>`, a struct of
+    // one field) the braced pair is read as one more element.
+    //
     // A value of several dimensions is the elements and the shape in one block, and the block is
     // written as both: `rt::Array<double>{{1.0, 2.0, 2.0, 2.0}, {2, 2}}`. The constructor takes
     // the element count from the shape's product (standalone/array.h), so the fold has to write
@@ -1586,7 +1592,9 @@ void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
     if (type->code() == TypeCode::Array) {
         const auto *array = camel::core::rtdata::fromSlot<::Array *>(constant);
         const size_t rank = array != nullptr ? array->rank() : 0;
-        if (rank >= 2) {
+        if (rank == 1) {
+            value = std::format("{}::shaped({{{}}}, {{{}}})", cppName, list, array->dim(0));
+        } else if (rank >= 2) {
             std::string shape;
             for (size_t i = 0; i < rank; ++i) {
                 shape += (i > 0 ? ", " : "") + std::to_string(array->dim(i));
