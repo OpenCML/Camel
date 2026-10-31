@@ -420,11 +420,11 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
         return "rt::Str";
     case TypeCode::Void:
         return "void";
-    // The bottom type `never` (design principles 3.9): nothing of it reaches C++, which has
-    // no type for a value that does not exist; a call that never returns is emitted as one
-    // that returns nothing.
+    // The bottom type `never` (design principles 3.9): the type nothing inhabits, which stands
+    // where any type is wanted (camel/standalone/core.h). A call that never returns is emitted as
+    // one that returns it, so the value of a `fail` can be an arm, a `let`'s right or an argument.
     case TypeCode::Never:
-        return "void";
+        return "rt::Never";
     default:
         break;
     }
@@ -1035,11 +1035,27 @@ std::optional<std::string> ProgramValues::constant(slot_t slot, const Type *t) {
     if (t->code() == TypeCode::Array) {
         const auto *array = fromSlot<::Array *>(slot);
         const Type *elem  = static_cast<const ArrayType *>(t)->elemType();
-        auto items        = elements(
-            array != nullptr ? array->size() : 0,
+        // Every element of the run, not `size()`: for a value of several dimensions the runtime
+        // answers the first extent there and the element count in `numel()` (rtdata/array.h), and
+        // reading the first extent wrote the first row's worth of a literal and no more.
+        auto items = elements(
+            array != nullptr ? static_cast<size_t>(array->numel()) : 0,
             [&](size_t i) { return array->get<slot_t>(i); },
             [&](size_t) { return elem; });
-        return items ? std::optional(hoist(*cpp, *items, "array")) : std::nullopt;
+        if (!items) {
+            return std::nullopt;
+        }
+        const size_t rank = array != nullptr ? array->rank() : 0;
+        if (rank >= 2) {
+            // The shape travels with the elements (rt::Array's block holds both): the rows of the
+            // literal are what `appendText` prints, and `len` answers the first extent.
+            std::string shape;
+            for (size_t i = 0; i < rank; ++i) {
+                shape += (i > 0 ? ", " : "") + std::to_string(array->dim(i));
+            }
+            return hoist(*cpp, std::format("{{{}}}, {{{}}}", *items, shape), "array");
+        }
+        return hoist(*cpp, *items, "array");
     }
     if (const TupleType *tuple = asTuple(t); tuple != nullptr && tuple->isNullable()) {
         if (camel::core::rtdata::isNullValue(slot)) {

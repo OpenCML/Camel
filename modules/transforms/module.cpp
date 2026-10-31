@@ -33,6 +33,7 @@
 #include "camel/runtime/program.h"
 
 #include <algorithm>
+#include <utility>
 #include <string>
 
 using namespace camel::core::context;
@@ -44,7 +45,9 @@ namespace {
 /// stands on names its operator by URI (`:op/add_d`). One line per operator, read from the rule's
 /// instance -- `URI -> rule -> the GraphId of its right side` -- because that is the pair a
 /// replacement has to have in hand before it can build anything.
-void printRuleUris(camel::core::context::Context &context, std::ostream &os) {
+void printRuleUris(
+    camel::core::context::Context &context, const camel::runtime::Program *program,
+    std::ostream &os) {
     std::vector<std::string> printed;
     for (const camel::parse::ast::RuleEntry &head : camel::parse::ast::rulesOf("rulesets.jvp")) {
         auto &table = camel::compile::gir::genericRuleTable(context);
@@ -68,8 +71,110 @@ void printRuleUris(camel::core::context::Context &context, std::ostream &os) {
                 break;
             }
             printed.push_back(uri);
+            // How many ports the right side takes, and how many nodes it has: whether a call can
+            // stand where the operator stood is a question about the right side's own signature,
+            // and a replacement that guessed it would be wrong at the first arity that differs.
+            struct Shape {
+                size_t ports = 0;
+                std::string kinds;
+                /// The type of the single value the graph takes: the packed tuple, when it has one.
+                std::string portType;
+                /// The norm inputs the graph's nodes consume between them: 0 means the operand is
+                /// not wired into this graph at all.
+                size_t inputs = 0;
+            };
+            const auto shapeOf = [](const camel::runtime::GCGraph *graph) {
+                Shape shape;
+                for (camel::runtime::gc_node_ref_t ref = 1; ref <= graph->nodeCount(); ++ref) {
+                    const camel::runtime::GCNode *node = graph->node(ref);
+                    if (node == nullptr) {
+                        continue;
+                    }
+                    if (node->kind == camel::runtime::GCNodeKind::Port) {
+                        ++shape.ports;
+                        if (shape.portType.empty() && node->dataType() != nullptr) {
+                            shape.portType = node->dataType()->toString();
+                        }
+                    }
+                    shape.inputs += static_cast<size_t>(node->withBegin - node->inBegin);
+                    if (!shape.kinds.empty()) {
+                        shape.kinds += ',';
+                    }
+                    shape.kinds += std::to_string(static_cast<int>(node->kind));
+                }
+                return shape;
+            };
+            // The value the right side ends in: a closure, when it ends in a Fill of the
+            // FunctionClosure kind. Its signature says what the replacement still has to supply.
+            std::string closure;
+            {
+                const camel::runtime::GCGraph *graph = instance.rhs;
+                for (camel::runtime::gc_node_ref_t ref = 1; ref <= graph->nodeCount(); ++ref) {
+                    const camel::runtime::GCNode *node = graph->node(ref);
+                    if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Fill ||
+                        node->payload == camel::runtime::kNoPayload) {
+                        continue;
+                    }
+                    const auto *body = graph->nodeBodyAs<camel::runtime::GCFillBody>(ref);
+                    if (body->fillKind != camel::runtime::GCFillKind::FunctionClosure) {
+                        continue;
+                    }
+                    closure = "fill=FunctionClosure slots=" + std::to_string(body->slotCount);
+                    if (auto *fnType =
+                            dynamic_cast<camel::core::type::FunctionType *>(node->dataType())) {
+                        closure += " type=" + fnType->toString();
+                        closure += " norm=" + std::to_string(fnType->normTypesCount());
+                        closure += " with=" + std::to_string(fnType->withTypesCount());
+                        closure += " args=";
+                        bool first = true;
+                        for (const std::string_view name : fnType->argNames()) {
+                            if (!first) {
+                                closure += ',';
+                            }
+                            first = false;
+                            closure += std::string(name);
+                        }
+                    } else if (node->dataType() != nullptr) {
+                        closure += " type=" + node->dataType()->toString();
+                    }
+                    break;
+                }
+            }
+            const Shape lhsShape = shapeOf(instance.lhs);
+            const Shape rhsShape = shapeOf(instance.rhs);
+            const size_t ports   = rhsShape.ports;
             os << "REINTERP uri " << uri << " -> rule " << head.rule
-               << " -> rhs " << camel::runtime::toValue(instance.rhs->id()) << '\n';
+               << " -> rhs " << camel::runtime::toValue(instance.rhs->id()) << " ports=" << ports
+               << " nodes=" << instance.rhs->nodeCount() << " lhsPorts=" << lhsShape.ports
+               << " lhsKinds=" << lhsShape.kinds << " rhsKinds=" << rhsShape.kinds
+               << " portType=" << (rhsShape.portType.empty() ? "-" : rhsShape.portType.c_str())
+               << " lhsIns=" << lhsShape.inputs << " rhsIns=" << rhsShape.inputs
+               << ' ' << (closure.empty() ? "closure=-" : closure.c_str())
+               << " vars=" << head.variables << " count="
+               << (head.variables.empty()
+                       ? 0
+                       : std::count(head.variables.begin(), head.variables.end(), ',') + 1)
+               << '\n';
+            // Step 1 of the replacement, for the operator the author named first. The right side
+            // of the rule is a graph that *builds* a closure over the values the left side bound,
+            // so what a call at the operator's site yields is a function value naming that graph.
+            // It is built here -- with one closure slot per variable, in the order the left side
+            // writes them -- and printed: it is the object the input tangents are later fed to,
+            // and building it is the step that a one-step "replace the operator" would skip.
+            if (uri == ":op/div_d" && instance.rhs != nullptr) {
+                size_t count = head.variables.empty()
+                                   ? 0
+                                   : std::count(head.variables.begin(), head.variables.end(), ',') + 1;
+                std::vector<camel::core::type::Type *> slots(
+                    count, camel::core::type::Type::Float64());
+                auto *layout = camel::core::type::TupleType::create(
+                    std::span<camel::core::type::Type *const>(slots.data(), slots.size()));
+                ::Function *built = ::Function::create(
+                    program, instance.rhs->id(), layout, camel::core::mm::autoSpace());
+                os << "REINTERP closure graph=" << camel::runtime::toValue(instance.rhs->id())
+                   << " layout=" << layout->toString() << " built=" << (built != nullptr ? "yes" : "no")
+                   << " slots=" << head.variables << '\n';
+            }
             break;
         }
     }
@@ -81,7 +186,7 @@ class ReinterpPass : public RuntimeGraphRewritePass {
 
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override {
-        printRuleUris(*context_, os);
+        printRuleUris(*context_, program, os);
         // Every function of the program that is made of operators: those are the ones a
         // replacement has something to replace in. A function of calls and constants alone is
         // simply not visited.
@@ -123,6 +228,27 @@ class ReinterpPass : public RuntimeGraphRewritePass {
             os << "REINTERP target=" << function->name() << " primitives=" << primitives
                << " other=" << other << " graph=" << camel::runtime::toValue(made)
                << " nodes=" << (encoded != nullptr ? encoded->nodeCount() : 0) << '\n';
+            // What a rebuilt copy of this graph has to name, node by node: the graphs its FUNC nodes
+            // call -- a rebuilt `main` calls the rebuilt `f`, and the rest (`println` among them)
+            // keeps the graphs it already names -- and the operators its OPER nodes use.
+            std::string calls;
+            std::string uris;
+            for (camel::runtime::gc_node_ref_t ref = 1; ref <= function->nodeCount(); ++ref) {
+                const camel::runtime::GCNode *node = function->node(ref);
+                if (node == nullptr) {
+                    continue;
+                }
+                if (node->kind == camel::runtime::GCNodeKind::Func) {
+                    calls += (calls.empty() ? "" : ",") +
+                             std::to_string(
+                                 camel::runtime::toValue(function->calleeIdOf(ref)));
+                } else if (node->kind == camel::runtime::GCNodeKind::Oper) {
+                    const auto *body = function->nodeBodyAs<camel::runtime::GCOperBody>(ref);
+                    uris += (uris.empty() ? "" : ",") + std::string(body->uri());
+                }
+            }
+            os << "REINTERP calls=" << (calls.empty() ? "-" : calls.c_str())
+               << " opers=" << (uris.empty() ? "-" : uris.c_str()) << '\n';
         }
         return program;
     }

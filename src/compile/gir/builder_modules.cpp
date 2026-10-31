@@ -1006,9 +1006,9 @@ void Builder::adoptImplKernel(
     // The instance is a semantic body of its `#impl` function whether or not an executor was
     // found for it: the body it holds is the semantics, and a consumer that asks to look inside
     // (autodiff, fusion, export, a rule) reads it rather than the kernel's own rule.
-    graph->draft().setFlags(
-        static_cast<uint8_t>(graph->draft().flags() | camel::runtime::kGraphFlagImplBody));
-    graph->draft().setImplKernelUri(std::string(uri.empty() ? kernel.uri : uri));
+    graph->edit().setFlags(
+        static_cast<uint8_t>(graph->view().flags() | camel::runtime::kGraphFlagImplBody));
+    graph->edit().setImplKernelUri(std::string(uri.empty() ? kernel.uri : uri));
     if (executor == nullptr) {
         // No executor for these types: this instance runs the body, which is the semantics and
         // gives the same result, and no direct call of it is a call of a kernel. `std::profile`
@@ -1251,9 +1251,9 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
                 // semantics and gives the same result, and a direct call of the function is a
                 // call of that graph rather than of a kernel (adoptImplKernel's no-executor
                 // path, for the instance of a generic function).
-                body->draft().setFlags(
-                    static_cast<uint8_t>(body->draft().flags() | camel::runtime::kGraphFlagImplBody));
-                body->draft().setImplKernelUri(std::string(uri));
+                body->edit().setFlags(
+                    static_cast<uint8_t>(body->view().flags() | camel::runtime::kGraphFlagImplBody));
+                body->edit().setImplKernelUri(std::string(uri));
                 continue;
             }
             // A direct call resolves in the kernel's own one-rule group: the operator path
@@ -1273,13 +1273,13 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
             // The graph stays the semantic body: expanding the function means reading this
             // graph, and a consumer that asks for it (autodiff, fusion, export, a rule) gets
             // exactly the graph the compiler built for the Camel body.
-            body->draft().setFlags(
-                static_cast<uint8_t>(body->draft().flags() | camel::runtime::kGraphFlagImplBody));
+            body->edit().setFlags(
+                static_cast<uint8_t>(body->view().flags() | camel::runtime::kGraphFlagImplBody));
             // The body names the kernel it implements. A direct call of the function is one OPER
             // of that kernel, so this is the only link back from such a call site to the
             // semantics (design principles 10.4): a consumer that must see inside the function
             // follows it, rather than reading the kernel's own derivative or lowering rule.
-            body->draft().setImplKernelUri(std::string(uri));
+            body->edit().setImplKernelUri(std::string(uri));
         } catch (const BuildAbortException &) {
             // Reported at the tag; the other declarations are still read.
         } catch (Diagnostic &d) {

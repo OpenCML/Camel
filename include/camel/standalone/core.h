@@ -149,6 +149,25 @@ struct ExitRequest {
 
 [[noreturn]] inline void exit(int64_t code) { throw ExitRequest{static_cast<int>(code)}; }
 
+// ---- The bottom type ----
+
+/// `never` (design principles 3.9): the type nothing inhabits. A value of it stands where a value
+/// of any type is wanted -- the arm of a branch that gives no value, the right of a `let`, the
+/// argument of a call -- so it converts to every type, and no conversion is ever taken: the only
+/// way to be of this type is to end the program.
+struct Never {
+    template <typename T> operator T() const {
+        std::abort(); // not reached: `fail` throws before it gives anything back
+    }
+};
+
+/// `fail<'Kind'>(message)` (:op/fail, src/builtin/operators/tagged.cpp): the fault the program
+/// raises itself, reported where the call stands, under the kind the program wrote (design
+/// principles 3.9). Nothing of it is returned.
+[[noreturn]] inline Never fail(const Site &site, std::string_view message) {
+    fault(site, {std::string(message)});
+}
+
 // ---- The recursion limit ----
 
 /// The number of calls that are open, not in tail position, below the current function (design

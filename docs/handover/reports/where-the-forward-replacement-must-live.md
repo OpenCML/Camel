@@ -247,6 +247,270 @@ REINTERP target=main primitives=1 other=4 graph=113 nodes=1
 （注意这个用例得 `import rulesets.jvp`——索引里只有程序自己的 ruleset 模块放进去的东西，不 import
 就一条都没有，`reinterp` 会安静地只打 `target=` 那两行。**“没有输出”和“没有规则”是两件事**。）
 
+## 判据：第一笔只换一个原语
+
+> **逐原语替换的第一笔只换一个原语——三个一起换，验不过时不知道是谁的错。**
+
+## 那一笔之前先量到的一件事：右侧不是算子的签名
+
+把右侧图的端口数也打出来之后：
+
+```
+REINTERP uri :op/mul_d -> rule jvp_mul -> rhs 63 ports=1 nodes=4
+REINTERP uri :op/add_d -> rule jvp_add -> rhs 74 ports=1 nodes=4
+REINTERP uri :op/neg_d -> rule jvp_neg -> rhs 85 ports=0 nodes=3
+REINTERP uri :op/sub_d -> rule jvp_sub -> rhs 96 ports=1 nodes=4
+REINTERP uri :op/div_d -> rule jvp_div -> rhs 107 ports=1 nodes=4
+```
+
+**`jvp_div__rhs<float>` 只有 1 个端口，而它要替换的 `:op/div_d` 有两个操作数。** 所以“把 `div_tangent`
+的调用放到 `/` 站的那个位置”**过不了类型**：右侧不是算子的替换品，它是**规则整个左侧的变量**上的一张
+图（值、切线的成对输入），端口是那组变量的入口。
+
+这一条把“第一笔”的写法改掉了：**先要有“规则的变量表 → 一个元组”的打包**（把 `/` 两个操作数的值与
+切线按规则左侧的顺序装进去），才谈得上调用。端口数是这把尺子，不是猜测。
+
+## 判据：先让端口数与变量数对上
+
+> **替换一个算子之前，先让右侧的端口数与左侧的变量数对上；对不上就是还差一次打包，不是差一次调用。**
+
+把两侧的形状都打出来（节点种类：`0`=Data、`1`=Port、`4`=Fill、`11`=Oper，
+`include/camel/runtime/graph.h` 的 `GCNodeKind`）：
+
+```
+REINTERP uri :op/mul_d -> rule jvp_mul -> rhs 63 ports=1 nodes=4 lhsPorts=1 lhsKinds=1,11 rhsKinds=1,0,4
+REINTERP uri :op/add_d -> rule jvp_add -> rhs 74 ports=1 nodes=4 lhsPorts=1 lhsKinds=1,11 rhsKinds=1,0,4
+REINTERP uri :op/neg_d -> rule jvp_neg -> rhs 85 ports=0 nodes=3 lhsPorts=0 lhsKinds=11 rhsKinds=0,4
+REINTERP uri :op/sub_d -> rule jvp_sub -> rhs 96 ports=1 nodes=4 lhsPorts=1 lhsKinds=1,11 rhsKinds=1,0,4
+REINTERP uri :op/div_d -> rule jvp_div -> rhs 107 ports=1 nodes=4 lhsPorts=1 lhsKinds=1,11 rhsKinds=1,0,4
+```
+
+**两侧都只有一个端口**：左侧是 `Port + Oper`（拿一个值去匹配那个算子），右侧是 `Port + Data + Fill`
+（从一个值算出结果）。所以那个“打包”**不是右侧的私有约定，是整个规则的接口**——两侧吃的是同一个元组，
+只是左边拿去匹配、右边拿去做。
+
+**变量表拿不到，卡在这里（不是猜的）**：三份表示里都没有变量的名字——
+
+- 两侧的实例图只有节点种类，没有名字（上面那行就是全部内容）；
+- `runtime::Pattern` 的 `Var` 只带下标（`include/camel/runtime/writings.h:64-75`）；
+- 声明的源码只剩一个 origin id（`GenericRuleEntry::where`，
+  `include/camel/compile/gir/rule_templates.h`）。
+
+**名字只在 `src/compile/gir/builder.cpp:897` 那一处还在手上**（`leftHeadOf(sides[0], …)` 与紧随的
+`collectRuleHead(…)`，`sides` 还是语法节点），而 `RuleHead`（`include/camel/parse/ast/rule_head.h`）
+没有承载它的字段。所以下一笔是：**让 `collectRuleHead` 多带一列变量名，与 `rhsCallee` 走同一条路**——
+它已经从同一份语法里读出了被调函数，变量名是同一处的第二个事实。
+
+## 判据：名字最后存在的那一处
+
+> **名字在两个实例图上都不剩的时候，唯一还在手上的那一处就是它最后一次存在的地方；要补的不是寄存器，
+> 是那一处的第二个事实。**
+
+补上了那一列（`RuleHead::variables`，`include/camel/parse/ast/rule_head.h`），在
+`src/parse/ast/builder.cpp:902` 读（与 `rhsCallee` 同一处语法、同一行代码的邻座）：
+
+```
+REINTERP uri :op/add_d -> rule jvp_add -> rhs 74 ports=1 nodes=4 lhsPorts=1 lhsKinds=1,11 rhsKinds=1,0,4 vars=x,w count=2
+REINTERP uri :op/div_d -> rule jvp_div -> rhs 107 ports=1 nodes=4 lhsPorts=1 lhsKinds=1,11 rhsKinds=1,0,4 vars=x,w count=2
+REINTERP uri :op/neg_d -> rule jvp_neg -> rhs 85 ports=0 nodes=3 lhsPorts=0 lhsKinds=11 rhsKinds=0,4 vars=x count=1
+```
+
+**变量数 2 对端口数 1**：右侧吃的确实是打包后的一个元组。**而 `neg` 是 1 对 0**——它左侧连端口都没有
+（`lhsKinds=11`，只有那个 Oper），所以“一元运算的变量不从端口来”是另一个事实，替换它之前得先知道它的
+操作数从哪进。**两个算子的形状不一样，不能一套代码套到底。**
+
+## 判据：两种形状不能共用一套替换
+
+> **两种形状的算子不能共用一套替换：端口进来的走打包，不进端口的先找它的操作数从哪来。**
+
+把端口的**类型**和两侧节点吃掉的**输入数**也量出来（`portType` 是
+`GCNode::dataType()->toString()`，`lhsIns`/`rhsIns` 是各节点 norm 输入的合计）：
+
+```
+REINTERP uri :op/add_d -> rule jvp_add -> rhs 74 ports=1 ... portType=float lhsIns=2 rhsIns=1 vars=x,w count=2
+REINTERP uri :op/div_d -> rule jvp_div -> rhs 107 ports=1 ... portType=float lhsIns=2 rhsIns=1 vars=x,w count=2
+REINTERP uri :op/neg_d -> rule jvp_neg -> rhs 85 ports=0 ... portType=- lhsIns=1 rhsIns=1 vars=x count=1
+```
+
+三条读数，三条结论：
+
+1. **`/` 的右侧端口是 `float`，不是元组**——`vars=x,w` 两个名字、`ports=1` 一个端口，那个端口
+   并不是“把两个值装一起”的元组口。**打包的形态还得再量一次**，不能假设成 `(float, float)`。
+2. **`jvp_div__rhs` 的图以 Fill 结尾**（`rhsKinds=1,0,4`，`4`=`Fill`）：它产出的不是数，是**一个函数
+   值**。所以“把右侧放到 `/` 那个位置”不是一次调用，是**先建闭包、再拿切线调那个闭包**——两步。
+3. **`neg` 的左侧没有端口，`lhsIns=1`**：它那个 Oper 的一个输入不在这个图里。**一元算子的操作数不是
+   从端口进的**，替换它第一步得先知道那个输入从哪来，不能套二元那套。
+
+## 判据：以 Fill 收尾的右侧是一个闭包
+
+> **右侧图以 Fill 收尾时，它不是“一个算子的签名”，是一个闭包——替换的第一步是建它，不是调它。**
+
+把那个 Fill 节点的种类、槽数、类型与形参打出来：
+
+```
+REINTERP uri :op/div_d -> rule jvp_div -> rhs 107 ports=1 ... fill=FunctionClosure slots=2 type=(dx: float, dw: float) => float pure norm=2 with=0 args=dx,dw vars=x,w count=2
+REINTERP uri :op/add_d -> rule jvp_add -> rhs 74 ... fill=FunctionClosure slots=2 type=(dx: float, dw: float) => float pure norm=2 with=0 args=dx,dw vars=x,w count=2
+REINTERP uri :op/neg_d -> rule jvp_neg -> rhs 85 ... fill=FunctionClosure slots=1 type=(dx: float) => float pure norm=1 with=0 args=dx vars=x count=1
+```
+
+**三方对齐，一步不差**：
+
+| 规则 | 左侧变量 | 闭包捕获槽 | 闭包形参 |
+|---|---|---|---|
+| `jvp_div` | `x,w`（2） | `slots=2` | `dx,dw` |
+| `jvp_add` | `x,w`（2） | `slots=2` | `dx,dw` |
+| `jvp_neg` | `x`（1） | `slots=1` | `dx` |
+
+所以“建闭包”要的值**就是左侧变量表那两列**（`x`、`w` 的值，按这个顺序），而闭包的形参
+`dx,dw` **是替换自己要提供的切线**——不是从函数 `f` 里读来的东西。
+
+**两步因此钉死**：① 在 `/` 站，用 `x`、`w` 的值调一次右侧图（`rhs 107`），拿到那个闭包；
+② 用 `dx`、`dw` 调这个闭包，得到切线。**第一步的产物是函数值，不是数**——这就是为什么“把右侧
+放到 `/` 那个位置”一句话做不到。
+
+## 判据：闭包先建，切线后喂
+
+> **右边产出闭包时，“替换算子”的第一步是建它；把两步写成一步，就会把切线喂给一个还没建出来的
+> 函数值。**
+
+第①步做出来的东西（`user/apps/` 之外的唯一一处：`modules/transforms/module.cpp`）：
+
+```
+REINTERP closure graph=107 layout=(float, float) built=yes slots=x,w
+```
+
+一个**函数值**建出来了：它命名图 `107`（`jvp_div__rhs`），闭包布局是 `(float, float)`（`x`、`w`
+两个槽，与 `vars=x,w` 对齐），`built=yes` 是 `::Function::create` 返回了一个非空的
+`Function*`（`include/camel/core/rtdata/func.h`）。
+
+**它是什么、不是什么，写清楚**：`Function::create` 建的是“**布局**为 `(float, float)` 的空闭包”
+——槽的**类型**有了，槽里的**值**还没有；把 `f` 里 `/` 那个站点的 `x`、`w` 真装进去、并让
+`107` 的端口吃到它们，需要调用节点与帧的连线。**所以这一笔是“闭包建得出来”，不是“闭包在 `/` 站点
+被调用了”。** 下一步是把这两件事接上。
+
+## 判据：没有读数，闭包就还是一个类型
+
+> **从“布局”到“值”这一步没有读数，就等于闭包还只是一个类型。**
+
+**这一步在“pass”里做不到，原因是结构性的，不是缺一行代码**：
+
+- `RuntimeGraphRewritePass::apply(const Program *, std::ostream &)`
+  （`include/camel/execute/pass/opt.h`）拿到的是**一个程序和一块输出**，没有求值器；
+- 执行一张图是引擎的事（`src/runtime/eval.cpp`），而 `include/` 里**没有 `eval.h`，也没有
+  `evaluate`/`execute`/`runGraph` 这类公开入口**（`Grep` 全树只在 `extent.h` 里命中
+  `evaluate`，那是形状求值，不是跑图）。
+
+所以在 `transforms::reinterp` 里“用 `x`、`w` 的实参调一次 `107`、把槽里的两个数打出来”**没有可调用
+的东西**：能建的只有值的**布局**（`Function::create` 的闭包类型），值本身要引擎跑出来。
+
+两条能走的路，都要作者点头，因为都在改“变换在哪一级发生”：
+
+1. **让变换在引擎里执行**（像 `std::macro` 那样有求值能力），变换就能在建闭包之后立刻读到槽里的两个数；
+2. **不做第①步的独立读数**，直接把①和②合进替换：变换把“调 `107` 建闭包、用 `dx/dw` 调闭包”建进
+   新图，由**程序自己**在跑的时候执行——读数就从 `println` 那条路出来（`f`、`f'` 一起）。
+
+我没有为了凑一行读数去造假值（比如把槽里填 `2.0`/`3.0` 再打印）：**那会把“布局”说成“值”**。
+
+## 判据：变换层建不出值，只能建“谁来算它”
+
+> **变换层建不出值，只能建“谁来算它”——所以两步替换的正确形态，是把两步都写进图里，让程序自己跑出来。**
+
+按②去看 `/` 一个站点，发现**② 的输入在 `f` 里根本不存在**，这不是力气问题：
+
+- 闭包的签名是 `(dx: float, dw: float) => float`：第②步要喂的两个切线；
+- `f` 的图里有的是**值**（`REINTERP target=f primitives=3 other=2`，5 个节点里 3 个算子、2 个端口/数据），
+  **没有任何一处是切线**，也没有“种子”；
+- 所以把②建进 `/` 站点，需要一个**还不存在**的值做输入。
+
+**正确的形态因此是**（写在这里，作为下一笔的图）：
+
+1. **入口播种**：`f` 的端口 `x` 同时产出两样东西——`x` 的值与切线 `1.0`；
+2. **逐站点接**：每个算子站点用“值、切线”成对过一遍（`jvp_*` 的规则正是这个形状），
+   `*`、`+`、`/` 三处各建一次“调右侧得闭包、用切线调闭包”；
+3. **出口成对**：`f` 返回 `(f(x), f'(x))`，由 `println` 打出来。
+
+**换句话说：`f' = 3.25` 不是“把 `/` 换掉”能到的，它是整条链都换了才有的数。** 一条链上三处，
+少一处就没有导数——这也解释了为什么“先把闭包建出来”这一步必须单独量清楚：链上每个站点都要重复它。
+
+## 判据：一个站点跑通，再谈链
+
+> **一条链三个站点都换了才有导数——所以先用一个站点的函数把形状跑通，再谈链。**
+
+用例已按 A 换成 `f(x) = 3.0 / x`（`test/cases/compile/transforms/reinterp_scalar.cml`）。**替换建不出来，
+卡在一处结构上**：
+
+- 建“调 `107` 得闭包”需要**被调图的 `DraftGraphBuilder`**：
+  `StaticFunction::create(const std::shared_ptr<DraftGraphBuilder> &graph, …)`
+  （`include/camel/compile/gir/static_function.h#StaticFunction::create`）；
+- `GenericRuleInstance` 存的是 `rhs`（一个 `GCGraph*`）与 `program`，**没有那个 builder**；
+  builder 只在实例化的那一刻活在 `src/compile/gir/rule_templates.cpp` 里；
+- 所以从 `modules/transforms` 拿到的 `GraphId 107` 是**不够**的：节点能建（`draft.h` 里有
+  `addFillNode`/`addCallNode`/`addStaticSlot`），但**函数值本身建不出来**。
+
+**结论（这一笔真正量到的东西）**：**替换要么发生在 `genericRuleInstance` 的同一层**（那里 builder 还在
+手上），**要么 `GenericRuleInstance` 得把那个 builder 一起留住**。这是一个要作者/你点头的设计选择，
+不是写两行代码的事——我没有绕开它（比如拿 `::Function::create` 假装建出静态函数值，那会在运行期
+找不到图）。
+
+## 判据：活得住的东西留一个把手
+
+> **建不出函数值，先问“建它需要的那样东西在哪一刻还活着”；活得住的就留一个把手，活不住的才是设计问题。**
+
+按这条判据，`GenericRuleInstance` 多了一列（`include/camel/compile/gir/rule_templates.h`）：
+
+```cpp
+std::shared_ptr<camel::compile::gir::DraftGraphBuilder> rhsBuilder;
+```
+
+**赋值点一处**：`src/compile/gir/rule_templates.cpp:104`，`publish()` 里 `encodeToRuntimeProgram(rhs, …)`
+之后紧跟 `instance.rhsBuilder = rhs;`——那一刻 builder 就在参数表里，是它**最后一次**以局部身份活着的地方。
+
+**它不延长任何东西的寿命**：图在那之前已经编进 `context` 的 pinned program（`publish` 的上一行
+`pinRuntimeProgram`），留住的只是“写这个名字的把手”，不是“让图活着”。**失效**：context 结束时一并结束；
+实例不跨 context。
+
+## 判据：值第一次能出现的那一刻
+
+> **把手留住之后，“值”才第一次能在替换图里出现；此前的每一步都是在为这一刻准备条件。**
+
+**这一刻还没到，卡在“装上去”而不是“建出来”**，位置很具体：
+
+- `GraphIRPass::apply` 拿到的是 `const Program *`（`include/camel/execute/pass/base.h`），并注明
+  “a rewrite makes a new one”：**程序发布后不再变**；
+- 新的程序由 `GraphDraftGroup` 造，而它的**根是第一个 reserve 的成员**
+  （`include/camel/runtime/draft_session.h`，`class GraphDraftGroup`）：`group.program()` 的入口是那个成员；
+- `Program::bind` / `setRoot` 都在**构造期**用（`include/camel/runtime/program.h`），拿不到一个已发布的
+  程序去改其中一张图。
+
+**所以“把 `f` 换掉”实际是“重造整条入口路径”**：新的 `main`（调新的 `f`、打元组）是根，新的 `f`
+（`3.0 / x` 的站点换成“建闭包 + 调闭包”）是它调的成员。**只换 `f` 换不进去**——没有一处 API 允许
+在一张已发布的图里替换另一张图。
+
+这就把下一笔的形状定死了：**一次 reserve 两个成员（`main`、`f`），第一个当根**，两个图都要重造，
+`println` 也得在 `main` 的新版本里重新接上。**这是“整条入口路径”，不是“一个站点”。**
+
+## 判据：先造一个最小的容器
+
+> **一个“装不进去”的东西，先用最小的容器把它装进去；容器的形状对了，再谈往真程序里装。**
+
+最小容器要装的两个人已经点清：`main` 与 `f`。**重造 `main` 需要的东西，一次量完**：
+
+```
+REINTERP target=f primitives=1 other=2 graph=112 nodes=1
+REINTERP calls=- opers=:op/div_d
+REINTERP target=main primitives=1 other=4 graph=113 nodes=1
+REINTERP calls=54 opers=:io/println
+```
+
+- `f`：没有 FUNC 调用，只有一个算子 `:op/div_d`——**新 `f` 只换这一个站点**；
+- `main`：FUNC 调用 **54**（就是 `f`），算子 `:io/println`——**新 `main` 的清单是“常量 `2.0` →
+  调新 `f` → `:io/println` → `return 0`”，四件事，一件不多**；
+- `println` **是算子，不是图**：所以最小容器不需要拷任何节点，两个图都能用
+  `addDataNode`/`addCallNode`/`addOperNode` 从零拼出来（`include/camel/runtime/draft.h`）。
+
+**这就是下一笔的施工单**：reserve 两个成员（`main__min` 第一个当根、`f__min`），`f__min` 里
+“`3.0/x` 的值 + 建闭包 + 调闭包”三段，`main__min` 里四件事，打出来就是 `(1.5, -0.75)`。
+
 ## 验收（缺一步不算完）
 
 1. **前向**：`f(x) = x*x + 3/x` 在 `x = 2` 处，`f = 5.5`，`f' = 4 - 0.75 = 3.25`。两个数都要打出来。

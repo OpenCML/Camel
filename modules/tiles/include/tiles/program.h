@@ -120,6 +120,10 @@ struct LoopRegion {
 size_t elements(const Shape &shape);
 size_t bytes(const Node &node);
 const void *hostData(const Node &node);
+/// The storage bytes of a node's host copy, in the node's element width: an f32 or f64 node
+/// contributes its bits unchanged, a bf16 or f16 node its elements rounded once into the element
+/// type. `bytes(node)` is the length of what it returns.
+std::vector<std::byte> hostStorage(const Node &node);
 Program compile(
     Function *function, const std::vector<Argument> &arguments, runtime::fact::FactStore &facts);
 // Closure-free regions with static f32 tensor or f64 scalar parameters. No input buffers needed.

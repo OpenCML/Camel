@@ -32,7 +32,13 @@ name = "agree_with_fvm"
 # The default layer. It is the only test of the tree that catches a generated C++ program that
 # builds and runs but prints what the interpreter does not -- a format specification that reached
 # the writer as plain text padded the whole array and exited 0 -- so it runs with the plan: about
-# 40 s of C++ compilations at 8 jobs, and nothing else looks at this.
+# 40 s of wall clock at 8 jobs, and nothing else looks at this.
+#
+# Its bound is 900 s, not 600: the runner fails a test whose own CPU time is more than a quarter of
+# its timeout, and 129 C++ compilations at -O2 cost about 150 s of CPU on this host -- at 600 the
+# test sat exactly on the margin and failed on the host's contention with 129 of 129 programs
+# agreeing (151.6 s against a 150 s quarter). The work cannot be made smaller without dropping
+# programs, so the number is raised, with this note, as docs/test-plans.md asks.
 tier = "fast"
 desc = "The programs of test/tools/cppexec/expect.txt are translated with std::cpp, built with the system's C++ compiler and run; each prints what std::fvm prints and exits with its code: scalars and their text, strings, branches as statements, the order of effects, faults with their located report, the recursion limit, tail calls as loops (also between two functions), exit codes, complex numbers (arithmetic, `^`, the math functions, their text and formatting, a faulting division), and operators of runtime modules through the bridge."
 kind = "behavior"
@@ -44,19 +50,28 @@ expect_exit = 0
 expect_stdout_contains = ["PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 600000
+# 129 programs, about 150 s of CPU at 8 jobs. The margin rule wants the bound to be at least four
+# times the work, and 600 s sat just under that line; 900 s is six times, and it is still the
+# runner's kill rather than a verdict, so a program that hangs is reported as one.
+timeout_ms = 900000
 
 [[tests]]
-name = "recursion_site_message"
-desc = "The report a call site pre-renders into its rt::Site names the recursion limit the program was translated with (`Maximum recursion depth (1000) exceeded when evaluating graph 'depth'.`), not the value placeholder the old table wrote (`\\0370`, the unit separator and a digit). The `filled` field carries the same text, so the number is still filled in when the fault happens; the program itself is built and run by agree_with_fvm."
+name = "link_line_keeps_the_compilers_stdlib"
+# Red when the `-L` of stdlib_dir is deleted from build_command: the printed command then has no
+# directory of the compiler's own libstdc++. agree_with_fvm builds and runs the same link and is
+# the end-to-end of it, but it stays green without the fix on a host whose compiler adds that -L
+# itself (measured: clang 23 does), so the link line is pinned here as well.
+desc = "The command a bridged program is linked with (a program that uses operators the C++ writer has no standalone translation for calls the Camel runtime) names the standard library of the compiler that builds it -- the directory of libstdc++.so the compiler itself reports -- and puts it in the program's rpath, instead of leaving the linker to the host's default search order, which can find a library older than the one libcamel.so was built with (measured: `undefined reference to std::__detail::__wait_impl(...)@GLIBCXX_3.4.35`). A compiler that names no libstdc++.so keeps the link line it had, and this case then passes on that answer; it never invents a directory."
 kind = "behavior"
-case = "../../../cases/trans/cpp/exec/site_message.cml"
-args = ["${case}", "std::cpp"]
+tool = "python"
+case = "../../../tools/cppexec/run.py"
+args = ["${case}", "--link-line"]
+skip_unless = ["${python}", "test/tools/cppexec/run.py", "--have-compiler"]
 expect_exit = 0
-expect_stdout_contains = ["Maximum recursion depth (1000) exceeded when evaluating graph 'depth'.", "const rt::Site"]
-expect_output_not_contains = ["Maximum recursion depth (\\037", "\\0370) exceeded"]
+expect_stdout_contains = ["link: ", "PASS"]
+expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 10000
+timeout_ms = 60000
 
 [[tests]]
 name = "named_struct_types"
@@ -98,6 +113,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "refuse_narrow_float"
+desc = "A value of bf16 is a core value type of the language (reduced-precision.md b1: literals, scalar arithmetic, comparison, conversion), 16 bits of storage computed in f32 and rounded to nearest even once -- C++ carries it, so the refusal here is work not done, not an ability the target lacks. The sentence names the operator and the type and ends in `yet`, as every refusal about a rule that is not written does; it does not claim the back end has no such element type, which would send a reader away from the code that is missing."
+kind = "negative"
+case = "../../../cases/trans/cpp/refuse_narrow_float.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_output_contains = ["has type 'bf16'", "-- but not this one yet"]
+expect_output_not_contains = ["no such element type"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "refuse_tensor_json"
 desc = "The same refusal in --output-format json: one diagnostic, TranslationRefused, stage pass:std::cpp, the range of the definition of `scale` (lines 10 to 12), nothing of a translation unit on stdout."
 kind = "behavior"
@@ -116,6 +144,42 @@ assert(d.message.includes("function 'main' uses 'tensor:ones' to build a tensor,
 assert(d.range.start.line === 14 && d.range.start.character === 22 && d.range.end.line === 14, `unexpected range ${JSON.stringify(d.range)}`)
 }
 """
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_rank"
+desc = "A literal of several dimensions keeps its shape: the elements lie flat in row order and the extents travel in the same block, so the generated program holds `rt::Array<double>{{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, {3, 2}}` and prints the three rows the interpreter prints -- it printed the first extent's worth of elements (`[1.0, 2.0, 3.0]`) and exited 0 before the shape was carried. The program itself is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/literal_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["const rt::Array<double> array{{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, {3, 2}};"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "slice_rank"
+desc = "A slice names one dimension of a value and keeps every other one whole: `m[0:2]` is the first two rows of a rank-2 value, `m[:, 1]` its second column, `len` of a row range answers the rows it kept, and `t[1:]` of a rank-3 value is the rank-2 value behind its first row. The dimension sliced takes the length the bounds give it and the shape everywhere else is the value's own, so the runtime's slice gathers along an axis instead of over the whole run. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/slice_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::sliceSub("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "index_rank"
+desc = "A position on a value of several dimensions: `m[1]` is the second row (`rt::atRow`, one dimension less and of the row's own extent), `m[1, 0]` writes the axis it drops and is the element (`rt::atAxis`, every other dimension kept whole), and `t[1]` of a rank-3 value is the rank-2 value behind it. `len` of a row answers the dimension that is left. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte -- six lines, rows and elements both. The operator rule that used to turn a value of several dimensions away is gone with it, as are the two module programs that took the same road: `index_two_positions` translates and agrees."
+kind = "behavior"
+case = "../../../cases/trans/cpp/index_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::atRow(", "rt::atAxis("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]

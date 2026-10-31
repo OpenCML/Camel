@@ -11,8 +11,8 @@ camel::runtime::GCGraph *Function::graph() const {
 }
 
 void Function::rebind(const camel::runtime::Program *program, camel::runtime::GraphId graph) {
-    ASSERT(program != nullptr, "Runtime Function program cannot be null.");
-    ASSERT(program->graph(graph) != nullptr, "Runtime Function graph must be in its program.");
+    GUARD(program != nullptr, "Runtime Function program cannot be null, and the call passed none: a function value with no program has no graphs to name");
+    GUARD(program->graph(graph) != nullptr, "Runtime Function graph must be in its program, and that graph is not one its program holds");
     program_ = program;
     graphId_ = graph;
 }
@@ -56,7 +56,11 @@ void Function::updateRefs(const rtdata::Object::RefRelocator &relocate, const ty
             }));
     }
     if (closure_) {
-        const type::TupleType *tupleTypePtr = tupleType();
+        // The closure's layout, not the one the program's graph would answer: this walk also
+        // reaches function values whose program the collector already freed (that is what the
+        // check above is for), and `tupleType()` reads `program_->graph(graphId_)` first -- through
+        // a pointer this walk may no longer use.
+        const type::TupleType *tupleTypePtr = closureType();
         closure_                            = static_cast<Tuple *>(relocate(
             closure_,
             tupleTypePtr,
@@ -72,15 +76,15 @@ void Function::updateRefs(const rtdata::Object::RefRelocator &relocate, const ty
 }
 
 const type::TupleType *Function::tupleType() const {
-    ASSERT(graph() != nullptr, "Runtime Function graph cannot be null.");
+    GUARD(graph() != nullptr, "Runtime Function graph cannot be null: this function value names no graph, so there is nothing to run");
     return tupleType_;
 }
 
 Function *Function::create(
     const camel::runtime::Program *program, camel::runtime::GraphId graph,
     const type::Type *tupleType, camel::core::mm::IAllocator &allocator) {
-    ASSERT(program != nullptr, "Runtime Function program cannot be null.");
-    ASSERT(camel::runtime::isValid(graph), "Runtime Function graph cannot be null.");
+    GUARD(program != nullptr, "Runtime Function program cannot be null, and the call passed none: a function value with no program has no graphs to name");
+    GUARD(camel::runtime::isValid(graph), "Runtime Function graph cannot be null: this function value names a graph the program does not hold");
     ASSERT(tupleType && tupleType->code() == type::TypeCode::Tuple, "Type must be TupleType");
     const type::TupleType *tt = static_cast<const type::TupleType *>(tupleType);
 
@@ -97,7 +101,7 @@ Function *Function::create(
 void Function::print(std::ostream &os, const type::Type *type) const {
     (void)type;
     const camel::runtime::GCGraph *runtimeGraph = graph();
-    ASSERT(runtimeGraph != nullptr, "Function print requires graph identity.");
+    GUARD(runtimeGraph != nullptr, "Function print requires graph identity, and this function value has no runtime graph to name");
     os << "Function(graph=" << runtimeGraph->name() << ", tupleSlots=";
     os << (closure_ ? std::to_string(closure_->size()) : "null");
     os << ")";

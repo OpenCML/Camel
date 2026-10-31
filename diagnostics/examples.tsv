@@ -181,7 +181,6 @@ SemanticDiag::PartialApplicationRefused	test/cases/compile/surface/name_as_value
 SemanticDiag::PureAndUses	test/cases/effects/err_pure_and_uses.cml
 SemanticDiag::RangeStepZero	test/cases/compile/static_expansion/static_loop_sequence_range_step_zero.cml
 SemanticDiag::Redeclaration	test/cases/compile/generics/err_redecl.cml
-SemanticDiag::ReducedPrecisionUnsupported	test/cases/modules/stdlib/reduced_arithmetic_refused.cml
 SemanticDiag::ReservedIdentifier	test/cases/compile/surface/reserved_function_name.cml
 SemanticDiag::ResourceGroupCycle	test/cases/effects/err_group_cycle.cml
 SemanticDiag::RestArgumentNotLast	test/cases/compile/rest_params/rest_arg_not_last.cml

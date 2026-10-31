@@ -100,6 +100,11 @@ void publish(
     instance.lhs     = program->root();
     encodeToRuntimeProgram(rhs, *program, &context.graphIds());
     instance.rhs = program->root();
+    // The builder of the graph just encoded, kept on the instance: a function value that names the
+    // graph is made from the builder (`StaticFunction::create`, static_function.h#StaticFunction::create), and a
+    // transform that runs after this point has only the instance. Nothing new is kept alive -- the
+    // graph is already in the pinned program above -- only the handle is handed on.
+    instance.rhsBuilder = rhs;
     if (when != nullptr) {
         encodeToRuntimeProgram(when, *program, &context.graphIds());
         instance.when      = program->root();

@@ -9,21 +9,17 @@
 > **哪些未决值得成页**：不是所有未决都值得成页——只有**今天有人被它堵住**的才值得。其余留在原则里，等它真的挡住一条车道再成页。所以第 15 节那 8 条不占待裁表，清单在文末，每条写明今天堵着谁。
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
+## 现在在等作者：0 页（4 页都已裁，3 页的改动在车道上）
 
-## 现在在等作者：6 页
-
-两页在等，都不是旧问题：一页是 `b6` 的最后一块（`gir-handle-names-a-transaction-or-a-draft`，handle 名字事务还是名字草稿，同页第二问问 region 的 id 能不能在 extract 时就分配），一页是 `lane-mcts` 落进来的（`partial-destructuring-of-a-value-tuple`，多值 `loop`/元组解构时名字少于值，该拒绝还是按位置取前几个）。其余五页已在 22:50–23:50 裁完、整体挪进 `reviews/`，见下面"已裁"表。
-
-第三页是 `lane-narrow` 落进来的（`tiles-narrow-dtype`）：`tiles` 的设备元素类型层（`dtype.h:11` 的 `F32`/`F64`/`I64`）要不要为窄浮点加两个值——`gpu-g4-g5-argmax-axis` 那页的"(b) 五步"第 1 步就是它，而同一页又写着"现在立计划，不马上做"。
+`questions/` 里现在没有一页在等答复：4 页都被读过、都裁了，改动按裁定往 develop 走。新页从车道落进来时才在这个表里加行。
 
 | 页 | 问什么 | 状态 | 堵着谁 |
 |---|---|---|---|
-| [`gir-handle-names-a-transaction-or-a-draft`](questions-2026-10-31-gir-handle-names-a-transaction-or-a-draft.md) | 编译期的 `node_handle_t` 名字一个事务（与 `NodeView` 同型）还是一张草稿；同页第二问：region 的 id 能不能在 extract 时就分配 | 待裁 | **堵 b6 的最后一块**：①名字事务要迁 `nodeDraftOf` 66 个形状不变、但 `DraftGraphBuilder::draft()` 132 个调用点；②名字草稿 0 改动，代价是在 3.6 旁边加一条编译期例外；**同页第二问堵 `tiles` 那 9 处与 `operator_instance` 那 2 处** |
-| [`partial-destructuring-of-a-value-tuple`](questions-2026-10-31-partial-destructuring-of-a-value-tuple.md) | 多值 `loop`/元组的解构，名字少于值时该拒绝（诊断），还是按位置取前几个（今天的实现） | 待裁 | 不堵今天的活（`mcts` 已按"四个名字全写全"绕开）；堵**下一个多状态循环**——两个同型状态就足以让它安静地算错 |
-| [`std-cpp-needs-a-tensor-type`](questions-2026-10-31-std-cpp-needs-a-tensor-type.md) | `std::cpp` 要不要有 tensor 类型：369 个程序（ones 39 + zeros 32 + load_npy 28 + reshape 270）都在等同一个类型，`Tensor` 在 `src/passes/trans/cpp` 里出现 0 次 | 待裁 | 堵 `std::cpp` 普查里 `tensor:` 一族 369 个程序，也堵 `h-fmt` 的 `reshape` 判断 |
-| [`mem-blocks-has-no-block-space`](questions-2026-10-31-mem-blocks-has-no-block-space.md) | `std::mem::blocks()` 在 `std::cpp` 写出的程序里没有块空间可数：译出来跑得动但第三行不同（`0 0 0 false` vs 解释器 `1 1 0 true`）；问该拒绝、该给 standalone 接块空间、还是换含义 | 待裁 | 堵 `std::cpp` 普查里的 `:op/mem_blocks` 一格（10 个程序今天仍拒绝） |
-| [`generator-narrowing-remains`](questions-2026-10-31-generator-narrowing-remains.md) | 生成器机器的 `FeatureNotSupported('generators')` 还留不留：三种更极端的形状（三携带量、嵌套两循环、依赖两前轮）今天全被接受，这条"没实现"的诊断没有形状可钉 | 待裁 | 堵 `lane-mcts` 这一笔的负例覆盖：原来钉它的 `stream.yield_lowering_refused` 随 develop 删除（那条 `loop` 已被降低） |
-| [`tiles-narrow-dtype`](questions-2026-10-31-tiles-narrow-dtype.md) | `tiles` 的设备元素类型层（`DType { F32, F64, I64 }`）要不要为 `F16`/`BF16` 加两个值，还是等 H50 支持面连同 `serial_kernel`、CUDA 代码生成、类型门一起定 | 待裁 | 堵**设备侧的窄浮点**：`#gpu` 里的 `bf16` 张量今天被 `unresolved_type` 排除；做第 1 步会让枚举先于它的四个消费方落地 |
+| [`does-rt-array-carry-a-shape`](questions-2026-10-31-does-rt-array-carry-a-shape.md) | 05:30 裁 **A**：`rt::Array` 带 `rank`/`extent` | 已裁未落 | 守卫与“形状 + 嵌套打印”第一步已落；队列：下标 → 切片 → `reshape` → `shape` → `numel` → 逐元素 |
+| [`std-cpp-needs-a-tensor-type`](questions-2026-10-31-std-cpp-needs-a-tensor-type.md) | 05:50 裁：**张量是 `rt::Foreign` 过桥**，走设计稿第 9 节，第 5 步开工 | 已裁未落 | 369 个程序记作“等第 5 步（外部对象）”；第一笔是 `rt::Foreign` 句柄 |
+| [`mem-blocks-has-no-block-space`](questions-2026-10-31-mem-blocks-has-no-block-space.md) | 05:10 裁 **A**：拒绝并让拒绝说实话（目标不具备，不是尚未实现） | 已裁已落 | 无；普查把 10 个记为“目标不具备” |
+| [`generator-narrowing-remains`](questions-2026-10-31-generator-narrowing-remains.md) | 04:50 裁 **A**：删掉生成器收窄 | 已裁已落 | 无；两处拒绝已删，三条形状转成消费它们的正例 |
+
 
 原则第 15 节另列着 6 条未决（另 2 条已成页、22:50 已裁），见文末。
 

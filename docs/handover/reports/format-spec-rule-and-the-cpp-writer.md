@@ -108,35 +108,61 @@ std::cpp  12 33 / abc / 5 12 12
 后面的 `n`），改成**一次左到右解码**；`"x\\ny"` 旧读法是 `\` 加一个真换行（进了 JS 就是行继续），新读法是
 `\` 和 `n` 两个字符。
 
-## 六、`std::cpp` 还缺哪些翻译：一次数清（3186 个程序）
+## 六、`std::cpp` 还缺哪些翻译：一次数清（3195 个程序）
 
-`test/cases/**/*.cml` 全部 3186 个，每个跑一遍 `std::cpp`，把"VM 接受、`std::cpp` 拒"的程序按诊断里的
-算子归类（`… has no translation in std::cpp yet` 会说出是哪一个）：
+`test/cases/**/*.cml` 全部 3196 个，每个跑一遍 `std::cpp`，把"VM 接受、`std::cpp` 拒"的程序按诊断里的
+算子归类。
 
-| 算子 | 被拒程序数 | 一个最小程序 |
-| --- | ---: | --- |
-| `tensor:reshape` | 270 | `test/cases/definitions/check.cml` |
-| `autodiff:grad` | 72 | `test/cases/definitions/grad.cml` |
-| `tensor:ones` | 39 | `test/cases/modules/nn/tensor_smoke.cml` |
-| `tensor:zeros` | 32 | `test/cases/perf/mlp_step.cml` |
-| `:op/fail` | 32 | `test/cases/opt/never_exit/fail_last.cml` |
-| `tensor:load_npy_f32` | 28 | `test/cases/modules/tiles/math_ulp.cml` |
-| `rand:uniform_array` | 23 | `test/cases/modules/nn/lr.cml` |
-| `autodiff:with_grad` | 16 | `test/cases/modules/autodiff/math_sqrt.cml` |
-| `:op/mem_blocks` | 10 | `test/cases/feat/mm/mem_blocks.cml` |
-| `tensor:sum` / `tensor:matmul` / `rand:shuffle_l` | 7 各 | `loops/iterate_tensor.cml` / `modules/onnx/entry/tuple.cml` / `para/core/merge_sort.cml` |
-| `tensor:shape` / `env:get_cwd` | 6 各 | `compile/entry_args/npy_values.cml` / `modules/std/env/basic.cml` |
-| `:op/set_field` / `:op/idx_take` | 4 各 | `compile/nullable_assign.cml` / `feat/mm/gc/gc_born_old.cml` |
-| `:struct/last_arr` | 2 | `test/cases/parse/syntax/subscript_forms.cml` |
+**先说尺子，因为它错过一次。** 最初那次普查只认两句话——`has no translation in std::cpp yet` 和
+`std::cpp does not translate yet`——于是漏掉了第三种说法（`on values std::cpp does not translate **it
+for** yet`，约 30 个），也把**类型层面**的拒（`converts a value of type 'f32' to 'f32[..]'`、
+`returns a value of type 'Json'`、`'\'Device<f32[..]>\''` 这些）压成了"另有 11 个"。现在按**一句**
+数：输出里有 `TranslationRefused` 就算被拒，一个程序一行。读数不是 683，是 **1000 / 3196**（31%）。
+尺子在仓库里，一行能复现：
 
-读数：**683 → 674** 个程序翻译不出来（这一笔把这 9 个修掉，`:op/set_index_in_place` 一行归零）。按族：
-tensor 414、autodiff 90、rand 34、核心算子（`:op/*`）50、`:struct/*` 2。另有 11 个是类型层面的拒
-（`std::cpp does not translate yet`），4 个**让翻译器崩掉**（segfault，见下）。
+```
+CAMEL_HOME=out/latest bash test/tools/cppexec/census.sh     # refused: 1000
+```
 
-这张表把两种东西分开了：tensor / autodiff / rand / tiles 是**整个子系统**（bridge 不运数组与张量，
-`std::cpp` 本来就不打算翻它们，要动是另一个决定）；`:op/*`、`:struct/*` 那 52 个才是**写出器的洞**。
-洞里最大的是 `:op/fail`（32 个）：它要 `never` 贯穿整个 emitter（分支的一个臂、`let` 的右值、
-`attempt` 的边界），不是一个翻译，我没动它。
+（里面有一个是**故意被拒**的负例 `test/cases/trans/cpp/refuse_rank.cml`，另有 22 个文件名带
+`err_`/`refuse_`/`fault_` 的负例；把负例扣掉是 977。）
+
+| 算子 | 被拒程序数 |
+| --- | ---: |
+| （诊断没点名任何算子：类型层面） | 400 |
+| `autodiff:grad` | 88 |
+| `onnx:export_model` | 78 |
+| `tensor:sum` | 45 |
+| `tensor:ones` | 42 |
+| `autodiff:with_grad` | 40 |
+| `tensor:zeros` | 34 |
+| `tensor:load_npy_f32` | 31 |
+| `rand:uniform_array` | 24 |
+| `tensor:multiply` / `tensor:shape` / `tensor:matmul` / `:op/slice_sub` / `:op/mem_blocks` | 15 / 12 / 10 / 10 / 10 |
+| `tiles:inspect` / `tiles:source` / `tensor:add` / `rand:shuffle_l` | 8 / 7 / 7 / 7 |
+| `env:get_cwd` / `tensor:full` / `array:sum_l` | 6 / 5 / 5 |
+
+其余每个 ≤ 4 个，最长的一串是 `tiles:*`、`tensor:*` 和几个模块的 `fs:`/`io:`/`re:`。tensor 一族合计
+约 250、autodiff 128、onnx 79、tiles 24、rand 35；核心算子（`:op/*`）现在只剩 `:op/slice_sub` 10
+（rank≥2 的值）、`:op/idx_arr` 4、`:op/idx_take` 1、`:op/mem_blocks` 10（gpu 那条线）。
+**4 个崩**（`rc=139`）已修成 0，见下。
+
+这条读数线（旧尺子，只数点名算子的那两句话）是 **683 → 674 → 666 → 661 → 638 → 629 → 593**：
+第一笔 `:op/set_index_in_place` 9 个，第二笔 `:op/set_field` / `:op/set_index` 5 个，第三笔
+`:op/idx_take` 4 个 + `:struct/last_arr` 2 个，第四笔 `:op/fail` 32 个（23 个真翻译、9 个换桶），
+第五到七笔是换桶那 9 个的三个算子（六之二），第八笔 `tensor:reshape`（六之三）。**这条线只用来比
+趋势**；绝对值以 999 为准。
+
+这张表把两种东西分开了：tensor / autodiff / onnx / tiles / rand 是**整个子系统**（bridge 不运数组与
+张量，`std::cpp` 本来就不打算翻它们，要动是另一个决定）；`:op/*` 和 `:struct/*` 才是**写出器的洞**。
+
+**表头那一格是个假的最大值。** 270 个程序被记在 `tensor:reshape` 名下，但按原文看是 7 句、且只有一句
+是真关于 reshape 的：`f32[]` 182、`float[]` 80、`int[]` 5、`fN[][]` 1，其余 2 句在匿名函数和 `check`
+里。更关键的是**它们不是同一个洞**：把 reshape 翻出来之后，只有 **6 个**真的翻译出来了，**264 个换了
+桶**——`onnx:export_model` 78、`tensor:sum` 38、`autodiff:with_grad` 24、`autodiff:grad` 16、类型层面
+15、`tensor:multiply` 10、`:op/slice_sub` 9、`tiles:*` 15……因为拒绝是按"图里第一个走到的算子"报的，
+reshape 只是那条流水线上最先碰到的那个。**一个格子 270 个程序，真正属于这个格子的只有 2 个**
+（修完之后仍停在 `tensor:reshape` 上的只有 2 条）。
 
 **4 个崩**（`rc=139`）：`compile/contextual_empty_array/all_literal.cml`、
 `contextual_empty_array/named_sibling.cml`、`compile/semantic/recursive_struct_array.cml`、
@@ -155,7 +181,7 @@ error[RuntimeDiag::TranslationRefused]: Translation pass 'std::cpp' refused the 
   --> test/cases/compile/semantic/recursive_struct_array.cml:40:19
 ```
 
-（`grown.children[0].value = 20` 是 `:op/set_field`，另一个洞，4 个程序，排在 `:op/fail` 后面。）
+（`grown.children[0].value = 20` 是 `:op/set_field`，当时是另一个洞，5 个程序，下一笔就修掉了。）
 
 顺手撞出**第 5 个崩**，这次在前端不在写出器：`type Node = { state: State, children: Node[] }` 里 `State`
 写在 `Node` **后面**时，`std::fvm` **自己**段错误（`rc=139`）；`State` 写前面就正常，互相递归（`A` 里 `B[]`、
@@ -190,7 +216,238 @@ std::fvm  [9, 2, 3]
 std::cpp  [9, 2, 3]
 ```
 
-## 七、七条判据
+接着修同一个族里的下一处：**`:op/set_field`**（5 个，比普查时多出来的那一个是以前崩的
+`recursive_struct_array.cml`，现在按缺口报了）。也就是 `p.x = 9`、`m[0].x = 9` —— 赋值把"改了一处的
+结构体"当**值**交出来，形状和上一笔的数组一模一样：**变量交出值、一处改变、块共享先复制**。所以它照抄
+第一个的形状，没有另起一套：
+
+```
+对数组：rt::setAt(xs, i, v, at_x_y)          （上一笔的，复用）
+对结构体：rt::setField(s, &Point::x, v)      （新，include/camel/standalone/record.h）
+```
+
+`set_field` 的字段是个**下标**，不是值——名字在类型里，所以规则表通过 `OperatorCall::fieldName` 去问，
+写成成员指针；这一段第一版把 `normTypes`/`norm` 捕获进 lambda，而它们已经被 move 进 `NodeCall` 了，
+所以永远拿到空类型、五条全拒。**"照抄形状"照抄的是语义，不是指针生命周期**，这是这一笔唯一的坑。
+
+读数：**5 → 0**，普查 **674 → 666**，与 `std::fvm` 逐字节相同（五条都 `same`）：
+
+```
+std::fvm  { x: 9, y: 2 } { x: 1, y: 2 }
+std::cpp  { x: 9, y: 2 } { x: 1, y: 2 }
+```
+
+第二列是**存之前读到的那个值**：`rt::setField` 返回新记录、`rt::setAt` 共享时先复制，所以
+`let kept = p; p.x = 9` 之后 `kept` 还是 `{ x: 1, y: 2 }`。`test/cases/trans/cpp/field_store.cml`
+把三处（字段、元素、元素的字段）各钉一遍，每一处都配一个存之前读的值。
+
+再往下是普查里剩下的最小一对，**一处一笔**：`:op/idx_take`（4）和 `:struct/last_arr`（2）。
+`idx_take` 是 `xs[positions]`——按一组位置取元素，`a6c21b186`；`last_arr` 是 `last(xs)`——最后一个
+元素，空数组给"位置 -1"那条故障，`b0b03b861`。两个都照抄上一笔的形状：**只读不写、位置照读的那条
+检查、越界就是读的那条故障、同一条站点**。`rt::take` 内部就调 `rt::at`，所以越界消息与位置原文一字
+不差；`rt::last` 填的也是读填的那三个值（位置、"an array"、长度），所以空数组印出来的就是 `Index -1`
+那一句。
+
+读数：**4 → 0**、**2 → 0**，普查 **666 → 661**（第五个 `gc_born_old.cml` 换了桶：它现在卡在
+`rand:uniform_array`，是模块的洞，不是写出器的）。六条里五条两边逐字节相同（包括两条故障用例）。
+
+```
+std::fvm  [40, 10, 30] [20, 20] [10, 20, 30, 40]
+std::cpp  [40, 10, 30] [20, 20] [10, 20, 30, 40]
+std::fvm  3 7 3     →   Index -1 is out of range for an array of length 0.
+std::cpp  3 7 3     →   Index -1 is out of range for an array of length 0.
+```
+
+两条用例：`test/cases/trans/cpp/take_positions.cml`（一个置换、一个重复位置、一个定长 `f32[3]`）、
+`test/cases/trans/cpp/last_element.cml`（三元素、单元素、空数组那条故障）。
+
+最后是 `:op/fail` 那 32 个——我一直说它"不是一个翻译，是 `never` 贯穿三处"，**这个判断是错的**。真去
+看拒绝原文，32 条是同一句、拦在同一个地方：**在问规则之前**，`lowerOperator` 先看结果的类型能不能写，
+而 `never` 那时映射成 `void`——`void` 不是值，于是"结果类型没有翻译"。**不是三处贯穿，是一处**：`never`
+这个类型在这儿没有值。把它做成真正的类型 `rt::Never`（`struct Never`，向每种类型都能转，但永远转不到，
+因为唯一持有它的方式是结束程序），三处就一起通了：语句、`let` 的右值、分支的臂、参数、`never` 函数的
+返回，全是"值站在要值的地方"。
+
+报告那一半也有现成的：站点本来就有 `kind`/`message`/`location` 三个字段（为 `attempt` 的错误值留的），
+所以 `fail` 的站点是 **ProgramFault 模板换个名字**——`d.name = "RuntimeDiag::" + 程序写的 kind`，
+印出来就是 `error[RuntimeDiag::Stop]`，和解释器一字不差，`attempt` 抓到的错误值说的也是同一个 kind。
+
+读数：**32 → 0**（这一行归零），普查 **661 → 638**。32 个里 **23 个真的翻译出来了**，另外 **9 个换了桶**
+（它们早就过了这个算子，卡在模块的 `array:sum` / `array:element_*` 上）。`feat/trans/cpp` 里的
+`fail_program.cml` 把五种站位各放一个 `fail`，最后留一个没人处理的，两边逐字节相同：
+
+```
+std::fvm  BadLimit / true / 7 / 1 / error[RuntimeDiag::Stopped]: the end ... rc=1
+std::cpp  BadLimit / true / 7 / 1 / error[RuntimeDiag::Stopped]: the end ... rc=1
+```
+
+这就是判据要改的那一条：**32 个程序听起来是 32 个难点，实际是一个类型没有值。**
+
+## 六之二、换桶的那 9 个：三个算子，一处一笔
+
+`:op/fail` 修完之后，32 个里有 9 个**并没有真的翻译出来**，只是"不再卡在 `fail` 上"——它们早就走过
+这个算子，停在前面的模块函数里。**这 9 个按原文分成三句，一句一个新算子**：
+
+| 拒绝原文 | 程序数 | 谁在喊 |
+| --- | --- | --- |
+| `'array:sum_d' on a value of type 'float[]'` | 4 | `statistics::variance_of` |
+| `'array:elements' on a value of type 'float[..]'` | 2（`sum_d` 修完变 4） | `array::flatten<float>` |
+| `'array:sort_d' on a value of type 'float[]'` | 3 | `statistics::quantile<float>` |
+
+三笔，一笔一个 sha，一笔一处：
+
+1. `8fef6467e` **`array:sum_d`**——元素从 +0 加起、按摆放顺序、在 `double` 里累加（运行时的浮点归约
+   就是这么累加的，`sumOf`）。只认 rank 1：这个后端的数组本来就是一条平铺的跑线。
+2. `8cde63796` **`array:elements`**——行主序一条跑线。`rt::Array` 不留形状，所以"取元素"就是给它的那个
+   值本身（`array_axis.cpp` 里 rank ≤ 1 也是原样返回）。**开区间 rank 也通**：`T[..]` 说的是长度未知，
+   不是摆放方式不同。
+3. `eb1eb5c4c` **`array:sort_d`**——`min`/`max` 的那个序（7.7）：NaN 在所有数之后，`-0` 在 `+0` 之前，
+   其余照常；相同元素留在原位（稳定排序，所以 `sort(xs)` 与 `xs[argsort(xs)]` 是同一些位）。
+
+读数：**638 → 629**（9 个全翻译出来了，一行不剩），n = 3194，崩溃 0。用例 `float_reduce.cml`：
+
+```
+std::fvm  7.0 / [-0.0, 0.0, 1.5, 2.5, 3.0] / 7.0 / [3.0, -0.0, 0.0, 1.5, 2.5] / [2.0] / 0.0
+std::cpp  同上，逐字节相同
+```
+
+`-0.0` 排在 `+0.0` 前面这一条，就是这个序里最容易被漏掉的一半。
+
+这 9 个里 8 个两边逐字节相同，`perf_fib_smoke.cml` 印的是耗时（每次都不一样），比不了；另外 4 个是
+**bridged**（还要链 `libcamel`），本机默认 `libstdc++` 比 `libcamel.so` 要求的旧（`GLIBCXX_3.4.35/36`），
+`run.py` 的链接行因此链不上——这是我手工补 `-L<conda>/lib -lstdc++` 之后才比出来的，**不是翻译的问题，
+是这台机器的链接环境问题**。
+
+判据进页：**一个洞归因到一处之后，换桶的那几个不算修好，只算没被它挡住——报数时要把"真的翻译了"与
+"不卡在这了"分开。**
+
+## 六之三、`tensor:reshape`：不是张量计算，是"这条平铺的跑线"换个说法
+
+`reshape` 的语义是"同样的元素、行主序、换个形状"（`modules/tensor/kernels/layout.cpp`）。这个后端
+**不留形状**（`rt::Array` 就是一条跑线），所以：
+
+- **目标是一维**（`reshape<[3]>(xs)`）：值、打印出来的样子、能做的操作全都不变，**就是它自己**。这条
+  能翻，而且 `xs->reshape<[n]>` 跟 `xs->reshape<[m]>` 的差别只有"元素数对不对"。
+- 算子真正做的比较只剩**元素数**：目标若不是同一个数，运行时在**读任何东西之前**就报
+  `TensorDimensionMismatch`，消息里带输入自己的形状（`[3]`）和目标（`[2]`）。这一半照抄了：
+  `rt::reshape(xs, count, site)`，`count` 来自目标类型里写死的长度。
+- **目标是多维**（`reshape<[2, 2]>`）：形状**是能被看见的**——`println` 印出来的是
+  `[[1.0, 2.0], [3.0, 4.0]]`，不是 `[1.0, 2.0, 3.0, 4.0]`。这条**翻不了**，不是没写规则，是这个后端
+  没有形状可印。所以规则只在目标一维时接，多维仍走 bridge。
+
+一笔（`984b1ffac`）：`tensor:reshape` 那一格 **270 → 0**，真翻译出来 **6 个**，264 个换桶（分布见六）。
+用例 `reshape_flat.cml` 三行相同、第四行是那个故障：
+
+```
+std::fvm  [1.0, 2.0, 3.0] / [4.0, 5.0, 6.0] / [1.0, 2.0, 3.0] / error[RuntimeDiag::TensorDimensionMismatch]: ... [3] -> [2].  rc=1
+std::cpp  同上，逐字节相同
+```
+
+判据进页：**表头那一格按"被拒程序数"开工之前，先按"拒绝句数"看一眼——270 个程序可能只是两句话；
+而且这两句话还可能是两条流水线的第一句话。** 这次的 270 是 7 句、1 个真洞、2 个真属于它的程序。
+
+## 六之四、剩下那 15 个核心算子：**一处拦截，而且拦在设计的门上**
+
+按新尺子，核心算子只剩 15 个程序：`:op/slice_sub` 11、`:op/idx_arr` 4（其中 1 个是我新加的负例
+`refuse_rank.cml`，算 10 个真程序）、`:op/idx_take` 1。三个算子的规则我都读过，**每个规则的门只有一
+道**：值必须是**一维**（`value->rank() == 1` 且 `!anyRank()`），函数体里就这一句
+（`operator_rules.cpp` 的 `:op/idx_arr` / `:op/slice_sub` / `:op/idx_take`）。所以"15 个是几处"不需要
+猜——把 15 个的第一句拒绝打出来，第一操作数的类型就摆在那儿：
+
+| 第一操作数 | 程序数 |
+| --- | ---: |
+| `f32[2, 3]` / `float[2, 3]` / `f32[3, 4]`（rank 2） | 9 |
+| `f32[2, 3, 4]` / `float[2, 3, 4]`（rank 3） | 2 |
+| `f32[?, 3]`（rank 2，首维未知） | 2 |
+| `f32[..]` / `int[..]`（开区间） | 2 |
+
+**15 / 15 是同一处**：值不是一维。为什么这一处修不了？因为这 15 个里有 **12 个**这个值本身就是
+`reshape<[2, 3]>` 造出来的（多维目标，见六之三——它连"存在"都不行），另有 **8 个**直接调
+`shape()` 印形状。也就是说这 15 个要的不是"slice 的规则"，是**"值带着形状"**——那是另一个决定（要
+不要给 `rt::Array` 一个形状），不是一处翻译。**我没有假装一处能修好它。**
+
+这一笔能修、而且该修的是**话**：规则说"不"的时候，原来只说 `on values std::cpp does not translate it
+for yet`——不说是什么值。现在它把操作数的类型印出来（`of type 'float[2, 3]' and 'int'`，连续重复的
+类型只报一次），于是"15 个是同一处"从我的推断变成了诊断自己说的话，下一次普查可以按**原因**分组而
+不是按算子分组。负例 `refuse_rank.cml` 把它钉在计划里（`refuse_rank`，exit 1、`10:14`）：
+
+```
+function 'main' uses the operator ':op/slice_sub' on values of type 'float[2, 3]' and 'int' std::cpp does not translate it for yet
+```
+
+读数：真翻译 **0**、换桶 **0**、被拒 **15 → 15**（数字没动，动的是数字背后的原因）；坏消息说得清楚
+也算一笔。判据进页：**分母错过的读数只能当趋势；要把趋势变成结论，先把尺子重写一遍并给出复现命令。**
+
+这一处的答案不在翻译侧，已经成页交给作者：`docs/handover/questions/questions-2026-10-31-does-rt-array-carry-a-shape.md`
+（`rt::Array` 要不要带形状，A/B/C 三个代价各一行）。页里还记着查证时撞见的一条**今天就印错**的事实：多维
+字面量 `float[3, 2] = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]` 生成 `rt::Array<double>{1.0, 2.0, 3.0}`、印
+`[1.0, 2.0, 3.0]`、exit 0，而 `std::fvm` 印三行——不是拒，是错。**这比拒绝更该先修。**
+
+## 六之五、形状：先堵住印错，再让形状进来
+
+作者 05:30 裁了那一页：**A —— `rt::Array` 要带形状**（原生多维数组是核心类型，原则 5.4；后端表示不了
+核心类型就不算完成，所以 A 是终点、不是可选项；B 不选，翻译了但不等价比拒绝更坏）。**先上守卫。**
+
+**第一笔（守卫，`ee451e689`）**：多维字面量进 `std::cpp` 时**拒绝**，不再印错。措辞说"目标不具备"
+（`an array in std::cpp is a flat run of elements and carries no shape, so a value of several dimensions
+has no form there`），不说"还没实现"。同一个程序，改前改后两行原文：
+
+```
+改前  const rt::Array<double> array{1.0, 2.0, 3.0};   →  印 [1.0, 2.0, 3.0]，exit 0（fvm 印三行）
+改后  error[RuntimeDiag::TranslationRefused]: ... uses a value of type 'float[3, 2]' ... no form there
+      --> test/cases/trans/cpp/refuse_literal_rank.cml:14:26                     exit 1
+```
+
+**第二笔（A 的第一步，形状 + 嵌套打印）**：`rt::Array` 的块里现在有 `rank` 与 `extents`（形状跟元素
+同一个块，复制一份值就是复制两份），`appendText` 按行嵌套，`len` 答第一维；写出器用 `numel()` 取**全部**
+元素并把形状写进常量（`const rt::Array<double> array{{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, {3, 2}};`）。
+守卫随之删掉——它守的"印错"已经没有了。**两行逐字一致**：
+
+```
+std::fvm  [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]] / 3
+std::cpp  同上，run.py 比对逐字节相同（agree_with_fvm 的 130 个程序里就有它）
+```
+
+**账本**：被拒 1002 → 1000（守卫那笔 +2：新负例与 `let_shape`；形状这笔 −2：负例删了、`let_shape`
+真翻译并且印对了）；15 个核心算子程序仍记作**"等形状（A 进行中）"**，按 A 的队列往下销。队列：形状 ✅
+→ 下标 → 切片 → `reshape` → `shape` → `numel` → 逐元素运算。
+
+判据进页：**后端表示不了核心类型，就不是完成——所以"等形状"不是不做，是排队；队列的第一项永远是先堵住
+印错。**
+
+**第三笔（下标 `9024c230f`）**：位置落在**一个维度**上，不再落在一维的跑线上。`m[1]` 走 `rt::atRow`
+（少一维、维长取自值），`m[1, 0]` 写明了它丢的是哪一维，走 `rt::atAxis`（其余维度整块保留）——所以
+`m[1, 2]` 是"先轴 1、再轴 0"的两个位置，与解释器一致；两者都复制元素，行是独立的值。`tensor:reshape`
+现在把目标形状写进值（元素本来就是行主序，多维目标因此也忠实），这是位置这一步的前置：模块程序先把平铺的
+字面量 reshape 成多维。**六行逐字一致**（`index_rank`，含 rank-3 的 `t[1]` 与 `t[1, 0, 1]`）：
+
+```
+[3.0, 4.0] / 3.0 / 2 / [[5.0, 6.0], [7.0, 8.0]] / [5.0, 6.0] / 6.0
+```
+
+**这一步删掉的拒绝：`:op/idx_arr` 4 → 1**（只剩开区间 `f32[..]` 那一个：它的位置可能是一个元素、也可能是
+任意维的行，而"有时是元素、有时是数组"的值没有单一 C++ 类型）；账本被拒 **1000 → 999**
+（`index_two_positions` 真翻译，`index_other_dimension` 仍停在切片 + `tensor:shape` 上，那是队列的下一
+步）。
+
+判据进页：**能力每往前一步，就删掉几条它守住过的拒绝；删不掉的，说明这一步还没真到。**
+
+**第四笔（切片 `d42365fb7`）**：切片切的是**一个维度**，其余维度整块保留——`m[0:2]` 是前两行、`m[:, 1]`
+是第二列，边界算术沿用一维那套，负轴从最后一维数起。**五行逐字一致**：
+
+```
+[[1.0, 2.0], [3.0, 4.0]] / [2.0, 4.0, 6.0] / 2 / [[[5.0, 6.0], [7.0, 8.0]]] / [[1.0, 2.0], [5.0, 6.0]]
+```
+
+**这一步删掉的拒绝：`:op/slice_sub` 11 → 1**（只剩开区间 `int[..]`：秩是值的属性，它的切片可能保留也可能
+丢掉任意多维）。但**程序数一个没放出来**（被拒 999 → 998 只因为我删掉了 `refuse_rank.cml` 那条自造的负例
+——它钉的拒绝已经不发生了，继续钉就是一条不再测任何东西的用例）。原因写在账上：那 10 个程序的**下一句**
+拒绝都不是切片，是 `shape` / `sum` / `sort`——队列的下一项。**这一步"删了 10 条、放行 0 个程序"，照实报。**
+
+判据进页：**一个值的形状只知道"几维、每维多长"还不够；位置能不能落在一维上，是下一步才知道的——所以每步都
+要重问一次"这条拒绝还成立吗"。**
+
+## 七、十六条判据
 
 > **裁定也可能基于过时的读数：拿到裁定先去 develop 上复现一次；不复现，就先把前提写下来，再谈要不要改。**
 
@@ -205,3 +462,23 @@ std::cpp  [9, 2, 3]
 > **一个后端拒一条翻译是缺口，崩一次是缺陷；缺口按被拒程序数报，缺陷按崩溃数报，两者不在一个优先级上。**
 
 > **同一个缺陷在写出器和前端各崩一次时，先修前端——写出器只影响一个后端，前端影响所有人。**
+
+> **同一个缺口的第二个实例，先照抄第一个的形状，再谈抽象；照抄的时候只抄语义，不抄指针。**
+
+> **一个洞按"程序数"报完，还要按"难点数"报一次：32 个程序可能只是三处贯穿。**
+
+> **表头那一格按"被拒程序数"开工之前，先按"拒绝句数"看一眼——270 个程序可能只是两句话。**
+
+> **分母错过的读数只能当趋势；要把趋势变成结论，先把尺子重写一遍并给出复现命令。**
+
+> **十五个程序挡在同一道门上，先问那道门是谁立的；门是设计的一部分时，翻译侧修不动它。**
+
+> **拒绝是可见的缺口，印错是隐形的缺口——普查只数得出前者，所以后者要先堵。**
+
+> **后端表示不了核心类型，就不是完成——所以"等形状"不是不做，是排队；队列的第一项永远是先堵住印错。**
+
+> **能力每往前一步，就删掉几条它守住过的拒绝；删不掉的，说明这一步还没真到。**
+
+> **写错树和写错代码一样危险：前者不报错，只在别人的检出上留下一个看起来像真改动的残片。**
+
+> **一个值的形状只知道"几维、每维多长"还不够；位置能不能落在一维上，是下一步才知道的——所以每步都要重问一次"这条拒绝还成立吗"。**

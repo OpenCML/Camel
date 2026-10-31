@@ -891,7 +891,7 @@ class ModelBuilder {
                     }
                     if (graph->funcType()) {
                         ext.signatures.push_back(sourceSpelling(graph->funcType()->toString()));
-                        ext.macro = ext.macro || graph->draft().isMacroGraph();
+                        ext.macro = ext.macro || graph->view().isMacroGraph();
                     }
                     if (auto where = functionOfGraph(graph->graphId())) {
                         addUnique(ext.definitions, *where);

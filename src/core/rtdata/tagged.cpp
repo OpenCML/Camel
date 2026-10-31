@@ -27,14 +27,14 @@ slot_t nullablePayload(slot_t nullable) {
 }
 
 slot_t makeSome(slot_t value, const type::TupleType *nullableType) {
-    ASSERT(nullableType && nullableType->isNullable(), "makeSome needs a nullable type.");
+    GUARD(nullableType && nullableType->isNullable(), "makeSome needs a nullable type, and the type it was handed is not one: the value would be tagged as present on a type that has no absent form");
     ::Tuple *box = ::Tuple::create(1, mm::autoSpace());
     box->set<slot_t>(kValueSlot, value, nullableType);
     return toSlot(box);
 }
 
 bool isErrorValue(slot_t fallible) {
-    ASSERT(fallible != NullSlot, "A fallible value is never the null slot.");
+    GUARD(fallible != NullSlot, "A fallible value is never the null slot: the value being tagged as Ok or Error is the null slot itself");
     return fromSlot<::Tuple *>(fallible)->get<slot_t>(kErrorSlot) != NullSlot;
 }
 
@@ -47,14 +47,14 @@ slot_t fallibleError(slot_t fallible) {
 }
 
 slot_t makeOk(slot_t value, const type::TupleType *fallibleType) {
-    ASSERT(fallibleType && fallibleType->isFallible(), "makeOk needs a fallible type.");
+    GUARD(fallibleType && fallibleType->isFallible(), "makeOk needs a fallible type, and the type it was handed is not one: an Ok would be tagged on a type with no Error arm");
     ::Tuple *box = ::Tuple::create(2, mm::autoSpace());
     box->set<slot_t>(kValueSlot, value, fallibleType);
     return toSlot(box);
 }
 
 slot_t makeFailed(slot_t error) {
-    ASSERT(error != NullSlot, "A failed value needs its Error structure.");
+    GUARD(error != NullSlot, "A failed value needs its Error structure, and the slot it was given is the null slot: a failure with no error is not a failure");
     // The payload slot stays the zero slot whatever its type; only the error slot is a
     // reference, and every fallible type declares it as one.
     static const type::TupleType *anyFallible = type::TupleType::fallible(type::Type::Void());
@@ -82,7 +82,7 @@ slot_t makeError(std::string_view kind, std::string_view message, std::string_vi
 }
 
 void printTaggedSlots(std::ostream &os, const slot_t *slots, const type::TupleType *type) {
-    ASSERT(type && type->isTagged(), "printTaggedSlots needs a tagged type.");
+    GUARD(type && type->isTagged(), "printTaggedSlots needs a tagged type, and the type it was handed has no tag: the slots would be printed as the wrong shape");
     if (type->isFallible() && slots[kErrorSlot] != NullSlot) {
         const auto *info = fromSlot<const ::Struct *>(slots[kErrorSlot]);
         const auto text  = [&](std::string_view field) {

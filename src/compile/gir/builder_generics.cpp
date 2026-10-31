@@ -2430,8 +2430,8 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         // every instance, and they were resolved once (tagFactsOf remembers by node).
         const TagFacts tags = tagFactsOf(tmpl->func, camel::core::tag::Func);
         if (camel::core::tag::declaresMacro(tags.declaration)) {
-            graph->draft().setFlags(static_cast<uint8_t>(
-                graph->draft().flags() | camel::runtime::kGraphFlagMacro));
+            graph->edit().setFlags(static_cast<uint8_t>(
+                graph->view().flags() | camel::runtime::kGraphFlagMacro));
         }
         buildFuncBody(tmpl->func, graph, funcType, instanceName, tags);
         leaveScope();
