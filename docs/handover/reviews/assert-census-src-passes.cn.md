@@ -6,6 +6,18 @@
 > - **② 可能为空**：检查的是指针/下标/长度，**一份畸形或被改坏的图能让它真的为空**，Release 下会崩（段错误或越界），不是"逻辑跑错"。
 > - **③ 纯防御**：**同一事实在调用点或前几行刚刚检查过**，断言只是重复一次。
 
+## 先看这两条——它们决定这张表怎么读
+
+**算法（② 与 ① 的分界，机械版本）**：
+
+> **沿调用链往上追，追得到 `decode(` 的一律按 ②；追不到、且写与读在同一个函数体内的一律按 ①；中间态（追不到，但也不知道会不会有一天被 decode 出来）必须带一条"何时转 ②"的句子，否则下一次普查会被重新判一遍。**
+
+**报数口径（证据数 ≠ 断言数）**：
+
+> **两条断言守同一件事时，先问"是不是同一条证据在两次站岗"；是的话，数字要按证据数报，不按断言数报。**
+
+**为什么这条口径必要**：Debug 下真出错只会停在**先跑到的那一侧**，另一侧那条永远不响。所以 `compile.cpp:471` 与 `fastvm.cpp:174/205`、`trampoline.cpp:90` 对外开放的是**同一条等式**，不是三份保证。**全仓库的断言总数里，有一族的实际验证次数比断言条数少一半**——凡是要报"断言覆盖率"的地方，都得先扣掉这一半。
+
 ## 第 1 块：`src/passes/sched/fastvm/fastvm.cpp`（最大目录里最大的一个文件）
 
 **读了几处：44**（43 个 `ASSERT` + 1 个 `CAMEL_ASSERT_NOT_VIEW`；`:42` 的 `static_assert` 不是运行期断言，不计）。
@@ -118,14 +130,48 @@
 
 **用这条分界回看第 1 块**：那 29 条②里，**调用帧、`Function`、运行图、闭包端口、程序根**——五组的来源全是图里的表，而 `fastvm` **今天就能跑 decode 来的图**（`fastvm.cpp:1072` 的 JIT 出口就是从那类图里读字节码的），所以**五组全部成立为②**，一条都不该降回①。
 
+## 第 3 块：`gotovm.cpp`（17）+ `jit/runtime/trampoline.cpp`（30）
+
+**读了几处：47**（`gotovm.cpp` 17 + `trampoline.cpp` 30；两处 `:926`/注释不计）。
+**本块三类：① 19 / ② 28 / ③ 0 = 47。**
+
+* `gotovm.cpp`：**① 7 / ② 10**
+  * ①：`36/43` 嵌套 JIT save 栈的界与下溢、`379/385` 访问下标、`390` 不支持的 ACCS、`471` JOIN 臂下标、`498` `isGCTraced`
+  * ②：`500/503` FILL 源对象与目标数据、`520` `Function`、`522/565/585/636` `runtimeTarget`、`666/692/770` `runtimeTailTarget`
+* `trampoline.cpp`：**① 12 / ② 18**
+  * ①：**`90` 直接调用 arity**、`490/496/502` 下标、`507/563/673/724` 四种"不支持的 opcode/源类型"、`517/542` 的 `!nargs.empty()`/`!wargs.empty()`（FILL/CALL 的形状由编码器决定）、`521` `isGCTraced`、`699` JOIN 臂下标
+  * ②：`89` 目标帧、`218/252/287/306/332/353/546` `runtimeTarget`、`390` `runtimeGraph`、`523/525` FILL 源与目标、`544` `Function`、`684` JIT helper 的源、`758/769/779` `bc.extra()->loop`、`329/350` `bc` 本身为 null
+
+## 成对表：**编码器侧 vs 执行器侧，谁先响**
+
+**左列是编码器写下的检查，右列是执行器对同一件事的检查**。中间一列说明 Debug 下真出错时**先响的是哪一侧**——**先响的那条才是"这一次验证"，另一条只是备份**。
+
+| # | 编码器侧（先响 →） | 同一等式 | 执行器侧（后备） |
+|---|---|---|---|
+| 1 | **`compile.cpp:471`** `normOps.size() == dstSlots.size()` | 直接调用的实参数 = 目标槽位数 | `fastvm.cpp:174`、`:205`；**`trampoline.cpp:90`** |
+| 2 | `compile.cpp:358/364/376`（源是 composite、kind 是 `TupleIndex`/`StructKey`） | 访问下标是类型给的，且 `< 长度` | `casevm.cpp:153/159`、`gotovm.cpp:379/385`、`trampoline.cpp:490/496/502` |
+| 3 | `compile.cpp:601`（编不了的操作符） | 每个 opcode 都有实现 | `casevm.cpp:164`、`gotovm.cpp:390`、`trampoline.cpp:507/563/673/724` |
+| 4 | `compile.cpp:411`、`:646/649`（BRCH/JOIN 配对） | JOIN 臂下标 `< withCnt()` | `casevm.cpp:212`、`gotovm.cpp:471`、`trampoline.cpp:699` |
+| 5 | （前端捕获表 → 闭包长度） | 闭包元组长度 = 捕获端口数 | `fastvm.cpp:230`、`trampoline.cpp:542/544` |
+| 6 | **`compile.cpp:126`**（materialize 前置） | 执行前必须有节点负载/帧布局/循环体 | `fastvm.cpp:1244`、`trampoline.cpp:758/769/779` |
+
+**读这张表要知道的三件事**：
+
+1. **第 1 行是这一族里最典型的一条**：同一等式在 **3 个文件、4 处**各写了一遍（`compile.cpp:471`、`fastvm.cpp:174`、`fastvm.cpp:205`、`trampoline.cpp:90`），**实际只验一次**。
+2. **"谁先响"不是固定的**：第 1、2、6 行编码器先响（它在前面）；**第 3 行执行器先响**——编不了的操作符在 `compile.cpp:601` 那条反而**最先**（编码器遇到不认识的类型就停），而 `casevm/gotovm/trampoline` 那四条的是一直没轮到。
+3. **所以"加了 30 条 `trampoline` 断言"不等于"多了 30 次验证"**：这 30 条里 **12 条属于①，其中大半在成对表里已经有一份**。**报覆盖率之前，先按这张表把重复的扣掉。**
+
+**"`fastvm` 今天就能跑 decode 来的图"的出处**（免得下一个人重新问）：`fastvm.cpp:1072` 的 JIT 出口按 `bc->opcode == OpCode::CALL` 读**解码图的字节码**；`fastvm.cpp:1244` 的 `hasFrameLayout()` 也说明它按"已经 materialize 过的图"工作。**这两处就是第 1 块那 29 条②不降回①的理由。**
+
 ## 进度
 
 | 块 | 目录/文件 | 读了几处 | ① | ② | ③ |
 |---|---|---|---|---|---|
 | 1 | `sched/fastvm/fastvm.cpp` | **44** | 14 | 29 | 1 |
 | 2 | `sched/fastvm/compile.cpp` + `casevm.cpp` | **32** | 15 | 17 | 0 |
+| 3 | `sched/fastvm/gotovm.cpp` + `jit/runtime/trampoline.cpp` | **47** | 19 | 28 | 0 |
 
-**`src/passes` 全量 305 处，读过 76，还剩 229。**
-**本目录（`sched/fastvm/`，共 163 处）里读过 76，还剩 87。**
+**`src/passes` 全量 305 处，读过 123，还剩 182。**
+**本目录（`sched/fastvm/`，共 163 处）里读过 123，还剩 40。**
 
-**下一块**：`fastvm/gotovm.cpp`（17）+ `trampoline.cpp`（30）——**执行器的另外两个入口**，正好把"执行器一侧"读完。
+**下一块**：`fastvm.cpp` 剩下的同目录文件——`bytecode.h`(20)、`fastvm.h`(2)、`runtime_support.cpp`(4)、`hosted.cpp`(1)、`optimize.cpp/h`(2)、三个 dump 文件(5)、`x64_backend.cpp`(3)——**把 `sched/fastvm` 收口（40 处）**，然后再出目录。
