@@ -114,3 +114,16 @@
 **结论**：要让 `:var/after` 在账上算"同一个名字"而不是"再读一次"，**需要新增一种访问种类**（例如"它交出的就是第 k 个操作数，不另算一次访问"）。那是语言层的决定，本线不自行加。
 
 **判据**：**账上把同一格数两次，会让两条本来无关的红同时出现（`core` 与 `source.declared_resources`）；一个红数到两条，先怀疑账本重复计数，而不是两个缺陷。**
+
+## 7. 合上 `lane-edges` 之后的那四条红（读数）
+
+合 `lane-edges`（`6a6fccfaf`，只合、未推）之后整闸 **total 8045, pass 8032, fail 4, skip 7, known 2**，四条正是 `core`、`poison:modules.resources:core`、`source.declared_resources`、`poison:compile.effects_syntax:source.declared_resources`。两族各一条根子：
+
+**`core` 族：节点号整体 +1，因为 `main` 的 `CALL` 节点现在记了一条访问。** 计划期望 `RESOURCES node main 19 :var/take: rmw variable (node 18); result may_alias 0`，实际是 `RESOURCES node main 20 :var/take: rmw variable (node 19); result may_alias 0`；账里多出一行 `RESOURCES node main 15 CALL: rmw variable (node 2)`，而计划的注释（`test/plans/feat/modules/resources.plan.toml:80-81`）写的是"The `CALL` node of `main` records no access of its own"。访问从 `Resolver::call` 的签名/足迹分支出来（`src/runtime/resources.cpp:444`，签名在 `:485-489`，操作数绑定在 `:519-526`）。
+
+**`source.declared_resources` 族：两次 `bump(cell)` 现在指两个不同的版本节点。** 期望（`test/plans/feat/compile/effects_syntax.plan.toml:33-44`）：两次调用**指同一格**且**按 control 定序**；实际是
+`RESOURCES node main 8 FUNC bump: rmw variable (node 7)` 与 `RESOURCES node main 9 FUNC bump: rmw variable (node 10)`，其中 `node 10 :var/after: read variable (node 7); result same 0`，配对只剩 `order main 8 9 resource ordered by data`。也就是说：`:var/after` 作为"同一格的下一版"，在账上被当成了**另一个值**。
+
+**它比的是哪两样**：`RESOURCES node`/`RESOURCES order` 这些行（由声明 + 建好的图算出来，`src/runtime/resources.cpp:783 resourcesOf`）对**源码程序里写的 clause**（`test/cases/effects/declared.cml:20-32`），断言写在计划的内联 `verify_script` 里（`test/plans/feat/compile/effects_syntax.plan.toml:26-53`）；**没有快照文件**。
+
+**判据**：**结果说"就是那个单元"、访问却说"读了它"——两者同时成立时，账本迟早会数两次；先看哪一句是多余的，再决定改哪一边。**
