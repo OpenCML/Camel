@@ -36,6 +36,7 @@
 #include <functional>
 #include <map>
 #include <numeric>
+#include <stdexcept>
 #define DEBUG_LEVEL -1
 
 using namespace std;
@@ -756,7 +757,7 @@ node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::nod
         return inner != nullptr ? castNodeTo(inner, tagged, origin) : nullptr;
     }
     // The empty literal `[]`: the same literal with the element type its position gives it.
-    ASSERT(target->code() == TypeCode::Array, "Only an empty array literal is left here.");
+    GUARD(target->code() == TypeCode::Array, "Only an empty array literal is left here.");
     node_handle_t typed = currGraph_->addStaticDataNode(
         tt::as_shared<Data>(ArrayData::create(tt::as_ptr<ArrayType>(target)->elemType())));
     registerNodeOrigin(context_, typed, origin, "gir.data");
@@ -1291,7 +1292,7 @@ void Builder::coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_
         // this is a compiler defect and not an error in the program: the assertion below is the
         // debug build's, and a release build reports it at the branch instead of handing a null
         // node to `normInputsOf` and the join (that was a segmentation fault).
-        ASSERT(coerced != nullptr, "A branch arm is joined only with a type its value enters.");
+        GUARD(coerced != nullptr, "A branch arm is joined only with a type its value enters.");
         diags_->of(InternalDiag::UnknownInternalError)
             .atOrigin(origin != nullptr ? origin->origin() : arm->origin)
             .commit(
@@ -1684,7 +1685,7 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
 node_handle_t Builder::peelPipeReceiver(const GCT::node_ptr_t &call, node_handle_t receiver) {
     Type *subjectType = valueTypeOf(nodeTypeOf(receiver));
     TupleType *tagged = asTagged(subjectType);
-    ASSERT(tagged != nullptr, "A pipe takes a receiver apart only when it is tagged.");
+    GUARD(tagged != nullptr, "A pipe takes a receiver apart only when it is tagged.");
     const bool onNull      = tagged->isNullable();
     const std::string name = bindTemporary(receiver);
     node_handle_t tagNode  = applyTagOperator(
@@ -2048,7 +2049,7 @@ node_handle_t Builder::reopenKnownNotNull(
         .atOrigin(at->origin())
         .commit(who, type->toString(), construct);
     node_handle_t reopened = coerceTo(subject, TupleType::nullable(type), at);
-    ASSERT(reopened != nullptr, "A value always enters the nullable form of its own type.");
+    GUARD(reopened != nullptr, "A value always enters the nullable form of its own type.");
     return reopened;
 }
 
@@ -2059,7 +2060,7 @@ node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
     const bool logical = kind == Kind::LogicalAnd || kind == Kind::LogicalOr;
     if (gct->size() != 3 || gct->at(1)->caseType() != CaseType::True ||
         gct->at(2)->caseType() != CaseType::Else) {
-        ASSERT(!logical, "'&&' and '||' are lowered with a true arm and an else arm.");
+        GUARD(!logical, "'&&' and '||' are lowered with a true arm and an else arm.");
         return nullptr; // a `match`
     }
     const GCT::node_ptr_t &cond = gct->at(0);
@@ -2200,7 +2201,7 @@ node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
                         opened.temporary,
                         opened.subject);
                     [[maybe_unused]] const bool bound = insertNode(opened.name, value);
-                    ASSERT(bound, "A narrowed name is the first name of its arm.");
+                    GUARD(bound, "A narrowed name is the first name of its arm.");
                     narrowedValues_.insert(value);
                 }
                 return visitBodyNode(arm.exec);
@@ -2502,7 +2503,7 @@ node_handle_t Builder::buildGuardedMatch(const GCT::node_ptr_t &gct, node_handle
             caseStep.exec = caseNode->at(0);
             break;
         default:
-            ASSERT(false, "A guarded match case is a value or `_`.");
+            throw std::runtime_error("A guarded match case is a value or `_`.");
         }
         steps.push_back(std::move(caseStep));
     }
@@ -2630,7 +2631,7 @@ node_handle_t Builder::buildBranch(
 
             switch (caseNode->caseType()) {
             case GCT::CaseType::True: {
-                ASSERT(caseNode->size() == 1, "True case should have only one child.");
+                GUARD(caseNode->size() == 1, "True case should have only one child.");
                 // An `if`: the condition is a bool (language reference 6.8.1: no truth-value
                 // conversion). Anything else was compared bit for bit with `true`.
                 Type *condType = valueTypeOf(nodeTypeOf(condNode));
@@ -2645,13 +2646,13 @@ node_handle_t Builder::buildBranch(
                 break;
             }
             case GCT::CaseType::Else:
-                ASSERT(i == gct->size() - 1, "Else case should be the last case.");
-                ASSERT(caseNode->size() == 1, "Else case should have only one child.");
+                GUARD(i == gct->size() - 1, "Else case should be the last case.");
+                GUARD(caseNode->size() == 1, "Else case should have only one child.");
                 caseExecNode = caseNode->at(0);
                 absentElse   = ifArmSeen && caseExecNode->size() == 0;
                 break;
             case GCT::CaseType::Value: {
-                ASSERT(caseNode->size() == 2, "Value case should have two children.");
+                GUARD(caseNode->size() == 2, "Value case should have two children.");
                 node_handle_t valueNode = valueNodeOf(visit(caseNode->at(0)));
                 // A case is compared with the value matched, by the comparison of that type:
                 // a case of another type was compared bit for bit (`case 1` on a string read
@@ -2679,7 +2680,7 @@ node_handle_t Builder::buildBranch(
                 break;
             }
             default:
-                ASSERT(false, "Unknown case type in BRCH node.");
+                throw std::runtime_error("Unknown case type in BRCH node.");
             }
 
             subGraph = buildArm(caseExecNode);
@@ -3122,7 +3123,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             linkNodes(LinkType::Norm, iterable, array);
             iterable = array;
             type     = valueTypeOf(nodeTypeOf(iterable));
-            ASSERT(
+            GUARD(
                 type != nullptr && type->code() == TypeCode::Array,
                 "The elements of an iterable must be an array.");
         }
@@ -4124,7 +4125,7 @@ node_handle_t Builder::buildStreamLoop(
 
 node_handle_t Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {
     ENTER("ANNO");
-    ASSERT(gct->size() == 1, "ANNO node should have exactly one child.");
+    GUARD(gct->size() == 1, "ANNO node should have exactly one child.");
     node_handle_t node = valueNodeOf(visit(gct->at(0)));
     LEAVE("ANNO");
     return node;
