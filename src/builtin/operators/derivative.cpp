@@ -516,12 +516,26 @@ template <typename F> void registerFloatForwardRules() {
     camel::core::bindForwardRule({std::string(F::neg), "rulesets.jvp", "-", 1});
 }
 
+/// And where the transposes of the same five are written down: `rulesets.transpose`, under the same
+/// five keys, because a rule is filed under the operator of its left side and the two families are
+/// written by the same hand. A linear function's pullback reads this table, and nothing else: the
+/// binding says which key to ask the family for, never what the rule says.
+template <typename F> void registerFloatTransposeRules() {
+    camel::core::bindTransposeRule({std::string(F::add), "rulesets.transpose", "+", 2});
+    camel::core::bindTransposeRule({std::string(F::sub), "rulesets.transpose", "-", 2});
+    camel::core::bindTransposeRule({std::string(F::mul), "rulesets.transpose", "*", 2});
+    camel::core::bindTransposeRule({std::string(F::div), "rulesets.transpose", "/", 2});
+    camel::core::bindTransposeRule({std::string(F::neg), "rulesets.transpose", "-", 1});
+}
+
 void registerBuiltinDerivatives() {
     auto &registry = DerivativeRegistry::instance();
     registerFloatRules<F64>(registry);
     registerFloatRules<F32>(registry);
     registerFloatForwardRules<F64>();
     registerFloatForwardRules<F32>();
+    registerFloatTransposeRules<F64>();
+    registerFloatTransposeRules<F32>();
     registry.setRule(":op/dtod", identityVjp);
     registry.setRule(":op/ftof", identityVjp);
     registry.setRule(":op/dtof", dtofVjp);

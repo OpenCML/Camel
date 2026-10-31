@@ -1181,3 +1181,8 @@ func main(): int {
 先在这一页记下，等负责人对下面这句措辞拍板后再开工：3.3 写的是"去掉一个效应的最后一个用处时，它由指向后继的顺序边保活（9.7）"，而 F2 说"顺序边只排序，不传递被用到"，两句冲突。这个例子里也根本没有后继效应可以接顺序边。
 
 用例：上面这个程序，四个后端在 `std::opt` 前后都打印 `1`。这一项不在冲刺主线上，S1（执行器按区域排计划）那一路做完手上的事再接。
+### 答复（2026-10-31 15:40，按要求补在本页末尾）
+
+- **树的哈希**：`52cdf5cab`（`52cdf5cabc15cc3ea1f71c38d886d9b161f3a3c6`），比 `8f153ecbf` 新，`ef0cda9a9` 是它的祖先（`merge-base --is-ancestor` 退出 0）。
+- **整套快层**：`total 8142 / pass 8138 / fail 0 / skip 2 / known failures 2`（`camel-remote.ps1 -Path m-train -Plan all -Tier fast -Jobs 8`，日志 `train129-gate.log`）。
+- **遍边界的三条检查没有被触发过**：整份快层输出里 `PassInternalError` **0 条**、`Camel Invariant Violation` **0 条**，因此没有点名任何遍。资源集合那条第（`ef0cda9a9`）在这棵树上覆盖到了，且一次也没有开火。

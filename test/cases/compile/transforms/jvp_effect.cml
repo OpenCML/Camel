@@ -1,0 +1,22 @@
+// An effect inside the differentiated function: `g` prints and then computes `x * x`. The lift must
+// let the effect run as written -- as often as the original body would have run it -- and it must
+// not try to differentiate it: a print has no tangent, and its "derivative" is not a number the
+// caller reads. The value still flows: `g(3) = 9`, `g'(3) = 6`.
+//
+// The count is read against the plain call: `g(3.0)` prints `3.0` once, and the lifted `g` has to
+// print it once too, so the run shows `3.0` twice and no more.
+import rulesets.jvp
+import { jvp } from transforms
+
+func g(x: float): float sync {
+    println(x)
+    return x * x
+}
+
+func main(): int sync {
+    println(g(3.0))
+    let (value, tangent) = jvp(g)(3.0, 1.0)
+    println(value)
+    println(tangent)
+    return 0
+}

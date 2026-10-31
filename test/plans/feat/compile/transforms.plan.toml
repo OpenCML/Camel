@@ -23,7 +23,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_div,jvp_add", "REINTERP jvp op signature=(f: (float) => float) => (float, float) => (float, float)", "lifted=(float, float) => (float, float) graph=(float, float) => (float, float) same=yes", "5.5", "3.25"]
+expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_div,jvp_add", "REINTERP jvp op signature=(f: (float) => float) => (float, float) => (float, float)", "lifted=(float, float) => (float, float) pure graph=(float, float) => (float, float) pure same=yes", "5.5", "3.25"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -97,6 +97,26 @@ expect_stdout_contains = ["REINTERP jvp function=f graph=", "81.0", "108.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# An effect is executed as written, not differentiated: the print inside `g` runs once (the same
+# number of times the original body ran it), and a number's tangent is still nonzero beside it.
+[[tests]]
+name = "jvp_effect.runs_as_written_and_zero_tangent"
+desc = "A function with an effect (`println` in the body) is lifted so that the effect keeps running exactly as often as it did -- once -- while the numeric part is differentiated: `g(x) = x*x` with a print reads `effect`, then `9.0` and `6.0`. The effect has no tangent and none is invented for it, but the tangent of the value does not become zero because an effect sits beside it, which is what a lift that gave up on the whole straight line at the first effect would read."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_effect.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+# The count: `g(3.0)` prints `3.0` once and the lifted `g` prints it once, so exactly two `3.0`
+# lines appear (the plain call's print, then the lifted call's print) -- a third would mean the
+# lift ran the effect again, and a single one would mean it dropped it. `9.0` and `6.0` are the
+# value and the tangent of the lifted call, and the plain call's `9.0` is the third.
+expect_stdout_contains = ["REINTERP jvp function=g graph=", "3.0\n9.0\n6.0"]
+expect_stdout_not_contains = ["3.0\n3.0\n3.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 # A call is lifted as a call: the callee gets a lifted graph of its own, and it gets exactly one --
 # `f(x) = g(x) + g(x)` calls `g` twice and the reading says `callees=1`. The numbers are checked
 # against the derivative written by hand: `g(x) = x*x`, `f(x) = 2*x*x`, so `f(3) = 18` and
@@ -121,14 +141,14 @@ timeout_ms = 20000
 # process stops without running `main`, while the call site is kept beside it as a related position.
 [[tests]]
 name = "rulesets_probe_missing.at_the_primitive"
-desc = "With a primitive carrying no forward rule, `jvp(f)` is a diagnostic and not a value: it names the operator (`math:pow_d`) and the reason no rule was found, and its position is the primitive's own -- `rulesets_probe_missing.cml:10:12`, the `pow` in `f` -- which is the position a reader has to be sent to, not the `jvp(f)` call. The reading line still names what was refused (`skip=rule uri=math:pow_d`), and the run's exit is non-zero: the program does not go on to print a value it could not differentiate."
+desc = "With a primitive carrying no forward rule, `jvp(f)` is a diagnostic and not a value: it names the operator (`math:pow_d`) and the reason no rule was found, and its position is the primitive's own -- `rulesets_probe_missing.cml:10:12`, the `pow` in `f` -- which is the position a reader has to be sent to, not the `jvp(f)` call. The reading line still names what was refused (`skip=rule uri=math:pow_d`), and the run's exit is non-zero: the program does not go on to print a value it could not differentiate. Read as a whole the assertions say *when* the fault is raised: the diagnostic carries the primitive's own position, the reason the table gave (`no forward rule bound at all`), and the raise-site hint (`[raised here`) that keeps the `jvp(f)` call beside it -- a graph-time fault, not a value computed and then checked."
 kind = "behavior"
 case = "../../../cases/compile/transforms/rulesets_probe_missing.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 1
-expect_output_contains = ["skip=rule uri=math:pow_d", "rulesets_probe_missing.cml:10:12: [Error]:", "jvp has no forward rule for `math:pow_d`"]
+expect_output_contains = ["skip=rule uri=math:pow_d", "rulesets_probe_missing.cml:10:12: [Error]:", "jvp has no forward rule for `math:pow_d`", "no forward rule bound at all", "[raised here"]
 expect_stdout_not_contains = ["5.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
