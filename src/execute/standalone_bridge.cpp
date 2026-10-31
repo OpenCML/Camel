@@ -19,6 +19,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/operator.h"
+#include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type.h"
 #include "camel/execute/executor.h"
@@ -37,6 +38,7 @@ namespace {
 
 using camel::core::rtdata::fromSlot;
 using camel::core::rtdata::toSlot;
+using camel::core::type::ArrayType;
 using camel::core::type::Type;
 using camel::core::type::TypeCode;
 
@@ -70,6 +72,22 @@ class ArgsOfCall final : public ::ArgsView {
                 slots_.push_back(toSlot(String::from(v.text, camel::core::mm::autoSpace())));
                 types_.push_back(Type::String());
                 break;
+case Value::Kind::IntArray: {
+                // A shape (or any other int array) as the runtime holds it: an `int[]`. It is built
+                // here rather than in the generated code so the program never needs the runtime's
+                // value layout -- the array is the runtime's own, made with its own allocator.
+                // `::Array` spelled out: bridge.h brings in camel::standalone::Array, the program's
+                // array, which is another type under the same name.
+                ArrayType *arrayType = ArrayType::create(Type::Int64());
+                ::Array *array =
+                    ::Array::create(camel::core::mm::autoSpace(), arrayType, v.ints.size());
+                for (size_t i = 0; i < v.ints.size(); ++i) {
+                    array->set<camel::core::rtdata::Int64>(i, v.ints[i]);
+                }
+                slots_.push_back(toSlot<::Array *>(array));
+                types_.push_back(arrayType);
+                break;
+            }
             case Value::Kind::Void:
                 slots_.push_back(NullSlot);
                 types_.push_back(Type::Void());
@@ -158,6 +176,21 @@ OperatorFault describe(const camel::core::error::RuntimeFault &fault) {
     return *op;
 }
 
+/// The type a value the runtime owns is printed by. A tensor is a numeric array
+/// (modules/tensor/tensor.h): its element type and its shape are the value's own, so the type is
+/// the array type they make -- the reading modules/tensor/module.cpp's value refiner does, and the
+/// one every reader of the slot (the printer included) takes a tensor for. A value that is not an
+/// array states no type this side can read, and the printer falls back to the object's own.
+const Type *typeOfValue(camel::core::rtdata::Object *object) {
+    auto *array = dynamic_cast<::Array *>(object);
+    if (array == nullptr) {
+        return nullptr;
+    }
+    const auto dims = array->shapeSpan();
+    Type *elem      = Type::create(array->elemTypeCode());
+    return dims.empty() ? elem : ArrayType::create(elem, dims);
+}
+
 Value valueOf(slot_t slot, Value::Kind kind) {
     switch (kind) {
     case Value::Kind::Bool:
@@ -173,6 +206,16 @@ Value valueOf(slot_t slot, Value::Kind kind) {
     case Value::Kind::String: {
         const auto *s = fromSlot<String *>(slot);
         return {kind, 0, 0, s != nullptr ? std::string(s->view()) : std::string()};
+    }
+    case Value::Kind::Foreign: {
+        // A value the runtime owns, handed to the generated program as the counted handle of
+        // camel/standalone/foreign.h: the handle is made here, inside the call (no safepoint is
+        // reached in one), and the Foreign that reaches the program owns its one count. The
+        // runtime keeps the object alive from now on, and the text of it is the runtime's own.
+        auto *object = fromSlot<camel::core::rtdata::Object *>(slot);
+        auto *root   = new camel::core::mm::RootHandle(
+            camel::core::mm::autoSpace(), object, typeOfValue(object), "bridge Foreign");
+        return {kind, 0, 0, {}, {}, root};
     }
     case Value::Kind::Void:
     default:

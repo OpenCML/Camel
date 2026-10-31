@@ -4,7 +4,6 @@
 #include "operator_rules.h"
 
 #include "camel/core/numeric_convert.h"
-#include "camel/core/numeric_convert_half.h"
 #include "camel/core/type/composite/array.h"
 #include "fault_sites.h"
 
@@ -215,26 +214,30 @@ OperatorRule checkedTextConversion(
 }
 
 /// A bf16 or an f16 read from a text (`bf16(s)`; cast.cpp __stobf__): `rt::halfFromText<To>(x,
-/// invalidSite, f32RangeSite, halfRangeSite)`. The text is read as f32 first, so a text that is
-/// not a number and one beyond f32 are the f32 refusals, with the element type's name in them as
-/// the runtime's own path puts it; the third report is the range of the element type itself
-/// (camel/core/numeric_convert_half.h, the same sentences).
-OperatorRule halfFromTextRule(const char *to, const char *target, std::string halfRangeReason) {
+/// invalidSite, rangeSite)`. The text is read as f32 first, so a text that is not a number and one
+/// beyond f32 are the f32 refusals, with the element type's name in them as the runtime's own path
+/// puts it; the third report is the range of the element type itself (camel/core/
+/// numeric_convert_half.h, the same sentences).
+///
+/// The last two are one diagnostic at one place, so they are one site: the range sits in the
+/// message as a value, and the runtime fills in the range it met -- f32's for a text beyond f32,
+/// the element type's for a number f32 holds and the type does not. Two sites of one kind at one
+/// node are one site (`SiteTable::siteFor` is keyed by node and kind), and asking for both would
+/// hand the second the first's text.
+OperatorRule halfFromTextRule(const char *to, const char *target) {
     return {
-        [to, target, halfRangeReason = std::move(halfRangeReason)](
-            OperatorCall &c) -> std::optional<std::string> {
-            const std::string text = SiteTable::valueMark(0);
+        [to, target](OperatorCall &c) -> std::optional<std::string> {
+            const std::string text  = SiteTable::valueMark(0);
+            const std::string range = SiteTable::valueMark(1);
             return std::format(
-                "rt::halfFromText<{}>({}, {}, {}, {})",
+                "rt::halfFromText<{}>({}, {}, {})",
                 to,
                 c.norm(0).text,
                 c.site(RuntimeDiag::InvalidNumberText, {text, target, "a number"}),
                 c.site(
                     RuntimeDiag::ConversionOutOfRange,
-                    {"'" + text + "'", target, camel::core::floatRangeReason<float>(target)}),
-                c.site(
-                    RuntimeDiag::ConversionOutOfRange,
-                    {"'" + text + "'", target, halfRangeReason}));
+                    {"'" + text + "'", target,
+                     std::format("the value is outside the range of {} ({})", target, range)}));
         },
         false};
 }
@@ -429,10 +432,8 @@ Rules buildRules() {
         checkedConversion("truncate", "int64_t", "int", RuntimeDiag::ConversionOutOfRange);
     r[":op/f6tol"] =
         checkedConversion("truncate", "int64_t", "int", RuntimeDiag::ConversionOutOfRange);
-    r[":op/stobf"] = halfFromTextRule(
-        "rt::BF16", "bf16", camel::core::halfRangeReason<camel::core::rtdata::BFloat16>("bf16"));
-    r[":op/stof6"] = halfFromTextRule(
-        "rt::F16", "f16", camel::core::halfRangeReason<camel::core::rtdata::Float16>("f16"));
+    r[":op/stobf"] = halfFromTextRule("rt::BF16", "bf16");
+    r[":op/stof6"] = halfFromTextRule("rt::F16", "f16");
     // A number to a complex value, and a complex value to the other width (cast.cpp, the c64
     // and c128 groups of globals.cpp): the imaginary part of a number is zero.
     r[":op/ctoc"] = identity();
@@ -694,13 +695,117 @@ Rules buildRules() {
             const TypeCode element = value->elemType()->code();
             if (element != TypeCode::Int64 && element != TypeCode::Int32 &&
                 element != TypeCode::Float32 && element != TypeCode::Float64 &&
-                element != TypeCode::Bool) {
+                element != TypeCode::Bool && element != TypeCode::BFloat16 &&
+                element != TypeCode::Float16) {
                 return std::nullopt;
             }
             return std::format("rt::sumAll({})", c.operand(0));
         },
         false,
     };
+    // `tensor:sum_axis` (modules/tensor/kernels/reduce.cpp, reduceAxis): the lanes along one dimension
+    // added from +0 in ascending order, rounded into the element type once -- the one reduction that
+    // does read a dimension, and the one that cannot be written by flattening the value.
+    //
+    // Two refusals stay, and they are not the same sentence. A rank of one is refused because its
+    // answer is a value of no dimension: the result's type cannot be written from the signature,
+    // which says `T[..]` -- a value of a rank the callee does not know -- while the answer here
+    // would be the element itself. An open rank is refused for that same reason and only that one:
+    // its rank is a property of the value, so the shape the answer keeps cannot be stated -- and not
+    // because such a value is not an array, which it is, and the operator reads it as one.
+    r["tensor:sum_axis"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (value == nullptr || value->anyRank() || value->rank() < 2 ||
+                value->elemType() == nullptr) {
+                return std::nullopt;
+            }
+            const TypeCode element = value->elemType()->code();
+            if (element != TypeCode::Int64 && element != TypeCode::Int32 &&
+                element != TypeCode::Float32 && element != TypeCode::Float64) {
+                return std::nullopt;
+            }
+            // The axis and the flag arrive on one of two roads: as arguments of the call
+            // (`sum_axis(xs, 1, false)`) or as the constant the callee was written with
+            // (`sum<1>(xs)`), which the graph keeps beside the value rather than among the
+            // arguments (`with`). Either road names the same two things, and the rule reads
+            // whichever carried them.
+            std::string axis;
+            std::string keepDims = "false";
+            if (c.normCount() >= 2) {
+                axis = c.operand(1);
+                if (c.normCount() > 2) {
+                    keepDims = c.operand(2);
+                }
+            } else if (c.withCount() >= 1) {
+                axis = c.with(0).text;
+                if (c.withCount() > 1) {
+                    keepDims = c.with(1).text;
+                }
+            } else {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::sumAxis({}, {}, {}, {})",
+                c.operand(0),
+                axis,
+                keepDims,
+                c.site(RuntimeDiag::InvalidArgument, marks(2)));
+        },
+        false,
+    };
+    // `tensor:max_axis` and `tensor:min_axis` (modules/tensor/kernels/reduce.cpp, reduceAxis): the
+    // same lanes as the sum, folded from the operation's identity instead of from +0, with the one
+    // comparison the interpreter makes -- a NaN on either side gives the canonical quiet NaN and -0
+    // is below +0 (modules/math/minmax.h), so a single NaN element makes the answer NaN and no
+    // order or grouping changes the bits. Nothing is rounded here and no accumulator takes part.
+    //
+    // A lane with no element has no extreme, and the interpreter refuses it naming the operator and
+    // the axis; that refusal is the only one these two have that the sum does not. The two the sum
+    // states stay as they are: a rank of one answers a value of no dimension and an open rank keeps
+    // no shape -- both because the answer's type cannot be written, not because the value is not an
+    // array.
+    for (const char *uri : {"tensor:max_axis", "tensor:min_axis"}) {
+        const bool maximum = uri[7] == 'm' && uri[8] == 'a';
+        r[uri]          = {
+            [maximum](OperatorCall &c) -> std::optional<std::string> {
+                const ArrayType *value = asArrayType(c.normType(0));
+                if (value == nullptr || value->anyRank() || value->rank() < 2 ||
+                    value->elemType() == nullptr) {
+                    return std::nullopt;
+                }
+                const TypeCode element = value->elemType()->code();
+                if (element != TypeCode::Int64 && element != TypeCode::Int32 &&
+                    element != TypeCode::Float32 && element != TypeCode::Float64) {
+                    return std::nullopt;
+                }
+                std::string axis;
+                std::string keepDims = "false";
+                if (c.normCount() >= 2) {
+                    axis = c.operand(1);
+                    if (c.normCount() > 2) {
+                        keepDims = c.operand(2);
+                    }
+                } else if (c.withCount() >= 1) {
+                    axis = c.with(0).text;
+                    if (c.withCount() > 1) {
+                        keepDims = c.with(1).text;
+                    }
+                } else {
+                    return std::nullopt;
+                }
+                return std::format(
+                    "rt::{}({}, {}, {}, {}, {})",
+                    maximum ? "maxAxis" : "minAxis",
+                    c.operand(0),
+                    axis,
+                    keepDims,
+                    c.site(RuntimeDiag::InvalidArgument, marks(2)),
+                    c.site(RuntimeDiag::InvalidArgument, marks(2)));
+            },
+            false,
+        };
+    }
     // `numel(xs)` (`stdlib/array.cml`): how many elements the value has. It needs no dimension of
     // the value -- only the count -- so a value of several dimensions and one of an open rank are
     // both read off the run it keeps: `numel` of a rank-zero value is one, as the interpreter's is.
@@ -854,6 +959,27 @@ Rules buildRules() {
         r[std::format("math:ceil_{}", t)]  = cmath("ceil");
         r[std::format("math:floor_{}", t)] = cmath("floor");
     }
+    // `math::min`, `math::max` and `math::abs` of a bf16 or an f16 (modules/math/operators.cpp,
+    // modules/math/minmax.h): the IEEE 754-2019 comparison of the values widened to f32, whose
+    // answer is one of the two operands (a NaN gives the canonical quiet NaN, -0 is below +0), and
+    // the sign bit cleared for abs. Neither rounds, so `rt::halfMin` and friends return a pattern
+    // rather than a computed value.
+    //
+    // A half crosses no bridge: bridge.h carries numbers, booleans and strings, and a sixteen-bit
+    // value is none of them, so these are the rules that let a program of either type stay
+    // standalone. The f32 and f64 forms are written here for the same reason and not because they
+    // are missing from the bridge -- the library's own `min` and `max` widen a bf16 to `float`
+    // before comparing (stdlib/math.cml), so a fold over a bf16 passes through the f64 comparison,
+    // and leaving that one bridged linked libcamel into a program of nothing but narrow floats.
+    for (const char *t : {"bf", "f6"}) {
+        r[std::format("math:min_{}", t)] = runtimeFunction("halfMin");
+        r[std::format("math:max_{}", t)] = runtimeFunction("halfMax");
+        r[std::format("math:abs_{}", t)] = runtimeFunction("halfAbs");
+    }
+    for (const char *t : {"f", "d"}) {
+        r[std::format("math:min_{}", t)] = runtimeFunction("ieeeMin");
+        r[std::format("math:max_{}", t)] = runtimeFunction("ieeeMax");
+    }
     // The complex functions (modules/math/operators.cpp): abs is hypot of the parts, exp is
     // std::exp of a std::complex, conj negates the imaginary part, re and im read one part.
     for (const char *t : {"c", "z"}) {
@@ -912,6 +1038,30 @@ Rules buildRules() {
                 c.norm(2).text);
         },
         true,
+    };
+
+    // ---- The results the runtime owns (tensor:*, design note 9) ----
+    // `tensor:ones` fills a tensor of the element type the call states with the shape it is given.
+    // A tensor is not a value this back end writes: it lives in the runtime module that owns it, and
+    // the program holds it through a counted handle (`rt::Foreign`, camel/standalone/foreign.h), so
+    // what a tensor is is written once, in the runtime, and the program and the interpreter print
+    // one tensor the same way -- the reason the shape crosses as the `int[]` it already is, instead
+    // of being rebuilt on this side. The result's C++ type is the handle, not the `rt::Array` the
+    // Camel type `f32[2, 2]` would otherwise name: an array the program builds is that value, a
+    // tensor is this one (which is why the rule says `resultCpp`).
+    r["tensor:ones"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1) {
+                return std::nullopt;
+            }
+            return std::format(
+                "{}.call<rt::Foreign>({}, {{rt::bridge::arg({})}}, {{}})",
+                c.bridgeOperator(),
+                c.place(),
+                c.norm(0).text);
+        },
+        false,
+        "rt::Foreign",
     };
 
     return r;
