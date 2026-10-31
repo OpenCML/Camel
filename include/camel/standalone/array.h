@@ -22,6 +22,7 @@
 #include "camel/standalone/str.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
@@ -29,6 +30,7 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace camel::standalone {
 
@@ -274,6 +276,45 @@ template <typename T> T last(const Array<T> &xs, const Site &site) {
         fault(site, {"-1", "an array", "0"});
     }
     return xs[xs.size() - 1];
+}
+
+/// `array:sort_d` (src/builtin/operators/array.cpp): the elements in the order `min` and `max` use
+/// (design principles 7.7) -- every NaN after every number, -0 below +0, else the usual one -- and
+/// ties in the order they stand, so the result is the one `xs[argsort(xs)]` gives, a stable sort
+/// of the clone the returning form of the store makes.
+inline Array<double> sorted(const Array<double> &xs) {
+    const auto order = [](double a, double b) {
+        if (std::isnan(b)) {
+            return !std::isnan(a);
+        }
+        if (std::isnan(a)) {
+            return false;
+        }
+        if (a == b) {
+            return std::signbit(a) && !std::signbit(b);
+        }
+        return a < b;
+    };
+    std::vector<double> items(xs.begin(), xs.end());
+    std::stable_sort(items.begin(), items.end(), order);
+    Array<double> out;
+    out.reserve(items.size());
+    for (const double item : items) {
+        out.push(item);
+    }
+    return out;
+}
+
+/// `tensor:reshape` (modules/tensor/kernels/layout.cpp): the same elements in row-major order in
+/// another shape. This back end keeps no shape, so the value is the one it was given -- but the
+/// operator compares the element count, and a target that changes it is a fault at `site` before
+/// anything is read, with the input's own shape in the message. `count` below zero asks nothing.
+template <typename T>
+Array<T> reshape(const Array<T> &xs, int64_t count, const Site &site) {
+    if (count >= 0 && static_cast<int64_t>(xs.size()) != count) {
+        fault(site, {std::to_string(xs.size())});
+    }
+    return xs;
 }
 
 /// `xs[idx]` with `idx` an array of positions (:op/idx_take, design principles 5.4): the elements
