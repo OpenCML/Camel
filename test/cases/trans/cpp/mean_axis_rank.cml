@@ -1,0 +1,32 @@
+/**
+ * The mean along one dimension is the interpreter's own two steps, in its order: each lane added from
+ * +0 in ascending order into a `double`, the *unrounded* total divided by the extent of the lane in
+ * `double`, and that quotient rounded into the element type once. It is not "the sum divided by a
+ * count" written a second time: rounding the sum first, or dividing in the element type, is a
+ * different number for an `f32` lane.
+ *
+ * A value of one dimension has one lane and nothing beside it, so the mean *is* the answer (design
+ * principles 5.4): `2.6666667` for an `f32[3]` of [1.0, 5.0, 2.0], a value of no dimension whose
+ * `shape` is `[]`, and `[2.6666667]` when the dimension is kept.
+ *
+ * A lane with no element is not refused: the interpreter divides 0.0 by 0.0 and answers the canonical
+ * NaN, one per lane, so an `f32[2, 0]` reduced on axis 1 answers `[nan, nan]`. The readings are the
+ * lines below; `agree_with_fvm` compares them with std::fvm byte for byte.
+ */
+import { mean_axis, reshape, shape } from tensor
+
+func main(): int sync {
+    let line: f32[3] = [1.0, 5.0, 2.0]
+    println(mean_axis(line, 0, false))
+    println(shape(mean_axis(line, 0, false)))
+    println(mean_axis(line, 0, true))
+    let wide: f32[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+    println(mean_axis(wide, 1, false))
+    println(shape(mean_axis(wide, 1, false)))
+    let cube: f32[2, 3, 4] = [[[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0], [9.0, 10.0, 11.0, 12.0]], [[12.0, 11.0, 10.0, 9.0], [8.0, 7.0, 6.0, 5.0], [4.0, 3.0, 2.0, 1.0]]]
+    println(mean_axis(cube, 1, false))
+    let flat: f32[0] = []
+    let none = reshape<[2, 0]>(flat)
+    println(mean_axis(none, 1, false))
+    return 0
+}

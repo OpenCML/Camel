@@ -572,14 +572,19 @@ Rules buildRules() {
     };
     // `shape(xs)` (`stdlib/array.cml`, `stdlib/tensor.cml`): the value's dimensions, one `int` per
     // dimension, which is what the interpreter's `int[]` is. The shape travels with the value, so the
-    // answer is read off it and is a new array of its own -- a value, not a view. An open rank is
-    // still not translated: its rank is a property of the value, and the rank-zero value it admits
-    // is not an array at all in this back end.
+    // answer is read off it and is a new array of its own -- a value, not a view.
+    //
+    // An open rank is translated: what `shape` asks for is a property of the value, and the value
+    // carries it -- `rt::shapeOf` reads the rank and the extents off the block, so a value of no
+    // dimension answers `[]` and one whose block records no shape answers the one dimension of its
+    // size, which is what the interpreter answers for both. ("Open rank" is a fact about the type;
+    // "the shape is not known yet" is a fact about a value, and this back end has no such value:
+    // every `rt::Array` either records its shape or is read as one dimension of what it holds.)
     for (const char *uri : {"array:shape", "tensor:shape"}) {
         r[uri] = {
             [](OperatorCall &c) -> std::optional<std::string> {
                 const ArrayType *value = asArrayType(c.normType(0));
-                if (value == nullptr || value->anyRank() || c.normCount() != 1) {
+                if (value == nullptr || value->elemType() == nullptr || c.normCount() != 1) {
                     return std::nullopt;
                 }
                 return std::format("rt::shapeOf({})", c.operand(0));
@@ -989,6 +994,56 @@ Rules buildRules() {
             }
             return std::format(
                 "rt::sumAxis({}, {}, {}, {})",
+                c.operand(0),
+                axis,
+                keepDims,
+                c.site(RuntimeDiag::InvalidArgument, marks(2)));
+        },
+        false,
+    };
+    // `tensor:mean_axis` (modules/tensor/kernels/reduce.cpp, reduceAxis): the mean is the sum's own
+    // two steps and not a second average -- each lane added from +0 in ascending order into a
+    // `double`, the unrounded total divided by the extent in `double`, that quotient rounded into the
+    // element type once. So the rule emits the runtime's mean, which walks the lanes the same way and
+    // rounds the same single time; "the sum divided by a count" computed in the element type would be
+    // a different number for an `f32` lane.
+    //
+    // Only a floating element type is written: the mean of an integer value is an `f32` in the
+    // kernel, while the operator's signature keeps the value's element type, so the answer's type on
+    // this side would be the integer one -- a different value printed, not a mean. That is left
+    // refused (by name) rather than translated to something else.
+    //
+    // An empty lane is not refused: the interpreter divides 0.0 by 0.0 and answers the canonical NaN
+    // (`[nan, nan]` for a `f32[2, 0]` reduced on axis 1), and the runtime does the same. The refusal
+    // these four extremes have for an empty lane is not the mean's.
+    r["tensor:mean_axis"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (value == nullptr || value->anyRank() || value->rank() < 1 ||
+                value->elemType() == nullptr) {
+                return std::nullopt;
+            }
+            const TypeCode element = value->elemType()->code();
+            if (element != TypeCode::Float32 && element != TypeCode::Float64) {
+                return std::nullopt;
+            }
+            std::string axis;
+            std::string keepDims = "false";
+            if (c.normCount() >= 2) {
+                axis = c.operand(1);
+                if (c.normCount() > 2) {
+                    keepDims = c.operand(2);
+                }
+            } else if (c.withCount() >= 1) {
+                axis = c.with(0).text;
+                if (c.withCount() > 1) {
+                    keepDims = c.with(1).text;
+                }
+            } else {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::meanAxis({}, {}, {}, {})",
                 c.operand(0),
                 axis,
                 keepDims,

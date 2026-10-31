@@ -396,6 +396,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "mean_axis_rank"
+desc = "The mean along one dimension is the interpreter's own two steps in its order, not a second average: each lane is added from +0 in ascending order into a `double`, the unrounded total is divided by the extent of the lane in `double`, and that quotient is rounded into the element type once -- rounding the sum first, or dividing in the element type, would be a different number for an `f32` lane. So `[2.0, 5.0]` for an `f32[2, 3]` reduced on axis 1 and `[[5.0, 6.0, 7.0, 8.0], [8.0, 7.0, 6.0, 5.0]]` for an `f32[2, 3, 4]` reduced on axis 1, whose lanes are three elements four apart in the run. A value of one dimension answers the mean itself, a value of no dimension: `2.6666667` for an `f32[3]` of [1.0, 5.0, 2.0], with `shape` answering `[]`, and `[2.6666667]` when the dimension is kept. A lane with no element is not refused -- the interpreter divides 0.0 by 0.0 and answers the canonical NaN, so an `f32[2, 0]` reduced on axis 1 answers `[nan, nan]` -- and the answer of an integer value is left refused, because the kernel's mean of an integer is an f32 while the operator's signature keeps the element type. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/mean_axis_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::meanAxis("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "sum_rank"
 desc = "The whole-value `sum` answers the element type: an integer result is the exact int64 accumulator (int64 as it stands) and a float one is the f64 accumulator converted once, added from +0 in the order the elements lie -- `6.0` for a `float[3]`, `10` for an `int[4]`, `0.6` for an `f32[3]` whose f64 total is not the f32 sum, `21.0` for a rank-2 value, `36.0` for a rank-3 one and `6.0` for a column of two. Every rank is one rule because the total reads none of the dimensions: the sum of a whole value is the sum of the same run however it is grouped, so nothing is flattened to reach it -- the axis form (`tensor:sum_axis`) is the one that reads a dimension. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
