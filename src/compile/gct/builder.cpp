@@ -5708,9 +5708,9 @@ node_ptr_t Builder::visitGeneratorBody(
 
     // The head writes the stream type, and it is what says what one `yield` hands out. A shape
     // this machine does not build is a defect of the machine, not a property of the program: the
-    // ruling of 2026-10-31 retired the "generators are not supported" refusal, so a shape that
-    // falls through is reported as an internal error with the program to send.
-    const auto refuse = [&](const AST::node_ptr_t &atNode) -> void {
+    // ruling of 2026-10-31 retired the "generators are not supported" refusal, and what is left is
+    // a defect reporter -- `reportUnbuiltShape` -- that names the shape and asks for the program.
+    const auto reportUnbuiltShape = [&](const AST::node_ptr_t &atNode) -> void {
         const AST::node_ptr_t atYield = firstOwnYield(atNode);
         diags_->of(InternalDiag::UnknownInternalError)
             .at((atYield != nullptr ? atYield : atNode)->load()->tokenRange())
@@ -5994,7 +5994,7 @@ node_ptr_t Builder::visitGeneratorBody(
                     // writes. A `yield` with no value has no element to hand out and keeps the
                     // named refusal.
                     if (values->size() == 0) {
-                        refuse(stmt);
+                        reportUnbuiltShape(stmt);
                     }
                     const auto elementOf = [&](const auto &list) -> node_ptr_t {
                         if (list->size() == 1) {
@@ -6098,7 +6098,7 @@ node_ptr_t Builder::visitGeneratorBody(
                             popScope();
                             return;
                         }
-                        refuse(stmt);
+                        reportUnbuiltShape(stmt);
                     }
                     if (isLoop) {
                         // A `while` loop whose body writes a `yield`. The pull that hands an
@@ -6119,7 +6119,7 @@ node_ptr_t Builder::visitGeneratorBody(
                             if (seqAst == nullptr || loopAst->optAtAs<AST::DataLoad>(2) != nullptr ||
                                 loopLoad->state().size() != 1 || init == nullptr ||
                                 !hoistable(init)) {
-                                refuse(stmt);
+                                reportUnbuiltShape(stmt);
                             }
                             const std::string stateName = loopLoad->state()[0].toString();
                             if (std::find(cellNames.begin(), cellNames.end(), stateName) ==
@@ -6209,7 +6209,7 @@ node_ptr_t Builder::visitGeneratorBody(
                         // the arm boundary is the next step).
                         if (inits->size() == 0 || loopLoad->state().empty() || loopLoad->hasFor() ||
                             inits->size() != loopLoad->state().size()) {
-                            refuse(stmt);
+                            reportUnbuiltShape(stmt);
                         }
                         // One cell per carried name. The body already may have a cell of that name
                         // (a `var` of its own): the loop carries that one cell, and the value below
@@ -6221,7 +6221,7 @@ node_ptr_t Builder::visitGeneratorBody(
                             const std::string name = loopLoad->state()[k].toString();
                             const AST::node_ptr_t eachInit = inits->at(k);
                             if (!hoistable(eachInit)) {
-                                refuse(stmt);
+                                reportUnbuiltShape(stmt);
                             }
                             if (std::find(cellNames.begin(), cellNames.end(), name) ==
                                 cellNames.end()) {
@@ -6296,7 +6296,7 @@ node_ptr_t Builder::visitGeneratorBody(
                                      AST::DataType::EnumPattern)) {
                                 // The arm binds a name; a binding lives in the arm's own graph, so
                                 // it would have to become a cell to outlive the `yield`.
-                                refuse(caseNode);
+                                reportUnbuiltShape(caseNode);
                             }
                             const int armPc = newArm();
                             fill(
@@ -6369,7 +6369,7 @@ node_ptr_t Builder::visitGeneratorBody(
                 // already written as a cell) would go round without moving: refused by name
                 // here rather than run as a loop that never advances.
                 if (last == nullptr) {
-                    refuse(from < stmts->size() ? stmts->at(from) : stmts);
+                    reportUnbuiltShape(from < stmts->size() ? stmts->at(from) : stmts);
                 }
                 // One name takes the value itself; a list of names takes the tuple the body built, one
                 // element per name -- the shape a loop that carries several values hands on:
@@ -6405,7 +6405,7 @@ node_ptr_t Builder::visitGeneratorBody(
                     if (tupleItems == nullptr || tupleItems->size() != names.size()) {
                         // A loop that carries several values hands them on as a tuple of the
                         // same length; anything else has no value for one of the names.
-                        refuse(lastStmt != nullptr ? lastStmt : stmts->at(from));
+                        reportUnbuiltShape(lastStmt != nullptr ? lastStmt : stmts->at(from));
                     }
                     // The next values are built before any of them is written: a state name the
                     // second element reads must be the value of this round, not the one the first
