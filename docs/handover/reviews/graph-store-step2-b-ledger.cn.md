@@ -1109,3 +1109,25 @@ HANDLE_PROBE refused: InvalidArgument
 **一条判据（协调者给的一句）**：**"降层率的分子是站点数，分母是证明：没有逐字节证明的那一处不许记进账。"**
 
 **逐字节证明**：与上一笔同一套——3264 个 `.cml` 各跑一次 `std::jgir`，改动前后 stdout / stderr / 退出码三者 3264 / 3264 逐字节相同。
+
+## 51. 存储头文件那 31 处 API 面：逐处判过，今天只换得动 2 处（本笔）
+
+**这是一次"逐处点名"，不是一次批量替换。** 31 个代码站点（`draft.h` 17、`draft_session.h` 6、`draft_clone.h` 3、`draft_writes.h` 3、`draft_inline.h` 1、`draft_types.h` 1；另有 4 行注释不在内），逐处问同一个问题：**这一处的调用者手上有没有事务？**
+
+| 判决 | 处数 | 是哪些 | 为什么 |
+|---|---|---|---|
+| **本笔换掉** | **2** | `draft.h` 的 `draftRuntimeNodeRefs`、`draft_writes.h` 的 `isWrittenArgument` | 前者唯一的调用者（`draft_session.cpp` 的 `committedNodeRefs`）手上正是 `found->second->transaction`；后者**唯一的调用者就在自己那个 `.cpp` 里**，它根本不是 API 面 |
+| 备好、没换 | 3 | `draft_session.h` 的 `debugDraftRootOpened`/`debugDraftRootClosed`、`draft_writes.h` 的 `WrittenSlots` 构造 | 前两者唯一的调用者在 `writings.cpp`（另一条车道的文件），而且它们是 `#ifndef NDEBUG`：Release 闸门根本看不见，换它得连带跑一次 Debug 构建；后者两个调用者（`modules/graph/read.cpp` 的 `copy->edit()`、`generic/algebra.cpp`）手上都有事务，下笔可换 |
+| 换不动 | 26 | 见下 | 调用者全在存储内部，**手上没有事务可以递** |
+
+那 26 处的构成：**类型自己的家 8**（`decode` 工厂、构造/析构、拷贝删除 ×2、赋值删除 ×2、`const_cast<GraphDraft *>(this)`）、**类定义 2**（`draft.h` 里 `DraftNodeHeader::owner` 那句、以及类头那句）、**类型自己的守卫 2**（`WritingScope` 的形参与成员，§44"边界三"）、**读者的声明 12**（`controlRegionOf`／`sameSyncBlock`／`nodeIsFreelySchedulable`／`carriesOrdering`／`isUnanchoredPure`／`ungated`／`resolveTupleProjection`／`reinferDraftTypes`／`isWrittenInPlace`／clone 两个）、**会话自己的门 4**（`DraftRootsDebug::Entry::draft`、`tryDraft` ×2、`draft(GraphId)`）。
+
+**结论（这一片真正的话）**：**存储的头文件不是"31 处都有事务可递"，而是"31 处里有 26 处的调用者就是类型自己"**——`controlRegionOf` 在 `draft_inline.cpp` 里被调 5 次、`sameSyncBlock` 在 `draft.cpp` 里被调 3 次，那些地方手上的东西就是 `*this`。**把这种形参换成事务，只能在调用处先 `GraphTransaction::borrow(*this)`，那是拿事务去包一个自己就拥有草稿的对象——不是降层，是加一层。** 所以这一片的上限就是 5 处（2 + 3），剩下的要等类型改名那一笔。
+
+**收益（协调者要的三个数）**：**形参 0 个**（`draftRuntimeNodeRefs` 的形参是换了类型，不是删了）、**`using` 0 个**、**删掉公开声明 1 条 + 它 6 行说明**（`isWrittenArgument` 从 `draft_writes.h` 收进 `draft_writes.cpp` 的匿名命名空间，与"删一个 using"同类：一个名字离开公开面），另加 2 行说明（迁移理由与"这个答案属于一次提交，所以要问会做这次提交的事务"）。**没有一项收益为负，但这一笔的收益也就是这 1 条声明。**
+
+**四个数：36 / 360 / 1 / 4。**（`references` 363 → 360：`draft.h` 的声明 −1、`graph.cpp` 的定义 −1（`const auto &draft = transaction.graph();` 之后它不再点这个名字）、`draft_writes.h` 的声明 −1；`files` 仍是 36。）
+
+**一条判据（协调者给的一句）**：**"前向声明是名字的记忆；删掉它之前先问这个头文件里还有谁记得这个名字。"**
+
+**逐字节证明**：同一套 3264 个 `.cml` × `std::jgir`，与 base1 比 stdout / stderr / 退出码 **3264 / 3264 全同**。
