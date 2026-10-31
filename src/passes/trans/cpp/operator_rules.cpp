@@ -655,6 +655,28 @@ Rules buildRules() {
         },
         false,
     };
+    // `array:argsort_bf` and `array:argsort_f6` (src/builtin/operators/array.cpp): the positions
+    // of the elements in the order `min` and `max` use, ties where they stand -- the order
+    // `array:sort_d` states, read as positions instead of values (rt::halfArgsort). The element
+    // type of the array decides which of the family is called, and every one of them returns an
+    // index, so this is what a program of a half asks for when it wants `argmax`, `argmin` or a
+    // sort rather than a total: `array::argmax` is a loop over
+    // `precedes(a, b) = argsort([b, a])[0] == 1`, and the array it sorts is as short as two.
+    for (const char *t : {"bf", "f6"}) {
+        r[std::format("array:argsort_{}", t)] = {
+            [](OperatorCall &c) -> std::optional<std::string> {
+                const ArrayType *value = asArrayType(c.normType(0));
+                if (c.normCount() != 1 || value == nullptr || value->anyRank() || value->rank() != 1 ||
+                    value->elemType() == nullptr ||
+                    (value->elemType()->code() != TypeCode::BFloat16 &&
+                     value->elemType()->code() != TypeCode::Float16)) {
+                    return std::nullopt;
+                }
+                return std::format("rt::halfArgsort({})", c.operand(0));
+            },
+            false,
+        };
+    }
     // `tensor:reshape` (modules/tensor/kernels/layout.cpp): the same elements in row-major order in
     // another shape. The shape travels with the value now (rt::Array holds it), so a target of
     // several dimensions is faithful too -- printing it gives its rows, `[[1.0, 2.0], [3.0, 4.0]]`,

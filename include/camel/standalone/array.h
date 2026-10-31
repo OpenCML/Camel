@@ -19,6 +19,7 @@
 #pragma once
 
 #include "camel/standalone/core.h"
+#include "camel/standalone/half.h"
 #include "camel/standalone/str.h"
 
 #include <algorithm>
@@ -644,6 +645,41 @@ inline Array<double> sorted(const Array<double> &xs) {
     out.reserve(items.size());
     for (const double item : items) {
         out.push(item);
+    }
+    return out;
+}
+
+/// `array:argsort_bf`, `array:argsort_f6` (src/builtin/operators/array.cpp): the positions of the
+/// elements in the order `min` and `max` use -- every NaN after every number, -0 below +0, else
+/// the usual one -- and ties in the order they stand. It is the order `sorted` states, read as
+/// positions instead of values, and it is what a program of a half asks for when it wants
+/// `argmax`, `argmin` or a sort rather than a total: `array::argmax` is a loop over
+/// `precedes(a, b) = argsort([b, a])[0] == 1`, so the element type of the array decides which
+/// argsort is called, and the answer is an index either way.
+template <typename Format> Array<int64_t> halfArgsort(const Array<Half<Format>> &xs) {
+    const auto order = [](float a, float b) {
+        if (std::isnan(b)) {
+            return !std::isnan(a);
+        }
+        if (std::isnan(a)) {
+            return false;
+        }
+        if (a == b) {
+            return std::signbit(a) && !std::signbit(b);
+        }
+        return a < b;
+    };
+    std::vector<int64_t> positions(xs.size());
+    for (std::size_t i = 0; i < xs.size(); ++i) {
+        positions[i] = static_cast<int64_t>(i);
+    }
+    std::stable_sort(positions.begin(), positions.end(), [&](int64_t l, int64_t r) {
+        return order(xs[l].toFloat(), xs[r].toFloat());
+    });
+    Array<int64_t> out;
+    out.reserve(positions.size());
+    for (const int64_t position : positions) {
+        out.push(position);
     }
     return out;
 }
