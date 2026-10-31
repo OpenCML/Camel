@@ -32,20 +32,26 @@ digraph GraphIR {
             N09 [label=":var\n/new", type="OPER", shape=diamond, style=solid, value_type="var int", tooltip=":var/new"];
             N0A [label="bump", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, value_type="int", tooltip="bump"];
             N0B [label="bump", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, value_type="int", tooltip="bump"];
-            N0C [label=":var\n/get", type="OPER", shape=diamond, style=solid, value_type="int", tooltip=":var/get"];
-            N0D [label="GATE", type="GATE", shape=diamond, style=dashed, value_type="int", tooltip="GATE"];
-            N0D -> O02 [label="0", type="EXIT", style=solid];
+            N0C [label=":var/\nafter", type="OPER", shape=diamond, style=solid, value_type="var int", tooltip=":var/after"];
+            N0D [label=":var/\nafter", type="OPER", shape=diamond, style=solid, value_type="var int", tooltip=":var/after"];
+            N0E [label=":var\n/get", type="OPER", shape=diamond, style=solid, value_type="int", tooltip=":var/get"];
+            N0F [label="GATE", type="GATE", shape=diamond, style=dashed, value_type="int", tooltip="GATE"];
+            N0F -> O02 [label="0", type="EXIT", style=solid];
             N07 -> N08 [label="0|0", type="NORM"];
             N08 -> N09 [label="0|0", type="NORM"];
             N09 -> N0A [label="0|0", type="NORM"];
-            N09 -> N0B [label="1|0", type="NORM"];
+            N0C -> N0B [label="0|0", type="NORM"];
             N0A -> N0B [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
             N0A -> N0B [label="ORDER", type="ORDER", style=dotted];
+            N0C -> N0B [label="ORDER", type="ORDER", style=dotted];
             N0A -> N0B [label="SYNC", type="SYNC", style=solid, arrowhead=diamond];
-            N09 -> N0C [label="2|0", type="NORM"];
-            N0B -> N0C [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
-            N0C -> N0D [label="0|0", type="NORM"];
-            N0B -> N0D [label="1|0", type="CTRL", style=dashed, arrowhead=empty];
-            N0B -> N0D [label="SYNC", type="SYNC", style=solid, arrowhead=diamond];
+            N09 -> N0C [label="1|0", type="NORM"];
+            N0A -> N0C [label="0|1", type="NORM"];
+            N09 -> N0D [label="2|0", type="NORM"];
+            N0B -> N0D [label="0|1", type="NORM"];
+            N0D -> N0E [label="0|0", type="NORM"];
+            N0E -> N0F [label="0|0", type="NORM"];
+            N0B -> N0F [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
+            N0B -> N0F [label="SYNC", type="SYNC", style=solid, arrowhead=diamond];
         }
 }
