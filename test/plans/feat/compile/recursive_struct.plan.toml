@@ -34,8 +34,7 @@ name = "recursive_struct.array_gc_nvm"
 desc = "The live tree is read after 32 temporary trees forced collections at NVM safepoints; `std::gc::verify` also checks the heap. The tree's values are unchanged, so the collector traced the `children` slot array and every moved Node it reaches."
 kind = "behavior"
 case = "../../../cases/compile/semantic/recursive_struct_array_gc.cml"
-args = ["${case}", "std::gc::verify", "${run_nvm}"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+args = ["--gc-stress", "alloc=5,safepoint=1,kind=major", "--gc-check", "verify=both", "${case}", "std::gc::verify", "${run_nvm}"]
 expect_exit = 0
 expect_stdout_contains = ["\"ok\":true", "10 178 1024", "4"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_duration_seconds"]
@@ -46,8 +45,7 @@ name = "recursive_struct.array_gc_fvm"
 desc = "The same live tree across moving collections at FastVM call-boundary safepoints."
 kind = "behavior"
 case = "../../../cases/compile/semantic/recursive_struct_array_gc.cml"
-args = ["${case}", "std::gc::verify", "${run_fvm}"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+args = ["--gc-stress", "alloc=5,safepoint=1,kind=major", "--gc-check", "verify=both", "${case}", "std::gc::verify", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["\"ok\":true", "10 178 1024", "4"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_duration_seconds"]

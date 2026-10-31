@@ -26,7 +26,7 @@ StaticFunction *StaticFunction::create(
     ASSERT(tupleType && tupleType->code() == type::TypeCode::Tuple, "Type must be TupleType");
     const auto *tt = static_cast<const type::TupleType *>(tupleType);
     ASSERT(
-        tt->size() == graph->draft().closureNodes().size(),
+        tt->size() == graph->view().closureNodes().size(),
         "Compile-time function closure tuple size mismatch.");
 
     void *mem = allocator.alloc(sizeof(StaticFunction), alignof(StaticFunction));

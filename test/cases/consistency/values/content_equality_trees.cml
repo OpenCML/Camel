@@ -3,7 +3,7 @@
  * part that is a collection is the collection's own (`:coll/eq`), so two collections with the
  * same entries are equal whatever the shape of their trees. The collections here are built in
  * opposite orders and by removal, which gives trees of different shapes when the leaves are
- * small (CAMEL_COLL_LEAF_CAPACITY=2 CAMEL_COLL_FANOUT=4).
+ * small (--coll leaf=2,fanout=4).
  */
 
 type Box = { name: string, table: Map<int, string>, seen: Set<int> }

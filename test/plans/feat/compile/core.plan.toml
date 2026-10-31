@@ -60,6 +60,34 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 10000
 
 [[tests]]
+name = "semantic.field_type_forward_reference"
+desc = "A struct field that names a type declared later is an unknown type where it is written: the declaration declares nothing, and the body that builds the value reports the same place instead of running on a half-built field type."
+kind = "negative"
+case = "../../../cases/compile/semantic/field_type_forward_reference.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedTypeReference"
+expect_diagnostic_code = "0x0300000A"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 22
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "semantic.mutual_struct_array"
+desc = "Two structs that mention each other through an array: the first one's field names a type that is not declared there, so it is an unknown type at that field, and neither declaration builds a value."
+kind = "negative"
+case = "../../../cases/compile/semantic/mutual_struct_array.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedTypeReference"
+expect_diagnostic_code = "0x0300000A"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 15
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
 name = "semantic.throw_is_a_name"
 desc = "`throw` is not a keyword and not a statement: it is an ordinary name that nothing declares, so writing it is an unresolved reference at the name. (The shape it was written in used to hand an error value out; that is now a `return` of an error value in a function declared `T!`.)"
 kind = "negative"

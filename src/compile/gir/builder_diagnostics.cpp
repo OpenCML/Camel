@@ -1853,7 +1853,7 @@ void Builder::checkDeclaredReturn(
     const GCT::node_ptr_t &value) {
     // Only a DECLARED type is checked: an undeclared one is set from the first value returned,
     // after which hasExitType() is true as well, so the check runs before that happens.
-    if (graph == nullptr || graph->draft().exitNode() != runtime::kInvalidNodeRef) {
+    if (graph == nullptr || graph->view().exitNode() != runtime::kInvalidNodeRef) {
         return;
     }
     FunctionType *funcType = graph->funcType();

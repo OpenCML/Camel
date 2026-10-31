@@ -1,0 +1,27 @@
+/**
+ * The Fibonacci stream.
+ *
+ * `loop a = 0, b = 1 while a < limit do { yield a; (b, a + b) }` carries two values across the
+ * pull: `a` and `b`, and each round's pair is built from the round before it. The body hands the
+ * next round `(b, a + b)`, and the pull that reaches the `yield` stops there, so the element it
+ * handed out is the one the round produced -- the statements after the `yield` run only when the
+ * consumer pulls again.
+ *
+ * Two consumers of two separate calls: the first prints the elements below 50, the second adds
+ * them up. Each call makes its own stream (a stream is linear; calling `fib` again gives a fresh
+ * one), and the numbers are the Fibonacci numbers, so a state machine that lost one of the two
+ * carried values, or wrote them in the wrong order, prints another sequence.
+ */
+
+func fib(limit: int): int.. sync {
+    loop a = 0, b = 1 while a < limit do {
+        yield a
+        (b, a + b)
+    }
+}
+
+func main(): int sync {
+    loop n = 0 for v in fib(50) do sync { println(v); n + 1 }
+    println(loop total = 0 for v in fib(50) do total + v)
+    return 0
+}

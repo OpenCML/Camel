@@ -81,23 +81,23 @@ Use these controls for deterministic GC validation:
 
 | Variable | Purpose |
 |----------|---------|
-| `CAMEL_GC_VERIFY=before|after|both|1` | Run heap verification around requested collections. |
-| `CAMEL_GC_STRESS_ALLOC=N` | Request collection every `N` auto-space allocations. |
-| `CAMEL_GC_STRESS_SAFEPOINT=N` | Request collection every `N` runtime safepoints. |
-| `CAMEL_GC_STRESS_MODE=minor|major|both` | Select the requested stress collection kind. |
+| `--gc-check verify=before|after|both|1` | Run heap verification around requested collections. |
+| `--gc-stress alloc=N` | Request collection every `N` auto-space allocations. |
+| `--gc-stress safepoint=N` | Request collection every `N` runtime safepoints. |
+| `--gc-stress kind=minor|major|both` | Select the requested stress collection kind. |
 | `std::prl gc_stress=true` | Serve every collection the stress asks for, in place of letting the parallel scheduler pace them. The scheduler otherwise starts the next collection no sooner than twice the time the last one took, which holds the collector at a third of a production run but skips almost every request of a run whose work is the stress itself: the `_prl` arms of `feat/mm/gc_collections.plan.toml` read 12 collections against the 3,538 the same tree case made on `std::fvm` until they asked for this. Every other run keeps the pacing (`docs/technical/06_runtime_and_execution.md`). |
-| `CAMEL_GC_LOG_MOVES=1` | Log object movement in the young-copying path. |
-| `--gc generational` | Run the generational collector: young objects are copied. `CAMEL_GC_ENABLE_YOUNG_COPYING=1` is the older spelling and no longer changes anything. |
-| `CAMEL_GC_POISON=1` | Safepoint poisoning: every safepoint moves every young object and poisons where it was (`36_gc_handle_rules.md` section 8). Implies the generational collector. |
-| `CAMEL_GC_PROMOTION_AGE=N` | Minor collections an object survives before promotion (1 to 15, default 4). |
-| `CAMEL_GC_LARGE_THRESHOLD_KB=N`, `CAMEL_GC_NURSERY_MB=N` | Size above which an object is born old (default 4 KB with mark-sweep, 64 KB generational), and the size of the birth space (default 4 MB). |
-| `CAMEL_GC_HEAP_LIMIT_MB=N` | Limit on what the elder and large-object spaces hold; reaching it is `RuntimeDiag::MemoryExhausted` (`docs/cli.md`, "The collector"). |
-| `CAMEL_GC_PRINT_CONFIG=1` | Print the effective GC diagnostic configuration to stderr at allocator initialization. |
-| `CAMEL_GC_LARGE_BUDGET_MB=N` | Floor (MB) of the large-object allocation between collections, and of the block bytes promoted to the elder space that ask for a major collection; default 4. It is in force only while the growth setting gives less. Not a diagnostic switch: it tunes production pacing. |
-| `CAMEL_GC_GROWTH_PERCENT=N` | Large-object allocation between collections, and promoted block bytes between major collections, in percent of the volume the last sweep left alive; default 100 (the space doubles). Lower: less garbage held, more collections, in proportion. Not a diagnostic switch: it tunes production pacing. |
+| `--gc-check moves` | Log object movement in the young-copying path. |
+| `--gc generational` | Run the generational collector: young objects are copied. The older `CAMEL_GC_ENABLE_YOUNG_COPYING` is not read and changes nothing. |
+| `--gc-check poison` | Safepoint poisoning: every safepoint moves every young object and poisons where it was (`36_gc_handle_rules.md` section 8). Implies the generational collector. |
+| `--gc-promotion-age N` | Minor collections an object survives before promotion (1 to 15, default 4). |
+| `--gc-large-threshold-kb N`, `--gc-nursery-mb N` | Size above which an object is born old (default 4 KB with mark-sweep, 64 KB generational), and the size of the birth space (default 4 MB). |
+| `--gc-heap-limit-mb N` | Limit on what the elder and large-object spaces hold; reaching it is `RuntimeDiag::MemoryExhausted` (`docs/cli.md`, "The collector"). |
+| `--gc-check config` | Print the effective GC diagnostic configuration to stderr at allocator initialization. |
+| `--gc-large-budget-mb N` | Floor (MB) of the large-object allocation between collections, and of the block bytes promoted to the elder space that ask for a major collection; default 4. It is in force only while the growth setting gives less. Not a diagnostic switch: it tunes production pacing. |
+| `--gc-growth-percent N` | Large-object allocation between collections, and promoted block bytes between major collections, in percent of the volume the last sweep left alive; default 100 (the space doubles). Lower: less garbage held, more collections, in proportion. Not a diagnostic switch: it tunes production pacing. |
 | `std::profile gc_stats=1|2` | Print the allocator's pacing statistics to stderr at exit (1), and one line per major collection (2). Also prints the occupancy of the graph, permanent and meta spaces (`[camel] spaces: ...`). |
-| `CAMEL_GRAPH_SPACE_LIMIT_MB=N`, `CAMEL_PERM_SPACE_LIMIT_MB=N`, `CAMEL_META_SPACE_LIMIT_MB=N` | Total (MB) the graph, permanent or meta space may reserve; default 256 each. Not diagnostic switches: they bound the size of the compiled program. Reaching one is `RuntimeDiag::MemoryExhausted`. |
-| `CAMEL_SPACE_SEGMENT_KB=N` | First segment (KB) of the graph, permanent and meta spaces (default 64, 32 and 16 MB). A test control: small segments make the spaces grow with small programs. |
+| `--graph-space-limit-mb N`, `--perm-space-limit-mb N`, `--meta-space-limit-mb N` | Total (MB) the graph, permanent or meta space may reserve; default 256 each. Not diagnostic switches: they bound the size of the compiled program. Reaching one is `RuntimeDiag::MemoryExhausted`. |
+| `--space-segment-kb N` | First segment (KB) of the graph, permanent and meta spaces (default 64, 32 and 16 MB). A test control: small segments make the spaces grow with small programs. |
 
 GC stress is a diagnostic mode: it asks the allocator to request collections at deterministic
 allocation or safepoint intervals so missed roots, missing barriers, and relocation bugs fail
@@ -108,7 +108,7 @@ so collections requested during execution, such as the large-object budget below
 next boundary.
 
 Production defaults keep young copying disabled. Tests that assert movement, remembered-set
-behavior, or foreign wrapper relocation must opt in with `CAMEL_GC_ENABLE_YOUNG_COPYING=1`.
+behavior, or foreign wrapper relocation must opt in with `--gc generational`.
 
 FVM polls less often than NVM/PRL: it does not poll a GC safepoint at every bytecode transition,
 only at call transitions (`CALL`, `FUNC`, `TAIL`), where every live value is in a FramePool frame.
@@ -121,10 +121,10 @@ pass boundary.
 
 | Mode | Settings | Finds |
 |---|---|---|
-| Collection stress | `CAMEL_GC_STRESS_SAFEPOINT=1` (and `_ALLOC=N`), `CAMEL_GC_STRESS_MODE=major` | a value that no root reaches: it is freed and its memory reused |
-| Moving stress | the same with `--gc generational` with `CAMEL_GC_STRESS_MODE=minor` or `both`, `CAMEL_GC_VERIFY=both` | a root that is not updated; with the default promotion age objects stop moving after four collections, so a raw pointer that is held for longer than that is not found |
-| Safepoint poisoning | `CAMEL_GC_POISON=1` | a raw pointer kept across any safepoint: nothing is promoted by age, every safepoint moves everything young, and the old addresses read as an unmapped page until the space has been walked once. This is the mode to run a new operator or scheduler change under |
-| Tenuring stress | `--gc generational` with `CAMEL_GC_PROMOTION_AGE=1 CAMEL_GC_STRESS_SAFEPOINT=1 CAMEL_GC_STRESS_MODE=minor CAMEL_GC_VERIFY=both` | a missing write barrier: everything is old after one collection, and the verifier reports an old object that points at a young one without being remembered |
+| Collection stress | `--gc-stress safepoint=1` (and `_ALLOC=N`), `--gc-stress kind=major` | a value that no root reaches: it is freed and its memory reused |
+| Moving stress | the same with `--gc generational` with `--gc-stress kind=minor` or `both`, `--gc-check verify=both` | a root that is not updated; with the default promotion age objects stop moving after four collections, so a raw pointer that is held for longer than that is not found |
+| Safepoint poisoning | `--gc-check poison` | a raw pointer kept across any safepoint: nothing is promoted by age, every safepoint moves everything young, and the old addresses read as an unmapped page until the space has been walked once. This is the mode to run a new operator or scheduler change under |
+| Tenuring stress | `--gc generational` with `--gc-promotion-age 1 --gc-stress safepoint=1 --gc-stress kind=minor --gc-check verify=both` | a missing write barrier: everything is old after one collection, and the verifier reports an old object that points at a young one without being remembered |
 
 The first two existed before the handle rules; they left two gaps that poisoning closes: an
 object that had been promoted no longer moved, and the address an object moved away from kept
@@ -192,10 +192,10 @@ Automated tests in `test/plans/feat/mm/gc.plan.toml`:
 Manual examples:
 
 ```powershell
-$env:CAMEL_GC_VERIFY = "both"
-$env:CAMEL_GC_STRESS_ALLOC = "5"
-$env:CAMEL_GC_STRESS_SAFEPOINT = "1"
-$env:CAMEL_GC_STRESS_MODE = "major"
+$env:--gc-check verify = "both"
+$env:--gc-stress alloc = "5"
+$env:--gc-stress safepoint = "1"
+$env:--gc-stress kind = "major"
 out\latest\bin\camel.exe test\cases\feat\mm\gc\gc_fib10.cml std::gc::verify std::nvm
 out\latest\bin\camel.exe test\cases\feat\mm\gc\gc_fib10.cml std::gc::verify std::fvm
 out\latest\bin\camel.exe test\cases\feat\mm\gc\gc_prl_scheduler.cml std::gc::verify std::prl
@@ -227,10 +227,10 @@ Automated tests:
 Manual stress command:
 
 ```powershell
-$env:CAMEL_GC_VERIFY = "both"
-$env:CAMEL_GC_STRESS_ALLOC = "5"
-$env:CAMEL_GC_STRESS_SAFEPOINT = "1"
-$env:CAMEL_GC_STRESS_MODE = "major"
+$env:--gc-check verify = "both"
+$env:--gc-stress alloc = "5"
+$env:--gc-stress safepoint = "1"
+$env:--gc-stress kind = "major"
 out\latest\bin\camel.exe test\cases\feat\mm\gc\gc_fib10.cml std::gc::verify std::nvm
 ```
 
@@ -255,8 +255,8 @@ Automated test:
 Manual command:
 
 ```powershell
-$env:CAMEL_GC_ENABLE_YOUNG_COPYING = "1"
-$env:CAMEL_GC_VERIFY = "both"
+$env:CAMEL_HOME = $env:CAMEL_HOME  # (no variable turns the young copying on: use --gc generational)
+$env:--gc-check verify = "both"
 out\latest\bin\camel.exe test\cases\feat\mm\gc\gc_fib10.cml std::gc::remembered_set std::nvm
 ```
 
@@ -281,8 +281,8 @@ Automated test:
 Manual command:
 
 ```powershell
-$env:CAMEL_GC_ENABLE_YOUNG_COPYING = "1"
-$env:CAMEL_GC_VERIFY = "both"
+$env:CAMEL_HOME = $env:CAMEL_HOME  # (no variable turns the young copying on: use --gc generational)
+$env:--gc-check verify = "both"
 out\latest\bin\camel.exe test\cases\feat\mm\gc\gc_fib10.cml std::gc::foreign_resource std::nvm
 ```
 

@@ -904,7 +904,7 @@ Optional timeout for the verification script process. Default is `5000`.
 ## Sweeps
 
 A plan may list `[[sweeps]]` next to its tests. A sweep runs the tests of other plans again
-under an extra environment, with all their assertions; the copies are named
+under extra command-line words (`args`), with all their assertions; the copies are named
 `<sweep name>:<source plan id>:<original name>` and count as tests of the plan that lists the
 sweep. The source plan's `id` (its file name when it has none) is part of the name because two
 source plans may both have a test called `shapes` — `feat/compile/enum` and `feat/para/handoff`
@@ -918,8 +918,8 @@ plan listed twice in the same sweep is expanded once.
 name = "poison"
 plans = ["../modules", "../linear"]   # plan files or directories, relative to this plan
 exclude = ["modules/onnx"]            # substrings of plan paths that are left out
-envs = ["CAMEL_GC_POISON=1"]
-skip_env_prefix = "CAMEL_GC_"         # leave out tests that set such a variable themselves
+args = ["--gc-check", "poison"]     # words put before the case of every copy
+skip_args_prefix = "--gc-"           # leave out tests that already name such an option
 timeout_scale = 20                    # their timeouts are multiplied by this
 fast_sample = 1                       # keep one test per source plan in the fast layer
 risk_tags = ["collections", "closures", "iterators"]  # plans whose sample is larger
@@ -927,7 +927,9 @@ risk_sample = 2                       # keep two or three of those instead
 ```
 
 Only `behavior` and `snapshot` tests of the `camel` tool are taken; a test marked
-`known_fail` or `sweep = false` is left out.
+`known_fail` or `sweep = false` is left out, and a sweep with `args` also leaves out the
+tests that do not drive a run (`check`, `inspect`, `--version`): the words go in front of the
+entry file of a run, and those tests have no entry file to put them in front of.
 
 The fast sample is risk-based. A source plan whose `tags` include one of `risk_tags` keeps
 `risk_sample` tests (two or three: a collection, a closure or an iterator moves objects across
@@ -945,7 +947,7 @@ end compiles) says `sweep = false` with a comment.
 
 - `CAMEL_TEST_TIMEOUT_SCALE=<n>` multiplies every test and verification timeout: for running
   whole plans under a mode that slows every program down, e.g.
-  `CAMEL_GC_POISON=1 CAMEL_TEST_TIMEOUT_SCALE=20 node scripts/test.js feat`.
+  `--gc-check poison CAMEL_TEST_TIMEOUT_SCALE=20 node scripts/test.js feat`.
 - Variables in the environment of the runner reach every test; a test's own `envs` win. The one
   exception is `CUDA_VISIBLE_DEVICES`, which the runner writes for a Python child that did not ask
   for the devices: see "CUDA visibility".

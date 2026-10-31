@@ -16,7 +16,7 @@ tree, the flat sorted array, and trees of tiny nodes, where a few dozen entries 
 a tree several levels high; docs/technical/31_map_and_set.md, section 5.7), on several back
 ends and collector settings. Each run must print exactly the reference answer, so the runs
 also agree with each other byte for byte. Every table an operation returns is checked
-against the invariants of the tree (CAMEL_COLL_VALIDATE).
+against the invariants of the tree (`--coll validate=on`).
 
 Commands:
 
@@ -671,17 +671,13 @@ def make(seed: int, ops: int, size: int) -> Program:
 
 SHAPES = {
     "tree": {},
-    "flat": {"CAMEL_COLL_LEAF_CAPACITY": "0"},
-    "tiny2x4": {"CAMEL_COLL_LEAF_CAPACITY": "2", "CAMEL_COLL_FANOUT": "4"},
-    "tiny5x4": {"CAMEL_COLL_LEAF_CAPACITY": "5", "CAMEL_COLL_FANOUT": "4"},
+    "flat": ["--coll", "leaf=0"],
+    "tiny2x4": ["--coll", "leaf=2,fanout=4"],
+    "tiny5x4": ["--coll", "leaf=5,fanout=4"],
 }
-STRESS = {
-    "CAMEL_GC_VERIFY": "both",
-    "CAMEL_GC_STRESS_ALLOC": "3",
-    "CAMEL_GC_STRESS_SAFEPOINT": "1",
-    "CAMEL_GC_STRESS_MODE": "both",
-}
-MOVING = {"CAMEL_GC_ENABLE_YOUNG_COPYING": "1"}
+STRESS = ["--gc-check", "verify=both", "--gc-stress", "alloc=3,safepoint=1,kind=both"]
+# The young copying is the generational collector, which is the default: nothing to add.
+MOVING: List[str] = []
 
 
 def matrix(name: str) -> List[Tuple[str, List[str], Dict[str, str]]]:
@@ -690,14 +686,14 @@ def matrix(name: str) -> List[Tuple[str, List[str], Dict[str, str]]]:
     if name in ("quick", "full"):
         for backend in ("nvm", "fvm", "jit", "prl"):
             for shape in ("tree", "flat", "tiny2x4", "tiny5x4"):
-                runs.append((f"{backend}/{shape}", [f"std::{backend}"], dict(SHAPES[shape])))
+                runs.append((f"{backend}/{shape}", [f"std::{backend}"], list(SHAPES[shape])))
     if name in ("gc", "full"):
         # The JIT is outside the contract of the moving collector (note 23).
         for backend in ("nvm", "fvm", "prl"):
             for shape in ("tree", "flat", "tiny2x4"):
-                for label, moving in (("stable", {}), ("moving", MOVING)):
-                    env = {**SHAPES[shape], **STRESS, **moving}
-                    runs.append((f"{backend}/{shape}/stress-{label}", ["std::gc::verify", f"std::{backend}"], env))
+                for label, moving in (("stable", []), ("moving", MOVING)):
+                    options = [*SHAPES[shape], *STRESS, *moving]
+                    runs.append((f"{backend}/{shape}/stress-{label}", ["std::gc::verify", f"std::{backend}"], options))
     return runs
 
 
@@ -706,14 +702,22 @@ def camel_exe() -> str:
     return str(Path(home) / "bin" / ("camel.exe" if os.name == "nt" else "camel"))
 
 
-def run_one(path: Path, passes: List[str], env_extra: Dict[str, str], timeout: int) -> Tuple[int, str, str]:
+def run_one(path: Path, passes: List[str], options: List[str], timeout: int) -> Tuple[int, str, str]:
+    """One run: every table an operation returns is checked (`--coll validate=on`)."""
     exe = camel_exe()
     env = dict(os.environ)
     env.setdefault("CAMEL_HOME", str(Path(exe).resolve().parents[1]))
-    env.update(env_extra)
-    env["CAMEL_COLL_VALIDATE"] = "1"
+    # Every table an operation returns is checked, in the one --coll the run is given: a second
+    # --coll would be refused as an invalid command line.
+    words = list(options)
+    if "--coll" in words:
+        at = words.index("--coll")
+        words[at + 1] = words[at + 1] + ",validate=on"
+    else:
+        words += ["--coll", "validate=on"]
     try:
-        proc = subprocess.run([exe, str(path), *passes], capture_output=True, env=env, timeout=timeout)
+        proc = subprocess.run([exe, *words, str(path), *passes],
+                              capture_output=True, env=env, timeout=timeout)
     except subprocess.TimeoutExpired:
         return -1, "", "timeout"
     out = proc.stdout.decode("utf-8", errors="replace").replace("\r\n", "\n")
@@ -727,8 +731,8 @@ def check_seed(seed: int, ops: int, size: int, which: str, directory: Path, time
     path.write_text(program.source(), encoding="utf-8", newline="\n")
     expected = program.expected()
     failures = []
-    for label, passes, env in matrix(which):
-        code, out, err = run_one(path, passes, env, timeout)
+    for label, passes, options in matrix(which):
+        code, out, err = run_one(path, passes, options, timeout)
         # The verification pass prints its verdict before the program runs.
         lines = [line for line in out.split("\n") if not line.startswith('{"ok":')]
         got = "\n".join(lines)

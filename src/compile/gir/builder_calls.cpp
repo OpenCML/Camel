@@ -262,7 +262,17 @@ node_handle_t Builder::createFuncDataNode(
         node_vec_t refNodes;
         const std::vector<CapturedValue> captured = capturedValues_[graph.get()];
         for (const CapturedValue &value : captured) {
-            refNodes.push_back(captureInto(currGraph_, value.origin, value.name));
+            node_handle_t ref = captureInto(currGraph_, value.origin, value.name);
+            // A call written before this value in the same graph may be a writer of the variable
+            // the value captures (the conservative writer set), and the closure reads it when it
+            // runs: what it captures is the variable as it stands after that call, not the cell
+            // from before it. The claim is the same one readVariableThrough takes, met here
+            // because the read is inside the value rather than in this graph.
+            if (const node_handle_t claim = claimedWriterOf(currGraph_.get(), value.origin);
+                claim != nullptr && sameGraph(claim, currGraph_) && ref != nullptr) {
+                ref = variableAfterCall(ref, claim);
+            }
+            refNodes.push_back(ref);
         }
         std::vector<size_t> closureSlots;
         closureSlots.reserve(refNodes.size());

@@ -157,12 +157,10 @@ try {
         assert.equal(invoke('checkpoint_roundtrip.cml', pass, 9, replaceDir).stdout.trim(), '1 false true')
         assert.deepEqual(fs.readdirSync(replaceDir).sort(), ['a.txt', 'manifest.json'], `${pass}: old leaves survived the replacement`)
     }
-    const stress = {
-        CAMEL_GC_ENABLE_YOUNG_COPYING: '1', CAMEL_GC_VERIFY: 'both',
-        CAMEL_GC_STRESS_SAFEPOINT: '1', CAMEL_GC_STRESS_MODE: 'minor'
-    }
+    // The checks are words, not environment: they go before the case, with the collector.
+    const stress = ['--gc-check', 'verify=both', '--gc-stress', 'safepoint=1,kind=minor', '--gc', 'generational']
     for (const pass of ['std::nvm', 'std::fvm', 'std::jit']) {
-        assert.equal(invoke('checkpoint_roundtrip.cml', pass, 1, path.join(root, 'nvm'), stress, 0, ['--gc', 'generational']).stdout, original)
+        assert.equal(invoke('checkpoint_roundtrip.cml', pass, 1, path.join(root, 'nvm'), {}, 0, stress).stdout, original)
     }
     const tensor = path.join(root, 'tensor')
     const bits = invoke('checkpoint_tensor.cml', 'std::jit', 0, tensor).stdout.trim()

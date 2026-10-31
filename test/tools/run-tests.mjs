@@ -81,7 +81,7 @@ const TEST_FIELDS = new Set([
     'verify_script', 'verify_script_path', 'verify_js',
 ])
 const SWEEP_FIELDS = new Set([
-    'name', 'plans', 'exclude', 'envs', 'skip_env_prefix', 'timeout_scale',
+    'name', 'plans', 'exclude', 'envs', 'args', 'skip_env_prefix', 'skip_args_prefix', 'timeout_scale',
     'fast_sample', 'risk_tags', 'risk_sample',
 ])
 
@@ -1981,8 +1981,8 @@ function invalidPlan(planPath, error) {
  *   name = "poison"                     # named "<name>:<source plan id>:<original name>"
  *   plans = ["../modules", "../linear"] # plan files or directories, relative to this plan
  *   exclude = ["modules/onnx"]          # substrings of plan paths that are left out
- *   envs = ["CAMEL_GC_POISON=1"]
- *   skip_env_prefix = "CAMEL_GC_"       # leave out tests that set such a variable themselves
+ *   args = ["--gc-check", "poison"]
+ *   skip_args_prefix = "--gc-"           # leave out tests that already name such an option
  *   timeout_scale = 20
  *
  * It is how a property that every program must keep (here: no raw pointer is held across a
@@ -1999,6 +1999,10 @@ export function expandSweeps(doc, planPath) {
         const exclude = (sweep.exclude || []).map((item) => String(item))
         const scale = Number.isFinite(sweep.timeout_scale) ? sweep.timeout_scale : 1
         const prefix = sweep.skip_env_prefix || null
+        // A sweep that sets its own options skips a source test that already names one of them:
+        // the copy would otherwise say --gc-check poison ... --gc-check poison and the parser
+        // would see the option twice.
+        const argPrefix = sweep.skip_args_prefix || null
         // `fast_sample = N` keeps N tests per source plan in the fast layer and puts the rest in
         // the milestone layer: the default developer run still checks the property against every
         // plan, and the full sweep (every eligible test) is `--tier milestone` away. The
@@ -2036,6 +2040,13 @@ export function expandSweeps(doc, planPath) {
                 if ((test.tool || 'camel') !== 'camel') continue
                 const own = (test.envs || []).map((entry) => String(entry))
                 if (prefix && own.some((entry) => entry.startsWith(prefix))) continue
+                const ownArgs = (test.args || []).map((entry) => String(entry))
+                if (argPrefix && ownArgs.some((entry) => entry.startsWith(argPrefix))) continue
+                // Options are read by a run: the words go in front of its entry file. A test
+                // that asks the compiler (`check`, `inspect`, `--version`) has no run to put them
+                // in front of, and they would land on the wrong parser.
+                const RUNDRIVING = new Set(["${case}", "--timeit", "--output-format"])
+                if ((sweep.args || []).length > 0 && !RUNDRIVING.has(ownArgs[0])) continue
                 eligible.push(test)
             }
             const sampled = new Set()
@@ -2055,6 +2066,7 @@ export function expandSweeps(doc, planPath) {
                     ...test,
                     name: rename(test.name),
                     envs: [...own, ...(sweep.envs || [])],
+                    args: [...(sweep.args || []), ...(test.args || [])],
                     timeout_ms: (test.timeout_ms || 10000) * scale,
                     verify_timeout_ms: (test.verify_timeout_ms || 5000) * scale,
                     __backendReference: test.__backendReference ? rename(test.__backendReference) : null,

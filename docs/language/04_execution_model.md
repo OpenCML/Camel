@@ -271,7 +271,7 @@ error[RuntimeDiag::MaxRecursionDepthExceeded]: Maximum recursion depth (1000) ex
 
 （其后是位置与建议。）
 
-**其他上限**：单张图的节点、块与边表项各不超过 65,535；图空间、永久空间、元空间三块内存各 256 MB，分别由 `CAMEL_GRAPH_SPACE_LIMIT_MB`、`CAMEL_PERM_SPACE_LIMIT_MB`、`CAMEL_META_SPACE_LIMIT_MB` 调整，耗尽时是 `RuntimeDiag::MemoryExhausted`。完整的表见 [cli.cn.md](../cli.cn.md)“资源上限”。
+**其他上限**：单张图的节点、块与边表项各不超过 65,535；图空间、永久空间、元空间三块内存各 256 MB，分别由 `--graph-space-limit-mb`、`--perm-space-limit-mb`、`--meta-space-limit-mb` 调整，耗尽时是 `RuntimeDiag::MemoryExhausted`。完整的表见 [cli.cn.md](../cli.cn.md)“资源上限”。
 
 ## 4.7 遍与流水线
 

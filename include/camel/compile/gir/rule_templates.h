@@ -73,6 +73,14 @@ struct GenericRuleInstance {
     const camel::runtime::GCGraph *when  = nullptr;
     /// The number of parameters of the condition, which is the arity of its node list.
     uint32_t whenArity = 0;
+    /// The operator URI the left side is written with, read from the published left side
+    /// (`:op/add_d`, `:op/div_d`). The index is keyed by the *written* head (`+`, `/`), and a graph
+    /// is built of operators named by their URIs; a transform sitting on a node has the URI in hand.
+    /// Recording it here is a fact about this instance -- what its left side is -- and not a
+    /// translation of one key into the other made at the moment of a lookup: a rule whose left side
+    /// changes changes here, and a family that grows or shrinks does not move this line. Empty when
+    /// the instance was not made, or its left side holds no operator node.
+    std::string lhsOperatorUri;
 };
 
 /// The templates of one generic rule, and one entry per type tuple tried on it.

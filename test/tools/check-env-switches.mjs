@@ -67,18 +67,6 @@ const SOURCE_EXTENSIONS = new Set(['.c', '.cc', '.cpp', '.h', '.hpp', '.hh'])
 // `CAMEL_HOME` needs no line at all: it names the installation the run was started from.
 const LEDGER = [
     {
-        at: 'src/core/mm/mm.cpp:envString',
-        reads: null,
-        owner: 'the environment-variable queue, core batch (lane-envsw)',
-        why: 'reads the settings of the allocator (CAMEL_GC_*, CAMEL_SPACE_SEGMENT_KB) by name; still a switch',
-    },
-    {
-        at: 'src/core/rtdata/collection_tree.cpp:envNumber',
-        reads: null,
-        owner: 'the environment-variable queue, core batch (lane-envsw)',
-        why: 'reads the settings of the collection tree (CAMEL_COLL_*) by name; still a switch',
-    },
-    {
         at: 'include/camel/standalone/core.h:briefReports',
         reads: 'CAMEL_ERROR_FORMAT',
         owner: 'the environment-variable queue, core batch (lane-envsw)',

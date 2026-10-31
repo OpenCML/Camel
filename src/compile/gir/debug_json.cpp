@@ -94,8 +94,8 @@ json graphSummary(const DraftGraphBuilder *graph) {
 
 json nodeToJson(const DraftGraphBuilder *graph, draft_node_ref_t nodeId) {
     json j;
-    const auto node    = graph->draft().ref(nodeId);
-    const auto *header = node ? graph->draft().header(nodeId) : nullptr;
+    const auto node    = graph->view().ref(nodeId);
+    const auto *header = node ? graph->view().header(nodeId) : nullptr;
     j["id"]            = nodeId;
     j["graphId"]       = camel::runtime::toText(graph->graphId());
     j["type"]          = header ? nodeKindName(header->kind) : "DEAD";
@@ -112,7 +112,7 @@ json nodeToJson(const DraftGraphBuilder *graph, draft_node_ref_t nodeId) {
     }
     if (header && header->kind == GCNodeKind::Accs) {
         const auto *body = reinterpret_cast<const camel::runtime::GCAccsBody *>(
-            graph->draft().payloadOf(nodeId).data());
+            graph->view().payloadOf(nodeId).data());
         if (body->accsKind == camel::runtime::GCAccsKind::StructKey) {
             j["accsKey"] = std::string(body->key());
         }
@@ -169,31 +169,31 @@ json expandedGraphToJson(const DraftGraphBuilder *graph) {
         j["dependencies"].push_back(graphSummary(dep.get()));
     }
 
-    for (draft_node_ref_t nodeId = 0; nodeId < graph->draft().nodeSlotCount(); ++nodeId) {
-        if (!graph->draft().alive(nodeId)) {
+    for (draft_node_ref_t nodeId = 0; nodeId < graph->view().nodeSlotCount(); ++nodeId) {
+        if (!graph->view().alive(nodeId)) {
             continue;
         }
         j["nodes"].push_back(nodeToJson(graph, nodeId));
 
-        for (size_t i = 0; i < graph->draft().normInputsOf(nodeId).size(); ++i) {
+        for (size_t i = 0; i < graph->view().normInputsOf(nodeId).size(); ++i) {
             j["edges"].push_back({
-                {"sourceId", graph->draft().normInputsOf(nodeId)[i]},
+                {"sourceId", graph->view().normInputsOf(nodeId)[i]},
                 {"targetId", nodeId},
                 {"linkType", "Norm"},
                 {"targetPortIndex", i},
             });
         }
-        for (size_t i = 0; i < graph->draft().withInputsOf(nodeId).size(); ++i) {
+        for (size_t i = 0; i < graph->view().withInputsOf(nodeId).size(); ++i) {
             j["edges"].push_back({
-                {"sourceId", graph->draft().withInputsOf(nodeId)[i]},
+                {"sourceId", graph->view().withInputsOf(nodeId)[i]},
                 {"targetId", nodeId},
                 {"linkType", "With"},
                 {"targetPortIndex", i},
             });
         }
-        for (size_t i = 0; i < graph->draft().ctrlInputsOf(nodeId).size(); ++i) {
+        for (size_t i = 0; i < graph->view().ctrlInputsOf(nodeId).size(); ++i) {
             j["edges"].push_back({
-                {"sourceId", graph->draft().ctrlInputsOf(nodeId)[i]},
+                {"sourceId", graph->view().ctrlInputsOf(nodeId)[i]},
                 {"targetId", nodeId},
                 {"linkType", "Ctrl"},
                 {"targetPortIndex", i},

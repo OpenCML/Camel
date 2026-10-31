@@ -14,9 +14,8 @@ cuda_free_device = true
 name = "compiled_region_fresh_inputs_and_captures"
 kind = "behavior"
 case = "../../cases/modules/tiles/compiled_region.cml"
-args = ["--gc", "generational", "${case}", "tiles::compile", "${backend}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "generational", "${case}", "tiles::compile", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "[4.0, 16.0, 36.0]\n[2.0, 4.0, 6.0]\n[8.0, 10.0, 12.0]\n[64.0, 100.0, 144.0]\n[4.0, 16.0, 36.0]\n"
 timeout_ms = 60000
@@ -25,9 +24,8 @@ timeout_ms = 60000
 name = "resident_cpu_gpu_chain"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident_fallback.cml"
-args = ["--gc", "generational", "${case}", "${backend}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "generational", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "cpu region once\n42.0\n364.0\n21.0\n"
 timeout_ms = 60000
@@ -36,9 +34,8 @@ timeout_ms = 60000
 name = "resident_fallback_fault"
 kind = "negative"
 case = "../../cases/modules/tiles/resident_fallback_fault.cml"
-args = ["--gc", "generational", "${case}", "${backend}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "generational", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 1
 # A run-time fault is printed on standard output after the program's own output (docs/cli.md,
 # "Output and diagnostics"): the CPU fallback runs once and the fault is not swallowed, so the
@@ -61,9 +58,8 @@ timeout_ms = 60000
 name = "outlined_execution"
 kind = "behavior"
 case = "../../cases/modules/tiles/region_execution.cml"
-args = ["--gc", "generational", "${case}", "tiles::test_outline_gpu", "${backend}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "generational", "${case}", "tiles::test_outline_gpu", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
 timeout_ms = 60000
@@ -72,9 +68,8 @@ timeout_ms = 60000
 name = "outlined_resident_execution"
 kind = "behavior"
 case = "../../cases/modules/tiles/region_execution.cml"
-args = ["--gc", "generational", "${case}", "tiles::test_outline_resident", "${backend}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "generational", "${case}", "tiles::test_outline_resident", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
 timeout_ms = 60000
@@ -105,9 +100,8 @@ timeout_ms = 10000
 name = "preferred_resident_execution"
 kind = "behavior"
 case = "../../cases/modules/tiles/region_execution.cml"
-args = ["--gc", "generational", "${case}", "tiles::test_outline_preferred", "${backend}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "generational", "${case}", "tiles::test_outline_preferred", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
 timeout_ms = 60000
@@ -116,9 +110,8 @@ timeout_ms = 60000
 name = "public_region_pass"
 kind = "behavior"
 case = "../../cases/modules/tiles/public_pass.cml"
-args = ["--gc", "generational", "${case}", "tiles::compile", "${backend}"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "generational", "${case}", "tiles::compile", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
 timeout_ms = 60000

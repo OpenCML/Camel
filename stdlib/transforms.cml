@@ -1,0 +1,20 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/*
+ * The `transforms` module's passes.
+ *
+ * `reinterp` is the forward replacement of a program's primitives by the rules of a ruleset
+ * family (`docs/design/program-transforms/README.cn.md` 4.1). Its first form builds the
+ * transform's own graph and says what it built; the numbers it will have to compute are
+ * `f(2) = 5.5` and `f'(2) = 3.25` for `f(x) = x*x + 3/x`.
+ */
+
+/// Builds the transform's own graph for every function of the program that is made of operators and
+/// prints what it built, one line per function:
+/// `REINTERP target=<graph name> primitives=<n> other=<n> graph=<id> nodes=<n>`. The primitives are
+/// the operator nodes a replacement has to replace; `other` is everything else in the function. The
+/// graph is the transform's own (a member of one draft group), not the function's.
+///
+///     camel f.cml transforms::reinterp std::nvm
+export func reinterp::<F>(f: F): F! when is_function::<F>()
