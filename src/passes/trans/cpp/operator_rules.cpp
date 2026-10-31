@@ -928,11 +928,12 @@ Rules buildRules() {
     };
 
     // ---- The results the runtime owns (tensor:*, design note 9) ----
-    // `tensor:ones` fills a tensor of the element type the call states with the shape it is given.
-    // The element type is the call's, and it reaches the kernel as the integer code of the type
-    // (`elementCode`): the kernel reads the call's result type to know what to fill, and a call
-    // that stated none left it filling f32 whatever the program wrote -- `ones::<f64>` built an
-    // f32 tensor and `ones::<i64>` printed `1.0` where the interpreter prints `1`.
+    // `tensor:ones` and `tensor:zeros` fill a tensor of the element type the call states with the
+    // shape it is given. The element type is the call's, and it reaches the kernel as the integer
+    // code of the type (`elementCode`): the kernel reads the call's result type to know what to
+    // fill, and a call that stated none left it filling f32 whatever the program wrote --
+    // `ones::<f64>` built an f32 tensor and `ones::<i64>` printed `1.0` where the interpreter
+    // prints `1`.
     // A tensor is not a value this back end writes: it lives in the runtime module that owns it, and
     // the program holds it through a counted handle (`rt::Foreign`, camel/standalone/foreign.h), so
     // what a tensor is is written once, in the runtime, and the program and the interpreter print
@@ -940,21 +941,22 @@ Rules buildRules() {
     // of being rebuilt on this side. The result's C++ type is the handle, not the `rt::Array` the
     // Camel type `f32[2, 2]` would otherwise name: an array the program builds is that value, a
     // tensor is this one (which is why the rule says `resultCpp`).
-    r["tensor:ones"] = {
-        [](OperatorCall &c) -> std::optional<std::string> {
-            if (c.normCount() != 1) {
-                return std::nullopt;
-            }
-            return std::format(
-                "{}.call<rt::Foreign>({}, {{rt::bridge::arg({})}}, {{}}, {})",
-                c.bridgeOperator(),
-                c.place(),
-                c.norm(0).text,
-                elementCode(c.resultType()));
-        },
-        false,
-        "rt::Foreign",
+    // The two builders are one rule: what differs between them is the value the runtime fills in,
+    // not one byte this back end writes, so they cross the same way or not at all. `zeros` was the
+    // last one refused as work not done; its refusal named the missing rule, and the rule is here.
+    auto tensorBuilder = [](OperatorCall &c) -> std::optional<std::string> {
+        if (c.normCount() != 1) {
+            return std::nullopt;
+        }
+        return std::format(
+            "{}.call<rt::Foreign>({}, {{rt::bridge::arg({})}}, {{}}, {})",
+            c.bridgeOperator(),
+            c.place(),
+            c.norm(0).text,
+            elementCode(c.resultType()));
     };
+    r["tensor:ones"]  = {tensorBuilder, false, "rt::Foreign"};
+    r["tensor:zeros"] = {tensorBuilder, false, "rt::Foreign"};
 
     return r;
 }

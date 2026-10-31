@@ -95,23 +95,6 @@ expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
-
-[[tests]]
-name = "refuse_tensor"
-desc = "A tensor whose operator has no rule is refused at that operator use -- tensor:zeros in main, line 14 column 18 -- and the sentence names the operator and the work not done. It no longer says std::cpp writes no tensor value: tensor:ones crosses the bridge now (the value lives in the runtime and the program holds an rt::Foreign handle to it), so what is missing for zeros is its rule in the table, not the tensor and not the shape array it takes (an int[] is translated)."
-kind = "negative"
-case = "../../../cases/trans/cpp/refuse_tensor.cml"
-args = ["${case}", "std::cpp"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_code = "0x0400000B"
-expect_diagnostic_line = 14
-expect_diagnostic_column = 18
-expect_output_contains = ["Translation pass 'std::cpp' refused the graph: function 'main' uses 'tensor:zeros' to build a tensor, and std::cpp has no translation of it yet"]
-expect_output_not_contains = ["internal error", "node#", "non-bridgeable", ":?:?:", "#include"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-
 [[tests]]
 name = "narrow_floats"
 desc = "bf16 and f16 are core value types of the language (reduced-precision.md b1) and values of the standalone runtime (include/camel/standalone/half.h), so a program that holds one is translated rather than refused: `rt::BF16` and `rt::F16` stand for the two types, sixteen bits of storage whose constant is the pattern itself (`fromBits`, exact for every pattern a program can write), the text is the type's own shortest text (so `0.1` as a bf16 prints `0.1` and not the `0.100097656` of the f32 it widens to), and arithmetic is computed in f32 and rounded once -- `/` through rt::div, where zero is a fault as it is for f32, and `^` through rt::pow. This entry pinned a refusal before the rules existed; it is now the acceptance case, and the program is built and run by agree_with_fvm, which is what says the two back ends print it byte for byte."
@@ -122,27 +105,6 @@ expect_exit = 0
 expect_stdout_contains = ["rt::BF16", "rt::F16", "rt::BF16::fromBits(uint16_t{", "rt::F16::fromBits(uint16_t{", "rt::div(", "rt::pow(", "rt::halfFromText<rt::BF16>(", "rt::halfFromText<rt::F16>(", "rt::convertArray<rt::BF16>(", "rt::convertArray<rt::F16>("]
 expect_output_not_contains = ["TranslationRefused", "no such element type", "camel/core/", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-
-[[tests]]
-name = "refuse_tensor_json"
-desc = "The same refusal in --output-format json: one diagnostic, TranslationRefused, stage pass:std::cpp, the range of the operator use `zeros` (line 13, characters 17 to 24), nothing of a translation unit on stdout."
-kind = "behavior"
-case = "../../../cases/trans/cpp/refuse_tensor.cml"
-args = ["--output-format", "json", "${case}", "std::cpp"]
-expect_exit = 1
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const diags = JSON.parse(input.normalized.stdout)
-assert(diags.length === 1, `expected one diagnostic, got ${diags.length}`)
-const d = diags[0]
-assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pass:std::cpp', `unexpected diagnostic ${d.data.name} at stage ${d.data.stage}`)
-assert(d.code === '0x0400000B', `code ${d.code}`)
-assert(d.message.includes("function 'main' uses 'tensor:zeros' to build a tensor, and std::cpp has no translation of it yet"), `unexpected message: ${d.message}`)
-assert(d.range.start.line === 13 && d.range.start.character === 17 && d.range.end.line === 13, `unexpected range ${JSON.stringify(d.range)}`)
-}
-"""
 timeout_ms = 8000
 
 [[tests]]
@@ -230,6 +192,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 10000
 
 [[tests]]
+name = "tensor_zeros"
+desc = "`tensor:zeros` translates, and it is the same rule as `tensor:ones`: the pass writes no tensor of its own, so the runtime builds the value and the program holds a counted handle to it -- `const rt::Foreign v1_zeros = op_tensor_zeros.call<rt::Foreign>(at_17_18, {rt::bridge::arg(lit::array)}, {}, 2)`, the shape handed over as the `int[]` it already is and the element type as the integer code of the type -- and prints the runtime's own text for it. It was the last tensor builder refused as work not done (`std::cpp has no translation of it yet`), and what differed from `ones` was the fill the runtime writes, not a byte of what this back end writes. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte: one line, `[[0.0, 0.0], [0.0, 0.0]]`."
+kind = "behavior"
+case = "../../../cases/trans/cpp/tensor_zeros.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["const rt::Foreign v1_zeros = op_tensor_zeros.call<rt::Foreign>(", "rt::bridge::arg(lit::array)", "}, {}, 2);", "const rt::bridge::Operator op_tensor_zeros{\"tensor:zeros\"};", "#include \"camel/standalone/bridge.h\"", "rt::println(v1_zeros);"]
+expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Array<float> v1_zeros"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
 name = "index_rank"
 desc = "A position on a value of several dimensions: `m[1]` is the second row (`rt::atRow`, one dimension less and of the row's own extent), `m[1, 0]` writes the axis it drops and is the element (`rt::atAxis`, every other dimension kept whole), and `t[1]` of a rank-3 value is the rank-2 value behind it. `len` of a row answers the dimension that is left. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte -- six lines, rows and elements both. The operator rule that used to turn a value of several dimensions away is gone with it, as are the two module programs that took the same road: `index_two_positions` translates and agrees."
 kind = "behavior"
@@ -278,17 +252,4 @@ expect_diagnostic_line = 6
 expect_diagnostic_column = 13
 expect_stderr_contains = ["std::cpp has no standalone translation of the operator 'str:to_upper': the program it writes calls the Camel runtime there and is built with libcamel."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 8000
-
-[[tests]]
-name = "refuse_tensor_names_the_tensor"
-desc = "The refusal for a tensor operator that has no rule names that operator and the work not done: `std::cpp` has no translation of `tensor:zeros` yet, the value it builds living in the runtime and crossing the bridge as `tensor:ones` does. What is not untranslated is named as well: the shape array it takes (an `int[]` is translated) and the tensor itself (the bridge carries one now, so the refusal does not claim the back end has no tensor value). The first version of this refusal blamed the shape, which sent a reader after the wrong side of the call."
-kind = "negative"
-case = "../../../cases/trans/cpp/refuse_tensor.cml"
-args = ["${case}", "std::cpp"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_output_contains = ["to build a tensor, and std::cpp has no translation of it yet", "crosses the bridge"]
-expect_output_not_contains = ["on a value of type 'int[]'", "no tensor type", "no tensor value"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

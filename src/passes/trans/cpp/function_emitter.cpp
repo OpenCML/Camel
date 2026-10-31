@@ -962,21 +962,9 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
                 "no runtime block space of its own: the counters are not available on this target",
                 describeFunction(g)));
     }
-    // The tensor builders whose value lives in the runtime: `tensor:ones` has a rule
-    // (operator_rules.cpp), and this back end has no rule for the others yet, so they are refused
-    // as work not done. The sentence names the operator: the shape array is translated and the
-    // bridge carries a tensor now, so neither of those is what is missing.
-    if (uri == "tensor:zeros") {
-        refuse(
-            g,
-            ref,
-            std::format(
-                "{} uses '{}' to build a tensor, and std::cpp has no translation of it yet: the "
-                "value lives in the runtime and crosses the bridge, as 'tensor:ones' does, and this "
-                "operator has no rule in the table",
-                describeFunction(g),
-                uri));
-    }
+    // `tensor:ones` and `tensor:zeros` are rules of the table now (operator_rules.cpp); a tensor
+    // builder the table has no rule for is refused below like any other operator, on the type of
+    // the value it takes or builds.
     if (rule == nullptr) {
         for (const auto types : {&normTypes, &withTypes}) {
             for (const Type *t : *types) {

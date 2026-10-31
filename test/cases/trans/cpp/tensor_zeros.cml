@@ -1,0 +1,19 @@
+/**
+ * `tensor:zeros` crosses the bridge as `tensor:ones` does.
+ *
+ * A tensor is a value the runtime owns: the program holds a counted handle to it (rt::Foreign) and
+ * prints the runtime's own text for the value, so the line below is std::fvm's, byte for byte --
+ * there is no second implementation of what a tensor is that could drift from it. `zeros` was the
+ * last tensor builder refused as work not done ("std::cpp has no translation of it yet"); it is one
+ * rule of the table now, the same call as `ones`, because what differs between the two is the fill
+ * the runtime writes and not one byte this back end writes.
+ *
+ * `agree_with_fvm` builds and runs this program against std::fvm.
+ */
+
+import { zeros } from tensor
+
+func main(): int sync {
+    println(zeros::<f32>([2, 2]))
+    return 0
+}
