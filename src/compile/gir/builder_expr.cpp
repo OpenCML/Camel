@@ -1519,9 +1519,10 @@ node_handle_t Builder::variableOperator(camel::core::OperId oper, node_handle_t 
 
 node_handle_t Builder::variableAfterCall(node_handle_t variable, node_handle_t call) {
     // The variable as it stands after `call`: `:var/after(cell, call)`. Its second argument is the
-    // call, whose value may be `void` and is not read -- the edge is what makes the call run when the
-    // read takes this version (docs/design-principles.cn.md 3.1, 3.5) -- and its result is the cell
-    // itself, so the read above it is a read of the variable after that write.
+    // call, and its value may be anything, `void` included, because this operator reads nothing of
+    // it: the edge is what makes the call run when the read takes this version
+    // (docs/design-principles.cn.md 3.1, 3.5). The result is the cell itself, so the read above it
+    // is a read of the variable after that write.
     const auto group = internalOperatorGroup(camel::core::oper::VarAfter);
     const std::vector<StaticArg> statics(1);
     const auto op = group->resolve({}, {nodeTypeOf(variable), nodeTypeOf(call)}, statics);
