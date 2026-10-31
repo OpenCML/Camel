@@ -332,9 +332,9 @@
 | `std::tf` 上线程的原生栈 | 与下一行相同：计数之外，线程的栈用掉十六分之十五时拒绝再嵌套一次调用 | `ulimit -s` 等（工作线程的栈至少 8 MiB：Unix 上进程的栈上限、Windows 上可执行文件的栈大小更大时取后者） | 在该调用处给出 `MaxRecursionDepthExceeded`；此时消息给出打开的调用数和栈的大小。默认上限（1000）在 Linux 默认的 8 MiB 栈下远够不到这里（见下文的实测） |
 | 线程的原生栈，所有执行后端 | 线程的栈（Linux 上主线程默认 8 MiB） | `ulimit -s` 之类 | 在原生栈将满（Unix 上剩余不足十六分之一，且至少保留 128 KiB；Windows 为 SEH 故障展开保留十六分之十五）时还要嵌套的调用，在到达上面的上限之前就被拒绝，诊断为 `MaxRecursionDepthExceeded`；消息说明原生栈已满。正是这一点使调高的上限不至于以段错误告终。栈的边界在 Linux（glibc）、Windows 和 macOS 上读取（Windows 也已验证；macOS 已实现，但没有编译或运行过）；在其他平台上，上限不能调高到默认值以上 |
 | `std::macro` 对 `#macro` 函数的提前求值 | 64 个求值器帧（32 层的自递归：`count(31)` 被求值，`count(32)` 不被求值） | `--max-macro-depth <n>`（1 到 1000000） | 求值失败：在该调用处给出运行时故障 `RuntimeDiag::MacroEvaluationFailed`，流水线停止（见“`std::macro` 报告什么”）。求值器在原生栈上嵌套（每帧约 630 字节），栈将满时以同样的方式停下 |
-| 图空间（程序的运行时图；一个函数约占 1 到 2 KB） | 总共 256 MB，随程序的需要按段保留 | `CAMEL_GRAPH_SPACE_LIMIT_MB=<megabytes>` | `RuntimeDiag::MemoryExhausted`（`0x04000014`，退出码 1），定位在正在编码其图的函数，指出空间、用量、上限和变量。程序本身放不下时阶段为 `compile`，是某个遍使它增长时阶段为 `pass:<name>` |
-| 永久空间（类型和布局；一个函数约占 0.6 到 2 KB，遍创建的内容永不释放） | 总共 256 MB，按段 | `CAMEL_PERM_SPACE_LIMIT_MB=<megabytes>` | `RuntimeDiag::MemoryExhausted`，同上，除非知道正在编译的函数，否则没有位置 |
-| 元空间（正在编译的图的常量和函数值；每个拥有它的函数、lambda 或分支臂约 1.2 KB） | 总共 256 MB，按段 | `CAMEL_META_SPACE_LIMIT_MB=<megabytes>` | `RuntimeDiag::MemoryExhausted`，阶段 `compile`，定位在正在编译的函数 |
+| 图空间（程序的运行时图；一个函数约占 1 到 2 KB） | 总共 256 MB，随程序的需要按段保留 | `--graph-space-limit-mb <megabytes>` | `RuntimeDiag::MemoryExhausted`（`0x04000014`，退出码 1），定位在正在编码其图的函数，指出空间、用量、上限和变量。程序本身放不下时阶段为 `compile`，是某个遍使它增长时阶段为 `pass:<name>` |
+| 永久空间（类型和布局；一个函数约占 0.6 到 2 KB，遍创建的内容永不释放） | 总共 256 MB，按段 | `--perm-space-limit-mb <megabytes>` | `RuntimeDiag::MemoryExhausted`，同上，除非知道正在编译的函数，否则没有位置 |
+| 元空间（正在编译的图的常量和函数值；每个拥有它的函数、lambda 或分支臂约 1.2 KB） | 总共 256 MB，按段 | `--meta-space-limit-mb <megabytes>` | `RuntimeDiag::MemoryExhausted`，阶段 `compile`，定位在正在编译的函数 |
 | 自动空间（运行期的值，受垃圾回收管理） | 宿主机的内存 | 否 | `RuntimeDiag::MemoryExhausted`（阶段 `pass:<scheduler>`），说明宿主机拒绝了这次分配 |
 
 **递归上限计的是什么** 在每个执行后端上都相同：每一次处于打开状态且不是尾调用的函数调用，不论它是写成一次调用、通过函数值进行，还是由高阶算子（`map`、`filter`、`reduce`、`foreach`）为某个元素进行。处于尾位置的调用替换它的调用者，不计数（见 `docs/technical/19_tail_call_optimization.md`），所以任意深度的尾递归在任何上限下都能运行。`if` 的分支臂是它们所在函数的尾调用。唯一不由程序自己发出的调用，即运行时对 `main` 的调用，不计数。因此上限为 L 时，对于从 `main` 调用的 `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)`，`depth(L - 1)` 是能运行的最深调用，在 `std::nvm`、`std::fvm`、`std::jit`（解释执行的和编译为原生代码的）以及 `std::tf` 上都是如此：默认值下是 `depth(999)`。改变存在哪些调用的遍（`std::opt::inline`）也改变被计数的内容，因为它们改变了图。

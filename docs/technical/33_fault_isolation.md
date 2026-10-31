@@ -452,9 +452,9 @@ the machine; times are minima of several runs and still noisy).
   Time: about 24 µs per isolated fault on `std::fvm`, 31 µs on `std::nvm` (a C++ exception
   through several activations, the located diagnostic, the error value); `std::prl` about
   130 µs.
-- **Collector.** `collector.cml` with `CAMEL_GC_VERIFY=both`, `CAMEL_GC_STRESS_ALLOC=5`,
-  `CAMEL_GC_STRESS_SAFEPOINT=1`, modes `major` and `both`, on the four back ends, and with
-  `CAMEL_GC_ENABLE_YOUNG_COPYING=1` on `std::nvm`, `std::fvm`, `std::prl`: correct output, no
+- **Collector.** `collector.cml` with `--gc-check verify=both`, `--gc-stress alloc=5`,
+  `--gc-stress safepoint=1`, modes `major` and `both`, on the four back ends, and with
+  `--gc generational` on `std::nvm`, `std::fvm`, `std::prl`: correct output, no
   verification issue.
 - **An `attempt` that does not fault.** Two million calls of a one-line function in a
   tail-recursive loop, directly / through a function value / through `attempt ... !! 0`:

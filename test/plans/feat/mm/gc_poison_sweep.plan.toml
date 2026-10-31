@@ -34,8 +34,8 @@ conditions is invisible in the copies a single sample leaves unrun.
 name = "poison"
 plans = ["../../smoke", "../modules", "../compile", "../linear", "../para", "../trans", "../consistency/attempt.plan.toml", "../consistency/faults.plan.toml", "../consistency/cleanup.plan.toml", "../consistency/values.plan.toml", "../consistency/match.plan.toml"]
 exclude = ["modules/autodiff", "modules/onnx"]
-envs = ["CAMEL_GC_POISON=1"]
-skip_env_prefix = "CAMEL_GC_"
+args = ["--gc-check", "poison"]
+skip_args_prefix = "--gc-"
 timeout_scale = 20
 fast_sample = 1
 # A plan whose tags name collections, closures or iterations keeps three sampled tests; the
