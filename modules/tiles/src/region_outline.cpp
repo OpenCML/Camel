@@ -414,16 +414,20 @@ const runtime::Program *outlineRegions(
                     // The pass cannot keep the scope's promise for this region, so it fails with
                     // the same error value the grouped refusal makes (design principles 9.1): what
                     // a scope can run is only known once the pass has looked at the graph. The
-                    // message takes the whole predicate, as the grouped report does.
+                    // message takes the whole predicate, as the grouped report does, and then the
+                    // compiler's own sentence for it: the two-layer summary alone reads the same
+                    // whichever layer refused, so the reader could not tell a fixed layer from an
+                    // unfixed one.
                     if (error != nullptr) {
                         *error = core::rtdata::makeError(
                             "GpuScopeUnsupported",
                             std::format(
-                                "`#gpu` scope '{}': operator '{}' has no device program ({})",
+                                "`#gpu` scope '{}': operator '{}' has no device program ({}): {}",
                                 scopeNameOf(*graph),
                                 who,
                                 shape ? "no device program for this shape"
-                                      : "no device program for this operator"),
+                                      : "no device program for this operator",
+                                e.what()),
                             sourceLocationOf(context, origin));
                     }
                     regionRefused = true;
