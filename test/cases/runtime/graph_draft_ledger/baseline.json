@@ -1,8 +1,8 @@
 {
   "comment": "The baseline of the direct-connection ledger (graph-store step 2 b): the numbers below may only fall, and the last step is all of them at zero. `sites` records where each number comes from, as `file#symbol` (a line number moves with every edit above it, a symbol does not); it is diagnostics for a red and never decides the verdict. Record a new row after a commit with check.mjs --record.",
   "numbers": {
-    "files": 37,
-    "references": 365,
+    "files": 36,
+    "references": 363,
     "constructions": 1,
     "decode": 4
   },
@@ -11,7 +11,6 @@
       "include/camel/compile/gir/draft_graph_builder.h": 1,
       "include/camel/core/tags.h": 1,
       "include/camel/core/type/composite/func.h": 1,
-      "include/camel/runtime/definitions.h": 1,
       "include/camel/runtime/draft.h": 1,
       "include/camel/runtime/draft_clone.h": 1,
       "include/camel/runtime/draft_inline.h": 1,
@@ -51,7 +50,6 @@
       "include/camel/core/tags.h#-": 3,
       "include/camel/core/tags.h#effectivePermissions": 3,
       "include/camel/core/type/composite/func.h#-": 1,
-      "include/camel/runtime/definitions.h#-": 1,
       "include/camel/runtime/draft.h#-": 1,
       "include/camel/runtime/draft.h#isDataPortSlot": 18,
       "include/camel/runtime/draft.h#ungated": 1,
@@ -63,7 +61,6 @@
       "include/camel/runtime/draft_session.h#-": 7,
       "include/camel/runtime/draft_types.h#-": 1,
       "include/camel/runtime/draft_writes.h#operatorOverloadType": 3,
-      "include/camel/runtime/graph.h#-": 1,
       "include/camel/runtime/graph.h#makeFillPayload": 1,
       "include/camel/runtime/graph.h#nodeIsFreelySchedulable": 3,
       "include/camel/runtime/loop.h#loopOf": 4,
