@@ -241,17 +241,25 @@ class Compiler {
         }
         if (tensor::isTensorType(type)) {
             const auto *t = td::fromSlot<tensor::Array *>(slot);
-            if (!t || t->dtype() != ty::TypeCode::Float32)
+            const auto dtype = t ? dtypeOfElementType(t->dtype()) : std::nullopt;
+            if (!dtype)
                 throw UnsupportedComputation(
-                    "tiles currently requires f32 tensors",
+                    "tiles requires a tensor of an element type the device knows",
                     {},
                     UnsupportedComputation::Reason::Shape);
-            Node node{.op = "input", .shape = t->shapeVector()};
+            // The host copy holds each element's value, widened exactly: bf16 and f16 widen to f32
+            // without losing a bit, which is why a narrow constant can sit beside f32 ones here.
+            // The bytes the device reads are `bytes(node)` of `node.dtype`; they are built from
+            // this copy by rounding once, at the one place that turns a node into storage, so the
+            // widening here is not a second rounding.
+            Node node{.op = "input", .shape = t->shapeVector(), .dtype = *dtype};
             const size_t n = elements(node.shape);
-            if (n)
-                node.data.assign(t->dataAs<float>(), t->dataAs<float>() + n);
-            auto *exact =
-                tensor::ops::tensorOf(ty::TypeCode::Float32, tensor::knownShape(node.shape));
+            if (n) {
+                node.data.resize(n);
+                for (size_t i = 0; i < n; ++i)
+                    node.data[i] = static_cast<float>(t->getAsDouble(i));
+            }
+            auto *exact = tensor::ops::tensorOf(t->dtype(), tensor::knownShape(node.shape));
             return {.type = exact, .tensor = append(std::move(node))};
         }
         auto constant = tensor::ops::constArgOf(slot, type);
@@ -353,14 +361,19 @@ class Compiler {
 
     Value placeholder(ty::Type *type) {
         Node node{.op = "input"};
+        const auto dtype = dtypeOfElementType(type->code());
+        if (dtype && !isFloating(*dtype) && *dtype != DType::I64)
+            throw UnsupportedComputation("loop values require a scalar of a known element type");
         if (type->code() == ty::TypeCode::Float64)
             node.dtype = DType::F64;
         else {
             const tensor::TensorFacts facts = tensor::tensorFactsOf(type);
-            if (facts.dtype != ty::TypeCode::Float32 || !facts.isStaticShape())
+            const auto element = facts.dtype ? dtypeOfElementType(*facts.dtype) : std::nullopt;
+            if (!element || !facts.isStaticShape())
                 throw UnsupportedComputation(
-                    "loop values require f64 scalars or static f32 tensors");
+                    "loop values require f64 scalars or static tensors of a known element type");
             node.shape = tensor::extentsOf(*facts.shape);
+            node.dtype = *element;
         }
         return {.type = type, .tensor = append(std::move(node))};
     }

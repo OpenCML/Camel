@@ -254,12 +254,14 @@ class DeviceRun {
             size_t hostOffset = 0;
             for (size_t id = 0; id < p.nodes.size(); ++id) {
                 const auto &node = p.nodes[id];
-                const auto *data = hostData(node);
-                if (!data)
+                if (!hostData(node))
                     continue;
+                // The bytes are the node's own element width: an f32 node copies its bits, a bf16
+                // or f16 node the value rounded once into the element type.
+                const std::vector<std::byte> storage = hostStorage(node);
                 hostInputs[id] = static_cast<std::byte *>(hostStaging) + hostOffset;
-                std::memcpy(hostInputs[id], data, bytes(node));
-                hostOffset += bytes(node);
+                std::memcpy(hostInputs[id], storage.data(), storage.size());
+                hostOffset += storage.size();
             }
         }
         for (const auto &launch : p.launches) {
@@ -638,10 +640,10 @@ std::vector<std::byte> execute(std::shared_ptr<const Program> snapshot) {
         std::vector<std::byte> result;
         for (auto output : p.outputs) {
             const auto &node = p.nodes[output];
-            if (const auto *data = hostData(node)) {
-                auto *begin = static_cast<const std::byte *>(data);
-                result.insert(result.end(), begin, begin + bytes(node));
-            }
+            if (!hostData(node))
+                continue;
+            const std::vector<std::byte> storage = hostStorage(node);
+            result.insert(result.end(), storage.begin(), storage.end());
         }
         return result;
     }
