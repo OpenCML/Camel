@@ -17,30 +17,6 @@ namespace {
 /// nothing. The count is a guard, not a budget: a graph settles in a couple of sweeps.
 constexpr size_t kMaxControlSweeps = 8;
 
-/// Item 7 of docs/handover/reports/opt-ctrl-inventory.md: the one thing this reduction does that is
-/// not a removal. When every wait of a target falls away and the target would be left waiting on
-/// nothing, one predecessor is put back -- a GATE whose wait this is (its sync predecessor is where
-/// that wait goes, docs/design/effects/edges.cn.md 5.3), or a node with no value inputs at all, where
-/// an empty frontier would otherwise read as a malformed cycle. It is a reordering rather than a
-/// cleanup: the wait moves to a different predecessor and execution moves with it. Extracted with its
-/// behaviour unchanged, so that moving it to the builder -- the place that knows where a statement's
-/// chain ends -- can be told apart from changing it.
-bool keepOneWaitWhenTheSetFallsAway(
-    GraphDraft &draft, gc_node_ref_t target, std::vector<gc_node_ref_t> &keep,
-    const std::vector<gc_node_ref_t> &roots, bool hasValues) {
-    if (!keep.empty() || roots.empty()) {
-        return false;
-    }
-    const auto *header = draft.header(target);
-    const bool aGateWhoseWaitThisIs =
-        header != nullptr && header->kind == GCNodeKind::Gate && draft.syncInputsOf(target).empty();
-    if (!aGateWhoseWaitThisIs && hasValues) {
-        return false;
-    }
-    keep.push_back(roots.back());
-    return true;
-}
-
 bool isBoundary(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
     const auto &draft = transaction.graph();
     const auto *h = draft.header(id);
@@ -308,12 +284,13 @@ size_t reduceControlDependencies(camel::runtime::GraphTransaction &transaction, 
                         keep.push_back(root);
                     }
                 }
-                // A GATE keeps one control input only while that input *is* its wait -- a gate with a sync
-                // predecessor waits on that (`docs/design/effects/edges.cn.md` 5.3) and needs none.
-                // With no value seed, an empty frontier otherwise indicates a malformed cycle;
-                // preserve diagnostics. That is item 7 of docs/handover/reports/opt-ctrl-inventory.md,
-                // in its own function: it reorders a wait rather than dropping one.
-                keepOneWaitWhenTheSetFallsAway(draft, target, keep, roots, hasValues);
+                // Item 7 of docs/handover/reports/opt-ctrl-inventory.md used to stand here: when every wait of
+                // a target fell away it put one predecessor back. The builder owns that wait now -- a
+                // GATE gets its sync predecessor where the block's chain ends
+                // (docs/design/effects/edges.cn.md 5.3, Builder::writeSyncLink), a place this reduction
+                // cannot see. Measured before removing it: across the whole fast corpus it never fired
+                // once, so no graph that can be built reaches it; one that did would be refused at
+                // commit by the runtime's own "GATE node without a wait" rule (src/runtime/graph.cpp).
                 if (keep.size() < draft.ctrlInputsOf(target).size()) {
                     removed += draft.ctrlInputsOf(target).size() - keep.size();
                     draft.setCtrlInputs(target, keep);
