@@ -469,6 +469,48 @@ std::shared_ptr<camel::compile::gir::DraftGraphBuilder> rhsBuilder;
 `pinRuntimeProgram`），留住的只是“写这个名字的把手”，不是“让图活着”。**失效**：context 结束时一并结束；
 实例不跨 context。
 
+## 判据：值第一次能出现的那一刻
+
+> **把手留住之后，“值”才第一次能在替换图里出现；此前的每一步都是在为这一刻准备条件。**
+
+**这一刻还没到，卡在“装上去”而不是“建出来”**，位置很具体：
+
+- `GraphIRPass::apply` 拿到的是 `const Program *`（`include/camel/execute/pass/base.h`），并注明
+  “a rewrite makes a new one”：**程序发布后不再变**；
+- 新的程序由 `GraphDraftGroup` 造，而它的**根是第一个 reserve 的成员**
+  （`include/camel/runtime/draft_session.h`，`class GraphDraftGroup`）：`group.program()` 的入口是那个成员；
+- `Program::bind` / `setRoot` 都在**构造期**用（`include/camel/runtime/program.h`），拿不到一个已发布的
+  程序去改其中一张图。
+
+**所以“把 `f` 换掉”实际是“重造整条入口路径”**：新的 `main`（调新的 `f`、打元组）是根，新的 `f`
+（`3.0 / x` 的站点换成“建闭包 + 调闭包”）是它调的成员。**只换 `f` 换不进去**——没有一处 API 允许
+在一张已发布的图里替换另一张图。
+
+这就把下一笔的形状定死了：**一次 reserve 两个成员（`main`、`f`），第一个当根**，两个图都要重造，
+`println` 也得在 `main` 的新版本里重新接上。**这是“整条入口路径”，不是“一个站点”。**
+
+## 判据：先造一个最小的容器
+
+> **一个“装不进去”的东西，先用最小的容器把它装进去；容器的形状对了，再谈往真程序里装。**
+
+最小容器要装的两个人已经点清：`main` 与 `f`。**重造 `main` 需要的东西，一次量完**：
+
+```
+REINTERP target=f primitives=1 other=2 graph=112 nodes=1
+REINTERP calls=- opers=:op/div_d
+REINTERP target=main primitives=1 other=4 graph=113 nodes=1
+REINTERP calls=54 opers=:io/println
+```
+
+- `f`：没有 FUNC 调用，只有一个算子 `:op/div_d`——**新 `f` 只换这一个站点**；
+- `main`：FUNC 调用 **54**（就是 `f`），算子 `:io/println`——**新 `main` 的清单是“常量 `2.0` →
+  调新 `f` → `:io/println` → `return 0`”，四件事，一件不多**；
+- `println` **是算子，不是图**：所以最小容器不需要拷任何节点，两个图都能用
+  `addDataNode`/`addCallNode`/`addOperNode` 从零拼出来（`include/camel/runtime/draft.h`）。
+
+**这就是下一笔的施工单**：reserve 两个成员（`main__min` 第一个当根、`f__min`），`f__min` 里
+“`3.0/x` 的值 + 建闭包 + 调闭包”三段，`main__min` 里四件事，打出来就是 `(1.5, -0.75)`。
+
 ## 验收（缺一步不算完）
 
 1. **前向**：`f(x) = x*x + 3/x` 在 `x = 2` 处，`f = 5.5`，`f' = 4 - 0.75 = 3.25`。两个数都要打出来。
