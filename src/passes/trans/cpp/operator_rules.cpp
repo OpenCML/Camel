@@ -461,6 +461,29 @@ Rules buildRules() {
         },
         false,
     };
+    // `xs[positions]` (:op/idx_take, struct.cpp __idx_take_arr__, design principles 5.4): the
+    // elements the positions name, in that order. Only a rank-1 value read by rank-1 positions is
+    // a flat run here (an rt::Array has no shape, cpp_types.cpp): a value of several dimensions
+    // keeps them, and one of an open rank has none, so both run through the bridge. The axis word
+    // a call writes names a dimension, and a rank-1 value has the one.
+    r[":op/idx_take"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value     = asArrayType(c.normType(0));
+            const ArrayType *positions = asArrayType(c.normType(1));
+            if (c.normCount() != 2 || value == nullptr || positions == nullptr ||
+                value->anyRank() || value->rank() != 1 || positions->anyRank() ||
+                positions->rank() != 1 || positions->elemType() == nullptr ||
+                positions->elemType()->code() != TypeCode::Int64) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::take({}, {}, {})",
+                c.operand(0),
+                c.operand(1),
+                c.site(RuntimeDiag::IndexOutOfRange, marks(3)));
+        },
+        false,
+    };
     // The slice of a one-dimensional array, whichever spelling wrote it (design principles 5.4):
     // the six words are the value, the axis, the two bounds, the step and the mask of the bounds
     // written, and a call that leaves the last two out stands for step 1 and "both written". A

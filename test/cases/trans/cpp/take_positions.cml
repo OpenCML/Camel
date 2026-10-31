@@ -1,0 +1,15 @@
+// `xs[positions]` (design principles 5.4): the elements the positions name, in that order, and a
+// copy of them -- the array they were taken from keeps what it had. A position can repeat, and a
+// fixed-size value is taken the same way.
+
+func take(xs: int[], order: int[]): int[] { return xs[order] }
+
+func main(): int sync {
+    let xs = [10, 20, 30, 40]
+    let order = [3, 0, 2]
+    println(take(xs, order), take(xs, [1, 1]), xs)
+
+    let f: f32[3] = [1.5, 2.5, 3.5]
+    println(f[[2, 0, 2]])
+    return 0
+}

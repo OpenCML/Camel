@@ -86,6 +86,10 @@ test/cases/consistency/faults/element_assigned_out_of_range.cml
 # with one place changed, and the value another variable read before the store keeps what it had.
 test/cases/trans/cpp/field_store.cml
 
+# `xs[positions]` (:op/idx_take): the elements those positions name, in that order, as a copy --
+# a position can repeat, and a fixed-size value is taken the same way.
+test/cases/trans/cpp/take_positions.cml
+
 # Output of print / println with a format (design principles 10.6).
 # (test/cases/trans/cpp/exec/print_formats.cml, in the directory above)
 # A formatted string is the same tree as '...'->format<...>: the translator sees no difference.

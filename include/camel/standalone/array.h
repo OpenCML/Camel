@@ -267,6 +267,21 @@ Array<T> sliceSub(
 /// `site`, as `xs[0]`.
 template <typename T> T head(const Array<T> &xs, const Site &site) { return at(xs, 0, site); }
 
+/// `xs[idx]` with `idx` an array of positions (:op/idx_take, design principles 5.4): the elements
+/// those positions name, in that order, as a copy. A position outside the array is
+/// IndexOutOfRange at `site` with the position as written, as a plain read is; a position taken
+/// twice is taken twice. The value read is a rank-1 one, so the third word of the call -- the
+/// axis -- is the only axis there is; an array of another shape runs through the bridge.
+template <typename T>
+Array<T> take(const Array<T> &xs, const Array<int64_t> &positions, const Site &site) {
+    Array<T> out;
+    out.reserve(positions.size());
+    for (const int64_t position : positions) {
+        out.push(at(xs, position, site));
+    }
+    return out;
+}
+
 /// `tail(xs)` (:struct/tail_arr): all but the first element; the empty array for one or none.
 template <typename T> Array<T> tail(const Array<T> &xs) {
     Array<T> out;
