@@ -1,0 +1,29 @@
+id = "runtime.txn_pending"
+order = 371
+tier = "fast"
+tags = ["feat", "runtime", "graph", "transaction", "gc"]
+desc = "A graph transaction that owns a graph before the graph has a name: `openPending` makes it, `assignId` names it at attach, and a transaction dropped unnamed returns everything it made to the collector. The program itself is empty; the pass prints its figures (lead ruling of 2026-10-31)."
+
+# `test::txn_pending` reads the collector before opening a pending transaction, builds eight ports
+# and a static value in it, drops the transaction without ever naming the graph, sweeps the graph
+# space and reads again. The two readings are printed and the pair is asserted: the acceptance of
+# "the transaction owns everything it makes" is a number a reader can check, not the claim that two
+# numbers are "the same".
+[defaults]
+kind = "behavior"
+case = "../../../cases/feat/mm/blocks.cml"
+expect_exit = 0
+expect_stdout_contains = ["TXN_PENDING before allocations=2 live=0", "TXN_PENDING after allocations=2 live=0", "TXN_PENDING live_equal=1"]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "txn_pending.dropped_unnamed"
+desc = "A pending transaction is opened, builds nodes and a static value, and is dropped without assignId: the live reading after the sweep must equal the one before it."
+args = ["${case}", "test::txn_pending", "std::nvm"]
+
+[[tests]]
+name = "txn_pending.named_at_attach"
+desc = "The same table with the id assigned first: naming the graph does not change what the drop returns."
+args = ["${case}", "test::txn_pending", "std::nvm"]
