@@ -27,6 +27,23 @@ expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float)
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# A branch is a property of the graph, not of a node: its arms are regions, its value is the Join's,
+# and each arm is interpreted on its own. `f(2) = 4` with `f'(2) = 4` and `f(-2) = 2` with
+# `f'(-2) = -1` say the arm the condition chose is the arm that was differentiated -- the four numbers
+# are also folded into one (4419) so a single string pins all of them.
+[[tests]]
+name = "jvp_branch.arms_are_each_interpreted"
+desc = "`f(x) = if x > 0 then x*x else -x` is differentiated the way it is written: the condition is copied and read by the `Brch`, never differentiated, and each arm's exit becomes the lifted pair of the arm's value and its tangent, which is what the `Join` yields. So `jvp(f)(2.0, 1.0)` reads `(4, 4)` -- `2x` at 2 -- and `jvp(f)(-2.0, 1.0)` reads `(2, -1)`, the arm that was actually taken. The arms stay arms in the lifted graph (their nodes are copied into their own regions), so an operator only one arm uses is not computed for the arm that was not taken."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_branch.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["REINTERP jvp function=f graph=", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_neg", "4419"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 # The negative side of the same rule table, and the point of it: a primitive the ruleset has no rule
 # for is not answered with 0 or 1 and is not only printed at -- it is a diagnostic that names the
 # primitive and stands *where the primitive is written*. `pow` is `math:pow_d`, which no forward rule
