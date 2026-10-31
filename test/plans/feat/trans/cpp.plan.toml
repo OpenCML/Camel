@@ -249,6 +249,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "mean_rank"
+desc = "The mean of a whole value is the sum divided by the number of elements, both in f64, and the answer's element type reached by one conversion: `2.5` for `int[4]` where a mean of integers is an f32 and not integer division, `1.6666666` for `int[3]` (the f32 rounding, not `1`), `0.2` for an `f32[3]` whose f32 sum divided again would not be that, `3.5` for a rank-2 value, and `7.0` for a single element. The answer's element type is the one the operator states and not the source's, so the rule writes it as the runtime template argument -- the one place in the file where a rule reads the result's type to write the call. A value with no element divides by zero; that fault agrees with the interpreter's too, checked by hand because a faulting program cannot sit in a list that must exit zero. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/mean_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::meanAll<"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "arg_axis_rank"
 desc = "The position of the extreme along one dimension: the first element of the lane equal to its maximum (minimum), or its first NaN, taken by the same order as the extreme itself -- a NaN is beyond every number and on a tie the earlier position stays. So `[1, 2]` for the columns of a rank-2 value and `[0, 0, 1]` for its rows, `[[1], [1], [0]]` with keepdims, `[[1, 1], [1, 1]]` for the middle axis of a rank-3 one, and `[1, 0]` where one lane holds a tie (the earlier of two equal maxima) and the other its first NaN. The answer's element type is int64 whatever the value holds, so the rule states a different runtime element type than the value it reads. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
