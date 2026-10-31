@@ -550,8 +550,21 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
             decl += std::format("    {} {};\n", member.cpp, member.name);
         }
         decl += std::format("    bool operator==(const {} &) const = default;\n}};\n", name);
-        // Its text, as the runtime prints it: `(1, a)` and `{ x: 1, y: 2.5 }`.
+        // Its text, as the runtime prints it: `(1, a)`, `{ x: 1, y: 2.5 }`, and `{}` for a struct
+        // with no fields -- the two braces with nothing between them, because the spaces around
+        // the fields are the fields' own and there is nothing to separate. A tuple with no fields
+        // prints `()`, and the interpreter writes `{}` for a loop state that carries nothing
+        // (loops/zero_leaf_state.cml).
         decl += std::format("inline void appendText(std::string &out, const {} &v) {{\n", name);
+        if (members.empty()) {
+            decl += std::format(
+                "    (void)v;\n    out += \"{}\";\n}}\n\n", isTuple ? "()" : "{}");
+            declarations_ += decl;
+            layouts_.emplace(layout, name);
+            representations_.emplace(key, name);
+            out = name;
+            return out;
+        }
         decl += std::format("    out += \"{}\";\n", isTuple ? "(" : "{ ");
         for (size_t i = 0; i < members.size(); ++i) {
             if (i > 0) {
@@ -562,7 +575,8 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
             }
             decl += std::format("    appendText(out, v.{});\n", members[i].name);
         }
-        decl += std::format("    out += \"{}\";\n}}\n\n", isTuple ? ")" : " }");
+        decl += std::format("    out += \"{}\";\n", isTuple ? ")" : " }");
+        decl += "}\n\n";
         declarations_ += decl;
         layouts_.emplace(layout, name);
         representations_.emplace(key, name);
@@ -1070,6 +1084,13 @@ std::optional<std::string> ProgramValues::constant(slot_t slot, const Type *t) {
         // constructor is written as a call, not as a braced pair: with an element type an `{n}` can
         // itself stand for (`rt::Array<T>`, a struct of one field) the initializer would read `{3}`
         // as one more element.
+        if (rank == 0 && array != nullptr && array->numel() == 1 &&
+            static_cast<const ArrayType *>(t)->anyRank()) {
+            // One element that recorded no rank, in a position of open rank, is the element itself:
+            // `element` says so, where an appended array is one dimension of what it holds
+            // (standalone/array.h). A value of one dimension keeps that and prints as the literal.
+            return hoist(*cpp, std::format("{}::element({})", *cpp, *items), "array");
+        }
         const bool oneDimension =
             rank == 1 && (array->dim(0) != 1 || !static_cast<const ArrayType *>(t)->anyRank());
         if (oneDimension) {

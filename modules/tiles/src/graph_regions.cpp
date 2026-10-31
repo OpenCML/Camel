@@ -15,6 +15,7 @@
 #include "camel/runtime/loop.h"
 #include "modules/tensor/type.h"
 #include "tiles/device.h"
+#include "tiles/internal/dtype_map.h"
 #include "tiles/internal/kernel_ir.h"
 #include "tiles/internal/placement.h"
 #include "tiles/internal/regions.h"
@@ -30,16 +31,40 @@ namespace {
 namespace rt  = runtime;
 namespace sem = core::sem;
 namespace ty  = core::type;
+/// The element types a device tensor can be read as: the two the device computes with today -- an
+/// f32 value and the i64 position an index answers in -- and the two narrow floats `DType` names.
+/// This is the type gate, and it asks one question: does the device path know the type at all. A
+/// tensor of another element type (an f64 tensor) has no width here and stays unresolved.
+bool tensorElement(ty::TypeCode code) {
+    return code == ty::TypeCode::Float32 || code == ty::TypeCode::Int64 ||
+           code == ty::TypeCode::BFloat16 || code == ty::TypeCode::Float16;
+}
+
+/// Whether the element type is one of the two narrow floats: 16-bit types the device path reads and
+/// names (`tiles/dtype.h`), and one no kernel is written for yet.
+bool narrowElement(DType dtype) { return dtype == DType::F16 || dtype == DType::BF16; }
+
+/// Whether the value's element type is a narrow float, read from the same facts the shape is.
+bool narrowElementType(ty::Type *type) {
+    if (!type)
+        return false;
+    const tensor::TensorFacts facts = tensor::tensorFactsOf(type);
+    if (!facts.dtype)
+        return false;
+    const auto element = dtypeOfElementType(*facts.dtype);
+    return element && narrowElement(*element);
+}
+
 std::optional<Shape> shape(ty::Type *type) {
     if (!type)
         return std::nullopt;
     if (type->code() == ty::TypeCode::Float64)
         return Shape{};
     const tensor::TensorFacts facts = tensor::tensorFactsOf(type);
-    // An element type whose width the device knows is readable as a shape: f32 and, because a
-    // position is an index, i64. Anything else stays unresolved here.
-    if ((facts.dtype != ty::TypeCode::Float32 && facts.dtype != ty::TypeCode::Int64) ||
-        !facts.isStaticShape())
+    // A narrowly typed tensor reads as a shape here, because the device names the type and its
+    // width: what is not there for a narrow element is the kernel, and a refusal that says the type
+    // cannot be read would blame the wrong half (`eligibility` says which one below).
+    if (!facts.dtype || !tensorElement(*facts.dtype) || !facts.isStaticShape())
         return std::nullopt;
     return tensor::extentsOf(*facts.shape);
 }
@@ -148,6 +173,12 @@ std::string eligibility(
     const auto output = shape(node->dataType());
     if (!output)
         return "unresolved_type";
+    // A narrow element reached this line, so the type gate read it: the device names the type and
+    // knows its two bytes. The node is still not planned, and the reason names the honest half --
+    // no kernel is written for a narrow element yet (`tiles/dtype.h`), so nothing here may store a
+    // four-byte value into a two-byte element.
+    if (narrowElementType(node->dataType()))
+        return "narrow_element_kernel_missing";
     const rt::fact::Anchor anchor{&graphs, &graph, id};
     const auto fact =
         facts.obtain<rt::fact::NodeInstance>(rt::fact::coreKinds().instance, {&anchor, 1});
@@ -163,21 +194,20 @@ std::string eligibility(
         {.uri = std::string(table.uri(oper)), .key = decl->key, .declaration = decl}};
     const auto permissions =
         camel::core::tag::effectivePermissions(graph, id, core::sem::NumericPolicy::explicitOnly());
-    // The candidate carries the element type the node was inferred with. Reading it as f32 would
-    // plan a four-byte store for an eight-byte position -- the same lie the byte width told before
-    // an i64 leaf was readable.
-    const auto elementType = [](ty::TypeCode code) {
-        if (code == ty::TypeCode::Float64)
-            return DType::F64;
-        if (code == ty::TypeCode::Int64)
-            return DType::I64;
-        return DType::F32;
-    };
+    // The candidate carries the element type the node was inferred with, read from the same facts
+    // the shape came from. Reading it as f32 would plan a four-byte store for an eight-byte
+    // position -- the same lie the byte width told before an i64 leaf was readable -- and would
+    // read a two-byte narrow element through a four-byte one.
+    const tensor::TensorFacts outputFacts = tensor::tensorFactsOf(node->dataType());
+    const auto outputElement =
+        outputFacts.dtype ? dtypeOfElementType(*outputFacts.dtype) : std::optional<DType>{};
+    if (!outputElement)
+        return "unresolved_type";
     Node candidate{
         .op          = found->second,
         .shape       = *output,
         .inputs      = {},
-        .dtype       = elementType(node->dataType()->code()),
+        .dtype       = *outputElement,
         .permissions = permissions,
         .semantic    = 0,
         .indexing    = inst};
@@ -190,6 +220,10 @@ std::string eligibility(
         const auto input = shape(graph.node(inputs[i])->dataType());
         if (!input)
             return "unresolved_input_type";
+        // A narrow operand is the same missing kernel read from the other side: the program that
+        // would read it is written for a four-byte element, and this one is two.
+        if (narrowElementType(graph.node(inputs[i])->dataType()))
+            return "narrow_element_kernel_missing";
         // Current physical tensor kernels take f32 tensor operands; f64 scalar
         // arithmetic has its own lowering and is not selected by this table yet.
         if (graph.node(inputs[i])->dataType()->code() == ty::TypeCode::Float64)
@@ -311,6 +345,12 @@ gpuRefusal(const rt::GCGraph &graph, const SegmentAnalysis &analysis, rt::gc_nod
     // Unresolved types and index instances are not refusals: the run retries with the actual
     // shapes and decides then; structural host code (`node_kind`, `control_edge`, `inside_loop`)
     // is not an operator's business.
+    //
+    // A narrow element (`narrow_element_kernel_missing`) is not a refusal either, and for a
+    // different reason: the type is read and its width is known, so what is missing is the work
+    // this lane has not done yet, not a program the device turned down. The node stays on the host
+    // and the plan prints the reason; refusing the whole `#gpu` scope over a kernel nobody has
+    // written would say the scope is wrong, which it is not.
     return "";
 }
 // The reading the residency conclusion is fed with: the graph's placements, and the blocks its

@@ -105,9 +105,16 @@ answer, so a test that merely passes does not catch it.
 - **Do not hard-code an element type.** Wrong: a gradient kernel reads `dataAs<float>()` for every
   tensor, so an f64 tensor is read as f32; a shape rule answers f32 whatever the input. Right:
   instantiate per supported element type and refuse the rest.
+- **Fix the cause, in the layer that causes it.** When a fix has been prescribed and it cannot be
+  written, the prescription was wrong about where the defect lives: report the measured cause and
+  change the layer that holds it. Wrong: a type rule is bent so one case stops failing, or a
+  conversion is widened so two shapes fit. Right: name the layer (`a computed leaf is read flat
+  because the position asks for a flat value`), change it there, add the case that shows the
+  original report was right, and keep the case that must still be refused. Two types of the same
+  rank that are not the same type never merge: a rule that merges them changes the language to
+  make a report go away.
 
 ## Architecture Reporting
 - During major refactors, identify the primary structural contradiction early.
 - If a deeper dependency blocks progress, surface that blocker directly instead of only cleaning peripheral symptoms.
 - Record important decisions and rationale in both code comments and docs when the refactor changes semantics.
-
