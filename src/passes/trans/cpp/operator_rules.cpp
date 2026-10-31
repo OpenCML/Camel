@@ -4,6 +4,7 @@
 #include "operator_rules.h"
 
 #include "camel/core/numeric_convert.h"
+#include "camel/core/type/bytes.h"
 #include "camel/core/type/composite/array.h"
 #include "fault_sites.h"
 
@@ -835,6 +836,134 @@ Rules buildRules() {
                          "the axis {} is outside the rank {}",
                          SiteTable::valueMark(0),
                          SiteTable::valueMark(1))}));
+        },
+        false,
+    };
+    // ---- Binary data: `Bytes` (stdlib/bytes.cml, modules/bytes/module.cpp) ----
+    // A `Bytes` is carried as the array of bytes (`ProgramValues::type`: `rt::Array<uint8_t>`),
+    // rank one and its extent the length -- the source array's own representation, not a class of
+    // its own -- so the module's four kernels and the crossing `array:to_bytes` are statements
+    // about that one type: the text's UTF-8 bytes, the values in 0..255 (a fault naming the
+    // element outside it), the values back, the elements' own bytes, and the decoding that is a
+    // value-level error and not a fault (`EncodingError` at the byte that is not UTF-8, the
+    // interpreter's own kind and message).
+    r["bytes:encode"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1 || c.normType(0) == nullptr ||
+                c.normType(0)->code() != TypeCode::String) {
+                return std::nullopt;
+            }
+            return std::format("rt::bytesOfText({})", c.operand(0));
+        },
+        false,
+    };
+    r["bytes:from_array"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = c.normCount() == 1 ? asArrayType(c.normType(0)) : nullptr;
+            if (value == nullptr || (!value->anyRank() && value->rank() > 1) ||
+                value->elemType() == nullptr || value->elemType()->code() != TypeCode::Int64) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::bytesOfValues({}, {})",
+                c.operand(0),
+                c.site(
+                    RuntimeDiag::InvalidArgument,
+                    {"bytes.from_array",
+                     std::format("element {} is outside 0..255", SiteTable::valueMark(0))}));
+        },
+        false,
+    };
+    r["bytes:to_array"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1 || c.normType(0) == nullptr ||
+                !camel::core::type::isBytesType(c.normType(0))) {
+                return std::nullopt;
+            }
+            return std::format("rt::valuesOfBytes({})", c.operand(0));
+        },
+        false,
+    };
+    r["bytes:decode"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1 || c.normType(0) == nullptr ||
+                !camel::core::type::isBytesType(c.normType(0))) {
+                return std::nullopt;
+            }
+            return std::format("rt::textOfBytes({})", c.operand(0));
+        },
+        false,
+    };
+    // `array:to_bytes` (stdlib/array.cml): the elements' own bytes, little-endian, row-major. The
+    // element types are the ones whose C++ form is the value itself, so `sizeof` is the width the
+    // interpreter writes -- one byte for a bool, two for a half, four for an `i32`/`f32`, eight for
+    // an `i64`/`f64`/`c64`, sixteen for a `c128` -- and a shaped run lies flat, as it does in the
+    // array. A string or a struct of them is `is_plain` but not one of these, and has no rule.
+    r["array:to_bytes"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = c.normCount() == 1 ? asArrayType(c.normType(0)) : nullptr;
+            if (value == nullptr || value->elemType() == nullptr) {
+                return std::nullopt;
+            }
+            switch (value->elemType()->code()) {
+            case TypeCode::Int32:
+            case TypeCode::Int64:
+            case TypeCode::Float32:
+            case TypeCode::Float64:
+            case TypeCode::Bool:
+            case TypeCode::BFloat16:
+            case TypeCode::Float16:
+            case TypeCode::Complex64:
+            case TypeCode::Complex128:
+                return std::format("rt::bytesOfElements({})", c.operand(0));
+            default:
+                return std::nullopt;
+            }
+        },
+        false,
+    };
+    // `len(b)` and `a + b` of two `Bytes` (:struct/len_bytes, :op/add_bytes): the length in bytes
+    // and the bytes of one followed by the bytes of the other -- the array's own length and
+    // concat, which is what the interpreter's kernels do on the byte run.
+    r[":struct/len_bytes"] = runtimeFunction("length");
+    // `a == b` of two `Bytes`: byte for byte, which is the array's `==` (a different length is a
+    // different value, the same length compares the elements in order).
+    r[":op/eq_bytes"]      = infix("==");
+    r[":op/ne_bytes"]      = infix("!=");
+    r[":op/add_bytes"]     = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 2) {
+                return std::nullopt;
+            }
+            return std::format("rt::concat({}, {})", c.operand(0), c.operand(1));
+        },
+        false,
+    };
+    // `tensor:to_bytes` (stdlib/tensor.cml): the same statement as `array:to_bytes` -- the
+    // elements' own bytes in row-major order -- and the value it runs on is an array, not a
+    // device buffer, so the target carries it. The element types are the ones whose C++ form is
+    // the value itself; a `P[]` of a struct has its layout's bytes, which this target does not
+    // pin, and keeps its refusal.
+    r["tensor:to_bytes"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = c.normCount() == 1 ? asArrayType(c.normType(0)) : nullptr;
+            if (value == nullptr || value->elemType() == nullptr) {
+                return std::nullopt;
+            }
+            switch (value->elemType()->code()) {
+            case TypeCode::Int32:
+            case TypeCode::Int64:
+            case TypeCode::Float32:
+            case TypeCode::Float64:
+            case TypeCode::Bool:
+            case TypeCode::BFloat16:
+            case TypeCode::Float16:
+            case TypeCode::Complex64:
+            case TypeCode::Complex128:
+                return std::format("rt::bytesOfElements({})", c.operand(0));
+            default:
+                return std::nullopt;
+            }
         },
         false,
     };
