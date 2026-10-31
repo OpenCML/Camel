@@ -1,0 +1,12 @@
+/**
+ * The refusal that names the values, not just the operator: a slice of a value of two dimensions
+ * is not the one slice this back end has -- it keeps no shape, so `m[0:1]` of `float[2, 3]` is not
+ * a run of a block here -- and the message says the types it was given instead of "on values",
+ * because the shape is what the reader has to know.
+ */
+
+func main(): int sync {
+    let m: float[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+    println(m[0:1])
+    return 0
+}

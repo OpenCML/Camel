@@ -137,6 +137,21 @@ assert(d.range.start.line === 14 && d.range.start.character === 22 && d.range.en
 timeout_ms = 8000
 
 [[tests]]
+name = "refuse_rank"
+desc = "A rule that declines says which values it declined: a slice of a value of two dimensions is not the one slice this back end has -- it keeps no shape, so `m[0:1]` of `float[2, 3]` is not a run of a block here -- and the refusal names both types it was given ('float[2, 3]' and 'int') where it used to say only \"on values\", which left the reader to guess the shape it wanted."
+kind = "negative"
+case = "../../../cases/trans/cpp/refuse_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 14
+expect_output_contains = ["function 'main' uses the operator ':op/slice_sub' on values of type 'float[2, 3]' and 'int' std::cpp does not translate it for yet"]
+expect_output_not_contains = ["internal error", "node#", "non-bridgeable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "enum_types"
 desc = "An enum is translated as a struct of its own: a tag and a std::variant payload struct per variant, with make<Tag>, get<Tag, Index> and an appendText that writes it as the interpreter does; :enum/tag and :enum/field become rt::enumTag and rt::enumField. The program itself is built and run by agree_with_fvm."
 kind = "behavior"
