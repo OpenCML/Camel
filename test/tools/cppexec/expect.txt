@@ -225,3 +225,21 @@ test/cases/trans/cpp/slice_rank.cml
 # counted handle to the runtime's own value (rt::Foreign) and prints the runtime's text for it --
 # the one line below is std::fvm's, byte for byte.
 test/cases/trans/cpp/tensor_ones.cml
+# `shape(m)` answers the value's dimensions as an `int[]` of its own -- a value, not a view -- and a
+# sliced value answers the dimensions it kept.
+test/cases/trans/cpp/shape_rank.cml
+
+# `numel` counts the elements of a value of any rank, and the whole-value `sum` answers the element
+# type -- exact for integers, the f64 accumulator converted once for floats.
+test/cases/trans/cpp/numel_rank.cml
+test/cases/trans/cpp/sum_rank.cml
+
+# A reduction along one dimension adds each lane from +0 in ascending order and answers the
+# dimensions it did not reduce -- `axis=0` sums a rank-2 value's columns, `axis=1` its rows, and the
+# middle axis of a rank-3 value sums elements that are apart in the run.
+test/cases/trans/cpp/sum_axis_rank.cml
+
+# The extreme along one dimension folds each lane from its identity (-inf or +inf, the lowest or the
+# largest value), so one NaN element makes the answer NaN, and compares with the one statement the
+# interpreter uses: a NaN on either side gives NaN, -0 is below +0, otherwise the larger (smaller).
+test/cases/trans/cpp/extreme_axis_rank.cml
