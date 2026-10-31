@@ -355,6 +355,7 @@ function readReferenceModules() {
             source: field(object, 'source'),
             registered: field(object, 'registered'),
             declaration: /\bdeclaration\s*:\s*true\b/.test(object),
+            passes_only: /\bpasses_only\s*:\s*true\b/.test(object),
             computed: field(object, 'computed'),
         }))
         .filter((module) => module.name)
@@ -467,6 +468,48 @@ function coverageProblems(reference) {
 
     for (const module of reference) {
         if (module.kind !== 'cpp' || module.registered === '<builtin>') continue
+        if (module.passes_only === true) {
+            // A module of passes: the unit of this registry is the operator, and a module that
+            // contributes passes has none. It is still checked, against the two things it must
+            // have -- a directory under modules/ that registers a pass, and a declaration of that
+            // pass in its own .cml (`declaration.guard_script` reads the declaration).
+            const dir = path.join(MODULES_DIR, String(module.name))
+            if (!fs.existsSync(dir)) {
+                problems.push(
+                    `scripts/stdlib-reference.mjs: MODULES lists '${module.name}' as passes_only, but ` +
+                        `modules/${module.name} does not exist`,
+                )
+            } else {
+                const registers = fs
+                    .readdirSync(dir)
+                    .filter((file) => file.endsWith('.cpp'))
+                    .some((file) =>
+                        /registerModulePass\s*\(/.test(fs.readFileSync(path.join(dir, file), 'utf8')),
+                    )
+                if (!registers) {
+                    problems.push(
+                        `scripts/stdlib-reference.mjs: MODULES lists '${module.name}' as passes_only, but ` +
+                            `no source of modules/${module.name} registers a pass (registerModulePass)`,
+                    )
+                }
+            }
+            const declared = module.source
+                ? path.join(STDLIB_DIR, String(module.source))
+                : path.join(STDLIB_DIR, `${module.name}.cml`)
+            if (!fs.existsSync(declared)) {
+                problems.push(
+                    `scripts/stdlib-reference.mjs: MODULES lists '${module.name}' as passes_only, but ` +
+                        `${path.relative(REPO_ROOT, declared)} does not exist, so the pass is declared nowhere`,
+                )
+            }
+            if (operatorNames.has(module.name)) {
+                problems.push(
+                    `scripts/stdlib-reference.mjs: MODULES lists '${module.name}' as passes_only, but it ` +
+                        `registers operators; it is checked like every operator module, without the flag`,
+                )
+            }
+            continue
+        }
         if (!operatorNames.has(module.name)) {
             problems.push(
                 `scripts/stdlib-reference.mjs: MODULES lists '${module.name}', but no module of modules/ ` +

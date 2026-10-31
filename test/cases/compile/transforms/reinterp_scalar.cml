@@ -1,0 +1,11 @@
+// A scalar function whose transform is the first thing `transforms::reinterp` is asked for:
+// `f(x) = x*x + 3/x`, so that the numbers of the finished transform are the ones the page
+// records -- f(2) = 5.5 and f'(x) = 2x - 3/x^2, f'(2) = 3.25.
+func f(x: float): float {
+    return x * x + 3.0 / x
+}
+
+func main(): int sync {
+    println(f(2.0))
+    return 0
+}
