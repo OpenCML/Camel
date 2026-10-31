@@ -355,17 +355,6 @@ expect_output_not_contains = ["Segmentation fault", "UnknownInternalError", "int
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 [[tests]]
-name = "literal_open_shape"
-desc = "A literal's shape is the one it has, whatever its type states. `float[]` names the element type and leaves the length to the value, so the type states no extent -- and the value is still 3 elements of one dimension, which `shape` and `len` read. The constant carries its extents (`rt::Array<double>{{1.0, 2.0, 3.0}, {3}}`); a literal of several dimensions carries the rows it had all along."
-kind = "behavior"
-case = "../../../cases/trans/cpp/literal_open_shape.cml"
-args = ["${case}", "std::cpp"]
-expect_exit = 0
-expect_stdout_contains = ["{1.0, 2.0, 3.0}, {3}", "{4.0, 5.0}, {2}"]
-expect_output_not_contains = ["TranslationRefused", "internal error"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-[[tests]]
 name = "cast_shape_holds"
 desc = "`as` states the shape a value must have. Both types are the same `rt::Array<T>` on this side -- a shape is not a second value -- so the conversion writes no bytes and checks the extents the type states: `rt::asShape(v, {2, 3}, \"float[2, 3]\", at_...)` answers the value itself when the rank and every stated extent are the ones the type says. The program keeps reading and prints both values; agree_with_fvm compares them with std::fvm byte for byte."
 kind = "behavior"

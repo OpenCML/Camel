@@ -1062,17 +1062,6 @@ std::optional<std::string> ProgramValues::constant(slot_t slot, const Type *t) {
             return std::nullopt;
         }
         const size_t rank = array != nullptr ? array->rank() : 0;
-        if (rank == 1) {
-            // A value of one dimension whose type states no extent (`float[]`, or a constant the
-            // passes folded): the elements alone would be a value of no rank, and `shape` and `len`
-            // read the rank. The two-list constructor is written as a call here, not as a braced
-            // initializer: with an element type an `{n}` can itself stand for (`Array<T>`, a struct
-            // of one field) the initializer is read as one more element.
-            return hoist(
-                *cpp,
-                std::format("{}::shaped({{{}}}, {{{}}})", *cpp, *items, std::to_string(array->dim(0))),
-                "array");
-        }
         if (rank >= 2) {
             // The shape travels with the elements (rt::Array's block holds both): the rows of the
             // literal are what `appendText` prints, and `len` answers the first extent.

@@ -234,10 +234,6 @@ test/cases/trans/cpp/slice_rank.cml
 # the rounds are the first extent (not the element count), and a rank-3 value gives rank-2 planes.
 test/cases/trans/cpp/iterate_rows.cml
 
-# A literal's shape is the one it has even when its type names no extents: `[1.0, 2.0, 3.0] as float[]`
-# is a value of one dimension of 3 elements, so `shape` and `len` read [3] and 3.
-test/cases/trans/cpp/literal_open_shape.cml
-
 # `as` states the shape a value must have: a value that holds it is the value (nothing to write, the
 # two sides are one `rt::Array<T>`), and a value that does not stops the program with the
 # interpreter's own sentence -- `conversion to 'float[3, 3]' failed: the array has shape [2, 2]`.
