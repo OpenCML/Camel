@@ -96,7 +96,12 @@ void printRuleUris(camel::core::context::Context &context, std::ostream &os) {
             os << "REINTERP uri " << uri << " -> rule " << head.rule
                << " -> rhs " << camel::runtime::toValue(instance.rhs->id()) << " ports=" << ports
                << " nodes=" << instance.rhs->nodeCount() << " lhsPorts=" << lhsShape.first
-               << " lhsKinds=" << lhsShape.second << " rhsKinds=" << rhsShape.second << '\n';
+               << " lhsKinds=" << lhsShape.second << " rhsKinds=" << rhsShape.second
+               << " vars=" << head.variables << " count="
+               << (head.variables.empty()
+                       ? 0
+                       : std::count(head.variables.begin(), head.variables.end(), ',') + 1)
+               << '\n';
             break;
         }
     }

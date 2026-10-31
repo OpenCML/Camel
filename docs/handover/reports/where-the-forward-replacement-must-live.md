@@ -301,6 +301,24 @@ REINTERP uri :op/div_d -> rule jvp_div -> rhs 107 ports=1 nodes=4 lhsPorts=1 lhs
 没有承载它的字段。所以下一笔是：**让 `collectRuleHead` 多带一列变量名，与 `rhsCallee` 走同一条路**——
 它已经从同一份语法里读出了被调函数，变量名是同一处的第二个事实。
 
+## 判据：名字最后存在的那一处
+
+> **名字在两个实例图上都不剩的时候，唯一还在手上的那一处就是它最后一次存在的地方；要补的不是寄存器，
+> 是那一处的第二个事实。**
+
+补上了那一列（`RuleHead::variables`，`include/camel/parse/ast/rule_head.h`），在
+`src/parse/ast/builder.cpp:902` 读（与 `rhsCallee` 同一处语法、同一行代码的邻座）：
+
+```
+REINTERP uri :op/add_d -> rule jvp_add -> rhs 74 ports=1 nodes=4 lhsPorts=1 lhsKinds=1,11 rhsKinds=1,0,4 vars=x,w count=2
+REINTERP uri :op/div_d -> rule jvp_div -> rhs 107 ports=1 nodes=4 lhsPorts=1 lhsKinds=1,11 rhsKinds=1,0,4 vars=x,w count=2
+REINTERP uri :op/neg_d -> rule jvp_neg -> rhs 85 ports=0 nodes=3 lhsPorts=0 lhsKinds=11 rhsKinds=0,4 vars=x count=1
+```
+
+**变量数 2 对端口数 1**：右侧吃的确实是打包后的一个元组。**而 `neg` 是 1 对 0**——它左侧连端口都没有
+（`lhsKinds=11`，只有那个 Oper），所以“一元运算的变量不从端口来”是另一个事实，替换它之前得先知道它的
+操作数从哪进。**两个算子的形状不一样，不能一套代码套到底。**
+
 ## 验收（缺一步不算完）
 
 1. **前向**：`f(x) = x*x + 3/x` 在 `x = 2` 处，`f = 5.5`，`f' = 4 - 0.75 = 3.25`。两个数都要打出来。
