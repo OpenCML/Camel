@@ -159,6 +159,94 @@ PROBE jvp_div rhs GraphId=75 name=rulesets.jvp_div__rhs<float> nodes=4
 
 页首那句“找右图里那个调用节点”要按这个读数修正：**桥是“拿到右侧图”，不是“拿到图里的调用节点”。**
 
+## 判据：方向与形状不是一回事
+
+> **裁定给的是方向，读数给的是形状；桥是“拿到右侧图”，不是“拿到图里的调用节点”——差这一句，能让
+> 下一个人在 `Pattern` 里找半天 Call。**
+
+裁定说“把右侧图实例化出来调用”，方向没错，但它没说“那是一条边还是一张图”。读数说的是形状：
+`Pattern::Kind` 里没有 Call，右侧图本身就是被调用的那段代码，所以替换手里要攥的是 `GraphId`
+（`64`/`75`），不是某个节点指针。**方向对了不等于落点对了**；每个跨层的地方都要这样对一次读数。
+
+## 第一个形态：图建出来了，但还没有地方住
+
+`modules/transforms` 里写了一个 pass `transforms::reinterp`：走遍程序里每个“由算子组成”的函数，
+为每个函数在自己的 `GraphDraftGroup` 里预留一张图、建出来、打印 `GraphId` 与节点数。手工跑：
+
+```
+REINTERP target=f primitives=3 other=2 graph=49 nodes=1
+REINTERP target=main primitives=1 other=4 graph=50 nodes=1
+5.5
+```
+
+**建得出来**（`graph=49`、`nodes=1`），primitives 也数对了（`f = x*x + 3/x` 是乘、加、除三个，
+两个常数不算）。它还不是替换：图里只有一个 port 直接接到输出——**先证“建得出来”，再证“建对了”**。
+
+**但它进不了提交**，卡在登记簿上，这条留给作者判：
+
+- `declaration.guard_script`：注册了 pass 就必须在模块的 `.cml` 里声明它，否则
+  `a pass is registered and its module's .cml declares no function for it: transforms::reinterp`。
+- 写了 `stdlib/transforms.cml` 之后，`registry.migrations_stay_migrated` 要求
+  `scripts/stdlib-reference.mjs` 的 `MODULES` 里有一条 `transforms`。
+- 那条一加，`--verify-ops` 就红：`MODULES lists 'transforms', but no module of modules/ registers
+  operators under that name`（`scripts/stdlib-declarations.mjs:470`）——**登记簿的单位是算子，
+  一个只注册 pass 的模块没有算子**。
+- 退到 `UNCHECKED_MODULES` 也不行：它要 `covered_by`，而 `--verify-ops` 看不见一个没有算子的模块。
+
+所以“pass-only 模块在登记簿里住哪”今天没有答案。我没有用 `registered: '<builtin>'` 去糊弄过去，
+也没有把 `GraphDraft` 写成 `auto` 去躲 `graph_draft_ledger` 的计数——**这两个都是让计数变成谎话**。
+工作树已退回 `5db161bc2`，一个红的提交都没留。
+
+## 判据：账本的类型错了，不是模块错了
+
+> **一个只贡献 pass 的模块，在按算子记账的登记簿里没有位置——那是账本的类型错了，不是模块错了；
+> 改账本，别让模块冒名。**
+
+裁定给了路：`MODULES` 条目可以写 `passes_only: true`（`scripts/stdlib-reference.mjs`），判据
+（`scripts/stdlib-declarations.mjs`）对这条跳过“必须注册算子”，改成查另外两件事：`modules/<name>`
+存在且源码里真有 `registerModulePass(`，以及 `stdlib/<name>.cml` 里真有那条声明。**边界守住了**：
+
+- 记成 `passes_only` 却实际上注册了算子的模块，会被判红（“它按普通算子模块查，不带这个旗子”）；
+- `passes_only` 且目录不在、或源码里没有 `registerModulePass(`、或声明文件不在，三种都红；
+- `--verify-ops` 的算子覆盖、`UNCHECKED_MODULES` 的 `covered_by` 一个字没动。
+
+**一处容易漏的坑**：`readReferenceModules()` 只把 `name/kind/source/registered/declaration/computed`
+抄进解析后的条目，新字段不加进去就等于没写——第一次跑它照样红，就是这么回事。旗子要跟着
+`field()` 的清单一起长。
+
+改完 `reinterp` 接回来了，`reinterp_builds_its_own_graph.nvm` 绿，`graph_draft_ledger` 四个数没动。
+
+## 判据：第二个键记进索引，不要每次反查
+
+> **两套键（URI 与写法）之间不要用“族里恰好有”来翻译；把第二个键记进索引，比每次反查便宜，也不会因
+> 族变化而失真。**
+
+索引按**写法**建键（`a + b` → `+`, arity 2），节点按 **URI** 说它是谁（`:op/add_d`）。**这两套键
+不是一回事**：一条 `+` 规则在 float 上是 `:op/add_d`，在 int 上是 `:op/add_i`——按写法反查族，是把
+“族里此刻恰好有这条规则”当成翻译函数；族一变，翻译就假。
+
+做法是把 URI 记在**实例**上：`GenericRuleInstance::lhsOperatorUri`
+（`include/camel/compile/gir/rule_templates.h`），在 `genericRuleInstance` 把左侧 publish 出来之后，
+从左侧图的第一个 OPER 节点读（`src/compile/gir/rule_templates.cpp`，`nodeBodyAs<GCOperBody>`）。
+它是“这条规则的左侧写的是什么”的事实，跟着左侧走，不跟着族走。
+
+读数（`import rulesets.jvp` 之后，`transforms::reinterp` 打在 `f(x) = x*x + 3/x` 上）：
+
+```
+REINTERP uri :op/mul_d -> rule jvp_mul -> rhs 63
+REINTERP uri :op/add_d -> rule jvp_add -> rhs 74
+REINTERP uri :op/neg_d -> rule jvp_neg -> rhs 85
+REINTERP uri :op/sub_d -> rule jvp_sub -> rhs 96
+REINTERP uri :op/div_d -> rule jvp_div -> rhs 107
+REINTERP target=f primitives=3 other=2 graph=112 nodes=1
+REINTERP target=main primitives=1 other=4 graph=113 nodes=1
+5.5
+```
+
+**一行就是替换要攥的全部**：`/` 那个节点是 `:op/div_d`，规则 `jvp_div`，它的右侧是图 `107`。
+（注意这个用例得 `import rulesets.jvp`——索引里只有程序自己的 ruleset 模块放进去的东西，不 import
+就一条都没有，`reinterp` 会安静地只打 `target=` 那两行。**“没有输出”和“没有规则”是两件事**。）
+
 ## 验收（缺一步不算完）
 
 1. **前向**：`f(x) = x*x + 3/x` 在 `x = 2` 处，`f = 5.5`，`f' = 4 - 0.75 = 3.25`。两个数都要打出来。

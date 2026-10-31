@@ -1,0 +1,15 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
+[[tests]]
+name = "reinterp_builds_its_own_graph.nvm"
+desc = "The first form of `reinterp` does two things and says them. It prints the other key the index holds, one line per operator: the left side of a rule is written `a + b` and a node names its operator by URI, so the instance records the URI its left side is written with, and the reading is `URI -> rule -> the GraphId of its right side` (`:op/div_d -> rule jvp_div -> rhs N`). Then it walks every function of the program that is made of operators -- for `f(x) = x*x + 3/x` that is `f`, with three primitives and two constants -- and builds a graph of the transform's own for each, printing its GraphId and node count. It is not a transform yet: the graph it builds is a single port handed to the output, and the reading says exactly that, so the next step has a number to grow from instead of a claim to believe."
+kind = "behavior"
+case = "../../../cases/compile/transforms/reinterp_scalar.cml"
+args = ["${case}", "transforms::reinterp", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["REINTERP uri :op/add_d -> rule jvp_add -> rhs ", "REINTERP uri :op/mul_d -> rule jvp_mul -> rhs ", "REINTERP uri :op/div_d -> rule jvp_div -> rhs ", "REINTERP target=f primitives=3 other=2 graph=", "nodes=1", "5.5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
