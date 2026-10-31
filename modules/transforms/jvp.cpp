@@ -74,6 +74,8 @@ JvpGraph buildJvpGraph(
     // Steps 1 and 2: a new member with the lifted signature, and one port per parameter, the port
     // itself being the lifted pair `(value, tangent)` the caller passes.
     auto *lifted = TupleType::create(std::vector<Type *>{Type::Float64(), Type::Float64()});
+    size_t copiedKinds = 0;
+    size_t seenKinds   = 0;
     camel::runtime::GraphDraftGroup group(context, program);
     const GraphId member = group.reserve(
         "jvp_of_" + std::string(function->name()), "jvp_of_" + std::string(function->name()));
@@ -84,6 +86,80 @@ JvpGraph buildJvpGraph(
             draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
         const gc_node_ref_t tangent =
             draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
+        // Step 3, first layer: the body is copied node by node. A port reads the caller's value, a
+        // constant is written again with the same value, and a primitive keeps its operator and gets
+        // its inputs from the copies. Nothing is differentiated here -- no rule closure is built --
+        // so the chain reproduces the original value; the tangent is still the caller's.
+        std::vector<gc_node_ref_t> copyOf(function->nodeCount() + 1, 0);
+        bool sawPort = false;
+        for (std::uint8_t kind = 0; kind <= static_cast<std::uint8_t>(rt::GCNodeKind::Dref); ++kind) {
+            bool seen = false;
+            for (camel::runtime::gc_node_ref_t ref = 1; ref <= function->nodeCount(); ++ref) {
+                const camel::runtime::GCNode *node = function->node(ref);
+                if (node != nullptr && static_cast<std::uint8_t>(node->kind) == kind) {
+                    seen = true;
+                    break;
+                }
+            }
+            if (seen) {
+                ++seenKinds;
+            }
+        }
+        for (camel::runtime::gc_node_ref_t ref = 1; ref <= function->nodeCount(); ++ref) {
+            const camel::runtime::GCNode *node = function->node(ref);
+            if (node == nullptr) {
+                continue;
+            }
+            switch (node->kind) {
+            case rt::GCNodeKind::Port:
+                if (!sawPort) {
+                    copyOf[ref] = value;
+                    sawPort     = true;
+                    ++copiedKinds;
+                }
+                break;
+            case rt::GCNodeKind::Data: {
+                const std::span<const slot_t> slots =
+                    function->staticSlots();
+                const std::ptrdiff_t index = -static_cast<std::ptrdiff_t>(node->dataIndex);
+                if (node->dataIndex < 0 && index >= 0 &&
+                    static_cast<size_t>(index) < slots.size()) {
+                    copyOf[ref] = draft.materializeStaticValue(
+                        slots[static_cast<size_t>(index)], node->dataType(),
+                        rt::kGCNodeFlagConstant);
+                    ++copiedKinds;
+                }
+                break;
+            }
+            case rt::GCNodeKind::Oper: {
+                const auto *body = function->nodeBodyAs<camel::runtime::GCOperBody>(ref);
+                const gc_node_ref_t made =
+                    draft.addOperNode(node->dataType(), nullptr, body->uri());
+                std::vector<gc_node_ref_t> inputs;
+                for (gc_node_ref_t input : function->normInputsOf(ref)) {
+                    inputs.push_back(input <= function->nodeCount() ? copyOf[input] : 0);
+                }
+                if (!inputs.empty()) {
+                    draft.setNormInputs(made, inputs);
+                }
+                copyOf[ref] = made;
+                ++copiedKinds;
+                break;
+            }
+            default:
+                break;
+            }
+        }
+        // The value the copied chain produces: what the original graph's exit was given.
+        gc_node_ref_t chainValue = value;
+        const gc_node_ref_t oldExit = function->exitNodeRef();
+        if (oldExit != 0 && oldExit <= function->nodeCount()) {
+            const auto oldExitIns = function->normInputsOf(oldExit);
+            if (!oldExitIns.empty() && oldExitIns.front() <= function->nodeCount() &&
+                copyOf[oldExitIns.front()] != 0) {
+                chainValue = copyOf[oldExitIns.front()];
+            }
+        }
         // The exit is the lifted result, and nothing else: the value the caller passed and the
         // tangent the caller passed. No primitive has been rewritten yet, so this graph is the
         // identity in two parts -- it establishes the shape of the new function, not the derivative.
@@ -93,7 +169,7 @@ JvpGraph buildJvpGraph(
         const gc_node_ref_t out = draft.addFillNode(
             lifted, rt::makeFillPayload(rt::GCFillKind::Tuple, std::vector<size_t>{0, 1}));
         draft.setNormInputs(out, std::span<const gc_node_ref_t>(&tupleSource, 1));
-        const std::array<gc_node_ref_t, 2> halves{value, tangent};
+        const std::array<gc_node_ref_t, 2> halves{chainValue, tangent};
         draft.setWithInputs(out, halves);
         draft.setOutputNode(out);
         draft.setReturnNode(out, rt::GCReturnKind::Self);
@@ -103,8 +179,8 @@ JvpGraph buildJvpGraph(
     const auto *madeType = made != nullptr ? made->funcType() : nullptr;
     os << "REINTERP jvp function=" << function->name() << " graph=" << rt::toValue(member)
        << " type=" << (madeType != nullptr ? madeType->toString() : std::string("-"))
-       << " nodes=3 ports=value,tangent exit=Tuple{value,tangent}"
-       << " tangent=caller's(not computed)\n";
+       << " nodes=" << function->nodeCount() << " kinds=" << copiedKinds << '/' << seenKinds
+       << " exit=Tuple{chain,tangent} tangent=caller's(not computed)\n";
     return JvpGraph{group.program(), const_cast<camel::runtime::GCGraph *>(made)};
 }
 
