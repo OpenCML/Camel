@@ -126,16 +126,16 @@ std::cpp  12 33 / abc / 5 12 12
 | `:op/mem_blocks` | 10 | `test/cases/feat/mm/mem_blocks.cml` |
 | `tensor:sum` / `tensor:matmul` / `rand:shuffle_l` | 7 各 | `loops/iterate_tensor.cml` / `modules/onnx/entry/tuple.cml` / `para/core/merge_sort.cml` |
 | `tensor:shape` / `env:get_cwd` | 6 各 | `compile/entry_args/npy_values.cml` / `modules/std/env/basic.cml` |
-| `:op/idx_take` | 4 | `feat/mm/gc/gc_born_old.cml` |
-| `:struct/last_arr` | 2 | `test/cases/parse/syntax/subscript_forms.cml` |
 
-读数：**683 → 674 → 666** 个程序翻译不出来（第一笔把 `:op/set_index_in_place` 那 9 个修掉，这一笔把
-`:op/set_field` / `:op/set_index` 那 5 个修掉，两行归零）。按族：
-tensor 414、autodiff 90、rand 34、核心算子（`:op/*`）50、`:struct/*` 2。另有 11 个是类型层面的拒
+读数：**683 → 674 → 666 → 661** 个程序翻译不出来（第一笔把 `:op/set_index_in_place` 那 9 个修掉，
+第二笔把 `:op/set_field` / `:op/set_index` 那 5 个修掉，第三笔把 `:op/idx_take` 4 个、`:struct/last_arr`
+2 个修掉——三行进表时共 15 个，现在全归零）。按族：
+tensor 414、autodiff 90、rand 34、核心算子（`:op/*`）32、`:struct/*` 0。另有 11 个是类型层面的拒
 （`std::cpp does not translate yet`），4 个**让翻译器崩掉**（segfault，见下）。
 
 这张表把两种东西分开了：tensor / autodiff / rand / tiles 是**整个子系统**（bridge 不运数组与张量，
-`std::cpp` 本来就不打算翻它们，要动是另一个决定）；`:op/*`、`:struct/*` 那 52 个才是**写出器的洞**。
+`std::cpp` 本来就不打算翻它们，要动是另一个决定）；`:op/*`、`:struct/*` 那时 52 个才是**写出器的洞**，
+现在只剩 `:op/fail` 32 个（`:op/mem_blocks` 10 个交给了 gpu 那条线）。
 洞里最大的是 `:op/fail`（32 个）：它要 `never` 贯穿整个 emitter（分支的一个臂、`let` 的右值、
 `attempt` 的边界），不是一个翻译，我没动它。
 
@@ -216,6 +216,26 @@ std::cpp  { x: 9, y: 2 } { x: 1, y: 2 }
 `let kept = p; p.x = 9` 之后 `kept` 还是 `{ x: 1, y: 2 }`。`test/cases/trans/cpp/field_store.cml`
 把三处（字段、元素、元素的字段）各钉一遍，每一处都配一个存之前读的值。
 
+再往下是普查里剩下的最小一对，**一处一笔**：`:op/idx_take`（4）和 `:struct/last_arr`（2）。
+`idx_take` 是 `xs[positions]`——按一组位置取元素，`a6c21b186`；`last_arr` 是 `last(xs)`——最后一个
+元素，空数组给"位置 -1"那条故障，`b0b03b861`。两个都照抄上一笔的形状：**只读不写、位置照读的那条
+检查、越界就是读的那条故障、同一条站点**。`rt::take` 内部就调 `rt::at`，所以越界消息与位置原文一字
+不差；`rt::last` 填的也是读填的那三个值（位置、"an array"、长度），所以空数组印出来的就是 `Index -1`
+那一句。
+
+读数：**4 → 0**、**2 → 0**，普查 **666 → 661**（第五个 `gc_born_old.cml` 换了桶：它现在卡在
+`rand:uniform_array`，是模块的洞，不是写出器的）。六条里五条两边逐字节相同（包括两条故障用例）。
+
+```
+std::fvm  [40, 10, 30] [20, 20] [10, 20, 30, 40]
+std::cpp  [40, 10, 30] [20, 20] [10, 20, 30, 40]
+std::fvm  3 7 3     →   Index -1 is out of range for an array of length 0.
+std::cpp  3 7 3     →   Index -1 is out of range for an array of length 0.
+```
+
+两条用例：`test/cases/trans/cpp/take_positions.cml`（一个置换、一个重复位置、一个定长 `f32[3]`）、
+`test/cases/trans/cpp/last_element.cml`（三元素、单元素、空数组那条故障）。
+
 ## 七、八条判据
 
 > **裁定也可能基于过时的读数：拿到裁定先去 develop 上复现一次；不复现，就先把前提写下来，再谈要不要改。**
@@ -232,4 +252,4 @@ std::cpp  { x: 9, y: 2 } { x: 1, y: 2 }
 
 > **同一个缺陷在写出器和前端各崩一次时，先修前端——写出器只影响一个后端，前端影响所有人。**
 
-> **同一个缺口的第二个实例，先照抄第一个的形状，再谈抽象。**
+> **同一个缺口的第二个实例，先照抄第一个的形状，再谈抽象；照抄的时候只抄语义，不抄指针。**
