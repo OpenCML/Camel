@@ -29,6 +29,7 @@ enum class RuntimeDiag : uint32_t {
     UnrecognizedGraphPass     = 0x00000A,
     TranslationRefused        = 0x00000B,
     PassInternalError         = 0x00000C,
+    PassBoundaryResources     = 0x00000D,
     MacroEvaluationFailed     = 0x00000E,
     EntryArgumentMissing      = 0x000010,
     EntryArgumentInvalid      = 0x000011,
