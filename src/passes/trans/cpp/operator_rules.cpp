@@ -754,57 +754,84 @@ Rules buildRules() {
         },
         false,
     };
-    // `tensor:max_axis` and `tensor:min_axis` (modules/tensor/kernels/reduce.cpp, reduceAxis): the
+    // `tensor:max_axis` / `tensor:min_axis` (modules/tensor/kernels/reduce.cpp, reduceAxis): the
     // same lanes as the sum, folded from the operation's identity instead of from +0, with the one
     // comparison the interpreter makes -- a NaN on either side gives the canonical quiet NaN and -0
     // is below +0 (modules/math/minmax.h), so a single NaN element makes the answer NaN and no
     // order or grouping changes the bits. Nothing is rounded here and no accumulator takes part.
     //
-    // A lane with no element has no extreme, and the interpreter refuses it naming the operator and
-    // the axis; that refusal is the only one these two have that the sum does not. The two the sum
-    // states stay as they are: a rank of one answers a value of no dimension and an open rank keeps
-    // no shape -- both because the answer's type cannot be written, not because the value is not an
-    // array.
-    for (const char *uri : {"tensor:max_axis", "tensor:min_axis"}) {
-        const bool maximum = uri[7] == 'm' && uri[8] == 'a';
-        r[uri]          = {
-            [maximum](OperatorCall &c) -> std::optional<std::string> {
-                const ArrayType *value = asArrayType(c.normType(0));
-                if (value == nullptr || value->anyRank() || value->rank() < 2 ||
-                    value->elemType() == nullptr) {
-                    return std::nullopt;
-                }
-                const TypeCode element = value->elemType()->code();
-                if (element != TypeCode::Int64 && element != TypeCode::Int32 &&
-                    element != TypeCode::Float32 && element != TypeCode::Float64) {
-                    return std::nullopt;
-                }
-                std::string axis;
-                std::string keepDims = "false";
-                if (c.normCount() >= 2) {
-                    axis = c.operand(1);
-                    if (c.normCount() > 2) {
-                        keepDims = c.operand(2);
-                    }
-                } else if (c.withCount() >= 1) {
-                    axis = c.with(0).text;
-                    if (c.withCount() > 1) {
-                        keepDims = c.with(1).text;
-                    }
-                } else {
-                    return std::nullopt;
-                }
-                return std::format(
-                    "rt::{}({}, {}, {}, {}, {})",
-                    maximum ? "maxAxis" : "minAxis",
-                    c.operand(0),
-                    axis,
-                    keepDims,
-                    c.site(RuntimeDiag::InvalidArgument, marks(2)),
-                    c.site(RuntimeDiag::InvalidArgument, marks(2)));
-            },
-            false,
+    // `tensor:argmax_axis` / `tensor:argmin_axis` are the same fold answering the position of that
+    // extreme instead of its value: the first element equal to it, or the first NaN, taken by
+    // `beyondExtreme` -- so +0 is above -0 and on a tie the earlier position stays. Their answer is
+    // an int64 value whatever the source holds, which is why the rule emits a different runtime
+    // element type and why the lane walk states two element types.
+    //
+    // A lane with no element has no extreme and no position, and the interpreter refuses it naming
+    // the operator and the axis; that refusal is the only one these four have that the sum does not.
+    // The two the sum states stay as they are: a rank of one answers a value of no dimension and an
+    // open rank keeps no shape -- both because the answer's type cannot be written, not because the
+    // value is not an array.
+    {
+        struct AxisRule {
+            const char *uri;
+            const char *name;
+            bool position;
+            bool maximum;
         };
+        for (const AxisRule axis : {
+                 AxisRule{"tensor:max_axis", "maxAxis", false, true},
+                 AxisRule{"tensor:min_axis", "minAxis", false, false},
+                 AxisRule{"tensor:argmax_axis", "argmaxAxis", true, true},
+                 AxisRule{"tensor:argmin_axis", "argminAxis", true, false},
+             }) {
+            r[axis.uri] = {
+                [axis](OperatorCall &c) -> std::optional<std::string> {
+                    const ArrayType *value = asArrayType(c.normType(0));
+                    if (value == nullptr || value->anyRank() || value->rank() < 2 ||
+                        value->elemType() == nullptr) {
+                        return std::nullopt;
+                    }
+                    const TypeCode element = value->elemType()->code();
+                    if (element != TypeCode::Int64 && element != TypeCode::Int32 &&
+                        element != TypeCode::Float32 && element != TypeCode::Float64) {
+                        return std::nullopt;
+                    }
+                    // A position is an int64 where the operator says so; if the answer the graph
+                    // states is not that, this rule is not the one to write it.
+                    if (axis.position) {
+                        const ArrayType *answer = asArrayType(c.resultType());
+                        if (answer == nullptr || answer->elemType() == nullptr ||
+                            answer->elemType()->code() != TypeCode::Int64) {
+                            return std::nullopt;
+                        }
+                    }
+                    std::string axisText;
+                    std::string keepDims = "false";
+                    if (c.normCount() >= 2) {
+                        axisText = c.operand(1);
+                        if (c.normCount() > 2) {
+                            keepDims = c.operand(2);
+                        }
+                    } else if (c.withCount() >= 1) {
+                        axisText = c.with(0).text;
+                        if (c.withCount() > 1) {
+                            keepDims = c.with(1).text;
+                        }
+                    } else {
+                        return std::nullopt;
+                    }
+                    return std::format(
+                        "rt::{}({}, {}, {}, {}, {})",
+                        axis.name,
+                        c.operand(0),
+                        axisText,
+                        keepDims,
+                        c.site(RuntimeDiag::InvalidArgument, marks(2)),
+                        c.site(RuntimeDiag::InvalidArgument, marks(2)));
+                },
+                false,
+            };
+        }
     }
     // `numel(xs)` (`stdlib/array.cml`): how many elements the value has. It needs no dimension of
     // the value -- only the count -- so a value of several dimensions and one of an open rank are
