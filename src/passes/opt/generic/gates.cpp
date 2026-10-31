@@ -26,7 +26,10 @@ if (!gate || gate->kind != GCNodeKind::Gate || !edgeBudget || !isReplaceable(tra
     // is asked through the one place that answers what a wait is worth (no gate is an effect of its
     // own, so `effectStandingOf` is not the question here -- `hasWaitEdge` is).
     EffectLivenessFacts facts;
-    facts.hasWaitEdge      = !draft.ctrlInputsOf(id).empty();
+    // A wait is read in either kind (docs/design/effects/edges.cn.md 5.3): the control edge the
+    // kind still exists under, and the sync edge that replaces it -- a GATE's wait is the chain's
+    // tail, and the sync edge is what names it once the control edge is gone.
+    facts.hasWaitEdge      = !draft.ctrlInputsOf(id).empty() || !draft.syncInputsOf(id).empty();
     facts.isSyncStatement  = !draft.syncInputsOf(id).empty();
     if (!facts.hasWaitEdge) {
         return false;

@@ -1,0 +1,15 @@
+/**
+ * A text beyond what a bf16 can hold: the report names the type and the range of the type, and it
+ * is the interpreter's, byte for byte (`RuntimeDiag::ConversionOutOfRange` at the conversion).
+ *
+ * `1e300` is beyond f32 as well, so this is the report of the f32 reading that a bf16 conversion
+ * does first: the range in it is f32's, with the target's name in front of it, which is what
+ * camel/core/numeric_convert_half.h does and what std::cpp renders into the site. A number that
+ * f32 holds and the element type does not is f16's own range, and that is the next case.
+ */
+func main(): int sync {
+    println(bf16('1.5'))
+    println(bf16('1e300'))
+    println('not reached')
+    return 0
+}

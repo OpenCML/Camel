@@ -90,15 +90,20 @@ Tuple *reusedTupleView(const Tuple::ViewData &data) {
 slot_t pureViewOf(
     const std::byte *bytes, const type::Type *type, const type::DataLayout *layout,
     size_t stride) {
-    ASSERT(
+    GUARD(
         bytes != nullptr && type != nullptr && layout != nullptr && layout->aggregate,
-        "A view is a pure-data aggregate");
+        "A view is a pure-data aggregate, and this call did not pass bytes, a type and an "
+        "aggregate layout together: the view would read a value through elements it does not "
+        "describe");
     if (type->code() == type::TypeCode::Struct) {
         return toSlot(
             layout->slotShaped ? reusedStructView({bytes, layout, type, stride})
                                : newStructView({bytes, layout, type, stride}));
     }
-    ASSERT(type->code() == type::TypeCode::Tuple, "A pure-data aggregate is a struct or tuple");
+    GUARD(
+        type->code() == type::TypeCode::Tuple,
+        "A pure-data aggregate is a struct or tuple, and this one is neither: its bytes would be "
+        "read as a tuple with this layout's field count");
     return toSlot(
         layout->slotShaped ? reusedTupleView({bytes, layout, type, stride})
                            : newTupleView({bytes, layout, type, stride}));
@@ -148,21 +153,13 @@ bool isViewSlot(slot_t slot, const type::Type *type) {
 }
 
 void assertStoredValueIsNotView(slot_t slot, const type::Type *type, std::string_view where) {
-#ifndef NDEBUG
-    if (isViewSlot(slot, type)) {
-        ASSERT(
-            false,
-            std::format(
-                "A compact element view escaped into {} ({}). A view is tied to the thread-local "
-                "view ring and must be materialised before it is stored.",
-                where,
-                type != nullptr ? type->toString() : "unknown"));
-    }
-#else
-    (void)slot;
-    (void)type;
-    (void)where;
-#endif
+    GUARD(
+        !isViewSlot(slot, type),
+        std::format(
+            "A compact element view escaped into {} ({}). A view is tied to the thread-local "
+            "view ring and must be materialised before it is stored.",
+            where,
+            type != nullptr ? type->toString() : "unknown"));
 }
 
 } // namespace camel::core::rtdata

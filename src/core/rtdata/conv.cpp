@@ -15,6 +15,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/graph.h"
 
+#include <stdexcept>
 #include <string>
 
 using namespace camel::core::data;
@@ -115,8 +116,13 @@ slot_t makeSlotFromPrimitiveData(const data_ptr_t &data) {
     }
 
     default:
-        ASSERT(false, "Unsupported primitive type conversion.");
-        return 0;
+        // Unreachable: the guard above admits only primitive codes, and the cases above are
+        // every one of them. If it is reached, the type system and this conversion disagree,
+        // which is a defect of the compiler, so say that rather than abort.
+        throw std::runtime_error(
+            "Unsupported primitive type conversion: type code " +
+            std::to_string(static_cast<int>(typeCode)) +
+            " is primitive, but this conversion has no slot form for it");
     }
 }
 
@@ -259,10 +265,12 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, camel::core::mm::IAllo
         const auto &closureData = funcData->closure();
 
         if (closureData.size() > 0) {
-            ASSERT(
+            GUARD(
                 closureData.size() == gcTuple->size(),
                 std::format(
-                    "Closure data size mismatch in FunctionData. Expected: {}, Actual: {}",
+                    "Closure data size mismatch in FunctionData. Expected: {}, Actual: {}: the "
+                    "fill below walks the captured values one slot at a time, so a slot would be "
+                    "left empty or written past the tuple",
                     gcTuple->size(),
                     closureData.size()));
             for (size_t i = 0; i < closureData.size(); ++i) {
@@ -288,7 +296,12 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, camel::core::mm::IAllo
     }
 
     default:
-        ASSERT(false, "Unsupported GC traced type conversion.");
-        return NullRef;
+        // Unreachable: the guard above admits only GC-traced codes, and the cases above are
+        // every one of them. Reaching it means the type system and this conversion disagree,
+        // which is a defect of the compiler, so say that rather than abort.
+        throw std::runtime_error(
+            "Unsupported GC traced type conversion: type code " +
+            std::to_string(static_cast<int>(typeCode)) +
+            " carries a GC trace, but this conversion has no reference form for it");
     }
 }

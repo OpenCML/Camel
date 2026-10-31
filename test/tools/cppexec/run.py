@@ -8,6 +8,7 @@
     python3 test/tools/cppexec/run.py --expect test/tools/cppexec/expect.txt
     python3 test/tools/cppexec/run.py --have-compiler
     python3 test/tools/cppexec/run.py --link-line
+    python3 test/tools/cppexec/run.py --standalone <program.cml>...
 
 For every program: `camel <program> [passes] std::cpp` writes a C++ file; the C++ compiler
 ($CXX, else clang++, g++ or c++) builds it with the headers of the repository (include/, where
@@ -45,6 +46,14 @@ libc++, a driver that prints the name back), the link line is the one it was.
 --link-line prints the command a bridged program is linked with and checks that it names that
 directory: exit 0 if it does, or if the compiler names none (nothing to name), 1 if the link line
 lost it.
+
+--standalone <program>... builds each program the way agree_with_fvm builds it -- with the link
+line its generated code asks for -- and checks the opposite of the same thing: the program must
+name no operator of the bridge (camel/standalone/bridge.h) and its built executable must need no
+Camel library, which `ldd` answers. "Standalone" is therefore a claim about the artifact, not
+about the writer's intentions: a value the bridge cannot carry (a bf16, an f16) that is emitted
+as a bridged call is caught here, and the link line that names libcamel is printed with it.
+Exit 0 when every program is standalone, 1 otherwise.
 """
 import argparse
 import collections
@@ -162,6 +171,83 @@ def check_link_line(compiler, msvc):
     return 0
 
 
+def needs_of(target, env):
+    """The shared libraries the built program needs, as the platform reports them: `ldd` on
+    Linux, `otool -L` on macOS, and (on Windows, where an import is resolved when the program
+    starts) the import table `dumpbin /dependents` prints. Empty when the platform has no tool."""
+    if os.name == "nt":
+        cmd = ["dumpbin", "/dependents", target]
+    elif sys.platform == "darwin":
+        cmd = ["otool", "-L", target]
+    else:
+        cmd = ["ldd", target]
+    try:
+        code, out, err, _ = run(cmd, 60, env)
+    except OSError:
+        return None
+    if code != 0:
+        return None
+    return out + err
+
+
+def check_standalone(programs, args):
+    """Every program written by std::cpp must be one the Camel runtime does not have to be part
+    of: the generated code names no bridge, and the executable built from it needs no Camel
+    library. The verdict is the artifact's (`ldd`), not the writer's."""
+    compiler, msvc = find_compiler()
+    if not compiler:
+        print("FAIL: no C++ compiler found (set CXX)")
+        return 2
+    env = dict(os.environ)
+    env.setdefault("CAMEL_HOME", os.path.join(ROOT, "out", "latest"))
+    workdir = tempfile.mkdtemp(prefix="cppexec-standalone-")
+    failed = 0
+    for path in programs:
+        rel = os.path.relpath(os.path.abspath(path), ROOT).replace("\\", "/")
+        code, out, err, _ = run([CAMEL, rel] + args.passes + ["std::cpp"], args.timeout, env)
+        if code != 0 or "#include" not in out:
+            print("FAIL %s: std::cpp did not write a program" % rel)
+            print("  " + (err or out).strip().splitlines()[-1][:200])
+            failed += 1
+            continue
+        bridges = "camel/standalone/bridge.h" in out
+        stem = re.sub(r"[^A-Za-z0-9_]", "_", rel)[:120]
+        source = os.path.join(workdir, stem + ".cpp")
+        target = os.path.join(workdir, stem + EXE)
+        with open(source, "w", encoding="utf-8", newline="\n") as f:
+            f.write(out)
+        cmd = build_command(compiler, msvc, source, target, bridges, env["CAMEL_HOME"])
+        print("%s" % rel)
+        print("  bridge: %s" % ("yes" if bridges else "no"))
+        print("  link: " + " ".join(cmd))
+        code, cout, cerr, _ = run(cmd, 600, env, cwd=workdir)
+        if code != 0:
+            errors = [l for l in (cout + cerr).splitlines() if "error" in l]
+            print("  FAIL: does not build: " + (errors[0] if errors else "")[:200])
+            failed += 1
+            continue
+        needs = needs_of(target, env)
+        if needs is None:
+            print("  PASS: no library tool on this platform; the link line names no Camel library"
+                  if "libcamel" not in " ".join(cmd) else "  FAIL: the link line names libcamel")
+            failed += 0 if "libcamel" not in " ".join(cmd) else 1
+            continue
+        camel = sorted({l.strip() for l in needs.splitlines() if "libcamel" in l})
+        if camel:
+            print("  FAIL: the built program needs the Camel runtime:")
+            for line in camel:
+                print("    " + line)
+            failed += 1
+        else:
+            print("  needs: none of the Camel runtime")
+    shutil.rmtree(workdir, ignore_errors=True)
+    if failed:
+        print("FAIL: %d of %d program(s) are not standalone" % (failed, len(programs)))
+        return 1
+    print("PASS: %d program(s) need no Camel runtime" % len(programs))
+    return 0
+
+
 def first_difference(a, b):
     la, lb = a.splitlines(), b.splitlines()
     for i in range(max(len(la), len(lb))):
@@ -217,7 +303,17 @@ def check(entry, workdir, args):
     if code != 0:
         errors = [l for l in (cout + cerr).splitlines() if "error" in l]
         rec["outcome"] = "does not build"
-        rec["detail"] = (errors[0] if errors else (cout + cerr).strip()[-200:])[:200]
+        # The line the compiler named, then the error: a build failure that names a place and
+        # not the text at that place is a failure nobody can read, and the generated program is
+        # temporary. The text comes first because it is the shorter of the two.
+        text = ""
+        at = re.search(re.escape(source) + r":(\d+):", errors[0] if errors else "")
+        if at:
+            lines = out.splitlines()
+            number = int(at.group(1))
+            if 0 < number <= len(lines):
+                text = lines[number - 1].strip() + "  <<  "
+        rec["detail"] = (text + (errors[0] if errors else (cout + cerr).strip()[-200:]))[:400]
         return rec
 
     fcode, fout, ferr, _ = run([CAMEL] + entry_args + [rel] + args.passes + ["std::fvm"], args.timeout, env)
@@ -283,6 +379,9 @@ def main():
     ap.add_argument("--link-line", action="store_true",
                     help="print the command a bridged program is linked with, and check that it "
                          "names the compiler's own standard library")
+    ap.add_argument("--standalone", action="store_true",
+                    help="check that the named programs are built without the Camel runtime: no "
+                         "bridge in the generated code, no Camel library in what it needs")
     ap.add_argument("--no-pch", action="store_true",
                     help="do not precompile camel/standalone/runtime.h (clang)")
     args = ap.parse_args()
@@ -297,6 +396,10 @@ def main():
         return 2
     if args.link_line:
         return check_link_line(compiler, msvc)
+    if args.standalone:
+        if not args.programs:
+            ap.error("--standalone needs at least one program")
+        return check_standalone(args.programs, args)
 
     expected = read_expect(args.expect) if args.expect else []
     programs = expand(args.programs + expected)

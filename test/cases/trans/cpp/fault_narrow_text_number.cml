@@ -1,0 +1,17 @@
+/**
+ * A text that is not a number, read as a bf16: the report is the interpreter's, byte for byte
+ * (`RuntimeDiag::InvalidNumberText`, located at the conversion, with the text and the type in it
+ * and the help line that says a failed conversion ends the program). It is the *first* of the
+ * three reports a bf16 text conversion can give -- the same text also names it in a sentence of
+ * its own, which is what separates "not a number" from "a number the type cannot hold".
+ *
+ * The program prints one value before it faults, so the line count says the report came from
+ * the run and not from the file: agree_with_fvm compares this output with std::fvm's whole
+ * standard output and exit code (test/tools/cppexec/expect.txt).
+ */
+func main(): int sync {
+    println(bf16('1.5'))
+    println(bf16('x'))
+    println('not reached')
+    return 0
+}

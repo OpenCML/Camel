@@ -1,0 +1,55 @@
+/**
+ * The module operators over a bf16 or an f16, which are the reductions and the two comparisons the
+ * standard library states in Camel and the element type decides:
+ *
+ *   sum    an f64 accumulator added from +0 in the order the elements lie, rounded once into the
+ *          element type (design principles 7.3). Two pairs separate that from the neighbouring
+ *          rules: [2^24, 1, -2^24] is 1 in f64 and 0 with an f32 accumulator, and [1, 2^-8, 2^-8]
+ *          is 1 + 2^-7 -- rounded once, it is 1.0078125, while rounding each addition into the
+ *          element type gives 1.0 at the first step and keeps it. The sum of no element is +0.
+ *   min    IEEE 754-2019 minimum: one of the two operands, a NaN on either side gives the
+ *   max    canonical quiet NaN, and -0 is below +0. Neither rounds, so `min(xs)` is an element of
+ *          xs bit for bit, not a value computed from it.
+ *   abs    the sign bit cleared: the one of the three whose answer differs from an operand's own
+ *          pattern.
+ *
+ * `array::sum` reaches the answer through the library's own f64 fold, so what this case adds is
+ * the arithmetic and the conversion it is written from; `tensor::sum` of the whole value is the
+ * runtime's kernel, and `rt::sumAll` is its standalone form. `min` and `max` of two values are
+ * operators of the math module (`rt::halfMin`, `rt::halfMax`), which the fold `xs->reduce` of
+ * `array::min` reaches one pair at a time.
+ *
+ * The readings are the lines below; agree_with_fvm compares them with std::fvm byte for byte.
+ */
+import { abs, max, min } from math
+import { max as array_max, min as array_min, sum as array_sum } from array
+import { sum as whole_sum } from tensor
+
+func main(): int sync {
+    let xs: bf16[] = [0.5, -1.5, 2.0]
+    println(array_sum(xs), array_min(xs), array_max(xs))
+    let hs: f16[] = [0.5, -1.5, 2.0]
+    println(array_sum(hs), array_min(hs), array_max(hs))
+
+    // The width of the accumulator, and the number of roundings.
+    let wide: bf16[] = [16777216.0, 1.0, -16777216.0]
+    println(array_sum(wide))
+    let tie: bf16[] = [1.0, 0.00390625, 0.00390625]
+    println(array_sum(tie))
+    // The sum of no element is +0 of the element type.
+    let none: bf16[] = []
+    println(array_sum(none))
+
+    // The two zeros and a NaN decide min and max as IEEE 754-2019 says.
+    println(min(bf16(0.0), bf16(-0.0)), max(bf16(0.0), bf16(-0.0)))
+    println(min(bf16('nan'), bf16(1.0)), max(bf16('nan'), bf16(1.0)))
+    println(min(f16(0.0), f16(-0.0)), max(f16(0.0), f16(-0.0)))
+    println(abs(bf16(-0.0)), abs(bf16(-1.5)), abs(f16(-1.5)))
+
+    // A value of several dimensions is summed whole: the grouping never enters.
+    let m: bf16[2, 2] = [[0.5, 1.5], [2.5, 3.5]]
+    println(whole_sum(m), whole_sum(xs))
+    let h2: f16[2, 2] = [[0.5, 1.5], [2.5, 3.5]]
+    println(whole_sum(h2))
+    return 0
+}

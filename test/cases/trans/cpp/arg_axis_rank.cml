@@ -1,0 +1,22 @@
+/**
+ * The position of the extreme along one dimension: the first element of the lane equal to its
+ * maximum (minimum), or the first NaN. The answer's element type is int64 whatever the value holds,
+ * so it is a value of positions and not of elements.
+ *
+ * The readings are the lines below; `agree_with_fvm` compares them with std::fvm byte for byte.
+ */
+import { nan } from math
+import { argmax_axis, argmin_axis, reshape } from tensor
+
+func main(): int sync {
+    let m: float[3, 2] = [[1.0, -2.0], [5.0, 0.0], [-3.0, 4.0]]
+    println(argmax_axis(m, 0, false))
+    println(argmax_axis(m, 1, false))
+    println(argmin_axis(m, 1, true))
+    let t: float[2, 2, 2] = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 9.0]]]
+    println(argmax_axis(t, 1, false))
+    let flat: float[6] = [1.0, 2.0, 2.0, nan, 2.0, nan]
+    let withTies = reshape<[2, 3]>(flat)
+    println(argmax_axis(withTies, 1, false))
+    return 0
+}
