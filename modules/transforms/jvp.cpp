@@ -154,7 +154,11 @@ FunctionType *jvpSignature(FunctionType *function) {
     if (params.empty()) {
         return nullptr;
     }
-    return FunctionType::create(camel::core::type::param_vec_t{}, params, lifted);
+    // The lifted graph does what the original does to the outside world, so it publishes the same
+    // effects: an effectful function's lift is an effectful function (otherwise the run time treats
+    // its print as an effect nothing depends on and does not execute it).
+    return FunctionType::create(camel::core::type::param_vec_t{}, params, lifted)
+        ->withResources(function->resources());
 }
 
 namespace {
@@ -704,6 +708,28 @@ bool liftGraph(
                 if (!inputs.empty()) {
                     draft.setNormInputs(made, inputs);
                 }
+                // The `sync` block's chain, copied edge for edge: a statement is executed because it
+                // sits on that chain, and an effect whose result nobody reads is dropped at run time
+                // without it. The flag says the node is one of the block's statements; the waits are
+                // the statements written before it.
+                {
+                    std::vector<gc_node_ref_t> waits;
+                    for (const rt::GCGraphSyncEdge &edge : function->syncPredsOf(ref)) {
+                        if (edge.pred < function->nodeCount() && copied[edge.pred]) {
+                            waits.push_back(copyOf[edge.pred]);
+                        }
+                    }
+                    if (!waits.empty()) {
+                        draft.setSyncInputs(made, waits);
+                    }
+                    // The flag is the original's own: a statement the block wrote, whether or not
+                    // anything was written before it (the first statement has no waits and is still
+                    // a statement).
+                    if (node->hasFlag(rt::kGCNodeFlagSyncStatement)) {
+                        draft.setNodeRuntimeFlags(
+                            made, static_cast<uint8_t>(rt::kGCNodeFlagSyncStatement));
+                    }
+                }
                 if (node->dataType() != Type::Float64()) {
                     // A discrete value -- a comparison's `bool`, a count's `int` -- has no tangent:
                     // it is copied so the nodes that read it have their operand, and no rule is
@@ -713,6 +739,23 @@ bool liftGraph(
                     break;
                 }
                 const std::string_view uri = body->uri();
+                // An operator with an external effect (a print, the clock, the profiler) is
+                // executed as written, and its derivative is zero: asking the rule table for a
+                // forward rule would ask it to differentiate a write to the outside world, and the
+                // honest answer -- "there is no such rule" -- would stop a program whose effect
+                // the lift has no business touching. The copy keeps the operator and its inputs, so
+                // the effect runs the same number of times it ran before.
+                if (camel::core::OperatorTable::instance().hasExternalEffect(uri)) {
+                    if (node->dataType() == Type::Float64()) {
+                        if (zeroConstant == rt::kInvalidNodeRef) {
+                            zeroConstant = draft.materializeStaticValue(
+                                camel::core::rtdata::toSlot<double>(0.0), Type::Float64(),
+                                rt::kGCNodeFlagConstant);
+                        }
+                        tangentOf[ref] = zeroConstant;
+                    }
+                    break;
+                }
                 std::vector<gc_node_ref_t> tangents;
                 for (gc_node_ref_t original : originals) {
                     if (tangentOf[original] == rt::kInvalidNodeRef) {
@@ -977,9 +1020,33 @@ bool liftGraph(
         // rules computed for it, which is the derivative of the chain at the values the caller
         // passed. Nothing is read back from the original graph: both halves are this graph's.
         const gc_node_ref_t out = alreadyLifted ? chainValue : liftedPair(chainValue, chainTangent);
-        draft.setExitNode(out);
-        draft.setOutputNode(out);
-        draft.setReturnNode(out, rt::GCReturnKind::Self);
+        // The `sync` block's own ordering: in the original graph the exit passes through a GATE that
+        // waits on the block's statements -- a print among them -- and that wait is the only thing
+        // that keeps an effect whose result nobody reads from being dropped. The lifted exit is a
+        // gate over the pair with the same waits, so the effect runs once, at the same point.
+        gc_node_ref_t exit = out;
+        const gc_node_ref_t originalExit = function->exitNodeRef();
+        if (originalExit < function->nodeCount() && function->node(originalExit) != nullptr &&
+            function->node(originalExit)->kind == rt::GCNodeKind::Gate) {
+            const gc_node_ref_t gate = draft.addGateNode(lifted, draft.allocateRuntimeSlot(lifted));
+            draft.setNormInputs(gate, std::span<const gc_node_ref_t>(&out, 1));
+            std::vector<gc_node_ref_t> waits;
+            for (const rt::GCGraphSyncEdge &edge : function->syncPredsOf(originalExit)) {
+                if (edge.pred < function->nodeCount() && copied[edge.pred]) {
+                    waits.push_back(copyOf[edge.pred]);
+                }
+            }
+            if (!waits.empty()) {
+                draft.setSyncInputs(gate, waits);
+            }
+            if (function->node(originalExit)->hasFlag(rt::kGCNodeFlagSyncStatement)) {
+                draft.setNodeRuntimeFlags(gate, static_cast<uint8_t>(rt::kGCNodeFlagSyncStatement));
+            }
+            exit = gate;
+        }
+        draft.setExitNode(exit);
+        draft.setOutputNode(exit);
+        draft.setReturnNode(exit, rt::GCReturnKind::Self);
         // The reading: one line per graph the lift made -- the function asked for and every callee it
         // had to lift -- so "a function called twice is lifted once" is countable, not claimed.
         std::string rules;
