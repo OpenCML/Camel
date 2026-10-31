@@ -81,6 +81,14 @@ struct GenericRuleInstance {
     /// changes changes here, and a family that grows or shrinks does not move this line. Empty when
     /// the instance was not made, or its left side holds no operator node.
     std::string lhsOperatorUri;
+    /// The compile-time builder the right side was built with (`compile_graph_ptr_t`, a
+    /// `shared_ptr<DraftGraphBuilder>`). Kept because a function value naming a graph is made from
+    /// the callee's *builder*, not from its `GraphId`:
+    /// `StaticFunction::create(const std::shared_ptr<DraftGraphBuilder> &graph, ...)`
+    /// (include/camel/compile/gir/static_function.h#StaticFunction::create). The graphs are already the context's --
+    /// `publish` encodes them into a pinned program -- so keeping this handle keeps nothing alive
+    /// that would otherwise be released; it keeps the *name* a rewritten graph has to write down.
+    std::shared_ptr<camel::compile::gir::DraftGraphBuilder> rhsBuilder;
 };
 
 /// The templates of one generic rule, and one entry per type tuple tried on it.

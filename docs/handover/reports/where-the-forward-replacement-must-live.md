@@ -441,7 +441,7 @@ REINTERP closure graph=107 layout=(float, float) built=yes slots=x,w
 
 - 建“调 `107` 得闭包”需要**被调图的 `DraftGraphBuilder`**：
   `StaticFunction::create(const std::shared_ptr<DraftGraphBuilder> &graph, …)`
-  （`include/camel/compile/gir/static_function.h:28`）；
+  （`include/camel/compile/gir/static_function.h#StaticFunction::create`）；
 - `GenericRuleInstance` 存的是 `rhs`（一个 `GCGraph*`）与 `program`，**没有那个 builder**；
   builder 只在实例化的那一刻活在 `src/compile/gir/rule_templates.cpp` 里；
 - 所以从 `modules/transforms` 拿到的 `GraphId 107` 是**不够**的：节点能建（`draft.h` 里有
@@ -451,6 +451,23 @@ REINTERP closure graph=107 layout=(float, float) built=yes slots=x,w
 手上），**要么 `GenericRuleInstance` 得把那个 builder 一起留住**。这是一个要作者/你点头的设计选择，
 不是写两行代码的事——我没有绕开它（比如拿 `::Function::create` 假装建出静态函数值，那会在运行期
 找不到图）。
+
+## 判据：活得住的东西留一个把手
+
+> **建不出函数值，先问“建它需要的那样东西在哪一刻还活着”；活得住的就留一个把手，活不住的才是设计问题。**
+
+按这条判据，`GenericRuleInstance` 多了一列（`include/camel/compile/gir/rule_templates.h`）：
+
+```cpp
+std::shared_ptr<camel::compile::gir::DraftGraphBuilder> rhsBuilder;
+```
+
+**赋值点一处**：`src/compile/gir/rule_templates.cpp:104`，`publish()` 里 `encodeToRuntimeProgram(rhs, …)`
+之后紧跟 `instance.rhsBuilder = rhs;`——那一刻 builder 就在参数表里，是它**最后一次**以局部身份活着的地方。
+
+**它不延长任何东西的寿命**：图在那之前已经编进 `context` 的 pinned program（`publish` 的上一行
+`pinRuntimeProgram`），留住的只是“写这个名字的把手”，不是“让图活着”。**失效**：context 结束时一并结束；
+实例不跨 context。
 
 ## 验收（缺一步不算完）
 
