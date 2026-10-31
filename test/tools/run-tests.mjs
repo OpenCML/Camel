@@ -1981,8 +1981,8 @@ function invalidPlan(planPath, error) {
  *   name = "poison"                     # named "<name>:<source plan id>:<original name>"
  *   plans = ["../modules", "../linear"] # plan files or directories, relative to this plan
  *   exclude = ["modules/onnx"]          # substrings of plan paths that are left out
- *   envs = ["CAMEL_GC_POISON=1"]
- *   skip_env_prefix = "CAMEL_GC_"       # leave out tests that set such a variable themselves
+ *   args = ["--gc-check", "poison"]
+ *   skip_args_prefix = "--gc-"           # leave out tests that already name such an option
  *   timeout_scale = 20
  *
  * It is how a property that every program must keep (here: no raw pointer is held across a

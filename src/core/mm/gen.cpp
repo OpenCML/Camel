@@ -561,7 +561,7 @@ bool GenerationalAllocatorWithGC::debugRunRememberedSetSelfTest() {
 
 bool GenerationalAllocatorWithGC::debugRunPoisonSelfTest() {
     if (!debugConfig().poisonAtSafepoints) {
-        throw std::runtime_error("GC poison self-test requires CAMEL_GC_POISON=1");
+        throw std::runtime_error("GC poison self-test requires --gc-check poison");
     }
     const slot_t poisonWord = poison::word();
 

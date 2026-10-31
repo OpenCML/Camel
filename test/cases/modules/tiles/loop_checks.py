@@ -13,14 +13,14 @@ from camel_arg import camel_from_argv  # noqa: E402
 # this tree's `out/latest/bin/camel`. One rule, in one place:
 # test/tools/camel_arg.py. `ARGV` is this process's arguments without the `--camel` pair.
 EXE, ARGV = camel_from_argv(ROOT)
+GCC_CHECK = ['--gc-check', 'verify=both', '--gc-stress', 'safepoint=1,kind=minor']
 # The install that binary lives in: the child is given it as CAMEL_HOME, so the compiler the case
 # runs and the standard library it reads are the same install whichever one `--camel` named.
 INSTALL = str(Path(EXE).resolve().parents[1])
-ENV = dict(os.environ, CAMEL_HOME=INSTALL,
-           CAMEL_GC_VERIFY='both', CAMEL_GC_STRESS_SAFEPOINT='1', CAMEL_GC_STRESS_MODE='minor')
+ENV = dict(os.environ, CAMEL_HOME=INSTALL)
 
 def run(case, passes, env=ENV):
-    return subprocess.run([EXE, '--gc', 'generational', str(Path(__file__).with_name(case + '.cml')), *passes],
+    return subprocess.run([EXE, *GCC_CHECK, '--gc', 'generational', str(Path(__file__).with_name(case + '.cml')), *passes],
                           cwd=ROOT, env=env, capture_output=True, text=True, timeout=90)
 
 for vm in ['std::nvm', 'std::fvm', 'std::jit', 'std::prl']:

@@ -707,8 +707,16 @@ def run_one(path: Path, passes: List[str], options: List[str], timeout: int) -> 
     exe = camel_exe()
     env = dict(os.environ)
     env.setdefault("CAMEL_HOME", str(Path(exe).resolve().parents[1]))
+    # Every table an operation returns is checked, in the one --coll the run is given: a second
+    # --coll would be refused as an invalid command line.
+    words = list(options)
+    if "--coll" in words:
+        at = words.index("--coll")
+        words[at + 1] = words[at + 1] + ",validate=on"
+    else:
+        words += ["--coll", "validate=on"]
     try:
-        proc = subprocess.run([exe, *options, "--coll", "validate=on", str(path), *passes],
+        proc = subprocess.run([exe, *words, str(path), *passes],
                               capture_output=True, env=env, timeout=timeout)
     except subprocess.TimeoutExpired:
         return -1, "", "timeout"

@@ -25,9 +25,6 @@ namespace camel::core::mm {
 constexpr size_t kDefaultGraphSpaceLimitBytes = 256 * MB;
 constexpr size_t kDefaultPermSpaceLimitBytes  = 256 * MB;
 constexpr size_t kDefaultMetaSpaceLimitBytes  = 256 * MB;
-constexpr const char *kGraphSpaceLimitEnv     = "CAMEL_GRAPH_SPACE_LIMIT_MB";
-constexpr const char *kPermSpaceLimitEnv      = "CAMEL_PERM_SPACE_LIMIT_MB";
-constexpr const char *kMetaSpaceLimitEnv      = "CAMEL_META_SPACE_LIMIT_MB";
 
 GenerationalAllocatorWithGC &autoSpace();
 GrowableFreeListAllocator &metaSpace();

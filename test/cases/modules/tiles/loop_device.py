@@ -17,6 +17,7 @@ from camel_arg import camel_from_argv  # noqa: E402
 # this tree's `out/latest/bin/camel`. One rule, in one place:
 # test/tools/camel_arg.py. `ARGV` is this process's arguments without the `--camel` pair.
 EXE, ARGV = camel_from_argv(ROOT)
+GCC_CHECK = ['--gc-check', 'verify=both', '--gc-stress', 'safepoint=1,kind=minor']
 # The install that binary lives in: the child is given it as CAMEL_HOME, so the compiler the case
 # runs and the standard library it reads are the same install whichever one `--camel` named.
 INSTALL = str(Path(EXE).resolve().parents[1])
@@ -47,11 +48,9 @@ with tempfile.TemporaryDirectory(prefix='camel-loop-device-') as folder:
     folder = Path(folder)
     write(folder / 'a.npy', a)
     write(folder / 'b.npy', b)
-    env = dict(os.environ, CAMEL_HOME=INSTALL, TILES_TEST_OUT=str(folder),
-               CAMEL_GC_VERIFY='both',
-               CAMEL_GC_STRESS_SAFEPOINT='1', CAMEL_GC_STRESS_MODE='minor')
+    env = dict(os.environ, CAMEL_HOME=INSTALL, TILES_TEST_OUT=str(folder))
     for vm in ['std::nvm', 'std::fvm', 'std::jit', 'std::prl']:
-        result = subprocess.run([EXE, '--gc', 'generational',
+        result = subprocess.run([EXE, *GCC_CHECK, '--gc', 'generational',
                                  str(Path(__file__).with_suffix('.cml')), vm],
                                 cwd=ROOT, env=env, capture_output=True, text=True, timeout=90)
         assert result.returncode == 0, (vm, result.stdout, result.stderr)
