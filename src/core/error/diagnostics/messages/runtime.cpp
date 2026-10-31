@@ -49,7 +49,7 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             {
                 "MaxRecursionDepthExceeded",
                 "Maximum recursion depth ({1}) exceeded when evaluating graph '{0}'.",
-                "Check for infinite recursion. A call in tail position takes no frame, so write a deep recursion as a tail call; or raise the limit with --max-recursion-depth <n> or CAMEL_MAX_RECURSION_DEPTH=<n>.",
+                "Check for infinite recursion. A call in tail position takes no frame, so write a deep recursion as a tail call; or raise the limit with --max-recursion-depth <n>.",
             },
         },
         {

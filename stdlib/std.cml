@@ -35,7 +35,10 @@ export func macro::<F>(f: F): F! when is_function::<F>()
 with <
     /// Write what the pass did and what it left, as `DEFUNCTIONALIZE` lines and a warning per family:
     /// a program that names the pass is asking, and the step the pipeline inserts stays silent.
-    report: bool = true
+    report: bool = true,
+    /// Write the dispatch the pass is about to lower, member by member and variant by variant: a
+    /// reading of a program it cannot lower, and nothing else it writes changes.
+    debug: bool = false
 >
 export func defunctionalize::<F>(f: F): F! when is_function::<F>()
 
@@ -118,7 +121,10 @@ with <
     effect_trace: string? = null,
     /// Print the kernel-timing table at exit: one row per operator with its calls, total time and
     /// time per call, as the module that serves the kernels measures them.
-    opstats: bool = false
+    opstats: bool = false,
+    /// Print one line for every value whose type the runtime reads while relocating it: the value,
+    /// the type it is read as, and the tag and field count it carries.
+    variant_trace: bool = false
 >
 export func profile::<F>(f: F): F! when is_function::<F>()
 

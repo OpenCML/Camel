@@ -126,8 +126,7 @@ bool parseTimeitSpecValue(
 /// is absent) or else by the environment variable `envName`. `out` gets the option's value;
 /// the environment's is read where it is used (camel::execute::recursionLimit) and is only
 /// checked here. False, with a message on stderr, when the text in effect is no limit.
-bool readDepthLimit(
-    const std::string &optionText, const char *option, const char *envName, size_t &out) {
+bool readDepthLimit(const std::string &optionText, const char *option, size_t &out) {
     const auto refuse = [](const char *what, std::string_view text) {
         std::cerr << "Invalid " << what << " value: '" << text
                   << "'. Expected an integer from 1 to " << camel::execute::kMaxDepthLimit << "."
@@ -142,17 +141,11 @@ bool readDepthLimit(
         out = *value;
         return true;
     }
-    if (const char *raw = std::getenv(envName)) {
-        if (!camel::execute::parseDepthLimit(raw)) {
-            return refuse(envName, raw);
-        }
-    }
     return true;
 }
 
 /// As readDepthLimit, for the rounds of a loop (a wider range).
-bool readRoundLimit(
-    const std::string &optionText, const char *option, const char *envName, size_t &out) {
+bool readRoundLimit(const std::string &optionText, const char *option, size_t &out) {
     const auto refuse = [](const char *what, std::string_view text) {
         std::cerr << "Invalid " << what << " value: '" << text
                   << "'. Expected an integer from 1 to " << camel::execute::kMaxRoundsLimit << "."
@@ -166,11 +159,6 @@ bool readRoundLimit(
         }
         out = *value;
         return true;
-    }
-    if (const char *raw = std::getenv(envName)) {
-        if (!camel::execute::parseRoundLimit(raw)) {
-            return refuse(envName, raw);
-        }
     }
     return true;
 }
@@ -638,13 +626,11 @@ bool parseArgs(int argc, char *argv[]) {
          (option("-t", "--threads") & integer("max threads", maxThreads)) % "max threads",
          (option("--max-recursion-depth") & value("calls", maxRecursionDepthOpt)) %
              "limit on calls open at once that are not tail calls (default: 1000 on every "
-             "scheduler; also CAMEL_MAX_RECURSION_DEPTH)",
+             "scheduler)",
          (option("--max-macro-depth") & value("calls", maxMacroDepthOpt)) %
-             "limit on nested calls while std::macro evaluates a call (default: 64; also "
-             "CAMEL_MAX_MACRO_DEPTH)",
+             "limit on nested calls while std::macro evaluates a call (default: 64)",
          (option("--max-macro-rounds") & value("rounds", maxMacroRoundsOpt)) %
-             "limit on the rounds one loop may run while std::macro evaluates it (default: "
-             "1000000; also CAMEL_MAX_MACRO_ROUNDS)",
+             "limit on the rounds one loop may run while std::macro evaluates it (default: 1000000)",
          (option("--gc") & value("collector", gcModeOpt)) %
              "collector of run-time values: generational (default; young objects are copied) or "
              "mark-sweep (objects keep their address)",
@@ -893,22 +879,19 @@ bool parseArgs(int argc, char *argv[]) {
             Run::resolvedPassList,
             &Run::fallbackPasses);
 
-        // The two depth limits: the option, else the environment variable. A value that is not
-        // an integer in range is refused here, before anything is compiled or run.
+        // The two depth limits: the option only. A value that is not an integer in range is
+        // refused here, before anything is compiled or run.
         if (!readDepthLimit(
                 Run::maxRecursionDepthOpt,
                 camel::execute::kMaxRecursionDepthOption,
-                camel::execute::kMaxRecursionDepthEnvVar,
                 Run::maxRecursionDepth) ||
             !readDepthLimit(
                 Run::maxMacroDepthOpt,
                 camel::execute::kMaxMacroDepthOption,
-                camel::execute::kMaxMacroDepthEnvVar,
                 Run::maxMacroDepth) ||
             !readRoundLimit(
                 Run::maxMacroRoundsOpt,
                 camel::execute::kMaxMacroRoundsOption,
-                camel::execute::kMaxMacroRoundsEnvVar,
                 Run::maxMacroRounds)) {
             std::exit(1);
         }

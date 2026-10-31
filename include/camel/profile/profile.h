@@ -202,6 +202,13 @@ std::string jsonPath();
 void setKernelTiming(bool on);
 bool kernelTiming() noexcept;
 
+/// The variant trace (`std::profile variant_trace=true`): one line for every value whose type the
+/// runtime reads while relocating it, with the three things that can disagree -- the value, the
+/// type it is read as, and the tag and field count it carries. A reading of its own; it starts
+/// nothing.
+void setVariantTrace(bool on);
+bool variantTrace() noexcept;
+
 /// Writes the text report (what `std::profile` prints) to `os`, and stops recording.
 void reportText(std::ostream &os, const ReportOptions &options);
 /// The same report as one JSON object, without stopping the recording (for tests and tools).
