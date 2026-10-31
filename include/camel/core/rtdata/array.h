@@ -87,18 +87,30 @@ class FixedArray : public rtdata::Object {
     const slot_t *data() const { return data_; }
 
     template <typename T> T get(size_t index) const {
-        ASSERT(index < size_, "Index out of range");
+        GUARD(
+            index < size_,
+            std::string("FixedArray index out of range: element ") + std::to_string(index) +
+                " of an array that holds " + std::to_string(size_));
         return fromSlot<T>(data_[index]);
     }
 
     template <typename T> void set(size_t index, T value) {
-        ASSERT(index < size_, "Index out of range");
+        GUARD(
+            index < size_,
+            std::string("FixedArray index out of range: element ") + std::to_string(index) +
+                " of an array that holds " + std::to_string(size_));
         data_[index] = toSlot(value);
     }
 
     template <typename T> void set(size_t index, T value, const type::ArrayType *arrayType) {
-        ASSERT(index < size_, "Index out of range");
-        ASSERT(arrayType != nullptr, "ArrayType is required for a typed FixedArray write.");
+        GUARD(
+            index < size_,
+            std::string("FixedArray index out of range: element ") + std::to_string(index) +
+                " of an array that holds " + std::to_string(size_));
+        GUARD(
+            arrayType != nullptr,
+            "ArrayType is required for a typed FixedArray write, and this call passed none: the "
+            "stored value is a reference and the write barrier needs the element type");
         const slot_t slot = rtdata::toSlot(value);
         camel::core::mm::writeBarrier(this, arrayType, slot, arrayType->elemType());
         data_[index] = slot;
@@ -111,7 +123,12 @@ class FixedArray : public rtdata::Object {
         if (!isOfSameCls(this, other))
             return false;
 
-        ASSERT(type && type->code() == type::TypeCode::Array, "Type must be ArrayType");
+        GUARD(
+            type != nullptr && type->code() == type::TypeCode::Array,
+            std::string("Type must be ArrayType, and this call passed ") +
+                (type != nullptr ? std::to_string(static_cast<int>(type->code()))
+                                 : std::string("none")) +
+                ": the elements are read through the array type's element type");
         const type::ArrayType *arrayType = static_cast<const type::ArrayType *>(type);
         type::TypeCode elemTypeCode      = arrayType->elemTypeCode();
 
@@ -148,7 +165,12 @@ class FixedArray : public rtdata::Object {
     virtual rtdata::Object *clone(
         camel::core::mm::IAllocator &allocator, const type::Type *type,
         bool deep = false) const override {
-        ASSERT(type && type->code() == type::TypeCode::Array, "Type must be ArrayType");
+        GUARD(
+            type != nullptr && type->code() == type::TypeCode::Array,
+            std::string("Type must be ArrayType, and this call passed ") +
+                (type != nullptr ? std::to_string(static_cast<int>(type->code()))
+                                 : std::string("none")) +
+                ": the elements are read through the array type's element type");
         const type::ArrayType *arrayType = static_cast<const type::ArrayType *>(type);
         type::TypeCode elemTypeCode      = arrayType->elemTypeCode();
 
@@ -193,7 +215,12 @@ class FixedArray : public rtdata::Object {
     }
 
     virtual void print(std::ostream &os, const type::Type *type) const override {
-        ASSERT(type && type->code() == type::TypeCode::Array, "Type must be ArrayType");
+        GUARD(
+            type != nullptr && type->code() == type::TypeCode::Array,
+            std::string("Type must be ArrayType, and this call passed ") +
+                (type != nullptr ? std::to_string(static_cast<int>(type->code()))
+                                 : std::string("none")) +
+                ": the elements are read through the array type's element type");
         const type::ArrayType *arrayType = static_cast<const type::ArrayType *>(type);
         type::Type *elemType             = arrayType->elemType();
 
@@ -346,7 +373,10 @@ class Array : public rtdata::Object {
     uint64_t numel() const { return numel_; }
     size_t rank() const { return rank_; }
     int64_t dim(size_t index) const {
-        ASSERT(index < rank_, "Array dimension out of range");
+        GUARD(
+            index < rank_,
+            std::string("Array dimension out of range: dimension ") + std::to_string(index) +
+                " of an array with " + std::to_string(rank_) + " dimensions");
         return extents_[index];
     }
     /// The extents as the runtime stores them. For a slot array this is the one extent.
@@ -356,7 +386,11 @@ class Array : public rtdata::Object {
         return std::vector<int64_t>(extents_, extents_ + rank_);
     }
     int64_t step(size_t index) const {
-        ASSERT(index < rank_, "Array dimension out of range");
+        GUARD(
+            index < rank_,
+            std::string("Array dimension out of range: the stride of dimension ") +
+                std::to_string(index) + " of an array with " + std::to_string(rank_) +
+                " dimensions");
         return strides_[index];
     }
     bool sameShape(const Array *other) const;
@@ -700,12 +734,19 @@ class Array : public rtdata::Object {
         appendSlot(rtdata::toSlot(value), nullptr);
     }
     template <typename T> void append(const T value, const type::ArrayType *arrayType) {
-        ASSERT(arrayType != nullptr, "ArrayType is required for a typed Array append.");
+        GUARD(
+            arrayType != nullptr,
+            std::string("ArrayType is required for a typed Array append, and this call passed "
+                        "none: the value appended to an array of ") +
+                std::to_string(size_) + " elements has no element type to be written through");
         appendSlot(rtdata::toSlot(value), arrayType);
     }
 
     void pop() {
-        ASSERT(size_ > 0, "Cannot pop from empty array");
+        GUARD(
+            size_ > 0,
+            "Cannot pop from an empty array: there is no last element to remove, and the count "
+            "would go below zero");
         --size_;
         --numel_;
         if (isSlots()) {
@@ -834,8 +875,13 @@ class Array : public rtdata::Object {
  */
 inline void storeReduceAccumulator(
     Array *cell, slot_t value, const type::ArrayType *cellType) {
-    ASSERT(cell != nullptr, "The reduce accumulator cell is null.");
-    ASSERT(cellType != nullptr, "The reduce accumulator needs the array type of its cell.");
+    GUARD(
+        cell != nullptr,
+        "The reduce accumulator cell is null: there is no slot to store this round's value in");
+    GUARD(
+        cellType != nullptr,
+        "The reduce accumulator needs the array type of its cell, and this call passed none: "
+        "the store has no element type to be written through");
     CAMEL_ASSERT_NOT_VIEW(value, cellType->elemType(), "the reduce accumulator");
     cell->set<slot_t>(0, value, cellType);
 }

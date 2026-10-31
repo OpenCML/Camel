@@ -14,6 +14,10 @@ test/cases/trans/cpp/narrow_floats.cml
 test/cases/trans/cpp/narrow_reductions.cml
 test/cases/trans/cpp/narrow_mean.cml
 test/cases/trans/cpp/narrow_argmax.cml
+# The library's own operators, where the writer had no rule and a bridged call was the answer: the
+# integer minimum and maximum (the plain comparison, not the IEEE one the floats take) and the
+# square root outside its domain (a NaN, not a fault).
+test/cases/trans/cpp/math_min_max_int.cml
 
 # Values and their text.
 test/cases/loops/iterate_string.cml
@@ -228,6 +232,11 @@ test/cases/trans/cpp/literal_rank.cml
 # the flat run carries the two computed leaves as the elements they sit in, and the divisions
 # fault where they are written.
 test/cases/trans/cpp/literal_rows_computed.cml
+
+# Folding a filled value of several dimensions: the run and the shape are what is left, and the
+# fold writes both (`{{1.0, 2.0, 2.0, 2.0}, {2, 2}}`). Written from the template's first extent
+# instead, it printed one row of elements and no shape.
+test/cases/trans/cpp/literal_rows_filled.cml
 
 # A position on a value of several dimensions: `m[1]` is the row, `m[1, 0]` names the axis it drops
 # and is the element, `t[1]` of a rank-3 value is the rank-2 value behind it -- and `len` of a row is

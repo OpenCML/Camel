@@ -1518,7 +1518,13 @@ void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
     if (type->code() == TypeCode::Array) {
         const auto *array = camel::core::rtdata::fromSlot<::Array *>(constant);
         const Type *elem  = static_cast<const camel::core::type::ArrayType *>(type)->elemType();
-        for (size_t i = 0; array != nullptr && i < array->size(); ++i) {
+        // Every element of the run, not `size()`: a template of several dimensions answers its
+        // first extent there and its element count in `numel()` (rtdata/array.h), so reading
+        // `size()` made the filled value the first row's worth of elements and dropped the shape
+        // with them -- a `float[2, 2]` filled this way printed `[1.0, 2.0]` where the interpreter
+        // prints `[[1.0, 2.0], [2.0, 2.0]]`.
+        const size_t count = array != nullptr ? static_cast<size_t>(array->numel()) : 0;
+        for (size_t i = 0; i < count; ++i) {
             itemTypes.push_back(elem);
             items.push_back("");
         }
@@ -1571,7 +1577,24 @@ void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
     for (size_t i = 0; i < items.size(); ++i) {
         list += (i ? ", " : "") + items[i];
     }
-    bind(frame, ref, std::format("{}{{{}}}", cppName, list), true, out, "value");
+    // A value of several dimensions is the elements and the shape in one block, and the block is
+    // written as both: `rt::Array<double>{{1.0, 2.0, 2.0, 2.0}, {2, 2}}`. The constructor takes
+    // the element count from the shape's product (standalone/array.h), so the fold has to write
+    // every element; a value that carried the old shape over a shorter run would be read as the
+    // first dimension's worth of elements, which is the harder defect to find of the two.
+    std::string value = std::format("{}{{{}}}", cppName, list);
+    if (type->code() == TypeCode::Array) {
+        const auto *array = camel::core::rtdata::fromSlot<::Array *>(constant);
+        const size_t rank = array != nullptr ? array->rank() : 0;
+        if (rank >= 2) {
+            std::string shape;
+            for (size_t i = 0; i < rank; ++i) {
+                shape += (i > 0 ? ", " : "") + std::to_string(array->dim(i));
+            }
+            value = cppName + "{{" + list + "}, {" + shape + "}}";
+        }
+    }
+    bind(frame, ref, std::move(value), true, out, "value");
 }
 
 void FunctionEmitter::lowerAccess(Frame &frame, gc_node_ref_t ref) {

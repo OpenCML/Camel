@@ -185,219 +185,6 @@ void printRuleUris(
     }
 }
 
-namespace {
-
-/// The smallest container the two steps of a replacement fit in: a `main` of four things (a
-/// constant `2.0`, a call of a new `f`, `:io/println`, `return 0`) and that new `f` (the value of
-/// `3/x`, the closure its rule builds, the call of that closure with the tangents `1` and `0`).
-/// Both graphs are made from nothing: the program this pass was given cannot have a graph replaced
-/// in it, so a rewrite makes a new program, and the group's first member is its root.
-const camel::runtime::Program *buildContainer(
-    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    const camel::compile::gir::GenericRuleInstance &instance, std::ostream &os) {
-    using camel::core::type::Type;
-    using camel::runtime::GraphDraftGroup;
-    using camel::runtime::GraphId;
-    using camel::runtime::gc_node_ref_t;
-
-    const camel::runtime::GCGraph *fGraph    = nullptr;
-    const camel::runtime::GCGraph *mainGraph = nullptr;
-    for (size_t i = 0; i <= program->tableSize(); ++i) {
-        camel::runtime::GCGraph *graph =
-            program->graph(static_cast<camel::runtime::GraphId>(i));
-        if (graph == nullptr) {
-            continue;
-        }
-        if (graph->name() == "f") {
-            fGraph = graph;
-        } else if (graph->name() == "main") {
-            mainGraph = graph;
-        }
-    }
-    if (fGraph == nullptr || mainGraph == nullptr) {
-        os << "REINTERP container skip=no-f-or-main\n";
-        return nullptr;
-    }
-    // The operator handles the two graphs name, read from the graphs themselves: a rebuilt graph
-    // uses the same implementations, and nothing here has to know how an operator is looked up.
-    // The operator a node uses is named by its URI, not by the implementation handle: that handle is
-    // a scheduler's cache and is null until a scheduler resolves it
-    // (`GCOperBody::op`, include/camel/runtime/graph.h). A rebuilt node is given the URI and the
-    // same null handle, the way the autodiff module builds one (modules/autodiff/pullback.cpp,
-    // `addOper`).
-    bool hasDiv            = false;
-    bool hasPrintln        = false;
-    camel::core::type::Type *printlnType = nullptr;
-    for (camel::runtime::gc_node_ref_t ref = 1; ref <= fGraph->nodeCount(); ++ref) {
-        const camel::runtime::GCNode *node = fGraph->node(ref);
-        if (node != nullptr && node->kind == camel::runtime::GCNodeKind::Oper &&
-            fGraph->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri() == ":op/div_d") {
-            hasDiv = true;
-        }
-    }
-    for (camel::runtime::gc_node_ref_t ref = 1; ref <= mainGraph->nodeCount(); ++ref) {
-        const camel::runtime::GCNode *node = mainGraph->node(ref);
-        if (node != nullptr && node->kind == camel::runtime::GCNodeKind::Oper &&
-            mainGraph->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri() == ":io/println") {
-            hasPrintln   = true;
-            printlnType = node->dataType();
-        }
-    }
-    if (!hasDiv || !hasPrintln) {
-        os << "REINTERP container skip=no-operators\n";
-        return nullptr;
-    }
-
-    Type *F = Type::Float64();
-    auto *pairType = camel::core::type::TupleType::create(std::vector<Type *>{F, F});
-
-    GraphDraftGroup group(context, program);
-    const GraphId mainId = group.reserve("main__min", "main__min");
-    const GraphId fId    = group.reserve("f__min", "f__min");
-
-    {
-        auto &draft = group.draft(fId);
-        // A member is a graph without a signature until one is written: a graph the program cannot
-        // call, which is what the first attempt's Type=- was. Both members take the signature the
-        // graph they stand in for has.
-        draft.setFuncType(fGraph->funcType());
-        const gc_node_ref_t x = draft.addPortNode(F, draft.allocateRuntimeSlot(F));
-        const gc_node_ref_t three = draft.materializeStaticValue(camel::core::rtdata::toSlot<double>(3.0), F);
-        const gc_node_ref_t value = draft.addOperNode(F, nullptr, ":op/div_d");
-        const std::array<gc_node_ref_t, 2> divIn{x, three};
-        draft.setNormInputs(value, divIn);
-        // The closure the rule builds: its captured values are the rule's variables, in the order
-        // the left side writes them (`x,w`), and its own parameters are the tangents the second
-        // step supplies.
-        auto *function = camel::compile::gir::StaticFunction::create(
-            instance.rhsBuilder, pairType, camel::core::mm::autoSpace());
-        const size_t fnSlot = draft.appendStaticSlot(
-            camel::core::rtdata::toSlot<camel::compile::gir::StaticFunction *>(function), instance.rhs->funcType());
-        const gc_node_ref_t fnSource =
-            draft.addDataNode(instance.rhs->funcType(), fnSlot, camel::runtime::kGCNodeFlagConstant);
-        const gc_node_ref_t closure = draft.addFillNode(
-            instance.rhs->funcType(),
-            camel::runtime::makeFillPayload(
-                camel::runtime::GCFillKind::FunctionClosure, std::vector<size_t>{0, 1}));
-        draft.setNormInputs(closure, std::span<const gc_node_ref_t>(&fnSource, 1));
-        const std::array<gc_node_ref_t, 2> captures{x, three};
-        draft.setWithInputs(closure, captures);
-        const gc_node_ref_t dx = draft.materializeStaticValue(camel::core::rtdata::toSlot<double>(1.0), F);
-        const gc_node_ref_t dw = draft.materializeStaticValue(camel::core::rtdata::toSlot<double>(0.0), F);
-        const gc_node_ref_t tangent = draft.addCallNode(F);
-        draft.setWithInputs(tangent, std::span<const gc_node_ref_t>(&closure, 1));
-        const std::array<gc_node_ref_t, 2> tangentIn{dx, dw};
-        draft.setNormInputs(tangent, tangentIn);
-        ::Tuple *emptyPair = ::Tuple::create(2, camel::core::mm::autoSpace());
-        const gc_node_ref_t pairSource = draft.materializeStaticValue(
-            camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(emptyPair), pairType);
-        const gc_node_ref_t out = draft.addFillNode(
-            pairType, camel::runtime::makeFillPayload(
-                          camel::runtime::GCFillKind::Tuple, std::vector<size_t>{0, 1}));
-        draft.setNormInputs(out, std::span<const gc_node_ref_t>(&pairSource, 1));
-        const std::array<gc_node_ref_t, 2> pairIn{value, tangent};
-        draft.setWithInputs(out, pairIn);
-        draft.setOutputNode(out);
-        draft.setReturnNode(out, camel::runtime::GCReturnKind::Self);
-    }
-
-    {
-        auto &draft = group.draft(mainId);
-        draft.setFuncType(mainGraph->funcType());
-        const gc_node_ref_t two = draft.materializeStaticValue(camel::core::rtdata::toSlot<double>(2.0), F);
-        const gc_node_ref_t probeValue =
-            draft.materializeStaticValue(camel::core::rtdata::toSlot<double>(42.0), F);
-        const gc_node_ref_t probe = draft.addOperNode(printlnType, nullptr, ":io/println");
-        draft.setNormInputs(probe, std::span<const gc_node_ref_t>(&probeValue, 1));
-        auto *emptyClosure = camel::core::type::TupleType::create();
-        const gc_node_ref_t fValue = draft.materializeStaticValue(
-            camel::core::rtdata::toSlot<::Function *>(::Function::create(
-                group.program(), fId, emptyClosure, camel::core::mm::autoSpace())),
-            fGraph->funcType());
-        const gc_node_ref_t call = draft.addCallNode(pairType);
-        draft.setWithInputs(call, std::span<const gc_node_ref_t>(&fValue, 1));
-        draft.setNormInputs(call, std::span<const gc_node_ref_t>(&two, 1));
-        const gc_node_ref_t print =
-            draft.addOperNode(printlnType, nullptr, ":io/println");
-        draft.setNormInputs(print, std::span<const gc_node_ref_t>(&call, 1));
-        const gc_node_ref_t zero =
-            draft.materializeStaticValue(camel::core::rtdata::toSlot<int64_t>(0), Type::Int64());
-        // println is a statement, not the value of anything: the exit has to follow it, or the
-        // program may schedule the print after it has stopped, or not at all.
-        draft.appendOrderDependency(call, probe);
-        draft.appendOrderDependency(print, call);
-        draft.appendOrderDependency(zero, print);
-        draft.setOutputNode(zero);
-        draft.setReturnNode(zero, camel::runtime::GCReturnKind::Self);
-    }
-
-    group.encode();
-    // A member that was just encoded may have no signature of its own yet: the type is a
-    // reading, and a reading that dereferences a null is a crash, not a measurement.
-    const auto typeText = [](const camel::runtime::GCGraph *graph) -> std::string {
-        const auto *fn = graph != nullptr ? graph->funcType() : nullptr;
-        return fn != nullptr ? fn->toString() : std::string("-");
-    };
-    os << "REINTERP container mainType=" << typeText(group.encoded(mainId))
-       << " oldMainType=" << typeText(mainGraph) << " fType=" << typeText(group.encoded(fId))
-       << " oldFType=" << typeText(fGraph) << '\n';
-    os << "REINTERP container root=" << camel::runtime::toValue(mainId)
-       << " f=" << camel::runtime::toValue(fId) << " call=" << camel::runtime::toValue(fId)
-       << " edge=main__min->f__min\n";
-    return group.program();
-}
-
-} // namespace
-
-namespace {
-
-/// The instance of the `/` rule a replacement is built from, found the way the report finds it: by
-/// the rule name the index holds for the operator's URI, then by the instance the context made of
-/// it for `float`.
-const camel::runtime::Program *buildContainerFrom(
-    const camel::core::context::context_ptr_t &contextPtr, const camel::runtime::Program *program,
-    std::ostream &os) {
-    using camel::core::type::Type;
-    // Held back: since the merge with develop the container segfaults while it is built, and a
-    // container that crashes the pass cannot be reported as a reading. The shape below is what the
-    // next step fixes; the pipeline's own rule is the one it has to satisfy, and that rule is a
-    // graph id: src/execute/camel_pass.cpp, "the function a pass returns must be the root
-    // function it was given, transformed".
-    return nullptr;
-    camel::core::context::Context &context = *contextPtr;
-    const auto heads = camel::parse::ast::rulesOf("rulesets.jvp");
-    const std::string uri = ":op/div_d";
-    for (const camel::parse::ast::RuleEntry &head : heads) {
-        auto &table = camel::compile::gir::genericRuleTable(context);
-        for (size_t i = 0; i < table.size(); ++i) {
-            if (table[i]->name != head.rule) {
-                continue;
-            }
-            const uint64_t ruleId = static_cast<uint64_t>(i) + 1;
-            const size_t at =
-                camel::compile::gir::genericRuleInstance(context, ruleId, {Type::Float64()}, {});
-            auto *entry = camel::compile::gir::genericRuleEntry(context, ruleId);
-            if (entry == nullptr || at >= entry->instances.size()) {
-                continue;
-            }
-            const camel::compile::gir::GenericRuleInstance &instance = entry->instances[at];
-            if (!instance.made || instance.rhs == nullptr ||
-                instance.rhsBuilder == nullptr || instance.lhsOperatorUri != uri) {
-                continue;
-            }
-            const camel::runtime::Program *container =
-                buildContainer(contextPtr, program, instance, os);
-            if (container != nullptr) {
-                return container;
-            }
-            os << "REINTERP container skip=build\n";
-        }
-    }
-    os << "REINTERP container skip=no-instance\n";
-    return nullptr;
-}
-
-} // namespace
 
 class ReinterpPass : public RuntimeGraphRewritePass {
   public:
@@ -406,25 +193,6 @@ class ReinterpPass : public RuntimeGraphRewritePass {
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override {
         printRuleUris(*context_, program, os);
-        // The two steps of the replacement, in the smallest container they fit in. The program this
-        // pass was given cannot have a graph replaced in it (a rewrite makes a new program), so the
-        // container is a new program whose root is its first member.
-        // The container is built and reported, but the program the pass answers with is still the
-        // one it was given: the container's root printed nothing when it was run, so installing it
-        // would replace a working entry with a silent one. The line above says it exists; the next
-        // step is making it speak.
-        if (const camel::runtime::Program *container = buildContainerFrom(context_, program, os)) {
-            // Where the container died, for whoever picks this up: the group builds both members,
-            // prints its types and its call edge (`REINTERP container mainType=... fType=...`),
-            // and then the program is run as a root of its own -- and the run ends with
-            // SIGSEGV (exit 139) right after the last `REINTERP` line, before the `println`
-            // inside `main__min` prints anything. So the crash is in the entry the group makes,
-            // not in the graphs it built: those two lines print the same signatures the original
-            // graphs have. The direction is dropped for now (see the pass's apply): a program
-            // whose root is a new graph cannot satisfy src/execute/camel_pass.cpp, which wants the
-            // graph the pass was given, by id.
-            (void)container;
-        }
         // Every function of the program that is made of operators: those are the ones a
         // replacement has something to replace in. A function of calls and constants alone is
         // simply not visited.
@@ -488,6 +256,12 @@ class ReinterpPass : public RuntimeGraphRewritePass {
             os << "REINTERP calls=" << (calls.empty() ? "-" : calls.c_str())
                << " opers=" << (uris.empty() ? "-" : uris.c_str()) << '\n';
         }
+        // Nothing is replaced in the program this pass was given: rewriting a graph that is already
+        // published is the road measured at 9cb1c3a94, and it ends in SIGSEGV at the entry it makes.
+        // `reinterp` produces a new function instead (the author's ruling, a824031aa): a new graph,
+        // written node by node with the rule's right side in place of each primitive, handed to the
+        // call site as a function value -- the shape `camel::autodiff::buildGradientGraph` builds
+        // for the reverse direction. The same program is answered with until that graph exists.
         return program;
     }
 };
