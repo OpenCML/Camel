@@ -163,6 +163,7 @@ func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
 
 - 三个算子各有一份 Camel 参考实现与一份原生实现，原生的用 `#impl` 标出（原则 6.2），差分测试对照。Camel 参考实现在实例化时遍历函数的图并展开成代码，需要元层（`static for`、`match type`）能读图的结构，这一块随第 6 节第 6 步单独定写法。
 - 求导的验收对照三样：有限差分、现在的 `pullback.cpp`、ADBench 能表达的 GMM、BA、LSTM。三个调度器的值与解释器一致。新路线全过之后，`pullback.cpp` 删除，不留兼容层。
+- M6 那三组组合（`grad(vmap(f))`、`vmap(grad(f))`、`jvp(vjp(f))`）的期望值、解析导数与有限差分的步长、误差界，先写在 `docs/design/program-transforms/m6-combination-numbers.cn.md`：代码还没写，数先钉死。
 
 ## 6. 施工顺序
 
