@@ -1310,41 +1310,6 @@ node_handle_t Builder::inPlaceRebindingOf(const GCT::node_ptr_t &gct) {
 
 namespace {
 
-/// The reduced-precision element type (bf16, f16) an argument carries — as its own type, or as
-/// the element type of an array — or nullopt when none does. A tensor argument is not one: its
-/// type is not an `ArrayType`, and a bf16 or f16 tensor is computed by the tensor module, which
-/// widens every element to f32 and rounds once when it stores the result (modules/tensor/dtype.h,
-/// design principles 7.3). A bf16 or f16 scalar or array has a literal, the written
-/// conversions and the scalar arithmetic, comparison and reduction of the language, but not every
-/// operation: `%` is an integer operation, and a function that takes a fixed set of types has no
-/// overload for the element type. Such a call is reported as asking for an operation the type does
-/// not have, rather than as "no matching function" over overloads it could never match.
-std::optional<TypeCode>
-reducedPrecisionArgumentOf(const type_vec_t &withTypes, const type_vec_t &normTypes) {
-    const auto reducedCode = [](const Type *type) -> std::optional<TypeCode> {
-        if (type == nullptr) {
-            return std::nullopt;
-        }
-        TypeCode code = type->code();
-        if (code == TypeCode::Array) {
-            const auto *arrayType = static_cast<const ArrayType *>(type);
-            code                  = arrayType->elemTypeCode();
-        }
-        if (code == TypeCode::BFloat16 || code == TypeCode::Float16) {
-            return code;
-        }
-        return std::nullopt;
-    };
-    for (const type_vec_t *types : {&withTypes, &normTypes}) {
-        for (const Type *type : *types) {
-            if (const auto code = reducedCode(type)) {
-                return code;
-            }
-        }
-    }
-    return std::nullopt;
-}
-
 /// One place a path assignment writes: a field (`v.f`, `v.0`) or an element (`v[i]`).
 struct PathStep {
     GCT::node_ptr_t node; // the ACCS or __idx__ node, as written
@@ -3123,17 +3088,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         .commit(graphs->front()->name(), argumentTypes, conditions);
                     throw BuildAbortException();
                 }
-                // A bf16 or f16 scalar or array among the arguments: no candidate can compute
-                // with it, whatever its parameters say, because the language defines no
-                // operation on a value of the element type (design principles 7.3). Say
-                // that, rather than list overloads the call could never match.
-                if (const auto reduced =
-                        reducedPrecisionArgumentOf(withInputTypes, normInputTypes)) {
-                    diags_->of(SemanticDiag::ReducedPrecisionUnsupported)
-                        .atOrigin(gct->origin())
-                        .commit(displayNameOf(graphs->front()->name()), typeCodeToString(*reduced));
-                    throw BuildAbortException();
-                }
                 std::vector<std::pair<std::string, FunctionType *>> candidates;
                 for (const auto &g : *graphs) {
                     candidates.emplace_back(g->name(), signatureOf(g));
@@ -3418,18 +3372,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     diags_->of(SemanticDiag::FunctionTypeArgumentNotInferred)
                         .atOrigin(gct->origin())
                         .commit(name, ops->name());
-                    throw BuildAbortException();
-                }
-                // A bf16 or f16 operand (or an array of one) that no overload can take: the
-                // operation is one the element type does not have (`%` is an integer operation,
-                // and a function with a fixed set of parameter types has no overload for it).
-                // Say that, rather than print an overload set the call could never match
-                // (design principles 7.3).
-                if (const auto reduced =
-                        reducedPrecisionArgumentOf(withInputTypes, normInputTypes)) {
-                    diags_->of(SemanticDiag::ReducedPrecisionUnsupported)
-                        .atOrigin(gct->origin())
-                        .commit(displayNameOf(ops->name()), typeCodeToString(*reduced));
                     throw BuildAbortException();
                 }
                 // A function with a `var` parameter given to an operator that calls it with values:

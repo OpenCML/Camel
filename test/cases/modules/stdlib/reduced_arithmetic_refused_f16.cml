@@ -1,12 +1,9 @@
 /**
  * The same refusal for the other narrow type: `%` over two f16 values has no candidate either,
  * because `__mod__` is registered for the integer types only (it is refused on f32 too -- see
- * test/cases/compile/operators/float_mod_assign.cml), and the diagnostic names the element type
- * it met. The bf16 arm of this rule is
- * test/cases/modules/stdlib/reduced_arithmetic_refused.cml; that case pins the wording for bf16,
- * and this one pins that the element type in the message follows the operand rather than being
- * fixed text: an implementation that always printed bf16 would pass the other case and fail this
- * one.
+ * test/cases/compile/operators/float_mod_assign.cml). The bf16 arm of this rule is
+ * test/cases/modules/stdlib/reduced_arithmetic_refused.cml; together the two pin that the operand
+ * types in the message are the ones the call was made with, `(bf16, bf16)` and `(f16, f16)`.
  *
  * It is a separate case and not a second statement in the same file because a refused call stops
  * the program at the first diagnostic: two refused statements would pin one message and leave the

@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-302 diagnostics: 281 errors, 21 warnings. 15 carry a machine-applicable edit, 287 say why they carry none.
+301 diagnostics: 280 errors, 21 warnings. 15 carry a machine-applicable edit, 286 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -219,7 +219,6 @@ prints one entry.
 | `0x030001D3` | [SemanticDiag::ParamDefaultWrongType](#paramdefaultwrongtype) | Error | no |
 | `0x030001D4` | [SemanticDiag::ParamAfterDefault](#paramafterdefault) | Error | no |
 | `0x030001D6` | [SemanticDiag::ParamArgumentWrongType](#paramargumentwrongtype) | Error | no |
-| `0x030001D7` | [SemanticDiag::ReducedPrecisionUnsupported](#reducedprecisionunsupported) | Error | no |
 | `0x030001D8` | [SemanticDiag::ImplOnBodylessDeclaration](#implonbodylessdeclaration) | Error | no |
 | `0x030001D9` | [SemanticDiag::ImplKernelUnknown](#implkernelunknown) | Error | no |
 | `0x030001DA` | [SemanticDiag::ImplKernelForeign](#implkernelforeign) | Error | no |
@@ -6959,36 +6958,6 @@ Write a value of the parameter's type; an integer may be given where a float is 
 ```camel
 func main(): int sync {
     println(21 * 2)
-    return 0
-}
-```
-
-### ReducedPrecisionUnsupported
-
-`0x030001D7` · Error · `SemanticDiag::ReducedPrecisionUnsupported`
-
-**Fix**
-
-None: choice: the repair is a decision only the writer can make
-
-**Message**
-
-```text
-The call of '{0}' cannot take a value of the reduced-precision element type '{1}'.
-```
-
-**Help**
-
-```text
-bf16 and f16 are floating types of the language: a literal has one, bf16(x) and f16(x) are written conversions, and the scalar arithmetic and comparison compute in f32 and round once into the element type (design principles 7.3). This call asks for an operation one of them has no overload for - an operation the same type refuses on f32, such as %, or a function that takes a fixed set of types. Write the operation on a type that has it, or read the value as f32 (or f64) first, which is exact: f32(x).
-```
-
-**Example** (`test/cases/modules/stdlib/reduced_arithmetic_refused.cml`, run as `camel test/cases/modules/stdlib/reduced_arithmetic_refused.cml`)
-
-```camel
-func main(): int sync {
-    let xs: bf16[] = []
-    println(xs[0] % xs[0])
     return 0
 }
 ```
