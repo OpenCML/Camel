@@ -1057,18 +1057,13 @@ Rules buildRules() {
     for (const char *t : {"f", "d"}) {
         r[std::format("math:sqrt_{}", t)] = cmath("sqrt", true);
     }
-    // `math:abs` of an integer is the wrap, not `std::abs`: the smallest integer has no positive
-    // counterpart, and `std::abs` of it is undefined behaviour, which the optimiser is free to fold
-    // into a positive answer -- stdlib/math.cml's `gcd` recognises the smallest integer by
-    // `abs(a) < 0`, so a folded answer turns its refusal into a gcd of a negative number
-    // (rt::absOf, camel/standalone/num.h).
+    // The integer absolute value is two's complement, not `std::abs`: the smallest integer has
+    // no positive counterpart, and the library's answer for it is itself -- `gcd` finds it by
+    // asking `abs(a) < 0` (stdlib/math.cml), so the answer is load-bearing. `std::abs` is
+    // undefined there and the test that depends on it can be optimized away
+    // (fault_gcd_overflow.cml: exit 0 where the interpreter refuses the value).
     for (const char *t : {"i", "l"}) {
-        r[std::format("math:abs_{}", t)] = {
-            [](OperatorCall &c) -> std::optional<std::string> {
-                return std::format("rt::absOf({})", c.norm(0).text);
-            },
-            true,
-        };
+        r[std::format("math:abs_{}", t)] = runtimeFunction("intAbs");
     }
     for (const char *t : {"f", "d"}) {
         r[std::format("math:abs_{}", t)]   = cmath("fabs");

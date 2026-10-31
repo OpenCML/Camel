@@ -7,11 +7,11 @@
 # the interpreter prints, word for word. A rule that writes its own plausible sentence is the one
 # mistake this list is meant to surface early -- it reads well, so nobody checks it.
 #
-# Program under this line: the interpreter itself warns during the run (`<__assn__>`), and the
-# written program has nothing to warn about: the extra line is the interpreter's diagnostic, not the
-# fault's text, and the fault line under it is the same.
-test/cases/consistency/faults/fault_in_sync_call.cml   # GAP: an interpreter warning in fvm's run, not a fault sentence
-# Program under this line: stdlib's `gcd` refuses the smallest integer in the interpreter, and the
-# standalone `gcd` does not refuse it at all (exit 0 where the interpreter exits 1). A missing
-# check, not a difference of words: the sentence cannot agree until the fault exists.
-test/cases/modules/stdlib/fault_gcd_overflow.cml       # GAP: the standalone gcd has no overflow check
+# Two kinds of line, and the difference matters: GAP is a fault this back end does not have (write
+# it, then delete the line -- a missing fault is worse than different words for one), EXCEPTION is a
+# difference that is not the fault at all.
+#
+# EXCEPTION: the interpreter itself warns during the run (`The call of '<__assn__> ...'`), and the
+# written program has nothing to warn about -- a compiler diagnostic, not a fault sentence. The
+# fault line under it and the exit code are the same on both sides; only that extra warning differs.
+test/cases/consistency/faults/fault_in_sync_call.cml   # interpreter warn, not a fault sentence -- exception
