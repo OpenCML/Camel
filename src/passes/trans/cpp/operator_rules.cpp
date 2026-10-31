@@ -1082,6 +1082,13 @@ Rules buildRules() {
         r[std::format("math:min_{}", t)] = runtimeFunction("ieeeMin");
         r[std::format("math:max_{}", t)] = runtimeFunction("ieeeMax");
     }
+    // The integers (math:min_i, math:min_l and their max forms): the library compares them the
+    // plain way -- no NaN to answer, no signed zero to order (modules/math/minmax.h) -- and the
+    // two values are the only answer either way, so this is not the IEEE pair above.
+    for (const char *t : {"i", "l"}) {
+        r[std::format("math:min_{}", t)] = runtimeFunction("intMin");
+        r[std::format("math:max_{}", t)] = runtimeFunction("intMax");
+    }
     // The complex functions (modules/math/operators.cpp): abs is hypot of the parts, exp is
     // std::exp of a std::complex, conj negates the imaginary part, re and im read one part.
     for (const char *t : {"c", "z"}) {

@@ -1,0 +1,21 @@
+/**
+ * `math::min` and `math::max` of two integers: the smaller and the larger of the two, for both
+ * integer widths (math:min_i, math:max_i, math:min_l, math:max_l). These types have no NaN to
+ * answer and no signed zero to order, so the answer is the plain comparison -- the IEEE minimum
+ * and maximum of the floats are the other rule, and this case keeps the two apart.
+ */
+
+import { max, min } from math
+
+func main(): int sync {
+    let a = -3
+    let b = 5
+    print(min(a, b))
+    print(max(a, b))
+
+    let x = 9000000000
+    let y = -9000000000
+    print(min(x, y))
+    print(max(x, y))
+    return 0
+}

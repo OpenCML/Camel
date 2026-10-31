@@ -1062,6 +1062,23 @@ std::optional<std::string> ProgramValues::constant(slot_t slot, const Type *t) {
             return std::nullopt;
         }
         const size_t rank = array != nullptr ? array->rank() : 0;
+        // A value of one dimension whose type leaves the length open (`float[]`) is still one
+        // dimension: the type says so, and the elements are how long it is, which `shape` and `len`
+        // read. A type of open rank (`float[..]`) says nothing about the rank, and a single element
+        // there is the rank-zero value the position promises (design principles 5.4: a rank-zero
+        // array *is* the element), so its constant keeps the rank it was made with. The two-list
+        // constructor is written as a call, not as a braced pair: with an element type an `{n}` can
+        // itself stand for (`rt::Array<T>`, a struct of one field) the initializer would read `{3}`
+        // as one more element.
+        const bool oneDimension =
+            rank == 1 && (array->dim(0) != 1 || !static_cast<const ArrayType *>(t)->anyRank());
+        if (oneDimension) {
+            return hoist(
+                *cpp,
+                std::format(
+                    "{}::shaped({{{}}}, {{{}}})", *cpp, *items, std::to_string(array->dim(0))),
+                "array");
+        }
         if (rank >= 2) {
             // The shape travels with the elements (rt::Array's block holds both): the rows of the
             // literal are what `appendText` prints, and `len` answers the first extent.
