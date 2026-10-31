@@ -368,6 +368,26 @@ REINTERP uri :op/neg_d -> rule jvp_neg -> rhs 85 ... fill=FunctionClosure slots=
 ② 用 `dx`、`dw` 调这个闭包，得到切线。**第一步的产物是函数值，不是数**——这就是为什么“把右侧
 放到 `/` 那个位置”一句话做不到。
 
+## 判据：闭包先建，切线后喂
+
+> **右边产出闭包时，“替换算子”的第一步是建它；把两步写成一步，就会把切线喂给一个还没建出来的
+> 函数值。**
+
+第①步做出来的东西（`user/apps/` 之外的唯一一处：`modules/transforms/module.cpp`）：
+
+```
+REINTERP closure graph=107 layout=(float, float) built=yes slots=x,w
+```
+
+一个**函数值**建出来了：它命名图 `107`（`jvp_div__rhs`），闭包布局是 `(float, float)`（`x`、`w`
+两个槽，与 `vars=x,w` 对齐），`built=yes` 是 `::Function::create` 返回了一个非空的
+`Function*`（`include/camel/core/rtdata/func.h`）。
+
+**它是什么、不是什么，写清楚**：`Function::create` 建的是“**布局**为 `(float, float)` 的空闭包”
+——槽的**类型**有了，槽里的**值**还没有；把 `f` 里 `/` 那个站点的 `x`、`w` 真装进去、并让
+`107` 的端口吃到它们，需要调用节点与帧的连线。**所以这一笔是“闭包建得出来”，不是“闭包在 `/` 站点
+被调用了”。** 下一步是把这两件事接上。
+
 ## 验收（缺一步不算完）
 
 1. **前向**：`f(x) = x*x + 3/x` 在 `x = 2` 处，`f = 5.5`，`f' = 4 - 0.75 = 3.25`。两个数都要打出来。
