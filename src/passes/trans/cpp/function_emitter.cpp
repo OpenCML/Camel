@@ -1655,8 +1655,9 @@ void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref) {
     const auto *targetArray = camel::core::type::asArrayType(toType);
     const auto *sourceArray =
         fromType != nullptr ? camel::core::type::asArrayType(fromType) : nullptr;
-    const bool checksShape =
-        targetArray != nullptr && sourceArray != nullptr && !targetArray->anyRank() && to == from;
+    const bool checksShape = targetArray != nullptr && sourceArray != nullptr &&
+                             !targetArray->anyRank() && !targetArray->extents().empty() &&
+                             to == from;
     if (checksShape) {
         std::string extents;
         for (const auto &form : targetArray->extents()) {
