@@ -169,6 +169,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "narrow_reductions_four_backends"
+desc = "A bf16 and an f16 on all four scheduling back ends: std::nvm, std::fvm, std::cpp (the program std::cpp writes, built and run) and std::jit, on the five programs that pin the two types -- the readings of a value of either, and the four faults a conversion or a division can give. What is compared is each back end's own output and exit code, byte for byte: a type is implemented when the four say the same sentence, not when one of them can run it. Nothing is skipped: a back end that could not run a program would say so in its cell, and the cell that differs is named."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/cppexec/run.py"
+args = ["${case}", "--four-backends", "test/cases/trans/cpp/narrow_reductions.cml", "test/cases/trans/cpp/fault_narrow_text_number.cml", "test/cases/trans/cpp/fault_narrow_text_range.cml", "test/cases/trans/cpp/fault_narrow_f16_range.cml", "test/cases/trans/cpp/fault_narrow_div_zero.cml"]
+expect_exit = 0
+expect_stdout_contains = ["PASS: 5 of 5 programs say the same thing on four back ends"]
+expect_output_not_contains = ["differs", "not run on", "does not build"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 300000
+
+[[tests]]
 name = "narrow_reductions_needs_no_runtime"
 # Red when the `math:min_f`/`math:max_f` rules are deleted: the library's own `min` widens a bf16
 # to `float` before comparing, so the fold reaches `math:min_d`, the bridge, and a link line that
