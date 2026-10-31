@@ -106,18 +106,8 @@ void appendShapedText(std::string &out, const Array<T> &xs, std::size_t offset, 
 /// it cannot tell the two apart. The rank is the whole test: a value is grown into one dimension by
 /// `push` (array.h) and made of no rank by `Array::element`, so nothing here counts elements.
 template <typename T> void appendText(std::string &out, const Array<T> &xs) {
-<<<<<<< HEAD
-    if (xs.zeroDimensional() || (xs.rank() == 0 && xs.size() == 1)) {
-        if (xs.size() != 0) {
-            appendText(out, xs[0]);
-        }
-||||||| bf16d9be6
-    if (xs.rank() == 0 && xs.size() == 1) {
-        appendText(out, xs[0]);
-=======
     if (xs.isElement()) {
         appendText(out, xs[0]);
->>>>>>> lane-nestedlit
         return;
     }
     if (xs.rank() >= 2) {

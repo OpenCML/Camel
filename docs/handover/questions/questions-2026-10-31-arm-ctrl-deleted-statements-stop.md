@@ -99,3 +99,35 @@ id=355 kind=11 idx=22
 3. **有一个臂的区间落在 BRCH 之前**：`353` 在 idx 18，它的 `352` 在 idx 20（之后，还好）；而 `133` 在 idx 4、入口 `132` 不在表里，`BranchArmEntries:707-711` 的规矩是"臂节点排在 BRCH 之前就跳过"——**这一条规矩确实会被问到，而不是像上一节猜的那样问不到**。
 
 **把三节连起来**：`live` 漏了 19 条 → 塞进计划后它们仍不在任何 `[entry, tail]` 里（区间只有一个节点，而且入口自己不在区域里）→ **臂的范围根本不覆盖臂里的语句**。这就是"放进计划还是不跑"的答案：**它在计划里的第几位有了，但没有任何区间覆盖它。**
+## 附：作者点名的"安全第一类"实测并不安全
+
+作者按 `9bd39d649` 的清单点了第一类："同步块里那些已经有同步前驱的 `LinkType::Ctrl`，删掉不改变谁会跑，因为同步前驱已经在说同一件事"。这一类只有一个落点：
+
+```cpp
+// src/compile/gir/builder_helpers.h:694，删 1 行
+inline void writeSyncStatement(node_handle_t from, node_handle_t to) {
+    writeSyncLink(from, to);
+-   linkNodes(LinkType::Ctrl, from, to);
+}
+```
+
+删掉后的 7 个计划目录（`smoke, feat/linear, feat/opt, feat/trans, feat/consistency, feat/compile, feat/docs`）：
+
+**`total: 5257, pass: 5163, fail: 94`**（干净树是 `5257 / 5255 / 0`）
+
+按族分：
+
+| 族 | 条数 |
+| --- | --- |
+| `var_capture` | 17 |
+| `unread_gate` | 14 |
+| `consecutive_sync_calls` | 12 |
+| `camel_passes` | 10 |
+| `var_writes_through_recursion` | 6 |
+| `algebra_rules` | 4 |
+| `gir` | 3 |
+| 其余（`covered_value` / `comprehension` / `entering` / `loops` / `boundaries` …） | 各 1-2 |
+
+**结论：同步前驱并没有说完 ctrl 说的那件事**——至少在"链尾接 GATE"与"链尾接调用"的那几处没有：`var_capture` 17 条、`unread_gate` 14 条、`consecutive_sync_calls` 12 条是**行为**族（值捕获、没人读的 Gate、连续同步调用），不是快照。**这一处就是今晚早先"过渡 ctrl 全停 = 94 条红"的来源，一个不差。**
+
+**请作者指出那一问**：若这条边必须留到"链尾接 GATE / 接调用"这两处被别的机制接住为止，那么**这两处该由谁接**——同步链的尾巴（`lastSyncedNode_`，`builder_control.cpp:4192` 已经在用它）能不能直接把等待写在 GATE 上，还是要一个别的承载者？

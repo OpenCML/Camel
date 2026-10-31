@@ -89,7 +89,8 @@ template <typename T> class Array {
     static Array element(T item) {
         Array out;
         out.push(std::move(item));
-        out.rep_->rank = 0;
+        out.rep_->rank   = 0;
+        out.rep_->zeroDim = true; // the value *is* that element, not an array of one
         return out;
     }
 
@@ -170,22 +171,18 @@ template <typename T> class Array {
     /// which is what the operators that run over the whole value read.
     static constexpr std::size_t kMaxRank = 8;
     std::size_t rank() const noexcept { return rep_ != nullptr ? rep_->rank : 0; }
-<<<<<<< HEAD
     /// Whether the shape recorded is the one with no dimensions (`setShape` with rank 0): the value
     /// is the element it holds (design principles 5.4), and prints as that element. A block that
     /// records no shape at all is a different thing -- `rank() == 0` too, because there is no rank
     /// to state -- and reads as one dimension of `size()` elements. Rank zero is a fact, not a
     /// number: the shape is there, and it is zero-dimensional.
     bool zeroDimensional() const noexcept { return rep_ != nullptr && rep_->zeroDim; }
-||||||| bf16d9be6
-=======
-    /// Whether the value *is* the element it holds (design principles 5.4): the shape is the one with
-    /// no dimensions, and there is an element to be. `Array::element` is what makes one, where `push`
-    /// grows a value into its first dimension, so the rank is the fact and nothing here counts. The
-    /// empty array is not an element: it is no block at all (`[]`), it holds nothing to be, and its
-    /// shape is the one dimension of nothing -- `[0]` -- as the interpreter answers.
-    bool isElement() const noexcept { return rank() == 0 && size() != 0; }
->>>>>>> lane-nestedlit
+
+    /// Whether the value *is* the element it holds: the zero-dimensional shape, with an element to
+    /// be. `Array::element` is what makes one, where `push` grows a value into its first dimension.
+    /// The empty array is not an element: it holds nothing to be, and its shape is the one
+    /// dimension of nothing -- `[0]` -- as the interpreter answers.
+    bool isElement() const noexcept { return zeroDimensional() && size() != 0; }
     std::size_t extent(std::size_t i) const noexcept {
         return rep_ != nullptr && i < rep_->rank ? rep_->extents[i] : 0;
     }
