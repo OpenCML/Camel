@@ -462,6 +462,14 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
     if (startRef != camel::runtime::kInvalidNodeRef) {
         visit(startRef);
     }
+    // A node a region says runs is laid out even when nothing outside the region reaches it: an
+    // arm's statements have no value user, and the region is the unit the plan is laid out from
+    // (docs/design/effects/edges.cn.md 5.2).
+    for (gc_node_ref_t n = 0; n < live.size(); ++n) {
+        if (live[n] && state[n] != 2) {
+            visit(n);
+        }
+    }
     return order;
 }
 
