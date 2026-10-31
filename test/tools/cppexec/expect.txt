@@ -76,6 +76,11 @@ test/cases/consistency/new_values/rebinding_loop.cml
 test/cases/consistency/new_values/peek_loop.cml
 test/cases/consistency/new_values/peek.cml
 
+# `xs[i] = v` (:op/set_index_in_place over :var/take): the changed array, an index outside it
+# faulting as a read does, and the array another holder has unchanged.
+test/cases/linear/byref/element_assigned.cml
+test/cases/consistency/faults/element_assigned_out_of_range.cml
+
 # Output of print / println with a format (design principles 10.6).
 # (test/cases/trans/cpp/exec/print_formats.cml, in the directory above)
 # A formatted string is the same tree as '...'->format<...>: the translator sees no difference.

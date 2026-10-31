@@ -1647,23 +1647,31 @@ bool FunctionEmitter::lowerVariable(
     if (uri == ":struct/append_arr_in_place") {
         return lowerAppendInPlace(frame, ref, out);
     }
+    if (uri == ":op/set_index_in_place") {
+        return lowerSetIndexInPlace(frame, ref, out);
+    }
     if (uri == ":op/assn_owned") {
-        // `xs = xs->append<v>` (the in-place form of `append`): the compiler writes
-        // :op/assn_owned(xs, :struct/append_arr_in_place(v, :var/take(xs))). The variable
-        // gives its array up for the call, so when nothing else holds it rt::append grows it
-        // in place (design note 5.2), which is what the interpreter's sole-reference mark does.
-        // The element is computed first: an expression that read the variable must see the
-        // array before it is given up. The form may already have been lowered as a step of the
+        // `xs = xs->append<v>` (the in-place form of `append`) is written
+        // :op/assn_owned(xs, :struct/append_arr_in_place(v, :var/take(xs))), and `xs[i] = v` is
+        // :op/assn_owned(xs, :op/set_index_in_place(:var/take(xs), i, v)). The variable gives its
+        // array up for the call, so when nothing else holds it the form grows or changes it in
+        // place (design note 5.2), which is what the interpreter's sole-reference mark does.
+        // The other arguments are computed first: an expression that read the variable must see
+        // the array before it is given up. A form may already have been lowered as a step of the
         // sequence before the assignment that stores it, so it is lowered once (consumed).
-        if (norm.size() == 2 && g->node(norm[1])->kind == GCNodeKind::Oper &&
-            operatorUri(g, norm[1]) == ":struct/append_arr_in_place" &&
-            lowerAppendInPlace(frame, norm[1], out)) {
-            // The assignment stands for the variable's version, so it carries what the form left: the
-            // variable's cell with its marking, which is how a write leaves the variable too
-            // (`lowerVariable`'s assignment path).
-            const CppValue appended = valueOf(frame, norm[1]);
-            frame.values[ref]       = CppValue{appended.text, false, appended.cell};
-            return true;
+        if (norm.size() == 2 && g->node(norm[1])->kind == GCNodeKind::Oper) {
+            const std::string form = operatorUri(g, norm[1]);
+            const bool lowered =
+                (form == ":struct/append_arr_in_place" && lowerAppendInPlace(frame, norm[1], out)) ||
+                (form == ":op/set_index_in_place" && lowerSetIndexInPlace(frame, norm[1], out));
+            if (lowered) {
+                // The assignment stands for the variable's version, so it carries what the form
+                // left: the variable's cell with its marking, which is how a write leaves the
+                // variable too (`lowerVariable`'s assignment path).
+                const CppValue stored = valueOf(frame, norm[1]);
+                frame.values[ref]     = CppValue{stored.text, false, stored.cell};
+                return true;
+            }
         }
         refuse(
             g,
@@ -1765,6 +1773,63 @@ bool FunctionEmitter::lowerAppendInPlace(Frame &frame, gc_node_ref_t ref, Block 
     // marking, exactly as a write leaves the variable (`lowerVariable`'s assignment path): a
     // non-escaping variable is a plain local and a later read of this node is that local, while
     // an escaping one is an rt::Cell, and a read of this node dereferences it once.
+    frame.values[ref] = CppValue{cell.text, false, cell.cell};
+    return true;
+}
+
+bool FunctionEmitter::lowerSetIndexInPlace(Frame &frame, gc_node_ref_t ref, Block &out) {
+    if (frame.consumed.contains(ref)) {
+        return true;
+    }
+    const GCGraph *g = frame.graph;
+    const auto args  = g->normInputsOf(ref);
+    if (args.size() != 3 || g->node(args.front())->kind != GCNodeKind::Oper ||
+        operatorUri(g, args.front()) != ":var/take") {
+        return false;
+    }
+    const auto cellInput = g->normInputsOf(args.front());
+    if (cellInput.empty()) {
+        return false;
+    }
+    const CppValue &cell = valueOf(frame, cellInput.front());
+    const bool local     = cell.cell == CppValue::Cell::Local;
+    // The index and the element are computed before the array is given up, as in the append
+    // form: an expression that reads the variable must see the array as it was.
+    std::vector<std::string> operand;
+    for (std::size_t i = 1; i < args.size(); ++i) {
+        const gc_node_ref_t arg = args[i];
+        std::string text        = valueOf(frame, arg).text;
+        if (!isIdentifier(text)) {
+            const std::string name = locals_.unique(std::format("item{}", nextValue_++));
+            out.push_back(Stmt::line(std::format(
+                "const {} {} = {};",
+                cppType(g, arg, g->node(arg)->dataType()),
+                name,
+                withoutParentheses(text))));
+            text = name;
+        }
+        operand.push_back(text);
+    }
+    const std::vector<std::string> marks{
+        SiteTable::valueMark(0), SiteTable::valueMark(1), SiteTable::valueMark(2)};
+    const std::string site =
+        program_.sites.siteFor(g, ref, RuntimeDiag::IndexOutOfRange, marks);
+    out.push_back(Stmt::line(
+        local ? std::format(
+                    "{0} = rt::setAt(std::move({0}), {1}, {2}, {3});",
+                    cell.text,
+                    operand[0],
+                    operand[1],
+                    site)
+              : std::format(
+                    "{0}.set(rt::setAt({0}.take(), {1}, {2}, {3}));",
+                    cell.text,
+                    operand[0],
+                    operand[1],
+                    site)));
+    frame.consumed.insert(ref);
+    // As the append form: the node stands for the variable's own value, the cell with its
+    // marking, and a read of it dereferences the cell once.
     frame.values[ref] = CppValue{cell.text, false, cell.cell};
     return true;
 }
