@@ -491,6 +491,18 @@ expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 [[tests]]
+name = "print_shape"
+desc = "Printing tells an element from an array of one. A value of no rank *is* the element (design principles 5.4): a field of `f32[..]` holds such a value and `println(first.v)` writes `1.5`, not `[1.5]`. A value that carries a dimension is written as the whole literal -- `[2.5]` -- because the bracket is the difference between an element and an array of one, and a reader who cannot see it cannot tell the two apart. `shape` of a value of one dimension answers the one dimension it has (`[2]`), not the element. agree_with_fvm runs the program and compares its output with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/print_shape.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::println(", "appendText"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "cast_shape_holds"
 desc = "`as` states the shape a value must have. Both types are the same `rt::Array<T>` on this side -- a shape is not a second value -- so the conversion writes no bytes and checks the extents the type states: `rt::asShape(v, {2, 3}, \"float[2, 3]\", at_...)` answers the value itself when the rank and every stated extent are the ones the type says. The program keeps reading and prints both values; agree_with_fvm compares them with std::fvm byte for byte."
 kind = "behavior"
@@ -513,6 +525,18 @@ expect_stdout_contains = ["rt::asShape(", "float[3, 3]", "RuntimeDiag::RuntimeEr
 expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+[[tests]]
+name = "fault_unread_cast"
+desc = "A conversion that can fail runs where it is written, whether or not its value is read. `let unused = open2(...) as float[3, 3]` states a shape and the check is the statement (design principles 5.4); dropping it because its value is unread would drop the fault with it. The generated function keeps `rt::asShape(open2(...), {3, 3}, \"float[3, 3]\", at_...)` where it stands and answers what the interpreter answers: `conversion to 'float[3, 3]' failed: the array has shape [2, 2]`, `not reached` unprinted. agree_with_fvm compares the report and the exit status byte for byte, and `opt/fault_preservation/chained_cast.cml` is the same statement reached through another pass."
+kind = "behavior"
+case = "../../../cases/trans/cpp/fault_unread_cast.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::asShape(", "float[3, 3]", "RuntimeDiag::RuntimeError"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
 
 [[tests]]
 name = "enum_types"

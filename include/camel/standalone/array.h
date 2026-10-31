@@ -392,16 +392,26 @@ template <typename T> T at(const Array<T> &xs, int64_t index, const Site &site) 
 /// the interpreter's `int[]` -- `[3, 2]` for a rank-2 value, `[4]` for one of a single dimension.
 /// It is a value, not a view: the array copies its extents into storage of its own, so a write to
 /// the answer cannot reach the value it describes.
+///
+/// The answer is itself one dimension of `rank` numbers, and it says so: a `shape` nobody shaped
+/// would print as an element when it holds one number (`2` for a value of 2) where the interpreter
+/// prints `[2]`, and `shape` of a value of no rank -- which *is* the element -- is the empty run.
 template <typename T> Array<int64_t> shapeOf(const Array<T> &xs) {
     Array<int64_t> out;
-    if (xs.rank() <= 1) {
-        out.push(static_cast<int64_t>(xs.size()));
+    const std::size_t rank = xs.rank();
+    if (rank == 0 && xs.size() == 1) {
         return out;
     }
-    out.reserve(xs.rank());
-    for (std::size_t i = 0; i < xs.rank(); ++i) {
-        out.push(static_cast<int64_t>(xs.extent(i)));
+    if (rank <= 1) {
+        out.push(static_cast<int64_t>(xs.size()));
+    } else {
+        out.reserve(rank);
+        for (std::size_t i = 0; i < rank; ++i) {
+            out.push(static_cast<int64_t>(xs.extent(i)));
+        }
     }
+    const std::int64_t count = static_cast<std::int64_t>(out.size());
+    out.setExtents(std::initializer_list<std::int64_t>{count});
     return out;
 }
 
