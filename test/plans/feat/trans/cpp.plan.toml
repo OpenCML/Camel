@@ -169,40 +169,39 @@ timeout_ms = 8000
 
 [[tests]]
 name = "tensor_ones"
-desc = "`tensor:ones` crosses the bridge: the pass writes no tensor of its own, so the runtime builds the value and the program holds a counted handle to it -- `const rt::Foreign v1_ones = op_tensor_ones.call<rt::Foreign>(at_13_17, {rt::bridge::arg(lit::array)}, {}, 2)`, the shape handed over as the `int[]` it already is and the element type as the integer code of the type (2 is f32) -- and prints the runtime's own text for it. The handle's C++ type is the rule's, not the `rt::Array<float>` the Camel type of the result names, because an array the program builds is a value while a tensor is a value the runtime owns. The program itself is built and run by agree_with_fvm, which compares it with std::fvm byte for byte: one line, `[[1.0, 1.0], [1.0, 1.0]]`."
+desc = "`tensor:ones` crosses the bridge, and what comes back is the value its Camel type names: `T[..]` is `rt::Array<T>` in this back end, one representation whichever module built the value, so the call is `const rt::Array<float> v1_ones = op_tensor_ones.call<rt::Array<float>>(at_13_17, {rt::bridge::arg(lit::array)}, {}, 2)` -- the shape handed over as the `int[]` it already is, the element type as the integer code of the type (2 is f32), and the result converted at the boundary into the shaped array the program holds (the elements copied out, the shape with them; camel/standalone/bridge.h). `println` of it is the same `rt::println` as for an array the program wrote itself, and it prints the nested form of the shape. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte: one line, `[[1.0, 1.0], [1.0, 1.0]]`. Nothing here is a handle: `rt::Foreign` is for the objects the language keeps opaque."
 kind = "behavior"
 case = "../../../cases/trans/cpp/tensor_ones.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
-expect_stdout_contains = ["const rt::Foreign v1_ones = op_tensor_ones.call<rt::Foreign>(", "rt::bridge::arg(lit::array)", "const rt::bridge::Operator op_tensor_ones{\"tensor:ones\"};", "#include \"camel/standalone/bridge.h\"", "rt::println(v1_ones);"]
-expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Array<float> v1_ones"]
+expect_stdout_contains = ["const rt::Array<float> v1_ones = op_tensor_ones.call<rt::Array<float>>(", "rt::bridge::arg(lit::array)", "const rt::bridge::Operator op_tensor_ones{\"tensor:ones\"};", "#include \"camel/standalone/bridge.h\"", "rt::println(v1_ones);"]
+expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
 name = "tensor_ones_element"
-desc = "The element type a `tensor:ones` call states reaches the kernel, so the tensor built is the one the program asked for. The rule sends it as the integer code of the type -- `op_tensor_ones.call<rt::Foreign>(at_18_17, {rt::bridge::arg(lit::array)}, {}, 3)` for f64, `..., {}, 1)` for i64 -- and the bridge makes the type from that code (`Type::create`, never a text of a type) as the `T[..]` such a call declares; the kernel reads it as the element of the call's result type (`tensor:ones` fills the element the call states). Before it the call stated no result type, the kernel fell back to f32, and `ones::<i64>([2, 2])` printed `[[1.0, 1.0], [1.0, 1.0]]` where the interpreter prints `[[1, 1], [1, 1]]`. An f64 tensor prints `[[1.0, 1.0], [1.0, 1.0]]` either way -- 1.0 has one text at both widths -- so the integer line is the one that shows the type, and both are checked against std::fvm by agree_with_fvm."
+desc = "The element type a `tensor:ones` call states still reaches the kernel, and the value it fills is still the array the result type names: the two facts are one call now. The rule sends the type as the integer code -- `op_tensor_ones.call<rt::Array<double>>(at_18_17, {rt::bridge::arg(lit::array)}, {}, 3)` for f64, `..., {}, 1)` for i64 -- and the bridge makes the type from that code (`Type::create`, never a text of a type) as the `T[..]` such a call declares; the kernel reads it as the element of the call's result type. Without it the call stated no result type, the kernel fell back to f32, and `ones::<i64>([2, 2])` printed `[[1.0, 1.0], [1.0, 1.0]]` where the interpreter prints `[[1, 1], [1, 1]]`. The elements cross back as the array's (`rt::Array<int64_t>`, `rt::Array<double>`), so the wrong width would show twice: in the value and in the text. An f64 tensor prints `[[1.0, 1.0], [1.0, 1.0]]` either way -- 1.0 has one text at both widths -- so the integer line is the one that shows the type, and both are checked against std::fvm by agree_with_fvm."
 kind = "behavior"
 case = "../../../cases/trans/cpp/tensor_ones_element.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
-expect_stdout_contains = ["op_tensor_ones.call<rt::Foreign>(", "}, {}, 3);", "}, {}, 1);", "rt::bridge::arg(lit::array)", "#include \"camel/standalone/bridge.h\""]
-expect_output_not_contains = ["TranslationRefused", "internal error"]
+expect_stdout_contains = ["const rt::Array<double> v1_ones = op_tensor_ones.call<rt::Array<double>>(", "const rt::Array<int64_t> v2_ones = op_tensor_ones.call<rt::Array<int64_t>>(", "}, {}, 3);", "}, {}, 1);", "rt::bridge::arg(lit::array)", "#include \"camel/standalone/bridge.h\""]
+expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
 name = "tensor_zeros"
-desc = "`tensor:zeros` translates, and it is the same rule as `tensor:ones`: the pass writes no tensor of its own, so the runtime builds the value and the program holds a counted handle to it -- `const rt::Foreign v1_zeros = op_tensor_zeros.call<rt::Foreign>(at_17_18, {rt::bridge::arg(lit::array)}, {}, 2)`, the shape handed over as the `int[]` it already is and the element type as the integer code of the type -- and prints the runtime's own text for it. It was the last tensor builder refused as work not done (`std::cpp has no translation of it yet`), and what differed from `ones` was the fill the runtime writes, not a byte of what this back end writes. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte: one line, `[[0.0, 0.0], [0.0, 0.0]]`."
+desc = "`tensor:zeros` translates, and it is the same rule as `tensor:ones`: `const rt::Array<float> v1_zeros = op_tensor_zeros.call<rt::Array<float>>(at_17_18, {rt::bridge::arg(lit::array)}, {}, 2)`, the shape handed over as the `int[]` it already is, the element type as the integer code of the type, and the tensor converted back at the boundary into the shaped array the result type names -- `println` of it prints the nested form, the same text as for a literal of that shape. What differed from `ones` was the fill the runtime writes, not a byte of what this back end writes, which is why the two builders are one rule. It was the last tensor builder refused as work not done (`std::cpp has no translation of it yet`). The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte: one line, `[[0.0, 0.0], [0.0, 0.0]]`."
 kind = "behavior"
 case = "../../../cases/trans/cpp/tensor_zeros.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
-expect_stdout_contains = ["const rt::Foreign v1_zeros = op_tensor_zeros.call<rt::Foreign>(", "rt::bridge::arg(lit::array)", "}, {}, 2);", "const rt::bridge::Operator op_tensor_zeros{\"tensor:zeros\"};", "#include \"camel/standalone/bridge.h\"", "rt::println(v1_zeros);"]
-expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Array<float> v1_zeros"]
+expect_stdout_contains = ["const rt::Array<float> v1_zeros = op_tensor_zeros.call<rt::Array<float>>(", "rt::bridge::arg(lit::array)", "}, {}, 2);", "const rt::bridge::Operator op_tensor_zeros{\"tensor:zeros\"};", "#include \"camel/standalone/bridge.h\"", "rt::println(v1_zeros);"]
+expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
-
 [[tests]]
 name = "index_rank"
 desc = "A position on a value of several dimensions: `m[1]` is the second row (`rt::atRow`, one dimension less and of the row's own extent), `m[1, 0]` writes the axis it drops and is the element (`rt::atAxis`, every other dimension kept whole), and `t[1]` of a rank-3 value is the rank-2 value behind it. `len` of a row answers the dimension that is left. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte -- six lines, rows and elements both. The operator rule that used to turn a value of several dimensions away is gone with it, as are the two module programs that took the same road: `index_two_positions` translates and agrees."

@@ -579,7 +579,7 @@ const CppValue &FunctionEmitter::valueOf(Frame &frame, gc_node_ref_t ref) {
 
 void FunctionEmitter::bind(
     Frame &frame, gc_node_ref_t ref, std::string expr, bool inlinable, Block &out,
-    const std::string &hint, const char *resultCpp) {
+    const std::string &hint) {
     const Type *type  = frame.graph->node(ref)->dataType();
     const size_t uses = liveUses(frame.graph, ref) + frame.results.count(ref);
     if (!isValueType(type) || uses == 0) {
@@ -602,7 +602,7 @@ void FunctionEmitter::bind(
         Stmt::line(
             std::format(
                 "const {} {} = {};",
-                resultCpp != nullptr ? std::string(resultCpp) : cppType(frame.graph, ref, type),
+                cppType(frame.graph, ref, type),
                 name,
                 withoutParentheses(expr))));
     frame.values[ref] = CppValue{name, false};
@@ -1079,8 +1079,7 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
                 uri,
                 types.empty() ? std::string() : " of type " + types));
     }
-    bind(
-        frame, ref, std::move(*expr), rule->inlinable, out, operatorHint(uri), rule->resultCpp);
+    bind(frame, ref, std::move(*expr), rule->inlinable, out, operatorHint(uri));
 }
 
 void FunctionEmitter::lowerLoop(
