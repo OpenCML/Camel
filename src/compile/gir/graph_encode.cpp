@@ -73,7 +73,6 @@ using camel::runtime::GCGraphPayloadShape;
 using camel::runtime::GCJoinBody;
 using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
-using camel::runtime::GraphDraft;
 using camel::runtime::validateRuntimeGraphPayload;
 
 bool canEncodeRuntimeStaticSlotType(Type *type) {
@@ -225,7 +224,10 @@ std::optional<std::span<const draft_node_ref_t>> liveNodesOf(const PreparedGraph
     return std::span<const draft_node_ref_t>{prepared.liveNodes};
 }
 
-std::vector<draft_node_ref_t> collectLiveDraftNodes(const GraphDraft &draft) {
+/// The nodes the graph of `transaction` reaches from its roots: the caller hands over the owner, not
+/// the graph, so a reader borrows the draft through it and this file names no storage type.
+std::vector<draft_node_ref_t> collectLiveDraftNodes(const runtime::GraphTransaction &transaction) {
+    const auto &draft = transaction.graph();
     std::unordered_set<draft_node_ref_t> visited;
     std::vector<draft_node_ref_t> worklist;
     auto pushRoot = [&](draft_node_ref_t ref) {
@@ -441,7 +443,7 @@ class EncodeSession {
         // The runtime graph is the part of the draft that its roots reach; the draft keeps the
         // rest (a rewrite need not have erased a node nothing reads) and the graph does not name
         // it.
-        prepared.liveNodes = collectLiveDraftNodes(graph->view());
+        prepared.liveNodes = collectLiveDraftNodes(graph->transaction());
         CAMEL_LOG_INFO_S(
             "GIREncode",
             "Prepare compile graph '{}' reachable nodes={}.",

@@ -1,9 +1,9 @@
 {
   "comment": "The baseline of the direct-connection ledger (graph-store step 2 b): the numbers below may only fall, and the last step is all of them at zero. `sites` records where each number comes from, as `file#symbol` (a line number moves with every edit above it, a symbol does not); it is diagnostics for a red and never decides the verdict. Record a new row after a commit with check.mjs --record.",
   "numbers": {
-    "files": 39,
-    "references": 369,
-    "constructions": 2,
+    "files": 37,
+    "references": 365,
+    "constructions": 1,
     "decode": 4
   },
   "sites": {
@@ -25,13 +25,11 @@
       "include/camel/runtime/writings.h": 1,
       "modules/rewrite/proof.h": 1,
       "modules/tiles/include/tiles/internal/graph_values.h": 1,
-      "modules/tiles/include/tiles/internal/regions.h": 1,
       "modules/tiles/src/graph_values.cpp": 1,
       "modules/tiles/src/region_extract.cpp": 1,
       "modules/tiles/src/region_outline.cpp": 1,
       "src/compile/gir/builder_support.h": 1,
       "src/compile/gir/draft_graph_builder.cpp": 1,
-      "src/compile/gir/graph_encode.cpp": 1,
       "src/core/tags.cpp": 1,
       "src/passes/test/writings.cpp": 1,
       "src/runtime/draft.cpp": 1,
@@ -74,17 +72,13 @@
       "include/camel/runtime/writings.h#extractWritings": 2,
       "modules/rewrite/proof.h#-": 1,
       "modules/tiles/include/tiles/internal/graph_values.h#packGraphAggregate": 2,
-      "modules/tiles/include/tiles/internal/regions.h#-": 1,
       "modules/tiles/src/graph_values.cpp#packGraphAggregate": 2,
       "modules/tiles/src/region_extract.cpp#copyLoopNodes": 1,
-      "modules/tiles/src/region_extract.cpp#extractRegion": 1,
       "modules/tiles/src/region_extract.cpp#makeLoopRegions": 1,
       "modules/tiles/src/region_outline.cpp#transferAggregate": 1,
       "src/compile/gir/builder_support.h#nodeDraftOf": 1,
       "src/compile/gir/draft_graph_builder.cpp#draftOwners": 2,
       "src/compile/gir/draft_graph_builder.cpp#fromDraft": 1,
-      "src/compile/gir/graph_encode.cpp#collectLiveDraftNodes": 1,
-      "src/compile/gir/graph_encode.cpp#compileGraphOpaque": 1,
       "src/core/tags.cpp#declaresIndependentElements": 1,
       "src/core/tags.cpp#effectivePermissions": 1,
       "src/core/tags.cpp#factsOf": 2,
@@ -333,7 +327,6 @@
       "src/runtime/writings.cpp#saturate": 1
     },
     "constructions": {
-      "modules/tiles/src/region_extract.cpp#extractRegion": 1,
       "src/runtime/draft.cpp#decode": 1
     },
     "decode": {
