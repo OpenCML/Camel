@@ -9,14 +9,18 @@
  *
  * The boundary is one function, bridge::call, implemented in libcamel
  * (src/execute/standalone_bridge.cpp). What crosses it is plain C++: the arguments and the
- * result as Values (numbers, booleans, the bytes of a string), a fault as the texts of its
- * diagnostic. The runtime's objects exist only while the operator runs, inside that function;
- * the generated code never holds one, and this header includes nothing of the runtime.
+ * result as Values (numbers, booleans, the bytes of a string, an array of integers), a fault as
+ * the texts of its diagnostic. A value the runtime owns -- a tensor -- cannot be one of those: it
+ * crosses as a counted handle (Foreign), so the generated code holds a handle and never one of the
+ * runtime's own pointers. The other runtime objects exist only while the operator runs, inside that
+ * function, and this header includes nothing of the runtime.
  */
 
 #pragma once
 
+#include "camel/standalone/array.h"
 #include "camel/standalone/core.h"
+#include "camel/standalone/foreign.h"
 #include "camel/standalone/str.h"
 
 #include <cstdint>
@@ -29,11 +33,13 @@ namespace camel::standalone::bridge {
 
 /// A value handed to or returned by an operator of the runtime.
 struct Value {
-    enum class Kind : uint8_t { Void, Bool, Int32, Int64, Float32, Float64, String };
+    enum class Kind : uint8_t { Void, Bool, Int32, Int64, Float32, Float64, String, IntArray, Foreign };
     Kind kind       = Kind::Void;
     int64_t integer = 0; // Bool, Int32, Int64
     double real     = 0; // Float32, Float64
     std::string text;    // String
+    std::vector<int64_t> ints; // IntArray
+    void *foreign = nullptr;   // Foreign
 };
 
 /// What the runtime's diagnostic says about a fault an operator raised.
@@ -56,7 +62,37 @@ inline Value arg(int32_t v) { return {Value::Kind::Int32, v, 0, {}}; }
 inline Value arg(int64_t v) { return {Value::Kind::Int64, v, 0, {}}; }
 inline Value arg(float v) { return {Value::Kind::Float32, 0, v, {}}; }
 inline Value arg(double v) { return {Value::Kind::Float64, 0, v, {}}; }
-inline Value arg(const Str &v) { return {Value::Kind::String, 0, 0, v.str()}; }
+inline Value arg(const Str &v) { return {Value::Kind::String, 0, 0, v.str(), {}, nullptr}; }
+
+/// A shape or any other array of integers, as an operator argument: a value, not a constant, so a
+/// shape computed at run time crosses as well as a literal one.
+inline Value arg(const std::vector<int64_t> &v) {
+    Value out;
+    out.kind = Value::Kind::IntArray;
+    out.ints = v;
+    return out;
+}
+
+/// The same for an `int[]` of the generated program, whose elements lie flat in row order: the
+/// runtime's arrays of integers are one run of elements too, so a shape built by the program
+/// (`[n, 3]` with `n` computed, `reshape`'s target) crosses as the array it is.
+inline Value arg(const Array<int64_t> &v) {
+    Value out;
+    out.kind = Value::Kind::IntArray;
+    out.ints.reserve(v.size());
+    for (std::size_t i = 0; i < v.size(); ++i) {
+        out.ints.push_back(v[i]);
+    }
+    return out;
+}
+
+/// A handle to a value the runtime owns (tensor.h): passed on as it is, its count taken by hand.
+inline Value arg(const Foreign &v) {
+    Value out;
+    out.kind    = Value::Kind::Foreign;
+    out.foreign = Foreign::retain(v.handle());
+    return out;
+}
 
 template <typename T> constexpr Value::Kind kindOf() {
     if constexpr (std::is_same_v<T, void>) {
@@ -71,6 +107,9 @@ template <typename T> constexpr Value::Kind kindOf() {
         return Value::Kind::Float32;
     } else if constexpr (std::is_same_v<T, double>) {
         return Value::Kind::Float64;
+    } else if constexpr (std::is_same_v<T, Foreign>) {
+        // A value the runtime owns, which crosses as the handle to it rather than as its value.
+        return Value::Kind::Foreign;
     } else {
         static_assert(std::is_same_v<T, Str>, "a type the bridge does not carry");
         return Value::Kind::String;
@@ -106,6 +145,10 @@ class Operator {
             return;
         } else if constexpr (std::is_same_v<R, Str>) {
             return Str(v.text);
+        } else if constexpr (std::is_same_v<R, Foreign>) {
+            // The handle the bridge made owns one count, and the Foreign that reaches the program
+            // is the one that takes it: no count is added here (foreign.h).
+            return Foreign(v.foreign);
         } else if constexpr (std::is_floating_point_v<R>) {
             return static_cast<R>(v.real);
         } else {

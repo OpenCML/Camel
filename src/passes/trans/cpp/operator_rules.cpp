@@ -937,6 +937,30 @@ Rules buildRules() {
         true,
     };
 
+    // ---- The results the runtime owns (tensor:*, design note 9) ----
+    // `tensor:ones` fills a tensor of the element type the call states with the shape it is given.
+    // A tensor is not a value this back end writes: it lives in the runtime module that owns it, and
+    // the program holds it through a counted handle (`rt::Foreign`, camel/standalone/foreign.h), so
+    // what a tensor is is written once, in the runtime, and the program and the interpreter print
+    // one tensor the same way -- the reason the shape crosses as the `int[]` it already is, instead
+    // of being rebuilt on this side. The result's C++ type is the handle, not the `rt::Array` the
+    // Camel type `f32[2, 2]` would otherwise name: an array the program builds is that value, a
+    // tensor is this one (which is why the rule says `resultCpp`).
+    r["tensor:ones"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1) {
+                return std::nullopt;
+            }
+            return std::format(
+                "{}.call<rt::Foreign>({}, {{rt::bridge::arg({})}}, {{}})",
+                c.bridgeOperator(),
+                c.place(),
+                c.norm(0).text);
+        },
+        false,
+        "rt::Foreign",
+    };
+
     return r;
 }
 

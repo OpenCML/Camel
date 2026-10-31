@@ -16,6 +16,7 @@
 | 页 | 问什么 | 状态 | 堵着谁 |
 |---|---|---|---|
 | [`does-rt-array-carry-a-shape`](questions-2026-10-31-does-rt-array-carry-a-shape.md) | 05:30 裁 **A**：`rt::Array` 带 `rank`/`extent` | 已裁未落 | 守卫与“形状 + 嵌套打印”第一步已落；队列：下标 → 切片 → `reshape` → `shape` → `numel` → 逐元素 |
+| [`which-results-cross-the-bridge`](questions-2026-10-31-which-results-cross-the-bridge.md) | 同一个 `T[..]`，两种表示：`tensor:*` 的结果走 `rt::Foreign`（05:50）还是原生带形状数组（05:30）；判据是"算子来自哪个模块"还是"形状是否具体" | 待裁 | 堵 `tensor:ones/zeros/reshape/load_npy` 与 `rand:*_array` 的表示，也堵 `std::cpp` 第 5 步 |
 | [`std-cpp-needs-a-tensor-type`](questions-2026-10-31-std-cpp-needs-a-tensor-type.md) | 05:50 裁：**张量是 `rt::Foreign` 过桥**，走设计稿第 9 节，第 5 步开工 | 已裁未落 | 369 个程序记作“等第 5 步（外部对象）”；第一笔是 `rt::Foreign` 句柄 |
 | [`mem-blocks-has-no-block-space`](questions-2026-10-31-mem-blocks-has-no-block-space.md) | 05:10 裁 **A**：拒绝并让拒绝说实话（目标不具备，不是尚未实现） | 已裁已落 | 无；普查把 10 个记为“目标不具备” |
 | [`generator-narrowing-remains`](questions-2026-10-31-generator-narrowing-remains.md) | 04:50 裁 **A**：删掉生成器收窄 | 已裁已落 | 无；两处拒绝已删，三条形状转成消费它们的正例 |
