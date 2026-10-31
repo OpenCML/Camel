@@ -48,7 +48,7 @@ using camel::runtime::kInvalidNodeRef;
 /// Whether `loop` is a region form of its graph: a LOOP node owns a condition region and a body
 /// region (camel/runtime/graph.h). The graph form of a loop (two graphs in the LOOP body) is not
 /// built any more, and NodeVM does not execute it.
-[[maybe_unused]] bool hasLoopRegions(const camel::runtime::GCGraph &graph, gc_node_ref_t loop) {
+bool hasLoopRegions(const camel::runtime::GCGraph &graph, gc_node_ref_t loop) {
     for (uint32_t r = 0; r < graph.regionCount(); ++r) {
         const camel::runtime::GCRegion *region = graph.region(r);
         if (region != nullptr && region->owner == loop &&
