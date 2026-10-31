@@ -1560,6 +1560,14 @@ class CmlPrinter {
             return ref;
         }
         const std::string_view uri = graph_->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri();
+        if (uri == ":var/after") {
+            // The cell after a call: the version a read takes when a call through a function value
+            // wrote the variable. The read is the person's read of the variable, so it is written
+            // with the variable's own name -- the first input is the cell, and the second is the
+            // call, which stands in the statement stream where they wrote it.
+            const auto after = graph_->normInputsOf(ref);
+            return after.empty() ? ref : after.front();
+        }
         if (!uri.starts_with(":op/assn")) {
             return ref;
         }
@@ -2091,6 +2099,28 @@ class CmlPrinter {
         return {text, 100};
     }
 
+    /// A read whose cell is a `:var/after` takes the version a call made. That call is an effect
+    /// whose only user is the `:var/after` node, so `processNode` kept it where the source had it
+    /// and lifted nothing; the read is where the person wrote the call's statement, so the call is
+    /// printed just before it, and the read then shows the variable's own name.
+    void emitCallTheVersionCameFrom(gc_node_ref_t cellOrWrite) {
+        const camel::runtime::GCNode *node = graph_->node(cellOrWrite);
+        if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Oper) {
+            return;
+        }
+        if (graph_->nodeBodyAs<camel::runtime::GCOperBody>(cellOrWrite)->uri() != ":var/after") {
+            return;
+        }
+        const auto after = graph_->normInputsOf(cellOrWrite);
+        if (after.size() < 2 || declared_.contains(after.back())) {
+            return;
+        }
+        branchAsStatement_     = true;
+        const std::string call = expression(after.back()).text;
+        branchAsStatement_     = false;
+        emit(indent_ + call);
+    }
+
     Expr operatorExpression(gc_node_ref_t ref) {
         const auto *body   = graph_->nodeBodyAs<camel::runtime::GCOperBody>(ref);
         const std::string_view uri = body->uri();
@@ -2099,16 +2129,19 @@ class CmlPrinter {
             if (inputs.size() != 1) {
                 fail(ref, "a variable read without a cell");
             }
+            emitCallTheVersionCameFrom(inputs.front());
             return {cellName(cellReadBy(inputs.front())), 100};
         }
         if (uri == ":var/after") {
-            // The cell after the call that wrote it: the second input is that call, whose value the
-            // operator does not read, and the value this node gives is the cell itself -- so the
-            // printed program names the cell, as a read of the variable does.
+            // The cell after the call that wrote it. This operator is not source syntax: the person
+            // who wrote the program wrote a read of the variable, and the call stands in the
+            // statement stream where they wrote it. So the printed program shows what the cell's
+            // reader sees at that point -- the first input's own spelling -- and the call, the
+            // second input, is not printed here at all.
             if (inputs.size() != 2) {
                 fail(ref, "a variable after a call without a cell and a call");
             }
-            return {cellName(cellReadBy(inputs.front())), 100};
+            return expression(inputs.front());
         }
         if (uri.starts_with(":var/")) {
             fail(ref, std::format("the operator '{}'", uri));
