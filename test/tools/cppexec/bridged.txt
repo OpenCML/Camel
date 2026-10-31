@@ -10,6 +10,3 @@
 # EXCEPTION: a regex engine is not in the standalone header set and is not meant to be -- the
 # bridge is how a program that needs one runs.
 test/cases/compile/diag_render/runtime_regex.cml   # re:test -- exception, not a gap
-# EXCEPTION: a tensor crosses the bridge as a handle (rt::Foreign); standalone operators over
-# tensors are a different piece of work, and the bridge is what makes them work today.
-test/cases/trans/cpp/tensor_ones.cml               # tensor:ones -- exception, not a gap
