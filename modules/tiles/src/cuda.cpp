@@ -3,6 +3,7 @@
 
 // Scoped execution, resident allocation ownership and GPU benchmark measurements.
 
+#include "tiles/dtype.h"
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
 #include "tiles/internal/mixed_gemm.h"
@@ -723,8 +724,7 @@ std::string benchmark(std::shared_ptr<const Program> snapshot) {
     report["output_shapes"] = json::array();
     report["output_dtypes"] = json::array();
     for (auto output : program.outputs)
-        report["output_dtypes"].push_back(
-            program.nodes[output].dtype == DType::F64 ? "f64" : "f32");
+        report["output_dtypes"].push_back(dtypeName(program.nodes[output].dtype));
     if (std::any_of(program.nodes.begin(), program.nodes.end(), [](const auto &n) {
             return n.dtype == DType::F64;
         }))
@@ -796,7 +796,7 @@ std::string benchmark(std::shared_ptr<const Program> snapshot) {
             // output can justify a relaxed optimized/unfused comparison.
             const bool bitwise = !outputHasRelaxedDependency(program, output);
             const auto &node   = program.nodes[output];
-            const size_t width = node.dtype == DType::F64 ? sizeof(double) : sizeof(float);
+            const size_t width = dtypeWidth(node.dtype);
             for (size_t i = 0; i < elements(node.shape); ++i) {
                 exact.push_back(bitwise);
                 offsets.push_back(offset);

@@ -156,29 +156,29 @@ expect_stdout_exact = "[-1.0, -0.0, 0.0, 2.0, 3.0] [-1.0, 2.0, 3.0]\n[apple, fig
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
-# What diagnostic ReducedPrecisionUnsupported is left about: `%`, which no float has.
+# `%` is refused on every floating type, so a narrow operand is refused the ordinary way.
 
 [[tests]]
 name = "reduced_arithmetic_refused"
-desc = "A `%` over two bf16 values has no candidate -- `__mod__` is registered for the integer types only, as it is for f32 -- so the call is refused as SemanticDiag::ReducedPrecisionUnsupported, naming `operator %` and the element type bf16 rather than listing overloads that could never match. `+` over the same values is no longer refused: a bf16 value has the scalar operations of any other float, and reduced_scalar pins what it computes. The case used to write `+`; that change is what re-points it at `%`."
+desc = "A `%` over two bf16 values has no candidate -- `__mod__` is registered for the integer types only, as it is for f32 -- and the refusal is the ordinary one: SemanticDiag::NoMatchingFunction for `(bf16, bf16)`, 'operator % is not defined for these operand types'. That is the same sentence the same call over f32 gets (test/cases/compile/operators/float_mod_assign.cml), which is the point: bf16 and f16 are floating types of the language (design principles 7.3), so the element width is not a separate reason for refusing a call. `+` over the same values is not refused: a bf16 value has the scalar operations of any other float, and reduced_scalar pins what it computes. The case used to write `+`; that change is what re-points it at `%`."
 kind = "negative"
 case = "../../../cases/modules/stdlib/reduced_arithmetic_refused.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ReducedPrecisionUnsupported"
-expect_output_contains = ["operator %", "element type 'bf16'"]
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_output_contains = ["(bf16, bf16)", "operator '%' is not defined for these operand types"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
 name = "reduced_arithmetic_refused_f16"
-desc = "The same refusal for f16: `%` over two f16 values has no candidate, because `__mod__` is registered for the integer types only, and the diagnostic names `operator %` and the element type `f16`. Both arms pin the phrase `element type '<type>'` and not a bare type name: the message carries one help paragraph naming both types (`bf16` contains `f16`, and the paragraph contains both words), so a bare name passes whichever type the message actually names -- measured, the bf16 case swapped to `f16` still went 44 pass / 0 fail with the old pin, and 43 / 1 once the phrase replaced it. What the two cases together test is that the element type in the text follows the operand rather than being fixed text. A separate case, because a refused call stops the program at the first diagnostic: two refused statements in one file would pin one message and leave the other unread."
+desc = "The same refusal for f16: SemanticDiag::NoMatchingFunction for `(f16, f16)`, 'operator % is not defined for these operand types'. Both arms pin the operand types and the sentence rather than a bare type name: a bare `f16` is a substring of `bf16`, so a message about bf16 satisfies it -- measured, the bf16 case swapped to `f16` still went green with that pin. What the two cases together test is that the operand types in the message follow the call rather than being fixed text. A separate case, because a refused call stops the program at the first diagnostic: two refused statements in one file would pin one message and leave the other unread."
 kind = "negative"
 case = "../../../cases/modules/stdlib/reduced_arithmetic_refused_f16.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ReducedPrecisionUnsupported"
-expect_output_contains = ["operator %", "element type 'f16'"]
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_output_contains = ["(f16, f16)", "operator '%' is not defined for these operand types"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -202,7 +202,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "reduced_minmax"
-desc = "`math::min`/`max`/`abs` over bf16 and f16 are the exact IEEE 754-2019 operations on the value each operand widens to, so each returns one of its operands (or clears the sign) and never rounds: [1.0, 2.0] answers bf16 1.0 (bytes [128, 63]) and 2.0 ([0, 64]), f16 the same with 0x3C00 and 0x4000; min(-0, +0) is -0 (bytes [0, 128]) and max is +0 ([0, 0]) while the two compare equal -- comparing the 16-bit patterns or the raw slots picks +0 for both; abs(-0.0) is the two bytes [0, 0] in both types, so an abs that kept the sign or was written as max(x, -x) moves that line; `array::min`/`max` over [0.0, -0.0] folds to -0.0 and +0.0 by their bytes whatever the element order, over f16 [5.0, 65504.0, -1.0] to -1.0 and 65504.0 (0x7BFF, bytes [255, 123]) -- the largest finite f16 exactly, so a saturation or a re-rounding moves it -- a one-element array to that element, and an empty one to null; and `sum` over the same element types still accumulates in f64 and rounds once ([2^24, 1, -2^24] answers bf16 1.0, bytes [128, 63], where an f32 accumulator answers 0; [1.0, 2^-8, 2^-8] answers 1.0078125, where a rounding per addition answers 1.0). The case was red before the overloads existed: every min/max/abs call here and the two reduce lines of stdlib/array.cml reported SemanticDiag::ReducedPrecisionUnsupported or 'math::min names an operator with 6 signatures'."
+desc = "`math::min`/`max`/`abs` over bf16 and f16 are the exact IEEE 754-2019 operations on the value each operand widens to, so each returns one of its operands (or clears the sign) and never rounds: [1.0, 2.0] answers bf16 1.0 (bytes [128, 63]) and 2.0 ([0, 64]), f16 the same with 0x3C00 and 0x4000; min(-0, +0) is -0 (bytes [0, 128]) and max is +0 ([0, 0]) while the two compare equal -- comparing the 16-bit patterns or the raw slots picks +0 for both; abs(-0.0) is the two bytes [0, 0] in both types, so an abs that kept the sign or was written as max(x, -x) moves that line; `array::min`/`max` over [0.0, -0.0] folds to -0.0 and +0.0 by their bytes whatever the element order, over f16 [5.0, 65504.0, -1.0] to -1.0 and 65504.0 (0x7BFF, bytes [255, 123]) -- the largest finite f16 exactly, so a saturation or a re-rounding moves it -- a one-element array to that element, and an empty one to null; and `sum` over the same element types still accumulates in f64 and rounds once ([2^24, 1, -2^24] answers bf16 1.0, bytes [128, 63], where an f32 accumulator answers 0; [1.0, 2^-8, 2^-8] answers 1.0078125, where a rounding per addition answers 1.0). The case was red before the overloads existed: every min/max/abs call here and the two reduce lines of stdlib/array.cml reported no matching function for their operand types, or 'math::min names an operator with 6 signatures'."
 kind = "behavior"
 case = "../../../cases/modules/stdlib/reduced_minmax.cml"
 args = ["${case}", "${backend}"]

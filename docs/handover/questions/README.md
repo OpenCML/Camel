@@ -4,21 +4,21 @@
 
 > **索引的价值在于与目录一一对应；一旦少一页，读者就会以为没有那一问。**
 
-> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 5 页**（`gir-handle-names-a-transaction-or-a-draft`、`partial-destructuring-of-a-value-tuple`、`tiles-narrow-dtype`），其余五页已裁完、整体挪进 `reviews/`（`a-version-port-that-accepts-more-than-void` 于 23:50 裁：选 A）。
+> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 6 页**（`gir-handle-names-a-transaction-or-a-draft`、`partial-destructuring-of-a-value-tuple`、`tiles-narrow-dtype`），其余五页已裁完、整体挪进 `reviews/`（`a-version-port-that-accepts-more-than-void` 于 23:50 裁：选 A）。
 >
 > **哪些未决值得成页**：不是所有未决都值得成页——只有**今天有人被它堵住**的才值得。其余留在原则里，等它真的挡住一条车道再成页。所以第 15 节那 8 条不占待裁表，清单在文末，每条写明今天堵着谁。
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
 
-## 现在在等作者：3 页
+## 现在在等作者：3 页（两页已裁、等着被挪走）
 
-三页在等，都是今天量出来、还没裁的：
+`rt::Array` 带形状（05:30 裁 A）与 `std::mem::blocks()`（05:10 裁 A）已经裁了，改动在车道上，页还没挪；真正等答复的是下面第 1、3 两页，第 2 页的作者已裁、我们在按 A 的顺序做。
 
 | 页 | 问什么 | 状态 | 堵着谁 |
 |---|---|---|---|
-| [`does-rt-array-carry-a-shape`](questions-2026-10-31-does-rt-array-carry-a-shape.md) | standalone 的 `rt::Array` 要不要带形状：不带的话，`reshape`/`slice`/`shape` 那 15 个程序挡在设计门上，翻译侧修不动 | 待裁 | 15/15 同一道门（`rank()==1 && !anyRank()`）；且多维字面量今天不是被拒、是印错，已先加 guard |
-| [`mem-blocks-has-no-block-space`](questions-2026-10-31-mem-blocks-has-no-block-space.md) | `std::mem::blocks()` 在 standalone 程序里该拒绝、接块空间、还是换含义 | 待裁 | `:op/mem_blocks` 10 个程序；能译但算错（四个计数恒 0） |
-| [`generator-narrowing-remains`](questions-2026-10-31-generator-narrowing-remains.md) | 生成器收窄还留不留：三种极端形状现在都被接受 | 待裁 | 不堵今天的活；留着它，`0x03000040` 在生成器面上就没有形状能触发 |
+| [`what-executes-a-value-taken-by-a-position`](questions-2026-10-31-what-executes-a-value-taken-by-a-position.md) | 被位置直接取走的值（写的值、`void` 调用的值）除了“让门依赖那次写”之外，还有什么能给它执行的理由 | 待裁 | **②a 停造 ctrl**：块外补丁整份套上整闸 `fail 150`（新增 146 条），不止 `var_reference` 的 66 条 |
+| [`std-cpp-needs-a-tensor-type`](questions-2026-10-31-std-cpp-needs-a-tensor-type.md) | `std::cpp` 要不要有 tensor 类型：`Tensor` 在这个后端里一次都没出现，而 `ones 39 + zeros 32 + load_npy_f32 28 + reshape 270` 都在等它 | 待裁 | 369 个程序；拒绝此刻只是先撞在 `int[]` 那一格上，已改说“缺的是 tensor 值” |
+| [`does-rt-array-carry-a-shape`](questions-2026-10-31-does-rt-array-carry-a-shape.md) | 已裁 05:30：**A**，`rt::Array` 带上 `rank`/`extent`；先上多维守卫，再按 下标→切片→`reshape`→`shape`→`numel`→逐元素 的顺序做 | 已裁未落 | 15 个程序 + 264 换桶里回到多维的那部分，记作“等形状（A 进行中）” |
 
 原则第 15 节另列着 6 条未决（另 2 条已成页、22:50 已裁），见文末。
 

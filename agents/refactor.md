@@ -41,6 +41,11 @@ returned for rework when it misses any of these, however well it tests:
 - **Tests assert behaviour that matters** (a property, a graph shape, an exact output), not
   counters that move with unrelated changes.
 - **Camel code** follows `docs/stdlib-conventions.cn.md` section 6.5 and is formatter output.
+- **A change made of several steps lands as one commit only when each step can say where it stands.**
+  Name the steps, and for each one say whether it is in the tree, in flight, or not started; a
+  slice whose steps cannot be placed one by one cannot be debugged when it fails, because nothing
+  tells you which step failed. The steps are reported while the work is in flight, not only with the
+  finished commit: "it is nearly there" is not a location.
 - **Documents cite files and symbols, never line numbers.** A line number moves with every edit; cite `src/compile/gir/builder.cpp` and the function, type or test name instead.
 
 - **Documentation moves with the code.** A commit that changes a module's behaviour or invariants updates that module's page under `docs/internals/` (or, until the reorganisation lands, its page under `docs/technical/`) and the affected `docs/reference/` (today `docs/language/`) sections in the same commit. Those pages say what is true now: responsibilities, core data structures, invariants, interfaces, where the code lives — no history, no task numbers, no line numbers.

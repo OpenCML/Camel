@@ -605,6 +605,19 @@ bool FunctionEmitter::lowerNode(
         std::optional<std::string> text;
         if (GCGraph *function = functionConstantOf(g, ref)) {
             text = functionValue(function, {});
+        } else if (hasSeveralDimensions(type)) {
+            // The constant of such a type is its first extent's worth of elements only, so writing
+            // one would print three numbers where the interpreter prints three rows -- a program
+            // that exits 0 and is wrong. The refusal says what the target does not have, because
+            // that is what is missing: an array here is a flat run of elements, with no shape.
+            refuse(
+                g,
+                ref,
+                std::format(
+                    "{} uses a value of type '{}'; an array in std::cpp is a flat run of elements "
+                    "and carries no shape, so a value of several dimensions has no form there",
+                    describeFunction(g),
+                    typeName(type)));
         } else {
             text = program_.values.constant(g->staticArea()->get<slot_t>(-node->dataIndex), type);
         }
@@ -911,6 +924,31 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
         return;
     }
     const OperatorRule *rule = findOperatorRule(uri);
+    // `std::mem::blocks()` reads the runtime's own block space, which is an introspection of this
+    // runtime: a program std::cpp writes has no block space of the runtime at all, so on this target
+    // the counters are not available. That is a boundary of the target, not a translation still to
+    // be written, and the two are said differently (author's ruling of 2026-10-31: A).
+    // `tensor:ones` and `tensor:zeros` build a tensor from a shape array. std::cpp writes no tensor
+    // value at all, so naming the shape array as the untranslated thing would blame the wrong
+    // side: the array is translated, the tensor is what the pass does not have.
+    if (uri == "tensor:ones" || uri == "tensor:zeros") {
+        refuse(
+            g,
+            ref,
+            std::format(
+                "{} uses '{}' to build a tensor, and std::cpp writes no tensor value: the pass has "
+                "no tensor type, so a shape cannot be handed to it",
+                describeFunction(g),
+                uri));
+    }
+    if (uri == ":op/mem_blocks") {        refuse(
+            g,
+            ref,
+            std::format(
+                "{} reads the block counters of the Camel runtime, and a program std::cpp writes has "
+                "no runtime block space of its own: the counters are not available on this target",
+                describeFunction(g)));
+    }
     if (rule == nullptr) {
         for (const auto types : {&normTypes, &withTypes}) {
             for (const Type *t : *types) {

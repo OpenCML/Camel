@@ -1565,14 +1565,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::ReducedPrecisionUnsupported,
-            {
-                "ReducedPrecisionUnsupported",
-                "The call of '{0}' cannot take a value of the reduced-precision element type '{1}'.",
-                "bf16 and f16 are floating types of the language: a literal has one, bf16(x) and f16(x) are written conversions, and the scalar arithmetic and comparison compute in f32 and round once into the element type (design principles 7.3). This call asks for an operation one of them has no overload for - an operation the same type refuses on f32, such as %, or a function that takes a fixed set of types. Write the operation on a type that has it, or read the value as f32 (or f64) first, which is exact: f32(x).",
-            },
-        },
-        {
             SemanticDiag::ImplOnBodylessDeclaration,
             {
                 "ImplOnBodylessDeclaration",

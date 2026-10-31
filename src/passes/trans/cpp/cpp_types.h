@@ -31,6 +31,13 @@ using camel::core::type::Type;
 
 bool isVoid(const Type *type);
 
+/// Whether `type` is, or holds, an array of more than one dimension -- a rank of two or more, or
+/// an open rank. A value of such a type has no form in the generated program: its array is a flat
+/// run of elements and carries no shape, so neither the bounds nor the layout of the value survive
+/// it. A constant of that type would be its first extent's worth of elements, which is why the
+/// writer refuses it instead of writing one.
+bool hasSeveralDimensions(const Type *type);
+
 /// Whether a value of `type` is a C++ value at all. `never` is not one: a call whose result is
 /// `never` ends the flow instead of producing anything (design principles 3.9), and cppTypes maps
 /// the type to `void` for that reason, so a `return` of it, an assignment of it or a name bound to
