@@ -105,6 +105,17 @@ std::optional<operator_t> ExecutorManager::find(const std::string &uri) const {
     return traced(itExec->second->find(uri.substr(pos + 1)));
 }
 
+void ExecutorManager::declareBridgeSignature(std::string uri, std::string sig) const {
+    bridgeSignatures.insert_or_assign(std::move(uri), std::move(sig));
+}
+
+std::optional<std::string> ExecutorManager::signatureOf(const std::string &uri) const {
+    const auto it = bridgeSignatures.find(uri);
+    if (it == bridgeSignatures.end()) {
+        return std::nullopt;
+    }
+    return it->second;
+}
 std::string ExecutorManager::getNameOfAnOperator(const operator_t &tracedOp) const {
     const operator_t op = camel::profile::unwrapThunk(camel::core::effect_trace::unwrap(tracedOp));
     for (const auto &[protocol, executor] : loadedExecutors) {

@@ -1,17 +1,16 @@
 /**
- * std::cpp translates scalar and string values only. The pass refuses at the operator use that
- * needs a tensor -- `tensor:ones` in `main`, line 16 -- and names the operator and the type of its
- * argument, instead of stopping with an internal error that names a node number; the array-returning
- * `scale` is never reached.
+ * `tensor:ones` crosses the bridge: a tensor is a value the runtime owns, and the program holds a
+ * counted handle to it (rt::Foreign), so what a tensor is is written once, in the runtime module,
+ * and the program prints it as the interpreter does.
+ *
+ * `tensor:zeros` builds one the same way and has no rule in the table yet. The refusal names that
+ * operator and the work not done -- not the shape array it takes (an `int[]` is translated) and not
+ * the type of its result (the bridge carries a tensor now).
  */
 
-import { ones } from tensor
-
-func scale(x: f32[..], k: f32): f32[..] {
-    return x * k
-}
+import { zeros } from tensor
 
 func main(): int sync {
-    println(scale(ones::<f32>([2, 3]), 2.0))
+    println(zeros::<f32>([2, 3]))
     return 0
 }

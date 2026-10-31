@@ -221,11 +221,7 @@ test/cases/trans/cpp/index_rank.cml
 # a column of it (`m[:, 1]`), and the rank-2 value behind the first row of a rank-3 one.
 test/cases/trans/cpp/slice_rank.cml
 
-# `shape(m)` answers the value's dimensions as an `int[]` of its own -- a value, not a view -- and a
-# sliced value answers the dimensions it kept.
-test/cases/trans/cpp/shape_rank.cml
-
-# `numel` counts the elements of a value of any rank, and the whole-value `sum` answers the element
-# type -- exact for integers, the f64 accumulator converted once for floats.
-test/cases/trans/cpp/numel_rank.cml
-test/cases/trans/cpp/sum_rank.cml
+# A tensor the runtime builds: `tensor:ones` has no standalone translation, so the program holds a
+# counted handle to the runtime's own value (rt::Foreign) and prints the runtime's text for it --
+# the one line below is std::fvm's, byte for byte.
+test/cases/trans/cpp/tensor_ones.cml
