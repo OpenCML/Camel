@@ -252,3 +252,10 @@ Statement（`numberLess` 的顺序、f64 累加一次的 `sum`、`IEEE 754-2019`
 尺子按这条站住：`not_comparable` 这一轮**没有涨**（仍是 12 条），每一条都写着"为什么两边不可比"
 ——打印自己测的秒数（`block_sort_merge`、`bootstrap_medians`）、打印当前时间（`modules/std/time`）、
 参考实现在 1e8 元素上自己 exit 1（`para/core/merge_sort`）——没有一条是"比不了就划过去"。
+
+**引别的树的数字，等于引别人的测量——要么说清是哪棵树哪个 sha，要么先合过来再量。**
+今晚就踩了一次：本车道报 `refused 1005 / defect 54`（HEAD `b3bb51280` + 三笔的树），而另一棵树是
+`971 / 0`；两个数并在一句话里就被读成"今夜的普查退步了"。所以这本页上的每一个数都带 sha，
+换树就重算，不跨树并称。顺带一条读数纪律：`defect` 里的 `does not build` 有一堆是 census 自己那条
+编译命令的链接失败（`para/*`、`trans/cpp/runtime_bridge.cml` 后者在 `expect.txt` 里、闸门全绿），
+报这一档之前先看它们的报错是不是写出器的缺口。

@@ -4,18 +4,22 @@
 
 > **索引的价值在于与目录一一对应；一旦少一页，读者就会以为没有那一问。**
 
-> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 6 页**（`gir-handle-names-a-transaction-or-a-draft`、`partial-destructuring-of-a-value-tuple`、`tiles-narrow-dtype`），其余五页已裁完、整体挪进 `reviews/`（`a-version-port-that-accepts-more-than-void` 于 23:50 裁：选 A）。
+> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 3 页在等答复**（`whose-effect-is-an-inlined-body`、`what-type-does-a-mean-have`、`does-a-stream-need-a-representation-in-cpp`），其余各页已裁、按裁定往 develop 走（裁完的页作者会挪进 `reviews/`）。
 >
 > **哪些未决值得成页**：不是所有未决都值得成页——只有**今天有人被它堵住**的才值得。其余留在原则里，等它真的挡住一条车道再成页。所以第 15 节那 8 条不占待裁表，清单在文末，每条写明今天堵着谁。
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
-## 现在在等作者：1 页（`whose-effect-is-an-inlined-body`）
+## 现在在等作者：3 页（`whose-effect-is-an-inlined-body`、`what-type-does-a-mean-have`、`does-a-stream-need-a-representation-in-cpp`）
 
-`questions/` 里只有一页在等答复：内联把体搬进调用者图后，那张图多出来的环境资源归谁。其余页面都已裁，改动按裁定往 develop 走（裁完的页作者会挪进 `reviews/`）。新页从车道落进来时才在这个表里加行。
+`questions/` 里在等答复的页：内联把体搬进调用者图后那张图多出来的环境资源归谁；`mean` 的返回类型
+（整数均值今天印成 `2.3333333f` 的位模式）；流要不要在 `std::cpp` 里有一套表示。其余页面都已裁，
+改动按裁定往 develop 走（裁完的页作者会挪进 `reviews/`）。新页从车道落进来时才在这个表里加行。
 
 | 页 | 问什么 | 状态 | 堵着谁 |
 |---|---|---|---|
 | [`whose-effect-is-an-inlined-body`](questions-2026-10-31-whose-effect-is-an-inlined-body.md) | 内联把体搬进调用者图后，那张图多出来的环境资源归调用者、归原来的体，还是谁内联谁在区域记录里登记 | 待裁 | 逐图版的效应边界不变量（今天量出 9 条 `callback.*_opt` 全是这个形状，尺子伸过了头） |
+| [`what-type-does-a-mean-have`](questions-2026-10-31-what-type-does-a-mean-have.md) | `mean` 返回元素类型 `T` 还是 `f32`：签名说 `T`，kernel 对整数答 `f32`（整数 `[1, 2, 4]` 的均值印成 `1075139925`，那是 `2.3333333f` 的位模式），`array_axis.cpp` 又直接拒非浮点 | 待裁 | `std::cpp` 侧"整数 `mean` 按名字拒"是误诊的产物：病因是类型，不是没写规则 |
+| [`does-a-stream-need-a-representation-in-cpp`](questions-2026-10-31-does-a-stream-need-a-representation-in-cpp.md) | 流（`T..`，全语料 35 条）在 `std::cpp` 里给一套表示（`rt::Stream<T>`），还是不表示、改由遍把生成器消解掉；流的类型是递归的（`() => (T, T..)?`），写不成 C++ 别名 | 待裁 | 35 条流拒绝（22 返回值、13 参数）全堵在这；作者第 11 条那三句是这页的不变量 |
 | [`does-rt-array-carry-a-shape`](questions-2026-10-31-does-rt-array-carry-a-shape.md) | 05:30 裁 **A**：`rt::Array` 带 `rank`/`extent` | 已裁未落 | 队列：`argmax_axis` → 逐元素；`T[..]` 的表示已由 07:30 裁定统一为原生带形状数组 |
 | [`std-cpp-needs-a-tensor-type`](questions-2026-10-31-std-cpp-needs-a-tensor-type.md) | 07:30 收回 05:50：`T[..]` 一律是原生带形状 `rt::Array`，经桥时转换；`rt::Foreign` 只留给 `PyObject`、`Device<T>` | 已裁未落 | `ones`/`zeros` 的表示要改回 `rt::Array`；设计稿 §9 与类型表同笔改 |
 | [`mem-blocks-has-no-block-space`](questions-2026-10-31-mem-blocks-has-no-block-space.md) | 05:10 裁 **A**：拒绝并让拒绝实话（目标不具备，不是尚未实现） | 已裁已落 | 无；普查把 10 个记为“目标不具备” |
