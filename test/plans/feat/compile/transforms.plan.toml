@@ -80,6 +80,23 @@ expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float)
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# The initial state is lifted like every other node: a constant gets the zero tangent, a value that
+# comes from the input gets the tangent the chain computed for it. `s = x`, three rounds of `s * x`:
+# `f(x) = x**4`, so `f(3) = 81`, `f'(3) = 108` -- not `(81, 0)`, which is what a lift that starts
+# every state at `(value, 0)` reads, and not `(0, 0)` either.
+[[tests]]
+name = "jvp_loop.init_from_input_is_lifted"
+desc = "A loop whose state starts at the input, not at a constant: `loop s = x for i in [1, 2, 3] do s * x` is `f(x) = x**4`, so `jvp(f)(3, 1)` reads `(81, 108)`. The initial state's tangent is not zero-by-default: the state is a node on the chain like any other, so `x` hands in `x`'s tangent and only a constant hands in zero. `(81, 0)` and `(0, 0)` are both distinguishable from `(81, 108)`, so the two numbers name the defect if the initial state is ever wired as `(value, 0)` again."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_loop_init_from_input.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["REINTERP jvp function=f graph=", "81.0", "108.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 # A call is lifted as a call: the callee gets a lifted graph of its own, and it gets exactly one --
 # `f(x) = g(x) + g(x)` calls `g` twice and the reading says `callees=1`. The numbers are checked
 # against the derivative written by hand: `g(x) = x*x`, `f(x) = 2*x*x`, so `f(3) = 18` and
