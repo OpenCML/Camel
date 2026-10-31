@@ -1,0 +1,16 @@
+/**
+ * A type function applied to a `typeof` of a type that is itself a type function applied to a
+ * `typeof`: the resolution has to go all the way down, not one layer.
+ */
+
+import { ElementOf } from types
+
+func corner(xss: int[][]): int sync {
+    let e: ElementOf<ElementOf<typeof xss>> = xss[0][0]
+    return e
+}
+
+func main(): int sync {
+    println(corner([[7, 8], [9]]))
+    return 0
+}

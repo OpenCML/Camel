@@ -1380,7 +1380,9 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
             return node;
         }
     }
-    Type *targetType = boundType(written);
+    // The declared type is a type expression like any other position (design principles 5.6): a
+    // `typeof` written in it is resolved here, without evaluating the expression it names.
+    Type *targetType = resolveTypeNode(boundType(written), gct);
     if (targetType != nullptr && targetType->code() == TypeCode::Function) {
         // A function type written for a function: it says which function a name stands for
         // (the instance of a generic function, one of several overloads, a partial
