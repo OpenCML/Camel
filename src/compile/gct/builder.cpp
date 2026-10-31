@@ -4776,11 +4776,17 @@ node_ptr_t Builder::visitRankedArrayInto(
     // The elements of the literal in the order the flattened value holds them, each built in the
     // element type the position gives it, as an array literal's elements are (design principles
     // 5.1). The shape is the one the literal writes, which is the position's by the checks above.
-    // An element the program computes is one of those elements like any other: it has no value of
-    // its own, so the flat value keeps its position as a hole and the computed node stands for it
-    // (`[[1.0, 0.0 / 0.0], [0.0 / 0.0, 2.0]]` is the four elements of a `float[2, 2]`, not two
-    // rows). Built as rows it stayed an array of the leaf type the computed rows' leaves gave it,
-    // and the declaration that asked for the shape reported the type it could not fit.
+    //
+    // An element the program computes is one of those elements like any other, and it is read in
+    // this order for the same reason: the brackets write the shape and the leaves are what fills
+    // it, so `[[1.0, x], [x, 2.0]]` is four elements in row order, not two rows of them. Read row
+    // by row, each row became a value of its own and the outer literal's element type became the
+    // leaf type those rows happened to give it (`float`) -- a type no position states, which the
+    // rows (`float[]`) then did not fit, and the report named the first row (`Cannot insert data
+    // of type 'float[]' into a(n) array with element type 'float'`). The value the position asks
+    // for is flat, so its elements are read flat; the one thing a computed leaf changes is that
+    // it cannot be folded, so it stays a hole in that same value and the node that computes it
+    // stands for it there.
     std::vector<AST::node_ptr_t> leaves;
     const auto collect = [&](const auto &self, const AST::node_ptr_t &node) -> void {
         const auto &items = *node->atAs<AST::RepeatedLoad>(0);

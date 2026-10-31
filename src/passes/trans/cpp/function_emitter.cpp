@@ -1207,9 +1207,6 @@ void FunctionEmitter::lowerLoop(
     }
     if (iterates) {
         const gc_node_ref_t element = g->regionPorts(parts[1]).front();
-        round.push_back(Stmt::line(std::format("if ({} >= {}.size()) {{ break; }}", index, array)));
-=======
-        const gc_node_ref_t element = g->regionPorts(parts[1]).front();
         // The item of a value of several dimensions is its row, one dimension less, which is what
         // the interpreter hands the body (design principles 4.2): `rt::atRow`, whose elements are
         // copied -- accepted, as the conversion at the bridge is -- so the body holds a value of
@@ -1224,7 +1221,6 @@ void FunctionEmitter::lowerLoop(
                     index,
                     array,
                     rows ? ".extent(0)" : ".size()")));
->>>>>>> lane-nestedlit
         const std::string name = locals_.unique(std::format("v{}_item", nextValue_++));
         round.push_back(
             Stmt::line(
