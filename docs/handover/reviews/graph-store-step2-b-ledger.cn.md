@@ -1023,3 +1023,36 @@ HANDLE_PROBE refused: InvalidArgument
 **四个数：41 / 371 / 2 / 4。**（`files` 42 → 41、`references` 372 → 371，**都是代码**。）
 
 **b6 的最后一块已写成问题**：`questions-2026-10-31-gir-handle-names-a-transaction-or-a-draft.md`。
+
+## 47. `其它` 那几处，和**"事务能不能在 attach 之前开"的答案**（`94018cbff`）
+
+### 先答那个更值的问题：`modules/graph/txn` 不是答案所在，它是"事务不必等于 id"的证据
+
+`GraphTransaction` 有两个入口（`graph_txn.h`）：
+
+| 入口 | 造还是名字 | 要不要 id |
+|---|---|---|
+| `open(id, funcType)` | **自己造**一张草稿 | **要**，当场命名（`:12` 的 `setId`） |
+| `borrow(draft)` | **只名字**一张已有草稿 | **不要**；`id()` 从草稿读（`:48`） |
+
+**所以"事务能不能在 attach 之前开"——能，但只有 `borrow` 这一种**；而 `borrow` 的语义是"这张草稿的所有权在别人手里"，**region 要的恰恰不是这个**。region 要的是第三种：**先造、id 后给**（`open` 不带 id）。**今天没有这个入口。**
+
+**这就是那句话的答案**：卡住 `tiles` 的不是引用，是**没有人定"region 的 id 什么时候分配"**。要不要给 `open` 一个"id 待定"的形态（或者让 region 在 extract 时就分配 id），是要作者定的事——**和 §46 的问题页同源**，所以没另开一页。
+
+### 分类（原清单 5 处，实际查到 4 处 + 1 处已经没有了）
+
+| 处 | 位置 | 判定 |
+|---|---|---|
+| 1 | `modules/graph/txn.cpp:52` `using camel::runtime::GraphDraft;` | **删**：这个 using **一次都没被用到**——点名一个自己不碰的类型，等于宣告一个不存在的主人 |
+| 2 | `modules/onnx/exporter.cpp:4815` `bindCaptures(GraphDraft &, …)` | **改**：`session.rootDraft()` 本来就返回 `GraphTransaction&`，收下它、问 `.edit()` |
+| 3 | `src/runtime/operator_instance.h:40` + `.cpp:92` `kernelArgumentsOf(const GraphDraft &, node)` | **等**：5 个调用点（`generic.cpp:1112`、`definitions.cpp:508`、`module.cpp:2140`、`writings.cpp:1530/2364`）**手上都只有一张草稿**——**与 `tiles` 那 7 个通行参数同型，同一个 id 问题堵着** |
+| 4 | `modules/rewrite/proof.h:51` | **留**：它点的是 `GraphDraft::decode` 这个 API。**改它会把 `decode` 那格也用散文降下来**（试过：`decode` 4 → 3），**那是拿散文改代码格，不做** |
+| 5 | `include/camel/core/data/composite/func.h` | **已经没有了**（今天 0 处），清单可能旧了 |
+
+**四个数：39 / 369 / 2 / 4。**（`files` 41 → 39、`references` 371 → 369，**都是代码**；`decode` 4 不动，正是第 4 项的克制。）
+
+### 一条判据：**改不动的时候，问题页比十处引用更有进展**
+
+> **"一个层里的引用改不动，往往不是引用的问题，是那句'id 什么时候分配'没人回答；这时候写问题页，比改十处引用更有进展。"**
+
+`tiles` 是这样（10 处只动得了 1 处，但"7 卡在 3 后面、3 卡在 id 上"这个结论比那 1 处值钱），`其它` 也是这样（第 3 项同样是 id 问题）。**两次都指向同一个没人回答的句子——这才是这一整轮真正的发现。**
