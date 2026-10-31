@@ -905,8 +905,20 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
     // runtime: a program std::cpp writes has no block space of the runtime at all, so on this target
     // the counters are not available. That is a boundary of the target, not a translation still to
     // be written, and the two are said differently (author's ruling of 2026-10-31: A).
-    if (uri == ":op/mem_blocks") {
+    // `tensor:ones` and `tensor:zeros` build a tensor from a shape array. std::cpp writes no tensor
+    // value at all, so naming the shape array as the untranslated thing would blame the wrong
+    // side: the array is translated, the tensor is what the pass does not have.
+    if (uri == "tensor:ones" || uri == "tensor:zeros") {
         refuse(
+            g,
+            ref,
+            std::format(
+                "{} uses '{}' to build a tensor, and std::cpp writes no tensor value: the pass has "
+                "no tensor type, so a shape cannot be handed to it",
+                describeFunction(g),
+                uri));
+    }
+    if (uri == ":op/mem_blocks") {        refuse(
             g,
             ref,
             std::format(

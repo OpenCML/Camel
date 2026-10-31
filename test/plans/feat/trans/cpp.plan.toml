@@ -83,7 +83,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "refuse_tensor"
-desc = "std::cpp does not translate tensors. The refusal is located at the operator use that needs one -- 	ensor:ones in main, line 15 column 23 -- and names the operator and the type of its argument (int[], the shape); the Tensor-returning scale is never reached (the operator use in the body stands in main, which the pass walks first). It used to be the unlocated PassInternalError \"runtime graph 'scale' is not supported by the direct C++ path: node#N: non-bridgeable return type\"."
+desc = "std::cpp does not translate tensors. The refusal is located at the operator use that needs one -- tensor:ones in main, line 15 column 23 -- and names the missing tensor value rather than the shape array it takes: the array is translated, the tensor is what the pass has no type for. The Tensor-returning scale is never reached (the operator use in the body stands in main, which the pass walks first). It used to be the unlocated PassInternalError \"runtime graph 'scale' is not supported by the direct C++ path: node#N: non-bridgeable return type\"."
 kind = "negative"
 case = "../../../cases/trans/cpp/refuse_tensor.cml"
 args = ["${case}", "std::cpp"]
@@ -92,7 +92,7 @@ expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 15
 expect_diagnostic_column = 23
-expect_output_contains = ["Translation pass 'std::cpp' refused the graph: function 'main' uses the operator 'tensor:ones' on a value of type 'int[]', which has no translation in std::cpp yet"]
+expect_output_contains = ["Translation pass 'std::cpp' refused the graph: function 'main' uses 'tensor:ones' to build a tensor, and std::cpp writes no tensor value: the pass has no tensor type, so a shape cannot be handed to it"]
 expect_output_not_contains = ["internal error", "node#", "non-bridgeable", ":?:?:", "#include"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -112,7 +112,7 @@ assert(diags.length === 1, `expected one diagnostic, got ${diags.length}`)
 const d = diags[0]
 assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pass:std::cpp', `unexpected diagnostic ${d.data.name} at stage ${d.data.stage}`)
 assert(d.code === '0x0400000B', `code ${d.code}`)
-assert(d.message.includes("function 'main' uses the operator 'tensor:ones' on a value of type 'int[]'"), `unexpected message: ${d.message}`)
+assert(d.message.includes("function 'main' uses 'tensor:ones' to build a tensor, and std::cpp writes no tensor value"), `unexpected message: ${d.message}`)
 assert(d.range.start.line === 14 && d.range.start.character === 22 && d.range.end.line === 14, `unexpected range ${JSON.stringify(d.range)}`)
 }
 """
@@ -155,4 +155,17 @@ expect_diagnostic_line = 6
 expect_diagnostic_column = 13
 expect_stderr_contains = ["std::cpp has no standalone translation of the operator 'str:to_upper': the program it writes calls the Camel runtime there and is built with libcamel."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "refuse_tensor_names_the_tensor"
+desc = "The refusal for a tensor the pass cannot build names the missing thing: `std::cpp` writes no tensor value, so `tensor:ones` and `tensor:zeros` have nothing to build into, and the shape array they take is not what is untranslated (an `int[]` is translated). The first version of this refusal blamed the shape, which sent a reader after the wrong side of the call."
+kind = "negative"
+case = "../../../cases/trans/cpp/refuse_tensor.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_output_contains = ["to build a tensor, and std::cpp writes no tensor value", "no tensor type"]
+expect_output_not_contains = ["on a value of type 'int[]'", "yet"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
