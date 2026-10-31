@@ -135,8 +135,8 @@ std::string describeNode(const camel::runtime::GCGraph *graph, gc_node_ref_t ref
 } // namespace
 
 std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *graph) {
-    ASSERT(graph != nullptr, "Runtime graph is null in execution topo construction.");
-    ASSERT(
+    GUARD(graph != nullptr, "Runtime graph is null in execution topo construction.");
+    GUARD(
         graph->hasNodePayload(),
         std::format("Runtime graph '{}' has no node payload.", graph->name()));
 
@@ -426,12 +426,12 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
 }
 
 gc_node_ref_t resolveRuntimeForwardedValueRef(camel::runtime::GCGraph *graph, gc_node_ref_t ref) {
-    ASSERT(graph != nullptr, "Runtime forwarded-value resolution requires a graph.");
+    GUARD(graph != nullptr, "Runtime forwarded-value resolution requires a graph.");
 
     gc_node_ref_t currentIndex = ref;
     while (currentIndex != camel::runtime::kInvalidNodeRef) {
         const auto *current = graph->node(currentIndex);
-        ASSERT(current != nullptr, "Runtime forwarded-value chain resolved to null.");
+        GUARD(current != nullptr, "Runtime forwarded-value chain resolved to null.");
         if (current->kind != camel::runtime::GCNodeKind::Gate) {
             return currentIndex;
         }
@@ -460,7 +460,7 @@ gc_node_ref_t resolveRuntimeTailValueRef(camel::runtime::GCGraph *graph) {
     }
     while (current != camel::runtime::kInvalidNodeRef) {
         const auto *node = graph->node(current);
-        ASSERT(node != nullptr, "Runtime tail-value lookup resolved to null.");
+        GUARD(node != nullptr, "Runtime tail-value lookup resolved to null.");
         if (node->kind != camel::runtime::GCNodeKind::Gate) {
             break;
         }
@@ -508,7 +508,7 @@ bool runtimeNodeOutputsContain(
 
 bool runtimeArmEndsWithValue(
     camel::runtime::GCGraph *graph, gc_node_ref_t armTailRef, gc_node_ref_t valueRef) {
-    ASSERT(graph != nullptr, "Runtime arm-tail check requires a graph.");
+    GUARD(graph != nullptr, "Runtime arm-tail check requires a graph.");
     if (armTailRef == valueRef) {
         return true;
     }
@@ -550,7 +550,7 @@ bool runtimeArmEndsWithValue(
         const gc_node_ref_t current = work.back();
         work.pop_back();
         const auto *node = graph->node(current);
-        ASSERT(node != nullptr, "Runtime arm-tail check resolved to null.");
+        GUARD(node != nullptr, "Runtime arm-tail check resolved to null.");
         if (node->kind != camel::runtime::GCNodeKind::Gate) {
             if (runsAfterValue(current)) {
                 return false; // something other than forwarding happens after the value
@@ -570,7 +570,7 @@ bool runtimeArmEndsWithValue(
 
 std::vector<gc_node_ref_t>
 collectRuntimeTailJoinArmValues(camel::runtime::GCGraph *graph, gc_node_ref_t tailJoinRef) {
-    ASSERT(graph != nullptr, "Runtime tail-join collection requires a graph.");
+    GUARD(graph != nullptr, "Runtime tail-join collection requires a graph.");
     std::vector<gc_node_ref_t> values;
     std::vector<gc_node_ref_t> joins{tailJoinRef};
     const camel::runtime::ControlRegions regions(*graph);
@@ -607,10 +607,10 @@ collectRuntimeTailJoinArmValues(camel::runtime::GCGraph *graph, gc_node_ref_t ta
 bool hasOnlyTrivialRuntimeTailSuffixAfter(
     const camel::runtime::GCGraph *graph, std::span<const gc_node_ref_t> topoOrder,
     size_t anchorIndex) {
-    ASSERT(graph != nullptr, "Runtime tail-suffix check requires a graph.");
+    GUARD(graph != nullptr, "Runtime tail-suffix check requires a graph.");
     for (size_t i = anchorIndex + 1; i < topoOrder.size(); ++i) {
         const auto *node = graph->node(topoOrder[i]);
-        ASSERT(node != nullptr, "Runtime tail-suffix lookup resolved to null.");
+        GUARD(node != nullptr, "Runtime tail-suffix lookup resolved to null.");
         if (node->kind != camel::runtime::GCNodeKind::Gate) {
             return false;
         }
@@ -620,15 +620,15 @@ bool hasOnlyTrivialRuntimeTailSuffixAfter(
 
 RuntimeBranchArmRegion collectRuntimeBranchArmRegion(
     camel::runtime::GCGraph *graph, gc_node_ref_t brchIndex, size_t armIndex) {
-    ASSERT(graph != nullptr, "Runtime branch region collection requires a graph.");
-    ASSERT(graph->node(brchIndex) != nullptr, "Runtime BRCH record is missing.");
-    ASSERT(
+    GUARD(graph != nullptr, "Runtime branch region collection requires a graph.");
+    GUARD(graph->node(brchIndex) != nullptr, "Runtime BRCH record is missing.");
+    GUARD(
         graph->node(brchIndex)->kind == camel::runtime::GCNodeKind::Brch,
         "Runtime branch region collection requires a BRCH node.");
 
     const camel::runtime::ControlRegions regions(*graph);
     const auto arms = regions.armsOf(brchIndex);
-    ASSERT(
+    GUARD(
         armIndex < arms.size() && arms[armIndex] != 0,
         std::format(
             "Graph '{}': arm {} of branch {} has no region.",
@@ -637,7 +637,7 @@ RuntimeBranchArmRegion collectRuntimeBranchArmRegion(
             brchIndex));
     const uint32_t armRegion = arms[armIndex];
     const auto *brchBody     = graph->nodeBodyAs<camel::runtime::GCBrchBody>(brchIndex);
-    ASSERT(brchBody != nullptr, "Runtime BRCH body is missing.");
+    GUARD(brchBody != nullptr, "Runtime BRCH body is missing.");
 
     std::vector<uint8_t> member(graph->nodeCount(), 0);
     for (gc_node_ref_t n = 0; n < graph->nodeCount(); ++n) {
@@ -735,7 +735,7 @@ BranchArmEntries::BranchArmEntries(
         }
         const auto *body = graph.nodeBodyAs<camel::runtime::GCBrchBody>(ref);
         const auto arms  = regions.armsOf(ref);
-        ASSERT(
+        GUARD(
             arms.size() >= graph.armCountOf(ref),
             std::format("Graph '{}': branch {} has arms without a region.", graph.name(), ref));
         auto &entries = entries_[ref];
@@ -756,8 +756,8 @@ template <typename SlotOf>
 size_t selectBranchArm(
     std::span<const gc_node_ref_t> norm, std::span<const gc_node_ref_t> with, SlotOf slotOf,
     Frame *frame) {
-    ASSERT(frame != nullptr, "Runtime branch selection requires a frame.");
-    ASSERT(norm.size() == 1, "Runtime BRCH must have exactly one norm input.");
+    GUARD(frame != nullptr, "Runtime branch selection requires a frame.");
+    GUARD(norm.size() == 1, "Runtime BRCH must have exactly one norm input.");
 
     const auto condIndex = slotOf(norm.front());
     if (with.empty()) {
@@ -791,13 +791,13 @@ size_t selectBranchArm(
 } // namespace
 
 size_t selectRuntimeBranchArm(camel::runtime::GCGraph *graph, gc_node_ref_t brchRef, Frame *frame) {
-    ASSERT(graph != nullptr, "Runtime branch selection requires a graph.");
+    GUARD(graph != nullptr, "Runtime branch selection requires a graph.");
     return selectBranchArm(
         graph->normInputsOf(brchRef),
         graph->withInputsOf(brchRef),
         [&](gc_node_ref_t ref) {
             const auto *node = graph->node(ref);
-            ASSERT(node != nullptr, "Runtime BRCH operand node is missing.");
+            GUARD(node != nullptr, "Runtime BRCH operand node is missing.");
             return node->dataIndex;
         },
         frame);
@@ -813,8 +813,8 @@ size_t selectRuntimeBranchArm(
 }
 
 slot_t readRuntimeGraphReturn(camel::runtime::GCGraph *graph, Frame *frame) {
-    ASSERT(graph != nullptr, "Runtime graph return read requires a graph.");
-    ASSERT(frame != nullptr, "Runtime graph return read requires a frame.");
+    GUARD(graph != nullptr, "Runtime graph return read requires a graph.");
+    GUARD(frame != nullptr, "Runtime graph return read requires a frame.");
 
     if (const auto *funcType = graph->funcType();
         funcType == nullptr || !funcType->hasExitType() ||
@@ -831,7 +831,7 @@ slot_t readRuntimeGraphReturn(camel::runtime::GCGraph *graph, Frame *frame) {
     }
 
     if (returnKind == camel::runtime::GCReturnKind::Self) {
-        ASSERT(returnNode->dataIndex != 0, "Runtime graph return slot resolved to slot 0.");
+        GUARD(returnNode->dataIndex != 0, "Runtime graph return slot resolved to slot 0.");
         return frame->get<slot_t>(returnNode->dataIndex);
     }
 
@@ -841,20 +841,20 @@ slot_t readRuntimeGraphReturn(camel::runtime::GCGraph *graph, Frame *frame) {
     }
 
     const auto *current = graph->node(currentIndex);
-    ASSERT(current != nullptr, "Runtime graph return forwarding chain resolved to null.");
-    ASSERT(current->dataIndex != 0, "Runtime graph return forwarding chain resolved to slot 0.");
+    GUARD(current != nullptr, "Runtime graph return forwarding chain resolved to null.");
+    GUARD(current->dataIndex != 0, "Runtime graph return forwarding chain resolved to slot 0.");
     return frame->get<slot_t>(current->dataIndex);
 }
 
 void writeRuntimeFillSlots(
     camel::core::rtdata::Object *target, camel::core::type::Type *targetType,
     const camel::runtime::GCFillBody *fillBody, std::span<const slot_t> values) {
-    ASSERT(target != nullptr, "Runtime FILL target object is null.");
-    ASSERT(targetType != nullptr, "Runtime FILL target type is null.");
-    ASSERT(fillBody != nullptr, "Runtime FILL payload is missing.");
+    GUARD(target != nullptr, "Runtime FILL target object is null.");
+    GUARD(targetType != nullptr, "Runtime FILL target type is null.");
+    GUARD(fillBody != nullptr, "Runtime FILL payload is missing.");
 
     const auto slots = fillBody->slots();
-    ASSERT(
+    GUARD(
         slots.size() == values.size(),
         "Runtime FILL slot mapping must match the number of with-input values.");
 
@@ -889,7 +889,7 @@ void writeRuntimeFillSlots(
     case camel::core::type::TypeCode::Function: {
         auto *func         = tt::as_ptr<Function>(target);
         Tuple *closureData = func->tuple();
-        ASSERT(closureData != nullptr, "Runtime FILL function closure storage is null.");
+        GUARD(closureData != nullptr, "Runtime FILL function closure storage is null.");
         const auto *tupleType = func->tupleType();
         for (size_t i = 0; i < values.size(); ++i) {
             // A closure capture is a stored value: a view must have been
@@ -900,7 +900,7 @@ void writeRuntimeFillSlots(
         }
     } break;
     default:
-        ASSERT(false, "Runtime FILL target type is not a supported GC container.");
+        throw std::runtime_error("Runtime FILL target type is not a supported GC container.");
     }
 }
 
