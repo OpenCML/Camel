@@ -16,9 +16,11 @@
  * The signature is `reinterp<jvp>(f) : (..Lift<ParamsOf<F>>) => Lift<ResultOf<F>>`: every parameter
  * becomes a pair of the value and its tangent, and so does the result. The tangent of an input is
  * *passed in* by the caller -- `jvp(f)(2.0, 1.0)` asks for the derivative in the direction 1 -- not
- * found inside the function. In the new graph each primitive's rule closure (the right side of the
- * rule for its operator, `GenericRuleInstance::rhsBuilder`) consumes the already-lifted tangents of
- * its inputs; constants and captured values are lifted with a zero tangent.
+ * found inside the function. In the new graph each primitive's rule consumes the already-lifted
+ * tangents of its inputs (a forward-mode rule, written in jvp.cpp): a constant's tangent is zero, a
+ * port's is the tangent the caller passed, and the result's tangent is the one the rules computed
+ * along the chain. A primitive with no rule is refused by name -- `skip=rule uri=...` -- rather than
+ * answered with 0 or 1.
  */
 
 #pragma once

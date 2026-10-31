@@ -99,6 +99,8 @@ type Reinterp<F, H> = (..H.Lift<ParamsOf<F>>) => H.Lift<ResultOf<F>>
 
 前向求导就是 `reinterp<jvp>`。导出 ONNX 是另一个规则集：每个原语解释成"往模型里写一个节点"。
 
+值先出现、切线后出现是对的次序——但只有切线由链上算出来的那一天，`jvp` 才叫前向模式（作者，2026-10-31）。
+
 ### 4.2 拆分 `split`
 
 ```camel
