@@ -46,3 +46,16 @@
 | `tiles:upload` | `Device<float>` / `Device<f32[]>` | **不确定** | 设备句柄是不是也走"外部对象"，要作者定；它可能和 `python:*` 同一类 |
 
 **"不确定"那一行**：`tiles:upload` 的结果是设备句柄（`Device<T>`），不是张量也不是原生数组；若第 5 步的"外部对象"是通用机制（`rt::Foreign` 装任意运行时根），它就归这一条；若只给张量开，它就单列。
+## 落地顺序（作者 2026-10-31 06:20 裁决后的施工单）
+
+**分工**：`signatureOf` 只做门（未登记 → "这个算子的结果不能被桥拿回来"）；具体 `Type*` 由调用点传**紧凑描述**（元素类型码 + 维数 + 各维上界），运行时据此造 `Type*` 再挂根。**描述必须由 `cpp_types` 里同一个函数产出**，规则里不许手拼。
+
+1. `include/camel/execute/executor.h`：`ExecutorManager` 加可选签名表（`uri → 能否过桥`），`signatureOf(uri)` 未登记返回空。
+2. `include/camel/standalone/bridge.h`：`Value::Kind` 加 `IntArray`（`std::vector<int64_t>`）与 `Foreign`（`void *`）；`call` 多带结果类型的紧凑描述。
+3. `include/camel/standalone/foreign.h`：`Foreign` 句柄（拷贝加一、移动不改、析构减一）+ `appendText`（文本由运行时给）。
+4. `src/execute/standalone_bridge.cpp`：`IntArray → int[]`；`Foreign` 结果按描述造 `Type*` 挂 `RootHandle`。
+5. `src/passes/trans/cpp/cpp_types.cpp`：**一个函数**产出紧凑描述（同源），tensor 类型 → `rt::Foreign`。
+6. `src/passes/trans/cpp/operator_rules.h`：`tensor:ones` / `tensor:zeros` 一条规则。
+7. 用例：四行程序（`tensor::ones::<f32>([2,2])` + 打印），`std::cpp` 与 `std::fvm` 输出并排。
+
+**为什么第 1 步不能先单独落地**：签名是泛型 `T[..]`，同一 URI 在不同调用点有不同的结果类型；只做门、不传描述，桥拿不到 `Type*`，`RootHandle` 不成立（它的 `Type*` 是追踪与析构的依据，不能让它是空）。
