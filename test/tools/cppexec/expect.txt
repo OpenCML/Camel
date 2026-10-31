@@ -347,3 +347,7 @@ test/cases/trans/cpp/field_name_missing.cml
 # an array any operator takes, and the position -- the result's element or the argument the operator
 # names -- is what the interpreter reads it as.
 test/cases/trans/cpp/empty_literal_takes_the_position.cml
+# The `array` module's kernels -- the sort and its atom `argsort`, the whole-array reductions, the
+# merge of two runs and `dim` -- written as the interpreter's own order, accumulation and
+# comparison, so a run of a `std::cpp` program reads back what `std::fvm` prints.
+test/cases/modules/stdlib/array_kernels_read_back.cml

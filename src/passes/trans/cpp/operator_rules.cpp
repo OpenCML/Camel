@@ -675,21 +675,8 @@ Rules buildRules() {
         },
         false,
     };
-    // `array:sort_d` (src/builtin/operators/array.cpp): the same elements in the order min and max
-    // use, ties where they stand. A rank-1 run again; the other element types name their own
-    // operator and get their own line when a program needs one.
-    r["array:sort_d"] = {
-        [](OperatorCall &c) -> std::optional<std::string> {
-            const ArrayType *value = asArrayType(c.normType(0));
-            if (c.normCount() != 1 || value == nullptr || value->anyRank() || value->rank() != 1 ||
-                value->elemType() == nullptr ||
-                value->elemType()->code() != TypeCode::Float64) {
-                return std::nullopt;
-            }
-            return std::format("rt::sorted({})", c.operand(0));
-        },
-        false,
-    };
+    // `array:sort_*` and the rest of the module's kernels are below, one rule per declaration
+    // (the `array:sort_d` line this used to be is now one of the four the loop writes).
     // `array:argsort_bf` and `array:argsort_f6` (src/builtin/operators/array.cpp): the positions
     // of the elements in the order `min` and `max` use, ties where they stand -- the order
     // `array:sort_d` states, read as positions instead of values (rt::halfArgsort). The element
@@ -712,6 +699,132 @@ Rules buildRules() {
             false,
         };
     }
+    // The rest of the `array` module's kernels (src/builtin/operators/array.cpp and
+    // array_reduce.cpp), each on the element type its declaration names and on a run of one
+    // dimension: the sorts and their atoms, the whole-array reductions and `dim`. The order, the
+    // summation and the comparison are the interpreter's own statements (rt::numberLess, rt::sorted,
+    // rt::argsort, rt::sumAll, rt::minOf/maxOf), so a program they translate is the same program
+    // and not merely one that compiles.
+    const std::pair<const char *, TypeCode> numberTypes[] = {
+        {"i", TypeCode::Int32},
+        {"l", TypeCode::Int64},
+        {"f", TypeCode::Float32},
+        {"d", TypeCode::Float64},
+    };
+    // A run of `count` arrays of one element type, one dimension each: what the declarations of
+    // these kernels are (`int[]`, `float[]`). A shaped value is no value of this target, so a
+    // dimension above one is refused rather than flattened.
+    const auto runOf = [](const OperatorCall &c, TypeCode code, size_t count) {
+        if (c.normCount() != count) {
+            return false;
+        }
+        for (size_t i = 0; i < count; ++i) {
+            const ArrayType *value = asArrayType(c.normType(i));
+            if (value == nullptr || (!value->anyRank() && value->rank() > 1) ||
+                value->elemType() == nullptr || value->elemType()->code() != code) {
+                return false;
+            }
+        }
+        return true;
+    };
+    for (const auto &[suffix, code] : numberTypes) {
+        // `sort_<t>` and `sort_<t>_in_place`: the same elements in the order `min` and `max` use,
+        // ties where they stand. The in-place form is the store's (`xs = xs->sort`), and a value is
+        // a copy either way, so the returning form says the same thing.
+        for (const char *form : {"", "_in_place"}) {
+            r[std::string("array:sort_") + suffix + form] = {
+                [code, runOf](OperatorCall &c) -> std::optional<std::string> {
+                    if (!runOf(c, code, 1)) {
+                        return std::nullopt;
+                    }
+                    return std::format("rt::sorted({})", c.operand(0));
+                },
+                false,
+            };
+        }
+        // `merge_sorted_<t>`: the elements of both runs in ascending order, `sort(concat(xs, ys))`.
+        r[std::format("array:merge_sorted_{}", suffix)] = {
+            [code, runOf](OperatorCall &c) -> std::optional<std::string> {
+                if (!runOf(c, code, 2)) {
+                    return std::nullopt;
+                }
+                return std::format(
+                    "rt::mergeSorted({}, {})", c.operand(0), c.operand(1));
+            },
+            false,
+        };
+        // `sum_<t>`: the elements added from +0 in the order they lie -- an integer in itself,
+        // wrapping, and a float in f64 rounded once (rt::sumAll is that statement).
+        r[std::format("array:sum_{}", suffix)] = {
+            [code, runOf](OperatorCall &c) -> std::optional<std::string> {
+                if (!runOf(c, code, 1)) {
+                    return std::nullopt;
+                }
+                return std::format("rt::sumAll({})", c.operand(0));
+            },
+            true,
+        };
+        // `min_<t>` and `max_<t>`: the fold with `min`/`max`, a NaN giving NaN and -0 below +0; a
+        // reduction over no element is InvalidArgument, and the report is the interpreter's own.
+        for (const char *form : {"min", "max"}) {
+            const bool minimum = std::string(form) == "min";
+            r[std::string("array:") + form + "_" + suffix] = {
+                [code, runOf, minimum](OperatorCall &c) -> std::optional<std::string> {
+                    if (!runOf(c, code, 1)) {
+                        return std::nullopt;
+                    }
+                    return std::format(
+                        "rt::{}({}, {})",
+                        minimum ? "minOf" : "maxOf",
+                        c.operand(0),
+                        c.site(
+                            RuntimeDiag::InvalidArgument,
+                            {minimum ? "array.min" : "array.max", "a reduction over no elements"}));
+                },
+                false,
+            };
+        }
+    }
+    // `argsort_<t>` for the keys a standalone program can order: the four number types, bool and
+    // string (a bf16 or an f16 keeps its own rule above). One element type has one declaration and
+    // one executor, so the rule reads the type rather than the value.
+    for (const char *suffix : {"i", "l", "f", "d", "b", "s"}) {
+        r[std::format("array:argsort_{}", suffix)] = {
+            [](OperatorCall &c) -> std::optional<std::string> {
+                if (c.normCount() != 1) {
+                    return std::nullopt;
+                }
+                const ArrayType *value = asArrayType(c.normType(0));
+                if (value == nullptr || (!value->anyRank() && value->rank() > 1) ||
+                    value->elemType() == nullptr) {
+                    return std::nullopt;
+                }
+                return std::format("rt::argsort({})", c.operand(0));
+            },
+            false,
+        };
+    }
+    // `array:dim`: the extent of one axis, a negative one counting from the last; an axis outside
+    // the rank is InvalidArgument, with the two numbers in the sentence the interpreter prints.
+    r["array:dim"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1 || c.withCount() != 1) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::dim({}, {}, {})",
+                c.operand(0),
+                c.with(0).text,
+                c.site(
+                    RuntimeDiag::InvalidArgument,
+                    {"array.dim",
+                     std::format(
+                         "the axis {} is outside the rank {}",
+                         SiteTable::valueMark(0),
+                         SiteTable::valueMark(1))}));
+        },
+        false,
+    };
     // `tensor:reshape` (modules/tensor/kernels/layout.cpp): the same elements in row-major order in
     // another shape. The shape travels with the value now (rt::Array holds it), so a target of
     // several dimensions is faithful too -- printing it gives its rows, `[[1.0, 2.0], [3.0, 4.0]]`,
