@@ -217,3 +217,29 @@ expect_diagnostic_column = 16
 expect_output_contains = ["needs its own parentheses at the top level of an interpolation"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "fstring_spec_matches_format"
+desc = "An interpolation and `format` take one set of format specifications: the same specification written both ways prints the same text for a scalar, for an f32, f64, f16 and int array, and for a width or a type of its own. Each pair is compared with itself, so the digits stay the writer's decision (7.7)."
+kind = "behavior"
+case = "../../../cases/compile/fstring/spec_matches_format.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split('\n')
+assert(lines.length > 0 && lines.length % 2 === 0, `expected pairs of lines, got ${lines.length}`)
+for (let i = 0; i < lines.length; i += 2) {
+  const interp = lines[i]
+  const format = lines[i + 1]
+  assert(interp.startsWith('interp: ') && format.startsWith('format: '), `not a pair at line ${i + 1}: ${interp} / ${format}`)
+  const a = interp.slice('interp: '.length)
+  const b = format.slice('format: '.length)
+  assert(a === b, `interpolation and format disagree at pair ${i / 2 + 1}: ${a} vs ${b}`)
+}
+}
+"""
+timeout_ms = 8000

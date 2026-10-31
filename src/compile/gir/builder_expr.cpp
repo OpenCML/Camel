@@ -748,7 +748,7 @@ node_handle_t Builder::valueVersionOf(node_handle_t variable) {
         // variable's new version: the read takes `:var/after(cell, call)`, which is the cell as it
         // stands after that call, and the edge from the call is what makes it run (3.1). Whatever
         // the call returns -- nothing, or a value of its own -- is not read here.
-        if (nodeKindOf(*modifier) == camel::runtime::GCNodeKind::Call) {
+        if (isCallNode(*modifier)) {
             return variableAfterCall(variable, *modifier);
         }
         return nullptr;
@@ -767,10 +767,42 @@ node_handle_t Builder::valueVersionOf(node_handle_t variable) {
     // parts of the call's value say nothing about it: the parts come from the callee's
     // captured-value table, and a write recorded through a function value has no row there. The
     // call is then the variable's version as a whole: `:var/after(cell, call)`.
-    if (nodeKindOf(*modifier) == camel::runtime::GCNodeKind::Call) {
+    if (isCallNode(*modifier)) {
         return variableAfterCall(variable, *modifier);
     }
     return nullptr;
+}
+
+/// A call, whichever node kind it is drawn with: `Call` names a call through a function value and
+/// `Func` a call of a function the graph names (the callee is the node's operator), and both are
+/// the write a captured variable takes (recordWrite, throughCallee).
+bool Builder::isCallNode(node_handle_t node) {
+    const auto kind = nodeKindOf(node);
+    return kind == camel::runtime::GCNodeKind::Call || kind == camel::runtime::GCNodeKind::Func;
+}
+
+bool Builder::hasValueVersion(node_handle_t variable) {
+    // The same question valueVersionOf answers, without making the node it would answer with: a
+    // caller that only wants to know whether the read has a version of its own must not leave a
+    // `:var/after` node behind for nothing to use (it would be an effect nothing depends on).
+    const auto modifier = modifierOf(variable);
+    if (!modifier.has_value() || !sameGraph(*modifier, currGraph_)) {
+        return false;
+    }
+    Type *type = nodeTypeOf(*modifier);
+    if (type != nullptr && valueTypeOf(type) != type) {
+        return true;
+    }
+    const auto value = callValues_.find(*modifier);
+    if (value == callValues_.end()) {
+        return isCallNode(*modifier);
+    }
+    for (size_t k = 0; k < value->second.variables.size(); ++k) {
+        if (value->second.variables[k] == variable) {
+            return true;
+        }
+    }
+    return isCallNode(*modifier);
 }
 
 void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
@@ -785,7 +817,7 @@ void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
     // A write that produced a version of its own has that data edge already: the read takes the
     // version, and the control input this helper used to stand in for it is gone with it
     // (Builder::valueVersionOf).
-    if (valueVersionOf(variable) != nullptr) {
+    if (hasValueVersion(variable)) {
         return;
     }
     if (auto modifier = modifierOf(variable); modifier.has_value()) {
@@ -1606,10 +1638,11 @@ node_handle_t Builder::variableOperator(camel::core::OperId oper, node_handle_t 
 }
 
 node_handle_t Builder::variableAfterCall(node_handle_t variable, node_handle_t call) {
-    // The variable as it stands after `call`: `:var/after(cell, call)`. Its second argument is the
-    // call, whose value may be `void` and is not read -- the edge is what makes the call run when the
-    // read takes this version (docs/design-principles.cn.md 3.1, 3.5) -- and its result is the cell
-    // itself, so the read above it is a read of the variable after that write.
+    // The variable as it stands after `call`: `:var/after(version, call)`. Its second argument is
+    // the call, and its value may be anything, `void` included, because this operator reads nothing
+    // of it: the edge is what makes the call run when the read takes this version
+    // (docs/design-principles.cn.md 3.1, 3.5). The result is that version's cell, so the read above
+    // it is a read of the variable after that write.
     //
     // Its first argument is the version the variable had before that call when there was one: the
     // write written before a call through a function value must keep running, because the call is
@@ -2157,6 +2190,20 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     switch (tgtType->code()) {
     case TypeCode::Tuple: {
         const auto &tupleType = tt::as_ptr<TupleType>(tgtType);
+        // A destructuring declaration binds one name per element: `let (x, y) = t` needs a tuple of
+        // two, whichever way the count is wrong (design principles 3.9). Reported here, at the
+        // declaration, and not as an element read past the end -- a name too few used to drop the
+        // remaining elements in silence, and a name too many reported an index the source never
+        // wrote.
+        const auto *gctTree = GCT::Tree::of(gct);
+        const size_t names  = gctTree != nullptr ? gctTree->unpackCount(gct) : 0;
+        // One answer per declaration: every name of it carries the count, and the first reports.
+        if (names != 0 && gct->accessIndex() == 0 && names != tupleType->size()) {
+            diags_->of(SemanticDiag::TupleUnpackingCountMismatch)
+                .atOrigin(gct->origin())
+                .commit();
+            throw BuildAbortException();
+        }
         // A tuple has a fixed length: an element past its end is a compile-time error (it was
         // read unchecked, which crashed the compiler in release builds).
         if (gct->accessIndex() >= tupleType->size()) {

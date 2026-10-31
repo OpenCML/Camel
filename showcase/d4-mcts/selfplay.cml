@@ -97,8 +97,10 @@ func main(): int sync {
         w2: reshape<[16]>([0.0 for i in 0..16] as float[])
     }
     // Sixteen games first: the batch a step descends is fixed while the model moves, which is what
-    // makes the losses of the ten steps comparable with each other.
-    let (boards, results) = loop bs = [] as int[][], rs = [] as float[], g = 0
+    // makes the losses of the ten steps comparable with each other. The loop carries the games'
+    // boards, their results and the count; the count is named `_` because the declaration that
+    // takes the two arrays has no use for it (and a name too few is a diagnostic now).
+    let (boards, results, _) = loop bs = [] as int[][], rs = [] as float[], g = 0
         while g < games
         do {
             let (b, r) = selfplay(fold(k, g + 1))

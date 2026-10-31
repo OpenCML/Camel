@@ -163,15 +163,70 @@
 
 **"`fastvm` 今天就能跑 decode 来的图"的出处**（免得下一个人重新问）：`fastvm.cpp:1072` 的 JIT 出口按 `bc->opcode == OpCode::CALL` 读**解码图的字节码**；`fastvm.cpp:1244` 的 `hasFrameLayout()` 也说明它按"已经 materialize 过的图"工作。**这两处就是第 1 块那 29 条②不降回①的理由。**
 
+## 第 4 块：`sched/fastvm` 收口的 41 处（`bytecode.h` 20、`runtime_support.cpp` 4、`bytecode.cpp` 2、`fastvm.h` 2、三个 dump 6、`x64_backend.cpp` 3、`bcdump.cpp` 1、`hosted.cpp` 1、`optimize.cpp` 1、`optimize.h` 1）
+
+**读了几处：41。本块三类：① 27 / ② 14 / ③ 0。**
+
+| 类 | 处 | 说明 |
+|---|---|---|
+| ① | `bytecode.h` 14 条 | **按 opcode 种类取数的前置条件**（`isDirectCallOpcode`、`extraWords`、`== OPER`、`LBEG/LTST/LEND`）：调用者刚 decode 过那个 opcode，种类是可证的 |
+| ① | `bytecode.cpp:137/155` | `ASSERT(false, "Unknown OpCode")`：枚举穷尽——**与成对表第 3 行同一条** |
+| ① | `runtime_support.cpp:28`、`optimize.h:51` | BRCH 恰一个 norm 操作数 / 查询只对 BRCH 有效——**成对表第 4 行** |
+| ① | 三个 dump 的 `hasFrameLayout` ×3 | **成对表第 6 行**（对方 `compile.cpp:126`、`fastvm.cpp:1244`） |
+| ① | `x64_backend.cpp:125/264/430` | `graphEnd <= unit.bytecodes.size()`：链接器自己算出的界 |
+| ① | `hosted.cpp:40`、`optimize.cpp:45` | 生命周期"只建一次"、`from > to` 的调用方不变量 |
+| ② | `bytecode.h` 6 条 | **`extraWords >= 2/3`**：读第 2/3 个附加字前检查长度——**解码来的字节码可能更短，这是真的会越界读** |
+| ② | `fastvm.h:429/438`、`bcdump.cpp:61`、三个 dump 的 `runtimeGraph` ×3 | 运行图为 null |
+| ② | `runtime_support.cpp:24/67` | 分支选择的帧、写捕获变量时被调图的图 |
+
+### 按纪律标出的重复（7 条，不计入"需要活在 release"的数）
+
+| 本块的重复 | 对方 |
+|---|---|
+| 三个 dump 的 `hasFrameLayout` ×3 | `compile.cpp:126`、`fastvm.cpp:1244` |
+| `bytecode.cpp:137/155` | `compile.cpp:601` |
+| `runtime_support.cpp:28`、`optimize.h:51` | `compile.cpp:411`、`casevm.cpp:212` |
+
+### `gotovm`/`trampoline` 那 5 条重判（照算法追它们的来源）
+
+| 处 | 原判 | 重判 | 理由 |
+|---|---|---|---|
+| `trampoline.cpp:758/769/779` `bc.extra()->loop != nullptr` ×3 | ② | **①（附条件：一旦有 decoder 能产出没有 `ExecLoop` 的字节码，转②）** | 那个循环体是**同一次编译里 `compile.cpp` 填进 `extra()` 的**，写与读在同一次 decode/链接之内 |
+| `trampoline.cpp:329/350` `bc` 非空 ×2 | ② | **①（同上）** | 同上：`prepareDirectJit*` 收的是同一次链接产出的字节码引用 |
+
+**所以这 5 条不是"必须判"，是"同一次 decode 内可证非空"**——把它算进 Release 必须活的数，会让那个数虚高 5。
+
+### 一条判据：**成对断言的价值在"哪一处永远不会响"**
+
+> **"成对断言的价值不在于'两处都守'，而在于'知道哪一处永远不会响'；不会响的那一处，要么删，要么降成 debug-only。"**
+
+**从这一块起的纪律**：凡判为 ①、**且已在成对表里有一份**的，一律在表里标 **"重复（对方 ile:line）"**，**不再计入"需要活在 release 的断言数"**。
+
+## `sched/fastvm` 整目录完成
+
+**这一目录 163 处，全部读过。三个累计数**：
+
+| 数 | 值 |
+|---|---|
+| **断言数**（`\bASSERT` 出现次数） | **163** |
+| **证据数**（扣掉成对表里重复的 33 条） | **130** |
+| **两者差** | **33** |
+
+三类：**① 80 / ② 83 / ③ 0**（另有一处 `CAMEL_ASSERT_NOT_VIEW`，不在这 163 的计数口径里，单列为③）。
+
+**33 这个差就是这个目录的用处**：**每六条断言里有一条永远不会说话。** 而 ① 的 80 条里，**33 条在成对表里有对方**——**真正"只在执行器这一侧、违反就两边都不知道"的证据是 47 条**。要换成 Release 也在的断言，**该换的是这 47 条，不是 80 条**。
+
 ## 进度
 
 | 块 | 目录/文件 | 读了几处 | ① | ② | ③ |
 |---|---|---|---|---|---|
-| 1 | `sched/fastvm/fastvm.cpp` | **44** | 14 | 29 | 1 |
+| 1 | `sched/fastvm/fastvm.cpp` | **43** | 14 | 29 | 1 |
 | 2 | `sched/fastvm/compile.cpp` + `casevm.cpp` | **32** | 15 | 17 | 0 |
-| 3 | `sched/fastvm/gotovm.cpp` + `jit/runtime/trampoline.cpp` | **47** | 19 | 28 | 0 |
+| 3 | `sched/fastvm/gotovm.cpp` + `jit/runtime/trampoline.cpp` | **47** | 24 | 23 | 0 |
+| 4 | `sched/fastvm` 其余 11 个文件 | **41** | 27 | 14 | 0 |
+| — | **合计** | **163** | **80** | **83** | **1** |
 
-**`src/passes` 全量 305 处，读过 123，还剩 182。**
-**本目录（`sched/fastvm/`，共 163 处）里读过 123，还剩 40。**
+**`src/passes` 全量 305 处，读过 163，还剩 142。**
+**本目录（`sched/fastvm/`，共 163 处）读完，剩 0。**
 
-**下一块**：`fastvm.cpp` 剩下的同目录文件——`bytecode.h`(20)、`fastvm.h`(2)、`runtime_support.cpp`(4)、`hosted.cpp`(1)、`optimize.cpp/h`(2)、三个 dump 文件(5)、`x64_backend.cpp`(3)——**把 `sched/fastvm` 收口（40 处）**，然后再出目录。
+**下一块**：出目录，进 `sched/nodevm`（47）与 `sched/taskflow`（71）——**这两块归另一条车道**；本车道接着读 `sched` 剩下的与 `trans`/`opt`/`test`（142 处里除去 118）。

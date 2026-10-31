@@ -1173,7 +1173,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_graph.before_after"
-desc = "`A(i); modify(i); B(i)` in a sync body: the body orders its statements, so the graph has the control dependencies A -> modify and modify -> the read of i that B uses."
+desc = "`A(i); modify(i); B(i)` in a sync body: the body orders its statements, so the graph has the control dependency A -> modify, and the read of i that B uses takes the version `modify` made (`:var/after`), so it follows it by a data edge. (Re-recorded when the version edge was added: one `:var/after` node per call that wrote a variable, and no node is renumbered.)"
 kind = "behavior"
 case = "../../../cases/linear/byref/order_before_after.cml"
 args = ["${case}", "std::gir"]
@@ -1194,7 +1194,13 @@ assert(edge(a, m, 'CTRL'), 'missing control dependency A -> modify')
 const reads = [...text.matchAll(/(N[0-9A-F]+) \[label=":var\/get", type="OPER"/g)].map(x => x[1])
 const readOfB = reads.find(r => edge(r, b, 'NORM'))
 assert(readOfB, 'B does not read the variable through :var/get')
-assert(edge(m, readOfB, 'CTRL'), 'missing control dependency modify -> read used by B')
+// The read after `modify` takes the version that call made: `:var/after(cell, modify)` is an
+// input of the read, so the two are joined by data edges and the write is used, not merely
+// ordered (design principles 3.1, 5.6).
+const afters = [...text.matchAll(/(N[0-9A-F]+) \[label=":var\/after", type="OPER"/g)].map(x => x[1])
+assert(afters.length > 0, 'no `:var/after` node for the write of modify')
+assert(afters.some(x => edge(m, x, 'NORM') && edge(x, readOfB, 'NORM')),
+    'the read does not take the version the call made')
 }
 """
 timeout_ms = 10000
@@ -3249,7 +3255,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor_read_after_call.run"
-desc = "Refused with a clear diagnostic instead of a silently wrong gradient: the variable is read after a call that receives it and may write it (run-time error at the gradient call)."
+desc = "Refused with a clear diagnostic instead of a silently wrong gradient: a variable of a differentiable type is read inside the differentiated function, and gradients do not flow through variables (run-time error at the gradient call). The read is reachable because a call that wrote the variable is now the version the read takes (`:var/after`), so the rule sees it."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_tensor_read_after_call.cml"
 args = ["${case}"]
@@ -3259,7 +3265,7 @@ verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.stdout + (input.stderr || '')
 assert(text.includes('Gradients do not flow through variables'), 'the diagnostic states the rule: ' + text)
-assert(text.includes('receives the variable and may write it'), 'the diagnostic names the case: ' + text)
+assert(text.includes('is declared inside the differentiated function is read there'), 'the diagnostic names the case: ' + text)
 assert(!text.includes('grad '), 'no gradient is printed')
 }
 """
@@ -3267,7 +3273,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor_read_after_call.macro"
-desc = "Refused with a clear diagnostic instead of a silently wrong gradient: the variable is read after a call that receives it and may write it (compile-time error of std::macro)."
+desc = "Refused with a clear diagnostic instead of a silently wrong gradient: a variable of a differentiable type is read inside the differentiated function, and gradients do not flow through variables (compile-time error of std::macro)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_tensor_read_after_call.cml"
 args = ["${case}", "std::macro", "std::fvm"]
@@ -3277,7 +3283,7 @@ verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.stdout + (input.stderr || '')
 assert(text.includes('Gradients do not flow through variables'), 'the diagnostic states the rule: ' + text)
-assert(text.includes('receives the variable and may write it'), 'the diagnostic names the case: ' + text)
+assert(text.includes('is declared inside the differentiated function is read there'), 'the diagnostic names the case: ' + text)
 assert(!text.includes('grad '), 'no gradient is printed')
 }
 """
