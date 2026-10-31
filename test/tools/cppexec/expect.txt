@@ -99,6 +99,11 @@ test/cases/trans/cpp/last_element.cml
 # error value says the same kind.
 test/cases/trans/cpp/fail_program.cml
 
+# `array:sum_d`, `array:sort_d` and `array:elements` -- the reductions of `stdlib::array` that name
+# their element type in the operator they compile to: added in f64 from +0, the elements as one
+# run, and the order `sort` gives (ties where they stand, -0 below +0).
+test/cases/trans/cpp/float_reduce.cml
+
 # Output of print / println with a format (design principles 10.6).
 # (test/cases/trans/cpp/exec/print_formats.cml, in the directory above)
 # A formatted string is the same tree as '...'->format<...>: the translator sees no difference.

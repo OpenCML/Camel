@@ -528,6 +528,21 @@ Rules buildRules() {
         },
         false,
     };
+    // `array:sort_d` (src/builtin/operators/array.cpp): the same elements in the order min and max
+    // use, ties where they stand. A rank-1 run again; the other element types name their own
+    // operator and get their own line when a program needs one.
+    r["array:sort_d"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (c.normCount() != 1 || value == nullptr || value->anyRank() || value->rank() != 1 ||
+                value->elemType() == nullptr ||
+                value->elemType()->code() != TypeCode::Float64) {
+                return std::nullopt;
+            }
+            return std::format("rt::sorted({})", c.operand(0));
+        },
+        false,
+    };
     // The slice of a one-dimensional array, whichever spelling wrote it (design principles 5.4):
     // the six words are the value, the axis, the two bounds, the step and the mask of the bounds
     // written, and a call that leaves the last two out stands for step 1 and "both written". A
