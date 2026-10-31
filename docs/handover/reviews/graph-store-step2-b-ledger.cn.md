@@ -1201,3 +1201,46 @@ HANDLE_PROBE refused: InvalidArgument
 **一条判据（协调者给的一句）**：**「删掉一个访问器的时候，先 `grep` 它的调用者——库里的 API 不是只有自己在用。」**
 
 **一条判据（协调者给的一句）**：**「`borrow` 不是降层，是把引用挪到另一个函数里——降层只有一种：让人手里本来就有那个东西。」**
+
+## 55. `draft_inline.cpp` 的 24 处：换掉 15 处，退回 9 处
+
+**这一笔只动一个文件**（`src/runtime/draft_inline.cpp`）。判据是「谁手上本来就有事务」：内联这一层的公开入口（`inlineCallableInDraft`、`specializeDirectFuncInDraft`、`devirtualizeStaticCallInDraft`）本来就收 `GraphTransaction &`，所以它们下面凡是**只在这条链上被调用**的读者都换成了收事务。
+
+**换掉 15 处**：`collectExecutableEntryRoots`、`orderedFuncActualInputs`、`orderedDirectCallFormalNodes`（草稿重载）、`orderedClonedDirectCallFormalNodes`（草稿重载）、`insideBranchArm`、`collectDirectFuncSpecializations`、`remapFormalNodeToActual`、`resolveValueCandidate`、`resolveInlineValueExit`（形参 2 处）、`resolveInlineCtrlExit`（形参 2 处）、`splicedBodyNeedsOrder`、`spliceChainAnchor`、`addSpliceOrderEdges`。读的写 `const auto &draft = transaction.graph();`，写的写 `auto &draft = transaction.edit();`——体一行没改。
+
+**退回 9 处，每处一句理由**：
+
+| 处 | 为什么必须留名字 |
+|---|---|
+| `snapshotNodeInit` | 唯一调用者 `src/runtime/draft_construct.cpp`，不在这一笔的文件里 |
+| `tryResolveStaticValue` | 三个调用者里 `liftClosureGraph`（1306）手上是**草稿**：闭包提升先解出一张草稿、改它，事务要等会话登记之后才有 |
+| `eraseFormalFromDraft` | 同上：`specializeGraphWithBindings`（838）对那张草稿做绑定 |
+| `encodeSpecializedGraph` | 同上：`specializeGraphWithBindings`（843）编码那张草稿 |
+| `specializeGraphWithBindings` 的 `decode` 局部（821） | 草稿本身——`decode` 那一格记的就是这种 |
+| `resolveTupleProjection` | 公开接口（`draft_inline.h:71`），调用者 `src/passes/opt/generic/generic.cpp` 在另一个文件 |
+| `liftClosureGraph` 的 `decode` 局部（1265） | 同上，草稿本身 |
+| `resolvePlaceForks` | 调用者 `src/runtime/graph_edges.cpp` 在另一个文件 |
+| 1794 的注释 | 注释不改写（§45） |
+
+**数**：`references` 329 → **314**（−15），`files` **35**（这个文件还有 9 处与一行注释，不出列），`constructions` 1，`decode` 4。**没有一处 `borrow`**。
+
+**一条判据（协调者给的一句）**：**「退回一处也是产出——把『为什么这里必须留名字』写下来，比硬换掉它值钱。」**
+
+## 56. `draft_clone.cpp` 的 13 处：一处也换不了，13 处全退回
+
+**读一遍再动手的结论**：这个文件里**没有任何一处手里有事务**。它的两个公开入口（`draft_clone.h:37`／`39`）签的就是两张草稿：
+
+```cpp
+DraftGraphCloneResult cloneRuntimeGraphIntoDraft(GraphDraft &owner, const GCGraph *sourceGraph, uint32_t intoRegion = 0);
+DraftGraphCloneResult cloneDraftGraphIntoDraft(GraphDraft &owner, const GraphDraft &sourceDraft, uint32_t intoRegion = 0);
+```
+
+其余的 11 处（`loopPayloadBytes`、两个 `cloneNodeInto*`、`resolveDraftNodeDataType`、`regionOf`、`portsOf`、模板 `cloneInto`、`cloneRegionsInto`、入口定义）都在这两个入口之下，**从入口拿到的是草稿，不是事务**——按「一笔一个文件」的口径，这个文件里没有一处能换。
+
+| 若是要换 | 要动几个文件 | 是什么 |
+|---|---|---|
+| 换掉这 13 处 | **3** | `draft_clone.h:37/39` 两张签名 + `draft_clone.cpp` 13 处 + 唯一调用者 `src/runtime/draft_inline.cpp:1830`（那里手上正好有 `transaction` 与 `calleeTransaction`） |
+
+**数**：`references` **314**（不动），`files` **35**（不动），`constructions` 1，`decode` 4。**一处 `borrow` 也没有造**——造了也只是把 13 处挪进另一个函数。
+
+**一条判据（协调者给的一句）**：**「一个读者能收事务，只因为它上游有人手里已经拿着事务——不是因为它想要。」**
