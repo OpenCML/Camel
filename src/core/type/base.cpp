@@ -118,8 +118,8 @@ const TypeCode &Type::code() const { return code_; }
 std::string Type::toString() const { return typeCodeToString(code_); }
 
 std::string Type::mangle() const {
-    ASSERT(!camel::core::type::isComposite(code_), "Composite type cannot call Type::mangle");
-    ASSERT(!camel::core::type::isOtherType(code_), "Other type cannot call Type::mangle");
+    GUARD(!camel::core::type::isComposite(code_), "Composite type cannot call Type::mangle");
+    GUARD(!camel::core::type::isOtherType(code_), "Other type cannot call Type::mangle");
 
     switch (code_) {
     case TypeCode::Int32:
@@ -157,14 +157,14 @@ std::string Type::mangle() const {
 }
 
 Type *Type::clone(bool deep) const {
-    ASSERT(!camel::core::type::isComposite(code_), "Composite type cannot call Type::clone");
-    ASSERT(!camel::core::type::isOtherType(code_), "Other type cannot call Type::clone");
+    GUARD(!camel::core::type::isComposite(code_), "Composite type cannot call Type::clone");
+    GUARD(!camel::core::type::isOtherType(code_), "Other type cannot call Type::clone");
     return Type::create(code_);
 }
 
 bool Type::equals(Type *type) const {
-    ASSERT(!camel::core::type::isComposite(code_), "Composite type cannot call Type::equals");
-    ASSERT(!camel::core::type::isOtherType(code_), "Other type cannot call Type::equals");
+    GUARD(!camel::core::type::isComposite(code_), "Composite type cannot call Type::equals");
+    GUARD(!camel::core::type::isOtherType(code_), "Other type cannot call Type::equals");
     if (!type)
         return false;
     return code_ == type->code_;
@@ -257,10 +257,10 @@ ExtentBinding bindExtents(
 }
 
 CastSafety Type::castSafetyFrom(Type *sourceType) const {
-    ASSERT(
+    GUARD(
         !camel::core::type::isComposite(code_),
         "Composite type cannot call Type::castSafetyFrom");
-    ASSERT(!camel::core::type::isOtherType(code_), "Other type cannot call Type::castSafetyFrom");
+    GUARD(!camel::core::type::isOtherType(code_), "Other type cannot call Type::castSafetyFrom");
 
     if (!sourceType)
         return CastSafety::Forbidden;
