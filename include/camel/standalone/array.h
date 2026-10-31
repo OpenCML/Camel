@@ -440,6 +440,16 @@ Array<T> asShape(
     const char *typeText,
     const Site &site) {
     const std::size_t rank = xs.rank();
+    if (rank == 0 && xs.size() > 1) {
+        // A value of several elements and no rank is one whose producer did not record a shape: the
+        // writer's own array constructions (`rt::Array<int>{{1, 2, 3}}`), a window, a comprehension.
+        // The interpreter's value has a shape, so the two cannot be compared here, and a program that
+        // is right must not stop because of a record that is missing: the conversion answers the
+        // value. Which producers those are is the next defect of this kind (design
+        // docs/design/cpp-standalone/README.cn.md 12.2), and the check below is the one that runs
+        // wherever the shape did travel with the value.
+        return xs;
+    }
     bool holds             = rank == extents.size();
     if (holds) {
         std::size_t i = 0;
