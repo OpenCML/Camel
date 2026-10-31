@@ -1,0 +1,36 @@
+/*
+ * A format specification is one rule, not two: `${xs:SPEC}` in an interpolation and
+ * `'{:SPEC}'->format<xs>` accept the same specifications and write the same text. Each `interp:`
+ * line below and the `format:` line after it are one subject written both ways; the plan compares
+ * the texts of a pair and pins no digit, so what an array's text is stays the writer's decision
+ * (7.7) and this case only says the two spellings of one specification agree.
+ */
+
+func pair(viaInterpolation: string, viaFormat: string) sync {
+    println('interp: ' + viaInterpolation)
+    println('format: ' + viaFormat)
+}
+
+func main(): int sync {
+    let fs: float[] = [0.7692, 0.7808]
+    pair(`${fs:.6f}`, '{:.6f}'->format<fs>)
+    pair(`${fs:.2f}`, '{:.2f}'->format<fs>)
+    pair(`${fs:>10.4f}`, '{:>10.4f}'->format<fs>)
+    pair(`${fs:e}`, '{:e}'->format<fs>)
+
+    let ds: f64[] = [0.7692267, 0.780836]
+    pair(`${ds:.9g}`, '{:.9g}'->format<ds>)
+
+    let is: int[] = [3, 7]
+    pair(`${is:04d}`, '{:04d}'->format<is>)
+
+    let fs16: f16[] = [0.25, 0.5]
+    pair(`${fs16:.3f}`, '{:.3f}'->format<fs16>)
+
+    let z: float = 0.5
+    pair(`${z:.3f}`, '{:.3f}'->format<z>)
+
+    let s = 'a scalar text'
+    pair(`${s}`, '{}'->format<s>)
+    return 0
+}
