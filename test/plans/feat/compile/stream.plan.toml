@@ -1312,3 +1312,16 @@ expect_exit = 0
 expect_stdout_exact = "7\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+[[tests]]
+name = "stream.generators_shapes_consumed"
+desc = "The generator machine builds the shapes it used to narrow away, and a stream that is built is only useful if it is consumed: three carried values, two nested loops with one carried value each, and a carried pair that depends on the two rounds before it are each pulled by a `for` loop and folded, and the three folds are what this case pins (1384, 102101112202122, 88). The folds are the ones an ordinary loop over the same sequence writes, so the numbers say the machine handed the elements out in the order the loops would."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_shapes_consumed.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "1384\n102101112202122\n88\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
