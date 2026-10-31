@@ -73,6 +73,32 @@ rule jvp_add
 - `include/camel/runtime/program.h:175` —— `tableSize()` 是唯一的规模读数，**没有按名字取的入口**；
 - 探针处：`src/passes/trans/rulesets/rulesets.cpp` 的 `apply`（已删除，不留）。
 
+## 那么两侧图去哪了：**被存起来**
+
+判据：**一条路走不通时，最贵的不是绕路，是不知道它为什么不通；这次拿到的是“规则两侧在定型后
+不存在”，这比绕路有用。**
+
+读 `src/compile/gir/` 的规则声明一侧，答案是三个字：**被存起来**。存的地方与索引：
+
+- `src/compile/gir/builder_generics.cpp:603` —— `registerGenericRule(...)`，把规则的两侧模板
+  登记进表，返回 `ruleId`；**规则值只带这个 id**（`builder_tags.cpp:354` 的注释：
+  “no graph stands for it, and the value namespace is the only place it appears”）；
+- `src/compile/gir/rule_templates.cpp:35` —— 表挂在 **context** 上（`context.genericRuleTemplates()`），
+  “so a rule value can keep an id instead of a pointer and an instance outlives the pass that made it”；
+- `include/camel/compile/gir/rule_templates.h:96-112` —— `GenericRuleEntry` 存 `lhs`/`rhs`/`when`
+  模板与 `instances`；每个 `GenericRuleInstance`（`:60-77`）带着 **`program`、`lhs`、`rhs`、`when`
+  四张真实的图**，“in one program of the context that is never released”；
+- `include/camel/compile/gir/rule_templates.h:152` —— `genericRuleEntry(context, ruleId)`；
+  `:168` —— `genericRuleInstance(context, ruleId, types, with)`：按类型元组实例化一次、留下，
+  **问两次答同一个位置**。
+
+所以：**两侧没有被丢弃，也没有被丢弃的风险**——它们是模板，实例在第一次被问到时建成真图，之后
+一直在。缺的只是**运行期**那一侧没有入口（`Program` 里看不到 context 的表）；而替换按作者的裁定
+就落在编译期（`(a)`），编译期这一侧的入口已经齐了：`genericRuleEntry` + `genericRuleInstance`。
+
+**结论**：路 2 不需要新 API，也不需要问作者；要证明的是“变换能把 `ruleId` 换成实例的 `rhs` 图”。
+下一个一行打印就该打这个。
+
 **结论**：路 1 在这个时点不成立。路 2（在 `Builder` 里跑，名字能解析）没被这次实验否定，但也没被
 证实——它要在宏这一步、规则两侧还没变成图之前动手，那里的问题不是“取图 id”，而是“先在规则该被
 实例化的地方拿到它”。
