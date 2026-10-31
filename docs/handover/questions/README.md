@@ -10,14 +10,15 @@
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
 
-## 现在在等作者：2 页
+## 现在在等作者：3 页
 
-两页在等，都不是旧问题：一页是 `b6` 的最后一块（`gir-handle-names-a-transaction-or-a-draft`，handle 名字事务还是名字草稿，同页第二问问 region 的 id 能不能在 extract 时就分配），一页是 `lane-mcts` 落进来的（`partial-destructuring-of-a-value-tuple`，多值 `loop`/元组解构时名字少于值，该拒绝还是按位置取前几个）。其余五页已在 22:50–23:50 裁完、整体挪进 `reviews/`，见下面"已裁"表。
+三页在等：一页是 `b6` 的最后一块（`gir-handle-names-a-transaction-or-a-draft`，handle 名字事务还是名字草稿，同页第二问问 region 的 id 能不能在 extract 时就分配），一页是 `lane-mcts` 落进来的（`partial-destructuring-of-a-value-tuple`，多值 `loop`/元组解构时名字少于值，该拒绝还是按位置取前几个），一页是 `lane-fmt` 落进来的（`does-rt-array-carry-a-shape`，`std::cpp` 最后 15 个核心算子程序全挡在"值必须是一维"这一道门上，问 `rt::Array` 要不要带形状）。其余五页已在 22:50–23:50 裁完、整体挪进 `reviews/`，见下面"已裁"表。
 
 | 页 | 问什么 | 状态 | 堵着谁 |
 |---|---|---|---|
 | [`gir-handle-names-a-transaction-or-a-draft`](questions-2026-10-31-gir-handle-names-a-transaction-or-a-draft.md) | 编译期的 `node_handle_t` 名字一个事务（与 `NodeView` 同型）还是一张草稿；同页第二问：region 的 id 能不能在 extract 时就分配 | 待裁 | **堵 b6 的最后一块**：①名字事务要迁 `nodeDraftOf` 66 个形状不变、但 `DraftGraphBuilder::draft()` 132 个调用点；②名字草稿 0 改动，代价是在 3.6 旁边加一条编译期例外；**同页第二问堵 `tiles` 那 9 处与 `operator_instance` 那 2 处** |
 | [`partial-destructuring-of-a-value-tuple`](questions-2026-10-31-partial-destructuring-of-a-value-tuple.md) | 多值 `loop`/元组的解构，名字少于值时该拒绝（诊断），还是按位置取前几个（今天的实现） | 待裁 | 不堵今天的活（`mcts` 已按"四个名字全写全"绕开）；堵**下一个多状态循环**——两个同型状态就足以让它安静地算错 |
+| [`does-rt-array-carry-a-shape`](questions-2026-10-31-does-rt-array-carry-a-shape.md) | `rt::Array` 要不要带形状：带，多维下标/切片/`shape` 才有意义；不带，`std::cpp` 最后 15 个核心算子程序只能继续拒 | 待裁 | **堵 `std::cpp` 的张量那一片**：15 个程序 15/15 挡在 `rank()==1 && !anyRank()` 这一句上（12 个的多维值由 `reshape<[2,3]>` 造出、8 个调 `shape()`），另有 264 个换桶里的多维部分；页内证据四还记着一个**今天就印错**的多维字面量（`{1.0, 2.0, 3.0}` 印三个，fvm 印三行） |
 
 原则第 15 节另列着 6 条未决（另 2 条已成页、22:50 已裁），见文末。
 
