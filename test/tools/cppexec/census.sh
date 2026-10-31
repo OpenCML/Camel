@@ -49,6 +49,11 @@
 #                                            PassInternalError, so there is no reading of the
 #                                            program to compare a translation against
 #   examples/perf/fibs.cml                   prints the wall-clock seconds it measured
+#   para/core/block_sort_merge.cml           prints the wall-clock seconds it measured
+#   para/core/bootstrap_medians.cml          prints the wall-clock seconds it measured
+#   para/core/merge_sort.cml                 prints the wall-clock seconds it measured, and on
+#                                            100000000 elements the reference itself stops
+#                                            (exit 1), so there is no reading to compare
 #
 # A `differs` count over the corpus has to leave these out, or it counts the clock and a
 # broken reference as defects of the writer. Two ways to close a hole in a ruler: make the case
@@ -60,6 +65,9 @@ not_comparable=(
     test/cases/perf/fib_recursive.cml
     test/cases/linear/jit/perf_fib_smoke.cml
     test/cases/para/core/monte_carlo_pi.cml
+    test/cases/para/core/block_sort_merge.cml
+    test/cases/para/core/bootstrap_medians.cml
+    test/cases/para/core/merge_sort.cml
     test/cases/para/core/unordered_foreach_timing.cml
     test/cases/modules/std/time/basic.cml
     test/cases/consistency/generic_values/candidate_body_fails.cml
