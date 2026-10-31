@@ -1002,13 +1002,33 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
         });
     auto expr = rule->emit(call);
     if (!expr) {
+        // The rule said no: name the operator *and* the values it was given, because what the
+        // rule turns on is their types. A refusal that only says "on values" leaves the reader to
+        // guess which shape the writer wanted -- the one thing the census sorts by.
+        std::string types;
+        std::string last;
+        for (size_t i = 0; i < call.normCount(); ++i) {
+            const Type *type = call.normType(i);
+            if (type == nullptr) {
+                continue;
+            }
+            std::string name = typeName(type);
+            if (name == last) {
+                continue; // the same type twice running: the shape is what the reader wants once
+            }
+            types += types.empty() ? "'" : " and '";
+            types += name;
+            types += "'";
+            last = std::move(name);
+        }
         refuse(
             g,
             ref,
             std::format(
-                "{} uses the operator '{}' on values std::cpp does not translate it for yet",
+                "{} uses the operator '{}' on values{} std::cpp does not translate it for yet",
                 describeFunction(g),
-                uri));
+                uri,
+                types.empty() ? std::string() : " of type " + types));
     }
     bind(frame, ref, std::move(*expr), rule->inlinable, out, operatorHint(uri));
 }
