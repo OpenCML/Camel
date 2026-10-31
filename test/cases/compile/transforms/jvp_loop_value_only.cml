@@ -1,0 +1,19 @@
+// A loop that carries its state but never differentiates it: `s` starts at 0 and every iteration
+// adds 1, so
+//   f(x) = loop s = 0.0 for i in [1, 2, 3, 4] do s + 1.0   ==   4
+//   f(3) = 4,  f'(3) = 0
+// The state is still lifted into a pair -- the loop's value is `(value, tangent)` whether or not
+// anything reads the tangent -- but no derivative flows into the body, so the tangent stays 0.
+import rulesets.jvp
+import { jvp } from transforms
+
+func f(x: float): float {
+    return loop s = 0.0 for i in [1, 2, 3, 4] do s + 1.0
+}
+
+func main(): int sync {
+    let (value, tangent) = jvp(f)(3.0, 1.0)
+    println(value)
+    println(tangent)
+    return 0
+}

@@ -182,6 +182,8 @@ JvpGraph buildJvpGraph(
     size_t copiedKinds = 0;
     size_t seenKinds   = 0;
     std::vector<std::string> usedRules;
+    // The copy of the loop node the walk made, if any.
+    gc_node_ref_t liftedLoopNode = camel::runtime::kInvalidNodeRef;
     camel::runtime::GraphDraftGroup group(context, program);
     const GraphId member = group.reserve(
         "jvp_of_" + std::string(function->name()), "jvp_of_" + std::string(function->name()));
@@ -208,6 +210,9 @@ JvpGraph buildJvpGraph(
         // graph -- the value came out of an input nobody had copied.
         std::vector<gc_node_ref_t> copyOf(function->nodeCount(), rt::kInvalidNodeRef);
         std::vector<bool> copied(function->nodeCount(), false);
+        // The value a node hands to a reader: the copy itself, except where the copy is a lifted
+        // pair -- a loop's state port -- and the reader wants the value half.
+        std::vector<gc_node_ref_t> valueOf(function->nodeCount(), rt::kInvalidNodeRef);
         bool complete = true;
         // Step 3, second layer: a tangent for every node. A constant's tangent is zero, a port's is
         // the tangent parameter the caller passed, and a primitive's is the forward rule the ruleset
@@ -270,6 +275,35 @@ JvpGraph buildJvpGraph(
             liftedJoin[body->join]   = made;
             joinOfBrch[ref]          = made;
         }
+        // A loop whose rounds are a region of this graph is lifted with the rest; one that keeps a
+        // condition graph and a body graph for a call a round is refused here, at the loop. The
+        // presence of the region, not the payload's graph ids, tells the two apart (a lowered loop
+        // keeps the ids it was built with).
+        for (gc_node_ref_t ref = 0; ref < function->nodeCount(); ++ref) {
+            const camel::runtime::GCNode *node = function->node(ref);
+            if (node == nullptr || node->kind != rt::GCNodeKind::Loop) {
+                continue;
+            }
+            bool hasRounds = false;
+            for (uint32_t r = 1; r < function->regionCount(); ++r) {
+                const rt::GCRegion *part = function->region(r);
+                if (part != nullptr && part->owner == ref &&
+                    part->kind == rt::GCRegionKind::LoopBody) {
+                    hasRounds = true;
+                    break;
+                }
+            }
+            if (!hasRounds) {
+                JvpGraph refused;
+                refused.refusedOrigin =
+                    static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                refused.refusedConstruct = "a loop that runs its rounds as calls";
+                refused.refusedWhy =
+                    "its body is a graph of its own, and only a loop whose rounds are a region of "
+                    "this graph is lifted yet";
+                return refused;
+            }
+        }
         for (std::uint8_t kind = 0; kind <= static_cast<std::uint8_t>(rt::GCNodeKind::Dref); ++kind) {
             bool seen = false;
             for (camel::runtime::gc_node_ref_t ref = 0; ref < function->nodeCount(); ++ref) {
@@ -294,7 +328,7 @@ JvpGraph buildJvpGraph(
             draft.setInsertRegion(
                 region != 0 && region < liftedRegion.size() ? liftedRegion[region] : 0);
             switch (node->kind) {
-            case rt::GCNodeKind::Port:
+            case rt::GCNodeKind::Port: {
                 // The lifted graph has one ordinary parameter, so the one port the original body
                 // reads is the value the caller passes. Its tangent is the second parameter.
                 if (!function->normPorts().empty() && function->normPorts().front() == ref) {
@@ -302,8 +336,41 @@ JvpGraph buildJvpGraph(
                     tangentOf[ref] = tangent;
                     copied[ref]    = true;
                     ++copiedKinds;
+                    break;
+                }
+                // A port of a loop's body region is a loop variable, and a `float` one is the
+                // carried state: the loop carries the pair, so this port is a pair port and the
+                // body reads its halves through projections.
+                const uint32_t portRegion = function->nodeRegion(ref);
+                const rt::GCRegion *portRegionBody =
+                    portRegion != 0 ? function->region(portRegion) : nullptr;
+                if (portRegionBody != nullptr &&
+                    portRegionBody->kind == rt::GCRegionKind::LoopBody) {
+                    const bool carried                     = node->dataType() == Type::Float64();
+                    camel::core::type::Type *portType = carried ? lifted : node->dataType();
+                    copyOf[ref] = draft.addPortNode(portType, draft.allocateRuntimeSlot(portType));
+                    if (carried) {
+                        const gc_node_ref_t pairOfState = copyOf[ref];
+                        const gc_node_ref_t half = draft.addAccsNode(Type::Float64(), 0);
+                        draft.setNormInputs(half, std::span<const gc_node_ref_t>(&pairOfState, 1));
+                        const gc_node_ref_t halfTangent = draft.addAccsNode(Type::Float64(), 1);
+                        draft.setNormInputs(
+                            halfTangent, std::span<const gc_node_ref_t>(&pairOfState, 1));
+                        valueOf[ref]   = half;
+                        tangentOf[ref] = halfTangent;
+                    }
+                    copied[ref] = true;
+                    ++copiedKinds;
+                } else {
+                    // Any other port -- the round number a loop writes, a with-parameter -- is a
+                    // place a value arrives in: copied as it is, with no tangent.
+                    copyOf[ref] = draft.addPortNode(
+                        node->dataType(), draft.allocateRuntimeSlot(node->dataType()));
+                    copied[ref] = true;
+                    ++copiedKinds;
                 }
                 break;
+            }
             case rt::GCNodeKind::Data: {
                 const std::span<const slot_t> slots =
                     function->staticSlots();
@@ -356,6 +423,27 @@ JvpGraph buildJvpGraph(
                 ++copiedKinds;
                 break;
             }
+            case rt::GCNodeKind::Loop: {
+                // A loop is a region of this graph: the rounds are the region's and the LOOP
+                // node's value is the state. Lifting it is lifting the state into a pair -- the
+                // node's type is the pair, the body's state port is a pair port (whose halves the
+                // body reads through projections), and the region's result is the pair of the
+                // body's new value and its tangent. The inputs and the region are wired after the
+                // walk. The payload names no graph: the rounds are the region (a region-form loop),
+                // and the ids a lowered loop still carries name graphs of the *other* program.
+                // The payload is a `GCLoopRef` (reference-table indexes), not a `GCLoopBody`
+                // (graphs): reading it through the wrong struct gives a node whose kind is 255 and
+                // whose graphs are none. `loopBodyOf` is the reading that converts.
+                const rt::GCLoopBody body = rt::loopBodyOf(*function, ref);
+                rt::GCLoopBody liftedBody = body;
+                liftedBody.condGraph      = camel::runtime::kInvalidGraphId;
+                liftedBody.bodyGraph      = camel::runtime::kInvalidGraphId;
+                copyOf[ref]               = draft.addLoopNode(liftedBody, lifted);
+                liftedLoopNode            = copyOf[ref];
+                copied[ref]               = true;
+                ++copiedKinds;
+                break;
+            }
             case rt::GCNodeKind::Oper: {
                 const auto *body = function->nodeBodyAs<camel::runtime::GCOperBody>(ref);
                 const gc_node_ref_t made =
@@ -371,7 +459,7 @@ JvpGraph buildJvpGraph(
                         break;
                     }
                     originals.push_back(input);
-                    inputs.push_back(copyOf[input]);
+                    inputs.push_back(valueOf[input] != rt::kInvalidNodeRef ? valueOf[input] : copyOf[input]);
                 }
                 copyOf[ref] = made;
                 copied[ref] = true;
@@ -515,6 +603,106 @@ JvpGraph buildJvpGraph(
         }
         if (!complete) {
             os << "REINTERP jvp function=" << function->name() << " skip=branch\n";
+            return JvpGraph{};
+        }
+        // A loop's wiring: its state input becomes a pair (the initial state and its zero tangent),
+        // its body region keeps its ports -- the state port now a pair -- and its result becomes the
+        // pair the body computes. The loop's value is then a lifted value like any other, so a
+        // reader of it needs nothing special, including the body's exit.
+        for (gc_node_ref_t ref = 0; complete && ref < function->nodeCount(); ++ref) {
+            const camel::runtime::GCNode *node = function->node(ref);
+            if (node == nullptr || node->kind != rt::GCNodeKind::Loop) {
+                continue;
+            }
+            const gc_node_ref_t loopCopy = copyOf[ref];
+            if (loopCopy == rt::kInvalidNodeRef) {
+                complete = false;
+                break;
+            }
+            // The body region comes first: its result is the pair the state becomes, and the loop
+            // node's *first with-input* is that same result (LoopView::bodyResult reads it there),
+            // so it has to be the pair and not the copy of the old exit.
+            gc_node_ref_t newState = rt::kInvalidNodeRef;
+            for (uint32_t r = 1; r < function->regionCount(); ++r) {
+                const rt::GCRegion *part = function->region(r);
+                if (part == nullptr || part->owner != ref ||
+                    part->kind != rt::GCRegionKind::LoopBody) {
+                    continue;
+                }
+                draft.setRegionOwner(liftedRegion[r], loopCopy, part->index);
+                std::vector<gc_node_ref_t> ports;
+                for (gc_node_ref_t port : function->regionPorts(r)) {
+                    if (port >= function->nodeCount() || !copied[port]) {
+                        complete = false;
+                        break;
+                    }
+                    ports.push_back(copyOf[port]);
+                }
+                if (!complete) {
+                    break;
+                }
+                if (!ports.empty()) {
+                    draft.setRegionPorts(liftedRegion[r], ports);
+                }
+                const gc_node_ref_t exit = part->result;
+                if (exit == rt::kInvalidNodeRef || !copied[exit] ||
+                    tangentOf[exit] == rt::kInvalidNodeRef) {
+                    complete = false;
+                    break;
+                }
+                draft.setInsertRegion(liftedRegion[r]);
+                newState = liftedPair(copyOf[exit], tangentOf[exit]);
+                draft.setRegionResult(liftedRegion[r], newState);
+                draft.setInsertRegion(0);
+            }
+            if (!complete || newState == rt::kInvalidNodeRef) {
+                complete = false;
+                break;
+            }
+            std::vector<gc_node_ref_t> loopInputs;
+            for (gc_node_ref_t input : function->normInputsOf(ref)) {
+                if (input >= function->nodeCount() || !copied[input]) {
+                    complete = false;
+                    break;
+                }
+                const camel::runtime::GCNode *in = function->node(input);
+                const gc_node_ref_t copy         = copyOf[input];
+                if (in != nullptr && in->dataType() == Type::Float64()) {
+                    if (tangentOf[input] == rt::kInvalidNodeRef) {
+                        complete = false;
+                        break;
+                    }
+                    loopInputs.push_back(liftedPair(copy, tangentOf[input]));
+                } else {
+                    loopInputs.push_back(copy);
+                }
+            }
+            if (!complete) {
+                break;
+            }
+            if (!loopInputs.empty()) {
+                draft.setNormInputs(loopCopy, loopInputs);
+            }
+            // The first with-input is the body's result -- the new state; the rest (a round index,
+            // what the body reads from outside) are copied as they are.
+            std::vector<gc_node_ref_t> loopWith;
+            loopWith.push_back(newState);
+            const auto loopWithOriginals = function->withInputsOf(ref);
+            for (size_t i = 1; i < loopWithOriginals.size(); ++i) {
+                const gc_node_ref_t input = loopWithOriginals[i];
+                if (input >= function->nodeCount() || !copied[input]) {
+                    complete = false;
+                    break;
+                }
+                loopWith.push_back(copyOf[input]);
+            }
+            if (!complete) {
+                break;
+            }
+            draft.setWithInputs(loopCopy, loopWith);
+        }
+        if (!complete) {
+            os << "REINTERP jvp function=" << function->name() << " skip=loop\n";
             return JvpGraph{};
         }
         // The value the copied chain produces: the node the original graph's exit names. The exit

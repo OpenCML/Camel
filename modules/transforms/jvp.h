@@ -49,6 +49,10 @@ struct JvpGraph {
     camel::source::origin_id_t refusedOrigin = camel::source::kInvalidOriginId;
     std::string refusedUri;
     std::string refusedWhy;
+    /// What could not be reinterpreted, when it is not a primitive (a loop): the name the diagnostic
+    /// uses. A construct this transform has no reading for is refused the same way a primitive with
+    /// no rule is -- at the construct, by name, stopping the build -- never copied and hoped for.
+    std::string refusedConstruct;
 };
 
 /// The signature `reinterp<jvp>(f)` has for `function`, or nullptr when the function has no forward

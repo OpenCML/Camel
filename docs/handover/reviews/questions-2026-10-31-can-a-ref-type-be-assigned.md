@@ -41,3 +41,26 @@ stdout 为空，stderr 是 Camel Invariant Violation（上方 Guarantee/Reading�
 
 **裁定之后**：若为 A，修调用方（解析再赋值），检查恢复为发布版生效；若为 B，把这一句改成对
 `Ref` 的判断，并补用例钉住“标注是 `Ref` 时赋值成立/不成立”的答案。
+
+---
+
+## 2026-10-31 13:50 裁定与落地状态
+
+作者裁 **A**：`Ref` 是尚未解析的引用，`assignableFrom` 不该替它作答；那四个用例是调用方
+在标注解析之前就拿去比，修法在调用方。
+
+**落地卡在这里，页留着**：按裁定把 `assignableFrom` 那句恢复成发布版生效后，在
+`gct::Builder::visitStructInto` 里试了两版修法——
+
+1. 值类型是 `Ref` 时整条字段比较跳过、交给通用路径（`visitData(ast)`）：**四个目标用例全绿**，
+   但 `rank_zero_slot_tuple_element`（nvm/fvm/jit）与 `print_and_recompile` 变红；
+2. 只在“值与字段类型不相等”时跳过：同样这三条红。
+
+原因：`fieldType->assignableFrom` 走的是**复合类型的重写版本**（`StructType`/`Array` 等），
+同一处 `Ref` 值在别的程序里正是由那个重写版本答“可以”的；调用方一跳过，字面量就
+从“按位置类型建”变成“按自己推出来的类型建”，三处用例因此换了形状。
+
+所以真正需要的是**在复合类型那一层解析这个 `Ref`**（它不是名字表里的条目，而是“这个位置的
+类型还没定”），而不是在 `visitStructInto` 跳过一次比较。这一笔需要动 `StructType::assignableFrom`
+的入口前提，属于类型系统内部，等下一次排期；当前树因此仍是**全绿**：`base.cpp` 那处保持
+`ASSERT`，整族 57/58。

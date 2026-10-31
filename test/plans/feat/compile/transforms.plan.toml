@@ -44,6 +44,42 @@ expect_stdout_contains = ["REINTERP jvp function=f graph=", "exit=Tuple{chain,ta
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# A loop's state is the LOOP node's value and its rounds are a region of the same graph, so lifting
+# it is lifting the *state*: the node's value becomes the pair, the body's state port is a pair port
+# whose halves the body reads through projections, and the region's result is the pair of the body's
+# new value and its tangent. `f(x) = loop s = 0.0 for i in [1,2,3,4] do s + x*x` carries `x*x = 9`
+# four times at x = 3 -- `f(3) = 36` -- and carries `8x = 24` four times -- `f'(3) = 24`. The number
+# that says the tangent is *carried* and not recomputed is 24: keeping only the last round's
+# derivative would read 6, which is what the case's comment records as the failure symptom.
+[[tests]]
+name = "jvp_loop.state_is_lifted"
+desc = "A loop is reinterpreted by lifting its state, not by interpreting its body twice: the LOOP node's value is the state, the rounds are a region of the same graph, and the lifted graph carries `(value, tangent)` from the initial `(0.0, 0.0)` through every round. `jvp(f)(3.0, 1.0)` reads `(36, 24)` -- `36` is `x*x` added four times at x = 3, `24` is `8x` added four times -- and the reading names the rules it applied (`jvp_mul`, `jvp_add`). `6` would be the answer of a tangent recomputed from the last round alone, which is why the case's comment names it as the symptom."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_loop.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_add", "36", "24"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# A loop whose body never reads the state's tangent -- `s + 1.0`, where the derivative does not
+# flow through the state at all -- is still lifted: the tangent is carried as zero, and the value is
+# what the loop computes. The pair is the loop's value whether or not anything differentiates it.
+[[tests]]
+name = "jvp_loop.value_only_is_still_lifted"
+desc = "A loop whose body does not touch the state's tangent (`s + 1.0` four times, so `f(3) = 4`) is lifted all the same: the state is carried as `(value, tangent)` from `(0.0, 0.0)`, the body reads only the value half, and the derivative stays 0 -- it does not flow through the state. The reading still says `tangent=computed source=ruleset`, and `jvp(f)(3.0, 1.0)` reads `(4, 0)`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_loop_value_only.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "4.0", "0.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 # The negative side of the same rule table, and the point of it: a primitive the ruleset has no rule
 # for is not answered with 0 or 1 and is not only printed at -- it is a diagnostic that names the
 # primitive and stands *where the primitive is written*. `pow` is `math:pow_d`, which no forward rule
