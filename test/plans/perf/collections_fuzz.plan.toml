@@ -7,7 +7,7 @@ desc = "The long runs of the random and differential tests of `Map<K, V>` and `S
 # A generated program is run on Camel and its output compared with the answer the generator
 # computed on Python dicts and sets. Every program runs under the default tree, the flat
 # sorted array and trees of tiny tables, with the invariants of every table checked
-# (CAMEL_COLL_VALIDATE=1).
+# (`--coll validate=on`).
 
 [defaults]
 kind = "behavior"

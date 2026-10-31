@@ -345,8 +345,7 @@ name = "stream.interval_loop_not_materialised"
 desc = "Two million rounds under an 8 MB heap cap: the fused loop runs, where an `int[]` of the same interval (16 MB) is refused with RuntimeDiag::MemoryExhausted. This is the observable half of `for i in 0..n` builds no array."
 kind = "behavior"
 case = "../../../cases/compile/stream/interval_loop_not_materialised.cml"
-args = ["${case}", "std::nvm"]
-envs = ["CAMEL_GC_HEAP_LIMIT_MB=8"]
+args = ["--gc-heap-limit-mb", "8", "${case}", "std::nvm"]
 expect_exit = 0
 expect_stdout_starts_with = "2000000\n"
 expect_output_not_contains = ["MemoryExhausted", "UnknownInternalError", "[Error]"]

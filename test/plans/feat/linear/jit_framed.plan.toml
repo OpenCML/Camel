@@ -34,8 +34,7 @@ desc = "Under std::jit those functions are compiled as framed code (fib, whose b
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
-args = ["--gc", "mark-sweep", "-vv", "${case}", "std::jit"]
-envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0"]
+args = ["--gc-check", "poison", "--gc", "mark-sweep", "-vv", "${case}", "std::jit"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'collatz' as framed code", "compiled & cached graph 'repeat' as framed code", "compiled & cached graph 'sum_at' as framed code", "compiled & cached graph 'mean' as framed code", "compiled & cached graph 'name_of' as framed code", "compiled & cached graph 'weight' as framed code", "compiled & cached graph 'weigh' as framed code", "compiled & cached graph 'walk' as framed code", "compiled & cached graph 'swap_sum' as framed code", "compiled & cached graph 'is_even' as framed code", "compiled & cached graph 'is_odd' as framed code", "compiled & cached graph 'fib' as frameless code", "compiled & cached graph 'twice' as framed code", "compiled & cached graph 'scaled_total' as framed code", "compiled & cached graph 'totals' as framed code", "collatz 111 118", "weigh 3210", "twice 284626", "totals 14415"]
 expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped core"]
@@ -46,8 +45,7 @@ desc = "The same after std::opt::inline, where the branch arms are part of the f
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
-args = ["--gc", "mark-sweep", "-vv", "${case}", "std::opt::inline", "std::jit"]
-envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0"]
+args = ["--gc-check", "poison", "--gc", "mark-sweep", "-vv", "${case}", "std::opt::inline", "std::jit"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'collatz' as framed code", "compiled & cached graph 'weigh' as framed code", "compiled & cached graph 'fib' as frameless code", "collatz 111 118", "weigh 3210", "totals 14415"]
 expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped core"]
@@ -58,7 +56,7 @@ name = "framed.operators.gc_stress"
 tier = "milestone"
 desc = "The same with a collection at every seventh safepoint and the heap verified before and after: framed code keeps every reference in its pool frame, where the collector finds it."
 backends = ["fvm", "jit", "inline_jit"]
-envs = ["CAMEL_GC_STRESS_SAFEPOINT=7", "CAMEL_GC_VERIFY=1"]
+args = ["--gc-stress", "safepoint=7", "--gc-check", "verify=1", "${case}"]
 sweep = false
 timeout_ms = 240000
 expect_exit = 0
@@ -68,7 +66,7 @@ expect_stdout_starts_with = "collatz 111 118\nrepeat >ababababab\nsum_at 31\nmea
 name = "framed.operators.moving"
 desc = "The same with the generational collector and safepoint poisoning: every safepoint moves every young object and poisons where it was, so a reference that compiled code kept in a register or baked into its code across a safepoint would fault."
 backends = ["fvm", "jit_hot_threshold0", "inline_jit_hot_threshold0"]
-envs = ["CAMEL_GC_POISON=1"]
+args = ["--gc-check", "poison", "${case}"]
 sweep = false
 timeout_ms = 240000
 expect_exit = 0
@@ -147,8 +145,8 @@ case = "../../../cases/linear/jit/framed_faults.cml"
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
-args = ["--gc", "mark-sweep", "-vv", "${case}", "std::jit"]
-envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0", "FAULT=none"]
+args = ["--gc-check", "poison", "--gc", "mark-sweep", "-vv", "${case}", "std::jit"]
+envs = ["FAULT=none"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'pick' as framed code", "compiled & cached graph 'picks' as framed code", "compiled & cached graph 'rem' as framed code", "compiled & cached graph 'quot' as framed code", "compiled & cached graph 'depth' as framed code", "isolated", "done"]
 
@@ -170,7 +168,8 @@ tier = "milestone"
 desc = "The allocating loops with a collection at every safepoint and the heap verified: the self tail call of compiled code polls the collector as the interpreter's does."
 case = "../../../cases/linear/jit/framed_loops.cml"
 backends = ["fvm", "jit", "inline_jit"]
-envs = ["N=20000", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_VERIFY=1"]
+args = ["--gc-stress", "safepoint=1", "--gc-check", "verify=1", "${case}"]
+envs = ["N=20000"]
 sweep = false
 timeout_ms = 240000
 expect_exit = 0
@@ -183,8 +182,8 @@ case = "../../../cases/linear/jit/framed_loops.cml"
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
-args = ["--gc", "mark-sweep", "-vv", "${case}", "std::jit"]
-envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0", "N=5000"]
+args = ["--gc-check", "poison", "--gc", "mark-sweep", "-vv", "${case}", "std::jit"]
+envs = ["N=5000"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'churn' as framed code", "compiled & cached graph 'ping' as framed code", "compiled & cached graph 'pong' as framed code", "compiled & cached graph 'build' as framed code", "compiled & cached graph 'total' as framed code", "compiled & cached graph 'digit_sum' as framed code", "done"]
 
@@ -207,8 +206,7 @@ case = "../../../cases/loops/compiled.cml"
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
-args = ["--gc", "mark-sweep", "-vv", "${case}", "std::jit hot_threshold=0"]
-envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0"]
+args = ["--gc-check", "poison", "--gc", "mark-sweep", "-vv", "${case}", "std::jit hot_threshold=0"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'countdown' as framed code; loop rounds: native rounds", "compiled & cached graph 'sum_to' as framed code; loop rounds: native rounds", "compiled & cached graph 'sum_squares' as framed code; loop rounds: helper: the round takes the next element of a sequence", "compiled & cached graph 'until_above' as framed code; loop rounds: helper: the round takes the next element of a sequence", "compiled & cached graph 'nested' as framed code; loop rounds: helper: the round takes the next element of a sequence (2 loops)", "compiled & cached graph 'collects' as framed code; loop rounds: helper: the round collects the values it produces", "compiled & cached graph 'ticks' as framed code; loop rounds: helper: the round contains OPER at pc=16"]
 expect_output_not_contains = ["'countdown' as framed code; loop rounds: helper", "'sum_to' as framed code; loop rounds: helper", "'sum_squares' as framed code; loop rounds: native", "'until_above' as framed code; loop rounds: native", "'nested' as framed code; loop rounds: native", "'collects' as framed code; loop rounds: native", "'ticks' as framed code; loop rounds: native", "compile skipped", "Segmentation fault", "dumped core"]
@@ -230,7 +228,8 @@ name = "framed.loops.moving"
 desc = "The loops with safepoint poisoning: the allocating loop and the loop that builds an array run across thousands of collections that move what they hold."
 case = "../../../cases/linear/jit/framed_loops.cml"
 backends = ["fvm", "jit_hot_threshold0", "inline_jit_hot_threshold0"]
-envs = ["N=20000", "CAMEL_GC_POISON=1"]
+args = ["--gc-check", "poison", "${case}"]
+envs = ["N=20000"]
 sweep = false
 timeout_ms = 240000
 expect_exit = 0
@@ -241,7 +240,8 @@ name = "framed.faults.moving"
 desc = "The isolated faults with safepoint poisoning."
 case = "../../../cases/linear/jit/framed_faults.cml"
 backends = ["fvm", "jit_hot_threshold0", "inline_jit_hot_threshold0"]
-envs = ["FAULT=none", "CAMEL_GC_POISON=1"]
+args = ["--gc-check", "poison", "${case}"]
+envs = ["FAULT=none"]
 sweep = false
 expect_exit = 0
 expect_stdout_starts_with = "62\n14\n14\n58\nIndexOutOfRange\nDivisionByZero\nDivisionByZero\nMaxRecursionDepthExceeded\n62\n58\nisolated\ndone\n"

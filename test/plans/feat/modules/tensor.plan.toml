@@ -326,8 +326,7 @@ name = "gc_tail_chain"
 desc = "Tensors in the root frame survive GC stress across a chain of distinct NodeVM tail calls (else-if ladder)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gc_tail_chain.cml"
-args = ["${case}"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+args = ["--gc-stress", "alloc=5,safepoint=1,kind=major", "--gc-check", "verify=both", "${case}"]
 expect_exit = 0
 expect_stdout_contains = ["gc_tail_chain sum=22"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -490,8 +489,7 @@ name = "reshape_view_gc.nvm"
 desc = "reshape shares its input's block: views that outlive their owners read the right elements while the collector copies the young generation and marks the heap at every safepoint (NodeVM)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/reshape_view_gc.cml"
-args = ["--gc", "generational", "${case}", "${run_nvm}"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "${run_nvm}"]
 expect_exit = 0
 expect_stdout_contains = ["total 16380.0", "[2.0, 4.0, 6.0, 8.0, 10.0, 12.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -502,8 +500,7 @@ name = "reshape_view_gc.fvm"
 desc = "reshape shares its input's block: views that outlive their owners read the right elements while the collector copies the young generation and marks the heap at every safepoint (FastVM)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/reshape_view_gc.cml"
-args = ["--gc", "generational", "${case}", "${run_fvm}"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["total 16380.0", "[2.0, 4.0, 6.0, 8.0, 10.0, 12.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -514,8 +511,7 @@ name = "reshape_view_gc.jit"
 desc = "reshape shares its input's block: views that outlive their owners read the right elements while the collector copies the young generation and marks the heap at every safepoint (the JIT)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/reshape_view_gc.cml"
-args = ["--gc", "generational", "${case}", "${run_jit}"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "${run_jit}"]
 expect_exit = 0
 expect_stdout_contains = ["total 16380.0", "[2.0, 4.0, 6.0, 8.0, 10.0, 12.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

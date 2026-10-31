@@ -57,8 +57,7 @@ expect_stderr_contains = ["[taskflow] bytecode: off"]
 name = "shapes.prl_gc_stress_generational"
 desc = "The generational (moving) collector with a verified minor collection at every safepoint, four workers: the frames of the interpreters of several threads are roots that are updated, and the collector stops every thread at a safepoint of the scheduler or of an interpreter."
 case = "../../../cases/para/handoff/shapes.cml"
-args = ["--gc", "generational", "-t", "4", "${case}", "${run_prl}"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "--gc", "generational", "-t", "4", "${case}", "${run_prl}"]
 expect_exit = 0
 expect_stdout_starts_with = "6765\n21\n111\n5.0\n[2, 5, 1, 7, 0, 9]\n"
 
@@ -66,8 +65,7 @@ expect_stdout_starts_with = "6765\n21\n111\n5.0\n[2, 5, 1, 7, 0, 9]\n"
 name = "shapes.prl_gc_stress_major"
 desc = "The same with the default collector and a verified major collection at every safepoint."
 case = "../../../cases/para/handoff/shapes.cml"
-args = ["-t", "4", "${case}", "${run_prl}"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+args = ["--gc-stress", "safepoint=1,kind=major", "--gc-check", "verify=both", "-t", "4", "${case}", "${run_prl}"]
 expect_exit = 0
 expect_stdout_starts_with = "6765\n21\n111\n5.0\n[2, 5, 1, 7, 0, 9]\n"
 
