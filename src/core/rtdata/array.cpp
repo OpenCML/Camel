@@ -102,7 +102,7 @@ Array *Array::createRankZero(
 Array *
 Array::view(Array *source, std::span<const int64_t> extents, uint64_t elementOffset) {
     GUARD(source != nullptr, "A view needs a source array, and the call passed none");
-    ASSERT(source->isCompact(), "Only a compact pure-data array can be viewed");
+    GUARD(source->isCompact(), "Only a compact pure-data array can be viewed, and the source this view names is not one");
     const uint64_t elements = checkedNumel(extents);
     if (elementOffset > source->numel_ || elements > source->numel_ - elementOffset) {
         throw std::invalid_argument("Array view must stay within its source");
@@ -939,7 +939,7 @@ void Array::reallocateSlots(size_t newCapacity, const type::ArrayType *arrayType
 }
 
 void Array::growCompact(uint64_t newCapacity) {
-    ASSERT(isCompact(), "Only a compact array grows this way");
+    GUARD(isCompact(), "Only a compact array grows this way, and this array holds other arrays instead of pure data");
     const size_t newBytes = static_cast<size_t>(newCapacity) * elementSize_;
     if (block_ == nullptr) {
         // Inline data: move it into a block, which is what makes the array growable and gives
@@ -1040,7 +1040,7 @@ void Array::adoptBlock(Block *block, size_t newBytes) {
     if (block == nullptr || block == block_) {
         return;
     }
-    ASSERT(isCompact(), "Only a compact array adopts a block");
+    GUARD(isCompact(), "Only a compact array adopts a block, and this array holds other arrays instead of pure data");
     Block *old = block_;
     block_     = block;
     dataPtr_    = block->data();
