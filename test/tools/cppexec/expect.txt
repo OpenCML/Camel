@@ -8,10 +8,12 @@ test/cases/trans/cpp/exec_mod_scalar.cml
 # The two reduced-precision floating types, at both precisions: storage and the type's own text,
 # arithmetic rounded once, comparison of the widened values, conversion in both directions, the
 # module reductions and comparisons over a value of either, the mean (a total and a division, both
-# in f64), and the reports a conversion or a division gives.
+# in f64), the positions argsort and the two arg loops read from a value of either, and the reports
+# a conversion or a division gives.
 test/cases/trans/cpp/narrow_floats.cml
 test/cases/trans/cpp/narrow_reductions.cml
 test/cases/trans/cpp/narrow_mean.cml
+test/cases/trans/cpp/narrow_argmax.cml
 
 # Values and their text.
 test/cases/loops/iterate_string.cml
