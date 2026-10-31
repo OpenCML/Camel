@@ -125,6 +125,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "narrow_reductions"
+desc = "The module operators over a bf16 or an f16: `tensor::sum` of the whole value (rt::sumAll, the f64 accumulator rounded once into the element type), `math::min`/`math::max` of two values (rt::halfMin/rt::halfMax, the IEEE 754-2019 comparison whose answer is one of the two patterns) and `math::abs` (rt::halfAbs, the sign bit cleared). A half crosses no bridge -- the bridge carries numbers, booleans and strings, and a sixteen-bit value is none of them -- so these need rules of their own here, which is what this entry pins; the readings are compared with the interpreter's by agree_with_fvm."
+kind = "behavior"
+case = "../../../cases/trans/cpp/narrow_reductions.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::sumAll(", "rt::halfMin(", "rt::halfMax(", "rt::halfAbs("]
+expect_output_not_contains = ["TranslationRefused", "rt::bridge", "libcamel"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "fault_narrow_text_number"
 desc = "A text that is not a number, read as a bf16, is a fault at run time, and the compiler renders its report into the site the conversion calls: the program is translated rather than refused, and it carries the invalid-text sentence. The value the fault reports is known only when it happens, so the sentence is written with a placeholder where the text goes; that the program *prints* it -- and prints it as the interpreter does, byte for byte -- is what agree_with_fvm compares (test/tools/cppexec/expect.txt)."
 kind = "behavior"

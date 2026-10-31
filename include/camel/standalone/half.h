@@ -32,6 +32,7 @@
 #include <cmath>
 #include <compare>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -220,6 +221,43 @@ template <typename Format> std::string halfText(const Half<Format> &value) {
         }
         return halfBitsFromFloat<Format>(parsed) == value.bits;
     });
+}
+
+/// One comparison of two values of the same type, IEEE 754-2019 (modules/math/minmax.h, the one
+/// statement of it the runtime has): a NaN on either side gives the canonical quiet NaN of the
+/// type, `-0` is below `+0`, and otherwise the answer is one of the two operands.
+///
+/// The answer is an operand's own pattern, never a value computed from the comparison: both
+/// operands are values the type holds, so nothing here rounds, and combining the two sign bits is
+/// what decides between two zeros that compare equal (`minimum` keeps a sign either operand has,
+/// `maximum` keeps one only when both have it).
+template <typename Format, bool maximum>
+Half<Format> halfCompareOf(const Half<Format> &a, const Half<Format> &b) {
+    const float x = a.toFloat();
+    const float y = b.toFloat();
+    if (x != x || y != y) {
+        return Half<Format>(std::numeric_limits<float>::quiet_NaN());
+    }
+    if (x != y) {
+        return (maximum ? x < y : y < x) ? b : a;
+    }
+    return Half<Format>::fromBits(maximum ? uint16_t(a.bits & b.bits) : uint16_t(a.bits | b.bits));
+}
+
+/// `math::min` of two values (:op/math:min_bf, math:min_f6; modules/math/operators.cpp).
+template <typename Format> Half<Format> halfMin(const Half<Format> &a, const Half<Format> &b) {
+    return halfCompareOf<Format, false>(a, b);
+}
+
+/// `math::max` of two values (math:max_bf, math:max_f6).
+template <typename Format> Half<Format> halfMax(const Half<Format> &a, const Half<Format> &b) {
+    return halfCompareOf<Format, true>(a, b);
+}
+
+/// `math::abs` of a value (math:abs_bf, math:abs_f6): the sign bit cleared, which is exact and the
+/// only one of the three whose answer differs from an operand's own pattern (`-0` becomes `+0`).
+template <typename Format> Half<Format> halfAbs(const Half<Format> &value) {
+    return Half<Format>::fromBits(uint16_t(value.bits & 0x7FFFu));
 }
 
 } // namespace camel::standalone

@@ -695,7 +695,8 @@ Rules buildRules() {
             const TypeCode element = value->elemType()->code();
             if (element != TypeCode::Int64 && element != TypeCode::Int32 &&
                 element != TypeCode::Float32 && element != TypeCode::Float64 &&
-                element != TypeCode::Bool) {
+                element != TypeCode::Bool && element != TypeCode::BFloat16 &&
+                element != TypeCode::Float16) {
                 return std::nullopt;
             }
             return std::format("rt::sumAll({})", c.operand(0));
@@ -854,6 +855,27 @@ Rules buildRules() {
         r[std::format("math:round_{}", t)] = cmath("round");
         r[std::format("math:ceil_{}", t)]  = cmath("ceil");
         r[std::format("math:floor_{}", t)] = cmath("floor");
+    }
+    // `math::min`, `math::max` and `math::abs` of a bf16 or an f16 (modules/math/operators.cpp,
+    // modules/math/minmax.h): the IEEE 754-2019 comparison of the values widened to f32, whose
+    // answer is one of the two operands (a NaN gives the canonical quiet NaN, -0 is below +0), and
+    // the sign bit cleared for abs. Neither rounds, so `rt::halfMin` and friends return a pattern
+    // rather than a computed value.
+    //
+    // A half crosses no bridge: bridge.h carries numbers, booleans and strings, and a sixteen-bit
+    // value is none of them, so these are the rules that let a program of either type stay
+    // standalone. The f32 and f64 forms are written here for the same reason and not because they
+    // are missing from the bridge -- the library's own `min` and `max` widen a bf16 to `float`
+    // before comparing (stdlib/math.cml), so a fold over a bf16 passes through the f64 comparison,
+    // and leaving that one bridged linked libcamel into a program of nothing but narrow floats.
+    for (const char *t : {"bf", "f6"}) {
+        r[std::format("math:min_{}", t)] = runtimeFunction("halfMin");
+        r[std::format("math:max_{}", t)] = runtimeFunction("halfMax");
+        r[std::format("math:abs_{}", t)] = runtimeFunction("halfAbs");
+    }
+    for (const char *t : {"f", "d"}) {
+        r[std::format("math:min_{}", t)] = runtimeFunction("ieeeMin");
+        r[std::format("math:max_{}", t)] = runtimeFunction("ieeeMax");
     }
     // The complex functions (modules/math/operators.cpp): abs is hypot of the parts, exp is
     // std::exp of a std::complex, conj negates the imaginary part, re and im read one part.

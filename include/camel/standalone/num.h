@@ -135,6 +135,32 @@ template <typename Format> Half<Format> pow(Half<Format> base, Half<Format> expo
     return Half<Format>(std::pow(base.toFloat(), exponent.toFloat()));
 }
 
+/// `math::min` and `math::max` of two f32 or f64 values (math:min_f, math:min_d and their max
+/// forms): the IEEE 754-2019 minimum and maximum that halfMin and halfMax of half.h state on the
+/// sixteen-bit pattern -- a NaN on either side gives the canonical quiet NaN, `-0` is below `+0`,
+/// and otherwise the answer is one of the two operands. std::fmin and std::fmax are not this
+/// comparison: they answer the other operand when one of theirs is a NaN.
+template <std::floating_point T> T ieeeMin(T a, T b) {
+    if (a != a || b != b) {
+        return std::numeric_limits<T>::quiet_NaN();
+    }
+    if (a != b) {
+        return b < a ? b : a;
+    }
+    return std::signbit(a) ? a : b;
+}
+
+/// `math::max` of two f32 or f64 values: see ieeeMin.
+template <std::floating_point T> T ieeeMax(T a, T b) {
+    if (a != a || b != b) {
+        return std::numeric_limits<T>::quiet_NaN();
+    }
+    if (a != b) {
+        return a < b ? b : a;
+    }
+    return std::signbit(a) ? b : a;
+}
+
 // ---- Number to number (:op/ltoi, :op/dtol, ...) ----
 
 namespace detail {
