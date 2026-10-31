@@ -91,6 +91,7 @@
 - “语言没有”是最容易滥用的一个筐——用它之前先指出一条语言规定，指不出来就是“我们没做”。
 - 改一句话之前，先 grep 谁在断言这句话——`test/` 下面不只是用例，还有计划里的期望。改名那天我 grep 了 `test/plans/*/*.toml` 与 `test/cases/*/*.cml`，漏了 `test/plans/feat/modules/tiles.plan.toml`（两层深）、`test/cases/modules/tiles/plan_check.cpp`（不是 `.cml`）和一行用例注释，于是“0 命中”的结论是假的：计划里的 `expect_stdout_contains`、`assert(...)` 和 C++ 检查都是断言，rename 与它的期望必须在同一笔里改。
 - `grep` 的结论要带上口径：搜了哪几个目录、哪几种扩展名——口径不写，“0 命中”就是假结论。
+- 签名是目标、存储是现状——落后的时候补存储，不把签名改成现状。作者裁了复数张量：签名写 `is_numeric`（`is_real || is_complex`）是目标，存储层落后于它，所以补存储、不为这段空档另加“尚未支持”的诊断。第一步只让模块认得这两个 dtype：`isSupportedTensorScalar` 收下 `c64`/`c128`，`elementSize` 改读元素的 `DataLayout`（8 与 16 字节，没有一种 C++ 存储类型同时说得出这两个宽度），创建算子的解析门从核心的 `isNumericScalar`（`include/camel/core/type/base.h`，只含整数与浮点）换成本模块的元素表——于是 `zeros::<c64>([2])` 过了重载，答 `[0+0i, 0+0i]`；`ones::<c64>` 仍停在 `dispatchDType` 的 default，那是内核那一步。
 
 
 ---

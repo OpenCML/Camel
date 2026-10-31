@@ -12,18 +12,28 @@
 
 #include "dtype.h"
 
+#include "camel/core/type/pure.h"
+
 namespace camel::tensor {
 
 using type::TypeCode;
 
 size_t elementSize(TypeCode dtype) {
+    // The element's own layout says how many bytes one takes, and every scalar has one: the two
+    // complex types are two parts (8 and 16 bytes) that no single C++ storage type names, and for
+    // the others the layout size is the storage type's size. Reading it here keeps the size
+    // question off the kernel dispatch, which does not know these two yet.
+    if (const type::DataLayout *layout = type::scalarDataLayout(dtype)) {
+        return layout->size;
+    }
     return dispatchDType(dtype, []<typename T>() { return sizeof(T); });
 }
 
 bool isSupportedTensorScalar(TypeCode code) {
     return code == TypeCode::Int32 || code == TypeCode::Int64 || code == TypeCode::Float32 ||
            code == TypeCode::Float64 || code == TypeCode::Bool || code == TypeCode::BFloat16 ||
-           code == TypeCode::Float16;
+           code == TypeCode::Float16 || code == TypeCode::Complex64 ||
+           code == TypeCode::Complex128;
 }
 
 bool isFloatingTensorType(TypeCode code) {
