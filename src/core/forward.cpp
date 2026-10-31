@@ -41,6 +41,15 @@ std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(const std::string &uri
     return camel::parse::ast::lookupRule(binding.family, binding.head, binding.arity);
 }
 
+std::optional<ForwardRuleBinding> forwardBindingOf(const std::string &uri) {
+    std::lock_guard<std::mutex> lock(bindingMutex());
+    const auto at = bindings().find(uri);
+    if (at == bindings().end()) {
+        return std::nullopt;
+    }
+    return at->second;
+}
+
 std::vector<std::string> forwardRuleDescriptions() {
     std::vector<std::string> lines;
     std::vector<ForwardRuleBinding> all;
