@@ -3,21 +3,22 @@
 - 状态：**数表**。只记位置与数：不含决定，不含提议，不改任何判定。
 - 基于：`origin/develop` 的 `76297223f`（下列行号在本分支上也相同，两种树里都验过）。
 - 对象：`EffectLivenessFacts`（`include/camel/runtime/effect_liveness.h`，6 个字段）被哪些地方填、每个地方填哪几个、从哪一侧（输入 / 用户）读。
-- 写法：引用写 `文件#符号`（仓库的引用检查只认符号），行号写在括号里，作描述用。
+- 写法：引用写 `文件#符号`（仓库的引用检查只认符号），行号写在括号里，作描述用。提交列是该行字符最近一次被改动的提交（按行 blame），只写 sha。
 - 一句话：**五份拷贝的第一件事不是合并，是列表——列表里的"方向"也是表的一部分。**
+- 一句判据：**不被扫描的页等于没写——数表要放在会被读的那条路上。**
 
 ---
 
 ## 1. 六处（每处都带 文件 + 行）
 
-| # | 位置（文件#符号，第 N 行） | 场合 | 填的字段（个数） | 读的方向 |
-|---|---|---|---|---|
-| 1 | `src/runtime/graph.cpp#validateRuntimeGraphPayloadImpl`（第 583–584 行） | GATE 的"没有等待"断言 | `hasWaitEdge`、`isSyncStatement`（2） | 输入：`ctrlInputsOf`、`syncPredsOf`（图侧） |
-| 2 | `src/passes/opt/generic/gates.cpp#bypassValueGate`（第 32–33 行） | 门节点的旁路判定 | `hasWaitEdge`、`isSyncStatement`（2） | 输入：`ctrlInputsOf`、`syncInputsOf`（草稿侧）；用户集在 44、45、67、78 行另读，不进 facts |
-| 3 | `src/execute/fusion_group.cpp#isPrivateTo`（第 92–94 行） | 融合组的成员判定 | `hasDataUser`、`isWaitedOn`、`isSyncStatement`（3） | 用户：`withOutputsOf`（92 行）、`ctrlOutputsOf`（93 行）；输入：`syncPredsOf`（94 行）；另手扫 `syncEdges`（95–102 行）；norm 用户在 82–85 行另读 |
-| 4 | `src/runtime/draft_inline.cpp#inlineCallableInDraft`（第 1754–1755 行） | 内联拼接：一次调用的等待 | `hasWaitEdge`、`isSyncStatement`（2） | 输入：`controlFrontier`（1739–1748 行，`include/camel/runtime/control.h#controlFrontier`）、`syncInputsOf`；用户集在 1765–1769 行另读 |
-| 5 | `src/runtime/writings.cpp#extract`（第 1147–1148 行） | 写作折叠：成员迁移 | `hasWaitEdge`、`isSyncStatement`（2） | 输入：`ctrlInputsOf`、`syncInputsOf`（草稿侧） |
-| 6 | `src/runtime/graph.cpp#isUnanchoredPure`（第 1300–1319 行） | 无锚纯节点的判定 | 不建 facts（0）；直接读 6 组 | 输入 3 组：`ctrlInputsOf`、`orderInputsOf`、`syncInputsOf`；用户 3 组：`ctrlUsersOf`、`orderUsersOf`、`syncUsersOf`（1316–1318 行） |
+| # | 位置（文件#符号，第 N 行） | 提交 | 场合 | 填的字段（个数） | 读的方向 |
+|---|---|---|---|---|---|
+| 1 | `src/runtime/graph.cpp#validateRuntimeGraphPayloadImpl`（第 583–584 行） | `23b2e69e3` | GATE 的"没有等待"断言 | `hasWaitEdge`、`isSyncStatement`（2） | 输入：`ctrlInputsOf`、`syncPredsOf`（图侧） |
+| 2 | `src/passes/opt/generic/gates.cpp#bypassValueGate`（第 32–33 行） | `222cf318c`（32 行）、`21f2f3be8`（33 行） | 门节点的旁路判定 | `hasWaitEdge`、`isSyncStatement`（2） | 输入：`ctrlInputsOf`、`syncInputsOf`（草稿侧）；用户集在 44、45、67、78 行另读，不进 facts |
+| 3 | `src/execute/fusion_group.cpp#isPrivateTo`（第 92–94 行） | `a882b3aaf` | 融合组的成员判定 | `hasDataUser`、`isWaitedOn`、`isSyncStatement`（3） | 用户：`withOutputsOf`（92 行）、`ctrlOutputsOf`（93 行）；输入：`syncPredsOf`（94 行）；另手扫 `syncEdges`（95–102 行）；norm 用户在 82–85 行另读 |
+| 4 | `src/runtime/draft_inline.cpp#inlineCallableInDraft`（第 1754–1755 行） | `f9e2ecc63` | 内联拼接：一次调用的等待 | `hasWaitEdge`、`isSyncStatement`（2） | 输入：`controlFrontier`（1739–1748 行，`include/camel/runtime/control.h#controlFrontier`）、`syncInputsOf`；用户集在 1765–1769 行另读 |
+| 5 | `src/runtime/writings.cpp#extract`（第 1147–1148 行） | `38b5880fa` | 写作折叠：成员迁移 | `hasWaitEdge`、`isSyncStatement`（2） | 输入：`ctrlInputsOf`、`syncInputsOf`（草稿侧） |
+| 6 | `src/runtime/graph.cpp#isUnanchoredPure`（第 1300–1319 行） | `61f5b677b` | 无锚纯节点的判定 | 不建 facts（0）；直接读 6 组 | 输入 3 组：`ctrlInputsOf`、`orderInputsOf`、`syncInputsOf`；用户 3 组：`ctrlUsersOf`、`orderUsersOf`、`syncUsersOf`（1316–1318 行） |
 
 第 6 行不是填充点：它读同一批边，但不经过结构体。
 
@@ -65,10 +66,11 @@
 
 ## 5. 判定本身与调用者
 
-| 项 | 位置（文件#符号，第 N 行） | 调用者 |
-|---|---|---|
-| `effectStandingOf` | 定义 `src/runtime/effects.cpp#effectStandingOf`（第 117–129 行）；声明 `include/camel/runtime/effect_liveness.h#effectStandingOf`（第 71 行） | **0**（全树只有声明、定义，和 `src/passes/opt/generic/gates.cpp#bypassValueGate` 的一处注释引用，第 27 行） |
-| `keepsEffectAlive` | 定义 `src/runtime/effects.cpp#keepsEffectAlive`（第 131–133 行）；声明 `include/camel/runtime/effect_liveness.h#keepsEffectAlive`（第 74 行） | **0** |
+| 项 | 位置（文件#符号，第 N 行） | 提交 | 调用者 |
+|---|---|---|---|
+| `EffectLivenessFacts`（6 个字段） | 声明 `include/camel/runtime/effect_liveness.h#EffectLivenessFacts`（第 35–62 行） | `30fa22344`（该段最晚；同段还有 `821185288`、`a882b3aaf`、`21f2f3be8`） | — |
+| `effectStandingOf` | 定义 `src/runtime/effects.cpp#effectStandingOf`（第 117–129 行）；声明 `include/camel/runtime/effect_liveness.h#effectStandingOf`（第 71 行） | `821185288`、`30fa22344` | **0**（全树只有声明、定义，和 `src/passes/opt/generic/gates.cpp#bypassValueGate` 的一处注释引用，第 27 行） |
+| `keepsEffectAlive` | 定义 `src/runtime/effects.cpp#keepsEffectAlive`（第 131–133 行）；声明 `include/camel/runtime/effect_liveness.h#keepsEffectAlive`（第 74 行） | `30fa22344` | **0** |
 
 ## 6. 两侧的名字（读同一批边）
 
