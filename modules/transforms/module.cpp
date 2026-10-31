@@ -225,7 +225,8 @@ class ReinterpPass : public RuntimeGraphRewritePass {
             const std::string name             = function->name() + "__reinterp";
             const camel::runtime::GraphId made = group.reserve(name, name);
             {
-                auto &draft                = group.draft(made);
+                auto &transaction          = group.transaction(made);
+                auto &draft                = transaction.edit();
                 camel::core::type::Type *t = camel::core::type::Type::Float64();
                 const camel::runtime::gc_node_ref_t port =
                     draft.addPortNode(t, draft.allocateRuntimeSlot(t));

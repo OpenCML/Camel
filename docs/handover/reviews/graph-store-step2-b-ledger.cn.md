@@ -131,6 +131,8 @@ b2 起消费者不再点类型名，写的是 `auto &draft = session.edit(g).edi
    手动再叠一遍全链：`camel cases/opt/generic/generic_passes.cml test::edges_ok std::opt std::gir`
    打出的仍是这两行，说明优化打开后它没有骗人。
 
+**账本只许降的时候，新代码遇到它只有一个动作：换一个不需要这个名字的人来拿图。**（作者，2026-10-31；`modules/transforms/jvp.cpp` 里那条规则路径就是这么过的——它原先收 `GraphDraft &`，改成收 `GraphTransaction &`，用 `GraphTransaction::borrow` 从一个没有事务在手、只有草稿的调用者那里借一个，账页的 files/references 因此各降一格，而不是各涨一格。）
+
 ## 3. 还没填的行
 
 b2 起逐笔往下填：b2.2 起按 `src/passes/test` → `opt/inline` ＋ `opt/generic` →
@@ -1174,3 +1176,28 @@ HANDLE_PROBE refused: InvalidArgument
 **结论（一句）**：**按"不改名、只降引用"的口径，b6 的终点是 188 处，不是 0 处。** 要 0 处只剩"改名或删类型"那一条路，而那条路是另一问——`GraphDraft` 本体不是 find/replace 的对象（§44）。
 
 **一条判据（协调者给的一句）**：**"一层降不动的时候，正确答案是报出它的天花板和理由，不是继续报进度条。"**
+
+## 54. 会话自己的门：27 处，换掉 26 处，退回 1 处
+
+**这一笔只动一类**：会话把「句柄 → 图」翻一次的地方。逐处「改前收什么 / 改后收什么」：
+
+| 组 | 处数 | 改前 | 改后 |
+|---|---|---|---|
+| `tryDraft`（`draft_session.h:159/160`，`draft_session.cpp` 两处定义） | 4 | 返回 `GraphDraft *` / `const GraphDraft *` | 返回 `GraphTransaction *` / `const GraphTransaction *`（`it->second->transaction.get()`） |
+| `GraphDraftGroup::draft(GraphId)`（`.h:346`，`.cpp:1858`） | 2 | 返回 `GraphDraft &` | 改名 `GraphDraftGroup::transaction(GraphId)`，返回 `GraphTransaction &` |
+| 编码路径的自由函数：`visitDraftGraphs`、`collectDraftDependencyGraphs`、`draftStaticDataType`、`collectDraftStaticGraphRefs`、`draftGraphOrigin`（声明 + 定义）、`encodeDraftGraph`、`draftGraphBytes`、`allocateGraph` | 9 | 形参 `const GraphDraft &draft` | 形参 `const GraphTransaction &transaction`，体首 `const auto &draft = transaction.graph();` |
+| `noteDraftOpened` / `noteDraftClosed` | 2 | 收 `const GraphDraft *` 当身份 | 收 `const GraphTransaction &`，身份取 `&transaction.graph()` |
+| 会话内的本地拼写（`edit()`／`graph()` 的结果、`*uncovered->draft`、`calleeDraftView`） | 9 | `GraphDraft &x = …` / `const GraphDraft &x = …` | `auto &x = …` / `const auto &x = …` |
+| 调用点改动（`engine.cpp` 2、`draft_inline.cpp` 1、`module.cpp` 1） | 0 | —— | 改为交事务，**不新增一个拼写** |
+
+**退回 1 处**：`DraftRootsDebug::Entry::draft`（`draft_session.h:107`）仍记草稿指针——它记的是「哪一张草稿」，而 `GraphTransaction::borrow` 让两张事务可以指同一张草稿；改成事务指针就把「根覆盖一张草稿」换成了「根覆盖一张事务」，是另一个事实。所以 `draft_session.h` 还剩 2 处（这一行 + 一行注释），`files` 只降了 `module.cpp` 这一个文件。
+
+**数**：`files` 36 → **35**，`references` 356 → **329**（−27），`constructions` 1，`decode` 4。
+
+**没有新造一处 `borrow`**：这一笔改掉的每一处，调用者手上本来就有事务。
+
+**一处漏了的调用者**：`GraphDraftGroup::draft` 改名之后，`modules/transforms/jvp.cpp:86` 还是 `group.draft(member)`——那一笔提交时这个文件在我这一支里还不存在（`origin/develop` 后来才带来），合成闸门的构建当场就停了。补一行 `auto &draft = group.transaction(member).edit();`。全树的调用者 1 处（`modules/transforms` 1、`src/execute` 0）。
+
+**一条判据（协调者给的一句）**：**「删掉一个访问器的时候，先 `grep` 它的调用者——库里的 API 不是只有自己在用。」**
+
+**一条判据（协调者给的一句）**：**「`borrow` 不是降层，是把引用挪到另一个函数里——降层只有一种：让人手里本来就有那个东西。」**

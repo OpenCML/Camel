@@ -141,7 +141,7 @@ size_t TupleType::frameLayoutBytes(std::span<Type *const> slotTypes) {
 }
 
 TupleType *TupleType::constructFrameLayout(void *memory, std::span<Type *const> slotTypes) {
-    ASSERT(memory != nullptr, "A frame layout needs memory to be built in.");
+    GUARD(memory != nullptr, "A frame layout needs memory to be built in.");
     const TupleTypeLayout layout =
         computeLayout(slotTypes.size(), runtimeReferenceCount(slotTypes));
     return new (memory) TupleType(layout, std::vector<Type *>(slotTypes.begin(), slotTypes.end()));
@@ -173,7 +173,7 @@ Type *internMembers(
 } // namespace
 
 TupleType *TupleType::cell(Type *valueType) {
-    ASSERT(valueType != nullptr, "A variable cell needs a value type.");
+    GUARD(valueType != nullptr, "A variable cell needs a value type.");
     // One cell per value type (see intern.h): a `var` cell is a tuple of one field, and the table
     // holds one object per structure like every other type, so it needs no list of its own.
     Type *members[] = {valueType};
@@ -186,7 +186,7 @@ TupleType *TupleType::cell(Type *valueType) {
 }
 
 TupleType *TupleType::nullable(Type *payloadType) {
-    ASSERT(payloadType != nullptr, "A nullable type needs a payload type.");
+    GUARD(payloadType != nullptr, "A nullable type needs a payload type.");
     Type *members[] = {payloadType};
     return static_cast<TupleType *>(internMembers(
         TypeTable::Shape::Nullable, members, [](const std::vector<Type *> &from) -> Type * {
@@ -197,7 +197,7 @@ TupleType *TupleType::nullable(Type *payloadType) {
 }
 
 TupleType *TupleType::fallible(Type *payloadType) {
-    ASSERT(payloadType != nullptr, "A fallible type needs a payload type.");
+    GUARD(payloadType != nullptr, "A fallible type needs a payload type.");
     Type *members[] = {payloadType, errorType()};
     return static_cast<TupleType *>(internMembers(
         TypeTable::Shape::Fallible, members, [](const std::vector<Type *> &from) -> Type * {
@@ -220,14 +220,14 @@ StructType *camel::core::type::errorType() {
 
 size_t camel::core::type::errorFieldIndex(std::string_view name) {
     const auto index = errorType()->findField(name);
-    ASSERT(index.has_value(), "Unknown field of the built-in error structure.");
+    GUARD(index.has_value(), "Unknown field of the built-in error structure.");
     return *index;
 }
 
 TupleType *TupleType::fromFactory(TupleTypeFactory &factory) { return create(factory.types_); }
 
 TupleType *TupleType::slice(size_t start, size_t end) const {
-    ASSERT(start <= end && end <= size_, "TupleType slice indices out of range");
+    GUARD(start <= end && end <= size_, "TupleType slice indices out of range");
     std::vector<Type *> slicedTypes;
     slicedTypes.reserve(end - start);
     for (size_t i = start; i < end; ++i) {
@@ -237,8 +237,8 @@ TupleType *TupleType::slice(size_t start, size_t end) const {
 }
 
 Type *TupleType::resolve(const type_vec_t &typeList) const {
-    ASSERT(typeList.size() > 0, "Type list is empty");
-    ASSERT(!resolved(), "TupleType is already resolved");
+    GUARD(typeList.size() > 0, "Type list is empty");
+    GUARD(!resolved(), "TupleType is already resolved");
     std::vector<Type *> types;
     types.reserve(size_);
     for (size_t i = 0; i < size_; ++i) {
@@ -252,9 +252,9 @@ Type *TupleType::resolve(const type_vec_t &typeList) const {
         }
         i++;
     }
-    ASSERT(j == typeList.size(), "Not all types in typeList are used");
+    GUARD(j == typeList.size(), "Not all types in typeList are used");
     auto newTuple = TupleType::create(std::move(types));
-    ASSERT(newTuple->resolved(), "TupleType is not fully resolved");
+    GUARD(newTuple->resolved(), "TupleType is not fully resolved");
     return newTuple;
 }
 

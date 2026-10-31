@@ -44,18 +44,6 @@ std::vector<std::string> marks(size_t n) {
     return out;
 }
 
-/// The integer code of the element type a tensor result names, which the bridge turns back into a
-/// type (standalone_bridge.cpp, `Type::create`): a code is what crosses, never the text of a type,
-/// because the tree writes a type's text (`typeToString`) and parses none, and a second spelling
-/// here would be one to keep in step by hand. -1 when the result is not an array type: a call that
-/// states no element type leaves the runtime its own reading, as such a call had before.
-int64_t elementCode(const Type *result) {
-    const ArrayType *array = asArrayType(result);
-    if (array == nullptr) {
-        return -1;
-    }
-    return static_cast<int64_t>(static_cast<uint32_t>(array->elemTypeCode()));
-}
 
 std::string joinedNorm(OperatorCall &call, size_t from = 0) {
     std::string out;
@@ -675,21 +663,8 @@ Rules buildRules() {
         },
         false,
     };
-    // `array:sort_d` (src/builtin/operators/array.cpp): the same elements in the order min and max
-    // use, ties where they stand. A rank-1 run again; the other element types name their own
-    // operator and get their own line when a program needs one.
-    r["array:sort_d"] = {
-        [](OperatorCall &c) -> std::optional<std::string> {
-            const ArrayType *value = asArrayType(c.normType(0));
-            if (c.normCount() != 1 || value == nullptr || value->anyRank() || value->rank() != 1 ||
-                value->elemType() == nullptr ||
-                value->elemType()->code() != TypeCode::Float64) {
-                return std::nullopt;
-            }
-            return std::format("rt::sorted({})", c.operand(0));
-        },
-        false,
-    };
+    // `array:sort_*` and the rest of the module's kernels are below, one rule per declaration
+    // (the `array:sort_d` line this used to be is now one of the four the loop writes).
     // `array:argsort_bf` and `array:argsort_f6` (src/builtin/operators/array.cpp): the positions
     // of the elements in the order `min` and `max` use, ties where they stand -- the order
     // `array:sort_d` states, read as positions instead of values (rt::halfArgsort). The element
@@ -712,6 +687,132 @@ Rules buildRules() {
             false,
         };
     }
+    // The rest of the `array` module's kernels (src/builtin/operators/array.cpp and
+    // array_reduce.cpp), each on the element type its declaration names and on a run of one
+    // dimension: the sorts and their atoms, the whole-array reductions and `dim`. The order, the
+    // summation and the comparison are the interpreter's own statements (rt::numberLess, rt::sorted,
+    // rt::argsort, rt::sumAll, rt::minOf/maxOf), so a program they translate is the same program
+    // and not merely one that compiles.
+    const std::pair<const char *, TypeCode> numberTypes[] = {
+        {"i", TypeCode::Int32},
+        {"l", TypeCode::Int64},
+        {"f", TypeCode::Float32},
+        {"d", TypeCode::Float64},
+    };
+    // A run of `count` arrays of one element type, one dimension each: what the declarations of
+    // these kernels are (`int[]`, `float[]`). A shaped value is no value of this target, so a
+    // dimension above one is refused rather than flattened.
+    const auto runOf = [](const OperatorCall &c, TypeCode code, size_t count) {
+        if (c.normCount() != count) {
+            return false;
+        }
+        for (size_t i = 0; i < count; ++i) {
+            const ArrayType *value = asArrayType(c.normType(i));
+            if (value == nullptr || (!value->anyRank() && value->rank() > 1) ||
+                value->elemType() == nullptr || value->elemType()->code() != code) {
+                return false;
+            }
+        }
+        return true;
+    };
+    for (const auto &[suffix, code] : numberTypes) {
+        // `sort_<t>` and `sort_<t>_in_place`: the same elements in the order `min` and `max` use,
+        // ties where they stand. The in-place form is the store's (`xs = xs->sort`), and a value is
+        // a copy either way, so the returning form says the same thing.
+        for (const char *form : {"", "_in_place"}) {
+            r[std::string("array:sort_") + suffix + form] = {
+                [code, runOf](OperatorCall &c) -> std::optional<std::string> {
+                    if (!runOf(c, code, 1)) {
+                        return std::nullopt;
+                    }
+                    return std::format("rt::sorted({})", c.operand(0));
+                },
+                false,
+            };
+        }
+        // `merge_sorted_<t>`: the elements of both runs in ascending order, `sort(concat(xs, ys))`.
+        r[std::format("array:merge_sorted_{}", suffix)] = {
+            [code, runOf](OperatorCall &c) -> std::optional<std::string> {
+                if (!runOf(c, code, 2)) {
+                    return std::nullopt;
+                }
+                return std::format(
+                    "rt::mergeSorted({}, {})", c.operand(0), c.operand(1));
+            },
+            false,
+        };
+        // `sum_<t>`: the elements added from +0 in the order they lie -- an integer in itself,
+        // wrapping, and a float in f64 rounded once (rt::sumAll is that statement).
+        r[std::format("array:sum_{}", suffix)] = {
+            [code, runOf](OperatorCall &c) -> std::optional<std::string> {
+                if (!runOf(c, code, 1)) {
+                    return std::nullopt;
+                }
+                return std::format("rt::sumAll({})", c.operand(0));
+            },
+            true,
+        };
+        // `min_<t>` and `max_<t>`: the fold with `min`/`max`, a NaN giving NaN and -0 below +0; a
+        // reduction over no element is InvalidArgument, and the report is the interpreter's own.
+        for (const char *form : {"min", "max"}) {
+            const bool minimum = std::string(form) == "min";
+            r[std::string("array:") + form + "_" + suffix] = {
+                [code, runOf, minimum](OperatorCall &c) -> std::optional<std::string> {
+                    if (!runOf(c, code, 1)) {
+                        return std::nullopt;
+                    }
+                    return std::format(
+                        "rt::{}({}, {})",
+                        minimum ? "minOf" : "maxOf",
+                        c.operand(0),
+                        c.site(
+                            RuntimeDiag::InvalidArgument,
+                            {minimum ? "array.min" : "array.max", "a reduction over no elements"}));
+                },
+                false,
+            };
+        }
+    }
+    // `argsort_<t>` for the keys a standalone program can order: the four number types, bool and
+    // string (a bf16 or an f16 keeps its own rule above). One element type has one declaration and
+    // one executor, so the rule reads the type rather than the value.
+    for (const char *suffix : {"i", "l", "f", "d", "b", "s"}) {
+        r[std::format("array:argsort_{}", suffix)] = {
+            [](OperatorCall &c) -> std::optional<std::string> {
+                if (c.normCount() != 1) {
+                    return std::nullopt;
+                }
+                const ArrayType *value = asArrayType(c.normType(0));
+                if (value == nullptr || (!value->anyRank() && value->rank() > 1) ||
+                    value->elemType() == nullptr) {
+                    return std::nullopt;
+                }
+                return std::format("rt::argsort({})", c.operand(0));
+            },
+            false,
+        };
+    }
+    // `array:dim`: the extent of one axis, a negative one counting from the last; an axis outside
+    // the rank is InvalidArgument, with the two numbers in the sentence the interpreter prints.
+    r["array:dim"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1 || c.withCount() != 1) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::dim({}, {}, {})",
+                c.operand(0),
+                c.with(0).text,
+                c.site(
+                    RuntimeDiag::InvalidArgument,
+                    {"array.dim",
+                     std::format(
+                         "the axis {} is outside the rank {}",
+                         SiteTable::valueMark(0),
+                         SiteTable::valueMark(1))}));
+        },
+        false,
+    };
     // `tensor:reshape` (modules/tensor/kernels/layout.cpp): the same elements in row-major order in
     // another shape. The shape travels with the value now (rt::Array holds it), so a target of
     // several dimensions is faithful too -- printing it gives its rows, `[[1.0, 2.0], [3.0, 4.0]]`,
@@ -828,16 +929,16 @@ Rules buildRules() {
     // added from +0 in ascending order, rounded into the element type once -- the one reduction that
     // does read a dimension, and the one that cannot be written by flattening the value.
     //
-    // Two refusals stay, and they are not the same sentence. A rank of one is refused because its
-    // answer is a value of no dimension: the result's type cannot be written from the signature,
-    // which says `T[..]` -- a value of a rank the callee does not know -- while the answer here
-    // would be the element itself. An open rank is refused for that same reason and only that one:
-    // its rank is a property of the value, so the shape the answer keeps cannot be stated -- and not
-    // because such a value is not an array, which it is, and the operator reads it as one.
+    // One refusal stays: an open rank, because its rank is a property of the value, so the shape the
+    // answer keeps cannot be stated -- and not because such a value is not an array, which it is, and
+    // the operator reads it as one. A rank of one is *not* refused: what its one lane sums to is the
+    // answer itself (design principles 5.4), a value of no dimension, and the open rank of the
+    // result's type writes that like any other answer. It was refused here until the same sentence
+    // was found to be wrong for `argmax_axis`; the reason was never about the sum.
     r["tensor:sum_axis"] = {
         [](OperatorCall &c) -> std::optional<std::string> {
             const ArrayType *value = asArrayType(c.normType(0));
-            if (value == nullptr || value->anyRank() || value->rank() < 2 ||
+            if (value == nullptr || value->anyRank() || value->rank() < 1 ||
                 value->elemType() == nullptr) {
                 return std::nullopt;
             }
@@ -889,9 +990,10 @@ Rules buildRules() {
     //
     // A lane with no element has no extreme and no position, and the interpreter refuses it naming
     // the operator and the axis; that refusal is the only one these four have that the sum does not.
-    // The two the sum states stay as they are: a rank of one answers a value of no dimension and an
-    // open rank keeps no shape -- both because the answer's type cannot be written, not because the
-    // value is not an array.
+    // A value of one dimension is a value with one axis and nothing beside it: what that one lane
+    // reduces to *is* the answer (design principles 5.4), so the answer is a value of no dimension,
+    // which the open rank of its type still writes. Only an open rank keeps no shape -- its rank is
+    // not known when the program is written -- and that is the one these four stay refused on.
     {
         struct AxisRule {
             const char *uri;
@@ -908,7 +1010,7 @@ Rules buildRules() {
             r[axis.uri] = {
                 [axis](OperatorCall &c) -> std::optional<std::string> {
                     const ArrayType *value = asArrayType(c.normType(0));
-                    if (value == nullptr || value->anyRank() || value->rank() < 2 ||
+                    if (value == nullptr || value->anyRank() || value->rank() < 1 ||
                         value->elemType() == nullptr) {
                         return std::nullopt;
                     }
@@ -1264,10 +1366,16 @@ Rules buildRules() {
     // The element types are the ones the tensor module itself stores (modules/tensor/dtype.h):
     // f32, f64, i32, i64 and the two reduced-precision floats, whose fill is a value of their own
     // type rounded once from 1.0/0.0 (`rt::BF16(1.0f)`), so the tensor a program reads is one
-    // array whatever its width. Anything else is refused here, not bridged: a `string` or a `bool`
-    // tensor never reaches this rule (the signature's `when is_numeric` refuses the call first),
-    // and a complex one has no dtype in the tensor module, so there is no interpreter value to
-    // agree with -- a written call would be a second answer, not a translation.
+    // array whatever its width. What is left out never reaches this rule, and it is left out by
+    // the language, not by this target: the signature's `when is_numeric` (`stdlib/signatures/
+    // tensor.cml`) says a tensor's element is a number, and `is_numeric::<string>()` and
+    // `is_numeric::<bool>()` are both false, so there is no string or bool tensor on any backend
+    // -- the same `NoMatchingFunction` comes from std::fvm. `c64`/`c128` do not even match the
+    // signature although `is_numeric` admits them: the tensor type for a complex element cannot be
+    // formed, and that disagreement is the author's to settle (docs/handover/questions/
+    // questions-2026-10-31-can-a-tensor-hold-a-complex.md). So the `default` below is a branch
+    // that does not run: it is a backstop, not a refusal this rule makes, and no element type is
+    // turned away with a written call that would be a second answer.
     auto tensorBuilder = [](bool ones) {
         return [ones](OperatorCall &c) -> std::optional<std::string> {
             if (c.normCount() != 1) {

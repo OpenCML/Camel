@@ -14,6 +14,7 @@
 #include "camel/utils/type.h"
 
 #include <string_view>
+#include <stdexcept>
 
 using namespace std;
 using namespace camel::core::type;
@@ -150,7 +151,7 @@ std::string Type::mangle() const {
     case TypeCode::EnumHole:
         return "H";
     default:
-        ASSERT(false, "Unknown TypeCode");
+        throw std::runtime_error("Unknown TypeCode");
         return "";
     }
 
@@ -289,7 +290,7 @@ CastSafety Type::castSafetyFrom(Type *sourceType) const {
 }
 
 slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
-    ASSERT(sourceType != nullptr, "castSlotFrom source type is null");
+    GUARD(sourceType != nullptr, "castSlotFrom source type is null");
     if (sourceType->code() == TypeCode::Array) {
         // A value of `T[..]` read as `T` is the element it holds: a rank-zero array *is* that
         // element (design principles 5.4), so reading it back hands the element on, and the
@@ -303,7 +304,7 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
             return array->getSlot(0);
         }
     }
-    ASSERT(
+    GUARD(
         castSafetyFrom(sourceType) == CastSafety::Safe,
         "castSlotFrom only allowed when castSafetyFrom returns Safe");
     // The table (castSafetyFrom) holds one entry for a type that lives in a slot: itself, and
@@ -321,6 +322,11 @@ bool Type::assignableFrom(Type *from) const {
         return true;
 
     // Built-in types: composite types containing Ref must be resolved before assignment.
+    // Still an ASSERT: a valid program reaches this. `comprehension_context.annotated` and
+    // `context.var_sibling` ask whether a value assigned to an annotated binding fits, and the
+    // annotation there is a Ref type, so either the callers must resolve it first or this
+    // invariant is narrower than the type system is. A question about the type system, not about
+    // turning a check on, so the check stays where it was.
     ASSERT(
         to->code_ != TypeCode::Ref && from->code_ != TypeCode::Ref,
         "Ref type cannot be assigned");
