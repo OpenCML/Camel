@@ -312,6 +312,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "empty_struct_text"
+desc = "A struct with no fields prints as the two braces with nothing between them: `{}`. Written as the opening half (`{ `) and the closing half (` }`) with no member to separate them, the generated text was `{  }`, two spaces the interpreter does not print -- the corpus case is a loop whose zero-leaf state struct is printed twice. agree_with_fvm compares the reading with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/loops/zero_leaf_state.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["out += \"{}\";"]
+expect_output_not_contains = ["{  }", "TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "numel_rank"
 desc = "`numel` counts the elements of a value whatever its rank: six for a rank-2 value, four for its first two rows, eight for a rank-3 one, four for a value of one dimension. It reads the count the value holds and no dimension of it, so a value of several dimensions and one of an open rank are both answered by the run -- which is why this step frees every program that asked for it, the open-rank one included. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"

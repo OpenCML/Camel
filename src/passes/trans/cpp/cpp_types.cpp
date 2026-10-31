@@ -550,10 +550,11 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
             decl += std::format("    {} {};\n", member.cpp, member.name);
         }
         decl += std::format("    bool operator==(const {} &) const = default;\n}};\n", name);
-        // Its text, as the runtime prints it: `(1, a)` and `{ x: 1, y: 2.5 }`. A type with no
-        // fields prints the empty pair -- `{}` for a struct, `()` for a tuple -- because the spaces
-        // around the fields are the fields': with none there is nothing between the brackets, and
-        // the interpreter writes `{}` for a loop state that carries nothing (`loops/zero_leaf_state.cml`).
+        // Its text, as the runtime prints it: `(1, a)`, `{ x: 1, y: 2.5 }`, and `{}` for a struct
+        // with no fields -- the two braces with nothing between them, because the spaces around
+        // the fields are the fields' own and there is nothing to separate. A tuple with no fields
+        // prints `()`, and the interpreter writes `{}` for a loop state that carries nothing
+        // (loops/zero_leaf_state.cml).
         decl += std::format("inline void appendText(std::string &out, const {} &v) {{\n", name);
         if (members.empty()) {
             decl += std::format(
@@ -574,7 +575,8 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
             }
             decl += std::format("    appendText(out, v.{});\n", members[i].name);
         }
-        decl += std::format("    out += \"{}\";\n}}\n\n", isTuple ? ")" : " }");
+        decl += std::format("    out += \"{}\";\n", isTuple ? ")" : " }");
+        decl += "}\n\n";
         declarations_ += decl;
         layouts_.emplace(layout, name);
         representations_.emplace(key, name);
