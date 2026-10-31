@@ -139,6 +139,26 @@ engine”）里；`instanceRules`（`modules/rewrite/module.cpp:636`）是那个
 `camel::runtime` 的公开函数，`instanceRules` 不是），要么让变换在引擎应用规则的地方顺手拿——**先
 用一行打印证它通，再写第二行**。
 
+## 桥通了：`ruleId` → 右侧图（`GraphId` + 图名）
+
+同一段探针，把实例右侧图自己的 id 与名字打出来：
+
+```
+PROBE jvp_add rhs GraphId=64 name=rulesets.jvp::jvp_add__rhs<float> nodes=4
+PROBE jvp_div rhs GraphId=75 name=rulesets.jvp_div__rhs<float> nodes=4
+```
+
+**这就是作者说的那条桥**：规则值只带 `ruleId`，`genericRuleInstance` 把它换成实例，实例的
+`rhs->id()` 是一个真的 `GraphId`（`64`/`75`），名字就是 `<rule>__rhs<float>`。**替换要拿的就是这
+张图，调用它**——不是到图里去找一个“指向 `div_tangent` 的调用节点”。
+
+**为什么图里没有调用节点**：`compileRule` 的产物 `camel::runtime::Rule` 的 `rhs` 是
+`Pattern`（`include/camel/runtime/writings.h:64-75`），而 `Pattern::Kind` 只有
+`Var / Constant / Op / Compute`——**没有 Call 这一种**。`div_tangent` 的调用在**编码后的模板体**
+里，实例图上只有它的入口形状（2 Port + 1 Data + 1 Fill）；调用这张图，`div_tangent` 就在里面跑。
+
+页首那句“找右图里那个调用节点”要按这个读数修正：**桥是“拿到右侧图”，不是“拿到图里的调用节点”。**
+
 ## 验收（缺一步不算完）
 
 1. **前向**：`f(x) = x*x + 3/x` 在 `x = 2` 处，`f = 5.5`，`f' = 4 - 0.75 = 3.25`。两个数都要打出来。
