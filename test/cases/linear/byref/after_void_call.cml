@@ -1,0 +1,21 @@
+/**
+ * A call whose result is `void` writes the variable, and the read after it takes that write's
+ * version: `:var/after(cell, call)` accepts a second operand of any type, `void` included, because
+ * the operator reads nothing of it. Expected output:
+ *   2
+ *   1
+ */
+func bump(var x: int): void sync {
+    x = x + 1
+}
+
+func main(): int sync {
+    var n = 1
+    bump(n)
+    println(n)
+    var m = 1
+    let before = m
+    bump(m)
+    println(before)
+    return 0
+}

@@ -1070,6 +1070,10 @@ class Builder {
         bool isRead;
     };
     std::unordered_map<node_handle_t, std::vector<VariableUse>> pendingUses_;
+    /// The reads that took a version of a variable with `:var/after`, per version they read: a
+    /// write of that version written below them is ordered after them (docs/design/effects/
+    /// edges.cn.md 5.6, the WAR half: the read sees the cell as it was before that write).
+    std::unordered_map<node_handle_t, std::vector<node_handle_t>> versionReads_;
 
     /// A branch arm: a region of the graph that has the branch (docs/design/graph-store 3.3),
     /// built where it is written. What the arm changes of the order of the variables (the last
@@ -2255,8 +2259,6 @@ class Builder {
     void recordWrite(node_handle_t variable, node_handle_t writer) {
         recordWrite(variable, writer, false);
     }
-    // Orders `node` after the last writer of `variable` in the current graph.
-    void orderAfterLastWriter(node_handle_t variable, node_handle_t node);
     // ---- The conservative writer set (design principles 3.1, 3.5) ---------------------------
     // A call through a function value has no callee at the call; which variable it writes is not
     // in its type yet. So the variables some function of the program writes are counted as its
