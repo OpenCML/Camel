@@ -76,10 +76,21 @@ template <typename T> class Array {
         }
     }
 
-    /// A literal of `items` with the shape written as the words of `shape`, which the generated
+    /// The array of `items` with the shape written as the words of `shape`, which the generated
     /// program writes from the type of the literal (`rt::Array<double>::shaped`).
     static Array shaped(std::initializer_list<T> items, std::initializer_list<std::size_t> shape) {
         return Array(items, shape);
+    }
+
+    /// A value of no rank: the one element *is* the value (design principles 5.4). A position whose
+    /// type is `f32[..]` holds such a value when something is written into it, and the difference
+    /// between it and an array of one element is what `println` prints (`1.5` and `[1.5]`), so it is
+    /// made by its own constructor rather than by appending one element.
+    static Array element(T item) {
+        Array out;
+        out.push(std::move(item));
+        out.rep_->rank = 0;
+        return out;
     }
 
     /// The array of `items` with the extents `extents` states, row order: what a value the runtime
@@ -196,13 +207,21 @@ template <typename T> class Array {
     }
 
     /// Adds `item` at the end, in place when the block is this array's alone.
+    ///
+    /// An appended array is one dimension of what it holds, and it now says so: the rank is left at 0
+    /// only for a value that *is* the element (design principles 5.4), and a value of one element with
+    /// no rank is indistinguishable from it -- `println` would write `2.0` where the interpreter writes
+    /// `[2.0]`. A value grown past one dimension keeps the extents it was given.
     void push(T item) {
         if (rep_ == nullptr || rep_->references != 1 || rep_->size == rep_->capacity) {
             reserve(std::max(size() + 1, size() * 2));
         }
         new (rep_->items() + rep_->size) T(std::move(item));
         ++rep_->size;
-        rep_->rank = 0; // an appended array is one dimension of what it holds
+        if (rep_->rank <= 1) {
+            rep_->rank          = 1;
+            rep_->extents[0]    = rep_->size;
+        }
     }
 
     /// Puts `value` at `index`, in place when the block is this array's alone and a copy of it
@@ -339,8 +358,8 @@ template <typename T> class Array {
         std::size_t references;
         std::size_t size;
         std::size_t capacity;
-        // The shape of a literal of several dimensions; a block built by appending has rank 0 here
-        // and reads as one dimension of `size` elements.
+        // The shape of the value; a block built by appending says it is one dimension of `size`
+        // elements, and rank 0 is only a value that *is* the element (design principles 5.4).
         std::uint32_t rank;
         std::size_t extents[Array::kMaxRank];
         T *items() noexcept { return reinterpret_cast<T *>(this + 1); }
