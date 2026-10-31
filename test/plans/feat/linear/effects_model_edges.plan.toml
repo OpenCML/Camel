@@ -9,9 +9,9 @@ tags = ["feat", "linear", "runtime", "effects", "gir"]
 # Each entry below states one clause of the design. They are marked `known_fail` against the
 # integration of the edge model, which the decision-maker put ahead of new small
 # tasks. The layer that holds all four is the graph's construction and its
-# consumers, not this plan, and the code is what disagrees with the design: the code still has a
-# `GCNodeKind::Sync`, its ordering between effect statements is a `CTRL` edge (which carries "used"
-# *and* orders, so no pass can treat it as either), and its `GATE` still takes a control input.
+# consumers, not this plan, and the code is what disagrees with the design: its ordering between
+# effect statements is a `CTRL` edge (which carries "used" *and* orders, so no pass can treat it as
+# either), and its `GATE` still takes a control input.
 #
 # Measured on this tree, which is what says the clauses cannot be burned one at a time:
 #   - the builder still generates a control edge where the model puts a sync or an order edge:
@@ -24,8 +24,7 @@ tags = ["feat", "linear", "runtime", "effects", "gir"]
 #   - `DraftEdgeKind::Ctrl`, `ctrlInputsOf` and `ctrlOutputsOf` occur in 53 source files under
 #     src/, include/ and modules/, and `std::opt::ctrl` keeps a GATE's control input on purpose
 #     (src/runtime/control.cpp#appendControlDependency, "A GATE must still have at least one CTRL
-#     input"), so the consumers still sort by the kind the model removes. `GCNodeKind::Sync` is read
-#     in 23 more files.
+#     input"), so the consumers still sort by the kind the model removes.
 #   - 26 checked-in pictures under test/ and exemplars/ carry 143 `type="CTRL"` edges (20 of them
 #     under a `golden/` directory), so the construction change lands with every one of them
 #     re-recorded.
