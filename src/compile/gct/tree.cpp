@@ -281,7 +281,10 @@ const std::string *Tree::internReference(std::string_view name) {
 }
 
 void Tree::append(Node &parent, Node *child) {
-    ASSERT((child->flags_ & Node::kAttached) == 0, "Node already has a parent");
+    GUARD(
+        (child->flags_ & Node::kAttached) == 0,
+        "Node already has a parent: this tree gives a node one parent, so the same expression "
+        "hangs here twice and would be evaluated twice");
     const size_t count = parent.childCount_;
     if (count == childCapacity(count)) {
         auto **grown = static_cast<Node **>(allocate(childCapacity(count + 1) * sizeof(Node *)));
@@ -307,7 +310,7 @@ Node &Node::operator<<(node_ptr_t child) {
 // =============================================================================
 
 node_ptr_t Tree::makeData(const data_ptr_t &data) {
-    ASSERT(data != nullptr, "A DATA node cannot be made of a null data pointer");
+    GUARD(data != nullptr, "A DATA node cannot be made of a null data pointer");
     Node *node          = makeNode(NodeKind::DATA);
     node->payload_.data = &constants_.emplace_back(data);
     return node;
@@ -475,7 +478,7 @@ node_ptr_t Tree::makeShapeComprehension() {
 node_ptr_t Tree::makeEnumCase(
     const std::string &label, const std::vector<std::string> &fields,
     const std::vector<std::string> &bindings, bool structShape) {
-    ASSERT(
+    GUARD(
         fields.empty() || fields.size() == bindings.size(),
         "Every field of a struct pattern has a binding entry");
     Node *node   = makeNode(NodeKind::CASE);

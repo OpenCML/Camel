@@ -188,11 +188,8 @@ JvpGraph buildJvpGraph(
     const GraphId member = group.reserve(
         "jvp_of_" + std::string(function->name()), "jvp_of_" + std::string(function->name()));
     {
-        auto &draft = group.draft(member);
-        // The writings a caller builds from a draft alone still go through a transaction
-        // (GraphTransaction::borrow): the draft's owner is the group, and a rule's tangent is built
-        // by a piece of code that is handed the transaction rather than the graph.
-        auto transaction = camel::runtime::GraphTransaction::borrow(draft);
+        auto &transaction = group.transaction(member);
+        auto &draft       = transaction.edit();
         draft.setFuncType(signature);
         const gc_node_ref_t value =
             draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
@@ -496,7 +493,7 @@ JvpGraph buildJvpGraph(
                 std::string ruleName;
                 std::string ruleWhy;
                 tangentOf[ref] =
-                    buildRuleTangent(*context, *transaction, uri, inputs, tangents, ruleName, ruleWhy);
+                    buildRuleTangent(*context, transaction, uri, inputs, tangents, ruleName, ruleWhy);
                 if (tangentOf[ref] == rt::kInvalidNodeRef) {
                     // Named, not guessed: the transform has no derivative for this operator, and
                     // the refusal carries the place the primitive was written -- the node's origin,

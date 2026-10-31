@@ -43,6 +43,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <vector>
+#include <stdexcept>
 
 #define DEBUG_LEVEL -1
 
@@ -2282,7 +2283,7 @@ std::optional<int64_t> Builder::foldExtentCall(
         break;
     case FoldRefusal::None:
     case FoldRefusal::NotAProgramCall:
-        ASSERT(false, "reportFoldRefusal is for a refusal");
+        throw std::runtime_error("reportFoldRefusal is for a refusal");
         break;
     }
     throw BuildAbortException();
@@ -2330,7 +2331,7 @@ void Builder::reportWhenProblem(
         break;
     case WhenOutcome::Fails:
     case WhenOutcome::Holds:
-        ASSERT(false, "reportWhenProblem is for a condition that does not hold");
+        throw std::runtime_error("reportWhenProblem is for a condition that does not hold");
         break;
     }
     throw BuildAbortException();

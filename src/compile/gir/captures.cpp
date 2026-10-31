@@ -41,7 +41,7 @@ std::string Builder::captureNameOf(node_handle_t origin, const std::string &fall
 
 node_handle_t Builder::captureInto(
     const compile_graph_ptr_t &graph, node_handle_t origin, const std::string &name) {
-    ASSERT(graph != nullptr && origin != nullptr, "A capture needs a graph and a value.");
+    GUARD(graph != nullptr && origin != nullptr, "A capture needs a graph and a value.");
     if (nodeGraphOf(origin) == graph.get()) {
         return origin;
     }
@@ -58,7 +58,7 @@ node_handle_t Builder::captureInto(
     // The origin is a node of a graph that encloses this one (the root graph for a value of
     // the top level of a module): the enclosing graphs between them capture it as well, so
     // that whoever calls or makes the value of this graph can pass it on.
-    ASSERT(
+    GUARD(
         graph->outerGraph() != nullptr,
         "A captured value must belong to a graph that encloses the capturing one.");
     (void)captureInto(graph->outerGraph(), origin, name);
@@ -126,7 +126,7 @@ node_handle_t Builder::captureInto(
 }
 
 void Builder::noteMachinePortOrigin(node_handle_t port, node_handle_t origin) {
-    ASSERT(port != nullptr && origin != nullptr, "A port stands for a value.");
+    GUARD(port != nullptr && origin != nullptr, "A port stands for a value.");
     machinePortOrigin_[port] = origin;
 }
 

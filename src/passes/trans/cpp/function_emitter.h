@@ -141,6 +141,9 @@ class FunctionEmitter {
         std::unordered_map<gc_node_ref_t, CppValue> values;
         /// Nodes already lowered as part of something else (the arms of a branch, its JOIN).
         std::unordered_set<gc_node_ref_t> consumed;
+        /// A closure node's graph and the value of each capture, kept so that a call can spell
+        /// the function value the way the parameter's function type does.
+        std::unordered_map<gc_node_ref_t, std::pair<GCGraph *, std::vector<std::string>>> closures;
         /// The results of the sequences being lowered: each is used once more, by the end of
         /// its sequence (a return, or the assignment of a branch's value).
         std::unordered_multiset<gc_node_ref_t> results;
@@ -194,9 +197,12 @@ class FunctionEmitter {
     /// Whether the variable whose cell is `cell` is used outside this function (design note
     /// 5.3): then it is an rt::Cell, else a C++ local.
     bool cellEscapes(const GCGraph *graph, gc_node_ref_t cell);
-    /// The function value of `function` with `captures`, as a C++ expression.
-    std::optional<std::string>
-    functionValue(GCGraph *function, const std::vector<std::string> &captures);
+    /// The function value of `function` with `captures`, as a C++ expression. `expected` is the
+    /// function type of the position the value fills, when that is known: the value then spells
+    /// that type, and a `void` one drops the result the function gives (a `(x: int) => int` value
+    /// is what a `(x: int) => void` parameter takes, and C++ does not convert it by itself).
+    std::optional<std::string> functionValue(
+        GCGraph *function, const std::vector<std::string> &captures, const Type *expected = nullptr);
     static GCGraph *functionConstantOf(const GCGraph *graph, gc_node_ref_t ref);
     static bool bridgeCarries(const Type *type);
     /// The count of open calls a call at `ref` passes: `rt::call(depth, site)`, which checks

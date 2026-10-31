@@ -72,7 +72,7 @@ node_handle_t Builder::valueNodeOf(const std::any &res) {
         }
         return materializeStaticTuple(tuple, tuple.origin);
     }
-    ASSERT(res.type() == typeid(node_handle_t), "Expression did not produce a value node.");
+    GUARD(res.type() == typeid(node_handle_t), "Expression did not produce a value node.");
     return any_cast<node_handle_t>(res);
 }
 
@@ -186,11 +186,11 @@ node_handle_t Builder::addCallNodeOf(const compile_graph_ptr_t &callee) {
 
 node_handle_t Builder::createFuncDataNode(
     const graph_ptr_t &graph, bool callableAsResult, bool allowParameterization) {
-    ASSERT(
+    GUARD(
         !(callableAsResult && allowParameterization),
         "Cannot enable both callableAsResult and allowParameterization options.");
-    ASSERT(currGraph_ != nullptr, "Current owner graph is null when creating a function node.");
-    ASSERT(graph != nullptr, "Target graph is null when creating a function node.");
+    GUARD(currGraph_ != nullptr, "Current owner graph is null when creating a function node.");
+    GUARD(graph != nullptr, "Target graph is null when creating a function node.");
     // Its captures are known once its body is built: a function of the top level is built
     // here unless it is (or it is being built: a recursive use).
     ensureFunctionBuilt(graph);
@@ -481,7 +481,7 @@ node_handle_t Builder::partialApplicationOf(
             continue;
         }
         node_handle_t entered = checkValue(bound[i].node, param, bound[i].expr);
-        ASSERT(entered != nullptr, "An argument the binding accepted is converted.");
+        GUARD(entered != nullptr, "An argument the binding accepted is converted.");
         bound[i].node = entered;
     }
 
@@ -505,7 +505,7 @@ node_handle_t Builder::partialApplicationOf(
     GCT::node_ptr_t callee = nullptr;
     if (nodeIsKind(target, runtime::GCNodeKind::Dref)) {
         const auto known = boundWithCallee_.find(target);
-        ASSERT(known != boundWithCallee_.end(), "A bound callee has its expression recorded.");
+        GUARD(known != boundWithCallee_.end(), "A bound callee has its expression recorded.");
         callee = tree_->clone(known->second);
     } else {
         callee = nameNode(bindTemporary(target));
@@ -656,7 +656,7 @@ node_handle_t Builder::ruleBindingValueOf(node_handle_t target, const GCT::node_
     const compile_graph_ptr_t graph =
         singleGraphOfDref(nodeGraphOf(target)->drefTarget(target));
     const TopLevelDeclaration *declaration = ruleBindingOf(graph);
-    ASSERT(declaration != nullptr, "A rule's binding function is declared at the top level.");
+    GUARD(declaration != nullptr, "A rule's binding function is declared at the top level.");
     FunctionType *calleeType = graph->funcType();
 
     // The values written beside the name (`name<value>`) are the `with` arguments, in the order

@@ -324,6 +324,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "reshape_computed_shape"
+desc = "A target shape the program computes at run time (`reshape<[n, 3]>(y)` with n a parameter) is the operator's value argument, so the extents the call writes are those values, not the ones the caller's contract put in the result type: `rt::reshapeBy(y, rt::Array<int64_t>{n, 3}, at_...)` reads them, and a target that changes the element count reports `[6] -> [3, 3]` -- both shapes filled at run time, the interpreter's sentence. Written from the type, the call carried `{2, 3}` and the fault never happened. agree_with_fvm compares the reading with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/modules/tensor/shape_inference/computed_extent_run_time.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::reshapeBy(", "reshape changes tensor element count: ["]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "numel_rank"
 desc = "`numel` counts the elements of a value whatever its rank: six for a rank-2 value, four for its first two rows, eight for a rank-3 one, four for a value of one dimension. It reads the count the value holds and no dimension of it, so a value of several dimensions and one of an open rank are both answered by the run -- which is why this step frees every program that asked for it, the open-rank one included. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
@@ -349,7 +361,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "arg_axis_rank"
-desc = "The position of the extreme along one dimension: the first element of the lane equal to its maximum (minimum), or its first NaN, taken by the same order as the extreme itself -- a NaN is beyond every number and on a tie the earlier position stays. So `[1, 2]` for the columns of a rank-2 value and `[0, 0, 1]` for its rows, `[[1], [1], [0]]` with keepdims, `[[1, 1], [1, 1]]` for the middle axis of a rank-3 one, and `[1, 0]` where one lane holds a tie (the earlier of two equal maxima) and the other its first NaN. The answer's element type is int64 whatever the value holds, so the rule states a different runtime element type than the value it reads. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+desc = "The position of the extreme along one dimension: the first element of the lane equal to its maximum (minimum), or its first NaN, taken by the same order as the extreme itself -- a NaN is beyond every number and on a tie the earlier position stays. So `[1, 2]` for the columns of a rank-2 value and `[0, 0, 1]` for its rows, `[[1], [1], [0]]` with keepdims, `[[1, 1], [1, 1]]` for the middle axis of a rank-3 one, and `[1, 0]` where one lane holds a tie (the earlier of two equal maxima) and the other its first NaN. The lanes are walked by the extents the value carries -- outer, `extent(axis)`, inner -- and each answer prints its shape with it: `[2] [1, 0]` for axis 1 of an `f32[2, 3]`, and `[2, 4] [[2, 2, 2, 2], [0, 0, 0, 0]]` for axis 1 of an `f32[2, 3, 4]`, whose three different extents are what tells a right split of the lanes from a wrong one (a 2x2x2 value is symmetric in the split and cannot). The answer's element type is int64 whatever the value holds, so the rule states a different runtime element type than the value it reads. A value of one dimension has one lane and nothing beside it, so what that lane reduces to is the answer itself: `1` for an `f32[3]` reduced on axis 0, with `shape` answering `[]` -- a value of no dimension, not an array of one -- `[1]` when the dimension is kept, `0` for the argmin of it, and `5.0 1.0` for its maximum and minimum. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/arg_axis_rank.cml"
 args = ["${case}", "std::cpp"]
@@ -373,12 +385,24 @@ timeout_ms = 8000
 
 [[tests]]
 name = "sum_axis_rank"
-desc = "A reduction along one dimension adds each lane from +0 in ascending order and answers the dimensions it did not reduce, in row-major order: `axis=0` of a rank-2 value sums its columns (`[9.0, 12.0]`), `axis=1` its rows (`[3.0, 7.0, 11.0]`), `keepdims` keeps the reduced dimension as one (`[[3.0], [7.0], [11.0]]`), and the three axes of a rank-3 value each sum a different set -- the middle one pairs elements that are `inner` apart in the run, which no flattening could produce. The axis and the flag arrive either as arguments of the call or as the constant the callee was written with (`sum<1>(xs)`), and the rule reads whichever carried them. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+desc = "A reduction along one dimension adds each lane from +0 in ascending order and answers the dimensions it did not reduce, in row-major order: `axis=0` of a rank-2 value sums its columns (`[9.0, 12.0]`), `axis=1` its rows (`[3.0, 7.0, 11.0]`), `keepdims` keeps the reduced dimension as one (`[[3.0], [7.0], [11.0]]`), and the three axes of a rank-3 value each sum a different set -- the middle one pairs elements that are `inner` apart in the run, which no flattening could produce. The axis and the flag arrive either as arguments of the call or as the constant the callee was written with (`sum<1>(xs)`), and the rule reads whichever carried them. A value of one dimension has one lane and nothing beside it, so what it sums to is the answer itself: `8.0` for an `f32[3]` of [1.0, 5.0, 2.0] reduced on axis 0 -- a value of no dimension, where an array of one would print `[8.0]` -- and `[8.0]` when the dimension is kept; `[6.0, 15.0]` for an `f32[2, 3]` reduced on axis 1 and `[[6.0], [15.0]]` with the dimension kept are the same reduction with its dimensions still printed, which is the behaviour it had. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/sum_axis_rank.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
 expect_stdout_contains = ["rt::sumAxis("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "mean_axis_rank"
+desc = "The mean along one dimension is the interpreter's own two steps in its order, not a second average: each lane is added from +0 in ascending order into a `double`, the unrounded total is divided by the extent of the lane in `double`, and that quotient is rounded into the element type once -- rounding the sum first, or dividing in the element type, would be a different number for an `f32` lane. So `[2.0, 5.0]` for an `f32[2, 3]` reduced on axis 1 and `[[5.0, 6.0, 7.0, 8.0], [8.0, 7.0, 6.0, 5.0]]` for an `f32[2, 3, 4]` reduced on axis 1, whose lanes are three elements four apart in the run. A value of one dimension answers the mean itself, a value of no dimension: `2.6666667` for an `f32[3]` of [1.0, 5.0, 2.0], with `shape` answering `[]`, and `[2.6666667]` when the dimension is kept. A lane with no element is not refused -- the interpreter divides 0.0 by 0.0 and answers the canonical NaN, so an `f32[2, 0]` reduced on axis 1 answers `[nan, nan]` -- and the answer of an integer value is left refused, because the kernel's mean of an integer is an f32 while the operator's signature keeps the element type. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/mean_axis_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::meanAxis("]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -454,6 +478,19 @@ expect_stdout_contains = ["const rt::Array<float> v1_zeros = rt::filledArray<flo
 expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign", "bridge::", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+
+[[tests]]
+name = "tensor_half"
+desc = "The two reduced-precision element types are the same array: `ones::<bf16>` writes `rt::filledArray<rt::BF16>(lit::array, rt::BF16(1.0f), \"ones\", at_…)` and `zeros::<f16>` the same with `rt::F16(0.0f)` and `\"zeros\"` over the literal of its own shape (`lit::array_2`) -- the fill is a value of the element type rounded once, which is what the tensor module stores (modules/tensor/dtype.h), so the tensor is `rt::Array<rt::BF16>` / `rt::Array<rt::F16>` and the program needs no Camel library. Before this, a tensor of either width was refused by the rule: the six element types a tensor can hold are one representation, and leaving two of them refused would have made the refusal the second representation. agree_with_fvm builds and runs the program against std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/tensor_ones_half.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::filledArray<rt::BF16>(lit::array, rt::BF16(1.0f), \"ones\", at_", "rt::filledArray<rt::F16>(lit::array_2, rt::F16(0.0f), \"zeros\", at_"]
+expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign", "bridge::", "libcamel"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
 [[tests]]
 name = "index_rank"
 desc = "A position on a value of several dimensions: `m[1]` is the second row (`rt::atRow`, one dimension less and of the row's own extent), `m[1, 0]` writes the axis it drops and is the element (`rt::atAxis`, every other dimension kept whole), and `t[1]` of a rank-3 value is the rank-2 value behind it. `len` of a row answers the dimension that is left. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte -- six lines, rows and elements both. The operator rule that used to turn a value of several dimensions away is gone with it, as are the two module programs that took the same road: `index_two_positions` translates and agrees."
@@ -504,7 +541,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 [[tests]]
 name = "print_shape"
-desc = "Printing tells an element from an array of one. A value of no rank *is* the element (design principles 5.4): a field of `f32[..]` holds such a value and `println(first.v)` writes `1.5`, not `[1.5]`. A value that carries a dimension is written as the whole literal -- `[2.5]` -- because the bracket is the difference between an element and an array of one, and a reader who cannot see it cannot tell the two apart. `shape` of a value of one dimension answers the one dimension it has (`[2]`), not the element. agree_with_fvm runs the program and compares its output with std::fvm byte for byte."
+desc = "Printing tells an element from an array of one. A value of no rank *is* the element (design principles 5.4): a field of `f32[..]` holds such a value and `println(first.v)` writes `1.5`, not `[1.5]`. A value that carries a dimension is written as the whole literal -- `[2.5]` -- because the bracket is the difference between an element and an array of one, and a reader who cannot see it cannot tell the two apart. `shape` of a value of one dimension answers the one dimension it has (`[2]`), not the element, and a value grown by `append` states that it is one dimension (`[3, 4]`). The same holds under a specification: `'{:>6}'->format<x>` writes `   1.5` for a value of no rank and `[   1.5]` for an array of one, because the bracket is the shape's and not the format's. agree_with_fvm runs the program and compares its output with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/print_shape.cml"
 args = ["${case}", "std::cpp"]

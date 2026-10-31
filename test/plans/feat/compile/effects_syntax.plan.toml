@@ -592,3 +592,29 @@ expect_exit = 0
 expect_stdout_contains = ["3"]
 expect_output_contains = ["is not in a sync block, and it writes the captured variable 'counter'"]
 timeout_ms = 20000
+
+# ---- The writer table's third credential: a call through a value is the write ----
+#
+# The one shape `isWriterWithLaterRead` was added for: a call through a function value whose
+# callback writes a captured `var`, and a read written after that call. Nothing fills that field
+# today (no caller of `effectStandingOf` reads it), so this case measures what the graph itself
+# does with the shape: the read written before the call keeps 0, the read written after it takes
+# 41, and both back ends say so.
+
+[[tests]]
+name = "callback.writer_table_through_callee"
+desc = "A value written by a call through a function value, read after the call: the call is the write, so the read written before it keeps 0 and the read written after it takes 41. Same output on the node VM and the bytecode VM."
+kind = "behavior"
+case = "../../../cases/effects/writer_table_through_callee.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = ["0", "41"].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000

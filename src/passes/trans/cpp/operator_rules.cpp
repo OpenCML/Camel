@@ -44,18 +44,6 @@ std::vector<std::string> marks(size_t n) {
     return out;
 }
 
-/// The integer code of the element type a tensor result names, which the bridge turns back into a
-/// type (standalone_bridge.cpp, `Type::create`): a code is what crosses, never the text of a type,
-/// because the tree writes a type's text (`typeToString`) and parses none, and a second spelling
-/// here would be one to keep in step by hand. -1 when the result is not an array type: a call that
-/// states no element type leaves the runtime its own reading, as such a call had before.
-int64_t elementCode(const Type *result) {
-    const ArrayType *array = asArrayType(result);
-    if (array == nullptr) {
-        return -1;
-    }
-    return static_cast<int64_t>(static_cast<uint32_t>(array->elemTypeCode()));
-}
 
 std::string joinedNorm(OperatorCall &call, size_t from = 0) {
     std::string out;
@@ -137,6 +125,28 @@ OperatorRule withArgument(const char *name) {
         },
         true,
     };
+}
+
+/// The element type of an array type, or null when `type` is not one.
+const Type *arrayElementOf(const Type *type) {
+    const ArrayType *array = asArrayType(type);
+    return array != nullptr ? array->elemType() : nullptr;
+}
+
+/// The C++ element type an empty literal (`[]`, of type `void[]`) takes from the position it fills,
+/// or nothing when the operand is not one: an empty literal has no element type of its own, so the
+/// position's -- `position` is the element type that position gives -- is the one it is written
+/// with. `rt::Array<void>` is not an array any operator takes, and C++ cannot convert one.
+std::string emptyLiteralElement(OperatorCall &c, const Type *position) {
+    const Type *element = arrayElementOf(c.normType(0));
+    if (element == nullptr || element->code() != TypeCode::Void) {
+        return {};
+    }
+    if (position == nullptr || position->code() == TypeCode::Void) {
+        return {};
+    }
+    const std::string written = c.cppType(position);
+    return written == "void" ? std::string() : written;
 }
 
 /// `x.name()`: a part of a tagged value (opt.h).
@@ -562,14 +572,19 @@ Rules buildRules() {
     };
     // `shape(xs)` (`stdlib/array.cml`, `stdlib/tensor.cml`): the value's dimensions, one `int` per
     // dimension, which is what the interpreter's `int[]` is. The shape travels with the value, so the
-    // answer is read off it and is a new array of its own -- a value, not a view. An open rank is
-    // still not translated: its rank is a property of the value, and the rank-zero value it admits
-    // is not an array at all in this back end.
+    // answer is read off it and is a new array of its own -- a value, not a view.
+    //
+    // An open rank is translated: what `shape` asks for is a property of the value, and the value
+    // carries it -- `rt::shapeOf` reads the rank and the extents off the block, so a value of no
+    // dimension answers `[]` and one whose block records no shape answers the one dimension of its
+    // size, which is what the interpreter answers for both. ("Open rank" is a fact about the type;
+    // "the shape is not known yet" is a fact about a value, and this back end has no such value:
+    // every `rt::Array` either records its shape or is read as one dimension of what it holds.)
     for (const char *uri : {"array:shape", "tensor:shape"}) {
         r[uri] = {
             [](OperatorCall &c) -> std::optional<std::string> {
                 const ArrayType *value = asArrayType(c.normType(0));
-                if (value == nullptr || value->anyRank() || c.normCount() != 1) {
+                if (value == nullptr || value->elemType() == nullptr || c.normCount() != 1) {
                     return std::nullopt;
                 }
                 return std::format("rt::shapeOf({})", c.operand(0));
@@ -653,21 +668,8 @@ Rules buildRules() {
         },
         false,
     };
-    // `array:sort_d` (src/builtin/operators/array.cpp): the same elements in the order min and max
-    // use, ties where they stand. A rank-1 run again; the other element types name their own
-    // operator and get their own line when a program needs one.
-    r["array:sort_d"] = {
-        [](OperatorCall &c) -> std::optional<std::string> {
-            const ArrayType *value = asArrayType(c.normType(0));
-            if (c.normCount() != 1 || value == nullptr || value->anyRank() || value->rank() != 1 ||
-                value->elemType() == nullptr ||
-                value->elemType()->code() != TypeCode::Float64) {
-                return std::nullopt;
-            }
-            return std::format("rt::sorted({})", c.operand(0));
-        },
-        false,
-    };
+    // `array:sort_*` and the rest of the module's kernels are below, one rule per declaration
+    // (the `array:sort_d` line this used to be is now one of the four the loop writes).
     // `array:argsort_bf` and `array:argsort_f6` (src/builtin/operators/array.cpp): the positions
     // of the elements in the order `min` and `max` use, ties where they stand -- the order
     // `array:sort_d` states, read as positions instead of values (rt::halfArgsort). The element
@@ -690,6 +692,152 @@ Rules buildRules() {
             false,
         };
     }
+    // The rest of the `array` module's kernels (src/builtin/operators/array.cpp and
+    // array_reduce.cpp), each on the element type its declaration names and on a run of one
+    // dimension: the sorts and their atoms, the whole-array reductions and `dim`. The order, the
+    // summation and the comparison are the interpreter's own statements (rt::numberLess, rt::sorted,
+    // rt::argsort, rt::sumAll, rt::minOf/maxOf), so a program they translate is the same program
+    // and not merely one that compiles.
+    const std::pair<const char *, TypeCode> numberTypes[] = {
+        {"i", TypeCode::Int32},
+        {"l", TypeCode::Int64},
+        {"f", TypeCode::Float32},
+        {"d", TypeCode::Float64},
+    };
+    // A run of `count` arrays of one element type, one dimension each: what the declarations of
+    // these kernels are (`int[]`, `float[]`). A shaped value is no value of this target, so a
+    // dimension above one is refused rather than flattened.
+    const auto runOf = [](const OperatorCall &c, TypeCode code, size_t count) {
+        if (c.normCount() != count) {
+            return false;
+        }
+        for (size_t i = 0; i < count; ++i) {
+            const ArrayType *value = asArrayType(c.normType(i));
+            if (value == nullptr || (!value->anyRank() && value->rank() > 1) ||
+                value->elemType() == nullptr || value->elemType()->code() != code) {
+                return false;
+            }
+        }
+        return true;
+    };
+    for (const auto &[suffix, code] : numberTypes) {
+        // `sort_<t>` and `sort_<t>_in_place`: the same elements in the order `min` and `max` use,
+        // ties where they stand. The in-place form is the store's (`xs = xs->sort`), and a value is
+        // a copy either way, so the returning form says the same thing.
+        for (const char *form : {"", "_in_place"}) {
+            r[std::string("array:sort_") + suffix + form] = {
+                [code, runOf](OperatorCall &c) -> std::optional<std::string> {
+                    if (!runOf(c, code, 1)) {
+                        return std::nullopt;
+                    }
+                    return std::format("rt::sorted({})", c.operand(0));
+                },
+                false,
+            };
+        }
+        // `merge_sorted_<t>`: the elements of both runs in ascending order, `sort(concat(xs, ys))`.
+        r[std::format("array:merge_sorted_{}", suffix)] = {
+            [code, runOf](OperatorCall &c) -> std::optional<std::string> {
+                if (!runOf(c, code, 2)) {
+                    return std::nullopt;
+                }
+                return std::format(
+                    "rt::mergeSorted({}, {})", c.operand(0), c.operand(1));
+            },
+            false,
+        };
+        // `sum_<t>`: the elements added from +0 in the order they lie -- an integer in itself,
+        // wrapping, and a float in f64 rounded once (rt::sumAll is that statement).
+        r[std::format("array:sum_{}", suffix)] = {
+            [code, runOf](OperatorCall &c) -> std::optional<std::string> {
+                if (!runOf(c, code, 1)) {
+                    return std::nullopt;
+                }
+                return std::format("rt::sumAll({})", c.operand(0));
+            },
+            true,
+        };
+        // `min_<t>` and `max_<t>`: the fold with `min`/`max`, a NaN giving NaN and -0 below +0; a
+        // reduction over no element is InvalidArgument, and the report is the interpreter's own.
+        for (const char *form : {"min", "max"}) {
+            const bool minimum = std::string(form) == "min";
+            r[std::string("array:") + form + "_" + suffix] = {
+                [code, runOf, minimum](OperatorCall &c) -> std::optional<std::string> {
+                    if (!runOf(c, code, 1)) {
+                        return std::nullopt;
+                    }
+                    return std::format(
+                        "rt::{}({}, {})",
+                        minimum ? "minOf" : "maxOf",
+                        c.operand(0),
+                        c.site(
+                            RuntimeDiag::InvalidArgument,
+                            {minimum ? "array.min" : "array.max", "a reduction over no elements"}));
+                },
+                false,
+            };
+        }
+    }
+    // `argsort_<t>` for the keys a standalone program can order: the four number types, bool and
+    // string (a bf16 or an f16 keeps its own rule above). One element type has one declaration and
+    // one executor, so the rule reads the type rather than the value.
+    for (const char *suffix : {"i", "l", "f", "d", "b", "s"}) {
+        r[std::format("array:argsort_{}", suffix)] = {
+            [](OperatorCall &c) -> std::optional<std::string> {
+                if (c.normCount() != 1) {
+                    return std::nullopt;
+                }
+                const ArrayType *value = asArrayType(c.normType(0));
+                if (value == nullptr || (!value->anyRank() && value->rank() > 1) ||
+                    value->elemType() == nullptr) {
+                    return std::nullopt;
+                }
+                return std::format("rt::argsort({})", c.operand(0));
+            },
+            false,
+        };
+    }
+    // `rand:shuffle_<t>` (modules/random/operators.cpp): `xs[permutation(k, len(xs))]`, the
+    // kernel of that body -- one uniform draw for each position, the positions ordered by (draw,
+    // position) -- which is what rt::randomShuffle states. Any other uniform shuffle is a different
+    // permutation, so the reading is the interpreter's, element for element.
+    for (const char *suffix : {"i", "l", "f", "d"}) {
+        r[std::string("rand:shuffle_") + suffix] = {
+            [](OperatorCall &c) -> std::optional<std::string> {
+                if (c.normCount() != 1 || c.withCount() != 1) {
+                    return std::nullopt;
+                }
+                const ArrayType *value = asArrayType(c.normType(0));
+                if (value == nullptr || (!value->anyRank() && value->rank() > 1) ||
+                    value->elemType() == nullptr) {
+                    return std::nullopt;
+                }
+                return std::format("rt::randomShuffle({}, {})", c.operand(0), c.with(0).text);
+            },
+            false,
+        };
+    }
+    // `array:dim`: the extent of one axis, a negative one counting from the last; an axis outside
+    // the rank is InvalidArgument, with the two numbers in the sentence the interpreter prints.
+    r["array:dim"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1 || c.withCount() != 1) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::dim({}, {}, {})",
+                c.operand(0),
+                c.with(0).text,
+                c.site(
+                    RuntimeDiag::InvalidArgument,
+                    {"array.dim",
+                     std::format(
+                         "the axis {} is outside the rank {}",
+                         SiteTable::valueMark(0),
+                         SiteTable::valueMark(1))}));
+        },
+        false,
+    };
     // `tensor:reshape` (modules/tensor/kernels/layout.cpp): the same elements in row-major order in
     // another shape. The shape travels with the value now (rt::Array holds it), so a target of
     // several dimensions is faithful too -- printing it gives its rows, `[[1.0, 2.0], [3.0, 4.0]]`,
@@ -701,6 +849,30 @@ Rules buildRules() {
             const ArrayType *target = asArrayType(c.resultType());
             if (c.normCount() != 1 || target == nullptr || target->anyRank() || target->rank() == 0) {
                 return std::nullopt;
+            }
+            // A shape the program computes (`reshape<[n, 3]>(y)`) is the operator's second argument,
+            // a value. The extents read below are the *result type's*, which the caller's contract
+            // may have filled in ([2, 3] where `exact` wants `f32[2, 3]`) rather than the shape the
+            // program meant ([3, 3] with n = 3) -- so a call written from it checks the count of a
+            // shape the program did not ask for, and a reshape that should fault goes through.
+            // Such a reshape is handed to the runtime, whose check reads the values it was given
+            // and reports the count it sees (`reshape changes tensor element count: [6] -> [3, 3]`,
+            // the interpreter's own sentence; bridge.h carries an int array for this reason).
+            if (c.withCount() > 0 && !c.withIsConstant(0)) {
+                // The target's extents are the program's values, so the count check is written
+                // against them: `rt::reshapeBy` reads the shape it is handed and reports the two
+                // shapes the interpreter reports (`[6] -> [3, 3]`), both slots filled at run time.
+                return std::format(
+                    "rt::reshapeBy({}, {}, {})",
+                    c.norm(0).text,
+                    c.with(0).text,
+                    c.site(
+                        RuntimeDiag::TensorDimensionMismatch,
+                        {"reshape",
+                         std::format(
+                             "reshape changes tensor element count: [{}] -> [{}]",
+                             SiteTable::valueMark(0),
+                             SiteTable::valueMark(1))}));
             }
             std::string words;
             std::string shape;
@@ -782,16 +954,16 @@ Rules buildRules() {
     // added from +0 in ascending order, rounded into the element type once -- the one reduction that
     // does read a dimension, and the one that cannot be written by flattening the value.
     //
-    // Two refusals stay, and they are not the same sentence. A rank of one is refused because its
-    // answer is a value of no dimension: the result's type cannot be written from the signature,
-    // which says `T[..]` -- a value of a rank the callee does not know -- while the answer here
-    // would be the element itself. An open rank is refused for that same reason and only that one:
-    // its rank is a property of the value, so the shape the answer keeps cannot be stated -- and not
-    // because such a value is not an array, which it is, and the operator reads it as one.
+    // One refusal stays: an open rank, because its rank is a property of the value, so the shape the
+    // answer keeps cannot be stated -- and not because such a value is not an array, which it is, and
+    // the operator reads it as one. A rank of one is *not* refused: what its one lane sums to is the
+    // answer itself (design principles 5.4), a value of no dimension, and the open rank of the
+    // result's type writes that like any other answer. It was refused here until the same sentence
+    // was found to be wrong for `argmax_axis`; the reason was never about the sum.
     r["tensor:sum_axis"] = {
         [](OperatorCall &c) -> std::optional<std::string> {
             const ArrayType *value = asArrayType(c.normType(0));
-            if (value == nullptr || value->anyRank() || value->rank() < 2 ||
+            if (value == nullptr || value->anyRank() || value->rank() < 1 ||
                 value->elemType() == nullptr) {
                 return std::nullopt;
             }
@@ -829,6 +1001,56 @@ Rules buildRules() {
         },
         false,
     };
+    // `tensor:mean_axis` (modules/tensor/kernels/reduce.cpp, reduceAxis): the mean is the sum's own
+    // two steps and not a second average -- each lane added from +0 in ascending order into a
+    // `double`, the unrounded total divided by the extent in `double`, that quotient rounded into the
+    // element type once. So the rule emits the runtime's mean, which walks the lanes the same way and
+    // rounds the same single time; "the sum divided by a count" computed in the element type would be
+    // a different number for an `f32` lane.
+    //
+    // Only a floating element type is written: the mean of an integer value is an `f32` in the
+    // kernel, while the operator's signature keeps the value's element type, so the answer's type on
+    // this side would be the integer one -- a different value printed, not a mean. That is left
+    // refused (by name) rather than translated to something else.
+    //
+    // An empty lane is not refused: the interpreter divides 0.0 by 0.0 and answers the canonical NaN
+    // (`[nan, nan]` for a `f32[2, 0]` reduced on axis 1), and the runtime does the same. The refusal
+    // these four extremes have for an empty lane is not the mean's.
+    r["tensor:mean_axis"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (value == nullptr || value->anyRank() || value->rank() < 1 ||
+                value->elemType() == nullptr) {
+                return std::nullopt;
+            }
+            const TypeCode element = value->elemType()->code();
+            if (element != TypeCode::Float32 && element != TypeCode::Float64) {
+                return std::nullopt;
+            }
+            std::string axis;
+            std::string keepDims = "false";
+            if (c.normCount() >= 2) {
+                axis = c.operand(1);
+                if (c.normCount() > 2) {
+                    keepDims = c.operand(2);
+                }
+            } else if (c.withCount() >= 1) {
+                axis = c.with(0).text;
+                if (c.withCount() > 1) {
+                    keepDims = c.with(1).text;
+                }
+            } else {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::meanAxis({}, {}, {}, {})",
+                c.operand(0),
+                axis,
+                keepDims,
+                c.site(RuntimeDiag::InvalidArgument, marks(2)));
+        },
+        false,
+    };
     // `tensor:max_axis` / `tensor:min_axis` (modules/tensor/kernels/reduce.cpp, reduceAxis): the
     // same lanes as the sum, folded from the operation's identity instead of from +0, with the one
     // comparison the interpreter makes -- a NaN on either side gives the canonical quiet NaN and -0
@@ -843,9 +1065,10 @@ Rules buildRules() {
     //
     // A lane with no element has no extreme and no position, and the interpreter refuses it naming
     // the operator and the axis; that refusal is the only one these four have that the sum does not.
-    // The two the sum states stay as they are: a rank of one answers a value of no dimension and an
-    // open rank keeps no shape -- both because the answer's type cannot be written, not because the
-    // value is not an array.
+    // A value of one dimension is a value with one axis and nothing beside it: what that one lane
+    // reduces to *is* the answer (design principles 5.4), so the answer is a value of no dimension,
+    // which the open rank of its type still writes. Only an open rank keeps no shape -- its rank is
+    // not known when the program is written -- and that is the one these four stay refused on.
     {
         struct AxisRule {
             const char *uri;
@@ -862,7 +1085,7 @@ Rules buildRules() {
             r[axis.uri] = {
                 [axis](OperatorCall &c) -> std::optional<std::string> {
                     const ArrayType *value = asArrayType(c.normType(0));
-                    if (value == nullptr || value->anyRank() || value->rank() < 2 ||
+                    if (value == nullptr || value->anyRank() || value->rank() < 1 ||
                         value->elemType() == nullptr) {
                         return std::nullopt;
                     }
@@ -973,17 +1196,57 @@ Rules buildRules() {
         };
     }
     r[":struct/len_arr"]      = runtimeFunction("length");
-    r[":struct/concat_arr"]   = runtimeFunction("concat");
-    r[":struct/append_arr"]   = withArgument("append");
+    r[":struct/concat_arr"]   = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const std::string empty = emptyLiteralElement(c, arrayElementOf(c.resultType()));
+            if (!empty.empty()) {
+                return std::format("rt::concat(rt::Array<{}>{{}}, {})", empty, c.norm(1).text);
+            }
+            return std::format("rt::concat({}, {})", c.norm(0).text, c.norm(1).text);
+        },
+        false,
+    };
+    // An empty literal (`[]`) is of type `void[]`: it has no element type of its own, and the one
+    // the position gives -- the array the result is, the element the operator names -- is the type
+    // it is written with. Written from its own type, `rt::Array<void>` is not an array these
+    // operators take, and the C++ compiler rejected the call.
+    r[":struct/append_arr"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const std::string empty = emptyLiteralElement(c, arrayElementOf(c.resultType()));
+            if (!empty.empty()) {
+                return std::format("rt::append(rt::Array<{}>{{}}, {})", empty, c.with(0).text);
+            }
+            return std::format("rt::append({}, {})", c.norm(0).text, c.with(0).text);
+        },
+        false,
+    };
     // The loop-state form (Builder::markLoopStateInPlace): writing in place is an optimisation of
     // `append`, and this back end has only the copying form, which gives the same values.
-    r[":struct/append_arr_owned"] = withArgument("append");
+    r[":struct/append_arr_owned"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const std::string empty = emptyLiteralElement(c, arrayElementOf(c.resultType()));
+            if (!empty.empty()) {
+                return std::format("rt::append(rt::Array<{}>{{}}, {})", empty, c.with(0).text);
+            }
+            return std::format("rt::append({}, {})", c.norm(0).text, c.with(0).text);
+        },
+        false,
+    };
     // The private copy one state of a loop takes (Builder::markLoopStateInPlace, per state),
     // which the same rewrite puts before the loop: an Array here is a value, and `append` copies
     // a block that another holder shares, so the copy itself has nothing to do (rt::append takes
     // the array by value).
     r[":struct/copy_arr"] = identity();
-    r[":struct/contains_arr"] = withArgument("contains");
+    r[":struct/contains_arr"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const std::string empty = emptyLiteralElement(c, c.withType(0));
+            if (!empty.empty()) {
+                return std::format("rt::contains(rt::Array<{}>{{}}, {})", empty, c.with(0).text);
+            }
+            return std::format("rt::contains({}, {})", c.norm(0).text, c.with(0).text);
+        },
+        false,
+    };
     r[":struct/zip"]          = {
         [](OperatorCall &c) -> std::optional<std::string> {
             std::string args;
@@ -1175,9 +1438,19 @@ Rules buildRules() {
     // rather than guessed -- the first sentence this rule carried was not the one the interpreter
     // prints, and a fault printed differently is a program that disagrees.
     //
-    // The element types are the numbers this array holds; a tensor of anything else (a string, a
-    // bool, one of the two reduced-precision floats, whose fill would need its own pattern) keeps
-    // the bridged call, which is the answer for it and not a refusal of the program.
+    // The element types are the ones the tensor module itself stores (modules/tensor/dtype.h):
+    // f32, f64, i32, i64 and the two reduced-precision floats, whose fill is a value of their own
+    // type rounded once from 1.0/0.0 (`rt::BF16(1.0f)`), so the tensor a program reads is one
+    // array whatever its width. What is left out never reaches this rule, and it is left out by
+    // the language, not by this target: the signature's `when is_numeric` (`stdlib/signatures/
+    // tensor.cml`) says a tensor's element is a number, and `is_numeric::<string>()` and
+    // `is_numeric::<bool>()` are both false, so there is no string or bool tensor on any backend
+    // -- the same `NoMatchingFunction` comes from std::fvm. `c64`/`c128` do not even match the
+    // signature although `is_numeric` admits them: the tensor type for a complex element cannot be
+    // formed, and that disagreement is the author's to settle (docs/handover/questions/
+    // questions-2026-10-31-can-a-tensor-hold-a-complex.md). So the `default` below is a branch
+    // that does not run: it is a backstop, not a refusal this rule makes, and no element type is
+    // turned away with a written call that would be a second answer.
     auto tensorBuilder = [](bool ones) {
         return [ones](OperatorCall &c) -> std::optional<std::string> {
             if (c.normCount() != 1) {
@@ -1193,6 +1466,8 @@ Rules buildRules() {
             case TypeCode::Float64: fill = ones ? "1.0" : "0.0"; break;
             case TypeCode::Int32:
             case TypeCode::Int64: fill = ones ? "1" : "0"; break;
+            case TypeCode::BFloat16: fill = ones ? "rt::BF16(1.0f)" : "rt::BF16(0.0f)"; break;
+            case TypeCode::Float16: fill = ones ? "rt::F16(1.0f)" : "rt::F16(0.0f)"; break;
             default: return std::nullopt;
             }
             return std::format(

@@ -224,8 +224,8 @@ void GraphVizDumpPass::popIndent() {
 }
 
 std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
-    ASSERT(graph != nullptr, "GraphViz dump requires a non-null runtime graph.");
-    ASSERT(graph->hasNodePayload(), "Runtime graph dump requires materialized node payload.");
+    GUARD(graph != nullptr, "GraphViz dump requires a non-null runtime graph.");
+    GUARD(graph->hasNodePayload(), "Runtime graph dump requires materialized node payload.");
     if (visitedGraphs_.find(graph) != visitedGraphs_.end()) {
         return string("");
     }
@@ -267,7 +267,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
             return classIdent(value->root);
         }
         const auto *record = lookupRecord(graph, input);
-        ASSERT(record != nullptr, "Runtime input record is missing.");
+        GUARD(record != nullptr, "Runtime input record is missing.");
         return nodeIdent(record);
     };
     const auto readsAClass = [&](camel::runtime::gc_node_ref_t input) {
@@ -401,7 +401,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
 
     auto emitPort = [&](camel::runtime::gc_node_ref_t ref, const char *nodeType) {
         const auto *port = lookupRecord(graph, ref);
-        ASSERT(port != nullptr, "Runtime port record is missing.");
+        GUARD(port != nullptr, "Runtime port record is missing.");
         const auto info    = portInfo(graph, ref);
         const string label = info.name.empty() ? "PORT" : info.name;
         string metadata;
@@ -632,7 +632,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
 
     for (size_t i = 0; i < graph->withPorts().size(); ++i) {
         const auto *port = lookupRecord(graph, graph->withPorts()[i]);
-        ASSERT(port != nullptr, "Runtime with-port record is missing.");
+        GUARD(port != nullptr, "Runtime with-port record is missing.");
         if (!config_.rich) {
             res += std::format(
                 "{}{}{} -> {} [label=\"{}\", type=\"{}\"];\n",
@@ -655,7 +655,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     }
     for (size_t i = 0; i < graph->normPorts().size(); ++i) {
         const auto *port = lookupRecord(graph, graph->normPorts()[i]);
-        ASSERT(port != nullptr, "Runtime norm-port record is missing.");
+        GUARD(port != nullptr, "Runtime norm-port record is missing.");
         if (!config_.rich) {
             res += std::format(
                 "{}{}{} -> {} [label=\"{}\", type=\"{}\"];\n",
@@ -677,7 +677,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     }
 
     const auto *exitRecord = graph->exitNode();
-    ASSERT(exitRecord != nullptr, "Runtime graph exit node is missing.");
+    GUARD(exitRecord != nullptr, "Runtime graph exit node is missing.");
     // The graph's result is a value: the edge leaves its class when it has several writings.
     const std::string exitSource = edgeSource(graph->nodeRef(exitRecord));
     if (!config_.rich) {
@@ -702,12 +702,12 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
         const auto nodeIndex = it.ref();
         const auto *node     = *it;
-        ASSERT(node != nullptr, "Runtime node record lookup failed.");
+        GUARD(node != nullptr, "Runtime node record lookup failed.");
 
         for (size_t i = 0; i < graph->withInputsOf(nodeIndex).size(); ++i) {
             auto inputIndex   = graph->withInputsOf(nodeIndex)[i];
             const auto *input = lookupRecord(graph, inputIndex);
-            ASSERT(input != nullptr, "Runtime with-input record is missing.");
+            GUARD(input != nullptr, "Runtime with-input record is missing.");
             size_t outIdx = 0;
             // The input end names a value: a value with several writings is read through its
             // class node, which has one output, so no output slot has to be found.
@@ -744,7 +744,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         for (size_t i = 0; i < graph->normInputsOf(nodeIndex).size(); ++i) {
             auto inputIndex   = graph->normInputsOf(nodeIndex)[i];
             const auto *input = lookupRecord(graph, inputIndex);
-            ASSERT(input != nullptr, "Runtime norm-input record is missing.");
+            GUARD(input != nullptr, "Runtime norm-input record is missing.");
             size_t outIdx = 0;
             if (!readsAClass(inputIndex)) {
                 for (auto outIndex : graph->normOutputsOf(inputIndex)) {
@@ -779,7 +779,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         for (size_t i = 0; i < graph->ctrlInputsOf(nodeIndex).size(); ++i) {
             auto inputIndex   = graph->ctrlInputsOf(nodeIndex)[i];
             const auto *input = lookupRecord(graph, inputIndex);
-            ASSERT(input != nullptr, "Runtime ctrl-input record is missing.");
+            GUARD(input != nullptr, "Runtime ctrl-input record is missing.");
             size_t outIdx = 0;
             for (auto outIndex : graph->ctrlOutputsOf(inputIndex)) {
                 if (outIndex == nodeIndex) {
@@ -895,7 +895,7 @@ GraphVizDumpPass::GraphVizDumpPass(const context_ptr_t &context, GraphVizDumpCon
 
 std::string GraphVizDumpPass::dumpDot(camel::runtime::GCGraph *graph) {
     program_ = context_->programOfRuntimeGraph(graph);
-    ASSERT(program_ != nullptr, "A graph to dump belongs to no program of the context.");
+    GUARD(program_ != nullptr, "A graph to dump belongs to no program of the context.");
     return dumpGraph(graph);
 }
 

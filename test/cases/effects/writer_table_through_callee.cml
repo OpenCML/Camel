@@ -1,0 +1,19 @@
+/**
+ * The writer table's third credential, on the one shape that needs it: a value written by a call
+ * through a function value, and a read written after that call. The call is the write -- the
+ * callback's captured `var` is written by it (`recordWrite(..., throughCallee=true)`) -- so the read
+ * written after the call takes 41 and the read written before it keeps 0, and the call runs because
+ * that read needs it (design principles 3.1, 3.3).
+ */
+
+func apply(f: (x: int) => void, v: int) {
+    f(v)
+}
+
+func main(): int sync {
+    var counter = 0
+    println(counter)
+    apply((x: int) => { counter = x }, 41)
+    println(counter)
+    return 0
+}

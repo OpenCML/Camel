@@ -4,9 +4,21 @@
  * so it is a value of positions and not of elements.
  *
  * The readings are the lines below; `agree_with_fvm` compares them with std::fvm byte for byte.
+ *
+ * The lanes are walked by the extents -- `outer`, `extent(axis)`, `inner`, read off the value -- and
+ * the answer keeps the dimensions the axis did not reduce. `shape` of each answer is printed with it,
+ * because a flat run of positions would print the same after a wrong split of those three numbers;
+ * `f32[2, 3, 4]` reduced on axis 1 is the case that tells the split apart, since all three extents
+ * differ. (A `2x2x2` value is symmetric in the split and cannot.)
+ *
+ * A value of one dimension has one lane and nothing beside it, so what it reduces to *is* the answer
+ * (design principles 5.4): `argmax_axis(xs, 0, false)` of an `f32[3]` is a value of no dimension --
+ * printed `1`, with `shape` answering `[]` -- and `argmin_axis` of it is `0`. Asking for the dimension
+ * kept gives it back as a one (`[1]`, `[0]`). The extremes answer the same way, which is the walk
+ * reading the rank the value has rather than two or more.
  */
 import { nan } from math
-import { argmax_axis, argmin_axis, reshape } from tensor
+import { argmax_axis, argmin_axis, max_axis, min_axis, reshape, shape } from tensor
 
 func main(): int sync {
     let m: float[3, 2] = [[1.0, -2.0], [5.0, 0.0], [-3.0, 4.0]]
@@ -18,5 +30,16 @@ func main(): int sync {
     let flat: float[6] = [1.0, 2.0, 2.0, nan, 2.0, nan]
     let withTies = reshape<[2, 3]>(flat)
     println(argmax_axis(withTies, 1, false))
+    let wide: f32[2, 3] = [[1.0, 3.0, 2.0], [6.0, 5.0, 4.0]]
+    println(shape(argmax_axis(wide, 1, false)), argmax_axis(wide, 1, false))
+    let cube: f32[2, 3, 4] = [[[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0], [9.0, 10.0, 11.0, 12.0]], [[12.0, 11.0, 10.0, 9.0], [8.0, 7.0, 6.0, 5.0], [4.0, 3.0, 2.0, 1.0]]]
+    println(shape(argmax_axis(cube, 1, false)), argmax_axis(cube, 1, false))
+    let line: f32[3] = [1.0, 5.0, 2.0]
+    let at = argmax_axis(line, 0, false)
+    println(at)
+    println(shape(at))
+    println(shape(argmax_axis(line, 0, true)), argmax_axis(line, 0, true))
+    println(argmin_axis(line, 0, false), shape(argmin_axis(line, 0, false)))
+    println(max_axis(line, 0, false), min_axis(line, 0, false))
     return 0
 }

@@ -4,6 +4,7 @@
 // Type checking, reference evaluation and CUDA rendering of scalar expression DAGs.
 
 #include "tiles/internal/scalar_expr.h"
+#include "camel/core/rtdata/half.h"
 #include <bit>
 #include <cfenv>
 #include <cmath>
@@ -18,9 +19,19 @@
 
 namespace camel::tiles::kernel {
 namespace {
+bool narrow(ScalarType type) { return type == ScalarType::F16 || type == ScalarType::BF16; }
 void checkType(ScalarType type) {
-    if (type.kind < ScalarType::F32 || type.kind > ScalarType::I64)
-        throw std::invalid_argument("invalid scalar type");
+    switch (type.kind) {
+    case ScalarType::F32:
+    case ScalarType::F64:
+    case ScalarType::F16:
+    case ScalarType::BF16:
+    case ScalarType::I32:
+    case ScalarType::U32:
+    case ScalarType::I64:
+        return;
+    }
+    throw std::invalid_argument("invalid scalar type");
 }
 size_t arity(ScalarOp op) {
     switch (op) {
@@ -95,6 +106,10 @@ ScalarType::ScalarType(DType type) : kind(F32) {
         kind = F32;
     else if (type == DType::F64)
         kind = F64;
+    else if (type == DType::F16)
+        kind = F16; // A narrow element keeps its own width: a register of it holds sixteen bits.
+    else if (type == DType::BF16)
+        kind = BF16;
     else if (type == DType::I64)
         kind = I64; // A tensor element type and a register type with the same width and meaning.
     else
@@ -124,6 +139,37 @@ uint32_t ScalarValue::asU32() const {
 }
 ScalarValue ScalarValue::f32(float value) { return {DType::F32, std::bit_cast<uint32_t>(value)}; }
 ScalarValue ScalarValue::f64(double value) { return {DType::F64, std::bit_cast<uint64_t>(value)}; }
+ScalarValue ScalarValue::f16(float value) {
+    return {ScalarType::F16, core::rtdata::float16FromFloat(value)};
+}
+ScalarValue ScalarValue::bf16(float value) {
+    return {ScalarType::BF16, core::rtdata::bfloat16FromFloat(value)};
+}
+float ScalarValue::asWideF32() const {
+    switch (type.kind) {
+    case ScalarType::F32:
+        if (bits > UINT32_MAX)
+            throw std::invalid_argument("invalid 32-bit scalar payload");
+        return std::bit_cast<float>(static_cast<uint32_t>(bits));
+    case ScalarType::F64:
+        return static_cast<float>(std::bit_cast<double>(bits));
+    case ScalarType::F16:
+        if (bits > UINT16_MAX)
+            throw std::invalid_argument("invalid f16 scalar payload");
+        return std::bit_cast<float>(core::rtdata::float16ToFloatBits(static_cast<uint16_t>(bits)));
+    case ScalarType::BF16:
+        if (bits > UINT16_MAX)
+            throw std::invalid_argument("invalid bf16 scalar payload");
+        return std::bit_cast<float>(core::rtdata::bfloat16ToFloatBits(static_cast<uint16_t>(bits)));
+    default:
+        throw std::invalid_argument("expected scalar float bits");
+    }
+}
+double ScalarValue::asWideF64() const {
+    if (type == ScalarType::F64)
+        return std::bit_cast<double>(bits);
+    return static_cast<double>(asWideF32());
+}
 float ScalarValue::asF32() const {
     if (type != DType::F32 || bits > UINT32_MAX)
         throw std::invalid_argument("expected scalar f32 bits");
@@ -148,6 +194,8 @@ ScalarExpr ScalarExpr::literal(ScalarValue value) {
     checkType(value.type);
     if (value.type != ScalarType::F64 && value.type != ScalarType::I64 && value.bits > UINT32_MAX)
         throw std::invalid_argument("invalid 32-bit scalar payload");
+    if (narrow(value.type) && value.bits > UINT16_MAX)
+        throw std::invalid_argument("invalid narrow scalar payload");
     return ScalarExpr(
         std::make_shared<Node>(
             Node{.kind = Node::Kind::Literal, .type = value.type, .value = value}));
@@ -192,6 +240,11 @@ ScalarExpr ScalarExpr::apply(ScalarOp op, std::vector<ScalarExpr> inputs) {
     // existing wrapping 32-bit arithmetic is a separate lowering contract.
     if (type == ScalarType::I64)
         throw std::invalid_argument("unsupported i64 scalar operation");
+    // A narrow element is computed with in f32 and rounded once when it is stored (design
+    // principles 7.3). Computing inside the element type would round after every operation, which is
+    // the double rounding the language does not define; a body says so with two casts instead.
+    if (narrow(type))
+        throw std::invalid_argument("a narrow element is computed in f32, not in its own width");
     const bool integer = type == ScalarType::I32 || type == ScalarType::U32;
     const bool bitwise = op == ScalarOp::BitAnd || op == ScalarOp::BitOr ||
                          op == ScalarOp::BitXor || op == ScalarOp::LogicalShiftRight;
@@ -211,10 +264,19 @@ ScalarExpr ScalarExpr::cast(ScalarType type, ScalarExpr input) {
     checkType(type);
     if (input.type() == type)
         return input;
+    // A narrow element and an f32/f64 convert into each other: widening is exact (the element's bits
+    // are a whole f32's top or low half) and narrowing is the one rounding the language defines.
+    const auto floaty = [](ScalarType each) {
+        return each == ScalarType::F32 || each == ScalarType::F64 || narrow(each);
+    };
     const bool i64ToF64 = type == ScalarType::F64 && input.type() == ScalarType::I64;
-    if (!i64ToF64 && ((type != ScalarType::F32 && type != ScalarType::F64) ||
-                      (input.type() != ScalarType::F32 && input.type() != ScalarType::F64)))
+    if (!i64ToF64 && (!floaty(type) || !floaty(input.type())))
         throw std::invalid_argument("numeric conversion involving integers is not supported");
+    // A narrow element is rounded from the f32 the arithmetic happens in. An f64 reaches one only
+    // through a reduction, which accumulates in f64 and rounds once: that single rounding from f64 is
+    // not written yet, so the conversion refuses rather than rounding twice through an f32.
+    if (narrow(type) && input.type() == ScalarType::F64)
+        throw std::invalid_argument("a narrow element from f64 needs its own single rounding");
     return ScalarExpr(
         std::make_shared<Node>(Node{
             .kind   = Node::Kind::Operation,
@@ -225,7 +287,7 @@ ScalarExpr ScalarExpr::cast(ScalarType type, ScalarExpr input) {
 ScalarExpr ScalarExpr::bitcast(ScalarType type, ScalarExpr input) {
     checkType(type);
     if (type == ScalarType::F64 || input.type() == ScalarType::F64 || type == ScalarType::I64 ||
-        input.type() == ScalarType::I64)
+        input.type() == ScalarType::I64 || narrow(type) || narrow(input.type()))
         throw std::invalid_argument("bitcast requires equal 32-bit widths");
     if (type == input.type())
         return input;
@@ -313,8 +375,14 @@ ScalarExpr::evaluate(const std::unordered_map<std::string, ScalarValue> &binding
         const auto value = node->inputs[0].evaluate(bindings);
         if (value.type == ScalarType::I64)
             return ScalarValue::f64(static_cast<double>(value.asI64()));
-        return type() == DType::F32 ? ScalarValue::f32(static_cast<float>(value.asF64()))
-                                    : ScalarValue::f64(static_cast<double>(value.asF32()));
+        // One rounding on the way in: a narrow target takes the widened number once, ties to even;
+        // a narrow source widens exactly, so nothing is rounded on the way out.
+        if (type() == ScalarType::F16)
+            return ScalarValue::f16(value.asWideF32());
+        if (type() == ScalarType::BF16)
+            return ScalarValue::bf16(value.asWideF32());
+        return type() == DType::F32 ? ScalarValue::f32(value.asWideF32())
+                                    : ScalarValue::f64(value.asWideF64());
     }
     // Every recursive result crosses an explicit IEEE bit representation; a
     // multiply/add pair cannot accidentally become an FMA in the host compiler.
@@ -361,6 +429,11 @@ std::unordered_map<std::string, ScalarType> ScalarExpr::symbols() const {
     return result;
 }
 std::string ScalarExpr::cuda() const {
+    // A narrow register has no spelling here on purpose: the device program that would compute one
+    // is not written, and printing the f64 arithmetic that happens to have the same name would be a
+    // wrong kernel rather than a missing one.
+    if (narrow(type()))
+        throw std::runtime_error("no CUDA spelling for a narrow element yet");
     const bool f32 = type() == DType::F32;
     if (node->kind == Node::Kind::Literal && type() == ScalarType::I64)
         return "tiles_i64(" + std::to_string(node->value.bits) + "ULL)";
@@ -508,7 +581,8 @@ bool ScalarPredicate::evaluate(const std::unordered_map<std::string, ScalarValue
             return value.asI32();
         if (value.type == ScalarType::U32)
             return value.asU32();
-        return value.type == ScalarType::F32 ? value.asF32() : value.asF64();
+        // A narrow element compares in the f32 it widens to, like every other narrow operation.
+        return value.type == ScalarType::F64 ? value.asF64() : value.asWideF32();
     };
     const double x = number(a), y = number(b);
     return compareValues(compare, x, y);
