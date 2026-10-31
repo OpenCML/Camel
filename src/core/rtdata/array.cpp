@@ -379,7 +379,11 @@ slot_t readLeaf(const std::byte *at, TypeCode code, camel::core::mm::IAllocator 
         return rtdata::toSlot(rtdata::Complex::create(real, imaginary, code, allocator));
     }
     default:
-        ASSERT(false, "Not a pure-data leaf type");
+        GUARD(
+            false,
+            std::format(
+                "reading a pure-data leaf whose type code {} has no leaf reader",
+                static_cast<int>(code)));
         return NullSlot;
     }
 }
@@ -436,7 +440,11 @@ void writeLeaf(std::byte *at, TypeCode code, slot_t slot) {
         break;
     }
     default:
-        ASSERT(false, "Not a pure-data leaf type");
+        GUARD(
+            false,
+            std::format(
+                "writing a pure-data leaf whose type code {} has no leaf writer",
+                static_cast<int>(code)));
         break;
     }
 }
@@ -621,7 +629,10 @@ slot_t Array::getSlotSlow(uint64_t flatIndex) const {
     case 1:
         return static_cast<slot_t>(*at);
     default:
-        ASSERT(false, "Unsupported compact element size");
+        GUARD(
+            false,
+            std::format(
+                "reading a compact element of {} bytes, which is no numeric width", elementSize_));
         return NullSlot;
     }
 }
@@ -697,7 +708,10 @@ void Array::setSlotSlow(uint64_t flatIndex, slot_t value, const type::ArrayType 
                                          : (value & 0xFF));
         break;
     default:
-        ASSERT(false, "Unsupported compact element size");
+        GUARD(
+            false,
+            std::format(
+                "storing a compact element of {} bytes, which is no numeric width", elementSize_));
         break;
     }
 }
