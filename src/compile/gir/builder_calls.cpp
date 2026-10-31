@@ -208,7 +208,7 @@ node_handle_t Builder::createFuncDataNode(
             setNodeMacro(node, true);
         }
     };
-    const bool hasClosure = !graph->draft().closureNodes().empty();
+    const bool hasClosure = !graph->view().closureNodes().empty();
     const bool valueMade  = valueUsedGraphs_.contains(graph.get());
 
     if (allowParameterization && (graph->parameterized() || !hasClosure || !valueMade)) {
@@ -218,12 +218,12 @@ node_handle_t Builder::createFuncDataNode(
         // the link step (addCaptureSite, linkCaptureSites).
         if (!graph->parameterized()) {
             const std::vector<draft_node_ref_t> closureNodes(
-                graph->draft().closureNodes().begin(),
-                graph->draft().closureNodes().end());
+                graph->view().closureNodes().begin(),
+                graph->view().closureNodes().end());
             for (draft_node_ref_t closureId : closureNodes) {
-                graph->draft().removeNormPort(closureId);
-                graph->draft().appendWithPort(closureId);
-                graph->draft().removeClosureNode(closureId);
+                graph->edit().removeNormPort(closureId);
+                graph->edit().appendWithPort(closureId);
+                graph->edit().removeClosureNode(closureId);
             }
             graph->setParameterized(true);
         }
@@ -250,11 +250,11 @@ node_handle_t Builder::createFuncDataNode(
     const auto slotIndex = currGraph_->addStaticSlot(
         camel::core::rtdata::toSlot<StaticFunction *>(staticFunc),
         graph->funcType());
-    auto dataNode = currGraph_->draft().ref(currGraph_->draft().addDataNode(
+    const auto dataRef = currGraph_->edit().addDataNode(
         graph->funcType(),
         slotIndex,
-        static_cast<uint8_t>(runtime::kGCNodeFlagConstant)));
-    markMacroNode(dataNode);
+        static_cast<uint8_t>(runtime::kGCNodeFlagConstant));
+    auto dataNode = currGraph_->view().ref(dataRef);
     node_handle_t resultNode = dataNode;
     if (hasClosure) {
         // The closure: the captured values, as the current graph sees them, in the order of
@@ -587,17 +587,17 @@ node_handle_t Builder::partialApplicationOf(
             *with << nameNode(name);
         }
         size_t index = 0;
-        for (draft_node_ref_t port : graph->draft().withPorts()) {
+        for (draft_node_ref_t port : graph->view().withPorts()) {
             const std::string name = "$with" + std::to_string(index++);
-            nodeScope_->insert(name, graph->draft().ref(port));
+            nodeScope_->insert(name, graph->view().ref(port));
             *with << nameNode(name);
         }
         GCT::node_ptr_t call = make(tree_->makeLink(calleeType->normTypesCount()));
         *call << with;
         index = 0;
-        for (draft_node_ref_t port : graph->draft().normPorts()) {
+        for (draft_node_ref_t port : graph->view().normPorts()) {
             const std::string name = "$norm" + std::to_string(index++);
-            nodeScope_->insert(name, graph->draft().ref(port));
+            nodeScope_->insert(name, graph->view().ref(port));
             *call << nameNode(name);
         }
         // The call is the value of the function, so it runs whenever the function is called.
@@ -789,8 +789,8 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
     if (isMacroGraph(target)) {
         // A function value of a macro function stays a macro through the forwarder: a call
         // through the value is still one std::macro may evaluate ahead of time.
-        graph->draft().setFlags(static_cast<uint8_t>(
-            graph->draft().flags() | camel::runtime::kGraphFlagMacro));
+        graph->edit().setFlags(static_cast<uint8_t>(
+            graph->view().flags() | camel::runtime::kGraphFlagMacro));
     }
     try {
         auto sourceContext = context_ ? context_->sourceContext() : nullptr;
@@ -807,11 +807,11 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
         if (isMacroGraph(target)) {
             setNodeMacro(call, true);
         }
-        for (draft_node_ref_t port : graph->draft().withPorts()) {
-            linkNodes(LinkType::With, graph->draft().ref(port), call);
+        for (draft_node_ref_t port : graph->view().withPorts()) {
+            linkNodes(LinkType::With, graph->view().ref(port), call);
         }
-        for (draft_node_ref_t port : graph->draft().normPorts()) {
-            linkNodes(LinkType::Norm, graph->draft().ref(port), call);
+        for (draft_node_ref_t port : graph->view().normPorts()) {
+            linkNodes(LinkType::Norm, graph->view().ref(port), call);
         }
         addCaptureSite(call, target);
         bindGraphScopedFuncNodeDebug(sourceContext, targetOrigin, target, call);
