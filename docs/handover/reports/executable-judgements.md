@@ -36,3 +36,5 @@
 - **一个缺口落在 270 个程序上时，先问这 270 个是不是都在等同一个类型**；是的话，**派工单位是类型，不是程序**（`tensor:ones/zeros/load_npy/reshape` = 369 个程序，`Tensor` 在 `src/passes/trans/cpp` 里出现 0 次——一件活的 369 张脸）。
 - **随机值能不能跨桥，先问桥带不带种子**：不带种子的桥，翻过去也复现不了。`rand:uniform_array`（23）+`rand:normal_array`（3）的拒绝原先点名 `Key`——而 key 可以在 C++ 侧算（`rt::randomStream` 用的是同一套 philox），真正拦路的是它们造出来的**带形状的数组**；换桶 26、真翻译 0，说的是同一件 tensor 缺口。
 - **分不清的两类，先数清各有多少个**；数目本身就是给决策者的材料（③ 只有 2 个：`tiles/matmul_edges`、`tiles/max_special` 的 `tensor:reshape`——决策要看的正是这两条）。
+||||||| a43e4f62d
+- **随机值能不能跨桥，先问桥带不带种子**：不带种子的桥，翻过去也复现不了。`rand:uniform_array`（23）+`rand:normal_array`（3）的拒绝原先点名 `Key`——而 key 可以在 C++ 侧算（`rt::randomStream` 用的是同一套 philox），真正拦路的是它们造出来的**带形状的数组**；换桶 26、真翻译 0，说的是同一件 tensor 缺口。
