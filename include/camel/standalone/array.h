@@ -207,7 +207,7 @@ template <typename T> class Array {
 
     /// States the shape the builder read from the type (`reshape`): `rank` extents, when they
     /// multiply to the elements this value holds.
-    void shapeOf(const std::size_t *shape, std::size_t rank) {
+    void setShape(const std::size_t *shape, std::size_t rank) {
         if (rep_ == nullptr || rank == 0 || rank > kMaxRank) {
             return;
         }
@@ -321,6 +321,23 @@ template <typename T> T at(const Array<T> &xs, int64_t index, const Site &site) 
         fault(site, {std::to_string(index), "an array", std::to_string(xs.size())});
     }
     return xs[static_cast<std::size_t>(index)];
+}
+
+/// `shape(xs)` (:array/shape, :tensor/shape): the value's dimensions, one `int` per dimension, as
+/// the interpreter's `int[]` -- `[3, 2]` for a rank-2 value, `[4]` for one of a single dimension.
+/// It is a value, not a view: the array copies its extents into storage of its own, so a write to
+/// the answer cannot reach the value it describes.
+template <typename T> Array<int64_t> shapeOf(const Array<T> &xs) {
+    Array<int64_t> out;
+    if (xs.rank() <= 1) {
+        out.push(static_cast<int64_t>(xs.size()));
+        return out;
+    }
+    out.reserve(xs.rank());
+    for (std::size_t i = 0; i < xs.rank(); ++i) {
+        out.push(static_cast<int64_t>(xs.extent(i)));
+    }
+    return out;
 }
 
 /// `xs[i]` on a value of several dimensions: the i-th row -- one dimension less than the value and
@@ -636,7 +653,7 @@ Array<T> reshape(const Array<T> &xs, std::initializer_list<int64_t> shape, int64
         }
         extents[rank++] = static_cast<std::size_t>(extent);
     }
-    out.shapeOf(extents, rank);
+    out.setShape(extents, rank);
     return out;
 }
 
