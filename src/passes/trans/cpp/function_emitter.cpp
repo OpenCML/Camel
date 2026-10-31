@@ -34,6 +34,22 @@ bool isAnonymousGraphName(const std::string &name) {
 
 std::string typeName(const Type *type) { return type ? type->toString() : "an unknown type"; }
 
+/// The text of a string constant of the program (a DATA node), or nothing when the node is not one:
+/// the writer reads it where a rule cannot, as `fail`'s kind and a field name read here.
+std::optional<std::string> stringConstantOf(const GCGraph *graph, gc_node_ref_t ref) {
+    const auto *node = graph->node(ref);
+    if (node == nullptr || node->kind != GCNodeKind::Data || node->dataType() == nullptr ||
+        node->dataType()->code() != camel::core::type::TypeCode::String) {
+        return std::nullopt;
+    }
+    if (const auto *text =
+            camel::core::rtdata::fromSlot<::String *>(graph->staticArea()->get<slot_t>(-node->dataIndex));
+        text != nullptr) {
+        return text->toString();
+    }
+    return std::nullopt;
+}
+
 /// The value a graph gives: its output node, seen through the GATEs that only order it.
 gc_node_ref_t resultOf(const GCGraph *graph) {
     gc_node_ref_t ref = graph->outputNodeRef();
@@ -1001,6 +1017,53 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
                 "{} reads the block counters of the Camel runtime, and a program std::cpp writes has "
                 "no runtime block space of its own: the counters are not available on this target",
                 describeFunction(g)));
+    }
+    // `s[k]` with a struct on the left: the field the name denotes (src/builtin/operators/ops.cpp,
+    // reachable through a declaration of the built-in `:op/idx_str`, which is what the interpreter
+    // reads a field through). A record is a C++ aggregate -- there is no field table at run time --
+    // so the name has to be one the writer reads here: a field the struct has is that member, and a
+    // name it does not have is the interpreter's own report, FieldNotFound, with the name in it.
+    if (uri == ":op/idx_str" && norm.size() == 2 && firstNormType != nullptr &&
+        firstNormType->code() == camel::core::type::TypeCode::Struct &&
+        firstNormType != camel::core::type::errorType()) {
+        const auto *record = static_cast<const camel::core::type::StructType *>(firstNormType);
+        const auto key     = stringConstantOf(g, normInputs[1]);
+        if (!key) {
+            refuse(
+                g,
+                ref,
+                std::format(
+                    "{} indexes a struct by a name the program computes, and a record is a C++ "
+                    "aggregate with no field table to look that name up in",
+                    describeFunction(g)));
+        }
+        for (size_t i = 0; i < record->size(); ++i) {
+            if (record->fieldName(i) != *key) {
+                continue;
+            }
+            bind(
+                frame,
+                ref,
+                std::format(
+                    "{}.{}", norm[0].text, program_.values.fieldName(firstNormType, i)),
+                true,
+                out,
+                "field");
+            return;
+        }
+        bind(
+            frame,
+            ref,
+            std::format(
+                "rt::fail({}, {})",
+                program_.sites.siteFor(
+                    g, ref, RuntimeDiag::FieldNotFound,
+                    std::vector<std::string>{SiteTable::valueMark(0)}),
+                cppStringLiteral(*key)),
+            false,
+            out,
+            "field");
+        return;
     }
     // `tensor:ones` and `tensor:zeros` are rules of the table now (operator_rules.cpp); a tensor
     // builder the table has no rule for is refused below like any other operator, on the type of

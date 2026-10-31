@@ -139,6 +139,28 @@ OperatorRule withArgument(const char *name) {
     };
 }
 
+/// The element type of an array type, or null when `type` is not one.
+const Type *arrayElementOf(const Type *type) {
+    const ArrayType *array = asArrayType(type);
+    return array != nullptr ? array->elemType() : nullptr;
+}
+
+/// The C++ element type an empty literal (`[]`, of type `void[]`) takes from the position it fills,
+/// or nothing when the operand is not one: an empty literal has no element type of its own, so the
+/// position's -- `position` is the element type that position gives -- is the one it is written
+/// with. `rt::Array<void>` is not an array any operator takes, and C++ cannot convert one.
+std::string emptyLiteralElement(OperatorCall &c, const Type *position) {
+    const Type *element = arrayElementOf(c.normType(0));
+    if (element == nullptr || element->code() != TypeCode::Void) {
+        return {};
+    }
+    if (position == nullptr || position->code() == TypeCode::Void) {
+        return {};
+    }
+    const std::string written = c.cppType(position);
+    return written == "void" ? std::string() : written;
+}
+
 /// `x.name()`: a part of a tagged value (opt.h).
 OperatorRule method(const char *name) {
     return {
@@ -997,17 +1019,57 @@ Rules buildRules() {
         };
     }
     r[":struct/len_arr"]      = runtimeFunction("length");
-    r[":struct/concat_arr"]   = runtimeFunction("concat");
-    r[":struct/append_arr"]   = withArgument("append");
+    r[":struct/concat_arr"]   = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const std::string empty = emptyLiteralElement(c, arrayElementOf(c.resultType()));
+            if (!empty.empty()) {
+                return std::format("rt::concat(rt::Array<{}>{{}}, {})", empty, c.norm(1).text);
+            }
+            return std::format("rt::concat({}, {})", c.norm(0).text, c.norm(1).text);
+        },
+        false,
+    };
+    // An empty literal (`[]`) is of type `void[]`: it has no element type of its own, and the one
+    // the position gives -- the array the result is, the element the operator names -- is the type
+    // it is written with. Written from its own type, `rt::Array<void>` is not an array these
+    // operators take, and the C++ compiler rejected the call.
+    r[":struct/append_arr"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const std::string empty = emptyLiteralElement(c, arrayElementOf(c.resultType()));
+            if (!empty.empty()) {
+                return std::format("rt::append(rt::Array<{}>{{}}, {})", empty, c.with(0).text);
+            }
+            return std::format("rt::append({}, {})", c.norm(0).text, c.with(0).text);
+        },
+        false,
+    };
     // The loop-state form (Builder::markLoopStateInPlace): writing in place is an optimisation of
     // `append`, and this back end has only the copying form, which gives the same values.
-    r[":struct/append_arr_owned"] = withArgument("append");
+    r[":struct/append_arr_owned"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const std::string empty = emptyLiteralElement(c, arrayElementOf(c.resultType()));
+            if (!empty.empty()) {
+                return std::format("rt::append(rt::Array<{}>{{}}, {})", empty, c.with(0).text);
+            }
+            return std::format("rt::append({}, {})", c.norm(0).text, c.with(0).text);
+        },
+        false,
+    };
     // The private copy one state of a loop takes (Builder::markLoopStateInPlace, per state),
     // which the same rewrite puts before the loop: an Array here is a value, and `append` copies
     // a block that another holder shares, so the copy itself has nothing to do (rt::append takes
     // the array by value).
     r[":struct/copy_arr"] = identity();
-    r[":struct/contains_arr"] = withArgument("contains");
+    r[":struct/contains_arr"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const std::string empty = emptyLiteralElement(c, c.withType(0));
+            if (!empty.empty()) {
+                return std::format("rt::contains(rt::Array<{}>{{}}, {})", empty, c.with(0).text);
+            }
+            return std::format("rt::contains({}, {})", c.norm(0).text, c.with(0).text);
+        },
+        false,
+    };
     r[":struct/zip"]          = {
         [](OperatorCall &c) -> std::optional<std::string> {
             std::string args;
