@@ -10,6 +10,7 @@
 #include "camel/core/mm/alloc/growable.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/runtime/graph_txn.h"
 
 #include <mutex>
 #include <optional>
@@ -175,7 +176,9 @@ bool isWrittenInPlace(const GraphDraft &draft, gc_node_ref_t id) {
     return false;
 }
 
-WrittenSlots::WrittenSlots(const GraphDraft &draft) : written_(draft.nodeSlotCount(), false) {
+WrittenSlots::WrittenSlots(const GraphTransaction &transaction)
+    : written_(transaction.graph().nodeSlotCount(), false) {
+    const auto &draft = transaction.graph();
     // GATEs share the slot of the value they forward: union them, mark the slots written
     // through any argument, and read the answer per node.
     std::vector<gc_node_ref_t> parent(written_.size());

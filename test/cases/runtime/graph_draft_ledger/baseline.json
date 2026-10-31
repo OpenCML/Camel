@@ -2,7 +2,7 @@
   "comment": "The baseline of the direct-connection ledger (graph-store step 2 b): the numbers below may only fall, and the last step is all of them at zero. `sites` records where each number comes from, as `file#symbol` (a line number moves with every edit above it, a symbol does not); it is diagnostics for a red and never decides the verdict. Record a new row after a commit with check.mjs --record.",
   "numbers": {
     "files": 36,
-    "references": 360,
+    "references": 356,
     "constructions": 1,
     "decode": 4
   },
@@ -58,9 +58,9 @@
       "include/camel/runtime/draft_clone.h#cloneRuntimeGraphIntoDraft": 1,
       "include/camel/runtime/draft_inline.h#-": 1,
       "include/camel/runtime/draft_inline.h#devirtualizeStaticCallInDraft": 1,
-      "include/camel/runtime/draft_session.h#-": 7,
+      "include/camel/runtime/draft_session.h#-": 5,
       "include/camel/runtime/draft_types.h#-": 1,
-      "include/camel/runtime/draft_writes.h#operatorOverloadType": 2,
+      "include/camel/runtime/draft_writes.h#operatorOverloadType": 1,
       "include/camel/runtime/graph.h#makeFillPayload": 1,
       "include/camel/runtime/graph.h#nodeIsFreelySchedulable": 3,
       "include/camel/runtime/loop.h#loopOf": 4,
@@ -295,7 +295,6 @@
       "src/runtime/draft_types.cpp#reinferDraftTypes": 1,
       "src/runtime/draft_types.cpp#staticSlotOf": 1,
       "src/runtime/draft_types.cpp#typeOf": 1,
-      "src/runtime/draft_writes.cpp#WrittenSlots": 1,
       "src/runtime/draft_writes.cpp#isWrittenArgument": 1,
       "src/runtime/draft_writes.cpp#isWrittenInPlace": 1,
       "src/runtime/graph.cpp#GCGraph": 1,

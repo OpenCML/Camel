@@ -1131,3 +1131,46 @@ HANDLE_PROBE refused: InvalidArgument
 **一条判据（协调者给的一句）**：**"前向声明是名字的记忆；删掉它之前先问这个头文件里还有谁记得这个名字。"**
 
 **逐字节证明**：同一套 3264 个 `.cml` × `std::jgir`，与 base1 比 stdout / stderr / 退出码 **3264 / 3264 全同**。
+
+## 52. 头文件那 31 处里备好的 3 处（本笔）
+
+| 处 | 换成 | 代价 |
+|---|---|---|
+| `draft_writes.h` 的 `WrittenSlots` 构造 | 事务：`written_(transaction.graph().nodeSlotCount(), false)` | 两个调用者都有事务——`modules/graph/read.cpp` 的 `copy`（`unique_ptr<GraphTransaction>`）与 `src/passes/opt/generic/algebra.cpp` 的 `transaction` |
+| `draft_session.h` 的 `debugDraftRootOpened` / `debugDraftRootClosed` | 事务：体首 `const GraphDraft &draft = transaction.graph();` | 唯一调用者是 `writings.cpp` 的 `EngineRootScope`，手上有 `transaction_`；**两处都在 `#ifndef NDEBUG` 里，Release 闸门看不见，这一笔另跑一次 Debug 闸门** |
+
+**四个数：36 / 356 / 1 / 4。**（`references` 360 → 356：`draft_session.h` −2、`draft_writes.h` −1、`draft_writes.cpp` 构造的定义 −1；`files` 仍 36。）
+
+**两套闸门（本笔）**：Release `8103 / 8098 / 1 / 2 / 2`，Debug `8103 / 8097 / 1 / 3 / 2`；两套同一红 `gpu_preference.named_device`（本机 8 张卡被别的进程占着）。Debug 那一跑抓到两处 Release 同样会红的编译错（`WrittenSlots` 体里的 `draft`、`modules/graph/read.cpp` 的第二处 `WrittenSlots(node.draft())`），改完重跑。
+
+**逐字节证明**：3264 个 `.cml` × `std::jgir`，与 base1 比 stdout / stderr / 退出码 3264 / 3264 全同。
+
+## 53. b6 的真实天花板：**188 处**
+
+口径：`GraphDraft` 这个名字在"**不改名、只降引用**"下的下界；按站点（occurrence）算，`include/camel/runtime/graph_txn.h` 与 `src/runtime/graph_txn.cpp` 不进账（§0）。今日读数 **356**。
+
+| 档 | 处数 | 构成 |
+|---|---|---|
+| ① 今日已降（**不在**下面的 356 之内，是差额） | **13** | 369 → 356：`95de7ab86` −4、`5e95f465f` −2、`d417ae6fc` −3、本笔 −4 |
+| ② 能降、有代价 | **154** | 见下八行 |
+| ③ 降不掉 | **188** | 类外成员定义 **175**、`draft.h` 里类型自己的声明 **12**（类头、`decode` 工厂、构造、析构、拷贝删除 ×2、赋值删除 ×2、`const_cast<GraphDraft *>(this)`、`DraftNodeHeader::owner`、`WritingScope` ×2）、`graph.h` 的 `friend class GraphDraft;` **1** |
+| 另：注释 | 14 | 可改写，但按 §45 不计进度 |
+
+**188 + 154 + 14 = 356**，三档加注释正好是今日读数。
+
+**② 的逐条（154）**
+
+| 处数 | 是什么 | 代价 |
+|---|---|---|
+| 59 | 存储自己的读者（`draft_inline.cpp` 24、`draft.cpp` 11、`draft_clone.cpp` 11、`draft_types.cpp` 7、`draft_writes.cpp` 2、`draft_construct.cpp` 1、另 3 处头文件声明） | 调用者在类型自己体内，要换只能在调用处先 `GraphTransaction::borrow(*this)`——加一层，不是降层 |
+| 27 | 会话的门（`tryDraft` 返回 ×2、`draft(GraphId)`、`DraftRootsDebug::Entry::draft`、`noteDraftOpened/Closed`、`encode`、`commit`、`edit` 等） | 会话本来就是草稿的持有者；要换得先改"会话交给谁"这一问 |
+| 10 | `graph.cpp` 的读者定义与 debug 记录 | 同上，随 59 一起动 |
+| 6 | GIR 层（`builder_support.h` 1、`draft_graph_builder.cpp` 3、`draft_graph_builder.h` 2） | **冻结**：handle 那一问等作者裁定 |
+| 7 | tiles（`graph_values.h` 2、`graph_values.cpp` 2、`region_extract.cpp` 2、`region_outline.cpp` 1） | **卡在区域 id 那一问** |
+| 11 | tags（`tags.h` 6、`tags.cpp` 5） | §41 边界，本层不碰 |
+| 25 | 其它边界（`node_ref.h` 4、`loop.h` 4、`loop.cpp` 2、`graph_build.h` 4、`operator_instance` 2、`writings` 8、`test/writings` 1） | b3／§44 边界三／编码器形参／`kernelArgumentsOf` 仍阻塞／另一条车道 |
+| 9 | `draft.h` 剩的读者声明 6 + `draft_clone.h` 3 | 随 59 一起动 |
+
+**结论（一句）**：**按"不改名、只降引用"的口径，b6 的终点是 188 处，不是 0 处。** 要 0 处只剩"改名或删类型"那一条路，而那条路是另一问——`GraphDraft` 本体不是 find/replace 的对象（§44）。
+
+**一条判据（协调者给的一句）**：**"一层降不动的时候，正确答案是报出它的天花板和理由，不是继续报进度条。"**
