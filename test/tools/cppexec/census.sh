@@ -206,6 +206,63 @@ for op, n in boundary.most_common():
 print("  to fix (the target carries these values): %d" % sum(gap.values()))
 for op, n in gap.most_common():
     print("    %4d  %s" % (n, op))
+
+# The second judged class: a declared type the writer does not carry. The reason names the type, so
+# the split is by the type's family, judged by the same question. A `Device<...>` is a GPU buffer,
+# `Rule`, `Graph` and `Node<...>` are the compiler's own values, `PyObject` is the Python runtime's
+# and a module's state is a struct of tensors -- the target has no counterpart of any of them, so
+# the refusal is correct. `Bytes`, `Map<...>`, `Set<...>`, `Json`, a stream (`T..`) and a struct of
+# them are plain values a standalone program could carry: the writer has no spelling for them yet,
+# which is the writer's gap and not the target's boundary. A family that is in neither list prints
+# as unjudged rather than being guessed into a pile.
+def type_family(name):
+    if name.startswith("Bytes"):
+        return "Bytes", "gap"
+    if "Device<" in name or "Explicit" in name:
+        return "Device<...>", "boundary"
+    if name == "Node" or name.startswith("Node<"):
+        return "Node<...>", "boundary"
+    if ".." in name:
+        return "a stream (T..)", "gap"
+    if name.startswith("Map<"):
+        return "Map<...>", "gap"
+    if name.startswith("Set<"):
+        return "Set<...>", "gap"
+    if name.startswith("Json"):
+        return "Json", "gap"
+    if name.startswith("Box"):
+        return "a struct of data", "gap"
+    if name.startswith("Rule"):
+        return "Rule", "boundary"
+    if name.startswith("Graph"):
+        return "Graph", "boundary"
+    if name.startswith("PyObject"):
+        return "PyObject", "boundary"
+    if "OptimizerState" in name or name.startswith("State"):
+        return "a module's state", "boundary"
+    return name, "unjudged"
+
+
+judged2 = "a declared type the writer does not carry"
+boundary2, gap2, unjudged2 = collections.Counter(), collections.Counter(), collections.Counter()
+for tag, program, message in rows:
+    if classify(message) != judged2:
+        continue
+    found = re.search(r"type '([^']*)';", message)
+    family, pile = type_family(found.group(1) if found else "?")
+    {"boundary": boundary2, "gap": gap2, "unjudged": unjudged2}[pile][family] += 1
+print()
+print("==== %d  %s -- judged ====" % (counts[judged2], judged2))
+print("  the target does not have it: %d" % sum(boundary2.values()))
+for family, n in boundary2.most_common():
+    print("    %4d  %s" % (n, family))
+print("  to fix (the target carries these values): %d" % sum(gap2.values()))
+for family, n in gap2.most_common():
+    print("    %4d  %s" % (n, family))
+if unjudged2:
+    print("  unjudged: %d" % sum(unjudged2.values()))
+    for family, n in unjudged2.most_common():
+        print("    %4d  %s" % (n, family))
 PY
 echo "==== crashes ===="
 grep -c '^CRASH|' "$out/refused.txt" || true
