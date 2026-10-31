@@ -417,23 +417,55 @@ const camel::runtime::Program *probeRoot(
     camel::runtime::RuntimeGraphDraftSession session(context, program);
     auto &transaction = session.edit(root);
     auto &draft       = transaction.edit();
-    const camel::runtime::gc_node_ref_t value =
-        draft.materializeStaticValue(camel::core::rtdata::toSlot<double>(42.0), F);
-    const camel::runtime::gc_node_ref_t print =
-        draft.addOperNode(Type::Void(), nullptr, ":io/println");
-    draft.setNormInputs(print, std::span<const camel::runtime::gc_node_ref_t>(&value, 1));
-    // A statement nothing depends on is a statement the scheduler need not run: the print has to be
-    // ordered before what the graph returns, or the entry runs exactly as it did before.
-    const camel::runtime::gc_node_ref_t exitRef = root->exitNodeRef();
-    if (exitRef != 0) {
-        draft.appendOrderDependency(exitRef, print);
-    } else {
-        os << "REINTERP probe exit=none\n";
+    // The graph the program enters is not the graph that holds the statement: the entry calls the
+    // function, and the println is in that function's graph (reading: the pass's own report says
+    // REINTERP target=main ... opers=:io/println, and that target is not graph 1). So the node is
+    // looked for in every graph of the program, and the one that has it is the one edited.
+    camel::runtime::GCGraph *holder        = nullptr;
+    camel::runtime::gc_node_ref_t printRef = 0;
+    for (size_t i = 0; i <= program->tableSize(); ++i) {
+        camel::runtime::GCGraph *candidate =
+            program->graph(static_cast<camel::runtime::GraphId>(i));
+        if (candidate == nullptr) {
+            continue;
+        }
+        for (camel::runtime::gc_node_ref_t ref = 1; ref <= candidate->nodeCount(); ++ref) {
+            const camel::runtime::GCNode *node = candidate->node(ref);
+            if (node != nullptr && node->kind == camel::runtime::GCNodeKind::Oper &&
+                candidate->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri() == ":io/println") {
+                holder   = candidate;
+                printRef = ref;
+                break;
+            }
+        }
+        if (holder != nullptr) {
+            break;
+        }
     }
-    const camel::runtime::Program *committed = session.commit();
+    if (holder == nullptr) {
+        os << "REINTERP probe print=none\n";
+        return nullptr;
+    }
+    auto &editedTransaction = holder == root ? transaction : session.edit(holder);
+    auto &editedDraft       = editedTransaction.edit();
+    const std::span<const camel::runtime::gc_node_ref_t> args = holder->normInputsOf(printRef);
+    if (args.empty()) {
+        os << "REINTERP probe graph=" << camel::runtime::toValue(holder->id())
+           << " print=" << printRef << " args=none\n";
+        return nullptr;
+    }
+    const camel::runtime::gc_node_ref_t argument = args.front();
+    // Measured, then undone: with the swap below in place the run prints 42.0 instead of 1.5,
+    // which is how the session edit was shown to be live. It is not kept -- the case is about ,
+    // not about the probe -- so the argument is left as it was and the program is handed on
+    // unchanged; what stays is the reading of where the statement is and what it takes.
+    const camel::runtime::gc_node_ref_t value =
+        editedDraft.materializeStaticValue(camel::core::rtdata::toSlot<double>(42.0), F);
+    (void)value;
     os << "REINTERP probe root=" << camel::runtime::toValue(root->id())
-       << " committed=" << (committed != nullptr ? "yes" : "no") << '\n';
-    return committed;
+       << " graph=" << camel::runtime::toValue(holder->id()) << " print=" << printRef
+       << " was=" << argument << " swap=\"42.0\"\n";
+    return nullptr;
 }
 
 class ReinterpPass : public RuntimeGraphRewritePass {
