@@ -2160,12 +2160,14 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     // Create an ExitLoad node to represent the exit statement.
     const AST::ExitType astExit = ast->loadAs<AST::ExitStmtLoad>()->exitType();
     if (astExit == AST::ExitType::Yield) {
-        // A `yield` that reaches here is one the generator machine did not claim: the body it
-        // stands in belongs to a function whose head does not write a stream type. The machine
-        // itself is built (docs/design/io-concurrency-streams/plan.cn.md slice E, visitGeneratorBody
-        // below); what is wrong is the head, so the report names the head. Reaching here must still
-        // stop the build: a `yield` run as a `return` would hand out one value and hide the rest.
-        diags_->of(SemanticDiag::YieldRequiresStreamHead).at(ast->load()->tokenRange()).commit();
+        // A `yield` the generator machine did not claim: it stands in a body the machine builds
+        // (docs/design/io-concurrency-streams/plan.cn.md slice E, visitGeneratorBody below), but in
+        // a shape it narrows away -- a loop that carries two values across the `yield`, each
+        // depending on the round before it, is the shape the narrowing names today. The head is
+        // fine here (a head that writes no stream type is refused by name of its own before this),
+        // so this one is the named gap and stays one: running the `yield` as a `return` would hand
+        // out one value and hide the rest.
+        diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("generators");
         throw BuildAbortException();
     }
     node_ptr_t exitNode = tree_->makeExit(ExitType::Return);
