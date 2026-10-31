@@ -383,7 +383,39 @@ function 'main' uses the operator ':op/slice_sub' on values of type 'float[2, 3]
 字面量 `float[3, 2] = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]` 生成 `rt::Array<double>{1.0, 2.0, 3.0}`、印
 `[1.0, 2.0, 3.0]`、exit 0，而 `std::fvm` 印三行——不是拒，是错。**这比拒绝更该先修。**
 
-## 七、十二条判据
+## 六之五、形状：先堵住印错，再让形状进来
+
+作者 05:30 裁了那一页：**A —— `rt::Array` 要带形状**（原生多维数组是核心类型，原则 5.4；后端表示不了
+核心类型就不算完成，所以 A 是终点、不是可选项；B 不选，翻译了但不等价比拒绝更坏）。**先上守卫。**
+
+**第一笔（守卫，`ee451e689`）**：多维字面量进 `std::cpp` 时**拒绝**，不再印错。措辞说"目标不具备"
+（`an array in std::cpp is a flat run of elements and carries no shape, so a value of several dimensions
+has no form there`），不说"还没实现"。同一个程序，改前改后两行原文：
+
+```
+改前  const rt::Array<double> array{1.0, 2.0, 3.0};   →  印 [1.0, 2.0, 3.0]，exit 0（fvm 印三行）
+改后  error[RuntimeDiag::TranslationRefused]: ... uses a value of type 'float[3, 2]' ... no form there
+      --> test/cases/trans/cpp/refuse_literal_rank.cml:14:26                     exit 1
+```
+
+**第二笔（A 的第一步，形状 + 嵌套打印）**：`rt::Array` 的块里现在有 `rank` 与 `extents`（形状跟元素
+同一个块，复制一份值就是复制两份），`appendText` 按行嵌套，`len` 答第一维；写出器用 `numel()` 取**全部**
+元素并把形状写进常量（`const rt::Array<double> array{{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, {3, 2}};`）。
+守卫随之删掉——它守的"印错"已经没有了。**两行逐字一致**：
+
+```
+std::fvm  [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]] / 3
+std::cpp  同上，run.py 比对逐字节相同（agree_with_fvm 的 130 个程序里就有它）
+```
+
+**账本**：被拒 1002 → 1000（守卫那笔 +2：新负例与 `let_shape`；形状这笔 −2：负例删了、`let_shape`
+真翻译并且印对了）；15 个核心算子程序仍记作**"等形状（A 进行中）"**，按 A 的队列往下销。队列：形状 ✅
+→ 下标 → 切片 → `reshape` → `shape` → `numel` → 逐元素运算。
+
+判据进页：**后端表示不了核心类型，就不是完成——所以"等形状"不是不做，是排队；队列的第一项永远是先堵住
+印错。**
+
+## 七、十三条判据
 
 > **裁定也可能基于过时的读数：拿到裁定先去 develop 上复现一次；不复现，就先把前提写下来，再谈要不要改。**
 
@@ -408,3 +440,7 @@ function 'main' uses the operator ':op/slice_sub' on values of type 'float[2, 3]
 > **分母错过的读数只能当趋势；要把趋势变成结论，先把尺子重写一遍并给出复现命令。**
 
 > **十五个程序挡在同一道门上，先问那道门是谁立的；门是设计的一部分时，翻译侧修不动它。**
+
+> **拒绝是可见的缺口，印错是隐形的缺口——普查只数得出前者，所以后者要先堵。**
+
+> **后端表示不了核心类型，就不是完成——所以"等形状"不是不做，是排队；队列的第一项永远是先堵住印错。**
