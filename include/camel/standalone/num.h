@@ -22,6 +22,7 @@
 #pragma once
 
 #include "camel/standalone/core.h"
+#include "camel/standalone/half.h"
 #include "camel/standalone/opt.h"
 #include "camel/standalone/str.h"
 #include "camel/utils/int_div.h"
@@ -162,6 +163,13 @@ To truncate(From value, const char *target, const Site &site) {
     return static_cast<To>(value);
 }
 
+/// A bf16 or an f16 truncated toward zero as the integer type To (`int(x)` of one): the value is
+/// the f32 it widens to, so the rule and the report are the f32 one (`:op/bftoi`, `:op/f6toi`).
+template <std::signed_integral To, typename Format>
+To truncate(Half<Format> value, const char *target, const Site &site) {
+    return truncate<To>(value.toFloat(), target, site);
+}
+
 /// The integer written in `text`, which must be that integer and nothing else (`int(s)`). The
 /// two refusals are the two causes (camel/core/numeric_convert.h, the same rule): `invalid`
 /// reports a text that is not a number, `outOfRange` a number the type cannot hold (the range is
@@ -192,6 +200,23 @@ To floatFromText(std::string_view text, const Site &invalid, const Site &outOfRa
     default:
         fault(invalid, {std::string(text)});
     }
+}
+
+/// The number written in `text` as a bf16 or an f16 (`bf16(s)`): the whole text must be one
+/// number, and one beyond the range of the element type is ConversionOutOfRange. The text is
+/// read first as f32 (`floatFromText` above, the runtime's own path in
+/// camel/core/numeric_convert_half.h), which is where "not a number" and "beyond f32" are
+/// refused, and then rounded once into the element type; a value whose nearest element is an
+/// infinity is the overflow of this type. The template argument is the value type (`rt::BF16`),
+/// as the rule of operator_rules.cpp writes it; the format it is made of is `Half::FormatOf`.
+template <typename Half> Half halfFromText(
+    std::string_view text, const Site &invalid, const Site &floatOutOfRange,
+    const Site &halfOutOfRange) {
+    const float asFloat = floatFromText<float>(text, invalid, floatOutOfRange);
+    if (halfOverflows<typename Half::FormatOf>(asFloat)) [[unlikely]] {
+        fault(halfOutOfRange, {std::string(text)});
+    }
+    return Half(asFloat);
 }
 
 // ---- Text to number, as a `T!` (:op/parse_int, :op/parse_float; tagged.cpp parseNumber) ----

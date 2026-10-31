@@ -1617,8 +1617,14 @@ void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref) {
     } else if (target != nullptr && (target->isNullable() || target->isFallible())) {
         text = std::format("{}({})", to, value.text);
     } else if (
-        fromType != nullptr && fromType->code() <= TypeCode::Bool &&
-        toType->code() <= TypeCode::Bool) {
+        fromType != nullptr &&
+        (camel::core::type::isNumericScalar(fromType->code()) ||
+         fromType->code() == TypeCode::Bool) &&
+        (camel::core::type::isNumericScalar(toType->code()) ||
+         toType->code() == TypeCode::Bool)) {
+        // A conversion between numbers is the C++ conversion of their values. The two
+        // reduced-precision types are among them: a static_cast into one of them is the store
+        // rounding, and one out of one is exact (include/camel/standalone/half.h).
         text = std::format("static_cast<{}>({})", to, value.text);
     } else {
         refuse(

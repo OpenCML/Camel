@@ -165,6 +165,7 @@ int main(int argc, char **argv) { return camel::standalone::run(argc, argv, fib:
 | `runtime.h` | 总入口，包含下面所有 |
 | `core.h` | `Site`、`Fault`、故障的报告与退出、递归计数、标准输出（二进制模式、整块缓冲、故障与退出前刷新）、`run` |
 | `num.h` | 回绕的加减乘与取负、带位置的除与取余、乘方、数值转换（越界是故障）、数与文字 |
+| `half.h` | `rt::BF16`、`rt::F16`：十六位存储、按就近取偶的存回舍入、该类型自己的最短文本 |
 | `str.h` | `Str`：不可变、带计数的字节串；拼接（计数为 1 时原地追加）、比较、下标、长度、包含 |
 | `format.h` | 值的文字（`println`、`string(x)`、`{}`）；`format` 的占位符与格式说明（fmt 的子集：填充、对齐、宽度、精度、`d`/`f`/`e`/`g`/`x`/`b`） |
 | `array.h`、`opt.h`、`fn.h`、`cell.h`、`map.h` | 阶段 3 起逐个加入（第 4 节的表） |
@@ -178,6 +179,7 @@ int main(int argc, char **argv) { return camel::standalone::run(argc, argv, fib:
 |---|---|---|
 | `int`、`i32` | `int64_t`、`int32_t` | 加减乘、取负、`+=` 等用 `rt::add` 一类的内联函数：经无符号运算回绕，编译出来与 `+` 相同；比较直接写 `<` 等 |
 | `float`、`f32` | `double`、`float` | 直接写 `+ - *`；`/` 除以零是故障（与运行时一致【读码 `src/builtin/operators/ops.cpp` 的 `__builtin__div__`】），所以写成 `rt::div(a, b, site)` |
+| `bf16`、`f16` | `rt::BF16`、`rt::F16` | 十六位存储；一次舍入就是存回时按就近取偶的那次（`include/camel/standalone/half.h`，与 `camel/core/rtdata/half.h` 同一条规则）。文字是该类型自己的最短文本（`halfText`，7.7），`println`、`string(x)` 与 `{}` 用的是它；`bf16(x)`、`f16(x)` 与 `as` 是 `static_cast`（一次舍入），`bf16(s)`、`f16(s)` 是 `rt::halfFromText`，其报告与解释器逐字相同；常量写成 `fromBits`，NaN 的载荷也不丢 |
 | `bool` | `bool` | `&`、`\|` 两边都已求值，写 `&&`、`\|\|` 不改变语义；`&&`、`\|\|` 运算符在图上本来就是分支（4.2） |
 | `c64`、`c128` | `std::complex<float>`、`std::complex<double>` | 两个部分就是 `std::complex` 的两个 `float`/`double`：`+`、`-`、`*`、一元 `-`、`==`、`!=` 直接写，`/` 是 `rt::complexDiv`（复数的零是故障），整数指数的 `^` 是 `rt::pow`（反复平方，与运行时同一个算法）；`abs`、`re`、`im`、`conj`、`exp` 是 `rt::complexAbs`、`rt::complexReal`、`rt::complexImag`、`std::conj`、`std::exp`；文字是 `camel::utils::complexText`，格式说明按两个部分写（`camel/standalone/format.h`，与解释器同一条规则，NaN 的部分不写符号）；`main` 的这类参数从 `--arg` 读语言里的复数文字（`rt::EntryKind::C64` / `C128`），实数文本是实部、虚部为 0 的复数（`1.5` 是 `1.5+0i`） |\r\n| `string` | `rt::Str` | 一个指针大小的句柄，指向 `{计数, 长度, 容量, 字节}`；空串是空指针。字面量是静态存储的“永生”对象（计数从一个不会减到零的值开始），不分配 |
 | `T[]` | `rt::Array<T>` | 句柄，指向 `{计数, 长度, 容量, T 元素}`；元素是 `T` 的 C++ 表示，`int[]` 是连续的 `int64_t`。计数为 1 时“返回新值”的算子在原处改（5.2） |

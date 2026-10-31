@@ -1,0 +1,61 @@
+/**
+ * `bf16` and `f16` are values of the program std::cpp writes: sixteen bits of storage holding the
+ * pattern of the element type, a literal that is the nearest value of its written type rounded
+ * once, and the type's own text.
+ *
+ *   exact          bf16    f16     why
+ *   0.1            0.1     -       the nearest bf16 of 0.1 is 0x3DCD (0.10009765625), and its text
+ *                                 is `0.1`: the shortest that reads back as that bf16, not the
+ *                                 `0.100097656` of the f32 it widens to (design principles 7.7)
+ *   0.1            -       0.1     the nearest f16 is 0x2E66 (0.0999755859375), and it prints `0.1`
+ *                                 too: the two types round the same f32 in opposite directions and
+ *                                 each still writes one digit, which is what separates the text of
+ *                                 the type from the text of the f32 it widens to
+ *   65504.0        -       65500.0 the largest finite f16; `65500` reads back as it, because the
+ *                                 spacing there is 32 and the shorter text is the one written
+ *   -0.0           -0.0    -0.0    a negative literal keeps its sign bit, and its text is `-0.0`
+ *
+ * This case is also the one that used to be `refuse_narrow_float`: bf16 and f16 were refused as an
+ * element type this back end did not have, and now they are types it writes. It pins storage and
+ * printing here; arithmetic, comparison and conversion join it as their rules land.
+ *
+ * What it adds to the interpreter's own cases (`test/cases/modules/stdlib/reduced_*.cml`) is the
+ * back end: the C++ file built from it must print these lines byte for byte as std::fvm does
+ * (test/tools/cppexec/expect.txt).
+ */
+func main(): int sync {
+    // A literal is the nearest value of its written type.
+    let a: bf16 = 0.1
+    let b: bf16 = 1.5
+    let h: f16 = 0.1
+    let g: f16 = 65504.0
+    println(a, b, bf16(0.0), bf16(-0.0))
+    println(h, g, f16(0.0), f16(-0.0))
+
+    // The text of a value is the type's own, wherever it is written: printing, `string(x)`, and a
+    // format without a specification.
+    println(string(a), string(h))
+    println<'{:}'>(a)
+    println<'{:}'>(h)
+    // Any other specification is the widened f32 (`{:10}` of a bf16 0.1 is `0.100097656`), and the
+    // empty one is the type's own text: the two are one line apart in the runtime as well.
+    println<'{:10}'>(a)
+    println<'{:.2f}'>(a)
+
+    // An array of them prints each element by its element type.
+    let xs: bf16[] = [a, b]
+    let halves: f16[] = [h, g]
+    println(xs, halves)
+
+    // A written conversion rounds once into the element type, and reading one as a wider number is
+    // exact: the f32 of a bf16 keeps every bit it had.
+    let wide: f32 = f32(a)
+    println(wide, bf16(wide / 2.0), int(b), string(a))
+
+    // A text is read as f32 and rounded once into the element type; an array of f32 converts each
+    // element the same way.
+    println(bf16('0.25'), f16('0.25'))
+    let tenths: f32[] = [0.1, 0.2]
+    println(bf16(tenths), f16(tenths))
+    return 0
+}

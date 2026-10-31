@@ -27,6 +27,16 @@
 
 namespace camel::core {
 
+/// Why a number is beyond what the type can hold (`target` is its name in the message): the same
+/// sentence as for the wider floats, with this type's range. std::cpp renders the same sentence
+/// into a translated program's report, so the two back ends print one text.
+template <typename Half> std::string halfRangeReason(const char *target) {
+    return std::format(
+        "the value is outside the range of {} ({})",
+        target,
+        camel::utils::halfRangeText(std::is_same_v<Half, camel::core::rtdata::BFloat16>));
+}
+
 /// A text read as a bf16 or f16 (`target` is the name in the message): the whole text must be one
 /// number, and one beyond the range of the element type is ConversionOutOfRange.
 template <typename Half> slot_t halfFromText(std::string_view text, const char *target) {
@@ -36,10 +46,7 @@ template <typename Half> slot_t halfFromText(std::string_view text, const char *
             error::RuntimeDiag::ConversionOutOfRange,
             "'" + std::string(text) + "'",
             target,
-            std::format(
-                "the value is outside the range of {} ({})",
-                target,
-                camel::utils::halfRangeText(std::is_same_v<Half, camel::core::rtdata::BFloat16>)));
+            halfRangeReason<Half>(target));
     }
     return camel::core::rtdata::halfFromFloat<Half>(asFloat);
 }
