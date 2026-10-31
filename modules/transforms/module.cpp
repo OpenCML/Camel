@@ -72,31 +72,45 @@ void printRuleUris(camel::core::context::Context &context, std::ostream &os) {
             // How many ports the right side takes, and how many nodes it has: whether a call can
             // stand where the operator stood is a question about the right side's own signature,
             // and a replacement that guessed it would be wrong at the first arity that differs.
-            const auto shapeOf = [](const camel::runtime::GCGraph *graph) {
+            struct Shape {
                 size_t ports = 0;
                 std::string kinds;
+                /// The type of the single value the graph takes: the packed tuple, when it has one.
+                std::string portType;
+                /// The norm inputs the graph's nodes consume between them: 0 means the operand is
+                /// not wired into this graph at all.
+                size_t inputs = 0;
+            };
+            const auto shapeOf = [](const camel::runtime::GCGraph *graph) {
+                Shape shape;
                 for (camel::runtime::gc_node_ref_t ref = 1; ref <= graph->nodeCount(); ++ref) {
                     const camel::runtime::GCNode *node = graph->node(ref);
                     if (node == nullptr) {
                         continue;
                     }
                     if (node->kind == camel::runtime::GCNodeKind::Port) {
-                        ++ports;
+                        ++shape.ports;
+                        if (shape.portType.empty() && node->dataType() != nullptr) {
+                            shape.portType = node->dataType()->toString();
+                        }
                     }
-                    if (!kinds.empty()) {
-                        kinds += ',';
+                    shape.inputs += static_cast<size_t>(node->withBegin - node->inBegin);
+                    if (!shape.kinds.empty()) {
+                        shape.kinds += ',';
                     }
-                    kinds += std::to_string(static_cast<int>(node->kind));
+                    shape.kinds += std::to_string(static_cast<int>(node->kind));
                 }
-                return std::pair<size_t, std::string>(ports, kinds);
+                return shape;
             };
-            const auto lhsShape = shapeOf(instance.lhs);
-            const auto rhsShape = shapeOf(instance.rhs);
-            const size_t ports  = rhsShape.first;
+            const Shape lhsShape = shapeOf(instance.lhs);
+            const Shape rhsShape = shapeOf(instance.rhs);
+            const size_t ports   = rhsShape.ports;
             os << "REINTERP uri " << uri << " -> rule " << head.rule
                << " -> rhs " << camel::runtime::toValue(instance.rhs->id()) << " ports=" << ports
-               << " nodes=" << instance.rhs->nodeCount() << " lhsPorts=" << lhsShape.first
-               << " lhsKinds=" << lhsShape.second << " rhsKinds=" << rhsShape.second
+               << " nodes=" << instance.rhs->nodeCount() << " lhsPorts=" << lhsShape.ports
+               << " lhsKinds=" << lhsShape.kinds << " rhsKinds=" << rhsShape.kinds
+               << " portType=" << (rhsShape.portType.empty() ? "-" : rhsShape.portType.c_str())
+               << " lhsIns=" << lhsShape.inputs << " rhsIns=" << rhsShape.inputs
                << " vars=" << head.variables << " count="
                << (head.variables.empty()
                        ? 0
