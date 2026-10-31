@@ -29,8 +29,11 @@ timeout_ms = 8000
 
 [[tests]]
 name = "agree_with_fvm"
-# Slow layer: measured 23.8 s in the full serial run.
-tier = "slow"
+# The default layer. It is the only test of the tree that catches a generated C++ program that
+# builds and runs but prints what the interpreter does not -- a format specification that reached
+# the writer as plain text padded the whole array and exited 0 -- so it runs with the plan: about
+# 40 s of C++ compilations at 8 jobs, and nothing else looks at this.
+tier = "fast"
 desc = "The programs of test/tools/cppexec/expect.txt are translated with std::cpp, built with the system's C++ compiler and run; each prints what std::fvm prints and exits with its code: scalars and their text, strings, branches as statements, the order of effects, faults with their located report, the recursion limit, tail calls as loops (also between two functions), exit codes, complex numbers (arithmetic, `^`, the math functions, their text and formatting, a faulting division), and operators of runtime modules through the bridge."
 kind = "behavior"
 tool = "python"

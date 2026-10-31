@@ -839,8 +839,7 @@ name = "constant_folding_survives_a_safepoint"
 desc = "The same pass with a collection forced at every safepoint while the new string constant is live."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/fold_target.cml"
-args = ["${case}", "fold_constants::fold", "std::nvm"]
-envs = ["CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "${case}", "fold_constants::fold", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "7\n"
 timeout_ms = 30000
@@ -864,8 +863,7 @@ name = "constants_of_every_type_survive_a_safepoint"
 desc = "The same pass with a collection forced at every safepoint while the four new values are live."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/typed_target.cml"
-args = ["${case}", "typed_constants::make", "std::nvm"]
-envs = ["CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc-stress", "safepoint=1,kind=minor", "${case}", "typed_constants::make", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "1\n1\n1\n1\n"
 timeout_ms = 30000

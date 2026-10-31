@@ -914,8 +914,7 @@ name = "pb_statics_gc.runtime.nvm"
 desc = "Runtime-built pullback sub-graphs keep their static constants (perm arrays) alive across collections: differentiates nested with-param calls with permute/transpose/batched matmul under GC stress. Locks the zero-pass transformer segfault fix."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/pb_statics_gc.cml"
-args = ["${case}", "${run_nvm}"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+args = ["--gc-stress", "safepoint=1,kind=major", "--gc-check", "verify=both", "${case}", "${run_nvm}"]
 expect_exit = 0
 expect_stdout_contains = ["loss=0.35793429613113403 gqw=0.19846568 gkw=0.076419204", "loss2=0.35793429613113403 gqw2=0.19846568 gkw2=0.076419204"]
 timeout_ms = 20000
@@ -925,8 +924,7 @@ name = "pb_statics_gc.runtime.fvm"
 desc = "Runtime-built pullback sub-graphs keep their static constants (perm arrays) alive across collections: differentiates nested with-param calls with permute/transpose/batched matmul under GC stress (FastVM). Locks the zero-pass transformer segfault fix."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/pb_statics_gc.cml"
-args = ["${case}", "${run_fvm}"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+args = ["--gc-stress", "safepoint=1,kind=major", "--gc-check", "verify=both", "${case}", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["loss=0.35793429613113403 gqw=0.19846568 gkw=0.076419204", "loss2=0.35793429613113403 gqw2=0.19846568 gkw2=0.076419204"]
 timeout_ms = 20000

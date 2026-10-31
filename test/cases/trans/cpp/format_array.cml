@@ -1,0 +1,29 @@
+/*
+ * A format specification on a numeric array acts on every element, and the text is the same in
+ * the interpreter and in the C++ that std::cpp writes: the brackets and the `, ` between the
+ * elements are the array's own form, the specification is each element's (design principles
+ * 7.7). Both spellings of one specification are here, so a program that writes either one has
+ * one answer in both back ends.
+ */
+
+func main(): int sync {
+    let fs: float[] = [0.7692, 0.7808]
+    println(`A ${fs:.6f}`)
+    println('B {:.6f}'->format<fs>)
+    println(`C ${fs:>10.2f}`)
+    println(`D ${fs:e}`)
+
+    let ds: f64[] = [0.7692267, 0.780836]
+    println(`E ${ds:.9g}`)
+
+    let is: int[] = [3, 7]
+    println(`F ${is:04d}`)
+    println(`G ${is:x}`)
+
+    let ss: string[] = ['a', 'b']
+    println(`H ${ss:>8}`)
+
+    let z: float = 0.5
+    println(`I ${z:.3f}`)
+    return 0
+}

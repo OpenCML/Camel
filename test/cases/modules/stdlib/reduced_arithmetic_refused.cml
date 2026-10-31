@@ -8,7 +8,7 @@
  * never match. The refusal is part of compiling the program, so the empty array is never read at
  * run time.
  *
- * The arithmetic and comparison a bf16 value does have -- `+`, `-`, `*`, `/`, `**`, `==`, `<`, ...
+ * The arithmetic and comparison a bf16 value does have -- `+`, `-`, `*`, `/`, `^`, `==`, `<`, ...
  * (design principles 7.3) -- are not refused, and
  * test/cases/modules/stdlib/reduced_scalar.cml pins what they compute. This case used to assert
  * the refusal of `+`, which was true before then; it is re-pointed at the operation that is

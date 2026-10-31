@@ -2173,19 +2173,14 @@ The feature '{0}' is not supported yet.
 Check the documentation for supported features.
 ```
 
-**Example** (`test/cases/compile/stream/yield_lowering.cml`, run as `camel test/cases/compile/stream/yield_lowering.cml`)
+**Example** (`test/cases/compile/namespace_rules/p12_use.cml`, run as `camel -E short test/cases/compile/namespace_rules/p12_use.cml`)
 
 ```camel
-func running(n: int): (int, int).. {
-    loop i = 0, s = 0 while i < n do {
-        yield (i, s)
-        (i + 1, s + i)
-    }
-}
-
+// use name = qualified name
+import lib
+use inc = lib::Tools::inc
 func main(): int sync {
-    let s = running(3)
-    println(1)
+    println(inc(1))
     return 0
 }
 ```
@@ -9743,7 +9738,7 @@ Out of memory{0}: {1}.
 The graph, permanent and meta spaces hold the compiled program (its runtime graphs, its types, the constants of the graphs being compiled) and grow with it; each has a total limit that only guards against a compiler that does not stop allocating. If the program is this large, raise the limit with the environment variable the message names. If a pass is named, the growth may be its doing (an inlining or unrolling that does not end): run the pipeline without it. The auto space holds run-time values: it is bounded by the memory of the host, or by CAMEL_GC_HEAP_LIMIT_MB when that is set, in which case the values the program keeps alive do not fit the limit.
 ```
 
-**Example** (`test/cases/compile/stream/interval_loop_not_materialised.cml`, run as `CAMEL_GC_HEAP_LIMIT_MB=8 camel test/cases/compile/stream/interval_loop_not_materialised.cml std::nvm`)
+**Example** (`test/cases/compile/stream/interval_loop_not_materialised.cml`, run as `camel --gc-heap-limit-mb 8 test/cases/compile/stream/interval_loop_not_materialised.cml std::nvm`)
 
 ```camel
 // `for i in 0..n` builds no array (design principles 4.2): the rounds

@@ -1,0 +1,19 @@
+/**
+ * `loop i = 0, s = 0 while i < n do { yield (i, s); (i + 1, s + i) }`: the machine carries two
+ * values across the pull, each depending on the round before it. Three rounds hand out (0, 0),
+ * (1, 0) and (2, 1), folded into one number that is 1021; the same logic written as a plain loop
+ * prints the same three pairs step by step.
+ */
+
+func running(n: int): (int, int).. sync {
+    loop i = 0, s = 0 while i < n do {
+        yield (i, s)
+        (i + 1, s + i)
+    }
+}
+
+func main(): int sync {
+    println(loop acc = 0 for q in running(3) do acc * 100 + q.0 * 10 + q.1)
+    println(loop acc = 0 for q in running(0) do acc * 100 + q.0 * 10 + q.1)
+    return 0
+}

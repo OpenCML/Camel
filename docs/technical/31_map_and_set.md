@@ -318,8 +318,8 @@ because an allocation is not a safepoint (note 23).
 
 ### 5.7 The switch back to the flat table
 
-`CAMEL_COLL_LEAF_CAPACITY=<n>` and `CAMEL_COLL_FANOUT=<n>` (read once, at the first
-collection operation) set L and F. `CAMEL_COLL_LEAF_CAPACITY=0` means "unbounded": every
+`--coll leaf=<n>` and `--coll fanout=<n>` (read once, at the first
+collection operation) set L and F. `--coll leaf=0` means "unbounded": every
 collection stays a single leaf, which is the previous representation with the previous code.
 The variables exist for two uses: differential tests (the same program must print the same
 bytes under the flat table, the default tree and a tree of tiny nodes, where fifty entries
@@ -513,12 +513,12 @@ and a `Set<T>` as an array, in key order.
   already executes through `Type::castSlotFrom`. The test programs give the same output on
   `std::nvm`, `std::fvm`, `std::jit` and `std::prl`.
 - **Collector.** Section 5.1. A program that builds maps and sets entry by entry out of
-  strings, arrays, tuples, `T?` boxes and other maps runs under `CAMEL_GC_VERIFY=both` with a
-  collection requested every third allocation (`CAMEL_GC_STRESS_ALLOC=3`,
-  `CAMEL_GC_STRESS_SAFEPOINT=1`), modes `major`, `minor` and `both`, with the non-moving
-  collector and with `CAMEL_GC_ENABLE_YOUNG_COPYING=1`, on the four backends: the output is
+  strings, arrays, tuples, `T?` boxes and other maps runs under `--gc-check verify=both` with a
+  collection requested every third allocation (`--gc-stress alloc=3`,
+  `--gc-stress safepoint=1`), modes `major`, `minor` and `both`, with the non-moving
+  collector and with `--gc generational`, on the four backends: the output is
   that of an undisturbed run and every verification is `ok`. Under the moving collector one
-  such run relocated 864 map tables, 344 set tables and 1608 strings (`CAMEL_GC_LOG_MOVES=1`).
+  such run relocated 864 map tables, 344 set tables and 1608 strings (`--gc-check moves`).
 - **Passes.** The operators are pure operators without a registered folder, and a `CAST` to
   a module type is not folded, so `std::opt::fold` leaves them and CSE/DCE treat them like
   any pure operator. The test programs print the same through `std::opt`, `std::opt::inline`,
@@ -577,7 +577,7 @@ Reading:
 ### After the persistent tree
 
 The table above was measured on the single sorted array. With the persistent B+ tree
-(section 5) the same accumulation, run with `CAMEL_COLL_LEAF_CAPACITY=0` for the old
+(section 5) the same accumulation, run with `--coll leaf=0` for the old
 representation and without it for the tree, on the same busy machine (load above 40, minimum
 of two runs, `std::fvm`):
 

@@ -9,6 +9,7 @@
 
 #include "camel/utils/assert.h"
 
+#include <format>
 #include <algorithm>
 
 namespace camel::core::type {
@@ -83,7 +84,14 @@ Type *TypeTable::intern(
                         !std::equal(words.begin(), words.end(), canonical.words.begin()));
     Type *plain = nullptr;
     if (named) {
-        ASSERT(canonical.make != nullptr, "A named key needs the constructor of its plain twin.");
+        GUARD(
+        canonical.make != nullptr,
+        std::format(
+            "a named key needs the plain twin's constructor, but that slot is empty: the key is "
+            "the named form of a type of shape {} with {} word(s) erased, so there is nothing to "
+            "fall back to",
+            static_cast<int>(shape),
+            canonical.words.size()));
         // The twin may itself be a type registered as a named one (its key equals this one's
         // name-erased key), in which case its own canonical id is the one that names no spelling
         // at all: take that, so the relation is a function and not one step.

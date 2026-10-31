@@ -51,6 +51,7 @@ Not in this reference: the profiler (`perf`).
 | [bytes](#bytes) | `import { ... } from bytes` | C++ |
 | [ckpt](#ckpt) | `import { ... } from ckpt` | C++ |
 | [tree](#tree) | `import { ... } from tree` | Camel |
+| [transforms](#transforms) | `import { ... } from transforms` | C++ |
 | [tensor](#tensor) | `import { ... } from tensor` | C++ |
 | [types](#types) | `import { ... } from types` | Camel |
 | [array](#array) | `import { ... } from array` | Camel |
@@ -85,6 +86,7 @@ Not in this reference: the profiler (`perf`).
 | [bytes](#bytes) | `import { ... } from bytes` |  |
 | [ckpt](#ckpt) | `import { ... } from ckpt` |  |
 | [tree](#tree) | `import { ... } from tree` |  |
+| [transforms](#transforms) | `import { ... } from transforms` |  |
 | [tensor](#tensor) | `import { ... } from tensor` |  |
 | [types](#types) | `import { ... } from types` |  |
 | [array](#array) | `import { ... } from array` |  |
@@ -1385,6 +1387,10 @@ leaf of `tree` at a leaf of the reference is a tuple of the same length.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `tree_unzip({ a: (1, 2.0) }, { a: 0 })` gives `({ a: 1 }, { a: 2.0 })`
+
+<a id="transforms"></a>
+
+## `transforms`: program transforms
 
 <a id="tensor"></a>
 

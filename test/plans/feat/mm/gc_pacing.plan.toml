@@ -16,7 +16,7 @@ cases: the three back ends, the mark-sweep collector and a larger birth space).
 A block held by an array that is promoted to the elder space can be released only by a major
 collection (a minor collection does not sweep the elder space). The allocator counts the block
 bytes of promoted values and asks for a major collection once they exceed a budget: the larger of
-the CAMEL_GC_LARGE_BUDGET_MB floor (default 4 MB) and CAMEL_GC_GROWTH_PERCENT percent (default 100)
+the `--gc-large-budget-mb` floor (default 4 MB) and `--gc-growth-percent` percent (default 100)
 of the block bytes the last sweep left in promoted values. The rolled-window case keeps `rows`
 arrays alive, so rows must survive the four minor collections that promote them and their blocks
 become the garbage that drives the major collections; without that path the high-water mark would
@@ -292,11 +292,10 @@ timeout_ms = 120000
 
 [[tests]]
 name = "gc_pacing.churn_nursery8"
-desc = "The window is the birth space: with CAMEL_GC_NURSERY_MB=8 it is 7.2 MB, so the high-water mark of the same churn is 12 MB (one window and two blocks) and the collections halve. Pipeline: std::fvm."
+desc = "The window is the birth space: with `--gc-nursery-mb 8` it is 7.2 MB, so the high-water mark of the same churn is 12 MB (one window and two blocks) and the collections halve. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_block_churn.cml"
-args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=600", "--arg", "temp=300000", "${run_fvm}"]
-envs = ["CAMEL_GC_NURSERY_MB=8"]
+args = ["--gc-nursery-mb", "8", "${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=600", "--arg", "temp=300000", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["gc_block_churn base=0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -361,8 +360,7 @@ name = "gc_pacing.promoted_steps"
 desc = "The same rolling window with 600 steps: the high-water mark does not move from 34.6 MB while the majors double. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_promoted_blocks.cml"
-args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=600", "--arg", "rows=16", "--arg", "size=131072", "${run_fvm}"]
-envs = ["CAMEL_GC_GROWTH_PERCENT=25"]
+args = ["--gc-growth-percent", "25", "${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=600", "--arg", "rows=16", "--arg", "size=131072", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["gc_promoted_blocks base=0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -388,11 +386,10 @@ timeout_ms = 120000
 
 [[tests]]
 name = "gc_pacing.promoted_floor"
-desc = "CAMEL_GC_LARGE_BUDGET_MB is the floor of the promoted-block budget too: with 16 MB (above 25 % of the live blocks) the majors fall from 64 to 22 and the high-water mark rises to 43 MB. Pipeline: std::fvm."
+desc = "`--gc-large-budget-mb` is the floor of the promoted-block budget too: with 16 MB (above 25 % of the live blocks) the majors fall from 64 to 22 and the high-water mark rises to 43 MB. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_promoted_blocks.cml"
-args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=300", "--arg", "rows=16", "--arg", "size=131072", "${run_fvm}"]
-envs = ["CAMEL_GC_GROWTH_PERCENT=25", "CAMEL_GC_LARGE_BUDGET_MB=16"]
+args = ["--gc-growth-percent", "25", "--gc-large-budget-mb", "16", "${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=300", "--arg", "rows=16", "--arg", "size=131072", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["gc_promoted_blocks base=0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -423,8 +420,7 @@ name = "gc_pacing.views_once"
 desc = "One 3 MB block reached through an array and its reshape view, both promoted: the block is counted once, so the promoted-block volume stays below the 4 MB floor and no major collection is asked for. Counting it per view would make 6 MB and ask for one. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_block_views.cml"
-args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=40", "--arg", "temp=100000", "${run_fvm}"]
-envs = ["CAMEL_GC_GROWTH_PERCENT=25"]
+args = ["--gc-growth-percent", "25", "${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=40", "--arg", "temp=100000", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["gc_block_views peak="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -450,11 +446,10 @@ timeout_ms = 120000
 
 [[tests]]
 name = "gc_pacing.adopted_block"
-desc = "An array promoted while inline (CAMEL_GC_PROMOTION_AGE=1, small allocations fill the birth space first) then grows its own block to 8 MB: the takeover registers the block, the sweep counts 4.7 MB of elder block bytes, and one major collection is asked for. Without the takeover registration the block is never counted and the collection count is zero. Pipeline: std::fvm."
+desc = "An array promoted while inline (`--gc-promotion-age 1`, small allocations fill the birth space first) then grows its own block to 8 MB: the takeover registers the block, the sweep counts 4.7 MB of elder block bytes, and one major collection is asked for. Without the takeover registration the block is never counted and the collection count is zero. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_block_adopted.cml"
-args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "pause=20", "--arg", "rounds=3000", "--arg", "grow=450000", "${run_fvm}"]
-envs = ["CAMEL_GC_GROWTH_PERCENT=25", "CAMEL_GC_PROMOTION_AGE=1"]
+args = ["--gc-growth-percent", "25", "--gc-promotion-age", "1", "${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "pause=20", "--arg", "rounds=3000", "--arg", "grow=450000", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["gc_block_adopted len=450000"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

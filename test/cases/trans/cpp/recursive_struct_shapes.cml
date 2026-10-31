@@ -1,0 +1,33 @@
+// A struct that holds itself through an array (design principles 5.2): the member is
+// `rt::Array<Tree>`, which names `Tree` before the declaration of `Tree` is complete, so the
+// element type of an array is not asked for its size or its alignment until something allocates.
+// The empty array in the field takes its element type from the field, and the whole value prints
+// and compares by walking the recurrence.
+
+type Tree = { value: int, children: Tree[] }
+type State = { board: int[], to_move: int }
+type Node = { state: State, children: Node[] }
+
+func total(tree: Tree): int sync {
+    var acc = tree.value
+    let _ = loop i = 0 while i < len(tree.children) do sync {
+        acc += total(tree.children[i])
+        i + 1
+    }
+    return acc
+}
+
+func main(): int sync {
+    // The empty array at the field, with a value beside it.
+    let leaf: Tree = { value: 4, children: [] }
+    let tree: Tree = { value: 1, children: [leaf, { value: 3, children: [leaf] }] }
+    println(total(tree))
+    println(tree)
+    println(tree == tree)
+    println(len(tree.children))
+    // A recursive field beside a field of a named struct type.
+    let state: State = { board: [7, 8], to_move: 1 }
+    let node: Node = { state: state, children: [] }
+    println(len(node.state.board), node.state.to_move, len(node.children))
+    return 0
+}

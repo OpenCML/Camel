@@ -4,10 +4,11 @@
  * variable it writes is not visible. Both writes happen; the read written after the call takes the
  * value the second write made (design principles 3.1, 3.5), so this prints `3`.
  *
- * The writer set is the one the call site cannot name: a variable written by some function in the
- * program counts as a possible write of a call through a function value. That is conservative --
- * a call with such a write has to run, and the reads after it are ordered after it -- and the
- * result is the one the program reads.
+ * A regression case, not an acceptance: this body is in a `sync` block, so the call runs and the
+ * read sees the cell whatever the writer set says -- it printed `3` before the conservative writer
+ * set existed. What tells the writer set from no writer set is the same body outside a sync block
+ * (two_references_write_one_object_unsynced.cml), which printed `1` and prints `3` now. Keep this
+ * case as the pin of the sync answer only; do not read it as evidence about the writer set.
  */
 
 var counter = 0

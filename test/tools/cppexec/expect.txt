@@ -11,6 +11,7 @@ test/cases/loops/iterate_string.cml
 test/cases/consistency/values/enums.cml
 test/cases/consistency/values/deep_enum_chain.cml
 test/cases/trans/cpp/recursive_enum_shapes.cml
+test/cases/trans/cpp/recursive_struct_shapes.cml
 test/cases/consistency/values/int_wrap.cml
 test/cases/consistency/values/int_min_div.cml
 test/cases/consistency/values/float_special.cml
@@ -21,6 +22,7 @@ test/cases/linear/operators/string_ordering.cml
 test/cases/compile/literals/real_literals.cml
 test/cases/compile/literals/literal_context.cml
 test/cases/opt/progen/judgement/string_of_float_format.cml
+test/cases/trans/cpp/format_array.cml
 
 # Order of effects, branches, match.
 test/cases/consistency/values/sync_order.cml
@@ -74,6 +76,11 @@ test/cases/consistency/narrowing/narrow.cml
 test/cases/consistency/new_values/rebinding_loop.cml
 test/cases/consistency/new_values/peek_loop.cml
 test/cases/consistency/new_values/peek.cml
+
+# `xs[i] = v` (:op/set_index_in_place over :var/take): the changed array, an index outside it
+# faulting as a read does, and the array another holder has unchanged.
+test/cases/linear/byref/element_assigned.cml
+test/cases/consistency/faults/element_assigned_out_of_range.cml
 
 # Output of print / println with a format (design principles 10.6).
 # (test/cases/trans/cpp/exec/print_formats.cml, in the directory above)

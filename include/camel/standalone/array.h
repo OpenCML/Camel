@@ -93,6 +93,13 @@ template <typename T> class Array {
         ++rep_->size;
     }
 
+    /// Puts `value` at `index`, in place when the block is this array's alone and a copy of it
+    /// otherwise (:op/set_index_in_place): a shared block is the other holder's too.
+    void set(std::size_t index, T value) {
+        reserve(size());
+        rep_->items()[index] = std::move(value);
+    }
+
     friend bool operator==(const Array &a, const Array &b) {
         // By content, element by element (design principles 4.2); not short-cut by identity:
         // an array that holds a NaN does not equal itself.
@@ -114,9 +121,11 @@ template <typename T> class Array {
         std::size_t capacity;
         T *items() noexcept { return reinterpret_cast<T *>(this + 1); }
     };
-    static_assert(alignof(T) <= alignof(Rep), "elements must not need more alignment");
-
     static Rep *allocate(std::size_t capacity) {
+        // Checked here rather than at the class scope: the array of a struct that holds the array
+        // (`Node { children: Node[] }`, design principles 5.2) names its element type before that
+        // type is complete, and the alignment is only ever needed to allocate.
+        static_assert(alignof(T) <= alignof(Rep), "elements must not need more alignment");
         auto *rep       = static_cast<Rep *>(::operator new(sizeof(Rep) + capacity * sizeof(T)));
         rep->references = 1;
         rep->size       = 0;
@@ -146,6 +155,17 @@ template <typename T> T at(const Array<T> &xs, int64_t index, const Site &site) 
         fault(site, {std::to_string(index), "an array", std::to_string(xs.size())});
     }
     return xs[static_cast<std::size_t>(index)];
+}
+
+/// `xs[i] = value` (:op/set_index_in_place): the array with that element changed, the index
+/// checked as a read checks it (the same fault, at the same site). The array another holder has
+/// is unchanged -- the block is copied when it is shared, so values stay values (design
+/// principles 10.5).
+template <typename T>
+Array<T> setAt(Array<T> xs, int64_t index, std::type_identity_t<T> value, const Site &site) {
+    (void)at(xs, index, site);
+    xs.set(static_cast<std::size_t>(index), std::move(value));
+    return xs;
 }
 
 /// A type name applied to an array (:op/atoi, :op/atol, :op/atof, :op/atod): every element converted

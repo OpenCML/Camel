@@ -1,7 +1,7 @@
 /**
  * Long tail loops in code std::jit compiled as framed code, N rounds of the environment each:
  * a loop that allocates a string in every round (the collector runs many times under it, more
- * so with CAMEL_GC_STRESS_SAFEPOINT), two graphs that tail-call each other, a loop that builds
+ * so with --gc-stress safepoint=1), two graphs that tail-call each other, a loop that builds
  * an array, and a loop whose body calls a function that is not a tail call. None of them may
  * use the machine stack or the recursion limit per round: N is far above both.
  */

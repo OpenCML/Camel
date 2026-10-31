@@ -31,6 +31,7 @@
 
 #include "camel/core/mm.h"
 #include "camel/core/module/userdef.h"
+#include "camel/core/type/composite/func.h"
 #include "camel/parse/ast/rule_head.h"
 #include "camel/runtime/graph.h"
 
@@ -590,7 +591,174 @@ bool Builder::buildLibraryEntry(
     return buildFrom(*it->second, true);
 }
 
+void Builder::scanProgramWriters() {
+    programWriters_.clear();
+    // A group whose name starts with `__assn` is an assignment: `__assn__` for `=`, a compound form
+    // (`__assn_add__`) and `__assn_owned__` for a rebinding to an in-place operator (design
+    // principles 4.3). The variable it writes is the base of its target: the variable itself
+    // (`v = e`) or a path into its value (`v.f = e`, `v[i] = e`), which the GIR builder reads as a
+    // rebinding of the variable (pathAssignmentOf).
+    const auto isAssignment = [](const std::string &group) {
+        return group.rfind("__assn", 0) == 0;
+    };
+    // The variable a target names: the reference under the fields and indices the assignment
+    // writes through.
+    const auto baseOf = [](GCT::node_ptr_t target) -> GCT::node_ptr_t {
+        GCT::node_ptr_t node = target;
+        while (node != nullptr) {
+            if ((node->type() == GCT::NodeKind::ACCS || node->type() == GCT::NodeKind::SACC) &&
+                node->size() > 0) {
+                node = node->at(0);
+                continue;
+            }
+            // An index of a path is a call of `__idx__` over the value it indexes
+            // (pathAssignmentOf).
+            if (node->type() == GCT::NodeKind::LINK && node->size() == 3 &&
+                node->at(0) != nullptr && node->at(0)->type() == GCT::NodeKind::DREF &&
+                node->at(0)->name() == "__idx__") {
+                node = node->at(1);
+                continue;
+            }
+            break;
+        }
+        if (node != nullptr &&
+            (node->type() == GCT::NodeKind::DREF || node->type() == GCT::NodeKind::NREF)) {
+            return node;
+        }
+        return nullptr;
+    };
+    // The group a callee names, under the with-arguments a partial application binds
+    // (`LINK(WITH(DREF op, w...), ...)`, design principles 4.3).
+    const auto groupOf = [](GCT::node_ptr_t callee) -> const std::string * {
+        GCT::node_ptr_t node = callee;
+        if (node != nullptr && node->type() == GCT::NodeKind::WITH && node->size() > 0) {
+            node = node->at(0);
+        }
+        if (node == nullptr || node->type() != GCT::NodeKind::DREF) {
+            return nullptr;
+        }
+        return &node->name();
+    };
+    struct Pending {
+        GCT::node_ptr_t node = nullptr;
+        // The function the node is written in: the innermost FUNC, or null at a module's top
+        // level. A lambda or a nested function is a function of its own, which is what the set
+        // counts a writer as.
+        const GCT::Node *function = nullptr;
+    };
+    // The names a function binds itself: its parameters. A function that writes a name it takes as
+    // a parameter writes that parameter -- the argument the call handed it, or the local copy of an
+    // ordinary one -- and not the variable the same spelling names in the body it is called from.
+    // Counting it would make every call a possible write of it for a reason the program does not
+    // have, so the set leaves it out: a `var` argument is a write this layer cannot see held by the
+    // hand-over of a cell, which is the boundary the set already has (a write reaching a variable
+    // only by passing it as a `var` argument is not in the scan).
+    std::unordered_map<const GCT::Node *, std::set<std::string>> parametersOf;
+    const auto parametersIn = [&](const GCT::Node *function) -> const std::set<std::string> & {
+        const auto known = parametersOf.find(function);
+        if (known != parametersOf.end()) {
+            return known->second;
+        }
+        std::set<std::string> &names = parametersOf[function];
+        if (function != nullptr && function->size() > 0 && function->at(0) != nullptr) {
+            if (auto *type = function->at(0)->dataType(); type != nullptr) {
+                if (const auto *signature = tt::as_ptr<FunctionType>(type);
+                    signature != nullptr) {
+                    for (size_t index = 0; index < signature->argNamesCount(); ++index) {
+                        names.emplace(signature->argNameAt(index));
+                    }
+                }
+            }
+        }
+        return names;
+    };
+    std::vector<Pending> pending;
+    for (const auto &[module, unit] : units_) {
+        if (unit->tree != nullptr && unit->tree->root() != nullptr) {
+            pending.push_back({unit->tree->root(), nullptr});
+        }
+    }
+    // The names a function declares itself: `var x = e` is a `VARI` over the reference that names
+    // the cell. A function that writes a name it declared writes its own cell -- nothing outside it
+    // reaches that cell but the functions written inside it, which are writers of their own and stay
+    // in the set. The declaring function's own write is left out: a call through a function value
+    // cannot write a cell it was never handed.
+    std::unordered_map<const GCT::Node *, std::set<std::string>> declaredOf;
+    const auto declaredNamesOf = [](GCT::node_ptr_t vari, std::set<std::string> &names) {
+        std::function<void(GCT::node_ptr_t, int)> collect = [&](GCT::node_ptr_t node, int depth) {
+            if (node == nullptr || depth > 1) {
+                return;
+            }
+            if (node->type() == GCT::NodeKind::NREF || node->type() == GCT::NodeKind::DREF) {
+                names.insert(node->name());
+                return;
+            }
+            if (node->type() == GCT::NodeKind::LINK || node->type() == GCT::NodeKind::EXEC) {
+                for (size_t i = 0; i < node->size(); ++i) {
+                    collect(node->at(i), depth + 1);
+                }
+            }
+        };
+        for (size_t i = 0; i < vari->size(); ++i) {
+            collect(vari->at(i), 0);
+        }
+    };
+    while (!pending.empty()) {
+        const Pending current = pending.back();
+        pending.pop_back();
+        const GCT::node_ptr_t node = current.node;
+        if (node == nullptr) {
+            continue;
+        }
+        const GCT::Node *function =
+            node->type() == GCT::NodeKind::FUNC ? node : current.function;
+        if (node->type() == GCT::NodeKind::VARI) {
+            declaredNamesOf(node, declaredOf[function]);
+        }
+        if (node->type() == GCT::NodeKind::LINK && node->size() >= 2) {
+            const std::string *group = groupOf(node->at(0));
+            if (group != nullptr && isAssignment(*group)) {
+                if (const GCT::node_ptr_t variable = baseOf(node->at(1)); variable != nullptr) {
+                    const std::set<std::string> &parameters = parametersIn(function);
+                    if (parameters.find(variable->name()) == parameters.end()) {
+                        programWriters_[variable->name()].insert(function);
+                    }
+                }
+            }
+        }
+        for (size_t i = 0; i < node->size(); ++i) {
+            pending.push_back({node->at(i), function});
+        }
+    }
+    // A function's write of a name it declared is dropped: the cell is the function's own, and only
+    // the functions written inside it can reach it, which are writers in their own right.
+    for (auto entry = programWriters_.begin(); entry != programWriters_.end();) {
+        std::set<const GCT::Node *> &functions = entry->second;
+        for (auto writer = functions.begin(); writer != functions.end();) {
+            const GCT::Node *function = *writer;
+            const auto declared = declaredOf.find(function);
+            if (function != nullptr && declared != declaredOf.end() &&
+                declared->second.count(entry->first) != 0) {
+                writer = functions.erase(writer);
+            } else {
+                ++writer;
+            }
+        }
+        if (functions.empty()) {
+            entry = programWriters_.erase(entry);
+        } else {
+            ++entry;
+        }
+    }
+}
+
 bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
+
+    // The conservative writer set, made before any body is built (design principles 3.1, 3.5):
+    // which variables the program writes is in the construction trees, and a function whose module
+    // has not been built yet still has its body there. A call through a function value, whose
+    // callee this layer does not know, is a possible write of those variables (visitLinkNode).
+    scanProgramWriters();
 
     // The modules in the order of their imports: a module after those it imports, except
     // around a cycle of imports, where one of them comes first (its uses of the others build

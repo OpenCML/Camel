@@ -182,6 +182,10 @@ class FunctionEmitter {
     /// The in-place form of `append` over `:var/take(xs)` (design principles 11.3): grows the
     /// variable's array with `rt::append` once; false when the node is not that shape.
     bool lowerAppendInPlace(Frame &frame, gc_node_ref_t ref, Block &out);
+    /// The in-place form of the element store over `:var/take(xs)` (design principles 11.3):
+    /// `xs[i] = v` becomes `rt::setAt` on the variable's own array, the element checked as a
+    /// read checks it; false when the node is not that shape.
+    bool lowerSetIndexInPlace(Frame &frame, gc_node_ref_t ref, Block &out);
     /// `map`, `filter`, `reduce`, `foreach`, `attempt`; false for any other operator.
     bool lowerHigherOrder(Frame &frame, gc_node_ref_t ref, const std::string &uri, Block &out);
     /// Whether the variable whose cell is `cell` is used outside this function (design note
