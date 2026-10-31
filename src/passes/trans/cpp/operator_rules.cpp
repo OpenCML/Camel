@@ -678,6 +678,37 @@ Rules buildRules() {
         },
         false,
     };
+    // `tensor:mean` of the whole value (modules/tensor/ops/reduction_ops.cpp, meanAllKernel): the sum
+    // divided by the number of elements, both in f64, and the answer's element type reached by one
+    // conversion -- the definition `sum(x) / float(numel(x))` (stdlib/tensor_definitions.cml) with
+    // the kernel's own accumulation. A mean of integers is therefore f32 and not integer division,
+    // and a mean of f32 elements is not the f32 sum divided again: the sum is the f64 one, exactly
+    // as the interpreter's `sumAll` returns it. A value with no element divides by zero, and the
+    // interpreter raises that fault rather than answering a NaN.
+    //
+    // The answer's element type is the one the operator states, which is not always the source's,
+    // so it is passed as the runtime template argument: the one place in this file where the rule
+    // reads the result's type to write the call.
+    r["tensor:mean"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (c.normCount() != 1 || value == nullptr || value->elemType() == nullptr ||
+                c.resultType() == nullptr) {
+                return std::nullopt;
+            }
+            const TypeCode element = value->elemType()->code();
+            if (element != TypeCode::Int64 && element != TypeCode::Int32 &&
+                element != TypeCode::Float32 && element != TypeCode::Float64) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::meanAll<{}>({}, {})",
+                c.cppType(c.resultType()),
+                c.operand(0),
+                c.site(RuntimeDiag::DivisionByZero, marks(0)));
+        },
+        false,
+    };
     // `tensor:sum` of the whole value (modules/tensor/ops/reduction_ops.cpp): the elements added from
     // +0 in the order they lie, answering the element type -- an integer result exactly in int64
     // (int32 truncated once into its own width) and a float one by the f64 accumulator converted

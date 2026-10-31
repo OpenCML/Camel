@@ -243,3 +243,8 @@ test/cases/trans/cpp/extreme_axis_rank.cml
 # The position of the extreme along one dimension: the first element of the lane equal to its
 # maximum (minimum), or its first NaN. The answer is an int64 value whatever the source holds.
 test/cases/trans/cpp/arg_axis_rank.cml
+
+# The mean of a whole value: the sum divided by the number of elements, both in f64, and the
+# answer's element type reached by one conversion -- a mean of integers is an f32, not integer
+# division, and a mean of f32 elements is not the f32 sum divided again.
+test/cases/trans/cpp/mean_rank.cml

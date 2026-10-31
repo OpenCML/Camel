@@ -975,6 +975,39 @@ Array<int64_t> argminAxis(
     return argExtremeAxis<false>(xs, axisArg, keepDims, invalid, empty);
 }
 
+/// `tensor:mean` of the whole value (modules/tensor/ops/reduction_ops.cpp, meanAllKernel): the sum
+/// divided by the number of elements, both in double, and the answer's element type reached by one
+/// conversion -- `stdlib/tensor_definitions.cml` states a mean as `sum(x) / float(numel(x))`, and
+/// the kernel is that statement with the sum and the division in f64. That is why the sum is taken
+/// here as the double the interpreter's `sumAll` returns and not as the rounded element value: a
+/// mean of f32 elements is not the f32 sum divided again.
+///
+/// `R` is the answer's element type, which the operator states apart from the source's: a mean of
+/// integers is an f32 (an integer's mean is not integer division), and a mean of f64 or f32 keeps
+/// that element type.
+///
+/// A value with no element divides by zero, and the interpreter raises that fault rather than
+/// answering a NaN; so does this.
+template <typename R, typename T> R meanAll(const Array<T> &xs, const Site &division) {
+    if (xs.size() == 0) [[unlikely]] {
+        fault(division);
+    }
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, int32_t>) {
+        std::uint64_t acc = 0;
+        for (std::size_t i = 0; i < xs.size(); ++i) {
+            acc += static_cast<std::uint64_t>(static_cast<int64_t>(xs[i]));
+        }
+        return static_cast<R>(
+            static_cast<double>(static_cast<int64_t>(acc)) / static_cast<double>(xs.size()));
+    } else {
+        double total = 0.0;
+        for (std::size_t i = 0; i < xs.size(); ++i) {
+            total += static_cast<double>(xs[i]);
+        }
+        return static_cast<R>(total / static_cast<double>(xs.size()));
+    }
+}
+
 /// `tail(xs)` (:struct/tail_arr): all but the first element; the empty array for one or none.
 template <typename T> Array<T> tail(const Array<T> &xs) {
     Array<T> out;
