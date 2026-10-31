@@ -238,6 +238,11 @@ test/cases/trans/cpp/literal_rows_computed.cml
 # instead, it printed one row of elements and no shape.
 test/cases/trans/cpp/literal_rows_filled.cml
 
+# `math:abs` of the smallest integer: the value has no positive counterpart, so the answer is the
+# wrap itself -- which is how `stdlib/math.cml`'s `gcd` recognises it and refuses. Written as
+# `std::abs`, the smallest value is undefined behaviour and the refusal is lost.
+test/cases/trans/cpp/abs_smallest_int.cml
+
 # A position on a value of several dimensions: `m[1]` is the row, `m[1, 0]` names the axis it drops
 # and is the element, `t[1]` of a rank-3 value is the rank-2 value behind it -- and `len` of a row is
 # the dimension that is left.

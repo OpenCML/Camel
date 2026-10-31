@@ -300,6 +300,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "abs_smallest_int"
+desc = "`math:abs` of the smallest integer answers the value itself -- it has no positive counterpart -- and the translation writes that wrap (`rt::absOf`) instead of `std::abs`, whose answer for the smallest value is undefined behaviour and may be folded positive. `stdlib/math.cml`'s `gcd` recognises the smallest integer by `abs(a) < 0`, so the fold is what keeps its refusal: the program prints the negative value and then the fault, and agree_with_fvm compares the reading with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/abs_smallest_int.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::absOf(", "gcd does not accept the smallest integer"]
+expect_output_not_contains = ["std::abs(", "TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "numel_rank"
 desc = "`numel` counts the elements of a value whatever its rank: six for a rank-2 value, four for its first two rows, eight for a rank-3 one, four for a value of one dimension. It reads the count the value holds and no dimension of it, so a value of several dimensions and one of an open rank are both answered by the run -- which is why this step frees every program that asked for it, the open-rank one included. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
