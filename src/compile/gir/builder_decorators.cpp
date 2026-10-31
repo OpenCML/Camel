@@ -94,8 +94,8 @@ compile_graph_ptr_t Builder::buildDecoratedGraph(
     graph_ptr_t decoratedGraph = enterScope(
         FunctionType::create(param_vec_t{}, param_vec_t{}, nullptr),
         "__decorated__" + funcName + "_" + std::to_string(syntheticRefIndex_++));
-    decoratedGraph->draft().setFlags(static_cast<uint8_t>(
-        decoratedGraph->draft().flags() | camel::runtime::kGraphFlagMacro));
+    decoratedGraph->edit().setFlags(static_cast<uint8_t>(
+        decoratedGraph->view().flags() | camel::runtime::kGraphFlagMacro));
     registerGraphOrigin(
         context_,
         decoratedGraph,
