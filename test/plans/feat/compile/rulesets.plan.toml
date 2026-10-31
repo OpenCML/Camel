@@ -22,11 +22,11 @@ name = "rulesets_rule_heads"
 desc = "The index of a module's rules is built from the heads of their left sides, read where the rules are written: `x + w` is filed under `+`, `x * w` under `*`, and `-x` under `-`. The probe prints one line per rule, so the index is read rather than assumed."
 kind = "behavior"
 case = "../../../cases/compile/rulesets/rulesets.probe_rule_heads.cml"
-args = ["${case}", "${backend}"]
+args = ["${case}", "std::rulesets", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_exact = "RULESET rulesets.probe_rule_heads +/2 -> add_rule\nRULESET rulesets.probe_rule_heads */2 -> mul_rule\nRULESET rulesets.probe_rule_heads -/1 -> neg_rule\n1\n"
+expect_stdout_exact = "RULESET rulesets.probe_rule_heads */2 -> mul_rule\nRULESET rulesets.probe_rule_heads +/2 -> add_rule\nRULESET rulesets.probe_rule_heads -/1 -> neg_rule\n1\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -57,10 +57,49 @@ name = "rulesets_arity_keeps_two_primitives_apart"
 desc = "`-x` and `x - w` write the same operator token and are two primitives (`__neg__` and `__sub__`). The index files a rule by the operator and the number of operands, so one module holds a rule for each and neither is refused as the other's duplicate."
 kind = "behavior"
 case = "../../../cases/compile/rulesets/rulesets.probe_arity.cml"
-args = ["${case}", "${backend}"]
+args = ["${case}", "std::rulesets", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "RULESET rulesets.probe_arity -/1 -> neg_rule\nRULESET rulesets.probe_arity -/2 -> sub_rule\n1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rulesets_lookup_answers_and_says_why_not"
+desc = "The index is asked through `lookupRule(family, head, arity)` -- the function a transform asks -- by the `std::rulesets` pass (`query=`), and the answers are pinned: `-` with one operand in `rulesets.jvp` is `jvp_neg`, `-` with two is `jvp_sub` (two primitives, one token), `-` with three has no rule, and a family no module declares is unknown. The two ways of not finding a rule are named apart, because the repairs differ: write the rule, or import the ruleset. A program that asks nothing prints nothing."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/compile/rulesets/rulesets_lookup.py"
+args = ["${case}", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["ruleset lookup: PASS"]
+expect_output_not_contains = ["FAIL"]
+timeout_ms = 60000
+
+[[tests]]
+name = "rulesets_forward_rules_come_from_the_index"
+desc = "The five scalar arithmetic operators are bound to keys in `rulesets.jvp`, and the pass reads the name those keys resolve to right now: `std::rulesets forward=true` prints one `FORWARD <uri> <family> <head>/<arity> -> <rule>` line per bound operator, and none of them says `no rule`. The three readings this pins -- that a binding is a key and not a remembered name, that the ten float operators (`_d` and `_f`) share the five keys, and that `-` with one operand is `jvp_neg` while `-` with two is `jvp_sub` -- are what a forward transform will read."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/rulesets_lookup.cml"
+args = ["${case}", "std::rulesets", "forward=true", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["FORWARD :op/add_d rulesets.jvp +/2 -> jvp_add", "FORWARD :op/sub_f rulesets.jvp -/2 -> jvp_sub", "FORWARD :op/mul_d rulesets.jvp */2 -> jvp_mul", "FORWARD :op/div_f rulesets.jvp //2 -> jvp_div", "FORWARD :op/neg_d rulesets.jvp -/1 -> jvp_neg"]
+expect_output_not_contains = ["-> no rule", "no such family"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rulesets_probe_missing_says_no_rule_for_div"
+desc = "A ruleset with four of the five scalar primitives answers `no rule` for `/` and a name for the other four. This is the fixture a replacement needs: the missing rule is a property of a test ruleset, not of the production one, so the production rules stay complete. What it pins today is the index's answer and nothing more -- the refusal at the primitive belongs to `reinterp`, which does not exist yet, and the case says so rather than pretending this reading is that refusal."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/rulesets_missing.cml"
+args = ["${case}", "std::rulesets", "query=rulesets.probe_missing|+|2;rulesets.probe_missing|-|1;rulesets.probe_missing|*|2;rulesets.probe_missing|/|2", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["LOOKUP rulesets.probe_missing +/2 -> add_ok", "LOOKUP rulesets.probe_missing -/1 -> neg_ok", "LOOKUP rulesets.probe_missing */2 -> mul_ok", "LOOKUP rulesets.probe_missing //2 -> no rule", "RULESET rulesets.probe_missing -/2 -> sub_ok"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

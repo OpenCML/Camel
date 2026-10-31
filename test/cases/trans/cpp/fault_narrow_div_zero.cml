@@ -1,0 +1,16 @@
+/**
+ * Dividing a bf16 by zero: the report is the interpreter's, byte for byte
+ * (`RuntimeDiag::DivisionByZero` located at the division). `/` on these types is rt::div, not the
+ * C++ operator, for exactly this reason: an operator cannot report a fault, and an infinity
+ * returned quietly where the language says a fault is the difference a reader cannot see.
+ *
+ * The same rule covers f16 (one site, the target's name in it), and the quotient of two values
+ * is computed in f32 and rounded once, as the other arithmetic is.
+ */
+func main(): int sync {
+    println(bf16(1.0) / bf16(3.0))
+    let zero: bf16 = 0.0
+    println(bf16(1.0) / zero)
+    println('not reached')
+    return 0
+}

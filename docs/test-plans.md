@@ -84,8 +84,42 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
 - `slow` is the release gate's layer: the plan files `scripts/release-gate.mjs` names in
   `SLOW_PLANS`, run one by one. It is everything whose result is still worth having but whose cost
   does not belong in the developer loop, and that a shared host can still carry: the large
-  front-end and debugger suites, the paced and soaked collection plans, the GPU tile plans, and any
-  other single test that takes about five seconds or more.
+  front-end and debugger suites, single entries of otherwise-fast plans that take about five
+  seconds or more, and the GPU tile plans.
+- **The slow layer's only whole plan is `gpu/tiles` (103 entries, and it needs devices): it cannot
+  move into the fast layer.** Its entries skip when the cards are busy (`tiles:available()`), so
+  the number that runs swings with what else is on the host -- a fast-layer green there would mean
+  "the cards were free", not "the compiler is right" -- and a whole-plan run takes about 89 s, of
+  which the fast layer's two minutes has none to give. One entry of it (the derived-graph
+  `gpu_scope` case) is already `tier = "fast"`, because it needs the compiler and not a card.
+  **The two collection plans stay in this layer, and they must be run whole every night:
+  `feat/mm/gc_pacing` (15) + `feat/mm/gc_soak` (22) = 37 entries, one whole run takes 6.7 s**
+  (`-Tier slow -Jobs 4`, 37 pass, 0 fail). Flipping them to `tier = "fast"` was tried and reverted,
+  and the numbers say why the bookkeeping was right: the fast layer's total went 8032 -> 8069 (+37)
+  but its wall went 227.5 s -> 275.3 s (**+47.8 s**), so those "6.7 s" entries cost the gate seven
+  times their own time -- they are memory-bandwidth work, not CPU work, and they compete with
+  everything beside them. The class also cannot be named by a rule (the runner self-test: "is a plan
+  an ordinary change must not run"), and the eight cases they read mirror to the milestone
+  `feat/mm/gc.plan.toml`; so the layer stays, the class stays, and nothing is renamed to route around
+  either. A nightly whole run is what keeps them from being forgotten.
+  **The nightly entry is one command, and it is the whole slow layer:
+  `node scripts/test.js test/plans --tier slow --jobs 8`.** There is no `nightly` script and no
+  plan file that includes the layer (the plan format has no `includes`), so the command is the
+  entry; paste it, do not remember it. Measured on this host at `d7ab3a6ab` (clean): **163 entries**
+  (the three whole slow plans are 140 of them; `perf/*`, `lsp`, `debugger`, `cpp`, `autodiff`,
+  `random`, `frontend`, `linear/var_reference` carry the rest as single slow entries), `wall`
+  131.4-160.5 s over three runs, and **it is not green**: `agree_with_fvm` fails in every run --
+  three cases "does not build: clang: error: linker command failed with exit code 1"
+  (`test/cases/consistency/values/max_min_special.cml`, `trans/cpp/exec/scalars.cml`,
+  `compile/diag_render/runtime_regex.cml`), which is the host's C++ link, not the compiler.
+  `gpu/tiles` is in it and skips what it cannot get: `skip: 19` when the cards were mostly free,
+  `skip: 47` when they were not -- the same command, a different number, which is why the skip
+  count is read beside the card report and never as "the GPU suite passed".
+  `feat/modules/random.plan.toml`'s `keyed_random.std_cpp_agrees` is the same shape -- it compiles
+  C++ like `trans/cpp`'s `agree_with_fvm` -- but nothing runs that layer today; recorded here and
+  left alone on purpose, one move at a time. Some individual entries are still `tier = "slow"` inside fast plans
+  (`test/plans/feat/modules/autodiff.plan.toml` 5, `tools/debugger` 4, `parse/frontend`,
+  `modules/random`, `tools/lsp`, `linear/var_reference`, `trans/cpp` 1 each).
 - `milestone` is the layer that only runs at a milestone, on a quiet machine: the plans
   `agents/test.md` holds back (the full suite, the GC poison sweep and stress plans, progen, the
   PyTorch comparisons and the perf/timeit plans -- the ones `scripts/plan-inventory.mjs` lists in
@@ -870,7 +904,7 @@ Optional timeout for the verification script process. Default is `5000`.
 ## Sweeps
 
 A plan may list `[[sweeps]]` next to its tests. A sweep runs the tests of other plans again
-under an extra environment, with all their assertions; the copies are named
+under extra command-line words (`args`), with all their assertions; the copies are named
 `<sweep name>:<source plan id>:<original name>` and count as tests of the plan that lists the
 sweep. The source plan's `id` (its file name when it has none) is part of the name because two
 source plans may both have a test called `shapes` — `feat/compile/enum` and `feat/para/handoff`
@@ -884,8 +918,8 @@ plan listed twice in the same sweep is expanded once.
 name = "poison"
 plans = ["../modules", "../linear"]   # plan files or directories, relative to this plan
 exclude = ["modules/onnx"]            # substrings of plan paths that are left out
-envs = ["CAMEL_GC_POISON=1"]
-skip_env_prefix = "CAMEL_GC_"         # leave out tests that set such a variable themselves
+args = ["--gc-check", "poison"]     # words put before the case of every copy
+skip_args_prefix = "--gc-"           # leave out tests that already name such an option
 timeout_scale = 20                    # their timeouts are multiplied by this
 fast_sample = 1                       # keep one test per source plan in the fast layer
 risk_tags = ["collections", "closures", "iterators"]  # plans whose sample is larger
@@ -893,7 +927,9 @@ risk_sample = 2                       # keep two or three of those instead
 ```
 
 Only `behavior` and `snapshot` tests of the `camel` tool are taken; a test marked
-`known_fail` or `sweep = false` is left out.
+`known_fail` or `sweep = false` is left out, and a sweep with `args` also leaves out the
+tests that do not drive a run (`check`, `inspect`, `--version`): the words go in front of the
+entry file of a run, and those tests have no entry file to put them in front of.
 
 The fast sample is risk-based. A source plan whose `tags` include one of `risk_tags` keeps
 `risk_sample` tests (two or three: a collection, a closure or an iterator moves objects across
@@ -911,7 +947,7 @@ end compiles) says `sweep = false` with a comment.
 
 - `CAMEL_TEST_TIMEOUT_SCALE=<n>` multiplies every test and verification timeout: for running
   whole plans under a mode that slows every program down, e.g.
-  `CAMEL_GC_POISON=1 CAMEL_TEST_TIMEOUT_SCALE=20 node scripts/test.js feat`.
+  `--gc-check poison CAMEL_TEST_TIMEOUT_SCALE=20 node scripts/test.js feat`.
 - Variables in the environment of the runner reach every test; a test's own `envs` win. The one
   exception is `CUDA_VISIBLE_DEVICES`, which the runner writes for a Python child that did not ask
   for the devices: see "CUDA visibility".

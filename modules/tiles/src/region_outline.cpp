@@ -385,10 +385,9 @@ const runtime::Program *outlineRegions(
         }
         std::vector<std::pair<rt::gc_node_ref_t, rt::gc_node_ref_t>> replacements;
         for (const auto &region : analysis.regions) {
-            auto extracted  = extractRegion(*graph, region);
+            auto extracted  = extractRegion(*graph, region, context.graphIds().allocate());
             const auto name = graph->name() + "/tiles.region/" + std::to_string(count++);
-            extracted.graph->setId(context.graphIds().allocate());
-            auto *callee = extracted.graph->encode(name, name);
+            auto *callee = extracted.graph->edit().encode(name, name);
             auto *fn     = ::Function::create(
                 rt::makeProgram(context, program, std::span(&callee, 1)),
                 callee->id(),

@@ -85,6 +85,8 @@ extern std::string graphGcMbOpt;
 extern std::string nativeStackGuardOpt;
 /// --devices <cpu|ordinal[,ordinal...]>: the devices a pipeline may use; "" when absent.
 extern std::string devicesOpt;
+/// --tensor-isa <native|generic>: the instruction set kernels may use; "" (native) when absent.
+extern std::string tensorIsaOpt;
 /// --profile-mode <normal|full>: the mode of the advanced profiler of --profile.
 extern std::string profileModeOpt;
 } // namespace Run

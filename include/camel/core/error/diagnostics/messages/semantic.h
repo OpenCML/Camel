@@ -392,7 +392,6 @@ enum class SemanticDiag : uint32_t {
     /// the step of a slice follows the same rule the step of a range does).
     SliceStepZero                  = 0x0001E9,
     WithPackNeedsNativeDeclaration = 0x000191,
-    ReducedPrecisionUnsupported    = 0x0001D7,
     // #impl(f) (design principles 10.4): the Camel body of the function is its semantics and the
     // body-less declaration f of the same module is the operator that runs it. The graph builder
     // resolves the tag when it declares the module, so no pass reads it and it names no reader.
@@ -466,6 +465,7 @@ enum class SemanticDiag : uint32_t {
     FactCaseBindsNoVariable   = 0x0001F8,
     TypeFunctionNotApplicable = 0x0001FE,
     StatementAfterReturn      = 0x000201,
+    YieldRequiresStreamHead   = 0x000206,
     RuleLeftIsNotAnOperator   = 0x000204,
     DuplicateRuleForOperator  = 0x000205,
 

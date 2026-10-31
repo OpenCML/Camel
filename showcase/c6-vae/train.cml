@@ -99,7 +99,10 @@ func main(data: string, steps: int, batch: int, lr: float, log_every: int, threa
     // contiguous slice, so no sampling happens inside the loop.
     let started = now()
     let loss_with_grad = with_grad(loss)
-    let (trained, optimizer) = loop m = initial, opt = adam_state(initial), step = 0
+    // The loop carries three states and this declaration wants two of them: `_` is the third, a
+    // value dropped on purpose (design principles 3.9), which is also what a name too few has to
+    // be written as now.
+    let (trained, optimizer, _) = loop m = initial, opt = adam_state(initial), step = 0
         while step < steps
         do sync {
             let start = (step % batches) * batch

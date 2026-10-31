@@ -10,7 +10,7 @@ TILES_OPERATOR_ID array:argmax_axis id=340 tensor_spelling=422
 TILES_OPERATOR_ID tensor:reshape id=406 tensor_spelling=422
 ```
 
-取数方式：`camel <case> tiles::test_outline_compiled std::nvm`，`CAMEL_TILES_TEST_REASONS=1`，
+取数方式：`camel <case> tiles::test_outline_compiled std::nvm`，`reasons=true`，
 作用域是 `f32[2,3] → int[2]` 的 argmax；主机无卡，读数与设备无关（pass 只读程序与表）。
 
 `tensor:reshape` 那一行是**对照**：它的 `id=406` 与 `tensor_spelling=422` 不同也说明不了什么——那只是
@@ -143,3 +143,25 @@ add("tensor:argmax_axis", lowerArgMax, 12);
 同一分裂也解释了区域侧：表里写的是 `tensor:sum_axis`、`tensor:mean_axis`、`tensor:max_axis`，
 而节点带 `array:sum_axis` 等，**表里那三条对真实程序是空的**——缺口账本"有实现 8"这一栏是**表**的读数，
 不是节点的读数。这一条要按节点重新量，才能知道 `sum_axis`/`mean_axis`/`max_axis` 到底算不算"有实现"。
+
+## 六、裁定之后的第一笔：为什么"移动注册"不是机械操作
+
+裁定：正名取 `tensor:`，不设别名；删 C++ 侧 `array:…_axis` 的注册。按裁定的实际走法应为
+"把六条实现注册挪进 tensor 模块，`stdlib/array.cml` 改为从 tensor 导入"。**今晚试了第一步（只改
+`#op` 拼法）并回退，得到两条硬约束**：
+
+1. **body-less 声明必须由已加载模块实现**：只把 `array.cml` 的 `#op('array:sum_axis')` 改成
+   `tensor:sum_axis`，只 `import array` 的程序立刻失败——
+   `SemanticDiag::NativeDeclarationNotLoaded: …'tensor:sum_axis', which no loaded module implements`。
+2. **`tensor:` 那侧没有同名的 `sum_axis` 函数可导入**：`stdlib/signatures/tensor.cml` 里
+   `#op('tensor:sum_axis')` 紧跟的是 **`export func sum(t: float[..], axis: int, keepdims?: bool)`**——
+   那条 `#op` 是"函数名 `sum` → 算子 `tensor:sum_axis`"的映射，**`sum_axis` 这个名字在 tensor 侧不存在**。
+   而 `stdlib/array.cml` 的 `sum` 是泛型 `<T>`，tensor 侧是具体类型的重载。
+
+**所以这一笔的真正内容是**：让 `array` 的泛型 `sum`/`mean`/`min`/`max`/`argmax`/`argmin` 指向
+`tensor:` 那六个算子，同时不失去泛型表面——要么 `array` 的函数改成对 tensor 重载的转发（需要 tensor
+侧补泛型入口或按类型分派），要么把六条实现注册真正搬到 tensor 模块下（`getArrayOpsMap()` 里那六条来自
+`src/builtin/operators/array_axis.cpp`，而 tensor 的执行走自己的 OpDef/内核，两条实现路径不同）。
+**这不是一次字符串替换，是一次 stdlib 表面与算子归属的对齐**；建议单开一笔、带完整门禁做。
+
+`sort`/`argsort`/`merge_sorted` 不动：声明与实现都只在 `array:` 侧，按裁定判据它们的正名就是 `array:`。

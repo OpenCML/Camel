@@ -29,6 +29,8 @@ RuntimeDiag::MacroEvaluationFailed	test/cases/compile/collections/refuse_grad.cm
 RuntimeDiag::MaxRecursionDepthExceeded	test/cases/consistency/limits/depth_direct.cml
 RuntimeDiag::MemoryExhausted	test/cases/compile/stream/interval_loop_not_materialised.cml
 RuntimeDiag::OperandTypeUnsupported	test/cases/modules/tensor/dtype/f32_only.cml
+RuntimeDiag::PassBoundaryNodes	test/cases/effects/declared.cml
+RuntimeDiag::PassBoundaryResources	test/cases/effects/declared.cml
 RuntimeDiag::PassInternalError	test/cases/opt/generic/broken_graph.cml
 RuntimeDiag::PassNeedsExtraction	test/cases/feat/mm/writings/congruence.cml
 RuntimeDiag::PassNotExportedByModule	test/cases/modules/pass_not_found/main.cml
@@ -181,7 +183,6 @@ SemanticDiag::PartialApplicationRefused	test/cases/compile/surface/name_as_value
 SemanticDiag::PureAndUses	test/cases/effects/err_pure_and_uses.cml
 SemanticDiag::RangeStepZero	test/cases/compile/static_expansion/static_loop_sequence_range_step_zero.cml
 SemanticDiag::Redeclaration	test/cases/compile/generics/err_redecl.cml
-SemanticDiag::ReducedPrecisionUnsupported	test/cases/modules/stdlib/reduced_arithmetic_refused.cml
 SemanticDiag::ReservedIdentifier	test/cases/compile/surface/reserved_function_name.cml
 SemanticDiag::ResourceGroupCycle	test/cases/effects/err_group_cycle.cml
 SemanticDiag::RestArgumentNotLast	test/cases/compile/rest_params/rest_arg_not_last.cml
@@ -277,6 +278,7 @@ SemanticDiag::WithDefaultNotConstant	test/cases/compile/with_defaults/default_no
 SemanticDiag::WithDefaultWrongType	test/cases/compile/with_defaults/default_wrong_type.cml
 SemanticDiag::WithPackNeedsNativeDeclaration	test/cases/compile/prelude_signatures/with_pack_with_body.cml
 SemanticDiag::WithParameterAfterDefault	test/cases/compile/with_defaults/after_default.cml
+SemanticDiag::YieldRequiresStreamHead	test/cases/compile/stream/yield_head_no_stream.cml
 SyntaxDiag::AngleCloseAfterSpace	test/cases/parse/syntax/angle_close_after_space.cml
 SyntaxDiag::AsRightSideIsType	test/cases/parse/rulings/stream_type_as_interval.cml
 SyntaxDiag::ComparisonAcrossLines	test/cases/compile/surface/angle_then_name_line.cml

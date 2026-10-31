@@ -44,7 +44,7 @@ GraphReleaseTestPass::apply(const camel::runtime::Program *program, std::ostream
         // A graph big enough to show in the space: a specialization of a graph that is inlined
         // is of the graph it specializes, which is not small either.
         for (size_t i = 0; i < 20000; ++i) {
-            blankNode(draft);
+            blankNode(*transaction);
         }
         encoded    = draft.encode("test$unbound", "test$unbound");
         afterEncode = camel::core::mm::graphSpace().usage().usedBytes;

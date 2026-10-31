@@ -271,7 +271,7 @@ driver (`startLoopState`, `takeLoopRound`), and so does the macro evaluator (`st
 `camel/execute/loop_frame.h`). The driver takes one element of an array per round; the other sequences are turned
 into their array of elements before the loop starts (section 2a), so no second form reaches it.
 The macro evaluator's limit on
-the rounds of a loop is `--max-macro-rounds <n>` (else `CAMEL_MAX_MACRO_ROUNDS`; default
+the rounds of a loop is `--max-macro-rounds <n>` (default
 1000000, 1 to 2^40), the way the nesting limit is `--max-macro-depth`.
 
 A collecting loop keeps its state and its tapes in one tuple, `(state…, tape…)`: the k state
@@ -425,7 +425,7 @@ environment variable): the four shapes and the three ways a loop runs no rounds;
 on `std::nvm`, `std::fvm`, `std::jit`, `std::prl`,
 with the back ends' output compared; `std::macro` on the two-value loop of `macro.cml`; a hundred
 thousand rounds of a `while` and a `for` loop with the tapes summarised by their lengths; and a
-tape that outgrows `CAMEL_GC_HEAP_LIMIT_MB`, which every executor reports as
+tape that outgrows `--gc-heap-limit-mb`, which every executor reports as
 `RuntimeDiag::MemoryExhausted` at the loop's source line.
 
 `test/plans/feat/modules/autodiff.plan.toml` covers the differentiation through a loop (section

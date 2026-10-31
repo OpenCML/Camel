@@ -234,7 +234,7 @@ class Cursor {
 /// Whether an operation on `small` and `large` should go through `small` entry by entry.
 bool muchSmaller(const Table *small, const Table *large);
 
-/// Stops the process when `t` breaks an invariant and CAMEL_COLL_VALIDATE asks for the check.
+/// Stops the process when `t` breaks an invariant and --coll validation asks for the check.
 Table *checked(Table *t, const CollectionType *type);
 
 } // namespace camel::core::rtdata::table::detail

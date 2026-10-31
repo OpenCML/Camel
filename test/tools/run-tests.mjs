@@ -81,7 +81,7 @@ const TEST_FIELDS = new Set([
     'verify_script', 'verify_script_path', 'verify_js',
 ])
 const SWEEP_FIELDS = new Set([
-    'name', 'plans', 'exclude', 'envs', 'skip_env_prefix', 'timeout_scale',
+    'name', 'plans', 'exclude', 'envs', 'args', 'skip_env_prefix', 'skip_args_prefix', 'timeout_scale',
     'fast_sample', 'risk_tags', 'risk_sample',
 ])
 
@@ -667,8 +667,12 @@ function parseArgs(argv) {
             if (install === '') throw new Error('--camel needs the path of the install to measure')
             options.camel = path.resolve(process.cwd(), install)
         } else if (arg === '--compile-only') {
-            options.compileOnly = true
-        } else if (arg === '--jobs' && i + 1 < argv.length) {
+            // Answers one question: which programs in the entries the fast layer does not run fail
+            // to compile. It does not answer whether those tests pass -- their own criteria are
+            // comparisons and budgets that judge nothing without a run -- so it reports two columns,
+            // the compilation failures and the entries whose question is not this one, and it is not
+            // part of the gate.
+            options.compileOnly = true        } else if (arg === '--jobs' && i + 1 < argv.length) {
             options.jobs = positiveInteger(argv[++i], '--jobs')
         } else if (arg.startsWith('--jobs=')) {
             options.jobs = positiveInteger(arg.slice('--jobs='.length), '--jobs')
@@ -1620,6 +1624,9 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         !args.some((word) => String(word).startsWith('--timeit'))
     if (logContext.options.compileOnly && !judgedByCompile) {
         test.__notJudged = true
+        // The second column, said out loud: this entry asks something other than whether a program
+        // compiles, so the sweep does not count it either way.
+        console.log(`[NOT-JUDGED] ${test.name} (${test.case || test.tool}) -- not a compilation question`)
     }
     if (judgedByCompile) {
         const firstPass = args.findIndex((word) => /^[A-Za-z_][\w:-]*::/.test(word))
@@ -1742,16 +1749,19 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // the case that failed to build.
     const expectsRefusal = typeof test.expect_exit === 'number' && test.expect_exit !== 0
     if (test.__notJudged) result.notJudged = true
-    const failures =
-        logContext.options.compileOnly && !test.tool
-            ? test.__notJudged || result.exitCode === 0 || expectsRefusal
-                ? []
-                : [
-                      `does not compile (${test.case}): ` +
-                          ((result.output.match(/^error\[[^\n]*/m) || [''])[0] ||
-                              `exit ${result.exitCode}`),
-                  ]
-            : await validateTest(test, result, { ...logContext, scope })    // The cost judgement of a test that declares `cpu_budget_ms`, in the unit
+    // The sweep answers one question, so it has two columns and no third: a program that does not
+    // compile is the question, and everything the entry would have judged besides compiling is
+    // "not this question" -- never a failure, and never silently dropped either, because a red
+    // nobody explains gets read as a defect.
+    const failures = logContext.options.compileOnly
+        ? test.__notJudged || result.exitCode === 0 || expectsRefusal
+            ? []
+            : [
+                  `does not compile (${test.case}): ` +
+                      ((result.output.match(/^error\[[^\n]*/m) || [''])[0] ||
+                          `exit ${result.exitCode}`),
+              ]
+        : await validateTest(test, result, { ...logContext, scope })    // The cost judgement of a test that declares `cpu_budget_ms`, in the unit
     // the rule asks for:
     //
     //   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）
@@ -1971,8 +1981,8 @@ function invalidPlan(planPath, error) {
  *   name = "poison"                     # named "<name>:<source plan id>:<original name>"
  *   plans = ["../modules", "../linear"] # plan files or directories, relative to this plan
  *   exclude = ["modules/onnx"]          # substrings of plan paths that are left out
- *   envs = ["CAMEL_GC_POISON=1"]
- *   skip_env_prefix = "CAMEL_GC_"       # leave out tests that set such a variable themselves
+ *   args = ["--gc-check", "poison"]
+ *   skip_args_prefix = "--gc-"           # leave out tests that already name such an option
  *   timeout_scale = 20
  *
  * It is how a property that every program must keep (here: no raw pointer is held across a
@@ -1989,6 +1999,10 @@ export function expandSweeps(doc, planPath) {
         const exclude = (sweep.exclude || []).map((item) => String(item))
         const scale = Number.isFinite(sweep.timeout_scale) ? sweep.timeout_scale : 1
         const prefix = sweep.skip_env_prefix || null
+        // A sweep that sets its own options skips a source test that already names one of them:
+        // the copy would otherwise say --gc-check poison ... --gc-check poison and the parser
+        // would see the option twice.
+        const argPrefix = sweep.skip_args_prefix || null
         // `fast_sample = N` keeps N tests per source plan in the fast layer and puts the rest in
         // the milestone layer: the default developer run still checks the property against every
         // plan, and the full sweep (every eligible test) is `--tier milestone` away. The
@@ -2026,6 +2040,13 @@ export function expandSweeps(doc, planPath) {
                 if ((test.tool || 'camel') !== 'camel') continue
                 const own = (test.envs || []).map((entry) => String(entry))
                 if (prefix && own.some((entry) => entry.startsWith(prefix))) continue
+                const ownArgs = (test.args || []).map((entry) => String(entry))
+                if (argPrefix && ownArgs.some((entry) => entry.startsWith(argPrefix))) continue
+                // Options are read by a run: the words go in front of its entry file. A test
+                // that asks the compiler (`check`, `inspect`, `--version`) has no run to put them
+                // in front of, and they would land on the wrong parser.
+                const RUNDRIVING = new Set(["${case}", "--timeit", "--output-format"])
+                if ((sweep.args || []).length > 0 && !RUNDRIVING.has(ownArgs[0])) continue
                 eligible.push(test)
             }
             const sampled = new Set()
@@ -2045,6 +2066,7 @@ export function expandSweeps(doc, planPath) {
                     ...test,
                     name: rename(test.name),
                     envs: [...own, ...(sweep.envs || [])],
+                    args: [...(sweep.args || []), ...(test.args || [])],
                     timeout_ms: (test.timeout_ms || 10000) * scale,
                     verify_timeout_ms: (test.verify_timeout_ms || 5000) * scale,
                     __backendReference: test.__backendReference ? rename(test.__backendReference) : null,

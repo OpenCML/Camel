@@ -5,8 +5,13 @@
 
 #include "camel/parse/syntax/cst.h"
 
+#include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include <map>
 #include <mutex>
+#include <string>
+#include <vector>
 
 namespace camel::parse::ast {
 
@@ -14,6 +19,16 @@ namespace {
 
 std::mutex registryMutex;
 std::map<std::string, std::vector<RuleHead>> registry;
+// The index a ruleset module answers questions from: family -> ("head@arity" -> rule name). A
+// sorted map, so a lookup is one binary search and a family's rules are printable in a fixed order.
+std::map<std::string, std::map<std::string, std::string>> indexed;
+// family -> rule name -> the function the rule's right side calls (`add_tangent`, ...). Kept by
+// rule name because that is what a lookup answers with: a transform reads the rule, then asks what
+// it calls.
+std::map<std::string, std::map<std::string, std::string>> callees;
+// family -> rule name -> the names its left side binds (`a,b`). Kept beside the callee, read from
+// the same declaration: the tuple both sides of the rule take.
+std::map<std::string, std::map<std::string, std::string>> variables;
 
 } // namespace
 
@@ -79,17 +94,126 @@ std::string leftHeadOf(syntax::Node left, std::string &shape, uint32_t &arity) {
     return {};
 }
 
+namespace {
+
+/// The first call inside `node`, as the name it calls: a node with no operator token of its own
+/// and at least two children, the callee and its argument list (`f(a, b)`). The right side of a
+/// rule is `(dx, dw) => add_tangent(x, w, dx, dw)`, so this finds `add_tangent`.
+std::string firstCallIn(syntax::Node node) {
+    if (!node) {
+        return {};
+    }
+    size_t tokens = 0;
+    size_t nodes  = 0;
+    syntax::Node first;
+    syntax::Node second;
+    for (size_t index = 0; index < node->childCount(); ++index) {
+        const syntax::Child child = node->child(index);
+        if (child->isToken()) {
+            ++tokens;
+        } else if (child->isNode()) {
+            if (nodes == 0) {
+                first = child->node();
+            } else if (nodes == 1) {
+                second = child->node();
+            }
+            ++nodes;
+        }
+    }
+    if (tokens == 0 && nodes >= 2 && first && second &&
+        std::string_view(syntax::nodeKindName(second->kind())) == "ParentArgues") {
+        return first->text();
+    }
+    // The layers above an expression hold one child each for the precedence levels; a lambda
+    // holds its parameters and its body. Descend into every child and take the first answer.
+    for (size_t index = 0; index < node->childCount(); ++index) {
+        const syntax::Child child = node->child(index);
+        if (!child->isNode()) {
+            continue;
+        }
+        std::string found = firstCallIn(child->node());
+        if (!found.empty()) {
+            return found;
+        }
+    }
+    return {};
+}
+
+/// The names the left side binds, collected in order: a leaf that is written as an identifier.
+/// The layers above an expression hold one child each (the precedence levels), so they are stepped
+/// through; an operator node is stepped into for its operands; a leaf is where a name is written.
+void collectNames(syntax::Node node, std::vector<std::string> &names) {
+    if (!node) {
+        return;
+    }
+    size_t tokens = 0;
+    std::vector<syntax::Node> children;
+    for (size_t index = 0; index < node->childCount(); ++index) {
+        const syntax::Child child = node->child(index);
+        if (child->isToken()) {
+            ++tokens;
+        } else if (child->isNode()) {
+            children.push_back(child->node());
+        }
+    }
+    if (tokens == 0 && children.size() == 1) {
+        collectNames(children.front(), names);
+        return;
+    }
+    if (children.empty()) {
+        const std::string text = node->text();
+        if (!text.empty() &&
+            (std::isalpha(static_cast<unsigned char>(text.front())) || text.front() == '_')) {
+            if (std::find(names.begin(), names.end(), text) == names.end()) {
+                names.push_back(text);
+            }
+        }
+        return;
+    }
+    for (const syntax::Node &child : children) {
+        collectNames(child, names);
+    }
+}
+
+} // namespace
+
+std::string rightCalleeOf(syntax::Node right) {
+    return firstCallIn(right);
+}
+
+std::string variableNamesOf(syntax::Node left) {
+    std::vector<std::string> names;
+    collectNames(left, names);
+    std::string joined;
+    for (const std::string &name : names) {
+        if (!joined.empty()) {
+            joined += ',';
+        }
+        joined += name;
+    }
+    return joined;
+}
+
 void collectRuleHead(
     const std::string &module,
     std::string head,
     std::string rule,
+    std::string rhsCallee,
     std::string shape,
+    std::string variables,
     uint32_t arity,
     uint32_t tokenStart,
     uint32_t tokenEnd) {
     std::lock_guard<std::mutex> lock(registryMutex);
     registry[module].push_back(RuleHead{
-        std::move(head), std::move(rule), std::move(shape), arity, tokenStart, tokenEnd});
+        std::move(head),
+        std::move(rule),
+        std::move(rhsCallee),
+        std::move(shape),
+        std::move(variables),
+        arity,
+        tokenStart,
+        tokenEnd});
 }
 
 std::vector<RuleHead> takeRuleHeads(const std::string &module) {
@@ -101,6 +225,87 @@ std::vector<RuleHead> takeRuleHeads(const std::string &module) {
         registry.erase(at);
     }
     return heads;
+}
+
+std::string indexRule(const std::string &family, const RuleHead &rule) {
+    std::lock_guard<std::mutex> lock(registryMutex);
+    std::map<std::string, std::string> &rules = indexed[family];
+    const std::string key = rule.head + "@" + std::to_string(rule.arity);
+    const auto at         = rules.find(key);
+    if (at == rules.end()) {
+        rules.emplace(key, rule.rule);
+        callees[family][rule.rule]   = rule.rhsCallee;
+        variables[family][rule.rule] = rule.variables;
+        return {};
+    }
+    if (at->second == rule.rule) {
+        return {};
+    }
+    return at->second;
+}
+
+RuleMatch lookupRule(const std::string &family, const std::string &head, uint32_t arity) {
+    std::lock_guard<std::mutex> lock(registryMutex);
+    const auto familyAt = indexed.find(family);
+    if (familyAt == indexed.end()) {
+        return RuleMatch{RuleLookup::NoSuchFamily, {}};
+    }
+    const auto at = familyAt->second.find(head + "@" + std::to_string(arity));
+    if (at == familyAt->second.end()) {
+        return RuleMatch{RuleLookup::NoRuleForPrimitive, {}};
+    }
+    return RuleMatch{RuleLookup::Found, at->second};
+}
+
+std::string rhsCalleeOf(const std::string &family, const std::string &rule) {
+    std::lock_guard<std::mutex> lock(registryMutex);
+    const auto at = callees.find(family);
+    if (at == callees.end()) {
+        return {};
+    }
+    const auto ruleAt = at->second.find(rule);
+    return ruleAt == at->second.end() ? std::string() : ruleAt->second;
+}
+
+std::vector<std::string> ruleFamilies() {
+    std::lock_guard<std::mutex> lock(registryMutex);
+    std::vector<std::string> families;
+    families.reserve(indexed.size());
+    for (const auto &[family, rules] : indexed) {
+        (void)rules;
+        families.push_back(family);
+    }
+    return families;
+}
+
+std::vector<RuleEntry> rulesOf(const std::string &family) {
+    std::lock_guard<std::mutex> lock(registryMutex);
+    std::vector<RuleEntry> entries;
+    const auto at = indexed.find(family);
+    if (at == indexed.end()) {
+        return entries;
+    }
+    entries.reserve(at->second.size());
+    for (const auto &[key, rule] : at->second) {
+        const size_t at2 = key.rfind('@');
+        if (at2 == std::string::npos) {
+            continue;
+        }
+        const auto familyVars = variables.find(family);
+        std::string names;
+        if (familyVars != variables.end()) {
+            const auto at3 = familyVars->second.find(rule);
+            if (at3 != familyVars->second.end()) {
+                names = at3->second;
+            }
+        }
+        entries.push_back(RuleEntry{
+            key.substr(0, at2),
+            static_cast<uint32_t>(std::strtoul(key.c_str() + at2 + 1, nullptr, 10)),
+            rule,
+            names});
+    }
+    return entries;
 }
 
 } // namespace camel::parse::ast

@@ -1,0 +1,13 @@
+/**
+ * The same report one level in: a function written inside another function's body that yields in a
+ * head that writes no stream type gets SemanticDiag::YieldRequiresStreamHead at its own `yield`, not
+ * a missing feature and not a report about the outer function.
+ */
+func outer(): int sync {
+    func inner(): int {
+        yield 1
+    }
+
+    inner()
+    return 0
+}

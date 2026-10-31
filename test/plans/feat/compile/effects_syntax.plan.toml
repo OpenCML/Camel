@@ -17,6 +17,24 @@ timeout_ms = 12000
 # ---- A source program: the clause is what a call touches ----
 
 [[tests]]
+name = "pass_boundary.resources_kept"
+desc = "A pass may move code, inline a body into its caller, copy it or delete what nothing needs; what it may not do is change which ambient resources the program touches. `PassBoundaryResources` is checked after every pass of the list, and this program -- two calls that touch a cell, a group's `db` and `stdout` -- goes through two rewriting passes with the program's own output unchanged and the check silent. The count of effects is not the invariant (inlining copies a body and the copies are not all run): the set of resources is."
+kind = "behavior"
+case = "../../../cases/effects/declared.cml"
+args = ["${case}", "std::opt::inline", "std::opt"]
+expect_exit = 0
+expect_output_not_contains = ["PassBoundaryResources", "changed the ambient resources", "failed with an internal error"]
+
+[[tests]]
+name = "pass_boundary.entry_and_exit_kept"
+desc = "The other half of the pass boundary, and a diagnostic of its own (`RuntimeDiag::PassBoundaryNodes`, 0x0400000F): after every pass the program's root graph still has an entry node it can start at and an exit node whose value it returns, or the pass that returned it is named. Kept apart from `PassBoundaryResources` on purpose -- two invariants that can go red separately are two invariants, and one red then says which of them broke. No pass in the tree breaks this one today, which is what this pins: the check is silent on a program put through two rewriting passes."
+kind = "behavior"
+case = "../../../cases/effects/declared.cml"
+args = ["${case}", "std::opt::inline", "std::opt"]
+expect_exit = 0
+expect_output_not_contains = ["RuntimeDiag::PassBoundaryNodes", "has no entry node", "has no exit node"]
+
+[[tests]]
 name = "source.declared_resources"
 desc = "Two calls of `consume` touch the same handle (the value they are given) and are ordered by control, two calls of `tick` touch the group's `db` and `stdout` and are visible outside the program -- naming an ambient resource in a clause promises the effect that comes with it -- and two calls of `bump` touch the same cell: the bodies touch nothing, so the footprint can only come from the clauses. The program's own output is unchanged."
 kind = "behavior"
@@ -444,6 +462,113 @@ verify_script = """
 const out = input.normalized.stdout.trim()
 const want = ["1 40", "7 50"].join('\n')
 assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+# ---- Two references write one mutable object ----
+#
+# `counter` is written by the body, and written again by a function value handed to a parameter of
+# function type: at the call the second writer is invisible. The write still happens, so the read
+# after the call takes the value of that second write (design principles 3.1, 3.5).
+
+[[tests]]
+name = "callback.two_references_write_one_object"
+desc = "Two references write one mutable object: the body writes `counter` and the function value the caller hands over writes it again. The call has to run and the read after it takes the value the second write made -- the call is a possible writer of a variable some function in the program writes. Same output on all four back ends."
+kind = "behavior"
+case = "../../../cases/effects/two_references_write_one_object.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "callback.two_references_write_one_object_opt"
+desc = "The same program through the optimizer: what the second write made is what the read takes, so no pass folds the read to the value the body wrote first."
+kind = "behavior"
+case = "../../../cases/effects/two_references_write_one_object.cml"
+args = ["${case}", "std::opt", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "callback.two_references_write_one_object_unsynced"
+desc = "The same two writes with the call outside a `sync` block: the write the function value makes is not visible at the call, so the conservative writer set is what makes the call run and the read after it take the value the second write made -- every variable visible at the call that some function of the program writes is a possible write of it."
+kind = "behavior"
+case = "../../../cases/effects/two_references_write_one_object_unsynced.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "callback.overcounted_writer_keeps_the_value"
+desc = "A writer the conservative set counts that the call does not reach: the function value handed over only prints, and `counter` is a variable some function of the program writes. The call has to run (its output appears); the value read after it is still the one the body wrote, so the extra writer costs execution and never the result."
+kind = "behavior"
+case = "../../../cases/effects/overcounted_writer_keeps_the_value.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = ["called 3", "1"].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "callback.two_calls_through_values_keep_both_writes"
+desc = "Two calls through function values in a row are two writes of `counter`, and the second call's before-version is the first call's `:var/after`: both writes run and the read after them takes `12`. Before the chain was made this printed `10`, with the write before the calls lost. The sequential schedulers only: nothing orders the two calls against each other, so a parallel one may interleave them, and then the number is the interleaving's (a run of `std::prl` printed `2`)."
+kind = "behavior"
+case = "../../../cases/effects/two_calls_through_values_keep_both_writes.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '12', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "callback.value_made_after_a_call_captures_its_version"
+desc = "A function value made after a call that may write a variable captures it as the call left it, so the closure written after the call reads `5`; before the claim was handed to the capture it read `1`, the cell from before the call."
+kind = "behavior"
+case = "../../../cases/effects/value_made_after_a_call_captures_its_version.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '5', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 30000

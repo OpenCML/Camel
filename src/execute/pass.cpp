@@ -75,6 +75,7 @@
 #include "passes/trans/dot/graphviz.h"
 #include "passes/trans/profile/profile.h"
 #include "passes/trans/stats/stats.h"
+#include "passes/trans/rulesets/rulesets.h"
 #include "passes/trans/tns/topo_node_seq.h"
 
 #include "camel/utils/log.h"
@@ -405,7 +406,8 @@ PassMaker optimizePass() {
 /// off (`fixedLoweringSteps`), so an inserted step writes nothing on the program's own output.
 PassMaker defunctionalizePass() {
     return [](const context_ptr_t &ctx, const PassArgs &args) {
-        return std::make_unique<DefunctionalizeRewritePass>(ctx, args.getBool("report"));
+        return std::make_unique<DefunctionalizeRewritePass>(
+            ctx, args.getBool("report"), args.getBool("debug"));
     };
 }
 
@@ -509,7 +511,9 @@ PassMaker profilePass() {
             pathArgument(args, "json"),
             gcStats < 0 ? 0 : static_cast<int>(gcStats),
             args.getBool("type_stats"),
-            pathArgument(args, "effect_trace"));
+            pathArgument(args, "effect_trace"),
+            args.getBool("opstats"),
+            args.getBool("variant_trace"));
     };
 }
 
@@ -571,6 +575,14 @@ void registerCoreKernels() {
     registerCoreKernel(
         "argir", makeGraphVizPass(GraphVizDumpConfig{.rich = true, .annotateRoles = true}));
     registerCoreKernel("stats", makePass<GraphStatsPass>());
+    registerCoreKernel(
+        "rulesets",
+        [](const context_ptr_t &ctx, const PassArgs &args) {
+            return std::make_unique<RulesetsPass>(
+                ctx,
+                args.isNull("query") ? std::string() : args.getString("query"),
+                args.getBool("forward"));
+        });
     registerCoreKernel("profile", profilePass());
     registerCoreKernel("cpp", makePass<CppDumpPass>());
     registerCoreKernel("cpp::module_file", makePass<CppModuleDumpPass>());
@@ -2097,6 +2109,87 @@ OrderVerdict orderedInProgram(const ProgramEffects &effects, EffectSite earlier,
 /// 2. The graph each of them is in after the pass. A pass that pulls an effect's node into another
 ///    graph takes its order with it, and a check that only read the order of a graph sees nothing:
 ///    the node is still in the program, it is the graph it runs in that moved.
+/// The ambient resources the program touches must be the same before and after a pass. A pass moves
+/// code, copies it, inlines a body, or deletes what nothing needs; none of that may add or remove an
+/// effect on state the program does not own.
+///
+/// The whole program is compared, not one graph at a time: inlining moves an effect from a callee
+/// graph into its caller and deletes the callee, which changes each graph's own resources and the
+/// program's none. The order of those effects is `effectOrderViolation`; this is the other half of
+/// the boundary, which resources the program touches at all.
+///
+/// Returns nothing for a pass that kept them, or the two lists the diagnostic names.
+std::vector<std::string> effectResourcesViolation(const ProgramEffects &before, const ProgramEffects &after) {
+    // The language's own ambient resources are the boundary here: a module may declare a resource
+    // of its own (	iles:driver) and a pass of that module may bring it into the program, which is
+    // the module's business, not a change to what the program does to state it does not own.
+    const auto resourcesOf = [](const ProgramEffects &effects) {
+        std::vector<std::string> names;
+        for (const EffectSite &site : effects.sites) {
+            for (const std::string &name : site.resources) {
+                if (camel::core::sem::isStandardResource(name)) {
+                    names.push_back(name);
+                }
+            }
+        }
+        std::sort(names.begin(), names.end());
+        names.erase(std::unique(names.begin(), names.end()), names.end());
+        return names;
+    };
+    const auto text = [](const std::vector<std::string> &names) {
+        if (names.empty()) {
+            return std::string("nothing");
+        }
+        std::string out;
+        for (const std::string &name : names) {
+            if (!out.empty()) {
+                out += ", ";
+            }
+            out += name;
+        }
+        return out;
+    };
+    const std::vector<std::string> was = resourcesOf(before);
+    const std::vector<std::string> is  = resourcesOf(after);
+    if (was == is) {
+        return {};
+    }
+    return {text(was), text(is)};
+}
+
+/// Every graph a pass returns keeps an entry and an exit: the node it starts at and the node whose
+/// value it returns. A rewrite may replace either one, but the one it puts there must be a node of
+/// the graph that is alive -- a graph whose entry or exit is gone is a graph nothing can run.
+///
+/// Returns nothing, or the graph and which of the two it lost.
+std::string entryExitViolation(const camel::runtime::Program &program) {
+    // The program's own boundary: the graph the pipeline starts from. A graph a module keeps for
+    // itself (a rule library, an extracted body) need not be runnable on its own.
+    const std::vector<camel::runtime::GCGraph *> graphs = {program.root()};
+    for (camel::runtime::GCGraph *graph : graphs) {
+        if (graph == nullptr) {
+            continue; // a program without a root is what the next pass is given to fix
+        }
+        const auto alive = [&](camel::runtime::gc_node_ref_t ref) {
+            if (ref == camel::runtime::kInvalidNodeRef || !graph->containsNodeRef(ref)) {
+                return false;
+            }
+            const camel::runtime::GCNode *record = graph->node(ref);
+            return record != nullptr && record->kind != camel::runtime::GCNodeKind::Dead;
+        };
+        const bool entry = alive(graph->entryNodeRef());
+        const bool exit  = alive(graph->exitNodeRef());
+        if (entry && exit) {
+            continue;
+        }
+        return std::format(
+            "graph {} of it has no {}",
+            camel::runtime::toValue(graph->id()),
+            !entry ? "entry node it can start at" : "exit node whose value it returns");
+    }
+    return {};
+}
+
 std::string effectOrderViolation(const ProgramEffects &before, const ProgramEffects &after) {
     const std::vector<std::pair<size_t, size_t>> pairs = matchedEffects(before, after);
     for (size_t i = 0; i < pairs.size(); ++i) {
@@ -2660,11 +2753,28 @@ PassApplyResult applyPassesDetailed(
             // (design principles 3.3). The check is the last thing the pass does, so that no pass
             // of the pipeline, nested or listed, ends without it.
             {
-                const std::string violation =
-                    effectOrderViolation(effectsBefore, collectEffects(*program));
+                const ProgramEffects effectsAfter = collectEffects(*program);
+                const std::string violation = effectOrderViolation(effectsBefore, effectsAfter);
                 if (!violation.empty()) {
                     ctx->rtmDiags()->of(RuntimeDiag::PassInternalError).commit(p, violation);
                     CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (effect order)", p);
+                    return {nullptr, PassApplyStatus::Failed};
+                }
+                const std::vector<std::string> resources =
+                    effectResourcesViolation(effectsBefore, effectsAfter);
+                if (!resources.empty()) {
+                    ctx->rtmDiags()
+                        ->of(RuntimeDiag::PassBoundaryResources)
+                        .commit(p, resources[0], resources[1]);
+                    CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (effect resources)", p);
+                    return {nullptr, PassApplyStatus::Failed};
+                }
+                const std::string boundary = entryExitViolation(*program);
+                if (!boundary.empty()) {
+                    ctx->rtmDiags()
+                        ->of(RuntimeDiag::PassBoundaryNodes)
+                        .commit(p, "graph", boundary);
+                    CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (entry/exit)", p);
                     return {nullptr, PassApplyStatus::Failed};
                 }
             }

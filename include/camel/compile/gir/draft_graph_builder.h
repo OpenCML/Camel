@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * Compile-time host around the shared GraphDraft editing core.
+ * Compile-time host around the shared editable graph core.
  *
- * This object owns compile-only services that should not live on GraphDraft:
+ * This object owns compile-only services that should not live on the editable draft:
  * - transient allocation used when converting compile-time constants into slots
  * - node cold metadata keyed by stable draft node ids
  * - compile-time operator registry ownership
@@ -49,7 +49,20 @@ class DraftGraphBuilder {
     DraftGraphBuilder(DraftGraphBuilder &&)                 = delete;
     DraftGraphBuilder &operator=(DraftGraphBuilder &&)      = delete;
 
+  private:
+    /// The graph itself. Private: a reader asks view(), a writer asks edit(), and this is the name the
+    /// class keeps for its own forty uses. It is not part of the interface any more.
     runtime::GraphDraft &draft() const { return transaction_->edit(); }
+  public:
+    /// The graph as it stands, for a caller that only reads it. On the writing side the same graph is
+    /// called draft(): the two sides get their own names first, and their own types after (a reader
+    /// takes a transaction and looks at its graph; a writer takes one and edits it). Today both name
+    /// the same object, which is what makes the split a rename rather than a rewrite.
+    auto view() const -> decltype(draft()) { return draft(); }
+
+    /// The graph, for a caller that changes it. Same object as view() today; the two names are what
+    /// lets the types separate later without touching the call sites again.
+    auto edit() -> decltype(draft()) { return draft(); }
     /// The transaction the graph belongs to: the only handle to the graph being built.
     runtime::GraphTransaction &transaction() const { return *transaction_; }
     static DraftGraphBuilder *fromDraft(const runtime::GraphDraft *draft);

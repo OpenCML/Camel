@@ -6,9 +6,9 @@ cannot write into a commit.  Re-running the command regenerates this file.  Time
 decimals the log carries; every number the search itself reports is exact and is pinned as a golden
 in `test/plans/feat/showcase_d4.plan.toml`.
 
-- date: 2026-10-23 (Asia/Shanghai)
-- Camel: Camel v0.2.28 (Build 261023_150653_102dbc5d1)
-- Python: 3.10.12 (the counterpart is the standard library alone: no NumPy, no PyTorch)
+- date: 2026-10-31 (Asia/Shanghai)
+- Camel: Camel v0.2.38 (Build 261031_000916_b63715d63)
+- Python: 3.10.19 (the counterpart is the standard library alone: no NumPy, no PyTorch)
 - command: `python showcase/d4-mcts/compare.py --profile small`
 - profile: small; seed 42, 2000 playouts per search and 5000 on the empty board, one process per run
 
@@ -61,9 +61,9 @@ cases, and the three refusals); this table is the same property from the compari
 
 | metric | Camel (nvm) | Python | Camel / Python |
 |---|---|---|---|
-| search time (s) | 0.227 | 0.146 | 1.555 |
-| playouts per second | 8816 | 13722 | 1.555 |
-| peak process memory (MiB) | 24.9 | 11.5 | 2.165 |
+| search time (s) | 0.165 | 0.055 | 3.007 |
+| playouts per second | 12152 | 36537 | 3.007 |
+| peak process memory (MiB) | 41.5 | 10.8 | 3.854 |
 
 The rows above are the `fork` case (`X..OX...O`, 2000 playouts); both are whole-process wall times,
 which this host shares with other work, so they are reported and never asserted.  Every number the
@@ -71,14 +71,33 @@ search reports is exact and reproducible: nothing in it is timed.  Python is the
 which is expected: a Python node is one `__slots__` object and a board is a `list` copy, while
 Camel copies the whole `State` (a nine-int array and an int) on every `apply_move` and goes through
 the graph scheduler.  The empty board runs longer on both sides and the same relation holds
-(Camel 1.592 s, Python 0.479 s at 5000 playouts in the same run).
+(Camel 1.032 s, Python 0.188 s at 5000 playouts in the same run).
+
+## Self-play (the learned half)
+
+| reading | value |
+|---|---|
+| games played | 16 |
+| steps taken | 10 |
+| mean result of the games | 0.656 |
+| loss, first three | 0.640625, 0.483687, 0.358262 |
+| loss, last three | 0.320763, 0.293756, 0.261926 |
+| wall time (s) | 0.097 |
+
+There is nothing to diff here: the Python counterpart is the search, and the training loop is the
+part of D4 it does not have.  So this table is a reading, not a comparison — the games are scripted
+(a player takes a free place drawn from the game's key, no search), the batch is fixed while the ten
+Adam steps move the model, and `feat/showcase_d4.plan.toml` pins that the sequence is printed and
+that its numbers are finite, never what they are.  The one thing a bigger run can break is its
+cost: sixteen games times ten steps stays in the same tenth of a second as one game and one step,
+because the schedule of this tiny graph is what the wall time is made of, not the arithmetic.
 
 ## Code size (code lines by section)
 
 | section | Camel | Python |
 |---|---|---|
-| header | 1 | 4 |
-| imports | 2 | 0 |
+| header | 0 | 4 |
+| imports | 3 | 0 |
 | game | 32 | 26 |
 | policy | 29 | 28 |
 | tree | 38 | 16 |

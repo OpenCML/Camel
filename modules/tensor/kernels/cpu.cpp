@@ -7,8 +7,7 @@
 
 #include "cpu.h"
 
-#include <cstdlib>
-#include <string_view>
+#include "camel/execute/cpu_isa.h"
 
 #if defined(_MSC_VER) && !defined(__clang__)
 #include <intrin.h>
@@ -61,8 +60,10 @@ CpuFeatures detectCpuFeatures() { return {}; }
 
 const CpuFeatures &cpuFeatures() {
     static const CpuFeatures features = [] {
-        const char *isa = std::getenv("CAMEL_TENSOR_ISA");
-        if (isa != nullptr && std::string_view(isa) == "generic") {
+        // A run that must not use a wider unit says so on its command line (`--tensor-isa
+        // generic`); the driver applies it before the first kernel is chosen, so reading it once
+        // here is enough.
+        if (camel::execute::selectedCpuIsa() == camel::execute::CpuIsa::Generic) {
             return CpuFeatures{};
         }
         return detectCpuFeatures();

@@ -284,7 +284,7 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
         const RuleObject *current = call.rule != nullptr ? call.rule->getAs<RuleObject>() : nullptr;
         return current != nullptr ? current->name() : std::string_view(call.name);
     };
-    auto &draft    = match.writings.draft();
+    auto &draft    = match.writings.transaction().edit();
     auto &writings = match.writings;
     // One slot per parameter: a rooted Node handle for a node parameter, a rooted object for a
     // constant the collector can move, and nothing for a constant whose bits are copied below.
@@ -1286,7 +1286,7 @@ slot_t whyNotKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     // generic rule's instance is made here and a rule's `when` condition runs here -- so each is
     // read again from where the collector keeps it, which is rule 2 of
     // docs/technical/36_gc_handle_rules.md. The rule is the address this kernel used to keep, and
-    // the one the fix in `callWhen` did not reach (6e0eb52e4): under `CAMEL_GC_POISON=1` the
+    // the one the fix in `callWhen` did not reach (6e0eb52e4): under `--gc-check poison` the
     // collector wrote its poison word where the rule had been, and `rule->name()` in the answer at
     // the end of this function read that word -- SIGSEGV with `nameId` 0xf3900000, measured
     // 2026-10-24 on rules.why_not_names_the_false_condition. The rule is rooted for the length of
@@ -1536,7 +1536,7 @@ class CamelCostModel final : public camel::runtime::CostModel {
     double totalCost(
         const camel::runtime::CostContext &context, camel::runtime::gc_node_ref_t node, double own,
         std::span<const double> inputs) const override {
-        const auto *header = context.draft.header(node);
+        const auto *header = context.transaction.graph().header(node);
         double inputsTotal = 0.0;
         for (double cost : inputs) {
             inputsTotal += cost;
@@ -1544,7 +1544,7 @@ class CamelCostModel final : public camel::runtime::CostModel {
         if (header == nullptr || header->kind != camel::runtime::GCNodeKind::Oper) {
             return own + inputsTotal;
         }
-        const auto bytes = context.draft.payloadOf(node);
+        const auto bytes = context.transaction.graph().payloadOf(node);
         if (bytes.size() < sizeof(camel::runtime::GCOperBody)) {
             return own + inputsTotal;
         }

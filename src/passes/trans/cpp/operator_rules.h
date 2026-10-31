@@ -52,8 +52,18 @@ class OperatorCall {
     /// SiteTable::siteFor.
     virtual std::string site(
         camel::core::error::RuntimeDiag kind, const std::vector<std::string> &args) = 0;
+    /// The Place of this call: what a fault of the operator itself reports (bridge::Operator).
+    virtual std::string place() = 0;
+    /// The accessor of this operator in the generated file, `op_<identifier>`: a rule that calls
+    /// the runtime's own implementation (bridge.h) names the operator with it, which is also what
+    /// makes the program one that includes bridge.h and links the runtime.
+    virtual std::string bridgeOperator() = 0;
     /// The C++ type of `type` ("void" when it has none).
     virtual std::string cppType(const Type *type) const = 0;
+    /// The C++ member name of the field the argument `argIndex` of a store names
+    /// (`:op/set_field`): a field index is one the compiler wrote, not a value of the program, so
+    /// it is not among the arguments' text. Empty when that argument is not such a constant.
+    virtual std::string fieldName(size_t argIndex) = 0;
 
     /// The C++ text of argument `i` to pass to an overloaded runtime function: a bare literal
     /// is written with its type when every argument is one (camel/standalone/num.h).
@@ -67,6 +77,12 @@ struct OperatorRule {
     /// Its result depends on its arguments only, it has no effect and cannot fault: the
     /// expression may be moved to its one use (and need not be a statement of its own).
     bool inlinable = false;
+    /// The C++ type of the result when it is not the C++ type of the node's Camel type: an
+    /// operator whose result is a value the runtime owns gives an `rt::Foreign`, whatever the type
+    /// of the value it names says (docs/design/cpp-standalone/README.cn.md 9 -- for such an
+    /// operator the representation is the call's, not the type's). Null: the node's type, as
+    /// everywhere else.
+    const char *resultCpp = nullptr;
 };
 
 /// The rule for the operator `uri`, or null when it has no standalone translation.

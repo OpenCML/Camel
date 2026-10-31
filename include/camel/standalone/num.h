@@ -22,6 +22,7 @@
 #pragma once
 
 #include "camel/standalone/core.h"
+#include "camel/standalone/half.h"
 #include "camel/standalone/opt.h"
 #include "camel/standalone/str.h"
 #include "camel/utils/int_div.h"
@@ -103,6 +104,11 @@ template <std::same_as<int32_t> T> T div(T a, T b, const Site &site) {
 template <std::same_as<float> T> T div(T a, T b, const Site &site) {
     return detail::divide(a, b, site);
 }
+/// `a / b` on a bf16 or an f16 (:op/div_bf, :op/div_f6): dividing by zero is DivisionByZero at
+/// `site` as it is for f32, and the quotient is computed in f32 and rounded once into the type.
+template <typename Format> Half<Format> div(Half<Format> a, Half<Format> b, const Site &site) {
+    return Half<Format>(detail::divide(a.toFloat(), b.toFloat(), site));
+}
 
 /// `a % b` (:op/mod_*): integers only; by zero is DivisionByZero at `site`; any % -1 is 0.
 inline int64_t mod(int64_t a, int64_t b, const Site &site) {
@@ -122,6 +128,37 @@ template <std::same_as<int32_t> T> T pow(T base, T exponent) {
 }
 template <std::same_as<float> T> T pow(T base, T exponent) {
     return static_cast<T>(std::pow(base, exponent));
+}
+/// `a ^ b` on a bf16 or an f16 (:op/pow_bf, :op/pow_f6): std::pow of the widened values, rounded
+/// once into the type.
+template <typename Format> Half<Format> pow(Half<Format> base, Half<Format> exponent) {
+    return Half<Format>(std::pow(base.toFloat(), exponent.toFloat()));
+}
+
+/// `math::min` and `math::max` of two f32 or f64 values (math:min_f, math:min_d and their max
+/// forms): the IEEE 754-2019 minimum and maximum that halfMin and halfMax of half.h state on the
+/// sixteen-bit pattern -- a NaN on either side gives the canonical quiet NaN, `-0` is below `+0`,
+/// and otherwise the answer is one of the two operands. std::fmin and std::fmax are not this
+/// comparison: they answer the other operand when one of theirs is a NaN.
+template <std::floating_point T> T ieeeMin(T a, T b) {
+    if (a != a || b != b) {
+        return std::numeric_limits<T>::quiet_NaN();
+    }
+    if (a != b) {
+        return b < a ? b : a;
+    }
+    return std::signbit(a) ? a : b;
+}
+
+/// `math::max` of two f32 or f64 values: see ieeeMin.
+template <std::floating_point T> T ieeeMax(T a, T b) {
+    if (a != a || b != b) {
+        return std::numeric_limits<T>::quiet_NaN();
+    }
+    if (a != b) {
+        return a < b ? b : a;
+    }
+    return std::signbit(a) ? b : a;
 }
 
 // ---- Number to number (:op/ltoi, :op/dtol, ...) ----
@@ -162,6 +199,13 @@ To truncate(From value, const char *target, const Site &site) {
     return static_cast<To>(value);
 }
 
+/// A bf16 or an f16 truncated toward zero as the integer type To (`int(x)` of one): the value is
+/// the f32 it widens to, so the rule and the report are the f32 one (`:op/bftoi`, `:op/f6toi`).
+template <std::signed_integral To, typename Format>
+To truncate(Half<Format> value, const char *target, const Site &site) {
+    return truncate<To>(value.toFloat(), target, site);
+}
+
 /// The integer written in `text`, which must be that integer and nothing else (`int(s)`). The
 /// two refusals are the two causes (camel/core/numeric_convert.h, the same rule): `invalid`
 /// reports a text that is not a number, `outOfRange` a number the type cannot hold (the range is
@@ -192,6 +236,40 @@ To floatFromText(std::string_view text, const Site &invalid, const Site &outOfRa
     default:
         fault(invalid, {std::string(text)});
     }
+}
+
+/// The number written in `text` as a bf16 or an f16 (`bf16(s)`): the whole text must be one
+/// number, and one beyond the range of the element type is ConversionOutOfRange. The text is
+/// read first as f32 (`floatFromText` above, the runtime's own path in
+/// camel/core/numeric_convert_half.h), which is where "not a number" and "beyond f32" are
+/// refused, and then rounded once into the element type; a value whose nearest element is an
+/// infinity is the overflow of this type.
+///
+/// One site carries both ranges, with the range in it as a value: the two refusals are the same
+/// diagnostic at the same place, and only the range they name differs -- f32's when the text is
+/// beyond f32 at all, the element type's when f32 holds it and the type does not. A program
+/// therefore reports whichever range it met, at one sentence.
+template <typename Half> Half halfFromText(
+    std::string_view text, const Site &invalid, const Site &outOfRange) {
+    float asFloat = 0.0f;
+    switch (camel::utils::parseWholeFloat<float>(text, asFloat)) {
+    case camel::utils::NumberTextStatus::Ok:
+        break;
+    case camel::utils::NumberTextStatus::OutOfRange:
+        fault(
+            outOfRange,
+            {std::string(text), std::string(camel::utils::floatRangeText<float>())});
+    default:
+        fault(invalid, {std::string(text)});
+    }
+    if (halfOverflows<typename Half::FormatOf>(asFloat)) [[unlikely]] {
+        fault(
+            outOfRange,
+            {std::string(text),
+             std::string(camel::utils::halfRangeText(
+                 std::is_same_v<typename Half::FormatOf, BF16Format>))});
+    }
+    return Half(asFloat);
 }
 
 // ---- Text to number, as a `T!` (:op/parse_int, :op/parse_float; tagged.cpp parseNumber) ----

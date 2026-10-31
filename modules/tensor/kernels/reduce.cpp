@@ -20,6 +20,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <string>
 #include <vector>
 
 namespace camel::tensor::kernels {
@@ -122,13 +123,38 @@ Shape reducedShape(std::span<const int64_t> shape, size_t axis, bool keepDims) {
 Array *reduceAxis(
     ReduceOp op, const Array *input, int64_t axisArg, bool keepDims,
     mm::IAllocator &allocator) {
+    // The axis is checked here rather than only inside `normalizeAxis`, because a refusal that says
+    // "axis 2 is out of range" leaves the reader to find which reduction made the call: the six axis
+    // reductions are one operator each, and the message names the one that was refused.
+    const char *axisName = op == ReduceOp::Sum      ? "tensor:sum_axis"
+                           : op == ReduceOp::Mean   ? "tensor:mean_axis"
+                           : op == ReduceOp::Max    ? "tensor:max_axis"
+                           : op == ReduceOp::Min    ? "tensor:min_axis"
+                           : op == ReduceOp::ArgMax ? "tensor:argmax_axis"
+                                                    : "tensor:argmin_axis";
+    const int64_t signedRank = static_cast<int64_t>(input->rank());
+    if (axisArg < -signedRank || axisArg >= signedRank) {
+        throw std::invalid_argument(
+            std::string("'") + axisName + "': the axis " + std::to_string(axisArg) +
+            " is outside the rank " + std::to_string(signedRank));
+    }
     const size_t axis     = normalizeAxis(axisArg, input->rank());
     const AxisSplit split = splitAt(input->shapeSpan(), axis);
     const Shape outShape  = reducedShape(input->shapeSpan(), axis, keepDims);
     if ((op == ReduceOp::Max || op == ReduceOp::Min || op == ReduceOp::ArgMax ||
          op == ReduceOp::ArgMin) &&
         split.extent == 0) {
-        throw std::invalid_argument("Cannot take max/min/argmax/argmin over an empty axis");
+        // The refusal names the operator and the axis it was given, because this is the one place a
+        // caller learns which of its several reductions was refused: a message that says only
+        // "reduce" makes the reader go back and find the call, and it lost exactly that when the six
+        // axis reductions stopped being spelled `array:` and became `tensor:`.
+        const char *name = op == ReduceOp::Max      ? "tensor:max_axis"
+                           : op == ReduceOp::Min    ? "tensor:min_axis"
+                           : op == ReduceOp::ArgMax ? "tensor:argmax_axis"
+                                                    : "tensor:argmin_axis";
+        throw std::invalid_argument(
+            std::string("'") + name + "': the axis " + std::to_string(axis) +
+            " has no element");
     }
 
     TypeCode outType = input->dtype();

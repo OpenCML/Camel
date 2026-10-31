@@ -26,7 +26,7 @@ using namespace table::detail;
 
 const CollectionType *collectionTypeOf(const Type *type) {
     const CollectionType *result = type::asCollectionType(type);
-    ASSERT(result != nullptr, "A Table needs its Map or Set type.");
+    GUARD(result != nullptr, "A Table needs its Map or Set type, and the type check returned none: the table has no layout to place entries in");
     return result;
 }
 
@@ -35,7 +35,7 @@ const CollectionType *collectionTypeOf(const Type *type) {
 // ---- Table ----
 
 Table *Table::create(size_t size, size_t slotCount, mm::IAllocator &allocator) {
-    ASSERT(slotCount >= size, "A leaf has one or two slots per entry.");
+    GUARD(slotCount >= size, "A leaf has one or two slots per entry, and this leaf declares fewer slots than entries: two entries would share a slot and the second write would be read back as the first");
     void *memory = allocator.alloc(sizeof(Table) + slotCount * sizeof(slot_t), alignof(Table));
     if (!memory) {
         throw std::bad_alloc();
@@ -47,7 +47,7 @@ Table *Table::create(size_t size, size_t slotCount, mm::IAllocator &allocator) {
 
 Table *Table::createBranch(
     size_t count, size_t height, size_t size, size_t width, mm::IAllocator &allocator) {
-    ASSERT(height > 0 && count > 0 && count <= width, "Not the shape of a branch.");
+    GUARD(height > 0 && count > 0 && count <= width, "Not the shape of a branch: a branch needs a positive height, at least one entry, and no more entries than its width, because the walk uses the count as the number of live arms");
     const size_t slotCount = 2 * width;
     void *memory = allocator.alloc(sizeof(Table) + slotCount * sizeof(slot_t), alignof(Table));
     if (!memory) {

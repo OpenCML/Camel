@@ -85,12 +85,12 @@ node_handle_t Builder::captureInto(
     const std::string shown = captureNameOf(origin, name.empty() ? originNames_[origin] : name);
     // A captured variable is captured by reference: the port holds the same cell.
     node_handle_t port = graph->addPortNode(nodeTypeOf(origin), shown, false);
-    graph->draft().removeNormPort(nodeIdOf(port));
+    graph->edit().removeNormPort(nodeIdOf(port));
     if (graph->parameterized()) {
         // Called directly already: its captures are with-ports, after the declared ones.
-        graph->draft().appendWithPort(nodeIdOf(port));
+        graph->edit().appendWithPort(nodeIdOf(port));
     } else {
-        graph->draft().appendClosureNode(nodeIdOf(port));
+        graph->edit().appendClosureNode(nodeIdOf(port));
     }
     graph->addCaptureName(shown);
     capturedValues_[graph.get()].push_back({origin, port, shown});

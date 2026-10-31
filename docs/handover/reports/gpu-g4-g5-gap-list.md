@@ -164,3 +164,27 @@ operator of the backward pass (`broadcast_like`, which the device back end does 
   九个要逐个跑一次 census 才成表，**这一轮没跑**。
 
 **所以本页今天能站住的只有 A = 13；26 这个数字既不是 A、也不是 A+B+C，它是"按表读 C2+transformer"的旧量法。**
+
+### 算式落定：A = 13，B = 14，A∪B = 19，C 未量
+
+`缺口 = A + B + C（去重）`
+
+- **A = 13**（C2，节点级）：`TILES_CENSUS ops=21 device=8 gap=13`。
+- **B = 14**（transformer，节点级）：`TILES_CENSUS ops=25 device=11 gap=14`——这个数今晚才第一次读得到，因为程序原先不通过类型检查（见下条）。
+- **A∪B = 19**（去重后）：两条程序共用的缺口是 `nn:adam`、`nn:adam_state`、`nn:softmax_cross_entropy_labels`、
+  `nn:softmax_cross_entropy_labels_grad`、`tensor:cast_like`、`tensor:gt`、`tensor:matmul_grad_lhs`、
+  `tensor:matmul_grad_rhs`；只在 transformer 里的另有 `tensor:dim`、`tensor:expand_axis`、`tensor:softmax`、
+  `tensor:softmax_grad`、`tensor:zeros`、`tensor:zeros_like`；只在 C2 里的另有 `tensor:argmax_axis`、
+  `tensor:numel`、`tensor:shape`、`tensor:strict_eq`、`tensor:take`。
+- **C 未量**：`array:` 入口（`sum`/`mean`/`min`/`max`/`argmax`/`argmin`/`sort`/`argsort`/`merge_sorted`）
+  逐个跑一次 census 才成表，**本轮没跑**。
+
+**旧账 26 与新账 19 的差**：旧账 transformer 那一半读的是**程序跑不起来之前**的表数（13），而今天节点级是 14；
+C2 的 13 恰好相同。所以 26 **不是**节点级事实，19 是——**且 19 不含 C**。
+
+### 一条可读性缺口（记在这里，因为今天没有诊断指向它）
+
+**`grad of P` 要求梯度与参数同形**：参数是静态形状时，梯度不能用 `f32[..]` 声明。今天报的是
+`NoMatchingFunction` 加一串重载，**没有一个字说“哪个字段的形状不一致”**——`transformer_step.cml` 因此坏了
+很久（`perf` 不在 `-Tier fast`，没人看见）。这条诊断缺口比那个测试坏掉更值得修：它让每一个“形状不匹配”
+的调用都变成一串重载列表。

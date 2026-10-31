@@ -1,7 +1,9 @@
 # 一问：并行 `map` 在一处故障之后，低于它的下标还执行吗？
 
-> 状态：等作者裁决。
-> 相关：`docs/design-principles.cn.md` 3.6（`L198`）；`src/passes/sched/taskflow/taskflow.cpp:2576-2811`；`docs/handover/reports/code-review-backends.md:37`；用例 `test/plans/feat/consistency/attempt.plan.toml:207`。
+> 状态：**已裁（2026-10-31，`301c3790e`）：取 ① ——保今天的实现，改 3.6 的措辞。**
+> 裁定原话：**"已经开始的元素跑完；下标大于已知最小故障、还没开始的元素不再开始，下标更小的仍会开始；报下标最小的故障。"**
+> 理由：**"同一输入同一输出"比"尽早停"更重要；多跑的只是下标更小的元素，而 3.6 本来就不保证元素间效应的顺序。**
+> 相关：`docs/design-principles.cn.md` 3.6（`L198`）；`src/passes/sched/taskflow/taskflow.cpp`（`ElementFaults`）；用例 `test/plans/feat/consistency/attempt.plan.toml`（`attempt.lowest_index`、`attempt.partial_fault`）。
 
 ## 现象
 
@@ -21,14 +23,9 @@ if (lowest.load(std::memory_order_acquire) < index) [[unlikely]] {
 
 > "an element before it still runs, as it would have run first on a back end that takes the elements in order. The fault reported is therefore the one the linear back ends report."
 
-同一段注释在 `:2797` 留着这个未决标记：
+把它记成未决问题的那两行标记（`DESIGN-QUESTION`，标签 `parallel-fault-lower-elements`，曾是 `:2797`）**已随裁定删掉**；注释现在写的是规则本身：下标更小的元素仍会开始，报的是线性后端报的那个。
 
-```cpp
-// DESIGN-QUESTION(parallel-fault-lower-elements): the alternative is to start nothing at all
-// after the first fault met, and then which fault is reported differs from run to run.
-```
-
-这是今天唯一记着这件事的地方：标记在代码里，不在原则里（`code-review-backends.md:37` 也点了它）。
+裁定之前，这件事只有代码里那条标记记着，原则里没有（`code-review-backends.md:37` 也点了它）。
 
 ## 两个读法各自要付什么
 
@@ -52,6 +49,6 @@ if (lowest.load(std::memory_order_acquire) < index) [[unlikely]] {
 
 **默认建议：①**。今天的做法不是随手写的：它保住了"报最小的下标"和跨后端一致，代价只是更小下标的多跑几个——而 3.6 已经允许效应顺序不作保证。改 3.6 的措辞比改实现便宜，也把今天的选择写成规则，下一个人不用再从注释里猜。
 
-**要作者答的一句**：`map` 在一处故障之后，下标更小、还没开始的元素是否仍执行——按今天的实现（①，改 3.6 的措辞），按字面停掉（②，接受报告随调度），还是全部跑完（③）？
+**作者答的一句**（2026-10-31）：取 ①。3.6 的措辞已按裁定改（`docs/design-principles.cn.md:198`），`taskflow.cpp` 的注释与 `33_fault_isolation.md` 3.3 同步，新用例 `attempt.partial_fault` 钉住"故障之下的元素全部执行"，四个后端同判。
 
-在这一页裁定之前，`taskflow.cpp` 按①做；原则按字面写的是②的读法。两者不一致这件事，今天只有 `:2797` 那条 `DESIGN-QUESTION` 记着。
+裁定之前，`taskflow.cpp` 按①做、原则按字面写的是②的读法；两者的不一致只由代码里那条标记记着。**现在实现、原则、用例三处说的是同一句话。**

@@ -6,6 +6,7 @@
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/complex.h"
+#include "camel/core/rtdata/half.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tagged.h"
@@ -25,6 +26,7 @@
 #include <cmath>
 #include <format>
 #include <limits>
+#include <set>
 #include <system_error>
 #include <unordered_set>
 #include <vector>
@@ -34,6 +36,12 @@ namespace camel::passes::cpp {
 using camel::core::type::TypeCode;
 
 bool isVoid(const Type *type) { return type != nullptr && type->code() == TypeCode::Void; }
+
+bool isValueType(const Type *type) {
+    return type != nullptr && !isVoid(type) && type->code() != TypeCode::Never;
+}
+
+bool endsFlow(const Type *type) { return type != nullptr && type->code() == TypeCode::Never; }
 
 std::string cppStringLiteral(std::string_view bytes) {
     std::string out = "\"";
@@ -264,6 +272,43 @@ const TupleType *asTuple(const Type *type) {
                                                               : nullptr;
 }
 
+/// Whether a value of `member` holds a value of the type `key` names, however deep: the walk
+/// follows every position that holds a value (a struct's fields, a tuple's items, an array's
+/// elements) and stops at a type it has already gone through. A member that comes back to the
+/// struct being declared is the one case the C++ declaration cannot write in the order the
+/// members are read: the name has to be in scope before the walk starts.
+bool holdsSelf(const Type *member, const std::string &key, std::set<std::string> &seen) {
+    if (member == nullptr) {
+        return false;
+    }
+    if (member->mangle() == key) {
+        return true;
+    }
+    if (!seen.insert(member->mangle()).second) {
+        return false;
+    }
+    if (const TupleType *tuple = asTuple(member); tuple != nullptr) {
+        for (size_t i = 0; i < tuple->size(); ++i) {
+            if (holdsSelf(tuple->typeAt(i), key, seen)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    if (member->code() == TypeCode::Array) {
+        return holdsSelf(static_cast<const ArrayType *>(member)->elemType(), key, seen);
+    }
+    if (member->code() == TypeCode::Struct) {
+        const auto *record = static_cast<const StructType *>(member);
+        for (size_t i = 0; i < record->size(); ++i) {
+            if (holdsSelf(record->typeAt(i), key, seen)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 /// The C++ name of the struct declaration of a named struct type: the declaration's name,
 /// module-qualified as the type system writes it (`models::Point` becomes `models_Point`), with
 /// the instance's type arguments when it is generic (`Pair<int>` becomes `Pair_int`). The name
@@ -365,6 +410,12 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
         return "float";
     case TypeCode::Float64:
         return "double";
+    // A reduced-precision number: sixteen bits of storage, computed on as f32 and rounded once on
+    // store (include/camel/standalone/half.h, design principles 7.3).
+    case TypeCode::BFloat16:
+        return "rt::BF16";
+    case TypeCode::Float16:
+        return "rt::F16";
     case TypeCode::Bool:
         return "bool";
     // A complex number is std::complex of its parts' width (include/camel/standalone/complex.h).
@@ -376,11 +427,11 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
         return "rt::Str";
     case TypeCode::Void:
         return "void";
-    // The bottom type `never` (design principles 3.9): nothing of it reaches C++, which has
-    // no type for a value that does not exist; a call that never returns is emitted as one
-    // that returns nothing.
+    // The bottom type `never` (design principles 3.9): the type nothing inhabits, which stands
+    // where any type is wanted (camel/standalone/core.h). A call that never returns is emitted as
+    // one that returns it, so the value of a `fail` can be an arm, a `let`'s right or an argument.
     case TypeCode::Never:
-        return "void";
+        return "rt::Never";
     default:
         break;
     }
@@ -423,6 +474,24 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
         const bool isTuple = tuple != nullptr;
         const auto *record = static_cast<const StructType *>(t);
         const size_t n     = isTuple ? tuple->size() : record->size();
+        // A struct that holds a value of itself (`Node { children: Node[] }`, design principles
+        // 5.2) would walk its own members forever: its name is registered before the walk, as an
+        // enum's is below, and the layout -- which only the walk can give -- is recorded once the
+        // declaration is written. Such a type is the only claimant of that layout, so no other
+        // type is made an alias of it.
+        bool holdsItself = false;
+        for (size_t i = 0; i < n && !holdsItself; ++i) {
+            std::set<std::string> seen;
+            holdsItself = holdsSelf(isTuple ? tuple->typeAt(i) : record->typeAt(i), key, seen);
+        }
+        std::string name;
+        if (holdsItself) {
+            name = isTuple               ? names_.unique("Tuple")
+                   : record->named()     ? names_.unique(declaredStructName(t))
+                                         : names_.unique("Record");
+            types_.emplace(key, name);
+            representations_.emplace(key, name);
+        }
         struct Member {
             const Type *type = nullptr;
             std::string cpp;
@@ -447,7 +516,8 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
             layout += std::format("{}:{}={};", member.name.size(), member.name, member.cpp);
             members.push_back(std::move(member));
         }
-        if (const auto existing = layouts_.find(layout); existing != layouts_.end()) {
+        if (const auto existing = layouts_.find(layout);
+            !holdsItself && existing != layouts_.end()) {
             // One C++ struct already has this layout. A named type gets a name of its own for
             // it (the declaration's); an anonymous one is simply that struct.
             if (!isTuple && record->named()) {
@@ -466,13 +536,14 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
             representations_.emplace(key, existing->second);
             return existing->second;
         }
-        std::string name;
-        if (isTuple) {
-            name = names_.unique("Tuple");
-        } else if (record->named()) {
-            name = names_.unique(declaredStructName(t));
-        } else {
-            name = names_.unique("Record");
+        if (!holdsItself) {
+            if (isTuple) {
+                name = names_.unique("Tuple");
+            } else if (record->named()) {
+                name = names_.unique(declaredStructName(t));
+            } else {
+                name = names_.unique("Record");
+            }
         }
         std::string decl = std::format("/// {}\nstruct {} {{\n", t->toString(), name);
         for (const Member &member : members) {
@@ -945,6 +1016,15 @@ std::optional<std::string> ProgramValues::constant(slot_t slot, const Type *t) {
     }
     case TypeCode::Void:
         return "rt::Unit{}";
+    // A reduced-precision constant is its pattern, written as one: the bits a slot holds in its low
+    // half are the bits the standalone value stores, so the literal is exact for every pattern a
+    // program can write, a NaN's payload included.
+    case TypeCode::BFloat16:
+        return std::format(
+            "rt::BF16::fromBits(uint16_t{{{}}})", camel::core::rtdata::halfBitsOfSlot(slot));
+    case TypeCode::Float16:
+        return std::format(
+            "rt::F16::fromBits(uint16_t{{{}}})", camel::core::rtdata::halfBitsOfSlot(slot));
     case TypeCode::String: {
         const auto *str = fromSlot<String *>(slot);
         return string(str != nullptr ? str->view() : std::string_view());
@@ -971,11 +1051,27 @@ std::optional<std::string> ProgramValues::constant(slot_t slot, const Type *t) {
     if (t->code() == TypeCode::Array) {
         const auto *array = fromSlot<::Array *>(slot);
         const Type *elem  = static_cast<const ArrayType *>(t)->elemType();
-        auto items        = elements(
-            array != nullptr ? array->size() : 0,
+        // Every element of the run, not `size()`: for a value of several dimensions the runtime
+        // answers the first extent there and the element count in `numel()` (rtdata/array.h), and
+        // reading the first extent wrote the first row's worth of a literal and no more.
+        auto items = elements(
+            array != nullptr ? static_cast<size_t>(array->numel()) : 0,
             [&](size_t i) { return array->get<slot_t>(i); },
             [&](size_t) { return elem; });
-        return items ? std::optional(hoist(*cpp, *items, "array")) : std::nullopt;
+        if (!items) {
+            return std::nullopt;
+        }
+        const size_t rank = array != nullptr ? array->rank() : 0;
+        if (rank >= 2) {
+            // The shape travels with the elements (rt::Array's block holds both): the rows of the
+            // literal are what `appendText` prints, and `len` answers the first extent.
+            std::string shape;
+            for (size_t i = 0; i < rank; ++i) {
+                shape += (i > 0 ? ", " : "") + std::to_string(array->dim(i));
+            }
+            return hoist(*cpp, std::format("{{{}}}, {{{}}}", *items, shape), "array");
+        }
+        return hoist(*cpp, *items, "array");
     }
     if (const TupleType *tuple = asTuple(t); tuple != nullptr && tuple->isNullable()) {
         if (camel::core::rtdata::isNullValue(slot)) {

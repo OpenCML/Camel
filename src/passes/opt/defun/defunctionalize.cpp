@@ -87,7 +87,6 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
-#include <cstdlib>
 #include <format>
 #include <map>
 #include <set>
@@ -408,29 +407,6 @@ template <class Draft> gc_node_ref_t emitCallThroughValue(
                 "it has no tag to read (a defect of the pass, not of the program)",
                 familyName,
                 dispatchedType != nullptr ? dispatchedType->toString() : std::string("<none>")));
-        }
-    }
-    // TEMPORARY DIAGNOSTIC
-    if (std::getenv("CAMEL_DEFUN_DEBUG") != nullptr) {
-        std::fprintf(
-            stderr,
-            "[defun] dispatch members=%zu variants=%zu args=%zu result=%s\n",
-            family.members.size(),
-            family.variants.size(),
-            arguments.size(),
-            resultType != nullptr ? resultType->toString().c_str() : "<null>");
-        for (const Variant &v : family.variants) {
-            std::string caps;
-            for (ty::Type *c : v.captures) {
-                caps += (caps.empty() ? "" : ",") + (c ? c->toString() : std::string("<null>"));
-            }
-            std::fprintf(
-                stderr,
-                "[defun]   variant tag=%zu name=%s graph=%llu captures=[%s]\n",
-                v.tag,
-                v.name.c_str(),
-                static_cast<unsigned long long>(camel::runtime::toValue(v.graph)),
-                caps.c_str());
         }
     }
     // The values a variant captured, taken out of the value: the tag and the field's index are
@@ -1681,6 +1657,34 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                     continue;
                 }
 
+                // The dispatch the pass is about to lower, member by member and variant by
+                // variant: asked for by the parameter `debug`, so a run that does not ask writes
+                // nothing here.
+                if (debug_) {
+                    std::fprintf(
+                        stderr,
+                        "[defun] dispatch members=%zu variants=%zu args=%zu result=%s\n",
+                        owner->members.size(),
+                        owner->variants.size(),
+                        arguments.size(),
+                        header->dataType != nullptr
+                            ? header->dataType->toString().c_str()
+                            : "<null>");
+                    for (const Variant &v : owner->variants) {
+                        std::string caps;
+                        for (ty::Type *c : v.captures) {
+                            caps += (caps.empty() ? "" : ",") +
+                                    (c ? c->toString() : std::string("<null>"));
+                        }
+                        std::fprintf(
+                            stderr,
+                            "[defun]   variant tag=%zu name=%s graph=%llu captures=[%s]\n",
+                            v.tag,
+                            v.name.c_str(),
+                            static_cast<unsigned long long>(camel::runtime::toValue(v.graph)),
+                            caps.c_str());
+                    }
+                }
                 // Only the run time knows the tag: `:enum/tag`, one arm per variant, `JOIN`.
                 emitCallThroughValue(
                     draft, *owner, arguments, withArguments, withs.front(), header->dataType,

@@ -74,7 +74,7 @@ LeakBranchArmTestPass::apply(const camel::runtime::Program *program, std::ostrea
            camel::runtime::gc_node_ref_t join) {
             auto &draft = transaction.edit();
             // A node that runs because of the BRCH and that no arm's result depends on.
-            const auto stray = anchorNode(draft);
+            const auto stray = anchorNode(transaction);
             draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, stray, brch);
             draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, join, stray);
         });

@@ -90,19 +90,25 @@ Array *Array::create(
 
 Array *Array::createRankZero(
     camel::core::mm::IAllocator &allocator, const type::ArrayType *arrayType, slot_t value) {
-    ASSERT(arrayType != nullptr, "A rank-zero array needs its type");
+    GUARD(
+        arrayType != nullptr,
+        "A rank-zero array needs its type, and this call passed none: the one element it holds "
+        "would have no type to be read by");
     // No extents at all: the value has no dimension, and `create` gives it the one element an
     // empty product counts (design principles 5.4 -- a rank-zero array is the element itself).
     Array *array = create(allocator, arrayType, std::span<const int64_t>(), false);
-    ASSERT(array->rank() == 0 && array->numel() == 1, "A rank-zero array holds one element");
+    GUARD(
+        array->rank() == 0 && array->numel() == 1,
+        "A rank-zero array holds one element, and this one does not: the value would be stored at "
+        "index 0 of an array that has no such element");
     array->setSlot(0, value, arrayType);
     return array;
 }
 
 Array *
 Array::view(Array *source, std::span<const int64_t> extents, uint64_t elementOffset) {
-    ASSERT(source != nullptr, "A view needs a source array");
-    ASSERT(source->isCompact(), "Only a compact pure-data array can be viewed");
+    GUARD(source != nullptr, "A view needs a source array, and the call passed none");
+    GUARD(source->isCompact(), "Only a compact pure-data array can be viewed, and the source this view names is not one");
     const uint64_t elements = checkedNumel(extents);
     if (elementOffset > source->numel_ || elements > source->numel_ - elementOffset) {
         throw std::invalid_argument("Array view must stay within its source");
@@ -120,11 +126,12 @@ Array::view(Array *source, std::span<const int64_t> extents, uint64_t elementOff
 Array *Array::wrap(
     camel::core::mm::IAllocator &allocator, const type::ArrayType *arrayType,
     std::span<const int64_t> extents, Block *block, size_t byteOffset, bool view) {
-    ASSERT(block != nullptr, "An array wrap needs a block");
-    ASSERT(arrayType != nullptr, "An array wrap needs its element type");
-    ASSERT(
+    GUARD(block != nullptr, "An array wrap needs a block to wrap, and the call passed none");
+    GUARD(arrayType != nullptr, "An array wrap needs the element type of what it wraps, and the call passed none");
+    GUARD(
         type::arrayStorageFor(arrayType->elemType()) == type::ArrayStorage::Compact,
-        "Only a pure-data array can wrap an external block");
+        "Only a pure-data array can wrap an external block, and this one holds slots: the wrapped "
+        "bytes would be read by a layout that does not describe them");
     return createCompact(
         allocator, arrayType->elemType(), extents, block, byteOffset, false, view);
 }
@@ -216,14 +223,17 @@ Array *Array::createSlotsRank(
 Array *Array::createCompact(
     camel::core::mm::IAllocator &allocator, const type::Type *elemType,
     std::span<const int64_t> extents, Block *block, size_t byteOffset, bool zeroInit, bool view) {
-    ASSERT(elemType != nullptr, "A compact array needs its element type");
+    GUARD(elemType != nullptr, "A compact array needs its element type, and the call passed none");
     const type::DataLayout *layout = type::pureDataLayout(elemType);
-    ASSERT(layout != nullptr, "A compact array's element type is pure data");
+    GUARD(layout != nullptr, "A compact array needs the layout of its element type, and the type has none");
     // Inline bytes start right after the extent table, which is 8-byte aligned; a layout that
     // needs stricter alignment (a complex number later) must not go inline.
-    ASSERT(
+    GUARD(
         layout->alignment <= alignof(slot_t),
-        "An inline compact element must not need more than slot alignment");
+        std::format(
+            "An inline compact element must not need more than slot alignment, and this one "
+            "needs {}: the inline bytes are aligned to a slot",
+            layout->alignment));
     const uint64_t numel  = checkedNumel(extents);
     const size_t elemSize = layout->size;
     const size_t bytes    = static_cast<size_t>(numel) * elemSize;
@@ -369,7 +379,11 @@ slot_t readLeaf(const std::byte *at, TypeCode code, camel::core::mm::IAllocator 
         return rtdata::toSlot(rtdata::Complex::create(real, imaginary, code, allocator));
     }
     default:
-        ASSERT(false, "Not a pure-data leaf type");
+        GUARD(
+            false,
+            std::format(
+                "reading a pure-data leaf whose type code {} has no leaf reader",
+                static_cast<int>(code)));
         return NullSlot;
     }
 }
@@ -426,7 +440,11 @@ void writeLeaf(std::byte *at, TypeCode code, slot_t slot) {
         break;
     }
     default:
-        ASSERT(false, "Not a pure-data leaf type");
+        GUARD(
+            false,
+            std::format(
+                "writing a pure-data leaf whose type code {} has no leaf writer",
+                static_cast<int>(code)));
         break;
     }
 }
@@ -477,7 +495,7 @@ void storeAggregate(std::byte *bytes, const type::Type *type, slot_t value) {
     for (size_t i = 0; i < layout->fieldCount; ++i) {
         const type::Type *field      = fieldType(i);
         const type::DataLayout *fieldLayout = type::pureDataLayout(field);
-        ASSERT(fieldLayout != nullptr, "A pure-data field has a layout");
+        GUARD(fieldLayout != nullptr, "A pure-data field needs the layout of its type, and that type has no layout");
         std::byte *fieldBytes = bytes + layout->fieldOffsets[i];
         if (fieldLayout->aggregate) {
             storeAggregate(fieldBytes, field, fieldValue(i));
@@ -509,7 +527,7 @@ materializeAggregate(const std::byte *bytes, const type::Type *type, camel::core
     bool hasNested = false;
     for (size_t i = 0; i < layout->fieldCount; ++i) {
         const type::DataLayout *fieldLayout = type::pureDataLayout(fieldType(i));
-        ASSERT(fieldLayout != nullptr, "A pure-data field has a layout");
+        GUARD(fieldLayout != nullptr, "A pure-data field needs the layout of its type, and that type has no layout");
         // A complex leaf allocates its box while the parent exists: that is a nested
         // allocation too, so the parent must be rooted across it.
         hasNested = hasNested || fieldLayout->aggregate ||
@@ -532,7 +550,7 @@ materializeAggregate(const std::byte *bytes, const type::Type *type, camel::core
         for (size_t i = 0; i < layout->fieldCount; ++i) {
             const type::Type *field             = fieldType(i);
             const type::DataLayout *fieldLayout = type::pureDataLayout(field);
-            ASSERT(fieldLayout != nullptr, "A pure-data field has a layout");
+            GUARD(fieldLayout != nullptr, "A pure-data field needs the layout of its type, and that type has no layout");
             const std::byte *fieldBytes = bytes + layout->fieldOffsets[i];
             const slot_t value = fieldLayout->aggregate
                                      ? rtdata::toSlot(static_cast<rtdata::Object *>(
@@ -554,7 +572,7 @@ materializeAggregate(const std::byte *bytes, const type::Type *type, camel::core
     for (size_t i = 0; i < layout->fieldCount; ++i) {
         const type::Type *field             = fieldType(i);
         const type::DataLayout *fieldLayout = type::pureDataLayout(field);
-        ASSERT(fieldLayout != nullptr, "A pure-data field has a layout");
+        GUARD(fieldLayout != nullptr, "A pure-data field needs the layout of its type, and that type has no layout");
         const std::byte *fieldBytes = bytes + layout->fieldOffsets[i];
         const slot_t value          = fieldLayout->aggregate
                                           ? rtdata::toSlot(static_cast<rtdata::Object *>(
@@ -611,7 +629,10 @@ slot_t Array::getSlotSlow(uint64_t flatIndex) const {
     case 1:
         return static_cast<slot_t>(*at);
     default:
-        ASSERT(false, "Unsupported compact element size");
+        GUARD(
+            false,
+            std::format(
+                "reading a compact element of {} bytes, which is no numeric width", elementSize_));
         return NullSlot;
     }
 }
@@ -687,7 +708,10 @@ void Array::setSlotSlow(uint64_t flatIndex, slot_t value, const type::ArrayType 
                                          : (value & 0xFF));
         break;
     default:
-        ASSERT(false, "Unsupported compact element size");
+        GUARD(
+            false,
+            std::format(
+                "storing a compact element of {} bytes, which is no numeric width", elementSize_));
         break;
     }
 }
@@ -939,7 +963,7 @@ void Array::reallocateSlots(size_t newCapacity, const type::ArrayType *arrayType
 }
 
 void Array::growCompact(uint64_t newCapacity) {
-    ASSERT(isCompact(), "Only a compact array grows this way");
+    GUARD(isCompact(), "Only a compact array grows this way, and this array holds other arrays instead of pure data");
     const size_t newBytes = static_cast<size_t>(newCapacity) * elementSize_;
     if (block_ == nullptr) {
         // Inline data: move it into a block, which is what makes the array growable and gives
@@ -1040,7 +1064,7 @@ void Array::adoptBlock(Block *block, size_t newBytes) {
     if (block == nullptr || block == block_) {
         return;
     }
-    ASSERT(isCompact(), "Only a compact array adopts a block");
+    GUARD(isCompact(), "Only a compact array adopts a block, and this array holds other arrays instead of pure data");
     Block *old = block_;
     block_     = block;
     dataPtr_    = block->data();

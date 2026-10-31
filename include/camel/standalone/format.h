@@ -28,6 +28,7 @@
 #include "camel/standalone/complex.h"
 #include "camel/standalone/core.h"
 #include "camel/standalone/fn.h"
+#include "camel/standalone/half.h"
 #include "camel/standalone/opt.h"
 #include "camel/standalone/str.h"
 #include "camel/utils/format_spec.h"
@@ -40,6 +41,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -58,8 +60,48 @@ inline void appendText(std::string &out, bool v) { out += v ? "true" : "false"; 
 inline void appendText(std::string &out, const Str &v) { out += v.view(); }
 inline void appendText(std::string &out, const Unit &) { out += "null"; }
 
-/// `[a, b, c]`.
+/// A bf16 or an f16: its own shortest text (half.h, the one float text rule), so a value prints
+/// the same under `println`, `string(x)` and a `{}` of `format`.
+template <typename Format> void appendText(std::string &out, Half<Format> v) {
+    out += halfText(v);
+}
+
+/// One dimension of a value that has a shape: the elements from `offset`, then, for a deeper
+/// dimension, one bracket group per extent. The rows are what the interpreter prints for a value of
+/// several dimensions (`[[1.0, 2.0], [3.0, 4.0]]`), and the flat block underneath is the same run.
+template <typename T>
+void appendShapedText(std::string &out, const Array<T> &xs, std::size_t offset, std::size_t from) {
+    const std::size_t extent = xs.extent(from);
+    out += '[';
+    if (from + 1 >= xs.rank()) {
+        for (std::size_t i = 0; i < extent; ++i) {
+            if (i > 0) {
+                out += ", ";
+            }
+            appendText(out, xs[offset + i]);
+        }
+    } else {
+        std::size_t inner = 1;
+        for (std::size_t i = from + 1; i < xs.rank(); ++i) {
+            inner *= xs.extent(i);
+        }
+        for (std::size_t i = 0; i < extent; ++i) {
+            if (i > 0) {
+                out += ", ";
+            }
+            appendShapedText(out, xs, offset + i * inner, from + 1);
+        }
+    }
+    out += ']';
+}
+
+/// `[a, b, c]`, and `[[1.0, 2.0], [3.0, 4.0]]` for a value that states a shape of several
+/// dimensions.
 template <typename T> void appendText(std::string &out, const Array<T> &xs) {
+    if (xs.rank() >= 2) {
+        appendShapedText(out, xs, 0, 0);
+        return;
+    }
     out += '[';
     for (std::size_t i = 0; i < xs.size(); ++i) {
         if (i > 0) {
@@ -154,17 +196,29 @@ namespace detail {
 
 /// One argument of `format`, classified as the runtime hands it to fmt.
 struct FormatArg {
-    enum class Kind { Integer, Float32, Float64, C64, C128, Text } kind;
-    int64_t integer    = 0;
-    double real        = 0;
-    double imaginary   = 0;
+    enum class Kind { Integer, Float32, Float64, Half, C64, C128, Text, Array } kind;
+    int64_t integer  = 0;
+    double real      = 0;
+    double imaginary = 0;
     std::string text;
+    /// An array whose element is a number: its text under a specification, written element by
+    /// element. Empty for every other argument, and for an array whose element takes no
+    /// specification of its own.
+    std::function<std::string(std::string_view)> underSpec;
 };
 
 inline FormatArg formatArg(int64_t v) { return {FormatArg::Kind::Integer, v, 0, 0, {}}; }
 inline FormatArg formatArg(int32_t v) { return {FormatArg::Kind::Integer, v, 0, 0, {}}; }
 inline FormatArg formatArg(double v) { return {FormatArg::Kind::Float64, 0, v, 0, {}}; }
 inline FormatArg formatArg(float v) { return {FormatArg::Kind::Float32, 0, v, 0, {}}; }
+/// A bf16 or an f16: a number, so a specification writes it as it writes an f32 of the widened
+/// value; a placeholder without one writes the text of its own type (the runtime's rule, so
+/// `{}` and `println` agree), which `text` already holds.
+template <typename Format> FormatArg formatArg(Half<Format> v) {
+    FormatArg arg{FormatArg::Kind::Half, 0, v.toFloat(), 0, {}};
+    appendText(arg.text, v);
+    return arg;
+}
 inline FormatArg formatArg(std::complex<float> v) {
     return {FormatArg::Kind::C64, 0, v.real(), v.imag(), {}};
 }
@@ -486,6 +540,13 @@ inline std::string formatOne(const FormatArg &arg, std::string_view specText, bo
     case FormatArg::Kind::Float32:
         return hasSpec ? formatFloat(static_cast<float>(arg.real), parseSpec(specText))
                        : camel::utils::floatText(static_cast<float>(arg.real));
+    case FormatArg::Kind::Half:
+        // No specification -- `{}` and the empty `{:}` alike -- is the text of the element's own
+        // type; any other specification is the widened value as an f32, which is what the runtime
+        // does with a half under a format (`{:10}` of a bf16 0.1 is `0.100097656`, not `0.1`).
+        return hasSpec && !specText.empty()
+                   ? formatFloat(static_cast<float>(arg.real), parseSpec(specText))
+                   : arg.text;
     case FormatArg::Kind::Float64:
         return hasSpec ? formatFloat(arg.real, parseSpec(specText))
                        : camel::utils::floatText(arg.real);
@@ -494,10 +555,59 @@ inline std::string formatOne(const FormatArg &arg, std::string_view specText, bo
             static_cast<float>(arg.real), static_cast<float>(arg.imaginary), specText, hasSpec);
     case FormatArg::Kind::C128:
         return formatComplex(arg.real, arg.imaginary, specText, hasSpec);
+    case FormatArg::Kind::Array:
+        // A numeric array under a specification is written element by element, its brackets and
+        // its `, ` its own; an array whose element takes no specification of its own is text,
+        // and the specification lays out that text (`string[]` with `{:>8}`).
+        if (hasSpec && arg.underSpec) {
+            return arg.underSpec(specText);
+        }
+        return formatText(arg.text, parseSpec(specText));
     case FormatArg::Kind::Text:
     default:
         return formatText(arg.text, parseSpec(specText));
     }
+}
+
+/// Whether one specification acts on each element of a `T` on its own, as the interpreter
+/// decides it (`isNumericElementType` in src/builtin/operators/str.cpp): the numbers. An array of
+/// arrays is not one of them -- its element is an array, and the specification lays out the whole
+/// text, exactly as `string[]` does.
+template <typename T> struct SpecPerElement : std::false_type {};
+template <> struct SpecPerElement<int32_t> : std::true_type {};
+template <> struct SpecPerElement<int64_t> : std::true_type {};
+template <> struct SpecPerElement<float> : std::true_type {};
+template <> struct SpecPerElement<double> : std::true_type {};
+template <typename Format> struct SpecPerElement<Half<Format>> : std::true_type {};
+
+/// The text of a numeric array with `spec` applied to each element -- `'{:.4f}'->format<xs>` is
+/// `[0.7692, 0.7808]`: the specification acts on every element on its own, while the brackets
+/// and the `, ` between elements are the array's own form (design principles 7.7).
+template <typename T>
+void appendArrayUnder(std::string &out, const Array<T> &xs, std::string_view spec) {
+    out += '[';
+    for (std::size_t i = 0; i < xs.size(); ++i) {
+        if (i > 0) {
+            out += ", ";
+        }
+        out += formatOne(formatArg(xs[i]), spec, true);
+    }
+    out += ']';
+}
+
+/// `formatArg` for an array: the value's own text, and -- when its element is a number -- the
+/// text the specification writes element by element.
+template <typename T> FormatArg formatArg(const Array<T> &xs) {
+    FormatArg arg{FormatArg::Kind::Array, 0, 0, 0, {}};
+    appendText(arg.text, xs);
+    if constexpr (SpecPerElement<T>::value) {
+        arg.underSpec = [xs](std::string_view spec) {
+            std::string out;
+            appendArrayUnder(out, xs, spec);
+            return out;
+        };
+    }
+    return arg;
 }
 
 /// fmt::vformat over the classified arguments.

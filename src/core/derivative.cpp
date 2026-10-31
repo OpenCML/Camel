@@ -337,3 +337,13 @@ std::optional<size_t> machineryTangentElementIndex(Type *aggregate, size_t index
 }
 
 } // namespace camel::core
+
+camel::core::tangent_node_t camel::core::TangentBuilder::addAccess(tangent_node_t aggregate, size_t index) {
+    (void)aggregate;
+    (void)index;
+    throw std::logic_error("TangentBuilder::addAccess is not implemented by this builder");
+}
+
+camel::core::tangent_node_t camel::core::TangentBuilder::addStaticFloat(double value) {
+    return addStatic(rtdata::toSlot<rtdata::Float64>(value), type::Type::Float64());
+}

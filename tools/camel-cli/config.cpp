@@ -15,6 +15,8 @@
 #include "build_stamp.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
+#include "camel/core/rtdata/collection.h"
+#include "camel/execute/cpu_isa.h"
 #include "camel/execute/devices.h"
 #include "camel/execute/limits.h"
 #include "camel/execute/pass/params.h"
@@ -125,8 +127,7 @@ bool parseTimeitSpecValue(
 /// is absent) or else by the environment variable `envName`. `out` gets the option's value;
 /// the environment's is read where it is used (camel::execute::recursionLimit) and is only
 /// checked here. False, with a message on stderr, when the text in effect is no limit.
-bool readDepthLimit(
-    const std::string &optionText, const char *option, const char *envName, size_t &out) {
+bool readDepthLimit(const std::string &optionText, const char *option, size_t &out) {
     const auto refuse = [](const char *what, std::string_view text) {
         std::cerr << "Invalid " << what << " value: '" << text
                   << "'. Expected an integer from 1 to " << camel::execute::kMaxDepthLimit << "."
@@ -141,17 +142,11 @@ bool readDepthLimit(
         out = *value;
         return true;
     }
-    if (const char *raw = std::getenv(envName)) {
-        if (!camel::execute::parseDepthLimit(raw)) {
-            return refuse(envName, raw);
-        }
-    }
     return true;
 }
 
 /// As readDepthLimit, for the rounds of a loop (a wider range).
-bool readRoundLimit(
-    const std::string &optionText, const char *option, const char *envName, size_t &out) {
+bool readRoundLimit(const std::string &optionText, const char *option, size_t &out) {
     const auto refuse = [](const char *what, std::string_view text) {
         std::cerr << "Invalid " << what << " value: '" << text
                   << "'. Expected an integer from 1 to " << camel::execute::kMaxRoundsLimit << "."
@@ -166,17 +161,71 @@ bool readRoundLimit(
         out = *value;
         return true;
     }
-    if (const char *raw = std::getenv(envName)) {
-        if (!camel::execute::parseRoundLimit(raw)) {
-            return refuse(envName, raw);
-        }
-    }
     return true;
 }
 
 /// The largest limit a memory option accepts, in megabytes (1 TiB): a value that is not a
 /// positive integer below it is no limit.
 constexpr size_t kMaxMemoryOptionMb = size_t{1} << 20;
+
+/// One word of a list option: `kind=minor` is the key `kind` with the value `minor`, a bare
+/// `moves` is a key with no value.
+struct SpecWord {
+    std::string key;
+    std::string value;
+};
+
+/// The words of `--gc-stress kind=minor,alloc=1000`: commas separate them, empty ones are skipped.
+std::vector<SpecWord> splitSpec(const std::string &spec) {
+    std::vector<SpecWord> words;
+    size_t begin = 0;
+    while (begin <= spec.size()) {
+        const size_t comma     = spec.find(',', begin);
+        const size_t end       = comma == std::string::npos ? spec.size() : comma;
+        const std::string word = spec.substr(begin, end - begin);
+        if (!word.empty()) {
+            const size_t equals = word.find('=');
+            words.push_back(
+                equals == std::string::npos ? SpecWord{word, ""}
+                                            : SpecWord{word.substr(0, equals), word.substr(equals + 1)});
+        }
+        if (comma == std::string::npos) {
+            break;
+        }
+        begin = comma + 1;
+    }
+    return words;
+}
+
+/// A number an option took: 0 is "the default", and the upper bound is what the option can mean.
+bool readNumberOption(
+    const std::string &text, const char *option, size_t &out, unsigned long long maximum) {
+    unsigned long long value = 0;
+    auto [ptr, ec]           = std::from_chars(text.data(), text.data() + text.size(), value);
+    if (text.empty() || ec != std::errc() || ptr != text.data() + text.size() || value > maximum) {
+        std::cerr << "Invalid " << option << " value: '" << text
+                  << "'. Expected a number from 0 to " << maximum << " (0: the default)."
+                  << std::endl;
+        return false;
+    }
+    out = static_cast<size_t>(value);
+    return true;
+}
+
+/// `on`/`off` (also `true`/`false`, `1`/`0`) for an option.
+bool readSwitchOption(const std::string &text, const char *option, bool &out) {
+    if (text == "on" || text == "true" || text == "1") {
+        out = true;
+        return true;
+    }
+    if (text == "off" || text == "false" || text == "0") {
+        out = false;
+        return true;
+    }
+    std::cerr << "Invalid " << option << " value: '" << text << "'. Expected on or off."
+              << std::endl;
+    return false;
+}
 
 bool readMegabyteLimit(const std::string &text, const char *option, size_t &out) {
     if (text.empty()) {
@@ -323,8 +372,22 @@ string maxMacroRoundsOpt    = ""; // raw --max-macro-rounds
 string gcModeOpt            = ""; // raw --gc
 string blockLimitOpt        = ""; // raw --block-limit (megabytes)
 string graphGcMbOpt         = ""; // raw --graph-gc-mb (megabytes)
+string gcNurseryMbOpt       = ""; // raw --gc-nursery-mb
+string gcPromotionAgeOpt    = ""; // raw --gc-promotion-age
+string gcLargeThresholdOpt  = ""; // raw --gc-large-threshold-kb
+string gcLargeBudgetOpt     = ""; // raw --gc-large-budget-mb
+string gcGrowthPercentOpt   = ""; // raw --gc-growth-percent
+string gcHeapLimitOpt       = ""; // raw --gc-heap-limit-mb
+string spaceSegmentKbOpt    = ""; // raw --space-segment-kb
+string metaSpaceLimitOpt    = ""; // raw --meta-space-limit-mb
+string graphSpaceLimitOpt   = ""; // raw --graph-space-limit-mb
+string permSpaceLimitOpt    = ""; // raw --perm-space-limit-mb
+string gcStressOpt          = ""; // raw --gc-stress (kind=...,alloc=...,safepoint=...)
+string gcCheckOpt           = ""; // raw --gc-check (moves,poison,verify=...,config)
+string collOpt              = ""; // raw --coll (leaf=...,fanout=...,pad=...,validate=...)
 string nativeStackGuardOpt  = ""; // raw --native-stack-guard (on|off)
 string devicesOpt           = ""; // raw --devices (cpu|ordinal[,ordinal...])
+string tensorIsaOpt         = ""; // raw --tensor-isa (native|generic)
 string profileModeOpt       = ""; // raw --profile-mode (normal|full)
 size_t maxRecursionDepth    = 0;  // 0: not given on the command line
 size_t maxMacroDepth        = 0;
@@ -636,13 +699,11 @@ bool parseArgs(int argc, char *argv[]) {
          (option("-t", "--threads") & integer("max threads", maxThreads)) % "max threads",
          (option("--max-recursion-depth") & value("calls", maxRecursionDepthOpt)) %
              "limit on calls open at once that are not tail calls (default: 1000 on every "
-             "scheduler; also CAMEL_MAX_RECURSION_DEPTH)",
+             "scheduler)",
          (option("--max-macro-depth") & value("calls", maxMacroDepthOpt)) %
-             "limit on nested calls while std::macro evaluates a call (default: 64; also "
-             "CAMEL_MAX_MACRO_DEPTH)",
+             "limit on nested calls while std::macro evaluates a call (default: 64)",
          (option("--max-macro-rounds") & value("rounds", maxMacroRoundsOpt)) %
-             "limit on the rounds one loop may run while std::macro evaluates it (default: "
-             "1000000; also CAMEL_MAX_MACRO_ROUNDS)",
+             "limit on the rounds one loop may run while std::macro evaluates it (default: 1000000)",
          (option("--gc") & value("collector", gcModeOpt)) %
              "collector of run-time values: generational (default; young objects are copied) or "
              "mark-sweep (objects keep their address)",
@@ -652,12 +713,50 @@ bool parseArgs(int argc, char *argv[]) {
          (option("--graph-gc-mb") & value("megabytes", graphGcMbOpt)) %
              "the graph space asks for a collection when it holds this many megabytes more than "
              "after the last one (default 64)",
+         (option("--gc-nursery-mb") & value("megabytes", gcNurseryMbOpt)) %
+             "the birth space of the generational collector, in megabytes (default 4)",
+         (option("--gc-promotion-age") & value("collections", gcPromotionAgeOpt)) %
+             "minor collections an object survives before it is promoted, 1 to 15 (default 4); 1 "
+             "shows a missing write barrier",
+         (option("--gc-large-threshold-kb") & value("kilobytes", gcLargeThresholdOpt)) %
+             "what counts as a large object, in kilobytes (default 64 generational, 4 mark-sweep)",
+         (option("--gc-large-budget-mb") & value("megabytes", gcLargeBudgetOpt)) %
+             "large-object bytes between collections, in megabytes (default 4)",
+         (option("--gc-growth-percent") & value("percent", gcGrowthPercentOpt)) %
+             "how much the large-object space grows between collections, in percent of what the "
+             "last sweep left (default 100)",
+         (option("--gc-heap-limit-mb") & value("megabytes", gcHeapLimitOpt)) %
+             "the limit of the collected heap, in megabytes (default none); a program that "
+             "outgrows it stops with MemoryExhausted",
+         (option("--space-segment-kb") & value("kilobytes", spaceSegmentKbOpt)) %
+             "the first segment of every growable space, in kilobytes; small segments make a "
+             "small program grow them, for exercising growth",
+         (option("--meta-space-limit-mb") & value("megabytes", metaSpaceLimitOpt)) %
+             "the limit of the meta space (types and function objects), in megabytes",
+         (option("--graph-space-limit-mb") & value("megabytes", graphSpaceLimitOpt)) %
+             "the limit of the graph space (compiled graphs), in megabytes",
+         (option("--perm-space-limit-mb") & value("megabytes", permSpaceLimitOpt)) %
+             "the limit of the permanent space (types and layouts), in megabytes",
+         (option("--gc-stress") & value("kind=...,alloc=...,safepoint=...", gcStressOpt)) %
+             "collect under stress: kind=minor|major|both names the collection, alloc=N collects "
+             "every N allocations, safepoint=N every N safepoints",
+         (option("--gc-check") & value("moves,poison,verify=...,config", gcCheckOpt)) %
+             "read the collector: moves logs every moved object, poison writes over the from-space "
+             "at every safepoint, verify=before|after|both checks the invariants around a "
+             "collection, config prints the resolved configuration at start",
+         (option("--coll") & value("leaf=...,fanout=...,pad=...,validate=...", collOpt)) %
+             "the widths of a Map or Set tree: leaf=N entries per leaf (0: unbounded, one sorted "
+             "array), fanout=N children per branch, pad=on|off (off allocates a table for its "
+             "content only), validate=on|off checks every table an operation returns",
          (option("--native-stack-guard") & value("on|off", nativeStackGuardOpt)) %
              "check the native stack on every nested call (default on); off measures where the "
              "stack really ends and is not for normal use",
          (option("--devices") & value("cpu|ordinal[,ordinal...]", devicesOpt)) %
              "devices a pipeline may use: cpu (the host only) or CUDA ordinals in order (e.g. 0 "
              "or 0,1); a device named here must be there",
+         (option("--tensor-isa") & value("native|generic", tensorIsaOpt)) %
+             "instruction set the kernels may use: native (default; what the processor reports) or "
+             "generic (the portable units only, whatever the processor has)",
          (option("--profile-mode") & value("normal|full", profileModeOpt)) %
              "mode of the profiler of --profile: full also opens the Perfetto UI when the report "
              "is written",
@@ -888,22 +987,19 @@ bool parseArgs(int argc, char *argv[]) {
             Run::resolvedPassList,
             &Run::fallbackPasses);
 
-        // The two depth limits: the option, else the environment variable. A value that is not
-        // an integer in range is refused here, before anything is compiled or run.
+        // The two depth limits: the option only. A value that is not an integer in range is
+        // refused here, before anything is compiled or run.
         if (!readDepthLimit(
                 Run::maxRecursionDepthOpt,
                 camel::execute::kMaxRecursionDepthOption,
-                camel::execute::kMaxRecursionDepthEnvVar,
                 Run::maxRecursionDepth) ||
             !readDepthLimit(
                 Run::maxMacroDepthOpt,
                 camel::execute::kMaxMacroDepthOption,
-                camel::execute::kMaxMacroDepthEnvVar,
                 Run::maxMacroDepth) ||
             !readRoundLimit(
                 Run::maxMacroRoundsOpt,
                 camel::execute::kMaxMacroRoundsOption,
-                camel::execute::kMaxMacroRoundsEnvVar,
                 Run::maxMacroRounds)) {
             std::exit(1);
         }
@@ -941,6 +1037,147 @@ bool parseArgs(int argc, char *argv[]) {
             camel::runtime::setGraphCollectionFloorBytes(graphGcFloorMb * camel::core::mm::MB);
         }
 
+        // The collector's sizing and its checks, and the widths of a collection tree: --gc-*,
+        // --space-segment-kb, the three space limits, --coll. Each has to be read before the
+        // space or the first table it shapes exists.
+        {
+            camel::core::mm::AllocatorSizing sizing{};
+            struct NumberOption {
+                const std::string &text;
+                const char *option;
+                size_t *target;
+            };
+            const NumberOption numbers[] = {
+                {Run::gcNurseryMbOpt, "--gc-nursery-mb", &sizing.nurseryMb},
+                {Run::gcPromotionAgeOpt, "--gc-promotion-age", &sizing.promotionAge},
+                {Run::gcLargeThresholdOpt, "--gc-large-threshold-kb", &sizing.largeThresholdKb},
+                {Run::gcLargeBudgetOpt, "--gc-large-budget-mb", &sizing.largeBudgetMb},
+                {Run::gcGrowthPercentOpt, "--gc-growth-percent", &sizing.growthPercent},
+                {Run::gcHeapLimitOpt, "--gc-heap-limit-mb", &sizing.heapLimitMb},
+                {Run::spaceSegmentKbOpt, "--space-segment-kb", &sizing.spaceSegmentKb},
+                {Run::metaSpaceLimitOpt, "--meta-space-limit-mb", &sizing.metaSpaceLimitMb},
+                {Run::graphSpaceLimitOpt, "--graph-space-limit-mb", &sizing.graphSpaceLimitMb},
+                {Run::permSpaceLimitOpt, "--perm-space-limit-mb", &sizing.permSpaceLimitMb},
+            };
+            bool sizingGiven = false;
+            for (const auto &number : numbers) {
+                if (number.text.empty()) {
+                    continue;
+                }
+                if (!readNumberOption(number.text, number.option, *number.target, 1u << 20)) {
+                    std::exit(1);
+                }
+                sizingGiven = true;
+            }
+            if (sizingGiven && !camel::core::mm::selectAllocatorSizing(sizing)) {
+                std::cerr << "Error: a sizing option was read after the run-time heap was set up."
+                          << std::endl;
+                std::exit(1);
+            }
+
+            camel::core::mm::AllocatorChecks checks{};
+            bool checksGiven = false;
+            for (const auto &word : splitSpec(Run::gcStressOpt)) {
+                checksGiven = true;
+                if (word.key == "kind") {
+                    if (word.value == "minor") {
+                        checks.stress = camel::core::mm::AllocatorChecks::Stress::Minor;
+                    } else if (word.value == "major") {
+                        checks.stress = camel::core::mm::AllocatorChecks::Stress::Major;
+                    } else if (word.value == "both") {
+                        checks.stress = camel::core::mm::AllocatorChecks::Stress::Both;
+                    } else {
+                        std::cerr << "Invalid --gc-stress kind: '" << word.value
+                                  << "'. Expected minor, major or both." << std::endl;
+                        std::exit(1);
+                    }
+                } else if (word.key == "alloc") {
+                    if (!readNumberOption(word.value, "--gc-stress alloc", checks.stressEveryAllocations, 1u << 20)) {
+                        std::exit(1);
+                    }
+                } else if (word.key == "safepoint") {
+                    if (!readNumberOption(word.value, "--gc-stress safepoint", checks.stressEverySafepoints, 1u << 20)) {
+                        std::exit(1);
+                    }
+                } else {
+                    std::cerr << "Invalid --gc-stress key: '" << word.key
+                              << "'. Expected kind, alloc or safepoint." << std::endl;
+                    std::exit(1);
+                }
+            }
+            for (const auto &word : splitSpec(Run::gcCheckOpt)) {
+                checksGiven = true;
+                if (word.key == "moves") {
+                    checks.logMoves = true;
+                } else if (word.key == "poison") {
+                    checks.poison = true;
+                } else if (word.key == "config") {
+                    checks.printConfig = true;
+                } else if (word.key == "verify") {
+                    if (word.value == "before" || word.value == "pre") {
+                        checks.verifyBefore = true;
+                    } else if (word.value == "after" || word.value == "post") {
+                        checks.verifyAfter = true;
+                    } else if (word.value == "both") {
+                        checks.verifyBefore = true;
+                        checks.verifyAfter  = true;
+                    } else {
+                        std::cerr << "Invalid --gc-check verify: '" << word.value
+                                  << "'. Expected before, after or both." << std::endl;
+                        std::exit(1);
+                    }
+                } else {
+                    std::cerr << "Invalid --gc-check word: '" << word.key
+                              << "'. Expected moves, poison, config or verify=...." << std::endl;
+                    std::exit(1);
+                }
+            }
+            if (checksGiven && !camel::core::mm::selectAllocatorChecks(checks)) {
+                std::cerr << "Error: --gc-stress or --gc-check was read after the run-time heap "
+                             "was set up."
+                          << std::endl;
+                std::exit(1);
+            }
+
+            camel::core::rtdata::table::ShapeRequest shape;
+            for (const auto &word : splitSpec(Run::collOpt)) {
+                if (word.key == "leaf") {
+                    size_t leaf = 0;
+                    if (!readNumberOption(word.value, "--coll leaf", leaf, 1u << 20)) {
+                        std::exit(1);
+                    }
+                    shape.leafCapacity = leaf;
+                } else if (word.key == "fanout") {
+                    size_t fanout = 0;
+                    if (!readNumberOption(word.value, "--coll fanout", fanout, 1u << 20)) {
+                        std::exit(1);
+                    }
+                    shape.fanout = fanout;
+                } else if (word.key == "pad") {
+                    bool padded = false;
+                    if (!readSwitchOption(word.value, "--coll pad", padded)) {
+                        std::exit(1);
+                    }
+                    shape.padded = padded;
+                } else if (word.key == "validate") {
+                    bool validate = false;
+                    if (!readSwitchOption(word.value, "--coll validate", validate)) {
+                        std::exit(1);
+                    }
+                    shape.validate = validate;
+                } else {
+                    std::cerr << "Invalid --coll key: '" << word.key
+                              << "'. Expected leaf, fanout, pad or validate." << std::endl;
+                    std::exit(1);
+                }
+            }
+            if (!Run::collOpt.empty() && !camel::core::rtdata::table::selectShape(shape)) {
+                std::cerr << "Error: --coll was read after the first collection was made."
+                          << std::endl;
+                std::exit(1);
+            }
+        }
+
         // --native-stack-guard: off is the switch for measuring where the stack ends.
         if (!Run::nativeStackGuardOpt.empty()) {
             if (Run::nativeStackGuardOpt == "off") {
@@ -965,6 +1202,19 @@ bool parseArgs(int argc, char *argv[]) {
                 std::exit(1);
             }
             camel::execute::selectDevices(*selection);
+        }
+
+        // --tensor-isa: the instruction set the kernels may use. Read before the first kernel is
+        // chosen, because a module selects its unit from it once.
+        if (!Run::tensorIsaOpt.empty()) {
+            std::string why;
+            const auto isa = camel::execute::parseCpuIsa(Run::tensorIsaOpt, why);
+            if (!isa) {
+                std::cerr << "Error: --tensor-isa '" << Run::tensorIsaOpt << "': " << why << "."
+                          << std::endl;
+                std::exit(1);
+            }
+            camel::execute::selectCpuIsa(*isa);
         }
 
         // --profile-mode: the mode of the advanced profiler that --profile starts.

@@ -7,6 +7,7 @@
 #include "camel/core/operator.h"
 #include "camel/core/slot.h"
 #include "camel/runtime/draft.h"
+#include "camel/runtime/graph_txn.h"
 #include "tiles/internal/residency.h"
 #include <cstddef>
 #include <memory>
@@ -50,13 +51,19 @@ struct Segment {
 // The result contains node IDs only: no GC pointers or references to the source graph.
 std::vector<Segment> partitionRegions(const std::vector<RegionNode> &nodes);
 struct RegionDraft {
-    std::unique_ptr<runtime::GraphDraft> graph;
+    std::unique_ptr<runtime::GraphTransaction> graph;
     std::vector<size_t> parameters; // Source IDs; constant boundary values are embedded.
     std::vector<runtime::gc_node_ref_t> sourceToNode;
 };
 // Source and static values must remain rooted; use under NoCollectionScope until
 // encoding/attaching the graph. The returned draft is not a GC root by itself.
-RegionDraft extractRegion(const runtime::GCGraph &source, const Segment &region);
+// `id` is the graph number the extracted graph takes: the transaction is opened with it, so the
+// number is decided here, at extraction, and a caller that only reads the result for a report
+// passes kInvalidGraphId and spends none (which is what that path did before there was a choice).
+RegionDraft extractRegion(
+    const runtime::GCGraph &source,
+    const Segment &region,
+    runtime::GraphId id = runtime::kInvalidGraphId);
 
 struct SegmentAnalysis {
     std::vector<Segment> regions;

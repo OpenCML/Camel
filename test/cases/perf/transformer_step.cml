@@ -17,17 +17,19 @@ import { now } from time
 
 // d = 8, s = 4, batch = 1: small enough to run a hundred steps in a second, large enough that
 // every operator of a real step is there.
+// Static shapes, because `nn:adam` asks for `grads: grad of P` and a gradient of a statically shaped
+// parameter tree is statically shaped: a `f32[..]` field here no longer unifies with it.
 type Block = {
-    g1: f32[..],
-    g2: f32[..],
-    wq: f32[..],
-    wk: f32[..],
-    wv: f32[..],
-    wo: f32[..],
-    w1: f32[..],
-    b1: f32[..],
-    w2: f32[..],
-    b2: f32[..]
+    g1: f32[8],
+    g2: f32[8],
+    wq: f32[8, 8],
+    wk: f32[8, 8],
+    wv: f32[8, 8],
+    wo: f32[8, 8],
+    w1: f32[8, 16],
+    b1: f32[16],
+    w2: f32[16, 8],
+    b2: f32[8]
 }
 
 // RMSNorm over the last axis, the gain applied after the normalization.
