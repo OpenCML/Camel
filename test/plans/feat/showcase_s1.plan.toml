@@ -1,0 +1,40 @@
+id = "showcase_s1_stream_fib"
+order = 914
+tier = "fast"
+tags = ["feat", "showcase", "s1", "stream", "generator"]
+
+# The stream row of the showcase design (`docs/design/showcase/README.cn.md`, "流与驻留执行")
+# asks for a program whose batch and stream schedules agree. This is the smallest one that does:
+# a generator whose Fibonacci round carries two values across the pull, consumed twice.
+#
+# The whole standard output is pinned: the ten Fibonacci numbers below 50 and their sum (88). A
+# state machine that dropped one of the two carried values, or wrote the second before reading
+# what the first replaced, would print another sequence -- that second mistake is exactly what the
+# two-state lowering had to fix, so the sequence is the reading that keeps it fixed.
+
+[[tests]]
+name = "stream_fib.default"
+desc = "`fib(50)` hands out 0, 1, 1, 2, 3, 5, 8, 13, 21, 34 and the same stream summed is 88; the round carries `a` and `b`, each built from the round before it."
+kind = "behavior"
+case = "../../../showcase/s1-stream-fib/fib.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n88\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+const numbers = lines.map((line) => Number(line.trim()))
+assert(numbers.length === 11, `printed ${numbers.length} lines, expected 11`)
+const elements = numbers.slice(0, 10)
+for (let i = 2; i < elements.length; i++) {
+    assert(elements[i] === elements[i - 1] + elements[i - 2],
+        `element ${i} is ${elements[i]}, not the sum of the two before it`)
+}
+assert(numbers[10] === elements.reduce((a, b) => a + b, 0),
+    `the total ${numbers[10]} is not the sum of the elements`)
+}
+"""
+timeout_ms = 30000
