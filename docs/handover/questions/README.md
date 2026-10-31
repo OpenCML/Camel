@@ -9,18 +9,17 @@
 > **哪些未决值得成页**：不是所有未决都值得成页——只有**今天有人被它堵住**的才值得。其余留在原则里，等它真的挡住一条车道再成页。所以第 15 节那 8 条不占待裁表，清单在文末，每条写明今天堵着谁。
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
-## 现在在等作者：0 页（4 页都已裁，3 页的改动在车道上）
+## 现在在等作者：1 页（`whose-effect-is-an-inlined-body`）
 
-`questions/` 里现在没有一页在等答复：4 页都被读过、都裁了，改动按裁定往 develop 走。新页从车道落进来时才在这个表里加行。
+`questions/` 里只有一页在等答复：内联把体搬进调用者图后，那张图多出来的环境资源归谁。其余四页都已裁，改动按裁定往 develop 走。新页从车道落进来时才在这个表里加行。
 
 | 页 | 问什么 | 状态 | 堵着谁 |
 |---|---|---|---|
-| [`does-rt-array-carry-a-shape`](questions-2026-10-31-does-rt-array-carry-a-shape.md) | 05:30 裁 **A**：`rt::Array` 带 `rank`/`extent` | 已裁未落 | 守卫与“形状 + 嵌套打印”第一步已落；队列：下标 → 切片 → `reshape` → `shape` → `numel` → 逐元素 |
-| [`which-results-cross-the-bridge`](questions-2026-10-31-which-results-cross-the-bridge.md) | 同一个 `T[..]`，两种表示：`tensor:*` 的结果走 `rt::Foreign`（05:50）还是原生带形状数组（05:30）；判据是"算子来自哪个模块"还是"形状是否具体" | 待裁 | 堵 `tensor:ones/zeros/reshape/load_npy` 与 `rand:*_array` 的表示，也堵 `std::cpp` 第 5 步 |
-| [`std-cpp-needs-a-tensor-type`](questions-2026-10-31-std-cpp-needs-a-tensor-type.md) | 05:50 裁：**张量是 `rt::Foreign` 过桥**，走设计稿第 9 节，第 5 步开工 | 已裁未落 | 369 个程序记作“等第 5 步（外部对象）”；第一笔是 `rt::Foreign` 句柄 |
-| [`mem-blocks-has-no-block-space`](questions-2026-10-31-mem-blocks-has-no-block-space.md) | 05:10 裁 **A**：拒绝并让拒绝说实话（目标不具备，不是尚未实现） | 已裁已落 | 无；普查把 10 个记为“目标不具备” |
+| [`whose-effect-is-an-inlined-body`](questions-2026-10-31-whose-effect-is-an-inlined-body.md) | 内联把体搬进调用者图后，那张图多出来的环境资源归调用者、归原来的体，还是谁内联谁在区域记录里登记 | 待裁 | 逐图版的效应边界不变量（今天量出 9 条 `callback.*_opt` 全是这个形状，尺子伸过了头） |
+| [`does-rt-array-carry-a-shape`](questions-2026-10-31-does-rt-array-carry-a-shape.md) | 05:30 裁 **A**：`rt::Array` 带 `rank`/`extent` | 已裁未落 | 队列：`argmax_axis` → 逐元素；`T[..]` 的表示已由 07:30 裁定统一为原生带形状数组 |
+| [`std-cpp-needs-a-tensor-type`](questions-2026-10-31-std-cpp-needs-a-tensor-type.md) | 07:30 收回 05:50：`T[..]` 一律是原生带形状 `rt::Array`，经桥时转换；`rt::Foreign` 只留给 `PyObject`、`Device<T>` | 已裁未落 | `ones`/`zeros` 的表示要改回 `rt::Array`；设计稿 §9 与类型表同笔改 |
+| [`mem-blocks-has-no-block-space`](questions-2026-10-31-mem-blocks-has-no-block-space.md) | 05:10 裁 **A**：拒绝并让拒绝实话（目标不具备，不是尚未实现） | 已裁已落 | 无；普查把 10 个记为“目标不具备” |
 | [`generator-narrowing-remains`](questions-2026-10-31-generator-narrowing-remains.md) | 04:50 裁 **A**：删掉生成器收窄 | 已裁已落 | 无；两处拒绝已删，三条形状转成消费它们的正例 |
-
 
 原则第 15 节另列着 6 条未决（另 2 条已成页、22:50 已裁），见文末。
 
