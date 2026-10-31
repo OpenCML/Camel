@@ -341,6 +341,107 @@ def check(entry, workdir, args):
     return rec
 
 
+BACKENDS = ("std::nvm", "std::fvm", "std::cpp", "std::jit")
+
+
+def back_end_run(program, entry_args, args, env, workdir, back_end):
+    """(exit code, text) of one program on one back end. For `std::cpp` that is the program it
+    writes: translated, built, then run -- the same three steps `check` takes."""
+    rel = os.path.relpath(program, ROOT).replace("\\", "/")
+    if back_end != "std::cpp":
+        code, out, err, _ = run([CAMEL] + entry_args + [rel] + args.passes + [back_end],
+                                args.timeout, env)
+        return code, (out + ("\n" + err if err.strip() else ""))
+    code, out, err, _ = run([CAMEL] + entry_args + [rel] + args.passes + ["std::cpp"],
+                            args.timeout, env)
+    if code != 0 or "#include" not in out:
+        return code, (out + err).strip()
+    stem = re.sub(r"[^A-Za-z0-9_]", "_", rel)[:150]
+    source = os.path.join(workdir, stem + ".cpp")
+    target = os.path.join(workdir, stem + EXE)
+    with open(source, "w", encoding="utf-8", newline="\n") as f:
+        f.write(out)
+    compiler, msvc = find_compiler()
+    bridged = "camel/standalone/bridge.h" in out
+    code, cout, cerr, _ = run(
+        build_command(compiler, msvc, source, target, bridged, env["CAMEL_HOME"], args.pch),
+        600, env, cwd=workdir)
+    if code != 0:
+        errors = [l for l in (cout + cerr).splitlines() if "error" in l]
+        return code, (errors[0] if errors else (cout + cerr).strip())
+    code, out, err, _ = run([target] + entry_args, args.timeout, env)
+    return code, (out + ("\n" + err if err.strip() else ""))
+
+
+def check_four(entry, workdir, args):
+    """The four cells of one program, and whether they say the same thing."""
+    program, entry_args = entry
+    rel = os.path.relpath(program, ROOT).replace("\\", "/")
+    env = dict(os.environ)
+    env.setdefault("CAMEL_HOME", os.path.join(ROOT, "out", "latest"))
+    if os.name == "nt":
+        env["PATH"] = os.path.join(env["CAMEL_HOME"], "libs") + os.pathsep + env.get("PATH", "")
+    cells = []
+    for back_end in BACKENDS:
+        code, text = back_end_run(program, entry_args, args, env, workdir, back_end)
+        cells.append({"back_end": back_end, "exit": code, "text": text,
+                      "not_supported": bool(re.search(r"[Nn]ot supported|unsupported|no support",
+                                                      text))})
+    rec = {"program": rel + "".join(" " + a for a in entry_args), "cells": cells}
+    speaking = [c for c in cells if not c["not_supported"]]
+    same = len({(c["exit"], c["text"]) for c in speaking}) == 1 if speaking else False
+    rec["same"] = same
+    rec["silent"] = [c["back_end"] for c in cells if c["not_supported"]]
+    rec["differs"] = [] if same else [c for c in speaking
+                                      if (c["exit"], c["text"]) != (speaking[0]["exit"],
+                                                                    speaking[0]["text"])]
+    return rec
+
+
+def check_four_backends(programs, args):
+    """Every program on the four back ends, one line per cell: a type is implemented when the
+    four say the same sentence, not when one of them runs it."""
+    entries = expand(programs)
+    workdir = tempfile.mkdtemp(prefix="cppexec-")
+    args.pch = None
+    compiler, msvc = find_compiler()
+    if not args.no_pch and "clang" in os.path.basename(compiler).lower():
+        pch = os.path.join(workdir, "runtime.pch")
+        header = os.path.join(ROOT, "include", "camel", "standalone", "runtime.h")
+        code, _, _, _ = run([compiler, "-std=c++20", "-O2", "-ffp-contract=off",
+                             "-I", os.path.join(ROOT, "include"),
+                             "-x", "c++-header", header, "-o", pch], 600)
+        args.pch = pch if code == 0 else None
+    try:
+        records = []
+        for entry in entries:
+            rec = check_four(entry, workdir, args)
+            records.append(rec)
+            print("%s  %s" % (rec["program"],
+                              "same" if rec["same"] else "differs"))
+            for cell in rec["cells"]:
+                text = " ".join(cell["text"].split())
+                if len(text) > 200:
+                    text = text[:200] + "..."
+                print("  %-9s %s  %s" % (cell["back_end"], cell["exit"], text or "(no output)"))
+            if rec["silent"]:
+                print("  not run on %s: the back end says so above" % ", ".join(rec["silent"]))
+            for cell in rec["differs"]:
+                print("  differs at %s: %s" % (cell["back_end"],
+                                               " ".join(cell["text"].split())[:300]))
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+    agree = [r for r in records if r["same"]]
+    print("")
+    if len(agree) == len(records):
+        print("PASS: %d of %d programs say the same thing on four back ends"
+              % (len(agree), len(records)))
+        return 0
+    print("FAIL: %d of %d programs speak with more than one voice"
+          % (len(records) - len(agree), len(records)))
+    return 1
+
+
 def expand(paths):
     """(program, arguments of its main) for every path: a directory gives its programs, a path
     followed by arguments (an entry of an --expect list) that program with them."""
@@ -382,6 +483,9 @@ def main():
     ap.add_argument("--standalone", action="store_true",
                     help="check that the named programs are built without the Camel runtime: no "
                          "bridge in the generated code, no Camel library in what it needs")
+    ap.add_argument("--four-backends", action="store_true",
+                    help="run each program on std::nvm, std::fvm, std::cpp and std::jit, say what "
+                         "each one said, and fail when they do not all say the same thing")
     ap.add_argument("--no-pch", action="store_true",
                     help="do not precompile camel/standalone/runtime.h (clang)")
     args = ap.parse_args()
@@ -400,6 +504,10 @@ def main():
         if not args.programs:
             ap.error("--standalone needs at least one program")
         return check_standalone(args.programs, args)
+    if args.four_backends:
+        if not args.programs:
+            ap.error("--four-backends needs at least one program")
+        return check_four_backends(args.programs, args)
 
     expected = read_expect(args.expect) if args.expect else []
     programs = expand(args.programs + expected)
