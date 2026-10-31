@@ -248,8 +248,10 @@ template <typename T> class Array {
     }
 
     /// States the shape a reduction along one dimension leaves (`sumAxis`): the source's dimensions
-    /// with the reduced one dropped, or written as one when the caller asked to keep it.
-    void shapeReduced(const Array<T> &source, std::size_t axis, bool keepDims) {
+    /// with the reduced one dropped, or written as one when the caller asked to keep it. The source
+    /// may hold another element type, which is why this reads its shape and not its elements: an
+    /// argmax answers positions of the value it read.
+    template <typename U> void shapeReduced(const Array<U> &source, std::size_t axis, bool keepDims) {
         if (rep_ == nullptr || axis >= source.rank()) {
             return;
         }
@@ -745,9 +747,10 @@ template <typename T> int64_t numel(const Array<T> &xs) { return static_cast<int
 /// `extent` elements `inner` apart, one lane per position of every other dimension, in row-major
 /// order of the answer. The lane is read where it lies -- no lane is gathered into a run of its own,
 /// and nothing is transposed first -- and the answer keeps the dimensions it did not reduce, or
-/// keeps the reduced one as a one when the caller asked for that.
-template <typename T, typename Lane>
-Array<T> axisReduce(
+/// keeps the reduced one as a one when the caller asked for that. `R` is the answer's element type,
+/// which is not always the source's: an argmax answers positions.
+template <typename T, typename R, typename Lane>
+Array<R> axisReduce(
     const Array<T> &xs, int64_t axisArg, bool keepDims, const char *name, const Site &invalid,
     Lane lane) {
     const auto rank    = static_cast<int64_t>(xs.rank());
@@ -769,7 +772,7 @@ Array<T> axisReduce(
     for (std::size_t i = dimension + 1; i < xs.rank(); ++i) {
         inner *= xs.extent(i);
     }
-    Array<T> out;
+    Array<R> out;
     out.reserve(outer * inner);
     for (std::size_t o = 0; o < outer; ++o) {
         for (std::size_t i = 0; i < inner; ++i) {
@@ -785,7 +788,7 @@ Array<T> axisReduce(
 /// and an exact `uint64_t` for integers, as the interpreter's kernel accumulates.
 template <typename T>
 Array<T> sumAxis(const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid) {
-    return axisReduce<T>(
+    return axisReduce<T, T>(
         xs,
         axisArg,
         keepDims,
@@ -862,7 +865,7 @@ Array<T> extremeAxis(
                      "': the axis " + std::to_string(axis) + " has no element"});
         }
     }
-    return axisReduce<T>(
+    return axisReduce<T, T>(
         xs,
         axisArg,
         keepDims,
@@ -896,6 +899,80 @@ template <typename T>
 Array<T> minAxis(
     const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid, const Site &empty) {
     return extremeAxis<false>(xs, axisArg, keepDims, invalid, empty);
+}
+
+/// Whether `v`, met after the extreme so far, takes its place (modules/tensor/kernels/minmax.h,
+/// `beyondExtreme`): the order is the one of IEEE 754-2019 maximum and minimum, so a NaN is beyond
+/// every number and the first NaN is kept, +0 is above -0, and on a tie the earlier position stays.
+template <bool Maximum, typename T> bool beyondExtreme(T v, T best) {
+    if constexpr (std::is_floating_point_v<T>) {
+        if (best != best) {
+            return false;
+        }
+        if (v != v) {
+            return true;
+        }
+        if (v == best) {
+            // Only +0 and -0 compare equal with different bits: the maximum takes the +0 and the
+            // minimum the -0, so a signed zero is a position the comparison can still tell apart.
+            return v == 0 && (Maximum ? (std::signbit(best) && !std::signbit(v))
+                                      : (!std::signbit(best) && std::signbit(v)));
+        }
+    }
+    return Maximum ? best < v : v < best;
+}
+
+/// `tensor:argmax_axis` and `tensor:argmin_axis` (modules/tensor/kernels/reduce.cpp): the position
+/// of the first element of the lane that equals its maximum (minimum), or of its first NaN. The
+/// answer's element type is int64 whatever the source holds, so it is a value of positions and not
+/// of elements; a lane with no element has no position, and the interpreter refuses that.
+template <bool Maximum, typename T>
+Array<int64_t> argExtremeAxis(
+    const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid, const Site &empty) {
+    const auto rank    = static_cast<int64_t>(xs.rank());
+    const int64_t axis = axisArg < 0 ? axisArg + rank : axisArg;
+    if (rank >= 2 && axis >= 0 && axis < rank) {
+        const auto dimension = static_cast<std::size_t>(axis);
+        if (xs.extent(dimension) == 0) [[unlikely]] {
+            fault(
+                empty,
+                {"[]",
+                 std::string("'") + (Maximum ? "tensor:argmax_axis" : "tensor:argmin_axis") +
+                     "': the axis " + std::to_string(axis) + " has no element"});
+        }
+    }
+    return axisReduce<T, int64_t>(
+        xs,
+        axisArg,
+        keepDims,
+        Maximum ? "tensor:argmax_axis" : "tensor:argmin_axis",
+        invalid,
+        [](const Array<T> &v, std::size_t base, std::size_t extent, std::size_t inner) {
+            T best          = v[base];
+            int64_t bestIdx = 0;
+            for (std::size_t k = 1; k < extent; ++k) {
+                const T candidate = v[base + k * inner];
+                if (beyondExtreme<Maximum>(candidate, best)) {
+                    best    = candidate;
+                    bestIdx = static_cast<int64_t>(k);
+                }
+            }
+            return bestIdx;
+        });
+}
+
+/// `tensor:argmax_axis`.
+template <typename T>
+Array<int64_t> argmaxAxis(
+    const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid, const Site &empty) {
+    return argExtremeAxis<true>(xs, axisArg, keepDims, invalid, empty);
+}
+
+/// `tensor:argmin_axis`.
+template <typename T>
+Array<int64_t> argminAxis(
+    const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid, const Site &empty) {
+    return argExtremeAxis<false>(xs, axisArg, keepDims, invalid, empty);
 }
 
 /// `tail(xs)` (:struct/tail_arr): all but the first element; the empty array for one or none.

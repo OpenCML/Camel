@@ -239,3 +239,7 @@ test/cases/trans/cpp/sum_axis_rank.cml
 # largest value), so one NaN element makes the answer NaN, and compares with the one statement the
 # interpreter uses: a NaN on either side gives NaN, -0 is below +0, otherwise the larger (smaller).
 test/cases/trans/cpp/extreme_axis_rank.cml
+
+# The position of the extreme along one dimension: the first element of the lane equal to its
+# maximum (minimum), or its first NaN. The answer is an int64 value whatever the source holds.
+test/cases/trans/cpp/arg_axis_rank.cml
