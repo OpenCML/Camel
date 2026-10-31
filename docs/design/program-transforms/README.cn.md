@@ -113,6 +113,8 @@ type Reinterp<F, H> = (..H.Lift<ParamsOf<F>>) => H.Lift<ResultOf<F>>
 
 哨兵值在原样复制里能活，在重映射里会死——重映射必须知道哪些字段不是引用。（作者，2026-10-31）无效图 id 不是"第 0 个依赖"：依赖表里多一项 0，哨兵就从 `kNoLoopGraph` 变成了一个对不上的数。
 
+同一句"环境性"能掩盖一个真缺陷——把红归给环境之前，先量它是从哪一步开始是 0 的。（作者，2026-11-01）`gpu_preference.named_device` 被当作"宿主没有 CUDA 设备"说了好几轮，其实是 `hostStorage` 漏了 8 字节（`870e10935` 已修、在 `develop` 上）：这条线合入 `develop` 之后它自然转绿。
+
 ### 4.2 拆分 `split`
 
 ```camel
