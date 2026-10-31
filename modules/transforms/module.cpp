@@ -23,13 +23,16 @@
 
 #include "module.h"
 
+#include "camel/compile/gir/rule_templates.h"
 #include "camel/execute/pass/opt.h"
 #include "camel/execute/pass/params.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/graph_txn.h"
+#include "camel/parse/ast/rule_head.h"
 #include "camel/runtime/program.h"
 
+#include <algorithm>
 #include <string>
 
 using namespace camel::core::context;
@@ -37,12 +40,48 @@ using namespace camel::core::module;
 
 namespace {
 
+/// The other key the index holds: the rule's left side is written `a + b`, and the node a transform
+/// stands on names its operator by URI (`:op/add_d`). One line per operator, read from the rule's
+/// instance -- `URI -> rule -> the GraphId of its right side` -- because that is the pair a
+/// replacement has to have in hand before it can build anything.
+void printRuleUris(camel::core::context::Context &context, std::ostream &os) {
+    std::vector<std::string> printed;
+    for (const camel::parse::ast::RuleEntry &head : camel::parse::ast::rulesOf("rulesets.jvp")) {
+        auto &table = camel::compile::gir::genericRuleTable(context);
+        for (size_t i = 0; i < table.size(); ++i) {
+            if (table[i]->name != head.rule) {
+                continue;
+            }
+            const uint64_t ruleId = static_cast<uint64_t>(i) + 1;
+            const size_t at       = camel::compile::gir::genericRuleInstance(
+                context, ruleId, {camel::core::type::Type::Float64()}, {});
+            auto *entry = camel::compile::gir::genericRuleEntry(context, ruleId);
+            if (entry == nullptr || at >= entry->instances.size()) {
+                break;
+            }
+            const camel::compile::gir::GenericRuleInstance &instance = entry->instances[at];
+            if (!instance.made || instance.rhs == nullptr) {
+                break;
+            }
+            const std::string &uri = instance.lhsOperatorUri;
+            if (std::find(printed.begin(), printed.end(), uri) != printed.end()) {
+                break;
+            }
+            printed.push_back(uri);
+            os << "REINTERP uri " << uri << " -> rule " << head.rule
+               << " -> rhs " << camel::runtime::toValue(instance.rhs->id()) << '\n';
+            break;
+        }
+    }
+}
+
 class ReinterpPass : public RuntimeGraphRewritePass {
   public:
     explicit ReinterpPass(const context_ptr_t &ctx) : RuntimeGraphRewritePass(ctx) {}
 
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override {
+        printRuleUris(*context_, os);
         // Every function of the program that is made of operators: those are the ones a
         // replacement has something to replace in. A function of calls and constants alone is
         // simply not visited.
