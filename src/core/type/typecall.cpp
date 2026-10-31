@@ -228,7 +228,7 @@ TypeCallType *TypeCallType::create(std::string_view name, std::span<Type *const>
         TypeTable::instance().internOther(typeCode(), parts, [&]() -> Type * {
             Type **params = OtherType::copyParams(arguments);
             void *mem     = mm::permSpace().alloc(sizeof(TypeCallType), alignof(TypeCallType));
-            ASSERT(mem != nullptr, "Failed to allocate TypeCallType from permSpace");
+            GUARD(mem != nullptr, "Failed to allocate TypeCallType from permSpace");
             return new (mem) TypeCallType(text, arguments.size(), params);
         }));
 }
@@ -344,7 +344,7 @@ MatchTypeType *MatchTypeType::create(Type *subject, std::span<const MatchTypeArm
         TypeTable::instance().internOther(typeCode(), key, [&]() -> Type * {
             Type **copy = OtherType::copyParams(params);
             void *mem   = mm::permSpace().alloc(sizeof(MatchTypeType), alignof(MatchTypeType));
-            ASSERT(mem != nullptr, "Failed to allocate MatchTypeType from permSpace");
+            GUARD(mem != nullptr, "Failed to allocate MatchTypeType from permSpace");
             return new (mem) MatchTypeType(shapes, identityCounts, params.size(), copy);
         }));
 }
