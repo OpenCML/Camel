@@ -6,6 +6,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/equality.h"
 #include "camel/core/type/enum.h"
+#include "camel/profile/profile.h"
 #include "camel/utils/brpred.h"
 
 #include <cstdio>
@@ -33,14 +34,9 @@ const EnumType *enumTypeOf(const Type *type) {
     return enumType;
 }
 
-/// Whether the trace prints what it was handed for every value it relocates (CAMEL_TRACE_VARIANT=1).
-bool traceWanted() {
-    static const bool wanted = [] {
-        const char *value = std::getenv("CAMEL_TRACE_VARIANT");
-        return value != nullptr && value[0] != '\0' && value[0] != '0';
-    }();
-    return wanted;
-}
+/// Whether the trace prints what it was handed for every value it relocates: the parameter
+/// `std::profile variant_trace=true` asks for it, and a run that does not ask pays one load.
+bool traceWanted() { return camel::profile::variantTrace(); }
 
 /// Reports a `Variant` whose type the trace cannot use, and stops. It stays in a release build on
 /// purpose: `ASSERT` compiles to nothing under `NDEBUG`, which is how this path used to take the

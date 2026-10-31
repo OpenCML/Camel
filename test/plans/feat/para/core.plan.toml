@@ -324,8 +324,7 @@ name = "concurrent_alloc.prl_gc_stress"
 desc = "The same under PRL with a collection forced at every safepoint and every 5 allocations, heap verified before and after: values in flight on one worker survive a collection started by another."
 kind = "behavior"
 case = "../../../cases/para/core/concurrent_alloc.cml"
-args = ["-t", "4", "${case}", "${run_prl}"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+args = ["--gc-stress", "alloc=5,safepoint=1,kind=major", "--gc-check", "verify=both", "-t", "4", "${case}", "${run_prl}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -568,8 +567,7 @@ name = "map_chunks.prl_gc_stress"
 desc = "map_chunks under PRL with a verified major collection at every safepoint the scheduler polls: the chunks of several workers write into one result array while the collector moves it."
 kind = "behavior"
 case = "../../../cases/para/core/map_chunks.cml"
-args = ["-t", "4", "${case}", "${run_prl}"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+args = ["--gc-stress", "safepoint=1,kind=major", "--gc-check", "verify=both", "-t", "4", "${case}", "${run_prl}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

@@ -58,16 +58,22 @@ class TensorExecutor : public Executor {
 /// the result's element type, so its signature is computed (`loadNpyOperatorGroup`, recorded in
 /// `stdlib/signatures/tensor.cml`).
 constexpr std::string_view kDeclaredOperators[] = {
+    "argmax_axis",
+    "argmin_axis",
     "dim",
     "gemm_backend",
     "gemm_library",
     "gemm_library_threads",
     "gemm_threads",
     "num_threads",
+    "max_axis",
+    "mean_axis",
+    "min_axis",
     "numel",
     "save_npy",
     "set_num_threads",
     "shape",
+    "sum_axis",
     "show",
     "to_bytes",
 };
@@ -124,6 +130,12 @@ bool TensorModule::load() {
     context_->registerExecutorFactory("tensor", [ctx = context_]() -> executor_ptr_t {
         return std::make_shared<TensorExecutor>(ctx, OpRegistry::instance().kernelMap("tensor"));
     });
+    // The results of these operators may cross the bridge into a generated program as runtime
+    // objects (docs/design/cpp-standalone/README.cn.md 9). The signature here says only what kind
+    // of value they return; one call's concrete type depends on the type argument and on the
+    // shape it is given, and is described by the call site.
+    context_->execMgr().declareBridgeSignature("tensor:ones", "T[..]");
+    context_->execMgr().declareBridgeSignature("tensor:zeros", "T[..]");
     // A tensor constant's exact type carries its dtype and shape.
     static const bool refinerAdded = [] {
         camel::core::ValueTypeRefinerRegistry::instance().add(

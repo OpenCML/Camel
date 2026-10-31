@@ -26,8 +26,8 @@ void GenerationalAllocatorWithGC::configureDebug(DebugConfig config) {
     if (config.poisonAtSafepoints) {
         if (!enableYoungGenCopying_) {
             throw std::runtime_error(
-                "safepoint poisoning needs the moving collector (CAMEL_GC_POISON implies "
-                "CAMEL_GC_GENERATIONAL when it is read from the environment)");
+                "safepoint poisoning needs the moving collector (--gc-check poison implies "
+                "the generational collector)");
         }
         poison::install();
         // Nothing is promoted by age: an object in the elder space no longer moves, and a

@@ -182,6 +182,13 @@ class FunctionEmitter {
     /// The in-place form of `append` over `:var/take(xs)` (design principles 11.3): grows the
     /// variable's array with `rt::append` once; false when the node is not that shape.
     bool lowerAppendInPlace(Frame &frame, gc_node_ref_t ref, Block &out);
+    /// The in-place form of the element store over `:var/take(xs)` (design principles 11.3):
+    /// `xs[i] = v` becomes `rt::setAt` on the variable's own array, the element checked as a
+    /// read checks it; false when the node is not that shape.
+    bool lowerSetIndexInPlace(Frame &frame, gc_node_ref_t ref, Block &out);
+    /// `fail<'Kind'>(message)` (:op/fail): the value of type `never`, under the report the
+    /// program's own kind names (design principles 3.9); false for any other operator.
+    bool lowerFail(Frame &frame, gc_node_ref_t ref, const std::string &uri, Block &out);
     /// `map`, `filter`, `reduce`, `foreach`, `attempt`; false for any other operator.
     bool lowerHigherOrder(Frame &frame, gc_node_ref_t ref, const std::string &uri, Block &out);
     /// Whether the variable whose cell is `cell` is used outside this function (design note
@@ -197,12 +204,18 @@ class FunctionEmitter {
     std::string callDepth(const GCGraph *graph, gc_node_ref_t ref);
 
     /// Names the value of `ref`: a statement `const T name = expr;` (or `expr;` when nothing
-    /// uses it), or the expression itself when it may be moved to its one use.
+    /// uses it), or the expression itself when it may be moved to its one use. `resultCpp` is the
+    /// C++ type of the value when it is not the one the node's Camel type names (an operator whose
+    /// result the runtime owns); null for the type of the node.
     void bind(
         Frame &frame, gc_node_ref_t ref, std::string expr, bool inlinable, Block &out,
-        const std::string &hint);
+        const std::string &hint, const char *resultCpp = nullptr);
     const CppValue &valueOf(Frame &frame, gc_node_ref_t ref);
     std::string cppType(const GCGraph *graph, gc_node_ref_t ref, const Type *type);
+    /// The accessor of the runtime operator `uri` in the generated file, and the registration that
+    /// makes the program one including bridge.h and linking the runtime (the first bridged node is
+    /// remembered for the warning that says so).
+    std::string bridgeOperator(const GCGraph *graph, gc_node_ref_t ref, const std::string &uri);
 
     /// Whether only nodes that write nothing (constants, ports, gates, joins of order) come
     /// after position `at` of `order`.

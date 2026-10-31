@@ -27,59 +27,17 @@ std::string lowerAscii(std::string value) {
     return value;
 }
 
-std::string envString(const char *name) {
-#ifdef _WIN32
-    char *envValue = nullptr;
-    size_t size  = 0;
-    if (_dupenv_s(&envValue, &size, name) != 0 || envValue == nullptr) {
-        return {};
-    }
-    std::string value(envValue, size > 0 ? size - 1 : 0);
-    std::free(envValue);
-    return value;
-#else
-    const char *value = std::getenv(name);
-    return value ? std::string(value) : std::string{};
-#endif
-}
-
-bool envFlag(const char *name) {
-    std::string value = envString(name);
-    if (value.empty()) {
-        return false;
-    }
-    value = lowerAscii(std::move(value));
-    return value != "0" && value != "false" && value != "off" && value != "no";
-}
-
-size_t envSize(const char *name) {
-    std::string raw = envString(name);
-    if (raw.empty()) {
-        return 0;
-    }
-    char *end                = nullptr;
-    unsigned long long value = std::strtoull(raw.c_str(), &end, 10);
-    return end && *end == '\0' ? static_cast<size_t>(value) : 0;
-}
-
-GenerationalAllocatorWithGC::CollectionKind envCollectionKind() {
-    std::string value = envString("CAMEL_GC_STRESS_MODE");
-    if (value.empty()) {
-        return GenerationalAllocatorWithGC::CollectionKind::Major;
-    }
-    value = lowerAscii(std::move(value));
-    if (value == "minor") {
-        return GenerationalAllocatorWithGC::CollectionKind::Minor;
-    }
-    if (value == "both" || value == "minor+major" || value == "all") {
-        return GenerationalAllocatorWithGC::CollectionKind::MinorAndMajor;
-    }
-    return GenerationalAllocatorWithGC::CollectionKind::Major;
-}
 
 // --gc: what the command line chose before the allocator existed (-1: nothing).
 std::atomic<int> selectedCollectorMode{-1};
 std::atomic<bool> autoSpaceCreated{false};
+
+// --gc-* and --space-segment-kb: the sizing and the checks the command line chose before the
+// auto space existed. A number nobody set is 0, which the sizing reads as "the default".
+AllocatorSizing selectedSizing{};
+AllocatorChecks selectedChecks{};
+std::atomic<bool> sizingSelected{false};
+std::atomic<bool> checksSelected{false};
 
 // --block-limit: what the command line chose before the block space existed (0: the default).
 std::atomic<size_t> selectedBlockLimitBytes{0};
@@ -103,38 +61,40 @@ void installStatsAtExit() {
     });
 }
 
-size_t largeObjectBudgetFromEnv() {
-    const size_t megabytes = envSize("CAMEL_GC_LARGE_BUDGET_MB");
+size_t largeObjectBudget() {
+    const size_t megabytes = selectedSizing.largeBudgetMb;
     return (megabytes != 0 ? megabytes : 4) * 1024 * 1024;
 }
 
 // Growth of the large-object space between two collections, in percent of what the last sweep
-// left (CAMEL_GC_GROWTH_PERCENT).
-size_t largeObjectGrowthPercentFromEnv() {
-    const size_t percent = envSize("CAMEL_GC_GROWTH_PERCENT");
+// left (--gc-growth-percent).
+size_t largeObjectGrowthPercent() {
+    const size_t percent = selectedSizing.growthPercent;
     return percent != 0 ? percent : 100;
 }
 
-GenerationalAllocatorWithGC::DebugConfig debugConfigFromEnv() {
-    GenerationalAllocatorWithGC::DebugConfig config{};
-    config.stressEveryNAllocations = envSize("CAMEL_GC_STRESS_ALLOC");
-    config.stressEveryNSafepoints  = envSize("CAMEL_GC_STRESS_SAFEPOINT");
-    config.stressCollection        = envCollectionKind();
-    config.logMovements            = envFlag("CAMEL_GC_LOG_MOVES");
-    config.poisonAtSafepoints      = envFlag("CAMEL_GC_POISON");
-
-    std::string verifyRaw = envString("CAMEL_GC_VERIFY");
-    if (!verifyRaw.empty()) {
-        std::string value = lowerAscii(std::move(verifyRaw));
-        if (value == "before" || value == "pre") {
-            config.verifyBeforeGC = true;
-        } else if (value == "after" || value == "post") {
-            config.verifyAfterGC = true;
-        } else if (value != "0" && value != "false" && value != "off" && value != "no") {
-            config.verifyBeforeGC = true;
-            config.verifyAfterGC  = true;
-        }
+/// The collection a stress point performs, as `--gc-stress kind=...` names it.
+GenerationalAllocatorWithGC::CollectionKind collectionKindOf(AllocatorChecks::Stress stress) {
+    switch (stress) {
+    case AllocatorChecks::Stress::Minor:
+        return GenerationalAllocatorWithGC::CollectionKind::Minor;
+    case AllocatorChecks::Stress::Both:
+        return GenerationalAllocatorWithGC::CollectionKind::MinorAndMajor;
+    case AllocatorChecks::Stress::Major:
+    case AllocatorChecks::Stress::None:
+        break;
     }
+    return GenerationalAllocatorWithGC::CollectionKind::Major;
+}
+GenerationalAllocatorWithGC::DebugConfig debugConfig() {
+    GenerationalAllocatorWithGC::DebugConfig config{};
+    config.stressEveryNAllocations = selectedChecks.stressEveryAllocations;
+    config.stressEveryNSafepoints  = selectedChecks.stressEverySafepoints;
+    config.stressCollection        = collectionKindOf(selectedChecks.stress);
+    config.logMovements            = selectedChecks.logMoves;
+    config.poisonAtSafepoints      = selectedChecks.poison;
+    config.verifyBeforeGC          = selectedChecks.verifyBefore;
+    config.verifyAfterGC           = selectedChecks.verifyAfter;
     return config;
 }
 
@@ -154,7 +114,7 @@ const char *collectionKindName(GenerationalAllocatorWithGC::CollectionKind kind)
 
 void maybePrintDebugConfig(
     bool youngCopying, const GenerationalAllocatorWithGC::DebugConfig &config) {
-    if (!envFlag("CAMEL_GC_PRINT_CONFIG")) {
+    if (!selectedChecks.printConfig) {
         return;
     }
     std::cerr << "[camel] GC config:" << " youngCopying=" << (youngCopying ? "true" : "false")
@@ -197,7 +157,7 @@ CollectorMode collectorMode() {
                                                     : CollectorMode::MarkSweep;
     }
     // Safepoint poisoning is a mode of the moving collector, so it turns it on.
-    if (envFlag("CAMEL_GC_POISON")) {
+    if (selectedChecks.poison) {
         return CollectorMode::Generational;
     }
     const int selected = selectedCollectorMode.load(std::memory_order_acquire);
@@ -206,6 +166,23 @@ CollectorMode collectorMode() {
     return selected >= 0 ? static_cast<CollectorMode>(selected) : CollectorMode::Generational;
 }
 
+bool selectAllocatorSizing(const AllocatorSizing &sizing) {
+    if (autoSpaceCreated.load(std::memory_order_acquire)) {
+        return false;
+    }
+    selectedSizing = sizing;
+    sizingSelected.store(true, std::memory_order_release);
+    return true;
+}
+
+bool selectAllocatorChecks(const AllocatorChecks &checks) {
+    if (autoSpaceCreated.load(std::memory_order_acquire)) {
+        return false;
+    }
+    selectedChecks = checks;
+    checksSelected.store(true, std::memory_order_release);
+    return true;
+}
 bool selectBlockSpaceLimit(size_t bytes) {
     if (blockSpaceCreated.load(std::memory_order_acquire)) {
         return false;
@@ -231,21 +208,21 @@ bool statsReportEnabled() { return requestedStatsLevel.load(std::memory_order_ac
 // Managed automatically by the GC system and must remain reachable from roots.
 GenerationalAllocatorWithGC &autoSpace() {
     static auto *allocator = [] {
-        const auto debugConfig = debugConfigFromEnv();
+        const auto debug = debugConfig();
         // Safepoint poisoning is a mode of the moving collector, so it turns it on.
         const bool youngCopying = collectorMode() == CollectorMode::Generational;
         autoSpaceCreated.store(true, std::memory_order_release);
-        // The birth space (CAMEL_GC_NURSERY_MB, default 4). Untouched pages cost nothing, so
-        // the mark-sweep collector, which does not use it, does not pay for it.
-        const size_t nurseryMb = envSize("CAMEL_GC_NURSERY_MB");
+        // The birth space (--gc-nursery-mb, default 4). Untouched pages cost nothing, so the
+        // mark-sweep collector, which does not use it, does not pay for it.
+        const size_t nurseryMb = selectedSizing.nurseryMb;
         const size_t nurseryBytes =
             std::clamp<size_t>(nurseryMb != 0 ? nurseryMb : 4, 1, 1024) * MB;
-        // What counts as a large object (CAMEL_GC_LARGE_THRESHOLD_KB). Large objects get a
+        // What counts as a large object (--gc-large-threshold-kb). Large objects get a
         // block of their own and never move. With mark-sweep the threshold is 4 KB. With the
         // generational collector it is 64 KB: an object born outside the birth space is old
         // from birth, and an array of a few thousand elements that dies young would keep
         // every young element it points at alive until the next major collection.
-        const size_t thresholdKb = envSize("CAMEL_GC_LARGE_THRESHOLD_KB");
+        const size_t thresholdKb = selectedSizing.largeThresholdKb;
         const size_t largeThreshold =
             thresholdKb != 0
                 ? std::min(thresholdKb * KB, nurseryBytes / 8)
@@ -255,26 +232,24 @@ GenerationalAllocatorWithGC &autoSpace() {
                 .birthSize = nurseryBytes,
                 // Under safepoint poisoning nothing is promoted by age, so the survivor spaces
                 // must hold whatever the birth space can.
-                .havenSize    = debugConfig.poisonAtSafepoints ? nurseryBytes : nurseryBytes / 4,
+                .havenSize    = debug.poisonAtSafepoints ? nurseryBytes : nurseryBytes / 4,
                 .elderGenSize = 32 * MB,
                 // Minor collections an object survives before it is promoted
-                // (CAMEL_GC_PROMOTION_AGE, 1 to 15; 1 promotes at the first one, which is the
+                // (--gc-promotion-age, 1 to 15; 1 promotes at the first one, which is the
                 // setting that shows missing write barriers).
                 .promotionAgeThreshold = std::clamp<size_t>(
-                    envSize("CAMEL_GC_PROMOTION_AGE") != 0 ? envSize("CAMEL_GC_PROMOTION_AGE") : 4,
-                    1,
-                    15),
+                    selectedSizing.promotionAge != 0 ? selectedSizing.promotionAge : 4, 1, 15),
                 .largeObjThreshold = largeThreshold,
-                // Large-object bytes between collections (CAMEL_GC_LARGE_BUDGET_MB overrides).
-                .largeObjCollectionBudget = largeObjectBudgetFromEnv(),
-                .largeObjGrowthPercent    = largeObjectGrowthPercentFromEnv(),
+                // Large-object bytes between collections (--gc-large-budget-mb overrides).
+                .largeObjCollectionBudget = largeObjectBudget(),
+                .largeObjGrowthPercent    = largeObjectGrowthPercent(),
                 .minorGCTriggerRatio      = 0.9f,
-                .heapLimitBytes           = envSize("CAMEL_GC_HEAP_LIMIT_MB") * MB,
+                .heapLimitBytes           = selectedSizing.heapLimitMb * MB,
                 // Production remains address-stable by default; Phase 3 tests can opt into the
                 // copying path explicitly to exercise remembered-set behavior.
                 .enableYoungGenCopying = youngCopying});
-        instance->configureDebug(debugConfig);
-        maybePrintDebugConfig(youngCopying, debugConfig);
+        instance->configureDebug(debug);
+        maybePrintDebugConfig(youngCopying, debug);
         // std::profile gc_stats=1: one line of pacing statistics on stderr at exit; =2: also
         // one line per major collection. The request is kept until the allocator exists, since
         // the pass may run before the heap is first used.
@@ -295,27 +270,32 @@ GenerationalAllocatorWithGC &autoSpace() {
 
 namespace {
 
-/// The limit of a space in bytes: `<env>=<megabytes>` when set to a positive number.
-size_t spaceLimitFromEnv(const char *env, size_t defaultBytes) {
-    const size_t megabytes = envSize(env);
-    return megabytes != 0 ? megabytes * MB : defaultBytes;
+/// The limit of a space in bytes: what the command line chose (`--graph-space-limit-mb` and the
+/// like), or the default when it chose nothing.
+struct SpaceLimit {
+    size_t fromOption;    // megabytes; 0 is the default
+    const char *option;   // the option that sets it, for the line that names it
+};
+
+size_t spaceLimitMb(const SpaceLimit &limit, size_t defaultBytes) {
+    return limit.fromOption != 0 ? limit.fromOption * MB : defaultBytes;
 }
 
 GrowableSpaceConfig spaceConfig(
     const char *name, const char *holds, size_t segmentBytes, size_t defaultLimitBytes,
-    const char *limitEnv) {
+    SpaceLimit limit) {
     GrowableSpaceConfig config;
     config.name       = name;
     config.holds      = holds;
-    config.limitBytes = spaceLimitFromEnv(limitEnv, defaultLimitBytes);
-    // CAMEL_SPACE_SEGMENT_KB=<kilobytes> sets the first segment of every growable space. It
-    // is a test control: with small segments a small program makes the spaces grow, so growth
-    // can be exercised under heap verification and collection stress.
-    if (const size_t kilobytes = envSize("CAMEL_SPACE_SEGMENT_KB"); kilobytes != 0) {
+    config.limitBytes = spaceLimitMb(limit, defaultLimitBytes);
+    // --space-segment-kb sets the first segment of every growable space. It is a test
+    // control: with small segments a small program makes the spaces grow, so growth can be
+    // exercised under heap verification and collection stress.
+    if (const size_t kilobytes = selectedSizing.spaceSegmentKb; kilobytes != 0) {
         segmentBytes = kilobytes * KB;
     }
     config.segmentBytes = std::min(segmentBytes, config.limitBytes);
-    config.limitEnv     = limitEnv;
+    config.limitEnv     = limit.option;
     return config;
 }
 
@@ -339,7 +319,7 @@ GrowableFreeListAllocator &metaSpace() {
         "constants and function objects of the graphs being compiled",
         16 * MB,
         kDefaultMetaSpaceLimitBytes,
-        kMetaSpaceLimitEnv));
+        {selectedSizing.metaSpaceLimitMb, "--meta-space-limit-mb"}));
     return *allocator;
 }
 
@@ -350,7 +330,7 @@ GrowableFreeListAllocator &graphSpace() {
         "runtime graphs",
         64 * MB,
         kDefaultGraphSpaceLimitBytes,
-        kGraphSpaceLimitEnv));
+        {selectedSizing.graphSpaceLimitMb, "--graph-space-limit-mb"}));
     return *allocator;
 }
 
@@ -371,7 +351,7 @@ GrowableFreeListAllocator &blockSpace() {
             "data blocks",
             8 * MB,
             selected != 0 ? selected : kDefaultBlockSpaceLimitBytes,
-            "--block-limit");
+            {0, "--block-limit"});
         config.sizesFromHeaders = true;
         blockSpaceCreated.store(true, std::memory_order_release);
         return config;
@@ -386,7 +366,7 @@ GrowableBumpAllocator &permSpace() {
         "types and layouts",
         32 * MB,
         kDefaultPermSpaceLimitBytes,
-        kPermSpaceLimitEnv));
+        {selectedSizing.permSpaceLimitMb, "--perm-space-limit-mb"}));
     return *allocator;
 }
 

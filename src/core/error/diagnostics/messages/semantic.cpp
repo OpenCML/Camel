@@ -1565,14 +1565,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::ReducedPrecisionUnsupported,
-            {
-                "ReducedPrecisionUnsupported",
-                "The call of '{0}' cannot take a value of the reduced-precision element type '{1}'.",
-                "bf16 and f16 are floating types of the language: a literal has one, bf16(x) and f16(x) are written conversions, and the scalar arithmetic and comparison compute in f32 and round once into the element type (design principles 7.3). This call asks for an operation one of them has no overload for - an operation the same type refuses on f32, such as %, or a function that takes a fixed set of types. Write the operation on a type that has it, or read the value as f32 (or f64) first, which is exact: f32(x).",
-            },
-        },
-        {
             SemanticDiag::ImplOnBodylessDeclaration,
             {
                 "ImplOnBodylessDeclaration",
@@ -1770,6 +1762,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "StatementAfterReturn",
                 "This statement cannot run: the 'return' written before it gives the value of this block, so nothing after it in the block is reached.",
                 "A 'return e' is the value of the block it is written in -- a function body, a 'sync' block, or the arm of an 'if' or a 'match' -- and a statement written after it in that same block is never reached. Move the statement before the 'return', or delete it.",
+            },
+        },
+        {
+            SemanticDiag::YieldRequiresStreamHead,
+            {
+                "YieldRequiresStreamHead",
+                "A function whose body writes 'yield' hands out a stream, and this function's head does not write one.",
+                "A body that writes 'yield' is a generator (design principles 5.4): its head writes the stream type it hands out, 'func f(xs: T): U.. sync with one yield in it', and a pull answers the next element and, when the body ends, null. Writing 'yield' in a body whose head writes something else gives that body no way to hand out its elements one at a time.",
             },
         },
         {

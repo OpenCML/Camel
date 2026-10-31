@@ -1446,12 +1446,12 @@ WhenResult Builder::whenOfPredicateInstance(
     // The instance's graph answers when its result is a constant of the graph (the common case:
     // every arm of `match type` ends in `true` or `false`).
     compile_graph_ptr_t graph = instantiateGeneric(tmpl, callBindings, {}, {}, callee);
-    if (graph == nullptr || graph->draft().returnNode() == camel::runtime::kInvalidNodeRef) {
+    if (graph == nullptr || graph->view().returnNode() == camel::runtime::kInvalidNodeRef) {
         return whenResultOf(
             WhenOutcome::NotEvaluable, written, "the predicate's instance has no result");
     }
     const data_ptr_t result =
-        constantOfNode(graph->draft().ref(graph->draft().returnNode()));
+        constantOfNode(graph->view().ref(graph->view().returnNode()));
     bool value = false;
     if (result != nullptr && asBool(result, value)) {
         return whenFromBool(value);

@@ -22,6 +22,7 @@
 #pragma once
 
 #include "camel/standalone/core.h"
+#include "camel/standalone/half.h"
 #include "camel/standalone/opt.h"
 #include "camel/standalone/str.h"
 #include "camel/utils/int_div.h"
@@ -103,6 +104,11 @@ template <std::same_as<int32_t> T> T div(T a, T b, const Site &site) {
 template <std::same_as<float> T> T div(T a, T b, const Site &site) {
     return detail::divide(a, b, site);
 }
+/// `a / b` on a bf16 or an f16 (:op/div_bf, :op/div_f6): dividing by zero is DivisionByZero at
+/// `site` as it is for f32, and the quotient is computed in f32 and rounded once into the type.
+template <typename Format> Half<Format> div(Half<Format> a, Half<Format> b, const Site &site) {
+    return Half<Format>(detail::divide(a.toFloat(), b.toFloat(), site));
+}
 
 /// `a % b` (:op/mod_*): integers only; by zero is DivisionByZero at `site`; any % -1 is 0.
 inline int64_t mod(int64_t a, int64_t b, const Site &site) {
@@ -122,6 +128,11 @@ template <std::same_as<int32_t> T> T pow(T base, T exponent) {
 }
 template <std::same_as<float> T> T pow(T base, T exponent) {
     return static_cast<T>(std::pow(base, exponent));
+}
+/// `a ^ b` on a bf16 or an f16 (:op/pow_bf, :op/pow_f6): std::pow of the widened values, rounded
+/// once into the type.
+template <typename Format> Half<Format> pow(Half<Format> base, Half<Format> exponent) {
+    return Half<Format>(std::pow(base.toFloat(), exponent.toFloat()));
 }
 
 // ---- Number to number (:op/ltoi, :op/dtol, ...) ----
@@ -162,6 +173,13 @@ To truncate(From value, const char *target, const Site &site) {
     return static_cast<To>(value);
 }
 
+/// A bf16 or an f16 truncated toward zero as the integer type To (`int(x)` of one): the value is
+/// the f32 it widens to, so the rule and the report are the f32 one (`:op/bftoi`, `:op/f6toi`).
+template <std::signed_integral To, typename Format>
+To truncate(Half<Format> value, const char *target, const Site &site) {
+    return truncate<To>(value.toFloat(), target, site);
+}
+
 /// The integer written in `text`, which must be that integer and nothing else (`int(s)`). The
 /// two refusals are the two causes (camel/core/numeric_convert.h, the same rule): `invalid`
 /// reports a text that is not a number, `outOfRange` a number the type cannot hold (the range is
@@ -192,6 +210,23 @@ To floatFromText(std::string_view text, const Site &invalid, const Site &outOfRa
     default:
         fault(invalid, {std::string(text)});
     }
+}
+
+/// The number written in `text` as a bf16 or an f16 (`bf16(s)`): the whole text must be one
+/// number, and one beyond the range of the element type is ConversionOutOfRange. The text is
+/// read first as f32 (`floatFromText` above, the runtime's own path in
+/// camel/core/numeric_convert_half.h), which is where "not a number" and "beyond f32" are
+/// refused, and then rounded once into the element type; a value whose nearest element is an
+/// infinity is the overflow of this type. The template argument is the value type (`rt::BF16`),
+/// as the rule of operator_rules.cpp writes it; the format it is made of is `Half::FormatOf`.
+template <typename Half> Half halfFromText(
+    std::string_view text, const Site &invalid, const Site &floatOutOfRange,
+    const Site &halfOutOfRange) {
+    const float asFloat = floatFromText<float>(text, invalid, floatOutOfRange);
+    if (halfOverflows<typename Half::FormatOf>(asFloat)) [[unlikely]] {
+        fault(halfOutOfRange, {std::string(text)});
+    }
+    return Half(asFloat);
 }
 
 // ---- Text to number, as a `T!` (:op/parse_int, :op/parse_float; tagged.cpp parseNumber) ----

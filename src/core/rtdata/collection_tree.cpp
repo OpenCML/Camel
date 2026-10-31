@@ -10,6 +10,7 @@
 #include "collection_tree.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
@@ -23,43 +24,47 @@ namespace {
 constexpr size_t kDefaultLeafCapacity = 64;
 constexpr size_t kDefaultFanout       = 64;
 
-size_t envNumber(const char *name, size_t fallback) {
-#ifdef _WIN32
-    char *buffer = nullptr;
-    size_t size  = 0;
-    if (_dupenv_s(&buffer, &size, name) != 0 || buffer == nullptr) {
-        return fallback;
-    }
-    const std::string raw(buffer);
-    std::free(buffer);
-#else
-    const char *value = std::getenv(name);
-    if (value == nullptr) {
-        return fallback;
-    }
-    const std::string raw(value);
-#endif
-    if (raw.empty()) {
-        return fallback;
-    }
-    char *end                       = nullptr;
-    const unsigned long long parsed = std::strtoull(raw.c_str(), &end, 10);
-    return end != nullptr && *end == '\0' ? static_cast<size_t>(parsed) : fallback;
+} // namespace
+
+namespace {
+
+/// What --coll asked for, before the first collection is made.
+ShapeRequest requestedShape{};
+std::atomic<bool> shapeSelected{false};
+std::atomic<bool> shapeRead{false};
+
+/// A width the command line chose, or the default when it chose none.
+size_t collNumber(const std::optional<size_t> &fromOption, size_t fallback) {
+    return fromOption.has_value() ? *fromOption : fallback;
+}
+
+bool collFlag(const std::optional<bool> &fromOption, bool fallback) {
+    return fromOption.has_value() ? *fromOption : fallback;
 }
 
 } // namespace
 
+bool selectShape(const ShapeRequest &request) {
+    if (shapeRead.load(std::memory_order_acquire)) {
+        return false;
+    }
+    requestedShape = request;
+    shapeSelected.store(true, std::memory_order_release);
+    return true;
+}
+
 const Shape &shape() {
     static const Shape configured = [] {
+        shapeRead.store(true, std::memory_order_release);
         Shape s{};
         // 0 asks for leaves without bound: no collection ever becomes a tree.
-        const size_t leaf = envNumber("CAMEL_COLL_LEAF_CAPACITY", kDefaultLeafCapacity);
-        s.leafCapacity    = leaf == 0 ? std::numeric_limits<size_t>::max()
-                                      : std::max<size_t>(leaf, 2);
-        s.fanout =
-            std::clamp<size_t>(envNumber("CAMEL_COLL_FANOUT", kDefaultFanout), 4, detail::kMaxFanout);
-        s.padded   = envNumber("CAMEL_COLL_PAD_NODES", 1) != 0;
-        s.validate = envNumber("CAMEL_COLL_VALIDATE", 0) != 0;
+        size_t leaf      = collNumber(requestedShape.leafCapacity, kDefaultLeafCapacity);
+        s.leafCapacity   = leaf == 0 ? std::numeric_limits<size_t>::max()
+                                     : std::max<size_t>(leaf, 2);
+        s.fanout         = std::clamp<size_t>(
+            collNumber(requestedShape.fanout, kDefaultFanout), 4, detail::kMaxFanout);
+        s.padded   = collFlag(requestedShape.padded, true);
+        s.validate = collFlag(requestedShape.validate, false);
         return s;
     }();
     return configured;

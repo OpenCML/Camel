@@ -1,7 +1,7 @@
 # Copyright (c) the OpenCML Organization
 # SPDX-License-Identifier: MIT
 
-"""T13 account 2: per-operator kernel time vs step time (CAMEL_TENSOR_OPSTATS=1).
+"""T13 account 2: per-operator kernel time vs step time (`std::profile opstats=true`).
 
 Two estimators, reported side by side:
 
@@ -59,10 +59,12 @@ def run_once(model: str, config: str, warmup: int, reps: int, threads: int) -> d
             "CAMEL_BENCH_WARMUP": str(warmup),
             "CAMEL_BENCH_REPS": str(reps),
             "CAMEL_BENCH_THREADS": str(threads),
-            "CAMEL_TENSOR_OPSTATS": "1",
         },
     )
-    cmd = [str(camel_binary()), str(camel_model(model)), *CAMEL_CONFIGS[config]]
+    # The kernel-timing table is a pass parameter; the profile session stays off (report=false,
+    # hints=false), so the run measures what it measured before.
+    opstats = ["std::profile", "report=false", "hints=false", "opstats=true"]
+    cmd = [str(camel_binary()), str(camel_model(model)), *opstats, *CAMEL_CONFIGS[config]]
     proc = subprocess.run(cmd, cwd=camel_model(model).parent, env=env, capture_output=True, text=True, timeout=900)
     if proc.returncode != 0:
         raise RuntimeError(f"{' '.join(cmd)} failed ({proc.returncode}):\n{proc.stdout}\n{proc.stderr}")

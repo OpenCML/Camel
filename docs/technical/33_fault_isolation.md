@@ -334,9 +334,12 @@ For the report not to depend on which element a worker picked first, "does not s
 to the elements *after* the smallest faulting index: an element before it still runs, as it
 would have run first on a back end that takes the elements in order. So the fault reported is
 the one `std::nvm` and `std::fvm` report, on every run (`lowest_index.cml`, and
-`faults/parallel_lowest_index.cml` for a fault that ends the run).
-`DESIGN-QUESTION(parallel-fault-lower-elements)`: the alternative, starting nothing at all
-after the first fault met, makes the report differ from run to run.
+`faults/parallel_lowest_index.cml` for a fault that ends the run). The author ruled this the
+rule on 2026-10-31 (3.6), not an implementation detail: "同一输入同一输出" counts for more than
+stopping as early as possible, what runs in addition is only elements below the reported index,
+and 3.6 does not order effects between elements, so no program can tell.
+`partial_fault.cml` pins it: one element faults at once while the elements below it are still
+queued, and every one of them starts and runs to its end on all four back ends.
 
 ## 4. Clean-up
 
@@ -452,9 +455,9 @@ the machine; times are minima of several runs and still noisy).
   Time: about 24 µs per isolated fault on `std::fvm`, 31 µs on `std::nvm` (a C++ exception
   through several activations, the located diagnostic, the error value); `std::prl` about
   130 µs.
-- **Collector.** `collector.cml` with `CAMEL_GC_VERIFY=both`, `CAMEL_GC_STRESS_ALLOC=5`,
-  `CAMEL_GC_STRESS_SAFEPOINT=1`, modes `major` and `both`, on the four back ends, and with
-  `CAMEL_GC_ENABLE_YOUNG_COPYING=1` on `std::nvm`, `std::fvm`, `std::prl`: correct output, no
+- **Collector.** `collector.cml` with `--gc-check verify=both`, `--gc-stress alloc=5`,
+  `--gc-stress safepoint=1`, modes `major` and `both`, on the four back ends, and with
+  `--gc generational` on `std::nvm`, `std::fvm`, `std::prl`: correct output, no
   verification issue.
 - **An `attempt` that does not fault.** Two million calls of a one-line function in a
   tail-recursive loop, directly / through a function value / through `attempt ... !! 0`:

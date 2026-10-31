@@ -48,7 +48,7 @@ using camel::runtime::kInvalidNodeRef;
 /// Whether `loop` is a region form of its graph: a LOOP node owns a condition region and a body
 /// region (camel/runtime/graph.h). The graph form of a loop (two graphs in the LOOP body) is not
 /// built any more, and NodeVM does not execute it.
-[[maybe_unused]] bool hasLoopRegions(const camel::runtime::GCGraph &graph, gc_node_ref_t loop) {
+bool hasLoopRegions(const camel::runtime::GCGraph &graph, gc_node_ref_t loop) {
     for (uint32_t r = 0; r < graph.regionCount(); ++r) {
         const camel::runtime::GCRegion *region = graph.region(r);
         if (region != nullptr && region->owner == loop &&
@@ -63,35 +63,84 @@ using camel::runtime::kInvalidNodeRef;
 void bindMarkedFunctionFrame(
     Frame *frame, Function *func, std::span<const slot_t> normArgs,
     std::span<const slot_t> withArgs = {}) {
-    ASSERT(frame != nullptr, "Marked operator call frame is null.");
-    ASSERT(func != nullptr && func->graph() != nullptr, "Marked operator callee is null.");
+    GUARD(
+        frame != nullptr,
+        std::format(
+            "binding the call frame of a marked operator: there is no frame for this call, so its "
+            "{} norm argument(s) have nowhere to go",
+            normArgs.size()));
+    GUARD(
+        func != nullptr && func->graph() != nullptr,
+        std::format(
+            "calling a marked operator with {} norm argument(s): the value being called is null or "
+            "names no graph, so there are no ports to bind them to",
+            normArgs.size()));
     auto *graph             = func->graph();
     const auto normPorts    = graph->normPorts();
     const auto withPorts    = graph->withPorts();
     const auto closureNodes = graph->closureNodes();
-    ASSERT(normArgs.size() == normPorts.size(), "Marked operator norm-arity mismatch.");
-    ASSERT(withArgs.size() == withPorts.size(), "Marked operator with-arity mismatch.");
+    GUARD(
+        normArgs.size() == normPorts.size(),
+        std::format(
+            "calling a marked operator with {} norm argument(s), but the callee declares {} norm "
+            "port(s): the graph does not describe the call it makes",
+            normArgs.size(),
+            normPorts.size()));
+    GUARD(
+        withArgs.size() == withPorts.size(),
+        std::format(
+            "calling a marked operator with {} with argument(s), but the callee declares {} with "
+            "port(s): the graph does not describe the call it makes",
+            withArgs.size(),
+            withPorts.size()));
 
     Tuple *closure = func->tuple();
-    ASSERT(closureNodes.empty() || closure != nullptr, "Marked operator closure tuple is null.");
-    ASSERT(
+    GUARD(
+        closureNodes.empty() || closure != nullptr,
+        std::format(
+            "the callee declares {} closure node(s), but the function value carries no closure "
+            "tuple: the graph does not describe the call it makes",
+            closureNodes.size()));
+    GUARD(
         closure == nullptr || closure->size() == closureNodes.size(),
-        "Marked operator closure-arity mismatch.");
+        std::format(
+            "the callee declares {} closure node(s), but the closure tuple holds {}: the graph does "
+            "not describe the call it makes",
+            closureNodes.size(),
+            closure == nullptr ? 0 : closure->size()));
 
     for (size_t i = 0; i < normPorts.size(); ++i) {
         const auto *port = graph->node(normPorts[i]);
-        ASSERT(port != nullptr, "Marked operator norm port is missing.");
+        GUARD(
+            port != nullptr,
+            std::format(
+                "binding norm argument {} of a marked operator call: the callee names node {} in its "
+                "norm port list, but its graph has no node there",
+                i,
+                normPorts[i]));
         frame->set(port->dataIndex, normArgs[i]);
     }
     for (size_t i = 0; i < withPorts.size(); ++i) {
         const auto *port = graph->node(withPorts[i]);
-        ASSERT(port != nullptr, "Marked operator with port is missing.");
+        GUARD(
+            port != nullptr,
+            std::format(
+                "binding with argument {} of a marked operator call: the callee names node {} in its "
+                "with port list, but its graph has no node there",
+                i,
+                withPorts[i]));
         frame->set(port->dataIndex, withArgs[i]);
     }
     if (closure != nullptr) {
         for (size_t i = 0; i < closureNodes.size(); ++i) {
             const auto *port = graph->node(closureNodes[i]);
-            ASSERT(port != nullptr, "Marked operator closure node is missing.");
+            GUARD(
+                port != nullptr,
+                std::format(
+                    "binding closure slot {} of a marked operator call: the callee names node {} in "
+                    "its closure node list, but its graph has no node there",
+                    i,
+                    closureNodes[i]));
             frame->set(port->dataIndex, closure->get<slot_t>(i));
         }
     }
@@ -248,9 +297,9 @@ slot_t NodeVMSchedPass::call(
     camel::execute::ActivationScope observedActivation;
     currRecursionDepth_++;
     slot_t result = NullSlot;
-    ASSERT(
+    GUARD(
         rootRuntimeGraph != nullptr,
-        "NodeVM runtime graph must be materialized before execution.");
+        std::format("running this program: its root graph was never materialized, so node 0 has no " "frame to run in"));
 
     Frame *currFrame       = rootFrame;
     Frame *tailLow         = nullptr; // tail-call frames above rootFrame, in stack order
@@ -565,9 +614,9 @@ slot_t NodeVMSchedPass::call(
                     currFrame->get<Function *>(planDataIndex(*currPlan, withInputs.front()));
                 ASSERT(func != nullptr, "NodeVM CALL resolved a null Function callee.");
                 auto *funcRuntimeGraph = programs_.graphOf(func);
-                ASSERT(
+                GUARD(
                     funcRuntimeGraph != nullptr,
-                    "NodeVM indirect CALL requires a materialized runtime graph target.");
+                    std::format("an indirect call reaches a graph whose runtime form was never materialized, so " "the call has no code to enter"));
 
                 requireRecursionRoom(currRuntimeGraph);
                 Frame *funcFrame = framePool_.acquire(funcRuntimeGraph);
@@ -585,9 +634,9 @@ slot_t NodeVMSchedPass::call(
 
             case GCNodeKind::Func: {
                 auto *runtimeTarget      = currProgram->graph(currPlan->directCallTargetIds[i]);
-                ASSERT(
+                GUARD(
                     runtimeTarget != nullptr,
-                    "NodeVM direct FUNC target must have a materialized runtime graph.");
+                    std::format("a direct call names a function whose graph is not in the program's graph table"));
                 const bool isTailCall = currPlan->directCallTailEligible[i] != 0 ||
                                         currPlan->directCallFeedsTailJoin[i] != 0;
                 if (isTailCall) {
@@ -690,10 +739,10 @@ slot_t NodeVMSchedPass::call(
                 // events of the plan and the state is its value. A loop of the old graph form (a
                 // condition graph and a body graph, run a call per round) is not executed; the
                 // plans above prove no such loop reaches this point.
-                ASSERT(
+                GUARD(
                     hasLoopRegions(*currRuntimeGraph, nodeRef),
                     "NodeVM: a LOOP node is not a region of its graph (the graph form of a loop "
-                    "must not remain).");
+                    "must not remain): the step that lowers loop regions did not run");
                 break;
 
             case GCNodeKind::Port:
@@ -704,10 +753,10 @@ slot_t NodeVMSchedPass::call(
                 break;
 
             default: {
-                ASSERT(
+                GUARD(
                     false,
                     std::format(
-                        "Node type {} should not appear in NodeVM execution.",
+                        "Node type {} should not appear in NodeVM execution: it belongs to another scheduler.",
                         static_cast<int>(n->kind)));
             } break;
             }

@@ -20,8 +20,8 @@ spaces (one `FreeListAllocator` per segment), `GrowableBumpAllocator` for the pe
 (one `BumpPointerAllocator` per segment). The first segment is as large as the whole space used
 to be (64, 32 and 16 MB); when no segment has room, a further one is reserved, as large as
 everything reserved so far (at most 256 MB, never smaller than the request), until the total
-reaches the limit of the space (`CAMEL_GRAPH_SPACE_LIMIT_MB`, `CAMEL_PERM_SPACE_LIMIT_MB`,
-`CAMEL_META_SPACE_LIMIT_MB`; 256 MB each by default).
+reaches the limit of the space (`--graph-space-limit-mb`, `--perm-space-limit-mb`,
+`--meta-space-limit-mb`; 256 MB each by default).
 
 Invariants:
 
@@ -50,7 +50,7 @@ Invariants:
   request, the usage, the limit and the variable that raises it. The first caller that knows
   what was being built adds it (`during`): the graph builder names the function being compiled,
   the encoders name the graph. The pass driver, the graph builder and the command line report
-  it as `RuntimeDiag::MemoryExhausted`. The auto space has no limit of its own unless `CAMEL_GC_HEAP_LIMIT_MB` sets one (the
+  it as `RuntimeDiag::MemoryExhausted`. The auto space has no limit of its own unless `--gc-heap-limit-mb` sets one (the
   elder space grows by segments, the large-object space takes blocks from the host); the limit
   and a refusal by the host are reported the same way.
 
@@ -113,7 +113,7 @@ graph, so a graph a rewrite changes, whose slot types differ, leaves nothing beh
 permanent space. (Before graph model step 3 it was an interned tuple type: one new permanent
 object per changed graph per commit.) Static-area layouts are still interned.
 
-`CAMEL_SPACE_SEGMENT_KB=<kilobytes>` sets the first segment of all three spaces. It is a test
+`--space-segment-kb <kilobytes>` sets the first segment of all three spaces. It is a test
 control: with 64 KB a program of a few hundred functions makes every space grow several times,
 so growth can be run under heap verification and collection stress (`test/plans/feat/mm/capacity.plan.toml`).
 
@@ -210,8 +210,8 @@ The elder space grows by segments (32 MB first, each further one as large as eve
 reserved so far, at most 256 MB), so neither allocation nor promotion fails short of the host
 refusing memory. Major collections are paced by volume for both old spaces: one is asked for
 when a space has taken, since its last sweep, the larger of a floor (32 MB for the elder space,
-`CAMEL_GC_LARGE_BUDGET_MB` for large objects) and `CAMEL_GC_GROWTH_PERCENT` percent of what
-that sweep left alive. `CAMEL_GC_HEAP_LIMIT_MB` bounds what the two hold together. In the
+`--gc-large-budget-mb` for large objects) and `--gc-growth-percent` percent of what
+that sweep left alive. `--gc-heap-limit-mb` bounds what the two hold together. In the
 generational collector a third volume paces a major collection: the blocks held by values
 promoted to the elder space (see "Promoted-block pacing" below).
 
@@ -301,7 +301,7 @@ Large-object pacing: objects above the generational threshold (4 KB) bypass the 
 spaces, so they never exhaust a space and never trigger a collection on their own. The allocator
 therefore counts large-object bytes since the last sweep and requests a major collection at the
 next safepoint once they exceed a budget. After every sweep the budget is the larger of a floor
-(`CAMEL_GC_LARGE_BUDGET_MB`, default 4 MB) and `CAMEL_GC_GROWTH_PERCENT` percent (default 100) of
+(`--gc-large-budget-mb`, default 4 MB) and `--gc-growth-percent` percent (default 100) of
 the large-object volume the sweep left alive. This is the usual heap-growth rule: with a live
 volume `L` and a growth of `g` percent, a program is collected once per `L * g / 100` bytes it
 allocates and the space holds at most `L * (1 + g / 100)`, plus whatever is allocated between the
@@ -335,8 +335,8 @@ promoted: a view of an inline array, `Array::growCompact` moving inline data int
 takeover; the collector counts the block there when the owner is already in the elder space, just
 as if the block had been promoted with the value. The allocator asks for a major collection at
 the next safepoint once the bytes promoted or adopted since the last sweep exceed a budget. After
-every sweep the budget is the larger of the large-object floor (`CAMEL_GC_LARGE_BUDGET_MB`,
-default 4 MB) and `CAMEL_GC_GROWTH_PERCENT` percent (default 100) of the block bytes the sweep
+every sweep the budget is the larger of the large-object floor (`--gc-large-budget-mb`,
+default 4 MB) and `--gc-growth-percent` percent (default 100) of the block bytes the sweep
 left in promoted values; the rule and the floor are the same as for the large-object space,
 because these are the same kind of bytes: pure data outside the collected heap that only a full
 mark-sweep can reclaim. The live base is summed with `Block::claimSweepGeneration()` for the same
@@ -387,17 +387,17 @@ idempotent disposal, finalization after disposal, and handle accounting.
 GC diagnostics are configured explicitly through environment variables so language-level test cases
 do not need source changes:
 
-- `CAMEL_GC_VERIFY=before|after|both|1` enables heap verification around every requested
+- `--gc-check verify=before|after|both|1` enables heap verification around every requested
   collection.
-- `CAMEL_GC_STRESS_ALLOC=N` requests a collection after every `N` auto-space allocations. The
+- `--gc-stress alloc=N` requests a collection after every `N` auto-space allocations. The
   request is serviced at the next GC safepoint, not inside the raw allocation path, so object
   constructors are not interrupted with half-initialized payloads.
-- `CAMEL_GC_STRESS_SAFEPOINT=N` requests a collection every `N` explicit runtime safepoints.
-- `CAMEL_GC_STRESS_MODE=minor|major|both` selects which collection kind stress requests use.
-- `CAMEL_GC_LOG_MOVES=1` emits movement records when the copying path relocates an object.
+- `--gc-stress safepoint=N` requests a collection every `N` explicit runtime safepoints.
+- `--gc-stress kind=minor|major|both` selects which collection kind stress requests use.
+- `--gc-check moves` emits movement records when the copying path relocates an object.
 - `--gc generational` selects the generational collector (the default);
-  `CAMEL_GC_ENABLE_YOUNG_COPYING=1` is the older spelling and changes nothing.
-- `CAMEL_GC_PRINT_CONFIG=1` prints the effective GC diagnostic configuration to stderr when the
+  The older `CAMEL_GC_ENABLE_YOUNG_COPYING` is not read and changes nothing.
+- `--gc-check config` prints the effective GC diagnostic configuration to stderr when the
   process-level allocator is initialized.
 - `std::profile gc_stats=1` also prints the occupancy of the graph, permanent and meta spaces at exit
   (`[camel] spaces: ...`): for each, kilobytes in use and at the high-water mark, megabytes

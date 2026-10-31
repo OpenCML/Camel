@@ -25,3 +25,14 @@ name = "blocks.mem_blocks.optimized"
 desc = "The same reading after the optimizer, which must not fold, merge or drop a call whose value is the counters (it is declared to have effects)."
 args = ["${case}", "std::opt::inline", "std::fvm"]
 expect_stdout_exact = "true\ntrue\n1 1 0 true\n100 7\n"
+[[tests]]
+name = "blocks.mem_blocks.not_available_in_cpp"
+desc = "`std::cpp` writes a program that has no block space of the Camel runtime, so `std::mem::blocks()` is not available on that target: the refusal says the boundary of the target, and it does not say the translation is still to be written -- a capability the target lacks is not a gap in the pass."
+kind = "negative"
+case = "../../../cases/feat/mm/mem_blocks.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 1
+expect_output_contains = ["a program std::cpp writes has", "not available on this target"]
+expect_output_not_contains = ["yet", "has no translation"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

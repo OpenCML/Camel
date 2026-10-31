@@ -251,7 +251,7 @@ tiles position reduction: an argmax plan keeps the value and stores the loop ind
   `argmax_axis` 是本文这一条。
 ## 六、两个探针，和"声明缺失"的四格读数
 
-**探针是通用件，不专属 argmax**（`region_test_pass.cpp`，由 `CAMEL_TILES_TEST_REASONS=1` 打开）：
+**探针是通用件，不专属 argmax**（`region_test_pass.cpp`，由 `reasons=true` 打开）：
 
 ```
 TILES_REGION_REASON <uri> <reason>            # 该节点为什么不在任何区域里；eligible 表示进了区域
@@ -277,7 +277,7 @@ TILES_OPERATOR_DECLARATION <uri> <declared|undeclared> major=<n>
 
 ### 六之二、"同一个算子两个 URI"——这里停下，要作者裁
 
-读数（`CAMEL_TILES_TEST_REASONS=1`，同一条作用域）：
+读数（`reasons=true`，同一条作用域）：
 
 ```
 TILES_OPERATOR_ID array:argmax_axis id=340 tensor_spelling=422
@@ -300,3 +300,92 @@ TILES_OPERATOR_ID tensor:reshape id=406 tensor_spelling=422
 `softmax_cross_entropy_labels`、`softmax_cross_entropy_labels_grad`）**`lookup` 返回 none——不在算子表里**；
 16 条 `tensor:*` 在表里但 `undeclared major=-1`。**前者要注册，后 15 条要写声明，排期不能合并。**另外第六条读数推翻了"B 组"这个划分本身：**`tensor:softmax`（id 424）已有声明 `major=1`**，它属于 A 组，缺的只是表里一个名字与 device 程序——所以 21 条是**三类**，不是两类。
 缺口账本 `gpu-g4-g5-gap-list.md:39` 那句已原位改掉（不是另起一段），否则下一个人照旧读到旧口径。
+
+### 七、身份统一之后：`major` 清单，与"统一不等于变得可导出"
+
+**并排的两句**：
+
+- **`argmax_axis` 现在读作 `unsupported_operator`**（节点已带 `tensor:argmax_axis`，表里仍没有这个名字）。
+- **命名统一不会让一个算子变得可导出；它只是让"不可导出"的原因从*命名错*变成*表里没有*——后者才是要修的东西。**
+
+**身份统一之后，`operations()` 仍然是 21（未动）**：这一笔只改 stdlib 的声明位置与模块注册，没有向表里加任何名字。
+**"统一身份"与"声称能力"是两件事**——今晚有一份"能力未动"的报告，这里再点明一次，免得读者以为它悄悄变了。
+
+**19 个缺口名字的 `major` 读数**（`TILES_OPERATOR_DECLARATION` / `TILES_DECLARATIONS_*` / 声明表源读）：
+
+| 名字 | `major` | 来源 |
+| --- | --- | --- |
+| `tensor:argmax_axis` | **1** | 探针（本轮，计划已钉住） |
+| `tensor:softmax` | **1** | 探针 |
+| `tensor:gelu` | -1 | 探针 |
+| `tensor:gelu_grad` | -1 | 探针 |
+| `tensor:layer_norm` | -1 | 探针 |
+| `tensor:layer_norm_grad` | -1 | 探针 |
+| `tensor:softmax_grad` | -1 | 探针 |
+| `tensor:matmul_grad_lhs` | -1 | 探针 |
+| `tensor:matmul_grad_rhs` | -1 | 探针 |
+| `tensor:cast_like` | -1 | 探针 |
+| `tensor:gt` | -1 | 探针 |
+| `tensor:strict_eq` | -1 | 探针 |
+| `tensor:take` | -1 | 探针 |
+| `tensor:numel` | -1 | 探针 |
+| `tensor:shape` | -1 | 探针 |
+| `tensor:zeros_like` | -1 | 探针 |
+| `tensor:expand_axis` | -1（有声明）* | 源读 `semantics.cpp:233` |
+| `tensor:zeros` | **无声明** | 源读（`semantics.cpp` 无此条） |
+| `tensor:dim` | **无声明** | 源读（`semantics.cpp` 无此条） |
+| `nn:adam`、`nn:adam_state`、`nn:softmax_cross_entropy_labels`、`nn:softmax_cross_entropy_labels_grad` | **无声明**（且不在算子表里） | 探针（`lookup` = none） |
+
+*`expand_axis` 的 `major` 数本轮未取（源读到"有声明"，版本未读）。
+
+**合计**：`major=1` 两个（`argmax_axis`、`softmax`）；有声明但版本未读一个（`expand_axis`）；`-1` 十五个；连声明都没有的五个 `nn:*` + `zeros` + `dim` 共七个。
+
+### 八、`argmax_axis` 的内核查：三种结果里的第一种，且有内核
+
+**结论：有内核，只是名字没进 `operations()`。** 三处原文：
+
+- `modules/tiles/src/serial_kernel.cpp:145` —— `else if (op == "argmax_axis" || op == "argmin_axis")`，两个槽：极值决定、位置就是循环下标，下标原样写进 i64 槽（不做算术，所以并列时保留更早的位置）。
+- `modules/tiles/src/reduction_kernel.cpp:153` —— 同一算子参与归约规则。
+- `modules/tiles/src/schedule.cpp:135` —— `positional("argmax_axis")` 为真。
+
+**所以 `unsupported_operator` 不是"真的不支持"，而是"表里没登记"**：设备程序能生成，只是 eligibility 这一层没放它过去。
+**补的是一个名字，不是一条降级路径**——与 ONNX 的 `ArgMax`（那是导出侧的 lowering，另一件事）不同。
+
+### 九、`operations()` 的真值：24，不是 21
+
+数函数体（`modules/tiles/src/graph_regions.cpp:46-82`），两个来源：
+
+- **字面量条目 22 条**：`neg`、`abs`、`exp`、`log`、`sqrt`、`rsqrt`、`relu`、`add`、`subtract`、`multiply`、`divide`、`maximum`、`minimum`、`matmul`、`sum_axis`、`mean_axis`、`max_axis`、`sum_to`、`transpose`、`permute`、`reshape`、`broadcast_like`；
+- **`emplace` 条目 2 条**：`tensor:sum` → `sum_all`、`tensor:mean` → `mean_all`。
+
+**合计 24。** "21"这个数此前怎么来的：它是**布局算子那一族（`transpose`/`permute`/`reshape`/`broadcast_like`）加入之前**的数，
+之后没人重数过。**21 应更正为 24**；`TILES_CENSUS ops=` 打的是程序里的算子数，不是表的条数，两者不能互证。
+
+### 十、一条判据
+
+**一处能力有两个数（表里的名字、设备上的内核），只有一个数变了不算能力变了。** 今晚 `argmax_axis` 的 `major` 从 -1 变 1，
+**能力一个没变**——同一晚，它的设备内核一直在（`serial_kernel.cpp`），只是名字没登记。
+
+### 十一、窄浮点：今天的位置，与 (b) 的五步
+
+**一条被推翻的诊断**：我曾说 `graph_regions.cpp#elementType` 把 `f16`/`bf16` 静默当 `F32`（2 字节存储、4 字节读取）。
+**读门那一行发现不成立**：`graph_regions.cpp:41-43` 在它之前就把非 `Float32`/`Int64` 的类型拒了（返回 `nullopt`），
+兜底那一行对窄浮点不可达。**真缺口只有一个 `enum`**：`modules/tiles/include/tiles/dtype.h:11` ——
+`enum class DType { F32, F64, I64 };`，**设备侧没有窄浮点的表示**。
+
+**唯一一个带 `#gpu` 的窄浮点用例**（`test/cases/gpu/nofallback/scalar_literal.cml`）单独跑出来的读数：
+```
+{"segments":[],"regions":[],"transfers":{...},"excluded":[{"node":0,"reason":"node_kind"},{"node":1,"reason":"node_kind"},{"node":2,"reason":"unresolved_type"}]}
+```
+**它是"排除通过"，不是"支持通过"**：那个 `bf16` 张量的算子被 `unresolved_type` 排除，计划却通过——因为它的描述钉的是
+"不再因 `scalar_tensor_operand` 被排除"，那是**另一件事**。**这是"读数说的是另一件事"的又一例。**
+
+**(b) 的五步（现在立计划，不马上做）**：
+
+1. **`DType` 加 `F16`/`BF16`** —— 验收：`tiles/dtype.h` 两个新值，`dtypeWidth`/`isFloating` 覆盖它们，编译通过且无行为变化。
+2. **`serial_kernel` 能对窄浮点发标量表达式** —— 验收：一个 `bf16` 逐元素 add 生成段程序，读数为"生成成功、无 `unresolved_type`"。
+3. **CUDA 代码生成用 `__half`/`__nv_bfloat16`** —— 验收：生成源文本里出现对应类型名，且 `f32` 计算-窄化写回的形状与主机内核一致（字符串读数即可，不需 GPU）。
+4. **类型门放行窄浮点**（`graph_regions.cpp:41`）—— 验收：`TILES_REGION_REASON <op> eligible`，且 `TILES_CENSUS` 的 `gap` 不因它变大。
+5. **能力表认领** —— 验收：`operations()` 里对应的名字带窄浮点支持、`TILES_CENSUS_GAP` 计数下降一条，并且一条 bf16 用例在 `--devices cpu` 上与主机结果逐元素相等。
+
+**（a）今天的边界要写明**：设备侧看不到 `bf16` **是边界，不是缺陷**；它会作为（b）第 1 步之前的一条读数留在本页。

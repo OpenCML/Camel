@@ -3,7 +3,8 @@
  *
  * Times one `with_grad` step of a one-layer function (a GEMM or a conv2d
  * with the exact shapes of an mlp_big / lenet_big layer) under std::nvm, with
- * CAMEL_TENSOR_OPSTATS=1 so the stderr op table gives the per-shape kernel time
+ * `std::profile opstats=true` in the pipeline so the stderr op table gives the
+ * per-shape kernel time
  * of matmul / matmul_grad_lhs / matmul_grad_rhs (or conv2d + its grad kernels)
  * with one call site each -- no cross-shape aggregation.
  *

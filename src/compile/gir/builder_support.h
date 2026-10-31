@@ -172,7 +172,7 @@ inline bool nodeIsKind(node_handle_t node, runtime::GCNodeKind kind) {
 
 
 inline bool isMacroGraph(const compile_graph_ptr_t &graph) {
-    return graph && graph->draft().isMacroGraph();
+    return graph && graph->view().isMacroGraph();
 }
 
 inline bool sameGraph(node_handle_t lhs, const compile_graph_ptr_t &graph) {

@@ -12,11 +12,13 @@
 ///
 /// `report` says whether the pass writes what it did and what it left: a program that names it is
 /// asking for that answer, and the pipeline that runs it ahead of `std::opt` is not (it would put a
-/// report line on the program's own output).
+/// report line on the program's own output). `debug` writes one more level: the dispatch it is
+/// about to lower, member by member and variant by variant, for reading a program it cannot lower.
 class DefunctionalizeRewritePass : public RuntimeGraphRewritePass {
   public:
-    DefunctionalizeRewritePass(const camel::core::context::context_ptr_t &context, bool report)
-        : RuntimeGraphRewritePass(context), report_(report) {}
+    DefunctionalizeRewritePass(
+        const camel::core::context::context_ptr_t &context, bool report, bool debug = false)
+        : RuntimeGraphRewritePass(context), report_(report), debug_(debug) {}
     ~DefunctionalizeRewritePass() override = default;
 
     const camel::runtime::Program *
@@ -24,4 +26,5 @@ class DefunctionalizeRewritePass : public RuntimeGraphRewritePass {
 
   private:
     bool report_ = true;
+    bool debug_  = false;
 };

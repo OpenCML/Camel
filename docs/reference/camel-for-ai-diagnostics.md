@@ -255,7 +255,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `RangeStepZero` | The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers. |
 | `SliceStepZero` | The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are. |
 | `WithPackNeedsNativeDeclaration` | The pack '..{0}' among the 'with' parameters needs a declaration without a body. |
-| `ReducedPrecisionUnsupported` | The call of '{0}' cannot take a value of the reduced-precision element type '{1}'. |
 | `ImplOnBodylessDeclaration` | The body-less declaration '{0}' cannot carry '#impl({1})': it has no Camel body. |
 | `ImplKernelUnknown` | The '#impl' tag of '{0}' names '{1}', which is no body-less declaration. |
 | `ImplKernelForeign` | The '#impl' tag of '{0}' names '{1}', which another module declares. |
@@ -281,6 +280,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `FactCaseBindsNoVariable` | This case of the fact '{0}' names no variable. |
 | `TypeFunctionNotApplicable` | The type function '{0}' is not applicable: {1}. |
 | `StatementAfterReturn` | This statement cannot run: the 'return' written before it gives the value of this block, so nothing after it in the block is reached. |
+| `YieldRequiresStreamHead` | A function whose body writes 'yield' hands out a stream, and this function's head does not write one. |
 | `RuleLeftIsNotAnOperator` | The rule '{0}' has a left side that is not one operator; it is written as '{1}', and a ruleset indexes its rules by the head of the left side. |
 | `DuplicateRuleForOperator` | The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side, and one ruleset has one rule per operator. |
 
@@ -302,7 +302,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `FailNotExecuted` | This 'fail' is not executed: {0}. |
 | `StatementAfterFail` | This statement cannot run: the 'fail' written before it never returns. |
 
-**Run time and passes — errors** (`RuntimeDiag`) — 36
+**Run time and passes — errors** (`RuntimeDiag`) — 37
 
 | `RuntimeError` | An error has occurred: {0}. |
 | `DivisionByZero` | Attempted division by zero. |
@@ -313,6 +313,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `UnrecognizedGraphPass` | Unrecognized graph rewriting/scheduling/translation pass '{0}'. |
 | `TranslationRefused` | Translation pass '{0}' refused the graph: {1}. |
 | `PassInternalError` | Pass '{0}' failed with an internal error: {1}. |
+| `PassBoundaryResources` | Pass '{0}' changed the ambient resources the program touches: before {1}, after {2}. |
 | `MacroEvaluationFailed` | '{0}' could not be evaluated by std::macro: {1}. |
 | `EntryArgumentMissing` | No value was given for the {0} {1} of 'main'. |
 | `EntryArgumentInvalid` | Cannot bind the argument '{0}' of 'main': {1}. |

@@ -5,12 +5,16 @@
 # Written for std::cpp: one construct each (docs/design/cpp-standalone/README.cn.md 12.2).
 test/cases/trans/cpp/exec
 test/cases/trans/cpp/exec_mod_scalar.cml
+# The two reduced-precision floating types, at both precisions: storage and the type's own text
+# (arithmetic, comparison and conversion join it as their rules land).
+test/cases/trans/cpp/narrow_floats.cml
 
 # Values and their text.
 test/cases/loops/iterate_string.cml
 test/cases/consistency/values/enums.cml
 test/cases/consistency/values/deep_enum_chain.cml
 test/cases/trans/cpp/recursive_enum_shapes.cml
+test/cases/trans/cpp/recursive_struct_shapes.cml
 test/cases/consistency/values/int_wrap.cml
 test/cases/consistency/values/int_min_div.cml
 test/cases/consistency/values/float_special.cml
@@ -21,6 +25,7 @@ test/cases/linear/operators/string_ordering.cml
 test/cases/compile/literals/real_literals.cml
 test/cases/compile/literals/literal_context.cml
 test/cases/opt/progen/judgement/string_of_float_format.cml
+test/cases/trans/cpp/format_array.cml
 
 # Order of effects, branches, match.
 test/cases/consistency/values/sync_order.cml
@@ -74,6 +79,38 @@ test/cases/consistency/narrowing/narrow.cml
 test/cases/consistency/new_values/rebinding_loop.cml
 test/cases/consistency/new_values/peek_loop.cml
 test/cases/consistency/new_values/peek.cml
+
+# `xs[i] = v` (:op/set_index_in_place over :var/take): the changed array, an index outside it
+# faulting as a read does, and the array another holder has unchanged.
+test/cases/linear/byref/element_assigned.cml
+test/cases/consistency/faults/element_assigned_out_of_range.cml
+
+# `s.x = v` and a path through a field (:op/set_field, :op/set_index): the record or the array
+# with one place changed, and the value another variable read before the store keeps what it had.
+test/cases/trans/cpp/field_store.cml
+
+# `xs[positions]` (:op/idx_take): the elements those positions name, in that order, as a copy --
+# a position can repeat, and a fixed-size value is taken the same way.
+test/cases/trans/cpp/take_positions.cml
+
+# `last(xs)` (:struct/last_arr): the last element of an array of one element too, and of the
+# empty array the fault a read of the position -1 gives.
+test/cases/trans/cpp/last_element.cml
+
+# `fail<'Kind'>(message)` (:op/fail): the fault the program raises itself, reported under the kind
+# it wrote -- as a statement, as a `let`'s right, as a branch's arm, and through `attempt`, whose
+# error value says the same kind.
+test/cases/trans/cpp/fail_program.cml
+
+# `array:sum_d`, `array:sort_d` and `array:elements` -- the reductions of `stdlib::array` that name
+# their element type in the operator they compile to: added in f64 from +0, the elements as one
+# run, and the order `sort` gives (ties where they stand, -0 below +0).
+test/cases/trans/cpp/float_reduce.cml
+
+# `tensor:reshape` (modules/tensor/kernels/layout.cpp): a target of one dimension is the same run,
+# the printed form unchanged with it; a target that changes the element count is the fault the
+# operator raises before it reads anything.
+test/cases/trans/cpp/reshape_flat.cml
 
 # Output of print / println with a format (design principles 10.6).
 # (test/cases/trans/cpp/exec/print_formats.cml, in the directory above)
@@ -169,3 +206,22 @@ test/cases/trans/cpp/loop_state_in_place_multi.cml
 # Complex numbers: c64 and c128 are std::complex<float>/<double>, ^ is repeated squaring for
 # an integer exponent, / faults on the complex zero, and one format specification writes both parts.
 test/cases/trans/cpp/complex_scalar.cml
+
+# A literal of several dimensions keeps its shape: the flat run and the extents in one block, so
+# `println` nests the rows and `len` answers the first dimension -- the two readings the writer used
+# to print as the first extent's worth of elements.
+test/cases/trans/cpp/literal_rank.cml
+
+# A position on a value of several dimensions: `m[1]` is the row, `m[1, 0]` names the axis it drops
+# and is the element, `t[1]` of a rank-3 value is the rank-2 value behind it -- and `len` of a row is
+# the dimension that is left.
+test/cases/trans/cpp/index_rank.cml
+
+# A slice names one dimension of a value and keeps every other one whole: rows of a rank-2 value,
+# a column of it (`m[:, 1]`), and the rank-2 value behind the first row of a rank-3 one.
+test/cases/trans/cpp/slice_rank.cml
+
+# A tensor the runtime builds: `tensor:ones` has no standalone translation, so the program holds a
+# counted handle to the runtime's own value (rt::Foreign) and prints the runtime's text for it --
+# the one line below is std::fvm's, byte for byte.
+test/cases/trans/cpp/tensor_ones.cml

@@ -241,7 +241,7 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, camel::core::mm::IAllo
     case TypeCode::Function: {
         auto funcData = tt::as_shared<camel::core::data::FunctionData>(data);
         auto *graph   = funcData->graph();
-        ASSERT(graph != nullptr, "FunctionData must carry a runtime graph.");
+        GUARD(graph != nullptr, "FunctionData must carry a runtime graph, and this one carries none: the closure it names has no graph to enter");
         auto *gcFunc = ::Function::create(
             funcData->program(),
             funcData->graphId(),

@@ -1,0 +1,13 @@
+/**
+ * The diagnostic readings of `onnx::export`: one model of a function of one input-dependent
+ * product, so the pass's `trace` has a lowered call to print and `prep_stats` a size to report.
+ * No `export_model` call in the program: the pass translates `main` itself, so the plan gives the
+ * model file through the pass's `out`. The plan runs this three times, once per reading, and pins
+ * what each one prints.
+ */
+
+import { relu } from tensor
+
+func main(x: f32[2, 2]): f32[2, 2] {
+    return relu(x * 2.0)
+}

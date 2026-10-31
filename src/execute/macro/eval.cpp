@@ -57,12 +57,10 @@ namespace {
 // (camel/execute/limits.h), with the limit and how to change it.
 std::string tooManyNestedCalls(size_t limit, std::string_view graphName) {
     return std::format(
-        "the evaluation needs more than {} nested calls (at '{}'). The limit is set with {} <n> "
-        "or {}=<n>",
+        "the evaluation needs more than {} nested calls (at '{}'). The limit is set with {} <n>",
         limit,
         graphName,
-        camel::execute::kMaxMacroDepthOption,
-        camel::execute::kMaxMacroDepthEnvVar);
+        camel::execute::kMaxMacroDepthOption);
 }
 constexpr size_t kMacroFramePoolSize = 8 * mm::MB;
 
@@ -1072,11 +1070,10 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
                         throw MacroExecutionError(
                             std::format(
                                 "the loop in '{}' runs more than {} rounds ahead of time. The "
-                                "limit is set with {} <n> or {}=<n>",
+                                "limit is set with {} <n>",
                                 runtimeGraph->name(),
                                 maxRounds,
-                                camel::execute::kMaxMacroRoundsOption,
-                                camel::execute::kMaxMacroRoundsEnvVar));
+                                camel::execute::kMaxMacroRoundsOption));
                     }
                     mm::safepoint("macro loop round");
                 });

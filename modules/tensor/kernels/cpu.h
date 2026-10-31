@@ -6,9 +6,9 @@
  * (GEMM, elementwise). Units built with wider vector ISAs are only called
  * after these checks confirm both CPU and OS support.
  *
- * The environment variable CAMEL_TENSOR_ISA=generic hides every feature, so the
- * portable units run on any processor. Tests use it to check that the GEMM
- * gives the same bits in every unit (design principles 7.1).
+ * `--tensor-isa generic` hides every feature, so the portable units run
+ * on any processor. Tests use it to check that the GEMM gives the same bits
+ * in every unit (design principles 7.1).
  */
 
 #pragma once
@@ -21,7 +21,7 @@ struct CpuFeatures {
 };
 
 /// Features of the running CPU (detected once; all false off x86-64 and under
-/// CAMEL_TENSOR_ISA=generic).
+/// `--tensor-isa generic`).
 const CpuFeatures &cpuFeatures();
 
 } // namespace camel::tensor::kernels

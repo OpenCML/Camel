@@ -30,8 +30,9 @@ ChunksTestPass::apply(const camel::runtime::Program *program, std::ostream &os) 
     }
     // A node nothing reads, after the others.
     RuntimeGraphDraftSession session(context_, program);
-    auto &draft          = session.edit(largest).edit();
-    const gc_node_ref_t edited = blankNode(draft);
+    auto &transaction    = session.edit(largest);
+    auto &draft          = transaction.edit();
+    const gc_node_ref_t edited = blankNode(transaction);
     const Program *next = session.commit();
 
     const GCGraph *after = next->graph(largest->id());

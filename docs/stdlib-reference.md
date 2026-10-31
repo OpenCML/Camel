@@ -1399,11 +1399,15 @@ leaf of `tree` at a leaf of the reference is a tuple of the same length.
 The `tensor` module: multi-dimensional numeric arrays, their element type and extents, their
 binary form, a NumPy file, and the module's worker threads.
 
-The declarations written here are the operators whose signature is fixed. The ones whose element
-type or shape follows their arguments — elementwise arithmetic, the reshaping operators, the
-axis forms of a reduction — cannot be written as a declaration; they are implemented in
-`modules/tensor` and listed in `stdlib/signatures/tensor.cml`, whose entries this page renders
-under the same sections (design principles 6.4).
+The declarations written here are the operators a body-less declaration can state. It was once
+thought that a name whose element type or shape follows its arguments could not be declared at
+all — elementwise arithmetic, the reshaping operators, the axis forms of a reduction — but
+`numel` and `shape` showed the limit is the generic parameter, not the operator: written as
+`export func numel::<T>(t: T[..]): int when is_numeric::<T>()`, a name whose result type follows
+its argument declares fine, and the axis reductions below are written the same way. What a
+declaration still cannot state is a signature that depends on a *value* argument. The operators
+whose signature the page renders from `stdlib/signatures/tensor.cml` are the ones left in C++
+(design principles 6.4).
 
 ### Creation
 
@@ -2103,6 +2107,89 @@ CBLAS, otherwise the canonical kernel's name, which is what the path forwards to
 
 - Pure.
 - Example: `gemm_library()`
+
+### The reductions along an axis, named by the function
+
+A declaration names `tensor:<function>`, so `sum_axis` below is the operator `tensor:sum_axis`
+-- the same naming `shape` and `numel` use, and the one the ONNX lowering table and the
+semantics declarations are keyed on. `stdlib/array.cml` imports these instead of declaring a
+second spelling of each.
+
+#### `sum_axis`
+
+```camel
+sum_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
+```
+
+The sum of each lane along one axis, accumulated in `f64` from `+0` in ascending order and
+rounded once into the element type. `keepdims` leaves the reduced axis as an extent of one.
+
+- Pure.
+- Example: `sum_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[4.0, 6.0]`
+
+#### `mean_axis`
+
+```camel
+mean_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
+```
+
+The mean of each lane along one axis: the sum and the count both in `f64`, one rounding into
+the element type. An empty axis is a fault.
+
+- Pure.
+- Failure: fault `InvalidArgument` when the axis has no element.
+- Example: `mean_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[2.0, 3.0]`
+
+#### `min_axis`
+
+```camel
+min_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
+```
+
+The smallest element of each lane along one axis. An empty axis is a fault: a minimum over no
+element has no identity to return.
+
+- Pure.
+- Failure: fault `InvalidArgument` when the axis has no element.
+- Example: `min_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[1.0, 2.0]`
+
+#### `max_axis`
+
+```camel
+max_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
+```
+
+The largest element of each lane along one axis. An empty axis is a fault, as for `min_axis`.
+
+- Pure.
+- Failure: fault `InvalidArgument` when the axis has no element.
+- Example: `max_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[3.0, 4.0]`
+
+#### `argmax_axis`
+
+```camel
+argmax_axis: (xs: T[..], axis: int, keepdims: bool) => int[] when is_numeric::<T>()
+```
+
+The position of the largest element of each lane along one axis, an `int` index along that
+axis. A tie keeps the earlier position. An empty axis is a fault.
+
+- Pure.
+- Failure: fault `InvalidArgument` when the axis has no element.
+- Example: `argmax_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[1, 1]`
+
+#### `argmin_axis`
+
+```camel
+argmin_axis: (xs: T[..], axis: int, keepdims: bool) => int[] when is_numeric::<T>()
+```
+
+The position of the smallest element of each lane along one axis; a tie keeps the earlier
+position. An empty axis is a fault.
+
+- Pure.
+- Failure: fault `InvalidArgument` when the axis has no element.
+- Example: `argmin_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[0, 0]`
 
 <a id="types"></a>
 

@@ -4,6 +4,7 @@
 #include "operator_rules.h"
 
 #include "camel/core/numeric_convert.h"
+#include "camel/core/numeric_convert_half.h"
 #include "camel/core/type/composite/array.h"
 #include "fault_sites.h"
 
@@ -213,6 +214,31 @@ OperatorRule checkedTextConversion(
         false};
 }
 
+/// A bf16 or an f16 read from a text (`bf16(s)`; cast.cpp __stobf__): `rt::halfFromText<To>(x,
+/// invalidSite, f32RangeSite, halfRangeSite)`. The text is read as f32 first, so a text that is
+/// not a number and one beyond f32 are the f32 refusals, with the element type's name in them as
+/// the runtime's own path puts it; the third report is the range of the element type itself
+/// (camel/core/numeric_convert_half.h, the same sentences).
+OperatorRule halfFromTextRule(const char *to, const char *target, std::string halfRangeReason) {
+    return {
+        [to, target, halfRangeReason = std::move(halfRangeReason)](
+            OperatorCall &c) -> std::optional<std::string> {
+            const std::string text = SiteTable::valueMark(0);
+            return std::format(
+                "rt::halfFromText<{}>({}, {}, {}, {})",
+                to,
+                c.norm(0).text,
+                c.site(RuntimeDiag::InvalidNumberText, {text, target, "a number"}),
+                c.site(
+                    RuntimeDiag::ConversionOutOfRange,
+                    {"'" + text + "'", target, camel::core::floatRangeReason<float>(target)}),
+                c.site(
+                    RuntimeDiag::ConversionOutOfRange,
+                    {"'" + text + "'", target, halfRangeReason}));
+        },
+        false};
+}
+
 /// `std::f(x)` of <cmath> (modules/math/operators.cpp). With `toFloat`, an integer argument
 /// is converted first, as __math_sqrt__ does: an i32 to f32, an int to float.
 OperatorRule cmath(const char *function, bool toFloat = false) {
@@ -275,6 +301,27 @@ Rules buildRules() {
     for (const char *t : {"i", "l", "f", "d"}) {
         r[std::format(":op/div_{}", t)] = faultingFunction("div", RuntimeDiag::DivisionByZero, 0);
         r[std::format(":op/pow_{}", t)] = runtimeFunction("pow");
+    }
+
+    // ---- Reduced-precision arithmetic (half_ops.cpp; include/camel/standalone/half.h) ----
+    // The operators of the standalone type compute in f32 and round once on store, which is the one
+    // arithmetic path of the element type (design principles 7.3), so `+`, `-`, `*` and unary `-`
+    // are written as the f32 ones are. `/` is rt::div because dividing by zero is a fault, `^` is
+    // rt::pow, whose result is rounded once like every other, and a comparison is the comparison of
+    // the widened values: the two zeros are equal and a NaN is ordered against nothing.
+    for (const char *t : {"bf", "f6"}) {
+        r[std::format(":op/add_{}", t)] = infix("+");
+        r[std::format(":op/sub_{}", t)] = infix("-");
+        r[std::format(":op/mul_{}", t)] = infix("*");
+        r[std::format(":op/neg_{}", t)] = prefix("-");
+        r[std::format(":op/div_{}", t)] = faultingFunction("div", RuntimeDiag::DivisionByZero, 0);
+        r[std::format(":op/pow_{}", t)] = runtimeFunction("pow");
+        r[std::format(":op/lt_{}", t)]  = infix("<");
+        r[std::format(":op/le_{}", t)]  = infix("<=");
+        r[std::format(":op/gt_{}", t)]  = infix(">");
+        r[std::format(":op/ge_{}", t)]  = infix(">=");
+        r[std::format(":op/eq_{}", t)]  = infix("==");
+        r[std::format(":op/ne_{}", t)]  = infix("!=");
     }
 
     // ---- Complex numbers (ops.cpp complexBinary, complexPower; include/camel/standalone/
@@ -359,6 +406,33 @@ Rules buildRules() {
     for (const char *t : {"i", "l", "f", "d", "a"}) {
         r[std::format(":op/{}tos", t)] = runtimeFunction("toText");
     }
+    // A bf16 or an f16 (cast.cpp): a written conversion rounds once into the element type -- a
+    // literal of the language arrives this way -- and no numeric permission is involved, because
+    // the type the program wrote is the precision it asked for. The compute precision of the type
+    // is f32, which is what a static_cast of these values goes through; the widening directions
+    // are exact, and a value beyond the type is an infinity as it is for f32 (no fault).
+    r[":op/bftobf"] = identity();
+    r[":op/f6tof6"] = identity();
+    for (const char *from : {"i", "l", "f", "d"}) {
+        r[std::format(":op/{}tobf", from)] = cast("rt::BF16");
+        r[std::format(":op/{}tof6", from)] = cast("rt::F16");
+    }
+    r[":op/bftof"] = cast("float");
+    r[":op/f6tof"] = cast("float");
+    r[":op/bftod"] = cast("double");
+    r[":op/f6tod"] = cast("double");
+    r[":op/bftoi"] =
+        checkedConversion("truncate", "int32_t", "i32", RuntimeDiag::ConversionOutOfRange);
+    r[":op/f6toi"] =
+        checkedConversion("truncate", "int32_t", "i32", RuntimeDiag::ConversionOutOfRange);
+    r[":op/bftol"] =
+        checkedConversion("truncate", "int64_t", "int", RuntimeDiag::ConversionOutOfRange);
+    r[":op/f6tol"] =
+        checkedConversion("truncate", "int64_t", "int", RuntimeDiag::ConversionOutOfRange);
+    r[":op/stobf"] = halfFromTextRule(
+        "rt::BF16", "bf16", camel::core::halfRangeReason<camel::core::rtdata::BFloat16>("bf16"));
+    r[":op/stof6"] = halfFromTextRule(
+        "rt::F16", "f16", camel::core::halfRangeReason<camel::core::rtdata::Float16>("f16"));
     // A number to a complex value, and a complex value to the other width (cast.cpp, the c64
     // and c128 groups of globals.cpp): the imaginary part of a number is zero.
     r[":op/ctoc"] = identity();
@@ -402,37 +476,256 @@ Rules buildRules() {
     };
 
     // ---- Arrays (struct.cpp, ops.cpp __builtin__idx__) ----
-    // A position is the element itself only when the value is a rank-1 array, which is what
-    // `rt::at` gives. An `rt::Array` here is a flat run of elements with no shape
-    // (cpp_types.cpp), so a position on a multidimensional value -- the slab this takes for a row
-    // of a rank-2 array, design principles 5.4 -- and a position on an open-rank value have no
-    // value in this back end: the operator runs through the bridge (camel/standalone/bridge.h).
-    // The axis word a call of the index writes is the same answer's: only the first dimension's
-    // position, the two-word call, is this rule's.
+    // A position is the element itself on a value of one dimension (`rt::at`) and the row, one
+    // dimension less, on a value of several (`rt::atRow`): the shape travels with the value, so the
+    // row's extent is the value's own. An open rank is still not translated: its position may be an
+    // element or a row of any dimension, and a value that is sometimes an element and sometimes an
+    // array has no single C++ type. The axis word a call of the index writes is the same answer's:
+    // only the first dimension's position, the two-word call, is this rule's.
     r[":op/idx_arr"] = {
         [](OperatorCall &c) -> std::optional<std::string> {
             const ArrayType *value = asArrayType(c.normType(0));
-            const bool takesASlab =
-                value != nullptr && (value->anyRank() || value->rank() >= 2);
-            if (c.normCount() != 2 || takesASlab) {
+            if (value == nullptr || c.normCount() < 2 || c.normCount() > 3) {
+                return std::nullopt;
+            }
+            if (value->anyRank()) {
+                return std::nullopt;
+            }
+            const std::string site =
+                c.site(RuntimeDiag::IndexOutOfRange, marks(3));
+            if (c.normCount() == 3) {
+                // The axis is written: the position drops the dimension it names, and every other
+                // dimension is kept whole (`m[1, 2]` of a rank-2 value is the position on axis 1
+                // and then the position on axis 0, design principles 5.4).
+                if (value->rank() < 2) {
+                    return std::nullopt;
+                }
+                return std::format(
+                    "rt::atAxis({}, {}, {}, {})", c.operand(0), c.operand(1), c.operand(2), site);
+            }
+            if (value->rank() >= 2) {
+                return std::format("rt::atRow({}, {}, {})", c.operand(0), c.operand(1), site);
+            }
+            return std::format("rt::at({}, {}, {})", c.operand(0), c.operand(1), site);
+        },
+        false,
+    };
+    // A store into an element or a field as a value (`xs[i] = v`, `s.x = v` of the plain form,
+    // set_value.cpp): the array or the record with that place changed. The store into a
+    // variable's own array or field is the assignment's (see lowerSetIndexInPlace), and this is
+    // the same change without a variable to hand over.
+    r[":op/set_index"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (value == nullptr || value->anyRank() || value->rank() != 1 || c.normCount() != 3) {
                 return std::nullopt;
             }
             return std::format(
-                "rt::at({}, {}, {})",
+                "rt::setAt({}, {}, {}, {})",
+                c.operand(0),
+                c.operand(1),
+                c.operand(2),
+                c.site(RuntimeDiag::IndexOutOfRange, marks(3)));
+        },
+        false,
+    };
+    // The field a store writes is an index, so the record's C++ member name is the type's: the
+    // member pointer the runtime takes is that field's (camel/standalone/record.h).
+    r[":op/set_field"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const std::string field = c.fieldName(1);
+            if (c.normCount() != 3 || field.empty()) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::setField({}, &{}::{}, {})",
+                c.norm(0).text,
+                c.cppType(c.normType(0)),
+                field,
+                c.operand(2));
+        },
+        false,
+    };
+    // `shape(xs)` (`stdlib/array.cml`, `stdlib/tensor.cml`): the value's dimensions, one `int` per
+    // dimension, which is what the interpreter's `int[]` is. The shape travels with the value, so the
+    // answer is read off it and is a new array of its own -- a value, not a view. An open rank is
+    // still not translated: its rank is a property of the value, and the rank-zero value it admits
+    // is not an array at all in this back end.
+    for (const char *uri : {"array:shape", "tensor:shape"}) {
+        r[uri] = {
+            [](OperatorCall &c) -> std::optional<std::string> {
+                const ArrayType *value = asArrayType(c.normType(0));
+                if (value == nullptr || value->anyRank() || c.normCount() != 1) {
+                    return std::nullopt;
+                }
+                return std::format("rt::shapeOf({})", c.operand(0));
+            },
+            false,
+        };
+    }
+    // `xs[positions]` (:op/idx_take, struct.cpp __idx_take_arr__, design principles 5.4): the
+    // elements the positions name, in that order. Only a rank-1 value read by rank-1 positions is
+    // a flat run here (an rt::Array has no shape, cpp_types.cpp): a value of several dimensions
+    // keeps them, and one of an open rank has none, so both run through the bridge. The axis word
+    // a call writes names a dimension, and a rank-1 value has the one.
+    r[":op/idx_take"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value     = asArrayType(c.normType(0));
+            const ArrayType *positions = asArrayType(c.normType(1));
+            if (c.normCount() != 2 || value == nullptr || positions == nullptr ||
+                value->anyRank() || value->rank() != 1 || positions->anyRank() ||
+                positions->rank() != 1 || positions->elemType() == nullptr ||
+                positions->elemType()->code() != TypeCode::Int64) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::take({}, {}, {})",
                 c.operand(0),
                 c.operand(1),
                 c.site(RuntimeDiag::IndexOutOfRange, marks(3)));
         },
         false,
     };
-    // The slice of a one-dimensional array, whichever spelling wrote it (design principles 5.4):
-    // the six words are the value, the axis, the two bounds, the step and the mask of the bounds
-    // written, and a call that leaves the last two out stands for step 1 and "both written". A
-    // value with several dimensions or an open rank is not a flat run here: the bridge runs it.
+    // The last element (:struct/last_arr, struct.cpp __last_arr__): of the empty array, the fault a
+    // read of the position -1 gives, named with the position that is not there.
+    r[":struct/last_arr"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (c.normCount() != 1 || value == nullptr || value->anyRank() || value->rank() != 1) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::last({}, {})",
+                c.operand(0),
+                c.site(RuntimeDiag::IndexOutOfRange, marks(3)));
+        },
+        false,
+    };
+    // The reductions and layouts of a module that name their element type in the operator
+    // (`array:sum_d`, ...; src/builtin/operators/array_reduce.cpp): one line per element type,
+    // because the executor takes exactly one and the name is what picked it. Rank 1 only, as the
+    // arrays of this back end are a flat run: a value of several dimensions keeps its own.
+    r["array:sum_d"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (c.normCount() != 1 || value == nullptr || value->anyRank() || value->rank() != 1 ||
+                value->elemType() == nullptr ||
+                value->elemType()->code() != TypeCode::Float64) {
+                return std::nullopt;
+            }
+            return std::format("rt::sum({})", c.operand(0));
+        },
+        false,
+    };
+    // `array:elements` (src/builtin/operators/array_axis.cpp): the elements in row-major order as
+    // an array of one dimension. An rt::Array of this back end is that flat run already -- it keeps
+    // no shape (cpp_types.cpp) -- so the value is the one the call was given, whatever rank the
+    // type wrote: a rank of several dimensions is a run and nothing more here.
+    r["array:elements"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1 || asArrayType(c.normType(0)) == nullptr) {
+                return std::nullopt;
+            }
+            return c.norm(0).text;
+        },
+        false,
+    };
+    // `array:sort_d` (src/builtin/operators/array.cpp): the same elements in the order min and max
+    // use, ties where they stand. A rank-1 run again; the other element types name their own
+    // operator and get their own line when a program needs one.
+    r["array:sort_d"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (c.normCount() != 1 || value == nullptr || value->anyRank() || value->rank() != 1 ||
+                value->elemType() == nullptr ||
+                value->elemType()->code() != TypeCode::Float64) {
+                return std::nullopt;
+            }
+            return std::format("rt::sorted({})", c.operand(0));
+        },
+        false,
+    };
+    // `tensor:reshape` (modules/tensor/kernels/layout.cpp): the same elements in row-major order in
+    // another shape. The shape travels with the value now (rt::Array holds it), so a target of
+    // several dimensions is faithful too -- printing it gives its rows, `[[1.0, 2.0], [3.0, 4.0]]`,
+    // which the run alone cannot say. What the operator still owes is its count check: a target that
+    // changes the element count is a fault before anything is read, and the report states the
+    // input's own shape.
+    r["tensor:reshape"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *target = asArrayType(c.resultType());
+            if (c.normCount() != 1 || target == nullptr || target->anyRank() || target->rank() == 0) {
+                return std::nullopt;
+            }
+            std::string words;
+            std::string shape;
+            int64_t count = 1;
+            for (const core::type::ExtentForm &extent : target->extents()) {
+                if (!extent.isConstant()) {
+                    return std::nullopt;
+                }
+                words += (words.empty() ? "" : ", ") + std::to_string(extent.constant());
+                shape += (count == 1 ? "" : ", ") + std::to_string(extent.constant());
+                count *= extent.constant();
+            }
+            const std::string site = c.site(
+                RuntimeDiag::TensorDimensionMismatch,
+                {"reshape",
+                 std::format(
+                     "reshape changes tensor element count: [{}] -> [{}]", SiteTable::valueMark(0), shape)});
+            return std::format(
+                "rt::reshape({}, {{{}}}, {}, {})", c.norm(0).text, words, count, site);
+        },
+        false,
+    };
+    // `tensor:sum` of the whole value (modules/tensor/ops/reduction_ops.cpp): the elements added from
+    // +0 in the order they lie, answering the element type -- an integer result exactly in int64
+    // (int32 truncated once into its own width) and a float one by the f64 accumulator converted
+    // once. The total of a value of several dimensions is the total of its run and reads none of its
+    // dimensions, so every rank is this one rule, the open one included: what a rank would be needed
+    // for is the result's own shape, and this operator's answer has none. The axis form
+    // (`tensor:sum_axis`) is the one that reads a dimension, and it is a step of its own.
+    r["tensor:sum"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (c.normCount() != 1 || value == nullptr || value->elemType() == nullptr) {
+                return std::nullopt;
+            }
+            const TypeCode element = value->elemType()->code();
+            if (element != TypeCode::Int64 && element != TypeCode::Int32 &&
+                element != TypeCode::Float32 && element != TypeCode::Float64 &&
+                element != TypeCode::Bool) {
+                return std::nullopt;
+            }
+            return std::format("rt::sumAll({})", c.operand(0));
+        },
+        false,
+    };
+    // `numel(xs)` (`stdlib/array.cml`): how many elements the value has. It needs no dimension of
+    // the value -- only the count -- so a value of several dimensions and one of an open rank are
+    // both read off the run it keeps: `numel` of a rank-zero value is one, as the interpreter's is.
+    for (const char *uri : {"array:numel", "tensor:numel"}) {
+        r[uri] = {
+            [](OperatorCall &c) -> std::optional<std::string> {
+                if (c.normCount() != 1 || asArrayType(c.normType(0)) == nullptr) {
+                    return std::nullopt;
+                }
+                return std::format("rt::numel({})", c.operand(0));
+            },
+            false,
+        };
+    }
+    // The slice of one dimension of a value, whichever spelling wrote it (design principles 5.4): the
+    // six words are the value, the axis, the two bounds, the step and the mask of the bounds written,
+    // and a call that leaves the last two out stands for step 1 and "both written". The dimension the
+    // axis names is the one sliced and every other one is kept whole -- `m[0:2]` of a rank-2 value is
+    // its first two rows, `m[:, 1]` its second column -- which is what the runtime's slice does now
+    // that the shape travels with the value. An open rank is still not translated: its rank is a
+    // property of the value, and a slice of it may keep or drop any number of dimensions.
     r[":op/slice_sub"] = {
         [](OperatorCall &c) -> std::optional<std::string> {
             const ArrayType *value = asArrayType(c.normType(0));
-            if (value == nullptr || value->anyRank() || value->rank() != 1 ||
+            if (value == nullptr || value->anyRank() ||
                 c.normCount() < 4 || c.normCount() > 6) {
                 return std::nullopt;
             }
@@ -449,13 +742,17 @@ Rules buildRules() {
         },
         false,
     };
-    // A type name applied to a one-dimensional numeric array converts every element. A value with
-    // several dimensions or an open rank is not a flat run here, and neither is bf16 or f16 (this
-    // back end has no such element type): those are refused, as the other array operators refuse.
+    // A type name applied to a one-dimensional numeric array converts every element, at every
+    // element type this back end has -- bf16 and f16 included, now that the runtime holds them
+    // (reduced-precision.md b1). A value with several dimensions or an open rank is not a flat run
+    // here, so it is refused the way the other array operators refuse a shape they were not
+    // written for.
     for (const auto &[uri, element] : {std::pair<const char *, const char *>{":op/atoi", "int32_t"},
                                       {":op/atol", "int64_t"},
                                       {":op/atof", "float"},
-                                      {":op/atod", "double"}}) {
+                                      {":op/atod", "double"},
+                                      {":op/atobf", "rt::BF16"},
+                                      {":op/atof6", "rt::F16"}}) {
         r[uri] = {
             [element](OperatorCall &c) -> std::optional<std::string> {
                 const ArrayType *value = asArrayType(c.normType(0));
@@ -615,6 +912,30 @@ Rules buildRules() {
                 c.norm(2).text);
         },
         true,
+    };
+
+    // ---- The results the runtime owns (tensor:*, design note 9) ----
+    // `tensor:ones` fills a tensor of the element type the call states with the shape it is given.
+    // A tensor is not a value this back end writes: it lives in the runtime module that owns it, and
+    // the program holds it through a counted handle (`rt::Foreign`, camel/standalone/foreign.h), so
+    // what a tensor is is written once, in the runtime, and the program and the interpreter print
+    // one tensor the same way -- the reason the shape crosses as the `int[]` it already is, instead
+    // of being rebuilt on this side. The result's C++ type is the handle, not the `rt::Array` the
+    // Camel type `f32[2, 2]` would otherwise name: an array the program builds is that value, a
+    // tensor is this one (which is why the rule says `resultCpp`).
+    r["tensor:ones"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1) {
+                return std::nullopt;
+            }
+            return std::format(
+                "{}.call<rt::Foreign>({}, {{rt::bridge::arg({})}}, {{}})",
+                c.bridgeOperator(),
+                c.place(),
+                c.norm(0).text);
+        },
+        false,
+        "rt::Foreign",
     };
 
     return r;

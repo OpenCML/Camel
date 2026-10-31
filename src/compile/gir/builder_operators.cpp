@@ -732,8 +732,8 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
     compile_graph_ptr_t graph = enterScope(type);
     const bool macroOperator  = camel::core::OperatorTable::instance().isMacro(op->uri());
     if (macroOperator) {
-        graph->draft().setFlags(
-            static_cast<uint8_t>(graph->draft().flags() | camel::runtime::kGraphFlagMacro));
+        graph->edit().setFlags(
+            static_cast<uint8_t>(graph->view().flags() | camel::runtime::kGraphFlagMacro));
     }
     try {
         bodyStates_[graph.get()] = BodyState::Open;
@@ -743,11 +743,11 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
             setNodeMacro(call, true);
         }
         registerNodeOrigin(context_, call, origin, "gir.link.oper");
-        for (draft_node_ref_t port : graph->draft().withPorts()) {
-            linkNodes(LinkType::With, graph->draft().ref(port), call);
+        for (draft_node_ref_t port : graph->view().withPorts()) {
+            linkNodes(LinkType::With, graph->view().ref(port), call);
         }
-        for (draft_node_ref_t port : graph->draft().normPorts()) {
-            linkNodes(LinkType::Norm, graph->draft().ref(port), call);
+        for (draft_node_ref_t port : graph->view().normPorts()) {
+            linkNodes(LinkType::Norm, graph->view().ref(port), call);
         }
         setGraphReturnFromResult(graph, nodeIdOf(call), nodeIdOf(call), opType->exitType());
         bodyStates_[graph.get()] = BodyState::Built;
@@ -809,9 +809,9 @@ Builder::attemptFunctionValue(const Argument &f, const GCT::node_ptr_t &origin) 
         GCT::node_ptr_t call = make(tree_->makeLink(1 + type->normTypesCount()));
         *call << callee << make(tree_->makeDRef(fName));
         size_t index = 0;
-        for (draft_node_ref_t port : graph->draft().normPorts()) {
+        for (draft_node_ref_t port : graph->view().normPorts()) {
             const std::string name = "$attempt" + std::to_string(index++);
-            nodeScope_->insert(name, graph->draft().ref(port));
+            nodeScope_->insert(name, graph->view().ref(port));
             *call << make(tree_->makeDRef(name));
         }
         // The call is the value of the function, so it runs whenever the function is called.
@@ -1310,41 +1310,6 @@ node_handle_t Builder::inPlaceRebindingOf(const GCT::node_ptr_t &gct) {
 
 namespace {
 
-/// The reduced-precision element type (bf16, f16) an argument carries — as its own type, or as
-/// the element type of an array — or nullopt when none does. A tensor argument is not one: its
-/// type is not an `ArrayType`, and a bf16 or f16 tensor is computed by the tensor module, which
-/// widens every element to f32 and rounds once when it stores the result (modules/tensor/dtype.h,
-/// design principles 7.3). A bf16 or f16 scalar or array has a literal, the written
-/// conversions and the scalar arithmetic, comparison and reduction of the language, but not every
-/// operation: `%` is an integer operation, and a function that takes a fixed set of types has no
-/// overload for the element type. Such a call is reported as asking for an operation the type does
-/// not have, rather than as "no matching function" over overloads it could never match.
-std::optional<TypeCode>
-reducedPrecisionArgumentOf(const type_vec_t &withTypes, const type_vec_t &normTypes) {
-    const auto reducedCode = [](const Type *type) -> std::optional<TypeCode> {
-        if (type == nullptr) {
-            return std::nullopt;
-        }
-        TypeCode code = type->code();
-        if (code == TypeCode::Array) {
-            const auto *arrayType = static_cast<const ArrayType *>(type);
-            code                  = arrayType->elemTypeCode();
-        }
-        if (code == TypeCode::BFloat16 || code == TypeCode::Float16) {
-            return code;
-        }
-        return std::nullopt;
-    };
-    for (const type_vec_t *types : {&withTypes, &normTypes}) {
-        for (const Type *type : *types) {
-            if (const auto code = reducedCode(type)) {
-                return code;
-            }
-        }
-    }
-    return std::nullopt;
-}
-
 /// One place a path assignment writes: a field (`v.f`, `v.0`) or an element (`v[i]`).
 struct PathStep {
     GCT::node_ptr_t node; // the ACCS or __idx__ node, as written
@@ -1742,8 +1707,8 @@ node_handle_t Builder::composeFunctionValue(
         // The parameter's port, and the two functions: a name of an enclosing graph used in a
         // nested one is what a closure captures, and insertNode makes exactly that of them.
         size_t portCount = 0;
-        for (draft_node_ref_t port : graph->draft().normPorts()) {
-            insertNode(std::string(kCompParameter), graph->draft().ref(port));
+        for (draft_node_ref_t port : graph->view().normPorts()) {
+            insertNode(std::string(kCompParameter), graph->view().ref(port));
             ++portCount;
         }
         ASSERT(portCount == 1, "A composition has exactly one parameter.");
@@ -3123,17 +3088,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         .commit(graphs->front()->name(), argumentTypes, conditions);
                     throw BuildAbortException();
                 }
-                // A bf16 or f16 scalar or array among the arguments: no candidate can compute
-                // with it, whatever its parameters say, because the language defines no
-                // operation on a value of the element type (design principles 7.3). Say
-                // that, rather than list overloads the call could never match.
-                if (const auto reduced =
-                        reducedPrecisionArgumentOf(withInputTypes, normInputTypes)) {
-                    diags_->of(SemanticDiag::ReducedPrecisionUnsupported)
-                        .atOrigin(gct->origin())
-                        .commit(displayNameOf(graphs->front()->name()), typeCodeToString(*reduced));
-                    throw BuildAbortException();
-                }
                 std::vector<std::pair<std::string, FunctionType *>> candidates;
                 for (const auto &g : *graphs) {
                     candidates.emplace_back(g->name(), signatureOf(g));
@@ -3418,18 +3372,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     diags_->of(SemanticDiag::FunctionTypeArgumentNotInferred)
                         .atOrigin(gct->origin())
                         .commit(name, ops->name());
-                    throw BuildAbortException();
-                }
-                // A bf16 or f16 operand (or an array of one) that no overload can take: the
-                // operation is one the element type does not have (`%` is an integer operation,
-                // and a function with a fixed set of parameter types has no overload for it).
-                // Say that, rather than print an overload set the call could never match
-                // (design principles 7.3).
-                if (const auto reduced =
-                        reducedPrecisionArgumentOf(withInputTypes, normInputTypes)) {
-                    diags_->of(SemanticDiag::ReducedPrecisionUnsupported)
-                        .atOrigin(gct->origin())
-                        .commit(displayNameOf(ops->name()), typeCodeToString(*reduced));
                     throw BuildAbortException();
                 }
                 // A function with a `var` parameter given to an operator that calls it with values:
@@ -4307,20 +4249,49 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             recordWrite(arg.written, targetNode);
         }
     }
-    if (synced_ && !targetGraph && targetOperator == nullptr) {
-        lastIndirectCall_ = targetNode;
-        // A call through a function value may write any variable the value captured, and which
-        // ones is not known here: every read written before it is ordered before it, as a read is
-        // before the write it precedes (the reads of a variable nothing else touches are folded
-        // away, with these edges). A read whose value the call already takes is ordered by that
-        // data edge, and is not given a second one.
-        for (const auto &[variable, uses] : pendingUses_) {
-            for (const VariableUse &use : uses) {
-                if (use.isRead && sameGraph(use.node, currGraph_) && linkCheek(use.node, targetNode) &&
-                    nodeTakesAnOrder(use.node) && nodeTakesAnOrder(targetNode) &&
-                    !hasDirectDataDependency(use.node, targetNode) &&
-                    !dataPathReaches(use.node, targetNode)) {
-                    linkNodes(LinkType::Order, use.node, targetNode);
+    if (targetGraph == nullptr && targetOperator == nullptr) {
+        if (synced_) {
+            lastIndirectCall_ = targetNode;
+            // A call through a function value may write any variable the value captured, and which
+            // ones is not known here: every read written before it is ordered before it, as a read
+            // is before the write it precedes (the reads of a variable nothing else touches are
+            // folded away, with these edges). A read whose value the call already takes is ordered
+            // by that data edge, and is not given a second one.
+            for (const auto &[variable, uses] : pendingUses_) {
+                for (const VariableUse &use : uses) {
+                    if (use.isRead && sameGraph(use.node, currGraph_) &&
+                        linkCheek(use.node, targetNode) && nodeTakesAnOrder(use.node) &&
+                        nodeTakesAnOrder(targetNode) &&
+                        !hasDirectDataDependency(use.node, targetNode) &&
+                        !dataPathReaches(use.node, targetNode)) {
+                        linkNodes(LinkType::Order, use.node, targetNode);
+                    }
+                }
+            }
+        }
+        // The conservative writer set (design principles 3.1, 3.5): the callee of a call through a
+        // function value is not known here, so every variable visible at the call that some
+        // function of the program writes is a possible write of it (scanProgramWriters). The call
+        // becomes that variable's version (`:var/after`, valueVersionOf), so the read written after
+        // it takes the value the call made, and the call runs even where no sync block orders it.
+        // Counting a writer the call does not reach costs the call having to run and the reads after
+        // it being ordered after it; it cannot change a value, because what the read takes is the
+        // variable as it stands after the call.
+        if (!programWriters_.empty()) {
+            for (const auto &[name, variable] : visibleVariables()) {
+                if (!programWrites(name)) {
+                    continue;
+                }
+                // The variable as this graph holds it: its own cell, or the capture port a read
+                // here would take. A variable this graph has not captured yet is counted where it
+                // is captured, so that a read written after this call takes the call (`:var/after`,
+                // readVariableThrough) -- the write happens before the graph needed the cell.
+                const node_handle_t cell =
+                    sameGraph(variable, currGraph_) ? variable : capturedCellIn(currGraph_.get(), variable);
+                if (cell != nullptr) {
+                    recordWrite(cell, targetNode, true);
+                } else {
+                    claimedWriters_[currGraph_.get()][variable] = targetNode;
                 }
             }
         }

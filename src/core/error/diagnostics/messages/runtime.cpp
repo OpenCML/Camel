@@ -49,7 +49,7 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             {
                 "MaxRecursionDepthExceeded",
                 "Maximum recursion depth ({1}) exceeded when evaluating graph '{0}'.",
-                "Check for infinite recursion. A call in tail position takes no frame, so write a deep recursion as a tail call; or raise the limit with --max-recursion-depth <n> or CAMEL_MAX_RECURSION_DEPTH=<n>.",
+                "Check for infinite recursion. A call in tail position takes no frame, so write a deep recursion as a tail call; or raise the limit with --max-recursion-depth <n>.",
             },
         },
         {
@@ -82,6 +82,14 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "PassInternalError",
                 "Pass '{0}' failed with an internal error: {1}.",
                 "The pass gave up without a diagnostic of its own: it built or was given a graph it cannot handle, which is a defect of the compiler rather than of the program. Try the pipeline without this pass or with the passes in another order, and report the program together with the pass list.",
+            },
+        },
+        {
+            RuntimeDiag::PassBoundaryResources,
+            {
+                "PassBoundaryResources",
+                "Pass '{0}' changed the ambient resources the program touches: before {1}, after {2}.",
+                "An effect is written once and stays where the program put it. A rewrite may move code, copy it, or delete what nothing needs, but the ambient resources a graph touches -- stdout, stderr, stdin, clock, env, fs, rng -- are the program's effects, and the pass list must leave them the same. This is a defect of the pass named, not of the program.",
             },
         },
         {

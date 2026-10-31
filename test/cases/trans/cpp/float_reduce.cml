@@ -1,0 +1,19 @@
+// The reductions of `stdlib::array` that name their element type in the operator they compile to
+// (`array:sum_d`, `array:sort_d`, `array:elements`; src/builtin/operators/array_reduce.cpp and
+// array_axis.cpp): the elements added in f64, the elements as one run in row-major order, and the
+// order `sort` gives -- ties where they stand, -0 below +0, as `min` and `max` order them
+// (design principles 7.7).
+
+import { flatten, sort, sum } from array
+
+func main(): int sync {
+    let xs: float[] = [3.0, -0.0, 0.0, 1.5, 2.5]
+    println(sum(xs))
+    println(sort(xs))
+    println(sum(sort(xs)))
+    println(flatten(xs))
+    println(sort([2.0]))
+    let none: float[] = []
+    println(sum(none))
+    return 0
+}

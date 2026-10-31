@@ -37,7 +37,7 @@ kind = "negative"
 case = "../../../cases/modules/array_kernels/err_axis_range.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["Invalid argument of 'array.sum_axis': the axis 2 is outside the rank 2"]
+expect_output_contains = ["'tensor:sum_axis': the axis 2 is outside the rank 2"]
 
 [[tests]]
 name = "array_kernels.axis_empty"
@@ -46,7 +46,7 @@ kind = "negative"
 case = "../../../cases/modules/array_kernels/err_axis_empty.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["Invalid argument of 'array.max_axis': the axis 0 has no element"]
+expect_output_contains = ["'tensor:max_axis': the axis 0 has no element"]
 
 [[tests]]
 name = "array_kernels.argsort"

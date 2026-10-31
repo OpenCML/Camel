@@ -326,8 +326,7 @@ name = "gc_tail_chain"
 desc = "Tensors in the root frame survive GC stress across a chain of distinct NodeVM tail calls (else-if ladder)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gc_tail_chain.cml"
-args = ["${case}"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+args = ["--gc-stress", "alloc=5,safepoint=1,kind=major", "--gc-check", "verify=both", "${case}"]
 expect_exit = 0
 expect_stdout_contains = ["gc_tail_chain sum=22"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -490,8 +489,7 @@ name = "reshape_view_gc.nvm"
 desc = "reshape shares its input's block: views that outlive their owners read the right elements while the collector copies the young generation and marks the heap at every safepoint (NodeVM)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/reshape_view_gc.cml"
-args = ["--gc", "generational", "${case}", "${run_nvm}"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "${run_nvm}"]
 expect_exit = 0
 expect_stdout_contains = ["total 16380.0", "[2.0, 4.0, 6.0, 8.0, 10.0, 12.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -502,8 +500,7 @@ name = "reshape_view_gc.fvm"
 desc = "reshape shares its input's block: views that outlive their owners read the right elements while the collector copies the young generation and marks the heap at every safepoint (FastVM)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/reshape_view_gc.cml"
-args = ["--gc", "generational", "${case}", "${run_fvm}"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["total 16380.0", "[2.0, 4.0, 6.0, 8.0, 10.0, 12.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -514,8 +511,7 @@ name = "reshape_view_gc.jit"
 desc = "reshape shares its input's block: views that outlive their owners read the right elements while the collector copies the young generation and marks the heap at every safepoint (the JIT)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/reshape_view_gc.cml"
-args = ["--gc", "generational", "${case}", "${run_jit}"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "${run_jit}"]
 expect_exit = 0
 expect_stdout_contains = ["total 16380.0", "[2.0, 4.0, 6.0, 8.0, 10.0, 12.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -725,11 +721,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "gemm_canonical.generic_unit"
-desc = "The portable GEMM unit (CAMEL_TENSOR_ISA=generic hides AVX2/AVX-512) gives the same bits as the vector units: it writes each fused multiply-add explicitly (on an x86-64 processor without FMA it used to round twice)."
+desc = "The portable GEMM unit (--tensor-isa generic hides AVX2/AVX-512) gives the same bits as the vector units: it writes each fused multiply-add explicitly (on an x86-64 processor without FMA it used to round twice)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gemm_canonical.cml"
-args = ["${case}", "tensor::fuse safe_fp=true"]
-envs = ["CAMEL_TENSOR_ISA=generic"]
+args = ["--tensor-isa", "generic", "${case}", "tensor::fuse safe_fp=true"]
 expect_exit = 0
 expect_stdout_exact = """gemm product_sum=-152.11356
 gemm affine_sum=-159.64394 relu_sum=3094.4185
@@ -754,8 +749,7 @@ name = "gemm_canonical.bits.generic_unit"
 desc = "The same bit guard in the portable GEMM unit: the band-major packing is shared, so its bits must not move either."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gemm_canonical_bits.cml"
-args = ["${case}"]
-envs = ["CAMEL_TENSOR_ISA=generic"]
+args = ["--tensor-isa", "generic", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "gemm_bits small_n=2806496542438e70a88c5c1952eb62c7b4fbc1fbb077cbdf39af9975c0b076ca\ngemm_bits two_blocks=6fd4d0768e02365caf2501fbcbcb32573796ec59676f5b8a82e4019d2a4e0569\ngemm_bits edges=8ea973273e7e990e72f4ab90e6ff58011181e2f9663cee0a875cc66f2711514c\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -774,10 +768,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "gelu_grad.bits.generic_unit"
-desc = "The same bit guard in the portable unit (CAMEL_TENSOR_ISA=generic), which is the one whose bits do not depend on the processor: that unit has no fused multiply-add, so the tangent's expansion cannot contract there and a machine without FMA gives these digests too. The polynomial and the slope are the vector unit's bits as well; the large shape's tangent is where the two part, inside vmath::tanh's declared error (modules/tensor/CMakeLists.txt is the unary units' same setting)."
+desc = "The same bit guard in the portable unit (--tensor-isa generic), which is the one whose bits do not depend on the processor: that unit has no fused multiply-add, so the tangent's expansion cannot contract there and a machine without FMA gives these digests too. The polynomial and the slope are the vector unit's bits as well; the large shape's tangent is where the two part, inside vmath::tanh's declared error (modules/tensor/CMakeLists.txt is the unary units' same setting)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gelu_grad_bits.cml"
-args = ["${case}"]
+args = ["--tensor-isa", "generic", "${case}"]
 envs = ["CAMEL_TENSOR_ISA=generic"]
 expect_exit = 0
 expect_stdout_exact = "gelu_grad_bits ffn=7d29df4309e84b58ddea304f7cbf89c8389f99b103beb9975ae8c23d1d3f1199\ngelu_grad_bits tail=294f48ede40d6baef3432e1e4df86fe997657b7b9862e8eb2c4493709a521b2e\ngelu_grad_bits single=cddf8a6de1c1396d8be68b1c2638a1a2df081d7cb5e6611946552a1eded1fb27\n"
@@ -789,8 +783,7 @@ name = "numeric_contract.generic_unit"
 desc = "The numeric-contract program in the portable kernel units: the same output as the default units."
 kind = "behavior"
 case = "../../../cases/modules/tensor/numeric_contract.cml"
-args = ["${case}"]
-envs = ["CAMEL_TENSOR_ISA=generic"]
+args = ["--tensor-isa", "generic", "${case}"]
 expect_exit = 0
 expect_stdout_contains = ["matmul fma_step=0.00048834085\nmatmul chain=16777216.0\nsoftmax equal=0.0\nsoftmax axis=[nan, nan, nan]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -1026,4 +1019,32 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
 expect_output_contains = ["No candidate of 'shape' applies to", "every candidate's 'when' condition is false", "(t: T[..]) => int[] — when is_numeric::<T>()"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+# The kernel-timing table is a pass parameter (`std::profile opstats=true`): a run that asks for
+# nothing prints no table, and one that asks prints the module's own rows.
+
+[[tests]]
+name = "op_stats.table"
+desc = "`std::profile opstats=true` prints the kernel-timing table: one line per operator that ran, with its calls and its time, the module's kernels measured through timing trampolines instead of the kernels themselves."
+kind = "behavior"
+case = "../../../cases/modules/tensor/op_stats.cml"
+args = ["${case}", "std::profile", "report=false", "hints=false", "opstats=true", "${backend}"]
+backends = ["nvm", "fvm"]
+expect_exit = 0
+expect_stdout_contains = ["8"]
+expect_stderr_contains = ["tensor op stats:", "  operator                      calls     total ms    us/call      %", "  zeros ", "  add ", "  multiply ", "  sum "]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "op_stats.off_by_default"
+desc = "The same program with `std::profile report=false hints=false` and no `opstats`: no table, no timing trampolines, and the program's own output unchanged."
+kind = "behavior"
+case = "../../../cases/modules/tensor/op_stats.cml"
+args = ["${case}", "std::profile", "report=false", "hints=false", "${backend}"]
+backends = ["nvm", "fvm"]
+expect_exit = 0
+expect_stdout_contains = ["8"]
+expect_output_not_contains = ["tensor op stats:"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000

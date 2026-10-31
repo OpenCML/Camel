@@ -57,6 +57,13 @@ class SiteTable {
         camel::core::error::RuntimeDiag kind, const std::vector<std::string> &args,
         std::string filled = {});
 
+    /// The name of the Site of the fault a `fail` raises at `node`: the report of ProgramFault,
+    /// named with the kind the program wrote instead of the diagnostic's own name (design
+    /// principles 3.9), and with the message the program gives as the value filled in.
+    std::string siteForProgramFault(
+        const camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t node,
+        const std::string &kind);
+
     /// The name of the Place of the call of a runtime module's operator at `node` of `graph`
     /// (camel/standalone/core.h): the source excerpt and the start of the one-line report,
     /// to which the generated program adds the runtime's diagnostic when the operator faults.
@@ -89,10 +96,12 @@ class SiteTable {
     };
 
     /// A new Site of a fault of `kind` at `origin` (none when it is kInvalidOriginId), whose
-    /// name is `at_<line>_<column>`. Shared by siteFor and siteAt.
+    /// name is `at_<line>_<column>`. Shared by siteFor and siteAt. `named` replaces the
+    /// diagnostic's name in the report, for the fault a `fail` names itself.
     std::string makeSite(
         uint64_t origin, camel::core::error::RuntimeDiag kind,
-        const std::vector<std::string> &args, std::string filled = {});
+        const std::vector<std::string> &args, std::string filled = {},
+        const std::string &named = {});
 
     /// `file.cml:line:col` of `d`'s range, the file without its directory (as an error value
     /// names it, src/execute/fault_isolation.cpp).
@@ -100,6 +109,7 @@ class SiteTable {
 
     camel::core::context::context_ptr_t context_;
     std::map<std::tuple<const void *, uint16_t, uint32_t>, size_t> index_;
+    std::map<std::tuple<const void *, uint16_t, uint32_t>, size_t> programFaults_;
     std::vector<Site> sites_;
     NameScope names_;
 };

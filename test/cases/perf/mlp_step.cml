@@ -14,11 +14,16 @@ import { with_grad } from autodiff
 import { adam, adam_state, softmax_cross_entropy } from nn
 import { now } from time
 
+// The shapes the model is built with, written down: `nn:adam` asks for `grads: grad of P`, and a
+// gradient of a statically shaped parameter tree is statically shaped (src/core/derivative.cpp: a
+// numeric array's tangent is a tensor of the same shape). A `f32[..]` field is the same family but
+// not the same type, so a declaration written loose here stops unifying with its own value -- the
+// shape is something the type checker can hold the program to, and giving it up buys nothing.
 type Mlp = {
-    w1: f32[..],
-    b1: f32[..],
-    w2: f32[..],
-    b2: f32[..]
+    w1: f32[784, 128],
+    b1: f32[128],
+    w2: f32[128, 10],
+    b2: f32[10]
 }
 
 with <m: Mlp>

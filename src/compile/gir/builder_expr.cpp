@@ -527,7 +527,7 @@ std::optional<node_handle_t> Builder::modifierOf(node_handle_t node) const {
     if (it == graphIt->second.end()) {
         return std::nullopt;
     }
-    return graph->draft().ref(it->second);
+    return graph->view().ref(it->second);
 }
 
 void Builder::setModifier(node_handle_t input, node_handle_t modifier) {
@@ -615,6 +615,24 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
             nodeTakesAnOrder(*previous) && nodeTakesAnOrder(exit) &&
             !hasDirectDataDependency(*previous, exit)) {
             linkNodes(LinkType::Order, *previous, exit);
+        }
+    }
+    if (throughCallee && nodeKindOf(exit) == camel::runtime::GCNodeKind::Call) {
+        // The version this write was recorded over. A call through a function value is only a
+        // possible writer of a variable (the conservative writer set), so the write written before
+        // it has to keep running, and the version a read takes after the call names it: an order
+        // edge alone does not keep a write alive (design principles 3.5, F3).
+        //
+        // Two calls in a row are two writes of the variable, and the second one's "before" is the
+        // first call's version, not the cell: what the read after the second takes is the variable
+        // as both calls left it (`:var/after(:var/after(cell, call1), call2)`). valueVersionOf
+        // answers that for a preceding call as it answers it for a write (valueVersionOf's own
+        // `:var/after` row), so the chain is made here and nowhere else.
+        if (auto previous = modifierOf(variable);
+            previous.has_value() && sameGraph(*previous, currGraph_)) {
+            if (node_handle_t version = valueVersionOf(variable); version != nullptr) {
+                writeBeforeCall_[exit][variable] = version;
+            }
         }
     }
     setModifier(variable, exit);
@@ -724,6 +742,15 @@ node_handle_t Builder::valueVersionOf(node_handle_t variable) {
     // the version of it.
     const auto value = callValues_.find(*modifier);
     if (value == callValues_.end()) {
+        // The call's captured writes are not in `callValues_` at all: its callee is a function
+        // value, so there is no mask to build the parts from. The writer registry recorded the call
+        // as this variable's write all the same (recordWrite, throughCallee), so the call is the
+        // variable's new version: the read takes `:var/after(cell, call)`, which is the cell as it
+        // stands after that call, and the edge from the call is what makes it run (3.1). Whatever
+        // the call returns -- nothing, or a value of its own -- is not read here.
+        if (nodeKindOf(*modifier) == camel::runtime::GCNodeKind::Call) {
+            return variableAfterCall(variable, *modifier);
+        }
         return nullptr;
     }
     const bool wrapped = value->second.hasReturn || value->second.variables.size() > 1;
@@ -735,6 +762,13 @@ node_handle_t Builder::valueVersionOf(node_handle_t variable) {
             return *modifier;
         }
         return callValuePartOf(*modifier, static_cast<uint32_t>(value->second.hasReturn ? 1 + k : k));
+    }
+    // The call is this variable's writer -- recordWrite recorded it through the callee -- but the
+    // parts of the call's value say nothing about it: the parts come from the callee's
+    // captured-value table, and a write recorded through a function value has no row there. The
+    // call is then the variable's version as a whole: `:var/after(cell, call)`.
+    if (nodeKindOf(*modifier) == camel::runtime::GCNodeKind::Call) {
+        return variableAfterCall(variable, *modifier);
     }
     return nullptr;
 }
@@ -1346,7 +1380,9 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
             return node;
         }
     }
-    Type *targetType = boundType(written);
+    // The declared type is a type expression like any other position (design principles 5.6): a
+    // `typeof` written in it is resolved here, without evaluating the expression it names.
+    Type *targetType = resolveTypeNode(boundType(written), gct);
     if (targetType != nullptr && targetType->code() == TypeCode::Function) {
         // A function type written for a function: it says which function a name stands for
         // (the instance of a generic function, one of several overloads, a partial
@@ -1571,6 +1607,40 @@ node_handle_t Builder::variableOperator(camel::core::OperId oper, node_handle_t 
     return node;
 }
 
+node_handle_t Builder::variableAfterCall(node_handle_t variable, node_handle_t call) {
+    // The variable as it stands after `call`: `:var/after(cell, call)`. Its second argument is the
+    // call, whose value may be `void` and is not read -- the edge is what makes the call run when the
+    // read takes this version (docs/design-principles.cn.md 3.1, 3.5) -- and its result is the cell
+    // itself, so the read above it is a read of the variable after that write.
+    //
+    // Its first argument is the version the variable had before that call when there was one: the
+    // write written before a call through a function value must keep running, because the call is
+    // only a possible writer of the variable (the conservative writer set), and the read takes what
+    // the last real write left. The cell itself when there is none.
+    node_handle_t before = variable;
+    if (const auto byCall = writeBeforeCall_.find(call); byCall != writeBeforeCall_.end()) {
+        if (const auto found = byCall->second.find(variable); found != byCall->second.end()) {
+            before = found->second;
+        }
+    }
+    const auto group = internalOperatorGroup(camel::core::oper::VarAfter);
+    const std::vector<StaticArg> statics(1);
+    const auto op = group->resolve({}, {nodeTypeOf(before), nodeTypeOf(call)}, statics);
+    if (!op.has_value()) {
+        throw std::runtime_error(
+            std::format(
+                "a variable after a call rejected its operands: the variable is {} and the call is "
+                "{}",
+                nodeTypeOf(before) != nullptr ? nodeTypeOf(before)->toString() : "<no type>",
+                nodeTypeOf(call) != nullptr ? nodeTypeOf(call)->toString() : "<no type>"));
+    }
+    node_handle_t node = currGraph_->addOperNode(*op, 0);
+    stampPermissions(node);
+    linkNodes(LinkType::Norm, before, node);
+    linkNodes(LinkType::Norm, call, node);
+    return node;
+}
+
 node_handle_t Builder::newVariable(node_handle_t value) {
     // The variable takes the widened type of its initializer (:var/new), so later assignments
     // may store values with a different refinement (e.g. shape).
@@ -1609,6 +1679,20 @@ node_handle_t Builder::readVariableThrough(
     // cell as its data port and the write orders it, which a control input stands in for
     // (Builder::orderAfterLastWriter). Before any write the version is the cell :var/new made.
     node_handle_t version = valueVersionOf(variable);
+    if (version == nullptr) {
+        // The conservative writer set may have counted a call of this graph as a possible writer of
+        // the variable before this graph had captured it (a call through a function value writes a
+        // variable this body had not touched yet): the read written after that call takes the
+        // variable as it stands after it. Program order is what says "after": the builder writes the
+        // body in the order it is written, so a claim met here was made by a call written before
+        // this read.
+        const auto origin = captureOriginOf_.find(variable);
+        const node_handle_t claimed = claimedWriterOf(
+            currGraph_.get(), origin == captureOriginOf_.end() ? variable : origin->second);
+        if (claimed != nullptr && sameGraph(claimed, currGraph_)) {
+            version = variableAfterCall(variable, claimed);
+        }
+    }
     if (version == nullptr) {
         version = variable;
     }
@@ -2075,6 +2159,20 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     switch (tgtType->code()) {
     case TypeCode::Tuple: {
         const auto &tupleType = tt::as_ptr<TupleType>(tgtType);
+        // A destructuring declaration binds one name per element: `let (x, y) = t` needs a tuple of
+        // two, whichever way the count is wrong (design principles 3.9). Reported here, at the
+        // declaration, and not as an element read past the end -- a name too few used to drop the
+        // remaining elements in silence, and a name too many reported an index the source never
+        // wrote.
+        const auto *gctTree = GCT::Tree::of(gct);
+        const size_t names  = gctTree != nullptr ? gctTree->unpackCount(gct) : 0;
+        // One answer per declaration: every name of it carries the count, and the first reports.
+        if (names != 0 && gct->accessIndex() == 0 && names != tupleType->size()) {
+            diags_->of(SemanticDiag::TupleUnpackingCountMismatch)
+                .atOrigin(gct->origin())
+                .commit();
+            throw BuildAbortException();
+        }
         // A tuple has a fixed length: an element past its end is a compile-time error (it was
         // read unchecked, which crashed the compiler in release builds).
         if (gct->accessIndex() >= tupleType->size()) {

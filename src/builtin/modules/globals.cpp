@@ -878,6 +878,36 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
             }),
 
+        // The cell a call wrote, taken after the call (Builder::valueVersionOf): the version a
+        // read takes when the call that wrote the variable is a call through a function value, whose
+        // captured writes are known at run time and not here. The second argument is that call; it
+        // may be any value, `void` included, because this operator reads nothing of it -- the edge
+        // is the whole of what it asks -- and the result is the cell itself, so the read above it is
+        // a read of the variable as it stands after the call (docs/design-principles.cn.md 3.1, 3.5).
+        OperatorGroup::create(
+            "__var_after__",
+            {
+                {
+                    ":var/after",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(variable: var T, after: any) => var T",
+                        [](const type_vec_t &with, const type_vec_t &norm)
+                            -> optional<Type *> {
+                            (void)with;
+                            // The second argument is the call, and this operator reads nothing of
+                            // it: any value it has (a `void` call, or one that returns something
+                            // and wrote the variable on the way) is acceptable here.
+                            if (norm.size() < 2 || norm[1] == nullptr) {
+                                return nullopt;
+                            }
+                            if (valueTypeOf(norm[0]) == norm[0]) {
+                                return nullopt; // not a variable
+                            }
+                            return norm[0];
+                        }),
+                },
+            }),
         // A read of a variable that leaves its sole-reference mark set; the compiler writes it
         // in place of a `:var/get` whose value cannot be kept (Builder::markNonRetainingReads).
         OperatorGroup::create(
