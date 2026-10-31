@@ -17,6 +17,7 @@
 #pragma once
 
 #include "camel/standalone/core.h"
+#include "camel/standalone/foreign.h"
 #include "camel/standalone/str.h"
 
 #include <cstdint>
@@ -29,11 +30,13 @@ namespace camel::standalone::bridge {
 
 /// A value handed to or returned by an operator of the runtime.
 struct Value {
-    enum class Kind : uint8_t { Void, Bool, Int32, Int64, Float32, Float64, String };
+    enum class Kind : uint8_t { Void, Bool, Int32, Int64, Float32, Float64, String, IntArray, Foreign };
     Kind kind       = Kind::Void;
     int64_t integer = 0; // Bool, Int32, Int64
     double real     = 0; // Float32, Float64
     std::string text;    // String
+    std::vector<int64_t> ints; // IntArray
+    void *foreign = nullptr;   // Foreign
 };
 
 /// What the runtime's diagnostic says about a fault an operator raised.
@@ -56,7 +59,24 @@ inline Value arg(int32_t v) { return {Value::Kind::Int32, v, 0, {}}; }
 inline Value arg(int64_t v) { return {Value::Kind::Int64, v, 0, {}}; }
 inline Value arg(float v) { return {Value::Kind::Float32, 0, v, {}}; }
 inline Value arg(double v) { return {Value::Kind::Float64, 0, v, {}}; }
-inline Value arg(const Str &v) { return {Value::Kind::String, 0, 0, v.str()}; }
+inline Value arg(const Str &v) { return {Value::Kind::String, 0, 0, v.str(), {}, nullptr}; }
+
+/// A shape or any other array of integers, as an operator argument: a value, not a constant, so a
+/// shape computed at run time crosses as well as a literal one.
+inline Value arg(const std::vector<int64_t> &v) {
+    Value out;
+    out.kind = Value::Kind::IntArray;
+    out.ints = v;
+    return out;
+}
+
+/// A handle to a value the runtime owns (tensor.h): passed on as it is, its count taken by hand.
+inline Value arg(const Foreign &v) {
+    Value out;
+    out.kind    = Value::Kind::Foreign;
+    out.foreign = Foreign::retain(v.handle());
+    return out;
+}
 
 template <typename T> constexpr Value::Kind kindOf() {
     if constexpr (std::is_same_v<T, void>) {
