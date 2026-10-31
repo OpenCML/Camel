@@ -247,6 +247,29 @@ REINTERP target=main primitives=1 other=4 graph=113 nodes=1
 （注意这个用例得 `import rulesets.jvp`——索引里只有程序自己的 ruleset 模块放进去的东西，不 import
 就一条都没有，`reinterp` 会安静地只打 `target=` 那两行。**“没有输出”和“没有规则”是两件事**。）
 
+## 判据：第一笔只换一个原语
+
+> **逐原语替换的第一笔只换一个原语——三个一起换，验不过时不知道是谁的错。**
+
+## 那一笔之前先量到的一件事：右侧不是算子的签名
+
+把右侧图的端口数也打出来之后：
+
+```
+REINTERP uri :op/mul_d -> rule jvp_mul -> rhs 63 ports=1 nodes=4
+REINTERP uri :op/add_d -> rule jvp_add -> rhs 74 ports=1 nodes=4
+REINTERP uri :op/neg_d -> rule jvp_neg -> rhs 85 ports=0 nodes=3
+REINTERP uri :op/sub_d -> rule jvp_sub -> rhs 96 ports=1 nodes=4
+REINTERP uri :op/div_d -> rule jvp_div -> rhs 107 ports=1 nodes=4
+```
+
+**`jvp_div__rhs<float>` 只有 1 个端口，而它要替换的 `:op/div_d` 有两个操作数。** 所以“把 `div_tangent`
+的调用放到 `/` 站的那个位置”**过不了类型**：右侧不是算子的替换品，它是**规则整个左侧的变量**上的一张
+图（值、切线的成对输入），端口是那组变量的入口。
+
+这一条把“第一笔”的写法改掉了：**先要有“规则的变量表 → 一个元组”的打包**（把 `/` 两个操作数的值与
+切线按规则左侧的顺序装进去），才谈得上调用。端口数是这把尺子，不是猜测。
+
 ## 验收（缺一步不算完）
 
 1. **前向**：`f(x) = x*x + 3/x` 在 `x = 2` 处，`f = 5.5`，`f' = 4 - 0.75 = 3.25`。两个数都要打出来。

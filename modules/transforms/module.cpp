@@ -68,8 +68,19 @@ void printRuleUris(camel::core::context::Context &context, std::ostream &os) {
                 break;
             }
             printed.push_back(uri);
+            // How many ports the right side takes, and how many nodes it has: whether a call can
+            // stand where the operator stood is a question about the right side's own signature,
+            // and a replacement that guessed it would be wrong at the first arity that differs.
+            size_t ports = 0;
+            for (camel::runtime::gc_node_ref_t ref = 1; ref <= instance.rhs->nodeCount(); ++ref) {
+                const camel::runtime::GCNode *node = instance.rhs->node(ref);
+                if (node != nullptr && node->kind == camel::runtime::GCNodeKind::Port) {
+                    ++ports;
+                }
+            }
             os << "REINTERP uri " << uri << " -> rule " << head.rule
-               << " -> rhs " << camel::runtime::toValue(instance.rhs->id()) << '\n';
+               << " -> rhs " << camel::runtime::toValue(instance.rhs->id()) << " ports=" << ports
+               << " nodes=" << instance.rhs->nodeCount() << '\n';
             break;
         }
     }
