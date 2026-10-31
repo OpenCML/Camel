@@ -28,6 +28,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <stdexcept>
 #define DEBUG_LEVEL -1
 
 using namespace std;
@@ -175,7 +176,7 @@ void Builder::buildEntryCall() {
 }
 
 void Builder::registerBuiltBody(const compile_graph_ptr_t &graph) {
-    ASSERT(graph != nullptr, "A built body is a graph.");
+    GUARD(graph != nullptr, "A built body is a graph.");
     // A body is registered where it finishes, and a graph that is registered twice would be judged
     // twice by a pass over the built bodies (settleStreamLinearity counts the reads of each graph):
     // one graph is one body, once.
@@ -242,7 +243,7 @@ bool orderEndsOnOneRegion(
 } // namespace
 
 void Builder::rehomeOrderEdges(const compile_graph_ptr_t &graph) {
-    ASSERT(graph != nullptr, "A built body is a graph.");
+    GUARD(graph != nullptr, "A built body is a graph.");
     auto &draft = graph->transaction().edit();
     // Most bodies order nothing: their effects are on the sync chain, and a body of pure
     // computation writes no order edge at all.
@@ -800,7 +801,7 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
     case GCT::NodeKind::SACC:
         return visitStaticAccessNode(node);
     default:
-        ASSERT(false, "Unknown GCT NodeType");
+        throw std::runtime_error("Unknown GCT NodeType");
     }
     return nullptr;
 }
@@ -1334,7 +1335,7 @@ void Builder::buildFuncBody(
                 }
                 const auto *tuple = tt::as_ptr<TupleType>(paramType);
                 const auto port   = nodeAt(paramName);
-                ASSERT(port.has_value(), "A tuple parameter has its port.");
+                GUARD(port.has_value(), "A tuple parameter has its port.");
                 for (size_t i = 0; i < tupleParam.names.size(); ++i) {
                     node_handle_t access = graph->addAccsNode(tuple->typeAt(i), i);
                     linkNodes(LinkType::Norm, *port, access);

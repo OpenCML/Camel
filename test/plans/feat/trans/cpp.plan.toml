@@ -324,6 +324,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "reshape_computed_shape"
+desc = "A target shape the program computes at run time (`reshape<[n, 3]>(y)` with n a parameter) is the operator's value argument, so the extents the call writes are those values, not the ones the caller's contract put in the result type: `rt::reshapeBy(y, rt::Array<int64_t>{n, 3}, at_...)` reads them, and a target that changes the element count reports `[6] -> [3, 3]` -- both shapes filled at run time, the interpreter's sentence. Written from the type, the call carried `{2, 3}` and the fault never happened. agree_with_fvm compares the reading with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/modules/tensor/shape_inference/computed_extent_run_time.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::reshapeBy(", "reshape changes tensor element count: ["]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "numel_rank"
 desc = "`numel` counts the elements of a value whatever its rank: six for a rank-2 value, four for its first two rows, eight for a rank-3 one, four for a value of one dimension. It reads the count the value holds and no dimension of it, so a value of several dimensions and one of an open rank are both answered by the run -- which is why this step frees every program that asked for it, the open-rank one included. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"

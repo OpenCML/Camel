@@ -23,6 +23,8 @@
 
 #include "module.h"
 
+#include "jvp.h"
+
 #include "camel/compile/gir/rule_templates.h"
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/rtdata/tuple.h"
@@ -255,6 +257,12 @@ class ReinterpPass : public RuntimeGraphRewritePass {
             }
             os << "REINTERP calls=" << (calls.empty() ? "-" : calls.c_str())
                << " opers=" << (uris.empty() ? "-" : uris.c_str()) << '\n';
+            // What the forward transform would make of this function, so the graph it builds can be
+            // named before anything is wired to a call site. Built and dropped: the program this
+            // pass answers with is unchanged.
+            if (camel::transforms::jvpSignature(function->funcType()) != nullptr) {
+                camel::transforms::buildJvpGraph(context_, program, function, os);
+            }
         }
         // Nothing is replaced in the program this pass was given: rewriting a graph that is already
         // published is the road measured at 9cb1c3a94, and it ends in SIGSEGV at the entry it makes.

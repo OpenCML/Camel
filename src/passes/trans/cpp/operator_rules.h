@@ -47,6 +47,10 @@ class OperatorCall {
     virtual const CppValue &with(size_t i) const        = 0;
     virtual const Type *normType(size_t i) const        = 0;
     virtual const Type *withType(size_t i) const        = 0;
+    /// Whether the `with` argument `i` is a constant of the program (a DATA node): a value the
+    /// writer can read, as opposed to one the program computes while it runs. A rule that would
+    /// have to know such a value writes nothing from the type and lets the runtime have it.
+    virtual bool withIsConstant(size_t i) const = 0;
     virtual const Type *resultType() const              = 0;
     /// The name of the Site for a fault of `kind` at this operation; `args` as for
     /// SiteTable::siteFor.

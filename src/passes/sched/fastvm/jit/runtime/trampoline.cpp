@@ -46,6 +46,7 @@ using namespace camel::core::context;
 
 #include <iomanip>
 #include <sstream>
+#include <stdexcept>
 
 using namespace camel::core::error;
 using namespace camel::core::rtdata;
@@ -86,8 +87,8 @@ inline void copyOperandsToBuffer(slot_t *dst, Frame *frame, const Bytecode &bc, 
 
 inline void
 writeDirectCallArgsToFrame(Frame *frame, data_arr_t dstSlots, const slot_t *args, size_t argsCnt) {
-    ASSERT(frame != nullptr, "JIT trampoline target frame is null.");
-    ASSERT(argsCnt == dstSlots.size(), "JIT encoded direct-call layout is arity-mismatched.");
+    GUARD(frame != nullptr, "JIT trampoline target frame is null.");
+    GUARD(argsCnt == dstSlots.size(), "JIT encoded direct-call layout is arity-mismatched.");
     for (size_t argIndex = 0; argIndex < argsCnt; ++argIndex) {
         frame->set(dstSlots[argIndex], args[argIndex]);
     }
@@ -215,7 +216,7 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
     if (getFuncExtraFn(&bc) != nullptr) {
         EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("JIT.Trampoline", "trampolineFunc path: JIT->JIT"));
         auto *runtimeTarget = getFuncExtraRuntimeGraph(&bc);
-        ASSERT(
+        GUARD(
             runtimeTarget != nullptr,
             std::format(
                 "FastVM trampoline FUNC JIT target '{}' must have a materialized runtime graph.",
@@ -249,7 +250,7 @@ slot_t trampolineFunc(slot_t *callerSlots, void *ctx, size_t pc) {
     }
 
     auto *runtimeTarget = getFuncExtraRuntimeGraph(&bc);
-    ASSERT(
+    GUARD(
         runtimeTarget != nullptr,
         std::format(
             "FastVM trampoline FUNC target '{}' must have a materialized runtime graph.",
@@ -284,7 +285,7 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
     if (getFuncExtraFn(&bc) != nullptr) {
         Frame *callerFrame  = reinterpret_cast<Frame *>(callerSlots[0]);
         auto *runtimeTarget = getFuncExtraRuntimeGraph(&bc);
-        ASSERT(
+        GUARD(
             runtimeTarget != nullptr,
             std::format(
                 "FastVM trampoline TAIL target '{}' must have a materialized runtime graph.",
@@ -303,7 +304,7 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
     }
 
     auto *runtimeTarget = getFuncExtraRuntimeGraph(&bc);
-    ASSERT(
+    GUARD(
         runtimeTarget != nullptr,
         std::format(
             "FastVM trampoline TAIL target '{}' must have a materialized runtime graph.",
@@ -326,10 +327,10 @@ slot_t trampolineTail(slot_t *callerSlots, void *ctx, size_t pc) {
 slot_t *prepareDirectJitCall(slot_t *callerSlots, void *ctx, const Bytecode *bc) {
     auto *jc = static_cast<JitContext *>(ctx);
     auto *vm = jc->vm;
-    ASSERT(bc, "prepareDirectJitCall requires non-null bytecode");
+    GUARD(bc, "prepareDirectJitCall requires non-null bytecode");
 
     auto *runtimeTarget = getFuncExtraRuntimeGraph(bc);
-    ASSERT(
+    GUARD(
         runtimeTarget != nullptr,
         std::format(
             "FastVM prepareDirectJitCall target '{}' must have a materialized runtime graph.",
@@ -347,10 +348,10 @@ slot_t *prepareDirectJitCall(slot_t *callerSlots, void *ctx, const Bytecode *bc)
 slot_t *prepareDirectJitTailCall(slot_t *callerSlots, void *ctx, const Bytecode *bc) {
     auto *jc = static_cast<JitContext *>(ctx);
     auto *vm = jc->vm;
-    ASSERT(bc, "prepareDirectJitTailCall requires non-null bytecode");
+    GUARD(bc, "prepareDirectJitTailCall requires non-null bytecode");
 
     auto *runtimeTarget = getFuncExtraRuntimeGraph(bc);
-    ASSERT(
+    GUARD(
         runtimeTarget != nullptr,
         std::format(
             "FastVM prepareDirectJitTailCall target '{}' must have a materialized runtime graph.",
@@ -387,7 +388,7 @@ slot_t directSelfFuncInvoke(slot_t *callerSlots, void *ctx, const Bytecode *bc) 
     auto *jc           = static_cast<JitContext *>(ctx);
     auto *vm           = jc->vm;
     auto *runtimeGraph = getFuncExtraRuntimeGraph(bc);
-    ASSERT(
+    GUARD(
         runtimeGraph != nullptr,
         std::format(
             "FastVM directSelfFuncInvoke target '{}' must have a materialized runtime graph.",
@@ -487,24 +488,24 @@ slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc) {
         slot_t result             = NullSlot;
         if (srcType == TypeCode::Tuple) {
             Tuple *t = frame->get<Tuple *>(srcIdx);
-            ASSERT(
+            GUARD(
                 static_cast<size_t>(indexIdx) < t->size(),
                 "Tuple access index out of range in JIT trampoline.");
             result = t->get<slot_t>(static_cast<size_t>(indexIdx));
         } else if (srcType == TypeCode::Struct) {
             Struct *s = frame->get<Struct *>(srcIdx);
-            ASSERT(
+            GUARD(
                 static_cast<size_t>(indexIdx) < s->size(),
                 "Struct access index out of range in JIT trampoline.");
             result = s->get<slot_t>(static_cast<size_t>(indexIdx));
         } else if (srcType == TypeCode::Array) {
             Array *a = frame->get<Array *>(srcIdx);
-            ASSERT(
+            GUARD(
                 static_cast<size_t>(indexIdx) < a->size(),
                 "Array access index out of range in JIT trampoline.");
             result = a->get<slot_t>(static_cast<size_t>(indexIdx));
         } else {
-            ASSERT(false, "Unsupported source type for ACCS in JIT trampoline.");
+            throw std::runtime_error("Unsupported source type for ACCS in JIT trampoline.: the dispatch reached a case no handler covers");
         }
         if (bc.result != 0) {
             frame->set(bc.result, result);
@@ -514,15 +515,15 @@ slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc) {
     case OpCode::FILL: {
         const data_arr_t nargs = bc.nargs();
         const data_arr_t wargs = bc.wargs();
-        ASSERT(!nargs.empty(), "FILL requires one norm input as destination template.");
+        GUARD(!nargs.empty(), "FILL requires one norm input as destination template.");
         const data_idx_t srcIdx = nargs[0];
         Type *srcType           = bc.extra()->pType;
         auto *fillBody = *reinterpret_cast<const camel::runtime::GCFillBody *const *>(bc.extra2());
-        ASSERT(isGCTraced(srcType->code()), "FILL target type is not GC-traced in JIT trampoline.");
+        GUARD(isGCTraced(srcType->code()), "FILL target type is not GC-traced in JIT trampoline.");
         Object *sourceObj = frame->get<Object *>(srcIdx);
-        ASSERT(sourceObj != nullptr, "FILL source object is null in JIT trampoline.");
+        GUARD(sourceObj != nullptr, "FILL source object is null in JIT trampoline.");
         Object *srcObj = sourceObj->clone(camel::core::mm::autoSpace(), srcType, false);
-        ASSERT(srcObj != nullptr, "FILL target data is null in JIT trampoline.");
+        GUARD(srcObj != nullptr, "FILL target data is null in JIT trampoline.");
         std::vector<slot_t> fillValues;
         fillValues.reserve(wargs.size());
         for (size_t j = 0; j < wargs.size(); ++j) {
@@ -539,11 +540,11 @@ slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc) {
     case OpCode::CALL: {
         const data_arr_t nargs = bc.nargs();
         const data_arr_t wargs = bc.wargs();
-        ASSERT(!wargs.empty(), "CALL requires with-arg[0] as Function.");
+        GUARD(!wargs.empty(), "CALL requires with-arg[0] as Function.");
         auto *function = frame->get<Function *>(wargs[0]);
-        ASSERT(function != nullptr, "JIT CALL resolved a null Function callee.");
+        GUARD(function != nullptr, "JIT CALL resolved a null Function callee.");
         auto *runtimeTarget = vm->graphOfFunction(function);
-        ASSERT(
+        GUARD(
             runtimeTarget != nullptr,
             "FastVM JIT indirect CALL requires a materialized runtime graph target.");
         Frame *funcFrame = vm->acquireFrameForCall(runtimeTarget);
@@ -560,7 +561,7 @@ slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc) {
         return result;
     }
     default:
-        ASSERT(false, "Unsupported opcode in trampolineBytecode.");
+        throw std::runtime_error("Unsupported opcode in trampolineBytecode.: the dispatch reached a case no handler covers");
         return NullSlot;
     }
 }
@@ -670,7 +671,7 @@ slot_t jitHelperBytecode(slot_t *slots, void *ctx, size_t pc) {
                 } else if (srcCode == TypeCode::Struct) {
                     result = frame->get<Struct *>(bc.fastop[0])->get<slot_t>(index);
                 } else {
-                    ASSERT(false, "ACCS opcode unsupported source type in JIT helper.");
+                    throw std::runtime_error("ACCS opcode unsupported source type in JIT helper.: the dispatch reached a case no handler covers");
                 }
                 break;
             }
@@ -681,7 +682,7 @@ slot_t jitHelperBytecode(slot_t *slots, void *ctx, size_t pc) {
                 auto *fillBody =
                     *reinterpret_cast<const camel::runtime::GCFillBody *const *>(bc.extra2());
                 Object *source = frame->get<Object *>(nargs[0]);
-                ASSERT(source != nullptr, "FILL source object is null in JIT helper.");
+                GUARD(source != nullptr, "FILL source object is null in JIT helper.");
                 Object *target = source->clone(camel::core::mm::autoSpace(), type, false);
                 std::vector<slot_t> fillValues;
                 fillValues.reserve(wargs.size());
@@ -696,7 +697,7 @@ slot_t jitHelperBytecode(slot_t *slots, void *ctx, size_t pc) {
                 // Reached for a JOIN of more than two arms only; a void JOIN yields null.
                 if (bc.extra()->pType != Type::Void()) {
                     const auto arm = static_cast<size_t>(frame->get<int32_t>(bc.nargs()[0]));
-                    ASSERT(arm < bc.withCnt(), "JOIN arm index out of range in JIT helper.");
+                    GUARD(arm < bc.withCnt(), "JOIN arm index out of range in JIT helper.");
                     result = frame->get<slot_t>(bc.wargs()[arm]);
                 }
                 break;
@@ -721,7 +722,7 @@ slot_t jitHelperBytecode(slot_t *slots, void *ctx, size_t pc) {
                 break;
             }
             default:
-                ASSERT(false, "Unsupported opcode in jitHelperBytecode.");
+                throw std::runtime_error("Unsupported opcode in jitHelperBytecode.: the dispatch reached a case no handler covers");
             }
         } catch (const RuntimeFault &fault) {
             throw reportRuntimeFault(
@@ -755,7 +756,7 @@ slot_t jitHelperLoopBegin(slot_t *slots, void *ctx, size_t pc) {
         auto *jc     = static_cast<JitContext *>(ctx);
         Bytecode &bc = static_cast<Bytecode *>(const_cast<void *>(jc->base))[pc];
         Frame *frame = reinterpret_cast<Frame *>(slots[0]);
-        ASSERT(bc.extra()->loop != nullptr, "A loop bytecode has no ExecLoop.");
+        GUARD(bc.extra()->loop != nullptr, "A loop bytecode has no ExecLoop.");
         camel::execute::loopBegin(*frame, *bc.extra()->loop);
         return NullSlot;
     });
@@ -766,7 +767,7 @@ slot_t jitHelperLoopTest(slot_t *slots, void *ctx, size_t pc) {
         auto *jc     = static_cast<JitContext *>(ctx);
         Bytecode &bc = static_cast<Bytecode *>(const_cast<void *>(jc->base))[pc];
         Frame *frame = reinterpret_cast<Frame *>(slots[0]);
-        ASSERT(bc.extra()->loop != nullptr, "A loop bytecode has no ExecLoop.");
+        GUARD(bc.extra()->loop != nullptr, "A loop bytecode has no ExecLoop.");
         return camel::execute::loopTest(*frame, *bc.extra()->loop) ? slot_t{1} : slot_t{0};
     });
 }
@@ -776,7 +777,7 @@ slot_t jitHelperLoopEnd(slot_t *slots, void *ctx, size_t pc) {
         auto *jc     = static_cast<JitContext *>(ctx);
         Bytecode &bc = static_cast<Bytecode *>(const_cast<void *>(jc->base))[pc];
         Frame *frame = reinterpret_cast<Frame *>(slots[0]);
-        ASSERT(bc.extra()->loop != nullptr, "A loop bytecode has no ExecLoop.");
+        GUARD(bc.extra()->loop != nullptr, "A loop bytecode has no ExecLoop.");
         // The round safepoint of FastVM (gotovm.cpp, casevm.cpp): a collection may run here,
         // and a loop that collects reports a memory limit at the loop (loop_frame.h).
         const bool more = camel::execute::loopEnd(

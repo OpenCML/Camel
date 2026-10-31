@@ -41,9 +41,10 @@ camel::core::type::FunctionType *jvpSignature(camel::core::type::FunctionType *f
 
 /// Builds the graph of `reinterp<jvp>(f)` for the graph `function` of `program`. The graph `function`
 /// is read, never changed; the new graph is a member of a program of its own, the way
-/// `buildGradientGraph` builds the reverse direction.
+/// `buildGradientGraph` builds the reverse direction. `os` receives what was built: a graph the
+/// caller cannot name yet is a graph nobody can check, so the reading is part of the interface.
 JvpGraph buildJvpGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    camel::runtime::GCGraph *function);
+    camel::runtime::GCGraph *function, std::ostream &os);
 
 } // namespace camel::transforms

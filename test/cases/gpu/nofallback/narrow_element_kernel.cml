@@ -1,0 +1,28 @@
+/// A `bf16` and an `f16` tensor in a `#gpu` scope: the type gate reads the element type and its two
+/// bytes, so the plan no longer reports the type as `unresolved_type` for it -- and the kernel that
+/// would compute with one is not written yet, so the reason the node is in no region is
+/// `narrow_element_kernel_missing` instead. The scope still compiles and the host computes the
+/// values; the reading separates "the device cannot read the type" from "the kernel is not written",
+/// which are two different repairs.
+
+import { sum } from tensor
+import { regions } from tiles
+
+#gpu
+func double_bf16(x: bf16[3]): bf16[3] {
+    return x * 2.0
+}
+
+#gpu
+func double_f16(x: f16[3]): f16[3] {
+    return x * 2.0
+}
+
+func main(): int sync {
+    println(regions<double_bf16>())
+    println(regions<double_f16>())
+    let halves: bf16[3] = [0.5, -1.5, 2.0]
+    let narrows: f16[3] = [0.5, -1.5, 2.0]
+    println(sum(double_bf16(halves)), sum(double_f16(narrows)))
+    return 0
+}

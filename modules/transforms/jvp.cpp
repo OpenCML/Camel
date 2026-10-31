@@ -34,12 +34,17 @@ FunctionType *jvpSignature(FunctionType *function) {
         return nullptr;
     }
     auto *lifted = TupleType::create(std::vector<Type *>{Type::Float64(), Type::Float64()});
+    // Every parameter becomes two parameters, the value and its tangent: `jvp(f)(2.0, 1.0)` passes
+    // two numbers, so the graph reads two ports. Handing the pair in as one tuple would need a node
+    // that takes it apart, and the only such node -- `Dref` -- belongs to graph construction and is
+    // refused outright in a runtime graph (src/runtime/graph.cpp).
     camel::core::type::param_vec_t params;
     for (size_t i = 0; i < function->normTypesCount(); ++i) {
         if (function->normTypeAt(i) != Type::Float64()) {
             return nullptr;
         }
-        params.emplace_back(lifted, false);
+        params.emplace_back(Type::Float64(), false);
+        params.emplace_back(Type::Float64(), false);
     }
     if (params.empty()) {
         return nullptr;
@@ -49,25 +54,58 @@ FunctionType *jvpSignature(FunctionType *function) {
 
 JvpGraph buildJvpGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    camel::runtime::GCGraph *function) {
-    // The skeleton, and nothing else yet: the five steps are fixed, none of them is written.
-    //
-    // 1. A new member of a group of its own: `GraphDraftGroup group(context, program)`, one reserved
-    //    member, its signature `jvpSignature(function->funcType())`.
-    // 2. Each parameter of `function` becomes one port of the lifted pair's type; the pair's first
-    //    element is the value the primitive reads, its second is the tangent the caller passed.
-    // 3. Every node is copied in order: a `Port` reads the first element of its lifted parameter, a
-    //    constant or a captured value is lifted with a zero tangent, and a primitive keeps its value
-    //    while its tangent becomes a call of the closure its rule instance carries
-    //    (`GenericRuleInstance::rhsBuilder`, typed by the tuple it captures -- the one thing
-    //    measured for certain, f9d352ce4), fed the lifted tangents of its inputs.
-    // 4. The exit is the lifted result: `Tuple{value, tangent}`.
-    // 5. The group is encoded and its program answered with, together with the member graph -- the
-    //    new function value whose caller decides which direction to ask about.
-    (void)context;
-    (void)program;
-    (void)function;
-    return JvpGraph{};
+    camel::runtime::GCGraph *function, std::ostream &os) {
+    if (program == nullptr || function == nullptr) {
+        return JvpGraph{};
+    }
+    FunctionType *signature = jvpSignature(function->funcType());
+    if (signature == nullptr) {
+        os << "REINTERP jvp function=" << function->name() << " skip=signature\n";
+        return JvpGraph{};
+    }
+    // One parameter, for now: with two the exit would need a way to combine two lifted pairs into
+    // the one lifted result, and that is a node in the body -- step 3's business, not this one's.
+    if (function->funcType()->normTypesCount() != 1) {
+        os << "REINTERP jvp function=" << function->name()
+           << " skip=params " << function->funcType()->normTypesCount() << "\n";
+        return JvpGraph{};
+    }
+
+    // Steps 1 and 2: a new member with the lifted signature, and one port per parameter, the port
+    // itself being the lifted pair `(value, tangent)` the caller passes.
+    auto *lifted = TupleType::create(std::vector<Type *>{Type::Float64(), Type::Float64()});
+    camel::runtime::GraphDraftGroup group(context, program);
+    const GraphId member = group.reserve(
+        "jvp_of_" + std::string(function->name()), "jvp_of_" + std::string(function->name()));
+    {
+        auto &draft = group.draft(member);
+        draft.setFuncType(signature);
+        const gc_node_ref_t value =
+            draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
+        const gc_node_ref_t tangent =
+            draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
+        // The exit is the lifted result, and nothing else: the value the caller passed and the
+        // tangent the caller passed. No primitive has been rewritten yet, so this graph is the
+        // identity in two parts -- it establishes the shape of the new function, not the derivative.
+        ::Tuple *emptyTuple = ::Tuple::create(2, mm::autoSpace());
+        const gc_node_ref_t tupleSource = draft.materializeStaticValue(
+            camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(emptyTuple), lifted);
+        const gc_node_ref_t out = draft.addFillNode(
+            lifted, rt::makeFillPayload(rt::GCFillKind::Tuple, std::vector<size_t>{0, 1}));
+        draft.setNormInputs(out, std::span<const gc_node_ref_t>(&tupleSource, 1));
+        const std::array<gc_node_ref_t, 2> halves{value, tangent};
+        draft.setWithInputs(out, halves);
+        draft.setOutputNode(out);
+        draft.setReturnNode(out, rt::GCReturnKind::Self);
+    }
+    group.encode();
+    const camel::runtime::GCGraph *made = group.encoded(member);
+    const auto *madeType = made != nullptr ? made->funcType() : nullptr;
+    os << "REINTERP jvp function=" << function->name() << " graph=" << rt::toValue(member)
+       << " type=" << (madeType != nullptr ? madeType->toString() : std::string("-"))
+       << " nodes=3 ports=value,tangent exit=Tuple{value,tangent}"
+       << " tangent=caller's(not computed)\n";
+    return JvpGraph{group.program(), const_cast<camel::runtime::GCGraph *>(made)};
 }
 
 } // namespace camel::transforms

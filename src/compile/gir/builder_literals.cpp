@@ -215,7 +215,7 @@ node_handle_t Builder::literalInType(
 node_handle_t
 Builder::makeLiteralNode(const literal::Value &value, Type *type, const GCT::node_ptr_t &origin) {
     node_handle_t node = literalInType(value, type, origin, true);
-    ASSERT(node != nullptr, "A literal of a numeric type is a node.");
+    GUARD(node != nullptr, "A literal of a numeric type is a node.");
     return node;
 }
 
