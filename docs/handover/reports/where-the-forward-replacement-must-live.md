@@ -197,6 +197,25 @@ REINTERP target=main primitives=1 other=4 graph=50 nodes=1
 也没有把 `GraphDraft` 写成 `auto` 去躲 `graph_draft_ledger` 的计数——**这两个都是让计数变成谎话**。
 工作树已退回 `5db161bc2`，一个红的提交都没留。
 
+## 判据：账本的类型错了，不是模块错了
+
+> **一个只贡献 pass 的模块，在按算子记账的登记簿里没有位置——那是账本的类型错了，不是模块错了；
+> 改账本，别让模块冒名。**
+
+裁定给了路：`MODULES` 条目可以写 `passes_only: true`（`scripts/stdlib-reference.mjs`），判据
+（`scripts/stdlib-declarations.mjs`）对这条跳过“必须注册算子”，改成查另外两件事：`modules/<name>`
+存在且源码里真有 `registerModulePass(`，以及 `stdlib/<name>.cml` 里真有那条声明。**边界守住了**：
+
+- 记成 `passes_only` 却实际上注册了算子的模块，会被判红（“它按普通算子模块查，不带这个旗子”）；
+- `passes_only` 且目录不在、或源码里没有 `registerModulePass(`、或声明文件不在，三种都红；
+- `--verify-ops` 的算子覆盖、`UNCHECKED_MODULES` 的 `covered_by` 一个字没动。
+
+**一处容易漏的坑**：`readReferenceModules()` 只把 `name/kind/source/registered/declaration/computed`
+抄进解析后的条目，新字段不加进去就等于没写——第一次跑它照样红，就是这么回事。旗子要跟着
+`field()` 的清单一起长。
+
+改完 `reinterp` 接回来了，`reinterp_builds_its_own_graph.nvm` 绿，`graph_draft_ledger` 四个数没动。
+
 ## 验收（缺一步不算完）
 
 1. **前向**：`f(x) = x*x + 3/x` 在 `x = 2` 处，`f = 5.5`，`f' = 4 - 0.75 = 3.25`。两个数都要打出来。
