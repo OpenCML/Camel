@@ -65,6 +65,40 @@ bool isReducedFloatTensorType(type::TypeCode code);
 /// (`type::typeCodeToString`).
 std::string elementTypeSpelling(type::TypeCode code);
 
+/// Who is missing a tensor element type, which is what a refusal has to say: "unsupported" alone
+/// reads the same for a language that has no such element, a back end that instantiates no kernel
+/// for one it does have, and code nobody has written -- three different debts.
+enum class ElementSubject {
+    Language, ///< the language has no such element (a tensor's elements are numbers)
+    Kernels,  ///< this build instantiates no kernel for an element the tensor store holds
+    Gap,      ///< the element type exists and the code that reads it is not written
+};
+
+/// The sentence a refusal about a tensor element carries, in the words of `subject`.
+///
+/// A complex element is none of the three: `is_numeric` admits it (`stdlib/types.cml`) and the
+/// tensor store does not hold it, so whether one should join the tensor element types is the
+/// author's call (docs/handover/questions/questions-2026-10-31-can-a-tensor-hold-a-complex.md).
+/// Asking about a complex element therefore answers with what is true today and names nobody,
+/// whatever subject the caller asks for.
+inline std::string noTensorElement(type::TypeCode code, ElementSubject subject) {
+    const std::string spelling = elementTypeSpelling(code);
+    if (code == type::TypeCode::Complex64 || code == type::TypeCode::Complex128) {
+        return "a tensor holds no element of type '" + spelling +
+               "': whether one should join the tensor element types is open";
+    }
+    switch (subject) {
+    case ElementSubject::Language:
+        return "the language has no tensor element of type '" + spelling +
+               "': a tensor's elements are numbers";
+    case ElementSubject::Kernels:
+        return "this build has no tensor kernel for element type '" + spelling + "'";
+    case ElementSubject::Gap:
+        return "tensor code for element type '" + spelling + "' is not written yet";
+    }
+    return "a tensor has no element of type '" + spelling + "'";
+}
+
 /// Human-readable element type name ("float32", "float64", "bfloat16", "float16", "int32",
 /// "int64", "bool"): the storage name the tensor print and the intern key use.
 std::string_view dtypeName(type::TypeCode dtype);
@@ -118,7 +152,7 @@ template <typename Fn> decltype(auto) dispatchDType(type::TypeCode dtype, Fn &&f
     case type::TypeCode::Float16:
         return fn.template operator()<camel::core::rtdata::Float16>();
     default:
-        throw std::invalid_argument("Unsupported array element type");
+        throw std::invalid_argument(noTensorElement(dtype, ElementSubject::Kernels));
     }
 }
 
