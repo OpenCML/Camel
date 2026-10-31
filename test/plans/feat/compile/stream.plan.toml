@@ -1163,6 +1163,29 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 [[tests]]
+name = "stream.generator_for_yield"
+desc = "`loop n = 0 for x in xs do { yield x; n + 1 }`: each round hands out one element and the pull stops there; the next pull goes on with the element after it. The three elements of [1, 2, 3] are 1, 2 and 3. All four back ends agree."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_for_yield.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "123\n"
+expect_output_not_contains = ["[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "stream.generator_for_yield_gir"
+desc = "The graph the `for` shape builds, printed before any backend runs: the position cell and the binder cell are in it, and the step's write of the position is where the next round's value comes from."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_for_yield.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+timeout_ms = 30000
+
+[[tests]]
 name = "stream.generator_loop_shared_cell"
 desc = "A `loop` whose state has the name of a cell the body already declared carries that one cell: `i` is written where its `var` stands and again by the loop's own step, so the stream hands out 0, 1, 2 and then 3 -- the value `i` holds after the loop, which is what the same logic written as a plain loop prints step by step. All four back ends agree."
 kind = "behavior"

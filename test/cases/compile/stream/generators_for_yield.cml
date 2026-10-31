@@ -1,0 +1,16 @@
+/**
+ * `loop n = 0 for x in xs do { yield x; n + 1 }`: each round hands out one element and the pull
+ * stops there; the next pull goes on with the element after it. Three elements, 1, 2 and 3.
+ */
+
+func take(xs: int[]): int.. sync {
+    loop n = 0 for x in xs do {
+        yield x
+        n + 1
+    }
+}
+
+func main(): int sync {
+    println(loop acc = 0 for v in take([1, 2, 3]) do acc * 10 + v)
+    return 0
+}
