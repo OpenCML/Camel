@@ -126,7 +126,7 @@ node_handle_t Builder::inlineRestCall(
     // The runtime parameters: the `constas` ones are compile-time values and are dropped from
     // the arguments below (design principles 5.4); the rest parameter is always last.
     const size_t normCount  = declaredNormCount - signature->normConstasCount();
-    ASSERT(signature->hasRest() && normCount > 0 && restBindings_.size() < 64,
+    GUARD(signature->hasRest() && normCount > 0 && restBindings_.size() < 64,
            "A rest signature has its rest parameter last.");
     const size_t fixedCount = normCount - 1;
     const std::string restName(signature->argNameAt(withCount + declaredNormCount - 1));

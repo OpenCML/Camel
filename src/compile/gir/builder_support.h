@@ -21,6 +21,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <stdexcept>
 
 namespace camel::compile::gir {
 
@@ -89,7 +90,7 @@ inline runtime::DraftEdgeKind toDraftEdgeKind(LinkType type) {
     case LinkType::Sync:
         return runtime::DraftEdgeKind::Sync;
     }
-    ASSERT(false, "Unknown link type.");
+    throw std::runtime_error("Unknown link type.");
     return runtime::DraftEdgeKind::Data;
 }
 
@@ -100,28 +101,28 @@ inline runtime::PortRole toPortRole(LinkType type) {
 }
 
 inline runtime::GCNodeKind nodeKindOf(node_handle_t node) {
-    ASSERT(node != nullptr, "Draft node is null.");
+    GUARD(node != nullptr, "Draft node is null.");
     return node.draft->header(node.id)->kind;
 }
 
 inline camel::core::type::Type *nodeTypeOf(node_handle_t node) {
-    ASSERT(node != nullptr, "Draft node is null.");
+    GUARD(node != nullptr, "Draft node is null.");
     return node.draft->header(node.id)->dataType;
 }
 
 inline const runtime::DraftNodeHeader *nodeHeaderOf(node_handle_t node) {
-    ASSERT(node != nullptr, "Draft node is null.");
+    GUARD(node != nullptr, "Draft node is null.");
     return node.draft->header(node.id);
 }
 
 inline runtime::GraphDraft *nodeDraftOf(node_handle_t node) {
-    ASSERT(node != nullptr, "Draft node is null.");
+    GUARD(node != nullptr, "Draft node is null.");
     return node.draft;
 }
 
 inline DraftGraphBuilder *nodeGraphOf(node_handle_t node) {
     auto *builder = DraftGraphBuilder::fromDraft(nodeDraftOf(node));
-    ASSERT(builder != nullptr, "Draft node is not owned by a compile graph builder.");
+    GUARD(builder != nullptr, "Draft node is not owned by a compile graph builder.");
     return builder;
 }
 
@@ -132,7 +133,7 @@ inline runtime::GraphTransaction *nodeTransactionOf(node_handle_t node) {
 }
 
 inline draft_node_ref_t nodeIdOf(node_handle_t node) {
-    ASSERT(node != nullptr, "Draft node is null.");
+    GUARD(node != nullptr, "Draft node is null.");
     return node.id;
 }
 
@@ -180,7 +181,11 @@ inline bool sameGraph(node_handle_t lhs, const compile_graph_ptr_t &graph) {
 }
 
 inline void linkNodes(LinkType type, node_handle_t from, node_handle_t to) {
-    ASSERT(from != nullptr && to != nullptr, "Cannot link null draft nodes.");
+    GUARD(from != nullptr && to != nullptr, "Cannot link null draft nodes.");
+    // Still an ASSERT: `inferTypeOf` builds the expression in a scratch `__typeof__` graph and
+    // reaches back into the graph it was called from, so this pair is reached by a valid program
+    // under `Builder::visitAccsNode`. Whether that link is the bug or this invariant is, is a
+    // question for the compiler's owner, not for a sweep of the checks.
     ASSERT(nodeGraphOf(from) == nodeGraphOf(to), "Compile-time link must stay within one graph.");
     nodeGraphOf(from)->link(toDraftEdgeKind(type), from, to, toPortRole(type));
 }

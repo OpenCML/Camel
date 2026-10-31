@@ -36,6 +36,7 @@
 #include <set>
 #include <atomic>
 #include <cctype>
+#include <stdexcept>
 #define DEBUG_LEVEL -1
 
 using namespace std;
@@ -369,7 +370,7 @@ node_handle_t Builder::operatorDrefOf(const std::string &group, const GCT::node_
             negated       = true;
         }
     }
-    ASSERT(set.ops != nullptr, "An operator has no group.");
+    GUARD(set.ops != nullptr, "An operator has no group.");
     node_handle_t drefNode{currGraph_->addDrefNode(
         std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{set.ops})};
     registerNodeOrigin(context_, drefNode, gct, "gir.dref");
@@ -768,11 +769,11 @@ Builder::attemptFunctionValue(const Argument &f, const GCT::node_ptr_t &origin) 
     // read is what the function captures.
     node_handle_t fValue = valueOf(f.node);
     Type *fType          = valueTypeOf(nodeTypeOf(fValue));
-    ASSERT(
+    GUARD(
         fType != nullptr && fType->code() == TypeCode::Function,
         "The transform is given a function value.");
     FunctionType *type = camel::execute::attemptFunctionType(tt::as_ptr<FunctionType>(fType));
-    ASSERT(type != nullptr, "The resolver accepted a function the transform cannot take.");
+    GUARD(type != nullptr, "The resolver accepted a function the transform cannot take.");
 
     // The captured function is bound to a name no program can write, in the scope the call
     // stands in, so that the new graph captures it the way any closure captures a name
@@ -1711,7 +1712,7 @@ node_handle_t Builder::composeFunctionValue(
             insertNode(std::string(kCompParameter), graph->view().ref(port));
             ++portCount;
         }
-        ASSERT(portCount == 1, "A composition has exactly one parameter.");
+        GUARD(portCount == 1, "A composition has exactly one parameter.");
         insertNode(std::string(kCompLhs), lhs);
         insertNode(std::string(kCompRhs), rhs);
         GCT::node_ptr_t inner = make(tree_->makeLink(1));
@@ -1965,7 +1966,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     auto callableValueType = [&](node_handle_t inputNode) -> Type * {
         if (nodeIsKind(inputNode, runtime::GCNodeKind::Func)) {
             auto callee = nodeGraphOf(inputNode)->funcTarget(inputNode);
-            ASSERT(callee != nullptr, "Compile FUNC node target is null.");
+            GUARD(callee != nullptr, "Compile FUNC node target is null.");
             return callResultType(inputNode, callee->funcType()->exitType());
         }
         if (nodeIsKind(inputNode, runtime::GCNodeKind::Oper)) {
@@ -2872,7 +2873,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     // in-place form: the call works on the array var/take hands it.
                     const auto form =
                         camel::core::OperatorTable::instance().inPlaceForm(targetOperator->uri());
-                    ASSERT(form.has_value(), "An in-place rebinding lost its in-place form.");
+                    GUARD(form.has_value(), "An in-place rebinding lost its in-place form.");
                     targetOperator = std::make_shared<OperatorIndex>(
                         targetOperator->name(), targetOperator->funcType(), *form);
                 }
@@ -3576,7 +3577,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                 // in-place form: the call works on the array:var/take hands it.
                 const auto form =
                     camel::core::OperatorTable::instance().inPlaceForm(targetOperator->uri());
-                ASSERT(form.has_value(), "An in-place rebinding lost its in-place form.");
+                GUARD(form.has_value(), "An in-place rebinding lost its in-place form.");
                 targetOperator = std::make_shared<OperatorIndex>(
                     targetOperator->name(),
                     targetOperator->funcType(),
@@ -3781,7 +3782,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         } else if (std::holds_alternative<graph_ptr_t>(drefTarget)) {
             callDecorated(std::get<graph_ptr_t>(drefTarget));
         } else {
-            ASSERT(false, "Dref target must be graph set, operator group, or decorated graph.");
+            throw std::runtime_error("Dref target must be graph set, operator group, or decorated graph.");
         }
     } else {
         Type *dataType = nodeTypeOf(targetNode);
@@ -3795,7 +3796,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             // reads this pull from the data edge the call writes.
             dataType = tt::as_ptr<StreamType>(dataType)->stepType();
         }
-        ASSERT(
+        GUARD(
             dataType->code() == TypeCode::Function,
             "Target node of LINK must be a function or operator node.");
         auto *funcType = tt::as_ptr<FunctionType>(dataType);
@@ -3870,7 +3871,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         enter(normInputs, normInputTypes, false);
     };
 
-    ASSERT(targetFuncType != nullptr, "Target function type must be resolved.");
+    GUARD(targetFuncType != nullptr, "Target function type must be resolved.");
     if (targetOperator == nullptr) {
         enterParameters(targetFuncType);
     } else {
