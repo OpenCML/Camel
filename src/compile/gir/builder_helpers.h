@@ -86,17 +86,17 @@ inline void setGraphReturnFromResult(
     const compile_graph_ptr_t &graph, draft_node_ref_t outputNode, draft_node_ref_t valueNode,
     Type *resultType) {
     ASSERT(graph != nullptr, "Graph return setup requires a valid graph.");
-    graph->draft().setOutputNode(outputNode);
-    graph->draft().setExitNode(outputNode);
+    graph->edit().setOutputNode(outputNode);
+    graph->edit().setExitNode(outputNode);
     if (isVoidGraphExitType(resultType)) {
-        graph->draft().setReturnNode(runtime::kInvalidNodeRef, runtime::GCReturnKind::None);
+        graph->edit().setReturnNode(runtime::kInvalidNodeRef, runtime::GCReturnKind::None);
         if (!graph->funcType()->hasExitType()) {
             graph->setExitType(Type::Void());
         }
         return;
     }
 
-    graph->draft().setReturnNode(valueNode, runtime::GCReturnKind::Self);
+    graph->edit().setReturnNode(valueNode, runtime::GCReturnKind::Self);
     if (!graph->funcType()->hasExitType()) {
         graph->setExitType(resultType);
     }

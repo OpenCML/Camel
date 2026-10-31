@@ -402,26 +402,37 @@ Rules buildRules() {
     };
 
     // ---- Arrays (struct.cpp, ops.cpp __builtin__idx__) ----
-    // A position is the element itself only when the value is a rank-1 array, which is what
-    // `rt::at` gives. An `rt::Array` here is a flat run of elements with no shape
-    // (cpp_types.cpp), so a position on a multidimensional value -- the slab this takes for a row
-    // of a rank-2 array, design principles 5.4 -- and a position on an open-rank value have no
-    // value in this back end: the operator runs through the bridge (camel/standalone/bridge.h).
-    // The axis word a call of the index writes is the same answer's: only the first dimension's
-    // position, the two-word call, is this rule's.
+    // A position is the element itself on a value of one dimension (`rt::at`) and the row, one
+    // dimension less, on a value of several (`rt::atRow`): the shape travels with the value, so the
+    // row's extent is the value's own. An open rank is still not translated: its position may be an
+    // element or a row of any dimension, and a value that is sometimes an element and sometimes an
+    // array has no single C++ type. The axis word a call of the index writes is the same answer's:
+    // only the first dimension's position, the two-word call, is this rule's.
     r[":op/idx_arr"] = {
         [](OperatorCall &c) -> std::optional<std::string> {
             const ArrayType *value = asArrayType(c.normType(0));
-            const bool takesASlab =
-                value != nullptr && (value->anyRank() || value->rank() >= 2);
-            if (c.normCount() != 2 || takesASlab) {
+            if (value == nullptr || c.normCount() < 2 || c.normCount() > 3) {
                 return std::nullopt;
             }
-            return std::format(
-                "rt::at({}, {}, {})",
-                c.operand(0),
-                c.operand(1),
-                c.site(RuntimeDiag::IndexOutOfRange, marks(3)));
+            if (value->anyRank()) {
+                return std::nullopt;
+            }
+            const std::string site =
+                c.site(RuntimeDiag::IndexOutOfRange, marks(3));
+            if (c.normCount() == 3) {
+                // The axis is written: the position drops the dimension it names, and every other
+                // dimension is kept whole (`m[1, 2]` of a rank-2 value is the position on axis 1
+                // and then the position on axis 0, design principles 5.4).
+                if (value->rank() < 2) {
+                    return std::nullopt;
+                }
+                return std::format(
+                    "rt::atAxis({}, {}, {}, {})", c.operand(0), c.operand(1), c.operand(2), site);
+            }
+            if (value->rank() >= 2) {
+                return std::format("rt::atRow({}, {}, {})", c.operand(0), c.operand(1), site);
+            }
+            return std::format("rt::at({}, {}, {})", c.operand(0), c.operand(1), site);
         },
         false,
     };
@@ -544,49 +555,49 @@ Rules buildRules() {
         false,
     };
     // `tensor:reshape` (modules/tensor/kernels/layout.cpp): the same elements in row-major order in
-    // another shape. This back end keeps no shape, so a value it hands back is a flat run -- and
-    // the shape is observable: printing a rank-2 value gives its rows, `[[1.0, 2.0], [3.0, 4.0]]`,
-    // where the run gives `[1.0, 2.0, 3.0, 4.0]`. So only a target of one dimension is faithful
-    // here, where the printed form is the run's own; a target of several dimensions is the shape
-    // this back end does not carry, and it still runs through the bridge. What is left of the
-    // operator is its count check: a target that changes the element count is a fault before
-    // anything is read, and the report states the input's own shape.
+    // another shape. The shape travels with the value now (rt::Array holds it), so a target of
+    // several dimensions is faithful too -- printing it gives its rows, `[[1.0, 2.0], [3.0, 4.0]]`,
+    // which the run alone cannot say. What the operator still owes is its count check: a target that
+    // changes the element count is a fault before anything is read, and the report states the
+    // input's own shape.
     r["tensor:reshape"] = {
         [](OperatorCall &c) -> std::optional<std::string> {
-            const ArrayType *value = asArrayType(c.normType(0));
-            if (c.normCount() != 1 || value == nullptr || value->anyRank() || value->rank() != 1) {
+            const ArrayType *target = asArrayType(c.resultType());
+            if (c.normCount() != 1 || target == nullptr || target->anyRank() || target->rank() == 0) {
                 return std::nullopt;
             }
-            const ArrayType *target = asArrayType(c.resultType());
-            int64_t count           = -1;
+            std::string words;
             std::string shape;
-            if (target != nullptr && !target->anyRank() && target->rank() == 1) {
-                const core::type::ExtentForm &extent = target->extents()[0];
-                if (extent.isConstant()) {
-                    count = extent.constant();
-                    shape = std::format("[{}]", count);
+            int64_t count = 1;
+            for (const core::type::ExtentForm &extent : target->extents()) {
+                if (!extent.isConstant()) {
+                    return std::nullopt;
                 }
-            }
-            if (count < 0) {
-                return c.norm(0).text;
+                words += (words.empty() ? "" : ", ") + std::to_string(extent.constant());
+                shape += (count == 1 ? "" : ", ") + std::to_string(extent.constant());
+                count *= extent.constant();
             }
             const std::string site = c.site(
                 RuntimeDiag::TensorDimensionMismatch,
                 {"reshape",
                  std::format(
-                     "reshape changes tensor element count: [{}] -> {}", SiteTable::valueMark(0), shape)});
-            return std::format("rt::reshape({}, {}, {})", c.norm(0).text, count, site);
+                     "reshape changes tensor element count: [{}] -> [{}]", SiteTable::valueMark(0), shape)});
+            return std::format(
+                "rt::reshape({}, {{{}}}, {}, {})", c.norm(0).text, words, count, site);
         },
         false,
     };
-    // The slice of a one-dimensional array, whichever spelling wrote it (design principles 5.4):
-    // the six words are the value, the axis, the two bounds, the step and the mask of the bounds
-    // written, and a call that leaves the last two out stands for step 1 and "both written". A
-    // value with several dimensions or an open rank is not a flat run here: the bridge runs it.
+    // The slice of one dimension of a value, whichever spelling wrote it (design principles 5.4): the
+    // six words are the value, the axis, the two bounds, the step and the mask of the bounds written,
+    // and a call that leaves the last two out stands for step 1 and "both written". The dimension the
+    // axis names is the one sliced and every other one is kept whole -- `m[0:2]` of a rank-2 value is
+    // its first two rows, `m[:, 1]` its second column -- which is what the runtime's slice does now
+    // that the shape travels with the value. An open rank is still not translated: its rank is a
+    // property of the value, and a slice of it may keep or drop any number of dimensions.
     r[":op/slice_sub"] = {
         [](OperatorCall &c) -> std::optional<std::string> {
             const ArrayType *value = asArrayType(c.normType(0));
-            if (value == nullptr || value->anyRank() || value->rank() != 1 ||
+            if (value == nullptr || value->anyRank() ||
                 c.normCount() < 4 || c.normCount() > 6) {
                 return std::nullopt;
             }
@@ -604,10 +615,12 @@ Rules buildRules() {
         false,
     };
     // A type name applied to a one-dimensional numeric array converts every element. A value with
-    // several dimensions or an open rank is not a flat run here, and neither is bf16 or f16 -- an
-    // element type this back end does not have (`kNoSuchElementType`, and `notTranslatedBecause`
-    // says it where a value of one is refused). Those are refused, as the other array operators
-    // refuse, and the refusal does not say `yet`: that word is for work not done.
+    // several dimensions or an open rank is not a flat run here, and neither is bf16 or f16: the
+    // language's core value types (reduced-precision.md b1 -- literals, scalar arithmetic,
+    // comparison, conversion), 16 bits of storage, computed in f32 and rounded to nearest even once,
+    // the same rule `dtype.h` and the interpreter follow. C++ can carry them, so what is missing is
+    // an rt:: value and the rules over it, not an ability of the target: these are refused the way
+    // the other array operators refuse a value they have not been written for yet.
     for (const auto &[uri, element] : {std::pair<const char *, const char *>{":op/atoi", "int32_t"},
                                       {":op/atol", "int64_t"},
                                       {":op/atof", "float"},

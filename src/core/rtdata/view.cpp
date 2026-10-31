@@ -133,7 +133,7 @@ slot_t readPureComplex(const std::byte *bytes, type::TypeCode code) {
         std::memcpy(&imaginary, bytes + sizeof(real), sizeof(imaginary));
         return toSlot(Complex::create(real, imaginary, code, mm::autoSpace()));
     }
-    ASSERT(code == type::TypeCode::Complex128, "A complex code is c64 or c128");
+    GUARD(code == type::TypeCode::Complex128, "A complex code is c64 or c128, and this one is neither: the two components would be read as one value");
     double real = 0.0, imaginary = 0.0;
     std::memcpy(&real, bytes, sizeof(real));
     std::memcpy(&imaginary, bytes + sizeof(real), sizeof(imaginary));

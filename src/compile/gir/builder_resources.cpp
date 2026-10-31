@@ -512,11 +512,11 @@ void Builder::measureInferredResources() {
     std::vector<DraftGraphBuilder *> unsettled;
     for (const auto &graph : bodies) {
         bool readsAnother = false;
-        for (draft_node_ref_t id = 0; id < graph->draft().nodeSlotCount() && !readsAnother; ++id) {
-            if (!graph->draft().alive(id)) {
+        for (draft_node_ref_t id = 0; id < graph->view().nodeSlotCount() && !readsAnother; ++id) {
+            if (!graph->view().alive(id)) {
                 continue;
             }
-            const auto kind = nodeKindOf(graph->draft().ref(id));
+            const auto kind = nodeKindOf(graph->view().ref(id));
             readsAnother    = kind == runtime::GCNodeKind::Func || kind == runtime::GCNodeKind::Call;
         }
         if (readsAnother) {
@@ -703,11 +703,11 @@ camel::source::origin_id_t Builder::firstUnpromisedEffectOrigin(
     // The first use the clause does not name is what the writer has to look at: the declaration
     // says what a caller may assume, and this is where the body stopped matching it. A use the
     // clause does name is not that place, so it is skipped rather than reported.
-    for (draft_node_ref_t id = 0; id < graph->draft().nodeSlotCount(); ++id) {
-        if (!graph->draft().alive(id)) {
+    for (draft_node_ref_t id = 0; id < graph->view().nodeSlotCount(); ++id) {
+        if (!graph->view().alive(id)) {
             continue;
         }
-        const node_handle_t node = graph->draft().ref(id);
+        const node_handle_t node = graph->view().ref(id);
         if (!isEffectNode(graph.get(), node)) {
             continue;
         }

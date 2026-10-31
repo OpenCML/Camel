@@ -4,6 +4,7 @@
 // Checked tensor schedules and interval-based storage reuse for one ordered stream.
 
 #include "camel/core/operator_table.h"
+#include "camel/core/rtdata/half.h"
 #include "tiles/dtype.h"
 #include "tiles/device.h"
 #include "tiles/internal/kernel_ir.h"
@@ -11,6 +12,7 @@
 #include "tiles/program.h"
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <iomanip>
 #include <limits>
 #include <numeric>
@@ -23,6 +25,27 @@ const void *hostData(const Node &node) {
     if (node.scalarBits)
         return &*node.scalarBits;
     return node.data.empty() ? nullptr : node.data.data();
+}
+std::vector<std::byte> hostStorage(const Node &node) {
+    const size_t width = dtypeWidth(node.dtype);
+    std::vector<std::byte> storage(bytes(node));
+    if (storage.empty())
+        return storage;
+    if (width == sizeof(float)) {
+        std::memcpy(storage.data(), node.data.data(), storage.size());
+        return storage;
+    }
+    // A narrow element holds the value the host copy widened, rounded once into the element type.
+    // This is the single place a bf16 or f16 node becomes bytes, so there is one rounding and the
+    // buffer the device reads is the buffer this rounding produced.
+    for (size_t i = 0; i < node.data.size(); ++i) {
+        const float value = node.data[i];
+        const uint16_t bits =
+            node.dtype == DType::BF16 ? core::rtdata::bfloat16FromFloat(value)
+                                  : core::rtdata::float16FromFloat(value);
+        std::memcpy(storage.data() + i * width, &bits, width);
+    }
+    return storage;
 }
 size_t bytes(const Node &node) {
     if (!node.results.empty())

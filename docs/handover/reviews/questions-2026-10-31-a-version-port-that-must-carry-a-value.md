@@ -138,7 +138,9 @@ return version;
 | `:1348` | `… makes a function value of type '{}' std::cpp does not translate yet` | **尚未实现**：函数值就是 lambda，C++ 有 |
 | `src/passes/trans/cpp/operator_rules.cpp:453` | `… neither is bf16 or f16 (this back end has no such element type): those are refused` | **目标不具备**：这一后端的元素类型集合里没有 bf16/f16——注释自己写着 `this back end has no such element type`；要它具备是另一件事（换元素类型层），不是把规则补上 |
 
-**一条判据**：**同一句 `yet` 里，只有收尾是"决定要不要给这个后端一个能力"的那一处才改；收尾是"写规则表"的留着——留着它，才知道还有活。**
+**一条判据（作者 06:10 的裁定，照抄）**：**"判断一条拒绝该不该写成'目标不具备'，只问一句：语言规定这个目标必须有吗？核心类型和核心运算，每个后端都必须有；只有对运行时本身的内省，可以随目标不同而缺席。"**
+
+**据此，`f4cfd9688` 那一句被打回，理由写明**：`bf16`/`f16` 是**核心值类型**（`reduced-precision.md` b1：字面量、标量算术、比较、转换都有），**C++ 完全能表示它们**——16 位存储、在 f32 里算、就近平局取偶舍入一次，与 `dtype.h` 和解释器同一条规则。**所以缺的是一段代码，不是一种能力**；`rt::BF16`/`rt::F16` 与它们的翻译规则另派一条车道，这一页只记撤回。**"目标不具备"今天唯一的合法例子是对运行时本身的内省**（`std::mem::blocks()`）。
 
 **落地的只有那一处**：`operator_rules.cpp:453` 那族（bf16/f16）的拒绝现在说能力边界——`std::cpp ... has type 'bf16'; std::cpp translates numbers (real and complex), ... : this back end has no such element type -- bf16 and f16 are not among the numbers it writes`，**没有 `yet`**；`refuse_tensor` 那一句**保留 `yet`**（它是没写的规则）。负例钉住这条：`test/plans/feat/trans/cpp.plan.toml` 的 `refuse_narrow_float`，断言 **输出没有 `yet`、且说出 `no such element type`**。
 

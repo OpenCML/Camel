@@ -441,7 +441,7 @@ REINTERP closure graph=107 layout=(float, float) built=yes slots=x,w
 
 - 建“调 `107` 得闭包”需要**被调图的 `DraftGraphBuilder`**：
   `StaticFunction::create(const std::shared_ptr<DraftGraphBuilder> &graph, …)`
-  （`include/camel/compile/gir/static_function.h:28`）；
+  （`include/camel/compile/gir/static_function.h#StaticFunction::create`）；
 - `GenericRuleInstance` 存的是 `rhs`（一个 `GCGraph*`）与 `program`，**没有那个 builder**；
   builder 只在实例化的那一刻活在 `src/compile/gir/rule_templates.cpp` 里；
 - 所以从 `modules/transforms` 拿到的 `GraphId 107` 是**不够**的：节点能建（`draft.h` 里有
@@ -451,6 +451,65 @@ REINTERP closure graph=107 layout=(float, float) built=yes slots=x,w
 手上），**要么 `GenericRuleInstance` 得把那个 builder 一起留住**。这是一个要作者/你点头的设计选择，
 不是写两行代码的事——我没有绕开它（比如拿 `::Function::create` 假装建出静态函数值，那会在运行期
 找不到图）。
+
+## 判据：活得住的东西留一个把手
+
+> **建不出函数值，先问“建它需要的那样东西在哪一刻还活着”；活得住的就留一个把手，活不住的才是设计问题。**
+
+按这条判据，`GenericRuleInstance` 多了一列（`include/camel/compile/gir/rule_templates.h`）：
+
+```cpp
+std::shared_ptr<camel::compile::gir::DraftGraphBuilder> rhsBuilder;
+```
+
+**赋值点一处**：`src/compile/gir/rule_templates.cpp:104`，`publish()` 里 `encodeToRuntimeProgram(rhs, …)`
+之后紧跟 `instance.rhsBuilder = rhs;`——那一刻 builder 就在参数表里，是它**最后一次**以局部身份活着的地方。
+
+**它不延长任何东西的寿命**：图在那之前已经编进 `context` 的 pinned program（`publish` 的上一行
+`pinRuntimeProgram`），留住的只是“写这个名字的把手”，不是“让图活着”。**失效**：context 结束时一并结束；
+实例不跨 context。
+
+## 判据：值第一次能出现的那一刻
+
+> **把手留住之后，“值”才第一次能在替换图里出现；此前的每一步都是在为这一刻准备条件。**
+
+**这一刻还没到，卡在“装上去”而不是“建出来”**，位置很具体：
+
+- `GraphIRPass::apply` 拿到的是 `const Program *`（`include/camel/execute/pass/base.h`），并注明
+  “a rewrite makes a new one”：**程序发布后不再变**；
+- 新的程序由 `GraphDraftGroup` 造，而它的**根是第一个 reserve 的成员**
+  （`include/camel/runtime/draft_session.h`，`class GraphDraftGroup`）：`group.program()` 的入口是那个成员；
+- `Program::bind` / `setRoot` 都在**构造期**用（`include/camel/runtime/program.h`），拿不到一个已发布的
+  程序去改其中一张图。
+
+**所以“把 `f` 换掉”实际是“重造整条入口路径”**：新的 `main`（调新的 `f`、打元组）是根，新的 `f`
+（`3.0 / x` 的站点换成“建闭包 + 调闭包”）是它调的成员。**只换 `f` 换不进去**——没有一处 API 允许
+在一张已发布的图里替换另一张图。
+
+这就把下一笔的形状定死了：**一次 reserve 两个成员（`main`、`f`），第一个当根**，两个图都要重造，
+`println` 也得在 `main` 的新版本里重新接上。**这是“整条入口路径”，不是“一个站点”。**
+
+## 判据：先造一个最小的容器
+
+> **一个“装不进去”的东西，先用最小的容器把它装进去；容器的形状对了，再谈往真程序里装。**
+
+最小容器要装的两个人已经点清：`main` 与 `f`。**重造 `main` 需要的东西，一次量完**：
+
+```
+REINTERP target=f primitives=1 other=2 graph=112 nodes=1
+REINTERP calls=- opers=:op/div_d
+REINTERP target=main primitives=1 other=4 graph=113 nodes=1
+REINTERP calls=54 opers=:io/println
+```
+
+- `f`：没有 FUNC 调用，只有一个算子 `:op/div_d`——**新 `f` 只换这一个站点**；
+- `main`：FUNC 调用 **54**（就是 `f`），算子 `:io/println`——**新 `main` 的清单是“常量 `2.0` →
+  调新 `f` → `:io/println` → `return 0`”，四件事，一件不多**；
+- `println` **是算子，不是图**：所以最小容器不需要拷任何节点，两个图都能用
+  `addDataNode`/`addCallNode`/`addOperNode` 从零拼出来（`include/camel/runtime/draft.h`）。
+
+**这就是下一笔的施工单**：reserve 两个成员（`main__min` 第一个当根、`f__min`），`f__min` 里
+“`3.0/x` 的值 + 建闭包 + 调闭包”三段，`main__min` 里四件事，打出来就是 `(1.5, -0.75)`。
 
 ## 验收（缺一步不算完）
 

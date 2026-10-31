@@ -59,8 +59,42 @@ inline void appendText(std::string &out, bool v) { out += v ? "true" : "false"; 
 inline void appendText(std::string &out, const Str &v) { out += v.view(); }
 inline void appendText(std::string &out, const Unit &) { out += "null"; }
 
-/// `[a, b, c]`.
+/// One dimension of a value that has a shape: the elements from `offset`, then, for a deeper
+/// dimension, one bracket group per extent. The rows are what the interpreter prints for a value of
+/// several dimensions (`[[1.0, 2.0], [3.0, 4.0]]`), and the flat block underneath is the same run.
+template <typename T>
+void appendShapedText(std::string &out, const Array<T> &xs, std::size_t offset, std::size_t from) {
+    const std::size_t extent = xs.extent(from);
+    out += '[';
+    if (from + 1 >= xs.rank()) {
+        for (std::size_t i = 0; i < extent; ++i) {
+            if (i > 0) {
+                out += ", ";
+            }
+            appendText(out, xs[offset + i]);
+        }
+    } else {
+        std::size_t inner = 1;
+        for (std::size_t i = from + 1; i < xs.rank(); ++i) {
+            inner *= xs.extent(i);
+        }
+        for (std::size_t i = 0; i < extent; ++i) {
+            if (i > 0) {
+                out += ", ";
+            }
+            appendShapedText(out, xs, offset + i * inner, from + 1);
+        }
+    }
+    out += ']';
+}
+
+/// `[a, b, c]`, and `[[1.0, 2.0], [3.0, 4.0]]` for a value that states a shape of several
+/// dimensions.
 template <typename T> void appendText(std::string &out, const Array<T> &xs) {
+    if (xs.rank() >= 2) {
+        appendShapedText(out, xs, 0, 0);
+        return;
+    }
     out += '[';
     for (std::size_t i = 0; i < xs.size(); ++i) {
         if (i > 0) {

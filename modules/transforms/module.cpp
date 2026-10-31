@@ -228,6 +228,27 @@ class ReinterpPass : public RuntimeGraphRewritePass {
             os << "REINTERP target=" << function->name() << " primitives=" << primitives
                << " other=" << other << " graph=" << camel::runtime::toValue(made)
                << " nodes=" << (encoded != nullptr ? encoded->nodeCount() : 0) << '\n';
+            // What a rebuilt copy of this graph has to name, node by node: the graphs its FUNC nodes
+            // call -- a rebuilt `main` calls the rebuilt `f`, and the rest (`println` among them)
+            // keeps the graphs it already names -- and the operators its OPER nodes use.
+            std::string calls;
+            std::string uris;
+            for (camel::runtime::gc_node_ref_t ref = 1; ref <= function->nodeCount(); ++ref) {
+                const camel::runtime::GCNode *node = function->node(ref);
+                if (node == nullptr) {
+                    continue;
+                }
+                if (node->kind == camel::runtime::GCNodeKind::Func) {
+                    calls += (calls.empty() ? "" : ",") +
+                             std::to_string(
+                                 camel::runtime::toValue(function->calleeIdOf(ref)));
+                } else if (node->kind == camel::runtime::GCNodeKind::Oper) {
+                    const auto *body = function->nodeBodyAs<camel::runtime::GCOperBody>(ref);
+                    uris += (uris.empty() ? "" : ",") + std::string(body->uri());
+                }
+            }
+            os << "REINTERP calls=" << (calls.empty() ? "-" : calls.c_str())
+               << " opers=" << (uris.empty() ? "-" : uris.c_str()) << '\n';
         }
         return program;
     }

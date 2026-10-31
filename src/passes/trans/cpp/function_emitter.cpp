@@ -605,19 +605,6 @@ bool FunctionEmitter::lowerNode(
         std::optional<std::string> text;
         if (GCGraph *function = functionConstantOf(g, ref)) {
             text = functionValue(function, {});
-        } else if (hasSeveralDimensions(type)) {
-            // The constant of such a type is its first extent's worth of elements only, so writing
-            // one would print three numbers where the interpreter prints three rows -- a program
-            // that exits 0 and is wrong. The refusal says what the target does not have, because
-            // that is what is missing: an array here is a flat run of elements, with no shape.
-            refuse(
-                g,
-                ref,
-                std::format(
-                    "{} uses a value of type '{}'; an array in std::cpp is a flat run of elements "
-                    "and carries no shape, so a value of several dimensions has no form there",
-                    describeFunction(g),
-                    typeName(type)));
         } else {
             text = program_.values.constant(g->staticArea()->get<slot_t>(-node->dataIndex), type);
         }
@@ -882,12 +869,16 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
             g,
             ref,
             std::format(
-                "the result of operator '{}' in {} has type '{}'; {}{}",
+                // What is missing here is a piece of this table, not a thing the target cannot
+                // do: the sentence says so, and it says it with `yet` (design principles: a core
+                // value type or a core operation is written by every back end, so its absence is
+                // work not done -- only introspection of the runtime itself may be absent by
+                // target, `std::mem::blocks()`).
+                "the result of operator '{}' in {} has type '{}'; {} -- but not this one yet",
                 uri,
                 describeFunction(g),
                 typeName(node->dataType()),
-                kTranslatedTypes,
-                notTranslatedBecause(node->dataType())));
+                kTranslatedTypes));
     }
     std::vector<CppValue> norm, with;
     std::vector<const Type *> normTypes, withTypes;
