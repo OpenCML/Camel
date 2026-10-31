@@ -1,0 +1,30 @@
+/**
+ * The mean of a value of bf16 or f16: the total and the count both in f64, one rounding into the
+ * element type (`stdlib/array.cml`: `T(sum64(es) / float(len(es)))`). It is the one reduction
+ * that divides, so it is the only place a narrow float's total is not its answer: the division
+ * happens in f64 where nothing rounds, and the single rounding is the store into the element.
+ *
+ * The lines separate that from rounding twice: the mean of [0.5, -1.5, 2.0] is 1/3, which a bf16
+ * cannot hold, and the mean of three f16 values that are each already rounded is the total of
+ * those rounded values, not the mean of the numbers they were written from.
+ *
+ * The readings are the lines below; agree_with_fvm compares them with std::fvm byte for byte.
+ */
+import { mean as array_mean } from array
+
+func main(): int sync {
+    let xs: bf16[] = [0.5, -1.5, 2.0]
+    println(array_mean(xs))
+    let hs: f16[] = [0.1, 0.2, 0.3]
+    println(array_mean(hs))
+    // One element: the mean of it is itself, exactly.
+    let one: bf16[] = [1.5]
+    println(array_mean(one))
+    // The count is the element count, not the rank: a value of several dimensions is averaged
+    // whole, in row-major order.
+    let m: f16[2, 2] = [[0.5, 1.5], [2.5, 3.5]]
+    println(array_mean(m))
+    let h2: bf16[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+    println(array_mean(h2))
+    return 0
+}

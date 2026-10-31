@@ -19,6 +19,7 @@
 #pragma once
 
 #include "camel/standalone/core.h"
+#include "camel/standalone/half.h"
 #include "camel/standalone/str.h"
 
 #include <algorithm>
@@ -449,6 +450,24 @@ Array<T> setAt(Array<T> xs, int64_t index, std::type_identity_t<T> value, const 
     return xs;
 }
 
+/// `array:elements` (src/builtin/operators/array_axis.cpp): the elements in row-major order as an
+/// array of one dimension. An rt::Array keeps the shape its type stated (design principles 5.4),
+/// so a value of several dimensions has to lose it here: `len` is the length of the first
+/// dimension (stdlib/prelude.cml), and every operator that reads a length after `some_elements`
+/// -- `array::mean` divides by `len(es)` -- means the element count, which is the first dimension
+/// of the flat run and not of the shaped one. A value of one dimension is returned as it stands.
+template <typename T> Array<T> flatten(const Array<T> &xs) {
+    if (xs.rank() <= 1) {
+        return xs;
+    }
+    Array<T> out;
+    out.reserve(xs.size());
+    for (const T &x : xs) {
+        out.push(x);
+    }
+    return out;
+}
+
 /// A type name applied to an array (:op/atoi, :op/atol, :op/atof, :op/atod): every element converted
 /// by the C++ conversion, which is what the runtime's does (core/array_convert.h).
 template <typename To, typename From> Array<To> convertArray(const Array<From> &xs) {
@@ -650,6 +669,41 @@ inline Array<double> sorted(const Array<double> &xs) {
     out.reserve(items.size());
     for (const double item : items) {
         out.push(item);
+    }
+    return out;
+}
+
+/// `array:argsort_bf`, `array:argsort_f6` (src/builtin/operators/array.cpp): the positions of the
+/// elements in the order `min` and `max` use -- every NaN after every number, -0 below +0, else
+/// the usual one -- and ties in the order they stand. It is the order `sorted` states, read as
+/// positions instead of values, and it is what a program of a half asks for when it wants
+/// `argmax`, `argmin` or a sort rather than a total: `array::argmax` is a loop over
+/// `precedes(a, b) = argsort([b, a])[0] == 1`, so the element type of the array decides which
+/// argsort is called, and the answer is an index either way.
+template <typename Format> Array<int64_t> halfArgsort(const Array<Half<Format>> &xs) {
+    const auto order = [](float a, float b) {
+        if (std::isnan(b)) {
+            return !std::isnan(a);
+        }
+        if (std::isnan(a)) {
+            return false;
+        }
+        if (a == b) {
+            return std::signbit(a) && !std::signbit(b);
+        }
+        return a < b;
+    };
+    std::vector<int64_t> positions(xs.size());
+    for (std::size_t i = 0; i < xs.size(); ++i) {
+        positions[i] = static_cast<int64_t>(i);
+    }
+    std::stable_sort(positions.begin(), positions.end(), [&](int64_t l, int64_t r) {
+        return order(xs[l].toFloat(), xs[r].toFloat());
+    });
+    Array<int64_t> out;
+    out.reserve(positions.size());
+    for (const int64_t position : positions) {
+        out.push(position);
     }
     return out;
 }
@@ -973,6 +1027,39 @@ template <typename T>
 Array<int64_t> argminAxis(
     const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid, const Site &empty) {
     return argExtremeAxis<false>(xs, axisArg, keepDims, invalid, empty);
+}
+
+/// `tensor:mean` of the whole value (modules/tensor/ops/reduction_ops.cpp, meanAllKernel): the sum
+/// divided by the number of elements, both in double, and the answer's element type reached by one
+/// conversion -- `stdlib/tensor_definitions.cml` states a mean as `sum(x) / float(numel(x))`, and
+/// the kernel is that statement with the sum and the division in f64. That is why the sum is taken
+/// here as the double the interpreter's `sumAll` returns and not as the rounded element value: a
+/// mean of f32 elements is not the f32 sum divided again.
+///
+/// `R` is the answer's element type, which the operator states apart from the source's: a mean of
+/// integers is an f32 (an integer's mean is not integer division), and a mean of f64 or f32 keeps
+/// that element type.
+///
+/// A value with no element divides by zero, and the interpreter raises that fault rather than
+/// answering a NaN; so does this.
+template <typename R, typename T> R meanAll(const Array<T> &xs, const Site &division) {
+    if (xs.size() == 0) [[unlikely]] {
+        fault(division);
+    }
+    if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, int32_t>) {
+        std::uint64_t acc = 0;
+        for (std::size_t i = 0; i < xs.size(); ++i) {
+            acc += static_cast<std::uint64_t>(static_cast<int64_t>(xs[i]));
+        }
+        return static_cast<R>(
+            static_cast<double>(static_cast<int64_t>(acc)) / static_cast<double>(xs.size()));
+    } else {
+        double total = 0.0;
+        for (std::size_t i = 0; i < xs.size(); ++i) {
+            total += static_cast<double>(xs[i]);
+        }
+        return static_cast<R>(total / static_cast<double>(xs.size()));
+    }
 }
 
 /// `tail(xs)` (:struct/tail_arr): all but the first element; the empty array for one or none.

@@ -4393,7 +4393,15 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         node_handle_t value = valueOf(normInputs[1].node);
         node_handle_t gate  = currGraph_->addGateNode(nodeTypeOf(value));
         linkNodes(LinkType::Norm, value, gate);
-        linkNodes(LinkType::Ctrl, targetNode, gate);
+        // The write is what the gate waits on. In a `sync` block that wait is a chain link: the
+        // sync edge with the statement marks that make it one (docs/design/effects/edges.cn.md
+        // 5.3). Outside one there is no chain to be a link of, and the control edge the kind still
+        // gives is what makes the write run where the value it wrote has no reader of its own.
+        if (synced_) {
+            writeSyncLink(targetNode, gate);
+        } else {
+            linkNodes(LinkType::Ctrl, targetNode, gate);
+        }
         LEAVE("LINK");
         return gate;
     }
@@ -4417,7 +4425,14 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         node_handle_t empty = currGraph_->addStaticDataNode(Data::null());
         node_handle_t gate  = currGraph_->addGateNode(nodeTypeOf(empty));
         linkNodes(LinkType::Norm, empty, gate);
-        linkNodes(LinkType::Ctrl, targetNode, gate);
+        // The call is what the gate waits on: a chain link inside a `sync` block, where a wait is the
+        // sync edge and the marks that make it one (docs/design/effects/edges.cn.md 5.3); outside
+        // one there is no chain, and the control edge the kind still gives stands.
+        if (synced_) {
+            writeSyncLink(targetNode, gate);
+        } else {
+            linkNodes(LinkType::Ctrl, targetNode, gate);
+        }
         LEAVE("LINK");
         return gate;
     }
