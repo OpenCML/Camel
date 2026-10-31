@@ -26,3 +26,4 @@
 - **新加一条诊断，等于同时欠一条点名它的测试**：诊断登记表不会自己满足，它只会在闸门上替你把欠账报出来（合并树上 `catalog.coverage_zero`：`0x03000206 SemanticDiag::YieldRequiresStreamHead is declared and no test mentions it`）。加诊断的那一笔就该把用例一起写，**并且重跑 `node scripts/diagnostics-catalog.mjs --write`**——生成的文档（`docs/diagnostics.md`、`diagnostics/examples.tsv`）不同步，`catalog.doc_is_generated` 会另开一笔红。
 - **一条负例在自己树上绿、在合并树上红，先怀疑它的期望写的是"今天的状态"，而不是"这条规则"**：`stream.yield_lowering_refused` 钉的是"两状态 `loop` 生成器被拒"，而 `origin/develop` 的 `src/compile/gct/builder.cpp` 比我的树多 211 行/少 35 行——合并树上那条 `loop` 已被**降低**（打出 `1`、退出 0）。负例要么钉规则、要么跟着上游改；钉"今天拒绝什么"的负例，会在别人实现它的那一刻变成假红。
 - **两棵树给出相反读数时，先把两棵树并起来再判**：判据说"今天"，指的是**合并后的今天**。我按自己的树把一条负例判成"对"，合并 `origin/develop` 后同一条用例的整个形状已被降低、用例本身都被上游删了——先并、再判，省掉一轮来回。
+- **一个诊断在语言面上已经没有形状能触发它，它就不是守卫，是空话**：留着它的唯一理由是还能被人从别的入口叫到（`FeatureNotSupported('generators')` 今天三种极端形状全被接受，只剩"没有入口"这一个理由）。
