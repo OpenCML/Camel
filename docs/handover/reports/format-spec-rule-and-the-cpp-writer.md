@@ -127,10 +127,10 @@ std::cpp  12 33 / abc / 5 12 12
 | `tensor:sum` / `tensor:matmul` / `rand:shuffle_l` | 7 各 | `loops/iterate_tensor.cml` / `modules/onnx/entry/tuple.cml` / `para/core/merge_sort.cml` |
 | `tensor:shape` / `env:get_cwd` | 6 各 | `compile/entry_args/npy_values.cml` / `modules/std/env/basic.cml` |
 
-读数：**683 → 674 → 666 → 661 → 638** 个程序翻译不出来（第一笔把 `:op/set_index_in_place` 那 9 个修掉，
+读数：**683 → 674 → 666 → 661 → 638 → 629** 个程序翻译不出来（第一笔把 `:op/set_index_in_place` 那 9 个修掉，
 第二笔把 `:op/set_field` / `:op/set_index` 那 5 个修掉，第三笔把 `:op/idx_take` 4 个、`:struct/last_arr`
 2 个修掉，第四笔把 `:op/fail` 那 32 个修掉——四行进表时共 47 个，现在全归零，其中 23 个真的翻译出来了，
-9 个换了桶）。按族：
+9 个换了桶；第五到七笔就是那 9 个换去的三个算子，见六之二）。按族：
 tensor 414、autodiff 90、rand 34、核心算子（`:op/*`）10、`:struct/*` 0。另有 11 个是类型层面的拒
 （`std::cpp does not translate yet`），4 个**让翻译器崩掉**（segfault，见下）。
 
@@ -258,6 +258,44 @@ std::cpp  BadLimit / true / 7 / 1 / error[RuntimeDiag::Stopped]: the end ... rc=
 ```
 
 这就是判据要改的那一条：**32 个程序听起来是 32 个难点，实际是一个类型没有值。**
+
+## 六之二、换桶的那 9 个：三个算子，一处一笔
+
+`:op/fail` 修完之后，32 个里有 9 个**并没有真的翻译出来**，只是"不再卡在 `fail` 上"——它们早就走过
+这个算子，停在前面的模块函数里。**这 9 个按原文分成三句，一句一个新算子**：
+
+| 拒绝原文 | 程序数 | 谁在喊 |
+| --- | --- | --- |
+| `'array:sum_d' on a value of type 'float[]'` | 4 | `statistics::variance_of` |
+| `'array:elements' on a value of type 'float[..]'` | 2（`sum_d` 修完变 4） | `array::flatten<float>` |
+| `'array:sort_d' on a value of type 'float[]'` | 3 | `statistics::quantile<float>` |
+
+三笔，一笔一个 sha，一笔一处：
+
+1. `8fef6467e` **`array:sum_d`**——元素从 +0 加起、按摆放顺序、在 `double` 里累加（运行时的浮点归约
+   就是这么累加的，`sumOf`）。只认 rank 1：这个后端的数组本来就是一条平铺的跑线。
+2. `8cde63796` **`array:elements`**——行主序一条跑线。`rt::Array` 不留形状，所以"取元素"就是给它的那个
+   值本身（`array_axis.cpp` 里 rank ≤ 1 也是原样返回）。**开区间 rank 也通**：`T[..]` 说的是长度未知，
+   不是摆放方式不同。
+3. `eb1eb5c4c` **`array:sort_d`**——`min`/`max` 的那个序（7.7）：NaN 在所有数之后，`-0` 在 `+0` 之前，
+   其余照常；相同元素留在原位（稳定排序，所以 `sort(xs)` 与 `xs[argsort(xs)]` 是同一些位）。
+
+读数：**638 → 629**（9 个全翻译出来了，一行不剩），n = 3194，崩溃 0。用例 `float_reduce.cml`：
+
+```
+std::fvm  7.0 / [-0.0, 0.0, 1.5, 2.5, 3.0] / 7.0 / [3.0, -0.0, 0.0, 1.5, 2.5] / [2.0] / 0.0
+std::cpp  同上，逐字节相同
+```
+
+`-0.0` 排在 `+0.0` 前面这一条，就是这个序里最容易被漏掉的一半。
+
+这 9 个里 8 个两边逐字节相同，`perf_fib_smoke.cml` 印的是耗时（每次都不一样），比不了；另外 4 个是
+**bridged**（还要链 `libcamel`），本机默认 `libstdc++` 比 `libcamel.so` 要求的旧（`GLIBCXX_3.4.35/36`），
+`run.py` 的链接行因此链不上——这是我手工补 `-L<conda>/lib -lstdc++` 之后才比出来的，**不是翻译的问题，
+是这台机器的链接环境问题**。
+
+判据进页：**一个洞归因到一处之后，换桶的那几个不算修好，只算没被它挡住——报数时要把"真的翻译了"与
+"不卡在这了"分开。**
 
 ## 七、九条判据
 
