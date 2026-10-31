@@ -1007,7 +1007,7 @@ void Builder::adoptImplKernel(
     // found for it: the body it holds is the semantics, and a consumer that asks to look inside
     // (autodiff, fusion, export, a rule) reads it rather than the kernel's own rule.
     graph->draft().setFlags(
-        static_cast<uint8_t>(graph->draft().flags() | camel::runtime::kGraphFlagImplBody));
+        static_cast<uint8_t>(graph->view().flags() | camel::runtime::kGraphFlagImplBody));
     graph->draft().setImplKernelUri(std::string(uri.empty() ? kernel.uri : uri));
     if (executor == nullptr) {
         // No executor for these types: this instance runs the body, which is the semantics and
@@ -1252,7 +1252,7 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
                 // call of that graph rather than of a kernel (adoptImplKernel's no-executor
                 // path, for the instance of a generic function).
                 body->draft().setFlags(
-                    static_cast<uint8_t>(body->draft().flags() | camel::runtime::kGraphFlagImplBody));
+                    static_cast<uint8_t>(body->view().flags() | camel::runtime::kGraphFlagImplBody));
                 body->draft().setImplKernelUri(std::string(uri));
                 continue;
             }
@@ -1274,7 +1274,7 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
             // graph, and a consumer that asks for it (autodiff, fusion, export, a rule) gets
             // exactly the graph the compiler built for the Camel body.
             body->draft().setFlags(
-                static_cast<uint8_t>(body->draft().flags() | camel::runtime::kGraphFlagImplBody));
+                static_cast<uint8_t>(body->view().flags() | camel::runtime::kGraphFlagImplBody));
             // The body names the kernel it implements. A direct call of the function is one OPER
             // of that kernel, so this is the only link back from such a call site to the
             // semantics (design principles 10.4): a consumer that must see inside the function
