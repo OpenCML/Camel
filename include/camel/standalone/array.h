@@ -89,7 +89,8 @@ template <typename T> class Array {
     static Array element(T item) {
         Array out;
         out.push(std::move(item));
-        out.rep_->rank = 0;
+        out.rep_->rank   = 0;
+        out.rep_->zeroDim = true; // the value *is* that element, not an array of one
         return out;
     }
 
@@ -176,6 +177,12 @@ template <typename T> class Array {
     /// to state -- and reads as one dimension of `size()` elements. Rank zero is a fact, not a
     /// number: the shape is there, and it is zero-dimensional.
     bool zeroDimensional() const noexcept { return rep_ != nullptr && rep_->zeroDim; }
+
+    /// Whether the value *is* the element it holds: the zero-dimensional shape, with an element to
+    /// be. `Array::element` is what makes one, where `push` grows a value into its first dimension.
+    /// The empty array is not an element: it holds nothing to be, and its shape is the one
+    /// dimension of nothing -- `[0]` -- as the interpreter answers.
+    bool isElement() const noexcept { return zeroDimensional() && size() != 0; }
     std::size_t extent(std::size_t i) const noexcept {
         return rep_ != nullptr && i < rep_->rank ? rep_->extents[i] : 0;
     }
@@ -429,11 +436,13 @@ template <typename T> T at(const Array<T> &xs, int64_t index, const Site &site) 
 ///
 /// The answer is itself one dimension of `rank` numbers, and it says so: a `shape` nobody shaped
 /// would print as an element when it holds one number (`2` for a value of 2) where the interpreter
-/// prints `[2]`, and `shape` of a value of no rank -- which *is* the element -- is the empty run.
+/// prints `[2]`, and `shape` of a value of no rank -- which *is* the element, and only `Array::element`
+/// makes one -- is the empty run. The rank is the test, not the element count: `push` gives every
+/// grown array the one dimension it has.
 template <typename T> Array<int64_t> shapeOf(const Array<T> &xs) {
     Array<int64_t> out;
     const std::size_t rank = xs.rank();
-    if (rank == 0 && xs.size() == 1) {
+    if (xs.isElement()) {
         return out;
     }
     if (rank <= 1) {

@@ -139,6 +139,28 @@ OperatorRule withArgument(const char *name) {
     };
 }
 
+/// The element type of an array type, or null when `type` is not one.
+const Type *arrayElementOf(const Type *type) {
+    const ArrayType *array = asArrayType(type);
+    return array != nullptr ? array->elemType() : nullptr;
+}
+
+/// The C++ element type an empty literal (`[]`, of type `void[]`) takes from the position it fills,
+/// or nothing when the operand is not one: an empty literal has no element type of its own, so the
+/// position's -- `position` is the element type that position gives -- is the one it is written
+/// with. `rt::Array<void>` is not an array any operator takes, and C++ cannot convert one.
+std::string emptyLiteralElement(OperatorCall &c, const Type *position) {
+    const Type *element = arrayElementOf(c.normType(0));
+    if (element == nullptr || element->code() != TypeCode::Void) {
+        return {};
+    }
+    if (position == nullptr || position->code() == TypeCode::Void) {
+        return {};
+    }
+    const std::string written = c.cppType(position);
+    return written == "void" ? std::string() : written;
+}
+
 /// `x.name()`: a part of a tagged value (opt.h).
 OperatorRule method(const char *name) {
     return {
@@ -997,17 +1019,57 @@ Rules buildRules() {
         };
     }
     r[":struct/len_arr"]      = runtimeFunction("length");
-    r[":struct/concat_arr"]   = runtimeFunction("concat");
-    r[":struct/append_arr"]   = withArgument("append");
+    r[":struct/concat_arr"]   = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const std::string empty = emptyLiteralElement(c, arrayElementOf(c.resultType()));
+            if (!empty.empty()) {
+                return std::format("rt::concat(rt::Array<{}>{{}}, {})", empty, c.norm(1).text);
+            }
+            return std::format("rt::concat({}, {})", c.norm(0).text, c.norm(1).text);
+        },
+        false,
+    };
+    // An empty literal (`[]`) is of type `void[]`: it has no element type of its own, and the one
+    // the position gives -- the array the result is, the element the operator names -- is the type
+    // it is written with. Written from its own type, `rt::Array<void>` is not an array these
+    // operators take, and the C++ compiler rejected the call.
+    r[":struct/append_arr"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const std::string empty = emptyLiteralElement(c, arrayElementOf(c.resultType()));
+            if (!empty.empty()) {
+                return std::format("rt::append(rt::Array<{}>{{}}, {})", empty, c.with(0).text);
+            }
+            return std::format("rt::append({}, {})", c.norm(0).text, c.with(0).text);
+        },
+        false,
+    };
     // The loop-state form (Builder::markLoopStateInPlace): writing in place is an optimisation of
     // `append`, and this back end has only the copying form, which gives the same values.
-    r[":struct/append_arr_owned"] = withArgument("append");
+    r[":struct/append_arr_owned"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const std::string empty = emptyLiteralElement(c, arrayElementOf(c.resultType()));
+            if (!empty.empty()) {
+                return std::format("rt::append(rt::Array<{}>{{}}, {})", empty, c.with(0).text);
+            }
+            return std::format("rt::append({}, {})", c.norm(0).text, c.with(0).text);
+        },
+        false,
+    };
     // The private copy one state of a loop takes (Builder::markLoopStateInPlace, per state),
     // which the same rewrite puts before the loop: an Array here is a value, and `append` copies
     // a block that another holder shares, so the copy itself has nothing to do (rt::append takes
     // the array by value).
     r[":struct/copy_arr"] = identity();
-    r[":struct/contains_arr"] = withArgument("contains");
+    r[":struct/contains_arr"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const std::string empty = emptyLiteralElement(c, c.withType(0));
+            if (!empty.empty()) {
+                return std::format("rt::contains(rt::Array<{}>{{}}, {})", empty, c.with(0).text);
+            }
+            return std::format("rt::contains({}, {})", c.norm(0).text, c.with(0).text);
+        },
+        false,
+    };
     r[":struct/zip"]          = {
         [](OperatorCall &c) -> std::optional<std::string> {
             std::string args;
@@ -1199,9 +1261,13 @@ Rules buildRules() {
     // rather than guessed -- the first sentence this rule carried was not the one the interpreter
     // prints, and a fault printed differently is a program that disagrees.
     //
-    // The element types are the numbers this array holds; a tensor of anything else (a string, a
-    // bool, one of the two reduced-precision floats, whose fill would need its own pattern) keeps
-    // the bridged call, which is the answer for it and not a refusal of the program.
+    // The element types are the ones the tensor module itself stores (modules/tensor/dtype.h):
+    // f32, f64, i32, i64 and the two reduced-precision floats, whose fill is a value of their own
+    // type rounded once from 1.0/0.0 (`rt::BF16(1.0f)`), so the tensor a program reads is one
+    // array whatever its width. Anything else is refused here, not bridged: a `string` or a `bool`
+    // tensor never reaches this rule (the signature's `when is_numeric` refuses the call first),
+    // and a complex one has no dtype in the tensor module, so there is no interpreter value to
+    // agree with -- a written call would be a second answer, not a translation.
     auto tensorBuilder = [](bool ones) {
         return [ones](OperatorCall &c) -> std::optional<std::string> {
             if (c.normCount() != 1) {
@@ -1217,6 +1283,8 @@ Rules buildRules() {
             case TypeCode::Float64: fill = ones ? "1.0" : "0.0"; break;
             case TypeCode::Int32:
             case TypeCode::Int64: fill = ones ? "1" : "0"; break;
+            case TypeCode::BFloat16: fill = ones ? "rt::BF16(1.0f)" : "rt::BF16(0.0f)"; break;
+            case TypeCode::Float16: fill = ones ? "rt::F16(1.0f)" : "rt::F16(0.0f)"; break;
             default: return std::nullopt;
             }
             return std::format(

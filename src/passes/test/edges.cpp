@@ -661,9 +661,10 @@ EdgesSyncCycleTestPass::apply(const camel::runtime::Program *program, std::ostre
 
 // One node read in every kind there is, and the two readings of its users. The draft keeps one
 // list per edge kind as the pass writes each edge; the graph the commit makes keeps one table
-// built from the input runs, with the sync users beside them (a sync edge is not a port). A pass
-// asking what reads or waits on a node (camel/runtime/effect_liveness.h) must get the same answer
-// from either side -- the graph had no accessor for four of those lists at all before this case
+// built from the input runs, with the two side arrays beside them (neither a sync nor an order
+// edge is a port). A pass asking what reads, waits on or is ordered by a node
+// (camel/runtime/effect_liveness.h; `isUnanchoredPure` reads all six) must get the same answer
+// from either side -- the graph had no accessor for five of those lists at all before this case
 // existed -- so the sets are compared node for node, in the runtime refs the commit gives the
 // draft's nodes (a draft's ids stop meaning anything once it is encoded).
 const camel::runtime::Program *
@@ -679,8 +680,9 @@ EdgeUsersTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     const auto markStatement = [&](gc_node_ref_t node) {
         draft.setNodeRuntimeFlags(node, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
     };
-    // The one node all four kinds reach: a value port (twice, so the four counts are not all
-    // equal), a context port, a control input, and a place on a `sync` block's chain.
+    // The one node all five kinds reach: a value port (twice, so the five counts are not all
+    // equal), a context port, a control input, a place on a `sync` block's chain, and an order
+    // edge that goes out of it.
     const gc_node_ref_t source = anchorNode(transaction);
     markStatement(source);
     for (size_t i = 0; i < 2; ++i) {
@@ -704,6 +706,14 @@ EdgeUsersTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         os << "EDGE_USERS wrote=0\n";
         return program;
     }
+    // An order edge out of `source`: it says it runs before `orderedAfter` when both run, and it
+    // carries no value. Its user is an anchor (a conversion) because the seal refuses an order
+    // edge on a node that takes no order.
+    const gc_node_ref_t orderedAfter = anchorNode(transaction);
+    if (!draft.appendOrderDependency(orderedAfter, source)) {
+        os << "EDGE_USERS order=0\n";
+        return program;
+    }
     // The runtime ref of every live node of the draft, read before the commit, which encodes the
     // drafts as they are now.
     const std::vector<gc_node_ref_t> committed = session.committedNodeRefs(program->root());
@@ -722,16 +732,17 @@ EdgeUsersTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         }
         return ordered(std::move(refs));
     };
-    std::vector<std::array<std::vector<gc_node_ref_t>, 4>> draftUsers(committed.size());
+    std::vector<std::array<std::vector<gc_node_ref_t>, 5>> draftUsers(committed.size());
     for (gc_node_ref_t id = 0; id < committed.size(); ++id) {
         if (committed[id] == kInvalidNodeRef) {
             continue;
         }
-        std::array<std::vector<gc_node_ref_t>, 4> &sets = draftUsers[id];
+        std::array<std::vector<gc_node_ref_t>, 5> &sets = draftUsers[id];
         sets[0] = draftReading(draft.normUsersOf(id));
         sets[1] = draftReading(draft.withUsersOf(id));
         sets[2] = draftReading(draft.ctrlUsersOf(id));
         sets[3] = draftReading(draft.syncUsersOf(id));
+        sets[4] = draftReading(draft.orderUsersOf(id));
     }
     const Program *next = nullptr;
     try {
@@ -748,11 +759,12 @@ EdgeUsersTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         if (ref == kInvalidNodeRef) {
             continue;
         }
-        const std::array<std::span<const gc_node_ref_t>, 4> graphReading{
+        const std::array<std::span<const gc_node_ref_t>, 5> graphReading{
             root->normUsersOf(ref),
             root->withUsersOf(ref),
             root->ctrlUsersOf(ref),
-            root->syncUsersOf(ref)};
+            root->syncUsersOf(ref),
+            root->orderUsersOf(ref)};
         for (size_t kind = 0; kind < graphReading.size(); ++kind) {
             const std::vector<gc_node_ref_t> fromGraph(
                 graphReading[kind].begin(), graphReading[kind].end());
@@ -766,7 +778,8 @@ EdgeUsersTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     os << "EDGE_USERS norm=" << root->normUsersOf(sourceRef).size()
        << " with=" << root->withUsersOf(sourceRef).size()
        << " ctrl=" << root->ctrlUsersOf(sourceRef).size()
-       << " sync=" << root->syncUsersOf(sourceRef).size() << " nodes=" << committed.size()
+       << " sync=" << root->syncUsersOf(sourceRef).size()
+       << " order=" << root->orderUsersOf(sourceRef).size() << " nodes=" << committed.size()
        << " disagree=" << disagreeingNodes << "\n";
     return next;
 }

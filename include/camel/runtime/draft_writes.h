@@ -53,7 +53,7 @@ bool isWrittenInPlace(const GraphDraft &draft, gc_node_ref_t id);
  */
 class WrittenSlots {
   public:
-    explicit WrittenSlots(const GraphDraft &draft);
+    explicit WrittenSlots(const GraphTransaction &transaction);
     bool operator()(gc_node_ref_t id) const { return id < written_.size() && written_[id]; }
 
   private:

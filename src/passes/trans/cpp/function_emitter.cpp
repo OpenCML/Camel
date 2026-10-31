@@ -34,6 +34,22 @@ bool isAnonymousGraphName(const std::string &name) {
 
 std::string typeName(const Type *type) { return type ? type->toString() : "an unknown type"; }
 
+/// The text of a string constant of the program (a DATA node), or nothing when the node is not one:
+/// the writer reads it where a rule cannot, as `fail`'s kind and a field name read here.
+std::optional<std::string> stringConstantOf(const GCGraph *graph, gc_node_ref_t ref) {
+    const auto *node = graph->node(ref);
+    if (node == nullptr || node->kind != GCNodeKind::Data || node->dataType() == nullptr ||
+        node->dataType()->code() != camel::core::type::TypeCode::String) {
+        return std::nullopt;
+    }
+    if (const auto *text =
+            camel::core::rtdata::fromSlot<::String *>(graph->staticArea()->get<slot_t>(-node->dataIndex));
+        text != nullptr) {
+        return text->toString();
+    }
+    return std::nullopt;
+}
+
 /// The value a graph gives: its output node, seen through the GATEs that only order it.
 gc_node_ref_t resultOf(const GCGraph *graph) {
     gc_node_ref_t ref = graph->outputNodeRef();
@@ -618,6 +634,9 @@ bool FunctionEmitter::lowerNode(
         std::optional<std::string> text;
         if (GCGraph *function = functionConstantOf(g, ref)) {
             text = functionValue(function, {});
+            // A named function used as a value is kept too: a call spells the function type of
+            // the position, and a `void` one drops the result the function gives.
+            frame.closures[ref] = {function, {}};
         } else {
             text = program_.values.constant(g->staticArea()->get<slot_t>(-node->dataIndex), type);
         }
@@ -749,9 +768,36 @@ void FunctionEmitter::lowerCall(
                 describeFunction(callee)));
     }
     std::vector<std::string> args;
+    // The parameter each argument fills, in the order a direct call lists them: the normal ones,
+    // then the `with` ones (the callee's own function type).
+    std::vector<const Type *> parameters;
+    if (const auto *calleeType = callee->funcType(); calleeType != nullptr) {
+        for (const Type *p : calleeType->normTypesSpan()) {
+            parameters.push_back(p);
+        }
+        for (const Type *p : calleeType->withTypesSpan()) {
+            parameters.push_back(p);
+        }
+    }
+    size_t argument = 0;
     for (const auto inputs : {g->normInputsOf(ref), g->withInputsOf(ref)}) {
         for (gc_node_ref_t input : inputs) {
-            args.push_back(valueOf(frame, input).text);
+            const Type *parameter = argument < parameters.size() ? parameters[argument] : nullptr;
+            std::string text;
+            // A function value spells the function type of the position it fills: the lambda's
+            // own result is dropped where that type is `void`.
+            if (parameter != nullptr &&
+                parameter->code() == camel::core::type::TypeCode::Function) {
+                const auto closure = frame.closures.find(input);
+                if (closure != frame.closures.end()) {
+                    if (auto spelled = functionValue(
+                            closure->second.first, closure->second.second, parameter)) {
+                        text = std::move(*spelled);
+                    }
+                }
+            }
+            args.push_back(text.empty() ? valueOf(frame, input).text : std::move(text));
+            ++argument;
         }
     }
 
@@ -971,6 +1017,53 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
                 "{} reads the block counters of the Camel runtime, and a program std::cpp writes has "
                 "no runtime block space of its own: the counters are not available on this target",
                 describeFunction(g)));
+    }
+    // `s[k]` with a struct on the left: the field the name denotes (src/builtin/operators/ops.cpp,
+    // reachable through a declaration of the built-in `:op/idx_str`, which is what the interpreter
+    // reads a field through). A record is a C++ aggregate -- there is no field table at run time --
+    // so the name has to be one the writer reads here: a field the struct has is that member, and a
+    // name it does not have is the interpreter's own report, FieldNotFound, with the name in it.
+    if (uri == ":op/idx_str" && norm.size() == 2 && firstNormType != nullptr &&
+        firstNormType->code() == camel::core::type::TypeCode::Struct &&
+        firstNormType != camel::core::type::errorType()) {
+        const auto *record = static_cast<const camel::core::type::StructType *>(firstNormType);
+        const auto key     = stringConstantOf(g, normInputs[1]);
+        if (!key) {
+            refuse(
+                g,
+                ref,
+                std::format(
+                    "{} indexes a struct by a name the program computes, and a record is a C++ "
+                    "aggregate with no field table to look that name up in",
+                    describeFunction(g)));
+        }
+        for (size_t i = 0; i < record->size(); ++i) {
+            if (record->fieldName(i) != *key) {
+                continue;
+            }
+            bind(
+                frame,
+                ref,
+                std::format(
+                    "{}.{}", norm[0].text, program_.values.fieldName(firstNormType, i)),
+                true,
+                out,
+                "field");
+            return;
+        }
+        bind(
+            frame,
+            ref,
+            std::format(
+                "rt::fail({}, {})",
+                program_.sites.siteFor(
+                    g, ref, RuntimeDiag::FieldNotFound,
+                    std::vector<std::string>{SiteTable::valueMark(0)}),
+                cppStringLiteral(*key)),
+            false,
+            out,
+            "field");
+        return;
     }
     // `tensor:ones` and `tensor:zeros` are rules of the table now (operator_rules.cpp); a tensor
     // builder the table has no rule for is refused below like any other operator, on the type of
@@ -1438,14 +1531,24 @@ GCGraph *FunctionEmitter::functionConstantOf(const GCGraph *graph, gc_node_ref_t
     return function != nullptr ? function->graph() : nullptr;
 }
 
-std::optional<std::string>
-FunctionEmitter::functionValue(GCGraph *function, const std::vector<std::string> &captures) {
+std::optional<std::string> FunctionEmitter::functionValue(
+    GCGraph *function, const std::vector<std::string> &captures, const Type *expected) {
     // A function value is the graph and the values it captured (design principles, section
     // 1): a lambda that calls the graph's function with the arguments, then the captures.
     auto name = program_.functionNames.find(function);
-    auto type = program_.values.type(function->funcType());
+    // The value spells the function type of the position it fills when that is known: a `void`
+    // function type takes a function whose result nobody wants (design principles 3.9), and a
+    // lambda that returns a value is not that type -- the result is dropped where the value is
+    // made, rather than the call being handed a type the parameter does not have.
+    const Type *spelled = expected != nullptr ? expected : function->funcType();
+    auto type           = program_.values.type(spelled);
     if (name == program_.functionNames.end() || !type) {
         return std::nullopt;
+    }
+    bool dropResult = false;
+    if (expected != nullptr && function->funcType() != nullptr) {
+        const auto *wanted = static_cast<const camel::core::type::FunctionType *>(expected);
+        dropResult         = isVoid(wanted->exitType()) && !isVoid(function->funcType()->exitType());
     }
     std::string params, args;
     size_t i = 0;
@@ -1470,11 +1573,12 @@ FunctionEmitter::functionValue(GCGraph *function, const std::vector<std::string>
         function->name(),
         function->closureNodes().size());
     return std::format(
-        "{}({}, [{}](rt::Depth depth{}) {{ return {}(depth{}{}); }})",
+        "{}({}, [{}](rt::Depth depth{}) {{ {}{}(depth{}{}); }})",
         *type,
         cppStringLiteral(text),
         capture,
         params,
+        dropResult ? "" : "return ",
         name->second,
         args,
         captured);
@@ -1514,6 +1618,10 @@ void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
                     describeFunction(g),
                     typeName(node->dataType())));
         }
+        // Kept for a call that takes this value: the position's function type is what the value
+        // has to spell, and the type of the closure is its own (`(x: int) => int` where a `void`
+        // function type takes it).
+        frame.closures[ref] = {function, captures};
         bind(frame, ref, std::move(*value), true, out, "closure");
         return;
     }
@@ -1825,6 +1933,20 @@ bool FunctionEmitter::cellEscapes(const GCGraph *graph, gc_node_ref_t cell) {
                 (isVariableAccess(operatorId(graph, user)) ||
                  operatorId(graph, user) == camel::core::oper::VarTake) &&
                 graph->normInputsOf(user).front() == cell) {
+                // An access that gives the cell back -- an assignment's value is the cell it
+                // wrote -- hands on this same cell, so what its users do to it, they do to this
+                // one: a call that takes it as a `var` argument takes the variable out of the
+                // function, and the variable is a cell (design note 5.3). A read (`:var/get`)
+                // gives a copy of the value, and its users are not this cell's; `:var/take` is
+                // the in-place forms' own access, which keeps the cell inside the function.
+                const Type *handed = node->dataType();
+                const bool givesTheCell =
+                    operatorId(graph, user) != camel::core::oper::VarTake && handed != nullptr &&
+                    handed->code() == camel::core::type::TypeCode::Tuple &&
+                    static_cast<const camel::core::type::TupleType *>(handed)->isCell();
+                if (givesTheCell && cellEscapes(graph, user)) {
+                    return true;
+                }
                 continue;
             }
             if (node->kind == GCNodeKind::Gate) {

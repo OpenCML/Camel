@@ -124,8 +124,8 @@ struct DraftRootsDebug {
 
 /// A DraftWritings's EngineRootScope covers its own draft, not a whole session: record it for
 /// the safepoint check. A draft of no session (one the front end built) is ignored.
-void debugDraftRootOpened(const GraphDraft &draft);
-void debugDraftRootClosed(const GraphDraft &draft);
+void debugDraftRootOpened(const GraphTransaction &transaction);
+void debugDraftRootClosed(const GraphTransaction &transaction);
 #endif
 
 class RuntimeGraphDraftSession {

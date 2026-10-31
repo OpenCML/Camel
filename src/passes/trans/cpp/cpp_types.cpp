@@ -1076,23 +1076,22 @@ std::optional<std::string> ProgramValues::constant(slot_t slot, const Type *t) {
             return std::nullopt;
         }
         const size_t rank = array != nullptr ? array->rank() : 0;
-        // A value of one dimension whose type leaves the length open (`float[]`) is still one
-        // dimension: the type says so, and the elements are how long it is, which `shape` and `len`
-        // read. A type of open rank (`float[..]`) says nothing about the rank, and a single element
-        // there is the rank-zero value the position promises (design principles 5.4: a rank-zero
-        // array *is* the element), so its constant keeps the rank it was made with. The two-list
+        // A value of one dimension carries the one dimension it has, whatever it holds: the type of
+        // open rank (`float[..]`) says nothing about the rank, but the value does, and `push` and
+        // `Array::element` (standalone/array.h) are what record it. A value of no rank is the
+        // rank-zero value a position of open rank promises (5.4: a rank-zero array *is* the
+        // element), and `element` is how it is written. Neither branch counts elements. The two-list
         // constructor is written as a call, not as a braced pair: with an element type an `{n}` can
         // itself stand for (`rt::Array<T>`, a struct of one field) the initializer would read `{3}`
         // as one more element.
-        if (rank == 0 && array != nullptr && array->numel() == 1 &&
+        if (rank == 0 && array != nullptr && array->numel() != 0 &&
             static_cast<const ArrayType *>(t)->anyRank()) {
-            // One element that recorded no rank, in a position of open rank, is the element itself:
-            // `element` says so, where an appended array is one dimension of what it holds
-            // (standalone/array.h). A value of one dimension keeps that and prints as the literal.
+            // A value of no rank, in a position of open rank, is the element itself: `element` says
+            // so, where an appended array is one dimension of what it holds (standalone/array.h). A
+            // value of one dimension keeps that and prints as the literal.
             return hoist(*cpp, std::format("{}::element({})", *cpp, *items), "array");
         }
-        const bool oneDimension =
-            rank == 1 && (array->dim(0) != 1 || !static_cast<const ArrayType *>(t)->anyRank());
+        const bool oneDimension = rank == 1;
         if (oneDimension) {
             return hoist(
                 *cpp,

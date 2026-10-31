@@ -2343,9 +2343,10 @@ GCUseIndex::GCUseIndex(const GCGraph &graph) {
     // order and the uniqueness the encoder gave the stored outputs before they were dropped.
     // Two passes over the input table: count, then place (a counting sort by source).
     //
-    // The fourth group is the sync edges, which are not in the input table: they are a side array
-    // sorted by (user, pred), so they are read in the same user order and placed the same way
-    // (docs/design/effects/edges.cn.md 1.5).
+    // The last two groups are the side arrays, which are not in the input table: the sync edges
+    // (the fourth) and the order edges (the fifth). Both are stored sorted by (user, pred), so
+    // they are read in the same user order and placed the same way (docs/design/effects/
+    // edges.cn.md 1.5).
     const size_t count  = graph.nodeCount();
     const auto groupsOf = [&](gc_node_ref_t user) {
         return std::array<std::span<const gc_node_ref_t>, 3>{
@@ -2369,16 +2370,24 @@ GCUseIndex::GCUseIndex(const GCGraph &graph) {
             }
         }
     }
-    for (const GCGraphSyncEdge &edge : graph.syncEdges()) {
-        if (!graph.containsNodeRef(edge.pred) || !graph.containsNodeRef(edge.user)) {
-            continue;
+    // The side arrays, each edge placed under its predecessor: the sync users in the fourth group,
+    // the order users in the fifth. Both are stored sorted by (user, pred), so one walk of each
+    // places them in the same user order the input runs have, and a user is skipped once its entry
+    // for that source is placed.
+    const auto countSide = [&](const auto &edges, size_t kind) {
+        for (const auto &edge : edges) {
+            if (!graph.containsNodeRef(edge.pred) || !graph.containsNodeRef(edge.user)) {
+                continue;
+            }
+            const size_t at = static_cast<size_t>(edge.pred) * kGroups + kind;
+            if (lastUser[at] != edge.user) {
+                lastUser[at] = edge.user;
+                ++sizes[at];
+            }
         }
-        const size_t at = static_cast<size_t>(edge.pred) * kGroups + 3;
-        if (lastUser[at] != edge.user) {
-            lastUser[at] = edge.user;
-            ++sizes[at];
-        }
-    }
+    };
+    countSide(graph.syncEdges(), 3);
+    countSide(graph.orderEdges(), 4);
     begins_.resize(count * kGroups + 1);
     uint32_t total = 0;
     for (size_t at = 0; at < count * kGroups; ++at) {
@@ -2401,16 +2410,20 @@ GCUseIndex::GCUseIndex(const GCGraph &graph) {
             }
         }
     }
-    for (const GCGraphSyncEdge &edge : graph.syncEdges()) {
-        if (!graph.containsNodeRef(edge.pred) || !graph.containsNodeRef(edge.user)) {
-            continue;
+    const auto placeSide = [&](const auto &edges, size_t kind) {
+        for (const auto &edge : edges) {
+            if (!graph.containsNodeRef(edge.pred) || !graph.containsNodeRef(edge.user)) {
+                continue;
+            }
+            const size_t at = static_cast<size_t>(edge.pred) * kGroups + kind;
+            if (lastUser[at] != edge.user) {
+                lastUser[at]         = edge.user;
+                users_[cursor[at]++] = edge.user;
+            }
         }
-        const size_t at = static_cast<size_t>(edge.pred) * kGroups + 3;
-        if (lastUser[at] != edge.user) {
-            lastUser[at]         = edge.user;
-            users_[cursor[at]++] = edge.user;
-        }
-    }
+    };
+    placeSide(graph.syncEdges(), 3);
+    placeSide(graph.orderEdges(), 4);
 }
 
 const GCUseIndex &GCGraph::uses() const {
@@ -2475,7 +2488,7 @@ std::span<const gc_node_ref_t> GCGraph::ctrlOutputsOf(gc_node_ref_t ref) const {
     return containsNodeRef(ref) ? uses().ctrl(ref) : std::span<const gc_node_ref_t>();
 }
 
-// The draft's four names for the same lists (camel/runtime/draft.h): a frozen graph reads them
+// The draft's five names for the same lists (camel/runtime/draft.h): a frozen graph reads them
 // where the table already is, so a pass asks it the question it asks of its own draft.
 std::span<const gc_node_ref_t> GCGraph::normUsersOf(gc_node_ref_t ref) const {
     return containsNodeRef(ref) ? uses().norm(ref) : std::span<const gc_node_ref_t>();
@@ -2491,6 +2504,10 @@ std::span<const gc_node_ref_t> GCGraph::ctrlUsersOf(gc_node_ref_t ref) const {
 
 std::span<const gc_node_ref_t> GCGraph::syncUsersOf(gc_node_ref_t ref) const {
     return containsNodeRef(ref) ? uses().sync(ref) : std::span<const gc_node_ref_t>();
+}
+
+std::span<const gc_node_ref_t> GCGraph::orderUsersOf(gc_node_ref_t ref) const {
+    return containsNodeRef(ref) ? uses().order(ref) : std::span<const gc_node_ref_t>();
 }
 
 std::span<const gc_node_ref_t> GCGraph::normPorts() const {

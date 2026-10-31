@@ -954,7 +954,8 @@ DraftRootsDebug::~DraftRootsDebug() {
     }
 }
 
-void debugDraftRootOpened(const GraphDraft &draft) {
+void debugDraftRootOpened(const GraphTransaction &transaction) {
+    const GraphDraft &draft = transaction.graph();
     std::lock_guard<std::mutex> lock(draftRootsMutex());
     for (DraftRootsDebug *state : draftRootsRegistry()) {
         for (DraftRootsDebug::Entry &entry : state->drafts) {
@@ -966,7 +967,8 @@ void debugDraftRootOpened(const GraphDraft &draft) {
     }
 }
 
-void debugDraftRootClosed(const GraphDraft &draft) {
+void debugDraftRootClosed(const GraphTransaction &transaction) {
+    const GraphDraft &draft = transaction.graph();
     std::lock_guard<std::mutex> lock(draftRootsMutex());
     for (DraftRootsDebug *state : draftRootsRegistry()) {
         for (DraftRootsDebug::Entry &entry : state->drafts) {
