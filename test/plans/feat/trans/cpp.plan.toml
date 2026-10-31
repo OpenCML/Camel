@@ -137,6 +137,38 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "narrow_mean"
+desc = "The mean of a value of bf16 or f16 is the library's own body -- the total in f64 and the count in f64, divided there and rounded once into the element type -- so it needs no rule of its own and the only thing that can go wrong is the division: it is `rt::div` (a denominator of zero is a fault, as for any float). The reading is the interpreter's, compared by agree_with_fvm; what this entry adds is that the program is translated rather than refused, with the divided total in it."
+kind = "behavior"
+case = "../../../cases/trans/cpp/narrow_mean.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::div("]
+expect_output_not_contains = ["TranslationRefused", "libcamel"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "narrow_argmax"
+# Not in test/tools/cppexec/expect.txt yet: the program translates, but the C++ it writes does not
+# always build. Roughly half the runs of the same command produce `const Tuple v3_items =
+# rt::range(...)` -- a loop's range value typed as a cell -- and clang rejects the assignment; the
+# other half build and agree with std::fvm. Same command, same input, both outcomes (measured on
+# one host, both from the expect list and from a single positional program), so the emission is
+# not deterministic and pinning a reading on it would pin a coin. What this entry keeps is the
+# translation: the rule is there and the positions are its job; the reading waits for the writer
+# to emit the same program twice.
+desc = "The positions read from a value of bf16 or f16: `argsort` names its element type (`array:argsort_bf`, `array:argsort_f6`) and answers with an index, so the rule is one per type but the answer's type is everyone's -- the case where a narrow float's operator result is not a narrow float. `array::argmax` and `argmin` are Camel loops over `argsort` of two elements, so they follow from it, and the order is the one `min` and `max` state (NaN last, -0 below +0, ties where they stand). The program is translated into rt::halfArgsort and no bridged call; the readings are compared with the interpreter's once the emitted program builds every time (see the note above)."
+kind = "behavior"
+case = "../../../cases/trans/cpp/narrow_argmax.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::halfArgsort("]
+expect_output_not_contains = ["TranslationRefused", "rt::bridge", "libcamel"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "narrow_reductions_needs_no_runtime"
 # Red when the `math:min_f`/`math:max_f` rules are deleted: the library's own `min` widens a bf16
 # to `float` before comparing, so the fold reaches `math:min_d`, the bridge, and a link line that

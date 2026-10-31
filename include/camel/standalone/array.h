@@ -19,6 +19,7 @@
 #pragma once
 
 #include "camel/standalone/core.h"
+#include "camel/standalone/half.h"
 #include "camel/standalone/str.h"
 
 #include <algorithm>
@@ -449,6 +450,24 @@ Array<T> setAt(Array<T> xs, int64_t index, std::type_identity_t<T> value, const 
     return xs;
 }
 
+/// `array:elements` (src/builtin/operators/array_axis.cpp): the elements in row-major order as an
+/// array of one dimension. An rt::Array keeps the shape its type stated (design principles 5.4),
+/// so a value of several dimensions has to lose it here: `len` is the length of the first
+/// dimension (stdlib/prelude.cml), and every operator that reads a length after `some_elements`
+/// -- `array::mean` divides by `len(es)` -- means the element count, which is the first dimension
+/// of the flat run and not of the shaped one. A value of one dimension is returned as it stands.
+template <typename T> Array<T> flatten(const Array<T> &xs) {
+    if (xs.rank() <= 1) {
+        return xs;
+    }
+    Array<T> out;
+    out.reserve(xs.size());
+    for (const T &x : xs) {
+        out.push(x);
+    }
+    return out;
+}
+
 /// A type name applied to an array (:op/atoi, :op/atol, :op/atof, :op/atod): every element converted
 /// by the C++ conversion, which is what the runtime's does (core/array_convert.h).
 template <typename To, typename From> Array<To> convertArray(const Array<From> &xs) {
@@ -650,6 +669,41 @@ inline Array<double> sorted(const Array<double> &xs) {
     out.reserve(items.size());
     for (const double item : items) {
         out.push(item);
+    }
+    return out;
+}
+
+/// `array:argsort_bf`, `array:argsort_f6` (src/builtin/operators/array.cpp): the positions of the
+/// elements in the order `min` and `max` use -- every NaN after every number, -0 below +0, else
+/// the usual one -- and ties in the order they stand. It is the order `sorted` states, read as
+/// positions instead of values, and it is what a program of a half asks for when it wants
+/// `argmax`, `argmin` or a sort rather than a total: `array::argmax` is a loop over
+/// `precedes(a, b) = argsort([b, a])[0] == 1`, so the element type of the array decides which
+/// argsort is called, and the answer is an index either way.
+template <typename Format> Array<int64_t> halfArgsort(const Array<Half<Format>> &xs) {
+    const auto order = [](float a, float b) {
+        if (std::isnan(b)) {
+            return !std::isnan(a);
+        }
+        if (std::isnan(a)) {
+            return false;
+        }
+        if (a == b) {
+            return std::signbit(a) && !std::signbit(b);
+        }
+        return a < b;
+    };
+    std::vector<int64_t> positions(xs.size());
+    for (std::size_t i = 0; i < xs.size(); ++i) {
+        positions[i] = static_cast<int64_t>(i);
+    }
+    std::stable_sort(positions.begin(), positions.end(), [&](int64_t l, int64_t r) {
+        return order(xs[l].toFloat(), xs[r].toFloat());
+    });
+    Array<int64_t> out;
+    out.reserve(positions.size());
+    for (const int64_t position : positions) {
+        out.push(position);
     }
     return out;
 }
