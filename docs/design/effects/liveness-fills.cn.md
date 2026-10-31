@@ -8,6 +8,7 @@
 - 一句判据：**不被扫描的页等于没写——数表要放在会被读的那条路上。**
 - 一句判据：**永远 false 的字段不是保守，是没人写的一份名单——它比写错更难发现，因为它从不报错。**
 - 一句判据：**零读点的代码不一定错——要问的是它描述的规则，今天还有没有别的东西在替它说。**
+- 一句判据：**重起一条线的时候，第一笔不是修出来的数，是一条能立刻被判红的不变量。**
 
 ---
 
@@ -112,3 +113,18 @@
 | 读法的来源与去向 | 临时把 `effectStandingOf` 接到 `test::edge_users` 里跑一次，facts 按 pass 的填法从冻结图取（`isWriterWithLaterRead` 仍是 0）；读数后已撤净，`git status` 空 |
 
 **结论**：行为对（两个 back end 都是 `0` / `41`，调用跑了、写发生了、调用之后的读拿到了新版本），判定错（这 2 个节点都说"没有凭据"）。因为它没有调用者，错不产生行为；一旦有人接上它去丢节点，这个形状就是第一个被丢的。所以它不是死码，是一个会咬人的洞——删掉 `isWriterWithLaterRead` 会把洞藏起来。调用为什么还是跑了（靠什么让 `f(v)` 执行）不在这张表里，这里只记"它跑了"和"判定说没凭据"这两件读数。
+
+## 10. 重起的第一笔：一条遍边界不变量
+
+守的是一句话：**一个活着的执行区域，它的结果节点必须在这次遍历的 `live` 集合里**。位置 `src/execute/graph_runtime_support.cpp#computeExecutionOrder`（第 184–202 行，`GUARD` 在第 194 行，`a67652d18`）：`live` 是从图的出口（`exitNodeRef`，没有则 `returnNodeRef`）沿 ctrl / norm / with 输入与 sync 前驱走出来的那批节点。
+
+为什么先加它：在它之前，能红的东西只有"跑出来的数不对"；而"区域的结果没人取"这种改写错误不改数——一样活干完，然后扔掉，图上和数上都看不出来。`GUARD` 在 `NDEBUG` 下也在，所以它是当场判死的一句话，不是只在调试版里响的提醒。
+
+A/B 读数（都跑 `test/plans/feat/compile/branch_exit.plan.toml`，10 例）：
+
+| 方向 | 读数 |
+|---|---|
+| 还原 | `total: 10, pass: 10, fail: 0` |
+| 拿掉被守的那条分支（把 JOIN 的 `with` 输入从 `live` 的走法里去掉——臂的结果正是这样进图的） | `total: 10, pass: 1, fail: 9`，9 例全是同一句：`Camel Invariant Violation: Region 1 yields node 4 and its owner 7 is in the execution, but that node is not: the value the region makes is read by nothing the exit depends on.`（`used_arm_exit` 与 `unused_arm_exit` 各 4 个 back end，加 `unused_arm_exit.wno`） |
+
+被守的分支一拿掉，红的不是数值，是这句话本身；还原即绿。这一笔只加这一条不变量，没动任何判定；`isWriterWithLaterRead` 的语义也没有动（它仍是那个洞的名字）。
