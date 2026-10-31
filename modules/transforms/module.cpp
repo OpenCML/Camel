@@ -33,6 +33,7 @@
 #include "camel/runtime/program.h"
 
 #include <algorithm>
+#include <utility>
 #include <string>
 
 using namespace camel::core::context;
@@ -71,16 +72,31 @@ void printRuleUris(camel::core::context::Context &context, std::ostream &os) {
             // How many ports the right side takes, and how many nodes it has: whether a call can
             // stand where the operator stood is a question about the right side's own signature,
             // and a replacement that guessed it would be wrong at the first arity that differs.
-            size_t ports = 0;
-            for (camel::runtime::gc_node_ref_t ref = 1; ref <= instance.rhs->nodeCount(); ++ref) {
-                const camel::runtime::GCNode *node = instance.rhs->node(ref);
-                if (node != nullptr && node->kind == camel::runtime::GCNodeKind::Port) {
-                    ++ports;
+            const auto shapeOf = [](const camel::runtime::GCGraph *graph) {
+                size_t ports = 0;
+                std::string kinds;
+                for (camel::runtime::gc_node_ref_t ref = 1; ref <= graph->nodeCount(); ++ref) {
+                    const camel::runtime::GCNode *node = graph->node(ref);
+                    if (node == nullptr) {
+                        continue;
+                    }
+                    if (node->kind == camel::runtime::GCNodeKind::Port) {
+                        ++ports;
+                    }
+                    if (!kinds.empty()) {
+                        kinds += ',';
+                    }
+                    kinds += std::to_string(static_cast<int>(node->kind));
                 }
-            }
+                return std::pair<size_t, std::string>(ports, kinds);
+            };
+            const auto lhsShape = shapeOf(instance.lhs);
+            const auto rhsShape = shapeOf(instance.rhs);
+            const size_t ports  = rhsShape.first;
             os << "REINTERP uri " << uri << " -> rule " << head.rule
                << " -> rhs " << camel::runtime::toValue(instance.rhs->id()) << " ports=" << ports
-               << " nodes=" << instance.rhs->nodeCount() << '\n';
+               << " nodes=" << instance.rhs->nodeCount() << " lhsPorts=" << lhsShape.first
+               << " lhsKinds=" << lhsShape.second << " rhsKinds=" << rhsShape.second << '\n';
             break;
         }
     }
