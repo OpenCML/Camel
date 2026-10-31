@@ -627,6 +627,57 @@ Rules buildRules() {
         },
         false,
     };
+    // `tensor:sum_axis` (modules/tensor/kernels/reduce.cpp, reduceAxis): the lanes along one dimension
+    // added from +0 in ascending order, rounded into the element type once -- the one reduction that
+    // does read a dimension, and the one that cannot be written by flattening the value.
+    //
+    // Two refusals stay, and they are not the same sentence. A rank of one is refused because its
+    // answer is a value of no dimension: the result's type cannot be written from the signature,
+    // which says `T[..]` -- a value of a rank the callee does not know -- while the answer here
+    // would be the element itself. An open rank is refused for that same reason and only that one:
+    // its rank is a property of the value, so the shape the answer keeps cannot be stated -- and not
+    // because such a value is not an array, which it is, and the operator reads it as one.
+    r["tensor:sum_axis"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (value == nullptr || value->anyRank() || value->rank() < 2 ||
+                value->elemType() == nullptr) {
+                return std::nullopt;
+            }
+            const TypeCode element = value->elemType()->code();
+            if (element != TypeCode::Int64 && element != TypeCode::Int32 &&
+                element != TypeCode::Float32 && element != TypeCode::Float64) {
+                return std::nullopt;
+            }
+            // The axis and the flag arrive on one of two roads: as arguments of the call
+            // (`sum_axis(xs, 1, false)`) or as the constant the callee was written with
+            // (`sum<1>(xs)`), which the graph keeps beside the value rather than among the
+            // arguments (`with`). Either road names the same two things, and the rule reads
+            // whichever carried them.
+            std::string axis;
+            std::string keepDims = "false";
+            if (c.normCount() >= 2) {
+                axis = c.operand(1);
+                if (c.normCount() > 2) {
+                    keepDims = c.operand(2);
+                }
+            } else if (c.withCount() >= 1) {
+                axis = c.with(0).text;
+                if (c.withCount() > 1) {
+                    keepDims = c.with(1).text;
+                }
+            } else {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::sumAxis({}, {}, {}, {})",
+                c.operand(0),
+                axis,
+                keepDims,
+                c.site(RuntimeDiag::InvalidArgument, marks(2)));
+        },
+        false,
+    };
     // `numel(xs)` (`stdlib/array.cml`): how many elements the value has. It needs no dimension of
     // the value -- only the count -- so a value of several dimensions and one of an open rank are
     // both read off the run it keeps: `numel` of a rank-zero value is one, as the interpreter's is.

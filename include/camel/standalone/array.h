@@ -245,6 +245,26 @@ template <typename T> class Array {
         }
     }
 
+    /// States the shape a reduction along one dimension leaves (`sumAxis`): the source's dimensions
+    /// with the reduced one dropped, or written as one when the caller asked to keep it.
+    void shapeReduced(const Array<T> &source, std::size_t axis, bool keepDims) {
+        if (rep_ == nullptr || axis >= source.rank()) {
+            return;
+        }
+        const std::size_t rank = keepDims ? source.rank() : source.rank() - 1;
+        std::size_t product    = 1;
+        for (std::size_t i = 0; i < rank; ++i) {
+            product *= keepDims && i == axis ? std::size_t{1} : source.extent(i < axis ? i : i + 1);
+        }
+        if (product != size() || rank > kMaxRank) {
+            return;
+        }
+        rep_->rank = static_cast<std::uint32_t>(rank);
+        for (std::size_t i = 0; i < rank; ++i) {
+            rep_->extents[i] = keepDims && i == axis ? 1 : source.extent(i < axis ? i : i + 1);
+        }
+    }
+
     /// States the shape a value built from another's elements has (`atAxis`): every dimension of
     /// the source except `axis`, when they multiply to the elements this value holds.
     void shapeWithout(const Array<T> &source, std::size_t axis) {
@@ -718,6 +738,61 @@ template <typename T> T sumAll(const Array<T> &xs) {
 /// answers -- one for a value of no dimension, the length for one of a single dimension, and the
 /// product of the extents for one of several.
 template <typename T> int64_t numel(const Array<T> &xs) { return static_cast<int64_t>(xs.size()); }
+
+/// `tensor:sum_axis` (modules/tensor/kernels/reduce.cpp, reduceAxis): one lane per position of every
+/// dimension but `axis`, each the elements of its lane added from +0 in ascending order and rounded
+/// into the element type once -- `double` for every float element type and an exact `uint64_t` for
+/// integers, as the interpreter's kernel accumulates. The result keeps the dimensions it did not
+/// reduce, in row-major order, and the reduced one either disappears or stays as one when the caller
+/// asked to keep it.
+///
+/// The lane is read where it lies: the elements of one lane are `inner` apart, and a lane is never
+/// gathered into a run of its own before being added. A rank of one answers a value of no dimension
+/// and a negative axis counts from the last one.
+template <typename T>
+Array<T> sumAxis(const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid) {
+    const auto rank = static_cast<int64_t>(xs.rank());
+    const int64_t axis = axisArg < 0 ? axisArg + rank : axisArg;
+    if (rank < 2 || axis < 0 || axis >= rank) [[unlikely]] {
+        fault(
+            invalid,
+            {"[]",
+             "'tensor:sum_axis': the axis " + std::to_string(axisArg) + " is outside the rank " +
+                 std::to_string(rank)});
+    }
+    const auto dimension = static_cast<std::size_t>(axis);
+    std::size_t outer    = 1;
+    for (std::size_t i = 0; i < dimension; ++i) {
+        outer *= xs.extent(i);
+    }
+    const std::size_t extent = xs.extent(dimension);
+    std::size_t inner        = 1;
+    for (std::size_t i = dimension + 1; i < xs.rank(); ++i) {
+        inner *= xs.extent(i);
+    }
+    Array<T> out;
+    out.reserve(outer * inner);
+    for (std::size_t o = 0; o < outer; ++o) {
+        for (std::size_t i = 0; i < inner; ++i) {
+            const std::size_t base = o * extent * inner + i;
+            if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, int32_t>) {
+                std::uint64_t acc = 0;
+                for (std::size_t k = 0; k < extent; ++k) {
+                    acc += static_cast<std::uint64_t>(static_cast<int64_t>(xs[base + k * inner]));
+                }
+                out.push(static_cast<T>(static_cast<int64_t>(acc)));
+            } else {
+                double acc = 0.0;
+                for (std::size_t k = 0; k < extent; ++k) {
+                    acc += static_cast<double>(xs[base + k * inner]);
+                }
+                out.push(static_cast<T>(acc));
+            }
+        }
+    }
+    out.shapeReduced(xs, dimension, keepDims);
+    return out;
+}
 
 /// `tail(xs)` (:struct/tail_arr): all but the first element; the empty array for one or none.
 template <typename T> Array<T> tail(const Array<T> &xs) {

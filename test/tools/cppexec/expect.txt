@@ -226,3 +226,8 @@ test/cases/trans/cpp/shape_rank.cml
 # type -- exact for integers, the f64 accumulator converted once for floats.
 test/cases/trans/cpp/numel_rank.cml
 test/cases/trans/cpp/sum_rank.cml
+
+# A reduction along one dimension adds each lane from +0 in ascending order and answers the
+# dimensions it did not reduce -- `axis=0` sums a rank-2 value's columns, `axis=1` its rows, and the
+# middle axis of a rank-3 value sums elements that are apart in the run.
+test/cases/trans/cpp/sum_axis_rank.cml
