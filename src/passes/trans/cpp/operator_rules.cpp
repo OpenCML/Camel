@@ -4,7 +4,6 @@
 #include "operator_rules.h"
 
 #include "camel/core/numeric_convert.h"
-#include "camel/core/numeric_convert_half.h"
 #include "camel/core/type/composite/array.h"
 #include "fault_sites.h"
 
@@ -215,26 +214,30 @@ OperatorRule checkedTextConversion(
 }
 
 /// A bf16 or an f16 read from a text (`bf16(s)`; cast.cpp __stobf__): `rt::halfFromText<To>(x,
-/// invalidSite, f32RangeSite, halfRangeSite)`. The text is read as f32 first, so a text that is
-/// not a number and one beyond f32 are the f32 refusals, with the element type's name in them as
-/// the runtime's own path puts it; the third report is the range of the element type itself
-/// (camel/core/numeric_convert_half.h, the same sentences).
-OperatorRule halfFromTextRule(const char *to, const char *target, std::string halfRangeReason) {
+/// invalidSite, rangeSite)`. The text is read as f32 first, so a text that is not a number and one
+/// beyond f32 are the f32 refusals, with the element type's name in them as the runtime's own path
+/// puts it; the third report is the range of the element type itself (camel/core/
+/// numeric_convert_half.h, the same sentences).
+///
+/// The last two are one diagnostic at one place, so they are one site: the range sits in the
+/// message as a value, and the runtime fills in the range it met -- f32's for a text beyond f32,
+/// the element type's for a number f32 holds and the type does not. Two sites of one kind at one
+/// node are one site (`SiteTable::siteFor` is keyed by node and kind), and asking for both would
+/// hand the second the first's text.
+OperatorRule halfFromTextRule(const char *to, const char *target) {
     return {
-        [to, target, halfRangeReason = std::move(halfRangeReason)](
-            OperatorCall &c) -> std::optional<std::string> {
-            const std::string text = SiteTable::valueMark(0);
+        [to, target](OperatorCall &c) -> std::optional<std::string> {
+            const std::string text  = SiteTable::valueMark(0);
+            const std::string range = SiteTable::valueMark(1);
             return std::format(
-                "rt::halfFromText<{}>({}, {}, {}, {})",
+                "rt::halfFromText<{}>({}, {}, {})",
                 to,
                 c.norm(0).text,
                 c.site(RuntimeDiag::InvalidNumberText, {text, target, "a number"}),
                 c.site(
                     RuntimeDiag::ConversionOutOfRange,
-                    {"'" + text + "'", target, camel::core::floatRangeReason<float>(target)}),
-                c.site(
-                    RuntimeDiag::ConversionOutOfRange,
-                    {"'" + text + "'", target, halfRangeReason}));
+                    {"'" + text + "'", target,
+                     std::format("the value is outside the range of {} ({})", target, range)}));
         },
         false};
 }
@@ -429,10 +432,8 @@ Rules buildRules() {
         checkedConversion("truncate", "int64_t", "int", RuntimeDiag::ConversionOutOfRange);
     r[":op/f6tol"] =
         checkedConversion("truncate", "int64_t", "int", RuntimeDiag::ConversionOutOfRange);
-    r[":op/stobf"] = halfFromTextRule(
-        "rt::BF16", "bf16", camel::core::halfRangeReason<camel::core::rtdata::BFloat16>("bf16"));
-    r[":op/stof6"] = halfFromTextRule(
-        "rt::F16", "f16", camel::core::halfRangeReason<camel::core::rtdata::Float16>("f16"));
+    r[":op/stobf"] = halfFromTextRule("rt::BF16", "bf16");
+    r[":op/stof6"] = halfFromTextRule("rt::F16", "f16");
     // A number to a complex value, and a complex value to the other width (cast.cpp, the c64
     // and c128 groups of globals.cpp): the imaginary part of a number is zero.
     r[":op/ctoc"] = identity();

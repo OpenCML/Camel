@@ -5,8 +5,9 @@
 # Written for std::cpp: one construct each (docs/design/cpp-standalone/README.cn.md 12.2).
 test/cases/trans/cpp/exec
 test/cases/trans/cpp/exec_mod_scalar.cml
-# The two reduced-precision floating types, at both precisions: storage and the type's own text
-# (arithmetic, comparison and conversion join it as their rules land).
+# The two reduced-precision floating types, at both precisions: storage and the type's own text,
+# arithmetic rounded once, comparison of the widened values, conversion in both directions, and
+# the reports a conversion or a division gives.
 test/cases/trans/cpp/narrow_floats.cml
 
 # Values and their text.
@@ -46,6 +47,12 @@ test/cases/consistency/entry/declared_string.cml
 test/cases/linear/runtime/recursion_depth_limit.cml
 test/cases/trans/cpp/exec/site_message.cml
 test/cases/compile/diag_render/runtime_format.cml
+# The three reports a reduced-precision conversion can give, and the one its division gives: the
+# whole standard output and the exit code are the interpreter's, byte for byte (not a keyword).
+test/cases/trans/cpp/fault_narrow_text_number.cml
+test/cases/trans/cpp/fault_narrow_text_range.cml
+test/cases/trans/cpp/fault_narrow_f16_range.cml
+test/cases/trans/cpp/fault_narrow_div_zero.cml
 
 # Tail calls.
 test/cases/consistency/values/tail_deep.cml

@@ -125,6 +125,54 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "fault_narrow_text_number"
+desc = "A text that is not a number, read as a bf16, is a fault at run time, and the compiler renders its report into the site the conversion calls: the program is translated rather than refused, and it carries the invalid-text sentence. The value the fault reports is known only when it happens, so the sentence is written with a placeholder where the text goes; that the program *prints* it -- and prints it as the interpreter does, byte for byte -- is what agree_with_fvm compares (test/tools/cppexec/expect.txt)."
+kind = "behavior"
+case = "../../../cases/trans/cpp/fault_narrow_text_number.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["Cannot convert the string", "InvalidNumberText"]
+expect_output_not_contains = ["TranslationRefused"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fault_narrow_text_range"
+desc = "A text beyond what a bf16 can hold: a conversion into a half names the type and the range, which for bf16 is f32's, because the text is read as f32 first (the sentence camel/core/numeric_convert_half.h raises, and the range a value the runtime fills). Both ranges a reduced-precision conversion can name are one diagnostic at one place, so one site in the program carries the range as a value; the byte-for-byte comparison of the report with the interpreter's is agree_with_fvm's, which runs the program."
+kind = "behavior"
+case = "../../../cases/trans/cpp/fault_narrow_text_range.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["the value is outside the range of bf16 ("]
+expect_output_not_contains = ["TranslationRefused"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fault_narrow_f16_range"
+desc = "The one report only f16 reaches: a number f32 holds and f16 does not names the element type's own range (at most 65504), where a text beyond f32 names f32's. One site carries both, with the range as a value the runtime fills, so the program has one sentence and one run faults it one way; that the report is the interpreter's byte for byte is what agree_with_fvm compares."
+kind = "behavior"
+case = "../../../cases/trans/cpp/fault_narrow_f16_range.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["the value is outside the range of f16 ("]
+expect_output_not_contains = ["TranslationRefused"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fault_narrow_div_zero"
+desc = "Dividing a bf16 by zero is a fault, not an infinity: `/` on these types goes through rt::div for that reason, and the report at that site is the interpreter's DivisionByZero. Pinned as the site the program carries; agree_with_fvm compares the whole report with the interpreter's byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/fault_narrow_div_zero.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::div(", "Attempted division by zero."]
+expect_output_not_contains = ["TranslationRefused"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "refuse_tensor_json"
 desc = "The same refusal in --output-format json: one diagnostic, TranslationRefused, stage pass:std::cpp, the range of the definition of `scale` (lines 10 to 12), nothing of a translation unit on stdout."
 kind = "behavior"
