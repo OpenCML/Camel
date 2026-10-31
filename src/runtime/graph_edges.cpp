@@ -173,6 +173,14 @@ class EdgeChecker {
     /// removed, and one statement is written directly after one other (the tail that reaches the
     /// block's value is the one node that two sync edges leave). The other direction -- one
     /// statement two statements follow -- is `checkSyncChainForks` below.
+    ///
+    /// A `GATE` is the exception on the user end, and it is not a relaxation for a test:
+    /// docs/design/effects/edges.cn.md 5.3 gives the GATE "一个数据端口读那个值、一个同步前驱是
+    /// 链尾" -- one data port for the value and one sync predecessor, the chain's tail -- because
+    /// the block's value node may be one this block does not own, so the wait is carried by a gate
+    /// of the block's own. A GATE is never a statement itself, so it cannot carry the flag; what
+    /// makes its predecessor a legal edge is that the predecessor is a statement of the block, and
+    /// that is what the `pred` test below still asks.
     void checkSyncEdges() {
         if (!graph_.hasSyncEdges()) {
             return;
@@ -201,7 +209,7 @@ class EdgeChecker {
                 bad("chains a node to itself");
                 continue;
             }
-            if ((user->flags & kGCNodeFlagSyncStatement) == 0) {
+            if ((user->flags & kGCNodeFlagSyncStatement) == 0 && user->kind != GCNodeKind::Gate) {
                 bad(std::format(
                     "ends on a node no `sync` block wrote (kind {}, flags {}, data type '{}')",
                     static_cast<int>(user->kind),
