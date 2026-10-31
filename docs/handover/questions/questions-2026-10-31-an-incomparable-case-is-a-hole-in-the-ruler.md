@@ -208,8 +208,17 @@ join 给出 `int[]`，`[]->contains<1>` 比较的是 `int` —— 元素类型�
 | **目标不具备** | **423** | 算子要的值在一个独立的 C++ 程序里根本不存在：形状数组与张量（`tensor:` 144）、被微分的函数（`autodiff:` 138）、导出的模型（`onnx:export_model` 91）、`Device<>`（`tiles:` 26）、模块自己的 kernel 表（`nn:` 14、`ckpt:` 2）、`json:encode` 3、`pyplot:plot` 1、用例自带的两套 test 模块 4。语言不规定 `std::cpp` 这个目标要有张量和这些模块的能力，所以拒绝正确，从待修清单划掉。 |
 | **该修** | **42** | 算子跑在目标已经有的值上（`int[]`、`f32[]`），答的也是已有的值：`array:*` 33 条（`sum_f` 6、`argsort_l` 5、`sum_l` 5、`sort_l` 4、`max_l` 3、`sort_l_in_place` 2，其余 8 个各 1）与 `rand:*` 9 条（`shuffle_l` 8、`shuffle_i` 1）。这不是目标的边界，是写的人还没写的规则。 |
 
-**一条判据（进页，一句话）**：拒绝的销账不是把话说得更客气，是把每一条分成"该拒"和"该修"两堆。
+**一条判据（进页，一句话）**：拒绝的销账不是把话说得更客气，是把每一条分成"该拒"和"该修"两堆——而"该修"那一堆要一条条编出来、跑出来。
 
 尺子按这条改：`census.sh` 现在把 `refused` 按第一句理由的形状打出来（上面那张表就是它打的），
 并对判过的那一类再打一次"目标不具备 / 该修"的两堆——一堆一类地判，判过的在尺子里留名，没判的
 原样打出。
+
+**那堆"该修"要一条条编出来、跑出来，不是改成措辞。** `array:` 那一堆 33 条这一轮已经落成规则：
+`argsort` / `sort`（含 in-place 形式）/ `merge_sorted` / `sum` / `min` / `max` / `dim` 七个算子族，
+在 `operator_rules.cpp` 里按声明的元素类型和"一维的 run"接上，语义直接取解释器自己的那几条
+Statement（`numberLess` 的顺序、f64 累加一次的 `sum`、`IEEE 754-2019` 的 `min`/`max`、空归约的
+`InvalidArgument`、`dim` 的越界报告），所以跑出来的是同一行输出，不是"编过了"。
+这一轮 33 条里 25 条从 `refused` 变成 `same`（全语料 `same` 1215 → 1241，`refused` 1003 → 978，`defect` 仍是 0），余下 8 条各有各的别的类：3 条卡在 in-place 形态的*绑定*（`xs = xs->sort`）、1 条是形状数组上的归约、4 条是 `Bytes` 结果。同一轮的红-去-证明：把 `argsort` 那六条规则拿掉，用例回到
+`uses the operator 'array:argsort_l' on a value of type 'int[]', which has no translation in std::cpp yet.`；
+装回去，用例 `same`。

@@ -813,12 +813,12 @@ template <typename T> T last(const Array<T> &xs, const Site &site) {
     return xs[xs.size() - 1];
 }
 
-/// `array:sort_d` (src/builtin/operators/array.cpp): the elements in the order `min` and `max` use
-/// (design principles 7.7) -- every NaN after every number, -0 below +0, else the usual one -- and
-/// ties in the order they stand, so the result is the one `xs[argsort(xs)]` gives, a stable sort
-/// of the clone the returning form of the store makes.
-inline Array<double> sorted(const Array<double> &xs) {
-    const auto order = [](double a, double b) {
+/// The order `min`, `max`, `argsort` and `sort` put two keys in (design principles 7.7): every NaN
+/// after every number, -0 below +0, else the usual one; a string by its bytes and false below
+/// true. It is the runtime's own `numberLess` (src/builtin/operators/array.cpp), stated here once
+/// because the four kernels that read it are also here.
+template <typename T> bool numberLess(const T &a, const T &b) {
+    if constexpr (std::is_floating_point_v<T>) {
         if (std::isnan(b)) {
             return !std::isnan(a);
         }
@@ -828,15 +828,70 @@ inline Array<double> sorted(const Array<double> &xs) {
         if (a == b) {
             return std::signbit(a) && !std::signbit(b);
         }
-        return a < b;
-    };
-    std::vector<double> items(xs.begin(), xs.end());
-    std::stable_sort(items.begin(), items.end(), order);
-    Array<double> out;
+    }
+    return a < b;
+}
+
+/// `array:sort_*` (src/builtin/operators/array.cpp): the elements in the order `min` and `max` use
+/// (design principles 7.7) -- every NaN after every number, -0 below +0, else the usual one -- and
+/// ties in the order they stand, so the result is the one `xs[argsort(xs)]` gives, a stable sort
+/// of the clone the returning form of the store makes. The shape travels with the elements: it is
+/// the value's own, and sorting a run does not change it.
+template <typename T> Array<T> sorted(const Array<T> &xs) {
+    std::vector<T> items(xs.begin(), xs.end());
+    std::stable_sort(items.begin(), items.end(), [](const T &a, const T &b) {
+        return numberLess(a, b);
+    });
+    Array<T> out;
     out.reserve(items.size());
-    for (const double item : items) {
+    for (const T &item : items) {
         out.push(item);
     }
+    std::vector<int64_t> extents;
+    for (std::size_t i = 0; i < xs.rank(); ++i) {
+        extents.push_back(static_cast<int64_t>(xs.extent(i)));
+    }
+    out.setExtents(extents);
+    return out;
+}
+
+/// `array:argsort_*` (src/builtin/operators/array.cpp): the positions of the keys in ascending
+/// order of key, equal keys keeping their order (a stable sort of the positions, which is what the
+/// runtime's total order over key and position is).
+template <typename T> Array<int64_t> argsort(const Array<T> &xs) {
+    const std::size_t n = xs.size();
+    std::vector<std::size_t> order(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        order[i] = i;
+    }
+    std::stable_sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
+        return numberLess(xs[a], xs[b]);
+    });
+    Array<int64_t> out;
+    out.reserve(n);
+    for (const std::size_t position : order) {
+        out.push(static_cast<int64_t>(position));
+    }
+    return out;
+}
+
+/// `array:merge_sorted_*` (src/builtin/operators/array.cpp): the elements of both runs in ascending
+/// order, the meaning `sort(concat(xs, ys))` -- equal elements keep their order, those of `xs`
+/// first -- over a run each.
+template <typename T> Array<T> mergeSorted(const Array<T> &xs, const Array<T> &ys) {
+    std::vector<T> items(xs.begin(), xs.end());
+    for (const T &item : ys) {
+        items.push_back(item);
+    }
+    std::stable_sort(items.begin(), items.end(), [](const T &a, const T &b) {
+        return numberLess(a, b);
+    });
+    Array<T> out;
+    out.reserve(items.size());
+    for (const T &item : items) {
+        out.push(item);
+    }
+    out.setExtents(std::vector<int64_t>{static_cast<int64_t>(items.size())});
     return out;
 }
 
@@ -1291,6 +1346,44 @@ template <typename R, typename T> R meanAll(const Array<T> &xs, const Site &divi
         }
         return static_cast<R>(total / static_cast<double>(xs.size()));
     }
+}
+
+/// `array:min_*` / `array:max_*` (src/builtin/operators/array_reduce.cpp): the fold of the elements
+/// with `minOf` / `maxOf`, which is IEEE 754-2019 minimum and maximum -- exactly associative, so
+/// the order does not change the bits -- and a reduction over no element is a fault
+/// (`InvalidArgument`, "a reduction over no elements"), as the declaration in stdlib/array.cml
+/// says. `site` is that fault's place, its report taking the two values in `fault`.
+template <typename T, bool Maximum> T extremeOf(const Array<T> &xs, const Site &site) {
+    if (xs.size() == 0) [[unlikely]] {
+        fault(site);
+    }
+    T best = xs[0];
+    for (std::size_t i = 1; i < xs.size(); ++i) {
+        best = Maximum ? maxOf(best, xs[i]) : minOf(best, xs[i]);
+    }
+    return best;
+}
+
+/// `array:min_*` over the whole value.
+template <typename T> T minOf(const Array<T> &xs, const Site &site) {
+    return extremeOf<T, false>(xs, site);
+}
+
+/// `array:max_*` over the whole value.
+template <typename T> T maxOf(const Array<T> &xs, const Site &site) {
+    return extremeOf<T, true>(xs, site);
+}
+
+/// `array:dim` (src/builtin/operators/array_axis.cpp, `normalizedAxis`): the extent of one axis, a
+/// negative one counting from the last; an axis outside the rank is a fault (`InvalidArgument`,
+/// "the axis N is outside the rank R"), which is the runtime's own report with the two numbers in
+/// it, so it is written here with them.
+template <typename T> int64_t dim(const Array<T> &xs, int64_t axis, const Site &site) {
+    const int64_t rank = static_cast<int64_t>(xs.rank());
+    if (axis < -rank || axis >= rank) [[unlikely]] {
+        fault(site, {std::to_string(axis), std::to_string(rank)});
+    }
+    return static_cast<int64_t>(xs.extent(static_cast<std::size_t>(axis < 0 ? axis + rank : axis)));
 }
 
 /// `tail(xs)` (:struct/tail_arr): all but the first element; the empty array for one or none.
