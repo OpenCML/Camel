@@ -152,6 +152,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "index_rank"
+desc = "A position on a value of several dimensions: `m[1]` is the second row (`rt::atRow`, one dimension less and of the row's own extent), `m[1, 0]` writes the axis it drops and is the element (`rt::atAxis`, every other dimension kept whole), and `t[1]` of a rank-3 value is the rank-2 value behind it. `len` of a row answers the dimension that is left. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte -- six lines, rows and elements both. The operator rule that used to turn a value of several dimensions away is gone with it, as are the two module programs that took the same road: `index_two_positions` translates and agrees."
+kind = "behavior"
+case = "../../../cases/trans/cpp/index_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::atRow(", "rt::atAxis("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "enum_types"
 desc = "An enum is translated as a struct of its own: a tag and a std::variant payload struct per variant, with make<Tag>, get<Tag, Index> and an appendText that writes it as the interpreter does; :enum/tag and :enum/field become rt::enumTag and rt::enumField. The program itself is built and run by agree_with_fvm."
 kind = "behavior"

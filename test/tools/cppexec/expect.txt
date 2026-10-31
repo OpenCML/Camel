@@ -208,3 +208,8 @@ test/cases/trans/cpp/complex_scalar.cml
 # `println` nests the rows and `len` answers the first dimension -- the two readings the writer used
 # to print as the first extent's worth of elements.
 test/cases/trans/cpp/literal_rank.cml
+
+# A position on a value of several dimensions: `m[1]` is the row, `m[1, 0]` names the axis it drops
+# and is the element, `t[1]` of a rank-3 value is the rank-2 value behind it -- and `len` of a row is
+# the dimension that is left.
+test/cases/trans/cpp/index_rank.cml
