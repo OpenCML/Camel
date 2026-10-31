@@ -49,7 +49,6 @@ using camel::runtime::GCGraph;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
-using camel::runtime::GraphDraft;
 using camel::runtime::kInvalidNodeRef;
 using camel::runtime::Program;
 using camel::runtime::RuntimeGraphDraftSession;
