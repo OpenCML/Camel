@@ -1,0 +1,43 @@
+/**
+ * The generator machine builds the shapes it used to narrow away, and a stream that is built is
+ * only useful if it is consumed: each function below is pulled by a `for` loop that folds the
+ * elements into one number, and the number is what this case pins.
+ *
+ * Three shapes: three carried values (`three`), two nested loops with one carried value each
+ * (`nested`), and a carried pair that depends on the two rounds before it (`fib`).
+ *
+ * The folds are the same ones an ordinary loop over the same sequence writes: `three(5)` folds
+ * its five elements into 1384 at base 10, `nested()` its nine into 102101112202122 at base 100, and
+ * `fib()` sums the ten values it hands out below 50 to 88. A fold at base 100 does not write the
+ * leading zeros of a small element, which is what a hand-written loop prints too.
+ */
+func three(n: int): int.. sync {
+    loop i = 0, s = 0, t = 0 while i < n do {
+        yield i + s + t
+        (i + 1, s + i, t + s)
+    }
+}
+
+func nested(): int.. sync {
+    loop i = 0 while i < 3 do {
+        loop j = 0 while j < 3 do {
+            yield i * 10 + j
+            j + 1
+        }
+        i + 1
+    }
+}
+
+func fib(): int.. sync {
+    loop a = 0, b = 1 while a < 50 do {
+        yield a
+        (b, a + b)
+    }
+}
+
+func main(): int sync {
+    println(loop acc = 0 for x in three(5) do acc * 10 + x)
+    println(loop acc = 0 for x in nested() do acc * 100 + x)
+    println(loop acc = 0 for x in fib() do acc + x)
+    return 0
+}

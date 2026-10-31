@@ -2160,14 +2160,16 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     // Create an ExitLoad node to represent the exit statement.
     const AST::ExitType astExit = ast->loadAs<AST::ExitStmtLoad>()->exitType();
     if (astExit == AST::ExitType::Yield) {
-        // A `yield` the generator machine did not claim: it stands in a body the machine builds
-        // (docs/design/io-concurrency-streams/plan.cn.md slice E, visitGeneratorBody below), but in
-        // a shape it narrows away -- a loop that carries two values across the `yield`, each
-        // depending on the round before it, is the shape the narrowing names today. The head is
-        // fine here (a head that writes no stream type is refused by name of its own before this),
-        // so this one is the named gap and stays one: running the `yield` as a `return` would hand
-        // out one value and hide the rest.
-        diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("generators");
+        // A `yield` the generator machine did not claim reached the statement builder, which means
+        // the machine missed a shape it builds: that is a defect of this builder, not a property of
+        // the program (author's ruling of 2026-10-31: the machine's narrowings are compiler
+        // defects, reported as internal errors with the program to send, and not as a missing
+        // feature).
+        diags_->of(InternalDiag::UnknownInternalError)
+            .at(ast->load()->tokenRange())
+            .commit(
+                "a `yield` reached the statement builder, so the generator machine did not claim "
+                "it; send the program, this is a compiler defect");
         throw BuildAbortException();
     }
     node_ptr_t exitNode = tree_->makeExit(ExitType::Return);
@@ -5704,14 +5706,17 @@ node_ptr_t Builder::visitGeneratorBody(
     const AST::node_ptr_t &bodyAst = funcAst->atAs<AST::StmtBlockLoad>(1);
     const auto &bodyStmts         = bodyAst->atAs<AST::RepeatedLoad>(0);
 
-    // The head writes the stream type, and it is what says what one `yield` hands out.
-    // A `yield` the machine narrows away (a `yield` with no value, a shape it cannot carry) is a
-    // named gap of the machine, not a mistake in the head.
+    // The head writes the stream type, and it is what says what one `yield` hands out. A shape
+    // this machine does not build is a defect of the machine, not a property of the program: the
+    // ruling of 2026-10-31 retired the "generators are not supported" refusal, so a shape that
+    // falls through is reported as an internal error with the program to send.
     const auto refuse = [&](const AST::node_ptr_t &atNode) -> void {
         const AST::node_ptr_t atYield = firstOwnYield(atNode);
-        diags_->of(SemanticDiag::FeatureNotSupported)
+        diags_->of(InternalDiag::UnknownInternalError)
             .at((atYield != nullptr ? atYield : atNode)->load()->tokenRange())
-            .commit("generators");
+            .commit(
+                "the generator machine does not build this shape; send the program, this is a "
+                "compiler defect");
         throw BuildAbortException();
     };
     // A local that lives across a `yield` is a cell of the body (see `addTypedCell`), so there is
