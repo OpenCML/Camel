@@ -519,7 +519,7 @@ void writeAnalysis(
         out << ",\"parameters\":";
         ids(out, extracted.parameters);
         out << ",\"result_arity\":" << region.outputs.size();
-        out << ",\"extracted_nodes\":" << extracted.graph->nodeCount();
+        out << ",\"extracted_nodes\":" << extracted.graph->graph().nodeCount();
         const SegmentResidency empty;
         const auto &segment = r < segments.size() ? segments[r] : empty;
         out << ",\"uploads\":";
@@ -537,7 +537,7 @@ void writeAnalysis(
         }
         out << ']';
         for (auto id : region.members) {
-            const auto *copy       = extracted.graph->header(extracted.sourceToNode[id]);
+            const auto *copy       = extracted.graph->graph().header(extracted.sourceToNode[id]);
             const auto permissions = camel::core::tag::effectivePermissions(
                 graph,
                 id,
