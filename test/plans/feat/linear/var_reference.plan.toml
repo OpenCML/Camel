@@ -3255,7 +3255,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor_read_after_call.run"
-desc = "Refused with a clear diagnostic instead of a silently wrong gradient: the variable is read after a call that receives it and may write it (run-time error at the gradient call)."
+desc = "Refused with a clear diagnostic instead of a silently wrong gradient: a variable of a differentiable type is read inside the differentiated function, and gradients do not flow through variables (run-time error at the gradient call). The read is reachable because a call that wrote the variable is now the version the read takes (`:var/after`), so the rule sees it."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_tensor_read_after_call.cml"
 args = ["${case}"]
@@ -3265,7 +3265,7 @@ verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.stdout + (input.stderr || '')
 assert(text.includes('Gradients do not flow through variables'), 'the diagnostic states the rule: ' + text)
-assert(text.includes('receives the variable and may write it'), 'the diagnostic names the case: ' + text)
+assert(text.includes('is declared inside the differentiated function is read there'), 'the diagnostic names the case: ' + text)
 assert(!text.includes('grad '), 'no gradient is printed')
 }
 """
@@ -3273,7 +3273,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor_read_after_call.macro"
-desc = "Refused with a clear diagnostic instead of a silently wrong gradient: the variable is read after a call that receives it and may write it (compile-time error of std::macro)."
+desc = "Refused with a clear diagnostic instead of a silently wrong gradient: a variable of a differentiable type is read inside the differentiated function, and gradients do not flow through variables (compile-time error of std::macro)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_tensor_read_after_call.cml"
 args = ["${case}", "std::macro", "std::fvm"]
@@ -3283,7 +3283,7 @@ verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.stdout + (input.stderr || '')
 assert(text.includes('Gradients do not flow through variables'), 'the diagnostic states the rule: ' + text)
-assert(text.includes('receives the variable and may write it'), 'the diagnostic names the case: ' + text)
+assert(text.includes('is declared inside the differentiated function is read there'), 'the diagnostic names the case: ' + text)
 assert(!text.includes('grad '), 'no gradient is printed')
 }
 """
