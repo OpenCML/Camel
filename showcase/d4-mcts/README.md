@@ -12,22 +12,29 @@ what lets "the search is right" be an assertion instead of a look at the numbers
 ## Scope
 
 D4 in the showcase design (`docs/design/showcase/README.cn.md`) reads **a simplified AlphaZero: MCTS + a
-policy/value network + self-play**. This example does only the **deterministic half** of that, and
-does it completely:
+policy/value network + self-play**. Both halves are here now, at the size a fast plan can carry:
 
-- done: UCT tree search, playouts, the light policy (win if you can → block → otherwise a place
-  from the generator), reproducible on all four back ends;
-- not done: the policy/value network and self-play. That is a narrowing of **scope** (compute and
-  length), not a language gap: `modules/nn` and autodiff can already train a small network and the
-  search half would be reused as is; growing the example until it needs training is what does not
-  belong in a showcase that runs in a fast plan. The search half also needs no runtime conversion of
-  an array into a tensor (the showcase design's question 7 / the native array work's steps 2–4), so it does not depend on those steps landing.
+- the search (`search.cml`): UCT, playouts, the light policy (win if you can → block → otherwise a
+  place from the generator), reproducible on all four back ends;
+- the learned half (`selfplay.cml`): a 9→16→1 value head, sixteen scripted self-play games, and ten
+  Adam steps over the batch of them, printing the games' results and the loss sequence
+  (`0.640625 → 0.261926`; `RESULTS.md` records that run).
+
+What is still not here is **the policy**. The move is drawn from the game's key, not chosen by the
+network, so the value head never steers a game; nothing searches with it (no PUCT), there is no
+replay buffer, and ten steps on sixteen games make a curve visible, not a player. That next step is
+growth in **compute and length**, not in language: `modules/nn` and autodiff already do the
+arithmetic, the search half would be reused as it stands, and `selfplay.cml` writes the same
+`winner` rule `search.cml` does. The search half also needs no runtime conversion of an array into a
+tensor (the showcase design's question 7 / the native array work's steps 2–4), so it does not depend
+on those steps landing.
 
 ## Layout
 
 ```
 showcase/d4-mcts/
 ├── search.cml                the Camel program (341 lines, MCTS)
+├── selfplay.cml              the learned half: 16 scripted games, 10 Adam steps, the loss sequence
 ├── baseline/mcts.py          the Python counterpart (the same search, stdlib only)
 ├── compare.py                runs both, diffs them line by line, times them, writes RESULTS.md
 ├── RESULTS.md                measured results of the `small` profile
@@ -166,18 +173,20 @@ back ends produce one output.
   fails with `Expected '=' before ':'` (no type annotation there) and `loop plays = []` fails with
   `LoopStateWithoutType` (`[]` has no element type). No loop in the tree needs one; the probe
   collected the moves as text instead.
-- **Scope**: no policy/value network and no self-play, for the reason above. Nothing in
-  `search.cml` is weakened to dodge a defect — the search is a search: 5000 playouts build 4929
-  nodes.
+- **Scope**: the value head is trained for ten steps, the policy is not — the move is still drawn
+  and no search consults the head. Nothing in `search.cml` is weakened to dodge a defect — the
+  search is a search: 5000 playouts build 4929 nodes.
 
 ## Tests
 
 - `test/plans/feat/showcase_d4.plan.toml` (fast): the four search cases on all four back ends plus
-  three refusals (no playouts, an unreachable position, a finished position), 19 tests. The whole
-  standard output is pinned, and `verify_script` asserts the properties that move if the search is
-  wrong: the winning move is worth exactly 1.0 and no other move is, the children's visits sum to
-  `playouts`, the centre is the highest-valued move on the empty board, and a search that examined
-  nothing must exit non-zero and **not** print a move.
+  three refusals (no playouts, an unreachable position, a finished position), and one entry that runs
+  the learned half — 20 tests. The whole standard output is pinned, and `verify_script` asserts the
+  properties that move if the search is wrong: the winning move is worth exactly 1.0 and no other
+  move is, the children's visits sum to `playouts`, the centre is the highest-valued move on the
+  empty board, and a search that examined nothing must exit non-zero and **not** print a move. The
+  self-play entry asserts only that its two lines printed, that a result is a score and a loss is a
+  finite number — never what the losses are (see `mcts.selfplay.curve`).
 - `test/plans/perf/showcase_d4.plan.toml` (slow): runs `compare.py --profile small`, about eight
   seconds; one differing line fails it.
 
