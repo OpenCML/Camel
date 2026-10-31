@@ -147,7 +147,7 @@ tool = "python"
 case = "../../../cases/modules/tiles/plan_check.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["tiles core views: quasi-affine maps, strided simplification, empty domains and rejected mutations passed", "tiles reduction domains: core extents, output permutations, canonical contributions and empty faults passed", "tiles position reduction: an argmax plan keeps the value and stores the loop index as i64 in its planned body and source", "tiles scalar i64: exact payloads, comparisons and nearest-even f64 casts passed", "tiles i64 position: the loop index reads into an i64 slot and stores that position, a plain symbol of the same name still refuses, and i64 arithmetic stays refused", "tiles loop source cache: exact domains, embedded bits, bindings and recursive contracts passed", "tiles multi-result storage: one producer, distinct writes and inclusive read lifetimes passed", "tiles regions: convexity, boundaries, liveness and dependency order passed", "tiles general reductions: scalar and sum-to core maps preserve contribution order", "tiles axis contracts: mapped traversal, numerical law and row eligibility passed", "tiles pointwise contracts: operand maps, bounds and row eligibility passed", "tiles kernel faults: IEEE conditions, resources and early-exit convergence passed", "tiles reduction laws: declared freedom required for parallel maximum", "tiles scalar expressions: typed rounding, FMA and IEEE bits passed", "tiles plan validation: 33 rejected mutations", "tiles index expressions: composition and checked evaluation passed", "tiles accesses: masked composition and lazy evaluation passed", "tiles ordered reductions: fusion boundaries and plan mutations passed", "tiles scalar inputs: typed payload and shape validation passed", "tiles source cache: values, literals, storage ownership and eviction passed", "tiles operator contracts: absent, replaced and incompatible declarations rejected", "tiles cast_like boundary: plans never name it, and a conversion is rejected", "tiles host storage: an f64 scalar keeps its eight bytes (2.0 is 0x4000000000000000, 3.0 is 0x4008000000000000), an f64 value held as numbers widens exactly, and an f32 tensor keeps its bits", "tiles narrow serial: f32 intermediate 0.2001953125 with a bf16 element and 0.199951171875 with an f16 element, bf16 wrote 0x3E4D 0.2001953125, f16 wrote 0x3266 0.199951171875", "tiles narrow serial: a store that rounds writes bf16 0x3C24 0.010009765625 and f16 0x211E 0.0099945068359375, one nearest-even rounding each", "tiles narrow serial: 7 numeric element types, 0 refused"]
+expect_stdout_contains = ["tiles core views: quasi-affine maps, strided simplification, empty domains and rejected mutations passed", "tiles reduction domains: core extents, output permutations, canonical contributions and empty faults passed", "tiles position reduction: an argmax plan keeps the value and stores the loop index as i64 in its planned body and source", "tiles scalar i64: exact payloads, comparisons and nearest-even f64 casts passed", "tiles i64 position: the loop index reads into an i64 slot and stores that position, a plain symbol of the same name still refuses, and i64 arithmetic stays refused", "tiles loop source cache: exact domains, embedded bits, bindings and recursive contracts passed", "tiles multi-result storage: one producer, distinct writes and inclusive read lifetimes passed", "tiles regions: convexity, boundaries, liveness and dependency order passed", "tiles general reductions: scalar and sum-to core maps preserve contribution order", "tiles axis contracts: mapped traversal, numerical law and row eligibility passed", "tiles pointwise contracts: operand maps, bounds and row eligibility passed", "tiles kernel faults: IEEE conditions, resources and early-exit convergence passed", "tiles reduction laws: declared freedom required for parallel maximum", "tiles scalar expressions: typed rounding, FMA and IEEE bits passed", "tiles plan validation: 33 rejected mutations", "tiles index expressions: composition and checked evaluation passed", "tiles accesses: masked composition and lazy evaluation passed", "tiles ordered reductions: fusion boundaries and plan mutations passed", "tiles scalar inputs: typed payload and shape validation passed", "tiles source cache: values, literals, storage ownership and eviction passed", "tiles operator contracts: absent, replaced and incompatible declarations rejected", "tiles cast_like boundary: plans never name it, and a conversion is rejected", "tiles host storage: an f64 scalar keeps its eight bytes (2.0 is 0x4000000000000000, 3.0 is 0x4008000000000000), an f64 value held as numbers widens exactly, and an f32 tensor keeps its bits", "tiles narrow serial: f32 intermediate 0.2001953125 with a bf16 element and 0.199951171875 with an f16 element, bf16 wrote 0x3E4D 0.2001953125, f16 wrote 0x3266 0.199951171875", "tiles narrow serial: a store that rounds writes bf16 0x3C24 0.010009765625 and f16 0x211E 0.0099945068359375, one nearest-even rounding each", "tiles narrow serial: the same program writes bf16 1 -3 4 and f16 1 -3 4 (0.5 -1.5 2.0 doubled), which the host run sums to 2.0", "tiles narrow serial: 7 numeric element types, 0 refused"]
 timeout_ms = 10000
 
 [[tests]]
@@ -892,14 +892,16 @@ assert(input.stdout.includes('12.0') && input.stdout.includes('-3.0'), input.std
 timeout_ms = 30000
 
 # A `bf16` or `f16` tensor of a `#gpu` scope: the type gate reads the element type and its two
-# bytes, so the node is no longer excluded as `unresolved_type`, and the kernel that would compute
-# with one is not written yet -- which the plan says in its own words instead of blaming the type.
-# Two element types in one case, because both reach the same line and only one of them being read
-# would leave the other refused by the old gate.
+# bytes, so the node is no longer excluded as `unresolved_type`, and what the device has no kernel
+# for is a two-byte element -- which the plan says in its own words instead of blaming the type. The
+# reason names the device (`device_element_kernel_missing`) because the host half does compute it:
+# the core's values outside a kernel, and the host serial executor over the same kernel body inside
+# one. Two element types in one case, because both reach the same line and only one of them being
+# read would leave the other refused by the old gate.
 
 [[tests]]
 name = "narrow.type_gate_reads_the_element_type"
-desc = "The region analysis of a `#gpu` scope over a `bf16` and an `f16` tensor names the missing kernel (`narrow_element_kernel_missing`) and never `unresolved_type`: the type gate read the element type, so the reason it is in no region is the kernel nobody has written. The host still computes both results (2.0), so the scope keeps working."
+desc = "The region analysis of a `#gpu` scope over a `bf16` and an `f16` tensor names the device's missing kernel (`device_element_kernel_missing`) and never `unresolved_type`: the type gate read the element type, so the reason it is in no region is the two-byte element the device has no kernel for. The host still computes both results (2.0), so the scope keeps working."
 kind = "behavior"
 case = "../../../cases/gpu/nofallback/narrow_element_kernel.cml"
 args = ["--devices", "cpu", "${case}", "std::nvm"]
@@ -915,24 +917,43 @@ plans.forEach((plan, i) => {
   // The gate's own word, which the type gate is what prints when it cannot read a type.
   assert(!reasons.includes('unresolved_type'),
     `${names[i]} must be read as a type the device knows: ${JSON.stringify(plan.excluded)}`)
-  assert(reasons.includes('narrow_element_kernel_missing'),
-    `${names[i]} must say the kernel is missing: ${JSON.stringify(plan.excluded)}`)
+  assert(reasons.includes('device_element_kernel_missing'),
+    `${names[i]} must say the device has no kernel for the element: ${JSON.stringify(plan.excluded)}`)
 })
-assert(input.stdout.includes('2.0'), input.stdout)
+assert(input.stdout.split(/\r?\n/).includes('2.0 2.0'), input.stdout)
 }
 """
 timeout_ms = 30000
 
 [[tests]]
 name = "narrow.kernel_reason_names_the_missing_kernel"
-desc = "The same two scopes read through the outline pass: `TILES_REGION_REASON tensor:multiply narrow_element_kernel_missing`, no `unresolved_type` anywhere, and no refusal of the scope (`GpuScope`/`has no device program`), because a kernel nobody has written is not a program the device turned down."
+desc = "The same two scopes read through the outline pass: `TILES_REGION_REASON tensor:multiply device_element_kernel_missing`, no `unresolved_type` anywhere, and no refusal of the scope on a run without a device (`GpuScope`/`has no device program`), because that run computes the element on the host and has no device program to be missing."
 kind = "behavior"
 case = "../../../cases/gpu/nofallback/narrow_element_kernel.cml"
 args = ["--devices", "cpu", "${case}", "tiles::test_outline_compiled", "reasons=true", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
-expect_stdout_contains = ["TILES_REGION_REASON tensor:multiply narrow_element_kernel_missing"]
+expect_stdout_contains = ["TILES_REGION_REASON tensor:multiply device_element_kernel_missing"]
 expect_output_not_contains = ["unresolved_type", "has no device program", "GpuScope"]
+timeout_ms = 30000
+
+# The other half of the same boundary: with a device in use the scope is refused, and the sentence
+# says which half is missing -- the device has no kernel for the element, while the host half
+# computes it. Before this the program ran and printed its values with a device present, silently
+# computing the narrow element on the host inside a scope that is a device unit.
+[[tests]]
+name = "narrow.device_has_no_kernel_for_the_element"
+desc = "The same case with a device in use: `#gpu` scope 'double_bf16' is refused naming `tensor:multiply` and saying the device has no kernel for a bf16 element, under GpuScopeUnsupported -- the refusal is about the device half, and nothing runs on the host in its place."
+kind = "behavior"
+case = "../../../cases/gpu/nofallback/narrow_element_kernel.cml"
+args = ["--devices", "0", "${case}", "tiles::compile", "std::nvm"]
+skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+# The whole sentence is pinned, not its pieces: this is the reading the lane reports, and a
+# refusal that names the device is only honest if the words say so.
+expect_stderr_contains = ["GpuScopeUnsupported: `#gpu` scope 'double_bf16': operator 'tensor:multiply' has no device program (the device has no kernel for a bf16 element)"]
+expect_stdout_not_contains = ["2.0 2.0"]
 timeout_ms = 30000
 
 [[tests]]
@@ -1416,3 +1437,4 @@ expect_exit = 0
 expect_stdout_exact = "TILES_CENSUS ops=2 device=1 gap=1\nTILES_CENSUS_DEVICE tensor:add\nTILES_CENSUS_GAP tensor:tanh\n"
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 30000
+

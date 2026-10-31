@@ -36,6 +36,18 @@ std::optional<int> configuredCudaOrdinal() {
     return 0;
 }
 
+bool deviceInUse() {
+    // An ordinal is configured, and this machine answers that it has it. The question is the
+    // count-and-ordinal one (`cudaDeviceAvailability`), not the back end's own probe: a refusal
+    // asks whether a device program could be run at all, and a back end that cannot be built is
+    // reported where it is used, not here.
+    const auto ordinal = configuredCudaOrdinal();
+    if (!ordinal)
+        return false;
+    const auto available = cudaDeviceAvailability({*ordinal});
+    return available.count > 0 && available.missing.empty();
+}
+
 CudaDeviceAvailability cudaDeviceAvailability(const std::vector<int> &named) {
     CudaDeviceAvailability availability;
 #ifdef CAMEL_TILES_CUDA

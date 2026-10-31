@@ -215,6 +215,8 @@ graph train_step [body placement=gpu]
 
 诊断形状：一条诊断列出作用域里**所有**不合格算子（URI + origin + 原因），给出两条出路（写 `#cpu` 块，或 `--devices cpu`），不让用户一条一条试。`--devices cpu` **不改变可编译集合**：支持面在编译期定死，`--devices cpu` 只决定"编出来的段在哪执行"（主机后端执行同一段图）。否则同一个程序在有无设备时编译结果不同，这就是"静默地为错的设备编译"。
 
+**拒绝理由的主语就是这条边界的名字**：能算的一半要接上，不能算的一半要说出是**谁**缺。`bf16`/`f16` 的逐元素内核宿主已经有一份（`modules/tiles/src/serial_execute.cpp` 按元素走内核体，算出的位与手推一致），设备还没有一条读两字节元素的内核，所以它的理由叫 `device_element_kernel_missing`，句子是 `the device has no kernel for a bf16 element`——主语是设备；有设备时作用域按它拒绝，没有设备时（`--devices cpu`）宿主照常算出这些值，理由只留在计划里。写"内核还没写"是把我们自己的待办说成用户的错误，说"设备没有这条内核"才是这条边界的名字。它随目标而变，与上一段不冲突：定死的是**支持面**（哪些算子有设备实现），而 `multiply` 的支持面在着，缺的是它的一种元素类型在设备那一半的内核——能算的一半接上，不能算的一半按目标拒绝。
+
 `#gpu` 写了而流水线里没有 `tiles::compile`：沿用 9.4 的 `SemanticDiag::TagHasNoReader = 0x100160` 警告。两边合起来，任何"标签被忽略"的情形都至少有一条诊断。
 
 空作用域（`#gpu` 块里没有设备算子、全被常量折叠掉）**不加警告**（第 5 问）：那不是写错，`tiles::inspect` 显示 0 个段就够了；"标签没有读者"仍按上面那一条报。
@@ -633,6 +635,8 @@ python benchmarks\train.py --check-ksteps --models transformer --device cuda --c
 （`--torch-device`/`--camel-devices` 是本计划要加的两个参数：`compare.py` 的 `camel_arg_command` 把 `--devices 0` 放在目标文件之前；`train.py` 的 `CAMEL_CONFIGS` 加一条 GPU 配置，`run_camel_full` 把 `--devices` 传下去，`model_torch` 按 `--device` 把权重与输入搬到 CUDA。GPU 配置的遍序是 `std::macro tiles::compile std::nvm`：`std::macro` 必须在 `tiles::compile` **之前**——派生图只有在编译期展开出来，才会被当成同一个单元的图（§2.6）；顺序反了 `tiles::compile` 会报缺少前置遍并点名 `std::macro`。）
 
 **把一条红归给环境之前，先量出它是从哪一步开始是 0 的——归因也要读数。** 一条设备读数不对时，三段各打一个点：`load`（宿主→设备的拷贝做完，设备缓冲里是什么）、`launch`（核跑完是什么）、`readback`（交回宿主的是什么）；哪一步先变成 0，就是哪一步的错，`--devices cpu` 跑同一程序是宿主那一半的对照。三段都读对了而值仍不对，才轮得到"机器/驱动"的说法——"环境"这两个字要有读数才配写。`gpu_preference.named_device` 就是这样定出来的：`load` 阶段设备缓冲已经是 8 个零（`hostStorage` 对 f64 标量没有规则，读的是空的 `data`），不是核没跑，也不是读回；修在 `hostStorage`，同日 870e10935。
+
+**A/B 要退到引入这条规则之前的那一笔——退得不够远，两侧都一样红。** 同一条红我先做过一次 A/B，退的是类型门 `a53b87e17`，而 `c397d72c2` 引入的 `hostStorage` 两侧都在，于是两侧都红，就被当成了环境；真正把它定住的是上面那三段读数。基线要落在"这条规则还不存在"的那一笔，否则"两侧都红"只说明这条规则被两次带上了。
 
 ---
 
