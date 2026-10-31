@@ -64,14 +64,19 @@ rule jvp_add
 ```
 
 **整个程序只有四张图，一张也不是规则的两侧**——尽管规则值确实存在（`rule jvp_add` 打出来了）。
-也就是说：**规则的左右两侧在 `Program` 里没有图**，它们在规则被应用时才由规则机制建成，
-程序定型（`Program` 组装完）之后取不到。
 
 取不到的那一处（结构上的缺失，不是某个函数返回空）：
 
 - `include/camel/runtime/program.h:79` —— `graph(GraphId)` 是唯一的取图入口；
 - `include/camel/runtime/program.h:175` —— `tableSize()` 是唯一的规模读数，**没有按名字取的入口**；
 - 探针处：`src/passes/trans/rulesets/rulesets.cpp` 的 `apply`（已删除，不留）。
+
+**这个结论是错的，作者裁定在先（`fsh-dev = 480523c40`）：“规则本身就是引用，不是名字：规则值带着
+它两侧的图。”** 四张图里没有两侧，是因为**探针找错了地方**——找的是“按名字取的函数”，而两侧挂在
+**规则值身上**，不在 `Program` 的图表里。
+
+判据（替掉今天那条的一半）：**探针找错地方，会得到一个正确的空答案；`tableSize` 里没有规则两侧，
+不等于规则两侧不存在。**
 
 ## 那么两侧图去哪了：**被存起来**
 
@@ -99,9 +104,40 @@ rule jvp_add
 **结论**：路 2 不需要新 API，也不需要问作者；要证明的是“变换能把 `ruleId` 换成实例的 `rhs` 图”。
 下一个一行打印就该打这个。
 
-**结论**：路 1 在这个时点不成立。路 2（在 `Builder` 里跑，名字能解析）没被这次实验否定，但也没被
-证实——它要在宏这一步、规则两侧还没变成图之前动手，那里的问题不是“取图 id”，而是“先在规则该被
-实例化的地方拿到它”。
+## 两侧图挂在规则值上（作者的裁定，`fsh-dev = 480523c40`）
+
+字段与位置：
+
+- `modules/rewrite/rule.h:84-85` —— `RuleObject::lhs()` / `RuleObject::rhs()`；
+- `modules/rewrite/rule.h:108-109` —— 字段 `::Function *lhs_; ::Function *rhs_;`；
+- `modules/rewrite/rule.h:72-73` —— “A rule value that keeps an id has no `lhs`, `rhs` or `when` of
+  its own”：**实例化的规则值只带 `ruleId()`**，两侧要从实例拿。
+
+两行打印（探针在 `std::rulesets` 的 `apply` 里，按名字在 context 的通用规则表里找到 `jvp_add`
+与 `jvp_div`，`genericRuleInstance(context, ruleId, {Float64}, {})` 取实例）：
+
+```
+PROBE rule jvp_add made=1 rhs=graph why=''
+PROBE   rhs nodes=4 live=4 graphs=69
+PROBE   node 0 kind=1   (Port)
+PROBE   node 1 kind=1   (Port)
+PROBE   node 2 kind=0   (Data)
+PROBE   node 3 kind=4   (Fill)
+PROBE rule jvp_div made=1 rhs=graph why=''
+PROBE   rhs nodes=4 live=4 graphs=80
+PROBE   node 0 kind=1 / node 1 kind=1 / node 2 kind=0 / node 3 kind=4
+```
+
+**实例的 `rhs` 是有的（4 个节点的图），但里面没有调用节点**：两个 Port、一个 Data、一个 Fill。
+也就是说，**存下来的这一份不是能跑的那一份**——真正被引擎应用的那份规则由
+`modules/rewrite/module.cpp:669` 的 `compileRule(ctx, source)` 编出来，存在
+`GenericRuleEntry::compiled`（`include/camel/compile/gir/rule_templates.h:112`，“owned by the
+engine”）里；`instanceRules`（`modules/rewrite/module.cpp:636`）是那个模块里的 `static` 函数。
+
+所以桥的下一段是：**`ruleId` → 实例 → 编译后的规则（引擎应用的那一个）→ 它的 rhs 图 → 调用节点
+→ `GraphId`**。这一段要么给 `modules/transforms` 一个取“编译后规则”的入口（`compileRule` 是
+`camel::runtime` 的公开函数，`instanceRules` 不是），要么让变换在引擎应用规则的地方顺手拿——**先
+用一行打印证它通，再写第二行**。
 
 ## 验收（缺一步不算完）
 
