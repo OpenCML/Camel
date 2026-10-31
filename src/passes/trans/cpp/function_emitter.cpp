@@ -1634,6 +1634,16 @@ bool FunctionEmitter::lowerVariable(
         frame.values[ref]    = CppValue{taken.text, false, taken.cell};
         return true;
     }
+    if (id == camel::core::oper::VarAfter) {
+        // `:var/after(cell, call)`: the variable as it stands after the call that wrote it. The
+        // call is a statement of its own here -- its effects run in the order the graph gives
+        // them -- so the version is the cell, exactly as a write leaves it; the second argument
+        // is not read (it may be `void`). The read above it dereferences the cell as it always
+        // does, after that statement.
+        const CppValue &cell = valueOf(frame, norm.front());
+        frame.values[ref]    = CppValue{cell.text, false, cell.cell};
+        return true;
+    }
     if (uri == ":struct/append_arr_in_place") {
         return lowerAppendInPlace(frame, ref, out);
     }
