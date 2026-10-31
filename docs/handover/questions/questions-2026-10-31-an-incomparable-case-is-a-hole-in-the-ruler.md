@@ -2,7 +2,7 @@
 
 日期：2026-10-31　车道：`lane-lit`（`std::cpp` 的语料普查）
 
-**判据（一句话）**：不可比的用例不是噪声，是尺子的漏洞；漏洞要么补上，要么写在尺子上。
+**判据（一句话，2026-10-31 作者的原话）**：不可比的用例不是噪声，是尺子的漏洞——要么让它可比，要么写明为什么不比。
 
 ## 这一句是从哪来的
 
@@ -65,3 +65,35 @@ differs 7**。`differs` 的 7 条按同一把尺子分开：
 另外 `err_as.cml` 与 `fold_cast_fails.cml`（上一轮列在真缺陷里的两条）在 `develop` 上已经不再
 `differs`：`rt::asShape` 与 `rt::Array<T>::shaped` 落地之后，到固定形状的转换会检查形状了。
 修这两条的是 `develop` 上的提交，不是这一轮的。
+
+## 再一笔：`reshape` 的目标形状是程序算出来的（2026-10-31 晚）
+
+`modules/tensor/shape_inference/computed_extent_run_time.cml` 上一个读数是 `differs`：
+`std::fvm` 在 `7:25` 报 `TensorDimensionMismatch: Array shape mismatch in 'reshape': reshape changes
+tensor element count: [6] -> [3, 3].`，而生成的程序印 `21.0`。
+
+根因不在检查，在**取错了形状**：`reshape<[n, 3]>(y)` 的目标形状是算符的**值参数**（一个 `int[]`），
+规则却从**结果类型**读 extents —— 那是调用点契约填进去的 `[2, 3]`，不是程序说的 `[n, 3]`。
+于是生成的是 `rt::reshape(y, {2, 3}, 6, ...)`：形状被换成契约里的那个，元素数正好相等，检查就过了。
+
+修法：`with` 参数不是常量（不是 DATA 节点）时，目标形状是程序算的 → 生成
+`rt::reshapeBy(y, rt::Array<int64_t>{n, 3}, at_...)`，由运行时读这些值、按值的乘积查元素数，
+并在运行时把两个形状都写进报告（`rt::extentText` / `rt::shapeText`，`[6] -> [3, 3]`）。
+规则要能分辨"写死的形状"和"算出来的形状"，所以 `OperatorCall` 多了一句
+`withIsConstant(i)`（`function_emitter.cpp` 里按 `GCNodeKind::Data` 判定）；写死的形状仍走
+`rt::reshape` 的原路径，静态形状的检查与以前逐字节相同。
+
+## rank-zero：两条并行读数（供裁定，不修）
+
+同一条程序 `test/cases/compile/array_shape/rank_zero_field_literal.cml`：
+
+```
+std::fvm : 1.5           std::cpp : [1.5]
+std::fvm : 2.5           std::cpp : [2.5]
+```
+
+`f32[..]` 位置上写一个元素，解释器给的是**rank-zero 的值**（设计原则 5.4），印出来就是那个元素；
+`std::cpp` 里 `rt::Array` 没有 rank-zero 这个值 —— `setShape` 对 `rank == 0` 直接返回
+（`include/camel/standalone/array.h`），因为那里的 `rank == 0` 表示"没写形状"，于是同一个值被
+当成一维的一个元素，印成 `[1.5]`。要修先得定语义：**rank 0 是"没有维度"，还是"没有写维度"**。
+这是给作者的问题，已在本页记着，等裁定。
