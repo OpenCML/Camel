@@ -158,7 +158,27 @@ error[RuntimeDiag::TranslationRefused]: Translation pass 'std::cpp' refused the 
 （`grown.children[0].value = 20` 是 `:op/set_field`，另一个洞，4 个程序，排在 `:op/fail` 后面。）
 
 顺手撞出**第 5 个崩**，这次在前端不在写出器：`type Node = { state: State, children: Node[] }` 里 `State`
-写在 `Node` **后面**时，`std::fvm` 自己也段错误（`rc=139`），`State` 写前面就正常。与本题无关，单独记一笔。
+写在 `Node` **后面**时，`std::fvm` **自己**段错误（`rc=139`）；`State` 写前面就正常，互相递归（`A` 里 `B[]`、
+`B` 里 `A[]`）也必然先撞这一条。最短复现 6 行（`type A = { b: B }` / `type B = { n: int }` / `main` 里
+`let a: A = { b: { n: 1 } }`），去掉那句 `let` 就只剩诊断——**"让这个值活着"才是复现的必要条件**。
+`gdb` 的栈帧：`Type::assignableFrom` ← `Builder::visitStructInto` ← `visitDataInto` ← `visitDataDecl`，
+不是自己套自己，是**拿一个空字段类型去问"能不能赋给"**。
+
+根因：字段点名了后面才声明的类型 → 那个名字当场报 `UnresolvedTypeReference`、声明**什么都没声明**（设计原则
+写的就是这句）——可那个"半成品类型"还留在解析它自己字段的那个作用域里；于是 `let a: A = {…}` 认出了它，读
+它那个空字段，解引用空指针。修法（`5e3cb487a`）：`lookupType` 在**问任何作用域之前**先看这个名字的声明是不是
+已经失败，失败就直接中止——报告还是声明那一条，不新增、也不拿半成品去建值。结构体通过数组装自己仍然要在
+自己的字段里认出自己，那条作用域照旧。
+
+两条读数：**139 → 1**（前向引用）、**139 → 1**（互相递归），给的都是同一句
+
+```
+error[SemanticDiag::UnresolvedTypeReference]: Unresolved type reference: 'B'.
+  --> test/cases/compile/semantic/mutual_struct_array.cml:8:15
+```
+
+两条用例钉住：`compile/semantic/field_type_forward_reference.cml`（字段点名后声明的类型）、
+`compile/semantic/mutual_struct_array.cml`（两个结构体通过数组互相点名）。
 
 这一笔修的是洞里最大的**一条翻译**：`:op/set_index_in_place`（9 个），`xs[i] = v` 现在与
 `acc = acc->append<v>` 同一个形状（`eae9f9f5b`）——变量把数组交出去，`rt::setAt` 按读的方式检查下标
@@ -170,7 +190,7 @@ std::fvm  [9, 2, 3]
 std::cpp  [9, 2, 3]
 ```
 
-## 七、六条判据
+## 七、七条判据
 
 > **裁定也可能基于过时的读数：拿到裁定先去 develop 上复现一次；不复现，就先把前提写下来，再谈要不要改。**
 
@@ -183,3 +203,5 @@ std::cpp  [9, 2, 3]
 > **普查的价值在分母：`674 / 3186` 这个数比"我碰到的那两个"有用得多。**
 
 > **一个后端拒一条翻译是缺口，崩一次是缺陷；缺口按被拒程序数报，缺陷按崩溃数报，两者不在一个优先级上。**
+
+> **同一个缺陷在写出器和前端各崩一次时，先修前端——写出器只影响一个后端，前端影响所有人。**
