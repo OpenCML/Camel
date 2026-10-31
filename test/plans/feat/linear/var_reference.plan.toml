@@ -1172,6 +1172,23 @@ assert(out === 'A 1 | modify | B 2 | 10020', `unexpected output: ${out}`)
 timeout_ms = 20000
 
 [[tests]]
+name = "after_void_call"
+desc = "A call whose result is `void` writes the variable, and the read after it takes that write's version: `:var/after(cell, call)` takes a second operand of any type, `void` included, because it reads nothing of it (the author's signature is `(var T, any) => var T`). The call still runs, which is what the printed `2` shows, and a value bound before the call is not changed by it."
+kind = "behavior"
+case = "../../../cases/linear/byref/after_void_call.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split('\n').map((l) => l.trim())
+assert(lines[0] === '2', `the read after the void call does not see the write: ${input.normalized.stdout}`)
+assert(lines[1] === '1', `a value bound before the call changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
 name = "order_graph.before_after"
 desc = "`A(i); modify(i); B(i)` in a sync body: the body orders its statements, so the graph has the control dependency A -> modify, and the read of i that B uses takes the version `modify` made (`:var/after`), so it follows it by a data edge. (Re-recorded when the version edge was added: one `:var/after` node per call that wrote a variable, and no node is renumbered.)"
 kind = "behavior"
