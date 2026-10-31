@@ -1082,6 +1082,13 @@ std::optional<std::string> ProgramValues::constant(slot_t slot, const Type *t) {
         // constructor is written as a call, not as a braced pair: with an element type an `{n}` can
         // itself stand for (`rt::Array<T>`, a struct of one field) the initializer would read `{3}`
         // as one more element.
+        if (rank == 0 && array != nullptr && array->numel() == 1 &&
+            static_cast<const ArrayType *>(t)->anyRank()) {
+            // One element that recorded no rank, in a position of open rank, is the element itself:
+            // `element` says so, where an appended array is one dimension of what it holds
+            // (standalone/array.h). A value of one dimension keeps that and prints as the literal.
+            return hoist(*cpp, std::format("{}::element({})", *cpp, *items), "array");
+        }
         const bool oneDimension =
             rank == 1 && (array->dim(0) != 1 || !static_cast<const ArrayType *>(t)->anyRank());
         if (oneDimension) {
