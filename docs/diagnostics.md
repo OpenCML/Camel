@@ -9573,7 +9573,46 @@ Pass '{0}' changed the ambient resources the program touches: before {1}, after 
 An effect is written once and stays where the program put it. A rewrite may move code, copy it, or delete what nothing needs, but the ambient resources a graph touches -- stdout, stderr, stdin, clock, env, fs, rng -- are the program's effects, and the pass list must leave them the same. This is a defect of the pass named, not of the program.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/effects/declared.cml`, run as `camel test/cases/effects/declared.cml std::opt::inline std::opt`)
+
+```camel
+// What a call touches, written on the declaration (design effects plan 3.1): a resource of the
+// module, a group of them, a handle type and `uses` on a parameter (a cell or a handle) and on a
+// group. The bodies touch nothing: the clause is the whole truth a call site reads.
+
+resource db
+resource console = [db, stdout]
+
+#resource type Stream = { id: int }
+
+/// The body touches nothing; the clause says a call reads and writes the handle it is given.
+func consume(s: Stream): int uses s {
+    return 0
+}
+
+/// The body is empty; every call touches what the group names.
+func tick(): void uses console {
+}
+
+/// The body touches nothing; the clause says a call writes the cell it is given.
+func bump(var t: int): int uses t sync {
+    return 0
+}
+
+func main(): int sync {
+    let s: Stream = { id: 7 }
+    consume(s)
+    consume(s)
+    tick()
+    tick()
+    var cell = 0
+    bump(cell)
+    bump(cell)
+    println(s.id)
+    println(cell)
+    return 0
+}
+```
 
 ### MacroEvaluationFailed
 

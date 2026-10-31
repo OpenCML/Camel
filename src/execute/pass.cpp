@@ -2120,10 +2120,17 @@ OrderVerdict orderedInProgram(const ProgramEffects &effects, EffectSite earlier,
 ///
 /// Returns nothing for a pass that kept them, or the two lists the diagnostic names.
 std::vector<std::string> effectResourcesViolation(const ProgramEffects &before, const ProgramEffects &after) {
+    // The language's own ambient resources are the boundary here: a module may declare a resource
+    // of its own (	iles:driver) and a pass of that module may bring it into the program, which is
+    // the module's business, not a change to what the program does to state it does not own.
     const auto resourcesOf = [](const ProgramEffects &effects) {
         std::vector<std::string> names;
         for (const EffectSite &site : effects.sites) {
-            names.insert(names.end(), site.resources.begin(), site.resources.end());
+            for (const std::string &name : site.resources) {
+                if (camel::core::sem::isStandardResource(name)) {
+                    names.push_back(name);
+                }
+            }
         }
         std::sort(names.begin(), names.end());
         names.erase(std::unique(names.begin(), names.end()), names.end());
