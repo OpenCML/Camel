@@ -7,9 +7,9 @@
 // floats, the two narrow ones a mixed-precision program stores, and the index.
 //
 // A narrow element is two bytes. The type gate in `graph_regions.cpp` reads it as a type the device
-// knows, and no kernel is written for one yet: `eligibility` keeps a narrow node out of every region
-// and says so as `narrow_element_kernel_missing`, so the plan names the missing kernel instead of a
-// type the device cannot take. The width here is the element's own either way, so a site that turns
+// knows, and this back end carries no kernel for one: `eligibility` keeps a narrow node out of every
+// region and says so, so the plan names the back end's missing kernel instead of a type the device
+// cannot take. The width here is the element's own either way, so a site that turns
 // a dtype into bytes cannot silently take a bf16 value for an f32 one, which is the mistake an
 // "else four bytes" fallback makes.
 

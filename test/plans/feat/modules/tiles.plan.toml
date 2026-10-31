@@ -892,14 +892,14 @@ assert(input.stdout.includes('12.0') && input.stdout.includes('-3.0'), input.std
 timeout_ms = 30000
 
 # A `bf16` or `f16` tensor of a `#gpu` scope: the type gate reads the element type and its two
-# bytes, so the node is no longer excluded as `unresolved_type`, and the kernel that would compute
-# with one is not written yet -- which the plan says in its own words instead of blaming the type.
+# bytes, so the node is no longer excluded as `unresolved_type`, and this back end carries no
+# narrow-float kernel -- which the plan says in its own words instead of blaming the type.
 # Two element types in one case, because both reach the same line and only one of them being read
 # would leave the other refused by the old gate.
 
 [[tests]]
 name = "narrow.type_gate_reads_the_element_type"
-desc = "The region analysis of a `#gpu` scope over a `bf16` and an `f16` tensor names the missing kernel (`narrow_element_kernel_missing`) and never `unresolved_type`: the type gate read the element type, so the reason it is in no region is the kernel nobody has written. The host still computes both results (2.0), so the scope keeps working."
+desc = "The region analysis of a `#gpu` scope over a `bf16` and an `f16` tensor names the back end's missing kernel (`no narrow-float kernel on this back end`) and never `unresolved_type`: the type gate read the element type, so the reason it is in no region is a kernel this back end does not carry. The host still computes both results (2.0), so the scope keeps working."
 kind = "behavior"
 case = "../../../cases/gpu/nofallback/narrow_element_kernel.cml"
 args = ["--devices", "cpu", "${case}", "std::nvm"]
@@ -915,7 +915,7 @@ plans.forEach((plan, i) => {
   // The gate's own word, which the type gate is what prints when it cannot read a type.
   assert(!reasons.includes('unresolved_type'),
     `${names[i]} must be read as a type the device knows: ${JSON.stringify(plan.excluded)}`)
-  assert(reasons.includes('narrow_element_kernel_missing'),
+  assert(reasons.includes('no narrow-float kernel on this back end'),
     `${names[i]} must say the kernel is missing: ${JSON.stringify(plan.excluded)}`)
 })
 assert(input.stdout.includes('2.0'), input.stdout)
@@ -925,13 +925,13 @@ timeout_ms = 30000
 
 [[tests]]
 name = "narrow.kernel_reason_names_the_missing_kernel"
-desc = "The same two scopes read through the outline pass: `TILES_REGION_REASON tensor:multiply narrow_element_kernel_missing`, no `unresolved_type` anywhere, and no refusal of the scope (`GpuScope`/`has no device program`), because a kernel nobody has written is not a program the device turned down."
+desc = "The same two scopes read through the outline pass: `TILES_REGION_REASON tensor:multiply no narrow-float kernel on this back end`, no `unresolved_type` anywhere, and no refusal of the scope (`GpuScope`/`has no device program`), because a kernel this back end does not carry is not a program the device turned down."
 kind = "behavior"
 case = "../../../cases/gpu/nofallback/narrow_element_kernel.cml"
 args = ["--devices", "cpu", "${case}", "tiles::test_outline_compiled", "reasons=true", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
-expect_stdout_contains = ["TILES_REGION_REASON tensor:multiply narrow_element_kernel_missing"]
+expect_stdout_contains = ["TILES_REGION_REASON tensor:multiply no narrow-float kernel on this back end"]
 expect_output_not_contains = ["unresolved_type", "has no device program", "GpuScope"]
 timeout_ms = 30000
 

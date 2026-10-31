@@ -818,7 +818,7 @@ int main() {
         // reduction is now a valid plan: what the schedule still refuses is one that is not a
         // scalar at all.
         rejects(scalar, [](auto &x) { x.nodes[1].shape = {1}; }, "scalar reduction type");
-        rejects(scalar, [](auto &x) { x.nodes[1].op = "relu"; }, "unsupported operation dtype");
+        rejects(scalar, [](auto &x) { x.nodes[1].op = "relu"; }, "this back end's plans carry f32 tensors and i64 positions");
         auto borrowed = indexed;
         auto resident = std::make_shared<DeviceValue>();
         resident->shape = {2,3};
