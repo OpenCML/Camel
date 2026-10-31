@@ -153,21 +153,13 @@ bool isViewSlot(slot_t slot, const type::Type *type) {
 }
 
 void assertStoredValueIsNotView(slot_t slot, const type::Type *type, std::string_view where) {
-#ifndef NDEBUG
-    if (isViewSlot(slot, type)) {
-        ASSERT(
-            false,
-            std::format(
-                "A compact element view escaped into {} ({}). A view is tied to the thread-local "
-                "view ring and must be materialised before it is stored.",
-                where,
-                type != nullptr ? type->toString() : "unknown"));
-    }
-#else
-    (void)slot;
-    (void)type;
-    (void)where;
-#endif
+    GUARD(
+        !isViewSlot(slot, type),
+        std::format(
+            "A compact element view escaped into {} ({}). A view is tied to the thread-local "
+            "view ring and must be materialised before it is stored.",
+            where,
+            type != nullptr ? type->toString() : "unknown"));
 }
 
 } // namespace camel::core::rtdata

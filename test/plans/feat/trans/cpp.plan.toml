@@ -120,6 +120,69 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "narrow_mean"
+desc = "The mean of a value of bf16 or f16 is the library's own body -- the total in f64 and the count in f64, divided there and rounded once into the element type -- so it needs no rule of its own and the only thing that can go wrong is the division: it is `rt::div` (a denominator of zero is a fault, as for any float). The reading is the interpreter's, compared by agree_with_fvm; what this entry adds is that the program is translated rather than refused, with the divided total in it."
+kind = "behavior"
+case = "../../../cases/trans/cpp/narrow_mean.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::div("]
+expect_output_not_contains = ["TranslationRefused", "libcamel"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "narrow_argmax"
+desc = "The positions read from a value of bf16 or f16: `argsort` names its element type (`array:argsort_bf`, `array:argsort_f6`) and answers with an index, so the rule is one per type but the answer's type is everyone's -- the case where a narrow float's operator result is not a narrow float. `array::argmax` and `argmin` are Camel loops over `argsort` of two elements, so they follow from it, and the order is the one `min` and `max` state (NaN last, -0 below +0, ties where they stand). It is translated into rt::halfArgsort with no bridged call, and its readings are in expect.txt: what kept them out was the writer, not this type -- a `for i in a..b` loop declared its items with the type of the node that holds the interval's two bounds, and that pair is written as a struct as soon as the program has a value of the same shape (function_emitter.cpp, the interval's array)."
+kind = "behavior"
+case = "../../../cases/trans/cpp/narrow_argmax.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::halfArgsort("]
+expect_output_not_contains = ["TranslationRefused", "rt::bridge", "libcamel"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "narrow_one_program_twenty_times"
+desc = "One command, one input, twenty runs of it, and then twenty-four more with eight alive at a time: every run has to write the same program. A writer whose output depends on the process it runs in turns every later red into a matter of luck, so the question is asked directly rather than assumed -- the program is narrowed to the two types and the reading it writes is the one that exposed it (`for i in a..b` over a bf16 array's length, which wrote `const Tuple ..._items = rt::range(...)` while the program also held a value of two ints). Pinned: one program shape, twenty of twenty, and no disagreement among runs that overlap."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/cppexec/narrow_repeat.py"
+args = ["${case}", "test/cases/trans/cpp/narrow_argmax.cml"]
+expect_exit = 0
+expect_stdout_contains = ["20 of 20: exit 0", "PASS: 20 runs of one command wrote one program", "runs, 8 at a time:"]
+expect_output_not_contains = ["FAIL:", "cell(Tuple)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 300000
+
+[[tests]]
+name = "every_expect_program_five_times"
+desc = "The guard the argmax defect grew into: every program the expect list names -- the files and the one directory, 147 of them -- translated five times, and no program may be written two ways. One program is the case the defect was found on; the next shape of it would be some other program, so the question is asked of all of them. Five runs of one command with nothing else alive is what is asked (3.0 s of wall clock on one host, so no run had to be dropped); a program that came back with two hashes is named with both, and the entry goes red."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/cppexec/narrow_repeat.py"
+args = ["${case}", "--expect=test/tools/cppexec/expect.txt", "--runs=5"]
+expect_exit = 0
+expect_stdout_contains = ["runs of each: 5", "runs of one command wrote one program", "PASS: "]
+expect_output_not_contains = ["FAIL:", "were written more than one way", "cell(Tuple)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 600000
+
+[[tests]]
+name = "narrow_reductions_four_backends"
+desc = "A bf16 and an f16 on all four scheduling back ends: std::nvm, std::fvm, std::cpp (the program std::cpp writes, built and run) and std::jit, on the five programs that pin the two types -- the readings of a value of either, and the four faults a conversion or a division can give. What is compared is each back end's own output and exit code, byte for byte: a type is implemented when the four say the same sentence, not when one of them can run it. Nothing is skipped: a back end that could not run a program would say so in its cell, and the cell that differs is named."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/cppexec/run.py"
+args = ["${case}", "--four-backends", "test/cases/trans/cpp/narrow_reductions.cml", "test/cases/trans/cpp/fault_narrow_text_number.cml", "test/cases/trans/cpp/fault_narrow_text_range.cml", "test/cases/trans/cpp/fault_narrow_f16_range.cml", "test/cases/trans/cpp/fault_narrow_div_zero.cml"]
+expect_exit = 0
+expect_stdout_contains = ["PASS: 5 of 5 programs say the same thing on four back ends"]
+expect_output_not_contains = ["differs", "not run on", "does not build"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 300000
+
+[[tests]]
 name = "narrow_reductions_needs_no_runtime"
 # Red when the `math:min_f`/`math:max_f` rules are deleted: the library's own `min` widens a bf16
 # to `float` before comparing, so the fold reaches `math:min_d`, the bridge, and a link line that
@@ -199,6 +262,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "literal_rows_computed"
+desc = "A nested literal at a position that states a rank is one value of that shape even when a leaf is computed: `[[1.0, 0.0 / 0.0], [0.0 / 0.0, 2.0]]` is the four elements of a `float[2, 2]` in row order, so the generated program holds `rt::Array<double>{{1.0, 0.0, 0.0, 2.0}, {2, 2}}` and the two computed leaves are the elements they sit in. Built as two rows it was refused before it was a value at all (`Cannot insert data of type 'float[]' into a(n) array with element type 'float'`, reported against the first row). The two divisions fault where they are written, and agree_with_fvm compares the report with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/literal_rows_computed.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["const rt::Array<double> array{{1.0, 0.0, 0.0, 2.0}, {2, 2}};", "RuntimeDiag::DivisionByZero at 15:37", "Attempted division by zero."]
+expect_output_not_contains = ["TranslationRefused", "ElementTypeMismatch", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "numel_rank"
 desc = "`numel` counts the elements of a value whatever its rank: six for a rank-2 value, four for its first two rows, eight for a rank-3 one, four for a value of one dimension. It reads the count the value holds and no dimension of it, so a value of several dimensions and one of an open rank are both answered by the run -- which is why this step frees every program that asked for it, the open-rank one included. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
@@ -206,6 +281,18 @@ case = "../../../cases/trans/cpp/numel_rank.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
 expect_stdout_contains = ["rt::numel("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "mean_rank"
+desc = "The mean of a whole value is the sum divided by the number of elements, both in f64, and the answer's element type reached by one conversion: `2.5` for `int[4]` where a mean of integers is an f32 and not integer division, `1.6666666` for `int[3]` (the f32 rounding, not `1`), `0.2` for an `f32[3]` whose f32 sum divided again would not be that, `3.5` for a rank-2 value, and `7.0` for a single element. The answer's element type is the one the operator states and not the source's, so the rule writes it as the runtime template argument -- the one place in the file where a rule reads the result's type to write the call. A value with no element divides by zero; that fault agrees with the interpreter's too, checked by hand because a faulting program cannot sit in a list that must exit zero. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/mean_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::meanAll<"]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-304 diagnostics: 283 errors, 21 warnings. 15 carry a machine-applicable edit, 289 say why they carry none.
+305 diagnostics: 284 errors, 21 warnings. 15 carry a machine-applicable edit, 290 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -295,6 +295,7 @@ prints one entry.
 | `0x04000010` | [RuntimeDiag::EntryArgumentMissing](#entryargumentmissing) | Error | no |
 | `0x04000011` | [RuntimeDiag::EntryArgumentInvalid](#entryargumentinvalid) | Error | no |
 | `0x04000012` | [RuntimeDiag::EntryResultNotWritten](#entryresultnotwritten) | Error | no |
+| `0x04000013` | [RuntimeDiag::PassBoundaryPorts](#passboundaryports) | Error | no |
 | `0x04000014` | [RuntimeDiag::MemoryExhausted](#memoryexhausted) | Error | no |
 | `0x04000030` | [RuntimeDiag::InvalidNumberText](#invalidnumbertext) | Error | no |
 | `0x04000031` | [RuntimeDiag::FormatFailed](#formatfailed) | Error | no |
@@ -9808,6 +9809,67 @@ Cannot write the result of 'main' to '{0}': {1}.
 ```camel
 func main() sync {
     println('a')
+}
+```
+
+### PassBoundaryPorts
+
+`0x04000013` · Error · `RuntimeDiag::PassBoundaryPorts`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
+**Message**
+
+```text
+Pass '{0}' returned a program whose operator node {1} no longer matches its declaration: {2}.
+```
+
+**Help**
+
+```text
+An operator node's ordinary ports are the arguments of the declaration it names, in order: a pass may rewrite the graph, but not write an operand the declaration does not have, point one at a node that is gone or dead, or leave one without a type. A node that no longer matches its declaration is a call nothing can run.
+```
+
+**Example** (`test/cases/effects/declared.cml`, run as `camel test/cases/effects/declared.cml std::opt::inline std::opt`)
+
+```camel
+// What a call touches, written on the declaration (design effects plan 3.1): a resource of the
+// module, a group of them, a handle type and `uses` on a parameter (a cell or a handle) and on a
+// group. The bodies touch nothing: the clause is the whole truth a call site reads.
+
+resource db
+resource console = [db, stdout]
+
+#resource type Stream = { id: int }
+
+/// The body touches nothing; the clause says a call reads and writes the handle it is given.
+func consume(s: Stream): int uses s {
+    return 0
+}
+
+/// The body is empty; every call touches what the group names.
+func tick(): void uses console {
+}
+
+/// The body touches nothing; the clause says a call writes the cell it is given.
+func bump(var t: int): int uses t sync {
+    return 0
+}
+
+func main(): int sync {
+    let s: Stream = { id: 7 }
+    consume(s)
+    consume(s)
+    tick()
+    tick()
+    var cell = 0
+    bump(cell)
+    bump(cell)
+    println(s.id)
+    println(cell)
+    return 0
 }
 ```
 

@@ -4530,30 +4530,6 @@ bool statesARank(const ArrayType *type) {
     return true;
 }
 
-/// Whether `ast` is a literal written as a value with nothing to compute in it (`1.0`,
-/// `(1.0, 2.0)`): a nested array literal whose elements are all of these is a constant array,
-/// which is what a position that states a rank takes. A literal with a name or a call in it is
-/// built when the program runs, and keeps that path.
-bool isConstantLiteral(const AST::node_ptr_t &ast) {
-    if (ast == nullptr || ast->type() != AST::LoadType::Data) {
-        return false;
-    }
-    switch (ast->loadAs<AST::DataLoad>()->dataType()) {
-    case AST::DataType::Literal:
-        return true;
-    case AST::DataType::Array:
-    case AST::DataType::Tuple: {
-        for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
-            if (!isConstantLiteral(item)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    default:
-        return false;
-    }
-}
 
 } // namespace
 
@@ -4800,8 +4776,18 @@ node_ptr_t Builder::visitRankedArrayInto(
     // The elements of the literal in the order the flattened value holds them, each built in the
     // element type the position gives it, as an array literal's elements are (design principles
     // 5.1). The shape is the one the literal writes, which is the position's by the checks above.
+    //
+    // An element the program computes is one of those elements like any other, and it is read in
+    // this order for the same reason: the brackets write the shape and the leaves are what fills
+    // it, so `[[1.0, x], [x, 2.0]]` is four elements in row order, not two rows of them. Read row
+    // by row, each row became a value of its own and the outer literal's element type became the
+    // leaf type those rows happened to give it (`float`) -- a type no position states, which the
+    // rows (`float[]`) then did not fit, and the report named the first row (`Cannot insert data
+    // of type 'float[]' into a(n) array with element type 'float'`). The value the position asks
+    // for is flat, so its elements are read flat; the one thing a computed leaf changes is that
+    // it cannot be folded, so it stays a hole in that same value and the node that computes it
+    // stands for it there.
     std::vector<AST::node_ptr_t> leaves;
-    bool constant = true;
     const auto collect = [&](const auto &self, const AST::node_ptr_t &node) -> void {
         const auto &items = *node->atAs<AST::RepeatedLoad>(0);
         if (!items.empty() && isArrayLiteralData(items.front())) {
@@ -4810,17 +4796,9 @@ node_ptr_t Builder::visitRankedArrayInto(
             }
             return;
         }
-        for (const auto &item : items) {
-            constant &= isConstantLiteral(item);
-        }
         leaves.insert(leaves.end(), items.begin(), items.end());
     };
     collect(collect, ast);
-    if (!constant) {
-        // An element the program computes is not a constant array: the ordinary build keeps the
-        // path it had for it.
-        return visitArrayInto(ast, arrayType, entered);
-    }
 
     ArrayDataFactory factory;
     factory.setElemType(elemType);

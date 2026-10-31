@@ -7,10 +7,13 @@ test/cases/trans/cpp/exec
 test/cases/trans/cpp/exec_mod_scalar.cml
 # The two reduced-precision floating types, at both precisions: storage and the type's own text,
 # arithmetic rounded once, comparison of the widened values, conversion in both directions, the
-# module reductions and comparisons over a value of either, and the reports a conversion or a
-# division gives.
+# module reductions and comparisons over a value of either, the mean (a total and a division, both
+# in f64), the positions argsort and the two arg loops read from a value of either, and the reports
+# a conversion or a division gives.
 test/cases/trans/cpp/narrow_floats.cml
 test/cases/trans/cpp/narrow_reductions.cml
+test/cases/trans/cpp/narrow_mean.cml
+test/cases/trans/cpp/narrow_argmax.cml
 
 # Values and their text.
 test/cases/loops/iterate_string.cml
@@ -221,6 +224,11 @@ test/cases/trans/cpp/complex_scalar.cml
 # to print as the first extent's worth of elements.
 test/cases/trans/cpp/literal_rank.cml
 
+# A rank-2 literal whose leaves are computed is one value of four elements, not two rows of them:
+# the flat run carries the two computed leaves as the elements they sit in, and the divisions
+# fault where they are written.
+test/cases/trans/cpp/literal_rows_computed.cml
+
 # A position on a value of several dimensions: `m[1]` is the row, `m[1, 0]` names the axis it drops
 # and is the element, `t[1]` of a rank-3 value is the rank-2 value behind it -- and `len` of a row is
 # the dimension that is left.
@@ -280,3 +288,8 @@ test/cases/trans/cpp/extreme_axis_rank.cml
 # The position of the extreme along one dimension: the first element of the lane equal to its
 # maximum (minimum), or its first NaN. The answer is an int64 value whatever the source holds.
 test/cases/trans/cpp/arg_axis_rank.cml
+
+# The mean of a whole value: the sum divided by the number of elements, both in f64, and the
+# answer's element type reached by one conversion -- a mean of integers is an f32, not integer
+# division, and a mean of f32 elements is not the f32 sum divided again.
+test/cases/trans/cpp/mean_rank.cml

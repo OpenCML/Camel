@@ -206,7 +206,7 @@ class FunctionEmitter {
     /// Names the value of `ref`: a statement `const T name = expr;` (or `expr;` when nothing
     /// uses it), or the expression itself when it may be moved to its one use. The C++ type is the
     /// one the node's Camel type names: a type has one representation, whichever operator built the
-    /// value (README.cn.md 4).
+    /// value (docs/design/cpp-standalone/README.cn.md 4).
     void bind(
         Frame &frame, gc_node_ref_t ref, std::string expr, bool inlinable, Block &out,
         const std::string &hint);

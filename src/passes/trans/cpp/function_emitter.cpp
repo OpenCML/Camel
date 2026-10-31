@@ -1117,6 +1117,8 @@ void FunctionEmitter::lowerLoop(
         }
     }
     std::string array, index;
+    const gc_node_ref_t element =
+        iterates ? g->regionPorts(parts[1]).front() : static_cast<gc_node_ref_t>(kInvalidNodeRef);
     if (iterates) {
         const gc_node_ref_t iterable = norm.front();
         array = locals_.unique(std::format("v{}_items", nextValue_++));
@@ -1143,6 +1145,13 @@ void FunctionEmitter::lowerLoop(
             // has no loop driver of its own — it writes the loop out — so the interval becomes
             // the array of its integers here, with the operation the interval is
             // (`:struct/range`, rt::range). What the program computes is the same.
+            //
+            // The array's type is the element's in rt::Array, and not the type of the node that
+            // holds the two bounds: that node's type is the pair, and a pair is written as a
+            // struct when the program has one of the same shape (a value of two ints, say), so
+            // asking for its C++ type asks for a `Tuple` there and writes an array into it.
+            const std::string items =
+                std::format("rt::Array<{}>", cppType(g, element, g->node(element)->dataType()));
             const auto bounds = g->withInputsOf(iterable);
             if (bounds.size() != 2) {
                 refuse(
@@ -1156,7 +1165,7 @@ void FunctionEmitter::lowerLoop(
                 Stmt::line(
                     std::format(
                         "const {} {} = rt::range({}, {}, 1, {});",
-                        cppType(g, iterable, g->node(iterable)->dataType()),
+                        items,
                         array,
                         withoutParentheses(valueOf(frame, bounds[0]).text),
                         withoutParentheses(valueOf(frame, bounds[1]).text),

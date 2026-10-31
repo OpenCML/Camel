@@ -393,25 +393,41 @@ class Array : public rtdata::Object {
     /// Slot data. Only a slot array and an 8-byte scalar compact element type have this layout;
     /// use dataAs<T>() or the get/set accessors otherwise.
     slot_t *data() {
-        ASSERT(
+        GUARD(
             isSlots() || isSlotResidentElement(),
-            "Use dataAs<T>() for this element type");
+            std::string("Array::data() asked for the slots of a value whose elements are not "
+                        "slots: storage ") +
+                std::to_string(static_cast<int>(storage_)) + " (0 compact, 1 slots, 2 view), " +
+                std::to_string(elementSize_) + " bytes per element of type code " +
+                std::to_string(static_cast<int>(elemTypeCode_)) +
+                ", so the bytes are not a slot_t[]");
         return reinterpret_cast<slot_t *>(dataPtr_);
     }
     const slot_t *data() const {
-        ASSERT(
+        GUARD(
             isSlots() || isSlotResidentElement(),
-            "Use dataAs<T>() for this element type");
+            std::string("Array::data() asked for the slots of a value whose elements are not "
+                        "slots: storage ") +
+                std::to_string(static_cast<int>(storage_)) + " (0 compact, 1 slots, 2 view), " +
+                std::to_string(elementSize_) + " bytes per element of type code " +
+                std::to_string(static_cast<int>(elemTypeCode_)) +
+                ", so the bytes are not a slot_t[]");
         return reinterpret_cast<const slot_t *>(dataPtr_);
     }
     std::byte *rawData() { return dataPtr_; }
     const std::byte *rawData() const { return dataPtr_; }
     std::byte *elementPtr(uint64_t flatIndex) {
-        ASSERT(flatIndex < numel_, "Array flat index out of range");
+        GUARD(
+            flatIndex < numel_,
+            std::string("Array flat index out of range: element ") + std::to_string(flatIndex) +
+                " of an array that holds " + std::to_string(numel_));
         return dataPtr_ + flatIndex * elementSize_;
     }
     const std::byte *elementPtr(uint64_t flatIndex) const {
-        ASSERT(flatIndex < numel_, "Array flat index out of range");
+        GUARD(
+            flatIndex < numel_,
+            std::string("Array flat index out of range: element ") + std::to_string(flatIndex) +
+                " of an array that holds " + std::to_string(numel_));
         return dataPtr_ + flatIndex * elementSize_;
     }
 
@@ -437,7 +453,10 @@ class Array : public rtdata::Object {
     /// One element as a slot. For a compact array the slot carries the element's own bytes
     /// (an f32 in the low 4 bytes, a bool in the low byte), which is what toSlot/fromSlot give.
     slot_t getSlot(uint64_t flatIndex) const {
-        ASSERT(flatIndex < numel_, "Array flat index out of range");
+        GUARD(
+            flatIndex < numel_,
+            std::string("Array flat index out of range: element ") + std::to_string(flatIndex) +
+                " of an array that holds " + std::to_string(numel_));
         if (isSlots()) {
             return reinterpret_cast<const slot_t *>(dataPtr_)[flatIndex];
         }
@@ -454,7 +473,11 @@ class Array : public rtdata::Object {
     /// be stored; the store paths materialise it (rtdata/view.h).
     slot_t getElementView(
         uint64_t flatIndex, const camel::core::type::DataLayout *layout = nullptr) const {
-        ASSERT(flatIndex < numel_, "Array flat index out of range");
+        GUARD(
+            flatIndex < numel_,
+            std::string("Array flat index out of range: element view ") +
+                std::to_string(flatIndex) + " of an array that holds " +
+                std::to_string(numel_));
         if (isCompact() && isAggregateElement() && block_ != nullptr) {
             if (layout == nullptr) {
                 layout = camel::core::type::pureDataLayout(elemType_);
@@ -485,14 +508,24 @@ class Array : public rtdata::Object {
         // used to be exclusive, which aborted every compact append in a Debug build.
         if (isCompact() && slotShaped_ && value != NullSlot &&
             !camel::core::rtdata::isViewSlot(value, elemType_)) {
-            ASSERT(flatIndex <= numel_, "Array flat index out of range");
+            GUARD(
+                flatIndex <= numel_,
+                std::string("Array flat index out of range: a store at ") +
+                    std::to_string(flatIndex) + " of an array that holds " +
+                    std::to_string(numel_) +
+                    "; an append stores at the end and nowhere past it");
             std::memcpy(
                 dataPtr_ + flatIndex * elementSize_,
                 camel::core::rtdata::aggregateSlots(value), elementSize_);
             return;
         }
         if (isCompact() && isSlotResidentElement() && elementSize_ == sizeof(slot_t)) {
-            ASSERT(flatIndex <= numel_, "Array flat index out of range");
+            GUARD(
+                flatIndex <= numel_,
+                std::string("Array flat index out of range: a store at ") +
+                    std::to_string(flatIndex) + " of an array that holds " +
+                    std::to_string(numel_) +
+                    "; an append stores at the end and nowhere past it");
             reinterpret_cast<slot_t *>(dataPtr_)[flatIndex] = value;
             return;
         }
@@ -561,13 +594,20 @@ class Array : public rtdata::Object {
     slot_t readElement(
         uint64_t flatIndex,
         const camel::core::type::DataLayout *layout = nullptr) const {
-        ASSERT(flatIndex < numel_, "Array flat index out of range");
+        GUARD(
+            flatIndex < numel_,
+            std::string("Array flat index out of range: read of element ") +
+                std::to_string(flatIndex) + " of an array that holds " +
+                std::to_string(numel_));
         if constexpr (R == ElementRead::Direct) {
             return reinterpret_cast<const slot_t *>(dataPtr_)[flatIndex];
         } else if constexpr (R == ElementRead::View) {
-            ASSERT(
+            GUARD(
                 block_ != nullptr,
-                "A view read needs a block-backed array; call ensureBlock() before the loop.");
+                std::string("A view read needs a block-backed array; call ensureBlock() before "
+                            "the loop: an array of ") +
+                    std::to_string(numel_) + " elements of type code " +
+                    std::to_string(static_cast<int>(elemTypeCode_)) + " has no block");
             return camel::core::rtdata::pureViewOf(
                 dataPtr_ + flatIndex * elementSize_, elemType_,
                 layout != nullptr ? layout : camel::core::type::pureDataLayout(elemType_),
@@ -582,14 +622,22 @@ class Array : public rtdata::Object {
         uint64_t flatIndex, slot_t value,
         const camel::core::type::ArrayType *arrayType = nullptr) {
         if constexpr (W == ElementWrite::Direct) {
-            ASSERT(flatIndex < numel_, "Array flat index out of range");
+            GUARD(
+                flatIndex < numel_,
+                std::string("Array flat index out of range: write of element ") +
+                    std::to_string(flatIndex) + " of an array that holds " +
+                    std::to_string(numel_));
             reinterpret_cast<slot_t *>(dataPtr_)[flatIndex] = value;
         } else if constexpr (W == ElementWrite::Aggregate) {
             // setSlot's fast path for a slot-shaped aggregate, with the storage-class tests
             // already folded into the class.
             if (slotShaped_ && value != NullSlot &&
                 !camel::core::rtdata::isViewSlot(value, elemType_)) {
-                ASSERT(flatIndex < numel_, "Array flat index out of range");
+                GUARD(
+                    flatIndex < numel_,
+                    std::string("Array flat index out of range: write of element ") +
+                        std::to_string(flatIndex) + " of an array that holds " +
+                        std::to_string(numel_));
                 std::memcpy(
                     dataPtr_ + flatIndex * elementSize_,
                     camel::core::rtdata::aggregateSlots(value), elementSize_);
@@ -607,17 +655,26 @@ class Array : public rtdata::Object {
     // a `{2, 3, 4}` array, which is a valid element and no element of the first dimension but the
     // last.
     template <typename T> T get(size_t index) const {
-        ASSERT(index < numel_, "Array flat index out of range");
+        GUARD(
+            index < numel_,
+            std::string("Array flat index out of range: read of element ") +
+                std::to_string(index) + " of an array that holds " + std::to_string(numel_));
         return rtdata::fromSlot<T>(getSlot(index));
     }
 
     template <typename T> void set(size_t index, T value) {
-        ASSERT(index < numel_, "Array flat index out of range");
+        GUARD(
+            index < numel_,
+            std::string("Array flat index out of range: write of element ") +
+                std::to_string(index) + " of an array that holds " + std::to_string(numel_));
         setSlot(index, rtdata::toSlot(value), nullptr);
     }
 
     template <typename T> void set(size_t index, T value, const type::ArrayType *arrayType) {
-        ASSERT(index < numel_, "Array flat index out of range");
+        GUARD(
+            index < numel_,
+            std::string("Array flat index out of range: write of element ") +
+                std::to_string(index) + " of an array that holds " + std::to_string(numel_));
         setSlot(index, rtdata::toSlot(value), arrayType);
     }
 
