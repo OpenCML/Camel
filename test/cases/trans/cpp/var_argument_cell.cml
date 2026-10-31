@@ -1,0 +1,19 @@
+// A `var` handed to a `var` parameter is the variable's own cell, not a copy of its value: the
+// callee's write is the caller's (design principles 3.5, design note 5.3), so the call passes an
+// `rt::Cell<T>` where the parameter is one. The version the call reads is the assignment's -- the
+// cell that assignment wrote -- and the generated code used to pass the plain value there, which
+// the C++ compiler rejected.
+//
+// Run: camel test/cases/trans/cpp/var_argument_cell.cml std::cpp
+
+func bump(var x: int) sync {
+    x = x + 1
+}
+
+func main(): int sync {
+    var a = 1
+    a = 2
+    bump(a)
+    println(a)
+    return 0
+}

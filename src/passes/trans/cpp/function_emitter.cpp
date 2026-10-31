@@ -1825,6 +1825,20 @@ bool FunctionEmitter::cellEscapes(const GCGraph *graph, gc_node_ref_t cell) {
                 (isVariableAccess(operatorId(graph, user)) ||
                  operatorId(graph, user) == camel::core::oper::VarTake) &&
                 graph->normInputsOf(user).front() == cell) {
+                // An access that gives the cell back -- an assignment's value is the cell it
+                // wrote -- hands on this same cell, so what its users do to it, they do to this
+                // one: a call that takes it as a `var` argument takes the variable out of the
+                // function, and the variable is a cell (design note 5.3). A read (`:var/get`)
+                // gives a copy of the value, and its users are not this cell's; `:var/take` is
+                // the in-place forms' own access, which keeps the cell inside the function.
+                const Type *handed = node->dataType();
+                const bool givesTheCell =
+                    operatorId(graph, user) != camel::core::oper::VarTake && handed != nullptr &&
+                    handed->code() == camel::core::type::TypeCode::Tuple &&
+                    static_cast<const camel::core::type::TupleType *>(handed)->isCell();
+                if (givesTheCell && cellEscapes(graph, user)) {
+                    return true;
+                }
                 continue;
             }
             if (node->kind == GCNodeKind::Gate) {

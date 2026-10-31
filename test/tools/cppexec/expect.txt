@@ -331,3 +331,7 @@ test/cases/trans/cpp/arg_axis_rank.cml
 # answer's element type reached by one conversion -- a mean of integers is an f32, not integer
 # division, and a mean of f32 elements is not the f32 sum divided again.
 test/cases/trans/cpp/mean_rank.cml
+# A `var` handed to a `var` parameter is the variable's own cell (design principles 3.5): the
+# callee's write is the caller's, so the generated call passes an `rt::Cell<T>` where the parameter
+# is one -- a plain value was what the compiler rejected.
+test/cases/trans/cpp/var_argument_cell.cml
