@@ -2,8 +2,10 @@
 // function whose parameters are the values and their tangents and whose result is the pair
 // `(value, tangent)`. `f(x) = x*x + 3/x` has f(2) = 5.5 and f'(2) = 2x - 3/x^2 = 3.25. The value
 // this program prints is 5.5, computed by the graph the transform built; the tangent it prints is
-// 3.25, computed by that graph's forward rules -- the caller passed 1.0 as the seed, and the reading
-// says the tangent is computed.
+// 3.25, computed by that graph from the forward rules the ruleset files for each operator -- which
+// is why the ruleset is imported: the transform reads its index, and a program that holds no
+// ruleset has no forward rule to read.
+import rulesets.jvp
 import { jvp } from transforms
 
 func f(x: float): float {

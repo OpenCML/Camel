@@ -3,10 +3,13 @@
 
 #include "jvp.h"
 
+#include "camel/compile/gir/rule_templates.h"
+#include "camel/core/forward.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/parse/ast/rule_head.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
 
@@ -26,6 +29,99 @@ using camel::core::type::TupleType;
 using camel::core::type::Type;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GraphId;
+
+namespace {
+
+/// The tangent of one primitive: the rule `stdlib/rulesets/jvp.cml` files for its operator, applied
+/// to the operands' values and their tangents.
+///
+/// The rule is read from the family's index every time it is asked for (camel/core/forward.h):
+/// remove `jvp_div` from the ruleset and the next question has no answer, which is what a transform
+/// must see. There is no table here -- a second writing of the four laws in C++ was the thing this
+/// kernel started with and the thing that had to go, because two tables that can disagree is worse
+/// than one that is missing.
+///
+/// A rule's right side as an instance is curried, not closed over: `(x, w) => ((dx, dw) =>
+/// Tangent<T>)`. So the graph calls it once with the operands the primitive is about, and calls what
+/// it answers with the tangents. Nothing is captured and no closure is built -- the operands are the
+/// rule's own parameters.
+gc_node_ref_t buildRuleTangent(
+    camel::core::context::Context &context, camel::runtime::GraphDraft &draft, std::string_view uri,
+    const std::vector<gc_node_ref_t> &values, const std::vector<gc_node_ref_t> &tangents,
+    std::string &ruleName, std::string &why) {
+    const auto match = camel::core::forwardRuleOf(std::string(uri));
+    if (!match.has_value()) {
+        why = "the operator has no forward rule bound at all";
+        return rt::kInvalidNodeRef;
+    }
+    if (match->status != camel::parse::ast::RuleLookup::Found) {
+        why = match->status == camel::parse::ast::RuleLookup::NoSuchFamily
+                  ? "no ruleset module is loaded (import rulesets.jvp)"
+                  : "the ruleset holds no rule for this operator and operand count";
+        return rt::kInvalidNodeRef;
+    }
+    ruleName        = match->rule;
+    uint64_t ruleId = 0;
+    {
+        const auto &table = camel::compile::gir::genericRuleTable(context);
+        for (size_t i = 0; i < table.size(); ++i) {
+            if (table[i] != nullptr && table[i]->name == ruleName) {
+                ruleId = static_cast<uint64_t>(i) + 1;
+                break;
+            }
+        }
+    }
+    if (ruleId == 0) {
+        why = "the rule is named in the index but its templates are not registered";
+        return rt::kInvalidNodeRef;
+    }
+    const size_t at = camel::compile::gir::genericRuleInstance(
+        context, ruleId, std::vector<camel::core::type::Type *>{Type::Float64()}, {});
+    const auto *entry = camel::compile::gir::genericRuleEntry(context, ruleId);
+    if (entry == nullptr || at >= entry->instances.size()) {
+        why = "no instance of the rule at float";
+        return rt::kInvalidNodeRef;
+    }
+    const auto &instance = entry->instances[at];
+    if (!instance.made || instance.program == nullptr || instance.rhs == nullptr) {
+        why = instance.why.empty() ? "no instance of the rule at float" : instance.why;
+        return rt::kInvalidNodeRef;
+    }
+    // The right side as an instance is curried, not closed over: `(x, w) => ((dx, dw) => Tangent<T>)`.
+    // It takes the operands it is about and answers with the function that takes the tangents, so the
+    // graph asks it once with the operands and calls what comes back with the tangents. No closure is
+    // built and nothing is captured: the operands become arguments, which is the whole shape.
+    auto *rhsType = instance.rhs->funcType();
+    if (rhsType == nullptr || !rhsType->hasExitType() || rhsType->exitType() == nullptr ||
+        rhsType->exitType()->code() != camel::core::type::TypeCode::Function) {
+        why = "the rule's right side does not answer with a function of the tangents";
+        return rt::kInvalidNodeRef;
+    }
+    auto *partialType = tt::as_ptr<FunctionType>(rhsType->exitType());
+    // A rule's right side captures nothing: the operands it is about are its own parameters, so its
+    // closure is the empty tuple (`Function::create` asks for one rather than for none).
+    const camel::core::type::TupleType *closureType = instance.rhs->closureType();
+    if (closureType == nullptr) {
+        closureType = TupleType::create(std::vector<Type *>{});
+    }
+    auto *function = ::Function::create(
+        instance.program, instance.rhs->id(), closureType, mm::autoSpace());
+    if (function == nullptr) {
+        why = "the rule's right side is not a graph a function value can name";
+        return rt::kInvalidNodeRef;
+    }
+    const gc_node_ref_t rule = draft.materializeStaticValue(
+        camel::core::rtdata::toSlot<::Function *>(function), rhsType);
+    const gc_node_ref_t partial = draft.addCallNode(partialType);
+    draft.setNormInputs(partial, values);
+    draft.setWithInputs(partial, std::span<const gc_node_ref_t>(&rule, 1));
+    const gc_node_ref_t tangent = draft.addCallNode(partialType->exitType());
+    draft.setNormInputs(tangent, tangents);
+    draft.setWithInputs(tangent, std::span<const gc_node_ref_t>(&partial, 1));
+    return tangent;
+}
+
+} // namespace
 
 FunctionType *jvpSignature(FunctionType *function) {
     if (function == nullptr) {
@@ -105,66 +201,14 @@ JvpGraph buildJvpGraph(
         std::vector<gc_node_ref_t> copyOf(function->nodeCount(), rt::kInvalidNodeRef);
         std::vector<bool> copied(function->nodeCount(), false);
         bool complete = true;
-        // Step 3, second layer: a tangent for every node, computed by one rule per primitive. A
-        // constant's tangent is zero, a port's is the tangent parameter the caller passed, and a
-        // primitive's is the rule below applied to its operands' values and tangents. The rules are
-        // the minimal set `f` needs; a primitive with none is refused *by name* rather than
-        // answered with 0 or 1, because a wrong derivative that looks like a derivative is the
-        // expensive kind of wrong.
+        // Step 3, second layer: a tangent for every node. A constant's tangent is zero, a port's is
+        // the tangent parameter the caller passed, and a primitive's is the forward rule the ruleset
+        // files for its operator, applied to its operands' values and tangents -- read from the
+        // index at this moment, not from a table written here. A primitive with no rule is refused
+        // *by name* rather than answered with 0 or 1, because a wrong derivative that looks like a
+        // derivative is the expensive kind of wrong.
         std::vector<gc_node_ref_t> tangentOf(function->nodeCount(), rt::kInvalidNodeRef);
         gc_node_ref_t zeroConstant = rt::kInvalidNodeRef;
-        const auto primitive = [&draft](const char *uri, std::vector<gc_node_ref_t> inputs) {
-            const gc_node_ref_t made = draft.addOperNode(Type::Float64(), nullptr, uri);
-            draft.setNormInputs(made, std::span<const gc_node_ref_t>(inputs));
-            return made;
-        };
-        const auto noteRule = [&usedRules](const char *name) {
-            if (std::find(usedRules.begin(), usedRules.end(), name) == usedRules.end()) {
-                usedRules.emplace_back(name);
-            }
-        };
-        // One writing per law, matching stdlib/rulesets/jvp.cml line for line (and the tangent
-        // functions camel::autodiff exports): `jvp_add`, `jvp_sub`, `jvp_mul`, `jvp_div`. Reading
-        // them from the ruleset's index instead -- `forwardRuleOf` and the rule's right side -- is
-        // the road forward.h describes, and it needs two things this transform does not have yet:
-        // the ruleset is in the index only when the program imports `rulesets.jvp`, and binding the
-        // right side's captured operands (`x`, `w`) is a closure the graph has to build at run time.
-        // `ref` is the rule's value in the new graph, `originals` the operands in the old one (where
-        // the tangents are kept) and `inputs` the same operands in the new one.
-        const auto tangentRule = [&](gc_node_ref_t ref, std::string_view uri,
-                                     const std::vector<gc_node_ref_t> &originals,
-                                     const std::vector<gc_node_ref_t> &inputs) -> gc_node_ref_t {
-            if (originals.size() != 2) {
-                return rt::kInvalidNodeRef;
-            }
-            const gc_node_ref_t a = inputs[0];
-            const gc_node_ref_t b = inputs[1];
-            const gc_node_ref_t da = tangentOf[originals[0]];
-            const gc_node_ref_t db = tangentOf[originals[1]];
-            if (uri == ":op/add_d") {
-                noteRule("add");
-                return primitive(":op/add_d", {da, db});
-            }
-            if (uri == ":op/sub_d") {
-                noteRule("sub");
-                return primitive(":op/sub_d", {da, db});
-            }
-            if (uri == ":op/mul_d") {
-                // (a*b)' = a'*b + a*b'
-                noteRule("mul");
-                const gc_node_ref_t lhs = primitive(":op/mul_d", {da, b});
-                const gc_node_ref_t rhs = primitive(":op/mul_d", {a, db});
-                return primitive(":op/add_d", {lhs, rhs});
-            }
-            if (uri == ":op/div_d") {
-                // (a/b)' = (a' - (a/b)*b') / b, with (a/b) the value the copy already computes
-                noteRule("div");
-                const gc_node_ref_t shift = primitive(":op/mul_d", {copyOf[ref], db});
-                const gc_node_ref_t top   = primitive(":op/sub_d", {da, shift});
-                return primitive(":op/div_d", {top, b});
-            }
-            return rt::kInvalidNodeRef;
-        };
         for (std::uint8_t kind = 0; kind <= static_cast<std::uint8_t>(rt::GCNodeKind::Dref); ++kind) {
             bool seen = false;
             for (camel::runtime::gc_node_ref_t ref = 0; ref < function->nodeCount(); ++ref) {
@@ -242,13 +286,30 @@ JvpGraph buildJvpGraph(
                     draft.setNormInputs(made, inputs);
                 }
                 const std::string_view uri = body->uri();
-                tangentOf[ref] = tangentRule(ref, uri, originals, inputs);
+                std::vector<gc_node_ref_t> tangents;
+                for (gc_node_ref_t original : originals) {
+                    if (tangentOf[original] == rt::kInvalidNodeRef) {
+                        complete = false;
+                        break;
+                    }
+                    tangents.push_back(tangentOf[original]);
+                }
+                if (!complete) {
+                    break;
+                }
+                std::string ruleName;
+                std::string ruleWhy;
+                tangentOf[ref] =
+                    buildRuleTangent(*context, draft, uri, inputs, tangents, ruleName, ruleWhy);
                 if (tangentOf[ref] == rt::kInvalidNodeRef) {
                     // Named, not guessed: the transform has no derivative for this operator, and
-                    // the caller is told which one.
+                    // the caller is told which one and why.
                     os << "REINTERP jvp function=" << function->name() << " skip=rule uri=" << uri
-                       << '\n';
+                       << " reason=" << ruleWhy << '\n';
                     return JvpGraph{};
+                }
+                if (std::find(usedRules.begin(), usedRules.end(), ruleName) == usedRules.end()) {
+                    usedRules.push_back(ruleName);
                 }
                 break;
             }
@@ -320,8 +381,8 @@ JvpGraph buildJvpGraph(
     os << "REINTERP jvp function=" << function->name() << " graph=" << rt::toValue(member)
        << " type=" << (madeType != nullptr ? madeType->toString() : std::string("-"))
        << " nodes=" << function->nodeCount() << " kinds=" << copiedKinds << '/' << seenKinds
-       << " exit=Tuple{chain,tangent} tangent=computed rules=" << (rules.empty() ? "-" : rules)
-       << '\n';
+       << " exit=Tuple{chain,tangent} tangent=computed source=ruleset rules="
+       << (rules.empty() ? "-" : rules) << '\n';
     return JvpGraph{group.program(), const_cast<camel::runtime::GCGraph *>(made)};
 }
 
