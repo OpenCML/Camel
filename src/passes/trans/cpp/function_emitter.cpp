@@ -882,12 +882,16 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
             g,
             ref,
             std::format(
-                "the result of operator '{}' in {} has type '{}'; {}{}",
+                // What is missing here is a piece of this table, not a thing the target cannot
+                // do: the sentence says so, and it says it with `yet` (design principles: a core
+                // value type or a core operation is written by every back end, so its absence is
+                // work not done -- only introspection of the runtime itself may be absent by
+                // target, `std::mem::blocks()`).
+                "the result of operator '{}' in {} has type '{}'; {} -- but not this one yet",
                 uri,
                 describeFunction(g),
                 typeName(node->dataType()),
-                kTranslatedTypes,
-                notTranslatedBecause(node->dataType())));
+                kTranslatedTypes));
     }
     std::vector<CppValue> norm, with;
     std::vector<const Type *> normTypes, withTypes;

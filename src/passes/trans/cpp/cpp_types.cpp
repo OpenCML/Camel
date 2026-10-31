@@ -42,32 +42,6 @@ bool isValueType(const Type *type) {
 
 bool endsFlow(const Type *type) { return type != nullptr && type->code() == TypeCode::Never; }
 
-namespace {
-/// Whether this value is, or holds, a narrow float: bf16 or f16. The standalone runtime has no
-/// such element type, so a value of one is outside what this back end can write at all.
-bool isNarrowFloat(const Type *type) {
-    const Type *t = type;
-    for (size_t guard = 0; t != nullptr && guard < 8; ++guard) {
-        if (t->code() == TypeCode::BFloat16 || t->code() == TypeCode::Float16) {
-            return true;
-        }
-        const camel::core::type::ArrayType *array = asArrayType(t);
-        if (array == nullptr) {
-            break;
-        }
-        t = array->elemType();
-    }
-    return false;
-}
-} // namespace
-
-std::string notTranslatedBecause(const Type *type) {
-    // Two refusals read the same sentence and are not the same thing: an operator or a value the
-    // table has not reached yet is work not done, while bf16 and f16 are element types this back
-    // end does not have -- an ability, not a to-do. The writer has to know which one they met.
-    return isNarrowFloat(type) ? std::string(kNoSuchElementType) : std::string();
-}
-
 std::string cppStringLiteral(std::string_view bytes) {
     std::string out = "\"";
     for (unsigned char c : bytes) {
