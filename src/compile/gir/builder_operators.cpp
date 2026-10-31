@@ -733,7 +733,7 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
     const bool macroOperator  = camel::core::OperatorTable::instance().isMacro(op->uri());
     if (macroOperator) {
         graph->draft().setFlags(
-            static_cast<uint8_t>(graph->draft().flags() | camel::runtime::kGraphFlagMacro));
+            static_cast<uint8_t>(graph->view().flags() | camel::runtime::kGraphFlagMacro));
     }
     try {
         bodyStates_[graph.get()] = BodyState::Open;
@@ -743,11 +743,11 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
             setNodeMacro(call, true);
         }
         registerNodeOrigin(context_, call, origin, "gir.link.oper");
-        for (draft_node_ref_t port : graph->draft().withPorts()) {
-            linkNodes(LinkType::With, graph->draft().ref(port), call);
+        for (draft_node_ref_t port : graph->view().withPorts()) {
+            linkNodes(LinkType::With, graph->view().ref(port), call);
         }
-        for (draft_node_ref_t port : graph->draft().normPorts()) {
-            linkNodes(LinkType::Norm, graph->draft().ref(port), call);
+        for (draft_node_ref_t port : graph->view().normPorts()) {
+            linkNodes(LinkType::Norm, graph->view().ref(port), call);
         }
         setGraphReturnFromResult(graph, nodeIdOf(call), nodeIdOf(call), opType->exitType());
         bodyStates_[graph.get()] = BodyState::Built;
@@ -809,9 +809,9 @@ Builder::attemptFunctionValue(const Argument &f, const GCT::node_ptr_t &origin) 
         GCT::node_ptr_t call = make(tree_->makeLink(1 + type->normTypesCount()));
         *call << callee << make(tree_->makeDRef(fName));
         size_t index = 0;
-        for (draft_node_ref_t port : graph->draft().normPorts()) {
+        for (draft_node_ref_t port : graph->view().normPorts()) {
             const std::string name = "$attempt" + std::to_string(index++);
-            nodeScope_->insert(name, graph->draft().ref(port));
+            nodeScope_->insert(name, graph->view().ref(port));
             *call << make(tree_->makeDRef(name));
         }
         // The call is the value of the function, so it runs whenever the function is called.
@@ -1742,8 +1742,8 @@ node_handle_t Builder::composeFunctionValue(
         // The parameter's port, and the two functions: a name of an enclosing graph used in a
         // nested one is what a closure captures, and insertNode makes exactly that of them.
         size_t portCount = 0;
-        for (draft_node_ref_t port : graph->draft().normPorts()) {
-            insertNode(std::string(kCompParameter), graph->draft().ref(port));
+        for (draft_node_ref_t port : graph->view().normPorts()) {
+            insertNode(std::string(kCompParameter), graph->view().ref(port));
             ++portCount;
         }
         ASSERT(portCount == 1, "A composition has exactly one parameter.");

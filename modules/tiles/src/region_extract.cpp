@@ -10,6 +10,7 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/loop.h"
+#include "camel/runtime/graph_txn.h"
 #include "camel/runtime/operator_instance.h"
 #include "tiles/internal/graph_values.h"
 #include "tiles/internal/regions.h"
@@ -142,13 +143,13 @@ void makeLoopRegions(
 }
 } // namespace
 
-RegionDraft extractRegion(const rt::GCGraph &source, const Segment &region) {
+RegionDraft extractRegion(const rt::GCGraph &source, const Segment &region, rt::GraphId id) {
     require(!region.members.empty() && !region.outputs.empty(), "empty region or result");
     RegionDraft result{
-        std::make_unique<rt::GraphDraft>(),
+        rt::GraphTransaction::open(id),
         {},
         std::vector<rt::gc_node_ref_t>(source.nodeCount(), rt::kInvalidNodeRef)};
-    auto &draft = *result.graph;
+    auto &draft = result.graph->edit();
     std::unordered_set<size_t> members(region.members.begin(), region.members.end());
     require(members.size() == region.members.size(), "duplicate member");
     for (auto id : members)

@@ -1089,7 +1089,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     }
     if (camel::core::tag::declaresMacro(tags.declaration)) {
         graph->draft().setFlags(static_cast<uint8_t>(
-            graph->draft().flags() | camel::runtime::kGraphFlagMacro));
+            graph->view().flags() | camel::runtime::kGraphFlagMacro));
     }
     buildFuncBody(gct, graph, funcType, name, tags);
     // A declaration tag whose argument names a function (`#vjp(cube_rule)`) keeps that graph
@@ -1287,9 +1287,9 @@ void Builder::buildFuncBody(
     staticValueScopes_.clear();
     try {
         registerGraphOrigin(context_, graph, gct, "gir.func.graph");
-        const auto withPorts = graph->draft().withPorts();
+        const auto withPorts = graph->view().withPorts();
         for (size_t i = 0; i < withPorts.size(); ++i) {
-            node_handle_t port = graph->draft().ref(withPorts[i]);
+            node_handle_t port = graph->view().ref(withPorts[i]);
             insertNode(graph->nodePortName(port), port);
             if (i < funcType->withTypesCount() && funcType->withIsVarAt(i)) {
                 variables_.insert(port);
@@ -1298,9 +1298,9 @@ void Builder::buildFuncBody(
                 recordDeclaration(graph->nodePortName(port), port, gct);
             }
         }
-        const auto normPorts = graph->draft().normPorts();
+        const auto normPorts = graph->view().normPorts();
         for (size_t i = 0; i < normPorts.size(); ++i) {
-            node_handle_t port = graph->draft().ref(normPorts[i]);
+            node_handle_t port = graph->view().ref(normPorts[i]);
             insertNode(graph->nodePortName(port), port);
             if (i < funcType->normTypesCount() && funcType->normIsVarAt(i)) {
                 variables_.insert(port);
