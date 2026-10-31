@@ -328,6 +328,32 @@ expect_stdout_contains = ["rt::atRow(", "rt::atAxis("]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+ 
+[[tests]]
+name = "iterate_rows"
+desc = "`for` over a value of several dimensions walks its first dimension: the item is the row, one dimension less, and the number of rounds is the first extent -- not the element count, which a rank-2 value of 2 rows of 3 elements has 6 of and 2 items. The generated loop holds the item as `rt::atRow(v2_items, v3_round, at_13_13)` and breaks at `v3_round >= v2_items.extent(0)`; a rank-3 value's planes come out as rank-2 items the same way, and a value of one dimension still gives its elements (`rt::at`). The elements of a row are copied, so the body holds a value of its own. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte -- three lines."
+kind = "behavior"
+case = "../../../cases/trans/cpp/iterate_rows.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::atRow(", ".extent(0))", "rt::at("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "refuse_iterate_open"
+desc = "A `for` over a value whose rank is open is refused with the reason: an item is an element on a value of one dimension and a row on a value of several, and no one C++ type holds both -- the same ground on which the index rule refuses an open rank (`:op/idx_arr`). The refusal names the loop `countRows` and is located at it; the positive half of this law is `iterate_rows`, where the type states the rank."
+kind = "negative"
+case = "../../../cases/trans/cpp/refuse_iterate_open.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_diagnostic_line = 12
+expect_output_contains = ["Translation pass 'std::cpp' refused the graph", "walks a value whose rank is open", "no one C++ type holds both"]
+expect_output_not_contains = ["Segmentation fault", "UnknownInternalError", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
 
 [[tests]]
 name = "enum_types"

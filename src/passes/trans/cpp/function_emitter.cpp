@@ -1121,6 +1121,22 @@ void FunctionEmitter::lowerLoop(
         const gc_node_ref_t iterable = norm.front();
         array = locals_.unique(std::format("v{}_items", nextValue_++));
         index = locals_.unique(std::format("v{}_round", nextValue_++));
+        // A `for` walks the first dimension (design principles 4.2): on a value of several the item
+        // is a row, one dimension less (`rt::atRow`), and on a value of one it is the element. An
+        // item is not that on an open rank -- a value that is an element at rank 1 and a row above
+        // it has no one C++ type -- which is the reason the index rule of the table refuses the
+        // same type (`:op/idx_arr`): the value the program holds is one type, and which it is is
+        // not a decision a single call can hold.
+        const auto *iterated = asArrayType(g->node(iterable)->dataType());
+        if (iterated != nullptr && iterated->anyRank()) {
+            refuse(
+                g,
+                loop,
+                std::format(
+                    "{} walks a value whose rank is open: an item is an element on a value of one "
+                    "dimension and a row on a value of several, and no one C++ type holds both",
+                    describeFunction(g)));
+        }
         if (g->loopIterableFormOf(loop) == camel::core::LoopIterableForm::Interval) {
             // `for i in a..b`: the graph's sequence is the pair of the interval's two bounds
             // (design principles 4.2, LoopIterableForm::Interval). The C++ this exporter writes
@@ -1182,16 +1198,34 @@ void FunctionEmitter::lowerLoop(
     }
     if (iterates) {
         const gc_node_ref_t element = g->regionPorts(parts[1]).front();
-        round.push_back(Stmt::line(std::format("if ({} >= {}.size()) {{ break; }}", index, array)));
+        // The item of a value of several dimensions is its row, one dimension less, which is what
+        // the interpreter hands the body (design principles 4.2): `rt::atRow`, whose elements are
+        // copied -- accepted, as the conversion at the bridge is -- so the body holds a value of
+        // its own. The count of rounds is the first dimension then, not the element count: a value
+        // of 3 rows of 2 elements has 3 items, not 6.
+        const auto *iterated = asArrayType(g->node(norm.front())->dataType());
+        const bool rows      = iterated != nullptr && !iterated->anyRank() && iterated->rank() >= 2;
+        round.push_back(
+            Stmt::line(
+                std::format(
+                    "if ({} >= {}{}) {{ break; }}",
+                    index,
+                    array,
+                    rows ? ".extent(0)" : ".size()")));
         const std::string name = locals_.unique(std::format("v{}_item", nextValue_++));
         round.push_back(
             Stmt::line(
                 std::format(
-                    "const {} {} = {}[{}];",
+                    "const {} {} = {};",
                     cppType(g, element, g->node(element)->dataType()),
                     name,
-                    array,
-                    index)));
+                    rows ? std::format(
+                               "rt::atRow({}, {}, {})",
+                               array,
+                               index,
+                               program_.sites.siteFor(
+                                   g, norm.front(), RuntimeDiag::IndexOutOfRange, {}))
+                         : std::format("{}[{}]", array, index))));
         round.push_back(Stmt::line(std::format("++{};", index)));
         frame.values[element] = CppValue{name, false};
     }
