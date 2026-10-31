@@ -92,13 +92,19 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
   "the cards were free", not "the compiler is right" -- and a whole-plan run takes about 89 s, of
   which the fast layer's two minutes has none to give. One entry of it (the derived-graph
   `gpu_scope` case) is already `tier = "fast"`, because it needs the compiler and not a card.
-  The paced and soaked collection plans (`feat/mm/gc_pacing` 15, `feat/mm/gc_soak` 22) are the
-  other two whole slow plans, and they are cheap: 37 entries in 6.7 s with no red. **Flipping them
-  to `tier = "fast"` was tried and reverted**: the runner self-test refuses to let an ordinary
-  change name a plan of the `feat/mm/gc_*` class ("is a plan an ordinary change must not run"),
-  and the eight cases they read live in the GC directory whose mirror is the milestone
-  `feat/mm/gc.plan.toml`. A tier flip cannot settle that; the plan class has to be narrowed, or
-  the plans renamed, and that is the author's call. Some individual entries are still `tier = "slow"` inside fast plans
+  **The two collection plans stay in this layer, and they must be run whole every night:
+  `feat/mm/gc_pacing` (15) + `feat/mm/gc_soak` (22) = 37 entries, one whole run takes 6.7 s**
+  (`-Tier slow -Jobs 4`, 37 pass, 0 fail). Flipping them to `tier = "fast"` was tried and reverted,
+  and the numbers say why the bookkeeping was right: the fast layer's total went 8032 -> 8069 (+37)
+  but its wall went 227.5 s -> 275.3 s (**+47.8 s**), so those "6.7 s" entries cost the gate seven
+  times their own time -- they are memory-bandwidth work, not CPU work, and they compete with
+  everything beside them. The class also cannot be named by a rule (the runner self-test: "is a plan
+  an ordinary change must not run"), and the eight cases they read mirror to the milestone
+  `feat/mm/gc.plan.toml`; so the layer stays, the class stays, and nothing is renamed to route around
+  either. A nightly whole run is what keeps them from being forgotten.
+  `feat/modules/random.plan.toml`'s `keyed_random.std_cpp_agrees` is the same shape -- it compiles
+  C++ like `trans/cpp`'s `agree_with_fvm` -- but nothing runs that layer today; recorded here and
+  left alone on purpose, one move at a time. Some individual entries are still `tier = "slow"` inside fast plans
   (`test/plans/feat/modules/autodiff.plan.toml` 5, `tools/debugger` 4, `parse/frontend`,
   `modules/random`, `tools/lsp`, `linear/var_reference`, `trans/cpp` 1 each).
 - `milestone` is the layer that only runs at a milestone, on a quiet machine: the plans
