@@ -622,9 +622,14 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
         // possible writer of a variable (the conservative writer set), so the write written before
         // it has to keep running, and the version a read takes after the call names it: an order
         // edge alone does not keep a write alive (design principles 3.5, F3).
+        //
+        // Two calls in a row are two writes of the variable, and the second one's "before" is the
+        // first call's version, not the cell: what the read after the second takes is the variable
+        // as both calls left it (`:var/after(:var/after(cell, call1), call2)`). valueVersionOf
+        // answers that for a preceding call as it answers it for a write (valueVersionOf's own
+        // `:var/after` row), so the chain is made here and nowhere else.
         if (auto previous = modifierOf(variable);
-            previous.has_value() && sameGraph(*previous, currGraph_) &&
-            nodeKindOf(*previous) != camel::runtime::GCNodeKind::Call) {
+            previous.has_value() && sameGraph(*previous, currGraph_)) {
             if (node_handle_t version = valueVersionOf(variable); version != nullptr) {
                 writeBeforeCall_[exit][variable] = version;
             }

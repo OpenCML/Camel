@@ -1,0 +1,21 @@
+/**
+ * A function value made after a call that may write a variable captures that variable as the call
+ * left it: the closure `read` is written after `f()`, so what it captures is `:var/after(cell,
+ * call)` and the read inside it takes `5`.
+ *
+ * Before the claimed call was handed to the capture, this program printed `1`: the closure was
+ * given the cell from before the call, and the write `counter = 5` never reached the read.
+ */
+
+var counter = 1
+
+func run(f: () => void): int {
+    f()
+    let read = () => counter
+    return read()
+}
+
+func main(): int sync {
+    println(run(() => { counter = 5 }))
+    return 0
+}
