@@ -489,6 +489,28 @@ std::shared_ptr<camel::compile::gir::DraftGraphBuilder> rhsBuilder;
 这就把下一笔的形状定死了：**一次 reserve 两个成员（`main`、`f`），第一个当根**，两个图都要重造，
 `println` 也得在 `main` 的新版本里重新接上。**这是“整条入口路径”，不是“一个站点”。**
 
+## 判据：先造一个最小的容器
+
+> **一个“装不进去”的东西，先用最小的容器把它装进去；容器的形状对了，再谈往真程序里装。**
+
+最小容器要装的两个人已经点清：`main` 与 `f`。**重造 `main` 需要的东西，一次量完**：
+
+```
+REINTERP target=f primitives=1 other=2 graph=112 nodes=1
+REINTERP calls=- opers=:op/div_d
+REINTERP target=main primitives=1 other=4 graph=113 nodes=1
+REINTERP calls=54 opers=:io/println
+```
+
+- `f`：没有 FUNC 调用，只有一个算子 `:op/div_d`——**新 `f` 只换这一个站点**；
+- `main`：FUNC 调用 **54**（就是 `f`），算子 `:io/println`——**新 `main` 的清单是“常量 `2.0` →
+  调新 `f` → `:io/println` → `return 0`”，四件事，一件不多**；
+- `println` **是算子，不是图**：所以最小容器不需要拷任何节点，两个图都能用
+  `addDataNode`/`addCallNode`/`addOperNode` 从零拼出来（`include/camel/runtime/draft.h`）。
+
+**这就是下一笔的施工单**：reserve 两个成员（`main__min` 第一个当根、`f__min`），`f__min` 里
+“`3.0/x` 的值 + 建闭包 + 调闭包”三段，`main__min` 里四件事，打出来就是 `(1.5, -0.75)`。
+
 ## 验收（缺一步不算完）
 
 1. **前向**：`f(x) = x*x + 3/x` 在 `x = 2` 处，`f = 5.5`，`f' = 4 - 0.75 = 3.25`。两个数都要打出来。
