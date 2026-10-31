@@ -425,6 +425,42 @@ Rules buildRules() {
         },
         false,
     };
+    // A store into an element or a field as a value (`xs[i] = v`, `s.x = v` of the plain form,
+    // set_value.cpp): the array or the record with that place changed. The store into a
+    // variable's own array or field is the assignment's (see lowerSetIndexInPlace), and this is
+    // the same change without a variable to hand over.
+    r[":op/set_index"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (value == nullptr || value->anyRank() || value->rank() != 1 || c.normCount() != 3) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::setAt({}, {}, {}, {})",
+                c.operand(0),
+                c.operand(1),
+                c.operand(2),
+                c.site(RuntimeDiag::IndexOutOfRange, marks(3)));
+        },
+        false,
+    };
+    // The field a store writes is an index, so the record's C++ member name is the type's: the
+    // member pointer the runtime takes is that field's (camel/standalone/record.h).
+    r[":op/set_field"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const std::string field = c.fieldName(1);
+            if (c.normCount() != 3 || field.empty()) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::setField({}, &{}::{}, {})",
+                c.norm(0).text,
+                c.cppType(c.normType(0)),
+                field,
+                c.operand(2));
+        },
+        false,
+    };
     // The slice of a one-dimensional array, whichever spelling wrote it (design principles 5.4):
     // the six words are the value, the axis, the two bounds, the step and the mask of the bounds
     // written, and a call that leaves the last two out stands for step 1 and "both written". A

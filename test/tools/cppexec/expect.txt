@@ -82,6 +82,10 @@ test/cases/consistency/new_values/peek.cml
 test/cases/linear/byref/element_assigned.cml
 test/cases/consistency/faults/element_assigned_out_of_range.cml
 
+# `s.x = v` and a path through a field (:op/set_field, :op/set_index): the record or the array
+# with one place changed, and the value another variable read before the store keeps what it had.
+test/cases/trans/cpp/field_store.cml
+
 # Output of print / println with a format (design principles 10.6).
 # (test/cases/trans/cpp/exec/print_formats.cml, in the directory above)
 # A formatted string is the same tree as '...'->format<...>: the translator sees no difference.

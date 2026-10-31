@@ -820,10 +820,11 @@ class NodeCall final : public OperatorCall {
         std::vector<const Type *> normTypes, std::vector<const Type *> withTypes,
         const Type *result,
         std::function<std::string(RuntimeDiag, const std::vector<std::string> &)> site,
-        std::function<std::string(const Type *)> cppType)
+        std::function<std::string(const Type *)> cppType,
+        std::function<std::string(size_t)> fieldName)
         : uri_(std::move(uri)), norm_(std::move(norm)), with_(std::move(with)),
           normTypes_(std::move(normTypes)), withTypes_(std::move(withTypes)), result_(result),
-          site_(std::move(site)), cppType_(std::move(cppType)) {}
+          site_(std::move(site)), cppType_(std::move(cppType)), fieldName_(std::move(fieldName)) {}
 
     std::string_view uri() const override { return uri_; }
     size_t normCount() const override { return norm_.size(); }
@@ -837,6 +838,7 @@ class NodeCall final : public OperatorCall {
         return site_(kind, args);
     }
     std::string cppType(const Type *type) const override { return cppType_(type); }
+    std::string fieldName(size_t argIndex) override { return fieldName_(argIndex); }
 
   private:
     std::string uri_;
@@ -845,6 +847,7 @@ class NodeCall final : public OperatorCall {
     const Type *result_;
     std::function<std::string(RuntimeDiag, const std::vector<std::string> &)> site_;
     std::function<std::string(const Type *)> cppType_;
+    std::function<std::string(size_t)> fieldName_;
 };
 
 } // namespace
@@ -888,6 +891,12 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
     };
     collect(g->normInputsOf(ref), norm, normTypes);
     collect(g->withInputsOf(ref), with, withTypes);
+    // The arguments' nodes and the first argument's type, kept before they are moved into the
+    // call a rule sees: a rule asks for a field name after that, and the field index is a node of
+    // the graph (a constant), not a value of the arguments.
+    const std::vector<gc_node_ref_t> normInputs(
+        g->normInputsOf(ref).begin(), g->normInputsOf(ref).end());
+    const Type *firstNormType = normTypes.empty() ? nullptr : normTypes.front();
 
     if (lowerVariable(frame, ref, uri, out) || lowerHigherOrder(frame, ref, uri, out)) {
         return;
@@ -963,7 +972,25 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
         [&](RuntimeDiag kind, const std::vector<std::string> &args) {
             return program_.sites.siteFor(g, ref, kind, args);
         },
-        [&](const Type *t) { return program_.values.type(t).value_or("void"); });
+        [&](const Type *t) { return program_.values.type(t).value_or("void"); },
+        [&](size_t argIndex) {
+            // The field a store writes is an index the compiler put in a constant
+            // (`:op/set_field`): the name is the struct type's, not the argument's text.
+            if (argIndex >= normInputs.size() || firstNormType == nullptr) {
+                return std::string();
+            }
+            const auto *index = g->node(normInputs[argIndex]);
+            if (index->kind != GCNodeKind::Data || index->dataType() == nullptr ||
+                index->dataType()->code() != camel::core::type::TypeCode::Int64) {
+                return std::string();
+            }
+            const int64_t field = camel::core::rtdata::fromSlot<int64_t>(
+                g->staticArea()->get<slot_t>(-index->dataIndex));
+            if (field < 0) {
+                return std::string();
+            }
+            return program_.values.fieldName(firstNormType, static_cast<size_t>(field));
+        });
     auto expr = rule->emit(call);
     if (!expr) {
         refuse(
@@ -1719,7 +1746,10 @@ bool FunctionEmitter::lowerVariable(
             [&](RuntimeDiag kind, const std::vector<std::string> &args) {
                 return program_.sites.siteFor(g, ref, kind, args);
             },
-            [&](const Type *t) { return program_.values.type(t).value_or("void"); });
+            [&](const Type *t) { return program_.values.type(t).value_or("void"); },
+            // A compound assignment writes no field of a record: its operator takes a value and
+            // the variable's own, and the field name is not among them.
+            [&](size_t) { return std::string(); });
         value = rule->emit(call).value_or(value);
     }
     if (local) {
