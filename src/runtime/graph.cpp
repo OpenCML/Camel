@@ -2473,6 +2473,24 @@ std::span<const gc_node_ref_t> GCGraph::ctrlOutputsOf(gc_node_ref_t ref) const {
     return containsNodeRef(ref) ? uses().ctrl(ref) : std::span<const gc_node_ref_t>();
 }
 
+// The draft's four names for the same lists (camel/runtime/draft.h): a frozen graph reads them
+// where the table already is, so a pass asks it the question it asks of its own draft.
+std::span<const gc_node_ref_t> GCGraph::normUsersOf(gc_node_ref_t ref) const {
+    return containsNodeRef(ref) ? uses().norm(ref) : std::span<const gc_node_ref_t>();
+}
+
+std::span<const gc_node_ref_t> GCGraph::withUsersOf(gc_node_ref_t ref) const {
+    return containsNodeRef(ref) ? uses().with(ref) : std::span<const gc_node_ref_t>();
+}
+
+std::span<const gc_node_ref_t> GCGraph::ctrlUsersOf(gc_node_ref_t ref) const {
+    return containsNodeRef(ref) ? uses().ctrl(ref) : std::span<const gc_node_ref_t>();
+}
+
+std::span<const gc_node_ref_t> GCGraph::syncUsersOf(gc_node_ref_t ref) const {
+    return containsNodeRef(ref) ? uses().sync(ref) : std::span<const gc_node_ref_t>();
+}
+
 std::span<const gc_node_ref_t> GCGraph::normPorts() const {
     const auto &payload = nativePayload_;
     if (!payload.normPorts) {
