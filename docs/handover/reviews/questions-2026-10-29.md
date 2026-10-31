@@ -782,3 +782,37 @@ graph-store 的账（b5 收尾、b4 入口）收下："删行数为 0 的片不�
 这样用例也能钉住这些读数。这是 21:35 说的"更好的做法"的落地。
 
 四页挪到 `reviews/` 留档。
+
+## 排入队列（2026-10-30 23:10）：清掉剩下的环境变量开关
+
+`CAMEL_RULESET_INDEX` 已经改成遍输出（`fdb4a9ae9`），收下。全仓还有一批 `getenv("CAMEL_*")`：
+- `modules/onnx/exporter.cpp` 的 `CAMEL_ONNX_TRACE`、`CAMEL_ONNX_DUMP`、`CAMEL_ONNX_PREP_STATS`；
+- `modules/tensor` 的 `CAMEL_TENSOR_ISA`、`CAMEL_TENSOR_OPSTATS`；
+- `modules/tiles` 的 `CAMEL_TILES_NVRTC`，以及 `region_test_pass.cpp` 的 `CAMEL_TILES_TEST_INVALIDATION`、`_REASONS`、`_I64`、`_DECLARATIONS`。
+
+作为一条收尾线逐个改：
+- 诊断输出改成遍的参数或翻译遍，用例可以钉住；
+- 选择类的设置（ISA、NVRTC 路径）改成命令行选项或安装配置。
+
+改完加一条快层检查：`src/`、`modules/` 里出现 `getenv("CAMEL_` 就红，只放行 `CAMEL_HOME` 和测试框架自己的变量。不阻塞主线，排在窄浮点算子之后。
+
+## 催办（2026-10-30 23:30，决策者）
+
+总速度很高（2 小时 74 笔），但最近三小时的代码集中在 graph-store、断言、tiles 参数和启动预算上；语言主线上已经裁定的几条，三小时以上没有一笔代码：
+
+| 线 | 下一条 |
+|---|---|
+| 版本口 | 22:50：`:var/after(cell, call)`，`callback_write_ignored` 打印 3；然后拆 `orderAfterLastWriter` 的 ctrl 替身，接着做 ① 的块外那一半 |
+| 看不见的写者 | 22:50：整个程序扫一遍得到保守写者集合，`twice` 打印 3 |
+| 程序变换第 3 步 | `reinterp<jvp>` 消费索引，标量 `jvp` 跑通，缺规则报编译期诊断 |
+| 窄浮点算术 | `bf16`/`f16` 的逐元素算子本身，以及与 `f32` 之间的转换 |
+| 示例 | 扩散训练步的 GPU 那一半；MCTS |
+| 环境变量开关 | 23:10 排入的那条收尾线（tiles 那一项 `304cc459b` 已经开始） |
+
+graph-store 和断言那两路照常推进，但不要占用这几路的人手。
+
+补一行：**第 11 条 生成器**：`builder.cpp:2164`（`yield` 的那句 `FeatureNotSupported("generators")`，注释还说"状态机 not built yet"）与 `:5704` 的 `refuse` 仍在。把 `refuse` 还会命中的形状逐个列出来，补完后删掉这两处，并翻转 `stream.yield_lowering_refused`。:2164 那段注释已经过时，同一笔删掉。
+
+## 裁定（2026-10-30 23:50）：`:var/after` 的第二个实参接受任意值
+
+接受任意值，包括 `void`。22:50 那句"它的值可以是 `void`"说的是"`void` 也行"，不是"只能是 `void`"。这个算子不读第二个实参，它只表示"这次调用之后的版本"，所以调用返回什么类型都一样。今天的实现是对的，把签名写成 `(var T, any) => var T`，语言参考写同一句。页面挪到 `reviews/` 留档。
