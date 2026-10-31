@@ -929,16 +929,16 @@ Rules buildRules() {
     // added from +0 in ascending order, rounded into the element type once -- the one reduction that
     // does read a dimension, and the one that cannot be written by flattening the value.
     //
-    // Two refusals stay, and they are not the same sentence. A rank of one is refused because its
-    // answer is a value of no dimension: the result's type cannot be written from the signature,
-    // which says `T[..]` -- a value of a rank the callee does not know -- while the answer here
-    // would be the element itself. An open rank is refused for that same reason and only that one:
-    // its rank is a property of the value, so the shape the answer keeps cannot be stated -- and not
-    // because such a value is not an array, which it is, and the operator reads it as one.
+    // One refusal stays: an open rank, because its rank is a property of the value, so the shape the
+    // answer keeps cannot be stated -- and not because such a value is not an array, which it is, and
+    // the operator reads it as one. A rank of one is *not* refused: what its one lane sums to is the
+    // answer itself (design principles 5.4), a value of no dimension, and the open rank of the
+    // result's type writes that like any other answer. It was refused here until the same sentence
+    // was found to be wrong for `argmax_axis`; the reason was never about the sum.
     r["tensor:sum_axis"] = {
         [](OperatorCall &c) -> std::optional<std::string> {
             const ArrayType *value = asArrayType(c.normType(0));
-            if (value == nullptr || value->anyRank() || value->rank() < 2 ||
+            if (value == nullptr || value->anyRank() || value->rank() < 1 ||
                 value->elemType() == nullptr) {
                 return std::nullopt;
             }
