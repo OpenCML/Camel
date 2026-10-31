@@ -2877,19 +2877,17 @@ void Builder::linkArmEntries(const std::vector<arm_ptr_t> &arms, node_handle_t b
         // The arm is a `sync` chain of its own, and the branch is the statement written before it:
         // the arm runs only when it is entered, so the BRCH is the chain predecessor of the arm's
         // first statement and not only the node its entries wait for (docs/design/effects/
-        // edges.cn.md 1.5, 5.7). The control edge is written beside it for as long as the chain of
-        // a block is carried as control edges too; a chain never forks, so an arm that already
-        // enters its chain from something keeps that place and no second predecessor is written.
+        // edges.cn.md 1.5, 5.7). The chain link is the sync edge below; the control edge that used
+        // to stand beside it said nothing this edge does not -- a sync edge orders like an order
+        // edge and carries "used" like a data port -- so it is not written any more. A chain never
+        // forks, so an arm that already enters its chain from something keeps that place and no
+        // second predecessor is written.
         if (entry == nullptr || !syncInputsOf(entry).empty() || !linkCheek(brchNode, entry)) {
             continue;
         }
         markSyncStatement(brchNode);
         markSyncStatement(entry);
         linkNodes(LinkType::Sync, brchNode, entry);
-        const auto ctrlInputs = ctrlInputsOf(entry);
-        if (std::ranges::find(ctrlInputs, nodeIdOf(brchNode)) == ctrlInputs.end()) {
-            linkNodes(LinkType::Ctrl, brchNode, entry);
-        }
     }
 }
 
