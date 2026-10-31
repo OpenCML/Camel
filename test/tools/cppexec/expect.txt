@@ -90,6 +90,10 @@ test/cases/trans/cpp/field_store.cml
 # a position can repeat, and a fixed-size value is taken the same way.
 test/cases/trans/cpp/take_positions.cml
 
+# `last(xs)` (:struct/last_arr): the last element of an array of one element too, and of the
+# empty array the fault a read of the position -1 gives.
+test/cases/trans/cpp/last_element.cml
+
 # Output of print / println with a format (design principles 10.6).
 # (test/cases/trans/cpp/exec/print_formats.cml, in the directory above)
 # A formatted string is the same tree as '...'->format<...>: the translator sees no difference.

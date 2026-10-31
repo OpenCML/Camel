@@ -484,6 +484,21 @@ Rules buildRules() {
         },
         false,
     };
+    // The last element (:struct/last_arr, struct.cpp __last_arr__): of the empty array, the fault a
+    // read of the position -1 gives, named with the position that is not there.
+    r[":struct/last_arr"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (c.normCount() != 1 || value == nullptr || value->anyRank() || value->rank() != 1) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::last({}, {})",
+                c.operand(0),
+                c.site(RuntimeDiag::IndexOutOfRange, marks(3)));
+        },
+        false,
+    };
     // The slice of a one-dimensional array, whichever spelling wrote it (design principles 5.4):
     // the six words are the value, the axis, the two bounds, the step and the mask of the bounds
     // written, and a call that leaves the last two out stands for step 1 and "both written". A

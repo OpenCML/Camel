@@ -267,6 +267,15 @@ Array<T> sliceSub(
 /// `site`, as `xs[0]`.
 template <typename T> T head(const Array<T> &xs, const Site &site) { return at(xs, 0, site); }
 
+/// `last(xs)` (:struct/last_arr): the last element; of the empty array IndexOutOfRange at `site`
+/// with the position -1, the one no array has (struct.cpp's __last_arr__ says the same).
+template <typename T> T last(const Array<T> &xs, const Site &site) {
+    if (xs.empty()) [[unlikely]] {
+        fault(site, {"-1", "an array", "0"});
+    }
+    return xs[xs.size() - 1];
+}
+
 /// `xs[idx]` with `idx` an array of positions (:op/idx_take, design principles 5.4): the elements
 /// those positions name, in that order, as a copy. A position outside the array is
 /// IndexOutOfRange at `site` with the position as written, as a plain read is; a position taken
