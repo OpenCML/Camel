@@ -137,6 +137,30 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "numel_rank"
+desc = "`numel` counts the elements of a value whatever its rank: six for a rank-2 value, four for its first two rows, eight for a rank-3 one, four for a value of one dimension. It reads the count the value holds and no dimension of it, so a value of several dimensions and one of an open rank are both answered by the run -- which is why this step frees every program that asked for it, the open-rank one included. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/numel_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::numel("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "sum_rank"
+desc = "The whole-value `sum` answers the element type: an integer result is the exact int64 accumulator (int64 as it stands) and a float one is the f64 accumulator converted once, added from +0 in the order the elements lie -- `6.0` for a `float[3]`, `10` for an `int[4]`, `0.6` for an `f32[3]` whose f64 total is not the f32 sum. Rank 1 only for this step: a value of several dimensions is the same total of the same run, but the axis form (`tensor:sum_axis`) is the one that needs the shape. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/sum_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::sumAll("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "shape_rank"
 desc = "`shape(m)` answers the value's dimensions as `int[]` -- `[3, 2]` for a rank-2 value, `[4]` for one of a single dimension, `[2, 2]` for a sliced one, `[2, 2, 2]` for a rank-3 one -- and the answer is a value of its own, not a view: the runtime copies the extents into storage of its own, so a write to it cannot reach the value it describes. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"

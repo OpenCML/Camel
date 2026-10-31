@@ -604,6 +604,43 @@ Rules buildRules() {
         },
         false,
     };
+    // `tensor:sum` of the whole value (modules/tensor/ops/reduction_ops.cpp): the elements added from
+    // +0 in the order they lie, answering the element type -- an integer result exactly in int64
+    // (int32 truncated once into its own width) and a float one by the f64 accumulator converted
+    // once. Rank 1 only for this step: the total of a value of several dimensions is the total of
+    // its run and needs no dimension, but the axis form (`tensor:sum_axis`) is the one that does,
+    // and it is a step of its own.
+    r["tensor:sum"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (c.normCount() != 1 || value == nullptr || value->anyRank() ||
+                value->rank() != 1 || value->elemType() == nullptr) {
+                return std::nullopt;
+            }
+            const TypeCode element = value->elemType()->code();
+            if (element != TypeCode::Int64 && element != TypeCode::Int32 &&
+                element != TypeCode::Float32 && element != TypeCode::Float64 &&
+                element != TypeCode::Bool) {
+                return std::nullopt;
+            }
+            return std::format("rt::sumAll({})", c.operand(0));
+        },
+        false,
+    };
+    // `numel(xs)` (`stdlib/array.cml`): how many elements the value has. It needs no dimension of
+    // the value -- only the count -- so a value of several dimensions and one of an open rank are
+    // both read off the run it keeps: `numel` of a rank-zero value is one, as the interpreter's is.
+    for (const char *uri : {"array:numel", "tensor:numel"}) {
+        r[uri] = {
+            [](OperatorCall &c) -> std::optional<std::string> {
+                if (c.normCount() != 1 || asArrayType(c.normType(0)) == nullptr) {
+                    return std::nullopt;
+                }
+                return std::format("rt::numel({})", c.operand(0));
+            },
+            false,
+        };
+    }
     // The slice of one dimension of a value, whichever spelling wrote it (design principles 5.4): the
     // six words are the value, the axis, the two bounds, the step and the mask of the bounds written,
     // and a call that leaves the last two out stands for step 1 and "both written". The dimension the
