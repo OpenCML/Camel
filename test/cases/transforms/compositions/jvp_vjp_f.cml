@@ -1,0 +1,34 @@
+/**
+ * M6, third combination: `jvp(vjp(f))` with `f(x) = x*x`, at `x = [1, 2, 3]`, cotangent `v = 1`
+ * and direction `dx = [0.5, 1.0, 1.5]`.
+ *
+ * The convention (`docs/design/program-transforms/m6-combination-numbers.cn.md` 2.3): the pullback
+ * is read with its cotangent held fixed (`vjp(f)(x, v) = v*f'(x) = 2vx`), and `jvp` differentiates
+ * that with respect to the primal in the direction `dx`. Its derivative in `x` is `2v`, so the
+ * directional derivative is `2*v*dx`; with `v = 1` that is `2*dx`, i.e. 1, 2, 3.
+ *
+ * `vjp` and `jvp` are not in the tree yet (stdlib/signatures/autodiff.cml says so in as many
+ * words): this file is what the day they land will be compared against, and the plan skips it
+ * until then. The numbers are the contract; the spelling of the two calls is settled with M4 and
+ * changing it must not change a number below.
+ */
+
+import { jvp, vjp } from autodiff
+import { vmap } from transforms
+
+func sq(x: f32): f32 {
+    return x * x
+}
+
+func main(): int {
+    let xs: f32[] = [1.0, 2.0, 3.0]
+    let dx: f32[] = [0.5, 1.0, 1.5]
+    let v: f32 = 1.0
+    // The pullback at a fixed cotangent, as a function of one number: 2*v*x.
+    let pull = (x: f32) => vjp(sq)(x, v)
+    let out = vmap(jvp(pull))(xs, dx)
+    println(out[0])
+    println(out[1])
+    println(out[2])
+    return 0
+}
