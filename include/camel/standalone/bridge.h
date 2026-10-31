@@ -11,7 +11,7 @@
  * (src/execute/standalone_bridge.cpp). What crosses it is plain C++: the arguments and the
  * result as Values (numbers, booleans, the bytes of a string, the elements of an array with its
  * shape), a fault as the texts of its diagnostic. A value of a type the program has of its own
- * crosses as that value: a tensor is a `T[..]`, the shaped array `Array` is (README.cn.md 4), so
+ * crosses as that value: a tensor is a `T[..]`, the shaped array `Array` is (docs/design/cpp-standalone/README.cn.md 4), so
  * the bridge converts it at the boundary -- the elements copied out of the runtime's value, its
  * shape with them -- and the program prints it as it prints any array of that type. Only an object
  * that is opaque in the language itself (a `PyObject`, a `Device<T>`) crosses as a counted handle
