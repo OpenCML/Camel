@@ -41,7 +41,8 @@ bool tensorElement(ty::TypeCode code) {
 }
 
 /// Whether the element type is one of the two narrow floats: 16-bit types the device path reads and
-/// names (`tiles/dtype.h`), and one no kernel is written for yet.
+/// names (`tiles/dtype.h`), and this back end carries no kernel for one, so a narrow node stays on
+/// the host and the plan says so by name.
 bool narrowElement(DType dtype) { return dtype == DType::F16 || dtype == DType::BF16; }
 
 /// Whether the value's element type is a narrow float, read from the same facts the shape is.
@@ -174,11 +175,10 @@ std::string eligibility(
     if (!output)
         return "unresolved_type";
     // A narrow element reached this line, so the type gate read it: the device names the type and
-    // knows its two bytes. The node is still not planned, and the reason names the honest half --
-    // no kernel is written for a narrow element yet (`tiles/dtype.h`), so nothing here may store a
-    // four-byte value into a two-byte element.
+    // knows its two bytes. The node is still not planned: this back end has no narrow-float kernel
+    // (`tiles/dtype.h`), so nothing here may store a four-byte value into a two-byte element.
     if (narrowElementType(node->dataType()))
-        return "narrow_element_kernel_missing";
+        return "no narrow-float kernel on this back end";
     const rt::fact::Anchor anchor{&graphs, &graph, id};
     const auto fact =
         facts.obtain<rt::fact::NodeInstance>(rt::fact::coreKinds().instance, {&anchor, 1});
@@ -223,7 +223,7 @@ std::string eligibility(
         // A narrow operand is the same missing kernel read from the other side: the program that
         // would read it is written for a four-byte element, and this one is two.
         if (narrowElementType(graph.node(inputs[i])->dataType()))
-            return "narrow_element_kernel_missing";
+            return "no narrow-float kernel on this back end";
         // Current physical tensor kernels take f32 tensor operands; f64 scalar
         // arithmetic has its own lowering and is not selected by this table yet.
         if (graph.node(inputs[i])->dataType()->code() == ty::TypeCode::Float64)
@@ -346,11 +346,11 @@ gpuRefusal(const rt::GCGraph &graph, const SegmentAnalysis &analysis, rt::gc_nod
     // shapes and decides then; structural host code (`node_kind`, `control_edge`, `inside_loop`)
     // is not an operator's business.
     //
-    // A narrow element (`narrow_element_kernel_missing`) is not a refusal either, and for a
-    // different reason: the type is read and its width is known, so what is missing is the work
-    // this lane has not done yet, not a program the device turned down. The node stays on the host
-    // and the plan prints the reason; refusing the whole `#gpu` scope over a kernel nobody has
-    // written would say the scope is wrong, which it is not.
+    // A narrow element is not a refusal either, and for a different reason: the type is read and
+    // its width is known, so what is missing is this back end's kernel for it, not a program the
+    // device turned down. The node stays on the host and the plan prints the reason; refusing the
+    // whole `#gpu` scope over a kernel the back end does not carry would say the scope is wrong,
+    // which it is not.
     return "";
 }
 // The reading the residency conclusion is fed with: the graph's placements, and the blocks its

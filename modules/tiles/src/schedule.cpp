@@ -301,10 +301,11 @@ void validate(const Program &p, InputBindings bindings) {
                 "scalar conversion type");
             continue;
         }
-        // An index-carrying reduction answers in i64; every other operation still answers in f32.
+        // An index-carrying reduction answers in i64; every other operation still answers in f32, and
+        // those two are all this back end's plans carry.
         require(
             n.dtype == DType::F32 || (n.dtype == DType::I64 && positional(n.op)),
-            "unsupported operation dtype");
+            "this back end's plans carry f32 tensors and i64 positions");
         for (auto in : n.inputs)
             require(p.nodes[in].dtype == DType::F32, "operand dtype mismatch");
         const bool reduction = n.op == "sum_axis" || n.op == "max_axis" || n.op == "mean_axis" ||
