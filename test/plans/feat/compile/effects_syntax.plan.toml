@@ -524,6 +524,40 @@ assert(out === want, `unexpected output: ${out}`)
 timeout_ms = 30000
 
 [[tests]]
+name = "callback.two_calls_through_values_keep_both_writes"
+desc = "Two calls through function values in a row are two writes of `counter`, and the second call's before-version is the first call's `:var/after`: both writes run and the read after them takes `12`. Before the chain was made this printed `10`, with the write before the calls lost."
+kind = "behavior"
+case = "../../../cases/effects/two_calls_through_values_keep_both_writes.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '12', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "callback.value_made_after_a_call_captures_its_version"
+desc = "A function value made after a call that may write a variable captures it as the call left it, so the closure written after the call reads `5`; before the claim was handed to the capture it read `1`, the cell from before the call."
+kind = "behavior"
+case = "../../../cases/effects/value_made_after_a_call_captures_its_version.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
 name = "callback.write_ignored_outside_sync"
 desc = "A call that hands a callback writing a captured `var` to a parameter of function type is a write of that variable at the call: outside a sync block it is reported (IgnoredSideEffect) exactly as the direct call of a writing function is, and the read after it still takes the value the callback wrote."
 kind = "behavior"

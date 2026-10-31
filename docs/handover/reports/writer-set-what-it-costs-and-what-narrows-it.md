@@ -86,6 +86,10 @@
 | 调用后首次捕获 | `5` | `5` | `a23530ba1` |
 | 两次相邻未知调用 | `12` | `12` | `66cfa1303` |
 
-**还没测的那一格**：`var` 实参那条的**错误形状**——读要的是一份"调用之前的拷贝"而不是那个单元（单元再经一层 `var` 传递后读另一头）。构造它需要把单元再交出去一层，今天没有最小程序，所以这一格写的是"未测"，不是"不会错"。
+**那个"未测"的格子现在有结论：无法构造最小程序。** 理由不是构造不出来，是**这条边界在这里不吃数**：`var` 实参把单元交出去，被调者写的就是同一个单元，读一定看见。实测 `func run(a: (var x: int) => void): int { a(counter); return counter }` 配 `(var y) => { y = 5 }`：**`std::nvm` 打 `5`，`std::prl` 也打 `5`**，和语义应得的一样。要让这个形状给出错的数，得让读拿一份"调用之前的拷贝"——这门语言在这里不做拷贝，所以最小程序不存在；能看见它的是**并行执行下的顺序**（谁先谁后），那是 `edges` 的账，不是这一格的数。
 
-**与 `edges` 交叉的一处（只查不改）**："被调者体内写它自己的 `var` 形参"（`bump(acc)`）这个形状，**写者会登记**（`builder_operators.cpp:4307` 的 `recordWrite(arg.written, targetNode)`），但**不进 `writeBeforeCall_`**：两参重载固定 `throughCallee = false`（`builder.h:2255`），而填 `writeBeforeCall_` 的分支只在 `throughCallee` 为真时进（`builder_expr.cpp:620`）。所以那条调用之后读到的 `:var/after` 第一个实参是裸单元，这正是 `edges` 看到的那一格。
+**与 `edges` 交叉的一处（只查不改，结论已定）**："被调者体内写它自己的 `var` 形参"（`bump(acc)`）的调用里，`:var/after` 的第一个实参是 `:var/new`。**这不是缺陷**：那条调用之前没有任何写，`:var/new` 就是"调用之前那一版"——当前版本下它就是正确写法。看起来的"裸单元"在有一次前写时已经由 `66cfa1303` 的链解决（`variables.cml` 里 `:var/after → :var/after → :var/new`）。查过的手脚：`builder_operators.cpp:4307` 的两参重载固定 `throughCallee = false`（`builder.h:2255`），填 `writeBeforeCall_` 只在 `throughCallee` 为真时进（`builder_expr.cpp:620`）；按"实参是 `var` 就走 `true`"改过一次，**四条读数里第三条不成立，已回退**——那处改在这两个程序里是空操作（`modifierOf(cell)` 没有值）。
+
+**修好的两个数都钉成了用例**：`test/cases/effects/two_calls_through_values_keep_both_writes.cml`（`12`）与 `test/cases/effects/value_made_after_a_call_captures_its_version.cml`（`5`），注释写明修前分别是 `10` 和 `1`，`callback.*` 那两条在 `test/plans/feat/compile/effects_syntax.plan.toml` 里跑四个后端。
+
+**判据**：**修好一个数之后，第一件事是把它钉成用例；不然它不是被修好了，只是这次对了。**
