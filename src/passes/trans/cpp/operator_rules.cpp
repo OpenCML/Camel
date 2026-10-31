@@ -889,9 +889,10 @@ Rules buildRules() {
     //
     // A lane with no element has no extreme and no position, and the interpreter refuses it naming
     // the operator and the axis; that refusal is the only one these four have that the sum does not.
-    // The two the sum states stay as they are: a rank of one answers a value of no dimension and an
-    // open rank keeps no shape -- both because the answer's type cannot be written, not because the
-    // value is not an array.
+    // A value of one dimension is a value with one axis and nothing beside it: what that one lane
+    // reduces to *is* the answer (design principles 5.4), so the answer is a value of no dimension,
+    // which the open rank of its type still writes. Only an open rank keeps no shape -- its rank is
+    // not known when the program is written -- and that is the one these four stay refused on.
     {
         struct AxisRule {
             const char *uri;
@@ -908,7 +909,7 @@ Rules buildRules() {
             r[axis.uri] = {
                 [axis](OperatorCall &c) -> std::optional<std::string> {
                     const ArrayType *value = asArrayType(c.normType(0));
-                    if (value == nullptr || value->anyRank() || value->rank() < 2 ||
+                    if (value == nullptr || value->anyRank() || value->rank() < 1 ||
                         value->elemType() == nullptr) {
                         return std::nullopt;
                     }
