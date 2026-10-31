@@ -137,6 +137,25 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "narrow_reductions_needs_no_runtime"
+# Red when the `math:min_f`/`math:max_f` rules are deleted: the library's own `min` widens a bf16
+# to `float` before comparing, so the fold reaches `math:min_d`, the bridge, and a link line that
+# names libcamel -- while the program still prints the same lines (agree_with_fvm stays green).
+# That is the case this entry exists for: "standalone" is a claim about the artifact, and only the
+# artifact can falsify it.
+desc = "The program std::cpp writes for a value of bf16 or f16 needs no Camel runtime: the generated code names no operator of the bridge, the link line names no Camel library, and the built executable's own dependencies (`ldd`) hold none. The link line is what falsifies it -- a program whose operator has no standalone translation is linked with libcamel, and a half the bridge cannot carry (bridge::Value has no sixteen-bit kind) must not be emitted as a bridged call. Read as an artifact question, not as a reading of the writer's intent."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/cppexec/run.py"
+args = ["${case}", "--standalone", "test/cases/trans/cpp/narrow_reductions.cml"]
+skip_unless = ["${python}", "test/tools/cppexec/run.py", "--have-compiler"]
+expect_exit = 0
+expect_stdout_contains = ["bridge: no", "needs: none of the Camel runtime", "PASS: 1 program"]
+expect_output_not_contains = ["FAIL", "libcamel"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 120000
+
+[[tests]]
 name = "fault_narrow_text_number"
 desc = "A text that is not a number, read as a bf16, is a fault at run time, and the compiler renders its report into the site the conversion calls: the program is translated rather than refused, and it carries the invalid-text sentence. The value the fault reports is known only when it happens, so the sentence is written with a placeholder where the text goes; that the program *prints* it -- and prints it as the interpreter does, byte for byte -- is what agree_with_fvm compares (test/tools/cppexec/expect.txt)."
 kind = "behavior"
