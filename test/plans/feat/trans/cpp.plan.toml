@@ -44,7 +44,10 @@ expect_exit = 0
 expect_stdout_contains = ["PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 600000
+# 129 programs, about 150 s of CPU at 8 jobs. The margin rule wants the bound to be at least four
+# times the work, and 600 s sat just under that line; 900 s is six times, and it is still the
+# runner's kill rather than a verdict, so a program that hangs is reported as one.
+timeout_ms = 900000
 
 [[tests]]
 name = "link_line_keeps_the_compilers_stdlib"
