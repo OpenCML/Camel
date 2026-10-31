@@ -5888,19 +5888,24 @@ node_ptr_t Builder::visitGeneratorBody(
                 // names of any function: a read that stands before the statement that writes the
                 // cell is a name used before it is declared, and is the same
                 // `UnresolvedReference` such a read gets in any function.
-                for (const HoistedCell &cell : hoisted) {
-                    if (i > cell.index) {
-                        continue;
+                // The check compares positions in the body's own statement list, so it is read
+                // only where the stretch walks that list: a block's statements are positions in
+                // the block, and a position there says nothing about a declaration of the body.
+                if (stmts.get() == bodyStmts.get()) {
+                    for (const HoistedCell &cell : hoisted) {
+                        if (i > cell.index) {
+                            continue;
+                        }
+                        const AST::node_ptr_t use = nameUseIn(stmt, cell.name);
+                        if (use == nullptr) {
+                            continue;
+                        }
+                        diags_->of(SemanticDiag::UnresolvedReference)
+                            .at(use->load()->tokenRange())
+                            .commit(cell.name);
+                        popScope();
+                        return;
                     }
-                    const AST::node_ptr_t use = nameUseIn(stmt, cell.name);
-                    if (use == nullptr) {
-                        continue;
-                    }
-                    diags_->of(SemanticDiag::UnresolvedReference)
-                        .at(use->load()->tokenRange())
-                        .commit(cell.name);
-                    popScope();
-                    return;
                 }
                 const bool isStmt =
                     stmt->type() == AST::LoadType::Stmt;
@@ -6042,14 +6047,15 @@ node_ptr_t Builder::visitGeneratorBody(
                             refuse(stmt);
                         }
                         const std::string stateName = loopLoad->state()[0].toString();
-                        if (std::find(cellNames.begin(), cellNames.end(), stateName) !=
+                        // The body already has a cell of that name (a `var` of its own): the loop
+                        // carries that one cell, and the value below is written into it where
+                        // the loop stands. A second cell of the name would be a second writing of
+                        // one variable; the name is one cell with one type.
+                        if (std::find(cellNames.begin(), cellNames.end(), stateName) ==
                             cellNames.end()) {
-                            // The body already has a cell of that name (a `var` of its own, or
-                            // another loop's state): a second cell of it is a second writing.
-                            refuse(stmt);
+                            addTypedCell(stateName, visitData(init), stmt);
+                            cellNames.push_back(stateName);
                         }
-                        addTypedCell(stateName, visitData(init), stmt);
-                        cellNames.push_back(stateName);
                         // The four points of the loop: past it, at the condition, in the body,
                         // and the step back to the condition.
                         const int afterPc = newArm();

@@ -1164,18 +1164,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 [[tests]]
-name = "stream.generator_loop_shared_cell_refused"
-desc = "A `loop` whose state has the name of a cell the body already declared is refused by name. The cells of a generator body are keyed by name, so reusing the name would make one table entry stand for two bindings (the `var` and the loop's own state); the shape is held here as a reading until the cells are keyed by binding. The graph builder reports SemanticDiag::FeatureNotSupported with `'generators'` at the loop."
-kind = "negative"
+name = "stream.generator_loop_shared_cell"
+desc = "A `loop` whose state has the name of a cell the body already declared carries that one cell: `i` is written where its `var` stands and again by the loop's own step, so the stream hands out 0, 1, 2 and then 3 -- the value `i` holds after the loop, which is what the same logic written as a plain loop prints step by step. All four back ends agree."
+kind = "behavior"
 case = "../../../cases/compile/stream/generators_loop_shared_cell.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::FeatureNotSupported"
-expect_diagnostic_code = "0x03000040"
-expect_output_contains = ["generators"]
-expect_output_not_contains = ["UnknownInternalError"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 10000
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "123\n"
+expect_output_not_contains = ["[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
 
 [[tests]]
 name = "stream.generator_cell_type_from_first_write"
