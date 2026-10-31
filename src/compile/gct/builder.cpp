@@ -6035,6 +6035,94 @@ node_ptr_t Builder::visitGeneratorBody(
                         const auto &loopLoad = loopAst->loadAs<AST::LoopExprLoad>();
                         const auto &inits    = loopAst->atAs<AST::RepeatedLoad>(0);
                         const AST::node_ptr_t init = inits->size() == 1 ? inits->at(0) : nullptr;
+                        if (loopLoad->hasFor()) {
+                            // `loop s = 0 for x in xs do ...`: the machine carries the sequence
+                            // once, where the loop stands, a position that moves by one each round,
+                            // and the fold state the body hands on. Each round writes the element
+                            // at that position into the binder's cell before the body runs.
+                            const auto &seqAst = loopAst->optAtAs<AST::DataLoad>(1);
+                            if (seqAst == nullptr || loopAst->optAtAs<AST::DataLoad>(2) != nullptr ||
+                                loopLoad->state().size() != 1 || init == nullptr ||
+                                !hoistable(init)) {
+                                refuse(stmt);
+                            }
+                            const std::string stateName = loopLoad->state()[0].toString();
+                            if (std::find(cellNames.begin(), cellNames.end(), stateName) ==
+                                cellNames.end()) {
+                                addTypedCell(stateName, visitData(init), stmt);
+                                cellNames.push_back(stateName);
+                            }
+                            const std::string seqName =
+                                "__gen_for_seq_" + std::to_string(idIndex_++);
+                            addTypedCell(seqName, visitData(seqAst), stmt);
+                            cellNames.push_back(seqName);
+                            const std::string idxName =
+                                "__gen_for_idx_" + std::to_string(idIndex_++);
+                            addTypedCell(idxName, intLiteral(0), stmt);
+                            cellNames.push_back(idxName);
+                            const auto elementAt = [&]() {
+                                node_ptr_t node = tree_->makeLink(2);
+                                *node << tree_->makeDRef("__idx__") << readCell(seqName)
+                                      << readCell(idxName);
+                                return mark(node, stmt, "gct.generator.for.element");
+                            };
+                            const std::string binderName = loopLoad->binder().toString();
+                            if (std::find(cellNames.begin(), cellNames.end(), binderName) ==
+                                cellNames.end()) {
+                                // The binder's type is the sequence's element type: `typeof` of the index
+                            // call over the sequence itself and a literal position, which is a
+                            // type the builder can compute without reading a cell.
+                            {
+                                node_ptr_t sample = tree_->makeLink(2);
+                                *sample << tree_->makeDRef("__idx__") << visitData(seqAst)
+                                        << intLiteral(0);
+                                addTypedCell(binderName, sample, stmt);
+                                cellNames.push_back(binderName);
+                            }
+                            }
+                            const int afterPc = newArm();
+                            fill(afterPc, stmts, i + 1, next, nextState);
+                            const int condPc = newArm();
+                            const int bodyPc = newArm();
+                            const int stepPc = newArm();
+                            {
+                                node_ptr_t length = tree_->makeLink(1);
+                                *length << tree_->makeDRef("len") << readCell(seqName);
+                                node_ptr_t condition = tree_->makeLink(2);
+                                *condition << tree_->makeDRef("__lt__") << readCell(idxName)
+                                           << length;
+                                node_ptr_t brch = tree_->makeBrch();
+                                *brch << condition;
+                                node_ptr_t trueCase = tree_->makeCase(CaseType::True);
+                                *trueCase << jumpTo(bodyPc);
+                                node_ptr_t elseCase = tree_->makeCase(CaseType::Else);
+                                *elseCase << jumpTo(afterPc);
+                                *brch << trueCase << elseCase;
+                                mark(brch, stmt, "gct.generator.branch");
+                                *arms[static_cast<size_t>(condPc)] << brch;
+                            }
+                            *arms[static_cast<size_t>(bodyPc)] << writeCell(binderName, elementAt());
+                            fill(
+                                bodyPc,
+                                loopAst->atAs<AST::StmtBlockLoad>(3)->atAs<AST::RepeatedLoad>(0),
+                                0,
+                                stepPc,
+                                stateName);
+                            {
+                                node_ptr_t nextIndex = tree_->makeLink(2);
+                                *nextIndex << tree_->makeDRef("__add__") << readCell(idxName)
+                                           << intLiteral(1);
+                                *arms[static_cast<size_t>(stepPc)]
+                                    << writeCell(idxName, nextIndex);
+                                *arms[static_cast<size_t>(stepPc)] << jumpTo(condPc);
+                            }
+                            *exec << writeCell(seqName, visitData(seqAst));
+                            *exec << writeCell(idxName, intLiteral(0));
+                            *exec << writeCell(stateName, visitData(init));
+                            *exec << jumpTo(condPc);
+                            popScope();
+                            return;
+                        }
                         // What the machine carries is exactly one value, and that value is read
                         // once, where the loop stands: a `for` has a sequence and a binder the
                         // arms do not run. A first value that is a constant or a lambda is the
