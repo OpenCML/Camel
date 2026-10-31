@@ -43,6 +43,9 @@ class ExecutorManager {
     // it from several workers at once. The mutex guards both maps.
     mutable std::shared_mutex loadedExecutorsMutex;
     bool factoryRegistered(const std::string &protocol) const;
+    // The operators whose result may cross the bridge (signatureOf): a small, explicit table, so a
+    // module opts in per operator instead of every operator having to say it cannot.
+    mutable std::unordered_map<std::string, std::string> bridgeSignatures;
 
   public:
     // The executor manager is a member of its context, so its back-reference to that context must
@@ -61,6 +64,18 @@ class ExecutorManager {
     /// module first (or when there is no such operator).
     std::optional<operator_t> findWithoutImport(const std::string &uri) const;
     std::string getNameOfAnOperator(const operator_t &op) const;
+
+    /// The generic signature of an operator whose *result* may cross the bridge into a generated
+    /// program as a runtime object (`tensor:ones` and its family), or nothing when the operator has
+    /// not been declared bridgeable. The signature says which kind of value it returns -- the
+    /// concrete type of one call is an instance fact and is described by the call site, because a
+    /// result like `T[..]` depends on the type argument and on the shape argument.
+    std::optional<std::string> signatureOf(const std::string &uri) const;
+
+    /// Declares that the result of `uri` may cross the bridge, with the generic signature `sig`.
+    /// Only the modules that offer such an operator call this; every other operator stays unknown
+    /// to signatureOf() and the bridge refuses to carry its result.
+    void declareBridgeSignature(std::string uri, std::string sig) const;
 };
 
 using exec_mgr_uptr_t = std::unique_ptr<ExecutorManager>;
