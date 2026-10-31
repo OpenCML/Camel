@@ -22,3 +22,4 @@
 - **`never` 不是一种值，是一条控制流边**：写出器要先认出它（`isValueType`/`endsFlow`、`bridgeCarries`），才谈得上翻译它——把 `never` 当结果类型去绑定，生成的 C++ 是 `const void v1_fail = …;`，clang 只报 "variable has incomplete type"，读者看不出是类型模型错了。
 - **两个后端"正文相同、诊断名不同"等于把同一件事报成了两件事**：`fail<'X'>` 的标签就是那半句被丢掉的话——桥（`src/execute/standalone_bridge.cpp` 的 `describe`）只读 `fault.diag()` 的目录名，丢掉 `RuntimeFault::kind()`，于是 VM 报 `RuntimeDiag::NoPremise`、C++ 报 `RuntimeDiag::ProgramFault`。**名字取自读者写下的那个词，不取自它在目录里的位置。**
 - **一条诊断说"这个功能还没实现"，而它已经实现了，那条诊断就是在撒谎**：它该说的是"你的写法缺什么"——`yield` 在非流类型的函数头里，从 `FeatureNotSupported('generators')` 改成 `SemanticDiag::YieldRequiresStreamHead`（写出器早就有生成器了）；真正**没实现**的那一处（机器收不下的循环形状）保留 `FeatureNotSupported`，因为那里的确是缺口。
+- **一条诊断落到了错误的格子上，说明那条路把"这是哪种错"的判断弄丢了**：先找出它把值读成了什么，再谈支持它——`(int, int)..` 本来就读成了流类型（探针能编能跑），丢的是**拒绝的类别**：函数头检查与生成器机器的收窄共用一个 lambda，于是"循环跨 yield 带两个值"这个机器缺口被报成了"头没写流类型"，还报在函数那一行。两个判断分开，各报各的。
