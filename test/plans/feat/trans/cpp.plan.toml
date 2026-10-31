@@ -281,6 +281,42 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "arg_axis_rank"
+desc = "The position of the extreme along one dimension: the first element of the lane equal to its maximum (minimum), or its first NaN, taken by the same order as the extreme itself -- a NaN is beyond every number and on a tie the earlier position stays. So `[1, 2]` for the columns of a rank-2 value and `[0, 0, 1]` for its rows, `[[1], [1], [0]]` with keepdims, `[[1, 1], [1, 1]]` for the middle axis of a rank-3 one, and `[1, 0]` where one lane holds a tie (the earlier of two equal maxima) and the other its first NaN. The answer's element type is int64 whatever the value holds, so the rule states a different runtime element type than the value it reads. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/arg_axis_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::argmaxAxis(", "rt::argminAxis("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "extreme_axis_rank"
+desc = "A maximum and a minimum along one dimension fold each lane from the operation's identity (-inf for a maximum of floats, +inf for a minimum, the lowest and the largest value otherwise) and compare with the one statement the interpreter uses: a NaN on either side gives the canonical quiet NaN and -0 is below +0. So `[5.0, 4.0]` and `[-3.0, -2.0]` for the two axes of a rank-2 value, `[[-2.0], [0.0], [-3.0]]` with keepdims, two axes of a rank-3 one, `[0.0, 0.0]` against `[-0.0, -0.0]` for a pair of signed zeros (the sign of the zero survives, which a comparison on values alone would lose), and `[nan, nan]` where a NaN element stands in the lane. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/extreme_axis_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::maxAxis(", "rt::minAxis("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "sum_axis_rank"
+desc = "A reduction along one dimension adds each lane from +0 in ascending order and answers the dimensions it did not reduce, in row-major order: `axis=0` of a rank-2 value sums its columns (`[9.0, 12.0]`), `axis=1` its rows (`[3.0, 7.0, 11.0]`), `keepdims` keeps the reduced dimension as one (`[[3.0], [7.0], [11.0]]`), and the three axes of a rank-3 value each sum a different set -- the middle one pairs elements that are `inner` apart in the run, which no flattening could produce. The axis and the flag arrive either as arguments of the call or as the constant the callee was written with (`sum<1>(xs)`), and the rule reads whichever carried them. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/sum_axis_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::sumAxis("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "sum_rank"
 desc = "The whole-value `sum` answers the element type: an integer result is the exact int64 accumulator (int64 as it stands) and a float one is the f64 accumulator converted once, added from +0 in the order the elements lie -- `6.0` for a `float[3]`, `10` for an `int[4]`, `0.6` for an `f32[3]` whose f64 total is not the f32 sum, `21.0` for a rank-2 value, `36.0` for a rank-3 one and `6.0` for a column of two. Every rank is one rule because the total reads none of the dimensions: the sum of a whole value is the sum of the same run however it is grouped, so nothing is flattened to reach it -- the axis form (`tensor:sum_axis`) is the one that reads a dimension. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"

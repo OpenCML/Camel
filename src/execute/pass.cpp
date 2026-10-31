@@ -2157,6 +2157,39 @@ std::vector<std::string> effectResourcesViolation(const ProgramEffects &before, 
     return {text(was), text(is)};
 }
 
+/// Every graph a pass returns keeps an entry and an exit: the node it starts at and the node whose
+/// value it returns. A rewrite may replace either one, but the one it puts there must be a node of
+/// the graph that is alive -- a graph whose entry or exit is gone is a graph nothing can run.
+///
+/// Returns nothing, or the graph and which of the two it lost.
+std::string entryExitViolation(const camel::runtime::Program &program) {
+    // The program's own boundary: the graph the pipeline starts from. A graph a module keeps for
+    // itself (a rule library, an extracted body) need not be runnable on its own.
+    const std::vector<camel::runtime::GCGraph *> graphs = {program.root()};
+    for (camel::runtime::GCGraph *graph : graphs) {
+        if (graph == nullptr) {
+            continue; // a program without a root is what the next pass is given to fix
+        }
+        const auto alive = [&](camel::runtime::gc_node_ref_t ref) {
+            if (ref == camel::runtime::kInvalidNodeRef || !graph->containsNodeRef(ref)) {
+                return false;
+            }
+            const camel::runtime::GCNode *record = graph->node(ref);
+            return record != nullptr && record->kind != camel::runtime::GCNodeKind::Dead;
+        };
+        const bool entry = alive(graph->entryNodeRef());
+        const bool exit  = alive(graph->exitNodeRef());
+        if (entry && exit) {
+            continue;
+        }
+        return std::format(
+            "graph {} of it has no {}",
+            camel::runtime::toValue(graph->id()),
+            !entry ? "entry node it can start at" : "exit node whose value it returns");
+    }
+    return {};
+}
+
 std::string effectOrderViolation(const ProgramEffects &before, const ProgramEffects &after) {
     const std::vector<std::pair<size_t, size_t>> pairs = matchedEffects(before, after);
     for (size_t i = 0; i < pairs.size(); ++i) {
@@ -2734,6 +2767,14 @@ PassApplyResult applyPassesDetailed(
                         ->of(RuntimeDiag::PassBoundaryResources)
                         .commit(p, resources[0], resources[1]);
                     CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (effect resources)", p);
+                    return {nullptr, PassApplyStatus::Failed};
+                }
+                const std::string boundary = entryExitViolation(*program);
+                if (!boundary.empty()) {
+                    ctx->rtmDiags()
+                        ->of(RuntimeDiag::PassBoundaryNodes)
+                        .commit(p, "graph", boundary);
+                    CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (entry/exit)", p);
                     return {nullptr, PassApplyStatus::Failed};
                 }
             }

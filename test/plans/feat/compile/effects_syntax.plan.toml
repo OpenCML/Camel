@@ -26,6 +26,15 @@ expect_exit = 0
 expect_output_not_contains = ["PassBoundaryResources", "changed the ambient resources", "failed with an internal error"]
 
 [[tests]]
+name = "pass_boundary.entry_and_exit_kept"
+desc = "The other half of the pass boundary, and a diagnostic of its own (`RuntimeDiag::PassBoundaryNodes`, 0x0400000F): after every pass the program's root graph still has an entry node it can start at and an exit node whose value it returns, or the pass that returned it is named. Kept apart from `PassBoundaryResources` on purpose -- two invariants that can go red separately are two invariants, and one red then says which of them broke. No pass in the tree breaks this one today, which is what this pins: the check is silent on a program put through two rewriting passes."
+kind = "behavior"
+case = "../../../cases/effects/declared.cml"
+args = ["${case}", "std::opt::inline", "std::opt"]
+expect_exit = 0
+expect_output_not_contains = ["RuntimeDiag::PassBoundaryNodes", "has no entry node", "has no exit node"]
+
+[[tests]]
 name = "source.declared_resources"
 desc = "Two calls of `consume` touch the same handle (the value they are given) and are ordered by control, two calls of `tick` touch the group's `db` and `stdout` and are visible outside the program -- naming an ambient resource in a clause promises the effect that comes with it -- and two calls of `bump` touch the same cell: the bodies touch nothing, so the footprint can only come from the clauses. The program's own output is unchanged."
 kind = "behavior"
