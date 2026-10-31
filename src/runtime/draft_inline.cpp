@@ -282,7 +282,8 @@ std::vector<gc_node_ref_t> collectExecutableEntryRoots(
 }
 
 std::vector<gc_node_ref_t> collectExecutableEntryRoots(
-    const GraphDraft &sourceDraft, const std::vector<gc_node_ref_t> &sourceToCloned) {
+    const GraphTransaction &transaction, const std::vector<gc_node_ref_t> &sourceToCloned) {
+    const auto &sourceDraft = transaction.graph();
     std::unordered_set<gc_node_ref_t> reachable;
     std::vector<gc_node_ref_t> stack{sourceDraft.exitNode()};
     while (!stack.empty()) {
@@ -345,7 +346,8 @@ std::vector<gc_node_ref_t> collectExecutableEntryRoots(
 }
 
 std::vector<gc_node_ref_t>
-orderedFuncActualInputs(const GraphDraft &draft, gc_node_ref_t funcNodeId) {
+orderedFuncActualInputs(const GraphTransaction &transaction, gc_node_ref_t funcNodeId) {
+    const auto &draft      = transaction.graph();
     std::vector<gc_node_ref_t> inputs;
     const auto normInputs = draft.normInputsOf(funcNodeId);
     const auto withInputs = draft.withInputsOf(funcNodeId);
@@ -407,7 +409,8 @@ orderedDirectCallFormalNodes(const GCGraph *graph) {
 }
 
 std::vector<std::pair<FormalKind, gc_node_ref_t>>
-orderedDirectCallFormalNodes(const GraphDraft &draft) {
+orderedDirectCallFormalNodes(const GraphTransaction &transaction) {
+    const auto &draft = transaction.graph();
     std::vector<std::pair<FormalKind, gc_node_ref_t>> formals;
     formals.reserve(draft.normPorts().size() + draft.withPorts().size());
     for (gc_node_ref_t ref : draft.normPorts()) {
@@ -442,7 +445,9 @@ orderedClonedDirectCallFormalNodes(const DraftGraphCloneResult &cloned, const GC
 }
 
 std::vector<std::pair<FormalKind, gc_node_ref_t>>
-orderedClonedDirectCallFormalNodes(const DraftGraphCloneResult &cloned, const GraphDraft &draft) {
+orderedClonedDirectCallFormalNodes(
+    const DraftGraphCloneResult &cloned, const GraphTransaction &transaction) {
+    const auto &draft = transaction.graph();
     std::vector<std::pair<FormalKind, gc_node_ref_t>> formals;
     formals.reserve(cloned.normPorts.size() + cloned.withPorts.size());
 
@@ -561,7 +566,8 @@ bool onCallCycle(const Program &program, const GCGraph *graph) {
 }
 
 /// True when node `id` runs inside an arm of a branch of the draft (between a BRCH and its JOIN).
-bool insideBranchArm(const GraphDraft &draft, gc_node_ref_t id) {
+bool insideBranchArm(const GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
     for (gc_node_ref_t brch = 0; brch < draft.nodeSlotCount(); ++brch) {
         const auto *h = draft.header(brch);
         if (!h || h->kind != GCNodeKind::Brch) {
@@ -599,15 +605,17 @@ bool insideBranchArm(const GraphDraft &draft, gc_node_ref_t id) {
 }
 
 std::vector<DraftFormalBinding> collectDirectFuncSpecializations(
-    const GraphDraft &draft, gc_node_ref_t funcNodeId, const GCGraph *calleeGraph,
+    const GraphTransaction &transaction, gc_node_ref_t funcNodeId, const GCGraph *calleeGraph,
     bool functionValuesOnly) {
+    const auto &draft = transaction.graph();
     std::vector<DraftFormalBinding> bindings;
     if (!calleeGraph) {
         return bindings;
     }
 
-    const std::vector<gc_node_ref_t> actualInputs = orderedFuncActualInputs(draft, funcNodeId);
-    const auto formals                            = orderedDirectCallFormalNodes(calleeGraph);
+    const std::vector<gc_node_ref_t> actualInputs =
+        orderedFuncActualInputs(transaction, funcNodeId);
+    const auto formals = orderedDirectCallFormalNodes(calleeGraph);
     CAMEL_LOG_INFO_S(
         "DraftOpt",
         "Specialize probe FUNC node {} callee='{}' actuals={} formals={}.",
@@ -716,7 +724,7 @@ std::vector<DraftFormalBinding> collectDirectFuncSpecializations(
     // a loop body or an arm keeps the one binding that turns its dispatch into a direct call.
     const bool bindsValues =
         std::ranges::any_of(bindings, [](const DraftFormalBinding &b) { return b.bindsValue(); });
-    if (bindsValues && insideBranchArm(draft, funcNodeId) &&
+    if (bindsValues && insideBranchArm(transaction, funcNodeId) &&
         onCallCycle(*draft.program(), calleeGraph)) {
         // Only a constant (or an object) bound here unrolls, so only a call that binds one loses
         // its value bindings.
@@ -945,10 +953,10 @@ void bindPortValueUses(
 
 gc_node_ref_t remapFormalNodeToActual(
     gc_node_ref_t nodeId, const DraftGraphCloneResult &cloned, const GCGraph *calleeGraph,
-    const GraphDraft *calleeDraftView, std::span<const gc_node_ref_t> boundActualInputs) {
-    const auto formalNodes = calleeDraftView
-                                 ? orderedClonedDirectCallFormalNodes(cloned, *calleeDraftView)
-                                 : orderedClonedDirectCallFormalNodes(cloned, calleeGraph);
+    const GraphTransaction *calleeTransaction, std::span<const gc_node_ref_t> boundActualInputs) {
+    const auto formalNodes =
+        calleeTransaction ? orderedClonedDirectCallFormalNodes(cloned, *calleeTransaction)
+                          : orderedClonedDirectCallFormalNodes(cloned, calleeGraph);
     for (size_t actualIndex = 0; actualIndex < formalNodes.size(); ++actualIndex) {
         if (formalNodes[actualIndex].second == nodeId) {
             ASSERT(
@@ -961,8 +969,9 @@ gc_node_ref_t remapFormalNodeToActual(
 }
 
 gc_node_ref_t resolveValueCandidate(
-    const GraphDraft &draft, gc_node_ref_t candidate,
+    const GraphTransaction &transaction, gc_node_ref_t candidate,
     std::span<const gc_node_ref_t> boundActualInputs) {
+    const auto &draft = transaction.graph();
     if (candidate == kInvalidNodeRef) {
         return kInvalidNodeRef;
     }
@@ -991,8 +1000,10 @@ gc_node_ref_t resolveValueCandidate(
 }
 
 gc_node_ref_t resolveInlineValueExit(
-    const GraphDraft &draft, const DraftGraphCloneResult &cloned, const GCGraph *calleeGraph,
-    const GraphDraft *calleeDraftView, std::span<const gc_node_ref_t> boundActualInputs) {
+    const GraphTransaction &transaction, const DraftGraphCloneResult &cloned,
+    const GCGraph *calleeGraph, const GraphTransaction *calleeTransaction,
+    std::span<const gc_node_ref_t> boundActualInputs) {
+    const auto &draft = transaction.graph();
     std::array<gc_node_ref_t, 3> candidates{
         cloned.returnNode,
         cloned.outputNode,
@@ -1006,9 +1017,9 @@ gc_node_ref_t resolveInlineValueExit(
             current,
             cloned,
             calleeGraph,
-            calleeDraftView,
+            calleeTransaction,
             boundActualInputs);
-        if (const gc_node_ref_t resolved = resolveValueCandidate(draft, current, boundActualInputs);
+        if (const gc_node_ref_t resolved = resolveValueCandidate(transaction, current, boundActualInputs);
             resolved != kInvalidNodeRef) {
             return resolved;
         }
@@ -1017,8 +1028,10 @@ gc_node_ref_t resolveInlineValueExit(
 }
 
 gc_node_ref_t resolveInlineCtrlExit(
-    const GraphDraft &draft, const DraftGraphCloneResult &cloned, const GCGraph *calleeGraph,
-    const GraphDraft *calleeDraftView, std::span<const gc_node_ref_t> boundActualInputs) {
+    const GraphTransaction &transaction, const DraftGraphCloneResult &cloned,
+    const GCGraph *calleeGraph, const GraphTransaction *calleeTransaction,
+    std::span<const gc_node_ref_t> boundActualInputs) {
+    const auto &draft = transaction.graph();
     gc_node_ref_t current = cloned.exitNode != kInvalidNodeRef     ? cloned.exitNode
                             : cloned.returnNode != kInvalidNodeRef ? cloned.returnNode
                                                                    : cloned.outputNode;
@@ -1027,7 +1040,7 @@ gc_node_ref_t resolveInlineCtrlExit(
             current,
             cloned,
             calleeGraph,
-            calleeDraftView,
+            calleeTransaction,
             boundActualInputs);
         return draft.resolveForwardedCtrlRef(current);
     }
@@ -1049,7 +1062,7 @@ bool specializeDirectFuncInDraft(
     }
 
     const std::vector<DraftFormalBinding> bindings =
-        collectDirectFuncSpecializations(draft, funcNodeId, calleeGraph, functionValuesOnly);
+        collectDirectFuncSpecializations(transaction, funcNodeId, calleeGraph, functionValuesOnly);
     CAMEL_LOG_INFO_S(
         "DraftOpt",
         "Specialize FUNC node {} callee='{}' bindings={}.",
@@ -1071,7 +1084,7 @@ bool specializeDirectFuncInDraft(
         std::vector<gc_node_ref_t> ports(draft.normPorts().begin(), draft.normPorts().end());
         const auto withPorts = draft.withPorts();
         ports.insert(ports.end(), withPorts.begin(), withPorts.end());
-        const std::vector<gc_node_ref_t> actuals = orderedFuncActualInputs(draft, funcNodeId);
+        const std::vector<gc_node_ref_t> actuals = orderedFuncActualInputs(transaction, funcNodeId);
         bool accepts = ports.size() == actuals.size();
         for (size_t i = 0; accepts && i < ports.size(); ++i) {
             const DraftNodeHeader *port   = draft.header(ports[i]);
@@ -1373,7 +1386,8 @@ bool nodeOwnsRegions(GCNodeKind kind) {
 /// effect and may-fault nodes of the body, i.e. exactly the ones the model does not let a pass
 /// arrange freely (design principles 3.4). The same predicate is what an order edge may sit on at
 /// all, so the seal check cannot refuse an edge this writes (4.6).
-bool splicedBodyNeedsOrder(const GraphDraft &draft, gc_node_ref_t id) {
+bool splicedBodyNeedsOrder(const GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft             = transaction.graph();
     const DraftNodeHeader *header = draft.header(id);
     if (header == nullptr || header->kind == GCNodeKind::Dead ||
         nodeOwnsRegions(header->kind)) {
@@ -1389,7 +1403,8 @@ bool splicedBodyNeedsOrder(const GraphDraft &draft, gc_node_ref_t id) {
 /// place -- an order edge or a sync edge moved onto it would fork the chain. Either way the GATE
 /// over the value carries the place instead, and it is the splice's own node.
 gc_node_ref_t spliceChainAnchor(
-    GraphDraft &draft, size_t slotsBefore, gc_node_ref_t value, uint32_t region) {
+    GraphTransaction &transaction, size_t slotsBefore, gc_node_ref_t value, uint32_t region) {
+    auto &draft = transaction.edit();
     if (value >= static_cast<gc_node_ref_t>(slotsBefore) && draft.alive(value) &&
         draft.syncInputsOf(value).empty() && draft.syncUsersOf(value).empty()) {
         return value;
@@ -1418,14 +1433,15 @@ gc_node_ref_t spliceChainAnchor(
 /// holds it (4.6) -- ordering an inner-region node after a statement outside it would order the
 /// region's work against the region, which the layout cannot honour.
 void addSpliceOrderEdges(
-    GraphDraft &draft, size_t slotsBefore, uint32_t blockRegion,
+    GraphTransaction &transaction, size_t slotsBefore, uint32_t blockRegion,
     const std::vector<gc_node_ref_t> &before, const std::vector<gc_node_ref_t> &after) {
+    auto &draft = transaction.edit();
     if (before.empty() && after.empty()) {
         return;
     }
     for (gc_node_ref_t id = static_cast<gc_node_ref_t>(slotsBefore); id < draft.nodeSlotCount();
          ++id) {
-        if (!draft.alive(id) || !splicedBodyNeedsOrder(draft, id) ||
+        if (!draft.alive(id) || !splicedBodyNeedsOrder(transaction, id) ||
             controlRegionOf(draft, id) != blockRegion) {
             continue;
         }
@@ -1435,7 +1451,7 @@ void addSpliceOrderEdges(
             }
         }
         for (gc_node_ref_t user : after) {
-            if (draft.alive(user) && splicedBodyNeedsOrder(draft, user) &&
+            if (draft.alive(user) && splicedBodyNeedsOrder(transaction, user) &&
                 controlRegionOf(draft, user) == blockRegion) {
                 draft.appendOrderDependency(user, id);
             }
@@ -1700,10 +1716,10 @@ DraftInlineResult inlineCallableInDraft(
     }
 
     const auto *calleeTransaction = std::as_const(session).tryDraft(calleeGraph);
-    const auto *calleeDraftView = calleeTransaction ? &calleeTransaction->graph() : nullptr;
-    const std::vector<gc_node_ref_t> actualInputs = orderedFuncActualInputs(draft, funcNodeId);
-    const auto formalNodes = calleeDraftView ? orderedDirectCallFormalNodes(*calleeDraftView)
-                                             : orderedDirectCallFormalNodes(calleeGraph);
+    const std::vector<gc_node_ref_t> actualInputs =
+        orderedFuncActualInputs(transaction, funcNodeId);
+    const auto formalNodes = calleeTransaction ? orderedDirectCallFormalNodes(*calleeTransaction)
+                                               : orderedDirectCallFormalNodes(calleeGraph);
     if (actualInputs.size() != formalNodes.size()) {
         CAMEL_LOG_INFO_S(
             "DraftInline",
@@ -1714,9 +1730,9 @@ DraftInlineResult inlineCallableInDraft(
         return DraftInlineResult{};
     }
     const gc_node_ref_t calleeEntry =
-        calleeDraftView ? calleeDraftView->entryNode() : calleeGraph->entryNodeRef();
+        calleeTransaction ? calleeTransaction->graph().entryNode() : calleeGraph->entryNodeRef();
     const gc_node_ref_t calleeOutput =
-        calleeDraftView ? calleeDraftView->outputNode() : calleeGraph->outputNodeRef();
+        calleeTransaction ? calleeTransaction->graph().outputNode() : calleeGraph->outputNodeRef();
     if (calleeEntry == kInvalidNodeRef || calleeOutput == kInvalidNodeRef) {
         CAMEL_LOG_INFO_S(
             "DraftInline",
@@ -1811,8 +1827,8 @@ DraftInlineResult inlineCallableInDraft(
         draft.setRegionInline(inlineRegion, kInvalidGraphId, kInvalidNodeRef);
     }
     DraftGraphCloneResult cloned =
-        calleeDraftView ? cloneDraftGraphIntoDraft(draft, *calleeDraftView, inlineRegion)
-                        : cloneRuntimeGraphIntoDraft(draft, calleeGraph, inlineRegion);
+        calleeTransaction ? cloneDraftGraphIntoDraft(draft, calleeTransaction->graph(), inlineRegion)
+                          : cloneRuntimeGraphIntoDraft(draft, calleeGraph, inlineRegion);
     if (cloned.returnNode != kInvalidNodeRef) {
         draft.setRegionResult(inlineRegion, cloned.returnNode);
     }
@@ -1822,8 +1838,8 @@ DraftInlineResult inlineCallableInDraft(
         funcNodeId,
         cloned.clonedNodes.size());
     const std::vector<gc_node_ref_t> entryRoots =
-        calleeDraftView ? collectExecutableEntryRoots(*calleeDraftView, cloned.sourceToCloned)
-                        : collectExecutableEntryRoots(calleeGraph, cloned.sourceToCloned);
+        calleeTransaction ? collectExecutableEntryRoots(*calleeTransaction, cloned.sourceToCloned)
+                          : collectExecutableEntryRoots(calleeGraph, cloned.sourceToCloned);
     CAMEL_LOG_INFO_S(
         "DraftInline",
         "Inline splice node {} collected {} executable entry roots.",
@@ -1831,8 +1847,8 @@ DraftInlineResult inlineCallableInDraft(
         entryRoots.size());
 
     const auto clonedFormalNodes =
-        calleeDraftView ? orderedClonedDirectCallFormalNodes(cloned, *calleeDraftView)
-                        : orderedClonedDirectCallFormalNodes(cloned, calleeGraph);
+        calleeTransaction ? orderedClonedDirectCallFormalNodes(cloned, *calleeTransaction)
+                          : orderedClonedDirectCallFormalNodes(cloned, calleeGraph);
     ASSERT(
         clonedFormalNodes.size() == formalNodes.size(),
         "Runtime inline formal-node planning diverged between source and cloned graphs.");
@@ -1948,10 +1964,10 @@ DraftInlineResult inlineCallableInDraft(
     }
 
     result.valueExit = resolveInlineValueExit(
-        draft,
+        transaction,
         cloned,
         calleeGraph,
-        calleeDraftView,
+        calleeTransaction,
         boundActualInputs);
     if (result.valueExit == kInvalidNodeRef) {
         return DraftInlineResult{};
@@ -1969,10 +1985,10 @@ DraftInlineResult inlineCallableInDraft(
                 calleeGraph ? calleeGraph->name() : "<null>"));
     }
     result.ctrlExit = resolveInlineCtrlExit(
-        draft,
+        transaction,
         cloned,
         calleeGraph,
-        calleeDraftView,
+        calleeTransaction,
         boundActualInputs);
     if (result.ctrlExit == kInvalidNodeRef) {
         result.ctrlExit = result.valueExit;
@@ -2215,7 +2231,7 @@ DraftInlineResult inlineCallableInDraft(
         draft.syncUsersOf(funcNodeId).begin(), draft.syncUsersOf(funcNodeId).end());
     if (callHasChainPlace && !bodyHasChain) {
         const gc_node_ref_t chainAnchor =
-            spliceChainAnchor(draft, slotsBefore, result.valueExit, draft.nodeRegion(funcNodeId));
+            spliceChainAnchor(transaction, slotsBefore, result.valueExit, draft.nodeRegion(funcNodeId));
         draft.takeStatementPlace(funcNodeId, chainAnchor);
         // 5.7: the caller's chain reaches the body's result by a sync edge. The body's statements are
         // reached from the graph's result through that chain (2), so the place the call had is handed
@@ -2295,7 +2311,7 @@ DraftInlineResult inlineCallableInDraft(
             orderFollowers.push_back(user);
         }
     }
-    addSpliceOrderEdges(draft, slotsBefore, callBlockRegion, orderPreds, orderFollowers);
+    addSpliceOrderEdges(transaction, slotsBefore, callBlockRegion, orderPreds, orderFollowers);
     // 5.7: the chain the body brought with it stands where the call stood. Written here, after the
     // body's statements are laid out and the data edges of the reads it holds are final: a read of a
     // captured `var` keeps the place its nearest write gave it, and the chain is joined around it
