@@ -88,19 +88,37 @@ $ camel showcase/i2-diffusion-step/step.cml --arg seed=7 --arg steps=3 --arg lr=
 想看真的被切成链的计划（一个分支臂切成 11 条链、13 条链间边），见
 `docs/handover/reports/prl-two-reds-and-segments.md`。
 
-## 为什么这一步还没上 GPU
+## 在 GPU 上
 
-派工裁定原文（`docs/handover/reviews/questions-2026-10-29.md`）：**"H237 杀手级示例、H13 官方示例
-（D4 MCTS、扩散模型训练步）：GPU 那一路能跑之后接上"**——扩散模型训练步是等 GPU 那一路能跑之后再
-接上的，GPU 设计稿把同一个训练步列成验收基准，也是这个原因。所以顺序是：先有这一版 CPU 的，再谈设备
-上的那一版。**读数没有被钉住的训练步，分不清设备的算术和它自己的 bug**，所以 CPU 版是前置，不是绕路：
-先把语义写对，再谈设备。
+设备那一半已经在这里，而且能跑：去噪器的前向 `relu(x @ w1 + b1) @ w2 + b2` 经 `tiles` 通道变成内核，
+在 GPU 上运行，程序打印设备的答案与主机在同一批数值上相差多少：
+
+```
+$ camel showcase/i2-diffusion-step/step_gpu.cml --devices 5
+i2gpu device=NVIDIA GeForce RTX 3090 (sm_86)
+i2gpu gap=0.0
+```
+
+`gap` 是逐元素平方差之和，设备与主机完全一致时它正好是 0。这是设备运行唯一能做出、又不必钉住某台机器的
+断言：不断言时长、不断言序号、不断言设备名。
+
+CPU 版是让这个读数有意义的前提：读数没被钉住的训练步，分不清设备的算术和它自己的 bug；所以主机版先写，
+并且一直留作对照。
+
+**序号是机器的事。** `--devices 5` 指的是写这份文档那台机器上一张空闲的卡；只有一张空闲卡的机器上就不写它。
+`nvidia-smi` 会说哪张空闲——被别的进程占着的卡会 `CUDA_ERROR_OUT_OF_MEMORY`，那是环境，不是示例。
+
+**用例不写设备号**，这一点和上面的命令不同，而且是故意的：计划条目设 `cuda_free_device = true` 并传
+`--devices 0`，指的都是子进程能看见的那一张卡，与主机给它的是几号无关；runner 在开跑前挑一张有空间的卡，
+所以同一个条目在"0 号正忙"的机器上读出来也是一样的。写进计划的序号是换台机器第一件会坏的事——一个取决于
+别人正在跑什么的红，不是测试，是新闻。
 
 ## 文件
 
 ```
 showcase/i2-diffusion-step/
   step.cml                   整个示例（Camel）
+  step_gpu.cml               同一个去噪器前向在 GPU 上的那一版，带 `gap`
   README.md                  English README
   README.cn.md               本文件
 ```
