@@ -67,6 +67,39 @@ inline Fallible<Str> textOfCodePoints(const Array<int64_t> &values, const Site &
     return Fallible<Str>(Str(out));
 }
 
+/// `str:split`: the parts the text falls into at each occurrence of `sep`, cut with the
+/// interpreter's own kernel (modules/str/operators.cpp `__str_split__`): an empty separator cuts
+/// the text into its code points (`camel::utf8::sequenceLength` a step), and any other keeps the
+/// empty parts -- `'a,b,,c'->split<','>` is `['a', 'b', '', 'c']`, and a text that ends with the
+/// separator ends with an empty part. The separators are not special: a text without one is one
+/// part, and an empty text is one empty part.
+inline Array<Str> splitText(const Str &s, const Str &sep) {
+    Array<Str> out;
+    const std::string_view text = s.view();
+    const std::string_view by   = sep.view();
+    if (by.empty()) {
+        for (std::size_t at = 0; at < text.size();) {
+            const std::size_t length =
+                camel::utf8::sequenceLength(static_cast<unsigned char>(text[at]));
+            out.push(Str(text.substr(at, length)));
+            at += length;
+        }
+    } else {
+        std::size_t from = 0;
+        while (true) {
+            const std::size_t at = text.find(by, from);
+            if (at == std::string_view::npos) {
+                out.push(Str(text.substr(from)));
+                break;
+            }
+            out.push(Str(text.substr(from, at - from)));
+            from = at + by.size();
+        }
+    }
+    out.setExtents(std::initializer_list<std::int64_t>{static_cast<std::int64_t>(out.size())});
+    return out;
+}
+
 /// `str:find`: the position of the first occurrence of `sub`, counted in characters and not in
 /// bytes, or the null when the text does not hold it. A needle that is absent is the null and not
 /// a fault; a needle in a valid text starts on a character boundary, which is why the count is

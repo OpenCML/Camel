@@ -962,6 +962,17 @@ Rules buildRules() {
         },
         false,
     };
+    // `str:split` (modules/str/operators.cpp): the parts, `string[]` -- an array of strings, which
+    // the target carries; the cuts keep the empty parts, and an empty separator cuts by code point.
+    r["str:split"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1 || c.withCount() != 1) {
+                return std::nullopt;
+            }
+            return std::format("rt::splitText({}, {})", c.operand(0), c.with(0).text);
+        },
+        false,
+    };
     r["str:find"] = {
         [](OperatorCall &c) -> std::optional<std::string> {
             if (c.normCount() != 1 || c.withCount() != 1) {
