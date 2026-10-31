@@ -4810,9 +4810,11 @@ type::Type *exactTypeOf(slot_t value, type::Type *declared) {
     return declared;
 }
 
-/// Binds the closure slots of `draft` to the constants `captures` (a closure the program
-/// builds from constants, which exists only as a FILL node until the program runs).
-void bindCaptures(camel::runtime::GraphDraft &draft, std::span<const Example> captures) {
+/// Binds the closure slots of the graph `transaction` owns to the constants `captures` (a
+/// closure the program builds from constants, which exists only as a FILL node until the
+/// program runs).
+void bindCaptures(camel::runtime::GraphTransaction &transaction, std::span<const Example> captures) {
+    auto &draft = transaction.edit();
     const std::vector<gc_node_ref_t> nodes(
         draft.closureNodes().begin(),
         draft.closureNodes().end());
@@ -4888,7 +4890,7 @@ Model exportBound(
     {
         camel::runtime::RuntimeGraphDraftSession session(context, fn->program(), graph);
         if (!captures.empty()) {
-            bindCaptures(session.rootDraft().edit(), captures);
+            bindCaptures(session.rootDraft(), captures);
         }
         // Captured values are constants of the model: they get the types their values fix.
         std::vector<type::Type *> captureTypes;
