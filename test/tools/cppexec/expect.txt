@@ -243,6 +243,11 @@ test/cases/trans/cpp/literal_rows_filled.cml
 # `std::abs`, the smallest value is undefined behaviour and the refusal is lost.
 test/cases/trans/cpp/abs_smallest_int.cml
 
+# A struct with no fields prints as the two braces with nothing between them (`{}`): written as the
+# opening half and the closing half with no member to separate them, it came out as `{  }`. The
+# program is the corpus case: a loop whose state is that struct prints it twice.
+test/cases/loops/zero_leaf_state.cml
+
 # A position on a value of several dimensions: `m[1]` is the row, `m[1, 0]` names the axis it drops
 # and is the element, `t[1]` of a rank-3 value is the rank-2 value behind it -- and `len` of a row is
 # the dimension that is left.

@@ -23,18 +23,20 @@
 # same output" -- reads them as differences of the translation, and they are not one:
 #
 #   linear/nvm/acc.cml                       prints the wall-clock seconds it measured
+#   linear/nvm/fib.cml                       prints the wall-clock seconds it measured
 #   perf/fib_recursive.cml                   prints the wall-clock seconds it measured
 #   consistency/generic_values/candidate_body_fails.cml
 #                                            a fixture for the pass: `std::fvm` itself stops with
 #                                            PassInternalError, so there is no reading of the
 #                                            program to compare a translation against
 #
-# A `differs` count over the corpus has to leave these three out, or it counts the clock and a
+# A `differs` count over the corpus has to leave these four out, or it counts the clock and a
 # broken reference as defects of the writer. Two ways to close a hole in a ruler: make the case
-# print nothing that moves, or write the hole down. The two benchmarks print the measurement --
+# print nothing that moves, or write the hole down. The benchmarks print the measurement --
 # that is what they are for -- so the hole is written down here, once, with the reason.
 not_comparable=(
     test/cases/linear/nvm/acc.cml
+    test/cases/linear/nvm/fib.cml
     test/cases/perf/fib_recursive.cml
     test/cases/consistency/generic_values/candidate_body_fails.cml
 )

@@ -550,19 +550,27 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
             decl += std::format("    {} {};\n", member.cpp, member.name);
         }
         decl += std::format("    bool operator==(const {} &) const = default;\n}};\n", name);
-        // Its text, as the runtime prints it: `(1, a)` and `{ x: 1, y: 2.5 }`.
+        // Its text, as the runtime prints it: `(1, a)`, `{ x: 1, y: 2.5 }`, and `{}` for a struct
+        // with no fields -- the two braces with nothing between them. Written as the opening half
+        // and the closing half with no member to separate them, a zero-leaf struct came out as
+        // `{  }`, two spaces the interpreter does not print (loops/zero_leaf_state.cml).
         decl += std::format("inline void appendText(std::string &out, const {} &v) {{\n", name);
-        decl += std::format("    out += \"{}\";\n", isTuple ? "(" : "{ ");
-        for (size_t i = 0; i < members.size(); ++i) {
-            if (i > 0) {
-                decl += "    out += \", \";\n";
+        if (!isTuple && members.empty()) {
+            decl += "    out += \"{}\";\n";
+        } else {
+            decl += std::format("    out += \"{}\";\n", isTuple ? "(" : "{ ");
+            for (size_t i = 0; i < members.size(); ++i) {
+                if (i > 0) {
+                    decl += "    out += \", \";\n";
+                }
+                if (!isTuple) {
+                    decl += std::format("    out += \"{}: \";\n", record->fieldName(i));
+                }
+                decl += std::format("    appendText(out, v.{});\n", members[i].name);
             }
-            if (!isTuple) {
-                decl += std::format("    out += \"{}: \";\n", record->fieldName(i));
-            }
-            decl += std::format("    appendText(out, v.{});\n", members[i].name);
+            decl += std::format("    out += \"{}\";\n", isTuple ? ")" : " }");
         }
-        decl += std::format("    out += \"{}\";\n}}\n\n", isTuple ? ")" : " }");
+        decl += "}\n\n";
         declarations_ += decl;
         layouts_.emplace(layout, name);
         representations_.emplace(key, name);
