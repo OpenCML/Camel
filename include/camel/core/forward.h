@@ -45,6 +45,13 @@ void bindForwardRule(ForwardRuleBinding binding);
 /// which is not the same as a ruleset that lacks the rule).
 std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(const std::string &uri);
 
+/// The binding for `uri` as it stands: the family it is filed in, the head of its left side and the
+/// operands that head takes. `forwardRuleOf` answers what *one* family's index resolves for `uri`;
+/// this answers the key itself, which is what a second family reads -- `lookupRule("rulesets.vmap",
+/// head, arity)`. The key is a property of the operator (which token, how many operands), not of the
+/// family that happens to own the binding, so a family other than the bound one reads it here.
+std::optional<ForwardRuleBinding> forwardBindingOf(const std::string &uri);
+
 /// One line per bound operator, sorted by uri: `uri family head/arity -> rule | no rule | no such
 /// family`. The reading a test takes of what the bindings resolve to without asking, in the order a
 /// reader needs it: what was bound, and what the index answers for it.
