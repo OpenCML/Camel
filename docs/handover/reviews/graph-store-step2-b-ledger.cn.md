@@ -996,3 +996,30 @@ HANDLE_PROBE refused: InvalidArgument
 * `startup.cost`（更早）：wall/CPU 两种读数给出相反的结论。
 
 **做法**：红了先 `-Plan <那一条>` 单跑；单跑还红才做 `git stash` + 重建的 A/B；**单跑绿就不是那一笔**，别为一个负载造的假红去改实现。**这条判据的价值不在结论，在于它把"我改了它所以它红了"这个最自然的错觉挡在门外。**
+
+### 一条判据：**散文里的数与代码里的数，不是同一种数**
+
+> **"散文里的引用可以改，代码里的引用一动就换了一层意思；所以同一个数（`references`）在两种改法下含义不同，报数时必须说清是哪一种。"**
+
+`compile/gir` 那 7 处是散文（`dbab87327`）：`references` 379 → 372，但**代码里的依赖一处没少**，那 7 **不是 b6 的进度**。`writings` 那 10 处是代码（`3232bf888`），那个 10 才是。**以后报这个数，先说"散文降了几、代码降了几"。**
+
+## 46. `tiles` 那 10 处：**7 个通行参数卡在"3 处自己造"后面，而那 3 处卡在一处没有 id**
+
+| 处 | 位置 | 判定 |
+|---|---|---|
+| 1–4 | `graph_values.h:14/18` + `graph_values.cpp:69/100`（`packGraphAggregate`、`packGraphTuple`） | **通行参数**：收草稿只为往里写 |
+| 5–6 | `region_extract.cpp:66/118`（`extractRegion` 的两个内部步骤） | **通行参数** |
+| 7 | `region_outline.cpp:65` | **通行参数** |
+| 8 | `regions.h:53` `std::unique_ptr<GraphDraft> graph`（`RegionDraft` 的家） | **tiles 自己造** |
+| 9 | `region_extract.cpp:148` `make_unique<GraphDraft>()` | **tiles 自己造** |
+| 10 | `region_test_pass.cpp:96` 栈上的 `GraphDraft draft;` | **tiles 自己造** |
+
+**为什么 1–7 不能先改**：`packGraphTuple(draft, …)` 的三个调用点（`region_extract.cpp:241`、`region_outline.cpp:465`、`region_test_pass.cpp:102`）手上都只有一张草稿，而这两张草稿来自第 8、9 项。**先改通行参数，就得在调用点 `borrow()` 一次——拿一个拼写换另一个拼写，正是判据禁的那件事。**
+
+**为什么连 8、9 项也卡住**：`GraphTransaction::open` 收一个 `GraphId`，而 region 的 id 是 **attach 的时候才分配**的（`region_outline.cpp:390`、`region_test_pass.cpp:110` 的 `setId(context.graphIds().allocate())`）。**extract 的那一刻根本没有 id 可开**。要改得先回答"region 的 id 什么时候分配"——那是另一问。
+
+**这一片实际动的是第 10 项**：`checkBindingKinds` 手上有一个 `Context`，**它的 id 现在就能分配**，于是它开一个事务、从事务里拿草稿，`setId` 那行随之消失（id 已在 `open` 里给了）。**这是这一层里唯一不需要先回答 id 问题的一处。**
+
+**四个数：41 / 371 / 2 / 4。**（`files` 42 → 41、`references` 372 → 371，**都是代码**。）
+
+**b6 的最后一块已写成问题**：`questions-2026-10-31-gir-handle-names-a-transaction-or-a-draft.md`。

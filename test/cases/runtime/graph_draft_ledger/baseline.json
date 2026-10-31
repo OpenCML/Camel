@@ -1,8 +1,8 @@
 {
   "comment": "The baseline of the direct-connection ledger (graph-store step 2 b): the numbers below may only fall, and the last step is all of them at zero. `sites` records where each number comes from, as `file#symbol` (a line number moves with every edit above it, a symbol does not); it is diagnostics for a red and never decides the verdict. Record a new row after a commit with check.mjs --record.",
   "numbers": {
-    "files": 42,
-    "references": 372,
+    "files": 41,
+    "references": 371,
     "constructions": 2,
     "decode": 4
   },
@@ -31,7 +31,6 @@
       "modules/tiles/src/graph_values.cpp": 1,
       "modules/tiles/src/region_extract.cpp": 1,
       "modules/tiles/src/region_outline.cpp": 1,
-      "modules/tiles/src/region_test_pass.cpp": 1,
       "src/compile/gir/builder_support.h": 1,
       "src/compile/gir/draft_graph_builder.cpp": 1,
       "src/compile/gir/graph_encode.cpp": 1,
@@ -85,7 +84,6 @@
       "modules/tiles/src/region_extract.cpp#extractRegion": 1,
       "modules/tiles/src/region_extract.cpp#makeLoopRegions": 1,
       "modules/tiles/src/region_outline.cpp#transferAggregate": 1,
-      "modules/tiles/src/region_test_pass.cpp#checkBindingKinds": 1,
       "src/compile/gir/builder_support.h#nodeDraftOf": 1,
       "src/compile/gir/draft_graph_builder.cpp#draftOwners": 2,
       "src/compile/gir/draft_graph_builder.cpp#fromDraft": 1,
