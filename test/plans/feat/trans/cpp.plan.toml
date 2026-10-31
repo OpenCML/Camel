@@ -159,6 +159,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "shape_rank"
+desc = "`shape(m)` answers the value's dimensions as `int[]` -- `[3, 2]` for a rank-2 value, `[4]` for one of a single dimension, `[2, 2]` for a sliced one, `[2, 2, 2]` for a rank-3 one -- and the answer is a value of its own, not a view: the runtime copies the extents into storage of its own, so a write to it cannot reach the value it describes. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/shape_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::shapeOf("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "slice_rank"
 desc = "A slice names one dimension of a value and keeps every other one whole: `m[0:2]` is the first two rows of a rank-2 value, `m[:, 1]` its second column, `len` of a row range answers the rows it kept, and `t[1:]` of a rank-3 value is the rank-2 value behind its first row. The dimension sliced takes the length the bounds give it and the shape everywhere else is the value's own, so the runtime's slice gathers along an axis instead of over the whole run. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"

@@ -217,3 +217,7 @@ test/cases/trans/cpp/index_rank.cml
 # A slice names one dimension of a value and keeps every other one whole: rows of a rank-2 value,
 # a column of it (`m[:, 1]`), and the rank-2 value behind the first row of a rank-3 one.
 test/cases/trans/cpp/slice_rank.cml
+
+# `shape(m)` answers the value's dimensions as an `int[]` of its own -- a value, not a view -- and a
+# sliced value answers the dimensions it kept.
+test/cases/trans/cpp/shape_rank.cml

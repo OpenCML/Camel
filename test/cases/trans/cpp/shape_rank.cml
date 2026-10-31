@@ -1,0 +1,21 @@
+/**
+ * `shape(m)` answers the value's dimensions -- one `int` per dimension, `[3, 2]` for a rank-2 value
+ * -- and it answers a value of its own, not a view: the array copies the extents into storage of its
+ * own, so writing the answer cannot reach the value it describes. A value of one dimension answers
+ * its length; a sliced one answers the dimensions it kept.
+ *
+ * The readings are the lines below; `agree_with_fvm` compares them with std::fvm byte for byte.
+ */
+import { shape } from tensor
+
+func main(): int sync {
+    let m: float[3, 2] = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]
+    println(shape(m))
+    println(shape(m[0:2]))
+    let v: float[4] = [1.0, 2.0, 3.0, 4.0]
+    println(shape(v))
+    let t: float[2, 2, 2] = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]]
+    println(shape(t))
+    println(len(shape(m)))
+    return 0
+}
