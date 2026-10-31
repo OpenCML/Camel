@@ -1256,3 +1256,16 @@ expect_output_contains = ["Attempted division by zero"]
 expect_output_not_contains = ["1234", "after"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+[[tests]]
+name = "stream.type_function_of_typeof"
+desc = "`ElementOf<typeof xs>`: `typeof e` gives the type `e` would have and evaluates nothing, so it is a type expression and may stand as the argument of a type function (ruling of 2026-10-31). The cell reads `xs[0]`, whose type is the element type of what `xs` holds; an empty sequence reads through the same declaration."
+kind = "behavior"
+case = "../../../cases/compile/stream/type_function_of_typeof.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "7\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

@@ -2596,6 +2596,40 @@ Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
         return boundType(valueType);
     }
     if (containsTypeOf(type)) {
+        // `typeof e` gives the type `e` would have and evaluates nothing, so it is a type
+        // expression, not only a whole type (ruling of 2026-10-31): it may stand as the argument
+        // of a type function, and `ElementOf<typeof xs>` is the element type of what `xs` holds.
+        // Each `typeof` met on the way down is resolved to the type it stands for; the type
+        // function is then applied to a concrete argument like any other.
+        std::function<Type *(Type *)> resolveTypeOfs = [&](Type *held) -> Type * {
+            if (held->code() == TypeCode::TypeOf) {
+                return resolveTypeNode(held, at);
+            }
+            if (held->code() != TypeCallType::typeCode()) {
+                return held;
+            }
+            const auto *call = tt::as_ptr<TypeCallType>(held);
+            std::vector<Type *> arguments;
+            bool changed = false;
+            for (Type *argument : call->paramsSpan()) {
+                Type *resolved = resolveTypeOfs(argument);
+                changed        = changed || resolved != argument;
+                arguments.push_back(resolved);
+            }
+            if (!changed) {
+                return held;
+            }
+            // The arguments are concrete now, so the function is one the type it computes
+            // stands for; one it does not accept stays a call and is reported where it is used.
+            std::string error;
+            if (Type *computed = TypeCallType::evaluate(call->name(), arguments, error)) {
+                return computed;
+            }
+            return TypeCallType::create(call->name(), arguments);
+        };
+        type = resolveTypeOfs(type);
+    }
+    if (containsTypeOf(type)) {
         diags_->of(SemanticDiag::TypeOfNotWholeType)
             .atOrigin(at != nullptr ? at->origin() : 0)
             .commit(type->toString());

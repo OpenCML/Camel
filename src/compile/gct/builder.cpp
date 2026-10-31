@@ -5745,15 +5745,21 @@ node_ptr_t Builder::visitGeneratorBody(
     // `typeof <that value's expression>`, so the cell has a type and no value yet, and the body
     // that creates the stream evaluates nothing (design principles 5.4). The value is written
     // where the statement is reached, in the arm that reaches it.
-    const auto addTypedCell = [&](const std::string &name,
-                                  const node_ptr_t &expr,
-                                  const AST::node_ptr_t &ast) {
+    const auto addCellOfType = [&](const std::string &name,
+                                   Type *type,
+                                   const AST::node_ptr_t &ast) {
         node_ptr_t ref = tree_->makeNRef(name);
-        *ref << tree_->makeType(TypeOfType::create(expr));
+        *ref << tree_->makeType(type);
         node_ptr_t vari = tree_->makeVari();
         *vari << ref;
         mark(vari, ast, "gct.generator.cell");
         *outer << vari;
+    };
+    // The same cell, typed by the expression whose value it will hold.
+    const auto addTypedCell = [&](const std::string &name,
+                                  const node_ptr_t &expr,
+                                  const AST::node_ptr_t &ast) {
+        addCellOfType(name, TypeOfType::create(expr), ast);
     };
     // The body's declarations that became cells: the statement that writes each, where it stands
     // in `bodyStmts`, and the cell's name. A cell is written where its declaration stands, so an
@@ -6057,7 +6063,8 @@ node_ptr_t Builder::visitGeneratorBody(
                             }
                             const std::string seqName =
                                 "__gen_for_seq_" + std::to_string(idIndex_++);
-                            addTypedCell(seqName, visitData(seqAst), stmt);
+                            node_ptr_t sequence = visitData(seqAst);
+                            addCellOfType(seqName, TypeOfType::create(sequence), stmt);
                             cellNames.push_back(seqName);
                             const std::string idxName =
                                 "__gen_for_idx_" + std::to_string(idIndex_++);
@@ -6072,15 +6079,16 @@ node_ptr_t Builder::visitGeneratorBody(
                             const std::string binderName = loopLoad->binder().toString();
                             if (std::find(cellNames.begin(), cellNames.end(), binderName) ==
                                 cellNames.end()) {
-                                // The binder's type is the sequence's element type: `typeof` of
-                                // the index call over the sequence itself and a literal position,
-                                // which is a type the builder can compute without reading a cell.
-                                // `typeof` has to be the whole type, so `ElementOf<typeof xs>` is
-                                // not a way to write it.
-                                node_ptr_t sample = tree_->makeLink(2);
-                                *sample << tree_->makeDRef("__idx__") << visitData(seqAst)
-                                        << intLiteral(0);
-                                addTypedCell(binderName, sample, stmt);
+                                // The binder's type is the sequence's element type, written the
+                                // way the language writes it -- `ElementOf<typeof xs>`, a type
+                                // function applied to a `typeof`. `typeof` gives the type of the
+                                // value without evaluating it, so the position is static.
+                                std::vector<Type *> binderArguments = {
+                                    TypeOfType::create(sequence)};
+                                addCellOfType(
+                                    binderName,
+                                    TypeCallType::create("ElementOf", binderArguments),
+                                    stmt);
                                 cellNames.push_back(binderName);
                             }
                             const int afterPc = newArm();
@@ -7332,8 +7340,12 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
         Type *applied = typeFunc->apply(types);
+        // An argument that is still a `typeof` is not concrete yet: `typeof e` is a type
+        // expression (ruling of 2026-10-31), and the graph builder resolves it where the type is
+        // used, without evaluating `e`. Reporting "not applicable" here would refuse the
+        // application before anything had a chance to give the `typeof` its type.
         const bool concrete = std::none_of(types.begin(), types.end(), [](Type *argument) {
-            return containsTypeVar(argument);
+            return containsTypeVar(argument) || containsTypeOf(argument);
         });
         // A pack is what `ParamsOf<F>` computes, and the `..` around it is read by the type that
         // holds it: it is reported where it is used bare, not here.

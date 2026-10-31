@@ -1,0 +1,17 @@
+/**
+ * `ElementOf<typeof xs>`: a type function applied to a `typeof`. `typeof e` gives the type the
+ * value `e` would have and evaluates nothing, so it is a type expression like any other and may be
+ * written as the argument of a type function: the element type of whatever `xs` holds.
+ */
+
+import { ElementOf } from types
+
+func first(xs: int[]): int sync {
+    let e: ElementOf<typeof xs> = xs[0]
+    return e
+}
+
+func main(): int sync {
+    println(first([7, 8]))
+    return 0
+}
