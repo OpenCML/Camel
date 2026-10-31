@@ -1,4 +1,6 @@
-#!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """How the programs that wait for step 5 (external objects) split by the result type of the operator
 that refuses them.
 
