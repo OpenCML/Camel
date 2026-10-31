@@ -399,6 +399,43 @@ const camel::runtime::Program *buildContainerFrom(
 
 } // namespace
 
+/// The smallest thing that proves the transform's own code runs: one statement added to the graph
+/// the program already enters -- a `println` of a constant -- committed in place, so the graph the
+/// pipeline runs keeps its id. That id is the contract a pass answers to: the program it returns
+/// must have the graph it was given as its root (src/execute/camel_pass.cpp). A container built as
+/// a new program cannot meet it, however it is rooted.
+const camel::runtime::Program *probeRoot(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    std::ostream &os) {
+    using camel::core::type::Type;
+    camel::runtime::GCGraph *root = program != nullptr ? program->root() : nullptr;
+    if (root == nullptr) {
+        os << "REINTERP probe root=none\n";
+        return nullptr;
+    }
+    Type *F = Type::Float64();
+    camel::runtime::RuntimeGraphDraftSession session(context, program);
+    auto &transaction = session.edit(root);
+    auto &draft       = transaction.edit();
+    const camel::runtime::gc_node_ref_t value =
+        draft.materializeStaticValue(camel::core::rtdata::toSlot<double>(42.0), F);
+    const camel::runtime::gc_node_ref_t print =
+        draft.addOperNode(Type::Void(), nullptr, ":io/println");
+    draft.setNormInputs(print, std::span<const camel::runtime::gc_node_ref_t>(&value, 1));
+    // A statement nothing depends on is a statement the scheduler need not run: the print has to be
+    // ordered before what the graph returns, or the entry runs exactly as it did before.
+    const camel::runtime::gc_node_ref_t exitRef = root->exitNodeRef();
+    if (exitRef != 0) {
+        draft.appendOrderDependency(exitRef, print);
+    } else {
+        os << "REINTERP probe exit=none\n";
+    }
+    const camel::runtime::Program *committed = session.commit();
+    os << "REINTERP probe root=" << camel::runtime::toValue(root->id())
+       << " committed=" << (committed != nullptr ? "yes" : "no") << '\n';
+    return committed;
+}
+
 class ReinterpPass : public RuntimeGraphRewritePass {
   public:
     explicit ReinterpPass(const context_ptr_t &ctx) : RuntimeGraphRewritePass(ctx) {}
@@ -406,6 +443,8 @@ class ReinterpPass : public RuntimeGraphRewritePass {
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override {
         printRuleUris(*context_, program, os);
+        // The container below is kept as the record of a direction that was measured and dropped:
+        // its root is a new graph, and the pipeline wants the graph it was given, by id.
         // The two steps of the replacement, in the smallest container they fit in. The program this
         // pass was given cannot have a graph replaced in it (a rewrite makes a new program), so the
         // container is a new program whose root is its first member.
@@ -487,6 +526,11 @@ class ReinterpPass : public RuntimeGraphRewritePass {
             }
             os << "REINTERP calls=" << (calls.empty() ? "-" : calls.c_str())
                << " opers=" << (uris.empty() ? "-" : uris.c_str()) << '\n';
+        }
+        // The probe runs after the reports above, so the readings this pass already had stay as
+        // they were: one added statement, in place, and the program that carries it.
+        if (const camel::runtime::Program *probed = probeRoot(context_, program, os)) {
+            return probed;
         }
         return program;
     }
