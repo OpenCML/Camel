@@ -237,6 +237,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "literal_rows_computed"
+desc = "A nested literal at a position that states a rank is one value of that shape even when a leaf is computed: `[[1.0, 0.0 / 0.0], [0.0 / 0.0, 2.0]]` is the four elements of a `float[2, 2]` in row order, so the generated program holds `rt::Array<double>{{1.0, 0.0, 0.0, 2.0}, {2, 2}}` and the two computed leaves are the elements they sit in. Built as two rows it was refused before it was a value at all (`Cannot insert data of type 'float[]' into a(n) array with element type 'float'`, reported against the first row). The two divisions fault where they are written, and agree_with_fvm compares the report with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/literal_rows_computed.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["const rt::Array<double> array{{1.0, 0.0, 0.0, 2.0}, {2, 2}};", "RuntimeDiag::DivisionByZero at 15:37", "Attempted division by zero."]
+expect_output_not_contains = ["TranslationRefused", "ElementTypeMismatch", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "numel_rank"
 desc = "`numel` counts the elements of a value whatever its rank: six for a rank-2 value, four for its first two rows, eight for a rank-3 one, four for a value of one dimension. It reads the count the value holds and no dimension of it, so a value of several dimensions and one of an open rank are both answered by the run -- which is why this step frees every program that asked for it, the open-rank one included. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
