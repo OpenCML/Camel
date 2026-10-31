@@ -216,6 +216,37 @@ REINTERP target=main primitives=1 other=4 graph=50 nodes=1
 
 改完 `reinterp` 接回来了，`reinterp_builds_its_own_graph.nvm` 绿，`graph_draft_ledger` 四个数没动。
 
+## 判据：第二个键记进索引，不要每次反查
+
+> **两套键（URI 与写法）之间不要用“族里恰好有”来翻译；把第二个键记进索引，比每次反查便宜，也不会因
+> 族变化而失真。**
+
+索引按**写法**建键（`a + b` → `+`, arity 2），节点按 **URI** 说它是谁（`:op/add_d`）。**这两套键
+不是一回事**：一条 `+` 规则在 float 上是 `:op/add_d`，在 int 上是 `:op/add_i`——按写法反查族，是把
+“族里此刻恰好有这条规则”当成翻译函数；族一变，翻译就假。
+
+做法是把 URI 记在**实例**上：`GenericRuleInstance::lhsOperatorUri`
+（`include/camel/compile/gir/rule_templates.h`），在 `genericRuleInstance` 把左侧 publish 出来之后，
+从左侧图的第一个 OPER 节点读（`src/compile/gir/rule_templates.cpp`，`nodeBodyAs<GCOperBody>`）。
+它是“这条规则的左侧写的是什么”的事实，跟着左侧走，不跟着族走。
+
+读数（`import rulesets.jvp` 之后，`transforms::reinterp` 打在 `f(x) = x*x + 3/x` 上）：
+
+```
+REINTERP uri :op/mul_d -> rule jvp_mul -> rhs 63
+REINTERP uri :op/add_d -> rule jvp_add -> rhs 74
+REINTERP uri :op/neg_d -> rule jvp_neg -> rhs 85
+REINTERP uri :op/sub_d -> rule jvp_sub -> rhs 96
+REINTERP uri :op/div_d -> rule jvp_div -> rhs 107
+REINTERP target=f primitives=3 other=2 graph=112 nodes=1
+REINTERP target=main primitives=1 other=4 graph=113 nodes=1
+5.5
+```
+
+**一行就是替换要攥的全部**：`/` 那个节点是 `:op/div_d`，规则 `jvp_div`，它的右侧是图 `107`。
+（注意这个用例得 `import rulesets.jvp`——索引里只有程序自己的 ruleset 模块放进去的东西，不 import
+就一条都没有，`reinterp` 会安静地只打 `target=` 那两行。**“没有输出”和“没有规则”是两件事**。）
+
 ## 验收（缺一步不算完）
 
 1. **前向**：`f(x) = x*x + 3/x` 在 `x = 2` 处，`f = 5.5`，`f' = 4 - 0.75 = 3.25`。两个数都要打出来。
