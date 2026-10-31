@@ -225,8 +225,9 @@ const camel::runtime::Program *buildContainer(
     // (`GCOperBody::op`, include/camel/runtime/graph.h). A rebuilt node is given the URI and the
     // same null handle, the way the autodiff module builds one (modules/autodiff/pullback.cpp,
     // `addOper`).
-    bool hasDiv     = false;
-    bool hasPrintln = false;
+    bool hasDiv            = false;
+    bool hasPrintln        = false;
+    camel::core::type::Type *printlnType = nullptr;
     for (camel::runtime::gc_node_ref_t ref = 1; ref <= fGraph->nodeCount(); ++ref) {
         const camel::runtime::GCNode *node = fGraph->node(ref);
         if (node != nullptr && node->kind == camel::runtime::GCNodeKind::Oper &&
@@ -238,7 +239,8 @@ const camel::runtime::Program *buildContainer(
         const camel::runtime::GCNode *node = mainGraph->node(ref);
         if (node != nullptr && node->kind == camel::runtime::GCNodeKind::Oper &&
             mainGraph->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri() == ":io/println") {
-            hasPrintln = true;
+            hasPrintln   = true;
+            printlnType = node->dataType();
         }
     }
     if (!hasDiv || !hasPrintln) {
@@ -305,7 +307,7 @@ const camel::runtime::Program *buildContainer(
         const gc_node_ref_t two = draft.materializeStaticValue(camel::core::rtdata::toSlot<double>(2.0), F);
         const gc_node_ref_t probeValue =
             draft.materializeStaticValue(camel::core::rtdata::toSlot<double>(42.0), F);
-        const gc_node_ref_t probe = draft.addOperNode(Type::Void(), nullptr, ":io/println");
+        const gc_node_ref_t probe = draft.addOperNode(printlnType, nullptr, ":io/println");
         draft.setNormInputs(probe, std::span<const gc_node_ref_t>(&probeValue, 1));
         auto *emptyClosure = camel::core::type::TupleType::create();
         const gc_node_ref_t fValue = draft.materializeStaticValue(
@@ -316,7 +318,7 @@ const camel::runtime::Program *buildContainer(
         draft.setWithInputs(call, std::span<const gc_node_ref_t>(&fValue, 1));
         draft.setNormInputs(call, std::span<const gc_node_ref_t>(&two, 1));
         const gc_node_ref_t print =
-            draft.addOperNode(Type::Void(), nullptr, ":io/println");
+            draft.addOperNode(printlnType, nullptr, ":io/println");
         draft.setNormInputs(print, std::span<const gc_node_ref_t>(&call, 1));
         const gc_node_ref_t zero =
             draft.materializeStaticValue(camel::core::rtdata::toSlot<int64_t>(0), Type::Int64());
@@ -356,6 +358,12 @@ const camel::runtime::Program *buildContainerFrom(
     const camel::core::context::context_ptr_t &contextPtr, const camel::runtime::Program *program,
     std::ostream &os) {
     using camel::core::type::Type;
+    // Held back: since the merge with develop the container segfaults while it is built, and a
+    // container that crashes the pass cannot be reported as a reading. The shape below is what the
+    // next step fixes; the pipeline's own rule is the one it has to satisfy, and that rule is a
+    // graph id: src/execute/camel_pass.cpp, "the function a pass returns must be the root
+    // function it was given, transformed".
+    return nullptr;
     camel::core::context::Context &context = *contextPtr;
     const auto heads = camel::parse::ast::rulesOf("rulesets.jvp");
     const std::string uri = ":op/div_d";
