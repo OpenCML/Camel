@@ -141,14 +141,14 @@ timeout_ms = 20000
 # process stops without running `main`, while the call site is kept beside it as a related position.
 [[tests]]
 name = "rulesets_probe_missing.at_the_primitive"
-desc = "With a primitive carrying no forward rule, `jvp(f)` is a diagnostic and not a value: it names the operator (`math:pow_d`) and the reason no rule was found, and its position is the primitive's own -- `rulesets_probe_missing.cml:10:12`, the `pow` in `f` -- which is the position a reader has to be sent to, not the `jvp(f)` call. The reading line still names what was refused (`skip=rule uri=math:pow_d`), and the run's exit is non-zero: the program does not go on to print a value it could not differentiate."
+desc = "With a primitive carrying no forward rule, `jvp(f)` is a diagnostic and not a value: it names the operator (`math:pow_d`) and the reason no rule was found, and its position is the primitive's own -- `rulesets_probe_missing.cml:10:12`, the `pow` in `f` -- which is the position a reader has to be sent to, not the `jvp(f)` call. The reading line still names what was refused (`skip=rule uri=math:pow_d`), and the run's exit is non-zero: the program does not go on to print a value it could not differentiate. Read as a whole the assertions say *when* the fault is raised: the diagnostic carries the primitive's own position, the reason the table gave (`no forward rule bound at all`), and the raise-site hint (`[raised here`) that keeps the `jvp(f)` call beside it -- a graph-time fault, not a value computed and then checked."
 kind = "behavior"
 case = "../../../cases/compile/transforms/rulesets_probe_missing.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 1
-expect_output_contains = ["skip=rule uri=math:pow_d", "rulesets_probe_missing.cml:10:12: [Error]:", "jvp has no forward rule for `math:pow_d`"]
+expect_output_contains = ["skip=rule uri=math:pow_d", "rulesets_probe_missing.cml:10:12: [Error]:", "jvp has no forward rule for `math:pow_d`", "no forward rule bound at all", "[raised here"]
 expect_stdout_not_contains = ["5.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
