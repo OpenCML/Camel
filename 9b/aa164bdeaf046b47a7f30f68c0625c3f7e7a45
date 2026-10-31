@@ -1,0 +1,1 @@
+Gated twice: 8072/8060/1/7/2 and 8072/8062/1/7/2. The one failure is capacity.growth_simplify_gc_stress, a pre-existing use-after-free on develop: Function::updateRefs calls tupleType(), which reads the program's graph of a dead object (introduced by 4fc420505, before ea2313576). Reproduced on develop alone; not caused by any lane in this train.
