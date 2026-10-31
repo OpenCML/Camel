@@ -166,13 +166,13 @@ case = "../../../cases/modules/stdlib/reduced_arithmetic_refused.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ReducedPrecisionUnsupported"
-expect_output_contains = ["operator %", "bf16"]
+expect_output_contains = ["operator %", "element type 'bf16'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
 name = "reduced_arithmetic_refused_f16"
-desc = "The same refusal for f16: `%` over two f16 values has no candidate, because `__mod__` is registered for the integer types only, and the diagnostic names `operator %` and the element type `f16`. The bf16 arm beside it pins the wording; this one pins that the element type in the message follows the operand -- an implementation that printed a fixed `bf16` would pass that case and fail this one. A separate case, because a refused call stops the program at the first diagnostic: two refused statements in one file would pin one message and leave the other unread."
+desc = "The same refusal for f16: `%` over two f16 values has no candidate, because `__mod__` is registered for the integer types only, and the diagnostic names `operator %` and the element type `f16`. Both arms pin the phrase `element type '<type>'` and not a bare type name: the message carries one help paragraph naming both types (`bf16` contains `f16`, and the paragraph contains both words), so a bare name passes whichever type the message actually names -- measured, the bf16 case swapped to `f16` still went 44 pass / 0 fail with the old pin, and 43 / 1 once the phrase replaced it. What the two cases together test is that the element type in the text follows the operand rather than being fixed text. A separate case, because a refused call stops the program at the first diagnostic: two refused statements in one file would pin one message and leave the other unread."
 kind = "negative"
 case = "../../../cases/modules/stdlib/reduced_arithmetic_refused_f16.cml"
 args = ["${case}"]
