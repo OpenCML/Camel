@@ -343,3 +343,7 @@ test/cases/trans/cpp/fn_result_dropped.cml
 # interpreter's own FieldNotFound report, with the name in it -- a record is a C++ aggregate, so the
 # name is one the writer reads, not one the program computes.
 test/cases/trans/cpp/field_name_missing.cml
+# An empty literal (`[]`) is written at the element type of the position it fills: `void[]` is not
+# an array any operator takes, and the position -- the result's element or the argument the operator
+# names -- is what the interpreter reads it as.
+test/cases/trans/cpp/empty_literal_takes_the_position.cml
