@@ -157,6 +157,21 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
     std::vector<uint8_t> live(graph->nodeCount(), 0);
     {
         std::vector<gc_node_ref_t> work{startRef};
+        // The plan is the region's, not the exit's alone: a node the graph puts in a region runs
+        // because its region runs (docs/design/effects/edges.cn.md 5.2 -- an arm is entered by
+        // belonging to it), so every node of a region is part of the execution, and what it reads
+        // and waits on is reached from it. Walking back from the exit alone would leave the
+        // statements of an arm out whenever nothing downstream reads what they made, which is what
+        // the control edge between the branch and its arm used to prevent.
+        const camel::runtime::ControlRegions seedRegions(*graph);
+        for (gc_node_ref_t n = 0; n < graph->nodeCount(); ++n) {
+            if (!graph->containsNodeRef(n) || graph->node(n) == nullptr) {
+                continue;
+            }
+            if (seedRegions.controlOf(n) != 0) {
+                work.push_back(n);
+            }
+        }
         while (!work.empty()) {
             const gc_node_ref_t n = work.back();
             work.pop_back();
@@ -702,13 +717,6 @@ BranchArmEntries::BranchArmEntries(
         const uint32_t control  = regions.controlOf(ref);
         if (control == 0) {
             continue;
-        }
-        const camel::runtime::GCRegion &region = *graph.region(control);
-        if (region.kind == camel::runtime::GCRegionKind::Arm) {
-            const auto owner = position.find(region.owner);
-            if (owner == position.end() || owner->second >= i) {
-                continue;
-            }
         }
         const uint32_t at = regions.tin(control);
         if (first[at] == kNone) {
