@@ -1613,14 +1613,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::YieldRequiresStreamHead,
-            {
-                "YieldRequiresStreamHead",
-                "A function whose body writes 'yield' hands out a stream, and this function's head does not write one.",
-                "A body that writes 'yield' is a generator (design principles 5.4): its head writes the stream type it hands out, 'func f(xs: T): U.. sync { yield u }', and a pull answers the next element and, when the body ends, null. Writing 'yield' in a body whose head writes something else gives that body no way to hand out its elements one at a time.",
-            },
-        },
-        {
             SemanticDiag::StreamInContainer,
             {
                 "StreamInContainer",
@@ -1778,6 +1770,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "StatementAfterReturn",
                 "This statement cannot run: the 'return' written before it gives the value of this block, so nothing after it in the block is reached.",
                 "A 'return e' is the value of the block it is written in -- a function body, a 'sync' block, or the arm of an 'if' or a 'match' -- and a statement written after it in that same block is never reached. Move the statement before the 'return', or delete it.",
+            },
+        },
+        {
+            SemanticDiag::YieldRequiresStreamHead,
+            {
+                "YieldRequiresStreamHead",
+                "A function whose body writes 'yield' hands out a stream, and this function's head does not write one.",
+                "A body that writes 'yield' is a generator (design principles 5.4): its head writes the stream type it hands out, 'func f(xs: T): U.. sync with one yield in it', and a pull answers the next element and, when the body ends, null. Writing 'yield' in a body whose head writes something else gives that body no way to hand out its elements one at a time.",
             },
         },
         {
