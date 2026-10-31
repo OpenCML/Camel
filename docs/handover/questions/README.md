@@ -18,7 +18,7 @@
 |---|---|---|---|
 | [`gir-handle-names-a-transaction-or-a-draft`](questions-2026-10-31-gir-handle-names-a-transaction-or-a-draft.md) | 编译期的 `node_handle_t` 名字一个事务（与 `NodeView` 同型）还是一张草稿；同页第二问：region 的 id 能不能在 extract 时就分配 | 待裁 | **堵 b6 的最后一块**：①名字事务要迁 `nodeDraftOf` 66 个形状不变、但 `DraftGraphBuilder::draft()` 132 个调用点；②名字草稿 0 改动，代价是在 3.6 旁边加一条编译期例外；**同页第二问堵 `tiles` 那 9 处与 `operator_instance` 那 2 处** |
 | [`partial-destructuring-of-a-value-tuple`](questions-2026-10-31-partial-destructuring-of-a-value-tuple.md) | 多值 `loop`/元组的解构，名字少于值时该拒绝（诊断），还是按位置取前几个（今天的实现） | 待裁 | 不堵今天的活（`mcts` 已按"四个名字全写全"绕开）；堵**下一个多状态循环**——两个同型状态就足以让它安静地算错 |
-| [`does-rt-array-carry-a-shape`](questions-2026-10-31-does-rt-array-carry-a-shape.md) | `rt::Array` 要不要带形状：带，多维下标/切片/`shape` 才有意义；不带，`std::cpp` 最后 15 个核心算子程序只能继续拒 | 已裁未落 | **05:30——A：带形状**（原生多维数组是核心类型，原则 5.4；后端表示不了核心类型就不算完成，所以 A 是终点、不是可选项；B 不选，翻译了但不等价比拒绝更坏）；**先上守卫** | 15 个核心算子程序记作"等形状（A 进行中）"：形状与嵌套打印已落（`ee451e689` 守卫、形状那笔），**下标 → 切片 → `reshape` → `shape` → `numel` → 逐元素运算待做**，每步以与 `std::fvm` 逐字一致验收 |
+| [`does-rt-array-carry-a-shape`](questions-2026-10-31-does-rt-array-carry-a-shape.md) | `rt::Array` 要不要带形状：带，多维下标/切片/`shape` 才有意义；不带，`std::cpp` 最后 15 个核心算子程序只能继续拒 | 已裁未落 | **05:30——A：带形状**（原生多维数组是核心类型，原则 5.4；后端表示不了核心类型就不算完成，所以 A 是终点、不是可选项；B 不选，翻译了但不等价比拒绝更坏）；**先上守卫** | 15 个核心算子程序记作"等形状（A 进行中）"：形状与嵌套打印已落（`ee451e689` 守卫、`6a8efdc1d` 形状），**下标与 `reshape` 已落（`9024c230f`，`:op/idx_arr` 的拒绝 4 → 1）**，切片 → `shape` → `numel` → 逐元素运算待做，每步以与 `std::fvm` 逐字一致验收 |
 
 原则第 15 节另列着 6 条未决（另 2 条已成页、22:50 已裁），见文末。
 
