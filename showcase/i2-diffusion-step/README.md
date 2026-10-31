@@ -101,20 +101,12 @@ branch arm cut into eleven chains with thirteen edges between them), see
   training *step* is the subject, and a UNet would add parameters, not semantics;
 - no sampler, no EMA, no learning-rate schedule: this is the training half of I2 only.
 
-## Why this step is not on a GPU yet
-
-The dispatch ruling is explicit (`docs/handover/reviews/questions-2026-10-29.md`): *"H237 杀手级示例、
-H13 官方示例（D4 MCTS、扩散模型训练步）：GPU 那一路能跑之后接上"* — the diffusion training step joins
-once the GPU path runs, and the GPU design lists it as an acceptance benchmark for exactly that
-reason. So the order is: this CPU step first, the device version after it. A step whose numbers are
-not pinned cannot tell a device's arithmetic apart from its own bug, which is why the CPU version is
-the prerequisite rather than a detour — correct semantics first, then the device.
-
 ## Files
 
 ```
 showcase/i2-diffusion-step/
   step.cml                   the Camel program (the whole example)
+  step_gpu.cml               the same denoiser's forward pass on the GPU, with `gap`
   README.md                  this file
   README.cn.md               Chinese README
 ```
@@ -122,10 +114,11 @@ showcase/i2-diffusion-step/
 The plan that runs it: `test/plans/feat/showcase_i2.plan.toml` — the default back end and
 `std::prl`, each printing the same numbers.
 
-## The device half
+## On the GPU
 
-`step_gpu.cml` runs the denoiser's forward pass on the GPU and prints how far the device's answer is
-from the host's on the same values:
+The device half is here and it runs. The denoiser's forward pass — `relu(x @ w1 + b1) @ w2 + b2` —
+goes through the `tiles` pass to a kernel, runs on the GPU, and the program prints how far the
+device's answer is from the host's on the same values:
 
 ```
 $ camel showcase/i2-diffusion-step/step_gpu.cml --devices 5
@@ -137,8 +130,12 @@ i2gpu gap=0.0
 and the host agree. It is the one assertion a device run can make without pinning a machine: no
 duration, no ordinal and no device name is asserted anywhere.
 
-The pass it needs is `tiles`, which translates the function graph -- `relu(x @ w1 + b1) @ w2 + b2` --
-to a kernel. That expression is inside the subset the module supports today: contiguous f32 tensors,
+The CPU step is what makes that reading mean something: a step whose numbers are not pinned cannot
+tell a device's arithmetic apart from its own bug. So the host version came first and stays as the
+reference.
+
+The `tiles` pass translates the function graph -- `relu(x @ w1 + b1) @ w2 + b2` -- to a kernel. That
+expression is inside the subset the module supports today: contiguous f32 tensors,
 broadcasting arithmetic, `relu`, and rank-2 `matmul`. The parameters travel as one aggregate because
 `run_preferred_resident` takes one argument and reads a struct of tensors by field.
 

@@ -1,21 +1,27 @@
-// D4 -- the self-play half, as the smallest loop that runs.
+// D4 -- the self-play half, at a size where its loss curve is a reading.
 //
-// The search half (`search.cml`) answers "what is this position worth" by playouts. The other half
-// of the showcase design's D4 is the learned part: a policy/value network, self-play, and a step of
-// training on what self-play produced. This program is that loop reduced to one game and one step:
-// it plays a game to the end, reads the result, and takes one Adam step on the network's value
-// prediction for the final board. It prints the result and the loss before and after.
+// The first version of this file was the smallest closed loop that runs: one scripted game, the
+// value head's prediction for its final board, and one Adam step, with the loss before and after.
+// This version is that same loop enlarged and nothing else -- sixteen games instead of one, ten
+// steps instead of one, and both written out as a sequence. Still no replay buffer, still no search
+// in the policy, no new operator.
 //
-// What it is not: a trainer. One game, one step, no replay buffer, no search in the policy (the
-// move is scripted -- X takes the first free place, O the last), and no claim that the value head
-// has learned anything. That is deliberate: the example's missing half is delivered as the smallest
-// closed loop that runs, and the second commit is what adds games and steps.
+// The games stay scripted: a player takes a free place drawn from the game's own key rather than
+// the first one, so that sixteen games are sixteen samples and not one sample sixteen times. The
+// target is still the game's result -- X's score, 1 for a win, 0.5 for a draw, 0 for a loss -- and
+// the policy is still not the network.
+//
+// What the enlargement buys, and what it does not: it buys a loss sequence, which this program
+// prints, and it raises the one question a bigger number raises -- whether the cost stayed linear
+// in games x steps. `RESULTS.md`'s "Self-play" section records that reading and the losses of the
+// run it was taken from. It does not buy a player: ten steps on sixteen scripted games make a curve
+// visible, not a policy worth searching with.
 //
 // Run:
 //   camel showcase/d4-mcts/selfplay.cml
 
 import { relu, reshape, sum } from tensor
-import { fold, key, normal } from random
+import { Key, choice, fold, key, normal } from random
 import { with_grad } from autodiff
 import { adam, adam_state } from nn
 
@@ -53,14 +59,24 @@ func loss_of(board: int[], target: float): float {
     return difference * difference
 }
 
-// One game, scripted: X takes the first free place, O takes the last. The result is X's score --
-// 1 for a win, 0.5 for a draw, 0 for a loss -- which is what a value head is trained against.
-func selfplay(): (int[], float) {
+// The batch: one loss per game, averaged. This is what a step descends, and the reason the run
+// needs more than one game -- a step on one sample is a step on noise.
+with <m: Net>
+func batch_loss(boards: int[][], targets: float[]): float {
+    let total = loop acc = 0.0 for i in 0..len(boards) do {
+        return acc + loss_of<m>(boards[i], targets[i])
+    }
+    return total / float(len(boards))
+}
+
+// One game, scripted: each player takes a free place drawn from the game's key (no search). The
+// result is X's score, which is what a value head is trained against.
+func selfplay(k: Key): (int[], float) {
     let (board, moves) = loop b = [0, 0, 0, 0, 0, 0, 0, 0, 0] as int[], turn = 0
         while turn < 9 && winner(b) == 0
         do {
             let places = (0..9)->filter<(i: int): bool => b[i] == 0>
-            let pick = places[0]
+            let pick = places->choice<fold(k, turn)>
             let mark = turn % 2 + 1
             let nextb = (0..9)->map<(i: int): int => if i == pick then mark else b[i]>
             return (nextb, turn + 1)
@@ -72,20 +88,39 @@ func selfplay(): (int[], float) {
 }
 
 func main(): int sync {
+    let games = 16
+    let steps = 10
     let k = key(42)
     let model: Net = {
         w1: normal::<float><shape: [9, 16]>(fold(k, 1)) * 0.3,
         b1: reshape<[16]>([0.0 for i in 0..16] as float[]),
         w2: reshape<[16]>([0.0 for i in 0..16] as float[])
     }
-    let (board, result) = selfplay()
-    let before = loss_of<model>(board, result)
-    let grad = with_grad(loss_of)
-    let (value, gradient) = grad<model>(board, result)
-    let opt = adam_state(model)
-    let next = adam(model, gradient, opt, 0.01)
-    let after = loss_of<next.0>(board, result)
-    let _ = value
-    `mcts selfplay squares=9 result=${result:.1f} loss0=${before:.6f} loss1=${after:.6f}`->println
+    // Sixteen games first: the batch a step descends is fixed while the model moves, which is what
+    // makes the losses of the ten steps comparable with each other.
+    let (boards, results) = loop bs = [] as int[][], rs = [] as float[], g = 0
+        while g < games
+        do {
+            let (b, r) = selfplay(fold(k, g + 1))
+            return (concat(bs, [b]), concat(rs, [r]), g + 1)
+        }
+    let step_of = with_grad(batch_loss)
+    // Ten steps, each one over the whole batch. The loop carries the model, the optimizer's state
+    // and the losses it has taken so far; the tuple it returns has one entry per carried name, in
+    // the order they were written, so the four names below must be four.
+    let (trained, trained_opt, losses, done) = loop m = model, opt = adam_state(model), ls = [] as float[], s = 0
+        while s < steps
+        do {
+            let (loss, gradient) = step_of<m>(boards, results)
+            let (next, next_opt) = adam(m, gradient, opt, 0.01)
+            return (next, next_opt, concat(ls, [loss]), s + 1)
+        }
+    let _ = trained
+    let _ = trained_opt
+    let _ = done
+    let curve = '{:.6f}'->format<losses>
+    let scores = '{:.1f}'->format<results>
+    `mcts selfplay games=${games} steps=${steps} squares=9 results=${scores}`->println
+    `mcts selfplay losses=${curve}`->println
     return 0
 }

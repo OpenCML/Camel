@@ -1,12 +1,8 @@
 /**
- * A `loop` whose state has the name of a cell the body already declared: `i` is the `var` at
- * the top and also the loop's state.
- *
- * Refused by name today. The cells of a generator body are keyed by name (`cellNames`), so one
- * table entry would stand for two bindings -- the `var` and the loop's own state -- and the
- * body's read of `i` resolves to the loop's binding, which has no cell of its own. Reusing the
- * name was tried: the body's `i` came back `UnresolvedReference`. The shape is pinned here so
- * the reason is a reading, not a belief.
+ * A `loop` whose state has the name of a cell the body already declared: `i` is one cell, the
+ * `var` and the loop's state, written by the `var` and by the loop's own step. The stream hands
+ * out 0, 1, 2 and then 3 -- the value `i` holds after the loop -- which is what the same logic
+ * written as a plain loop prints step by step.
  */
 
 func count(): int.. sync {
@@ -15,6 +11,7 @@ func count(): int.. sync {
         yield i
         i + 1
     }
+    yield i
 }
 
 func main(): int sync {

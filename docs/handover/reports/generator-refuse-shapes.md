@@ -8,6 +8,8 @@
 
 > **删掉检查之后错误换了名字（`FeatureNotSupported` → `UnresolvedReference`），说明删的是检查不是限制；把检查放回去，并把这一跑写成负例。**
 
+> **把"还没做"钉成负例，等于把缺口写成语言规则；缺口要么被修掉，要么被记在待办里，不能出现在验收里。**
+
 日期：2026-10-31　读数树：`lane-gen`（`5803e9039`）
 
 **这一页只列形状，不删任何代码。** 本机不构建（Windows 上构建会蓝屏），所以每一行都是**静态读代码 + 对照已有用例**得来，标"未跑"的触发程序没有实际跑过。
@@ -34,7 +36,7 @@
 | `loop` 带两个及以上状态 | **已有用例** `yield_lowering.cml`（`loop i = 0, s = 0 … { yield (i, s); (i + 1, s + i) }`） | **有**：把两值装进一个元组单元 `loop st = (0, 0) while … do { let (i, s) = st; yield (i, s); (i + 1, s + i) }`（未跑，按单状态路径推断） | 把多状态拆成元组状态；或给机器加多状态的 arm 布局 |
 | `for` 循环里有 `yield` | `func g(): int.. sync { for x in xs { yield x } }`（未跑） | **有**：写成 `loop i = 0 while i < n do { yield xs[i]; i + 1 }`（`generators_loop.cml` 是那个绿形状） | 把 `for` 展开成 `loop`（迭代器本身占一个状态，得和第 6 行一起做） |
 | `loop` 初值依赖当前点 | `var c = 0; loop i = c while i < 3 do { yield i; i + 1 }`（未跑） | 没有（`!hoistable(init)` 直接拒） | 允许读单元的初值：把初值求值放进第一个 arm，而不是提到循环前 |
-| 循环状态名与体内单元重名 | **已有用例** `stream.generator_loop_shared_cell_refused`（`var i = 0` 后写 `loop i = 0 while i < 3 do { yield i; i + 1 }`） | **没有**（实测：按名字复用让读解析到错的绑定，`UnresolvedReference('i')`） | 按绑定而不是按名字键的单元表；今天的形状已用负例钉住 |
+| 循环状态名与体内单元重名 | **已有用例** `stream.generator_loop_shared_cell`（`var i = 0` 后写 `loop i = 0 while i < 3 do { yield i; i + 1 }`，循环后再 `yield i`） | **有**（已转正：`120/120/0`，四后端输出 `123`，`a1182780f`） | 已做：循环状态复用体内那个单元（一个名字一个单元），并把"读在声明前"的检查限定在体自己的语句表上 |
 | `match` 臂绑定名字，臂里有 `yield` | `func g(x: int): int.. sync { match x { case n => { yield n } } }`（未跑） | 没有（`Ref`/`EnumPattern` 绑定被拒：绑定活在臂的图里，活不过 `yield`） | 把绑定提升成单元（与"局部跨 `yield`"是同一套：`addTypedCell`） |
 | 循环体最后一条语句不产值 | `loop i = 0 while i < 3 do { yield i; var x = 1 }`（未跑） | 没有（`last == nullptr` 拒：下一轮没有值可写回状态） | 让"最后一条是 `var` 声明"也算产值（读那个单元），或让 `var` 在这里写成赋值 |
 | `:2164`（`visitExitStmt` 看到 `yield`） | **没找到能命中的程序**（全部函数体在 `:5426` 被路由到生成器体；嵌套函数/lambda 各自路由并以 `:5667` 拒） | 无（按静态读法疑似死路径） | 删之前先找到一条能命中的程序；找不到就是死代码，可连同 `:2160` 注释一起删 |
@@ -42,12 +44,13 @@
 ## 两个数
 
 - **形状 11 条**（表的前 11 行；`loop` 的四个子形状分开数）。
-- **余下 3 条**：双状态 `loop`、`for` + `yield`、状态名重名（最后这条不是"只拦了另一种写法"，见下）。
+- **余下 2 条**：`for` + `yield`、双状态 `loop`（`yield_lowering_refused` 是作者留着待翻转的标记，不算）。
 - **`yield a, b` 已删并转绿**：先红（`112/108/4`，四个后端都是 `FeatureNotSupported('generators')`）→ 删分支、用 `TupleDataFactory` 装元组 → 绿（`112/112/0`），`139d3a62d`。
 - **块里的 `yield` 已删并转绿**：先红（`117/113/4`，四个后端都是 `FeatureNotSupported('generators')`，位置 `generators_yield_in_block.cml:7:7`）→ 给裸块加一个 arm、拉取停在块内、块后继续 → 绿（`117/117/0`，四后端四条 `[PASS]`），`01a46940c`。
-- **状态名重名不是"只拦了另一种写法"**（2026-10-31 实测）：先跑红（`FeatureNotSupported('generators')`，116/112/4），再按"复用那个单元"删掉 `refuse` 跑绿——**绿没来**，回来的是 `UnresolvedReference('i')`：体的单元按名字键，循环状态的绑定与 `var` 的绑定共用一个名字，复用会让读解析到错误的绑定。已把 `refuse` 放回，用例转成负例 `stream.generator_loop_shared_cell_refused`（113/113 绿）。这条要的是**按绑定而不是按名字键的单元表**，是机器能力，不是删检查。
+- **状态名重名先红了、负例也钉了，但作者裁定不许钉负例**（2026-10-31）：第一次删法回来 `UnresolvedReference('i')`；把 `refuse` 放回、写成负例是错的处理——**负例等于把缺口写成语言规则**。改正：循环状态复用体内那个单元（一个名字一个单元），并把"读在声明前"的检查限定在体自己的语句表上（块里的语句位置不是体里的位置，之前的误报就来自这里）。`stream.generator_loop_shared_cell` 翻成正例：`120/120/0`，四后端输出 `123`（0、1、2，再是循环后的 3，与同一段逻辑写成普通循环逐步打印的结果相同），`a1182780f`。
+- **全树负例扫描**：`git grep -n 'FeatureNotSupported' test/plans test/cases` 里"以负例把缺口钉住"的只有 `stream.yield_lowering_refused`（作者留着待翻转），其余命中都是 `expect_output_not_contains`（要求不出现），不是负例钉缺口。
 
 ## 这张表不承诺什么
 
-- "有别的路径"是按**语义等价的最小改写** + 已有绿例推断的；状态名重名这条已经被实测推翻并改成负例。
+- "有别的路径"是按**语义等价的最小改写** + 已有绿例推断的；状态名重名这条先被实测推翻（`UnresolvedReference`），后按作者裁定改正并转正。
 - `:2164` 的"疑似死"同样只是静态读法：删它之前要么找到一条能命中的程序，要么接受"删掉并留一条它曾在哪里被命中的记录"。
