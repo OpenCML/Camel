@@ -20,6 +20,7 @@ inline constexpr const char *kEdgesSyncGateTestPass      = "test::edges_sync_gat
 inline constexpr const char *kEdgesSyncForkTestPass      = "test::edges_sync_fork";
 inline constexpr const char *kEdgesSyncForkGateTestPass  = "test::edges_sync_fork_gate";
 inline constexpr const char *kEdgesSyncCycleTestPass     = "test::edges_sync_cycle";
+inline constexpr const char *kEdgeUsersTestPass          = "test::edge_users";
 
 // Each adds nodes to the root graph, commits, and prints "EDGES accepted" or
 // "EDGES refused: <the commit's message>".
@@ -144,6 +145,20 @@ class EdgesSyncForkGateTestPass : public RuntimeGraphRewritePass {
 // the draft's side reports and then what the commit does with it. A freeze that walked four kinds
 // again would accept this graph, which is what this case is for.
 class EdgesSyncCycleTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+// The users of a node, read on both sides of the freeze. A draft keeps one list per edge kind as a
+// pass writes the edge; a frozen graph keeps one table built from its input runs, with the sync
+// users beside them because a sync edge is not a port. A pass asking what reads or waits on a node
+// (camel/runtime/effect_liveness.h) must get the same answer from either side, so this pass builds
+// one node read in all four kinds, commits, and prints the four sets of that node and how many
+// nodes of the graph the two sides disagree about. The sets are compared in the runtime refs the
+// commit gives the draft's nodes: a draft's ids stop meaning anything once it is encoded.
+class EdgeUsersTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     const camel::runtime::Program *
