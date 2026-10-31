@@ -1202,10 +1202,16 @@ Rules buildRules() {
     // The element types are the ones the tensor module itself stores (modules/tensor/dtype.h):
     // f32, f64, i32, i64 and the two reduced-precision floats, whose fill is a value of their own
     // type rounded once from 1.0/0.0 (`rt::BF16(1.0f)`), so the tensor a program reads is one
-    // array whatever its width. Anything else is refused here, not bridged: a `string` or a `bool`
-    // tensor never reaches this rule (the signature's `when is_numeric` refuses the call first),
-    // and a complex one has no dtype in the tensor module, so there is no interpreter value to
-    // agree with -- a written call would be a second answer, not a translation.
+    // array whatever its width. What is left out never reaches this rule, and it is left out by
+    // the language, not by this target: the signature's `when is_numeric` (`stdlib/signatures/
+    // tensor.cml`) says a tensor's element is a number, and `is_numeric::<string>()` and
+    // `is_numeric::<bool>()` are both false, so there is no string or bool tensor on any backend
+    // -- the same `NoMatchingFunction` comes from std::fvm. `c64`/`c128` do not even match the
+    // signature although `is_numeric` admits them: the tensor type for a complex element cannot be
+    // formed, and that disagreement is the author's to settle (docs/handover/questions/
+    // questions-2026-10-31-can-a-tensor-hold-a-complex.md). So the `default` below is a branch
+    // that does not run: it is a backstop, not a refusal this rule makes, and no element type is
+    // turned away with a written call that would be a second answer.
     auto tensorBuilder = [](bool ones) {
         return [ones](OperatorCall &c) -> std::optional<std::string> {
             if (c.normCount() != 1) {
