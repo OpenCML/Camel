@@ -130,11 +130,28 @@ return version;
 
 **为什么值得记**：这类错误不会崩，也不会错值；它只是**多出一条没人用的边**，然后被一条正确的诊断说穿。**看见那条诊断时，先问"是谁造了它"，而不是"这条诊断是不是太吵"。**
 
-## 十、附注：形状一的补丁
+## 十、三类红，以及它们各自的账
+
+**一条判据**：**一条新边会同时改三个地方的账；但先分完类再动手——今晚 7 条红里只有 2 条是我们的，2 条等作者，2 条是别人的 footprint，1 条是重录。**
+
+发出一条边之后，整闸的读数是这样分的（`total 8040 / pass 8024 / fail 7`，合并 `develop` 之后）：
+
+| 类 | 条数 | 名字 | 谁的 |
+|---|---|---|---|
+| **(a) 检查器该跟着 3.1 改** | 2 | `source.declared_resources`、`poison:…:source.declared_resources` | **等作者**：这一页在 `questions/` 里（随第 61 趟上线），**作者下轮读，不催** |
+| **(b) 我们改错了** | 2 | `pass_export_var_param_inlined`、`ort_var_parameter` | **我们的**，但**修在 `writers` 那半边**：`bump(acc)` 的形状写者会登记，可那个两参重载固定 `throughCallee = false`（`builder.h:2255-2256`），而 `writeBeforeCall_` 只在真时填（`builder_expr.cpp:620`）——所以 `:var/after` 的第一实参拿到了裸单元 |
+| **(c) 黄金/期望该重录** | 1 | `docs.tutorial_images.current` | **我们的**：`10_var_order` 重画（`84516a3d1`），只换 `.dot`/`.svg`，渲染器自己的时间戳噪音不提交 |
+| **(别人的) footprint** | 2 | `core`、`poison:modules.resources:core` | **`writers`**：`:var/after` 多一条 `read variable(operand 0)` 声明 |
+
+**这一分法的用处**：**`fail 7` 里我这一半只欠 2 条，而且已经定位到 `writers` 的一行**。不分类的话，7 条会一起算在"发出这条边的人"头上，下一个人就会去改检查器和 footprint。
+
+**附一条今晚的更正**：有的"搬一半"不是搬的时候漏了，是**递进去的那个 id 从一开始就不属于这一族**——`variableAfterCall` 在没有 `writeBeforeCall_` 登记时退回单元本身，而单元可能声明在另一个函数里（见前一轮的定位：第一实参是 `:var/new`，不是版本）。
+
+## 十一、附注：形状一的补丁
 
 形状一的实现（`valueVersionOf` 返回调用节点）**只存在于补丁里**：`D:\Temp\version-edge-a.patch`，**5674 字节**，内含 `builder_expr.cpp` 的 10 行与枚举两态化的改动（枚举两态化已单独上车，见 `821185288`）。**它是形状一的唯一记录**，重跑本页第二节的形状一读数时用它。
 
-## 十一、这一页堵着谁
+## 十二、这一页堵着谁
 
 - **① 的块外那一半**（`builder_operators.cpp:4403`、`:4427`，补丁 `D:\Temp\edges-block-outside.patch`）：门不再造之后，这个变量族正是靠版本边活着的；
 - **③ 停造 ctrl**：`orderAfterLastWriter` 里那条 ctrl 边是这一格的临时替身，它必须在版本边成立之后才拆；
