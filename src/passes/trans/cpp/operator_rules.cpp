@@ -1007,6 +1007,12 @@ Rules buildRules() {
         true,
     };
     r["math:sqrt"]    = cmath("sqrt", true);
+    // The typed square root (math:sqrt_f, math:sqrt_d): std::sqrt answers what the library's
+    // answers, including outside the domain -- a negative operand and a NaN operand both give a
+    // NaN and not a fault, which is what std::fvm answers and what math_sqrt_domain.cml pins.
+    for (const char *t : {"f", "d"}) {
+        r[std::format("math:sqrt_{}", t)] = cmath("sqrt", true);
+    }
     for (const char *t : {"i", "l"}) {
         r[std::format("math:abs_{}", t)] = cmath("abs");
     }

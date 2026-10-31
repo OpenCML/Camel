@@ -13,5 +13,3 @@ test/cases/compile/diag_render/runtime_regex.cml   # re:test -- exception, not a
 # EXCEPTION: a tensor crosses the bridge as a handle (rt::Foreign); standalone operators over
 # tensors are a different piece of work, and the bridge is what makes them work today.
 test/cases/trans/cpp/tensor_ones.cml               # tensor:ones -- exception, not a gap
-# GAP: the f64 square root has no rule yet; the next commit writes it and deletes this line.
-test/cases/trans/cpp/exec/scalars.cml              # math:sqrt_d -- gap
