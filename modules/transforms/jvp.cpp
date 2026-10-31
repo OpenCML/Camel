@@ -10,9 +10,11 @@
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
 
+#include <algorithm>
 #include <array>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace camel::transforms {
@@ -76,6 +78,7 @@ JvpGraph buildJvpGraph(
     auto *lifted = TupleType::create(std::vector<Type *>{Type::Float64(), Type::Float64()});
     size_t copiedKinds = 0;
     size_t seenKinds   = 0;
+    std::vector<std::string> usedRules;
     camel::runtime::GraphDraftGroup group(context, program);
     const GraphId member = group.reserve(
         "jvp_of_" + std::string(function->name()), "jvp_of_" + std::string(function->name()));
@@ -102,6 +105,66 @@ JvpGraph buildJvpGraph(
         std::vector<gc_node_ref_t> copyOf(function->nodeCount(), rt::kInvalidNodeRef);
         std::vector<bool> copied(function->nodeCount(), false);
         bool complete = true;
+        // Step 3, second layer: a tangent for every node, computed by one rule per primitive. A
+        // constant's tangent is zero, a port's is the tangent parameter the caller passed, and a
+        // primitive's is the rule below applied to its operands' values and tangents. The rules are
+        // the minimal set `f` needs; a primitive with none is refused *by name* rather than
+        // answered with 0 or 1, because a wrong derivative that looks like a derivative is the
+        // expensive kind of wrong.
+        std::vector<gc_node_ref_t> tangentOf(function->nodeCount(), rt::kInvalidNodeRef);
+        gc_node_ref_t zeroConstant = rt::kInvalidNodeRef;
+        const auto primitive = [&draft](const char *uri, std::vector<gc_node_ref_t> inputs) {
+            const gc_node_ref_t made = draft.addOperNode(Type::Float64(), nullptr, uri);
+            draft.setNormInputs(made, std::span<const gc_node_ref_t>(inputs));
+            return made;
+        };
+        const auto noteRule = [&usedRules](const char *name) {
+            if (std::find(usedRules.begin(), usedRules.end(), name) == usedRules.end()) {
+                usedRules.emplace_back(name);
+            }
+        };
+        // One writing per law, matching stdlib/rulesets/jvp.cml line for line (and the tangent
+        // functions camel::autodiff exports): `jvp_add`, `jvp_sub`, `jvp_mul`, `jvp_div`. Reading
+        // them from the ruleset's index instead -- `forwardRuleOf` and the rule's right side -- is
+        // the road forward.h describes, and it needs two things this transform does not have yet:
+        // the ruleset is in the index only when the program imports `rulesets.jvp`, and binding the
+        // right side's captured operands (`x`, `w`) is a closure the graph has to build at run time.
+        // `ref` is the rule's value in the new graph, `originals` the operands in the old one (where
+        // the tangents are kept) and `inputs` the same operands in the new one.
+        const auto tangentRule = [&](gc_node_ref_t ref, std::string_view uri,
+                                     const std::vector<gc_node_ref_t> &originals,
+                                     const std::vector<gc_node_ref_t> &inputs) -> gc_node_ref_t {
+            if (originals.size() != 2) {
+                return rt::kInvalidNodeRef;
+            }
+            const gc_node_ref_t a = inputs[0];
+            const gc_node_ref_t b = inputs[1];
+            const gc_node_ref_t da = tangentOf[originals[0]];
+            const gc_node_ref_t db = tangentOf[originals[1]];
+            if (uri == ":op/add_d") {
+                noteRule("add");
+                return primitive(":op/add_d", {da, db});
+            }
+            if (uri == ":op/sub_d") {
+                noteRule("sub");
+                return primitive(":op/sub_d", {da, db});
+            }
+            if (uri == ":op/mul_d") {
+                // (a*b)' = a'*b + a*b'
+                noteRule("mul");
+                const gc_node_ref_t lhs = primitive(":op/mul_d", {da, b});
+                const gc_node_ref_t rhs = primitive(":op/mul_d", {a, db});
+                return primitive(":op/add_d", {lhs, rhs});
+            }
+            if (uri == ":op/div_d") {
+                // (a/b)' = (a' - (a/b)*b') / b, with (a/b) the value the copy already computes
+                noteRule("div");
+                const gc_node_ref_t shift = primitive(":op/mul_d", {copyOf[ref], db});
+                const gc_node_ref_t top   = primitive(":op/sub_d", {da, shift});
+                return primitive(":op/div_d", {top, b});
+            }
+            return rt::kInvalidNodeRef;
+        };
         for (std::uint8_t kind = 0; kind <= static_cast<std::uint8_t>(rt::GCNodeKind::Dref); ++kind) {
             bool seen = false;
             for (camel::runtime::gc_node_ref_t ref = 0; ref < function->nodeCount(); ++ref) {
@@ -123,11 +186,11 @@ JvpGraph buildJvpGraph(
             switch (node->kind) {
             case rt::GCNodeKind::Port:
                 // The lifted graph has one ordinary parameter, so the one port the original body
-                // reads is the value the caller passes. The tangent is the second parameter and has
-                // no node in the original body: no primitive computes it yet.
+                // reads is the value the caller passes. Its tangent is the second parameter.
                 if (!function->normPorts().empty() && function->normPorts().front() == ref) {
-                    copyOf[ref] = value;
-                    copied[ref] = true;
+                    copyOf[ref]    = value;
+                    tangentOf[ref] = tangent;
+                    copied[ref]    = true;
                     ++copiedKinds;
                 }
                 break;
@@ -140,7 +203,14 @@ JvpGraph buildJvpGraph(
                     copyOf[ref] = draft.materializeStaticValue(
                         slots[static_cast<size_t>(index)], node->dataType(),
                         rt::kGCNodeFlagConstant);
-                    copied[ref] = true;
+                    // A constant does not move: its tangent is the one zero every rule shares.
+                    if (zeroConstant == rt::kInvalidNodeRef) {
+                        zeroConstant = draft.materializeStaticValue(
+                            camel::core::rtdata::toSlot<double>(0.0), Type::Float64(),
+                            rt::kGCNodeFlagConstant);
+                    }
+                    tangentOf[ref] = zeroConstant;
+                    copied[ref]    = true;
                     ++copiedKinds;
                 }
                 break;
@@ -149,6 +219,7 @@ JvpGraph buildJvpGraph(
                 const auto *body = function->nodeBodyAs<camel::runtime::GCOperBody>(ref);
                 const gc_node_ref_t made =
                     draft.addOperNode(node->dataType(), nullptr, body->uri());
+                std::vector<gc_node_ref_t> originals;
                 std::vector<gc_node_ref_t> inputs;
                 for (gc_node_ref_t input : function->normInputsOf(ref)) {
                     // A primitive whose input was not copied cannot be reproduced: the copy would
@@ -158,6 +229,7 @@ JvpGraph buildJvpGraph(
                         complete = false;
                         break;
                     }
+                    originals.push_back(input);
                     inputs.push_back(copyOf[input]);
                 }
                 copyOf[ref] = made;
@@ -168,6 +240,15 @@ JvpGraph buildJvpGraph(
                 }
                 if (!inputs.empty()) {
                     draft.setNormInputs(made, inputs);
+                }
+                const std::string_view uri = body->uri();
+                tangentOf[ref] = tangentRule(ref, uri, originals, inputs);
+                if (tangentOf[ref] == rt::kInvalidNodeRef) {
+                    // Named, not guessed: the transform has no derivative for this operator, and
+                    // the caller is told which one.
+                    os << "REINTERP jvp function=" << function->name() << " skip=rule uri=" << uri
+                       << '\n';
+                    return JvpGraph{};
                 }
                 break;
             }
@@ -209,16 +290,21 @@ JvpGraph buildJvpGraph(
             return JvpGraph{};
         }
         const gc_node_ref_t chainValue = copyOf[oldValue];
-        // The exit is the lifted result, and nothing else: the value the copied chain computes and
-        // the tangent the caller passed. No primitive has been rewritten yet, so this graph is the
-        // identity in two parts -- it establishes the shape of the new function, not the derivative.
+        const gc_node_ref_t chainTangent = tangentOf[oldValue];
+        if (chainTangent == rt::kInvalidNodeRef) {
+            os << "REINTERP jvp function=" << function->name() << " skip=tangent\n";
+            return JvpGraph{};
+        }
+        // The exit is the lifted result: the value the copied chain computes and the tangent the
+        // rules computed for it, which is the derivative of the chain at the values the caller
+        // passed. Nothing is read back from the original graph: both halves are this graph's.
         ::Tuple *emptyTuple = ::Tuple::create(2, mm::autoSpace());
         const gc_node_ref_t tupleSource = draft.materializeStaticValue(
             camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(emptyTuple), lifted);
         const gc_node_ref_t out = draft.addFillNode(
             lifted, rt::makeFillPayload(rt::GCFillKind::Tuple, std::vector<size_t>{0, 1}));
         draft.setNormInputs(out, std::span<const gc_node_ref_t>(&tupleSource, 1));
-        const std::array<gc_node_ref_t, 2> halves{chainValue, tangent};
+        const std::array<gc_node_ref_t, 2> halves{chainValue, chainTangent};
         draft.setWithInputs(out, halves);
         draft.setExitNode(out);
         draft.setOutputNode(out);
@@ -227,10 +313,15 @@ JvpGraph buildJvpGraph(
     group.encode();
     const camel::runtime::GCGraph *made = group.encoded(member);
     const auto *madeType = made != nullptr ? made->funcType() : nullptr;
+    std::string rules;
+    for (const std::string &rule : usedRules) {
+        rules += (rules.empty() ? "" : ",") + rule;
+    }
     os << "REINTERP jvp function=" << function->name() << " graph=" << rt::toValue(member)
        << " type=" << (madeType != nullptr ? madeType->toString() : std::string("-"))
        << " nodes=" << function->nodeCount() << " kinds=" << copiedKinds << '/' << seenKinds
-       << " exit=Tuple{chain,tangent} tangent=caller's(not computed)\n";
+       << " exit=Tuple{chain,tangent} tangent=computed rules=" << (rules.empty() ? "-" : rules)
+       << '\n';
     return JvpGraph{group.program(), const_cast<camel::runtime::GCGraph *>(made)};
 }
 
