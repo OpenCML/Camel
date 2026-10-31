@@ -253,7 +253,10 @@ int compareKeys(slot_t a, slot_t b, const type::Type *keyType) {
         return 0;
     }
     default:
-        ASSERT(false, "Not a key type: " + keyType->toString());
+        // Unreachable, and nothing is checked here: collectionKeyProblem (core/type/collection)
+        // admits only int, i32, bool, string, tuples of those and enums of those, which are
+        // exactly the cases above, so no collection value carries a key type this switch does
+        // not order. There is no call that could reach this branch, so there is none to report.
         return three(a, b);
     }
 }

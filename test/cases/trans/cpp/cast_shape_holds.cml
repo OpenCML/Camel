@@ -1,0 +1,26 @@
+/**
+ * `as` states the shape a value must have, and a value that holds it is that value.
+ *
+ * The C++ representation of both sides is the same `rt::Array<T>` -- a shape is not a second value
+ * -- so the conversion writes no bytes: it checks the extents the type states. The generated call is
+ * `rt::asShape(v, {3}, "float[3]", at_...)`, which answers the value itself when the rank and every
+ * stated extent are the ones the type says, and `{2, 3}` for a value of several.
+ *
+ * `agree_with_fvm` builds and runs this program against std::fvm, byte for byte.
+ */
+
+func open(v: float[2]): float[..] {
+    return v as float[..]
+}
+
+func open2(v: float[2, 3]): float[..] {
+    return v as float[..]
+}
+
+func main(): int sync {
+    let a = open([1.0, 2.0]) as float[2]
+    println(a)
+    let b = open2([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]) as float[2, 3]
+    println(b)
+    return 0
+}
