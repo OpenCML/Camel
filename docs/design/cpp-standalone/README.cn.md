@@ -611,7 +611,9 @@ python3 test/tools/cppexec/run.py [--passes "std::opt::inline"] [--jobs N] 程�
 1. `push` 记下它长成的维数（`{size}`），秩为零只剩“真的是元素”一种含义；
 2. `Array::element(x)` 是造“就是元素”的值的那条路，转译器用在一个开放秩位置（`f32[..]`）上只有一个元素的常量。
 
-规则本身仍只在 `appendText` 一处；`float_reduce.cml`（`[2.0]`）、`rank_zero_field_literal.cml`（`1.5`）、`rebinding_loop.cml`（`[[0], [0, 1, 2, 3], …]`）三条与 `std::fvm` 逐字节相同。
+规则本身不数元素，三处问的是同一个事实：`rt::Array::isElement`（秩为零，且真有元素可作）。空数组不是元素——它没有块、没有东西可作——所以 `[]` 仍旧印 `[]`、`shape` 回答 `[0]`。三处是 `appendText`、格式说明那条路（`appendArrayUnder`：`'{:>6}'->format<x>` 对秩为零的值写 `   1.5`，对秩为一的值写 `[   1.5]`，方括号是形状的不是格式的）、以及 `shape`（`shapeOf`）。转译器那边同理：秩为一的常量写成带形状的字面（`rt::Array<float>::shaped({1.5f}, {1})`，只有一个元素也一样），秩为零的写 `rt::Array<float>::element(1.5f)`，都不按元素个数分支。
+
+`float_reduce.cml`（`[2.0]`）、`rank_zero_field_literal.cml`（`1.5`）、`rebinding_loop.cml`（`[[0], [0, 1, 2, 3], …]`）三条与 `std::fvm` 逐字节相同。
 
 ---
 
