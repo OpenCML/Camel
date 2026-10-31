@@ -319,6 +319,55 @@ REINTERP uri :op/neg_d -> rule jvp_neg -> rhs 85 ports=0 nodes=3 lhsPorts=0 lhsK
 （`lhsKinds=11`，只有那个 Oper），所以“一元运算的变量不从端口来”是另一个事实，替换它之前得先知道它的
 操作数从哪进。**两个算子的形状不一样，不能一套代码套到底。**
 
+## 判据：两种形状不能共用一套替换
+
+> **两种形状的算子不能共用一套替换：端口进来的走打包，不进端口的先找它的操作数从哪来。**
+
+把端口的**类型**和两侧节点吃掉的**输入数**也量出来（`portType` 是
+`GCNode::dataType()->toString()`，`lhsIns`/`rhsIns` 是各节点 norm 输入的合计）：
+
+```
+REINTERP uri :op/add_d -> rule jvp_add -> rhs 74 ports=1 ... portType=float lhsIns=2 rhsIns=1 vars=x,w count=2
+REINTERP uri :op/div_d -> rule jvp_div -> rhs 107 ports=1 ... portType=float lhsIns=2 rhsIns=1 vars=x,w count=2
+REINTERP uri :op/neg_d -> rule jvp_neg -> rhs 85 ports=0 ... portType=- lhsIns=1 rhsIns=1 vars=x count=1
+```
+
+三条读数，三条结论：
+
+1. **`/` 的右侧端口是 `float`，不是元组**——`vars=x,w` 两个名字、`ports=1` 一个端口，那个端口
+   并不是“把两个值装一起”的元组口。**打包的形态还得再量一次**，不能假设成 `(float, float)`。
+2. **`jvp_div__rhs` 的图以 Fill 结尾**（`rhsKinds=1,0,4`，`4`=`Fill`）：它产出的不是数，是**一个函数
+   值**。所以“把右侧放到 `/` 那个位置”不是一次调用，是**先建闭包、再拿切线调那个闭包**——两步。
+3. **`neg` 的左侧没有端口，`lhsIns=1`**：它那个 Oper 的一个输入不在这个图里。**一元算子的操作数不是
+   从端口进的**，替换它第一步得先知道那个输入从哪来，不能套二元那套。
+
+## 判据：以 Fill 收尾的右侧是一个闭包
+
+> **右侧图以 Fill 收尾时，它不是“一个算子的签名”，是一个闭包——替换的第一步是建它，不是调它。**
+
+把那个 Fill 节点的种类、槽数、类型与形参打出来：
+
+```
+REINTERP uri :op/div_d -> rule jvp_div -> rhs 107 ports=1 ... fill=FunctionClosure slots=2 type=(dx: float, dw: float) => float pure norm=2 with=0 args=dx,dw vars=x,w count=2
+REINTERP uri :op/add_d -> rule jvp_add -> rhs 74 ... fill=FunctionClosure slots=2 type=(dx: float, dw: float) => float pure norm=2 with=0 args=dx,dw vars=x,w count=2
+REINTERP uri :op/neg_d -> rule jvp_neg -> rhs 85 ... fill=FunctionClosure slots=1 type=(dx: float) => float pure norm=1 with=0 args=dx vars=x count=1
+```
+
+**三方对齐，一步不差**：
+
+| 规则 | 左侧变量 | 闭包捕获槽 | 闭包形参 |
+|---|---|---|---|
+| `jvp_div` | `x,w`（2） | `slots=2` | `dx,dw` |
+| `jvp_add` | `x,w`（2） | `slots=2` | `dx,dw` |
+| `jvp_neg` | `x`（1） | `slots=1` | `dx` |
+
+所以“建闭包”要的值**就是左侧变量表那两列**（`x`、`w` 的值，按这个顺序），而闭包的形参
+`dx,dw` **是替换自己要提供的切线**——不是从函数 `f` 里读来的东西。
+
+**两步因此钉死**：① 在 `/` 站，用 `x`、`w` 的值调一次右侧图（`rhs 107`），拿到那个闭包；
+② 用 `dx`、`dw` 调这个闭包，得到切线。**第一步的产物是函数值，不是数**——这就是为什么“把右侧
+放到 `/` 那个位置”一句话做不到。
+
 ## 验收（缺一步不算完）
 
 1. **前向**：`f(x) = x*x + 3/x` 在 `x = 2` 处，`f = 5.5`，`f' = 4 - 0.75 = 3.25`。两个数都要打出来。
