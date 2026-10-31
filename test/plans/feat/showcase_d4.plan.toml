@@ -215,27 +215,48 @@ assert(out.includes('has won'), 'the refusal must say the position is over')
 """
 timeout_ms = 60000
 
-# The learned half of D4, as the smallest loop that runs: one scripted game, the value network's
-# prediction for the final board, and one Adam step on it. It asserts that the line is printed and
-# that its numbers are numbers -- not what they are: a loss curve is not a reading of this example
-# until the second commit adds games and steps to it.
+# The learned half of D4, enlarged: sixteen scripted games, ten Adam steps on the batch of them,
+# and both readings printed -- the games' results and the loss sequence. It asserts that the lines
+# are printed and that their numbers are numbers and scores -- not what they are: the curve is a
+# reading, and RESULTS.md's "Self-play" section is where a run's losses are recorded.
 [[tests]]
-name = "mcts.selfplay.first_step"
-desc = "One self-play game (scripted: each player takes the first free place), the value head's prediction on the final board, one Adam step against the game's result, and the loss before and after, printed as one line."
+name = "mcts.selfplay.curve"
+desc = "Sixteen self-play games (scripted: a player takes a free place drawn from the game's key), ten Adam steps on the batch of them, and the results and the loss sequence printed as two lines."
 kind = "behavior"
 case = "../../../showcase/d4-mcts/selfplay.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["mcts selfplay squares=9 result="]
+expect_stdout_contains = ["mcts selfplay games=16 steps=10 squares=9 results=[", "mcts selfplay losses=["]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
-const line = /^mcts selfplay squares=9 result=([0-9.]+) loss0=([0-9.eE+-]+) loss1=([0-9.eE+-]+)$/m.exec(input.normalized.stdout)
-assert(line !== null, 'no self-play line on stdout')
-const result = Number(line[1])
-assert(result === 0 || result === 0.5 || result === 1, 'the result is a score: ' + line[1])
-for (const value of [line[2], line[3]]) {
-  assert(Number.isFinite(Number(value)), 'a loss is a finite number: ' + value)
+const out = input.normalized.stdout
+const lines = out.split(String.fromCharCode(10))
+const lineWith = (prefix) => lines.find((line) => line.startsWith(prefix))
+const field = (line, name) => {
+  const rest = line.slice(line.indexOf(name + '=') + name.length + 1)
+  const end = rest.indexOf(' ')
+  return end < 0 ? rest : rest.slice(0, end)
+}
+const list = (line, name) => {
+  const start = line.indexOf(name + '=[') + name.length + 2
+  return line.slice(start, line.indexOf(']', start)).split(',').map((item) => Number(item.trim()))
+}
+const head = lineWith('mcts selfplay games=')
+assert(head !== undefined, 'no self-play header line on stdout')
+const games = Number(field(head, 'games'))
+const steps = Number(field(head, 'steps'))
+const results = list(head, 'results')
+assert(results.length === games, 'one result per game: ' + results.length + ' for ' + games)
+for (const result of results) {
+  assert(result === 0 || result === 0.5 || result === 1, 'a result is a score: ' + result)
+}
+const curve = lineWith('mcts selfplay losses=')
+assert(curve !== undefined, 'no loss sequence on stdout')
+const losses = list(curve, 'losses')
+assert(losses.length === steps, 'one loss per step: ' + losses.length + ' for ' + steps)
+for (const loss of losses) {
+  assert(Number.isFinite(loss), 'a loss is a finite number: ' + loss)
 }
 }
 """
