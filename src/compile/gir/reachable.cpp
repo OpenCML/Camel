@@ -42,8 +42,8 @@ void forEachReachableGraph(
             visit(rule);
         }
 
-        const auto staticSlots = curr->draft().staticSlots();
-        const auto staticTypes = curr->draft().staticSlotTypes();
+        const auto staticSlots = curr->view().staticSlots();
+        const auto staticTypes = curr->view().staticSlotTypes();
         for (size_t i = 0; i < staticSlots.size() && i < staticTypes.size(); ++i) {
             auto *type = staticTypes[i];
             if (!type || type->code() != camel::core::type::TypeCode::Function) {
