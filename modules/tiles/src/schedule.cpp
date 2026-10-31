@@ -31,10 +31,32 @@ std::vector<std::byte> hostStorage(const Node &node) {
     std::vector<std::byte> storage(bytes(node));
     if (storage.empty())
         return storage;
+    // A scalar leaf's value is its own bits, not an f32 array: `hostData` answers the same and the
+    // upload copies from here. An f64 leaf therefore contributes the eight bytes it was given, and
+    // not the low half of an f32 or the zeros an empty `data` would leave (a scalar keeps its value
+    // in `scalarBits`, so the array is legitimately empty).
+    if (node.scalarBits) {
+        if (width != sizeof(uint64_t) || storage.size() != sizeof(uint64_t))
+            throw std::runtime_error("a scalar host copy is eight bytes");
+        std::memcpy(storage.data(), &*node.scalarBits, width);
+        return storage;
+    }
     if (width == sizeof(float)) {
         std::memcpy(storage.data(), node.data.data(), storage.size());
         return storage;
     }
+    if (width == sizeof(double)) {
+        // An f64 value the host copy holds as numbers: widening f32 to f64 is exact, so this is the
+        // value and not a rounding.
+        for (size_t i = 0; i < node.data.size(); ++i) {
+            const double value = static_cast<double>(node.data[i]);
+            std::memcpy(storage.data() + i * width, &value, width);
+        }
+        return storage;
+    }
+    if (width != 2)
+        throw std::runtime_error(
+            "no host storage rule for a " + std::to_string(width) + "-byte element");
     // A narrow element holds the value the host copy widened, rounded once into the element type.
     // This is the single place a bf16 or f16 node becomes bytes, so there is one rounding and the
     // buffer the device reads is the buffer this rounding produced.
