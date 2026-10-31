@@ -95,23 +95,6 @@ expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
-
-[[tests]]
-name = "refuse_tensor"
-desc = "A tensor whose operator has no rule is refused at that operator use -- tensor:zeros in main, line 14 column 18 -- and the sentence names the operator and the work not done. It no longer says std::cpp writes no tensor value: tensor:ones crosses the bridge now (the value lives in the runtime and the program holds an rt::Foreign handle to it), so what is missing for zeros is its rule in the table, not the tensor and not the shape array it takes (an int[] is translated)."
-kind = "negative"
-case = "../../../cases/trans/cpp/refuse_tensor.cml"
-args = ["${case}", "std::cpp"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_code = "0x0400000B"
-expect_diagnostic_line = 14
-expect_diagnostic_column = 18
-expect_output_contains = ["Translation pass 'std::cpp' refused the graph: function 'main' uses 'tensor:zeros' to build a tensor, and std::cpp has no translation of it yet"]
-expect_output_not_contains = ["internal error", "node#", "non-bridgeable", ":?:?:", "#include"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-
 [[tests]]
 name = "narrow_floats"
 desc = "bf16 and f16 are core value types of the language (reduced-precision.md b1) and values of the standalone runtime (include/camel/standalone/half.h), so a program that holds one is translated rather than refused: `rt::BF16` and `rt::F16` stand for the two types, sixteen bits of storage whose constant is the pattern itself (`fromBits`, exact for every pattern a program can write), the text is the type's own shortest text (so `0.1` as a bf16 prints `0.1` and not the `0.100097656` of the f32 it widens to), and arithmetic is computed in f32 and rounded once -- `/` through rt::div, where zero is a fault as it is for f32, and `^` through rt::pow. This entry pinned a refusal before the rules existed; it is now the acceptance case, and the program is built and run by agree_with_fvm, which is what says the two back ends print it byte for byte."
@@ -267,27 +250,6 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "refuse_tensor_json"
-desc = "The same refusal in --output-format json: one diagnostic, TranslationRefused, stage pass:std::cpp, the range of the operator use `zeros` (line 13, characters 17 to 24), nothing of a translation unit on stdout."
-kind = "behavior"
-case = "../../../cases/trans/cpp/refuse_tensor.cml"
-args = ["--output-format", "json", "${case}", "std::cpp"]
-expect_exit = 1
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const diags = JSON.parse(input.normalized.stdout)
-assert(diags.length === 1, `expected one diagnostic, got ${diags.length}`)
-const d = diags[0]
-assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pass:std::cpp', `unexpected diagnostic ${d.data.name} at stage ${d.data.stage}`)
-assert(d.code === '0x0400000B', `code ${d.code}`)
-assert(d.message.includes("function 'main' uses 'tensor:zeros' to build a tensor, and std::cpp has no translation of it yet"), `unexpected message: ${d.message}`)
-assert(d.range.start.line === 13 && d.range.start.character === 17 && d.range.end.line === 13, `unexpected range ${JSON.stringify(d.range)}`)
-}
-"""
-timeout_ms = 8000
-
-[[tests]]
 name = "literal_rank"
 desc = "A literal of several dimensions keeps its shape: the elements lie flat in row order and the extents travel in the same block, so the generated program holds `rt::Array<double>{{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, {3, 2}}` and prints the three rows the interpreter prints -- it printed the first extent's worth of elements (`[1.0, 2.0, 3.0]`) and exited 0 before the shape was carried. The program itself is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
@@ -409,16 +371,39 @@ timeout_ms = 8000
 
 [[tests]]
 name = "tensor_ones"
-desc = "`tensor:ones` crosses the bridge: the pass writes no tensor of its own, so the runtime builds the value and the program holds a counted handle to it -- `const rt::Foreign v1_ones = op_tensor_ones.call<rt::Foreign>(at_13_17, {rt::bridge::arg(lit::array)}, {})`, the shape handed over as the `int[]` it already is -- and prints the runtime's own text for it. The handle's C++ type is the rule's, not the `rt::Array<float>` the Camel type of the result names, because an array the program builds is a value while a tensor is a value the runtime owns. The program itself is built and run by agree_with_fvm, which compares it with std::fvm byte for byte: one line, `[[1.0, 1.0], [1.0, 1.0]]`."
+desc = "`tensor:ones` crosses the bridge, and what comes back is the value its Camel type names: `T[..]` is `rt::Array<T>` in this back end, one representation whichever module built the value, so the call is `const rt::Array<float> v1_ones = op_tensor_ones.call<rt::Array<float>>(at_13_17, {rt::bridge::arg(lit::array)}, {}, 2)` -- the shape handed over as the `int[]` it already is, the element type as the integer code of the type (2 is f32), and the result converted at the boundary into the shaped array the program holds (the elements copied out, the shape with them; camel/standalone/bridge.h). `println` of it is the same `rt::println` as for an array the program wrote itself, and it prints the nested form of the shape. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte: one line, `[[1.0, 1.0], [1.0, 1.0]]`. Nothing here is a handle: `rt::Foreign` is for the objects the language keeps opaque."
 kind = "behavior"
 case = "../../../cases/trans/cpp/tensor_ones.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
-expect_stdout_contains = ["const rt::Foreign v1_ones = op_tensor_ones.call<rt::Foreign>(", "rt::bridge::arg(lit::array)", "const rt::bridge::Operator op_tensor_ones{\"tensor:ones\"};", "#include \"camel/standalone/bridge.h\"", "rt::println(v1_ones);"]
-expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Array<float> v1_ones"]
+expect_stdout_contains = ["const rt::Array<float> v1_ones = op_tensor_ones.call<rt::Array<float>>(", "rt::bridge::arg(lit::array)", "const rt::bridge::Operator op_tensor_ones{\"tensor:ones\"};", "#include \"camel/standalone/bridge.h\"", "rt::println(v1_ones);"]
+expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
+[[tests]]
+name = "tensor_ones_element"
+desc = "The element type a `tensor:ones` call states still reaches the kernel, and the value it fills is still the array the result type names: the two facts are one call now. The rule sends the type as the integer code -- `op_tensor_ones.call<rt::Array<double>>(at_18_17, {rt::bridge::arg(lit::array)}, {}, 3)` for f64, `..., {}, 1)` for i64 -- and the bridge makes the type from that code (`Type::create`, never a text of a type) as the `T[..]` such a call declares; the kernel reads it as the element of the call's result type. Without it the call stated no result type, the kernel fell back to f32, and `ones::<i64>([2, 2])` printed `[[1.0, 1.0], [1.0, 1.0]]` where the interpreter prints `[[1, 1], [1, 1]]`. The elements cross back as the array's (`rt::Array<int64_t>`, `rt::Array<double>`), so the wrong width would show twice: in the value and in the text. An f64 tensor prints `[[1.0, 1.0], [1.0, 1.0]]` either way -- 1.0 has one text at both widths -- so the integer line is the one that shows the type, and both are checked against std::fvm by agree_with_fvm."
+kind = "behavior"
+case = "../../../cases/trans/cpp/tensor_ones_element.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["const rt::Array<double> v1_ones = op_tensor_ones.call<rt::Array<double>>(", "const rt::Array<int64_t> v2_ones = op_tensor_ones.call<rt::Array<int64_t>>(", "}, {}, 3);", "}, {}, 1);", "rt::bridge::arg(lit::array)", "#include \"camel/standalone/bridge.h\""]
+expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "tensor_zeros"
+desc = "`tensor:zeros` translates, and it is the same rule as `tensor:ones`: `const rt::Array<float> v1_zeros = op_tensor_zeros.call<rt::Array<float>>(at_17_18, {rt::bridge::arg(lit::array)}, {}, 2)`, the shape handed over as the `int[]` it already is, the element type as the integer code of the type, and the tensor converted back at the boundary into the shaped array the result type names -- `println` of it prints the nested form, the same text as for a literal of that shape. What differed from `ones` was the fill the runtime writes, not a byte of what this back end writes, which is why the two builders are one rule. It was the last tensor builder refused as work not done (`std::cpp has no translation of it yet`). The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte: one line, `[[0.0, 0.0], [0.0, 0.0]]`."
+kind = "behavior"
+case = "../../../cases/trans/cpp/tensor_zeros.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["const rt::Array<float> v1_zeros = op_tensor_zeros.call<rt::Array<float>>(", "rt::bridge::arg(lit::array)", "}, {}, 2);", "const rt::bridge::Operator op_tensor_zeros{\"tensor:zeros\"};", "#include \"camel/standalone/bridge.h\"", "rt::println(v1_zeros);"]
+expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
 [[tests]]
 name = "index_rank"
 desc = "A position on a value of several dimensions: `m[1]` is the second row (`rt::atRow`, one dimension less and of the row's own extent), `m[1, 0]` writes the axis it drops and is the element (`rt::atAxis`, every other dimension kept whole), and `t[1]` of a rank-3 value is the rank-2 value behind it. `len` of a row answers the dimension that is left. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte -- six lines, rows and elements both. The operator rule that used to turn a value of several dimensions away is gone with it, as are the two module programs that took the same road: `index_two_positions` translates and agrees."
@@ -427,6 +412,55 @@ case = "../../../cases/trans/cpp/index_rank.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
 expect_stdout_contains = ["rt::atRow(", "rt::atAxis("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+ 
+[[tests]]
+name = "iterate_rows"
+desc = "`for` over a value of several dimensions walks its first dimension: the item is the row, one dimension less, and the number of rounds is the first extent -- not the element count, which a rank-2 value of 2 rows of 3 elements has 6 of and 2 items. The generated loop holds the item as `rt::atRow(v2_items, v3_round, at_13_13)` and breaks at `v3_round >= v2_items.extent(0)`; a rank-3 value's planes come out as rank-2 items the same way, and a value of one dimension still gives its elements (`rt::at`). The elements of a row are copied, so the body holds a value of its own. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte -- three lines."
+kind = "behavior"
+case = "../../../cases/trans/cpp/iterate_rows.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::atRow(", ".extent(0))", "rt::at("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "refuse_iterate_open"
+desc = "A `for` over a value whose rank is open is refused with the reason: an item is an element on a value of one dimension and a row on a value of several, and no one C++ type holds both -- the same ground on which the index rule refuses an open rank (`:op/idx_arr`). The refusal names the loop `countRows` and is located at it; the positive half of this law is `iterate_rows`, where the type states the rank."
+kind = "negative"
+case = "../../../cases/trans/cpp/refuse_iterate_open.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_diagnostic_line = 12
+expect_output_contains = ["Translation pass 'std::cpp' refused the graph", "walks a value whose rank is open", "no one C++ type holds both"]
+expect_output_not_contains = ["Segmentation fault", "UnknownInternalError", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+[[tests]]
+name = "cast_shape_holds"
+desc = "`as` states the shape a value must have. Both types are the same `rt::Array<T>` on this side -- a shape is not a second value -- so the conversion writes no bytes and checks the extents the type states: `rt::asShape(v, {2, 3}, \"float[2, 3]\", at_...)` answers the value itself when the rank and every stated extent are the ones the type says. The program keeps reading and prints both values; agree_with_fvm compares them with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/cast_shape_holds.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::asShape(", "float[2, 3]", "{2, 3}"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "cast_shape_fault"
+desc = "A value that does not hold the shape its type states stops the program at the conversion, with the interpreter's own sentence: `conversion to 'float[3, 3]' failed: the array has shape [2, 2]` -- the same words `ArrayType::castSlotFrom` writes, at the conversion's own position, so the two reports are one. The translation succeeds and the check is the site's (`rt::asShape(v, {3, 3}, \"float[3, 3]\", at_...)`, a RuntimeError site); agree_with_fvm runs the program and compares the report and the exit status with std::fvm's."
+kind = "behavior"
+case = "../../../cases/trans/cpp/cast_shape_fault.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::asShape(", "float[3, 3]", "RuntimeDiag::RuntimeError"]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -468,17 +502,4 @@ expect_diagnostic_line = 6
 expect_diagnostic_column = 13
 expect_stderr_contains = ["std::cpp has no standalone translation of the operator 'str:to_upper': the program it writes calls the Camel runtime there and is built with libcamel."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 8000
-
-[[tests]]
-name = "refuse_tensor_names_the_tensor"
-desc = "The refusal for a tensor operator that has no rule names that operator and the work not done: `std::cpp` has no translation of `tensor:zeros` yet, the value it builds living in the runtime and crossing the bridge as `tensor:ones` does. What is not untranslated is named as well: the shape array it takes (an `int[]` is translated) and the tensor itself (the bridge carries one now, so the refusal does not claim the back end has no tensor value). The first version of this refusal blamed the shape, which sent a reader after the wrong side of the call."
-kind = "negative"
-case = "../../../cases/trans/cpp/refuse_tensor.cml"
-args = ["${case}", "std::cpp"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_output_contains = ["to build a tensor, and std::cpp has no translation of it yet", "crosses the bridge"]
-expect_output_not_contains = ["on a value of type 'int[]'", "no tensor type", "no tensor value"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

@@ -3,13 +3,13 @@
 
 /**
  * @file foreign.h
- * @brief A value the runtime owns, held by a generated program: a counted handle.
+ * @brief An object a generated program cannot read, held by it: a counted handle.
  *
- * A tensor, a PyObject and the like are not values a generated program builds itself; they live in
- * the runtime and the program holds a handle to them (docs/design/cpp-standalone/README.cn.md 9 and
- * the type table). The semantics of such a value is implemented once, in its runtime module, and the
- * generated program reaches it over the bridge -- so "the same input, the same output" is guaranteed
- * by one implementation rather than by two that must be kept in step.
+ * A PyObject, a `Device<T>` and the like are opaque in the language itself: no Camel program opens
+ * one, so no representation of them on this side would be more than a name. Such a value lives in
+ * the runtime and the program holds a handle to it (docs/design/cpp-standalone/README.cn.md 9 and
+ * the type table). A tensor is not one of them: it is a `T[..]`, the shaped array of array.h, and
+ * it crosses the bridge by conversion instead.
  *
  * The handle keeps the runtime object alive (the runtime's rooted handle is what the pointer
  * identifies); the text a program prints for it is the runtime's own text. Both live in libcamel,
