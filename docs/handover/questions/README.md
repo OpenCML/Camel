@@ -15,7 +15,7 @@
 
 | 页 | 问什么 | 状态 | 堵着谁 |
 |---|---|---|---|
-| [`does-rt-array-carry-a-shape`](questions-2026-10-31-does-rt-array-carry-a-shape.md) | 05:30 裁 **A**：`rt::Array` 带 `rank`/`extent` | 已裁未落 | 守卫与“形状 + 嵌套打印”第一步已落；队列：下标 ✔ → 切片 ✔ → `reshape` ✔ → `shape` ✔ → `numel` ✔ → 全值和 ✔ → 沿轴归约 ✔（`tensor:sum_axis`，同分母 3 → 1、放行 0，跨过去的停在 `tensor:max_axis`）→ 逐元素；被拒 983 / 3215 |
+| [`does-rt-array-carry-a-shape`](questions-2026-10-31-does-rt-array-carry-a-shape.md) | 05:30 裁 **A**：`rt::Array` 带 `rank`/`extent` | 已裁未落 | 守卫与“形状 + 嵌套打印”第一步已落；队列：下标 ✔ → 切片 ✔ → `reshape` ✔ → `shape` ✔ → `numel` ✔ → 全值和 ✔ → 沿轴归约 ✔（`sum_axis` 3 → 1；`max_axis`/`min_axis` 2 → 1 与 0 → 0；三笔都放行 0，跨过去的停在同族下一句）→ `argmax_axis` → 逐元素；被拒 983 / 3216 |
 | [`std-cpp-needs-a-tensor-type`](questions-2026-10-31-std-cpp-needs-a-tensor-type.md) | 05:50 裁：**张量是 `rt::Foreign` 过桥**，走设计稿第 9 节，第 5 步开工 | 已裁未落 | 369 个程序记作“等第 5 步（外部对象）”；第一笔是 `rt::Foreign` 句柄 |
 | [`mem-blocks-has-no-block-space`](questions-2026-10-31-mem-blocks-has-no-block-space.md) | 05:10 裁 **A**：拒绝并让拒绝说实话（目标不具备，不是尚未实现） | 已裁已落 | 无；普查把 10 个记为“目标不具备” |
 | [`generator-narrowing-remains`](questions-2026-10-31-generator-narrowing-remains.md) | 04:50 裁 **A**：删掉生成器收窄 | 已裁已落 | 无；两处拒绝已删，三条形状转成消费它们的正例 |
