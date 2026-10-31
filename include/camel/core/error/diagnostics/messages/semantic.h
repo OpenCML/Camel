@@ -468,6 +468,10 @@ enum class SemanticDiag : uint32_t {
     StatementAfterReturn      = 0x000201,
     RuleLeftIsNotAnOperator   = 0x000204,
     DuplicateRuleForOperator  = 0x000205,
+    /// A body that writes `yield` in a function whose head writes a type that is not a stream.
+    /// The generator machine is built (docs/design/io-concurrency-streams/plan.cn.md slice E);
+    /// what a reader gets wrong is the head, so the report names the head and not a feature.
+    YieldRequiresStreamHead = 0x000206,
 
     // Warnings
     IgnoredSideEffect = 0x100002,

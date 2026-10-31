@@ -2160,14 +2160,12 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     // Create an ExitLoad node to represent the exit statement.
     const AST::ExitType astExit = ast->loadAs<AST::ExitStmtLoad>()->exitType();
     if (astExit == AST::ExitType::Yield) {
-        // The syntax reads `yield` (design principles 5.4: a function whose body writes it
-        // produces a stream, and its head writes the stream type). What produces that stream is
-        // the generator state machine of docs/design/io-concurrency-streams/plan.cn.md slice E,
-        // which is not built yet: several `yield`s in one round, any nesting, `match` arms and
-        // `sync` blocks, per-element faults and linear values are all things that machine has to
-        // produce. Refusing it by name here is what keeps a `yield` from running as a `return`:
-        // a wrong value would be worse than a named gap.
-        diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("generators");
+        // A `yield` that reaches here is one the generator machine did not claim: the body it
+        // stands in belongs to a function whose head does not write a stream type. The machine
+        // itself is built (docs/design/io-concurrency-streams/plan.cn.md slice E, visitGeneratorBody
+        // below); what is wrong is the head, so the report names the head. Reaching here must still
+        // stop the build: a `yield` run as a `return` would hand out one value and hide the rest.
+        diags_->of(SemanticDiag::YieldRequiresStreamHead).at(ast->load()->tokenRange()).commit();
         throw BuildAbortException();
     }
     node_ptr_t exitNode = tree_->makeExit(ExitType::Return);
@@ -5707,9 +5705,9 @@ node_ptr_t Builder::visitGeneratorBody(
     // The head writes the stream type, and it is what says what one `yield` hands out.
     const auto refuse = [&](const AST::node_ptr_t &atNode) -> void {
         const AST::node_ptr_t atYield = firstOwnYield(atNode);
-        diags_->of(SemanticDiag::FeatureNotSupported)
+        diags_->of(SemanticDiag::YieldRequiresStreamHead)
             .at((atYield != nullptr ? atYield : atNode)->load()->tokenRange())
-            .commit("generators");
+            .commit();
         throw BuildAbortException();
     };
     // A local that lives across a `yield` is a cell of the body (see `addTypedCell`), so there is
