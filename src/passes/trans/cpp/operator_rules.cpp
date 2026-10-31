@@ -1057,8 +1057,18 @@ Rules buildRules() {
     for (const char *t : {"f", "d"}) {
         r[std::format("math:sqrt_{}", t)] = cmath("sqrt", true);
     }
+    // `math:abs` of an integer is the wrap, not `std::abs`: the smallest integer has no positive
+    // counterpart, and `std::abs` of it is undefined behaviour, which the optimiser is free to fold
+    // into a positive answer -- stdlib/math.cml's `gcd` recognises the smallest integer by
+    // `abs(a) < 0`, so a folded answer turns its refusal into a gcd of a negative number
+    // (rt::absOf, camel/standalone/num.h).
     for (const char *t : {"i", "l"}) {
-        r[std::format("math:abs_{}", t)] = cmath("abs");
+        r[std::format("math:abs_{}", t)] = {
+            [](OperatorCall &c) -> std::optional<std::string> {
+                return std::format("rt::absOf({})", c.norm(0).text);
+            },
+            true,
+        };
     }
     for (const char *t : {"f", "d"}) {
         r[std::format("math:abs_{}", t)]   = cmath("fabs");

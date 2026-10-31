@@ -94,6 +94,16 @@ template <std::same_as<int32_t> T> constexpr T sub(T a, T b) { return detail::wr
 template <std::same_as<int32_t> T> constexpr T mul(T a, T b) { return detail::wrapMul(a, b); }
 template <std::same_as<int32_t> T> constexpr T neg(T a) { return detail::wrapNeg(a); }
 
+/// `math:abs` of an integer (modules/math/operators.cpp, `__math_abs__`): the positive
+/// counterpart, and the smallest integer has none -- the wrap of it is itself, which is the answer
+/// the interpreter gives, and what a check written as `abs(a) < 0` reads (stdlib/math.cml's `gcd`
+/// refuses the smallest integer that way). `std::abs` of the smallest value is undefined behaviour,
+/// so the wrap is the only writing of it.
+constexpr int64_t absOf(int64_t a) { return a < 0 ? detail::wrapNeg(a) : a; }
+template <std::same_as<int32_t> T> constexpr T absOf(T a) {
+    return a < T{0} ? detail::wrapNeg(a) : a;
+}
+
 /// `a / b` (:op/div_*): dividing by zero is DivisionByZero at `site`, for floats too; the
 /// smallest integer divided by -1 wraps around.
 inline int64_t div(int64_t a, int64_t b, const Site &site) { return detail::divide(a, b, site); }
