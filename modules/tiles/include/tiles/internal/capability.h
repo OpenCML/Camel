@@ -49,6 +49,13 @@ class DeviceUnavailable : public std::runtime_error {
 /// and ignored (the host runs the program) when there is not.
 std::optional<int> configuredCudaOrdinal();
 
+/// Whether this run will run a graph on a device: an ordinal is configured (or the run left the
+/// choice to device 0) and the back end can be built. `--devices cpu` answers false by
+/// configuration and a machine with no usable device answers false by capability, and both are the
+/// same answer to a caller asking "is there a device program here to be missing?". It is the
+/// question a refusal about the device half asks before it blames the device.
+bool deviceInUse();
+
 /// What CUDA devices this process can see, asked before any graph runs. `count` is the number of
 /// visible devices; `missing` is the subset of `named` that `cuDeviceGet` does not answer;
 /// `reason` explains a count of zero (no device, no driver, or a build without CUDA support).

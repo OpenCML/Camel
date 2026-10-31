@@ -1,8 +1,12 @@
 /// A `bf16` and an `f16` tensor in a `#gpu` scope: the type gate reads the element type and its two
-/// bytes, so the plan no longer reports the type as `unresolved_type` for it -- and this back end
-/// carries no narrow-float kernel, so the reason the node is in no region is
-/// `no narrow-float kernel on this back end` instead. The scope still compiles and the host computes
-/// the values; the reading separates "the device cannot read the type" from "this back end has no
+/// bytes, so the plan no longer reports `unresolved_type` for it -- and this back end carries no
+/// device kernel for a two-byte element, so the reason the node is in no region is
+/// `device_element_kernel_missing`: an id, because it answers "who is missing the kernel". The
+/// device half is the one missing it, because the host half does compute it -- the core's own
+/// values, and the host serial executor that runs the same kernel body one element at a time. So
+/// the same program reads two ways: a run without a device (`--devices cpu`) keeps the scope and
+/// prints the values, and a run with one refuses the scope and says the device has no kernel for
+/// the element. The reading separates "the device cannot read the type" from "the device has no
 /// kernel for it", which are two different repairs.
 
 import { sum } from tensor

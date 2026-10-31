@@ -222,3 +222,14 @@ Statement（`numberLess` 的顺序、f64 累加一次的 `sum`、`IEEE 754-2019`
 这一轮 33 条里 25 条从 `refused` 变成 `same`（全语料 `same` 1215 → 1241，`refused` 1003 → 978，`defect` 仍是 0），余下 8 条各有各的别的类：3 条卡在 in-place 形态的*绑定*（`xs = xs->sort`）、1 条是形状数组上的归约、4 条是 `Bytes` 结果。同一轮的红-去-证明：把 `argsort` 那六条规则拿掉，用例回到
 `uses the operator 'array:argsort_l' on a value of type 'int[]', which has no translation in std::cpp yet.`；
 装回去，用例 `same`。
+
+**`rand:` 那 9 条**：`rand:shuffle_*` 是"该修"里最后的一族，规则写的是解释器自己的内核，不是"另一种也均匀的
+洗牌"——每个位置取**它自己那把 key** 折出来的一个 f64 抽样（`-3 - index` 的计数器、block 的 53 位、不做模数
+纠正也不加缓冲），按（抽样，位置）排序，再按这个顺序取元素。分布对不等于逐字节对：要么连解释器的偏差
+一起抄，要么读回来的顺序就不是那一行。`random.h` 里写的就是 `modules/random/operators.cpp` 的同一个 block
+函数、同一次 fold、同一个排序，所以种子在程序里（`key(42)`）时两次运行逐字节相同，没有一条用例被挪进
+"不可比"。
+**一条判据（进页，一句话）**：分布对不等于逐字节对——要跟解释器一样，就得连它的偏差一起抄。
+
+同一轮红-去-证明：拿掉四条 `shuffle` 规则，`test/cases/trans/cpp/shuffle_reads_back.cml` 回到
+`uses the operator 'rand:shuffle_l' on a value of type 'int[]', which has no translation in std::cpp yet.`。
