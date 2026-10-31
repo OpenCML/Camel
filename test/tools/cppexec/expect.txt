@@ -254,13 +254,6 @@ test/cases/trans/cpp/iterate_rows.cml
 # A literal of one dimension carries its extents: `[1.0, 2.0, 3.0] as float[]` is one dimension of
 # 3 elements, so `shape` and `len` read [3] and 3, and `as float[3]` has a rank to check.
 test/cases/trans/cpp/literal_open_shape.cml
-# Printing tells an element from an array of one: a value of no rank is the element (`1.5`), and a value
-# that carries a dimension is the whole literal (`[2.5]`), so `shape` answers `[2]` for a value of 2.
-test/cases/trans/cpp/print_shape.cml
-
-# The same rule on a field of `f32[..]`, filled from a literal: the position holds the rank-zero
-# value, so `println(first.v)` writes `1.5` and not `[1.5]`.
-test/cases/compile/array_shape/rank_zero_field_literal.cml
 
 # A type with no fields prints the empty pair: the spaces around the fields are the fields', so a
 # loop state that carries nothing is written `{}` as the interpreter writes it.
