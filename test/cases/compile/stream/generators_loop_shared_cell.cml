@@ -1,0 +1,23 @@
+/**
+ * A `loop` whose state has the name of a cell the body already declared: `i` is the `var` at
+ * the top and also the loop's state.
+ *
+ * Refused by name today. The cells of a generator body are keyed by name (`cellNames`), so one
+ * table entry would stand for two bindings -- the `var` and the loop's own state -- and the
+ * body's read of `i` resolves to the loop's binding, which has no cell of its own. Reusing the
+ * name was tried: the body's `i` came back `UnresolvedReference`. The shape is pinned here so
+ * the reason is a reading, not a belief.
+ */
+
+func count(): int.. sync {
+    var i = 0
+    loop i = 0 while i < 3 do {
+        yield i
+        i + 1
+    }
+}
+
+func main(): int sync {
+    println(loop acc = 0 for v in count() do acc * 10 + v)
+    return 0
+}

@@ -1150,6 +1150,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 [[tests]]
+name = "stream.generator_loop_shared_cell_refused"
+desc = "A `loop` whose state has the name of a cell the body already declared is refused by name. The cells of a generator body are keyed by name, so reusing the name would make one table entry stand for two bindings (the `var` and the loop's own state); the shape is held here as a reading until the cells are keyed by binding. The graph builder reports SemanticDiag::FeatureNotSupported with `'generators'` at the loop."
+kind = "negative"
+case = "../../../cases/compile/stream/generators_loop_shared_cell.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FeatureNotSupported"
+expect_diagnostic_code = "0x03000040"
+expect_output_contains = ["generators"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
 name = "stream.generator_cell_type_from_first_write"
 desc = "The type of a cell of a generator's own body is the type of its first write. `var s = \"one\"` is that write, and language reference 7.2 makes a `var` without a written type take the type of its initializer, so the cell is `var string`: the machine neither re-types it from the later write `s = \"two\"` nor gives it a type of its own. `std::jgir` prints the cell in the graph of the function it belongs to, which is where the type is read."
 kind = "behavior"
