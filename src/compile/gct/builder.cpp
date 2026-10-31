@@ -5957,14 +5957,36 @@ node_ptr_t Builder::visitGeneratorBody(
                     stmt->loadAs<AST::ExitStmtLoad>()->exitType() == AST::ExitType::Yield) {
                     // The answer: the element and the stream that continues after this point.
                     const auto &values = stmt->atAs<AST::RepeatedLoad>(0);
-                    if (values->size() != 1) {
+                    // `yield a, b` hands out the tuple `(a, b)`, the same element `yield (a, b)`
+                    // writes. A `yield` with no value has no element to hand out and keeps the
+                    // named refusal.
+                    if (values->size() == 0) {
                         refuse(stmt);
                     }
+                    const auto elementOf = [&](const auto &list) -> node_ptr_t {
+                        if (list->size() == 1) {
+                            return visitData(list->front());
+                        }
+                        TupleDataFactory factory;
+                        bool dangling       = false;
+                        node_ptr_t execNode = makeExec(false, true);
+                        for (size_t k = 0; k < list->size(); ++k) {
+                            auto [data, _] =
+                                extractData(visitData(list->at(k)), execNode, dangling);
+                            factory.add(data);
+                        }
+                        node_ptr_t tupleNode = tree_->makeData(factory.build());
+                        if (dangling) {
+                            *execNode << tupleNode;
+                            tupleNode = execNode;
+                        }
+                        return tupleNode;
+                    };
                     const int resume = newArm();
                     fill(resume, stmts, i + 1, next, nextState);
                     *exec << writeCell(pcName, intLiteral(resume));
                     *exec << writeCell(haltName, intLiteral(1));
-                    node_ptr_t elem = declaredValue(visitData(values->front()), elemType, stmt);
+                    node_ptr_t elem = declaredValue(elementOf(values), elemType, stmt);
                     // The value of the round is the answer of the pull: a `return` is written
                     // only in the step function's own body
                     // (docs/design/io-concurrency-streams/plan.cn.md, slice E), so the element
@@ -6031,6 +6053,18 @@ node_ptr_t Builder::visitGeneratorBody(
                         stmt->at(0)->type() == AST::LoadType::Data &&
                         stmt->at(0)->loadAs<AST::DataLoad>()->dataType() == AST::DataType::LoopExpr;
                     if (!isIf && !isMatch && !isLoop) {
+                        if (isStmt && stmtType == AST::StmtType::Block) {
+                            // A plain block is a grouping, not a point of its own: its statements
+                            // are this stretch's statements, and the pull goes on at the arm after
+                            // the block. One more arm carries them.
+                            const int blockPc = newArm();
+                            const int afterPc = newArm();
+                            fill(afterPc, stmts, i + 1, next, nextState);
+                            fill(blockPc, stmt->atAs<AST::RepeatedLoad>(0), 0, afterPc, nextState);
+                            *exec << jumpTo(blockPc);
+                            popScope();
+                            return;
+                        }
                         refuse(stmt);
                     }
                     if (isLoop) {

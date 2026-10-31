@@ -406,7 +406,8 @@ PassMaker optimizePass() {
 /// off (`fixedLoweringSteps`), so an inserted step writes nothing on the program's own output.
 PassMaker defunctionalizePass() {
     return [](const context_ptr_t &ctx, const PassArgs &args) {
-        return std::make_unique<DefunctionalizeRewritePass>(ctx, args.getBool("report"));
+        return std::make_unique<DefunctionalizeRewritePass>(
+            ctx, args.getBool("report"), args.getBool("debug"));
     };
 }
 
@@ -510,7 +511,9 @@ PassMaker profilePass() {
             pathArgument(args, "json"),
             gcStats < 0 ? 0 : static_cast<int>(gcStats),
             args.getBool("type_stats"),
-            pathArgument(args, "effect_trace"));
+            pathArgument(args, "effect_trace"),
+            args.getBool("opstats"),
+            args.getBool("variant_trace"));
     };
 }
 
@@ -576,7 +579,9 @@ void registerCoreKernels() {
         "rulesets",
         [](const context_ptr_t &ctx, const PassArgs &args) {
             return std::make_unique<RulesetsPass>(
-                ctx, args.isNull("query") ? std::string() : args.getString("query"));
+                ctx,
+                args.isNull("query") ? std::string() : args.getString("query"),
+                args.getBool("forward"));
         });
     registerCoreKernel("profile", profilePass());
     registerCoreKernel("cpp", makePass<CppDumpPass>());

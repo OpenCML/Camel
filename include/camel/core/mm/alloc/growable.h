@@ -92,7 +92,8 @@ struct GrowableSpaceConfig {
     size_t segmentBytes    = 16 * MB;
     size_t maxSegmentBytes = 256 * MB;
     size_t limitBytes      = 1 * GB; // Total over all segments.
-    const char *limitEnv   = "";     // Environment variable that sets limitBytes, in MB.
+    const char *limitEnv   = "";     // The option that sets limitBytes, in MB (`--block-limit`):
+                                     // the diagnostic names it when the space runs out.
     // Free-list spaces only: read the size of a freed block from its header and keep no table
     // of sizes (see FreeListAllocator). For spaces that only a collector frees.
     bool sizesFromHeaders = false;

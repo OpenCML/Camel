@@ -159,7 +159,7 @@ kind = "behavior"
 case = "../../../cases/modules/tiles/argmax_axis_scope.cml"
 args = ["--devices", "cpu", "${case}", "tiles::test_outline_compiled", "reasons=true", "declarations=true", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["TILES_OUTLINED 0", "TILES_OPERATOR_DECLARATION tensor:argmax_axis declared major=1", "TILES_REGION_REASON tensor:argmax_axis unsupported_operator", "TILES_DECLARATIONS_3 tensor:layer_norm_grad 463 undeclared major=-1; tensor:softmax 424 declared major=1;", "TILES_OPERATOR_DECLARATION tensor:reshape declared major=1"]
+expect_stdout_contains = ["TILES_OUTLINED 0", "TILES_OPERATOR_DECLARATION tensor:argmax_axis declared major=1", "TILES_REGION_REASON tensor:argmax_axis unsupported_operator", "TILES_DECLARATIONS_3 tensor:layer_norm_grad undeclared major=-1; tensor:softmax declared major=1;", "TILES_OPERATOR_DECLARATION tensor:reshape declared major=1"]
 timeout_ms = 10000
 
 [[tests]]

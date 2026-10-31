@@ -737,15 +737,12 @@ node_handle_t Builder::valueVersionOf(node_handle_t variable) {
     // the version of it.
     const auto value = callValues_.find(*modifier);
     if (value == callValues_.end()) {
-        // The call's captured writes are not known at this layer (its callee is a function value,
-        // so there is no mask and no parts to take). The writer registry recorded the call as this
-        // variable's write all the same (recordWrite, throughCallee), so the call is the variable's
-        // new version: the read takes `:var/after(cell, call)`, which is the cell as it stands
-        // after that call, and the edge from the call is what makes it run (3.1). The call's value
-        // may be `void` -- this operator does not read it.
-        if (nodeKindOf(*modifier) == camel::runtime::GCNodeKind::Call) {
-            return variableAfterCall(variable, *modifier);
-        }
+// The call's captured writes are not in `callValues_` at all: its callee is a function
+        // value, so there is no mask to build the parts from. The writer registry recorded the call
+        // as this variable's write all the same (recordWrite, throughCallee), so the call is the
+        // variable's new version: the read takes `:var/after(cell, call)`, which is the cell as it
+        // stands after that call, and the edge from the call is what makes it run (3.1). Whatever
+        // the call returns -- nothing, or a value of its own -- is not read here.
         return nullptr;
     }
     const bool wrapped = value->second.hasReturn || value->second.variables.size() > 1;
@@ -757,6 +754,13 @@ node_handle_t Builder::valueVersionOf(node_handle_t variable) {
             return *modifier;
         }
         return callValuePartOf(*modifier, static_cast<uint32_t>(value->second.hasReturn ? 1 + k : k));
+    }
+    // The call is this variable's writer -- recordWrite recorded it through the callee -- but the
+    // parts of the call's value say nothing about it: the parts come from the callee's
+    // captured-value table, and a write recorded through a function value has no row there. The
+    // call is then the variable's version as a whole: `:var/after(cell, call)`.
+    if (nodeKindOf(*modifier) == camel::runtime::GCNodeKind::Call) {
+        return variableAfterCall(variable, *modifier);
     }
     return nullptr;
 }

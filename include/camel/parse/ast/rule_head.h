@@ -22,11 +22,22 @@ namespace camel::parse::ast {
 /// level): the caller reports it, and the shape's name says what was written.
 std::string leftHeadOf(syntax::Node left, std::string &shape, uint32_t &arity);
 
+/// The function a rule's right side calls, e.g. `add_tangent` for `x + w => (dx, dw) =>
+/// add_tangent(x, w, dx, dw)`, or empty when the right side calls nothing (it is a value).
+///
+/// A transform that replaces an operator with the rule's meaning has to call that function, and it
+/// is written in the rule -- so a reader of the ruleset reads it from here rather than keeping a
+/// second copy of the mapping in C++.
+std::string rightCalleeOf(syntax::Node right);
+
 /// What a ruleset's index holds for one rule: the head of its left side, its operand count, and the
 /// rule's name.
 struct RuleHead {
     std::string head;  // the operator the left side is written with, e.g. "+"
     std::string rule;  // the rule's name
+    // The function the right side calls (`add_tangent`, `neg_tangent`, ...), empty when it calls
+    // nothing: the name a transform resolves to replace the operator with the rule's meaning.
+    std::string rhsCallee;
     std::string shape; // when the left side is not one operator: the shape's name, else empty
     uint32_t arity = 0; // how many operands the head takes: 2 for `a + b`, 1 for `-a`
     // The rule's tokens in its module's buffer, for a diagnostic about the rule itself.
@@ -40,6 +51,7 @@ void collectRuleHead(
     const std::string &module,
     std::string head,
     std::string rule,
+    std::string rhsCallee,
     std::string shape,
     uint32_t arity,
     uint32_t tokenStart,
@@ -72,6 +84,10 @@ std::string indexRule(const std::string &family, const RuleHead &rule);
 /// built and printed answers nothing, and reads as if it did: this is the question a transform asks
 /// it, and the answer says which of the two ways there is no rule.
 RuleMatch lookupRule(const std::string &family, const std::string &head, uint32_t arity);
+
+/// The function `rule` of `family` calls on its right side (`add_tangent`, ...), or empty when its
+/// right side calls nothing: the name a replacement has to resolve, read from the rule itself.
+std::string rhsCalleeOf(const std::string &family, const std::string &rule);
 
 /// The families built so far, in name order: what a reader can ask `lookupRule` about.
 std::vector<std::string> ruleFamilies();

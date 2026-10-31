@@ -42,7 +42,7 @@ expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_diagnostic_line = 11
 expect_diagnostic_column = 38
 expect_stdout_starts_with = "start\n"
-expect_output_contains = ["Maximum recursion depth (100) exceeded", "--max-recursion-depth", "CAMEL_MAX_RECURSION_DEPTH"]
+expect_output_contains = ["Maximum recursion depth (100) exceeded", "--max-recursion-depth"]
 expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
 [[tests]]
@@ -99,22 +99,6 @@ args = ["--native-stack-guard", "off", "--max-recursion-depth", "5000", "${case}
 envs = ["N=4000"]
 expect_exit = 0
 expect_stdout_starts_with = "start\n4000\ndone\n"
-
-[[tests]]
-name = "limit.raised.environment"
-desc = "The same with CAMEL_MAX_RECURSION_DEPTH=5000."
-args = ["--native-stack-guard", "off", "${case}", "${backend}"]
-envs = ["N=4000", "CAMEL_MAX_RECURSION_DEPTH=5000"]
-expect_exit = 0
-expect_stdout_starts_with = "start\n4000\ndone\n"
-
-[[tests]]
-name = "limit.option_over_environment"
-desc = "The option wins over the environment variable: limit 100 although the environment says 5000."
-envs = ["N=4000", "CAMEL_MAX_RECURSION_DEPTH=5000"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
-expect_output_contains = ["Maximum recursion depth (100) exceeded"]
 
 [[tests]]
 name = "limit.default"
@@ -246,16 +230,6 @@ expect_exit = 1
 expect_stderr_contains = ["Invalid --max-recursion-depth value: 'deep'."]
 expect_output_not_contains = ["start"]
 
-[[tests]]
-name = "limit.environment.invalid"
-desc = "A bad value of the environment variable is refused the same way."
-backends = false
-args = ["${case}", "${run_fvm}"]
-envs = ["N=1", "CAMEL_MAX_RECURSION_DEPTH=12x"]
-expect_exit = 1
-expect_stderr_contains = ["Invalid CAMEL_MAX_RECURSION_DEPTH value: '12x'."]
-expect_output_not_contains = ["start"]
-
 # --- the macro evaluator -------------------------------------------------------------------
 
 [[tests]]
@@ -266,22 +240,13 @@ case = "../../../cases/consistency/limits/macro_depth.cml"
 args = ["${case}", "std::macro", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
-expect_output_contains = ["more than 64 nested calls", "--max-macro-depth", "CAMEL_MAX_MACRO_DEPTH"]
+expect_output_contains = ["more than 64 nested calls", "--max-macro-depth"]
 
 [[tests]]
 name = "limit.macro.option"
 desc = "With --max-macro-depth 200 the call is evaluated ahead of time; the program then runs on each back end without recursing at all."
 case = "../../../cases/consistency/limits/macro_depth.cml"
 args = ["--max-macro-depth", "200", "--max-recursion-depth", "4", "${case}", "std::macro", "${backend}"]
-expect_exit = 0
-expect_stdout_starts_with = "100\n"
-
-[[tests]]
-name = "limit.macro.environment"
-backends = false
-case = "../../../cases/consistency/limits/macro_depth.cml"
-args = ["--max-recursion-depth", "4", "${case}", "std::macro", "std::fvm"]
-envs = ["CAMEL_MAX_MACRO_DEPTH=200"]
 expect_exit = 0
 expect_stdout_starts_with = "100\n"
 

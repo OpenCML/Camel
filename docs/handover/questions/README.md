@@ -4,7 +4,7 @@
 
 > **索引的价值在于与目录一一对应；一旦少一页，读者就会以为没有那一问。**
 
-> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里只有 README**——四页在 22:50 一起裁完、整体挪进了 `reviews/`。
+> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里只有 README**——五页都已裁完、整体挪进 `reviews/`（最新一页 `a-version-port-that-accepts-more-than-void` 于 23:50 裁：选 A）。
 >
 > **哪些未决值得成页**：不是所有未决都值得成页——只有**今天有人被它堵住**的才值得。其余留在原则里，等它真的挡住一条车道再成页。所以第 15 节那 8 条不占待裁表，清单在文末，每条写明今天堵着谁。
 
@@ -12,7 +12,7 @@
 
 ## 现在在等作者：0 页
 
-`questions/` 里只剩 README：22:50 那笔（`301c3790e`）把四页一起答了，整体挪进 `reviews/`。四页的问题、裁定与还堵着的活见下面"已裁"表；待裁表现在是 **0 行**。
+`questions/` 里只剩 README：23:50 那一页（`:var/after` 的第二个实参）选了 A，已整体挪进 `reviews/`；其余四页在 22:50 一起裁完、也挪进了 `reviews/`。五页的裁定与还堵着的活见下面"已裁"表；待裁表现在是 **0 行**。
 
 | 页 | 问什么 | 状态 | 堵着谁 |
 |---|---|---|---|
@@ -33,6 +33,7 @@
 | [`jvp-family-anchor`](../reviews/questions-2026-10-30-jvp-family-anchor.md) | `#jvp` 这族规则没有挂点：补声明、挂标签、还是按算子 id 查表 | 已裁未落 | 09:35 ①，20:50 改成"内置原语的规则写规则集模块、按左边归属"，22:10 补上"搬规则" | 与上一行是**同一件活**；索引已落（`program.cpp:658-659` 按 `rulesets.` 前缀建），规则还没搬 |
 | [`what-carries-a-wait-for-a-write`](../reviews/questions-2026-10-31-what-carries-a-wait-for-a-write.md) | 值在门后等一次写、或等一次调用，该由哪种边承担 | 已裁未落 | 20:35——3.1 已经答了，不加第四种边；三件事：门的等待=同步前驱、三族遍改读"数据使用+同步链"、然后停造 ctrl 重测 | **②a 停造 ctrl**；`simplify`/`unread_gate`/`dropped_effects` 三族遍；`gates.cpp:19` 的使能条件 |
 | [`reinterp-rule-set`](../reviews/questions-2026-10-30-reinterp-rule-set.md) | 规则集 `H` 以什么形式交给算子 | 已裁未落 | 09:15——C：`H` 是编译期名字；规则集是一个模块；`transforms` 收 `reinterp`/`split`/`transpose` | **`reinterp` 还没实现**（`git grep reinterp` 只中 `reinterpret_cast`），`modules/transforms/` 只有骨架；第 3–5 步都等它 |
+| [`a-version-port-that-accepts-more-than-void`](../reviews/questions-2026-10-31-a-version-port-that-accepts-more-than-void.md) | `:var/after` 的第二个实参只接受 `void`（按 22:50 的字面），还是任意值 | 已裁未落 | 23:50——A（比我们的主张更宽）：接受任意值，包括 `void`；第二实参不被读，只表示"这次调用之后的版本"；签名写成 `(var T, any) => var T`，语言参考写同一句 | 语言参考与签名注释写成 `(var T, any) => var T`（今天的实现已对） |
 | [`generator-cell-type-by-inference`](../reviews/generator-cell-type-by-inference.cn.md) | 单元的类型由"只求类型的推导"定，还是由运行时状态的首个写入定 | 已裁未落 | 16:30——A：`typeof` 只用"只求类型"的推导 | **第 11 条生成器的收尾**：`src/compile/gct/builder.cpp:2164` 仍报 `FeatureNotSupported("generators")` |
 | [`literal-head-type-expression`](../reviews/questions-2026-10-30-literal-head-type-expression.md) | `Tangent<T>` 这类算出来的类型能不能当字面量的头 | 已裁未落 | 10:10——②的规则、①的工作量：字面量头走类型表达式解析器；同一笔补 `zero_tangent` 的元组/结构体臂 | **`zero_tangent` 的聚合臂**（`stdlib/rulesets/jvp.cml:53` 仍是 `case _ => ()`）；规则集模块合入前的最后一块 |
 | [`match-type-guard`](../reviews/questions-2026-10-30-match-type-guard.md) | `match type` 里能不能用类型函数做守卫 | 已裁未落 | 11:10——②：不是加守卫，是修缺陷；`T[..]` 匹配任意秩，`T[?]` 只匹配秩 1 | **`zero_tangent` 的任意秩臂真正生效**（修 `match type` 的实施例，本次未核）；`stdlib/rules.cml` 里靠"只匹配秩 1"写错的条目逐条改 `T[?]` |
@@ -94,6 +95,7 @@
 | 并行 map 故障 | 并行 `map` 出故障后，下标更小、还没开始的元素是否仍执行 | **已裁**（22:50，见"已裁"表）；`code-review-backends.md:37` 那条 `DESIGN-QUESTION` 要删（见"返工"一节） |
 | 算子实参装入 | 内建算子的实参是否自动装入（`xs->append<5>`，`xs: (int?)[]`） | 无车道被堵；但审计 A25 记着今天要写 `5 as int?` |
 | 源码声明流水线 | 是否允许入口文件写出 `pipeline std::macro, tiles::compile, std::nvm` | 无；流水线仍只在命令行拼 |
+| GIR handle 名字什么 | 编译期 `node_handle_t` 名字一个事务（与 `NodeView` 同型）还是一张草稿 | **已成页**（待裁）；**堵 b6 的最后一块**：`nodeDraftOf` 66 个 + `draft()` 132 个调用点 |
 
 ## 裁定去哪找
 

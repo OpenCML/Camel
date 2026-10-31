@@ -214,3 +214,28 @@ assert(out.includes('has won'), 'the refusal must say the position is over')
 }
 """
 timeout_ms = 60000
+
+# The learned half of D4, as the smallest loop that runs: one scripted game, the value network's
+# prediction for the final board, and one Adam step on it. It asserts that the line is printed and
+# that its numbers are numbers -- not what they are: a loss curve is not a reading of this example
+# until the second commit adds games and steps to it.
+[[tests]]
+name = "mcts.selfplay.first_step"
+desc = "One self-play game (scripted: each player takes the first free place), the value head's prediction on the final board, one Adam step against the game's result, and the loss before and after, printed as one line."
+kind = "behavior"
+case = "../../../showcase/d4-mcts/selfplay.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["mcts selfplay squares=9 result="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /^mcts selfplay squares=9 result=([0-9.]+) loss0=([0-9.eE+-]+) loss1=([0-9.eE+-]+)$/m.exec(input.normalized.stdout)
+assert(line !== null, 'no self-play line on stdout')
+const result = Number(line[1])
+assert(result === 0 || result === 0.5 || result === 1, 'the result is a score: ' + line[1])
+for (const value of [line[2], line[3]]) {
+  assert(Number.isFinite(Number(value)), 'a loss is a finite number: ' + value)
+}
+}
+"""

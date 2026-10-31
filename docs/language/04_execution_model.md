@@ -244,7 +244,7 @@ help: Ensure the index is within the valid range of the collection.
 
 **`exit(n)`** 立即结束程序，退出码为 `n`；此前的输出照常写出。
 
-**递归深度。** 尾位置的调用不占用栈帧，尾递归可以任意深。非尾递归同时打开的调用数有上限，默认 1000，超过是故障 `RuntimeDiag::MaxRecursionDepthExceeded`；用 `--max-recursion-depth <n>` 或环境变量 `CAMEL_MAX_RECURSION_DEPTH` 调整。计数包括通过函数值的调用和高阶算子对每个元素的调用。默认值在各执行后端上相同，并行调度器同样计数。
+**递归深度。** 尾位置的调用不占用栈帧，尾递归可以任意深。非尾递归同时打开的调用数有上限，默认 1000，超过是故障 `RuntimeDiag::MaxRecursionDepthExceeded`；用 `--max-recursion-depth <n>` 调整。计数包括通过函数值的调用和高阶算子对每个元素的调用。默认值在各执行后端上相同，并行调度器同样计数。
 
 ```cml
 func depth(n: int): int {

@@ -957,3 +957,102 @@ HANDLE_PROBE refused: InvalidArgument
 | **待做：`onnx`** | **1** | `exporter.cpp:4815` | **最后一片** |
 
 **合计：296 + 25 + 17（四条边界）+ 51（待做）= 389。**
+
+## 45. `writings` 那 19 处：**哪一种"拿草稿"能被删掉**（`3232bf888`）
+
+**判据一句话**：**一处能删掉的 `GraphDraft` 参数，等于删掉一次"谁有权力写这张图"的含糊。**
+
+**分类表（19 处 → 改 10、留 9）**：
+
+| 处 | 位置 | 判定 |
+|---|---|---|
+| 1 | `writings.h:116` `CostContext::draft` | **改**：成本模型是**读者**，收事务、自己问 `.graph()` |
+| 2 | `writings.h:426` `DraftWritings::draft()` | **删**：调用者说 `transaction().edit()` 更诚实 |
+| 3 | `writings.h:423` 注释里的 `GraphDraft::setWritings` | **改**：写成 `` `setWritings` `` |
+| 4 | `writings.cpp:90` `nodeText` | **改**：收事务（17 个调用点） |
+| 5 | `writings.cpp:451` `readsVariable` | **改**：收事务 |
+| 6 | `writings.cpp:473` `shapeTakesPart` | **改**：收事务 |
+| 7 | `writings.cpp:613` `makeKey` | **改**：收事务（2 个调用点） |
+| 8 | `writings.cpp:41/65` `EngineRootScope` 的形参与成员 | **改**：收事务；`relocateStaticValues` 走 `edit()`，`debugDraftRootOpened` 走 `graph()` |
+| 9 | `writings.cpp:864` `const GraphDraft &draft = context.draft;` | **改**：`context.transaction.graph()` |
+| 10 | `writings.cpp:921` `CostContext{draft_, context}` | **改**：`{*transaction_, context}` |
+| 11 | `writings.h:411` + `writings.cpp:434` **只收草稿的构造函数** | **留**：**这是另一条车道 4 小时前才立的门**（"a draft alone has no owner"），删它等于替他们改决定；要删得先问 |
+| 12 | `writings.h:557` 成员 `GraphDraft &draft_` | **留**：**草稿就是这份 writings 的研究对象**，不是伸手要 |
+| 13–17 | `writings.cpp:824/1003/1435/1982/2449` 五处 `GraphDraft::WritingScope` | **留**：**类型自己的作用域守卫**，同 §41 判过的那条 |
+| 18–19 | `test/writings.cpp:216` | **留**：同上（上一片已判） |
+
+**三个数**：**消失的参数 6 个**（第 1、4、5、6、7、8 项）+ **一个访问器**（第 2 项）；**删掉的行数 55**；**保留 9 个**。
+
+**四个数：45 / 379 / 2 / 4。**（`references` 389 → 379。）
+
+**一个插曲**：这一片第一次跑整闸时 `runner.backend_matrix` 红了（嵌套自检 36 条里 7 条失败）。**A/B 一度指向这一片，但那是假象**：同一条用例单独再跑就绿（11.64 s vs 22.73 s），**它自己带一条按 CPU 时间判的余量规则，整闸刚跑完时的负载会把它顶红**。**记在这里，免得下一次有人把它算到 writings 头上。**
+
+### 一条判据：**时间类断言的红，先单跑复核再归因**
+
+> **"按 CPU/时间判的余量规则，在整闸刚跑完的负载下载荷最高；所以时间类断言的红必须先单跑复核，才能归因到某笔改动。"**
+
+**它同时适用于 `writings` 与 `startup.cost` 两处**：
+* `runner.backend_matrix`（今晚，`writings` 这一片）：整闸里 22.73 s 红、单独跑 11.64 s 绿。
+* `startup.cost`（更早）：wall/CPU 两种读数给出相反的结论。
+
+**做法**：红了先 `-Plan <那一条>` 单跑；单跑还红才做 `git stash` + 重建的 A/B；**单跑绿就不是那一笔**，别为一个负载造的假红去改实现。**这条判据的价值不在结论，在于它把"我改了它所以它红了"这个最自然的错觉挡在门外。**
+
+### 一条判据：**散文里的数与代码里的数，不是同一种数**
+
+> **"散文里的引用可以改，代码里的引用一动就换了一层意思；所以同一个数（`references`）在两种改法下含义不同，报数时必须说清是哪一种。"**
+
+`compile/gir` 那 7 处是散文（`dbab87327`）：`references` 379 → 372，但**代码里的依赖一处没少**，那 7 **不是 b6 的进度**。`writings` 那 10 处是代码（`3232bf888`），那个 10 才是。**以后报这个数，先说"散文降了几、代码降了几"。**
+
+## 46. `tiles` 那 10 处：**7 个通行参数卡在"3 处自己造"后面，而那 3 处卡在一处没有 id**
+
+| 处 | 位置 | 判定 |
+|---|---|---|
+| 1–4 | `graph_values.h:14/18` + `graph_values.cpp:69/100`（`packGraphAggregate`、`packGraphTuple`） | **通行参数**：收草稿只为往里写 |
+| 5–6 | `region_extract.cpp:66/118`（`extractRegion` 的两个内部步骤） | **通行参数** |
+| 7 | `region_outline.cpp:65` | **通行参数** |
+| 8 | `regions.h:53` `std::unique_ptr<GraphDraft> graph`（`RegionDraft` 的家） | **tiles 自己造** |
+| 9 | `region_extract.cpp:148` `make_unique<GraphDraft>()` | **tiles 自己造** |
+| 10 | `region_test_pass.cpp:96` 栈上的 `GraphDraft draft;` | **tiles 自己造** |
+
+**为什么 1–7 不能先改**：`packGraphTuple(draft, …)` 的三个调用点（`region_extract.cpp:241`、`region_outline.cpp:465`、`region_test_pass.cpp:102`）手上都只有一张草稿，而这两张草稿来自第 8、9 项。**先改通行参数，就得在调用点 `borrow()` 一次——拿一个拼写换另一个拼写，正是判据禁的那件事。**
+
+**为什么连 8、9 项也卡住**：`GraphTransaction::open` 收一个 `GraphId`，而 region 的 id 是 **attach 的时候才分配**的（`region_outline.cpp:390`、`region_test_pass.cpp:110` 的 `setId(context.graphIds().allocate())`）。**extract 的那一刻根本没有 id 可开**。要改得先回答"region 的 id 什么时候分配"——那是另一问。
+
+**这一片实际动的是第 10 项**：`checkBindingKinds` 手上有一个 `Context`，**它的 id 现在就能分配**，于是它开一个事务、从事务里拿草稿，`setId` 那行随之消失（id 已在 `open` 里给了）。**这是这一层里唯一不需要先回答 id 问题的一处。**
+
+**四个数：41 / 371 / 2 / 4。**（`files` 42 → 41、`references` 372 → 371，**都是代码**。）
+
+**b6 的最后一块已写成问题**：`questions-2026-10-31-gir-handle-names-a-transaction-or-a-draft.md`。
+
+## 47. `其它` 那几处，和**"事务能不能在 attach 之前开"的答案**（`94018cbff`）
+
+### 先答那个更值的问题：`modules/graph/txn` 不是答案所在，它是"事务不必等于 id"的证据
+
+`GraphTransaction` 有两个入口（`graph_txn.h`）：
+
+| 入口 | 造还是名字 | 要不要 id |
+|---|---|---|
+| `open(id, funcType)` | **自己造**一张草稿 | **要**，当场命名（`:12` 的 `setId`） |
+| `borrow(draft)` | **只名字**一张已有草稿 | **不要**；`id()` 从草稿读（`:48`） |
+
+**所以"事务能不能在 attach 之前开"——能，但只有 `borrow` 这一种**；而 `borrow` 的语义是"这张草稿的所有权在别人手里"，**region 要的恰恰不是这个**。region 要的是第三种：**先造、id 后给**（`open` 不带 id）。**今天没有这个入口。**
+
+**这就是那句话的答案**：卡住 `tiles` 的不是引用，是**没有人定"region 的 id 什么时候分配"**。要不要给 `open` 一个"id 待定"的形态（或者让 region 在 extract 时就分配 id），是要作者定的事——**和 §46 的问题页同源**，所以没另开一页。
+
+### 分类（原清单 5 处，实际查到 4 处 + 1 处已经没有了）
+
+| 处 | 位置 | 判定 |
+|---|---|---|
+| 1 | `modules/graph/txn.cpp:52` `using camel::runtime::GraphDraft;` | **删**：这个 using **一次都没被用到**——点名一个自己不碰的类型，等于宣告一个不存在的主人 |
+| 2 | `modules/onnx/exporter.cpp:4815` `bindCaptures(GraphDraft &, …)` | **改**：`session.rootDraft()` 本来就返回 `GraphTransaction&`，收下它、问 `.edit()` |
+| 3 | `src/runtime/operator_instance.h:40` + `.cpp:92` `kernelArgumentsOf(const GraphDraft &, node)` | **等**：5 个调用点（`generic.cpp:1112`、`definitions.cpp:508`、`module.cpp:2140`、`writings.cpp:1530/2364`）**手上都只有一张草稿**——**与 `tiles` 那 7 个通行参数同型，同一个 id 问题堵着** |
+| 4 | `modules/rewrite/proof.h:51` | **留**：它点的是 `GraphDraft::decode` 这个 API。**改它会把 `decode` 那格也用散文降下来**（试过：`decode` 4 → 3），**那是拿散文改代码格，不做** |
+| 5 | `include/camel/core/data/composite/func.h` | **已经没有了**（今天 0 处），清单可能旧了 |
+
+**四个数：39 / 369 / 2 / 4。**（`files` 41 → 39、`references` 371 → 369，**都是代码**；`decode` 4 不动，正是第 4 项的克制。）
+
+### 一条判据：**改不动的时候，问题页比十处引用更有进展**
+
+> **"一个层里的引用改不动，往往不是引用的问题，是那句'id 什么时候分配'没人回答；这时候写问题页，比改十处引用更有进展。"**
+
+`tiles` 是这样（10 处只动得了 1 处，但"7 卡在 3 后面、3 卡在 id 上"这个结论比那 1 处值钱），`其它` 也是这样（第 3 项同样是 id 问题）。**两次都指向同一个没人回答的句子——这才是这一整轮真正的发现。**

@@ -365,3 +365,27 @@ TILES_OPERATOR_ID tensor:reshape id=406 tensor_spelling=422
 
 **一处能力有两个数（表里的名字、设备上的内核），只有一个数变了不算能力变了。** 今晚 `argmax_axis` 的 `major` 从 -1 变 1，
 **能力一个没变**——同一晚，它的设备内核一直在（`serial_kernel.cpp`），只是名字没登记。
+
+### 十一、窄浮点：今天的位置，与 (b) 的五步
+
+**一条被推翻的诊断**：我曾说 `graph_regions.cpp#elementType` 把 `f16`/`bf16` 静默当 `F32`（2 字节存储、4 字节读取）。
+**读门那一行发现不成立**：`graph_regions.cpp:41-43` 在它之前就把非 `Float32`/`Int64` 的类型拒了（返回 `nullopt`），
+兜底那一行对窄浮点不可达。**真缺口只有一个 `enum`**：`modules/tiles/include/tiles/dtype.h:11` ——
+`enum class DType { F32, F64, I64 };`，**设备侧没有窄浮点的表示**。
+
+**唯一一个带 `#gpu` 的窄浮点用例**（`test/cases/gpu/nofallback/scalar_literal.cml`）单独跑出来的读数：
+```
+{"segments":[],"regions":[],"transfers":{...},"excluded":[{"node":0,"reason":"node_kind"},{"node":1,"reason":"node_kind"},{"node":2,"reason":"unresolved_type"}]}
+```
+**它是"排除通过"，不是"支持通过"**：那个 `bf16` 张量的算子被 `unresolved_type` 排除，计划却通过——因为它的描述钉的是
+"不再因 `scalar_tensor_operand` 被排除"，那是**另一件事**。**这是"读数说的是另一件事"的又一例。**
+
+**(b) 的五步（现在立计划，不马上做）**：
+
+1. **`DType` 加 `F16`/`BF16`** —— 验收：`tiles/dtype.h` 两个新值，`dtypeWidth`/`isFloating` 覆盖它们，编译通过且无行为变化。
+2. **`serial_kernel` 能对窄浮点发标量表达式** —— 验收：一个 `bf16` 逐元素 add 生成段程序，读数为"生成成功、无 `unresolved_type`"。
+3. **CUDA 代码生成用 `__half`/`__nv_bfloat16`** —— 验收：生成源文本里出现对应类型名，且 `f32` 计算-窄化写回的形状与主机内核一致（字符串读数即可，不需 GPU）。
+4. **类型门放行窄浮点**（`graph_regions.cpp:41`）—— 验收：`TILES_REGION_REASON <op> eligible`，且 `TILES_CENSUS` 的 `gap` 不因它变大。
+5. **能力表认领** —— 验收：`operations()` 里对应的名字带窄浮点支持、`TILES_CENSUS_GAP` 计数下降一条，并且一条 bf16 用例在 `--devices cpu` 上与主机结果逐元素相等。
+
+**（a）今天的边界要写明**：设备侧看不到 `bf16` **是边界，不是缺陷**；它会作为（b）第 1 步之前的一条读数留在本页。

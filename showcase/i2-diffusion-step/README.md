@@ -121,3 +121,38 @@ showcase/i2-diffusion-step/
 
 The plan that runs it: `test/plans/feat/showcase_i2.plan.toml` — the default back end and
 `std::prl`, each printing the same numbers.
+
+## The device half
+
+`step_gpu.cml` runs the denoiser's forward pass on the GPU and prints how far the device's answer is
+from the host's on the same values:
+
+```
+$ camel showcase/i2-diffusion-step/step_gpu.cml --devices 5
+i2gpu device=NVIDIA GeForce RTX 3090 (sm_86)
+i2gpu gap=0.0
+```
+
+`gap` is the sum of squared differences over every element, so it is zero exactly when the device
+and the host agree. It is the one assertion a device run can make without pinning a machine: no
+duration, no ordinal and no device name is asserted anywhere.
+
+The pass it needs is `tiles`, which translates the function graph -- `relu(x @ w1 + b1) @ w2 + b2` --
+to a kernel. That expression is inside the subset the module supports today: contiguous f32 tensors,
+broadcasting arithmetic, `relu`, and rank-2 `matmul`. The parameters travel as one aggregate because
+`run_preferred_resident` takes one argument and reads a struct of tensors by field.
+
+The schedule, the noise draw, the loss and the Adam update stay on the host: the loop carries the
+optimizer state, which the device path does not have yet. So this is the device half of the step's
+*arithmetic*, not a device half of the training loop.
+
+**The ordinal is the machine's.** `--devices 5` names a card with free memory on the host this was
+written on; on a host with one free GPU, drop it. `nvidia-smi` says which one is free -- a card held
+by another process fails with `CUDA_ERROR_OUT_OF_MEMORY`, which is the environment, not the example.
+
+**The test does not do what the command above does**, and the difference is deliberate: the plan entry
+sets `cuda_free_device = true` and passes `--devices 0`, which names the one card the child can see
+whichever ordinal the host gave it. The runner picks a card with room before the run starts, so the
+entry reads the same on a host whose device 0 is busy. An ordinal written into a plan is the second
+thing to break on someone else's machine -- a red that depends on what another process is running is
+not a test, it is news.
