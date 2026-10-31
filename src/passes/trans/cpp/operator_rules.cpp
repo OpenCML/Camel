@@ -792,6 +792,26 @@ Rules buildRules() {
             false,
         };
     }
+    // `rand:shuffle_<t>` (modules/random/operators.cpp): `xs[permutation(k, len(xs))]`, the
+    // kernel of that body -- one uniform draw for each position, the positions ordered by (draw,
+    // position) -- which is what rt::randomShuffle states. Any other uniform shuffle is a different
+    // permutation, so the reading is the interpreter's, element for element.
+    for (const char *suffix : {"i", "l", "f", "d"}) {
+        r[std::string("rand:shuffle_") + suffix] = {
+            [](OperatorCall &c) -> std::optional<std::string> {
+                if (c.normCount() != 1 || c.withCount() != 1) {
+                    return std::nullopt;
+                }
+                const ArrayType *value = asArrayType(c.normType(0));
+                if (value == nullptr || (!value->anyRank() && value->rank() > 1) ||
+                    value->elemType() == nullptr) {
+                    return std::nullopt;
+                }
+                return std::format("rt::randomShuffle({}, {})", c.operand(0), c.with(0).text);
+            },
+            false,
+        };
+    }
     // `array:dim`: the extent of one axis, a negative one counting from the last; an axis outside
     // the rank is InvalidArgument, with the two numbers in the sentence the interpreter prints.
     r["array:dim"] = {
