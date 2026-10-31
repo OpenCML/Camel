@@ -3,10 +3,15 @@
 # list and requires exactly this set: a new name is red, and so is a name here that stops linking
 # it -- in that case the line is deleted, because a list that can only grow says nothing.
 #
-# Each one uses an operator the writer has no standalone translation of, which is the exception
-# design principles 9.8 and the page (1.1) state: the program is written, the link line names
-# libcamel, and the translation warns naming the operator.
-test/cases/compile/diag_render/runtime_regex.cml   # re:test -- a regex engine is not in the header set
-test/cases/consistency/values/max_min_special.cml  # math:max_l -- no rule for the integer max
-test/cases/trans/cpp/exec/scalars.cml              # math:sqrt_d -- the f64 square root (libm)
-test/cases/trans/cpp/tensor_ones.cml               # tensor:ones -- a tensor crosses the bridge
+# Every line says whether it is a GAP (a rule the writer is missing, so the next person should
+# write it and then delete the line) or an EXCEPTION (the bridge is the answer, and the next
+# person should not). "known" alone tells neither.
+#
+# EXCEPTION: a regex engine is not in the standalone header set and is not meant to be -- the
+# bridge is how a program that needs one runs.
+test/cases/compile/diag_render/runtime_regex.cml   # re:test -- exception, not a gap
+# EXCEPTION: a tensor crosses the bridge as a handle (rt::Foreign); standalone operators over
+# tensors are a different piece of work, and the bridge is what makes them work today.
+test/cases/trans/cpp/tensor_ones.cml               # tensor:ones -- exception, not a gap
+# GAP: the f64 square root has no rule yet; the next commit writes it and deletes this line.
+test/cases/trans/cpp/exec/scalars.cml              # math:sqrt_d -- gap
