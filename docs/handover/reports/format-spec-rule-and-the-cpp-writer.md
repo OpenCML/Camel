@@ -108,10 +108,56 @@ std::cpp  12 33 / abc / 5 12 12
 后面的 `n`），改成**一次左到右解码**；`"x\\ny"` 旧读法是 `\` 加一个真换行（进了 JS 就是行继续），新读法是
 `\` 和 `n` 两个字符。
 
-## 六、三条判据
+## 六、`std::cpp` 还缺哪些翻译：一次数清（3186 个程序）
+
+`test/cases/**/*.cml` 全部 3186 个，每个跑一遍 `std::cpp`，把"VM 接受、`std::cpp` 拒"的程序按诊断里的
+算子归类（`… has no translation in std::cpp yet` 会说出是哪一个）：
+
+| 算子 | 被拒程序数 | 一个最小程序 |
+| --- | ---: | --- |
+| `tensor:reshape` | 270 | `test/cases/definitions/check.cml` |
+| `autodiff:grad` | 72 | `test/cases/definitions/grad.cml` |
+| `tensor:ones` | 39 | `test/cases/modules/nn/tensor_smoke.cml` |
+| `tensor:zeros` | 32 | `test/cases/perf/mlp_step.cml` |
+| `:op/fail` | 32 | `test/cases/opt/never_exit/fail_last.cml` |
+| `tensor:load_npy_f32` | 28 | `test/cases/modules/tiles/math_ulp.cml` |
+| `rand:uniform_array` | 23 | `test/cases/modules/nn/lr.cml` |
+| `autodiff:with_grad` | 16 | `test/cases/modules/autodiff/math_sqrt.cml` |
+| `:op/mem_blocks` | 10 | `test/cases/feat/mm/mem_blocks.cml` |
+| `tensor:sum` / `tensor:matmul` / `rand:shuffle_l` | 7 各 | `loops/iterate_tensor.cml` / `modules/onnx/entry/tuple.cml` / `para/core/merge_sort.cml` |
+| `tensor:shape` / `env:get_cwd` | 6 各 | `compile/entry_args/npy_values.cml` / `modules/std/env/basic.cml` |
+| `:op/set_field` / `:op/idx_take` | 4 各 | `compile/nullable_assign.cml` / `feat/mm/gc/gc_born_old.cml` |
+| `:struct/last_arr` | 2 | `test/cases/parse/syntax/subscript_forms.cml` |
+
+读数：**683 → 674** 个程序翻译不出来（这一笔把这 9 个修掉，`:op/set_index_in_place` 一行归零）。按族：
+tensor 414、autodiff 90、rand 34、核心算子（`:op/*`）50、`:struct/*` 2。另有 11 个是类型层面的拒
+（`std::cpp does not translate yet`），4 个**让翻译器崩掉**（segfault，见下）。
+
+这张表把两种东西分开了：tensor / autodiff / rand / tiles 是**整个子系统**（bridge 不运数组与张量，
+`std::cpp` 本来就不打算翻它们，要动是另一个决定）；`:op/*`、`:struct/*` 那 52 个才是**写出器的洞**。
+洞里最大的是 `:op/fail`（32 个）：它要 `never` 贯穿整个 emitter（分支的一个臂、`let` 的右值、
+`attempt` 的边界），不是一个翻译，我没动它。
+
+**4 个崩**（`rc=139`，与本题无关但同一批扫出来的）：`compile/contextual_empty_array/all_literal.cml`、
+`contextual_empty_array/named_sibling.cml`、`compile/semantic/recursive_struct_array.cml`、
+`recursive_struct_array_gc.cml`。空字面量数组与递归结构数组，翻译器直接段错误。
+
+这一笔修的是洞里最大的**一条翻译**：`:op/set_index_in_place`（9 个），`xs[i] = v` 现在与
+`acc = acc->append<v>` 同一个形状（`eae9f9f5b`）——变量把数组交出去，`rt::setAt` 按读的方式检查下标
+（同一条故障、同一段报告、同一个位置），块被别的持有者共享时先复制，所以值还是值。九条程序与 `std::fvm`
+逐字节相同，包括越界那一条：
+
+```
+std::fvm  [9, 2, 3]
+std::cpp  [9, 2, 3]
+```
+
+## 七、四条判据
 
 > **裁定也可能基于过时的读数：拿到裁定先去 develop 上复现一次；不复现，就先把前提写下来，再谈要不要改。**
 
 > **一个后端缺一条翻译，不会报错，只会把整个计划留在慢层；慢层没人跑，缺口就一直绿着。**
 
 > **一个计划能抓"两个后端悄悄不一致"，它就该在快层；抓不到不一致的计划才配待在慢层。**
+
+> **一个后端缺哪条翻译，用"被拒程序数"报，不用"我碰到的那两个"报；今晚两个是碰到的，剩下多少没人知道。**
