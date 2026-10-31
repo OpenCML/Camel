@@ -1,6 +1,6 @@
 # 事务退回它分配的一切——这条判据在丢弃路径上测得到吗？
 
-> 状态：**待裁**（2026-10-31，`lane-gs2b`）
+> 状态：**已裁（c）：撤掉这条用例**（2026-10-31，`fsh-dev = f24411f32`）。留档于此。
 > 相关：`docs/handover/reviews/questions-2026-10-31-when-is-a-region-known-not-to-hold.md`
 
 ## 一句话

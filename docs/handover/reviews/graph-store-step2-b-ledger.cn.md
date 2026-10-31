@@ -1062,3 +1062,13 @@ HANDLE_PROBE refused: InvalidArgument
 ### 一条记录：**试改过，回退在案**
 
 `modules/rewrite/proof.h:51` 的 `GraphDraft::decode` 我一度改成 `` `decode` ``，整闸没红，但账本的 `decode` 那一格从 **4 掉到 3**——**散文降了代码格**。已原样回退（`94018cbff` 里这一处没有动）。**记下来，是因为"数要对得上意思"比"数变小"重要；一次试改加一次回退，比一个漂亮的小数字更能说明账本在被怎么用。**
+
+## 48. 资源账那条用例：撤掉，不是改写
+
+**结论（作者 2026-10-31 `f24411f32` 裁定 (c)）**：**草稿不在 GC 空间分配**——`extractRegion` 只做 `GraphTransaction::open`（普通堆上的 `make_unique<GraphDraft>`）与往草稿自己的向量里 `addNode`/`appendStaticSlot`（`src/runtime/draft.cpp:2131-2145`），**整条抽出路径一次 `autoSpace()` 分配都没有**。实测三行：`during / before / after = allocations 2 / 2 / 2，live 0 / 0 / 0`。
+
+所以**"丢弃前后 GC 读数相同"在丢弃路径上恒真且无信息**。
+
+**"事务拥有它造出的一切"由类型保证**——`RegionDraft::graph` 就是那个 `unique_ptr<GraphTransaction>`，丢弃即析构——**不由读数证明**。作者自认 00:50/02:50 要这条用例时没看清草稿不在 GC 空间里。
+
+**留下的两句**：**"一条账恒真时，要么改题、要么撤题；把恒真的账留在验收里，等于给自己发一张永远通过的通行证。"** **"一条账恒真时，不是账写对了，是它测的那条路根本不分配——先去找分配发生在哪一步。"**
