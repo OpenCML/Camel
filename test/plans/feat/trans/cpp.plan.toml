@@ -540,3 +540,17 @@ expect_diagnostic_column = 13
 expect_stderr_contains = ["std::cpp has no standalone translation of the operator 'str:to_upper': the program it writes calls the Camel runtime there and is built with libcamel."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "every_fault_program_says_what_fvm_says"
+desc = "Every `fault_*` case in test/cases -- 47 of them -- run twice: once by std::fvm, once as the program std::cpp writes, and the two reports compared word for word (stdout and stderr together, and the exit code). A fault is the language's answer, so the words of it belong to the interpreter: a back end that writes its own sentence is not translating the fault, it is inventing one -- and an invented sentence reads well, which is why it survives review. This check exists because the tensor builders' rule did exactly that: `Tensor shape cannot contain negative extents` in place of the kernel's `zeros: Shape cannot contain negative values`, found by measuring, not by reading. The six programs std::cpp does not translate (a refusal is a different answer, and the interpreter's sentence is the only one there is) are counted and named, not compared; the two that differ today are in test/tools/cppexec/fault_words.txt, both marked GAP, and the set has to be exactly that list in both directions."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/cppexec/run.py"
+args = ["${case}", "--faults", "--fault-baseline=test/tools/cppexec/fault_words.txt"]
+skip_unless = ["${python}", "test/tools/cppexec/run.py", "--have-compiler"]
+expect_exit = 0
+expect_stdout_contains = ["fault program(s) print what std::fvm prints"]
+expect_output_not_contains = ["FAIL:", "is not in the baseline", "now prints what std::fvm prints"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 900000
