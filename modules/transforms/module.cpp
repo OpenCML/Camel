@@ -455,17 +455,97 @@ const camel::runtime::Program *probeRoot(
         return nullptr;
     }
     const camel::runtime::gc_node_ref_t argument = args.front();
-    // Measured, then undone: with the swap below in place the run prints 42.0 instead of 1.5,
-    // which is how the session edit was shown to be live. It is not kept -- the case is about ,
-    // not about the probe -- so the argument is left as it was and the program is handed on
-    // unchanged; what stays is the reading of where the statement is and what it takes.
-    const camel::runtime::gc_node_ref_t value =
-        editedDraft.materializeStaticValue(camel::core::rtdata::toSlot<double>(42.0), F);
-    (void)value;
-    os << "REINTERP probe root=" << camel::runtime::toValue(root->id())
-       << " graph=" << camel::runtime::toValue(holder->id()) << " print=" << printRef
-       << " was=" << argument << " swap=\"42.0\"\n";
-    return nullptr;
+    (void)argument;
+    (void)editedDraft;
+
+    // The rule's right side, made for `float`: one instance, already built by the rule table.
+    const camel::compile::gir::GenericRuleInstance *instance = nullptr;
+    const auto heads = camel::parse::ast::rulesOf("rulesets.jvp");
+    for (size_t s = 0; s < heads.size() && instance == nullptr; ++s) {
+        auto &table = camel::compile::gir::genericRuleTable(*context);
+        for (size_t i = 0; i < table.size(); ++i) {
+            if (table[i]->name != heads[s].rule) {
+                continue;
+            }
+            const uint64_t ruleId = static_cast<uint64_t>(i) + 1;
+            const size_t at = camel::compile::gir::genericRuleInstance(*context, ruleId, {F}, {});
+            auto *entry     = camel::compile::gir::genericRuleEntry(*context, ruleId);
+            if (entry == nullptr || at >= entry->instances.size()) {
+                continue;
+            }
+            const camel::compile::gir::GenericRuleInstance &candidate = entry->instances[at];
+            if (candidate.made && candidate.rhs != nullptr && candidate.rhsBuilder != nullptr &&
+                candidate.lhsOperatorUri == ":op/div_d") {
+                instance = &candidate;
+                break;
+            }
+        }
+    }
+    if (instance == nullptr) {
+        os << "REINTERP closure instance=none\n";
+        return nullptr;
+    }
+
+    // The smallest case: build the closure the rule's right side is made of, in the graph that
+    // holds the `/` site, and change nothing else. Two types are what this is about -- the type the
+    // static value is written under, and the type of the thing written. The reference construction
+    // (modules/autodiff/pullback.cpp, `addClosure`) makes a `::Function` over the rule's graph and
+    // materializes it under that same graph's signature in one call; the first attempt here wrote a
+    // `StaticFunction *` into a slot typed by the rule's signature, and the size of the value was
+    // read off a type that describes a function rather than a pointer.
+    camel::runtime::GCGraph *siteGraph = nullptr;
+    camel::runtime::gc_node_ref_t divRef = 0;
+    for (size_t i = 0; i <= program->tableSize() && siteGraph == nullptr; ++i) {
+        camel::runtime::GCGraph *candidate =
+            program->graph(static_cast<camel::runtime::GraphId>(i));
+        if (candidate == nullptr) {
+            continue;
+        }
+        for (camel::runtime::gc_node_ref_t ref = 1; ref <= candidate->nodeCount(); ++ref) {
+            const camel::runtime::GCNode *node = candidate->node(ref);
+            if (node != nullptr && node->kind == camel::runtime::GCNodeKind::Oper &&
+                candidate->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri() == ":op/div_d") {
+                siteGraph = candidate;
+                divRef    = ref;
+                break;
+            }
+        }
+    }
+    if (siteGraph == nullptr) {
+        os << "REINTERP closure site=none\n";
+        return nullptr;
+    }
+    // The type a closure value has is the tuple of what it captures, not the signature of the
+    // function inside it: pullback's addClosure takes a TupleType *closureType and writes the
+    // ::Function under that type. Writing it under the rule's signature made the runtime read a
+    // value's size off a type that describes a function -- the allocation asked for a billion
+    // megabytes, which is a size computed from the wrong type, not a shortage of memory.
+    auto *closureType = camel::core::type::TupleType::create(std::vector<Type *>{F, F});
+    auto &closureTransaction = session.edit(siteGraph);
+    auto &closureDraft       = closureTransaction.edit();
+    auto *function           = ::Function::create(
+        session.program(), instance->rhs->id(), closureType, camel::core::mm::autoSpace());
+    const camel::runtime::gc_node_ref_t source = closureDraft.materializeStaticValue(
+        camel::core::rtdata::toSlot<::Function *>(function), closureType);
+    const auto divIns = siteGraph->normInputsOf(divRef);
+    if (divIns.size() < 2) {
+        os << "REINTERP closure div=" << divRef << " ins=" << divIns.size() << '\n';
+        return nullptr;
+    }
+    const camel::runtime::gc_node_ref_t closure = closureDraft.addFillNode(
+        closureType,
+        camel::runtime::makeFillPayload(
+            camel::runtime::GCFillKind::FunctionClosure, std::vector<size_t>{0, 1}));
+    closureDraft.setNormInputs(closure, std::span<const camel::runtime::gc_node_ref_t>(&source, 1));
+    const std::array<camel::runtime::gc_node_ref_t, 2> captures{divIns[0], divIns[1]};
+    closureDraft.setWithInputs(closure, captures);
+    os << "REINTERP closure graph=" << camel::runtime::toValue(siteGraph->id())
+       << " div=" << divRef << " slotType=" << closureType->toString()
+       << " valueType=Function* source=" << source << " closure=" << closure
+       << " captures=2\n";
+    const camel::runtime::Program *committed = session.commit();
+    os << "REINTERP closure committed=" << (committed != nullptr ? "yes" : "no") << '\n';
+    return committed;
 }
 
 class ReinterpPass : public RuntimeGraphRewritePass {
