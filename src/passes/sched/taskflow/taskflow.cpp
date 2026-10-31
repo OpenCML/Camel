@@ -109,7 +109,7 @@ slot_t readForwardedRuntimeValue(GCGraph *graph, gc_node_ref_t nodeRef, Frame *f
         return NullSlot;
     }
     const auto *node = requireNode(graph, current);
-    ASSERT(node->dataIndex != 0, "Taskflow forwarded-value chain resolved to slot 0.");
+    GUARD(node->dataIndex != 0, "Taskflow forwarded-value chain resolved to slot 0.");
     return frame->get<slot_t>(node->dataIndex);
 }
 
@@ -1770,7 +1770,7 @@ void TaskflowExecSchedPass::executeCallNode(
         targetGraph = programs_.of(graph).calleeOf(*graph, nodeRef);
     } else {
         const auto withInputs = graph->withInputsOf(nodeRef);
-        ASSERT(!withInputs.empty(), "Taskflow CALL node must have function input.");
+        GUARD(!withInputs.empty(), "Taskflow CALL node must have function input.");
         Function *func = frame->get<Function *>(dataIndexOf(graph, withInputs.front()));
         targetGraph    = func ? programs_.graphOf(func) : nullptr;
     }
@@ -1823,7 +1823,7 @@ void TaskflowExecSchedPass::callClosure(
     GraphPlan *targetPlan, Frame *funcFrame, camel::runtime::gc_data_idx_t funcIdx, size_t argCount,
     FillArgs &&fillArgs, Sink &&sink) {
     std::array<slot_t, 2> args{NullSlot, NullSlot};
-    ASSERT(argCount <= args.size(), "Taskflow closure call takes at most two arguments.");
+    GUARD(argCount <= args.size(), "Taskflow closure call takes at most two arguments.");
     requireCallRoom(region.thread(), site.graph, site.node);
     OpenCall openCall(region.thread().callDepth);
     region.enter();
@@ -1924,7 +1924,7 @@ slot_t TaskflowExecSchedPass::executeLinearNode(
     case GCNodeKind::Join: {
         const auto normInputs = graph->normInputsOf(nodeRef);
         const auto withInputs = graph->withInputsOf(nodeRef);
-        ASSERT(!normInputs.empty(), "Taskflow linear JOIN must have branch-index input.");
+        GUARD(!normInputs.empty(), "Taskflow linear JOIN must have branch-index input.");
         const auto brIndex = frame->get<Int32>(dataIndexOf(graph, normInputs.front()));
         ASSERT(
             brIndex >= 0 && static_cast<size_t>(brIndex) < withInputs.size(),
@@ -1952,7 +1952,7 @@ slot_t TaskflowExecSchedPass::executeLinearNode(
 
     case GCNodeKind::Copy: {
         const auto normInputs = graph->normInputsOf(nodeRef);
-        ASSERT(!normInputs.empty(), "Taskflow linear COPY node must have one norm input.");
+        GUARD(!normInputs.empty(), "Taskflow linear COPY node must have one norm input.");
         const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
         const TypeCode srcCode          = frame->codeAt(srcIdx);
         if (camel::core::type::isGCTraced(srcCode)) {
@@ -1969,7 +1969,7 @@ slot_t TaskflowExecSchedPass::executeLinearNode(
 
     case GCNodeKind::Cast: {
         const auto normInputs = graph->normInputsOf(nodeRef);
-        ASSERT(!normInputs.empty(), "Taskflow linear CAST node must have one norm input.");
+        GUARD(!normInputs.empty(), "Taskflow linear CAST node must have one norm input.");
         const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
         Type *srcType                   = frame->typeAt<Type>(srcIdx);
         Type *tgtType                   = node->dataType();
@@ -1989,7 +1989,7 @@ slot_t TaskflowExecSchedPass::executeLinearNode(
     case GCNodeKind::Fill: {
         const auto normInputs = graph->normInputsOf(nodeRef);
         const auto withInputs = graph->withInputsOf(nodeRef);
-        ASSERT(!normInputs.empty(), "Taskflow linear FILL node must have one norm input.");
+        GUARD(!normInputs.empty(), "Taskflow linear FILL node must have one norm input.");
         const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
         Type *srcType                   = node->dataType();
         ASSERT(
@@ -2016,7 +2016,7 @@ slot_t TaskflowExecSchedPass::executeLinearNode(
 
     case GCNodeKind::Accs: {
         const auto normInputs = graph->normInputsOf(nodeRef);
-        ASSERT(!normInputs.empty(), "Taskflow linear ACCS node must have one norm input.");
+        GUARD(!normInputs.empty(), "Taskflow linear ACCS node must have one norm input.");
         const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
         const auto *body                = graph->nodeBodyAs<GCAccsBody>(nodeRef);
         if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
@@ -2285,7 +2285,7 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
     case GCNodeKind::Join: {
         const auto normInputs = graph->normInputsOf(nodeRef);
         const auto withInputs = graph->withInputsOf(nodeRef);
-        ASSERT(!normInputs.empty(), "Taskflow JOIN must have branch-index input.");
+        GUARD(!normInputs.empty(), "Taskflow JOIN must have branch-index input.");
         const auto brIndex = frame->get<Int32>(dataIndexOf(graph, normInputs.front()));
         ASSERT(
             brIndex >= 0 && static_cast<size_t>(brIndex) < withInputs.size(),
@@ -2313,7 +2313,7 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
 
     case GCNodeKind::Copy: {
         const auto normInputs = graph->normInputsOf(nodeRef);
-        ASSERT(!normInputs.empty(), "Taskflow COPY node must have one norm input.");
+        GUARD(!normInputs.empty(), "Taskflow COPY node must have one norm input.");
         const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
         const TypeCode srcCode          = frame->codeAt(srcIdx);
         if (camel::core::type::isGCTraced(srcCode)) {
@@ -2330,7 +2330,7 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
 
     case GCNodeKind::Cast: {
         const auto normInputs = graph->normInputsOf(nodeRef);
-        ASSERT(!normInputs.empty(), "Taskflow CAST node must have one norm input.");
+        GUARD(!normInputs.empty(), "Taskflow CAST node must have one norm input.");
         const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
         Type *srcType                   = frame->typeAt<Type>(srcIdx);
         Type *tgtType                   = node->dataType();
@@ -2350,7 +2350,7 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
     case GCNodeKind::Fill: {
         const auto normInputs = graph->normInputsOf(nodeRef);
         const auto withInputs = graph->withInputsOf(nodeRef);
-        ASSERT(!normInputs.empty(), "Taskflow FILL node must have one norm input.");
+        GUARD(!normInputs.empty(), "Taskflow FILL node must have one norm input.");
         const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
         Type *srcType                   = node->dataType();
         ASSERT(
@@ -2376,7 +2376,7 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
 
     case GCNodeKind::Accs: {
         const auto normInputs = graph->normInputsOf(nodeRef);
-        ASSERT(!normInputs.empty(), "Taskflow ACCS node must have one norm input.");
+        GUARD(!normInputs.empty(), "Taskflow ACCS node must have one norm input.");
         const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
         const auto *body                = graph->nodeBodyAs<GCAccsBody>(nodeRef);
         if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
@@ -2406,7 +2406,7 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
 
     case GCNodeKind::Call: {
         const auto withInputs = graph->withInputsOf(nodeRef);
-        ASSERT(!withInputs.empty(), "Taskflow CALL node must have function input.");
+        GUARD(!withInputs.empty(), "Taskflow CALL node must have function input.");
         Function *func    = frame->get<Function *>(dataIndexOf(graph, withInputs.front()));
         auto *targetGraph = func ? programs_.graphOf(func) : nullptr;
         ASSERT(targetGraph != nullptr, "Taskflow CALL target graph is null.");
@@ -2788,14 +2788,14 @@ bool elementsIndependent(GCGraph *graph, gc_node_ref_t nodeRef) {
 
 // The faults of the element calls of one unordered operator (map, apply, filter,
 // unordered_foreach; the chunks of unordered_reduce), which run concurrently and can fault
-// together. Design principles 3.6: elements that have started run to their end, elements
-// that have not started do not start, and of several faults the one of the smallest index is
-// reported. So that the report does not depend on which element a worker happened to pick
-// first, "do not start" is applied to the elements *after* the smallest faulting index known:
-// an element before it still runs, as it would have run first on a back end that takes the
-// elements in order. The fault reported is therefore the one the linear back ends report.
-// DESIGN-QUESTION(parallel-fault-lower-elements): the alternative is to start nothing at all
-// after the first fault met, and then which fault is reported differs from run to run.
+// together. Design principles 3.6 (ruled 2026-10-31): elements that have started run to their
+// end; of the elements that have not started, those above the smallest fault known do not
+// start and those below it still do; the fault of the smallest index is reported. So "do not
+// start" is applied to the elements *after* the smallest faulting index known: an element
+// before it still runs, as it would have run first on a back end that takes the elements in
+// order, and the fault reported is the one the linear back ends report. The elements that run
+// beyond what "start nothing after a fault" would allow are all below the reported index, and
+// 3.6 does not order effects between elements, so a program cannot observe the difference.
 //
 // Nothing escapes into the executor (it would cancel the whole flow, lower elements included):
 // the element's task keeps its failure here, and the thread that started the operator
@@ -3250,7 +3250,7 @@ TaskflowExecSchedPass::executeIsolateNode(GCGraph *graph, gc_node_ref_t nodeRef,
     auto &thread = region.thread();
     region.enter();
     const auto normInputs = graph->normInputsOf(nodeRef);
-    ASSERT(!normInputs.empty(), "The fault-isolation node requires a function input.");
+    GUARD(!normInputs.empty(), "The fault-isolation node requires a function input.");
     Function *func = frame->get<Function *>(dataIndexOf(graph, normInputs.front()));
     ASSERT(func != nullptr && func->graph() != nullptr, "Fault-isolation callee is null.");
     GCGraph *target = programs_.graphOf(func);

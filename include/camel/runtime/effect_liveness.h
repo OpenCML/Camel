@@ -64,8 +64,10 @@ struct EffectLivenessFacts {
 /// The answer. There are two of them: an effect is kept by a data use, a chain, or a later read of
 /// what it wrote, and a call through a function value is no third case -- the call is itself the
 /// new version of what it wrote, and the read takes a data edge from it (`Builder::valueVersionOf`).
-/// A write the writer table does not know is left to the sync blocks and the resource order
-/// (docs/design-principles.cn.md 3.3): it is not a credential of this layer.
+/// A write the writer table does not know is registered by the conservative writer set (all
+/// functions in the program that write the variable, scanned before building; see the 22:50
+/// ruling). The sync blocks and the resource order are only an extra guarantee now, not the
+/// only one.
 EffectStanding effectStandingOf(const EffectLivenessFacts &facts);
 
 /// Whether running the node is part of the program, as far as the liveness question goes.

@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <atomic>
 #include <charconv>
-#include <cstdlib>
 #include <format>
 #include <string>
 #include <system_error>
@@ -25,14 +24,6 @@
 namespace camel::execute {
 
 namespace {
-
-std::optional<size_t> depthLimitFromEnvironment(const char *name) {
-    const char *raw = std::getenv(name);
-    if (raw == nullptr) {
-        return std::nullopt;
-    }
-    return parseDepthLimit(raw);
-}
 
 struct StackBounds {
     uintptr_t low  = 0; // 0: unknown
@@ -112,11 +103,6 @@ RecursionLimit recursionLimit(const core::context::Context &context) {
     if (const size_t option = context.maxRecursionDepth(); option != 0) {
         return {std::min(option, kMaxDepthLimit), true};
     }
-    static const std::optional<size_t> fromEnvironment =
-        depthLimitFromEnvironment(kMaxRecursionDepthEnvVar);
-    if (fromEnvironment) {
-        return {*fromEnvironment, true};
-    }
     return {kDefaultMaxRecursionDepth, false};
 }
 
@@ -124,9 +110,7 @@ size_t macroDepthLimit(const core::context::Context &context) {
     if (const size_t option = context.maxMacroDepth(); option != 0) {
         return std::min(option, kMaxDepthLimit);
     }
-    static const std::optional<size_t> fromEnvironment =
-        depthLimitFromEnvironment(kMaxMacroDepthEnvVar);
-    return fromEnvironment.value_or(kDefaultMaxMacroDepth);
+    return kDefaultMaxMacroDepth;
 }
 
 std::optional<size_t> parseRoundLimit(std::string_view text) {
@@ -144,11 +128,7 @@ size_t macroRoundLimit(const core::context::Context &context) {
     if (const size_t option = context.maxMacroRounds(); option != 0) {
         return std::min(option, kMaxRoundsLimit);
     }
-    static const std::optional<size_t> fromEnvironment = [] {
-        const char *raw = std::getenv(kMaxMacroRoundsEnvVar);
-        return raw == nullptr ? std::nullopt : parseRoundLimit(raw);
-    }();
-    return fromEnvironment.value_or(kDefaultMaxMacroRounds);
+    return kDefaultMaxMacroRounds;
 }
 
 size_t framePoolBytes(size_t limit) {

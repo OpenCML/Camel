@@ -118,6 +118,69 @@ class VjpBuilder {
     vjp_node_t addStaticFloat(double value);
 };
 
+using tangent_node_t = camel::runtime::gc_node_ref_t;
+
+/// The graph a forward rule emits its tangent computation into, the forward-side counterpart of
+/// `VjpBuilder`: the same three things are asked of it, and a rule written against one reads the
+/// same way as a rule written against the other.
+///
+///   - construction: `addStatic`, `addOper`, `addAccess` build the nodes a rule's answer is made of;
+///   - accumulation: `accumulateTangent` adds a contribution to a value's tangent, which is what
+///     every rule does to its inputs' tangents and what a rule that shares a node does to one node
+///     twice;
+///   - the common operations: `tangentOf` reads a value's tangent so far, `zeroTangentOf` the zero
+///     of its tangent space, and `isActive` tells a value a differentiated input flows into from a
+///     constant of the same type.
+///
+/// A forward rule computes the tangent of its call's result from the call's inputs and their
+/// tangents; nothing here reads a gradient, because there is none to read.
+class TangentBuilder {
+  public:
+    virtual ~TangentBuilder() = default;
+
+    /// Static type of a node.
+    virtual type::Type *nodeType(tangent_node_t node) const = 0;
+    /// The value of a node that is a compile-time constant.
+    virtual std::optional<slot_t> staticValueOf(tangent_node_t node) const = 0;
+    /// A constant node.
+    virtual tangent_node_t addStatic(slot_t value, type::Type *type) = 0;
+    /// An operator node with the given inputs. The operator is resolved by URI when the graph runs.
+    virtual tangent_node_t addOper(
+        type::Type *type, std::string_view uri, std::span<const tangent_node_t> normInputs) = 0;
+    /// Element `index` of an aggregate (tuple or struct) node.
+    virtual tangent_node_t addAccess(tangent_node_t aggregate, size_t index);
+    /// Adds `tangent` to the tangent of `primal`. Ignored for values without a tangent space.
+    virtual void accumulateTangent(tangent_node_t primal, tangent_node_t tangent) = 0;
+    /// The tangent `primal` carries so far, if any: a value a differentiated input flows into has
+    /// one, a constant does not.
+    virtual std::optional<tangent_node_t> tangentOf(tangent_node_t primal) const = 0;
+    /// The zero tangent of `primal`'s tangent space, as a node a rule can use as a value.
+    virtual tangent_node_t zeroTangentOf(tangent_node_t primal) = 0;
+    /// True when a differentiated input flows into `node`, so its tangent is worth carrying. False
+    /// for a compile-time constant and for anything computed from data alone.
+    virtual bool isActive(tangent_node_t node) const = 0;
+
+    tangent_node_t addStaticFloat(double value);
+};
+
+/// One operator call being forwarded: its inputs and their tangents, and the node for its result.
+struct TangentCall {
+    std::string_view uri;
+    /// The call's normal inputs, in order.
+    std::span<const tangent_node_t> inputs;
+    /// The tangent of each normal input, in the same order; a null node for an input that carries
+    /// none (a constant, a discrete value).
+    std::span<const tangent_node_t> tangents;
+    /// The call's `with` inputs, in order: configuration, through which no tangent flows.
+    std::span<const tangent_node_t> withInputs;
+    tangent_node_t output;
+    uint64_t origin = 0;
+};
+
+/// The tangent of `call`'s result. A null node means the result's tangent is zero (the call is
+/// locally constant, or none of its inputs carries a tangent).
+using TangentRule = tangent_node_t (*)(TangentBuilder &builder, const TangentCall &call);
+
 /// One operator call being differentiated.
 struct VjpCall {
     std::string_view uri;

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * Per-operator kernel timing. When CAMEL_TENSOR_OPSTATS is set, the kernel
+ * Per-operator kernel timing. When the pipeline names `std::profile opstats=true`, the kernel
  * map serves timing trampolines instead of the kernels, and a table of calls
  * and time per operator is printed to stderr at exit. Comparing the total
  * with the program's own time separates kernel time from interpretation.
@@ -16,7 +16,7 @@
 
 namespace camel::tensor::ops {
 
-/// True when CAMEL_TENSOR_OPSTATS is set.
+/// True when the run asked for the kernel-timing table (`std::profile opstats=true`).
 bool opStatsEnabled();
 
 /// A kernel that times `kernel` under `name`, or `kernel` itself when no trampoline is left.

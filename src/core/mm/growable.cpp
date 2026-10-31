@@ -60,7 +60,7 @@ void MemoryExhausted::compose() {
         advice_  = limitSetting_.empty()
                        ? std::string("the limit is fixed")
                        : std::format(
-                             "set {}=<megabytes> to raise the limit (it is {} now)",
+                             "raise it with {}=<megabytes> (it is {} now)",
                              limitSetting_,
                              limitBytes_ / MB);
         message_ = std::format(

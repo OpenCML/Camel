@@ -36,7 +36,10 @@ std::optional<Shape> shape(ty::Type *type) {
     if (type->code() == ty::TypeCode::Float64)
         return Shape{};
     const tensor::TensorFacts facts = tensor::tensorFactsOf(type);
-    if (facts.dtype != ty::TypeCode::Float32 || !facts.isStaticShape())
+    // An element type whose width the device knows is readable as a shape: f32 and, because a
+    // position is an index, i64. Anything else stays unresolved here.
+    if ((facts.dtype != ty::TypeCode::Float32 && facts.dtype != ty::TypeCode::Int64) ||
+        !facts.isStaticShape())
         return std::nullopt;
     return tensor::extentsOf(*facts.shape);
 }
@@ -160,11 +163,21 @@ std::string eligibility(
         {.uri = std::string(table.uri(oper)), .key = decl->key, .declaration = decl}};
     const auto permissions =
         camel::core::tag::effectivePermissions(graph, id, core::sem::NumericPolicy::explicitOnly());
+    // The candidate carries the element type the node was inferred with. Reading it as f32 would
+    // plan a four-byte store for an eight-byte position -- the same lie the byte width told before
+    // an i64 leaf was readable.
+    const auto elementType = [](ty::TypeCode code) {
+        if (code == ty::TypeCode::Float64)
+            return DType::F64;
+        if (code == ty::TypeCode::Int64)
+            return DType::I64;
+        return DType::F32;
+    };
     Node candidate{
         .op          = found->second,
         .shape       = *output,
         .inputs      = {},
-        .dtype       = node->dataType()->code() == ty::TypeCode::Float64 ? DType::F64 : DType::F32,
+        .dtype       = elementType(node->dataType()->code()),
         .permissions = permissions,
         .semantic    = 0,
         .indexing    = inst};

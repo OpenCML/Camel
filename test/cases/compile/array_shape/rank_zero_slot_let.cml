@@ -1,0 +1,21 @@
+// The `let` slot, both writings of the value: a literal (`= 1.0`) and a value the program computed
+// (`= one`), each declared `f32[..]`. The rule is one (design principles 5.4: `T[..]` includes rank
+// zero, and the rank-zero array is the element itself), so both writings print their element and
+// nothing of the array the slot holds is visible.
+//
+// What this case pins: a declaration gives its value the type it stands in, and the two ways of
+// writing that value agree -- print, and through it the representation the slot holds.
+
+func main(): int sync {
+    let one: f32 = 1.0
+    let two: f32 = 2.5
+    let writtenLow: f32[..] = 1.0
+    println(writtenLow)
+    let writtenHigh: f32[..] = 2.5
+    println(writtenHigh)
+    let computedLow: f32[..] = one
+    println(computedLow)
+    let computedHigh: f32[..] = two
+    println(computedHigh)
+    return 0
+}

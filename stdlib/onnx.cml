@@ -58,6 +58,14 @@ export func export_model::<F, E>(fn: F, example: E): void! when is_function::<F>
 /// Writes the model of the program's `main` (or of the one `export_model` call it makes) as an
 /// ONNX file, translating the function `main` refers to itself. `out` overrides the file the
 /// `out` argument of `export_model` names (then exactly one call is allowed) and names the file
-/// when the program makes no request.
-with <out: string = "">
+/// when the program makes no request. The three readings below print to standard error and
+/// change nothing the exporter does: `trace` every lowered call with the facts of its arguments,
+/// `dump` the simplified graph that is translated (as `std::rgir` does), `prep_stats` the size of
+/// the function when the export receives it and after the export's own simplification.
+// Temporary, while the generator only reads one line: this declaration stays on one line because
+// scripts/stdlib-reference.mjs takes a declaration's parameters from a single line. The proper fix
+// is for the generator to read the block form, and it is written down in
+// docs/handover/reviews/questions-2026-10-31-stdlib-reference-one-line-declarations.md. Do not
+// read this as the house style for pass parameters.
+with <out: string = "", trace: bool = false, dump: bool = false, prep_stats: bool = false>
 export func export_model::<F>(f: F): F! when is_function::<F>()

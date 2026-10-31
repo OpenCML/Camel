@@ -21,6 +21,7 @@
 #include "camel/utils/number_text.h"
 
 #include <cmath>
+#include <format>
 #include <cstdio>
 #include <functional>
 #include <memory>
@@ -85,6 +86,17 @@ Array *Array::create(
     bool zeroInit) {
     const int64_t extent = static_cast<int64_t>(size);
     return create(allocator, arrayType, std::span<const int64_t>(&extent, 1), zeroInit);
+}
+
+Array *Array::createRankZero(
+    camel::core::mm::IAllocator &allocator, const type::ArrayType *arrayType, slot_t value) {
+    ASSERT(arrayType != nullptr, "A rank-zero array needs its type");
+    // No extents at all: the value has no dimension, and `create` gives it the one element an
+    // empty product counts (design principles 5.4 -- a rank-zero array is the element itself).
+    Array *array = create(allocator, arrayType, std::span<const int64_t>(), false);
+    ASSERT(array->rank() == 0 && array->numel() == 1, "A rank-zero array holds one element");
+    array->setSlot(0, value, arrayType);
+    return array;
 }
 
 Array *
@@ -182,7 +194,9 @@ Array *Array::createSlotsRank(
     }
     fillStrides(extents, array->strides_);
 
-    array->size_     = extents.empty() ? 0 : static_cast<uint64_t>(extents[0]);
+    // A value with no dimension holds its one element: size is that element's count, not the 0
+    // an empty extent would give (design principles 5.4).
+    array->size_     = extents.empty() ? numel : static_cast<uint64_t>(extents[0]);
     array->numel_    = numel;
     array->capacity_ = std::max(capacity, kInlineSlots);
 
@@ -232,7 +246,9 @@ Array *Array::createCompact(
     array->elementSize_  = static_cast<uint32_t>(elemSize);
     array->rank_         = static_cast<uint32_t>(rank);
     array->numel_        = numel;
-    array->size_         = extents.empty() ? 0 : static_cast<uint64_t>(extents[0]);
+    // A value with no dimension holds its one element (design principles 5.4): size is that
+    // element's count, not the 0 an empty extent would give.
+    array->size_         = extents.empty() ? numel : static_cast<uint64_t>(extents[0]);
     array->view_         = view;
     array->slotShaped_   = layout != nullptr && layout->slotShaped;
     array->extents_      = reinterpret_cast<int64_t *>(array + 1);
@@ -423,7 +439,11 @@ void storeAggregate(std::byte *bytes, const type::Type *type, slot_t value) {
         return; // all-zero bytes describe the zero value
     }
     const type::DataLayout *layout = type::pureDataLayout(type);
-    ASSERT(layout != nullptr && layout->aggregate, "storeAggregate expects an aggregate type");
+    GUARD(
+        layout != nullptr && layout->aggregate,
+        std::format(
+            "storing a value of type code {} field by field, but that type has no aggregate layout",
+            static_cast<int>(type->code())));
     const auto fieldType = [type](size_t i) -> const type::Type * {
         return type->code() == TypeCode::Struct
                    ? static_cast<const type::StructType *>(type)->typeAt(i)
@@ -476,7 +496,11 @@ namespace camel::core::rtdata {
 rtdata::Object *
 materializeAggregate(const std::byte *bytes, const type::Type *type, camel::core::mm::IAllocator &allocator) {
     const type::DataLayout *layout = type::pureDataLayout(type);
-    ASSERT(layout != nullptr && layout->aggregate, "materializeAggregate expects an aggregate");
+    GUARD(
+        layout != nullptr && layout->aggregate,
+        std::format(
+            "reading a value of type code {} field by field, but that type has no aggregate layout",
+            static_cast<int>(type->code())));
     const auto fieldType = [type](size_t i) -> const type::Type * {
         return type->code() == TypeCode::Struct
                    ? static_cast<const type::StructType *>(type)->typeAt(i)
@@ -548,7 +572,11 @@ materializeAggregate(const std::byte *bytes, const type::Type *type, camel::core
 
 
 slot_t Array::getSlotSlow(uint64_t flatIndex) const {
-    ASSERT(flatIndex < numel_, "Array flat index out of range");
+    GUARD(
+        flatIndex < numel_,
+        std::format(
+            "reading element {} of an array that holds {} (rank {}), so the read is past its end",
+            flatIndex, numel_, rank_));
     if (isSlots()) {
         return reinterpret_cast<const slot_t *>(dataPtr_)[flatIndex];
     }
@@ -591,7 +619,12 @@ slot_t Array::getSlotSlow(uint64_t flatIndex) const {
 void Array::setSlotSlow(uint64_t flatIndex, slot_t value, const type::ArrayType *arrayType) {
     // Inclusive: an append stores at `numel_` before the count grows (see Array::setSlot). The old
     // exclusive bound aborted every compact append in a Debug build.
-    ASSERT(flatIndex <= numel_, "Array flat index out of range");
+    GUARD(
+        flatIndex <= numel_,
+        std::format(
+            "storing element {} of an array that holds {} (rank {}); an append may store at the "
+            "end ({}) and nowhere past it",
+            flatIndex, numel_, rank_, numel_));
     if (isSlots()) {
         CAMEL_ASSERT_NOT_VIEW(value, elemType_, "an array element");
         rtdata::Object *owner =
@@ -660,7 +693,10 @@ void Array::setSlotSlow(uint64_t flatIndex, slot_t value, const type::ArrayType 
 }
 
 double Array::getAsDouble(uint64_t flatIndex) const {
-    ASSERT(flatIndex < numel_, "Array flat index out of range");
+    GUARD(
+        flatIndex < numel_,
+        std::format(
+            "reading a number out of element {} of an array that holds {}", flatIndex, numel_));
     switch (elemTypeCode_) {
     case TypeCode::Float32:
         return static_cast<double>(dataAs<float>()[flatIndex]);
@@ -682,7 +718,10 @@ double Array::getAsDouble(uint64_t flatIndex) const {
 }
 
 int64_t Array::getAsInt64(uint64_t flatIndex) const {
-    ASSERT(flatIndex < numel_, "Array flat index out of range");
+    GUARD(
+        flatIndex < numel_,
+        std::format(
+            "reading an integer out of element {} of an array that holds {}", flatIndex, numel_));
     switch (elemTypeCode_) {
     case TypeCode::Float32:
         return static_cast<int64_t>(dataAs<float>()[flatIndex]);
@@ -704,7 +743,10 @@ int64_t Array::getAsInt64(uint64_t flatIndex) const {
 }
 
 bool Array::getAsBool(uint64_t flatIndex) const {
-    ASSERT(flatIndex < numel_, "Array flat index out of range");
+    GUARD(
+        flatIndex < numel_,
+        std::format(
+            "reading a bool out of element {} of an array that holds {}", flatIndex, numel_));
     switch (elemTypeCode_) {
     case TypeCode::Float32:
         return dataAs<float>()[flatIndex] != 0.0f;
@@ -726,7 +768,10 @@ bool Array::getAsBool(uint64_t flatIndex) const {
 }
 
 void Array::setFromDouble(uint64_t flatIndex, double value) {
-    ASSERT(flatIndex < numel_, "Array flat index out of range");
+    GUARD(
+        flatIndex < numel_,
+        std::format(
+            "writing a number to element {} of an array that holds {}", flatIndex, numel_));
     switch (elemTypeCode_) {
     case TypeCode::Float32:
         dataAs<float>()[flatIndex] = static_cast<float>(value);
@@ -755,7 +800,10 @@ void Array::setFromDouble(uint64_t flatIndex, double value) {
 }
 
 void Array::setFromInt64(uint64_t flatIndex, int64_t value) {
-    ASSERT(flatIndex < numel_, "Array flat index out of range");
+    GUARD(
+        flatIndex < numel_,
+        std::format(
+            "writing an integer to element {} of an array that holds {}", flatIndex, numel_));
     switch (elemTypeCode_) {
     case TypeCode::Float32:
         dataAs<float>()[flatIndex] = static_cast<float>(value);
@@ -784,7 +832,10 @@ void Array::setFromInt64(uint64_t flatIndex, int64_t value) {
 }
 
 void Array::setFromBool(uint64_t flatIndex, bool value) {
-    ASSERT(flatIndex < numel_, "Array flat index out of range");
+    GUARD(
+        flatIndex < numel_,
+        std::format(
+            "writing a bool to element {} of an array that holds {}", flatIndex, numel_));
     switch (elemTypeCode_) {
     case TypeCode::Float32:
         dataAs<float>()[flatIndex] = value ? 1.0f : 0.0f;
@@ -1270,7 +1321,11 @@ rtdata::Object *Array::clone(
         return copy;
     }
 
-    ASSERT(typeInfo && typeInfo->code() == TypeCode::Array, "Type must be ArrayType");
+    GUARD(
+        typeInfo && typeInfo->code() == TypeCode::Array,
+        std::format(
+            "copying a value whose type code is {}, but the copy reads an ArrayType",
+            typeInfo == nullptr ? -1 : static_cast<int>(typeInfo->code())));
     const auto *arrayType            = static_cast<const type::ArrayType *>(typeInfo);
     const type::TypeCode elemTypeCode = arrayType->elemTypeCode();
     // A slot array of any rank keeps its shape: `size_` is the first extent only, so a rank-2

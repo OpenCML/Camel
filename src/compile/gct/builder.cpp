@@ -1141,6 +1141,12 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                 node_ptr_t nRefNode = tree_->makeNRef(ref.toString());
                 node_ptr_t accsNode = tree_->makeAccs(i);
                 *accsNode << tree_->clone(dRefNode);
+                // How many names this declaration wrote, so the graph builder can refuse a count
+                // the value's tuple cannot meet -- in either direction -- at the declaration, and
+                // not at an element that happens to be past the end.
+                tree_->markUnpack(accsNode, refs.size());
+                setOriginFromAst(
+                    context_, accsNode, ast, camel::source::OriginKind::GctNode, "gct.accs");
                 *nRefNode << accsNode;
                 setOriginFromOrigin(
                     context_,
@@ -4346,6 +4352,46 @@ bool Builder::rejectTextInLiteral(
     return false;
 }
 
+namespace {
+
+/// Whether a type has a position of an open rank (`T[..]`) anywhere: at that position a value of
+/// the element type is the rank-zero value itself (design principles 5.4), so the literal standing
+/// there is the position's to convert and not one the declaration can convert as data.
+bool hasRankZeroPosition(Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    if (type->code() == TypeCode::Array) {
+        const auto *arrayType = tt::as_ptr<ArrayType>(type);
+        if (arrayType == nullptr) {
+            return false;
+        }
+        return arrayType->rankZeroType() != nullptr ||
+               hasRankZeroPosition(arrayType->elemType());
+    }
+    if (type->code() == TypeCode::Struct) {
+        const auto *structType = tt::as_ptr<StructType>(type);
+        for (size_t i = 0; structType != nullptr && i < structType->size(); ++i) {
+            if (hasRankZeroPosition(structType->typeAt(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+    if (type->code() == TypeCode::Tuple) {
+        const auto *tupleType = tt::as_ptr<TupleType>(type);
+        for (size_t i = 0; tupleType != nullptr && i < tupleType->size(); ++i) {
+            if (hasRankZeroPosition(tupleType->typeAt(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+    return false;
+}
+
+} // namespace
+
 node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST::node_ptr_t &ast) {
     // A literal of the declared type, converted now (`let x: float = 1`). A declared `T?` /
     // `T!` and a type written with a type variable (decided when the generic function is
@@ -4432,11 +4478,18 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
                 rejectTextInLiteral(value->data(), literalType, value->origin())) {
                 throw BuildAbortException();
             }
-            data_ptr_t converted = value->data()->convertTo(literalType);
+            data_ptr_t converted = camel::core::data::convertDataTo(value->data(), literalType);
             if (converted != nullptr && converted->type()->equals(literalType)) {
                 return tree_->makeData(converted);
             }
-            if (converted == nullptr) {
+            if (converted == nullptr && hasRankZeroPosition(literalType)) {
+                // The type has a position of `T[..]`, and a literal there is converted where a
+                // position converts its literal: the element becomes the rank-zero value the
+                // position promises (design principles 5.4), through the annotation CAST below
+                // (`Builder::coerceTo`), which reports what the literal cannot be. Converting it
+                // here would need the element types the literal is written at, which are the
+                // position's, not the data layer's.
+            } else if (converted == nullptr) {
                 reportLiteralCastFailure(
                     diags_, ast->load()->tokenRange(), value->data(), literalType);
                 throw BuildAbortException();
@@ -5888,19 +5941,24 @@ node_ptr_t Builder::visitGeneratorBody(
                 // names of any function: a read that stands before the statement that writes the
                 // cell is a name used before it is declared, and is the same
                 // `UnresolvedReference` such a read gets in any function.
-                for (const HoistedCell &cell : hoisted) {
-                    if (i > cell.index) {
-                        continue;
+                // The check compares positions in the body's own statement list, so it is read
+                // only where the stretch walks that list: a block's statements are positions in
+                // the block, and a position there says nothing about a declaration of the body.
+                if (stmts.get() == bodyStmts.get()) {
+                    for (const HoistedCell &cell : hoisted) {
+                        if (i > cell.index) {
+                            continue;
+                        }
+                        const AST::node_ptr_t use = nameUseIn(stmt, cell.name);
+                        if (use == nullptr) {
+                            continue;
+                        }
+                        diags_->of(SemanticDiag::UnresolvedReference)
+                            .at(use->load()->tokenRange())
+                            .commit(cell.name);
+                        popScope();
+                        return;
                     }
-                    const AST::node_ptr_t use = nameUseIn(stmt, cell.name);
-                    if (use == nullptr) {
-                        continue;
-                    }
-                    diags_->of(SemanticDiag::UnresolvedReference)
-                        .at(use->load()->tokenRange())
-                        .commit(cell.name);
-                    popScope();
-                    return;
                 }
                 const bool isStmt =
                     stmt->type() == AST::LoadType::Stmt;
@@ -5910,14 +5968,36 @@ node_ptr_t Builder::visitGeneratorBody(
                     stmt->loadAs<AST::ExitStmtLoad>()->exitType() == AST::ExitType::Yield) {
                     // The answer: the element and the stream that continues after this point.
                     const auto &values = stmt->atAs<AST::RepeatedLoad>(0);
-                    if (values->size() != 1) {
+                    // `yield a, b` hands out the tuple `(a, b)`, the same element `yield (a, b)`
+                    // writes. A `yield` with no value has no element to hand out and keeps the
+                    // named refusal.
+                    if (values->size() == 0) {
                         refuse(stmt);
                     }
+                    const auto elementOf = [&](const auto &list) -> node_ptr_t {
+                        if (list->size() == 1) {
+                            return visitData(list->front());
+                        }
+                        TupleDataFactory factory;
+                        bool dangling       = false;
+                        node_ptr_t execNode = makeExec(false, true);
+                        for (size_t k = 0; k < list->size(); ++k) {
+                            auto [data, _] =
+                                extractData(visitData(list->at(k)), execNode, dangling);
+                            factory.add(data);
+                        }
+                        node_ptr_t tupleNode = tree_->makeData(factory.build());
+                        if (dangling) {
+                            *execNode << tupleNode;
+                            tupleNode = execNode;
+                        }
+                        return tupleNode;
+                    };
                     const int resume = newArm();
                     fill(resume, stmts, i + 1, next, nextState);
                     *exec << writeCell(pcName, intLiteral(resume));
                     *exec << writeCell(haltName, intLiteral(1));
-                    node_ptr_t elem = declaredValue(visitData(values->front()), elemType, stmt);
+                    node_ptr_t elem = declaredValue(elementOf(values), elemType, stmt);
                     // The value of the round is the answer of the pull: a `return` is written
                     // only in the step function's own body
                     // (docs/design/io-concurrency-streams/plan.cn.md, slice E), so the element
@@ -5984,6 +6064,18 @@ node_ptr_t Builder::visitGeneratorBody(
                         stmt->at(0)->type() == AST::LoadType::Data &&
                         stmt->at(0)->loadAs<AST::DataLoad>()->dataType() == AST::DataType::LoopExpr;
                     if (!isIf && !isMatch && !isLoop) {
+                        if (isStmt && stmtType == AST::StmtType::Block) {
+                            // A plain block is a grouping, not a point of its own: its statements
+                            // are this stretch's statements, and the pull goes on at the arm after
+                            // the block. One more arm carries them.
+                            const int blockPc = newArm();
+                            const int afterPc = newArm();
+                            fill(afterPc, stmts, i + 1, next, nextState);
+                            fill(blockPc, stmt->atAs<AST::RepeatedLoad>(0), 0, afterPc, nextState);
+                            *exec << jumpTo(blockPc);
+                            popScope();
+                            return;
+                        }
                         refuse(stmt);
                     }
                     if (isLoop) {
@@ -6008,14 +6100,15 @@ node_ptr_t Builder::visitGeneratorBody(
                             refuse(stmt);
                         }
                         const std::string stateName = loopLoad->state()[0].toString();
-                        if (std::find(cellNames.begin(), cellNames.end(), stateName) !=
+                        // The body already has a cell of that name (a `var` of its own): the loop
+                        // carries that one cell, and the value below is written into it where
+                        // the loop stands. A second cell of the name would be a second writing of
+                        // one variable; the name is one cell with one type.
+                        if (std::find(cellNames.begin(), cellNames.end(), stateName) ==
                             cellNames.end()) {
-                            // The body already has a cell of that name (a `var` of its own, or
-                            // another loop's state): a second cell of it is a second writing.
-                            refuse(stmt);
+                            addTypedCell(stateName, visitData(init), stmt);
+                            cellNames.push_back(stateName);
                         }
-                        addTypedCell(stateName, visitData(init), stmt);
-                        cellNames.push_back(stateName);
                         // The four points of the loop: past it, at the condition, in the body,
                         // and the step back to the condition.
                         const int afterPc = newArm();

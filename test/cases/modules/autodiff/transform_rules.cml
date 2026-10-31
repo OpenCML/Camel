@@ -15,7 +15,8 @@
  */
 
 import { declaration_tags, graph_of, rule_of, tag_graphs, tag_name } from graph
-import { add_tangent, div_tangent, mul_cotangent, mul_tangent, neg_tangent, sub_tangent, jvp, transpose, vjp } from autodiff
+import { add_tangent, div_tangent, mul_cotangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
+import { jvp, transpose, vjp } from prelude
 import { Graph, Tag } from graph
 
 // A function with all three rules: a linear one, so its transpose and its pullback are the transpose
@@ -73,7 +74,7 @@ func main(): int sync {
     println(tags->map<(t: Tag): string => tag_name(t)>)
     // The first tag's argument is the function written for it, and the name a program writes
     // (`jvp`) and the qualified spelling both find the same rule.
-    println('transform_rules graph={} qualified={}'->format<tag_graphs(tags[0])[0] == graph_of(scale_jvp), isRule(rule_of(g, 'autodiff::jvp'), graph_of(scale_jvp))>)
+    println('transform_rules graph={} qualified={}'->format<tag_graphs(tags[0])[0] == graph_of(scale_jvp), isRule(rule_of(g, 'prelude::jvp'), graph_of(scale_jvp))>)
 
     // The tangent of each scalar primitive is its derivative.
     let e = 1.0

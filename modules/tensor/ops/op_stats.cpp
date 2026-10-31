@@ -3,12 +3,13 @@
 
 #include "op_stats.h"
 
+#include "camel/profile/profile.h"
+
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
-#include <cstdlib>
 #include <mutex>
 #include <utility>
 #include <vector>
@@ -94,8 +95,9 @@ void report() {
 } // namespace
 
 bool opStatsEnabled() {
-    static const bool enabled = std::getenv("CAMEL_TENSOR_OPSTATS") != nullptr;
-    return enabled;
+    // Asked once per kernel map, while the program compiles: the pass named it when the pipeline
+    // was parsed, so a run that asks for other readings pays no trampoline.
+    return camel::profile::kernelTiming();
 }
 
 operator_t timedKernel(const std::string &name, operator_t kernel) {

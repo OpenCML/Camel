@@ -1,0 +1,14 @@
+/**
+ * The kernel-timing table's case: an allocation, an element-wise product and a reduction, so the
+ * table the tensor module prints at exit has rows to print. The plan runs this twice, with
+ * `std::profile opstats=true` and without it, and pins which of the two runs prints a table.
+ */
+
+import { sum, zeros } from tensor
+
+func main(): int sync {
+    let a = zeros::<f32>([2, 2]) + 1.0
+    let b = a * 2.0
+    println(sum(b))
+    return 0
+}

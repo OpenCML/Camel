@@ -1,0 +1,25 @@
+/**
+ * Two references write one mutable object: `counter` is written here, and written again by the
+ * function value `f` the caller hands over -- at this level `f` is only a parameter, so which
+ * variable it writes is not visible. Both writes happen; the read written after the call takes the
+ * value the second write made (design principles 3.1, 3.5), so this prints `3`.
+ *
+ * A regression case, not an acceptance: this body is in a `sync` block, so the call runs and the
+ * read sees the cell whatever the writer set says -- it printed `3` before the conservative writer
+ * set existed. What tells the writer set from no writer set is the same body outside a sync block
+ * (two_references_write_one_object_unsynced.cml), which printed `1` and prints `3` now. Keep this
+ * case as the pin of the sync answer only; do not read it as evidence about the writer set.
+ */
+
+var counter = 0
+
+func twice(f: (x: int) => void, v: int): int sync {
+    counter = 1     // The first reference: recorded in the writer table.
+    f(v)            // The second reference: `f` captured `counter`, not visible here.
+    return counter  // Whichever write the read takes.
+}
+
+func main(): int sync {
+    println(twice((y: int) => { counter = y }, 3))
+    return 0
+}

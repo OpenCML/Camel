@@ -7,7 +7,7 @@
  * module cache has to keep.
  */
 
-import { vjp } from autodiff
+import { vjp } from prelude
 
 func scale_rule(x: float, dy: float): float {
     return 10.0 * dy

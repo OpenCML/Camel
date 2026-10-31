@@ -13,6 +13,7 @@
 #include "array_convert.h"
 
 #include "camel/core/derivative.h"
+#include "camel/core/forward.h"
 #include "camel/core/type/base.h"
 #include "camel/core/rtdata/half.h"
 #include "camel/core/type/composite/array.h"
@@ -502,10 +503,25 @@ template <typename F> TangentSpace floatTangentSpace() {
 
 } // namespace
 
+/// Where the forward rules of the float arithmetic are written down: not here, but in the ruleset
+/// module `rulesets.jvp`, one `rule` per operator whose left side is that operator. What this
+/// registers is the key -- the operator and how many operands it takes -- and the family; the name
+/// is read from that family's index when a transform asks (camel/core/forward.h), so the ruleset
+/// stays the one place a rule is written.
+template <typename F> void registerFloatForwardRules() {
+    camel::core::bindForwardRule({std::string(F::add), "rulesets.jvp", "+", 2});
+    camel::core::bindForwardRule({std::string(F::sub), "rulesets.jvp", "-", 2});
+    camel::core::bindForwardRule({std::string(F::mul), "rulesets.jvp", "*", 2});
+    camel::core::bindForwardRule({std::string(F::div), "rulesets.jvp", "/", 2});
+    camel::core::bindForwardRule({std::string(F::neg), "rulesets.jvp", "-", 1});
+}
+
 void registerBuiltinDerivatives() {
     auto &registry = DerivativeRegistry::instance();
     registerFloatRules<F64>(registry);
     registerFloatRules<F32>(registry);
+    registerFloatForwardRules<F64>();
+    registerFloatForwardRules<F32>();
     registry.setRule(":op/dtod", identityVjp);
     registry.setRule(":op/ftof", identityVjp);
     registry.setRule(":op/dtof", dtofVjp);

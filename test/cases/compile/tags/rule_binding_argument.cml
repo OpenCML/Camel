@@ -1,0 +1,21 @@
+/// A tag whose argument is a rule that has `with` parameters: the name of such a rule is a
+/// function of them (design principles 5.5), and the declaration carries the rule mark
+/// (`ruleBinding`), so a use of the name as a value is a `Rule` and not a function value. The tag
+/// argument is therefore a rule, and the program compiles and runs.
+///
+/// The sibling case `rule_argument.cml` reaches the same acceptance through a rule with no `with`
+/// parameters, whose name is bound by an initializer that calls `__rule_generic`; this one reaches
+/// it through the marked declaration itself, which is the branch that had no case at all.
+
+tag jvp::<F>(rule: F) on func when is_function::<F>()
+
+with <k: float>
+rule scale_rule(x: float) { x * k => (dx: float) => dx * k }
+
+#jvp(scale_rule)
+func mul(x: float, w: float): float { return x * w }
+
+func main(): int sync {
+    println(mul(2.0, 3.0))
+    return 0
+}

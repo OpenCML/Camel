@@ -24,6 +24,12 @@
  * (std::opt::fold and std::opt::dce on the bound copy of the function; the
  * program's own graphs are not modified).
  *
+ * What it prints, it prints because a parameter asked for it: `trace=true` every
+ * lowered call with the facts of its arguments, `dump=true` the simplified graph
+ * that is translated, `prep_stats=true` the size of the function when the export
+ * receives it and after its own simplification. A run that asks for nothing
+ * prints nothing but the file it wrote.
+ *
  * Nothing is written when any request is refused, and the program is not
  * executed (the pass consumes the graph).
  */
@@ -36,14 +42,21 @@ namespace camel::onnx::passes {
 
 class OnnxExportPass : public GraphTranslatePass {
   public:
-    explicit OnnxExportPass(const camel::core::context::context_ptr_t &ctx, std::string out = {})
-        : GraphTranslatePass(ctx), out_(std::move(out)) {}
+    OnnxExportPass(
+        const camel::core::context::context_ptr_t &ctx, std::string out = {}, bool trace = false,
+        bool dump = false, bool prepStats = false)
+        : GraphTranslatePass(ctx), out_(std::move(out)), trace_(trace), dump_(dump),
+          prepStats_(prepStats) {}
 
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 
   private:
     std::string out_; // the parameter `out`; empty: not given
+    /// The parameters `trace`, `dump` and `prep_stats`: what the pass prints beyond the file.
+    bool trace_     = false;
+    bool dump_      = false;
+    bool prepStats_ = false;
 };
 
 /// Registers the onnx module's passes (onnx::export) with the pass registry.

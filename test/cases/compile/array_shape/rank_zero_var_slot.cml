@@ -1,0 +1,17 @@
+// A `var` declared `f32[..]`: the initial value and the value written later take the same edge, so
+// both are the rank-zero array the slot holds (design principles 5.4), and both print as the
+// element. The write is the same entrance a call argument is -- `=` is an operator whose argument
+// enters a parameter of `f32[..]`.
+//
+// Before the conversion (`619eedb6c`) the crash was in the reading; after it (`cae413dbf`) the four
+// slots print the same two lines.
+
+func main(): int sync {
+    var value: f32[..] = 1.0
+    println(value)
+    sync {
+        value = 2.5
+    }
+    println(value)
+    return 0
+}

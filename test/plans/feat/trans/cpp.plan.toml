@@ -45,7 +45,7 @@ timeout_ms = 600000
 
 [[tests]]
 name = "recursion_site_message"
-desc = "The report a call site pre-renders into its rt::Site names the recursion limit the program was translated with (`Maximum recursion depth (1000) exceeded when evaluating graph 'depth'.`), not the value placeholder the old table wrote (`\\0370`, the unit separator and a digit). The `filled` field carries the same text so a CAMEL_MAX_RECURSION_DEPTH in effect still replaces it when the fault happens; the program itself is built and run by agree_with_fvm."
+desc = "The report a call site pre-renders into its rt::Site names the recursion limit the program was translated with (`Maximum recursion depth (1000) exceeded when evaluating graph 'depth'.`), not the value placeholder the old table wrote (`\\0370`, the unit separator and a digit). The `filled` field carries the same text, so the number is still filled in when the fault happens; the program itself is built and run by agree_with_fvm."
 kind = "behavior"
 case = "../../../cases/trans/cpp/exec/site_message.cml"
 args = ["${case}", "std::cpp"]

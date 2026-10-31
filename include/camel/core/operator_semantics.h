@@ -472,7 +472,11 @@ struct OperatorSemantics {
     /// A higher-order operator's use of the function it calls; nullopt: not one.
     std::optional<ElementCalls> elementCalls;
     /// The faults the operator can raise. nullopt: not declared, the operator's mayFault trait
-    /// decides ("may fault, anyhow"). An empty list: it never faults.
+    /// decides ("may fault, anyhow"). An empty list: the operator never decides to fail itself —
+    /// together with purity that is what makes a node freely schedulable (docs/design/effects/
+    /// edges.cn.md 4.6), so moving the node past another effect does not reorder a failure. It does
+    /// not promise that the process cannot run out of memory: that limit is the host's, reported at
+    /// the process boundary as RuntimeDiag::MemoryExhausted, and it belongs to no operator.
     std::optional<std::vector<FaultSpec>> faults;
     /// The resources (camel/core/resource_semantics.h). nullopt: not declared, read
     /// conservatively from the traits (conservativeResources): a pure operator touches none;

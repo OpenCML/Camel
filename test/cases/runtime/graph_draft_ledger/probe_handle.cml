@@ -1,0 +1,7 @@
+// The case of `graph::probe_handle`: the module is imported so its pass is registered, and the
+// pass is named after the file. Nothing in the program is what the case is about; the pass is.
+import { open } from graph
+
+func main(): int sync {
+    return 0
+}

@@ -1,0 +1,14 @@
+import { argmax } from array
+import { reshape } from tensor
+
+// The position along an axis of the first largest element, as a scope the pass outlines. Its result
+// is a tensor of indices, so the pass has to plan an i64 result rather than answer in the operand's
+// element type --- and the test pass says, in the analysis's own words, why each node is in no
+// region when it is not.
+func first_biggest(x: f32[2, 3]): int[2] { return x->argmax<1>() as int[2] }
+
+func main(): int sync {
+    let x = reshape<[2, 3]>([1.0, 5.0, 3.0, 4.0, 4.0, 2.0] as f32[]) as f32[2, 3]
+    println(first_biggest(x))
+    return 0
+}

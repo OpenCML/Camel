@@ -1,3 +1,9 @@
+> **裁定：已修。** 这一页问的两件事都落定了：三条标签进 `prelude`（`d1b3531b4`），而它当时报的
+> `string` / `attempt` 连锁失败不是"`prelude` 放不下类型函数"，是 `checkPreludeDeclarations` 造了 prelude
+> 却没登记进 `modulesByPath_`、同一个文件被检查第二遍（修在 `1ab619a57`）。规则（`add_jvp` 等）仍在
+> `stdlib/autodiff.cml`；把 `#jvp(rule)` 挂到运算符声明上还差一问，见
+> `questions-2026-10-31-tag-argument-of-a-rule.md`。页不删，留着：下一个人要知道这条路为什么长这样。
+
 # `prelude` 放不下 `Tangent` 与 `export tag`：一引入类型函数，它自己的声明整片连锁失败
 
 裁定 ① 要求把 `jvp`/`vjp`/`transpose` 三个标签、以及标量原语的规则，都放进最底层的 `prelude.cml`。实测发现 **`prelude` 一碰到 `types` 里的类型函数就散架**，标签和规则两条路都以同一种方式失败。

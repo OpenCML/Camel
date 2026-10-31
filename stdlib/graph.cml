@@ -317,3 +317,9 @@ export func operator ==(a: TypeRef, b: TypeRef): bool
 export func operator ==(a: Op, b: Op): bool
 #op('graph:eq')
 export func operator ==(a: Tag, b: Tag): bool
+
+/// The self-test of the handle invariant: makes a handle that claims a node the program does not
+/// have and reports whether the claim was refused where the handle was made. It is a test, in no
+/// pipeline, and naming it is the whole switch: `HANDLE_PROBE allowed a node that is there` (the
+/// control), then `HANDLE_PROBE refused: ...` for the node that is not.
+export func probe_handle::<F>(f: F): F! when is_function::<F>()

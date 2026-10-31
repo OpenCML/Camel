@@ -11,6 +11,7 @@
 #include "camel/core/type/base.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/runtime/draft.h"
+#include "camel/runtime/graph_txn.h"
 #include "camel/runtime/reachable.h"
 #include "camel/runtime/resources.h"
 
@@ -148,199 +149,201 @@ void syntheticGraphs(std::ostream &os, const rt::Program &base) {
     }
 
     std::vector<rt::GCGraph *> graphs;
-    const auto addPort = [](rt::GraphDraft &draft, Type *type) {
-        const rt::gc_slot_idx_t slot = draft.allocateRuntimeSlot(type);
+    const auto addPort = [](rt::GraphTransaction &transaction, Type *type) {
+        auto &draft                   = transaction.edit();
+        const rt::gc_slot_idx_t slot  = draft.allocateRuntimeSlot(type);
         const rt::gc_node_ref_t port = draft.addPortNode(type, slot);
         draft.appendNormPort(port);
         return port;
     };
-    const auto finish = [](rt::GraphDraft &draft, rt::gc_node_ref_t value) {
+    const auto finish = [](rt::GraphTransaction &transaction, rt::gc_node_ref_t value) {
+        auto &draft = transaction.edit();
         draft.setReturnNode(value, rt::GCReturnKind::Self);
         draft.setOutputNode(value);
         draft.setExitNode(value);
     };
-    const auto encode = [&](rt::GraphDraft &draft, const std::string &name) {
+    const auto encode = [&](rt::GraphTransaction &transaction, const std::string &name) {
+        auto &draft        = transaction.edit();
         rt::GCGraph *graph = draft.encode("synth_" + name, "synth:" + name);
         graphs.push_back(graph);
         return graph;
     };
+    // A test graph is opened the way the front end opens one: the transaction is the only way to
+    // get a draft, here as everywhere else.
     const auto makeDraft = [](rt::GraphId id, FunctionType *type) {
-        auto draft = std::make_unique<rt::GraphDraft>();
-        draft->setId(id);
-        draft->setFuncType(type);
-        return draft;
+        return rt::GraphTransaction::open(id, type);
     };
 
     // `open()` makes a fresh object, `same(x)` returns its parameter, `view(x)` a view of it,
     // `next(h)` touches the object the handle names.
     {
-        auto draft = makeDraft(idOpen, nullaryInt());
+        auto transaction = makeDraft(idOpen, nullaryInt());        auto &draft = transaction->edit();
         const rt::gc_node_ref_t value =
-            draft->addOperNode(Type::Int64(), nullptr, "semtest:handle_open");
-        finish(*draft, value);
-        encode(*draft, "open");
+            draft.addOperNode(Type::Int64(), nullptr, "semtest:handle_open");
+        finish(*transaction, value);
+        encode(*transaction, "open");
     }
     {
-        auto draft = makeDraft(idSame, unaryInt());
-        const rt::gc_node_ref_t port = addPort(*draft, Type::Int64());
+        auto transaction = makeDraft(idSame, unaryInt());        auto &draft = transaction->edit();
+        const rt::gc_node_ref_t port = addPort(*transaction, Type::Int64());
         const std::array<rt::gc_node_ref_t, 1> inputs{port};
         const rt::gc_node_ref_t value =
-            draft->addOperNode(Type::Int64(), nullptr, "semtest:handle_same");
-        draft->setNormInputs(value, inputs);
-        finish(*draft, value);
-        encode(*draft, "same");
+            draft.addOperNode(Type::Int64(), nullptr, "semtest:handle_same");
+        draft.setNormInputs(value, inputs);
+        finish(*transaction, value);
+        encode(*transaction, "same");
     }
     {
-        auto draft = makeDraft(idView, unaryInt());
-        const rt::gc_node_ref_t port = addPort(*draft, Type::Int64());
+        auto transaction = makeDraft(idView, unaryInt());        auto &draft = transaction->edit();
+        const rt::gc_node_ref_t port = addPort(*transaction, Type::Int64());
         const std::array<rt::gc_node_ref_t, 1> inputs{port};
         const rt::gc_node_ref_t value =
-            draft->addOperNode(Type::Int64(), nullptr, "semtest:handle_view");
-        draft->setNormInputs(value, inputs);
-        finish(*draft, value);
-        encode(*draft, "view");
+            draft.addOperNode(Type::Int64(), nullptr, "semtest:handle_view");
+        draft.setNormInputs(value, inputs);
+        finish(*transaction, value);
+        encode(*transaction, "view");
     }
     {
-        auto draft = makeDraft(idNext, unaryInt());
-        const rt::gc_node_ref_t port = addPort(*draft, Type::Int64());
+        auto transaction = makeDraft(idNext, unaryInt());        auto &draft = transaction->edit();
+        const rt::gc_node_ref_t port = addPort(*transaction, Type::Int64());
         const std::array<rt::gc_node_ref_t, 1> inputs{port};
         const rt::gc_node_ref_t value =
-            draft->addOperNode(Type::Int64(), nullptr, "semtest:handle_next");
-        draft->setNormInputs(value, inputs);
-        finish(*draft, value);
-        encode(*draft, "next");
+            draft.addOperNode(Type::Int64(), nullptr, "semtest:handle_next");
+        draft.setNormInputs(value, inputs);
+        finish(*transaction, value);
+        encode(*transaction, "next");
     }
     {
         // A function whose return is its parameter: the result is the port, not fresh.
-        auto draft = makeDraft(idPass, unaryInt());
-        finish(*draft, addPort(*draft, Type::Int64()));
-        encode(*draft, "passthrough");
+        auto transaction = makeDraft(idPass, unaryInt());        auto &draft = transaction->edit();
+        finish(*transaction, addPort(*transaction, Type::Int64()));
+        encode(*transaction, "passthrough");
     }
     {
         // The same body, but the type publishes `uses h`: the call touches the argument even
         // though the body does not.
-        auto draft = makeDraft(idTyped, typedUnaryInt(true));
-        finish(*draft, addPort(*draft, Type::Int64()));
-        encode(*draft, "typed");
+        auto transaction = makeDraft(idTyped, typedUnaryInt(true));        auto &draft = transaction->edit();
+        finish(*transaction, addPort(*transaction, Type::Int64()));
+        encode(*transaction, "typed");
     }
     {
         // `pure` with a `var` parameter: a call that passes a cell the signature says is unused
         // touches nothing (the plan's 2.2/2.3 property).
-        auto draft = makeDraft(idTypedUnused, typedUnaryInt(false, true));
-        finish(*draft, addPort(*draft, Type::Int64()));
-        encode(*draft, "typed-unused");
+        auto transaction = makeDraft(idTypedUnused, typedUnaryInt(false, true));        auto &draft = transaction->edit();
+        finish(*transaction, addPort(*transaction, Type::Int64()));
+        encode(*transaction, "typed-unused");
     }
     {
-        auto draft = makeDraft(idTypedCaller, nullaryInt());
-        draft->addDependency(idOpen);
-        draft->addDependency(idPass);
-        draft->addDependency(idTyped);
-        draft->addDependency(idTypedUnused);
-        const rt::gc_node_ref_t a = draft->addFuncNode(idOpen, Type::Int64());
-        const rt::gc_node_ref_t b = draft->addFuncNode(idOpen, Type::Int64());
+        auto transaction = makeDraft(idTypedCaller, nullaryInt());        auto &draft = transaction->edit();
+        draft.addDependency(idOpen);
+        draft.addDependency(idPass);
+        draft.addDependency(idTyped);
+        draft.addDependency(idTypedUnused);
+        const rt::gc_node_ref_t a = draft.addFuncNode(idOpen, Type::Int64());
+        const rt::gc_node_ref_t b = draft.addFuncNode(idOpen, Type::Int64());
         const std::array<rt::gc_node_ref_t, 1> ax{a};
         const std::array<rt::gc_node_ref_t, 1> by{b};
-        const rt::gc_node_ref_t generic = draft->addFuncNode(idPass, Type::Int64());
-        draft->setNormInputs(generic, ax);
-        const rt::gc_node_ref_t ca = draft->addFuncNode(idTyped, Type::Int64());
-        const rt::gc_node_ref_t cb = draft->addFuncNode(idTyped, Type::Int64());
-        const rt::gc_node_ref_t ua = draft->addFuncNode(idTypedUnused, Type::Int64());
-        draft->setNormInputs(ca, ax);
-        draft->setNormInputs(cb, by);
-        draft->setNormInputs(ua, ax);
-        finish(*draft, cb);
-        encode(*draft, "typed-caller");
+        const rt::gc_node_ref_t generic = draft.addFuncNode(idPass, Type::Int64());
+        draft.setNormInputs(generic, ax);
+        const rt::gc_node_ref_t ca = draft.addFuncNode(idTyped, Type::Int64());
+        const rt::gc_node_ref_t cb = draft.addFuncNode(idTyped, Type::Int64());
+        const rt::gc_node_ref_t ua = draft.addFuncNode(idTypedUnused, Type::Int64());
+        draft.setNormInputs(ca, ax);
+        draft.setNormInputs(cb, by);
+        draft.setNormInputs(ua, ax);
+        finish(*transaction, cb);
+        encode(*transaction, "typed-caller");
     }
     {
         // Two calls of the same typed function on one value: one resource, serialised. The body
         // says nothing, so before step 2 there is no pair at all.
-        auto draft = makeDraft(idTypedSame, nullaryInt());
-        draft->addDependency(idOpen);
-        draft->addDependency(idTyped);
-        const rt::gc_node_ref_t a = draft->addFuncNode(idOpen, Type::Int64());
+        auto transaction = makeDraft(idTypedSame, nullaryInt());        auto &draft = transaction->edit();
+        draft.addDependency(idOpen);
+        draft.addDependency(idTyped);
+        const rt::gc_node_ref_t a = draft.addFuncNode(idOpen, Type::Int64());
         const std::array<rt::gc_node_ref_t, 1> ax{a};
-        const rt::gc_node_ref_t ca = draft->addFuncNode(idTyped, Type::Int64());
-        const rt::gc_node_ref_t cb = draft->addFuncNode(idTyped, Type::Int64());
-        draft->setNormInputs(ca, ax);
-        draft->setNormInputs(cb, ax);
+        const rt::gc_node_ref_t ca = draft.addFuncNode(idTyped, Type::Int64());
+        const rt::gc_node_ref_t cb = draft.addFuncNode(idTyped, Type::Int64());
+        draft.setNormInputs(ca, ax);
+        draft.setNormInputs(cb, ax);
         const std::array<rt::gc_node_ref_t, 1> after{ca};
-        draft->setCtrlInputs(cb, after);
-        finish(*draft, cb);
-        encode(*draft, "typed-same");
+        draft.setCtrlInputs(cb, after);
+        finish(*transaction, cb);
+        encode(*transaction, "typed-same");
     }
     {
         // An effect that names no resource at all, next to one that names a cell: the global
         // resource meets every effect (design principles 3.3), where two named resources do not
         // (F9). Before the pair is decided by resource alone there is no pair here at all.
-        auto draft = makeDraft(idUnnamed, unaryInt());
-        const rt::gc_node_ref_t port = addPort(*draft, Type::Int64());
+        auto transaction = makeDraft(idUnnamed, unaryInt());        auto &draft = transaction->edit();
+        const rt::gc_node_ref_t port = addPort(*transaction, Type::Int64());
         const std::array<rt::gc_node_ref_t, 1> inputs{port};
         const rt::gc_node_ref_t cell =
-            draft->addOperNode(Type::Int64(), nullptr, "semtest:cell_write");
-        draft->setNormInputs(cell, inputs);
+            draft.addOperNode(Type::Int64(), nullptr, "semtest:cell_write");
+        draft.setNormInputs(cell, inputs);
         const rt::gc_node_ref_t global =
-            draft->addOperNode(Type::Int64(), nullptr, "semtest:unnamed");
+            draft.addOperNode(Type::Int64(), nullptr, "semtest:unnamed");
         const std::array<rt::gc_node_ref_t, 1> after{cell};
-        draft->setCtrlInputs(global, after);
-        finish(*draft, global);
-        encode(*draft, "unnamed-global");
+        draft.setCtrlInputs(global, after);
+        finish(*transaction, global);
+        encode(*transaction, "unnamed-global");
     }
 
     // (a) open() then two operations on the same returned value: one object, serialised.
     for (const Caller caller : {kOpenTwice, kOpenTwiceCtrl, kSameTwice, kSameOneCtrl}) {
         const bool withCtrl = caller == kOpenTwiceCtrl || caller == kSameOneCtrl;
-        auto draft = makeDraft(callerIds[caller], nullaryInt());
-        draft->addDependency(idOpen);
+        auto transaction = makeDraft(callerIds[caller], nullaryInt());        auto &draft = transaction->edit();
+        draft.addDependency(idOpen);
         if (caller != kOpenTwice && caller != kOpenTwiceCtrl) {
-            draft->addDependency(idSame);
+            draft.addDependency(idSame);
         }
-        const rt::gc_node_ref_t a = draft->addFuncNode(idOpen, Type::Int64());
+        const rt::gc_node_ref_t a = draft.addFuncNode(idOpen, Type::Int64());
         const rt::gc_node_ref_t b = caller != kSameOneCtrl
-                                        ? draft->addFuncNode(idOpen, Type::Int64())
+                                        ? draft.addFuncNode(idOpen, Type::Int64())
                                         : rt::kInvalidNodeRef;
         rt::gc_node_ref_t first = rt::kInvalidNodeRef;
         rt::gc_node_ref_t second = rt::kInvalidNodeRef;
         if (caller == kOpenTwice || caller == kOpenTwiceCtrl) {
             // Two open() results: before result inference both are Unknown, so the model cannot
             // tell them apart and has to serialise them.
-            first  = draft->addOperNode(Type::Int64(), nullptr, "semtest:handle_next");
-            second = draft->addOperNode(Type::Int64(), nullptr, "semtest:handle_next");
+            first  = draft.addOperNode(Type::Int64(), nullptr, "semtest:handle_next");
+            second = draft.addOperNode(Type::Int64(), nullptr, "semtest:handle_next");
             const std::array<rt::gc_node_ref_t, 1> x{a};
             const std::array<rt::gc_node_ref_t, 1> y{b};
-            draft->setNormInputs(first, x);
-            draft->setNormInputs(second, y);
+            draft.setNormInputs(first, x);
+            draft.setNormInputs(second, y);
         } else if (caller == kSameTwice) {
             // same(open()) twice: the result is Same of each fresh object.
             const std::array<rt::gc_node_ref_t, 1> ax{a};
             const std::array<rt::gc_node_ref_t, 1> by{b};
-            const rt::gc_node_ref_t ia = draft->addFuncNode(idSame, Type::Int64());
-            const rt::gc_node_ref_t ib = draft->addFuncNode(idSame, Type::Int64());
-            draft->setNormInputs(ia, ax);
-            draft->setNormInputs(ib, by);
-            first  = draft->addOperNode(Type::Int64(), nullptr, "semtest:handle_next");
-            second = draft->addOperNode(Type::Int64(), nullptr, "semtest:handle_next");
+            const rt::gc_node_ref_t ia = draft.addFuncNode(idSame, Type::Int64());
+            const rt::gc_node_ref_t ib = draft.addFuncNode(idSame, Type::Int64());
+            draft.setNormInputs(ia, ax);
+            draft.setNormInputs(ib, by);
+            first  = draft.addOperNode(Type::Int64(), nullptr, "semtest:handle_next");
+            second = draft.addOperNode(Type::Int64(), nullptr, "semtest:handle_next");
             const std::array<rt::gc_node_ref_t, 1> x{ia};
             const std::array<rt::gc_node_ref_t, 1> y{ib};
-            draft->setNormInputs(first, x);
-            draft->setNormInputs(second, y);
+            draft.setNormInputs(first, x);
+            draft.setNormInputs(second, y);
         } else {
             // same(open()) and open() are one object (Same), so the two next calls conflict.
             const std::array<rt::gc_node_ref_t, 1> ax{a};
-            const rt::gc_node_ref_t ia = draft->addFuncNode(idSame, Type::Int64());
-            draft->setNormInputs(ia, ax);
-            first  = draft->addOperNode(Type::Int64(), nullptr, "semtest:handle_next");
-            second = draft->addOperNode(Type::Int64(), nullptr, "semtest:handle_next");
+            const rt::gc_node_ref_t ia = draft.addFuncNode(idSame, Type::Int64());
+            draft.setNormInputs(ia, ax);
+            first  = draft.addOperNode(Type::Int64(), nullptr, "semtest:handle_next");
+            second = draft.addOperNode(Type::Int64(), nullptr, "semtest:handle_next");
             const std::array<rt::gc_node_ref_t, 1> x{ia};
             const std::array<rt::gc_node_ref_t, 1> y{a};
-            draft->setNormInputs(first, x);
-            draft->setNormInputs(second, y);
+            draft.setNormInputs(first, x);
+            draft.setNormInputs(second, y);
         }
         if (withCtrl) {
             const std::array<rt::gc_node_ref_t, 1> after{first};
-            draft->setCtrlInputs(second, after);
+            draft.setCtrlInputs(second, after);
         }
-        finish(*draft, second);
-        encode(*draft, caller == kOpenTwice       ? "open-twice"
+        finish(*transaction, second);
+        encode(*transaction, caller == kOpenTwice       ? "open-twice"
                            : caller == kOpenTwiceCtrl ? "open-twice-ctrl"
                            : caller == kSameTwice     ? "same-twice"
                                                       : "same-one-ctrl");

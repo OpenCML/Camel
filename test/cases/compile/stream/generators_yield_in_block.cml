@@ -1,0 +1,14 @@
+/**
+ * A `yield` written inside a plain block `{ ... }`: the block is a grouping, so the pull stops
+ * at the `yield` inside it and goes on after the block. Two elements, 1 and 2.
+ */
+
+func g(): int.. sync {
+    { yield 1 }
+    yield 2
+}
+
+func main(): int sync {
+    println(loop acc = 0 for v in g() do acc * 10 + v)
+    return 0
+}

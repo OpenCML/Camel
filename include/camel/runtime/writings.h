@@ -113,7 +113,7 @@ class WritingStore {
 /// What a cost model may look at: the draft, and the context for the facts about the program
 /// (a back end's model reads the shapes there).
 struct CostContext {
-    const GraphDraft &draft;
+    const GraphTransaction &transaction;
     camel::core::context::Context *context = nullptr;
 };
 
@@ -403,9 +403,16 @@ const Program *extractWritings(
 /// op-semantics 6.4).
 class DraftWritings : private WritingObserver {
   public:
+    /// The writings of `draft`. A caller that has no transaction to offer hands the draft alone,
+    /// and the writings open a transaction over it and keep it: the draft has an owner already
+    /// (whoever made it), so the transaction owns nothing and is only the face the draft is read
+    /// and written through. It lives as long as these writings do.
+    explicit DraftWritings(
+        GraphDraft &draft,
+        camel::core::sem::NumericPolicy policy = camel::core::sem::NumericPolicy::relaxed());
     /// The writings of the draft a transaction owns. The transaction is recorded, so the draft
     /// has an owner that is not a handle: a handle in a draft names this transaction and nothing
-    /// else. There is no form of these writings made from a bare draft.
+    /// else.
     explicit DraftWritings(
         GraphTransaction &transaction,
         camel::core::sem::NumericPolicy policy = camel::core::sem::NumericPolicy::relaxed());
@@ -413,10 +420,10 @@ class DraftWritings : private WritingObserver {
     DraftWritings(const DraftWritings &)            = delete;
     DraftWritings &operator=(const DraftWritings &) = delete;
 
-    /// Writes the equivalences back to the draft (GraphDraft::setWritings), which keeps them
+    /// Writes the equivalences back to the draft (`setWritings`), which keeps them
     /// until it is encoded.
     void save() { draft_.setWritings(std::vector<WritingUnion>(store_.log().begin(), store_.log().end())); }
-    GraphDraft &draft() { return draft_; }
+
     /// The transaction the draft belongs to. It is never null: a draft no transaction owns has
     /// no writings.
     GraphTransaction &transaction() { return *transaction_; }
@@ -548,7 +555,11 @@ class DraftWritings : private WritingObserver {
     void index(gc_node_ref_t node);
 
     GraphDraft &draft_;
-    /// The transaction `draft_` belongs to, when these writings were made from one.
+    /// The transaction opened here when the writings were handed a draft and no transaction: it
+    /// owns nothing (the draft has an owner already) and lives exactly as long as these writings,
+    /// so a handle made from them names a transaction for as long as it can be reached.
+    std::unique_ptr<GraphTransaction> ownedTransaction_;
+    /// The transaction `draft_` belongs to: the caller's, or the one above.
     GraphTransaction *transaction_ = nullptr;
     camel::core::sem::PermissionMask matchPerms_ = 0;
     bool greedy_        = false; // rewrite(): nodes are replaced, so nothing is looked up by key

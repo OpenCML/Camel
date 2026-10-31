@@ -302,6 +302,16 @@ class Tree {
     }
     bool isPipe(const Node *call) const { return pipeCalls_.contains(call); }
 
+    /// Records that `node` (an ACCS of a destructuring declaration) is one of `count` names, so
+    /// the graph builder can refuse a count the tuple cannot meet. The declaration writes this once
+    /// per name it binds, and the order it binds them in is the tuple's.
+    void markUnpack(const Node *node, size_t count) { unpackCounts_[node] = count; }
+    /// The count a destructuring declaration recorded for this ACCS, or 0 for a written `t.0`.
+    size_t unpackCount(const Node *node) const {
+        const auto found = unpackCounts_.find(node);
+        return found == unpackCounts_.end() ? 0 : found->second;
+    }
+
 
     /// The number of nodes made so far, attached to the root or not.
     size_t nodeCount() const { return nodeCount_; }
@@ -369,6 +379,10 @@ class Tree {
     std::unordered_map<const Node *, std::vector<std::optional<std::string>>> argumentNames_;
     std::unordered_set<const Node *> pipeCalls_;
     std::unordered_map<const Node *, Type *> nativeValues_;
+    // The ACCS nodes a destructuring declaration built, and how many names that declaration
+    // wrote: `let (x, y) = t` makes one per name, and the graph builder compares the count with the
+    // tuple it destructures (a written `t.0` has no entry).
+    std::unordered_map<const Node *, size_t> unpackCounts_;
 
     // Keyed by the data object: a composite literal's elements are converted from it, and a
     // nested literal keeps its own entry.

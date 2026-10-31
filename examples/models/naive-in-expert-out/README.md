@@ -343,7 +343,7 @@ traffic a call, 4 blocks and 10 MB a step — and what it buys in time is a tent
 most, under 0.2% of the step, below what this host resolves.
 
 **The change moves no bits.** The fused gradient's storage bits, over 1,155 to 262,144 elements, are
-the three-pass chain's shape for shape, in the default unit and under `CAMEL_TENSOR_ISA=generic`:
+the three-pass chain's shape for shape, in the default unit and under `--tensor-isa generic`:
 the plan pins them (`gelu_grad.bits`, `gelu_grad.bits.generic_unit`). That is why the loop is
 compiled per instruction set (`gradient_loops.inl` included by `gradient_generic.cpp` and
 `gradient_avx2.cpp`, the shape `update_*` already has) rather than written once in

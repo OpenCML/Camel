@@ -681,7 +681,7 @@ Model translate(core::context::Context &ctx, const Request &request) {
 /// The export of a program that makes no request: the computation of `main` is the model.
 void exportEntry(
     core::context::Context &ctx, const camel::runtime::Program *program, std::ostream &os,
-    const std::string &out) {
+    const std::string &out, const ExportOptions &options) {
     GCGraph *root = program->root();
     if (out.empty()) {
         throw Refusal{
@@ -698,7 +698,7 @@ void exportEntry(
     }
     Model model;
     try {
-        model = translateEntryGraph(ctx, program);
+        model = translateEntryGraph(ctx, program, options);
     } catch (const ExportError &e) {
         std::string message = e.what();
         if (e.kind() == ExportError::Kind::CallRemains) {
@@ -728,10 +728,20 @@ const camel::runtime::Program *
 OnnxExportPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     camel::runtime::GCGraph *graph = program->root();
     try {
+        // What the pass prints is what its parameters asked for, on every request it translates.
+        const auto asked = [&](ExportOptions options) {
+            options.trace     = trace_;
+            options.dump      = dump_;
+            options.prepStats = prepStats_;
+            return options;
+        };
         // Every request is translated before any file is written: a refusal leaves no model.
-        const std::vector<Request> requests = collectRequests(*context_, graph, out_);
+        std::vector<Request> requests = collectRequests(*context_, graph, out_);
+        for (Request &request : requests) {
+            request.options = asked(std::move(request.options));
+        }
         if (requests.empty()) {
-            exportEntry(*context_, program, os, out_);
+            exportEntry(*context_, program, os, out_, asked(ExportOptions{}));
             return nullptr;
         }
         if (requests.size() > 1 && !out_.empty()) {
@@ -780,7 +790,12 @@ void registerOnnxPasses() {
     // The pass, its documentation and its parameter `out` are the declaration in
     // stdlib/onnx.cml; the exporter's own signature carries the rest.
     descriptor.make = [](const core::context::context_ptr_t &ctx, const PassArgs &args) {
-        return std::make_unique<OnnxExportPass>(ctx, args.getString("out"));
+        return std::make_unique<OnnxExportPass>(
+            ctx,
+            args.getString("out"),
+            args.getBool("trace"),
+            args.getBool("dump"),
+            args.getBool("prep_stats"));
     };
     registerModulePass(kPassName, std::move(descriptor));
     // The pass is named for the function it wraps (`onnx.export_model`); the old spelling stays

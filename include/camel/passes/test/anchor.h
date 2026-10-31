@@ -9,6 +9,7 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/core/type/base.h"
 #include "camel/runtime/draft.h"
+#include "camel/runtime/graph_txn.h"
 
 #include <span>
 
@@ -21,7 +22,8 @@ namespace camel::passes::test {
 /// it stands where a statement of the source would. It is not a GATE, so a chain that forks on it is
 /// a fork, and it runs as the conversion it is. The tests use it where they need a statement the
 /// source did not write; the SYNC node that used to stand there is gone (edges.cn.md 5.3).
-inline camel::runtime::gc_node_ref_t anchorNode(camel::runtime::GraphDraft &draft) {
+inline camel::runtime::gc_node_ref_t anchorNode(camel::runtime::GraphTransaction &transaction) {
+    auto &draft = transaction.edit();
     const camel::runtime::gc_node_ref_t value = draft.materializeStaticValue(
         camel::core::rtdata::toSlot<float>(1.0f), camel::core::type::Type::Float32());
     const camel::runtime::gc_node_ref_t cast =
@@ -33,7 +35,8 @@ inline camel::runtime::gc_node_ref_t anchorNode(camel::runtime::GraphDraft &draf
 /// A node nothing reads and nothing executes: the null constant (slot 0, no type). It is what a
 /// test adds when it only needs the graph to change, or a node to hang an edge on that no rule about
 /// purity, chains or layout has anything to say about -- it is pure, so no order edge may end on it.
-inline camel::runtime::gc_node_ref_t blankNode(camel::runtime::GraphDraft &draft) {
+inline camel::runtime::gc_node_ref_t blankNode(camel::runtime::GraphTransaction &transaction) {
+    auto &draft = transaction.edit();
     return draft.addDataNode(nullptr, 0);
 }
 

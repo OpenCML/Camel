@@ -3,6 +3,7 @@
 
 #include "camel/core/type/base.h"
 #include "camel/core/mm.h"
+#include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/composite/composite.h"
@@ -289,6 +290,19 @@ CastSafety Type::castSafetyFrom(Type *sourceType) const {
 
 slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
     ASSERT(sourceType != nullptr, "castSlotFrom source type is null");
+    if (sourceType->code() == TypeCode::Array) {
+        // A value of `T[..]` read as `T` is the element it holds: a rank-zero array *is* that
+        // element (design principles 5.4), so reading it back hands the element on, and the
+        // compiler inserts this conversion where a value's type goes from `T[..]` back to `T`
+        // (Builder::coerceTo). The table below refuses an `as` on an open rank -- the shape is not
+        // known until the conversion runs -- so this one edge is not the table's answer, and it
+        // reads a value it can check: only a value with no dimension is the element.
+        const auto *array =
+            camel::core::rtdata::fromSlot<const Array *>(value);
+        if (array != nullptr && array->rank() == 0) {
+            return array->getSlot(0);
+        }
+    }
     ASSERT(
         castSafetyFrom(sourceType) == CastSafety::Safe,
         "castSlotFrom only allowed when castSafetyFrom returns Safe");

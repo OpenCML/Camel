@@ -406,7 +406,7 @@ parameters back). Note that `camel_opt` in `run.py` (inference) is
 
 **Reconciliation before timing.** `reconcile_train.py` checks, per model,
 configuration and protocol, the gradient operators a step executes (per-step
-counts from `CAMEL_TENSOR_OPSTATS=1`), that the update is consumed, and that
+counts from `std::profile opstats=true`), that the update is consumed, and that
 the final parameters agree with PyTorch; it writes `reconciliation.csv` with a
 verdict. The rule for gradient operators: every gradient operator whose result
 reaches a parameter update or the returned loss is executed under the optimised

@@ -269,12 +269,18 @@ std::span<const gc_node_ref_t> &initSlot(DraftNodeInit &init, DraftEdgeSlot slot
 } // namespace
 
 std::span<std::byte> DraftNodeView::payload(DraftNode *node) {
-    ASSERT(node != nullptr, "Draft payload view requires a non-null node.");
+    GUARD(
+        node != nullptr,
+        std::string("taking the payload view of a null draft node: there is no header to say how many "
+                    "payload bytes it has"));
     return {tailBytes(node), node->header.payloadBytes};
 }
 
 std::span<const std::byte> DraftNodeView::payload(const DraftNode *node) {
-    ASSERT(node != nullptr, "Draft payload view requires a non-null node.");
+    GUARD(
+        node != nullptr,
+        std::string("taking the payload view of a null draft node: there is no header to say how many "
+                    "payload bytes it has"));
     return {tailBytes(node), node->header.payloadBytes};
 }
 
@@ -780,15 +786,31 @@ gc_node_ref_t GraphDraft::translateNodeRef(
     if (sourceRef == kInvalidNodeRef) {
         return kInvalidNodeRef;
     }
-    ASSERT(sourceRef < sourceToDraft.size(), "Source node ref is out of decode map range.");
+    GUARD(
+        sourceRef < sourceToDraft.size(),
+        std::format(
+            "translating source node {} of a graph being decoded, but the map built from that graph "
+            "covers only {} of its nodes",
+            sourceRef,
+            sourceToDraft.size()));
     const gc_node_ref_t translated = sourceToDraft[sourceRef];
-    ASSERT(translated != kInvalidNodeRef, "Source node ref was not mapped during draft decode.");
+    GUARD(
+        translated != kInvalidNodeRef,
+        std::format(
+            "translating source node {} of a graph being decoded: the map has an entry for it, but "
+            "the entry is kInvalidNodeRef, so it was never mapped",
+            sourceRef));
     return translated;
 }
 
 size_t GraphDraft::payloadBytesForSourceNode(const GCGraph *graph, gc_node_ref_t sourceRef) {
     const GCNode *sourceNode = graph->node(sourceRef);
-    ASSERT(sourceNode != nullptr, "Draft decode encountered a null runtime node.");
+    GUARD(
+        sourceNode != nullptr,
+        std::format(
+            "decoding source node {} of a graph being decoded, but that graph has no node there "
+            "(its payload size is being read)",
+            sourceRef));
     if (sourceNode->kind == GCNodeKind::Brch) {
         return sizeof(DraftBrchPayload);
     }
@@ -800,7 +822,12 @@ DraftNode *GraphDraft::createDecodedNode(
     const std::vector<gc_node_ref_t> &sourceToDraft) {
     ++mutations_;
     const GCNode *sourceNode = graph->node(sourceRef);
-    ASSERT(sourceNode != nullptr, "Draft decode encountered a null source node.");
+    GUARD(
+        sourceNode != nullptr,
+        std::format(
+            "decoding source node {} of a graph being decoded, but that graph has no node there "
+            "(its kind and inputs are being read)",
+            sourceRef));
 
     const auto normInputs  = graph->normInputsOf(sourceRef);
     const auto withInputs  = graph->withInputsOf(sourceRef);
@@ -928,7 +955,13 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const Program &program, const GCG
     draft->decoded_ = true;
     draft->base_    = graph;
     for (gc_node_ref_t sourceRef = 0; sourceRef < graph->nodeCount(); ++sourceRef) {
-        ASSERT(sourceRef < sourceToDraft.size(), "Runtime node ref is out of draft decode range.");
+        GUARD(
+        sourceRef < sourceToDraft.size(),
+        std::format(
+            "decoding source node {} into the draft, but the map being filled covers only {} nodes: "
+            "the graph grew while it was being decoded",
+            sourceRef,
+            sourceToDraft.size()));
         const gc_node_ref_t draftId = static_cast<gc_node_ref_t>(draft->nodesById_.size());
         sourceToDraft[sourceRef]    = draftId;
         draft->draftIdsBySourceRef_[sourceRef] = draftId;
@@ -1099,8 +1132,19 @@ DraftNode *GraphDraft::rebuildNode(gc_node_ref_t id, const DraftNodeInit &init) 
 
 void GraphDraft::replaceNodeStorage(gc_node_ref_t id, DraftNode *nodePtr) {
     ++mutations_;
-    ASSERT(id < nodesById_.size(), "Draft node storage replacement id is out of range.");
-    ASSERT(nodePtr != nullptr, "Draft node storage replacement requires a non-null node.");
+    GUARD(
+        id < nodesById_.size(),
+        std::format(
+            "replacing the storage of draft node {}: this graph holds only {} nodes, so the id is "
+            "out of range",
+            id,
+            nodesById_.size()));
+    GUARD(
+        nodePtr != nullptr,
+        std::format(
+            "replacing the storage of draft node {} with null: the id is in range, but there is no "
+            "node to put there",
+            id));
     nodePtr->header.owner  = this;
     nodePtr->header.selfId = id;
     nodesById_[id]         = nodePtr;
@@ -1199,7 +1243,7 @@ void GraphDraft::setNodePermissions(gc_node_ref_t id, camel::core::sem::Permissi
     requireOneWriting("setNodePermissions");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot set the permissions of a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("set the permissions of draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     draftNode->header.permissions = permissions;
 }
 
@@ -1211,7 +1255,7 @@ uint32_t GraphDraft::nodeAttrs(gc_node_ref_t id) const {
 void GraphDraft::setNodeAttrs(gc_node_ref_t id, uint32_t attrs) {
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot set the attributes of a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("set the attributes of draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     draftNode->header.attrs = attrs;
 }
 
@@ -1223,14 +1267,14 @@ uint32_t GraphDraft::nodeName(gc_node_ref_t id) const {
 void GraphDraft::setNodeName(gc_node_ref_t id, uint32_t name) {
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot set the name of a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("set the name of draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     draftNode->header.name = name;
 }
 
 void GraphDraft::setNodeOrigin(gc_node_ref_t id, uint64_t origin) {
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot set the origin of a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("set the origin of draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     draftNode->header.origin = origin;
 }
 
@@ -1630,7 +1674,7 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
     requireOneWriting("eraseNode");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot erase a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("erase draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     if (draftNode->header.kind == GCNodeKind::Brch || draftNode->header.kind == GCNodeKind::Loop) {
         dissolveRegionsOf(id);
     }
@@ -1712,7 +1756,7 @@ void GraphDraft::setNormInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> 
     requireOneWriting("setNormInputs");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot set norm inputs for a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("set norm inputs for draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     for (gc_node_ref_t oldInput : DraftNodeView::normInputs(draftNode)) {
         removeUserRef(oldInput, id, DraftEdgeSlot::NormalPorts);
     }
@@ -1730,7 +1774,7 @@ void GraphDraft::setWithInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> 
     requireOneWriting("setWithInputs");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot set with inputs for a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("set with inputs for draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     for (gc_node_ref_t oldInput : DraftNodeView::withInputs(draftNode)) {
         removeUserRef(oldInput, id, DraftEdgeSlot::ContextPorts);
     }
@@ -1748,7 +1792,7 @@ void GraphDraft::setCtrlInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> 
     requireOneWriting("setCtrlInputs");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot set ctrl inputs for a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("set ctrl inputs for draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     for (gc_node_ref_t oldInput : DraftNodeView::ctrlInputs(draftNode)) {
         removeUserRef(oldInput, id, DraftEdgeSlot::Ctrl);
     }
@@ -1766,7 +1810,7 @@ void GraphDraft::setOrderInputs(gc_node_ref_t id, std::span<const gc_node_ref_t>
     requireOneWriting("setOrderInputs");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot set order inputs for a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("set order inputs for draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     for (gc_node_ref_t input : inputs) {
         if (input == id) {
             throw std::logic_error("An order edge cannot order a node after itself.");
@@ -1789,7 +1833,7 @@ void GraphDraft::setSyncInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> 
     requireOneWriting("setSyncInputs");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot set sync inputs for a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("set sync inputs for draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     for (gc_node_ref_t input : inputs) {
         if (input == id) {
             throw std::logic_error("A sync edge cannot chain a node to itself.");
@@ -1847,7 +1891,7 @@ void GraphDraft::setPorts(
     requireOneWriting("setPorts");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr, "Cannot set ports for a missing draft node.");
+    GUARD(draftNode != nullptr, std::format("set ports for draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
     for (gc_node_ref_t oldInput : DraftNodeView::normInputs(draftNode)) {
         removeUserRef(oldInput, id, DraftEdgeSlot::NormalPorts);
     }
@@ -2103,7 +2147,12 @@ gc_node_ref_t GraphDraft::materializeStaticValue(
 void GraphDraft::setStaticSlot(size_t index, slot_t value) {
     requireOneWriting("setStaticSlot");
     ++mutations_;
-    ASSERT(index < staticSlots_.size(), "Draft static slot index is out of range.");
+    GUARD(
+        index < staticSlots_.size(),
+        std::format(
+            "writing static slot {} of a draft that declares {} static slots",
+            index,
+            staticSlots_.size()));
     touchRefs();
     staticSlots_[index] = value;
 }
@@ -2205,7 +2254,13 @@ GraphId GraphDraft::payloadGraphAt(uint32_t index) const {
 
 GraphId GraphDraft::calleeIdOf(gc_node_ref_t id) const {
     const DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr && draftNode->header.kind == GCNodeKind::Func, "Not a FUNC node.");
+    GUARD(
+        draftNode != nullptr && draftNode->header.kind == GCNodeKind::Func,
+        std::format(
+            "reading the callee of node {}, whose kind is {}: a callee is a GCFuncRef payload, which "
+            "only a FUNC node (kind 10) carries, so what this node holds is not a graph index",
+            id,
+            draftNode == nullptr ? -1 : static_cast<int>(draftNode->header.kind)));
     return payloadGraphAt(DraftNodeView::payloadAs<GCFuncRef>(draftNode)->ref);
 }
 
@@ -2218,14 +2273,26 @@ void GraphDraft::setCalleeGraph(gc_node_ref_t id, GraphId callee) {
     requireOneWriting("setCalleeGraph");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr && draftNode->header.kind == GCNodeKind::Func, "Not a FUNC node.");
+    GUARD(
+        draftNode != nullptr && draftNode->header.kind == GCNodeKind::Func,
+        std::format(
+            "pointing node {}, whose kind is {}, at a callee: the payload slot holds a GCFuncRef only "
+            "when the node is a FUNC node (kind 10)",
+            id,
+            draftNode == nullptr ? -1 : static_cast<int>(draftNode->header.kind)));
     touchRefs();
     DraftNodeView::payloadAs<GCFuncRef>(draftNode)->ref = payloadGraphIndexOf(callee);
 }
 
 GCLoopBody GraphDraft::loopGraphsOf(gc_node_ref_t id) const {
     const DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr && draftNode->header.kind == GCNodeKind::Loop, "Not a LOOP node.");
+    GUARD(
+        draftNode != nullptr && draftNode->header.kind == GCNodeKind::Loop,
+        std::format(
+            "reading the loop graphs of node {}, whose kind is {}: a loop body is a GCLoopRef payload, "
+            "which only a LOOP node carries, so what this node holds is not a pair of graph indices",
+            id,
+            draftNode == nullptr ? -1 : static_cast<int>(draftNode->header.kind)));
     const auto *ref = DraftNodeView::payloadAs<GCLoopRef>(draftNode);
     return GCLoopBody{
         .condGraph       = payloadGraphAt(ref->condRef),
@@ -2240,7 +2307,13 @@ void GraphDraft::setLoopGraphs(gc_node_ref_t id, GraphId cond, GraphId body) {
     requireOneWriting("setLoopGraphs");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    ASSERT(draftNode != nullptr && draftNode->header.kind == GCNodeKind::Loop, "Not a LOOP node.");
+    GUARD(
+        draftNode != nullptr && draftNode->header.kind == GCNodeKind::Loop,
+        std::format(
+            "pointing node {}, whose kind is {}, at a loop body: the payload slot holds a GCLoopRef only "
+            "when the node is a LOOP node",
+            id,
+            draftNode == nullptr ? -1 : static_cast<int>(draftNode->header.kind)));
     touchRefs();
     auto *ref    = DraftNodeView::payloadAs<GCLoopRef>(draftNode);
     ref->condRef = payloadGraphIndexOf(cond);

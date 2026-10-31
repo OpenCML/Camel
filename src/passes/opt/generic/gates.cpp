@@ -13,9 +13,11 @@
 namespace camel::passes::generic {
 using namespace camel::runtime;
 
-bool bypassValueGate(GraphDraft &draft, gc_node_ref_t id, size_t &edgeBudget) {
+bool bypassValueGate(
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, size_t &edgeBudget) {
+    auto &draft = transaction.edit();
     const auto *gate = draft.header(id);
-    if (!gate || gate->kind != GCNodeKind::Gate || !edgeBudget || !isReplaceable(draft, id) ||
+if (!gate || gate->kind != GCNodeKind::Gate || !edgeBudget || !isReplaceable(transaction, id) ||
         draft.normInputsOf(id).size() != 1 || !draft.withInputsOf(id).empty()) {
         return false;
     }
@@ -72,7 +74,7 @@ bool bypassValueGate(GraphDraft &draft, gc_node_ref_t id, size_t &edgeBudget) {
     }
     for (auto user : draft.ctrlUsersOf(id))
         addUser(user, true);
-    const auto predecessors = controlFrontier(draft, draft.ctrlInputsOf(id));
+    const auto predecessors = controlFrontier(transaction, draft.ctrlInputsOf(id));
     const auto controlUsers = std::ranges::count_if(users, [](const auto &u) { return u.control; });
     const size_t cost       = predecessors.size() * users.size() + controlUsers;
     if (cost > 64 || cost > edgeBudget ||
@@ -86,16 +88,16 @@ bool bypassValueGate(GraphDraft &draft, gc_node_ref_t id, size_t &edgeBudget) {
             draft.unlinkInput(DraftEdgeKind::Ctrl, user.id, id);
             // A control-only user also waited for value production, not just the gate's
             // explicit CTRL inputs. Keep that completion (and any fault in the producer).
-            appendControlDependency(draft, value, user.id);
+            appendControlDependency(transaction, value, user.id);
         }
         // A wait the gate carried through the chain of its `sync` block is handed on in that kind:
         // the consumer that is a statement of the block follows the same predecessor through the
         // sync edge (docs/handover/README.cn.md 5.21 item 4).
         for (gc_node_ref_t predecessor : draft.syncInputsOf(id)) {
-            handOverSyncWait(draft, predecessor, user.id);
+            handOverSyncWait(transaction, predecessor, user.id);
         }
         for (auto predecessor : predecessors) {
-            appendControlDependency(draft, predecessor, user.id);
+            appendControlDependency(transaction, predecessor, user.id);
         }
     }
     draft.eraseNode(id);

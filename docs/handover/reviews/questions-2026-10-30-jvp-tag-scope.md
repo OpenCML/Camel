@@ -1,3 +1,8 @@
+> **裁定：①**（三条标签进 `prelude`，`autodiff` 反过来从 `prelude` 引入）——落地在 `d1b3531b4`。
+> 页里"`prelude` 看不到 `add_jvp` 的标签"那句报错另有根因：`checkPreludeDeclarations` 造了 prelude
+> 却没登记进 `modulesByPath_`，同一个文件被检查第二遍（修在 `1ab619a57`）。页不删，留着：下一个人
+> 要知道这条路为什么长这样。
+
 # `#jvp` 标注点写在哪个模块：标签有自己的命名空间，而运算符声明在 `prelude`
 
 给标量算子挂 `#jvp(rule)` 时撞上的不是"一个位置只能有一个标签"，而是**标签名在哪个模块可见**。

@@ -1136,7 +1136,9 @@ void ParserImpl::parseDataDecl(bool exported) {
         close(list, NK::IdentList);
     } break;
     case TK::LParen:
-        parseBracketedIdents(TK::RParen, NK::ParentIdents);
+        // `let (a, b) = t`: the carrier of a tuple destructuring, where `_` may stand for an
+        // element the declaration drops (design principles 3.9, as `let _ = e` does).
+        parseBracketedIdents(TK::RParen, NK::ParentIdents, true);
         break;
     case TK::Identifier:
         parseIdentList();
@@ -1327,19 +1329,33 @@ static TK openOf(TK closer) {
 /// where the list opens is reported rather than read: taking the terminal token as the opener would
 /// fold it into the tree and leave the Program node without it (or with it twice), which is not
 /// lossless. A name that is not there is reported by `parseIdentDef` in the same way.
-void ParserImpl::parseBracketedIdents(TK closer, NK kind) {
+///
+/// `wildcards` is the one place a `_` may stand among the names: the carrier of a declaration that
+/// destructures a tuple (`let (x, _) = t`). `let _ = e` accepts it already (design principles 3.9:
+/// a value dropped on purpose), and a name list of one of those keeps the same shape -- the `_` is
+/// closed as an `IdentDef`, as it is there, so the tree reads the same.
+void ParserImpl::parseBracketedIdents(TK closer, NK kind, bool wildcards) {
     const size_t m = mark();
     if (!expect(openOf(closer))) {
         return close(m, kind);
     }
+    const auto item = [&]() {
+        if (!wildcards || cur_ != TK::Underscore) {
+            parseIdentDef();
+            return;
+        }
+        const size_t wm = mark();
+        bump();
+        close(wm, NK::IdentDef);
+    };
     {
         Scope scope(*this, false);
         if (cur_ != closer && cur_ != TK::Comma) {
             const size_t lm = mark();
-            parseIdentDef();
+            item();
             while (cur_ == TK::Comma && peek(1) != closer && !panic_) {
                 bump();
-                parseIdentDef();
+                item();
             }
             close(lm, NK::IdentList);
         }

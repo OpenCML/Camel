@@ -319,12 +319,9 @@ std::unordered_map<std::string, operator_t> getArrayOpsMap() {
         {"dim", __array_dim__},
         {"elements", __array_elements__},
         {"to_bytes", __array_to_bytes__},
-        {"sum_axis", __array_sum_axis__},
-        {"mean_axis", __array_mean_axis__},
-        {"min_axis", __array_min_axis__},
-        {"max_axis", __array_max_axis__},
-        {"argmax_axis", __array_argmax_axis__},
-        {"argmin_axis", __array_argmin_axis__},
+        // The reductions along an axis are not here: their URI is `tensor:sum_axis` and the five
+        // beside it, implemented by the tensor module (`modules/tensor/ops/indexing.cpp`), and one
+        // operator has one implementation. This module's `sum`/`mean`/... import those declarations.
     };
     // The sorting family, one operator per element type (kSortTypes): `sort_<t>` returns a new
     // array (design principles 11.3) and `sort_<t>_in_place` is the form the compiler calls for

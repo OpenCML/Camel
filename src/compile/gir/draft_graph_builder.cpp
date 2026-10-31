@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * Compile-time host around GraphDraft.
+ * Compile-time host around the editable draft.
  *
  * The old Graph/Node layer should disappear over time. This builder is the
  * destination host for compile-time services that must remain outside the

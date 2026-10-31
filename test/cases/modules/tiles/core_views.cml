@@ -2,7 +2,8 @@
 // The differentiated tensor is the first `with` parameter; the derivative wrappers keep the
 // ordinary signature that tiles::run and tiles::source specialize on.
 import { load_npy, save_npy, reshape, permute, sum, zeros } from tensor
-import { grad, vjp } from autodiff
+import { grad } from autodiff
+import { vjp } from prelude
 import { source, inspect, run_preferred_resident, download } from tiles
 import { get_env } from env
 let weights = reshape<[2, 3]>([1.0, -2.0, 3.0, -4.0, 5.0, -6.0] as f32[])

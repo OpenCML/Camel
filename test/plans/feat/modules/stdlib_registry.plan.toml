@@ -225,3 +225,17 @@ expect_exit = 0
 expect_stdout_contains = ["PASS no algo module"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
+
+# The environment switches that are left are a ledger: a new `getenv` of a CAMEL_* variable fails
+# here, and so does a ledger line whose switch was cleared.
+[[tests]]
+name = "registry.no_env_switches"
+desc = "Every `getenv` under `src/` and `modules/` is in `test/tools/check-env-switches.mjs`: no CAMEL_* variable decides a run's behaviour unless an explicit line says why it is still there, and a line whose switch was cleared fails too."
+kind = "behavior"
+tool = "node"
+case = "../../../tools/check-env-switches.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS no environment switch outside the ledger"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000

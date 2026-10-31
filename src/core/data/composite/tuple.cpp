@@ -1,6 +1,7 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
+#include "camel/core/data/composite/array.h"
 #include "camel/core/data/composite/tuple.h"
 #include "camel/core/data/base.h"
 #include "camel/core/data/null.h"
@@ -141,7 +142,7 @@ data_ptr_t TupleData::convertTo(Type *type) {
             if (e == nullptr || elemType == nullptr) {
                 return nullptr;
             }
-            data_ptr_t converted = e->convertTo(elemType);
+            data_ptr_t converted = convertDataTo(e, elemType);
             if (converted == nullptr) {
                 // A tuple with a hole is not a value: the conversion of the whole literal fails,
                 // and the caller reports the element that could not be converted.

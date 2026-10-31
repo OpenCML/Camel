@@ -1,0 +1,23 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// A ruleset that deliberately lacks one of the five scalar arithmetic primitives: there is a rule
+// for `+`, `-` (both arities) and `*`, and none for `/`. A replacement that walks a function has to
+// stop at the `/` it meets and say so there -- writing four rules is how the fifth one's absence is
+// a state the code can be put in on purpose, rather than by taking a rule out of the production
+// ruleset.
+rule add_ok(x: float, w: float) {
+    x + w => (dx: float, dw: float) => dx + dw
+}
+
+rule sub_ok(x: float, w: float) {
+    x - w => (dx: float, dw: float) => dx - dw
+}
+
+rule mul_ok(x: float, w: float) {
+    x * w => (dx: float, dw: float) => dx * w + x * dw
+}
+
+rule neg_ok(x: float) {
+    -x => (dx: float) => -dx
+}

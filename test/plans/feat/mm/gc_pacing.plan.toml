@@ -322,11 +322,10 @@ timeout_ms = 120000
 
 [[tests]]
 name = "gc_pacing.promoted_fvm"
-desc = "A rolling window of 16 rows of 1 MB is kept; a row survives the four minor collections that promote it and is then garbage. The promoted block bytes (15 MB after the last sweep) ask for a major collection at the 4 MB floor: 64 majors in 300 steps, and the peak is 34.6 MB, which is the live window plus the floor and the young rows, not the 300 MB allocated. CAMEL_GC_GROWTH_PERCENT=25 keeps the budget at the floor. Pipeline: std::fvm."
+desc = "A rolling window of 16 rows of 1 MB is kept; a row survives the four minor collections that promote it and is then garbage. The promoted block bytes (15 MB after the last sweep) ask for a major collection at the 4 MB floor: 64 majors in 300 steps, and the peak is 34.6 MB, which is the live window plus the floor and the young rows, not the 300 MB allocated. `--gc-growth-percent 25` keeps the budget at the floor. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_promoted_blocks.cml"
-args = ["${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=300", "--arg", "rows=16", "--arg", "size=131072", "${run_fvm}"]
-envs = ["CAMEL_GC_GROWTH_PERCENT=25"]
+args = ["--gc-growth-percent", "25", "${case}", "std::profile gc_stats=1 report=false hints=false", "--arg", "steps=300", "--arg", "rows=16", "--arg", "size=131072", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["gc_promoted_blocks base=0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

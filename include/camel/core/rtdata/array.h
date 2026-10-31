@@ -274,6 +274,14 @@ class Array : public rtdata::Object {
         camel::core::mm::IAllocator &allocator, const type::ArrayType *arrayType, size_t size,
         bool zeroInit = false);
 
+    /// A rank-zero array holding `value`: no dimensions, one element (design principles 5.4 -- a
+    /// rank-zero array is the element itself, and the run's value of it is this one). `rank()` is
+    /// 0, `numel()` and `size()` are 1, it prints as the element and compares by it. A value of
+    /// this shape is what a `T[..]` slot holds when the program gives it the element: the compiler
+    /// wraps it there, so that the slot has a rank the run can read.
+    static Array *createRankZero(
+        camel::core::mm::IAllocator &allocator, const type::ArrayType *arrayType, slot_t value);
+
     /// A view of `source`'s compact data: `extents` elements starting at `elementOffset`.
     /// The view shares the block; an inline source is promoted (copied once) first. Only
     /// compact arrays can be viewed.
@@ -408,11 +416,21 @@ class Array : public rtdata::Object {
     }
 
     template <typename T> T *dataAs() {
-        ASSERT(isCompact(), "dataAs<T>() requires a compact numeric array");
+        GUARD(
+            isCompact(),
+            std::string("asking for the storage as an array of ") + std::to_string(sizeof(T)) +
+                "-byte values, but this array is not compact: its elements are stored as " +
+                std::to_string(static_cast<int>(storage_)) +
+                " (0 compact, 1 slots, 2 view), so they are not a plain T[]");
         return reinterpret_cast<T *>(dataPtr_);
     }
     template <typename T> const T *dataAs() const {
-        ASSERT(isCompact(), "dataAs<T>() requires a compact numeric array");
+        GUARD(
+            isCompact(),
+            std::string("asking for the storage as an array of ") + std::to_string(sizeof(T)) +
+                "-byte values, but this array is not compact: its elements are stored as " +
+                std::to_string(static_cast<int>(storage_)) +
+                " (0 compact, 1 slots, 2 view), so they are not a plain T[]");
         return reinterpret_cast<const T *>(dataPtr_);
     }
 

@@ -33,3 +33,17 @@ expect_stdout_contains = ["[LEDGER] files ", "[LEDGER] ok"]
 expect_output_not_contains = ["[LEDGER] RED"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+# The check in Handle::create that a handle naming a program names a node that program has. This
+# case is what makes it a check and not a comment: the pass makes a handle that is wrong on
+# purpose, and the reading is the refusal. Both lines are asserted -- the control first, because a
+# refusal that also refuses the right handle would be a worse bug than the one it guards.
+[[tests]]
+name = "runtime.graph_draft_ledger.handle_invariant"
+desc = "A handle that claims a node the program does not have is refused where the handle is made, and a node that is there is allowed."
+kind = "behavior"
+case = "../../../cases/runtime/graph_draft_ledger/probe_handle.cml"
+args = ["${case}", "graph::probe_handle"]
+expect_exit = 0
+expect_stdout_contains = ["HANDLE_PROBE allowed a node that is there: yes", "HANDLE_PROBE refused:"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

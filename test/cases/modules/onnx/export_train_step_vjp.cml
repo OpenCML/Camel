@@ -6,7 +6,8 @@
  * agree (checked by hand, artifacts: b2/probes/p11_vjp_step.cml).
  */
 import { reshape, sum, tanh, where } from tensor
-import { with_grad, vjp } from autodiff
+import { with_grad } from autodiff
+import { vjp } from prelude
 import { sgd } from nn
 import { export_model } from onnx
 import { get_env } from env

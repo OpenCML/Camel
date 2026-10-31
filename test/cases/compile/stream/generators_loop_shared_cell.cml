@@ -1,0 +1,20 @@
+/**
+ * A `loop` whose state has the name of a cell the body already declared: `i` is one cell, the
+ * `var` and the loop's state, written by the `var` and by the loop's own step. The stream hands
+ * out 0, 1, 2 and then 3 -- the value `i` holds after the loop -- which is what the same logic
+ * written as a plain loop prints step by step.
+ */
+
+func count(): int.. sync {
+    var i = 0
+    loop i = 0 while i < 3 do {
+        yield i
+        i + 1
+    }
+    yield i
+}
+
+func main(): int sync {
+    println(loop acc = 0 for v in count() do acc * 10 + v)
+    return 0
+}

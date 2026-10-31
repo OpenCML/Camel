@@ -5,7 +5,7 @@
 ## 1. 有多少条
 
 - **37 条 `rule` 声明，全部 `export`**。`std::opt` 的规则库就是这 37 条，没有别的来源：C++ 侧不再注册规则（`modules/rewrite/module.cpp` 只注册引擎与内核；`src/passes/opt/generic/algebra.cpp` 剩下的 `neutral_only` 是文档化的参考模式，不是库的一部分）。
-- 标准库里另有 10 条 `rule`（`stdlib/autodiff.cml` 的 `add_jvp` … `neg_t`），那是求导的规则集，不属于 `std::opt`。
+- 标准库里另有 10 条 `rule`，那是求导的规则集，不属于 `std::opt`：5 条前向规则在 `stdlib/rulesets/jvp.cml`（`jvp_add` … `jvp_neg`），5 条转置规则在 `stdlib/rulesets/transpose.cml`（`add_t` … `neg_t`）。规则属于哪一族由它声明在哪个模块决定；它是哪个原语的规则，由左边的运算符与元数决定。
 - 测试用例里的 `rule` 是各自用例的规则，不进库。
 
 ## 2. 按注册点分组

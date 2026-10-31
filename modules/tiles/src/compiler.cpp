@@ -1091,12 +1091,19 @@ class Compiler {
         }
         const tensor::TensorFacts result =
             inferred ? tensor::tensorFactsOf(*inferred) : tensor::TensorFacts{};
-        if (result.dtype != ty::TypeCode::Float32 || !result.isStaticShape())
+        // A position is a tensor of indices, so an i64 result is as statically known as an f32 one.
+        // The node carries the element type it was inferred with; nothing is read at f32 width.
+        const bool positionalResult = result.dtype == ty::TypeCode::Int64 && def->name == "argmax_axis";
+        if ((result.dtype != ty::TypeCode::Float32 && !positionalResult) ||
+            !result.isStaticShape())
             throw UnsupportedComputation(
                 "operator '" + uri() + "' needs a statically known f32 tensor result",
                 uri(),
                 UnsupportedComputation::Reason::Shape);
-        Node n{.op = std::string(def->name), .shape = tensor::extentsOf(*result.shape)};
+        Node n{
+            .op = std::string(def->name),
+            .shape = tensor::extentsOf(*result.shape),
+            .dtype = positionalResult ? DType::I64 : DType::F32};
         if (n.op == "sum_to") {
             n.inputs = {tensorValue(args.at(0))};
             if (program.nodes[n.inputs[0]].shape == n.shape)

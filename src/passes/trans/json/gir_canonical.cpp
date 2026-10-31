@@ -234,7 +234,7 @@ class CanonicalDocument {
         // A graph holding writings is a state of a rewrite, not a program: its nodes are the
         // several writings of one value and no draft of it may be edited.
         if (draft.writings().empty())
-            reduceDocumentOrdering(draft);
+            reduceDocumentOrdering(*transaction);
         for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
             if (draft.header(id) == nullptr)
                 continue;

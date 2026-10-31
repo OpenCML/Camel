@@ -34,7 +34,9 @@ if(CUDAToolkit_FOUND)
   target_link_libraries(tiles-async-check PRIVATE libcamel fmt::fmt nlohmann_json::nlohmann_json ${CMAKE_DL_LIBS})
   # The lease test builds the module's device code without libcamel; `--devices` is read from
   # the core's selection, so that one translation unit comes along (it depends on nothing else).
-  add_executable(tiles-module-lease ../../test/cases/modules/tiles/module_lease.cpp ../../test/cases/modules/tiles/scalar_device.cpp src/scalar_expr.cpp src/cuda_backend.cpp src/cuda_pool.cpp src/capability.cpp src/cuda_resources.cpp ${CMAKE_SOURCE_DIR}/src/execute/devices.cpp)
+  # kernel expression construction names index expressions, so index_expr.cpp is one of the files
+  # this target cannot leave out.
+  add_executable(tiles-module-lease ../../test/cases/modules/tiles/module_lease.cpp ../../test/cases/modules/tiles/scalar_device.cpp src/scalar_expr.cpp src/index_expr.cpp src/cuda_backend.cpp src/cuda_pool.cpp src/capability.cpp src/cuda_resources.cpp ${CMAKE_SOURCE_DIR}/src/execute/devices.cpp)
   target_compile_features(tiles-module-lease PRIVATE cxx_std_23)
   target_include_directories(tiles-module-lease PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/include)
   target_link_libraries(tiles-module-lease PRIVATE ${CMAKE_DL_LIBS})

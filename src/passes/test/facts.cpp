@@ -661,7 +661,7 @@ FactNodeTestPass::apply(const camel::runtime::Program *program, std::ostream &os
 
     // A node more at the end of the root: its revision changes, the record of `kept` does not.
     RuntimeGraphDraftSession session(context_, program);
-    (void)blankNode(session.edit(root).edit());
+    (void)blankNode(session.edit(root));
     const camel::runtime::Program *grown = session.commit();
     GCGraph *grownRoot                   = grown->root();
     const Anchor grownAnchor{grown, grownRoot, kept};

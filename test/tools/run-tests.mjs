@@ -666,7 +666,13 @@ function parseArgs(argv) {
             const install = arg.slice('--camel='.length)
             if (install === '') throw new Error('--camel needs the path of the install to measure')
             options.camel = path.resolve(process.cwd(), install)
-        } else if (arg === '--jobs' && i + 1 < argv.length) {
+        } else if (arg === '--compile-only') {
+            // Answers one question: which programs in the entries the fast layer does not run fail
+            // to compile. It does not answer whether those tests pass -- their own criteria are
+            // comparisons and budgets that judge nothing without a run -- so it reports two columns,
+            // the compilation failures and the entries whose question is not this one, and it is not
+            // part of the gate.
+            options.compileOnly = true        } else if (arg === '--jobs' && i + 1 < argv.length) {
             options.jobs = positiveInteger(argv[++i], '--jobs')
         } else if (arg.startsWith('--jobs=')) {
             options.jobs = positiveInteger(arg.slice('--jobs='.length), '--jobs')
@@ -1602,7 +1608,33 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         scope.backend = passes
     }
     const args = expandArgs(test.args || [], scope)
-    const env = { ...process.env }
+    // `--compile-only`: the same entry, the same case, the same environment and the same arguments
+    // that are not passes -- but the pipeline stops once the program is built. Every word that
+    // names a pass is dropped and one compile pass is appended (`std::gir` builds the program and
+    // returns an empty graph), so nothing the entry would have executed is executed. This is what
+    // makes a case outside the fast tier visible without paying for its run.
+    // Only an entry that hands the compiler a case and a pipeline is judged: a tool entry, one that
+    // drives the CLI (`--timeit`, `--output-format`), or one whose first word is a flag is asking
+    // something else, and a compile of it would answer a question nobody asked.
+    const judgedByCompile =
+        logContext.options.compileOnly &&
+        !test.tool &&
+        args.length > 0 &&
+        !String(args[0]).startsWith('--') &&
+        !args.some((word) => String(word).startsWith('--timeit'))
+    if (logContext.options.compileOnly && !judgedByCompile) {
+        test.__notJudged = true
+        // The second column, said out loud: this entry asks something other than whether a program
+        // compiles, so the sweep does not count it either way.
+        console.log(`[NOT-JUDGED] ${test.name} (${test.case || test.tool}) -- not a compilation question`)
+    }
+    if (judgedByCompile) {
+        const firstPass = args.findIndex((word) => /^[A-Za-z_][\w:-]*::/.test(word))
+        if (firstPass >= 0) args.length = firstPass
+        const timeit = args.findIndex((word) => word === '--timeit' || word === '--output-format')
+        if (timeit >= 0) args.length = Math.min(args.length, timeit)
+        args.push('std::gir')
+    }    const env = { ...process.env }
     // Assertions on diagnostics (name, code, line, column) read the one-line text format.
     // A test of the format with source excerpts passes --error-format text, which wins.
     env.CAMEL_ERROR_FORMAT = 'short'
@@ -1711,8 +1743,25 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
 
     // The verification reads this test's output: executePlans removes the scratch directory
     // only after this returns.
-    const failures = await validateTest(test, result, { ...logContext, scope })
-    // The cost judgement of a test that declares `cpu_budget_ms`, in the unit
+    // A compile-only run has no output to hold the entry's assertions to: what it asks is whether
+    // the program builds, and the entry's own expectations -- stdout, exit code, diagnostics -- are
+    // the name of a run that did not happen. So the verdict is the compiler's alone, and it names
+    // the case that failed to build.
+    const expectsRefusal = typeof test.expect_exit === 'number' && test.expect_exit !== 0
+    if (test.__notJudged) result.notJudged = true
+    // The sweep answers one question, so it has two columns and no third: a program that does not
+    // compile is the question, and everything the entry would have judged besides compiling is
+    // "not this question" -- never a failure, and never silently dropped either, because a red
+    // nobody explains gets read as a defect.
+    const failures = logContext.options.compileOnly
+        ? test.__notJudged || result.exitCode === 0 || expectsRefusal
+            ? []
+            : [
+                  `does not compile (${test.case}): ` +
+                      ((result.output.match(/^error\[[^\n]*/m) || [''])[0] ||
+                          `exit ${result.exitCode}`),
+              ]
+        : await validateTest(test, result, { ...logContext, scope })    // The cost judgement of a test that declares `cpu_budget_ms`, in the unit
     // the rule asks for:
     //
     //   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）
@@ -1724,13 +1773,13 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // working crosses the timeout while its CPU budget stands still, and a program that works
     // harder crosses the budget while the wall clock may say anything at all. The reading is in
     // 10 ms ticks (USER_HZ), which is a thousandth of the budget these plans declare.
-    if (cpuBudgetMs !== null && result.timedOut) {
+    if (!logContext.options.compileOnly && cpuBudgetMs !== null && result.timedOut) {
         failures.push(
             `killed at its ${formatDurationMs(timeoutMs)} liveness bound after ` +
                 `${formatDurationMs(result.wallMs)}: a cpu_budget_ms test's timeout catches a program ` +
                 `that stopped working, and the CPU budget is what catches one that works harder`
         )
-    } else if (cpuBudgetMs !== null) {
+    } else if (!logContext.options.compileOnly && cpuBudgetMs !== null) {
         if (result.cpuMs === null) {
             failures.push(
                 `cpu_budget_ms ${cpuBudgetMs.toFixed(0)} ms has no CPU reading: ${result.cpuReason} ` +
@@ -2058,7 +2107,7 @@ export function testTier(plan, test) {
  * `tier = "debug"`. `all` therefore leaves those tests out: it runs on the Release binary, where
  * the debug layer's abort case would not abort.
  */
-function selectTier(plans, tier, namedPlans = new Set()) {
+function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
     const order = []
     for (const plan of plans) {
         for (const test of plan.tests) order.push({ plan, test })
@@ -2067,6 +2116,10 @@ function selectTier(plans, tier, namedPlans = new Set()) {
         // A plan the schema rejected fails in every layer: its tests never ran, so no layer can
         // honestly say the plan is clean.
         if (test.__planError) return true
+        // A compile-only run asks only about the entries the fast layer does not run: whatever the
+        // fast layer runs is compiled there already, and compiling it a second time is paying twice
+        // for the same answer. What this sweep buys is the part nobody looks at.
+        if (compileOnly) return testTier(plan, test) !== 'fast'
         if (tier === 'all') return testTier(plan, test) !== 'debug'
         if (tier === 'debug') return plan.debug_tier === true || testTier(plan, test) === 'debug'
         return testTier(plan, test) === tier
@@ -2115,7 +2168,7 @@ function selectTier(plans, tier, namedPlans = new Set()) {
     return selectedPlans
 }
 
-function loadPlans(targets, tier, layeredPlans = new Set()) {
+function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false) {
     // A plan file named on the command line (or by `--changed`'s self rule) runs in full; the
     // plans a directory reaches follow the layer. The same plan reached both ways is named,
     // unless `--changed` marked it `layer: true`: then the tier filter applies to it as well.
@@ -2149,7 +2202,7 @@ function loadPlans(targets, tier, layeredPlans = new Set()) {
             if (lhsOrder !== rhsOrder) return lhsOrder - rhsOrder
             return lhs.__planPath.localeCompare(rhs.__planPath)
         })
-    return selectTier(plans, tier, namedPlans)
+    return selectTier(plans, tier, namedPlans, compileOnly === true)
 }
 
 /** The result of a test the runner itself could not run: its failure is reported like any other. */
@@ -2856,7 +2909,7 @@ async function main() {
             return false
         }
     })
-    const plans = loadPlans(options.targets, options.tier, options.layeredPlans)
+    const plans = loadPlans(options.targets, options.tier, options.layeredPlans, options.compileOnly === true)
     // The pid keeps two runs started in the same second (the self-test does this) out of one
     // directory, whose logs and summary.json would otherwise overwrite each other.
     const logDir = path.join(LOG_ROOT, `${timestamp()}_${process.pid}`)

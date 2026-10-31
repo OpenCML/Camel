@@ -113,7 +113,7 @@ tool = "python"
 case = "../../../tools/scale/scale.py"
 args = ["${case}", "limit", "meta", "1", "string", "2000"]
 expect_exit = 0
-expect_stdout_contains = ["\"code\":\"0x04000014\"", "\"stage\":\"compile\"", "Out of memory: The meta space (constants and function objects of the graphs being compiled) is exhausted while compiling function 'f", "of the limit of 1.0 MB are in use", "set CAMEL_META_SPACE_LIMIT_MB=<megabytes> to raise the limit (it is 1 now)", "camel exit=1"]
+expect_stdout_contains = ["\"code\":\"0x04000014\"", "\"stage\":\"compile\"", "Out of memory: The meta space (constants and function objects of the graphs being compiled) is exhausted while compiling function 'f", "of the limit of 1.0 MB are in use", "raise it with --meta-space-limit-mb=<megabytes> (it is 1 now)", "camel exit=1"]
 expect_output_not_contains = ["bad_alloc", "UnknownInternalError", "scale total="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
@@ -126,7 +126,7 @@ tool = "python"
 case = "../../../tools/scale/scale.py"
 args = ["${case}", "limit", "graph", "1", "mixed", "2000"]
 expect_exit = 0
-expect_stdout_contains = ["\"code\":\"0x04000014\"", "\"stage\":\"compile\"", "Out of memory: The graph space (runtime graphs) is exhausted while encoding graph '", "of the limit of 1.0 MB are in use", "set CAMEL_GRAPH_SPACE_LIMIT_MB=<megabytes> to raise the limit (it is 1 now)", "camel exit=1"]
+expect_stdout_contains = ["\"code\":\"0x04000014\"", "\"stage\":\"compile\"", "Out of memory: The graph space (runtime graphs) is exhausted while encoding graph '", "of the limit of 1.0 MB are in use", "raise it with --graph-space-limit-mb=<megabytes> (it is 1 now)", "camel exit=1"]
 expect_output_not_contains = ["bad_alloc", "UnknownInternalError", "scale total="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
@@ -139,7 +139,7 @@ tool = "python"
 case = "../../../tools/scale/scale.py"
 args = ["${case}", "limit", "perm", "2", "lambda", "2750"]
 expect_exit = 0
-expect_stdout_contains = ["\"code\":\"0x04000014\"", "\"stage\":\"compile\"", "Out of memory: The permanent space (types and layouts) is exhausted", "of the limit of 2.0 MB are in use", "set CAMEL_PERM_SPACE_LIMIT_MB=<megabytes> to raise the limit (it is 2 now)", "camel exit=1"]
+expect_stdout_contains = ["\"code\":\"0x04000014\"", "\"stage\":\"compile\"", "Out of memory: The permanent space (types and layouts) is exhausted", "of the limit of 2.0 MB are in use", "raise it with --perm-space-limit-mb=<megabytes> (it is 2 now)", "camel exit=1"]
 expect_output_not_contains = ["bad_alloc", "UnknownInternalError", "scale total=", "camel exit=-11"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000

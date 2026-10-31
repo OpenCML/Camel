@@ -40,3 +40,17 @@
 - **已落地**：`control.cpp` 三处 GATE 规则改成"**有同步前驱就不需要 ctrl**"（`appendControlDependency` 的提前返回、`reduceControlDependencies` 的保留、无值种子时的兜底各一处）。`passes/test/control.cpp` 的 26 处**一行没改就跟着绿了**，因为它的用例正是"没有同步前驱的门仍要留一条 ctrl"——新规则在这条上与原规则同形。**唯一被重录的图**：`exemplars/05_effect_order/expected/simplified.agir.dot` 与它的 `run.log`，各删 5 行 `type="CTRL"`（都是"门 → 它的同步后继"那条与 SYNC 重复的边）。
 - **没落地、也不该机械翻的**：`gates.cpp:19`。它的 `ctrlInputsOf(id).empty()` 是**使能条件不是守卫**——"有 ctrl 等待的门才可绕过（等待搬到消费者）"，翻成"有 ctrl 就不许绕"会把这个优化整条掐掉，`control.topology` 的 `ordinary forwarding gate survived` 当场报错。等 ② 停造 ctrl 之后，这条判据要**重新设计**，不是改个符号。
 - **不用改**：`std::opt::order`（只读 order 与 sync）。
+
+## 更正：这里的结论已被裁定推翻
+
+> **这一段与本文其余部分不是同一时刻的结论；以裁定为准，原文保留是因为它是当时的判断，不是因为它还对。**
+
+上面"留下的两处"说 `:4403`/`:4427` 没有答案、停造 ctrl 会把等待丢掉。**20:35 裁定**（2026-10-30，`reviews/questions-2026-10-29.md:697`）说：在同步块里，门的等待就是同步前驱（5.3，与 `coerceArmExit` 同一处理）；不在同步块里，门不需要存在；停造 ctrl 时这两处按此改，而不是换成别的边。**以裁定为准**——那两处有答案，答案不是"再找一种边"。
+
+今天的现状（2026-10-31，本树，只读读数；报告写的行号今天漂到 `:4425`/`:4449`，仍是同两个门）：
+
+- **写侧未改**：`builder_operators.cpp:4425`（赋值门）与 `:4449`（`void` 门）仍各写一条 `linkNodes(LinkType::Ctrl, targetNode, gate)`。
+- **写侧没有同步块判断**：`git grep -n "isSyncStatement" -- src/compile/gir` 无命中。`isSyncStatement` 只在读侧：`include/camel/runtime/effect_liveness.h:41`、`src/passes/opt/generic/gates.cpp:30`、`src/runtime/graph.cpp:584`、`src/execute/fusion_group.cpp:94`、`src/runtime/effects.cpp:120`。
+- **读侧已先读同步前驱**：`gates.cpp:30` 取 `syncInputsOf`，`:38` 对同步块里的门直接不绕；`graph_runtime_support.cpp:472` 同样先把同步前驱当等待。
+
+所以这两处**没有改**：改的是读侧（`d52823be4` 那一族），写侧仍按老样子造 ctrl；②a 之前，那两条 ctrl 还在图里。

@@ -47,12 +47,16 @@
 - `-P`, `--profile`：记录各阶段耗时，把跟踪文件写到 `profile_reports/`。只在 debug 构建中生效；release 构建接受这个选项，但不产生报告  
 - `-S`, `--scheduler <type>`：指定调度器类型  
 - `-t`, `--threads <num>`：一次运行可用的线程数，作用于它的每个池：并行调度器与各模块自己的工作者池（张量内核的池也在内）。每个池都从这一个数取大小；不给选项时各用机器的核数。它没有环境变量。`tensor::num_threads()` 报告池的大小；程序自己可以用 `tensor::set_num_threads` 在运行时改动  
-- `--max-recursion-depth <n>`：可同时处于打开状态且不是尾调用的调用数上限（1 到 1000000；见“资源上限”）。也可用 `CAMEL_MAX_RECURSION_DEPTH=<n>`；选项优先  
-- `--max-macro-depth <n>`：`std::macro` 提前求值一次调用时嵌套调用的上限（默认 64；取值范围相同）。也可用 `CAMEL_MAX_MACRO_DEPTH=<n>`  
-- `--max-macro-rounds <n>`：`std::macro` 提前求值时一个循环至多运行的轮数（默认 1000000，取值 1 到 2^40）；超过则这次求值失败。也可用 `CAMEL_MAX_MACRO_ROUNDS=<n>`，选项优先  
+- `--max-recursion-depth <n>`：可同时处于打开状态且不是尾调用的调用数上限（1 到 1000000；见“资源上限”）。  
+- `--max-macro-depth <n>`：`std::macro` 提前求值一次调用时嵌套调用的上限（默认 64；取值范围相同）。  
+- `--max-macro-rounds <n>`：`std::macro` 提前求值时一个循环至多运行的轮数（默认 1000000，取值 1 到 2^40）；超过则这次求值失败。  
 - `--gc <collector>`：运行时值的回收器：`generational`（默认；分代，年轻对象会被复制）或 `mark-sweep`（对象地址不变）。详见英文版 `docs/cli.md` 的 "The collector" 一节  
 - `--block-limit <megabytes>`：数据块空间的上限（默认 2048 MB，取值 1 到 2^20 MB）；它只防范失控的分配，最后一个持有者消失时块的内存立即归还  
 - `--graph-gc-mb <megabytes>`：图空间比上次回收后多出这么多时要求回收（默认 64）  
+- `--gc-nursery-mb <megabytes>`、`--gc-promotion-age <n>`、`--gc-large-threshold-kb <kilobytes>`、`--gc-large-budget-mb <megabytes>`、`--gc-growth-percent <n>`、`--gc-heap-limit-mb <megabytes>`：回收器的尺寸，在堆存在之前读入：初生空间（默认 4 MB）、晋升前存活的次回收次数（默认 4）、多大算大对象（generational 默认 64 KB，mark-sweep 4 KB）、两次回收之间允许的大对象字节（默认 4 MB）、该空间的增长比例（默认 100%）、堆上限（默认无）。每一项做什么见“回收器”一节  
+- `--space-segment-kb <kilobytes>`、`--meta-space-limit-mb <megabytes>`、`--graph-space-limit-mb <megabytes>`、`--perm-space-limit-mb <megabytes>`：每个可增长空间的第一个段（段小则小程序也会增长它们），以及 meta、graph、permanent 三个空间的上限；空间用尽时以 `RuntimeDiag::MemoryExhausted` 停下，并指出能抬高它的选项  
+- `--gc-stress <kind=...,alloc=...,safepoint=...>`、`--gc-check <moves,poison,verify=...,config>`：在压力下回收、读回收器：`kind=minor|major|both` 指定回收种类，`alloc=N` 每 N 次分配回收一次，`safepoint=N` 每 N 个安全点回收一次；`moves` 逐行打印移动的对象，`poison` 在每个安全点覆写 from 空间，`verify=before|after|both` 在回收前后检查不变式，`config` 启动时打印解析后的配置  
+- `--coll <leaf=...,fanout=...,pad=...,validate=...>`：`Map`/`Set` 树的宽度，在第一个集合建立之前读入：每个叶子的条目数（默认 64；0 表示所有集合都是一个有序数组）、每个分支的孩子数（默认 64）、`pad=off` 让根以下的表按内容分配、`validate=on` 检查每个操作返回的表  
 - `--native-stack-guard <on|off>`：嵌套调用前是否检查原生栈（默认 `on`）；`off` 只用于测量栈真正到哪里结束，不供正常使用  
 - `--devices <cpu|ordinal[,ordinal...]>`：一条流水线可以使用的设备（设计原则 13.4）：`cpu` 表示只用主机，或者按流水线可用的次序写 CUDA 序号（例如 `0`、`0,1`）。这里点名的设备必须存在：只要已加载的模块拥有设备，启动时就会在**任何图运行之前**检查一次（`--devices cpu` 永远通过；不给这个选项时，缺失只意味着程序在主机上运行）。缺失的序号是运行时诊断 `DeviceUnavailable`（`0x04000070`），报告中点出这个设备、机器上实际有多少 CUDA 设备（或为什么一台都问不到），以及其它同样缺失的序号；退出码为 1。程序即使一次都没有执行到设备操作，也照样报出（见 `modules/tiles/README.md` 的 "Tiles"）。今天一条流水线在第一个序号上执行，多卡执行是 G7。`--devices cpu` 下 `tiles:available()` 为假，需要设备的操作报错，而不是悄悄移到 GPU 上。  
 - `--profile-mode <normal|full>`：`--profile` 启动的剖析器模式；`full` 在写出报告时同时打开 Perfetto 界面（需要 `--profile`）  
@@ -176,7 +180,7 @@
 | `std::tf`、`std::prl` | `linear: bool = false`（逐节点求值），`fanout_all: bool = false`（把每个无序的高阶调用都展开成并行任务），`diag: bool = false`（打印对每张图的决定），`segments: bool = false`（打印当前计划的分段（不是理论上可以切成的分段）：每段的条目与链、每条链等谁，以及每个算子落在哪一段），`bytecode: bool = true`（把串行的图交给字节码解释器），`gc_stats: int = 0`（1：运行结束时打印统计；2：另外每次回收一行） |
 | `onnx::export` | `out: string = ""`（模型文件；见下） |
 
-仍留在环境变量里的是进程的环境，不是某个遍的设置：`CAMEL_HOME`、`CAMEL_STD_LIB`、`CAMEL_PACKAGES`，日志与诊断格式变量，资源上限（`CAMEL_*_SPACE_*`，以及 `--max-recursion-depth`、`--max-macro-depth`、`--max-macro-rounds` 的环境变量写法），回收器的诊断与节奏变量（`CAMEL_GC_HEAP_LIMIT_MB`、`CAMEL_GC_GROWTH_PERCENT`、`CAMEL_GC_PROMOTION_AGE`、`CAMEL_GC_POISON`、`CAMEL_GC_VERIFY`、`CAMEL_GC_STRESS_*`），以及 `CAMEL_STARTUP_PROFILE`。重写引擎的增长预算是上面那些遍的 `growth_budget` 参数，不从环境变量读取。开关是选项和遍参数：`--gc`、`--block-limit`、`--graph-gc-mb`、`--native-stack-guard`、`--profile-mode`，以及 `std::profile` 的 `gc_stats`、`type_stats`、`effect_trace` 参数；测试专用的遍在流水线里写出名字即可。
+仍留在环境变量里的是进程的环境，不是某个遍的设置：`CAMEL_HOME`、`CAMEL_STD_LIB`、`CAMEL_PACKAGES`，日志与诊断格式变量，以及 `CAMEL_STARTUP_PROFILE`。重写引擎的增长预算是上面那些遍的 `growth_budget` 参数，不从环境变量读取。开关是选项和遍参数：`--gc`、`--block-limit`、`--graph-gc-mb`、`--gc-nursery-mb`、`--gc-promotion-age`、`--gc-large-threshold-kb`、`--gc-large-budget-mb`、`--gc-growth-percent`、`--gc-heap-limit-mb`、`--space-segment-kb`、`--meta-space-limit-mb`、`--graph-space-limit-mb`、`--perm-space-limit-mb`、`--gc-stress`、`--gc-check`、`--coll`、`--max-recursion-depth`、`--max-macro-depth`、`--max-macro-rounds`、`--native-stack-guard`、`--profile-mode`，以及 `std::profile` 的 `gc_stats`、`type_stats`、`effect_trace` 参数；测试专用的遍在流水线里写出名字即可。
 
 ### 模块的遍
 
@@ -209,12 +213,12 @@
 当每个实参都是常量时，`std::macro` 把对 `#macro` 函数或宏算子的调用替换为它的结果。有两种情况会让调用留在程序里：
 
 - **某个实参不是常量。** 这是正常情况，不是失败；什么都不打印。带 `-v` 时 stderr 上有一行日志指出这次调用和那个实参：`[WARN] <Macro> 'count' at m.cml:11:17 stays a run-time call: argument 1 is not a constant.`
-- **求值失败**：某个算子抛出错误（除以零、`autodiff: no derivative rule for operator ...`）、有异常逃逸，或者求值所需的嵌套调用数超过求值器的上限（64，除非 `--max-macro-depth` 或 `CAMEL_MAX_MACRO_DEPTH` 另有指定）。这是运行时故障，是遍运行中的故障（见设计原则 8）：`RuntimeDiag::MacroEvaluationFailed`（`0x0400000E`，阶段 `pass:std::macro`），定位在这次调用，并带有原因（`short` 格式，后面还有建议和诊断名）：`(m)m.cml:19:17: [Error]: 'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero. ...` 流水线在此停止，退出码为 1；后面的遍不运行，程序不执行。
+- **求值失败**：某个算子抛出错误（除以零、`autodiff: no derivative rule for operator ...`）、有异常逃逸，或者求值所需的嵌套调用数超过求值器的上限（64，除非 `--max-macro-depth` 另有指定）。这是运行时故障，是遍运行中的故障（见设计原则 8）：`RuntimeDiag::MacroEvaluationFailed`（`0x0400000E`，阶段 `pass:std::macro`），定位在这次调用，并带有原因（`short` 格式，后面还有建议和诊断名）：`(m)m.cml:19:17: [Error]: 'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero. ...` 流水线在此停止，退出码为 1；后面的遍不运行，程序不执行。
 
 这条规则的后果：
 
 - 一次失败的宏调用会使遍停止，**即使这次调用在运行期永远不会到达**（调用位于没有任何地方调用的函数里，或位于没有被选中的分支里）：`std::macro` 对每一个实参都是常量的宏调用求值。
-- 深度超过求值器上限（默认 64 帧）的宏递归是一次失败的求值，所以不带 `std::macro` 能运行的程序，带上它可能失败（对 `#macro func count(n) = if n == 0 then 0 else 1 + count(n - 1)` 调用 `count(40)`）。消息给出上限以及提高它的办法：`'count' could not be evaluated by std::macro: the evaluation needs more than 64 nested calls (at 'count'). The limit is set with --max-macro-depth <n> or CAMEL_MAX_MACRO_DEPTH=<n>.`
+- 深度超过求值器上限（默认 64 帧）的宏递归是一次失败的求值，所以不带 `std::macro` 能运行的程序，带上它可能失败（对 `#macro func count(n) = if n == 0 then 0 else 1 + count(n - 1)` 调用 `count(40)`）。消息给出上限以及提高它的办法：`'count' could not be evaluated by std::macro: the evaluation needs more than 64 nested calls (at 'count'). The limit is set with --max-macro-depth <n>.`
 - 失败的求值在失败之前已经产生的效应，发生在遍运行的时候（遍的每一轮一次）。它们不会重复，因为程序不运行。
 - 流水线里没有 `std::macro` 时一切照旧：这次调用是普通调用，只有在被执行到时才可能失败。
 - `onnx::export_model` 在程序运行期间用同一个求值器展开它所导出函数中的宏；那里求值失败是同一条诊断，阶段为 `run`。
@@ -323,11 +327,11 @@
 | `std::opt::inline` 向其中内联的图的大小 | 4096 个节点 | 否 | 这次调用不内联 |
 | `std::opt` 的轮数 | 16 | 否 | 程序按现状传下去。带 `-v` 时有日志 |
 | 同一个递归函数的仅类型特化（张量实参的形状在递归的每一层都变化） | 8 | 否 | 这次调用保留它的被调用者 |
-| 非尾递归，在每个调度器上相同：`std::nvm`、`std::fvm`、`std::jit`（解释执行的和编译为原生代码的调用一样计数）和 `std::tf` / `std::prl`（计数随元素转到运行它的工作线程上） | 1000 个打开的调用 | `--max-recursion-depth <n>`、`CAMEL_MAX_RECURSION_DEPTH=<n>`（1 到 1000000） | 程序停止，诊断为 `RuntimeDiag::MaxRecursionDepthExceeded`（`0x04000004`，阶段 `run`，退出码 1），定位在将成为第 1001 个打开调用的调用表达式；在它之前运行的已经运行，其输出已经写出。消息给出上限（`Maximum recursion depth (1000) exceeded when evaluating graph '...'.`），建议给出选项和变量 |
+| 非尾递归，在每个调度器上相同：`std::nvm`、`std::fvm`、`std::jit`（解释执行的和编译为原生代码的调用一样计数）和 `std::tf` / `std::prl`（计数随元素转到运行它的工作线程上） | 1000 个打开的调用 | `--max-recursion-depth <n>`（1 到 1000000） | 程序停止，诊断为 `RuntimeDiag::MaxRecursionDepthExceeded`（`0x04000004`，阶段 `run`，退出码 1），定位在将成为第 1001 个打开调用的调用表达式；在它之前运行的已经运行，其输出已经写出。消息给出上限（`Maximum recursion depth (1000) exceeded when evaluating graph '...'.`），建议给出选项 |
 | `std::jit` 编译为原生代码的代码中的递归（分支臂已被内联的自递归函数，例如在 `std::opt::inline` 之后）占用的原生栈 | 无单独的上限：递归深度按上一行计数 | 上一行的选项和变量 | 默认上限下与解释执行给出同一条诊断（`camel f.cml std::opt::inline std::jit`：`depth(999)` 运行，`depth(1000)` 是 `MaxRecursionDepthExceeded`）。原生栈将满的检查不覆盖已编译的代码：上限调得很高而递归确实很深时，进程以段错误结束，没有诊断（上限为 1000000 时，20000 层的递归能运行，100000 层的递归崩溃） |
 | `std::tf` 上线程的原生栈 | 与下一行相同：计数之外，线程的栈用掉十六分之十五时拒绝再嵌套一次调用 | `ulimit -s` 等（工作线程的栈至少 8 MiB：Unix 上进程的栈上限、Windows 上可执行文件的栈大小更大时取后者） | 在该调用处给出 `MaxRecursionDepthExceeded`；此时消息给出打开的调用数和栈的大小。默认上限（1000）在 Linux 默认的 8 MiB 栈下远够不到这里（见下文的实测） |
 | 线程的原生栈，所有执行后端 | 线程的栈（Linux 上主线程默认 8 MiB） | `ulimit -s` 之类 | 在原生栈将满（Unix 上剩余不足十六分之一，且至少保留 128 KiB；Windows 为 SEH 故障展开保留十六分之十五）时还要嵌套的调用，在到达上面的上限之前就被拒绝，诊断为 `MaxRecursionDepthExceeded`；消息说明原生栈已满。正是这一点使调高的上限不至于以段错误告终。栈的边界在 Linux（glibc）、Windows 和 macOS 上读取（Windows 也已验证；macOS 已实现，但没有编译或运行过）；在其他平台上，上限不能调高到默认值以上 |
-| `std::macro` 对 `#macro` 函数的提前求值 | 64 个求值器帧（32 层的自递归：`count(31)` 被求值，`count(32)` 不被求值） | `--max-macro-depth <n>`、`CAMEL_MAX_MACRO_DEPTH=<n>`（1 到 1000000） | 求值失败：在该调用处给出运行时故障 `RuntimeDiag::MacroEvaluationFailed`，流水线停止（见“`std::macro` 报告什么”）。求值器在原生栈上嵌套（每帧约 630 字节），栈将满时以同样的方式停下 |
+| `std::macro` 对 `#macro` 函数的提前求值 | 64 个求值器帧（32 层的自递归：`count(31)` 被求值，`count(32)` 不被求值） | `--max-macro-depth <n>`（1 到 1000000） | 求值失败：在该调用处给出运行时故障 `RuntimeDiag::MacroEvaluationFailed`，流水线停止（见“`std::macro` 报告什么”）。求值器在原生栈上嵌套（每帧约 630 字节），栈将满时以同样的方式停下 |
 | 图空间（程序的运行时图；一个函数约占 1 到 2 KB） | 总共 256 MB，随程序的需要按段保留 | `CAMEL_GRAPH_SPACE_LIMIT_MB=<megabytes>` | `RuntimeDiag::MemoryExhausted`（`0x04000014`，退出码 1），定位在正在编码其图的函数，指出空间、用量、上限和变量。程序本身放不下时阶段为 `compile`，是某个遍使它增长时阶段为 `pass:<name>` |
 | 永久空间（类型和布局；一个函数约占 0.6 到 2 KB，遍创建的内容永不释放） | 总共 256 MB，按段 | `CAMEL_PERM_SPACE_LIMIT_MB=<megabytes>` | `RuntimeDiag::MemoryExhausted`，同上，除非知道正在编译的函数，否则没有位置 |
 | 元空间（正在编译的图的常量和函数值；每个拥有它的函数、lambda 或分支臂约 1.2 KB） | 总共 256 MB，按段 | `CAMEL_META_SPACE_LIMIT_MB=<megabytes>` | `RuntimeDiag::MemoryExhausted`，阶段 `compile`，定位在正在编译的函数 |
@@ -335,7 +339,7 @@
 
 **递归上限计的是什么** 在每个执行后端上都相同：每一次处于打开状态且不是尾调用的函数调用，不论它是写成一次调用、通过函数值进行，还是由高阶算子（`map`、`filter`、`reduce`、`foreach`）为某个元素进行。处于尾位置的调用替换它的调用者，不计数（见 `docs/technical/19_tail_call_optimization.md`），所以任意深度的尾递归在任何上限下都能运行。`if` 的分支臂是它们所在函数的尾调用。唯一不由程序自己发出的调用，即运行时对 `main` 的调用，不计数。因此上限为 L 时，对于从 `main` 调用的 `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)`，`depth(L - 1)` 是能运行的最深调用，在 `std::nvm`、`std::fvm`、`std::jit`（解释执行的和编译为原生代码的）以及 `std::tf` 上都是如此：默认值下是 `depth(999)`。改变存在哪些调用的遍（`std::opt::inline`）也改变被计数的内容，因为它们改变了图。
 
-**设置它。** 命令行上的 `--max-recursion-depth <n>`，否则是环境变量 `CAMEL_MAX_RECURSION_DEPTH=<n>`；`n` 是 1 到 1000000 的整数。其他任何值（0、文本、更大的数）在程序编译之前就在标准错误上被拒绝（`Invalid --max-recursion-depth value: '0'. Expected an integer from 1 to 1000000.`），退出码为 1。没有对应的 `.opencmlrc` 键。既没有选项也没有变量时，每个调度器都在 1000 处停下，并行调度器同样计数（设计原则 3.9）。
+**设置它。** 命令行上的 `--max-recursion-depth <n>`；`n` 是 1 到 1000000 的整数。其他任何值（0、文本、更大的数）在程序编译之前就在标准错误上被拒绝（`Invalid --max-recursion-depth value: '0'. Expected an integer from 1 to 1000000.`），退出码为 1。没有对应的 `.opencmlrc` 键。没有选项时，每个调度器都在 1000 处停下，并行调度器同样计数（设计原则 3.9）。
 
 **调高上限的代价**（在 Linux x86-64、release 构建上测得，函数有三个槽）：
 

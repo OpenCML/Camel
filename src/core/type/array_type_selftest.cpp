@@ -3,12 +3,16 @@
 
 #include "camel/core/type/array_type_selftest.h"
 
+#include "camel/core/data/composite/array.h"
+#include "camel/core/data/primary.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
+#include "camel/core/rtdata/conv.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/intern.h"
 
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -150,6 +154,67 @@ std::string debugRunArrayTypeSelfTest() {
         !openF32->assignableFrom(ArrayType::create(i64, shapeOf({4}))),
         "f32[..] accepts int[4]");
     require(openF32->castSafetyFrom(f32) == CastSafety::Safe, "f32[..] from f32 is not Safe");
+
+    // ---- The rank-zero value in the run ---------------------------------------------------
+    // The type says the element is the value (design principles 5.4), and the run holds it as an
+    // array with no dimension so that a slot of `T[..]` has a rank to read: `rank()` 0, `numel()`
+    // 1 and `size()` 1 -- the 0 an empty extent of a rank-one array would count is not the count
+    // of a rank-zero value, which holds its one element. It prints as the element itself and
+    // compares by it, so a program that receives the element through a `T[..]` slot sees the value
+    // it handed in.
+    Array *rankZero =
+        Array::createRankZero(mm::autoSpace(), openF32, camel::core::rtdata::toSlot(1.0f));
+    require(rankZero->rank() == 0, "a rank-zero value has a dimension");
+    require(rankZero->numel() == 1, "a rank-zero value does not hold one element");
+    require(rankZero->size() == 1, "a rank-zero value counts 0 at its dimension");
+    std::ostringstream rankZeroText;
+    rankZero->print(rankZeroText, openF32);
+    require(
+        rankZeroText.str() == "1.0",
+        "a rank-zero value of 1.0 prints as '" + rankZeroText.str() + "'");
+    Array *sameZero =
+        Array::createRankZero(mm::autoSpace(), openF32, camel::core::rtdata::toSlot(1.0f));
+    Array *otherZero =
+        Array::createRankZero(mm::autoSpace(), openF32, camel::core::rtdata::toSlot(2.0f));
+    require(
+        rankZero->getSlot(0) == sameZero->getSlot(0),
+        "a rank-zero value holds a different element than the one it was given");
+    require(rankZero->equalsContent(sameZero, openF32), "a rank-zero value does not equal its own");
+    require(!rankZero->equalsContent(otherZero, openF32), "a rank-zero value equals another one");
+
+    // ---- The rank-zero value as data -------------------------------------------------------
+    // A literal is a value before the run makes anything of it, so the rank-zero value has to exist
+    // at that level too: the constant side of the same rule (design principles 5.4). It is made of
+    // the element, keeps no dimension, is written as the element and compares by it, and the run
+    // makes of it the same array a computed element is made into -- one value, one rule, and the
+    // two entrances a value takes (a computed one through the compiler's conversion, a literal
+    // through this one).
+    const camel::core::data::data_ptr_t element = std::make_shared<camel::core::data::FloatData>(1.5f);
+    std::shared_ptr<camel::core::data::ArrayData> zeroData =
+        camel::core::data::ArrayData::rankZero(openF32, element);
+    require(zeroData->isRankZero(), "a rank-zero value made of an element is not one");
+    require(
+        zeroData->type()->equals(openF32),
+        "a rank-zero value is not of the open rank it was made for");
+    // Written as the element is written: the text of a value with no dimension has no brackets to
+    // add and no dimension to name, so it is the element's own text (the run prints it the same,
+    // `Array::print` of a rank-zero value).
+    require(
+        zeroData->toString() == element->toString(),
+        "a rank-zero value of 1.5 is written as '" + zeroData->toString() + "'");
+    auto *dataZero =
+        static_cast<Array *>(makeGCRefFromGCTracedData(zeroData, camel::core::mm::autoSpace()));
+    require(dataZero->rank() == 0, "the run makes a dimension of a rank-zero value");
+    require(dataZero->numel() == 1, "the run makes no element of a rank-zero value");
+    require(dataZero->size() == 1, "the run counts 0 at the dimension of a rank-zero value");
+    std::ostringstream dataZeroText;
+    dataZero->print(dataZeroText, openF32);
+    require(
+        dataZeroText.str() == "1.5",
+        "a rank-zero value of 1.5 prints as '" + dataZeroText.str() + "'");
+    require(
+        dataZero->getSlot(0) == camel::core::rtdata::toSlot(1.5f),
+        "a rank-zero value does not hold the element it was made of");
     // A type nobody wrote an element type in: `Void` is the "no value" marker and `Void[..]` is
     // an open rank whose element type nobody stated, so no type variable takes either (design
     // principles 5.1, 5.2: `T := Void` is not a type a call can be made at).

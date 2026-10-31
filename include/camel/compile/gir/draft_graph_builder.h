@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * Compile-time host around the shared GraphDraft editing core.
+ * Compile-time host around the shared editable graph core.
  *
- * This object owns compile-only services that should not live on GraphDraft:
+ * This object owns compile-only services that should not live on the editable draft:
  * - transient allocation used when converting compile-time constants into slots
  * - node cold metadata keyed by stable draft node ids
  * - compile-time operator registry ownership

@@ -5,6 +5,7 @@
 
 #pragma once
 #include "tiles/dtype.h"
+#include "tiles/internal/index_expr.h"
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -62,10 +63,16 @@ class ScalarExpr {
   public:
     static ScalarExpr literal(ScalarValue value);
     static ScalarExpr symbol(std::string name, ScalarType type);
+    // A loop index read into an i64 register: the value of an index, not a number computed from
+    // it. Only i64 can hold a full index, and the result takes no part in arithmetic (i64
+    // arithmetic remains refused), so a position can be stored and nothing else can be derived.
+    static ScalarExpr fromIndex(IndexExpr index, ScalarType type);
     static ScalarExpr apply(ScalarOp op, std::vector<ScalarExpr> inputs);
     static ScalarExpr cast(ScalarType type, ScalarExpr input);
     static ScalarExpr bitcast(ScalarType type, ScalarExpr input);
     ScalarType type() const;
+    // The index this register reads, or nullptr for every other expression.
+    const IndexExpr *index() const;
     ScalarValue evaluate(const std::unordered_map<std::string, ScalarValue> &bindings) const;
     ScalarExpr substitute(const std::string &name, const ScalarExpr &replacement) const;
     std::unordered_map<std::string, ScalarType> symbols() const;

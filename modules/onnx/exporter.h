@@ -53,6 +53,13 @@ struct ExportOptions {
     /// Axes of the tensor arguments left dynamic in the model (e.g. {0} for a variable batch
     /// size). The examples' extents on these axes are not baked into the graph.
     std::vector<int64_t> dynamicAxes;
+    /// Print every lowered call with the facts of its arguments (`onnx::export trace=true`).
+    bool trace = false;
+    /// Print the simplified graph that is translated, as std::rgir does (`dump=true`).
+    bool dump = false;
+    /// Print the size of the function when the export receives it and after the export's own
+    /// simplification (`prep_stats=true`).
+    bool prepStats = false;
 };
 
 /// An example argument: a value whose types (dtypes and shapes) the graph inputs take.

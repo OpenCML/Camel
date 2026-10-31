@@ -1,0 +1,23 @@
+// The field slot, both writings: a struct field declared `f32[..]`, filled from a literal
+// (`{ v: 1.0 }`) and from a value the program computed (`{ v: one }`). The two writings take
+// different roads on purpose -- a literal becomes the rank-zero value in the data layer, a computed
+// value is converted as it enters the FILL -- and they meet in the same value the field holds.
+//
+// What this case pins: the field is a slot with a type, and it reads back as the element for both
+// ways of writing the value, so neither road is a rule of its own.
+
+type Box = { v: f32[..] }
+
+func main(): int sync {
+    let one: f32 = 1.0
+    let two: f32 = 2.5
+    let writtenLow: Box = { v: 1.0 }
+    println(writtenLow.v)
+    let writtenHigh: Box = { v: 2.5 }
+    println(writtenHigh.v)
+    let computedLow: Box = { v: one }
+    println(computedLow.v)
+    let computedHigh: Box = { v: two }
+    println(computedHigh.v)
+    return 0
+}

@@ -3153,3 +3153,56 @@ assert(model.ops.filter((op) => op === 'ReduceSum').length === 1, `expected one 
 }
 """
 timeout_ms = 10000
+
+# The three readings `onnx::export` prints, one test each: a parameter asks for the reading, so a
+# run that asks for nothing prints nothing but the file it wrote. The case is one input-dependent
+# product and its activation, so `trace` has lowered calls to print, `dump` a graph and
+# `prep_stats` a size.
+
+[[tests]]
+name = "pass_diagnostics_trace"
+desc = "`trace=true` prints every lowered call with the facts of its arguments, and what each call returns: the product (its scalar operand still an unbound constant) and the activation."
+kind = "behavior"
+case = "../../../cases/modules/onnx/pass_diagnostics.cml"
+args = ["${case}", 'onnx::export out="${test_tmp}/pass_trace.onnx" trace=true']
+expect_exit = 0
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/pass_trace.onnx"]
+expect_stderr_contains = ["[onnx] __root__ tensor:multiply(sym tensor[2,2], const f32[])", "[onnx]   -> sym tensor[2,2]", "[onnx] __root__ tensor:relu(sym tensor[2,2])"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "pass_diagnostics_dump"
+desc = "`dump=true` prints the simplified graph that is translated, as std::rgir does, and writes the model all the same. A run without the parameter prints no digraph."
+kind = "behavior"
+case = "../../../cases/modules/onnx/pass_diagnostics.cml"
+args = ["${case}", 'onnx::export out="${test_tmp}/pass_dump.onnx" dump=true']
+expect_exit = 0
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/pass_dump.onnx"]
+expect_stderr_contains = ["digraph GraphIR {"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "pass_diagnostics_prep_stats"
+desc = "`prep_stats=true` prints the size of the function when the export receives it and after the export's own simplification."
+kind = "behavior"
+case = "../../../cases/modules/onnx/pass_diagnostics.cml"
+args = ["${case}", 'onnx::export out="${test_tmp}/pass_prep_stats.onnx" prep_stats=true']
+expect_exit = 0
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/pass_prep_stats.onnx"]
+expect_stderr_contains = ["ONNX_PREP_STATS received {\"graphs\":1,", "ONNX_PREP_STATS simplified {\"graphs\":1,"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "pass_diagnostics_default_silent"
+desc = "The same export with no reading asked for prints nothing but the file it wrote: the readings are what a parameter asks for, not something a run does by itself."
+kind = "behavior"
+case = "../../../cases/modules/onnx/pass_diagnostics.cml"
+args = ["${case}", 'onnx::export out="${test_tmp}/pass_quiet.onnx"']
+expect_exit = 0
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/pass_quiet.onnx"]
+expect_output_not_contains = ["[onnx]", "ONNX_PREP_STATS", "digraph GraphIR {"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000

@@ -527,6 +527,14 @@ slot_t __index_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     auto *const arr     = norm.get<Array *>(0);
     const Int64 raw     = norm.get<Int64>(1);
     const Int64 axisArg = norm.size() >= 3 ? norm.get<Int64>(2) : 0;
+    if (arr->rank() == 0) {
+        // A value of rank zero has no positions: it is the element itself (design principles 5.4),
+        // so there is nothing to index and nothing to hand back. Refused here rather than read as
+        // an extent the value has not.
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "a value of rank zero has no positions to index: it is the element itself");
+    }
     const Int64 axis    = indexAxis(arr, axisArg);
     const auto at       = static_cast<size_t>(axis);
     const Int64 extent  = arr->dim(at);

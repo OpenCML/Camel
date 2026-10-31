@@ -22,6 +22,7 @@
 
 import math
 import { RowsOf, is_array, is_float, is_integer, is_numeric, is_ordered, is_plain, is_same } from types
+import { sum_axis, mean_axis, min_axis, max_axis, argmax_axis, argmin_axis } from tensor
 
 // ---- rearranging ----
 
@@ -400,20 +401,7 @@ export func vmap::<T, U>(f: (row: T) => U): (xs: RowsOf<T>) => U[] {
 #op('array:elements')
 func elements::<T>(xs: T[..]): T[]
 
-// The kernels of the reductions along an axis: one operator each, sweeping one axis of a
-// contiguous block; the result shape follows the axis and keepdims.
-#op('array:sum_axis')
-func sum_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..]
-#op('array:mean_axis')
-func mean_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..]
-#op('array:min_axis')
-func min_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..]
-#op('array:max_axis')
-func max_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..]
-#op('array:argmax_axis')
-func argmax_axis::<T>(xs: T[..], axis: int, keepdims: bool): int[..]
-#op('array:argmin_axis')
-func argmin_axis::<T>(xs: T[..], axis: int, keepdims: bool): int[..]
+// The reductions along an axis are the tensor module's operators (`tensor:sum_axis` and its five); this module imports them rather than declaring a second spelling of each.
 
 // The Camel function above is the meaning of its name; a kernel is the same function run by a
 // native executor, adopted for the element types that have one (design principles 10.4) and

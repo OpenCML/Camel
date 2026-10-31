@@ -4,7 +4,7 @@
 /*
  * DraftGraphBuilder -> GCGraph encoding.
  *
- * Compile-time GIR lives entirely on DraftGraphBuilder and GraphDraft, and the frozen graph is
+ * Compile-time GIR lives entirely on the builder and the draft, and the frozen graph is
  * built from that draft: there is no second draft, the nodes the graph has are the draft's own
  * (the part its roots reach), and every byte of the payload comes out of the draft itself.
  * - collect the reachable compile graph tree

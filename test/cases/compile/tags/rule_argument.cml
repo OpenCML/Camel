@@ -1,0 +1,18 @@
+/// A tag whose argument is a `rule`: the author's ruling of 2026-10-31 keeps the tag argument a
+/// compile-time value or the name of a function, and adds a rule declaration to it. A rule is a
+/// declaration of the program and its name is what the tag writes, so the program compiles and
+/// runs.
+
+tag jvp::<F>(rule: F) on func when is_function::<F>()
+
+rule mul_rule(x: float, w: float) {
+    x * w => (dx: float, dw: float) => dx * w + x * dw
+}
+
+#jvp(mul_rule)
+func mul(x: float, w: float): float { return x * w }
+
+func main(): int sync {
+    println(mul(2.0, 3.0))
+    return 0
+}

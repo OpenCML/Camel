@@ -9,7 +9,8 @@ script checks that per (model, configuration, protocol) and writes a verdict;
 train.py --time --reconciliation times only the pairs whose verdict is PASS.
 
 Per Camel configuration it runs the training workload twice with
-``CAMEL_TENSOR_OPSTATS=1`` (same warmup, ``--reps0`` and ``--reps`` timed steps)
+``std::profile opstats=true`` in the pipeline (same warmup, ``--reps0`` and
+``--reps`` timed steps)
 and takes the difference of the operator call counts divided by the difference
 in steps: the operators executed per step, exact when every step does the same
 work (a non-integral quotient is an error). Set-up operators, the first-step
@@ -112,7 +113,7 @@ OP_COLUMNS = ["model", "protocol", "config", "operator", "calls_per_step", "kern
 
 
 def parse_opstats(stderr: str) -> Dict[str, Tuple[int, float]]:
-    """operator -> (calls, total ms) from the CAMEL_TENSOR_OPSTATS table."""
+    """operator -> (calls, total ms) from the kernel-timing table."""
     return {m.group(1): (int(m.group(2)), float(m.group(3))) for m in OPROW.finditer(stderr)}
 
 
@@ -120,7 +121,7 @@ def per_step_ops(short: str, long: str, steps: int) -> Dict[str, Tuple[int, floa
     """Operators executed per step: (long run - short run) / `steps` more steps."""
     a, b = parse_opstats(short), parse_opstats(long)
     if not a or not b:
-        raise RuntimeError("no operator table in stderr (is CAMEL_TENSOR_OPSTATS supported by this build?)")
+        raise RuntimeError("no operator table in stderr (does the pipeline name std::profile opstats=true?)")
     out: Dict[str, Tuple[int, float]] = {}
     for op in sorted(set(a) | set(b)):
         if op in SETUP_OPS:
@@ -718,11 +719,17 @@ def optimised(config: str) -> bool:
 
 def measure(model: str, config: str, protocol: str, args, raw: Path) -> dict:
     """Two op-stats runs of one Camel configuration; per-step operators, losses, final parameters."""
-    env = {"CAMEL_TENSOR_OPSTATS": "1", "CAMEL_BENCH_TRAIN_PROTOCOL": protocol}
+    env = {"CAMEL_BENCH_TRAIN_PROTOCOL": protocol}
+    # The kernel-timing table is a pass parameter: the profile pass prints it and its session is
+    # left off (report=false, hints=false), so the run measures what it measured before.
+    opstats = ["std::profile", "report=false", "hints=false", "opstats=true"]
     runs = {}
     for label, reps in (("short", args.reps0), ("long", args.reps)):
         log = raw / f"recon_{protocol}_{model}_{config}_{label}.log"
-        runs[label] = train.camel_ksteps(model, config, args.warmup, reps, threads=args.threads, log=log, extra_env=env)
+        runs[label] = train.camel_ksteps(
+            model, config, args.warmup, reps, threads=args.threads, log=log, extra_env=env,
+            extra_passes=opstats,
+        )
         ran = train.protocol_of(runs[label]["stdout"])
         if ran != protocol:
             raise RuntimeError(f"asked for the {protocol} protocol, the model ran {ran!r}")

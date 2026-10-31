@@ -11,6 +11,7 @@
 #include "facts.h"
 #include "handle.h"
 #include "nodekind.h"
+#include "probe.h"
 #include "read.h"
 #include "regionkind.h"
 #include "txn.h"
@@ -210,6 +211,7 @@ class GraphModule final : public BuiltinModule {
                     {"abort", onTxn},
                 });
         }
+        camel::graphmod::registerHandleProbePass();
         loaded_ = true;
         return true;
     }

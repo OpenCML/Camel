@@ -1,0 +1,49 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * The `transpose` ruleset: the transpose (the pullback) of a linear primitive, written where the
+ * primitive is (design principles 9.9, program transforms).
+ *
+ * A transpose rule's right side is "the cotangent of the result => the cotangent of the operand that
+ * carries the data", and it is linear in that cotangent: `x + c` passes it through, `x * c` scales
+ * it by `c`, and `-x` negates it. The value the primitive was given is a value here, not a constant
+ * of the rule, so `mul_t` is also the transpose of `x * 3`.
+ *
+ * A rule belongs to the family of the module it is declared in, and to a primitive by the operator
+ * of its left side and the number of operands that operator was given. The forward rules of the
+ * same primitives are in `rulesets.jvp`: the two left sides are the same text, and a module holds
+ * one rule per operator, so the two families live in two modules -- a module does not serve two
+ * families, just as it does not serve both a library and a ruleset.
+ *
+ * Adding a rule changes docs/stdlib-reference.md; regenerate it with
+ * `node scripts/stdlib-reference.mjs --write`.
+ */
+
+import { is_float } from types
+import { add_cotangent, div_cotangent, mul_cotangent, neg_cotangent, sub_cotangent } from autodiff
+
+/// The transpose of `x + c`: the cotangent of the sum is the cotangent of `x`.
+export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
+    x + c => (ct: T) => add_cotangent(x, c, ct)
+}
+
+/// The transpose of `x - c`.
+export rule sub_t::<T>(x: T, c: T) when is_float::<T>() {
+    x - c => (ct: T) => sub_cotangent(x, c, ct)
+}
+
+/// The transpose of `x * c`: `ct * c`.
+export rule mul_t::<T>(x: T, c: T) when is_float::<T>() {
+    x * c => (ct: T) => mul_cotangent(x, c, ct)
+}
+
+/// The transpose of `x / c`: `ct / c`.
+export rule div_t::<T>(x: T, c: T) when is_float::<T>() {
+    x / c => (ct: T) => div_cotangent(x, c, ct)
+}
+
+/// The transpose of `-x`: `-ct`.
+export rule neg_t::<T>(x: T) when is_float::<T>() {
+    -x => (ct: T) => neg_cotangent(x, ct)
+}

@@ -129,7 +129,7 @@ bool isEmptyArrayLiteral(node_handle_t node) {
     }
     if (nodeIsKind(node, runtime::GCNodeKind::Data)) {
         // A typed `[]` is a static array: its length says whether the literal was empty.
-        const runtime::GraphDraft &draft = *nodeDraftOf(node);
+        const auto &draft = *nodeDraftOf(node);
         const int32_t dataIndex          = draft.node(nodeIdOf(node))->header.dataIndex;
         if (dataIndex < 0 && static_cast<size_t>(-dataIndex) < draft.staticSlots().size()) {
             const auto *array = camel::core::rtdata::fromSlot<::Array *>(
@@ -629,6 +629,15 @@ node_handle_t Builder::convertStructValue(
                     return nullptr;
                 }
                 field = typed;
+            } else if (isRankZeroEdge(targetFieldType, sourceFieldType)) {
+                // The field's type goes from `T` to `T[..]` here (design principles 5.4): the value
+                // is the element, and the slot holds the rank-zero array that *is* the element.
+                // Same question and same call as every other position.
+                node_handle_t wrapped = coerceTo(access, targetFieldType, origin);
+                if (wrapped == nullptr) {
+                    return nullptr;
+                }
+                field = wrapped;
             } else if (!targetFieldType->assignableFrom(sourceFieldType)) {
                 // A field of another type (a refined module type is assignable; a number of
                 // another type is not).
@@ -652,6 +661,15 @@ node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::nod
             target->castSafetyFrom(source) == CastSafety::Safe) {
             return castNodeTo(valueOf(node), target, origin);
         }
+        // The value's type goes from `T` to `T[..]` here, and that is where the run's
+        // representation is made: the slot holds the rank-zero array that *is* the element (design
+        // principles 5.4), so the program's value, its printing and its comparison do not change,
+        // while the slot has a rank to read. This is the one place the conversion is inserted --
+        // every position that gives a value its type comes through here, and a call argument, which
+        // does not, asks the same question before it enters (builder_operators.cpp).
+        if (isRankZeroEdge(target, source)) {
+            return castNodeTo(valueOf(node), target, origin);
+        }
         return node;
     }
     // A literal takes the type of its context (design principles 5.1): `let x: float = 1`,
@@ -661,6 +679,16 @@ node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::nod
     if (const std::optional<literal::Value> value = literalValueOfExpr(origin);
         value.has_value() && target->isPrimitive() && literal::kindEnters(*value, target)) {
         return literalInType(*value, target, origin, true);
+    }
+    // A literal in a position of `T[..]` is the element (design principles 5.4): the value takes
+    // the element's type first, and the wrap above makes the rank-zero value the slot holds. The
+    // position states the element type, not a dimension, so nothing about the literal loses.
+    if (const std::optional<literal::Value> value = literalValueOfExpr(origin); value.has_value()) {
+        if (Type *element = rankZeroElementOf(target);
+            element != nullptr && literal::kindEnters(*value, element)) {
+            node_handle_t elementNode = literalInType(*value, element, origin, true);
+            return elementNode != nullptr ? castNodeTo(elementNode, target, origin) : nullptr;
+        }
     }
     // An array or struct literal takes the element (field) type its position gives it (design
     // principles 5.1): `f([1, 2])` where `f` takes a `float[]`, `return { a: 1 }` under
@@ -699,6 +727,13 @@ node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::nod
                                                     : castNodeTo(failed, fallible, origin);
     }
     if (!entersImplicitly(target, source)) {
+        // The other direction of the same edge: a value of `T[..]` read as `T` is the element it
+        // holds (design principles 5.4), so the conversion hands the element on. `T[]` and
+        // `T[3, ..]` are not this edge -- they state dimensions the element has not -- and they
+        // stay refused, as the table refuses them.
+        if (isRankZeroEdge(target, source)) {
+            return castNodeTo(valueOf(node), target, origin);
+        }
         return nullptr;
     }
     node = valueOf(node); // what a variable holds, not the variable
@@ -1172,6 +1207,34 @@ data_ptr_t Builder::literalElementInType(
     const data_ptr_t &data, Type *type, const GCT::node_ptr_t &origin,
     const GCT::Tree::LiteralElement *written) {
     if (data == nullptr || type == nullptr || asTagged(type) != nullptr) {
+        return nullptr;
+    }
+    // The element in a position of `T[..]` is the rank-zero value that position promises (design
+    // principles 5.4): the same value, kept as the value with no dimension it is, so the run has an
+    // array to read and the program still sees the element. This is the constant side of the edge
+    // the compiler converts at a computed value (`Builder::coerceTo`): one rule, two entrances -- a
+    // value the program computes keeps its computation and is converted as it enters, a literal
+    // becomes the value at this level, because there is nothing to compute.
+    if (Type *rankZeroElement = rankZeroElementOf(type);
+        rankZeroElement != nullptr) {
+        auto *rankZeroValueType = tt::as_ptr<ArrayType>(type);
+        if (rankZeroElement->assignableFrom(data->type())) {
+            return ArrayData::rankZero(rankZeroValueType, data);
+        }
+        // A number written where the position states the element type: it takes that type as it
+        // was written (design principles 5.1), exactly as a field of a named type does, and the
+        // element is then the rank-zero value. Without this a literal `{ v: 1.5 }` could not be a
+        // value of `{ v: f32[..] }` while `{ v: one }` with `one: f32` could.
+        const literal::Value *exact = writtenValueOf(written);
+        const std::optional<literal::Value> fallback =
+            exact == nullptr ? exactValueOfData(data) : std::nullopt;
+        const literal::Value *value = exact != nullptr ? exact : fallback ? &*fallback : nullptr;
+        if (value != nullptr && isNumericType(rankZeroElement) &&
+            isNumericType(data->type()) && literal::kindEnters(*value, rankZeroElement)) {
+            if (const auto element = value->toData(rankZeroElement); element.has_value()) {
+                return ArrayData::rankZero(rankZeroValueType, *element);
+            }
+        }
         return nullptr;
     }
     if (type->assignableFrom(data->type())) {
@@ -4123,7 +4186,7 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     for (node_handle_t ctrlInput : syncInputs) {
         if (linkCheek(ctrlInput, outputAnchor) &&
             !runtime::hasControlDependency(
-                *nodeDraftOf(outputAnchor),
+                *nodeTransactionOf(outputAnchor),
                 nodeIdOf(ctrlInput),
                 nodeIdOf(outputAnchor))) {
             if (ctrlInput == lastSyncedNode_) {

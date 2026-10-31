@@ -1,0 +1,11 @@
+/// A name imported from the prelude explicitly. The prelude is read once, with every program, so
+/// an import of it finds the module that was already read: the file is not read and checked a
+/// second time, in a context that has none of the built-in module's claims in hand -- which its
+/// `#op` declarations need, since they name rules of that module.
+
+import { string } from prelude
+
+func main(): int sync {
+    println(string(42))
+    return 0
+}

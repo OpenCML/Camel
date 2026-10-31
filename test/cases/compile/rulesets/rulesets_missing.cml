@@ -1,0 +1,15 @@
+/**
+ * A program that builds `rulesets.probe_missing` and computes nothing, so the index can be asked
+ * about it: four of the five scalar primitives are filed and `/` is not.
+ *
+ * Today this is the whole reading. A replacement that walks a function and meets `x / w` would have
+ * to refuse at that node, and that red cannot be shown yet: there is no `reinterp` to write it
+ * with, so the only red available is the index saying `no rule` -- which is a statement about the
+ * ruleset, not about a replacement. The case next to this one pins that, and says so.
+ */
+import rulesets.probe_missing
+
+func main(): int sync {
+    println(1)
+    return 0
+}

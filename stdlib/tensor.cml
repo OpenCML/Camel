@@ -5,11 +5,15 @@
  * The `tensor` module: multi-dimensional numeric arrays, their element type and extents, their
  * binary form, a NumPy file, and the module's worker threads.
  *
- * The declarations written here are the operators whose signature is fixed. The ones whose element
- * type or shape follows their arguments — elementwise arithmetic, the reshaping operators, the
- * axis forms of a reduction — cannot be written as a declaration; they are implemented in
- * `modules/tensor` and listed in `stdlib/signatures/tensor.cml`, whose entries this page renders
- * under the same sections (design principles 6.4).
+ * The declarations written here are the operators a body-less declaration can state. It was once
+ * thought that a name whose element type or shape follows its arguments could not be declared at
+ * all — elementwise arithmetic, the reshaping operators, the axis forms of a reduction — but
+ * `numel` and `shape` showed the limit is the generic parameter, not the operator: written as
+ * `export func numel::<T>(t: T[..]): int when is_numeric::<T>()`, a name whose result type follows
+ * its argument declares fine, and the axis reductions below are written the same way. What a
+ * declaration still cannot state is a signature that depends on a *value* argument. The operators
+ * whose signature the page renders from `stdlib/signatures/tensor.cml` are the ones left in C++
+ * (design principles 6.4).
  */
 
 // The fixed signatures of the operators of `modules/tensor` (design principles 6.4).
@@ -145,3 +149,48 @@ export func gemm_library(): string
 /// principles 7.4); the default lets a matmul the 7.3 rule permits use the library GEMM.
 with <safe_fp: bool = false>
 export func fuse::<F>(f: F): F! when is_function::<F>()
+
+// ---- the reductions along an axis, named by the function ----
+// A declaration names `tensor:<function>`, so `sum_axis` below is the operator `tensor:sum_axis`
+// -- the same naming `shape` and `numel` use, and the one the ONNX lowering table and the
+// semantics declarations are keyed on. `stdlib/array.cml` imports these instead of declaring a
+// second spelling of each.
+/// The sum of each lane along one axis, accumulated in `f64` from `+0` in ascending order and
+/// rounded once into the element type. `keepdims` leaves the reduced axis as an extent of one.
+/// @pure
+/// @example sum_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [4.0, 6.0]
+export func sum_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..] when is_numeric::<T>()
+
+/// The mean of each lane along one axis: the sum and the count both in `f64`, one rounding into
+/// the element type. An empty axis is a fault.
+/// @pure
+/// @fails fault `InvalidArgument` when the axis has no element
+/// @example mean_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [2.0, 3.0]
+export func mean_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..] when is_numeric::<T>()
+
+/// The smallest element of each lane along one axis. An empty axis is a fault: a minimum over no
+/// element has no identity to return.
+/// @pure
+/// @fails fault `InvalidArgument` when the axis has no element
+/// @example min_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [1.0, 2.0]
+export func min_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..] when is_numeric::<T>()
+
+/// The largest element of each lane along one axis. An empty axis is a fault, as for `min_axis`.
+/// @pure
+/// @fails fault `InvalidArgument` when the axis has no element
+/// @example max_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [3.0, 4.0]
+export func max_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..] when is_numeric::<T>()
+
+/// The position of the largest element of each lane along one axis, an `int` index along that
+/// axis. A tie keeps the earlier position. An empty axis is a fault.
+/// @pure
+/// @fails fault `InvalidArgument` when the axis has no element
+/// @example argmax_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [1, 1]
+export func argmax_axis::<T>(xs: T[..], axis: int, keepdims: bool): int[] when is_numeric::<T>()
+
+/// The position of the smallest element of each lane along one axis; a tie keeps the earlier
+/// position. An empty axis is a fault.
+/// @pure
+/// @fails fault `InvalidArgument` when the axis has no element
+/// @example argmin_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [0, 0]
+export func argmin_axis::<T>(xs: T[..], axis: int, keepdims: bool): int[] when is_numeric::<T>()

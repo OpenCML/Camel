@@ -2257,6 +2257,42 @@ class Builder {
     }
     // Orders `node` after the last writer of `variable` in the current graph.
     void orderAfterLastWriter(node_handle_t variable, node_handle_t node);
+    // ---- The conservative writer set (design principles 3.1, 3.5) ---------------------------
+    // A call through a function value has no callee at the call; which variable it writes is not
+    // in its type yet. So the variables some function of the program writes are counted as its
+    // possible writes, by the name each is written with -- the set the whole program gives before
+    // a body is built (scanProgramWriters). Counting a writer the call does not reach costs the
+    // call having to run and the reads after it being ordered after it; it never changes a value,
+    // because the call is the variable's version (`:var/after`) and that is the variable as it
+    // stands after the call. The functions are kept with the set until a function type carries
+    // what it writes, which is when the set can be narrowed.
+    std::unordered_map<std::string, std::set<const GCT::Node *>> programWriters_;
+    // Fills `programWriters_` out of every module's construction tree. Runs before the bodies
+    // are built: a function its module has not built yet still writes what its body says.
+    void scanProgramWriters();
+    // Whether some function of the program writes a variable that `name` is written with.
+    bool programWrites(const std::string &name) const { return programWriters_.contains(name); }
+    // The variables visible where the builder stands, by the name the source writes each with and
+    // its cell: the innermost binding of each name, and only a binding that is a variable
+    // (`isVariable`: a `let`, a parameter or a constant is no write of anybody).
+    std::vector<std::pair<std::string, node_handle_t>> visibleVariables() const;
+    // The cell of `origin` in `graph`, when `graph` already captured it: the port a read of the
+    // variable there takes. Null when the graph has not captured it yet.
+    node_handle_t capturedCellIn(DraftGraphBuilder *graph, node_handle_t origin) const;
+    // The calls of `graph` the conservative writer set counted as possible writers of a variable
+    // the graph had not captured when they were built, by the variable's origin: a read of that
+    // variable written after such a call takes `:var/after` of it (readVariableThrough), which is
+    // what makes the call run and gives the read the value the call left.
+    std::unordered_map<DraftGraphBuilder *, std::unordered_map<node_handle_t, node_handle_t>>
+        claimedWriters_;
+    /// The call `graph` was counted a possible writer of `origin` by, if any.
+    node_handle_t claimedWriterOf(DraftGraphBuilder *graph, node_handle_t origin) const;
+    // The version the variable had before a call through a function value was recorded as its
+    // write, by the call and then the variable: `:var/after` takes it as its first argument, so the
+    // write written before the call runs and the call follows it. A count that turns out to reach
+    // no write then costs the call having to run, and never the value the body wrote.
+    std::unordered_map<node_handle_t, std::unordered_map<node_handle_t, node_handle_t>>
+        writeBeforeCall_;
     // The captured variables `graph` writes: by its own body, by its arms and by the functions
     // it calls directly, transitively. Exact once every graph reached is built; for a graph
     // whose body is still open (a recursive call) every variable it captured counts as written.

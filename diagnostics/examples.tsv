@@ -76,6 +76,7 @@ SemanticDiag::DuplicateDictKey	test/cases/compile/semantic/duplicate_struct_fiel
 SemanticDiag::DuplicateEnumField	test/cases/compile/enum/err_duplicate_field.cml
 SemanticDiag::DuplicateEnumVariant	test/cases/compile/enum/err_duplicate_variant.cml
 SemanticDiag::DuplicateParameter	test/cases/compile/generics/err_tf_dup.cml
+SemanticDiag::DuplicateRuleForOperator	test/cases/compile/rulesets/rulesets.err_duplicate_head.cml
 SemanticDiag::DynamicCastForbidden	test/cases/compile/collections/err_value_type.cml
 SemanticDiag::EffectInRuleCondition	test/cases/modules/rules/condition_rewrite.cml
 SemanticDiag::EffectNotExecuted	test/cases/compile/diag_json/dropped_effects_forward.cml
@@ -192,6 +193,7 @@ SemanticDiag::RestParameterTypeNotSupported	test/cases/compile/rest_params/rest_
 SemanticDiag::ReturnNeedsConversion	test/cases/compile/array_shape/err_return_shape.cml
 SemanticDiag::ReturnTypeMismatch	test/cases/compile/return_type/string_as_int.cml
 SemanticDiag::RuleConstParamNotMatched	test/cases/modules/rules/const_param_unbound.cml
+SemanticDiag::RuleLeftIsNotAnOperator	test/cases/compile/rulesets/rulesets.err_left_not_operator.cml
 SemanticDiag::RuleTagNotRequires	test/cases/modules/rules/err_rule_tag.cml
 SemanticDiag::RuleWithArgumentNotConstant	test/cases/modules/rules/err_rule_with_not_constant.cml
 SemanticDiag::RuleWithParameterUnbound	test/cases/modules/rules/err_rule_with_unbound.cml

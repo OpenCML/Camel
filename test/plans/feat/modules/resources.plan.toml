@@ -62,9 +62,13 @@ for (const l of [
   'RESOURCES node main 23 rand:seed: write ambient rng; external',
   'RESOURCES node main 29 fs:exists: read ambient fs; external',
   'RESOURCES node countdown 12 FUNC countdown: rmw variable (node 0); result unknown',
+  // A call through a function value may write any variable visible where it is called
+  // (Builder::scanProgramWriters), so the read of `c` after `inc()` takes a `:var/after` node above
+  // the call and one node more is written before the rest of the body: the read of `d` the
+  // `countdown` write is ordered by control against is node 35 now, and was 34 before.
   'RESOURCES order main 8 9 resource ordered by data',
   'RESOURCES order main 9 10 resource ordered by data',
-  'RESOURCES order main 12 34 resource ordered by control',
+  'RESOURCES order main 12 35 resource ordered by control',
   'RESOURCES order main 19 21 resource ordered by data',
   'RESOURCES order countdown 4 12 resource ordered by control',
   'true', 'false', '4', '16', '[1, 2, 3]',
@@ -135,7 +139,7 @@ assert(!/RESOURCES order main (2|5|18) /.test(out), 'making a cell conflicts wit
 // access of the captured cell -- and no result part: the call hands back the value its body
 // computed, not a version of a resource, and the closure's own footprint above already names the
 // version its write makes (`result fresh`).
-assert(!/RESOURCES order main 12 (8|9|10|15|32) /.test(out), 'the cells of c and d are different resources')
+assert(!/RESOURCES order main 12 (8|9|10|15|32|33) /.test(out), 'the cells of c and d are different resources')
 assert(!out.includes(' unordered'), 'the program orders every conflicting pair')
 
 // ---- Synthetic graphs: the internal model of steps 1-2 (no syntax yet). ----

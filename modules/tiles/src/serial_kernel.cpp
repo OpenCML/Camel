@@ -142,6 +142,33 @@ KernelBody serialBody(const Program &p, Launch &launch) {
     ScalarExpr result = ScalarExpr::literal(ScalarValue::f32(0));
     if (op == "constant64") {
         result = ScalarExpr::literal({DType::F64, static_cast<uint64_t>(root.attributes.at(0))});
+    } else if (op == "argmax_axis" || op == "argmin_axis") {
+        // Two slots: the extreme value decides, and the position is the loop index itself. The
+        // index goes into an i64 slot unchanged -- no arithmetic is applied to it -- so a tie keeps
+        // the earlier position (strict comparison) and an empty domain stays the caller's fault.
+        const auto access  = reductionAccess(p, *reducer, row, r);
+        const auto width   = access.count;
+        const auto &at     = access.address;
+        const bool maximum = op == "argmax_axis";
+        const auto best    = ScalarExpr::symbol("k_best", DType::F32);
+        const auto element = ScalarExpr::symbol("k_x", DType::F32);
+        body.push_back(ScalarBinding{
+            "k_best", ScalarExpr::literal({DType::F32, maximum ? 0xff800000ULL : 0x7f800000ULL})});
+        body.push_back(ScalarBinding{"k_pos", ScalarExpr::literal(ScalarValue::i64(-1))});
+        Block terms;
+        const auto input = lower.reduction == SIZE_MAX ? lower.load(terms, reducer->inputs[0], at)
+                                                      : lower.value(terms, reducer->inputs[0], at);
+        terms.push_back(ScalarBinding{"k_x", ScalarExpr::cast(DType::F32, input)});
+        Block update;
+        update.push_back(Assignment{"k_best", element});
+        update.push_back(Assignment{
+            "k_pos", ScalarExpr::fromIndex(IndexExpr::variable("k_r"), ScalarType::I64)});
+        terms.push_back(Conditional{
+            ScalarPredicate{ScalarCompare::Less, maximum ? best : element, maximum ? element : best},
+            std::move(update),
+            {}});
+        body.push_back(Loop{"k_r", IndexExpr(0), IndexExpr(width), 1, std::move(terms)});
+        result = ScalarExpr::symbol("k_pos", ScalarType::I64);
     } else if (
         op == "sum_axis" || op == "mean_axis" || op == "max_axis" || op == "sum_all" ||
         op == "mean_all" || op == "sum_to") {

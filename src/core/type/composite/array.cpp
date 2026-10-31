@@ -545,6 +545,18 @@ slot_t ArrayType::castSlotFrom(slot_t value, Type *sourceType) const {
     ASSERT(sourceType != nullptr, "castSlotFrom source type is null");
     const CastSafety safety = castSafetyFrom(sourceType);
     if (safety == CastSafety::Safe) {
+        if (sourceType->code() != TypeCode::Array) {
+            // A value of the element type entering a slot of `T[..]` becomes the rank-zero array
+            // that holds it. Nothing about the value changes (design principles 5.4: a rank-zero
+            // array *is* the element -- the same value, the same printing, the same comparison),
+            // but the run now has a value with a rank to read, which is what a slot of an open
+            // rank needs. The compiler inserts this conversion where a value's type goes from `T`
+            // to `T[..]` (Builder::coerceTo); it is never the `as` of a program, which the builder
+            // answers by keeping the value as it is (Builder::visitCastNode).
+            auto *zero = Array::createRankZero(
+                camel::core::mm::autoSpace(), this, value);
+            return camel::core::rtdata::toSlot(zero);
+        }
         return value;
     }
     // What every other answer needs is a value of a type a value can have: `Unsafe` is answered

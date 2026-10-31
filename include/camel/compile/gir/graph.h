@@ -5,7 +5,7 @@
  * Deprecated include shim.
  *
  * Compile-time graph semantics have moved to `DraftGraphBuilder` plus
- * `GraphDraft`. This header intentionally stops exposing the old `Graph`
+ * the editable draft. This header intentionally stops exposing the old `Graph`
  * surface so remaining users fail at concrete migration points instead of
  * depending on stale APIs.
  */

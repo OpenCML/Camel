@@ -19,8 +19,9 @@
  *
  */
 
-import { is_same, Tangent } from types
+import { is_float, is_same, Tangent } from types
 import { zeros_like } from tensor
+import { add_tangent, div_tangent, mul_tangent, neg_tangent, sub_tangent } from autodiff
 
 /// A value of type `T` with its tangent: what a forward transform carries for one value.
 /// @example is_same::<Lift<float>, (float, float)>()    // true
@@ -101,4 +102,38 @@ export func div_jvp(x: f32, y: f32, d: (f32, f32)): (f32, Tangent<f32>) {
 export func div_jvp(x: float, y: float, d: (float, float)): (float, Tangent<float>) {
     let (dx, dy) = d
     return (x / y, (y * dx - x * dy) / (y * y))
+}
+
+// ---- the forward rules of the scalar arithmetic ----
+// A rule is filed in its ruleset module under the operator its left side is written with and the
+// number of operands it takes, and a transform reads it from there; a rule is not a function a
+// program calls, so the rules below and the functions above are two things and their names do not
+// collide (`jvp_add` is the rule, `add_jvp` is the function a program can call and compare).
+//
+// One law, one writing: each right side names the tangent function the library keeps, so what the
+// transform produces and what a test can compute are the same statement.
+
+/// `d(x + w) = dx + dw`.
+export rule jvp_add::<T>(x: T, w: T) when is_float::<T>() {
+    x + w => (dx: T, dw: T) => add_tangent(x, w, dx, dw)
+}
+
+/// `d(x - w) = dx - dw`.
+export rule jvp_sub::<T>(x: T, w: T) when is_float::<T>() {
+    x - w => (dx: T, dw: T) => sub_tangent(x, w, dx, dw)
+}
+
+/// `d(x * w) = dx * w + x * dw`.
+export rule jvp_mul::<T>(x: T, w: T) when is_float::<T>() {
+    x * w => (dx: T, dw: T) => mul_tangent(x, w, dx, dw)
+}
+
+/// `d(x / w) = dx / w - x * dw / (w * w)`.
+export rule jvp_div::<T>(x: T, w: T) when is_float::<T>() {
+    x / w => (dx: T, dw: T) => div_tangent(x, w, dx, dw)
+}
+
+/// `d(-x) = -dx`.
+export rule jvp_neg::<T>(x: T) when is_float::<T>() {
+    -x => (dx: T) => neg_tangent(x, dx)
 }

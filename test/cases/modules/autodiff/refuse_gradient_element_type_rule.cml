@@ -14,7 +14,8 @@
  * mismatch: the program then runs and prints `grad=0.0`.
  */
 
-import { grad, vjp } from autodiff
+import { grad } from autodiff
+import { vjp } from prelude
 
 func pick_rule(xs: float[], i: int, dy: float): f32 {
     return f32(0.0)

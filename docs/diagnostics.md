@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-300 diagnostics: 279 errors, 21 warnings. 15 carry a machine-applicable edit, 285 say why they carry none.
+302 diagnostics: 281 errors, 21 warnings. 15 carry a machine-applicable edit, 287 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -264,6 +264,8 @@ prints one entry.
 | `0x03000201` | [SemanticDiag::StatementAfterReturn](#statementafterreturn) | Error | no |
 | `0x03000202` | [SemanticDiag::TagArgumentNotValue](#tagargumentnotvalue) | Error | no |
 | `0x03000203` | [SemanticDiag::TagNameAsValue](#tagnameasvalue) | Error | no |
+| `0x03000204` | [SemanticDiag::RuleLeftIsNotAnOperator](#ruleleftisnotanoperator) | Error | no |
+| `0x03000205` | [SemanticDiag::DuplicateRuleForOperator](#duplicateruleforoperator) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8569,7 +8571,7 @@ The tag '{1}' cannot take '{0}' as an argument: it names {2}.
 **Help**
 
 ```text
-A tag is read before the program runs, so an argument is a compile-time value -- a literal, a top-level constant or a string -- or, for a parameter that carries a function, the name of a function of the program (the fact is that function's graph reference). A tag and a type are declarations, not values; a rule and a body-less kernel are declarations too, and neither has the function graph such a parameter takes. Name a function, a literal or a constant.
+A tag is read before the program runs, so an argument is a compile-time value -- a literal, a top-level constant or a string -- or, for a parameter that carries a function, the name of a function of the program or of one of its rules. A rule may be named because the parameter asks for a declaration of the law, and a rule is a declaration: its name is what the tag writes and what the pass reads. A value that is no function cannot be named there: it stands for data the program computes, and a tag is read before any of it exists. A tag and a type are declarations too, and neither has a value for a parameter that takes one. Name a function, a rule, a literal or a constant.
 ```
 
 **Example** (`test/cases/compile/tags/err_tag_argument.cml`, run as `camel test/cases/compile/tags/err_tag_argument.cml`)
@@ -8619,6 +8621,80 @@ tag label(x: int) on func
 
 func main(): int sync {
     let f = label
+    return 0
+}
+```
+
+### RuleLeftIsNotAnOperator
+
+`0x03000204` · Error · `SemanticDiag::RuleLeftIsNotAnOperator`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The rule '{0}' has a left side that is not one operator; it is written as '{1}', and a ruleset indexes its rules by the head of the left side.
+```
+
+**Help**
+
+```text
+A ruleset is a module of rules, and the transform finds a rule for a primitive by the head of the rule's left side: `a + b` puts its rule under `+`, `-a` under `-`, and `f(a, b)` under `f`. A left side that is a literal, a tuple, or a chain of operators at one level names no one primitive, so no primitive can find it. Write the left side as one operator applied to the operands, or move the rule to the module that owns the shape it matches.
+```
+
+**Example** (`test/cases/compile/rulesets/rulesets.err_left_not_operator.cml`, run as `camel test/cases/compile/rulesets/rulesets.err_left_not_operator.cml`)
+
+```camel
+// A left side that names no one operator: the index files a rule under the head of its left side,
+// and `x` alone names nothing a primitive could look up. It is refused where it is written.
+rule id_rule(x: float) {
+    x => (dx: float) => dx
+}
+
+func main(): int sync {
+    println(1)
+    return 0
+}
+```
+
+### DuplicateRuleForOperator
+
+`0x03000205` · Error · `SemanticDiag::DuplicateRuleForOperator`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side, and one ruleset has one rule per operator.
+```
+
+**Help**
+
+```text
+A transform looks up the rules of a primitive by the operator its left side is written with and the number of operands it takes, so a second rule under the same operator with the same number of operands has no way to be chosen: which of the two applies would be decided by the order they are written in, and the program would mean different things depending on where a rule sits. Merge the two into one rule whose right side covers both cases, or give one of them a left side with a different operator -- and remember that `-x` and `x - w` are two primitives, not one.
+```
+
+**Example** (`test/cases/compile/rulesets/rulesets.err_duplicate_head.cml`, run as `camel test/cases/compile/rulesets/rulesets.err_duplicate_head.cml`)
+
+```camel
+// Two rules of one module with the same head: a transform looks a rule up by the head of its left
+// side, so the second one has no way to be chosen. It is refused where it is written.
+rule first_rule(x: float, w: float) {
+    x + w => (dx: float, dw: float) => dx
+}
+
+rule second_rule(x: float, w: float) {
+    x + w => (dx: float, dw: float) => dw
+}
+
+func main(): int sync {
+    println(1)
     return 0
 }
 ```
@@ -9309,7 +9385,7 @@ Maximum recursion depth ({1}) exceeded when evaluating graph '{0}'.
 **Help**
 
 ```text
-Check for infinite recursion. A call in tail position takes no frame, so write a deep recursion as a tail call; or raise the limit with --max-recursion-depth <n> or CAMEL_MAX_RECURSION_DEPTH=<n>.
+Check for infinite recursion. A call in tail position takes no frame, so write a deep recursion as a tail call; or raise the limit with --max-recursion-depth <n>.
 ```
 
 **Example** (`test/cases/consistency/limits/depth_direct.cml`, run as `N=100 camel --max-recursion-depth 100 test/cases/consistency/limits/depth_direct.cml ${backend}`)
@@ -9910,7 +9986,8 @@ A derivative rule returns a gradient of the parameter's element type. Convert th
 **Example** (`test/cases/modules/autodiff/refuse_gradient_element_type_rule.cml`, run as `camel test/cases/modules/autodiff/refuse_gradient_element_type_rule.cml std::nvm`)
 
 ```camel
-import { grad, vjp } from autodiff
+import { grad } from autodiff
+import { vjp } from prelude
 
 func pick_rule(xs: float[], i: int, dy: float): f32 {
     return f32(0.0)

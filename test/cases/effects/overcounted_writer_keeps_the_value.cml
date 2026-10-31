@@ -1,0 +1,24 @@
+/**
+ * A writer counted that the call does not reach. `counter` is written by `apply` itself, so every
+ * call through a function value in the program is counted as a possible write of it -- here the
+ * function value handed over only prints.
+ *
+ * Counting it costs the call having to run and nothing else: the read after the call takes the call
+ * as the variable's version, so `called 3` is on the output, and the version it takes is the one
+ * the variable had before the call (`writeBeforeCall_`), so the write the body made keeps a reader,
+ * keeps running, and `1` is what is printed. An over-counted writer can make a call must-execute;
+ * it cannot change the value a read takes.
+ */
+
+var counter = 0
+
+func apply(f: (x: int) => void, v: int): int {
+    counter = 1
+    f(v)
+    return counter
+}
+
+func main(): int sync {
+    println(apply((y: int) => { println('called', y) }, 3))
+    return 0
+}

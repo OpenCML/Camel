@@ -1,0 +1,17 @@
+// The element through a parameter and back out of the same slot: `elem` takes `f32[..]` and returns
+// `f32`, so the value crosses the edge twice -- once into the slot (wrapped into the rank-zero
+// array the slot holds) and once out of it (the element the rank-zero array is, design principles
+// 5.4). Both directions are the compiler's conversion, not the program's `as`.
+//
+// Before that conversion (`619eedb6c`) this crashed as `show` did; after it (`cae413dbf`) the same
+// program prints the value it was given, and the four slots print the same two lines.
+
+func elem(v: f32[..]): f32 {
+    return v
+}
+
+func main(): int sync {
+    println(elem(1.0))
+    println(elem(2.5))
+    return 0
+}

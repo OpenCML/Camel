@@ -466,6 +466,8 @@ enum class SemanticDiag : uint32_t {
     FactCaseBindsNoVariable   = 0x0001F8,
     TypeFunctionNotApplicable = 0x0001FE,
     StatementAfterReturn      = 0x000201,
+    RuleLeftIsNotAnOperator   = 0x000204,
+    DuplicateRuleForOperator  = 0x000205,
 
     // Warnings
     IgnoredSideEffect = 0x100002,

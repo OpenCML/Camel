@@ -387,3 +387,27 @@ assert(lines[lines.length - 1] === 'NESTED 3 5 5 7', 'the program prints what it
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 20000
+# The pass's own reading of a dispatch it cannot lower: asked for by the parameter `debug`, so a
+# run that does not ask prints nothing.
+[[tests]]
+name = "defun.debug_dispatch"
+desc = "`debug=true` writes the dispatch the pass is about to lower, member by member and variant by variant, before it lowers it: the reading a program the pass cannot lower is diagnosed with, and nothing else the pass writes changes."
+kind = "behavior"
+case = "../../../cases/opt/defun/higher_order.cml"
+args = ["${case}", "std::defunctionalize", "debug=true", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["HIGHER ORDER"]
+expect_stderr_contains = ["[defun] dispatch members=", "[defun]   variant tag="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "defun.debug_off_by_default"
+desc = "The same program with the pass named and `debug` not given writes no dispatch: the reading is off by default."
+kind = "behavior"
+case = "../../../cases/opt/defun/higher_order.cml"
+args = ["${case}", "std::defunctionalize", "std::nvm"]
+expect_exit = 0
+expect_output_not_contains = ["[defun] dispatch"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000

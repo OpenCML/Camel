@@ -69,24 +69,6 @@ using type::TypeCode;
 
 namespace {
 
-/// CAMEL_ONNX_TRACE=1 prints every lowered call with the facts of its arguments to stderr.
-bool traceEnabled() {
-    static const bool enabled = [] {
-        const char *v = std::getenv("CAMEL_ONNX_TRACE");
-        return v && *v && std::string_view(v) != "0";
-    }();
-    return enabled;
-}
-
-/// CAMEL_ONNX_DUMP=1 prints the simplified graph that is translated (as std::rgir does).
-bool dumpEnabled() {
-    static const bool enabled = [] {
-        const char *v = std::getenv("CAMEL_ONNX_DUMP");
-        return v && *v && std::string_view(v) != "0";
-    }();
-    return enabled;
-}
-
 std::string describe(const Value &v) {
     const TensorFacts f = factsOf(v);
     std::string shape   = "?";
@@ -3760,7 +3742,7 @@ Value Evaluator::applyOper(
     if (def && def->index) {
         instance = tensor::ops::instantiate(*def, inferContext);
     }
-    if (traceEnabled()) {
+    if (options_.trace) {
         std::string args;
         for (const Value &v : norm) {
             args += (args.empty() ? "" : ", ") + describe(v);
@@ -3770,7 +3752,7 @@ Value Evaluator::applyOper(
     try {
         Value result = lowering->lower(
             LowerContext(emitter_, uri, norm, std::move(facts), resultType, std::move(instance)));
-        if (traceEnabled()) {
+        if (options_.trace) {
             std::cerr << std::format("[onnx]   -> {}\n", describe(result));
         }
         return result;
@@ -4810,9 +4792,11 @@ type::Type *exactTypeOf(slot_t value, type::Type *declared) {
     return declared;
 }
 
-/// Binds the closure slots of `draft` to the constants `captures` (a closure the program
-/// builds from constants, which exists only as a FILL node until the program runs).
-void bindCaptures(camel::runtime::GraphDraft &draft, std::span<const Example> captures) {
+/// Binds the closure slots of the graph `transaction` owns to the constants `captures` (a
+/// closure the program builds from constants, which exists only as a FILL node until the
+/// program runs).
+void bindCaptures(camel::runtime::GraphTransaction &transaction, std::span<const Example> captures) {
+    auto &draft = transaction.edit();
     const std::vector<gc_node_ref_t> nodes(
         draft.closureNodes().begin(),
         draft.closureNodes().end());
@@ -4888,7 +4872,7 @@ Model exportBound(
     {
         camel::runtime::RuntimeGraphDraftSession session(context, fn->program(), graph);
         if (!captures.empty()) {
-            bindCaptures(session.rootDraft().edit(), captures);
+            bindCaptures(session.rootDraft(), captures);
         }
         // Captured values are constants of the model: they get the types their values fix.
         std::vector<type::Type *> captureTypes;
@@ -5014,7 +4998,7 @@ Model translatePrepared(
     const camel::runtime::Program *programBeforeSimplify = program;
     // Measurement aid: what the bound function looks like when the export receives it and
     // after the export's own simplification (one line each on stderr).
-    const bool prepStats = std::getenv("CAMEL_ONNX_PREP_STATS") != nullptr;
+    const bool prepStats = options.prepStats;
     if (prepStats) {
         std::cerr << "ONNX_PREP_STATS received " << reachableStats(*program, root) << std::endl;
     }
@@ -5066,7 +5050,7 @@ Model translatePrepared(
     if (prepStats) {
         std::cerr << "ONNX_PREP_STATS simplified " << reachableStats(*program, root) << std::endl;
     }
-    if (dumpEnabled()) {
+    if (options.dump) {
         GraphVizDumpPass(context).apply(program, std::cerr);
     }
 

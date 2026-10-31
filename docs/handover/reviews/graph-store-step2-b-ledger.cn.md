@@ -1,6 +1,6 @@
 # graph-store 第 2 步 b：直连账（逐步填）
 
-**这一路的账：535 → 534 → 533 → 532 → 530 → 521**（files 66 → 64，decode 6 → 5）。它**不是线性**的：`534`（`fact.cpp` 的两处退路）、`530`（转储在 decode 副本上开事务）各掉一格，而中间三笔**一格没掉**——`calleeKernel` 把 `|| handle->draft()` 收成只问事务、`read.cpp` 三处把 `->draft()` 归零（退路本就是 `auto`，没有类型名可删）、删探针（探针不碰草稿）——**"改一处就该掉一格不是必然"，每一格都能指名。**
+**这一路的账：535 → 534 → 533 → 532 → 530 → 521 → 515 → 517**（files 66 → 62，decode 6 → 5 → 4）。它**不是一条一直往下的线**：`534`（`fact.cpp` 的两处退路）、`530`（转储在 decode 副本上开事务）、`515`（`read.cpp` 不再提这个类型）各掉一格；中间三笔**一格没掉**——`calleeKernel` 把 `|| handle->draft()` 收成只问事务、`read.cpp` 三处把 `->draft()` 归零（退路本就是 `auto`，没有类型名可删）、删探针（探针不碰草稿）；**最后 515 → 517 是向上的一格，它是 C 裁定的代价**：`writings.h` 必须留一处"收草稿"的入口，而入口必须命名它收的类型。**"改一处就该掉一格不是必然"与"下降也不是一直向下"两句要一起读。**
 
 b 的落点是"可编辑图归图仓的事务所有、前端一开始就在里面建图"，最后一笔删掉 `GraphDraft`。
 本页只做一件事：把"还有多少处直接连到 `GraphDraft`"记成三个数，**每一笔提交填一行**。叙述可以说"删净了"，这三个数不会。
@@ -418,3 +418,647 @@ helper 只借一次草稿、并不持有它，所以改成收模板参数（`tem
 **四项实测：62 / 515 / 3 / 4**（files 64 → 62，references 521 → 515，decode 5 → 4）。
 
 **"还有没有可删的调用点"——在今晚动过的范围里是 0**：`handle.h`／`handle.cpp` 0、`read.cpp` 0、`fact.cpp` 0、`module.cpp` 0。**`modules/graph/txn.cpp` 还剩 2 处，都不是台账住户**：一处是 `using`，一处是事务 API 自己的返回类型 `std::pair<GraphDraft &, gc_node_ref_t>`——事务的墙（§0 第 1 条）本来就不在账里。剩下的 `GraphDraft` 全在 `draft*.cpp` 与各 pass 里，那是**这个类型本身该在的地方**，不是"直连"。
+
+## 24. 裁定改口径：C 落地，账本只允许一次上涨
+
+> **"终点那句话从此是可检查的，不是叙述"**——`check.mjs` 的 `ZERO_FILES` 直接查那五个文件，与四个总数无关。这是账本工具化最好的一次：叙述会漂，断言不会。
+>
+> **"`--force: recording an increase; the diff of baseline.json says so`——涨在 diff 里看得见，不是偷偷记的"**——这是"允许一次"与"默认放行"的分界线：前者要一条命令、一次 `--force`、一份可见的 diff，后者只需要谁都不看。
+
+**作者 18:15 的裁定**：*"可编辑的图只存在于事务里。所以 B 不选，读端不允许'同时问事务和指针'。实现上取 C：`Writings` 没拿到外部事务时，就自己开一个并拥有它，`createInDraft` 随之删掉，测试一行不用改。"*
+
+**落地**（`1e70b99ac` + `01ea89d6f`）：`GraphTransaction::borrow(GraphDraft&)` 开一个**借来的**事务（自己不拥有草稿，草稿本来就有主）；`DraftWritings(GraphDraft&)` 内部持有它，**生命周期到 `Writings` 析构**；那 17 处调用点**逐字还原**（`git revert 404c77db4`）。`graphWritings` 的 (a) 保留。
+
+**这是唯一一次允许上涨：C 的入口必须命名它收的类型（`writings.h:411`、`writings.cpp:431` 两行）。上涨是裁定的代价，不是漏出去的洞。**
+
+**终点改成可检查的形状（原先那句"三个数归零、删掉 `GraphDraft`"到此作废）**：
+
+> **`handle`／`read`／`fact`／`module` 侧归零；`writings.h` 留一个入口，因为它必须命名收进来的类型。**
+
+`check.mjs` 现在**直接查这件事**（`ZERO_FILES`）：`modules/graph/handle.h`、`handle.cpp`、`modules/graph/read.cpp`、`modules/rewrite/fact.cpp`、`modules/rewrite/module.cpp` 五处，任何一处出现这个类型名即红，与四个总数无关。
+
+**A 那半边照旧成立，不因为改成 C 就说回去**：`createInDraft` 零调用者、`Handle::draft_` 已删、`nodeHandleOf` 单形态。
+
+## 25. b4 的 A：13 处"从 program 造 handle"问完，答案是三层
+
+问的是**"读一个已发布的程序，造 handle 要不要事务"**。13 行逐个答，答案不是两种而是三种：
+
+| 类 | 处数 | 位置 | 要不要事务 |
+|---|---|---|---|
+| **① 已发布的程序** | **9** | `read.cpp:158/162/172/570/742/796`、`txn.cpp:393`、`fact.cpp:423`、`module.cpp:1555`（其中 1555 与 404/438 一类，见下） | **不要**：图不再变 |
+| **② 根本无图** | **3** | `read.cpp:404`（Op）、`read.cpp:438`（TypeRef）、`module.cpp:1555`（Op） | **不需要**：没有图可谈 |
+| **③ 草稿里的新节点** | **2** | `txn.cpp:350`（常量折叠）、`txn.cpp:440`（`add_constant`） | **要**：节点只存在于草稿里 |
+
+**可检查的一句话**：*不是"不要事务"，是"两种都有"——9 行已发布、3 行根本无图、2 行未发布。*
+
+**第 ③ 类这一笔就修了（`82c8be1ee`）**：两个内核手里本来就有 `state.session` 与 `session.edit(graph)`，所以不是加管道，是**把已有的东西接上**——返回值改 `createInTransaction`。
+
+**然后加了一条可执行的自律，不然分类法只是自律（`a985ea51c`）**：`Handle::create` 在 `kind == Node && program != nullptr` 时要求 `(graph, node)` 真在 program 里（用现成的 `program->graph()` 与 `containsGraphNode`），**错了就在造 handle 的地方炸**，不等某个读者拿空 `program_` 去查。触发它的是一条只读自测 `graph::probe_handle`（`probe.cpp` + `probe_handle.cml` + 计划里的 `runtime.graph_draft_ledger.handle_invariant`），读数：
+```
+HANDLE_PROBE allowed a node that is there: yes
+HANDLE_PROBE refused: InvalidArgument
+```
+**第②类是"无图"不是"未发布"，这一点写在这里**：Op／TypeRef handle 的 `program` 是 `nullptr`、图 id 是 `Invalid`，它们根本不命名图，所以在这个断言里必然放行——放行是对的。
+
+**断言一开就抓到了第 14 个红（`4a7892476`）**：`graph.replace` 的守卫问替换节点要 `program`，而折叠刚写进草稿的节点现在用事务命名，于是 14 个折叠用例当场全红。守卫改成"两种命名法都认"（`to->program() == state.base` 或 `to->transaction()->id() == to->graph()`）。**这就是断言的价值：它抓的不是我改的两行，是我没想到的第三个地方。**
+
+### 25.1 那条红立成一条规矩（B 的每一步都按它判）
+
+**守卫不能靠 `program` 认图。** 一个节点在某张图里，凭据是它自己的 `(graph, node)`，不是"我手里这张 program 有没有它"。**用 `program` 认图，等于假设节点都已发布**——折叠写进草稿的节点一出现，这个假设就破了。
+
+**证据就是上面那次的读数，原样一句话**：*它没抓我改的那两行，抓的是我以为无关的第三个地方。* 14 个用例、一个守卫、一个假设。
+
+**于是 B 里凡是"这个位置手里只有 program"的，先问一句：它是在认图吗？**
+
+| 判断 | 做法 | 计数 |
+|---|---|---|
+| **是认图** | 改成从节点自己的字段取（`handle->graph()`、`handle->transaction()`、草稿的 `containsNodeRef`） | **改掉的** |
+| **确实需要 program** | 保留，并就地写一句为什么（要遍历已发布的图、要给读者一张冻结的快照） | **保留的** |
+
+两类分开计数，是这一步的账。
+
+## 26. B 的第一片：`autodiff/pullback.cpp`，从 37 处到 34 处
+
+**先记一句上一轮的结论，它把分类法变成了判据**：**① 类 = 没有草稿参数的位置，③ 类 = 有草稿参数且不属于事务的位置**。所以"B 的第一片要删掉多余的草稿参数"在 ① 类里量出来是 **0 行、0 个局部**——那 9 行之所以是 ① 类，正是因为没有草稿能到那里。
+
+**这一片动的不是参数，是"认谁"**：`regionOwners_` 这张表记的是"某个 region 的来路里带进了哪些函数"，**键原来是草稿的地址**。草稿只能从事务到达，**所以键改成事务**（`0ecc12501`）：
+
+| 数 | 值 |
+|---|---|
+| 删掉的行数 | **0**（改的是三行：两个簿记函数的参数、一处表类型） |
+| 删掉／改写的参数与局部 | **2 个参数**（`ownersOf`、`noteArmOwner` 的第一个参数）+ **1 处表键类型** + 2 处调用点 |
+| 本来就需要草稿而保留的点 | **34 处**，全部是真实用法 |
+
+**为什么是 0 行**：这个文件里没有一处"多余的草稿参数"——每一处都是**读一个节点、写一个节点、或取一个图 id**。真正的删法是另一件事：**那些只被 `draft()` 调用的自由函数，本来该是 `PullbackContext` 的成员**，转成成员后签名里那个 `const GraphDraft &draft` 就消失了（对象自己知道它的草稿）。改法不是"删参数"，是"换归属"——那是下一片的事，不是这一片。
+
+**四个数：62 / 514 / 3 / 4**（`517 → 514`）。
+
+## 27. B 第二片：那张表只放行 5 行，不是 18 行
+
+**判据就是 §26 那句**：*只被 `draft()` 调用的自由函数，本来就该是成员的*。按它把 `pullback.cpp` 的 28 个收草稿的自由函数逐个过一遍，**只有 5 行满足**（`4eb159b5a`）：
+
+| 函数 | 原参数 | 转成员后消失的参数 | 调用者数 | 全部传 `draft()`？ |
+|---|---|---|---|---|
+| `readsCallVersion` | `const GraphDraft &draft` | 这个 | 2 | **是** |
+| `componentProjectionOf` | 同上 | 这个 | 1 | **是** |
+| `orderingOf` | 同上 | 这个 | 2 | **是** |
+| `takeSyncPlace` | `GraphDraft &draft` | 这个 | 3 | **是** |
+| `evidentFunction` | `const GraphDraft &draft` | 这个 | 3 | **是** |
+
+**为什么其余 23 行不转——它们不是"多传东西"，是"传的东西不一样"**：同一个 helper 被**三种草稿**调用——重写自己的 `draft()`、反向传播的 `forward()`（`Backward::forward`，1051）、反向传播的 `target()`。`calleeOf` 四传 `draft()`、两传 `forward()`；`valueNode`、`portsOf`、`externalInputsOf`、`staticValue`、`addPort`、`setResult`、`pruneUnreachable` 同样跨着好几个草稿。**转成某一个对象的成员，就等于替另一个对象认错了图**——这正是 §25.1 那条规矩的另一面。它们该去的地方是**事务**（谁拥有这张图），不是某一个重写器；那要动 `GraphTransaction` 的接口，属于下一层。
+
+**三个数**：删掉的行数 **0**（每个函数是搬进类里，不是删掉）；消失的参数 **5 个**；保留 **23 个**（每个都是一句"它服务的不止一张图"）。
+
+**四个数：62 / 509 / 3 / 4**（`514 → 509`）。
+
+## 28. B 第三片：那 23 个的边界在"调用点上手里有没有事务"
+
+**判据（这一层的那句话，写在这里）**：*同一个 helper 被三种草稿调用——重写自己的 `draft()`、反向传播的 `forward()`、`target()`。转成某一个对象的成员，就是替另一个对象认错了图。**它们该去的地方是**事务**（谁拥有这张图），不是某个重写器。***
+
+**于是表问的是另一件事**：不是"谁是它的主人"，而是**"它的调用点上，手里有没有事务"**——有就换成收 `const rt::GraphTransaction &`，没有（只拿到一个 draft 参数的）就得先转那个自由函数。
+
+| helper | 今天被哪些草稿调用 | 能从事务到达 | 本片 |
+|---|---|---|---|
+| `staticValue` | `draft()`、`forward()`、`target()` | **是** | **改** |
+| `calleeOf` | `draft()`、`forward()` | **是** | **改** |
+| `externalInputsOf` | `draft()`、`forward()` | **是** | **改** |
+| `portsOf` | `forward()` | **是** | **改** |
+| `addCall` | `target()` | **是** | **改** |
+| `typeOf` | `draft`、`draft()`、`forward`、`forward()`、`liftedDraft`、`target()` | 否 | 留 |
+| `kindOf` | `draft`、`draft()`、`forward()`、`target()` | 否 | 留 |
+| `regionMember` | `draft`、`draft()` | 否 | 留 |
+| `valueNode` | `draft`、`forward` | 否 | 留 |
+| `hasOrdering` | `draft` | 否 | 留 |
+| `addAccs`／`addField`／`addOper`／`addPort`／`addAggregate`／`addFill` | `draft`、`draft()`、`target()`、`pullback` | 否 | 留 |
+| `setResult`／`pruneUnreachable` | `draft`、`forward`、`pullback` | 否 | 留 |
+| `addLoopInt`／`stampLoopOrigin`／`addZeroTangent`／`addTangentSum`／`buildReverseCond` | `draft` | 否 | 留 |
+| `addClosure` | `engine_.group()` 与 `draft()`／`forward`／`draft` | 否 | 留 |
+
+**"否"的那 18 行是哪一种**：它们都经**自由函数的 `draft` 参数**到达——`buildReverseBody`、`buildReverseClosure`、`packState` 那一族。**它们的调用点上没有事务，只有草稿**；要转就得把那一族一起转，而那一族目前的调用者里还有人只传草稿。**这就是这次重构的边界，写在这张表里，不是留在脑子里。**
+
+**三个数**：删掉的行数 **10**（净 `-10`）；**消失／换掉的参数 5 个**（五处 `const GraphDraft &draft` / `GraphDraft &draft` → 所有者）；**保留 18 个**。
+
+**四个数：62 / 504 / 3 / 4**（`509 → 504`）。
+
+## 29. `generic` 这一族：深度是 3，而且**入口的 `std::function` 类型是原子**
+
+**判据沿用 §28 那条**（可检查）：**"能不能在**调用点上**拿到事务——不是'谁是它的主人'。"**
+
+**这一族长什么样**：`generic` 里所有收草稿的函数，**调用点的第一个实参全都是同一个标识符 `draft`**——一个从入口一路传下来的名字。链条只有一条：
+
+| 层 | 谁 | 这一层手里有没有事务 |
+|---|---|---|
+| **0 入口** | `rewriteReachableGraphs`（`rewrite.cpp:457`） | **有**：`session.edit(g)` 就在调用点上 |
+| **1 回调** | `std::function<size_t(GraphDraft &)>`，六个 lambda（`generic.cpp:1465/1491/1503/1527/1543/1577`、`algebra.cpp:276`） | 没有，参数是草稿 |
+| **2 pass 函数** | `algebraDraft`、`cseDraft`、`dceDraft`、`reduceControlDependencies`、`reduceOrderDependencies`、`reduceDocumentOrdering` | 没有，同上 |
+| **3 叶子** | `operUriOf`、`operIdOf`、`isPureOper`、`isValueOnly`、`isDeadWhenUnread`、`isReplaceable`、`reaches`、`orderedSources`、`readsNoWrittenSlot`、`replaceNode`、`markSyncStatement`、`handOverSyncWait`、`gateInputsSurvive`、`staticValueOf`、`isFoldable`、`staticArgs`、`staticArmOf`、`branchArmNodes`、`joinBlockFragments`、`pruneBranch`、`foldStaticAccess`、`bypassValueGate`（22 个） | 没有，同上 |
+
+**"有多深"的答案：一个叶子要变成收事务，得改三处签名（0→1→2→3）**；**但真正的原子是第 0–1 层**：`std::function<size_t(GraphDraft &)>` 这个类型不在一个函数里，它决定**六个 lambda 全部**的写法。**所以这一族不能按"每片 5–8 个函数"切**——切法只能是**按分支**，每个分支都要付一次"入口 + 回调类型"的共同成本。
+
+| 分支 | 内容 | 叶子数 |
+|---|---|---|
+| **A. 代数** | `algebraDraft` + `operUriOf`、`isPureOper`、`replaceNode`、`markSyncStatement`、`handOverSyncWait`、`gateInputsSurvive` | 6 |
+| **B. 公共子式与死代码** | `cseDraft`、`dceDraft`、`foldStaticAccess` + `isValueOnly`、`isDeadWhenUnread`、`isReplaceable`、`reaches`、`orderedSources`、`readsNoWrittenSlot`、`pruneBranch`、`joinBlockFragments` | 8 |
+| **C. 顺序去重** | `reduceControlDependencies`、`reduceOrderDependencies`、`reduceDocumentOrdering`（在 `src/runtime/control.cpp`，被同样的 lambda 调用） | 0 |
+
+**A 与 `pullback` 那 18 行是同一族**：形状一样（草稿作为自由函数的参数一路传下来，入口处本来就有事务），**只是两处实例**——`generic` 的 `draft` 与 `pullback` 的 `draft`/`forward`/`pullback`。**表能看出它们是同一族：判据一样、链条一样、原子一样。**
+
+**三个数（这一片未动代码）：0 / 0 / 28（保留，等分批）**。**四个数：62 / 504 / 3 / 4（未变）。**
+
+## 30. 那一族的原子换了形状（`71151fc20`）
+
+**只改类型与签名，一条规则体都没动，一个叶子都没搬**：
+
+| 位置 | 改前 | 改后 |
+|---|---|---|
+| `rewriteReachableGraphs` 的入口（`rewrite.cpp:457`） | `rewrite(session.edit(g).edit())` | `rewrite(session.edit(g))` |
+| 回调类型（`rewrite.h:218`、`rewrite.cpp:459`） | `std::function<size_t(GraphDraft &)>` | `std::function<size_t(camel::runtime::GraphTransaction &)>` |
+| 六个 lambda（`generic.cpp` 四处、`finish` 一处、`algebra.cpp:277`） | `(GraphDraft &draft)` | `(GraphTransaction &transaction)` + 首行 `auto &draft = transaction.edit();` |
+| 第 2 层三个 pass 函数（`algebraDraft`、`cseDraft`、`dceDraft`） | `(GraphDraft &draft)` | `(GraphTransaction &transaction)` + 同一行 |
+
+**用 `edit()` 不是 `graph()`**：`graph()` 是 `const GraphDraft &`，而这几个 pass 函数要改图——**这正是"所有权"在类型上的第一次显形**：写的人要拿 `edit()`，读的人拿 `graph()`。编译器的第一轮报错（`setNodeAttrs` 作用在 `const GraphDraft` 上）就是这个区分的证据。
+
+**验收（可检查的一条）**：`git grep -n "std::function<size_t(GraphDraft &)>" -- src` → **无输出（exit 1）**。**"类型没了"比"能编过"更能说明这一笔真的改了形状。**
+
+**三个数**：**消失的参数 13 个**（11 处签名／lambda 的 `GraphDraft` 参数 + 入口两处 `.edit()` 的二次解包）；**删掉的行数 0**（净 `+15`，都是 lambda 首行的绑定与折行）；**保留 28 个**（叶子一个没动）。
+
+**四个数：62 / 491 / 3 / 4**（`504 → 491`）。
+
+**这条数不只是「引用数」，还是「同一件事被拼写几次」**（2026-10-31 实测）：同一条谓词，如果写成
+`bool nodeTakesNoOrder(const GraphDraft &draft, gc_node_ref_t id)` 这样的自由函数，声明加定义就是**两处**
+新的类型拼写，账本立刻 `+2`；把它做成 `GraphDraft` 的成员（`bool GraphDraft::takesNoOrder(gc_node_ref_t) const`），
+函数体里用 `this`、参数表里不再出现类型名，定义处仍有一处 `GraphDraft::` 限定，于是只 `+1`，从基线 515 起到 516
+就是那一处。**所以这一层要降的不只是「谁还连着它」，还有「同一句话被写了几遍」**：一句判据只该有一个拼写，
+这也是把谓词收成成员的第二个理由（第一个是写与判同义）。
+
+## 31. A 分支：两个叶子转了，四个被 B 挡住——**这一片的结论是顺序，不是数量**
+
+**转了的两个**（`33c185186`）：`operUriOf`、`gateInputsSurvive`。两个都是纯读，所以体内是
+`const auto &draft = transaction.graph();`——**`graph()` 是读的那一半，`edit()` 是写的那一半，这一片第一次按读写分开取。**
+
+**四个被挡住的，各自在声明处留了一句"被谁挡住"**：
+
+| 叶子 | 挡住它的是谁 | 它为什么挡 |
+|---|---|---|
+| `isPureOper` | `foldDraft`（B） | 它把收到的草稿原样传下去 |
+| `markSyncStatement` | `handOverSyncWait`、`replaceNode` | 两个调用方都收草稿 |
+| `handOverSyncWait` | `replaceNode`、`bypassValueGate`（B） | 同上 |
+| `replaceNode` | `replaceFoldResult`（B）、图模块的 `replace` | 事务在它们外面一层 |
+
+**所以 A 不是"做完 6 个"，是"做完 2 个、量出 4 个的依赖"**：**这四个叶子的入口全在 B 的 pass 函数里**——
+`foldDraft`、`replaceFoldResult`、`bypassValueGate`。**这说明族的真实顺序是 B → A 的剩余 → C**，
+不是表上原先写的 A → B → C。**表又一次自己改了答案**：分支 A 不是最先能做的一层，**它是最先能"读"的那一层**。
+
+**三个数**：**消失的参数 2 个**（`const GraphDraft &draft` ×2）；**删掉的行数 0**（净 `+7`：多出的三句挡路注释、两个 `const auto &draft` 绑定）；**保留 26 个**。
+
+**四个数：62 / 488 / 3 / 4**（`491 → 488`）。
+
+## 32. B 分支：`draftOf` 也交了——**一个函数的返回值，决定了四个叶子能不能转**（`c336ad4dc`）
+
+**B 转了 11 处签名**：`bypassValueGate`、fold 一族的六个（`foldDraft`、`foldStaticAccess`、`foldStaticFill`、
+`foldStaticCast`、`foldFromTypes`、`replaceFoldResult`）、以及 A 留下的四个叶子（`isPureOper`、
+`markSyncStatement`、`handOverSyncWait`、`replaceNode`）。**外加 algebra 里被 `replaceNode` 与 `isPureOper`
+牵动的两处（`simplify` 与那次 `replaceNode` 调用）——它们不在表上，是编译器点名的。**
+
+**真正的发现不在 `generic` 里，在 `modules/graph/txn.cpp`**：`replaceNode` 的最后一个外部调用者
+是 `graph.replace`／`graph.erase`，而它们手里只有一个**裸草稿**——因为 `draftOf` 的返回值就是
+`std::pair<GraphDraft &, gc_node_ref_t>`。**一个辅助函数的返回类型，卡住了另一个模块的重构**：
+
+| | 改前 | 改后 |
+|---|---|---|
+| `draftOf` | `std::pair<GraphDraft &, gc_node_ref_t>` | `std::pair<camel::runtime::GraphTransaction &, ...>` |
+| 三个调用点 | `auto [draft, ref]` | `auto [transaction, ref]` + 一行 `auto &draft = transaction.edit();` |
+
+**这不是顺手的清理，是判据的必然**：`draftOf` 的注释本来写着"返回草稿"，而 `Handle` 那边已经裁定
+"草稿里的节点只能由事务命名"。**两句话对不上，编译器就把它们撞在一起了。**
+
+**`test::control` 的门自检也一样**：它原来 `bypassValueGate(draft, ...)`，可它上面两行就是
+`auto owner = GraphTransaction::open(...)`——**事务一直在手边，只是没交出去。**
+
+**三个数**：**消失的参数 11 个**；**删掉的行数 12**（净 `+11`：十处 `auto &draft = transaction.edit();` 与一行 `const auto &draft = transaction.graph();`，抵掉旧签名折行的行数）；**保留 15 个**（`armRegions`、`staticValueOf`、`isFoldable`、`staticArgs`、`staticArmOf`、`branchArmNodes`、`joinBlockFragments`、`pruneBranch`、`operIdOf`、`isValueOnly`、`isDeadWhenUnread`、`isReplaceable`、`reaches`、`orderedSources`、`readsNoWrittenSlot`——都是被 B 的函数用草稿调用的读，**它们的调用点现在手里是事务，但转它们要连这些读的调用者一起看，留给下一片**）。
+
+**四个数：61 / 472 / 3 / 4**（`488 → 472`，**files 首次降到 61**：`gates.cpp` 不再拼那个类型名）。
+
+## 33. 那 15 个读：一片带走，而且**"读"和"写"在这一层第一次分家**（`6aa9ef309`）
+
+**15 个全部转了**，写法按它们对图能做什么分两种：
+
+| 一种 | 谁 | 体内第一行 |
+|---|---|---|
+| **只读**（13 个） | `operIdOf`、`isValueOnly`、`isDeadWhenUnread`、`isReplaceable`、`reaches`、`orderedSources`、`readsNoWrittenSlot`、`armRegions`、`staticValueOf`、`isFoldable`、`staticArgs`、`staticArmOf`、`branchArmNodes` | `const auto &draft = transaction.graph();` |
+| **会写**（2 个） | `joinBlockFragments`、`pruneBranch` | `auto &draft = transaction.edit();` |
+
+**这不是风格，是参数表在说它能做什么**：一个只读的 helper 收 `const GraphTransaction &` 就**拿不到可写草稿**，
+编译器替"这个函数不该改图"做了担保。**今晚第一次，判据从注释搬进了类型。**
+
+**又没有在新模块里踩坑**，因为 B 那一笔已经把它们都解决了：图模块的 `replace`／`erase` 手里是 `draftOf` 现在返回的事务，
+`inline` 的 `inlineCallInOrder` 自己的参数表里就写着 `GraphTransaction &transaction`。**"先报再改"这一条没有触发——三个外部调用点全都是"事务本来就在手边"。**
+
+**三个数**：**消失的参数 15 个**；**删掉的行数 15**（净 `0`：进 89 出 89，签名换行与绑定行正好抵平——**这一片是纯形状，行数不动**）；**保留 0 个**（`generic` 这一族到此清空，只剩 C（`runtime/control.cpp` 那三个）与 `rewrite.h` 里两个 inline 的边界）。
+
+**四个数：59 / 450 / 3 / 4**（`472 → 450`，**files 61 → 59**：`algebra.cpp` 与 `gates.cpp` 一起不再拼那个类型名）。
+
+## 34. C：两个模块，同一个问题，两个已经对上的答案（`2b8f372cf`）
+
+**`control.cpp` 这半小时没动**（最后一次是 04:05 的 `5d4231797`，比动手时早一个多小时），所以按约定做了。
+
+三个函数转了签名，**它们看什么边一点没改**：`edges` 的 ②a（"pass 该不该继续造控制边"）还没定，
+所以在 `reduceOrderDependencies` 上留了一句：*"它仍然读控制等待：一个 pass 能不能干脆不再造它们这件事（edges 2a）还没定，
+在那之前，一个忽略它们的归约会去回答一个关于"编译器并不构建的图"的问题。"*
+
+**这一片的证据不在 `control.cpp`，在两个调用者身上**：
+
+| 调用者 | 它手里原本有什么 | 改了什么 |
+|---|---|---|
+| `generic` 的两处 lambda | 事务（B 之后） | 传 `transaction` |
+| `src/passes/trans/json/gir_canonical.cpp:237` | **两行之上刚 `GraphTransaction::decode(program_, graph)`** | 传 `*transaction` |
+| `src/passes/test/control.cpp`（18 处） | 每个用例函数第二行就是 `auto owner = GraphTransaction::open(...)` | 传 `*owner` |
+
+**没有一处需要新造事务**。**"调用点上能不能拿到事务"这条判据，到现在为止的答案是：能——只要那个模块已经按自己的方式回答过一次。**
+
+**还剩几个（"该不该收尾"的数）**：
+
+| 位置 | 剩下 | 是什么性质 |
+|---|---|---|
+| `src/passes/opt/generic/` | **3** | `rewrite.h:26` 的 `using`、`rewrite.h:34` 的 `isComputedAfter`（inline 读）、`algebra.cpp:154` 的 `constant`（模板读） |
+| `src/runtime/control.cpp` + `control.h` | **10** | 3 个导出 API（`hasControlDependency`、`controlFrontier`、`appendControlDependency`）+ 内部 4 个 + 头文件里的声明 |
+
+**这 13 处和前面 400 多处不是同一种**：它们全是**读谓词与内部实现**，而且**都在"已经收事务的函数"体内被调用**——
+转它们是"再往里一层"，收益是拼写数，不是判据。**下一片做不做，由你按"还能不能给出一句新判据"决定。**
+
+**三个数**：**消失的参数 3 个**；**删掉的行数 3**（净 `+5`：三行绑定 + 那段"仍然读控制边"的注释）；**保留 13 个**（上表）。
+
+**四个数：59 / 444 / 3 / 4**（`450 → 444`）。
+
+## 35. 收尾扫描：那 13 处不是"拼写数"，是**13 个删不掉的理由**（`46a30576e`）
+
+**判据的对象换了**：这一族的目标不是少写字，是**最后能删掉 `GraphDraft` 本身**——所以
+**"能删掉几行"在这里读成"能删掉几个 `GraphDraft &` 参数"**：**每一个还在收它的参数，都是一个删不掉的理由。**
+这不是把标准放宽，是把标准的**对象**从行数换成了**参数**。
+
+**13 处全转，0 处拿不到事务。** 而且有三处把同一个问题往外推了一跳，**每一跳都早就有人回答过**：
+
+| 那一跳 | 它本来就有 |
+|---|---|
+| `builder_control.cpp` / `builder_operators.cpp` | **`nodeTransactionOf`**，就写在 `nodeDraftOf` 旁边，注释原话：*"the transaction the node's graph is built in … the identity two nodes of one graph agree on"* |
+| `draft_inline.cpp` 的拼接例程 | `inlineCallableInDraft(session, GraphTransaction &transaction, …)` 的参数表 |
+| `test/control.cpp` | 每个用例第二行的 `GraphTransaction::open(...)` |
+
+**额外带出来的三个**（不在那 13 里，是编译器点名的下一跳）：`bindPortValueUses`、`keepCalleeOrdering`、
+`devirtualizeClosureCallInDraft`——**它们都在 `draft_inline.cpp`，上游都是已经收事务的函数。**
+
+**"没有一处需要新造事务"**——**这句话是整场迁移的总答案**：*"调用点上能不能拿到事务"这条判据，
+到现在为止的答案是：能——只要那个模块已经按自己的方式回答过一次。*
+
+**这一族的账**：`generic` 与 `control` 两个模块里**再没有一处参数写 `GraphDraft`**。
+
+**三个数**：**消失的参数 16 个**（13 + 额外三跳）；**删掉的行数 16**；**保留 0 个**。
+
+**四个数：57 / 432 / 3 / 4**（`444 → 432`，**files 59 → 57**：`control.cpp`、`control.h` 连拼写都没了）。
+
+## 36. 族谱：b6 还差多远，用**还能收草稿的参数**报（不是 `references`）
+
+**判据要换对象**：*b6 的进度不该用 `references` 这个数报，应该用**还能收草稿的参数数**报——因为目标是删掉类型，
+而类型只能在没有函数收它的时候被删。*
+
+**全仓 444 处拼写里，174 处在参数位置**（其余是 `using`、`#include`、`GraphDraft::` 成员定义、类型自身的声明）：
+
+| 族 | 文件数 | 收草稿的参数 | 其中"类型自己的家／成员定义"（删不掉也不该删） |
+|---|---|---|---|
+| `runtime/draft*` + `graph_txn` + `writings`（墙） | 19 | 112 | **112**（全是：类型自身的成员与自由函数读它的内部） |
+| `compile/gir`（builder 一族） | 3 | 3 | 0（**但是造草稿的地方，要单独一轮**） |
+| `modules/autodiff`（`pullback`） | 1 | **23** | 0 |
+| `passes/`（`opt` + `test`） | 7 | 12 | 0 |
+| `modules/tiles` | 4 | 7 | 0 |
+| `core/tags` | 2 | 10 | 0 |
+| `modules/onnx` | 1 | 1 | 0 |
+
+**所以"墙外"还剩 56 个参数**，分布在 18 个文件里。**`pullback` 的 23 个是最大的一块。**
+
+**`pullback` 这一片今晚没成，原因是判据在这一族上第一次不够用**：那 23 个参数不是 23 个自由函数的入口，
+而是**同一个类（`ForwardRewrite`／`Backward`）的成员方法里的 40 多处调用**，而这些成员同时握着三张草稿
+（`draft()`、`forward()`、`target()`）——**"调用点上有没有事务"在这里退化成"这三张草稿各自属于哪个事务"，
+而它们属于两个不同的事务（`forwardTransaction_` 与 `targetTransaction_`）。** 我改到一半树不能构建，
+按"任何时刻停下树都要能构建"退回了（`git checkout --`，树已重新绿）。**这一片需要一个 A/B：先给每个成员方法标出它读写的是哪个事务，再改签名。**
+
+**三个数（这一片）：0 / 0 / 56**（未动）。**四个数：57 / 432 / 3 / 4（未变）。**
+
+## 37. `pullback` 的 A 表：**三张草稿，两个事务，一个映射**
+
+**表头那句判据**：*一个方法同时握两个事务本身不是错——错的是它把一张草稿上的节点塞进另一张草稿。
+"跨事务写"那一列非空的地方，就是要单独想的地方。*
+
+**`ForwardRewrite`：15 个方法，一个事务。** 它只收一个 `rt::GraphTransaction &transaction_`，
+`draft()` 就是 `transaction_.edit()`；**没有任何方法同时握两个**：
+
+| 方法 | 用哪张草稿 | 事务 | 跨事务写 |
+|---|---|---|---|
+| `followFunctionValues`、`carriesFunctionValue`、`expandKernelBodies`、`run`、`retarget`、`redirectValue`、`redirectCallValue`、`redirectAnchors`、`split`、`dependsOnTangentPort`、`rewriteLoop`、`rewriteIndirectCall`、`rewriteClosureCall`、`rewriteCall`、`rewriteBranch`（15 个） | `draft()` | **`transaction_`（一个）** | **无** |
+
+**`Backward`：35 个方法，两张草稿两个事务。**
+
+| 结论 | 方法数 | 方法 |
+|---|---|---|
+| **只读前向**（`forward()` → `forwardTransaction_`） | **16** | `accumulate`、`gradient`、`userGradient`、`refuseWhenActive`、`run`、`reportRefusals`、`activeFunctionInput`、`chosenFunction`、`refusalReason`、`whyNotEvident`、`operUri`、`operId`、`checkVariableReads`、`visit`、`visitOper`、`visitAccs` |
+| **只写目标**（`target()` → `targetTransaction_`） | **8** | `accumulateInto`、`producerOf`、`add`、`zero`、`materialize`、`visitCallSite`、`visitRuleSite`、`finishCaptures` |
+| **两张都不用** | **7** | `primalOf`、`gradientOf`、`accumulateGradient`、`isActive`、`mergeInto`、`refuseActiveCollection`、`refuseActiveEnum` |
+| **两张都用（交界）** | **4** | `ref`、`checkGradientType`、`visitFill`、`visitForward` |
+
+**交界处 4 处，但只有 1 处是设计上的跨**：
+
+* `ref(primal)`——**它就是那张映射表本身**，注释写着"Target-graph node holding the primal value"。**唯一一处把前向节点变成目标节点的地方。**
+* `checkGradientType`、`visitFill`、`visitForward`——**同时读两个事务，但都不调用 `ref()`**。
+  **B 那一轮的第一件事就是核实这三处**：它们若把前向节点直接塞进目标写，那就是这条族真正的风险点；
+  若只是比较类型、读两边头部，那就没问题。**表里这一列非空，但还不知道是"跨"还是"看"。**
+
+**B 的做法（随之定）**：`ForwardRewrite` 的方法继续收 `transaction_`；`Backward` 的方法**显式收它真正用的那一个，
+需要两个的就显式收两个**（`forwardTransaction_`、`targetTransaction_`）——**不收一个"能拿到另一个"的接口，那是把判据藏起来。**
+
+**三个数**：**0 / 0 / 56**（这一片只出表）。**四个数：57 / 432 / 3 / 4（未变）。**
+
+## 38. 那 3 处核实完了：**都不跨**
+
+| 方法 | 它读 | 它写 | 结论 |
+|---|---|---|---|
+| `checkGradientType` (`pullback.cpp:3115–3128`) | `typeOf(target(), gradient)`（3117）、`forward().nodeOrigin(where)`（3122） | **两个图都不写**（`failGradientType` 记的是拒绝，不是节点） | **不跨**——只从两边**读** |
+| `visitFill` (`pullback.cpp:4186–4236`) | 前向 `payloadOf`／`typeOf`／`withInputsOf`（4187/4189/4199/4222） | 目标 `materializeStaticValue`（4210）、`addOper(target(), …)`（4214），**输入全是目标节点**（`moved.value`、新常量） | **不跨**——前向节点只当 `gradients_`／`active_` 的**键** |
+| `visitForward` (`pullback.cpp:4238–4256`) | 前向 `normInputsOf`／`typeOf`（4239/4244） | 目标 `addCastNode`／`setNormInputs`（4251–4252），输入 `g` 是 `gradient()` 给的**目标节点** | **不跨**——`accumulate(source, g)`（4255）把前向当键、目标当值 |
+
+**也没有"顺手拿到另一个事务"的那种**：三个都真的两边都要（读前向、写目标），**签名应当显式收两个。**
+
+**这条族的跨事务写不是"没有"，是只有一个地方，而它被收在一个动作里**：`gradients_` 是**以前向节点为键、目标节点为值**的表，
+所以每次 `accumulate(前向, 目标)` 都在"跨"——**但跨的是表的键，不是图的写。**
+
+### `ref()`：为什么必须在这里跨
+
+`Backward::ref` (`pullback.cpp:3020–3045`) 是**全类唯一一处把前向节点变成目标节点的地方**，理由在它的三条出路里：
+
+* 常量：**复制**一份进目标（`materializeStaticValue`，3030）——目标图不能指向前向图的节点，常量也要自己的；
+* 残差口（tape 模式）：在目标图里开一个 **Port**（3034–3036），并把它记进 `captures_`——**这个 Port 就是"把前向的一个值带进目标图"的唯一合法形式**；
+* 闭包口：同上，开 Port 并挂成闭包节点（3038–3040）。
+
+三种都被记进 `toTarget_`／`toPrimal_`（3042–3043）——**那张表就是两个图之间的翻译表。** **所以"能不能不收两个事务"的答案是：不能。
+`ref` 是唯一一处两个事务必须同时在场的地方，因为它做的事就是把一个地址空间的名字翻译成另一个地址空间的节点。** 其余所有方法要么在一边
+读，要么在一边写，**它们跨的时候都是经过 `ref()`，而不是自己造一个。**
+
+**B 的顺序**：**3 处核实（本节，已完成，不改代码）→ 16 个只读前向的签名 → 8 个只写目标 → 最后 4 个交界。**
+
+**三个数**：**0 / 0 / 56**（本轮只核实，未改代码）。**四个数：57 / 432 / 3 / 4（未变）。**
+
+## 39. B 第一笔：`pullback` 22 个参数一次转完，**并说明为什么"读批／写批"分不成两笔**（`1ba2a53af`）
+
+**计划与它为什么不成立**：原打算"先 16 个只读前向，再 8 个只写目标"。**做不到**——
+`addOper`／`addAggregate` 这些**造节点**的函数，自己要先问 `typeOf`／`kindOf`／`regionMember`（它们能造什么取决于读到了什么），
+所以**在一边点名事务，另一边同一句话里也得点名**。**读批与写批在调用图上是一个连通块，不是两层。**
+（`ref`／`checkGradientType`／`visitFill`／`visitForward` 那 4 个交界仍可最后做——它们是被调用者，不是调用者。）
+
+**真正需要一次一笔的是 `Backward::run`**：**它的 48 次 `forward()` 一次没动**——那是同一个方法里 48 个"这张图只读"的论据，
+不是机械替换。**它留作单独一笔。**（这一笔只改了 `run` 里调用那些已转函数的**实参**，十几行。）
+
+**转的时候必须区分的四个地址空间**（这就是 A 表那张图的用处）：
+
+| 位置 | 事务从哪来 |
+|---|---|
+| `ForwardRewrite` 成员 | `transaction_` |
+| `Backward` 成员读 | `forwardTransaction_` |
+| `Backward` 成员写 | `targetTransaction_` |
+| 自由函数 | 参数 `transaction` |
+| `Engine::build` 里那几处 | `*pending.source`（前向）、`*pullbackOwner`（回传图） |
+
+**三处不是这一族、仍然收草稿的东西**（转的时候被编译器点名，已还原）：
+`ungated()`（别的模块的助手）、`LoopDraftView` 的构造（**它是一张草稿的视图**）、`rt::fallBackToCopyingAppend`（运行时入口）。
+
+**结果**：**`modules/autodiff/pullback.cpp` 里 `GraphDraft` 的拼写归零**（`git grep -c -w GraphDraft` 退出码 1）。
+
+**三个数**：**消失的参数 22 个**；**删掉的行数 217**；**保留 0 个**。
+
+**四个数：56 / 408 / 3 / 4**（`432 → 408`，**files 57 → 56**：`modules/autodiff` 整族清零）。
+
+## 40. `run` 那一笔：32 处读，没有一处不是"只读"（`55fe8ccd0`）
+
+**A 表里那个 48 是转换前的数**：`1ba2a53af` 里已有 16 处变成"传给已转函数的实参"，**剩 32 处是 `run` 自己的直接读**，这一笔全收进一个 const 视图。
+
+**逐处看过的结论**：32 处只有六种表达式——`payloadOf`、`normInputsOf`、`withInputsOf`、`armRegionOf`、`nodeOrigin`、`program()`；
+另外 6 处 `LoopDraftView(*forward.program(), forward, node)` 是**把图当视图传**（构造一个只读视图），不是写。
+**没有一处需要可写句柄。** **"48 个论据"里没有一个反例。**
+
+**三个数（这一笔）**：**消失的参数 0 个**（`run` 本来就不收草稿——它收的是自己的成员）；**改动的行数 32**；**保留 0 个**。
+
+### b6 的"永远不收"清单（三条，各一句为什么是边界而不是漏网）
+
+| 名字 | 为什么它是边界 |
+|---|---|
+| `ungated()` | 它在**别的模块**里，收的是草稿；这里只是调用者。**改它属于那一族的工作，不属于 pyllback 的签名。** |
+| `LoopDraftView` 的构造 | **它自己就是"一张草稿的视图"**——视图要的是草稿，不是事务；收事务的应该是造视图的人。 |
+| `rt::fallBackToCopyingAppend` | **运行时入口**，调用方是 pass，它拿的是"要追加的那张图"，收事务会把运行时的边界掀开。 |
+
+**记住它们不是妥协**：**这三处是"事务之外还允许存在草稿"的全部理由**，b6 要删掉 `GraphDraft` 时，得先回答这三条。
+
+## 41. `passes/` + `core/tags` 那 22 处：转掉的、和"不该转"的（`3a128f94e`）
+
+**先给清单（一行一处）**：
+
+| # | 位置 | 那个函数收了什么 | 调用点上能不能拿事务 |
+|---|---|---|---|
+| 1 | `core/tags.h:55` | 前置声明 `class GraphDraft;` | —（声明） |
+| 2 | `core/tags.h:249` / `tags.cpp:575` | `factsOf(const GraphDraft &, node)` | **不收**：见下方"边界" |
+| 3 | `core/tags.h:256` / `tags.cpp:584` | `permissionsOf(...)` | **不收**：同上 |
+| 4 | `core/tags.h:264` / `tags.cpp:594` | `effectivePermissions(...)` | **不收**：同上 |
+| 5 | `core/tags.h:274` / `tags.cpp:619` | `declaresIndependentElements(const GraphDraft &)` | **不收**：同上 |
+| 6 | `core/tags.h:281` / `tags.cpp:637` | `markIndependentElements(GraphDraft &, attr)` | **不收**：同上 |
+| 7 | `passes/opt/generic/algebra.cpp:154` | `constant<T>(const GraphDraft &, ...)` | **能**（`simplify` 已收事务）→ **转** |
+| 8 | `passes/opt/generic/rewrite.h:26` | `using camel::runtime::GraphDraft;` | 第 9 条转完即删 → **删** |
+| 9 | `passes/opt/generic/rewrite.h:34` | `isComputedAfter(const GraphDraft &, ...)` | **能**（`replaceNode`、`pruneBranch` 都有事务）→ **转** |
+| 10 | `passes/opt/inline/engine.cpp:118` | **注释**里的 `GraphDraft::calleeGraphOf` | → **改写成"草稿的 `calleeGraphOf`"** |
+| 11 | `passes/opt/inline/engine.cpp:298` | `upstreamOf(const GraphDraft &, ...)` | **能**（内联轮次有事务）→ **转** |
+| 12 | `passes/opt/inline/engine.cpp:324` | `isDraftBranchArmHead(const GraphDraft &, ...)` | **能** → **转** |
+| 13 | `passes/test/control.cpp:19` | `node(GraphDraft &, {...})`（37 个调用点） | **能**（每个用例都有 `owner`）→ **转** |
+| 14 | `passes/test/fault.cpp:70`、`:85` | 两个 lambda `(GraphDraft &draft, brch, join)` | **能**（`breakFirstBranchOfMain` 里 `session.edit(owner)` 就是事务）→ **转** |
+| 15 | `passes/test/resources.cpp:151`、`:157`、`:162`、`:168` | 三个 lambda + `make_unique<GraphDraft>()` | **留**：这一族自己**造**草稿（构造出来的不是事务给的），要动它得先回答"谁能造草稿"——那不是这一片的判据 |
+| 16 | `passes/test/writings.cpp:216` | `GraphDraft::WritingScope scope(draft)` | **留**：它是**类型的嵌套作用域守卫**，不是参数 |
+| 17 | `passes/test/anchor.h:24`、`:36` | `anchorNode(GraphDraft &)`、`blankNode(...)` | **留**：33 个调用点散在 7 个测试文件里，是**另一片**（测试 pass 一族） |
+
+**"为什么 `core/tags` 不该转"——这一条是这张表里最重要的**：
+
+`camel/core/tags.h` **已经把同一个函数写了两遍**：一遍收 `const GraphDraft &`，一遍收 `const GCGraph &`。
+**因为它们是两个不同的类**，访问器不同；**而事务交出来的正是草稿**——所以收草稿的那一遍**恰好就是事务的调用者需要的那一遍**。
+**再加一个收事务的重载，只会多一个拼写，不会多一条保证。** 这里剩下的是**"草稿上的只读 API"**——**是边界，不是漏网。**
+
+**这一片的结果**：`files 56 → 51`，`references 408 → 399`。
+
+**三个数**：**消失的参数 9 个**（第 7、9、11、12、13、14 六项 + `using` 一行 + 注释一处不计数，实为 9 个参数）；
+**删掉的行数 73**；**保留 13 个**（表里标"留"与"不收"的）。
+
+**四个数：51 / 399 / 3 / 4。**
+
+## 42. `compile/gir` 收口：**造草稿的地方只剩一处，而它收的是事务**（`49716f337`）
+
+**每个点先回答"造还是用"**：
+
+| 位置 | 造还是用 | 改成了什么 |
+|---|---|---|
+| `builder_control.cpp:132` | **用**（读一张已有的草稿） | `const auto &draft = *nodeDraftOf(node);` |
+| `builder_helpers.h:509` | **用** | `const auto *draft = nodeDraftOf(node);` |
+| `builder_operators.cpp:4021` | **用** | `auto *draft = nodeDraftOf(a);` |
+| `builder.cpp:1424` `InsertRegionScope` | **用它，而且要活过语句** | **改收 `runtime::GraphTransaction *transaction`**——它自己的析构里用 `transaction->edit()` |
+
+**那句区别（下一人会问的）**：**这个 builder 不造草稿，它用一张**——唯一造草稿的是 `DraftGraphBuilder` 的构造函数，
+而它**本来就收 `std::shared_ptr<GraphTransaction>`**。**所以"造草稿的地方也能收事务"的答案是：造的时候收事务（那是所有者），
+用的时候收它借来的那张草稿；而一个要活过语句的作用域，收的必须是所有者，不是被它借出去的东西。**
+
+**`compile/gir` 现在剩下的**：`nodeDraftOf` 这个访问器本身与两处 `unordered_map<const GraphDraft *, ...>`（`draftOwners` 的键）
+——**它们是"草稿就是我的键"这一类，不是参数**。（`nodeDraftOf` 的 66 个调用点仍用它，那是下一步的事。）
+
+**三个数**：**消失的拼写 4 处（参数 0 个——这四处本来就不是参数，是借用）**；**删掉的行数 22**；**保留 0 个**。
+
+**四个数：47 / 395 / 3 / 4。**
+
+### ⚠ `writings` 那 1 个：**撞车了，没动**
+
+`origin/develop` **比本车道领先 121 个提交**，其中**两笔正好在 `writings` 上**：
+* `1e70b99ac`（02:14）"let the writings open the transaction a draft alone has no owner for"——改了 `writings.h`／`writings.cpp`／`graph_txn.*`
+* `01ea89d6f`（02:15）"let the tests hand the writings a draft, as they did before"——改了 `test/writings.cpp` 等四个文件
+
+**所以"`writings` 那 1 个"正被另一条车道在做。按规矩：报，不自己合。** 要先把这个车道快进到 develop 再决定。
+
+## 43. `test/` 收口：**测试里再没有一处自己造的草稿**（`29ee885c6`）
+
+**先回答那一问："测试里谁能造草稿？"** 答案取 **(a)**：**没有谁**。
+* **理由一**：b6 的验收要是"`GraphDraft` 的构造只出现在事务里"，**测试里留一个 `make_unique<GraphDraft>` 就等于验收永远差一步**。
+* **理由二**：`GraphTransaction::open(id, type)` **本来就是为"没有所有者的草稿"开的门**（`graph_txn.h:27`），测试正是它的用户；不借这个门，测试就得自己造一个**连任何转换过的 API 都递不进去**的草稿——那已经是一座孤岛。
+* **理由三**：测试是"唯一不受产品约束的调用者"这句话**不成立**——它约束的正是"谁能造"。**约束一条，就不该给它开例外。**
+
+**做了什么**：
+* `resources.cpp`：`makeDraft` 从 `make_unique<rt::GraphDraft>()` 改成 `rt::GraphTransaction::open(id, type)`；三个 helper（`addPort`／`finish`／`encode`）改收事务，草稿在函数体内借。
+* `anchor.h`：`anchorNode`／`blankNode` 改收事务；**33 个调用点散在 7 个文件，一片做完**（`edges` 17、`chunks` 1、`keepfn` 2、`graph_release` 1、`fault` 1、`facts` 1）。每个调用点手上本来就有事务——`session.edit(...)` 或一个绑定好的 owner。
+
+**三个数**：**消失的参数 6 个**（`resources` 4、`anchor` 2）；**删掉的行数 156**；**保留 1 个**（`test/writings.cpp:216` 的 `GraphDraft::WritingScope`——**类型自己的作用域守卫，不是参数**）。
+
+**四个数：45 / 389 / 2 / 4。**（**`constructions` 3 → 2**：测试里那一处构造没了，只剩事务内部的两处。）
+
+---
+
+## 44. b6 的开工清单（**最终表**，`29ee885c6` 之后）
+
+**余 389 处 / 45 个文件**（`git grep -o -w GraphDraft`；**另有事务自己那 10 处不计入判据**）。
+
+| 类 | 处数 | 在哪 | 下一步 |
+|---|---|---|---|
+| **墙：类型自己的家** | **296** | `src/runtime/draft.cpp` 129、`draft_construct.cpp` 39、`draft_inline.cpp` 25、`draft_session.cpp` 23、`draft_regions.cpp` 20、`include/camel/runtime/draft.h` 20、`draft_clone.cpp` 13、`draft_types.cpp` 7、`draft_session.h` 7、`draft_clone.h` 4、`draft_writes.*` 6、`draft_inline.h` 2、`draft_types.h` 1 | **不收**：这是类型自己的定义与成员实现 |
+| **墙：图的两层** | **25** | `graph.cpp` 11、`graph.h` 5、`graph_build.h` 4、`node_ref.h` 4、`definitions.h` 1 | **不收**：`DraftNodeRef` 拿草稿当键、`encode` 的入参 |
+| **边界一：`LoopDraftView`** | **6** | `loop.h` 4、`loop.cpp` 2 | **不收**（第 1 条） |
+| **边界二：`fallBackToCopyingAppend`** | 含在上行 | `loop.cpp:657` | **不收**（第 2 条） |
+| **边界三：真的复制一份时** | — | — | **不收**（第 3 条 `ungated`／`fallBackToCopyingAppend`／`LoopDraftView` 三者合为三条） |
+| **边界四：`tags` 的草稿重载** | **11** | `core/tags.h` 6、`tags.cpp` 5 | **不收**（第 4 条，§41 的原话） |
+| **待做：`writings`** | **19** | `writings.cpp` 13、`writings.h` 5、`passes/test/writings.cpp` 1 | **另一条车道正在做**（`1e70b99ac`／`01ea89d6f`），**本车道不碰** |
+| **待做：`compile/gir`** | **16** | `draft_graph_builder.h` 5、`draft_graph_builder.cpp` 4、`graph_encode.cpp` 3、`builder_support.h` 1、`debug_json.cpp` 1、`gir/graph.h` 1、`nodes.h` 1 | **访问器本身**（`nodeDraftOf` 66 个调用点）与 `draftOwners` 的键——"草稿就是我的键"那一类 |
+| **待做：`tiles`** | **10** | `region_extract.cpp` 3、`graph_values.*` 4、`regions.h` 1、`region_outline.cpp` 1、`region_test_pass.cpp` 1 | **下一片** |
+| **待做：其它** | **5** | `operator_instance.*` 2、`composite/func.h` 1、`modules/graph/txn.cpp` 1、`proof.h` 1 | **下一片** |
+| **待做：`onnx`** | **1** | `exporter.cpp:4815` | **最后一片** |
+
+**合计：296 + 25 + 17（四条边界）+ 51（待做）= 389。**
+
+## 45. `writings` 那 19 处：**哪一种"拿草稿"能被删掉**（`3232bf888`）
+
+**判据一句话**：**一处能删掉的 `GraphDraft` 参数，等于删掉一次"谁有权力写这张图"的含糊。**
+
+**分类表（19 处 → 改 10、留 9）**：
+
+| 处 | 位置 | 判定 |
+|---|---|---|
+| 1 | `writings.h:116` `CostContext::draft` | **改**：成本模型是**读者**，收事务、自己问 `.graph()` |
+| 2 | `writings.h:426` `DraftWritings::draft()` | **删**：调用者说 `transaction().edit()` 更诚实 |
+| 3 | `writings.h:423` 注释里的 `GraphDraft::setWritings` | **改**：写成 `` `setWritings` `` |
+| 4 | `writings.cpp:90` `nodeText` | **改**：收事务（17 个调用点） |
+| 5 | `writings.cpp:451` `readsVariable` | **改**：收事务 |
+| 6 | `writings.cpp:473` `shapeTakesPart` | **改**：收事务 |
+| 7 | `writings.cpp:613` `makeKey` | **改**：收事务（2 个调用点） |
+| 8 | `writings.cpp:41/65` `EngineRootScope` 的形参与成员 | **改**：收事务；`relocateStaticValues` 走 `edit()`，`debugDraftRootOpened` 走 `graph()` |
+| 9 | `writings.cpp:864` `const GraphDraft &draft = context.draft;` | **改**：`context.transaction.graph()` |
+| 10 | `writings.cpp:921` `CostContext{draft_, context}` | **改**：`{*transaction_, context}` |
+| 11 | `writings.h:411` + `writings.cpp:434` **只收草稿的构造函数** | **留**：**这是另一条车道 4 小时前才立的门**（"a draft alone has no owner"），删它等于替他们改决定；要删得先问 |
+| 12 | `writings.h:557` 成员 `GraphDraft &draft_` | **留**：**草稿就是这份 writings 的研究对象**，不是伸手要 |
+| 13–17 | `writings.cpp:824/1003/1435/1982/2449` 五处 `GraphDraft::WritingScope` | **留**：**类型自己的作用域守卫**，同 §41 判过的那条 |
+| 18–19 | `test/writings.cpp:216` | **留**：同上（上一片已判） |
+
+**三个数**：**消失的参数 6 个**（第 1、4、5、6、7、8 项）+ **一个访问器**（第 2 项）；**删掉的行数 55**；**保留 9 个**。
+
+**四个数：45 / 379 / 2 / 4。**（`references` 389 → 379。）
+
+**一个插曲**：这一片第一次跑整闸时 `runner.backend_matrix` 红了（嵌套自检 36 条里 7 条失败）。**A/B 一度指向这一片，但那是假象**：同一条用例单独再跑就绿（11.64 s vs 22.73 s），**它自己带一条按 CPU 时间判的余量规则，整闸刚跑完时的负载会把它顶红**。**记在这里，免得下一次有人把它算到 writings 头上。**
+
+### 一条判据：**时间类断言的红，先单跑复核再归因**
+
+> **"按 CPU/时间判的余量规则，在整闸刚跑完的负载下载荷最高；所以时间类断言的红必须先单跑复核，才能归因到某笔改动。"**
+
+**它同时适用于 `writings` 与 `startup.cost` 两处**：
+* `runner.backend_matrix`（今晚，`writings` 这一片）：整闸里 22.73 s 红、单独跑 11.64 s 绿。
+* `startup.cost`（更早）：wall/CPU 两种读数给出相反的结论。
+
+**做法**：红了先 `-Plan <那一条>` 单跑；单跑还红才做 `git stash` + 重建的 A/B；**单跑绿就不是那一笔**，别为一个负载造的假红去改实现。**这条判据的价值不在结论，在于它把"我改了它所以它红了"这个最自然的错觉挡在门外。**
+
+### 一条判据：**散文里的数与代码里的数，不是同一种数**
+
+> **"散文里的引用可以改，代码里的引用一动就换了一层意思；所以同一个数（`references`）在两种改法下含义不同，报数时必须说清是哪一种。"**
+
+`compile/gir` 那 7 处是散文（`dbab87327`）：`references` 379 → 372，但**代码里的依赖一处没少**，那 7 **不是 b6 的进度**。`writings` 那 10 处是代码（`3232bf888`），那个 10 才是。**以后报这个数，先说"散文降了几、代码降了几"。**
+
+## 46. `tiles` 那 10 处：**7 个通行参数卡在"3 处自己造"后面，而那 3 处卡在一处没有 id**
+
+| 处 | 位置 | 判定 |
+|---|---|---|
+| 1–4 | `graph_values.h:14/18` + `graph_values.cpp:69/100`（`packGraphAggregate`、`packGraphTuple`） | **通行参数**：收草稿只为往里写 |
+| 5–6 | `region_extract.cpp:66/118`（`extractRegion` 的两个内部步骤） | **通行参数** |
+| 7 | `region_outline.cpp:65` | **通行参数** |
+| 8 | `regions.h:53` `std::unique_ptr<GraphDraft> graph`（`RegionDraft` 的家） | **tiles 自己造** |
+| 9 | `region_extract.cpp:148` `make_unique<GraphDraft>()` | **tiles 自己造** |
+| 10 | `region_test_pass.cpp:96` 栈上的 `GraphDraft draft;` | **tiles 自己造** |
+
+**为什么 1–7 不能先改**：`packGraphTuple(draft, …)` 的三个调用点（`region_extract.cpp:241`、`region_outline.cpp:465`、`region_test_pass.cpp:102`）手上都只有一张草稿，而这两张草稿来自第 8、9 项。**先改通行参数，就得在调用点 `borrow()` 一次——拿一个拼写换另一个拼写，正是判据禁的那件事。**
+
+**为什么连 8、9 项也卡住**：`GraphTransaction::open` 收一个 `GraphId`，而 region 的 id 是 **attach 的时候才分配**的（`region_outline.cpp:390`、`region_test_pass.cpp:110` 的 `setId(context.graphIds().allocate())`）。**extract 的那一刻根本没有 id 可开**。要改得先回答"region 的 id 什么时候分配"——那是另一问。
+
+**这一片实际动的是第 10 项**：`checkBindingKinds` 手上有一个 `Context`，**它的 id 现在就能分配**，于是它开一个事务、从事务里拿草稿，`setId` 那行随之消失（id 已在 `open` 里给了）。**这是这一层里唯一不需要先回答 id 问题的一处。**
+
+**四个数：41 / 371 / 2 / 4。**（`files` 42 → 41、`references` 372 → 371，**都是代码**。）
+
+**b6 的最后一块已写成问题**：`questions-2026-10-31-gir-handle-names-a-transaction-or-a-draft.md`。
+
+## 47. `其它` 那几处，和**"事务能不能在 attach 之前开"的答案**（`94018cbff`）
+
+### 先答那个更值的问题：`modules/graph/txn` 不是答案所在，它是"事务不必等于 id"的证据
+
+`GraphTransaction` 有两个入口（`graph_txn.h`）：
+
+| 入口 | 造还是名字 | 要不要 id |
+|---|---|---|
+| `open(id, funcType)` | **自己造**一张草稿 | **要**，当场命名（`:12` 的 `setId`） |
+| `borrow(draft)` | **只名字**一张已有草稿 | **不要**；`id()` 从草稿读（`:48`） |
+
+**所以"事务能不能在 attach 之前开"——能，但只有 `borrow` 这一种**；而 `borrow` 的语义是"这张草稿的所有权在别人手里"，**region 要的恰恰不是这个**。region 要的是第三种：**先造、id 后给**（`open` 不带 id）。**今天没有这个入口。**
+
+**这就是那句话的答案**：卡住 `tiles` 的不是引用，是**没有人定"region 的 id 什么时候分配"**。要不要给 `open` 一个"id 待定"的形态（或者让 region 在 extract 时就分配 id），是要作者定的事——**和 §46 的问题页同源**，所以没另开一页。
+
+### 分类（原清单 5 处，实际查到 4 处 + 1 处已经没有了）
+
+| 处 | 位置 | 判定 |
+|---|---|---|
+| 1 | `modules/graph/txn.cpp:52` `using camel::runtime::GraphDraft;` | **删**：这个 using **一次都没被用到**——点名一个自己不碰的类型，等于宣告一个不存在的主人 |
+| 2 | `modules/onnx/exporter.cpp:4815` `bindCaptures(GraphDraft &, …)` | **改**：`session.rootDraft()` 本来就返回 `GraphTransaction&`，收下它、问 `.edit()` |
+| 3 | `src/runtime/operator_instance.h:40` + `.cpp:92` `kernelArgumentsOf(const GraphDraft &, node)` | **等**：5 个调用点（`generic.cpp:1112`、`definitions.cpp:508`、`module.cpp:2140`、`writings.cpp:1530/2364`）**手上都只有一张草稿**——**与 `tiles` 那 7 个通行参数同型，同一个 id 问题堵着** |
+| 4 | `modules/rewrite/proof.h:51` | **留**：它点的是 `GraphDraft::decode` 这个 API。**改它会把 `decode` 那格也用散文降下来**（试过：`decode` 4 → 3），**那是拿散文改代码格，不做** |
+| 5 | `include/camel/core/data/composite/func.h` | **已经没有了**（今天 0 处），清单可能旧了 |
+
+**四个数：39 / 369 / 2 / 4。**（`files` 41 → 39、`references` 371 → 369，**都是代码**；`decode` 4 不动，正是第 4 项的克制。）
+
+### 一条判据：**改不动的时候，问题页比十处引用更有进展**
+
+> **"一个层里的引用改不动，往往不是引用的问题，是那句'id 什么时候分配'没人回答；这时候写问题页，比改十处引用更有进展。"**
+
+`tiles` 是这样（10 处只动得了 1 处，但"7 卡在 3 后面、3 卡在 id 上"这个结论比那 1 处值钱），`其它` 也是这样（第 3 项同样是 id 问题）。**两次都指向同一个没人回答的句子——这才是这一整轮真正的发现。**
+
+**同源的第二问已并进同一页**（不另开页）：`questions-2026-10-31-gir-handle-names-a-transaction-or-a-draft.md` 现在有两问——①handle 名字事务还是草稿；②**region 的 id 能不能在 extract 时就分配**。第二问里给了第三种形态的草稿（`openPending()` + `assignId(GraphId)`）和**两条必须一起答的风险**：**pending 且从未 `assignId` 的事务丢草稿时，它登记过的静态值与槽位要不要显式退**；**两张 pending 同时存在时，`GraphId` 的分配时刻一变，图编号顺序就会变**（`gir` 黄金与"同一输入同一输出"都看得见）。**只写，不实现。**
+
+### 一条记录：**试改过，回退在案**
+
+`modules/rewrite/proof.h:51` 的 `GraphDraft::decode` 我一度改成 `` `decode` ``，整闸没红，但账本的 `decode` 那一格从 **4 掉到 3**——**散文降了代码格**。已原样回退（`94018cbff` 里这一处没有动）。**记下来，是因为"数要对得上意思"比"数变小"重要；一次试改加一次回退，比一个漂亮的小数字更能说明账本在被怎么用。**

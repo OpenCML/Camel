@@ -156,8 +156,7 @@ struct ExitRequest {
 /// makes calls, so that it lives in a register.
 using Depth = uint32_t;
 
-/// The limit in effect: the one the program was translated with, unless the environment
-/// variable CAMEL_MAX_RECURSION_DEPTH gives another (set by run()).
+/// The limit in effect: the one the program was translated with (set by run()).
 inline uint32_t recursionLimit = 1000;
 
 /// The largest limit: what camel/execute/limits.h accepts where the native stack is guarded.
@@ -181,30 +180,6 @@ inline void write(std::string_view text) { std::fwrite(text.data(), 1, text.size
 // ---- Running a program ----
 
 namespace detail {
-
-/// A limit written in the environment: a decimal integer from 1 to kMaxRecursionLimit;
-/// anything else is no value (as camel/execute/limits.cpp reads it).
-inline bool limitFromEnvironment(uint32_t &out) {
-    const char *raw = std::getenv("CAMEL_MAX_RECURSION_DEPTH");
-    if (raw == nullptr || *raw == '\0') {
-        return false;
-    }
-    uint64_t value = 0;
-    for (const char *p = raw; *p != '\0'; ++p) {
-        if (*p < '0' || *p > '9') {
-            return false;
-        }
-        value = value * 10 + static_cast<uint64_t>(*p - '0');
-        if (value > kMaxRecursionLimit) {
-            return false;
-        }
-    }
-    if (value == 0) {
-        return false;
-    }
-    out = static_cast<uint32_t>(value);
-    return true;
-}
 
 /// Whether reports use the one-line format (CAMEL_ERROR_FORMAT=short, as for `camel`).
 inline bool briefReports() {
@@ -238,9 +213,6 @@ template <typename Entry> int run(uint32_t translatedLimit, Entry &&entry) {
     _setmode(_fileno(stdout), _O_BINARY);
 #endif
     recursionLimit = translatedLimit;
-    if (uint32_t fromEnvironment = 0; detail::limitFromEnvironment(fromEnvironment)) {
-        recursionLimit = fromEnvironment;
-    }
 
     int code = 0;
     camel::utils::BigStackThread thread(detail::stackBytesFor(recursionLimit), [&] {

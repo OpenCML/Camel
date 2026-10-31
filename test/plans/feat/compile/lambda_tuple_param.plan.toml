@@ -25,3 +25,25 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TupleUnpackingCountMismatch"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+
+[[tests]]
+name = "let_unpack_arity"
+desc = "A destructuring declaration binds one name per element: two names for a loop that carries four states is refused at the `let`, not read as the first two (which held the model in the loss array, and was silent when the types matched)."
+kind = "negative"
+case = "../../../cases/compile/err_let_unpack_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TupleUnpackingCountMismatch"
+expect_diagnostic_line = 2
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "let_unpack_wildcard"
+desc = "`_` stands for an element a destructuring declaration drops (design principles 3.9, as in `let _ = e`): `let (x, _) = (1, 2)` and `let (_, w) = (3, 4)` run, and the plain `let (p, q) = (5, 6)` beside them still binds both names."
+kind = "behavior"
+case = "../../../cases/compile/let_unpack_wildcard.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "x=1 w=4 p=5 q=6\n"
+timeout_ms = 10000

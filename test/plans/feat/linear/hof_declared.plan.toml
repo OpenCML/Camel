@@ -3,7 +3,7 @@ order = 921
 tier = "fast"
 debug_tier = true # also selected by --tier debug (Debug build)
 tags = ["feat", "linear", "higher_order", "macro", "loops"]
-desc = "The higher-order array operators are native operators that call their function through the function-call service, and the schedulers run them by their declaration (OperatorSemantics::elementCalls), not by name (design principles 3.6): the macro evaluator runs them; a loop under std::macro stops at the rounds limit, which --max-macro-rounds and CAMEL_MAX_MACRO_ROUNDS set like the nesting limit."
+desc = "The higher-order array operators are native operators that call their function through the function-call service, and the schedulers run them by their declaration (OperatorSemantics::elementCalls), not by name (design principles 3.6): the macro evaluator runs them; a loop under std::macro stops at the rounds limit, which --max-macro-rounds sets like the nesting limit."
 
 [[tests]]
 name = "hof.macro"
@@ -47,19 +47,7 @@ kind = "behavior"
 case = "../../../cases/loops/macro.cml"
 args = ["--max-macro-rounds", "100", "${case}", "std::macro"]
 expect_exit = 1
-expect_output_contains = ["more than 100 rounds", "--max-macro-rounds", "CAMEL_MAX_MACRO_ROUNDS"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
-
-[[tests]]
-name = "macro_rounds.environment"
-desc = "CAMEL_MAX_MACRO_ROUNDS sets the same limit."
-kind = "behavior"
-case = "../../../cases/loops/macro.cml"
-args = ["${case}", "std::macro"]
-envs = ["CAMEL_MAX_MACRO_ROUNDS=100"]
-expect_exit = 1
-expect_output_contains = ["more than 100 rounds"]
+expect_output_contains = ["more than 100 rounds", "--max-macro-rounds"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

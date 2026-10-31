@@ -17,14 +17,17 @@ namespace {
 /// nothing. The count is a guard, not a budget: a graph settles in a couple of sweeps.
 constexpr size_t kMaxControlSweeps = 8;
 
-bool isBoundary(const GraphDraft &draft, gc_node_ref_t id) {
+bool isBoundary(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
     const auto *h = draft.header(id);
     return !h || h->kind == GCNodeKind::Brch || h->kind == GCNodeKind::Join;
 }
 
 bool controlPath(
-    const GraphDraft &draft, gc_node_ref_t predecessor, gc_node_ref_t user, size_t &maxWork) {
-    if (predecessor == user || isBoundary(draft, predecessor) || isBoundary(draft, user)) {
+    const camel::runtime::GraphTransaction &transaction, gc_node_ref_t predecessor,
+    gc_node_ref_t user, size_t &maxWork) {
+    const auto &draft = transaction.graph();
+    if (predecessor == user || isBoundary(transaction, predecessor) || isBoundary(transaction, user)) {
         return false;
     }
     std::vector<gc_node_ref_t> work{user};
@@ -32,7 +35,7 @@ bool controlPath(
     while (!work.empty() && maxWork) {
         const auto node = work.back();
         work.pop_back();
-        if (!seen.insert(node).second || isBoundary(draft, node)) {
+        if (!seen.insert(node).second || isBoundary(transaction, node)) {
             continue;
         }
         for (auto input : draft.ctrlInputsOf(node)) {
@@ -52,12 +55,15 @@ bool controlPath(
 } // namespace
 
 bool hasControlDependency(
-    const GraphDraft &draft, gc_node_ref_t predecessor, gc_node_ref_t user, size_t maxWork) {
-    return controlPath(draft, predecessor, user, maxWork);
+    const camel::runtime::GraphTransaction &transaction, gc_node_ref_t predecessor,
+    gc_node_ref_t user, size_t maxWork) {
+    return controlPath(transaction, predecessor, user, maxWork);
 }
 
 std::vector<gc_node_ref_t>
-controlFrontier(const GraphDraft &draft, std::span<const gc_node_ref_t> inputs, size_t maxWork) {
+controlFrontier(
+    const camel::runtime::GraphTransaction &transaction, std::span<const gc_node_ref_t> inputs,
+    size_t maxWork) {
     std::vector<gc_node_ref_t> roots;
     std::unordered_set<gc_node_ref_t> unique;
     for (auto input : inputs) {
@@ -72,7 +78,7 @@ controlFrontier(const GraphDraft &draft, std::span<const gc_node_ref_t> inputs, 
                 continue;
             }
             --maxWork; // bound pair probes as well as the edges they inspect
-            if (controlPath(draft, roots[i], roots[j], maxWork)) {
+            if (controlPath(transaction, roots[i], roots[j], maxWork)) {
                 removed[i] = true;
                 break;
             }
@@ -88,7 +94,9 @@ controlFrontier(const GraphDraft &draft, std::span<const gc_node_ref_t> inputs, 
 }
 
 bool appendControlDependency(
-    GraphDraft &draft, gc_node_ref_t predecessor, gc_node_ref_t user, size_t maxWork) {
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t predecessor, gc_node_ref_t user,
+    size_t maxWork) {
+    auto &draft          = transaction.edit();
     const auto existing = draft.ctrlInputsOf(user);
     if (predecessor == user || std::ranges::find(existing, predecessor) != existing.end()) {
         return false;
@@ -99,10 +107,11 @@ bool appendControlDependency(
     // removes the call and may discard an unused argument. That edge must reach the body.
     // A GATE must still have at least one CTRL input while its wait is only a control edge
     // (`docs/design/effects/edges.cn.md` 5.3): its wait is the sync predecessor, so a gate that has
-    // one needs no control input at all, and nothing here appends one for its sake.
+    // one needs no control input at all, and nothing here appends one for its sake. The owner of these
+    // rules is the finished graph, executed by the seal check at commit, not the draft's writers.
     const auto *source = draft.header(predecessor);
     if (h && source && source->kind != GCNodeKind::Brch && h->kind != GCNodeKind::Loop &&
-        h->kind != GCNodeKind::Func && h->kind != GCNodeKind::Call && !isBoundary(draft, user) &&
+        h->kind != GCNodeKind::Func && h->kind != GCNodeKind::Call && !isBoundary(transaction, user) &&
         (h->kind != GCNodeKind::Gate || !existing.empty() || !draft.syncInputsOf(user).empty())) {
         for (auto inputs : {draft.normInputsOf(user), draft.withInputsOf(user)}) {
             for (auto input : inputs) {
@@ -116,14 +125,15 @@ bool appendControlDependency(
             }
         }
     }
-    if (hasControlDependency(draft, predecessor, user, maxWork)) {
+    if (hasControlDependency(transaction, predecessor, user, maxWork)) {
         return false;
     }
     draft.appendInput(DraftEdgeKind::Ctrl, user, predecessor);
     return true;
 }
 
-size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork) {
+size_t reduceControlDependencies(camel::runtime::GraphTransaction &transaction, size_t maxWork) {
+    auto &draft = transaction.edit();
     if (!maxWork) {
         return 0;
     }
@@ -163,13 +173,14 @@ size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork) {
         edges += draft.ctrlInputsOf(id).size() + draft.normInputsOf(id).size() +
                  draft.withInputsOf(id).size();
         protectedNode[id] =
-            protectedNode[id] || isBoundary(draft, id) || h->kind == GCNodeKind::Loop;
+            protectedNode[id] || isBoundary(transaction, id) || h->kind == GCNodeKind::Loop;
     }
     maxWork = std::min(maxWork, 8 * (slots + edges));
     // Epochs avoid clearing graph-sized scratch arrays for every target. Mandatory value inputs
     // seed the walk directly; the other control inputs seed only their parents, so a control edge
     // cannot prove itself. JOIN arm values are alternatives, never mandatory predecessors: a walk
-    // may reach a completed JOIN/LOOP as its endpoint but cannot walk through it.
+    // may reach a completed JOIN/LOOP as its endpoint but cannot walk through it. The owner of these
+    // rules is the finished graph, executed by the seal check at commit, not the draft's writers.
     //
     // The sweep runs twice, for two readings of the graph. The first is the value-path reduction the
     // pass has always made. The second reads the sync edge as an ordering of its own: it is the edge
@@ -317,7 +328,9 @@ enum class OrderingReading {
     Document,
 };
 
-size_t reduceOrderingEdges(GraphDraft &draft, size_t maxWork, OrderingReading reading) {
+size_t reduceOrderingEdges(
+    camel::runtime::GraphTransaction &transaction, size_t maxWork, OrderingReading reading) {
+    auto &draft = transaction.edit();
     if (!maxWork) {
         return 0;
     }
@@ -427,12 +440,18 @@ size_t reduceOrderingEdges(GraphDraft &draft, size_t maxWork, OrderingReading re
 
 } // namespace
 
-size_t reduceOrderDependencies(GraphDraft &draft, size_t maxWork) {
-    return reduceOrderingEdges(draft, maxWork, OrderingReading::Pass);
+/// Names the transaction, not the draft, for the same reason the rest of this family does. It still
+/// reads control waits: the question of whether a pass may stop making them at all (edges 2a) is
+/// undecided, and until it is, a reduction that ignored them would be answering a question about a
+/// graph the compiler does not build.
+size_t reduceOrderDependencies(camel::runtime::GraphTransaction &transaction, size_t maxWork) {
+    auto &draft = transaction.edit();
+    return reduceOrderingEdges(transaction, maxWork, OrderingReading::Pass);
 }
 
-size_t reduceDocumentOrdering(GraphDraft &draft, size_t maxWork) {
-    return reduceOrderingEdges(draft, maxWork, OrderingReading::Document);
+size_t reduceDocumentOrdering(camel::runtime::GraphTransaction &transaction, size_t maxWork) {
+    auto &draft = transaction.edit();
+    return reduceOrderingEdges(transaction, maxWork, OrderingReading::Document);
 }
 
 } // namespace camel::runtime

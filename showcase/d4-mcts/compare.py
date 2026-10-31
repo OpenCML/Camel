@@ -5,6 +5,12 @@
 # their output and their exit code, checks the answers a reader can check by hand, times them,
 # counts the code by section and writes RESULTS.md.  It exits non-zero on the first difference,
 # so the slow plan entry fails with it.
+#
+# The learned half (`selfplay.cml`) has no Python counterpart to diff against, so it is not
+# compared: it is run once, and its readings -- sixteen games, ten steps, the loss sequence and
+# the wall time -- go into the report beside the search's exact numbers.  That is the one place the
+# two halves are read side by side: the search's lines are pinned, the training loop's curve is
+# recorded, and the plan pins only that the curve printed and that its numbers are finite.
 
 from __future__ import annotations
 
@@ -114,6 +120,34 @@ def best_mean(stdout: str, best: str) -> str:
     return "n/a"
 
 
+def bracketed(line: str, name: str) -> list[float]:
+    """The numbers of a `name=[...]` field of one output line."""
+    marker = f"{name}=["
+    start = line.index(marker) + len(marker)
+    end = line.index("]", start)
+    return [float(item) for item in line[start:end].split(",")]
+
+
+def selfplay_readings(stdout: str) -> tuple[int, int, list[float], list[float]]:
+    """(games, steps, game results, loss sequence) of `selfplay.cml`'s two lines."""
+    games = steps = 0
+    results: list[float] = []
+    losses: list[float] = []
+    for line in output_lines(stdout):
+        if not line.startswith("mcts selfplay "):
+            continue
+        for item in line.split():
+            if item.startswith("games="):
+                games = int(item.split("=", 1)[1])
+            elif item.startswith("steps="):
+                steps = int(item.split("=", 1)[1])
+        if "results=[" in line:
+            results = bracketed(line, "results")
+        if "losses=[" in line:
+            losses = bracketed(line, "losses")
+    return games, steps, results, losses
+
+
 def code_size() -> list[tuple]:
     camel = section_counts(HERE / "search.cml", "==", "camel")
     python = section_counts(HERE / "baseline" / "mcts.py", "==", "python")
@@ -177,6 +211,15 @@ def main() -> int:
             problems.append(f"{backend}: stdout differs from std::nvm")
 
     timed = [run for run in runs if run[0] == "fork"][0]
+    # The learned half, run once: it has no counterpart to diff against, so its readings are
+    # recorded instead of compared.  A curve that does not print, or that prints something other
+    # than one finite loss per step, is the defect this run can see.
+    play = run_command([str(camel), str(HERE / "selfplay.cml")], camel_env(REPO))
+    p_games, p_steps, p_results, p_losses = selfplay_readings(play["stdout"])
+    if play["exit"] != 0 or not p_losses or len(p_losses) != p_steps:
+        problems.append(f"self-play: exit {play['exit']}, {len(p_losses)} losses for "
+                        f"{p_steps} steps")
+    mean_result = sum(p_results) / len(p_results) if p_results else 0.0
     version = run_command([str(camel), "--version"], camel_env(REPO))
     lines = []
     lines.append("# D4 — Monte-Carlo tree search: measured results")
@@ -233,6 +276,27 @@ def main() -> int:
                  f"they are reported and never asserted.  Every number the search reports is "
                  f"exact and reproducible: nothing in it is timed.")
     lines.append("")
+    lines.append("## Self-play (the learned half)")
+    lines.append("")
+    lines.append(table([
+        ("games played", str(p_games)),
+        ("steps taken", str(p_steps)),
+        ("mean result of the games", f"{mean_result:.3f}"),
+        ("loss, first three", ", ".join(f"{x:.6f}" for x in p_losses[:3])),
+        ("loss, last three", ", ".join(f"{x:.6f}" for x in p_losses[-3:])),
+        ("wall time (s)", f"{play['seconds']:.3f}"),
+    ], ("reading", "value")))
+    lines.append("")
+    lines.append("There is nothing to diff here: the Python counterpart is the search, and the "
+                 "training loop is the part of D4 it does not have.  So this table is a reading, "
+                 "not a comparison -- the games are scripted (a player takes a free place drawn "
+                 "from the game's key, no search), the batch is fixed while the ten Adam steps "
+                 "move the model, and `feat/showcase_d4.plan.toml` pins that the sequence is "
+                 "printed and that its numbers are finite, never what they are.  The one thing a "
+                 "bigger run can break is its cost: sixteen games times ten steps stays in the "
+                 "same tenth of a second as one game and one step, because the schedule of this "
+                 "tiny graph is what the wall time is made of, not the arithmetic.")
+    lines.append("")
     lines.append("## Code size (code lines by section)")
     lines.append("")
     lines.append(table(code_size(), ("section", "Camel", "Python")))
@@ -258,6 +322,10 @@ def main() -> int:
           f"camel_peak_mib={timed[3]['peak_bytes'] / 2**20:.1f} "
           f"python_peak_mib={timed[4]['peak_bytes'] / 2**20:.1f} "
           f"python_version={platform.python_version()}")
+    print(f"d4 measured: selfplay games={p_games} steps={p_steps} "
+          f"loss_first={p_losses[0] if p_losses else float('nan'):.6f} "
+          f"loss_last={p_losses[-1] if p_losses else float('nan'):.6f} "
+          f"mean_result={mean_result:.3f} camel_s={play['seconds']:.3f}")
     sections = code_size()
     print(f"d4 measured: size camel={sections[-1][1]} python={sections[-1][2]} "
           f"sections={len(sections) - 1}")
