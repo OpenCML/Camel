@@ -210,7 +210,7 @@ Builder &Builder::of(const context_ptr_t &context) {
 }
 
 void Builder::claimRootNodes(size_t firstNode) {
-    const size_t count = rootGraph_->draft().nodeSlotCount();
+    const size_t count = rootGraph_->view().nodeSlotCount();
     if (rootNodeOwners_.size() < count) {
         rootNodeOwners_.resize(count, nullptr);
     }
@@ -406,7 +406,7 @@ void Builder::buildTopLevelValue(TopLevelDeclaration &declaration) {
     // Built in the namespace it is declared in, with the `using namespace` of its blocks.
     namespacePath_ = namespacesOf(declaration);
     UsingScope usings(*this, declaration.unit->tree->usingsOf(declaration.gct));
-    const size_t firstNode = rootGraph_->draft().nodeSlotCount();
+    const size_t firstNode = rootGraph_->view().nodeSlotCount();
     try {
         (void)visit(declaration.gct);
         declaration.state = BuildState::Built;
@@ -693,7 +693,7 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
     if (ok) {
         UnitContext context(*this, entry);
         refOrigin_             = camel::source::kInvalidOriginId;
-        const size_t firstNode = rootGraph_->draft().nodeSlotCount();
+        const size_t firstNode = rootGraph_->view().nodeSlotCount();
         try {
             // Every direct call gets the captures of its callee; then the entry call, made
             // once `main` has all of its captures (its value holds them); then the captures
@@ -772,7 +772,7 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
     for (const compile_graph_ptr_t &graph : rootGraph_->subGraphs()) {
         const auto owner = rootSubGraphOwners_.find(graph.get());
         const bool semanticBody =
-            (graph->draft().flags() & camel::runtime::kGraphFlagImplBody) != 0;
+            (graph->view().flags() & camel::runtime::kGraphFlagImplBody) != 0;
         if (owner != rootSubGraphOwners_.end() && owner->second != nullptr &&
             !owner->second->entry && !semanticBody) {
             imported.push_back(graph);

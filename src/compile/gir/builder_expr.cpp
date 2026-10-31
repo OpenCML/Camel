@@ -527,7 +527,7 @@ std::optional<node_handle_t> Builder::modifierOf(node_handle_t node) const {
     if (it == graphIt->second.end()) {
         return std::nullopt;
     }
-    return graph->draft().ref(it->second);
+    return graph->view().ref(it->second);
 }
 
 void Builder::setModifier(node_handle_t input, node_handle_t modifier) {
