@@ -145,3 +145,35 @@ std::fvm : 2.5           std::cpp : [2.5]
 
 这 7 条一条也不进 `refused`：**它们是写给 C++ 的那一侧的错**，而 `refused` 是"这个程序我不译"的
 回答。把两者并成一格，读数会好看，缺陷会消失。
+## 这 7 条已经编出来了：四条根因，四个提交
+
+"编译不过不是拒绝，是缺陷；……——这句话的下一步是逐个把那 7 条编出来。" 这 7 条编出来了。四条根因，
+每个根因一个提交，每个提交带一条最小用例（`test/cases/trans/cpp/` 下，也进了
+`test/tools/cppexec/expect.txt`），并且每条都做了反证：**去掉修复，红的就是那一条**，其余不动。
+
+| 根因 | 程序 | 修前编译器原话第一行 | 产物里改的是什么 |
+| --- | --- | --- | --- |
+| ① `var` 实参 | `linear/operators/string_plus_assign.cml`、`linear/byref/var_argument_reads_the_nearest_write.cml` | `error: no matching function for call to 'append'` / `'bump'` | 传给 `var` 形参的是格（`rt::Cell<T>`）本身，不是它的值；格先被赋过值再传时，没被认作逃出函数 |
+| ② `rt::Fn` 两处拼法 | `effects/callback_write_through_parameter.cml`、`effects/value_made_after_a_call_captures_its_version.cml`、`opt/defun/widened_own_values.cml` | `error: no matching function for call to 'apply'` / `'run'` | 函数值按**它占的那个位置的函数类型**拼；位置是 `void` 函数类型时，值在造它的地方丢掉结果 |
+| ③ 记录上的 `[]` | `compile/native/idx_field_missing.cml` | `error: no viable conversion from 'const S' to 'const Str'` | 记录是 C++ 聚合、运行期没有字段表，所以名字得是写的人读得出的那个；没有这个字段就是解释器自己的 FieldNotFound 报告，名字在里面 |
+| ④ 空字面量 | `compile/binding_join/join.cml` | `error: no matching function for call to 'append'` | `[]` 是 `void[]`，元素类型由它占的位置给：结果数组的元素，或算子点名的那个元素 |
+
+四条都只改产物里的类型与取值，没有一处是把编译器的话压下去：没有 `static_cast`，没有把模板放宽到
+"什么都能进"，也没有把哪条改成 `refused` 换读数。
+
+关于第四条的判断（"推不出元素类型，是该拒绝还是该修"）：这里**不是推不出来**。`[]->append<1>` 的
+join 给出 `int[]`，`[]->contains<1>` 比较的是 `int` —— 元素类型是知道的，错的是拼法：拿字面量自己的
+`void[]` 去拼。所以它落在"修类型"。真正推不出来的形状是另一类（位置本身没有类型），那类的问题是
+拒绝的措辞，不是这一条。
+
+**四条修复之后，同一把尺子（3327 个程序）**：
+
+| | 修前 | 修后 |
+| --- | ---: | ---: |
+| `same` | 1204 | **1215** |
+| **`defect`（`differs` + `does not build`）** | **7** | **0** |
+| `refused` | 1003 | 1003 |
+| 不是程序（`not a program`） | 1100 | 1100 |
+| 程序总数 | 3323 | 3327（多 4 条最小用例） |
+
+`same` 多 11 条 = 7 条修好的加 4 条新用例。`refused` 一条没动：这 7 条里没有一条被折进拒绝。
