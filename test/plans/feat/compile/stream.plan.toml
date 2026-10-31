@@ -1255,6 +1255,39 @@ expect_output_contains = ["Attempted division by zero"]
 expect_output_not_contains = ["1234", "after"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+[[tests]]
+name = "stream.yield_head_no_stream"
+desc = "A body that writes `yield` hands out a stream, and its head writes that stream type. A head that writes none is reported by name of the head -- SemanticDiag::YieldRequiresStreamHead at the `yield` -- not as a feature the compiler has not built: the generator machine exists, and what this program is missing is the type in its head."
+kind = "negative"
+case = "../../../cases/compile/stream/yield_head_no_stream.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::YieldRequiresStreamHead"
+expect_diagnostic_code = "0x03000206"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 5
+expect_output_contains = ["hands out a stream"]
+expect_output_not_contains = ["FeatureNotSupported", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "stream.yield_head_nested_no_stream"
+desc = "The same report one level in: a function written inside another function's body that yields in a head writing no stream type gets SemanticDiag::YieldRequiresStreamHead at its own `yield`, rather than a report about the outer function or a missing feature."
+kind = "negative"
+case = "../../../cases/compile/stream/yield_head_nested_no_stream.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::YieldRequiresStreamHead"
+expect_diagnostic_code = "0x03000206"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 9
+expect_output_contains = ["hands out a stream"]
+expect_output_not_contains = ["FeatureNotSupported", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+timeout_ms = 30000
+timeout_ms = 30000
 
 [[tests]]
 name = "stream.type_function_of_typeof"
