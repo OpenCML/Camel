@@ -1083,4 +1083,65 @@ std::optional<std::string> ProgramValues::constant(slot_t slot, const Type *t) {
     return std::nullopt;
 }
 
+namespace {
+
+/// The walk of `hasSeveralDimensions`, carrying the struct types already entered: a struct may hold
+/// an array of itself (`type Node = { children: Node[] }`), and following it without this stack does
+/// not terminate -- it crashed the writer on `recursive_struct_shapes` before the stack was here.
+/// The stack is a fixed array on the frame, not a `std::set`: this runs for every constant of every
+/// program, and the allocation it saved was worth a second of CPU over the agreement cases.
+bool walksIntoSeveralDimensions(
+    const Type *type, std::array<const Type *, 32> &stack, size_t depth) {
+    if (type == nullptr) {
+        return false;
+    }
+    if (const auto *array = camel::core::type::asArrayType(type)) {
+        // Only a rank the type states. An open rank (`f32[..]`) says nothing about the value's
+        // extents -- a rank-zero field is declared `f32[..]` and reads back as its element -- so
+        // refusing on it refuses programs that are right (`rank_zero_field_literal`). What an open
+        // rank can hide is a rank-2 constant annotated that way; that one still slips through, and
+        // seeing it needs the value's own extents, which is the shape question the page asks.
+        return array->rank() >= 2 || walksIntoSeveralDimensions(array->elemType(), stack, depth);
+    }
+    if (const TupleType *tuple = asTuple(type)) {
+        if (tuple->isNullable()) {
+            return walksIntoSeveralDimensions(tuple->payloadType(), stack, depth);
+        }
+        if (tuple->isTagged() || tuple->isCell()) {
+            return false; // a variant's fields are the ones its tag names, not slots of a value
+        }
+        for (size_t i = 0; i < tuple->size(); ++i) {
+            if (walksIntoSeveralDimensions(tuple->typeAt(i), stack, depth)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    if (type->code() == TypeCode::Struct) {
+        if (depth >= stack.size()) {
+            return true; // deeper than this walk can tell: refuse rather than write a wrong constant
+        }
+        for (size_t i = 0; i < depth; ++i) {
+            if (stack[i] == type) {
+                return false; // already walking it: the cycle holds nothing new
+            }
+        }
+        stack[depth] = type;
+        const auto *record = static_cast<const StructType *>(type);
+        for (size_t i = 0; i < record->size(); ++i) {
+            if (walksIntoSeveralDimensions(record->typeAt(i), stack, depth + 1)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+bool hasSeveralDimensions(const Type *type) {
+    std::array<const Type *, 32> stack{};
+    return walksIntoSeveralDimensions(type, stack, 0);
+}
+
 } // namespace camel::passes::cpp
