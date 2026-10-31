@@ -1,0 +1,12 @@
+# The programs of test/tools/cppexec/expect.txt that still link the Camel runtime when std::cpp
+# writes them, and why. The check (run.py --standalone --expect=... --baseline=...) asks the whole
+# list and requires exactly this set: a new name is red, and so is a name here that stops linking
+# it -- in that case the line is deleted, because a list that can only grow says nothing.
+#
+# Each one uses an operator the writer has no standalone translation of, which is the exception
+# design principles 9.8 and the page (1.1) state: the program is written, the link line names
+# libcamel, and the translation warns naming the operator.
+test/cases/compile/diag_render/runtime_regex.cml   # re:test -- a regex engine is not in the header set
+test/cases/consistency/values/max_min_special.cml  # math:max_l -- no rule for the integer max
+test/cases/trans/cpp/exec/scalars.cml              # math:sqrt_d -- the f64 square root (libm)
+test/cases/trans/cpp/tensor_ones.cml               # tensor:ones -- a tensor crosses the bridge

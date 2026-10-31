@@ -213,10 +213,24 @@ case = "../../../tools/cppexec/run.py"
 args = ["${case}", "--standalone", "test/cases/trans/cpp/narrow_reductions.cml"]
 skip_unless = ["${python}", "test/tools/cppexec/run.py", "--have-compiler"]
 expect_exit = 0
-expect_stdout_contains = ["bridge: no", "needs: none of the Camel runtime", "PASS: 1 program"]
+expect_stdout_contains = ["bridge: no", "needs: none of the Camel runtime", "PASS: 1 of 1 program(s) need no Camel runtime"]
 expect_output_not_contains = ["FAIL", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 120000
+
+[[tests]]
+name = "every_expect_program_links_no_runtime"
+desc = "The same property as narrow_reductions_needs_no_runtime, asked of every program the expect list names instead of one: each is translated, built and its own dependencies read (`ldd`), and the set of programs that still link the Camel runtime has to be exactly the set test/tools/cppexec/bridged.txt names -- 4 of 147 today. Both directions are checked: a fifth program that links it is red, and so is one of the four becoming standalone, because the list is then wrong and a list that can only grow says nothing. The four are the operators the writer has no standalone translation of (re:test, math:max_l, math:sqrt_d, tensor:ones), which is the exception 1.1 of the page states."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/cppexec/run.py"
+args = ["${case}", "--standalone", "--expect=test/tools/cppexec/expect.txt", "--baseline=test/tools/cppexec/bridged.txt"]
+skip_unless = ["${python}", "test/tools/cppexec/run.py", "--have-compiler"]
+expect_exit = 0
+expect_stdout_contains = ["need no Camel runtime; 4 link it, all in the baseline"]
+expect_output_not_contains = ["FAIL:", "is not in the baseline", "no longer links the runtime"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 900000
 
 [[tests]]
 name = "fault_narrow_text_number"
