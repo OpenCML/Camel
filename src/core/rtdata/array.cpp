@@ -90,11 +90,17 @@ Array *Array::create(
 
 Array *Array::createRankZero(
     camel::core::mm::IAllocator &allocator, const type::ArrayType *arrayType, slot_t value) {
-    ASSERT(arrayType != nullptr, "A rank-zero array needs its type");
+    GUARD(
+        arrayType != nullptr,
+        "A rank-zero array needs its type, and this call passed none: the one element it holds "
+        "would have no type to be read by");
     // No extents at all: the value has no dimension, and `create` gives it the one element an
     // empty product counts (design principles 5.4 -- a rank-zero array is the element itself).
     Array *array = create(allocator, arrayType, std::span<const int64_t>(), false);
-    ASSERT(array->rank() == 0 && array->numel() == 1, "A rank-zero array holds one element");
+    GUARD(
+        array->rank() == 0 && array->numel() == 1,
+        "A rank-zero array holds one element, and this one does not: the value would be stored at "
+        "index 0 of an array that has no such element");
     array->setSlot(0, value, arrayType);
     return array;
 }
@@ -122,9 +128,10 @@ Array *Array::wrap(
     std::span<const int64_t> extents, Block *block, size_t byteOffset, bool view) {
     GUARD(block != nullptr, "An array wrap needs a block to wrap, and the call passed none");
     GUARD(arrayType != nullptr, "An array wrap needs the element type of what it wraps, and the call passed none");
-    ASSERT(
+    GUARD(
         type::arrayStorageFor(arrayType->elemType()) == type::ArrayStorage::Compact,
-        "Only a pure-data array can wrap an external block");
+        "Only a pure-data array can wrap an external block, and this one holds slots: the wrapped "
+        "bytes would be read by a layout that does not describe them");
     return createCompact(
         allocator, arrayType->elemType(), extents, block, byteOffset, false, view);
 }
@@ -221,9 +228,12 @@ Array *Array::createCompact(
     GUARD(layout != nullptr, "A compact array needs the layout of its element type, and the type has none");
     // Inline bytes start right after the extent table, which is 8-byte aligned; a layout that
     // needs stricter alignment (a complex number later) must not go inline.
-    ASSERT(
+    GUARD(
         layout->alignment <= alignof(slot_t),
-        "An inline compact element must not need more than slot alignment");
+        std::format(
+            "An inline compact element must not need more than slot alignment, and this one "
+            "needs {}: the inline bytes are aligned to a slot",
+            layout->alignment));
     const uint64_t numel  = checkedNumel(extents);
     const size_t elemSize = layout->size;
     const size_t bytes    = static_cast<size_t>(numel) * elemSize;
