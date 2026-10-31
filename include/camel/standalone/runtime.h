@@ -24,3 +24,4 @@
 #include "camel/standalone/random.h"
 #include "camel/standalone/record.h"
 #include "camel/standalone/str.h"
+#include "camel/standalone/text.h"

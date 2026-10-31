@@ -615,6 +615,18 @@ template <typename To, typename From> Array<To> convertArray(const Array<From> &
     for (const From &x : xs) {
         out.push(static_cast<To>(x));
     }
+    // The conversion is of the elements, not of the shape: the interpreter's kernel walks the
+    // run and leaves the extents where they were (`core/array_convert.h`), so a value whose rank
+    // is only known at run time -- `bf16[..]` -- keeps its shape through `atof`. A value of no
+    // rank stays of no rank: its one element prints alone, as it did.
+    if (xs.rank() > 0) {
+        std::vector<std::int64_t> extents;
+        extents.reserve(xs.rank());
+        for (std::size_t i = 0; i < xs.rank(); ++i) {
+            extents.push_back(static_cast<std::int64_t>(xs.extent(i)));
+        }
+        out.setExtents(extents);
+    }
     return out;
 }
 

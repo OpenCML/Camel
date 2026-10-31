@@ -319,3 +319,25 @@ Statement（`numberLess` 的顺序、f64 累加一次的 `sum`、`IEEE 754-2019`
 
 在这一问被回答之前，这三族**不改判、不动手**：它们仍记在"该修"（写的人还没有拼法），只是拼法要先由
 语言作者定表示；`not_comparable` 仍是 12，没有一条新的。
+
+### 开秩转换 `:op/atof`/`atobf`/`atof6` + `str:codepoints`/`str:find`/`from_codepoints`：`7` 条里 `5` 条转 `same`
+
+**一条判据（进页，一句话）**：连着两笔只有判断没有代码的时候，第三笔挑一族能落到 `same` 的——判断的成本要有代码来付。
+
+两条原来拒得不一样：开秩的 5 条是"an operator that has no rule for several value types"（`bf16[..]`、`f32[..]` 这种
+秩要到运行时才知道的值），`str` 的 2 条是"whose result of type `int[]` / `int?` has no translation"。
+两种都不是缺值类型：`bf16[..]` 的值就是 `rt::Array<rt::BF16>` 加上运行时的 extents，`int[]` 是数组，
+`int?` 是 `rt::Opt<int64_t>`。**"形状未定是值的事实"**（`nestedlit` 那条）——所以转换只转元素、形状留在原地：
+`rt::convertArray` 现在把输入的 rank 与 extents 原样照抄（无秩仍是空秩，一个元素仍然只印元素本身），
+于是秩要到运行时才知道的值也能走 `atof`/`atobf`/`atof6`。
+
+`str:codepoints` 回 `int[]`（`camel::utf8::decodeOne` 一步一个码点），`str:from_codepoints` 回 `string!`
+（不是码点的那个数是一个 `EncodingError` 值，消息照抄解释器；只有"比一个字符串还长"是故障），
+`str:find` 回 `int?`（`std::string_view::find` 找字节、`camel::utf8::indexOf` 数字符，解释器的两个函数）。
+三处都放在 `include/camel/standalone/text.h` 里，因为 `Array`/`Opt` 在 `str.h` 之后才声明——
+**没有为新东西造值类型**。
+
+7 条的去向：**5 条 `same`**（`str_chars`、`reduced_scalar`、`bf16_cast_boundaries`、`bf16_cast_no_permission`、
+`bf16_cast_under_strict`），逐字节读回两条（`str_chars`：`[104, 8364, 128512, 233]`；`_under_strict`：`[205, 61]`）。
+仍拒 2 条，各自另一族：`utf8_string.cml` → `str:split`（结果 `string[]`，还没写规则）；
+`bf16_storage.cml` → `tensor:sum_axis` 在 `bf16[..]` 上（按轴求和，形状要丢一维，属于形状那一类）。
