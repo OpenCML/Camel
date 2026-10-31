@@ -414,12 +414,15 @@ class ReinterpPass : public RuntimeGraphRewritePass {
         // would replace a working entry with a silent one. The line above says it exists; the next
         // step is making it speak.
         if (const camel::runtime::Program *container = buildContainerFrom(context_, program, os)) {
-            // Installing it is what the next step is for: run as the program root it segfaults
-            // (exit 139) before printing a single line, so the entry it makes is not the entry the
-            // old program had. The line it prints is the reading; the install waits for a container
-            // that speaks.
-            // The probe (a println of 42) does not appear when this program is run, so the root
-            // the group makes is not the entry the pipeline runs. Not installed until it speaks.
+            // Where the container died, for whoever picks this up: the group builds both members,
+            // prints its types and its call edge (`REINTERP container mainType=... fType=...`),
+            // and then the program is run as a root of its own -- and the run ends with
+            // SIGSEGV (exit 139) right after the last `REINTERP` line, before the `println`
+            // inside `main__min` prints anything. So the crash is in the entry the group makes,
+            // not in the graphs it built: those two lines print the same signatures the original
+            // graphs have. The direction is dropped for now (see the pass's apply): a program
+            // whose root is a new graph cannot satisfy src/execute/camel_pass.cpp, which wants the
+            // graph the pass was given, by id.
             (void)container;
         }
         // Every function of the program that is made of operators: those are the ones a
