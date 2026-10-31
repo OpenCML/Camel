@@ -247,6 +247,16 @@ New codes: take a number that `--check` accepts, add the table entry, run `--wri
 use: syntax `0x01`-`0x0B`; run time `0x30`-`0x3B` for operator and module faults; semantic
 `0x80` and up for multi-error reporting.
 
+**A diagnostic whose premise is gone goes with it.** A code exists to explain a condition the
+tree can still produce; when a ruling removes the condition, keeping the code means the source
+goes on citing a sentence that is no longer true. Retire it in one change: delete the message
+table entry and its enumerator from `registry.tsv`, run `--write` (the enumerator and the
+reference page are generated from it), delete the sites that raised it, and re-point the cases
+that pinned it at the diagnostic the ordinary path now reports -- never delete those cases, they
+are the only reading that says the ordinary path is what answers. `ReducedPrecisionUnsupported`
+went this way when bf16/f16 stopped being an element type without operators: `%` over one of them
+is refused as `NoMatchingFunction` for `(bf16, bf16)`, the same sentence the call over f32 gets.
+
 ### One value twice, at a merge
 
 Two lanes cut from the same `develop` each add a diagnostic and each take "the next free number" of

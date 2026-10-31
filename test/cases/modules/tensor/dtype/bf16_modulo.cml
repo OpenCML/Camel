@@ -3,8 +3,9 @@
  * principles 7.3): bf16 and f16 are floating types on par
  * with f32, so the remainder of two of their arrays is their element type's own operator applied
  * elementwise, computed in f32 and rounded once into the element type when it is stored. It is not
- * a case of reduced precision: `SemanticDiag::ReducedPrecisionUnsupported` is what the same call
- * reported while the kernel was missing.
+ * a case of reduced precision: before the kernel existed the same call was refused the ordinary
+ * way, as no matching function for its operand types, not with a diagnostic of its own about the
+ * element width.
  *
  * The operator is the language's `%`, the truncated remainder (`camel::utils::remainder`,
  * include/camel/utils/int_div.h): the result takes the sign of the left operand, and nothing is
