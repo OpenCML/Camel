@@ -584,14 +584,19 @@ Rules buildRules() {
     };
     // `shape(xs)` (`stdlib/array.cml`, `stdlib/tensor.cml`): the value's dimensions, one `int` per
     // dimension, which is what the interpreter's `int[]` is. The shape travels with the value, so the
-    // answer is read off it and is a new array of its own -- a value, not a view. An open rank is
-    // still not translated: its rank is a property of the value, and the rank-zero value it admits
-    // is not an array at all in this back end.
+    // answer is read off it and is a new array of its own -- a value, not a view.
+    //
+    // An open rank is translated: what `shape` asks for is a property of the value, and the value
+    // carries it -- `rt::shapeOf` reads the rank and the extents off the block, so a value of no
+    // dimension answers `[]` and one whose block records no shape answers the one dimension of its
+    // size, which is what the interpreter answers for both. ("Open rank" is a fact about the type;
+    // "the shape is not known yet" is a fact about a value, and this back end has no such value:
+    // every `rt::Array` either records its shape or is read as one dimension of what it holds.)
     for (const char *uri : {"array:shape", "tensor:shape"}) {
         r[uri] = {
             [](OperatorCall &c) -> std::optional<std::string> {
                 const ArrayType *value = asArrayType(c.normType(0));
-                if (value == nullptr || value->anyRank() || c.normCount() != 1) {
+                if (value == nullptr || value->elemType() == nullptr || c.normCount() != 1) {
                     return std::nullopt;
                 }
                 return std::format("rt::shapeOf({})", c.operand(0));
