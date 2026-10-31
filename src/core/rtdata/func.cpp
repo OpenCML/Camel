@@ -56,7 +56,11 @@ void Function::updateRefs(const rtdata::Object::RefRelocator &relocate, const ty
             }));
     }
     if (closure_) {
-        const type::TupleType *tupleTypePtr = tupleType();
+        // The closure's layout, not the one the program's graph would answer: this walk also
+        // reaches function values whose program the collector already freed (that is what the
+        // check above is for), and `tupleType()` reads `program_->graph(graphId_)` first -- through
+        // a pointer this walk may no longer use.
+        const type::TupleType *tupleTypePtr = closureType();
         closure_                            = static_cast<Tuple *>(relocate(
             closure_,
             tupleTypePtr,
