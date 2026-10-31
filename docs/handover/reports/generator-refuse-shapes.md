@@ -10,6 +10,8 @@
 
 > **把"还没做"钉成负例，等于把缺口写成语言规则；缺口要么被修掉，要么被记在待办里，不能出现在验收里。**
 
+> **"先证明能跑，再删拒绝"的顺序不能倒：先删拒绝只能得到一个更响的错，先证明能跑才能得到一个更弱的拒绝清单。**
+
 日期：2026-10-31　读数树：`lane-gen`（`5803e9039`）
 
 **这一页只列形状，不删任何代码。** 本机不构建（Windows 上构建会蓝屏），所以每一行都是**静态读代码 + 对照已有用例**得来，标"未跑"的触发程序没有实际跑过。
@@ -34,7 +36,7 @@
 | `yield` 包在块语句里 | **已有用例** `stream.generator_yield_in_block`（`{ yield 1 }` 后 `yield 2`） | **有**（已删并转绿：`117/117/0`，`01a46940c`） | 已做：块单独一个 arm，块后接着原来的 arm |
 | `loop` 没有单个初值 | `loop while c do { yield 1 }`（未跑） | 没有（`init == nullptr` 直接拒） | 支持 0 状态循环：不建状态单元，只保留条件/体/回边四个点 |
 | `loop` 带两个及以上状态 | **已有用例** `yield_lowering.cml`（`loop i = 0, s = 0 … { yield (i, s); (i + 1, s + i) }`） | **有**：把两值装进一个元组单元 `loop st = (0, 0) while … do { let (i, s) = st; yield (i, s); (i + 1, s + i) }`（未跑，按单状态路径推断） | 把多状态拆成元组状态；或给机器加多状态的 arm 布局 |
-| `for` 循环里有 `yield` | `func g(): int.. sync { for x in xs { yield x } }`（未跑） | **有**：写成 `loop i = 0 while i < n do { yield xs[i]; i + 1 }`（`generators_loop.cml` 是那个绿形状） | 把 `for` 展开成 `loop`（迭代器本身占一个状态，得和第 6 行一起做） |
+| `for` 循环里有 `yield` | **已有试跑**：`loop n = 0 for x in xs do { yield x; n + 1 }`（**表里原来的 `for x in xs { … }` 根本不过解析器**：`Unexpected 'for'; expected '}'`；语言里只有 `loop s = init for x in xs do …` 这一种写法） | **没有**：`124/120/4` 红，`generators_for_yield.cml:8:9` `FeatureNotSupported`；按位置状态（序列单元 + 位置单元 + 绑定单元，条件 `idx < len(seq)`、步进 `idx + 1`）写了一版，**挂住**（四个后端都无输出、被超时杀掉），已整体收回，`refuse` 还在 | 先查那版为什么挂（arm 布局/条件与步进的接线），再谈删拒绝 |
 | `loop` 初值依赖当前点 | `var c = 0; loop i = c while i < 3 do { yield i; i + 1 }`（未跑） | 没有（`!hoistable(init)` 直接拒） | 允许读单元的初值：把初值求值放进第一个 arm，而不是提到循环前 |
 | 循环状态名与体内单元重名 | **已有用例** `stream.generator_loop_shared_cell`（`var i = 0` 后写 `loop i = 0 while i < 3 do { yield i; i + 1 }`，循环后再 `yield i`） | **有**（已转正：`120/120/0`，四后端输出 `123`，`a1182780f`） | 已做：循环状态复用体内那个单元（一个名字一个单元），并把"读在声明前"的检查限定在体自己的语句表上 |
 | `match` 臂绑定名字，臂里有 `yield` | `func g(x: int): int.. sync { match x { case n => { yield n } } }`（未跑） | 没有（`Ref`/`EnumPattern` 绑定被拒：绑定活在臂的图里，活不过 `yield`） | 把绑定提升成单元（与"局部跨 `yield`"是同一套：`addTypedCell`） |
