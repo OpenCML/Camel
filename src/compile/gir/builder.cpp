@@ -1049,7 +1049,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         }
     }
     if (camel::core::tag::declaresMacro(tags.declaration)) {
-        graph->draft().setFlags(static_cast<uint8_t>(
+        graph->edit().setFlags(static_cast<uint8_t>(
             graph->view().flags() | camel::runtime::kGraphFlagMacro));
     }
     buildFuncBody(gct, graph, funcType, name, tags);
@@ -1060,14 +1060,14 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     // A declaration fact that has to live on the graph itself: a scheduler reads
     // `#independent` from the exit node of the function it is about to call (design 3.6).
     if (!name.empty()) {
-        camel::core::tag::markIndependentElements(graph->draft(), tags.declaration);
+        camel::core::tag::markIndependentElements(graph->edit(), tags.declaration);
     }
     // The declaration's facts go with the graph (design principles 6.2, 10.1): a pass reads what
     // a declaration writes through the function it was given — `#jvp(rule)` names a rule graph,
     // a numeric permission is a flag — not through the module that declares it. A declaration
     // fact is not a node attribute (`attr::fateOf` records that), so it stays cold metadata of
     // the graph rather than an attribute of a node.
-    graph->draft().setDeclarationFacts(tags.declaration);
+    graph->edit().setDeclarationFacts(tags.declaration);
     if (name.empty()) {
         lambdaGraphs_[gct] = graph.get();
     }
@@ -1339,7 +1339,7 @@ void Builder::buildFuncBody(
         // (docs/design/gpu/plan.cn.md 2.2). Only the tags written on this declaration, not
         // those of the scope it is written in, which the nodes carry themselves.
         if (bodyTags.nodes != camel::core::attr::kNoAttrs) {
-            graph->draft().setRegionAttrs(0, bodyTags.nodes);
+            graph->edit().setRegionAttrs(0, bodyTags.nodes);
         }
         // A body declared `: void` drops the value of its last statement.
         if (!inferredExitGraphs_.contains(camel::runtime::toValue(graph->graphId())) &&

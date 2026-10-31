@@ -56,6 +56,10 @@ class DraftGraphBuilder {
     /// takes a transaction and looks at its graph; a writer takes one and edits it). Today both name
     /// the same object, which is what makes the split a rename rather than a rewrite.
     auto view() const -> decltype(draft()) { return draft(); }
+
+    /// The graph, for a caller that changes it. Same object as view() today; the two names are what
+    /// lets the types separate later without touching the call sites again.
+    auto edit() -> decltype(draft()) { return draft(); }
     /// The transaction the graph belongs to: the only handle to the graph being built.
     runtime::GraphTransaction &transaction() const { return *transaction_; }
     static DraftGraphBuilder *fromDraft(const runtime::GraphDraft *draft);
