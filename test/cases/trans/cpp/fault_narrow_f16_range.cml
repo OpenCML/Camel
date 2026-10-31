@@ -1,0 +1,15 @@
+/**
+ * A number f32 holds and an f16 does not: `1e5` is beyond 65504, so the report is the element
+ * type's own range (`at most 65504 in magnitude`) rather than the f32 range a bf16 would name --
+ * the third of the three reports a text conversion into a reduced-precision type can give, and
+ * the one that only f16 reaches, because bf16's range is f32's.
+ *
+ * The text is the interpreter's, byte for byte (agree_with_fvm compares the whole standard output
+ * and the exit code).
+ */
+func main(): int sync {
+    println(f16('1.5'))
+    println(f16('1e5'))
+    println('not reached')
+    return 0
+}

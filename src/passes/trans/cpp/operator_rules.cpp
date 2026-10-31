@@ -4,7 +4,6 @@
 #include "operator_rules.h"
 
 #include "camel/core/numeric_convert.h"
-#include "camel/core/numeric_convert_half.h"
 #include "camel/core/type/composite/array.h"
 #include "fault_sites.h"
 
@@ -215,26 +214,30 @@ OperatorRule checkedTextConversion(
 }
 
 /// A bf16 or an f16 read from a text (`bf16(s)`; cast.cpp __stobf__): `rt::halfFromText<To>(x,
-/// invalidSite, f32RangeSite, halfRangeSite)`. The text is read as f32 first, so a text that is
-/// not a number and one beyond f32 are the f32 refusals, with the element type's name in them as
-/// the runtime's own path puts it; the third report is the range of the element type itself
-/// (camel/core/numeric_convert_half.h, the same sentences).
-OperatorRule halfFromTextRule(const char *to, const char *target, std::string halfRangeReason) {
+/// invalidSite, rangeSite)`. The text is read as f32 first, so a text that is not a number and one
+/// beyond f32 are the f32 refusals, with the element type's name in them as the runtime's own path
+/// puts it; the third report is the range of the element type itself (camel/core/
+/// numeric_convert_half.h, the same sentences).
+///
+/// The last two are one diagnostic at one place, so they are one site: the range sits in the
+/// message as a value, and the runtime fills in the range it met -- f32's for a text beyond f32,
+/// the element type's for a number f32 holds and the type does not. Two sites of one kind at one
+/// node are one site (`SiteTable::siteFor` is keyed by node and kind), and asking for both would
+/// hand the second the first's text.
+OperatorRule halfFromTextRule(const char *to, const char *target) {
     return {
-        [to, target, halfRangeReason = std::move(halfRangeReason)](
-            OperatorCall &c) -> std::optional<std::string> {
-            const std::string text = SiteTable::valueMark(0);
+        [to, target](OperatorCall &c) -> std::optional<std::string> {
+            const std::string text  = SiteTable::valueMark(0);
+            const std::string range = SiteTable::valueMark(1);
             return std::format(
-                "rt::halfFromText<{}>({}, {}, {}, {})",
+                "rt::halfFromText<{}>({}, {}, {})",
                 to,
                 c.norm(0).text,
                 c.site(RuntimeDiag::InvalidNumberText, {text, target, "a number"}),
                 c.site(
                     RuntimeDiag::ConversionOutOfRange,
-                    {"'" + text + "'", target, camel::core::floatRangeReason<float>(target)}),
-                c.site(
-                    RuntimeDiag::ConversionOutOfRange,
-                    {"'" + text + "'", target, halfRangeReason}));
+                    {"'" + text + "'", target,
+                     std::format("the value is outside the range of {} ({})", target, range)}));
         },
         false};
 }
@@ -429,10 +432,8 @@ Rules buildRules() {
         checkedConversion("truncate", "int64_t", "int", RuntimeDiag::ConversionOutOfRange);
     r[":op/f6tol"] =
         checkedConversion("truncate", "int64_t", "int", RuntimeDiag::ConversionOutOfRange);
-    r[":op/stobf"] = halfFromTextRule(
-        "rt::BF16", "bf16", camel::core::halfRangeReason<camel::core::rtdata::BFloat16>("bf16"));
-    r[":op/stof6"] = halfFromTextRule(
-        "rt::F16", "f16", camel::core::halfRangeReason<camel::core::rtdata::Float16>("f16"));
+    r[":op/stobf"] = halfFromTextRule("rt::BF16", "bf16");
+    r[":op/stof6"] = halfFromTextRule("rt::F16", "f16");
     // A number to a complex value, and a complex value to the other width (cast.cpp, the c64
     // and c128 groups of globals.cpp): the imaginary part of a number is zero.
     r[":op/ctoc"] = identity();
@@ -694,7 +695,8 @@ Rules buildRules() {
             const TypeCode element = value->elemType()->code();
             if (element != TypeCode::Int64 && element != TypeCode::Int32 &&
                 element != TypeCode::Float32 && element != TypeCode::Float64 &&
-                element != TypeCode::Bool) {
+                element != TypeCode::Bool && element != TypeCode::BFloat16 &&
+                element != TypeCode::Float16) {
                 return std::nullopt;
             }
             return std::format("rt::sumAll({})", c.operand(0));
@@ -956,6 +958,27 @@ Rules buildRules() {
         r[std::format("math:round_{}", t)] = cmath("round");
         r[std::format("math:ceil_{}", t)]  = cmath("ceil");
         r[std::format("math:floor_{}", t)] = cmath("floor");
+    }
+    // `math::min`, `math::max` and `math::abs` of a bf16 or an f16 (modules/math/operators.cpp,
+    // modules/math/minmax.h): the IEEE 754-2019 comparison of the values widened to f32, whose
+    // answer is one of the two operands (a NaN gives the canonical quiet NaN, -0 is below +0), and
+    // the sign bit cleared for abs. Neither rounds, so `rt::halfMin` and friends return a pattern
+    // rather than a computed value.
+    //
+    // A half crosses no bridge: bridge.h carries numbers, booleans and strings, and a sixteen-bit
+    // value is none of them, so these are the rules that let a program of either type stay
+    // standalone. The f32 and f64 forms are written here for the same reason and not because they
+    // are missing from the bridge -- the library's own `min` and `max` widen a bf16 to `float`
+    // before comparing (stdlib/math.cml), so a fold over a bf16 passes through the f64 comparison,
+    // and leaving that one bridged linked libcamel into a program of nothing but narrow floats.
+    for (const char *t : {"bf", "f6"}) {
+        r[std::format("math:min_{}", t)] = runtimeFunction("halfMin");
+        r[std::format("math:max_{}", t)] = runtimeFunction("halfMax");
+        r[std::format("math:abs_{}", t)] = runtimeFunction("halfAbs");
+    }
+    for (const char *t : {"f", "d"}) {
+        r[std::format("math:min_{}", t)] = runtimeFunction("ieeeMin");
+        r[std::format("math:max_{}", t)] = runtimeFunction("ieeeMax");
     }
     // The complex functions (modules/math/operators.cpp): abs is hypot of the parts, exp is
     // std::exp of a std::complex, conj negates the imaginary part, re and im read one part.
