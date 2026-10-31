@@ -15,6 +15,7 @@
 #include "camel/standalone/enum.h"
 #include "camel/standalone/fn.h"
 #include "camel/standalone/format.h"
+#include "camel/standalone/half.h"
 #include "camel/standalone/hof.h"
 #include "camel/standalone/library.h"
 #include "camel/standalone/num.h"
