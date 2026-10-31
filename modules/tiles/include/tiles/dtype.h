@@ -7,11 +7,14 @@
 // floats, the two narrow ones a mixed-precision program stores, and the index.
 //
 // A narrow element is two bytes. The type gate in `graph_regions.cpp` reads it as a type the device
-// knows, and this back end carries no kernel for one: `eligibility` keeps a narrow node out of every
-// region and says so, so the plan names the back end's missing kernel instead of a type the device
-// cannot take. The width here is the element's own either way, so a site that turns
-// a dtype into bytes cannot silently take a bf16 value for an f32 one, which is the mistake an
-// "else four bytes" fallback makes.
+// knows, and this back end carries no device kernel for one: `eligibility` keeps a narrow node out
+// of every region and says so as `device_element_kernel_missing` -- an id, not a sentence, because
+// the plan reads it and asks who is missing the kernel; `gpuRefusal` is where it becomes words, and
+// only where a device is in use. The reason names the device because the host half does compute it
+// (the core's values, and the host serial executor over the same kernel body), so the plan names the
+// device's missing kernel instead of a type the device cannot take. The width here is the element's
+// own either way, so a site that turns a dtype into bytes cannot silently take a bf16 value for an
+// f32 one, which is the mistake an "else four bytes" fallback makes.
 
 #pragma once
 

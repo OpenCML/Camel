@@ -257,9 +257,10 @@ size_t elementWidth(kernel::ScalarType type) {
 }
 
 // One pointwise program over three elements, multiplied either by the constant two or by itself, with
-// the product stored in `store`: the store's type is what decides whether the narrowing happens.
-Program narrowProduct(DType element, DType store, bool square) {
-    const std::vector<float> values = {0.1f, 0.25f, 1.5f};
+// the product stored in `store`: the store's type is what decides whether the narrowing happens. The
+// values are the source case's own when a reading is meant to be tied to that program.
+Program narrowProduct(
+    DType element, DType store, bool square, const std::vector<float> &values = {0.1f, 0.25f, 1.5f}) {
     Program p;
     p.nodes = {
         {.op = "input", .shape = {3}, .dtype = element, .data = values},
@@ -328,6 +329,21 @@ void checkNarrowSerialRun() {
                  "0.199951171875 with an f16 element, bf16 wrote "
               << written(bf16Stored.at(0)) << " 0.2001953125, f16 wrote " << written(f16Stored.at(0))
               << " 0.199951171875\n";
+    // The same program the source case runs (`test/cases/gpu/nofallback/narrow_element_kernel.cml`):
+    // a bf16 and an f16 `[0.5, -1.5, 2.0] * 2.0`, whose host value is the `2.0 2.0` that case prints.
+    // The three stores are exact in both element types, so this reading ties the two halves -- the
+    // executor's body and the program the host runs -- to one arithmetic rather than to a coincidence.
+    const std::vector<float> program = {0.5f, -1.5f, 2.0f};
+    const auto bf16Program = serialStores(narrowProduct(DType::BF16, DType::BF16, false, program));
+    const auto f16Program  = serialStores(narrowProduct(DType::F16, DType::F16, false, program));
+    requireStored(bf16Program, 0, 0x3F80ULL, "bf16 0.5 doubled is 1.0");
+    requireStored(bf16Program, 1, 0xC040ULL, "bf16 -1.5 doubled is -3.0");
+    requireStored(bf16Program, 2, 0x4080ULL, "bf16 2.0 doubled is 4.0");
+    requireStored(f16Program, 0, 0x3C00ULL, "f16 0.5 doubled is 1.0");
+    requireStored(f16Program, 1, 0xC200ULL, "f16 -1.5 doubled is -3.0");
+    requireStored(f16Program, 2, 0x4400ULL, "f16 2.0 doubled is 4.0");
+    std::cout << "tiles narrow serial: the same program writes bf16 1 -3 4 and f16 1 -3 4"
+                 " (0.5 -1.5 2.0 doubled), which the host run sums to 2.0\n";
     // The same elements squared, where the store really rounds: 0.0100193... is nearer to bf16
     // 0x3C24 than to its neighbours, and 0.00999511... is nearer to f16 0x211E, one rounding each.
     const auto bf16Squared = serialStores(narrowProduct(DType::BF16, DType::BF16, true));
