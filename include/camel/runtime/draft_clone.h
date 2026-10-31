@@ -7,7 +7,7 @@
  * Inline-style runtime rewrites need a graph-native way to copy one immutable
  * runtime graph into a mutable owner draft before rewiring ports and exits.
  * This helper provides the first low-level clone primitive: append all nodes of
- * a source runtime graph into an existing GraphDraft and return the source ->
+ * a source runtime graph into the draft an existing transaction holds and return the source ->
  * cloned node-id mapping.
  */
 
@@ -35,8 +35,8 @@ struct DraftGraphCloneResult {
 /// Clones the nodes of a graph into `owner`. The cloned nodes are in the region `intoRegion` of
 /// `owner` (0: the body); the regions the source graph has are made again inside it.
 DraftGraphCloneResult cloneRuntimeGraphIntoDraft(
-    GraphDraft &owner, const GCGraph *sourceGraph, uint32_t intoRegion = 0);
+    GraphTransaction &transaction, const GCGraph *sourceGraph, uint32_t intoRegion = 0);
 DraftGraphCloneResult cloneDraftGraphIntoDraft(
-    GraphDraft &owner, const GraphDraft &sourceDraft, uint32_t intoRegion = 0);
+    GraphTransaction &target, const GraphTransaction &source, uint32_t intoRegion = 0);
 
 } // namespace camel::runtime

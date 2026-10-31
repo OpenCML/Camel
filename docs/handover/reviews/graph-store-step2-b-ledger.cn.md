@@ -1242,3 +1242,26 @@ DraftGraphCloneResult cloneDraftGraphIntoDraft(GraphDraft &owner, const GraphDra
 **数**：`references` **314**（不动），`files` **35**（不动），`constructions` 1，`decode` 4。**一处 `borrow` 也没有造**——造了也只是把 13 处挪进另一个函数。
 
 **一条判据（协调者给的一句）**：**「一个读者能收事务，只因为它上游有人手里已经拿着事务——不是因为它想要。」**
+
+## 57. `draft_clone` 的两个入口改收事务：三个文件，一次改动
+
+`draft_clone.h` 的两张签名不再出现 `GraphDraft`，`draft_clone.cpp` 的内部函数从事务上取图：
+
+```cpp
+DraftGraphCloneResult cloneRuntimeGraphIntoDraft(
+    GraphTransaction &transaction, const GCGraph *sourceGraph, uint32_t intoRegion = 0);
+DraftGraphCloneResult cloneDraftGraphIntoDraft(
+    GraphTransaction &target, const GraphTransaction &source, uint32_t intoRegion = 0);
+```
+
+| 文件 | 改了什么 |
+|---|---|
+| `include/camel/runtime/draft_clone.h` | 两张签名 + 一行注释（4 处拼写 + 1 处注释） |
+| `src/runtime/draft_clone.cpp` | 9 处拼写：两个入口、`loopPayloadBytes`、两个 `clonePayloadBytes` 重载、`resolveDraftNodeDataType`、`adoptRegions`、以及它们各自的调用点；体首取 `transaction.edit()` / `transaction.graph()` |
+| `src/runtime/draft_inline.cpp` | 唯一的调用点（1830/1831）各传自己手上的事务：`transaction` 与 `calleeTransaction` |
+
+**留下的 4 处（这一个文件仍出列不了，但它不再是文件名）**：`regionOf(const GraphDraft&, id)` 与 `portsOf(const GraphDraft&, id)` 是两个适配重载——`adoptRegions<Source>` 同一个循环既要读 `GCGraph` 也要读一张草稿，这一对重载就是那个「两样都读」的接口；另外两处是注释。
+
+**数**：`files` 35 → **34**，`references` 314 → **301**（−13），`constructions` 1，`decode` 4。**没有一处 `borrow`**。
+
+**一条判据（协调者给的一句）**：**「一次改动要跨三个文件的时候，先问『这三个是不是同一件事』——是，就一起改；不是，就再拆。」**

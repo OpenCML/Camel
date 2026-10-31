@@ -1827,8 +1827,8 @@ DraftInlineResult inlineCallableInDraft(
         draft.setRegionInline(inlineRegion, kInvalidGraphId, kInvalidNodeRef);
     }
     DraftGraphCloneResult cloned =
-        calleeTransaction ? cloneDraftGraphIntoDraft(draft, calleeTransaction->graph(), inlineRegion)
-                          : cloneRuntimeGraphIntoDraft(draft, calleeGraph, inlineRegion);
+        calleeTransaction ? cloneDraftGraphIntoDraft(transaction, *calleeTransaction, inlineRegion)
+                          : cloneRuntimeGraphIntoDraft(transaction, calleeGraph, inlineRegion);
     if (cloned.returnNode != kInvalidNodeRef) {
         draft.setRegionResult(inlineRegion, cloned.returnNode);
     }
