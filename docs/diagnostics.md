@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-303 diagnostics: 282 errors, 21 warnings. 15 carry a machine-applicable edit, 288 say why they carry none.
+304 diagnostics: 283 errors, 21 warnings. 15 carry a machine-applicable edit, 289 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -291,6 +291,7 @@ prints one entry.
 | `0x0400000C` | [RuntimeDiag::PassInternalError](#passinternalerror) | Error | no |
 | `0x0400000D` | [RuntimeDiag::PassBoundaryResources](#passboundaryresources) | Error | no |
 | `0x0400000E` | [RuntimeDiag::MacroEvaluationFailed](#macroevaluationfailed) | Error | no |
+| `0x0400000F` | [RuntimeDiag::PassBoundaryNodes](#passboundarynodes) | Error | no |
 | `0x04000010` | [RuntimeDiag::EntryArgumentMissing](#entryargumentmissing) | Error | no |
 | `0x04000011` | [RuntimeDiag::EntryArgumentInvalid](#entryargumentinvalid) | Error | no |
 | `0x04000012` | [RuntimeDiag::EntryResultNotWritten](#entryresultnotwritten) | Error | no |
@@ -9662,6 +9663,28 @@ func main(): int sync {
     return 0
 }
 ```
+
+### PassBoundaryNodes
+
+`0x0400000F` · Error · `RuntimeDiag::PassBoundaryNodes`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
+**Message**
+
+```text
+Pass '{0}' returned a program whose {1} has no {2}.
+```
+
+**Help**
+
+```text
+A graph runs from its entry node to its exit node. A rewrite may replace either one, but what it puts there must be a node of the graph that is alive: a graph whose entry or exit is gone is a graph nothing can run, and the pass that returned it lost the program's boundary.
+```
+
+*No example: no test small enough to show raises it.*
 
 ### EntryArgumentMissing
 
