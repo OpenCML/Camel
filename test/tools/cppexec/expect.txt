@@ -234,3 +234,8 @@ test/cases/trans/cpp/sum_rank.cml
 # dimensions it did not reduce -- `axis=0` sums a rank-2 value's columns, `axis=1` its rows, and the
 # middle axis of a rank-3 value sums elements that are apart in the run.
 test/cases/trans/cpp/sum_axis_rank.cml
+
+# The extreme along one dimension folds each lane from its identity (-inf or +inf, the lowest or the
+# largest value), so one NaN element makes the answer NaN, and compares with the one statement the
+# interpreter uses: a NaN on either side gives NaN, -0 is below +0, otherwise the larger (smaller).
+test/cases/trans/cpp/extreme_axis_rank.cml

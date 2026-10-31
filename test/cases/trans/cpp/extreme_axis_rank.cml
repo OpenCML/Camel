@@ -1,0 +1,31 @@
+/**
+ * The extreme along one dimension: each lane folded from -inf (maximum) or +inf (minimum), so a
+ * single NaN element makes the answer NaN, and compared with the one statement the interpreter uses
+ * -- a NaN on either side gives NaN, -0 is below +0, otherwise the larger (smaller) operand.
+ *
+ * The NaN value is built with `reshape` because a nested literal holds constants only: the shape a
+ * literal stands in is checked against its leaves, and `nan` is not one.
+ *
+ * The readings are the lines below; `agree_with_fvm` compares them with std::fvm byte for byte.
+ */
+import { nan } from math
+import { max_axis, min_axis, reshape } from tensor
+
+func main(): int sync {
+    let m: float[3, 2] = [[1.0, -2.0], [5.0, 0.0], [-3.0, 4.0]]
+    println(max_axis(m, 0, false))
+    println(min_axis(m, 0, false))
+    println(max_axis(m, 1, false))
+    println(min_axis(m, 1, true))
+    let t: float[2, 2, 2] = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 9.0]]]
+    println(max_axis(t, 1, false))
+    println(min_axis(t, 2, false))
+    let signed: float[2, 2] = [[-0.0, 0.0], [0.0, -0.0]]
+    println(max_axis(signed, 1, false))
+    println(min_axis(signed, 1, false))
+    let flat: float[4] = [1.0, nan, nan, 2.0]
+    let withNan = reshape<[2, 2]>(flat)
+    println(max_axis(withNan, 1, false))
+    println(min_axis(withNan, 0, false))
+    return 0
+}

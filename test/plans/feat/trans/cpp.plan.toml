@@ -170,6 +170,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "extreme_axis_rank"
+desc = "A maximum and a minimum along one dimension fold each lane from the operation's identity (-inf for a maximum of floats, +inf for a minimum, the lowest and the largest value otherwise) and compare with the one statement the interpreter uses: a NaN on either side gives the canonical quiet NaN and -0 is below +0. So `[5.0, 4.0]` and `[-3.0, -2.0]` for the two axes of a rank-2 value, `[[-2.0], [0.0], [-3.0]]` with keepdims, two axes of a rank-3 one, `[0.0, 0.0]` against `[-0.0, -0.0]` for a pair of signed zeros (the sign of the zero survives, which a comparison on values alone would lose), and `[nan, nan]` where a NaN element stands in the lane. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/extreme_axis_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::maxAxis(", "rt::minAxis("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "sum_axis_rank"
 desc = "A reduction along one dimension adds each lane from +0 in ascending order and answers the dimensions it did not reduce, in row-major order: `axis=0` of a rank-2 value sums its columns (`[9.0, 12.0]`), `axis=1` its rows (`[3.0, 7.0, 11.0]`), `keepdims` keeps the reduced dimension as one (`[[3.0], [7.0], [11.0]]`), and the three axes of a rank-3 value each sum a different set -- the middle one pairs elements that are `inner` apart in the run, which no flattening could produce. The axis and the flag arrive either as arguments of the call or as the constant the callee was written with (`sum<1>(xs)`), and the rule reads whichever carried them. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
