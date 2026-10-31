@@ -111,8 +111,7 @@ desc = "Under std::jit the straight-line callee is compiled as frameless code, a
 kind = "behavior"
 backends = false
 case = "../../../cases/consistency/attempt/compiled.cml"
-args = ["--gc", "mark-sweep", "-vv", "${case}", "std::jit"]
-envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0"]
+args = ["--gc-check", "poison", "--gc", "mark-sweep", "-vv", "${case}", "std::jit"]
 expect_output_contains = ["compiled & cached graph 'quot' as frameless code", "compiled & cached graph 'depth' as frameless code"]
 
 [[tests]]
@@ -159,7 +158,8 @@ name = "attempt.collector.stress"
 desc = "Isolated faults under allocation pressure, with heap verification around every collection and a major collection every 5 allocations and at every safepoint: what a boundary dropped is collectable, what is used after it survived."
 kind = "behavior"
 case = "../../../cases/consistency/attempt/collector.cml"
-envs = ["N=300", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+args = ["--gc-stress", "alloc=5,safepoint=1,kind=major", "--gc-check", "verify=both", "${case}"]
+envs = ["N=300"]
 timeout_ms = 120000
 verify_script = """
 assert(input.normalized.stdout === '8328\nerror DivisionByZero: Attempted division by zero.\nitem 20 / 20\nend\n', JSON.stringify(input.normalized.stdout))
@@ -170,7 +170,8 @@ name = "attempt.collector.stress_both"
 desc = "The same with minor and major collections requested."
 kind = "behavior"
 case = "../../../cases/consistency/attempt/collector.cml"
-envs = ["N=300", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=5,safepoint=1,kind=both", "--gc-check", "verify=both", "${case}"]
+envs = ["N=300"]
 timeout_ms = 120000
 verify_script = """
 assert(input.normalized.stdout === '8328\nerror DivisionByZero: Attempted division by zero.\nitem 20 / 20\nend\n', JSON.stringify(input.normalized.stdout))

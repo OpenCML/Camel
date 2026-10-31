@@ -223,7 +223,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
         // is full keeps what is allocated up to that safepoint out of the elder space.
         float minorGCTriggerRatio;
         // Old-space bytes (elder + large) the heap may hold; 0: no limit but the host's
-        // memory (CAMEL_GC_HEAP_LIMIT_MB). See allocation and safepoint for how it is enforced.
+        // memory (--gc-heap-limit-mb). See allocation and safepoint for how it is enforced.
         size_t heapLimitBytes;
         bool enableYoungGenCopying;
     };
@@ -235,7 +235,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
         bool verifyBeforeGC             = false;
         bool verifyAfterGC              = false;
         bool logMovements               = false;
-        // Safepoint poisoning (CAMEL_GC_POISON): every safepoint evacuates the whole young
+        // Safepoint poisoning (--gc-check poison): every safepoint evacuates the whole young
         // generation and overwrites the addresses the objects had with a poison word, so a
         // pointer that C++ code kept across the safepoint reads poison instead of a value
         // that happens to be still right. Requires young copying. See poison.h.
@@ -309,7 +309,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
     /// Accounts for `bytes` a core Block is about to take from the Block space. The bytes are
     /// live values (the plan requires them to pace the collector and to
-    /// count against CAMEL_GC_HEAP_LIMIT_MB), but they are allocated outside this allocator, so
+    /// count against --gc-heap-limit-mb), but they are allocated outside this allocator, so
     /// the array layer calls this before taking them.
     void checkBlockBytes(size_t bytes);
 
@@ -404,7 +404,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
     bool debugRunRememberedSetSelfTest();
 
     // White-box check of safepoint poisoning (std::gc::poison): an address kept across a
-    // safepoint reads the poison word, a RootHandle follows the object. Needs CAMEL_GC_POISON.
+    // safepoint reads the poison word, a RootHandle follows the object. Needs --gc-check poison.
     bool debugRunPoisonSelfTest();
 
     // Minor GC: collect the young generation (Birth + From).
@@ -543,7 +543,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // collection: a minor collection does not sweep the elder space. The block bytes promoted
     // since the last sweep therefore request a major on the same rule as the large-object
     // space: once they grow past the larger of the large-object floor
-    // (CAMEL_GC_LARGE_BUDGET_MB) and the growth percentage (CAMEL_GC_GROWTH_PERCENT) of the
+    // (--gc-large-budget-mb) and the growth percentage (--gc-growth-percent) of the
     // block bytes the last sweep left in promoted values.
     size_t elderBlockBudget_;
     size_t elderBlockBytesSinceSweep_ = 0; // Promoted block bytes since the last sweep

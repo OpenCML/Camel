@@ -744,7 +744,7 @@ SysV 下的序列是 `push rdi; mov rsi, r13; mov edx, pc; mov rax, helper; call
 - **有帧代码**的安全点与解释器的在同样的位置（`FUNC` / `TAIL` / `CALL`、高阶算子的每个元素、自尾调用的轮询、循环的每一轮（17.9）），都在驱动循环、解释器或辅助函数里，此时它已经 `ret` 或正处在 C++ 调用里。帧池的帧是已注册的根，回收器按帧布局扫描并就地更新；在辅助函数调用、离开点与轮询处没有值活在寄存器或机器栈上（寄存器分配拒绝跨过它们的值，之后代码重新读帧），所以这些位置上它的"栈映射"是空的。
 - **由此得出的结论（原 `DESIGN-QUESTION(jit-safepoint-under-framed-code)`）**：自己会到达安全点的算子（调用 Camel 函数的 C++ 算子；标准库的高阶算子是 `SCHD`，不在此列）经 `jitHelperOper` 调用时，机器栈上有它上面的有帧代码。这是允许的：那段代码不持有回收器需要看见或更新的东西。"编译出的代码之下不得有安全点"是关于无帧代码的规则。
 - **对象常量。** 回收器移动对象时（`--gc generational`），两种代码都不含对象的地址：对象常量在每次使用时从图的静态区读取，静态区是回收器就地更新的根（`36_gc_handle_rules.md` 第 5 节）。标记-清除下无帧代码仍把它当作立即数。唯一的例外是自调用或自尾调用在多于 4 个（经寄存器传递的上限）实参里传一个对象常量：那些实参作为立即数拷贝，这样的图在分代下编译成有帧代码（`collectRuntimeConstructs` 的 `object-constant-arg`）；在 17.5 的程序里没有出现。此前分代模式下含对象常量的图一律留给解释器，`test/cases/perf/gc/jit_const.cml`（返回字符串常量的双递归）因此慢 21 倍；现在 `jit_const(36)` 在 `std::opt::inline std::jit` 下标记-清除 102 毫秒、分代 101 毫秒，同一程序分代下的 `std::opt::inline std::fvm` 是 2742 毫秒（各 5 轮中位数，2026-10-14）。
-- 验证：`test/plans/feat/linear/jit_framed.plan.toml` 的 `gc_stress` 用例每第 7 个（循环用例每个）安全点回收并校验堆；`*.moving` 用例在安全点投毒（`CAMEL_GC_POISON=1`：每个安全点移动全部年轻对象并毒化原处）下、且每张图第一次调用就编译时运行；完整测试集在两种回收器下各跑一遍，随机程序也在两种回收器与投毒下跑过（17.7）。
+- 验证：`test/plans/feat/linear/jit_framed.plan.toml` 的 `gc_stress` 用例每第 7 个（循环用例每个）安全点回收并校验堆；`*.moving` 用例在安全点投毒（`--gc-check poison`：每个安全点移动全部年轻对象并毒化原处）下、且每张图第一次调用就编译时运行；完整测试集在两种回收器下各跑一遍，随机程序也在两种回收器与投毒下跑过（17.7）。
 
 ### 17.5 覆盖面统计
 
@@ -856,6 +856,6 @@ python3 test/tools/jitcov/jitcov.py --progen 1-300              # 随机程序
 
 与解释器（`gotovm.cpp`、`casevm.cpp`）里这三条字节码逐句相同。含循环的图因此是有帧代码（`collectRuntimeConstructs` 的 `LOOP`）。两个跳转都是一轮的边界：目标是 `blockStarts` 的一项（`slotCache` 在这里清空），事件之后也清空缓存，寄存器分配还不允许值跨过 `CallHelper`，所以每一轮都从帧重新读写状态。
 
-`LEND` 在轮次边界上轮询 `fastVmCallBoundarySafepoint()`（`loopRoundSafepoint`），位置与 FastVM 相同：解释的轮次与编译的轮次到达同样多的安全点（在 `CAMEL_GC_STRESS_SAFEPOINT=1` 下两者给出相同的回收次数与移动对象数），会收集的循环的 `MemoryExhausted` 也仍报在循环的位置。17.4 的"机器栈上没有编译出的代码"在这一处是有意的例外：轮询发生在辅助函数里，`LEND` 已经进入 C++，寄存器里没有值（辅助函数调用是分配的屏障）。
+`LEND` 在轮次边界上轮询 `fastVmCallBoundarySafepoint()`（`loopRoundSafepoint`），位置与 FastVM 相同：解释的轮次与编译的轮次到达同样多的安全点（在 `--gc-stress safepoint=1` 下两者给出相同的回收次数与移动对象数），会收集的循环的 `MemoryExhausted` 也仍报在循环的位置。17.4 的"机器栈上没有编译出的代码"在这一处是有意的例外：轮询发生在辅助函数里，`LEND` 已经进入 C++，寄存器里没有值（辅助函数调用是分配的屏障）。
 
 数字（2026-10-21，Linux x86-64，一千万轮两状态的 `while`，整进程 CPU 时间、批内交替五次取中位数）：`std::nvm` 1.611 秒、`std::fvm` 0.457 秒、`std::jit` 0.363 秒（含循环的入口函数在第一次调用就编译）、手写尾递归解释 0.309 秒、同一尾递归编译 0.084 秒。编译后的循环比解释器快 20%（36.3 对 45.7 ns/轮），但仍是编译后的尾递归（8.4 ns/轮）的 4.3 倍：每轮两次辅助函数调用（`LTST`、`LEND`）是剩下的固定开销，目标 0.155 秒仍未达到。测试在 `test/plans/feat/linear/loops.plan.toml`（`loops.compiled*`）与 `jit_framed.plan.toml`（`framed.loops.regions.*`，`-vv` 日志断言图被编译成有帧代码）。

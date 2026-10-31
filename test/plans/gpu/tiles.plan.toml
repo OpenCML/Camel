@@ -417,8 +417,7 @@ timeout_ms = 60000
 name = "aggregate_outputs.nvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/outputs.cml"
-args = ["--gc", "generational", "${case}", "std::nvm"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::nvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -436,8 +435,7 @@ timeout_ms = 60000
 name = "aggregate_outputs.fvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/outputs.cml"
-args = ["--gc", "generational", "${case}", "std::fvm"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::fvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -455,8 +453,7 @@ timeout_ms = 60000
 name = "aggregate_outputs.jit"
 kind = "behavior"
 case = "../../cases/modules/tiles/outputs.cml"
-args = ["--gc", "generational", "${case}", "std::jit"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::jit"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -558,8 +555,7 @@ timeout_ms = 60000
 name = "value_gradient.nvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/value_gradient.cml"
-args = ["--gc", "generational", "${case}", "std::macro", "std::nvm"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::macro", "std::nvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -577,8 +573,7 @@ timeout_ms = 60000
 name = "value_gradient.fvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/value_gradient.cml"
-args = ["--gc", "generational", "${case}", "std::macro", "std::fvm"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::macro", "std::fvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -596,8 +591,7 @@ timeout_ms = 60000
 name = "value_gradient.jit"
 kind = "behavior"
 case = "../../cases/modules/tiles/value_gradient.cml"
-args = ["--gc", "generational", "${case}", "std::macro", "std::jit"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::macro", "std::jit"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -615,8 +609,7 @@ timeout_ms = 60000
 name = "resident_transfers.nvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident.cml"
-args = ["--gc", "generational", "${case}", "std::nvm"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::nvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -630,8 +623,7 @@ timeout_ms = 60000
 name = "resident_transfers.fvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident.cml"
-args = ["--gc", "generational", "${case}", "std::fvm"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::fvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -645,8 +637,7 @@ timeout_ms = 60000
 name = "resident_transfers.jit"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident.cml"
-args = ["--gc", "generational", "${case}", "std::jit"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::jit"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -660,8 +651,7 @@ timeout_ms = 60000
 name = "resident_compute.nvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident_compute.cml"
-args = ["--gc", "generational", "${case}", "std::nvm"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::nvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -678,8 +668,7 @@ timeout_ms = 60000
 name = "resident_compute.fvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident_compute.cml"
-args = ["--gc", "generational", "${case}", "std::fvm"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::fvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -696,8 +685,7 @@ timeout_ms = 60000
 name = "resident_compute.jit"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident_compute.cml"
-args = ["--gc", "generational", "${case}", "std::jit"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::jit"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -714,8 +702,7 @@ timeout_ms = 60000
 name = "resident_outputs.nvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident_outputs.cml"
-args = ["--gc", "generational", "${case}", "std::nvm"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::nvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -729,8 +716,7 @@ timeout_ms = 60000
 name = "resident_outputs.fvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident_outputs.cml"
-args = ["--gc", "generational", "${case}", "std::fvm"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::fvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -744,8 +730,7 @@ timeout_ms = 60000
 name = "resident_outputs.jit"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident_outputs.cml"
-args = ["--gc", "generational", "${case}", "std::jit"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::jit"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -759,8 +744,7 @@ timeout_ms = 60000
 name = "resident_scalars.nvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident_scalars.cml"
-args = ["--gc", "generational", "${case}", "std::macro", "std::nvm"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::macro", "std::nvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -774,8 +758,7 @@ timeout_ms = 60000
 name = "resident_scalars.fvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident_scalars.cml"
-args = ["--gc", "generational", "${case}", "std::macro", "std::fvm"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::macro", "std::fvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -789,8 +772,7 @@ timeout_ms = 60000
 name = "resident_scalars.jit"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident_scalars.cml"
-args = ["--gc", "generational", "${case}", "std::macro", "std::jit"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::macro", "std::jit"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -804,8 +786,7 @@ timeout_ms = 60000
 name = "scalar_arithmetic.nvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/scalar_arithmetic.cml"
-args = ["--gc", "generational", "${case}", "std::macro", "std::nvm"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::macro", "std::nvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -832,8 +813,7 @@ timeout_ms = 60000
 name = "scalar_arithmetic.fvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/scalar_arithmetic.cml"
-args = ["--gc", "generational", "${case}", "std::macro", "std::fvm"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::macro", "std::fvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -860,8 +840,7 @@ timeout_ms = 60000
 name = "scalar_arithmetic.jit"
 kind = "behavior"
 case = "../../cases/modules/tiles/scalar_arithmetic.cml"
-args = ["--gc", "generational", "${case}", "std::macro", "std::jit"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc-stress", "alloc=1,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::macro", "std::jit"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -960,8 +939,7 @@ case = "../../cases/modules/tiles/numeric_permissions.py"
 # A python tool is the command, so a camel option in `args` would go to python. The script runs
 # camel itself; the default collector (generational) is the one this test wants, and the stress
 # switches below reach the script's environment.
-args = ["${case}"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+args = ["${case}", "--camel-options", "--gc-stress alloc=3,safepoint=1,kind=major --gc-check verify=both"]
 expect_exit = 0
 expect_stdout_contains = ["std::nvm: numeric permission boundaries", "std::opt std::nvm: numeric permission boundaries"]
 timeout_ms = 180000

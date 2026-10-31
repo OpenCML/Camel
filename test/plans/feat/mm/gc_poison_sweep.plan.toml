@@ -4,7 +4,7 @@ tier = "fast"
 tags = ["feat", "mm", "gc", "poison"]
 desc = """
 The handle rules (docs/technical/36_gc_handle_rules.md) checked against what the other plans
-exercise: their tests are run again with safepoint poisoning (CAMEL_GC_POISON=1), in which every
+exercise: their tests are run again with safepoint poisoning (--gc-check poison), in which every
 safepoint moves every young object and overwrites where it was, so a C++ pointer kept across a
 safepoint, a missing root or a stale interior pointer ends the program with a report instead of
 going unnoticed. The assertions of each test are kept: the program must print what it prints
@@ -12,7 +12,7 @@ without the mode.
 
 The plans are named by directory, so an operator or a module added later is covered as soon as
 it has a test there. Left out: the slow model tests of autodiff and onnx (run them with
-`CAMEL_GC_POISON=1 node scripts/test.js feat/modules/autodiff.plan.toml` when touching those
+`node scripts/test.js feat/modules/autodiff.plan.toml` after adding `--gc-check poison` when touching those
 modules), tests that choose their own collector settings, benchmarks and differential tests.
 A test that cannot run in the mode says `sweep = false` and why.
 
@@ -34,8 +34,8 @@ conditions is invisible in the copies a single sample leaves unrun.
 name = "poison"
 plans = ["../../smoke", "../modules", "../compile", "../linear", "../para", "../trans", "../consistency/attempt.plan.toml", "../consistency/faults.plan.toml", "../consistency/cleanup.plan.toml", "../consistency/values.plan.toml", "../consistency/match.plan.toml"]
 exclude = ["modules/autodiff", "modules/onnx"]
-envs = ["CAMEL_GC_POISON=1"]
-skip_env_prefix = "CAMEL_GC_"
+args = ["--gc-check", "poison"]
+skip_args_prefix = "--gc-"
 timeout_scale = 20
 fast_sample = 1
 # A plan whose tags name collections, closures or iterations keeps three sampled tests; the

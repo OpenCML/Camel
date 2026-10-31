@@ -3032,10 +3032,9 @@ skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 desc = "std::opt::inline std::jit compiles a function that passes its var parameter on (200000-deep tail recursion) as frameless code, and a function that reads the variable as framed code: :var/get is a generic operator, called through a helper."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_jit.cml"
-args = ["--gc", "mark-sweep", "-vv", "${case}", "std::opt::inline", "std::jit"]
+args = ["--gc-check", "poison", "--gc", "mark-sweep", "-vv", "${case}", "std::opt::inline", "std::jit"]
 # Which kind of code a graph becomes depends on the collector: the test names the default one.
 sweep = false
-envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'down' as frameless code", "compiled & cached graph 'plain' as frameless code", "compiled & cached graph 'read' as framed code"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

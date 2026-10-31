@@ -4,8 +4,8 @@
  * a row survives the four minor collections that promote it and is then garbage. A minor
  * collection cannot release the block of a promoted array, so without a major collection driven
  * by these bytes the window would grow with the number of steps. The plan asserts the major
- * collection is asked for by the promoted-block budget (CAMEL_GC_GROWTH_PERCENT of the block
- * bytes the last sweep left, above the CAMEL_GC_LARGE_BUDGET_MB floor) and that the high-water
+ * collection is asked for by the promoted-block budget (--gc-growth-percent of the block
+ * bytes the last sweep left, above the --gc-large-budget-mb floor) and that the high-water
  * mark does not grow with `steps`.
  */
 

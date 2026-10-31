@@ -1,4 +1,4 @@
-// A collecting loop whose tapes outgrow the heap limit (CAMEL_GC_HEAP_LIMIT_MB): the failure is
+// A collecting loop whose tapes outgrow the heap limit (--gc-heap-limit-mb): the failure is
 // a memory exhaustion, attributed to the loop whose tape could not grow.
 func main(): int sync {
     println(loop i = 0 while i < 2000000 do i + 1)

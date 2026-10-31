@@ -1286,7 +1286,7 @@ slot_t whyNotKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     // generic rule's instance is made here and a rule's `when` condition runs here -- so each is
     // read again from where the collector keeps it, which is rule 2 of
     // docs/technical/36_gc_handle_rules.md. The rule is the address this kernel used to keep, and
-    // the one the fix in `callWhen` did not reach (6e0eb52e4): under `CAMEL_GC_POISON=1` the
+    // the one the fix in `callWhen` did not reach (6e0eb52e4): under `--gc-check poison` the
     // collector wrote its poison word where the rule had been, and `rule->name()` in the answer at
     // the end of this function read that word -- SIGSEGV with `nameId` 0xf3900000, measured
     // 2026-10-24 on rules.why_not_names_the_false_condition. The rule is rooted for the length of

@@ -2,7 +2,7 @@
  * An array that takes a block over after it was promoted must register the block then. The loop
  * state starts as an empty inline array; the first `pause` rounds allocate small arrays that fill
  * the birth space, so a minor collection promotes the state while it still has no block
- * (CAMEL_GC_PROMOTION_AGE=1). The append then moves the promoted array's inline data into a
+ * (--gc-promotion-age 1). The append then moves the promoted array's inline data into a
  * block and grows it past the 4 MB floor. Without the takeover registration those bytes are never
  * counted (the promotion that could have counted them already happened) and no major collection
  * is asked for. The plan asserts the collection count, not a timing.
