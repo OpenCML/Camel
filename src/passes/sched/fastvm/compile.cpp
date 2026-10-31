@@ -30,12 +30,12 @@ using data_idx_t = camel::runtime::gc_data_idx_t;
 static data_idx_t
 runtimeDataIndexOf(const camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef) {
     const auto *node = graph ? graph->node(nodeRef) : nullptr;
-    ASSERT(node != nullptr, "FastVM runtime node lookup resolved to null.");
+    GUARD(node != nullptr, "FastVM runtime node lookup resolved to null.");
     return node->dataIndex;
 }
 
 static std::vector<data_idx_t> directCallDstSlotsOf(camel::runtime::GCGraph *targetRuntimeGraph) {
-    ASSERT(targetRuntimeGraph != nullptr, "FastVM direct-call target graph is null.");
+    GUARD(targetRuntimeGraph != nullptr, "FastVM direct-call target graph is null.");
     std::vector<data_idx_t> dstSlots;
     const auto normPorts = targetRuntimeGraph->normPorts();
     const auto withPorts = targetRuntimeGraph->withPorts();
@@ -122,8 +122,8 @@ static bytecode_vec_t compileRuntimeGraph(
     const context_ptr_t &ctx, const camel::runtime::Program &program,
     camel::runtime::GCGraph *graph, const CompileStrategy &opt,
     std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins) {
-    ASSERT(graph != nullptr, "FastVM compile requires a non-null runtime graph.");
-    ASSERT(
+    GUARD(graph != nullptr, "FastVM compile requires a non-null runtime graph.");
+    GUARD(
         graph->hasNodePayload(),
         std::format("Runtime graph '{}' has no node payload.", graph->name()));
 
@@ -243,7 +243,7 @@ static bytecode_vec_t compileRuntimeGraph(
     for (size_t i = 0; i < topoSortedIndices.size(); ++i) {
         const auto runtimeNodeIndex = topoSortedIndices[i];
         const auto *record          = graph->node(runtimeNodeIndex);
-        ASSERT(record != nullptr, "Runtime topo node is missing runtime metadata.");
+        GUARD(record != nullptr, "Runtime topo node is missing runtime metadata.");
 
         size_t currIdx             = bytecodes.size();
         const size_t bytecodeStart = bytecodes.size();
@@ -352,16 +352,16 @@ static bytecode_vec_t compileRuntimeGraph(
             const auto sourceRef  = graph->normInputsOf(runtimeNodeIndex).front();
             const auto *srcRecord = graph->node(sourceRef);
             const auto *accBody   = graph->nodeBodyAs<camel::runtime::GCAccsBody>(runtimeNodeIndex);
-            ASSERT(
+            GUARD(
                 srcRecord != nullptr && srcRecord->dataType() != nullptr,
                 "ACCS source node must exist.");
-            ASSERT(srcRecord->dataType()->isComposite(), "ACCS source node must be composite.");
+            GUARD(srcRecord->dataType()->isComposite(), "ACCS source node must be composite.");
 
             size_t index = 0;
 
             switch (srcRecord->dataType()->code()) {
             case TypeCode::Tuple: {
-                ASSERT(
+                GUARD(
                     accBody->accsKind == camel::runtime::GCAccsKind::TupleIndex,
                     "ACCS tuple access must be numeric.");
                 index                 = accBody->value;
@@ -373,7 +373,7 @@ static bytecode_vec_t compileRuntimeGraph(
                 break;
             }
             case TypeCode::Struct: {
-                ASSERT(
+                GUARD(
                     accBody->accsKind == camel::runtime::GCAccsKind::StructKey,
                     "ACCS struct access must be keyed.");
                 const std::string_view keyView = accBody->key();
@@ -390,7 +390,7 @@ static bytecode_vec_t compileRuntimeGraph(
                 break;
             }
             default:
-                ASSERT(false, "Unsupported ACCS source node type.");
+                throw std::runtime_error("Unsupported ACCS source node type.: the dispatch reached a case no handler covers");
             }
 
             appendBytecode(
@@ -408,7 +408,7 @@ static bytecode_vec_t compileRuntimeGraph(
             appendBytecode(bytecodes, OpCode::BRCH, record->dataIndex, {}, normOps, withOps);
             for (size_t armIndex = 0; armIndex < graph->armCountOf(runtimeNodeIndex); ++armIndex) {
                 const auto armEntry = plan.branchArmEntriesOf(i)[armIndex];
-                ASSERT(
+                GUARD(
                     armEntry != camel::runtime::kInvalidNodeRef,
                     std::format(
                         "FastVM runtime compile cannot resolve BRCH arm {} entry in graph '{}'.",
@@ -459,7 +459,7 @@ static bytecode_vec_t compileRuntimeGraph(
         case camel::runtime::GCNodeKind::Func: {
             bool isTail            = plan.directCallTailEligible[i] != 0;
             auto *targetRuntimeGraph = program.calleeOf(*graph, runtimeNodeIndex);
-            ASSERT(
+            GUARD(
                 targetRuntimeGraph != nullptr,
                 std::format(
                     "FastVM runtime compile cannot resolve direct runtime callee for node ref {} "
@@ -468,7 +468,7 @@ static bytecode_vec_t compileRuntimeGraph(
                     graph->name()));
             normOps.insert(normOps.end(), withOps.begin(), withOps.end());
             auto dstSlots = directCallDstSlotsOf(targetRuntimeGraph);
-            ASSERT(
+            GUARD(
                 normOps.size() == dstSlots.size(),
                 std::format(
                     "FastVM direct-call arity mismatch for node ref {} in graph '{}': "
@@ -598,7 +598,7 @@ static bytecode_vec_t compileRuntimeGraph(
             continue;
 
         default:
-            ASSERT(
+            GUARD(
                 false,
                 std::format(
                     "Unsupported node type encountered in runtime bytecode generation: {}",
@@ -643,10 +643,10 @@ static bytecode_vec_t compileRuntimeGraph(
         0,
         {static_cast<data_idx_t>(hasValueReturn ? runtimeDataIndexOf(graph, returnNodeRef) : 0)});
 
-    ASSERT(
+    GUARD(
         brchTargetMap.empty(),
         "Some BRCH nodes have unmatched control outputs without corresponding JOIN nodes.");
-    ASSERT(
+    GUARD(
         joinTargetMap.empty(),
         "Some JOIN nodes have unmatched JUMP instructions without corresponding targets.");
 
@@ -701,7 +701,7 @@ LinkedBytecodeResult compileAndLinkGraphs(
     std::unordered_map<camel::runtime::GCGraph *, size_t> offsetMap;
 
     for (auto *runtimeGraph : uniqueGraphs) {
-        ASSERT(runtimeGraph != nullptr, "Reachable runtime graph set contains null.");
+        GUARD(runtimeGraph != nullptr, "Reachable runtime graph set contains null.");
         if (known(runtimeGraph)) {
             continue;
         }
@@ -754,7 +754,7 @@ LinkedBytecodeResult compileAndLinkGraphs(
         case OpCode::TAIL:
         case OpCode::FUNC: {
             auto *target = getFuncExtraRuntimeGraph(&bc);
-            ASSERT(
+            GUARD(
                 target != nullptr,
                 std::format(
                     "FastVM linker cannot resolve runtime graph for bytecode at pc {}.",
