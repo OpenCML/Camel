@@ -604,8 +604,10 @@ Rules buildRules() {
         false,
     };
     // A type name applied to a one-dimensional numeric array converts every element. A value with
-    // several dimensions or an open rank is not a flat run here, and neither is bf16 or f16 (this
-    // back end has no such element type): those are refused, as the other array operators refuse.
+    // several dimensions or an open rank is not a flat run here, and neither is bf16 or f16 -- an
+    // element type this back end does not have (`kNoSuchElementType`, and `notTranslatedBecause`
+    // says it where a value of one is refused). Those are refused, as the other array operators
+    // refuse, and the refusal does not say `yet`: that word is for work not done.
     for (const auto &[uri, element] : {std::pair<const char *, const char *>{":op/atoi", "int32_t"},
                                       {":op/atol", "int64_t"},
                                       {":op/atof", "float"},

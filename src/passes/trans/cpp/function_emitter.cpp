@@ -882,11 +882,12 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
             g,
             ref,
             std::format(
-                "the result of operator '{}' in {} has type '{}'; {}",
+                "the result of operator '{}' in {} has type '{}'; {}{}",
                 uri,
                 describeFunction(g),
                 typeName(node->dataType()),
-                kTranslatedTypes));
+                kTranslatedTypes,
+                notTranslatedBecause(node->dataType())));
     }
     std::vector<CppValue> norm, with;
     std::vector<const Type *> normTypes, withTypes;
