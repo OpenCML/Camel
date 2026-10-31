@@ -9,8 +9,8 @@
  * -- the collector walks the handles itself, so two Foreigns that name one object are two handles,
  * a copy is another handle, and the last release deletes it and hands the object back to the
  * collector. The text is the runtime's own, because only the runtime knows how its objects print.
- * Both are why this half of the type lives here and not in the header (docs/design/cpp-standalone/
- * README.cn.md 9).
+ * Both are why this half of the type lives here and not in the header: only the runtime can count
+ * its own handles and print its own objects (docs/design/cpp-standalone/README.cn.md, section 9).
  */
 
 #include "camel/standalone/foreign.h"

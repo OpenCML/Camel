@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * @file foreign.h
  * @brief A value the runtime owns, held by a generated program: a counted handle.
