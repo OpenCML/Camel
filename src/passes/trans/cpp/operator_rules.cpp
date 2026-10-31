@@ -880,6 +880,56 @@ Rules buildRules() {
         },
         false,
     };
+    // `tensor:mean_axis` (modules/tensor/kernels/reduce.cpp, reduceAxis): the mean is the sum's own
+    // two steps and not a second average -- each lane added from +0 in ascending order into a
+    // `double`, the unrounded total divided by the extent in `double`, that quotient rounded into the
+    // element type once. So the rule emits the runtime's mean, which walks the lanes the same way and
+    // rounds the same single time; "the sum divided by a count" computed in the element type would be
+    // a different number for an `f32` lane.
+    //
+    // Only a floating element type is written: the mean of an integer value is an `f32` in the
+    // kernel, while the operator's signature keeps the value's element type, so the answer's type on
+    // this side would be the integer one -- a different value printed, not a mean. That is left
+    // refused (by name) rather than translated to something else.
+    //
+    // An empty lane is not refused: the interpreter divides 0.0 by 0.0 and answers the canonical NaN
+    // (`[nan, nan]` for a `f32[2, 0]` reduced on axis 1), and the runtime does the same. The refusal
+    // these four extremes have for an empty lane is not the mean's.
+    r["tensor:mean_axis"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (value == nullptr || value->anyRank() || value->rank() < 1 ||
+                value->elemType() == nullptr) {
+                return std::nullopt;
+            }
+            const TypeCode element = value->elemType()->code();
+            if (element != TypeCode::Float32 && element != TypeCode::Float64) {
+                return std::nullopt;
+            }
+            std::string axis;
+            std::string keepDims = "false";
+            if (c.normCount() >= 2) {
+                axis = c.operand(1);
+                if (c.normCount() > 2) {
+                    keepDims = c.operand(2);
+                }
+            } else if (c.withCount() >= 1) {
+                axis = c.with(0).text;
+                if (c.withCount() > 1) {
+                    keepDims = c.with(1).text;
+                }
+            } else {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::meanAxis({}, {}, {}, {})",
+                c.operand(0),
+                axis,
+                keepDims,
+                c.site(RuntimeDiag::InvalidArgument, marks(2)));
+        },
+        false,
+    };
     // `tensor:max_axis` / `tensor:min_axis` (modules/tensor/kernels/reduce.cpp, reduceAxis): the
     // same lanes as the sum, folded from the operation's identity instead of from +0, with the one
     // comparison the interpreter makes -- a NaN on either side gives the canonical quiet NaN and -0

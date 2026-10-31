@@ -322,6 +322,11 @@ test/cases/trans/cpp/sum_rank.cml
 # middle axis of a rank-3 value sums elements that are apart in the run.
 test/cases/trans/cpp/sum_axis_rank.cml
 
+# The mean along one dimension is the sum's own two steps in the interpreter's order: each lane added
+# from +0 into a double, the unrounded total divided by the extent in double, one rounding into the
+# element type -- not "the sum divided by a count" written a second way.
+test/cases/trans/cpp/mean_axis_rank.cml
+
 # The extreme along one dimension folds each lane from its identity (-inf or +inf, the lowest or the
 # largest value), so one NaN element makes the answer NaN, and compares with the one statement the
 # interpreter uses: a NaN on either side gives NaN, -0 is below +0, otherwise the larger (smaller).

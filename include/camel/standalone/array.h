@@ -1095,6 +1095,33 @@ Array<T> sumAxis(const Array<T> &xs, int64_t axisArg, bool keepDims, const Site 
         });
 }
 
+/// `tensor:mean_axis` (modules/tensor/kernels/reduce.cpp, reduceAxis): the mean is not "the sum
+/// divided by a count" written a second way -- it is the interpreter's own two steps, in its order.
+/// Each lane is added from +0 in ascending order into a `double` (every float element type does,
+/// design principles 7.3), the *unrounded* total is divided by the extent of the lane in `double`,
+/// and that quotient is rounded into the element type once. Rounding the sum first would give a
+/// different number for an `f32` lane, and so would dividing in the element type.
+///
+/// A lane with no element is not refused here: the interpreter does not refuse it either, it divides
+/// `0.0` by `0.0` and answers the canonical NaN -- one per lane, so a `f32[2, 0]` reduced on axis 1
+/// answers `[nan, nan]`. That NaN is the arithmetic's, not a diagnostic's.
+template <typename T>
+Array<T> meanAxis(const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid) {
+    return axisReduce<T, T>(
+        xs,
+        axisArg,
+        keepDims,
+        "tensor:mean_axis",
+        invalid,
+        [](const Array<T> &v, std::size_t base, std::size_t extent, std::size_t inner) {
+            double acc = 0.0;
+            for (std::size_t k = 0; k < extent; ++k) {
+                acc += static_cast<double>(v[base + k * inner]);
+            }
+            return static_cast<T>(acc / static_cast<double>(extent));
+        });
+}
+
 /// IEEE 754-2019 maximum of two values (modules/math/minmax.h, `maxOf`): a NaN on either side gives
 /// the canonical quiet NaN, -0 is below +0, and otherwise the larger operand -- chosen on the values
 /// but returned as its own bits, so the sign of a zero survives.
