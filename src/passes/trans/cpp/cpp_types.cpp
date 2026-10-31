@@ -550,8 +550,20 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
             decl += std::format("    {} {};\n", member.cpp, member.name);
         }
         decl += std::format("    bool operator==(const {} &) const = default;\n}};\n", name);
-        // Its text, as the runtime prints it: `(1, a)` and `{ x: 1, y: 2.5 }`.
+        // Its text, as the runtime prints it: `(1, a)` and `{ x: 1, y: 2.5 }`. A type with no
+        // fields prints the empty pair -- `{}` for a struct, `()` for a tuple -- because the spaces
+        // around the fields are the fields': with none there is nothing between the brackets, and
+        // the interpreter writes `{}` for a loop state that carries nothing (`loops/zero_leaf_state.cml`).
         decl += std::format("inline void appendText(std::string &out, const {} &v) {{\n", name);
+        if (members.empty()) {
+            decl += std::format(
+                "    (void)v;\n    out += \"{}\";\n}}\n\n", isTuple ? "()" : "{}");
+            declarations_ += decl;
+            layouts_.emplace(layout, name);
+            representations_.emplace(key, name);
+            out = name;
+            return out;
+        }
         decl += std::format("    out += \"{}\";\n", isTuple ? "(" : "{ ");
         for (size_t i = 0; i < members.size(); ++i) {
             if (i > 0) {

@@ -262,6 +262,10 @@ test/cases/trans/cpp/print_shape.cml
 # value, so `println(first.v)` writes `1.5` and not `[1.5]`.
 test/cases/compile/array_shape/rank_zero_field_literal.cml
 
+# A type with no fields prints the empty pair: the spaces around the fields are the fields', so a
+# loop state that carries nothing is written `{}` as the interpreter writes it.
+test/cases/loops/zero_leaf_state.cml
+
 # `as` states the shape a value must have: a value that holds it is the value (nothing to write, the
 # two sides are one `rt::Array<T>`), and a value that does not stops the program with the
 # interpreter's own sentence -- `conversion to 'float[3, 3]' failed: the array has shape [2, 2]`.
