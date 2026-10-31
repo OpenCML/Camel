@@ -1,0 +1,18 @@
+/**
+ * A reduction over the whole value answers the element type: an integer result is exact (int64 as
+ * it stands) and every float element type is the f64 accumulator converted once, added from +0 in
+ * the order the elements lie. The value is summed whole, so the grouping never enters.
+ *
+ * The readings are the lines below; `agree_with_fvm` compares them with std::fvm byte for byte.
+ */
+import { sum } from tensor
+
+func main(): int sync {
+    let v: float[3] = [1.0, 2.0, 3.0]
+    println(sum(v))
+    let i: int[4] = [1, 2, 3, 4]
+    println(sum(i))
+    let s: f32[3] = [0.1, 0.2, 0.3]
+    println(sum(s))
+    return 0
+}

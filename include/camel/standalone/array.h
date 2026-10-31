@@ -683,6 +683,42 @@ inline double sum(const Array<double> &xs) {
     return total;
 }
 
+/// `tensor:sum` of the whole value (modules/tensor/ops/reduction_ops.cpp, sumAllKernel): an integer
+/// result is the exact int64 accumulator -- int64 as it stands and int32 truncated into its own
+/// element type, where truncating once gives the same bits as wrapping at every step -- and every
+/// float element type takes the f64 accumulator converted once, added from +0 in the order the
+/// elements lie.
+///
+/// The whole value is what is summed, so the total is the total of the run and no dimension of it
+/// has to be known: the grouping never enters. A reduction along an axis is the form that needs the
+/// shape, and it is not this one.
+template <typename T> T sumAll(const Array<T> &xs) {
+    if constexpr (std::is_same_v<T, int64_t>) {
+        std::uint64_t acc = 0;
+        for (std::size_t i = 0; i < xs.size(); ++i) {
+            acc += static_cast<std::uint64_t>(xs[i]);
+        }
+        return static_cast<int64_t>(acc);
+    } else if constexpr (std::is_same_v<T, int32_t>) {
+        std::uint64_t acc = 0;
+        for (std::size_t i = 0; i < xs.size(); ++i) {
+            acc += static_cast<std::uint64_t>(static_cast<int64_t>(xs[i]));
+        }
+        return static_cast<int32_t>(static_cast<int64_t>(acc));
+    } else {
+        double total = 0.0;
+        for (std::size_t i = 0; i < xs.size(); ++i) {
+            total += static_cast<double>(xs[i]);
+        }
+        return static_cast<T>(total);
+    }
+}
+
+/// `numel(xs)` (`stdlib/array.cml`): how many elements the value has, which is what the interpreter
+/// answers -- one for a value of no dimension, the length for one of a single dimension, and the
+/// product of the extents for one of several.
+template <typename T> int64_t numel(const Array<T> &xs) { return static_cast<int64_t>(xs.size()); }
+
 /// `tail(xs)` (:struct/tail_arr): all but the first element; the empty array for one or none.
 template <typename T> Array<T> tail(const Array<T> &xs) {
     Array<T> out;
