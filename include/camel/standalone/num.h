@@ -135,6 +135,32 @@ template <typename Format> Half<Format> pow(Half<Format> base, Half<Format> expo
     return Half<Format>(std::pow(base.toFloat(), exponent.toFloat()));
 }
 
+/// `math::min` and `math::max` of two f32 or f64 values (math:min_f, math:min_d and their max
+/// forms): the IEEE 754-2019 minimum and maximum that halfMin and halfMax of half.h state on the
+/// sixteen-bit pattern -- a NaN on either side gives the canonical quiet NaN, `-0` is below `+0`,
+/// and otherwise the answer is one of the two operands. std::fmin and std::fmax are not this
+/// comparison: they answer the other operand when one of theirs is a NaN.
+template <std::floating_point T> T ieeeMin(T a, T b) {
+    if (a != a || b != b) {
+        return std::numeric_limits<T>::quiet_NaN();
+    }
+    if (a != b) {
+        return b < a ? b : a;
+    }
+    return std::signbit(a) ? a : b;
+}
+
+/// `math::max` of two f32 or f64 values: see ieeeMin.
+template <std::floating_point T> T ieeeMax(T a, T b) {
+    if (a != a || b != b) {
+        return std::numeric_limits<T>::quiet_NaN();
+    }
+    if (a != b) {
+        return a < b ? b : a;
+    }
+    return std::signbit(a) ? b : a;
+}
+
 // ---- Number to number (:op/ltoi, :op/dtol, ...) ----
 
 namespace detail {
@@ -217,14 +243,31 @@ To floatFromText(std::string_view text, const Site &invalid, const Site &outOfRa
 /// read first as f32 (`floatFromText` above, the runtime's own path in
 /// camel/core/numeric_convert_half.h), which is where "not a number" and "beyond f32" are
 /// refused, and then rounded once into the element type; a value whose nearest element is an
-/// infinity is the overflow of this type. The template argument is the value type (`rt::BF16`),
-/// as the rule of operator_rules.cpp writes it; the format it is made of is `Half::FormatOf`.
+/// infinity is the overflow of this type.
+///
+/// One site carries both ranges, with the range in it as a value: the two refusals are the same
+/// diagnostic at the same place, and only the range they name differs -- f32's when the text is
+/// beyond f32 at all, the element type's when f32 holds it and the type does not. A program
+/// therefore reports whichever range it met, at one sentence.
 template <typename Half> Half halfFromText(
-    std::string_view text, const Site &invalid, const Site &floatOutOfRange,
-    const Site &halfOutOfRange) {
-    const float asFloat = floatFromText<float>(text, invalid, floatOutOfRange);
+    std::string_view text, const Site &invalid, const Site &outOfRange) {
+    float asFloat = 0.0f;
+    switch (camel::utils::parseWholeFloat<float>(text, asFloat)) {
+    case camel::utils::NumberTextStatus::Ok:
+        break;
+    case camel::utils::NumberTextStatus::OutOfRange:
+        fault(
+            outOfRange,
+            {std::string(text), std::string(camel::utils::floatRangeText<float>())});
+    default:
+        fault(invalid, {std::string(text)});
+    }
     if (halfOverflows<typename Half::FormatOf>(asFloat)) [[unlikely]] {
-        fault(halfOutOfRange, {std::string(text)});
+        fault(
+            outOfRange,
+            {std::string(text),
+             std::string(camel::utils::halfRangeText(
+                 std::is_same_v<typename Half::FormatOf, BF16Format>))});
     }
     return Half(asFloat);
 }

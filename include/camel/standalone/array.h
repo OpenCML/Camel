@@ -22,10 +22,12 @@
 #include "camel/standalone/str.h"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
+#include <limits>
 #include <new>
 #include <string>
 #include <type_traits>
@@ -282,6 +284,28 @@ template <typename T> class Array {
         rep_->rank = static_cast<std::uint32_t>(source.rank());
         for (std::size_t i = 0; i < source.rank(); ++i) {
             rep_->extents[i] = i == axis ? count : source.extent(i);
+        }
+    }
+
+    /// States the shape a reduction along one dimension leaves (`sumAxis`): the source's dimensions
+    /// with the reduced one dropped, or written as one when the caller asked to keep it. The source
+    /// may hold another element type, which is why this reads its shape and not its elements: an
+    /// argmax answers positions of the value it read.
+    template <typename U> void shapeReduced(const Array<U> &source, std::size_t axis, bool keepDims) {
+        if (rep_ == nullptr || axis >= source.rank()) {
+            return;
+        }
+        const std::size_t rank = keepDims ? source.rank() : source.rank() - 1;
+        std::size_t product    = 1;
+        for (std::size_t i = 0; i < rank; ++i) {
+            product *= keepDims && i == axis ? std::size_t{1} : source.extent(i < axis ? i : i + 1);
+        }
+        if (product != size() || rank > kMaxRank) {
+            return;
+        }
+        rep_->rank = static_cast<std::uint32_t>(rank);
+        for (std::size_t i = 0; i < rank; ++i) {
+            rep_->extents[i] = keepDims && i == axis ? 1 : source.extent(i < axis ? i : i + 1);
         }
     }
 
@@ -758,6 +782,238 @@ template <typename T> T sumAll(const Array<T> &xs) {
 /// answers -- one for a value of no dimension, the length for one of a single dimension, and the
 /// product of the extents for one of several.
 template <typename T> int64_t numel(const Array<T> &xs) { return static_cast<int64_t>(xs.size()); }
+
+/// The lanes of a reduction along one dimension (modules/tensor/kernels/reduce.cpp, `AxisSplit`):
+/// `extent` elements `inner` apart, one lane per position of every other dimension, in row-major
+/// order of the answer. The lane is read where it lies -- no lane is gathered into a run of its own,
+/// and nothing is transposed first -- and the answer keeps the dimensions it did not reduce, or
+/// keeps the reduced one as a one when the caller asked for that. `R` is the answer's element type,
+/// which is not always the source's: an argmax answers positions.
+template <typename T, typename R, typename Lane>
+Array<R> axisReduce(
+    const Array<T> &xs, int64_t axisArg, bool keepDims, const char *name, const Site &invalid,
+    Lane lane) {
+    const auto rank    = static_cast<int64_t>(xs.rank());
+    const int64_t axis = axisArg < 0 ? axisArg + rank : axisArg;
+    if (rank < 2 || axis < 0 || axis >= rank) [[unlikely]] {
+        fault(
+            invalid,
+            {"[]",
+             std::string("'") + name + "': the axis " + std::to_string(axisArg) +
+                 " is outside the rank " + std::to_string(rank)});
+    }
+    const auto dimension = static_cast<std::size_t>(axis);
+    std::size_t outer    = 1;
+    for (std::size_t i = 0; i < dimension; ++i) {
+        outer *= xs.extent(i);
+    }
+    const std::size_t extent = xs.extent(dimension);
+    std::size_t inner        = 1;
+    for (std::size_t i = dimension + 1; i < xs.rank(); ++i) {
+        inner *= xs.extent(i);
+    }
+    Array<R> out;
+    out.reserve(outer * inner);
+    for (std::size_t o = 0; o < outer; ++o) {
+        for (std::size_t i = 0; i < inner; ++i) {
+            out.push(lane(xs, o * extent * inner + i, extent, inner));
+        }
+    }
+    out.shapeReduced(xs, dimension, keepDims);
+    return out;
+}
+
+/// `tensor:sum_axis` (modules/tensor/kernels/reduce.cpp, reduceAxis): each lane added from +0 in
+/// ascending order and rounded into the element type once -- `double` for every float element type
+/// and an exact `uint64_t` for integers, as the interpreter's kernel accumulates.
+template <typename T>
+Array<T> sumAxis(const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid) {
+    return axisReduce<T, T>(
+        xs,
+        axisArg,
+        keepDims,
+        "tensor:sum_axis",
+        invalid,
+        [](const Array<T> &v, std::size_t base, std::size_t extent, std::size_t inner) {
+            if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, int32_t>) {
+                std::uint64_t acc = 0;
+                for (std::size_t k = 0; k < extent; ++k) {
+                    acc += static_cast<std::uint64_t>(static_cast<int64_t>(v[base + k * inner]));
+                }
+                return static_cast<T>(static_cast<int64_t>(acc));
+            } else {
+                double acc = 0.0;
+                for (std::size_t k = 0; k < extent; ++k) {
+                    acc += static_cast<double>(v[base + k * inner]);
+                }
+                return static_cast<T>(acc);
+            }
+        });
+}
+
+/// IEEE 754-2019 maximum of two values (modules/math/minmax.h, `maxOf`): a NaN on either side gives
+/// the canonical quiet NaN, -0 is below +0, and otherwise the larger operand -- chosen on the values
+/// but returned as its own bits, so the sign of a zero survives.
+template <typename T> T maxOf(T a, T b) {
+    if constexpr (std::is_floating_point_v<T>) {
+        if (a != a || b != b) {
+            return std::numeric_limits<T>::quiet_NaN();
+        }
+        if (a != b) {
+            return a < b ? b : a;
+        }
+        using Bits = std::conditional_t<sizeof(T) == 4, std::uint32_t, std::uint64_t>;
+        return std::bit_cast<T>(static_cast<Bits>(std::bit_cast<Bits>(a) & std::bit_cast<Bits>(b)));
+    } else {
+        return a < b ? b : a;
+    }
+}
+
+/// IEEE 754-2019 minimum of two values (the same statement as `maxOf`).
+template <typename T> T minOf(T a, T b) {
+    if constexpr (std::is_floating_point_v<T>) {
+        if (a != a || b != b) {
+            return std::numeric_limits<T>::quiet_NaN();
+        }
+        if (a != b) {
+            return b < a ? b : a;
+        }
+        using Bits = std::conditional_t<sizeof(T) == 4, std::uint32_t, std::uint64_t>;
+        return std::bit_cast<T>(static_cast<Bits>(std::bit_cast<Bits>(a) | std::bit_cast<Bits>(b)));
+    } else {
+        return b < a ? b : a;
+    }
+}
+
+/// `tensor:max_axis` and `tensor:min_axis` (modules/tensor/kernels/reduce.cpp): each lane folded
+/// from the operation's identity -- -inf for a maximum of floats, +inf for a minimum, the lowest and
+/// the largest value otherwise -- so that one NaN element still makes the answer NaN. Nothing is
+/// rounded and no accumulator takes part. A lane with no element has no extreme: the interpreter
+/// refuses it, and so does this.
+template <bool Maximum, typename T>
+Array<T> extremeAxis(
+    const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid, const Site &empty) {
+    const auto rank    = static_cast<int64_t>(xs.rank());
+    const int64_t axis = axisArg < 0 ? axisArg + rank : axisArg;
+    if (rank >= 2 && axis >= 0 && axis < rank) {
+        const auto dimension = static_cast<std::size_t>(axis);
+        if (xs.extent(dimension) == 0) [[unlikely]] {
+            fault(
+                empty,
+                {"[]",
+                 std::string("'") + (Maximum ? "tensor:max_axis" : "tensor:min_axis") +
+                     "': the axis " + std::to_string(axis) + " has no element"});
+        }
+    }
+    return axisReduce<T, T>(
+        xs,
+        axisArg,
+        keepDims,
+        Maximum ? "tensor:max_axis" : "tensor:min_axis",
+        invalid,
+        [](const Array<T> &v, std::size_t base, std::size_t extent, std::size_t inner) {
+            T best;
+            if constexpr (std::is_floating_point_v<T>) {
+                best = Maximum ? -std::numeric_limits<T>::infinity()
+                               : std::numeric_limits<T>::infinity();
+            } else {
+                best = Maximum ? std::numeric_limits<T>::lowest()
+                               : std::numeric_limits<T>::max();
+            }
+            for (std::size_t k = 0; k < extent; ++k) {
+                best = Maximum ? maxOf(best, v[base + k * inner]) : minOf(best, v[base + k * inner]);
+            }
+            return best;
+        });
+}
+
+/// `tensor:max_axis`.
+template <typename T>
+Array<T> maxAxis(
+    const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid, const Site &empty) {
+    return extremeAxis<true>(xs, axisArg, keepDims, invalid, empty);
+}
+
+/// `tensor:min_axis`.
+template <typename T>
+Array<T> minAxis(
+    const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid, const Site &empty) {
+    return extremeAxis<false>(xs, axisArg, keepDims, invalid, empty);
+}
+
+/// Whether `v`, met after the extreme so far, takes its place (modules/tensor/kernels/minmax.h,
+/// `beyondExtreme`): the order is the one of IEEE 754-2019 maximum and minimum, so a NaN is beyond
+/// every number and the first NaN is kept, +0 is above -0, and on a tie the earlier position stays.
+template <bool Maximum, typename T> bool beyondExtreme(T v, T best) {
+    if constexpr (std::is_floating_point_v<T>) {
+        if (best != best) {
+            return false;
+        }
+        if (v != v) {
+            return true;
+        }
+        if (v == best) {
+            // Only +0 and -0 compare equal with different bits: the maximum takes the +0 and the
+            // minimum the -0, so a signed zero is a position the comparison can still tell apart.
+            return v == 0 && (Maximum ? (std::signbit(best) && !std::signbit(v))
+                                      : (!std::signbit(best) && std::signbit(v)));
+        }
+    }
+    return Maximum ? best < v : v < best;
+}
+
+/// `tensor:argmax_axis` and `tensor:argmin_axis` (modules/tensor/kernels/reduce.cpp): the position
+/// of the first element of the lane that equals its maximum (minimum), or of its first NaN. The
+/// answer's element type is int64 whatever the source holds, so it is a value of positions and not
+/// of elements; a lane with no element has no position, and the interpreter refuses that.
+template <bool Maximum, typename T>
+Array<int64_t> argExtremeAxis(
+    const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid, const Site &empty) {
+    const auto rank    = static_cast<int64_t>(xs.rank());
+    const int64_t axis = axisArg < 0 ? axisArg + rank : axisArg;
+    if (rank >= 2 && axis >= 0 && axis < rank) {
+        const auto dimension = static_cast<std::size_t>(axis);
+        if (xs.extent(dimension) == 0) [[unlikely]] {
+            fault(
+                empty,
+                {"[]",
+                 std::string("'") + (Maximum ? "tensor:argmax_axis" : "tensor:argmin_axis") +
+                     "': the axis " + std::to_string(axis) + " has no element"});
+        }
+    }
+    return axisReduce<T, int64_t>(
+        xs,
+        axisArg,
+        keepDims,
+        Maximum ? "tensor:argmax_axis" : "tensor:argmin_axis",
+        invalid,
+        [](const Array<T> &v, std::size_t base, std::size_t extent, std::size_t inner) {
+            T best          = v[base];
+            int64_t bestIdx = 0;
+            for (std::size_t k = 1; k < extent; ++k) {
+                const T candidate = v[base + k * inner];
+                if (beyondExtreme<Maximum>(candidate, best)) {
+                    best    = candidate;
+                    bestIdx = static_cast<int64_t>(k);
+                }
+            }
+            return bestIdx;
+        });
+}
+
+/// `tensor:argmax_axis`.
+template <typename T>
+Array<int64_t> argmaxAxis(
+    const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid, const Site &empty) {
+    return argExtremeAxis<true>(xs, axisArg, keepDims, invalid, empty);
+}
+
+/// `tensor:argmin_axis`.
+template <typename T>
+Array<int64_t> argminAxis(
+    const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid, const Site &empty) {
+    return argExtremeAxis<false>(xs, axisArg, keepDims, invalid, empty);
+}
 
 /// `tail(xs)` (:struct/tail_arr): all but the first element; the empty array for one or none.
 template <typename T> Array<T> tail(const Array<T> &xs) {
