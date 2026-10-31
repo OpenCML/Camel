@@ -45,7 +45,9 @@ namespace {
 /// stands on names its operator by URI (`:op/add_d`). One line per operator, read from the rule's
 /// instance -- `URI -> rule -> the GraphId of its right side` -- because that is the pair a
 /// replacement has to have in hand before it can build anything.
-void printRuleUris(camel::core::context::Context &context, std::ostream &os) {
+void printRuleUris(
+    camel::core::context::Context &context, const camel::runtime::Program *program,
+    std::ostream &os) {
     std::vector<std::string> printed;
     for (const camel::parse::ast::RuleEntry &head : camel::parse::ast::rulesOf("rulesets.jvp")) {
         auto &table = camel::compile::gir::genericRuleTable(context);
@@ -153,6 +155,26 @@ void printRuleUris(camel::core::context::Context &context, std::ostream &os) {
                        ? 0
                        : std::count(head.variables.begin(), head.variables.end(), ',') + 1)
                << '\n';
+            // Step 1 of the replacement, for the operator the author named first. The right side
+            // of the rule is a graph that *builds* a closure over the values the left side bound,
+            // so what a call at the operator's site yields is a function value naming that graph.
+            // It is built here -- with one closure slot per variable, in the order the left side
+            // writes them -- and printed: it is the object the input tangents are later fed to,
+            // and building it is the step that a one-step "replace the operator" would skip.
+            if (uri == ":op/div_d" && instance.rhs != nullptr) {
+                size_t count = head.variables.empty()
+                                   ? 0
+                                   : std::count(head.variables.begin(), head.variables.end(), ',') + 1;
+                std::vector<camel::core::type::Type *> slots(
+                    count, camel::core::type::Type::Float64());
+                auto *layout = camel::core::type::TupleType::create(
+                    std::span<camel::core::type::Type *const>(slots.data(), slots.size()));
+                ::Function *built = ::Function::create(
+                    program, instance.rhs->id(), layout, camel::core::mm::autoSpace());
+                os << "REINTERP closure graph=" << camel::runtime::toValue(instance.rhs->id())
+                   << " layout=" << layout->toString() << " built=" << (built != nullptr ? "yes" : "no")
+                   << " slots=" << head.variables << '\n';
+            }
             break;
         }
     }
@@ -164,7 +186,7 @@ class ReinterpPass : public RuntimeGraphRewritePass {
 
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override {
-        printRuleUris(*context_, os);
+        printRuleUris(*context_, program, os);
         // Every function of the program that is made of operators: those are the ones a
         // replacement has something to replace in. A function of calls and constants alone is
         // simply not visited.
