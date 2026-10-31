@@ -6,6 +6,8 @@
 
 > **先跑红再跑绿的删除，是唯一能证明"删的是限制、不是检查"的做法。**
 
+> **删掉检查之后错误换了名字（`FeatureNotSupported` → `UnresolvedReference`），说明删的是检查不是限制；把检查放回去，并把这一跑写成负例。**
+
 日期：2026-10-31　读数树：`lane-gen`（`5803e9039`）
 
 **这一页只列形状，不删任何代码。** 本机不构建（Windows 上构建会蓝屏），所以每一行都是**静态读代码 + 对照已有用例**得来，标"未跑"的触发程序没有实际跑过。
@@ -27,7 +29,7 @@
 | 函数头没写流类型，体里有 `yield` | `func f(): int { yield 1 }`（未跑） | 没有。这正是"头必须写 `T..`"的检查处（`5.4`）；但类型层可能先报别的错，需确认 | 先查类型层是否已有"yield 要求流返回类型"的诊断；若没有，把 `5667` 换成正经类型诊断，让头推出流类型 |
 | `yield` 没有值 | `func g(): int.. sync { yield }`（未跑） | 没有 | 定 `yield` 无值是否合法（0 元流？）；不合法就给类型诊断 |
 | `yield a, b` 多个值 | `func g(): (int, int).. sync { yield 1, 2 }`（未跑） | **有**：`yield (1, 2)` 元组今天能跑（`generators.cml` 的 `quad()`） | 把多值按元组收成一条，或在机器里按元组元素展开 |
-| `yield` 包在块语句里 | `func g(): int.. sync { { yield 1 } }`（未跑） | **有**：去掉花括号直写 `yield 1` 就是今天绿的样子 | 让 `fill` 递归进块语句（生成器体里，块与直写等价） |
+| `yield` 包在块语句里 | **已有用例** `stream.generator_yield_in_block`（`{ yield 1 }` 后 `yield 2`） | **有**（已删并转绿：`117/117/0`，`01a46940c`） | 已做：块单独一个 arm，块后接着原来的 arm |
 | `loop` 没有单个初值 | `loop while c do { yield 1 }`（未跑） | 没有（`init == nullptr` 直接拒） | 支持 0 状态循环：不建状态单元，只保留条件/体/回边四个点 |
 | `loop` 带两个及以上状态 | **已有用例** `yield_lowering.cml`（`loop i = 0, s = 0 … { yield (i, s); (i + 1, s + i) }`） | **有**：把两值装进一个元组单元 `loop st = (0, 0) while … do { let (i, s) = st; yield (i, s); (i + 1, s + i) }`（未跑，按单状态路径推断） | 把多状态拆成元组状态；或给机器加多状态的 arm 布局 |
 | `for` 循环里有 `yield` | `func g(): int.. sync { for x in xs { yield x } }`（未跑） | **有**：写成 `loop i = 0 while i < n do { yield xs[i]; i + 1 }`（`generators_loop.cml` 是那个绿形状） | 把 `for` 展开成 `loop`（迭代器本身占一个状态，得和第 6 行一起做） |
@@ -40,9 +42,10 @@
 ## 两个数
 
 - **形状 11 条**（表的前 11 行；`loop` 的四个子形状分开数）。
-- **其中 4 条已经在别的路径上能跑、只是被先拦住**（`yield a, b` 已删并转绿，见下）：块里的 `yield`、双状态 `loop`、`for` + `yield`、状态名重名。
+- **余下 3 条**：双状态 `loop`、`for` + `yield`、状态名重名（最后这条不是"只拦了另一种写法"，见下）。
+- **`yield a, b` 已删并转绿**：先红（`112/108/4`，四个后端都是 `FeatureNotSupported('generators')`）→ 删分支、用 `TupleDataFactory` 装元组 → 绿（`112/112/0`），`139d3a62d`。
+- **块里的 `yield` 已删并转绿**：先红（`117/113/4`，四个后端都是 `FeatureNotSupported('generators')`，位置 `generators_yield_in_block.cml:7:7`）→ 给裸块加一个 arm、拉取停在块内、块后继续 → 绿（`117/117/0`，四后端四条 `[PASS]`），`01a46940c`。
 - **状态名重名不是"只拦了另一种写法"**（2026-10-31 实测）：先跑红（`FeatureNotSupported('generators')`，116/112/4），再按"复用那个单元"删掉 `refuse` 跑绿——**绿没来**，回来的是 `UnresolvedReference('i')`：体的单元按名字键，循环状态的绑定与 `var` 的绑定共用一个名字，复用会让读解析到错误的绑定。已把 `refuse` 放回，用例转成负例 `stream.generator_loop_shared_cell_refused`（113/113 绿）。这条要的是**按绑定而不是按名字键的单元表**，是机器能力，不是删检查。
-- **`yield a, b` 已做**：先红（`112/108/4`，四个后端都是 `FeatureNotSupported('generators')`）→ 删分支、用 `TupleDataFactory` 装元组 → 绿（`112/112/0`），`139d3a62d`。
 
 ## 这张表不承诺什么
 
