@@ -41,11 +41,67 @@ GradientGraph buildGradientGraph(
 
 1. **从规则的图里取**：规则值带着它的两侧图（`RuleObject` 的 `lhs`/`rhs`），右端图里那个对
    `add_tangent` 的调用节点已经指向实例化后的图 id——按 `rhsCalleeOf` 的名字找不到它，但可以按
-   “右端图里第一个调用节点”找到。**不需要新入口。**
+   “右端图里第一个调用节点”找到。**不需要新入口。** ——**已证：今天不通，见下节。**
 2. **让变换在 `Builder` 里跑**（与宏算子同处），那里名字能解析：`addCallNodeOf(calleeGraph)` 已经
    能建调用节点。代价是变换要拆成两份（构造侧与重写侧）。
 3. **给运行期 `Program` 加按名字取的入口**——**跨层，除非前三层都走不通，不加**（作者的纪律：
    只用编译期已有的能力）。
+
+## 路 1 的实证：**今天不通**
+
+判据：**一条跨层的路，先用一行打印证明它通；证明了再写第二行。**
+
+打印（临时探针，`std::rulesets` 里遍历 `program->tableSize()` 的每个 `GraphId`，打印图名与
+FUNC/CALL 节点指向的 `GraphId` 与图名；程序 `probe_rule_graph.cml` 里把规则**当值用**
+`let r = jvp_add`，并 `println(r)` 打出 `rule jvp_add`）：
+
+```
+PROBE all 1  name=__root__                          mangled=__root__
+PROBE all 54 name=main                              mangled=main
+PROBE all 55 name=rulesets.jvp::lift<float>          mangled=rulesets.jvp::lift<float>
+PROBE all 56 name=rulesets.jvp::zero_tangent<float>  mangled=rulesets.jvp::zero_tangent<float>
+rule jvp_add
+```
+
+**整个程序只有四张图，一张也不是规则的两侧**——尽管规则值确实存在（`rule jvp_add` 打出来了）。
+也就是说：**规则的左右两侧在 `Program` 里没有图**，它们在规则被应用时才由规则机制建成，
+程序定型（`Program` 组装完）之后取不到。
+
+取不到的那一处（结构上的缺失，不是某个函数返回空）：
+
+- `include/camel/runtime/program.h:79` —— `graph(GraphId)` 是唯一的取图入口；
+- `include/camel/runtime/program.h:175` —— `tableSize()` 是唯一的规模读数，**没有按名字取的入口**；
+- 探针处：`src/passes/trans/rulesets/rulesets.cpp` 的 `apply`（已删除，不留）。
+
+## 那么两侧图去哪了：**被存起来**
+
+判据：**一条路走不通时，最贵的不是绕路，是不知道它为什么不通；这次拿到的是“规则两侧在定型后
+不存在”，这比绕路有用。**
+
+读 `src/compile/gir/` 的规则声明一侧，答案是三个字：**被存起来**。存的地方与索引：
+
+- `src/compile/gir/builder_generics.cpp:603` —— `registerGenericRule(...)`，把规则的两侧模板
+  登记进表，返回 `ruleId`；**规则值只带这个 id**（`builder_tags.cpp:354` 的注释：
+  “no graph stands for it, and the value namespace is the only place it appears”）；
+- `src/compile/gir/rule_templates.cpp:35` —— 表挂在 **context** 上（`context.genericRuleTemplates()`），
+  “so a rule value can keep an id instead of a pointer and an instance outlives the pass that made it”；
+- `include/camel/compile/gir/rule_templates.h:96-112` —— `GenericRuleEntry` 存 `lhs`/`rhs`/`when`
+  模板与 `instances`；每个 `GenericRuleInstance`（`:60-77`）带着 **`program`、`lhs`、`rhs`、`when`
+  四张真实的图**，“in one program of the context that is never released”；
+- `include/camel/compile/gir/rule_templates.h:152` —— `genericRuleEntry(context, ruleId)`；
+  `:168` —— `genericRuleInstance(context, ruleId, types, with)`：按类型元组实例化一次、留下，
+  **问两次答同一个位置**。
+
+所以：**两侧没有被丢弃，也没有被丢弃的风险**——它们是模板，实例在第一次被问到时建成真图，之后
+一直在。缺的只是**运行期**那一侧没有入口（`Program` 里看不到 context 的表）；而替换按作者的裁定
+就落在编译期（`(a)`），编译期这一侧的入口已经齐了：`genericRuleEntry` + `genericRuleInstance`。
+
+**结论**：路 2 不需要新 API，也不需要问作者；要证明的是“变换能把 `ruleId` 换成实例的 `rhs` 图”。
+下一个一行打印就该打这个。
+
+**结论**：路 1 在这个时点不成立。路 2（在 `Builder` 里跑，名字能解析）没被这次实验否定，但也没被
+证实——它要在宏这一步、规则两侧还没变成图之前动手，那里的问题不是“取图 id”，而是“先在规则该被
+实例化的地方拿到它”。
 
 ## 验收（缺一步不算完）
 
