@@ -2172,19 +2172,14 @@ The feature '{0}' is not supported yet.
 Check the documentation for supported features.
 ```
 
-**Example** (`test/cases/compile/stream/yield_lowering.cml`, run as `camel test/cases/compile/stream/yield_lowering.cml`)
+**Example** (`test/cases/compile/namespace_rules/p12_use.cml`, run as `camel -E short test/cases/compile/namespace_rules/p12_use.cml`)
 
 ```camel
-func running(n: int): (int, int).. {
-    loop i = 0, s = 0 while i < n do {
-        yield (i, s)
-        (i + 1, s + i)
-    }
-}
-
+// use name = qualified name
+import lib
+use inc = lib::Tools::inc
 func main(): int sync {
-    let s = running(3)
-    println(1)
+    println(inc(1))
     return 0
 }
 ```
