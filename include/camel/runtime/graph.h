@@ -65,7 +65,6 @@ class FunctionType;
 
 namespace camel::runtime {
 
-class GraphDraft;
 class Program;
 
 } // namespace camel::runtime

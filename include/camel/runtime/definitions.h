@@ -74,7 +74,6 @@ class UserDefinedModule;
 
 namespace camel::runtime {
 
-class GraphDraft;
 class RuntimeGraphDraftSession;
 
 /// A definition built: the graph of its function, frozen and kept by the context.

@@ -1089,3 +1089,23 @@ HANDLE_PROBE refused: InvalidArgument
 **为什么不借此动别的**：它不碰 handle、不碰 `draft()`、不碰 region 的 id——**这三件是冻结的全部内容**；而 `tags` 的五个草稿重载是 §41 判过的边界（"事务交出来的正是草稿"），不是漏网。
 
 **逐字节证明**：`test/cases` 3235 + `examples` 29 = **3264 个 `.cml` 各跑一次 `std::jgir`**，改动前后各一遍，**stdout / stderr / 退出码三者 3264 / 3264 逐字节相同**；同一二进制连跑两遍也是 3264 / 3264 相同（这一次没有出现 §1 那处行序抖动，所以不需要豁免任何文件）。
+
+## 50. 死的前向声明：**六个里有两个**（本笔）
+
+**先核那个结论**："全树 `class GraphDraft;` 只剩一处"——**核过了，不对**。全树有 **6 处** `class GraphDraft;`，另有 1 处 `friend class GraphDraft;`；本笔删 **2 处**，剩 4 处，都是承重的。
+
+| 处 | 位置 | 判定 |
+|---|---|---|
+| 1 | `include/camel/runtime/definitions.h` | **删**：那个头文件里再没有第二处点这个名字，声明是死的 |
+| 2 | `include/camel/runtime/graph.h` 命名空间开头那句 | **删**：同一个头文件的 `friend class GraphDraft;`（`GCGraph` 的私有区）本身就在 `camel::runtime` 里声明了这个名字，所以开头这句是重复的；它前面也没有任何一处用到（另外三处都是注释） |
+| 3 | `include/camel/core/tags.h` | **留**：五处限定名（`camel::runtime::GraphDraft`）靠它 |
+| 4 | `include/camel/runtime/loop.h` | **留**：`LoopDraftView` 的形参与成员靠它 |
+| 5 | `include/camel/runtime/node_ref.h` | **留**：`DraftNodeRef` 的成员与比较靠它 |
+| 6 | `src/runtime/graph_build.h` | **留**：编码器的三个形参靠它 |
+| — | `include/camel/runtime/graph.h` 的 `friend class GraphDraft;` | **不动**：它给的是**访问权**，不是名字；撤它要先答"`GraphDraft` 今天还用不用 `GCGraph` 的私有区"，那是另一问 |
+
+**四个数：36 / 363 / 1 / 4。**（`files` 37 → 36、`references` 365 → 363；**两行删除、零行新增**，这一笔的 diff 就是两行减法。）
+
+**一条判据（协调者给的一句）**：**"降层率的分子是站点数，分母是证明：没有逐字节证明的那一处不许记进账。"**
+
+**逐字节证明**：与上一笔同一套——3264 个 `.cml` 各跑一次 `std::jgir`，改动前后 stdout / stderr / 退出码三者 3264 / 3264 逐字节相同。
