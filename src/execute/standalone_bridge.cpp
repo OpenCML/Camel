@@ -19,6 +19,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/operator.h"
+#include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type.h"
 #include "camel/execute/executor.h"
@@ -26,6 +27,7 @@
 #include "camel/utils/install_layout.h"
 
 #include <array>
+#include <cstdio>
 #include <filesystem>
 #include <mutex>
 #include <unordered_map>
@@ -37,6 +39,7 @@ namespace {
 
 using camel::core::rtdata::fromSlot;
 using camel::core::rtdata::toSlot;
+using camel::core::type::ArrayType;
 using camel::core::type::Type;
 using camel::core::type::TypeCode;
 
@@ -70,6 +73,21 @@ class ArgsOfCall final : public ::ArgsView {
                 slots_.push_back(toSlot(String::from(v.text, camel::core::mm::autoSpace())));
                 types_.push_back(Type::String());
                 break;
+case Value::Kind::IntArray: {
+                // A shape (or any other int array) as the runtime holds it: an `int[]`. It is built
+                // here rather than in the generated code so the program never needs the runtime's
+                // value layout -- the array is the runtime's own, made with its own allocator.
+                ArrayType *arrayType = ArrayType::create(Type::Int64());
+                Array *array = Array::create(camel::core::mm::autoSpace(), arrayType, v.ints.size());
+                for (size_t i = 0; i < v.ints.size(); ++i) {
+                    array->set<camel::core::rtdata::Int64>(i, v.ints[i]);
+                }
+                std::fprintf(stderr, "bridge: IntArray kind=%d n=%zu\n",
+                             static_cast<int>(v.kind), v.ints.size());
+                slots_.push_back(toSlot<Array *>(array));
+                types_.push_back(arrayType);
+                break;
+            }
             case Value::Kind::Void:
                 slots_.push_back(NullSlot);
                 types_.push_back(Type::Void());
