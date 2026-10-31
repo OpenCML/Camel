@@ -259,10 +259,12 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, camel::core::mm::IAllo
         const auto &closureData = funcData->closure();
 
         if (closureData.size() > 0) {
-            ASSERT(
+            GUARD(
                 closureData.size() == gcTuple->size(),
                 std::format(
-                    "Closure data size mismatch in FunctionData. Expected: {}, Actual: {}",
+                    "Closure data size mismatch in FunctionData. Expected: {}, Actual: {}: the "
+                    "fill below walks the captured values one slot at a time, so a slot would be "
+                    "left empty or written past the tuple",
                     gcTuple->size(),
                     closureData.size()));
             for (size_t i = 0; i < closureData.size(); ++i) {
