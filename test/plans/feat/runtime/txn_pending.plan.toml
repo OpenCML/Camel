@@ -11,7 +11,7 @@ desc = "A graph transaction that owns a graph before the graph has a name: `open
 # numbers are "the same".
 [defaults]
 kind = "behavior"
-case = "../../../cases/feat/mm/blocks.cml"
+case = "../../../cases/feat/runtime/txn_pending.cml"
 expect_exit = 0
 expect_stdout_contains = ["TXN_PENDING before allocations=2 live=0", "TXN_PENDING after allocations=2 live=0", "TXN_PENDING live_equal=1"]
 expect_output_not_contains = ["Segmentation fault", "dumped core", "[Error]"]
