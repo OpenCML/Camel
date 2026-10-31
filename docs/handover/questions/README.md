@@ -9,14 +9,14 @@
 > **哪些未决值得成页**：不是所有未决都值得成页——只有**今天有人被它堵住**的才值得。其余留在原则里，等它真的挡住一条车道再成页。所以第 15 节那 8 条不占待裁表，清单在文末，每条写明今天堵着谁。
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
-## 现在在等作者：3 页（`whose-effect-is-an-inlined-body`、`can-a-scratch-graph-link-outward`、`can-a-gct-node-have-two-parents`）
+## 现在在等作者：2 页（`whose-effect-is-an-inlined-body`、`can-a-gct-node-have-two-parents`）
 
-`questions/` 里有三页在等答复：内联把体搬进调用者图后，那张图多出来的环境资源归谁；临时 `__typeof__` 图里能不能链接外层图的节点；一个 GCT 节点能不能有两个父亲。其余四页都已裁，改动按裁定往 develop 走。新页从车道落进来时才在这个表里加行。
+`questions/` 里有两页在等答复：内联把体搬进调用者图后，那张图多出来的环境资源归谁；一个 GCT 节点能不能有两个父亲。其余页都已裁，改动按裁定往 develop 走。新页从车道落进来时才在这个表里加行。
 
 | 页 | 问什么 | 状态 | 堵着谁 |
 |---|---|---|---|
 | [`whose-effect-is-an-inlined-body`](questions-2026-10-31-whose-effect-is-an-inlined-body.md) | 内联把体搬进调用者图后，那张图多出来的环境资源归调用者、归原来的体，还是谁内联谁在区域记录里登记 | 待裁 | 逐图版的效应边界不变量（今天量出 9 条 `callback.*_opt` 全是这个形状，尺子伸过了头） |
-| [`can-a-scratch-graph-link-outward`](questions-2026-10-31-can-a-scratch-graph-link-outward.md) | 临时 `__typeof__` 图里能不能链接外层图的节点：`linkNodes` 的“两节点同图”被一个合法程序（`tags_restore_readings.cml`）打破，是边错还是不变式写窄了 | 待裁 | `src/compile/gir` 那一族的收尾（117 处里剩这 1 处 `ASSERT`） |
+| [`can-a-scratch-graph-link-outward`](questions-2026-10-31-can-a-scratch-graph-link-outward.md) | 临时 `__typeof__` 图里能不能链接外层图的节点：`linkNodes` 的“两节点同图”被一个合法程序（`tags_restore_readings.cml`）打破，是边错还是不变式写窄了 | 已裁已落 | 无；作者裁 **A（边错了，不变式对，`c2c2e632d`）**，`visitAccsNode` 改放“只带类型的端口替身”、`linkNodes` 检查改为发布版生效，落 `cfeac4ed1` |
 | [`can-a-gct-node-have-two-parents`](questions-2026-10-31-can-a-gct-node-have-two-parents.md) | 一个 GCT 节点能不能有两个父亲：`Tree::append` 的“未挂载”被合法程序（`match_guard` 守卫用例）打破，是构建器错还是这棵树其实是 DAG | 待裁 | `src/compile/gct` 那一族的收尾（63 处里剩这 1 处 `ASSERT`） |
 | [`does-rt-array-carry-a-shape`](questions-2026-10-31-does-rt-array-carry-a-shape.md) | 05:30 裁 **A**：`rt::Array` 带 `rank`/`extent` | 已裁未落 | 队列：`argmax_axis` → 逐元素；`T[..]` 的表示已由 07:30 裁定统一为原生带形状数组 |
 | [`std-cpp-needs-a-tensor-type`](questions-2026-10-31-std-cpp-needs-a-tensor-type.md) | 07:30 收回 05:50：`T[..]` 一律是原生带形状 `rt::Array`，经桥时转换；`rt::Foreign` 只留给 `PyObject`、`Device<T>` | 已裁未落 | `ones`/`zeros` 的表示要改回 `rt::Array`；设计稿 §9 与类型表同笔改 |
