@@ -472,6 +472,23 @@ Rules buildRules() {
         },
         false,
     };
+    // `shape(xs)` (`stdlib/array.cml`, `stdlib/tensor.cml`): the value's dimensions, one `int` per
+    // dimension, which is what the interpreter's `int[]` is. The shape travels with the value, so the
+    // answer is read off it and is a new array of its own -- a value, not a view. An open rank is
+    // still not translated: its rank is a property of the value, and the rank-zero value it admits
+    // is not an array at all in this back end.
+    for (const char *uri : {"array:shape", "tensor:shape"}) {
+        r[uri] = {
+            [](OperatorCall &c) -> std::optional<std::string> {
+                const ArrayType *value = asArrayType(c.normType(0));
+                if (value == nullptr || value->anyRank() || c.normCount() != 1) {
+                    return std::nullopt;
+                }
+                return std::format("rt::shapeOf({})", c.operand(0));
+            },
+            false,
+        };
+    }
     // `xs[positions]` (:op/idx_take, struct.cpp __idx_take_arr__, design principles 5.4): the
     // elements the positions name, in that order. Only a rank-1 value read by rank-1 positions is
     // a flat run here (an rt::Array has no shape, cpp_types.cpp): a value of several dimensions
