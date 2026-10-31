@@ -55,3 +55,44 @@ func main(): int sync {
 **要作者答的一句**：同一可变对象被两条引用写、其中一条在这一层看不见时，读拿谁的值——保持"看不见的写不产生版本"（①），按函数值类型里的资源登记（②），还是拒绝这种写法（③）？
 
 在这一页裁定之前，`twice` 这样的程序打印 `1`；不写出来，下一个人会以为是自己的闭包写错了。
+
+## 裁定与落地（保守的写者集合）
+
+作者裁定：**穿过函数值的调用，是"调用点看得见的变量中，程序里某个函数（lambda、嵌套函数、模块函数）写过的那些"的可能写者**；这个集合由**建图之前整程序扫描**得到。`twice` 的 `counter` 在集合里，所以 `return counter` 取 `:var/after(counter, f(v))`，读 `3`。代价是有些调用变成必须执行、它之后的读被排到它后面——保守但正确；等函数值的类型带上它写的资源，再把集合收窄。
+
+落地：
+
+- 扫描在建图之前走遍每个模块的构造树，按赋值（`__assn*`）与路径赋值（`ACCS`/`SACC`/`__idx__`）记下"变量名 → 写它的函数集合"（`Builder::scanProgramWriters`，`src/compile/gir/program.cpp`）。按拼写记，故意多算：局部同名也是一种可能。
+- 调用点（`builder_operators.cpp:4310` 那半边，未知被调者）把每个可见且被程序写过的变量记成这次调用写的（`recordWrite(cell, call, throughCallee)`），图里还没有的变量按图登记、由后到的读领取（`claimedWriters_` / `readVariableThrough`）。
+- 读取版本时，写者是这种调用就取 `:var/after(cell, call)`（`valueVersionOf` → `variableAfterCall`）。
+
+### 这一问的验收：为什么是 `_unsynced` 的 `1 → 3`，不是 `twice` 的 `3`
+
+**`twice` 带 `sync`，今天本来就打印 `3`**（四条后端实测，`std::opt` 也是 `3`）：同步块让调用执行，读拿到的是活着的单元。一个在改动前就成立的读数不能当验收——本轮的第三个实例（前两个：`twice` 页上写的"打印 1"、`callback_write_ignored` 的读数）。所以：
+
+- `test/cases/effects/two_references_write_one_object.cml`（带 `sync`，期望 `3`）：**回归**，注释里写明它不判别写者集合；
+- `test/cases/effects/two_references_write_one_object_unsynced.cml`（同一个身体、`f(v)` 在同步块外）：**验收**，改动前 `1`、改动后 `3`；
+- `test/cases/effects/overcounted_writer_keeps_the_value.cml`：**多算的证明**，`called 3` + `1`。
+
+### 记一个写者，不是记"谁最后写"
+
+**记一个写者，不是记"谁最后写"，是记"这一版从哪来"。把前一次写挤掉，等于让那次写没人读、按 3.1 被丢——结果比不算更错。**
+
+这不是推演，是先量到的：只把调用记成变量的最后一个写者时，`counter = 1` 没人读、被丢，读拿到 `0`（`called 3` + `0`）。修法是 `recordWrite` 记下"写之前的版本"（`writeBeforeCall_`），`:var/after` 的**第一个实参取那个版本**，不取裸单元。
+
+### 资源账上的两条
+
+- **声明一个算子不碰的东西，会在别人的账上多出一条无主的访问；算子的资源声明要和它的语义一样小。** `:var/after` 曾写成 `read variable (operand 0)` + `result alias(0)`，`main` 的 footprint 因此多出 `rmw variable (any)`。
+- **`alias` 是"可能同址"，`same` 是"就是这一格"。资源账要的是后者；用 `alias` 会把一条真账写成一个无主的 `(any)`。** 改成 `result same 0` 之后，`main` 的 footprint 回到原文：`RESOURCES footprint main rmw ambient rng; write ambient stdout; read ambient fs; rmw object (any); external`。
+- 另外 **check 5 的原文**："不是纯算子就必须碰、分配或影响某物"——它说明"什么都不声明"这条路不存在，每个算子至少要有一条访问或一条别名关系（只写别名会被拒：`The semantics declared for the operator ':var/after' are rejected`）。
+- 判据：**保守的代价会出现在别人的账上（这里是 footprint），所以做保守化的那一笔必须自己跑一遍那些记 footprint 的用例。**
+
+### 冲突解决里"漏掉一侧"
+
+merge `origin/develop` 时，`:var/after` 已在 develop（另一车道落地）。冲突解决里 `valueVersionOf` 的兜底被整块换成 develop 的注释、**代码那三行没留下**，于是读又回到裸单元，`return counter` 交给 `println` 的成了单元而不是值（`called 3`，没有 `1`）。这只有在整闸里以一条红的形式出现。判据：**冲突解决里"漏掉一侧"是最难发现的错，它只会在整闸里以一条红的形式出现；解决冲突后必须重跑那条用例，不能只看编译通过。**
+
+### 已知边界（留给收窄那一笔）
+
+- 只靠"把变量当 `var` 实参传出去"才被写的变量不在扫描里（调用点没有类型，判不出）。
+- 调用之后才第一次捕获的变量，按程序的书写顺序当"之后"（`claimedWriters_`）。
+- 两次相邻的未知调用，前一次本身也是未知调用修饰时，不走 `writeBeforeCall_`（Call 修饰被跳过）。
