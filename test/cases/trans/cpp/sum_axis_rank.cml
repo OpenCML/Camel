@@ -4,6 +4,14 @@
  * `axis=1` its rows, and the middle axis of a rank-3 value sums pairs that are apart in the run,
  * which is the case a flattening could not produce.
  *
+ * A value of one dimension has one lane and nothing beside it, so what it sums to *is* the answer
+ * (design principles 5.4): a value of no dimension, printed `8.0` -- an array of one would print
+ * `[8.0]` -- and `[8.0]` when the dimension is kept. The shape is what the rendering shows, since
+ * the brackets are the shape's: `[6.0, 15.0]` is one dimension of two and `[[6.0], [15.0]]` two
+ * dimensions with the reduced one kept. `shape` of a sum's answer is not asked here: the sum's
+ * result type is the open rank `T[..]`, and `tensor:shape` of an open rank is refused on its own
+ * account (a separate hole, named on the page, not this one).
+ *
  * The readings are the lines below; `agree_with_fvm` compares them with std::fvm byte for byte.
  */
 import { sum_axis } from tensor
@@ -17,5 +25,11 @@ func main(): int sync {
     println(sum_axis(t, 1, false))
     println(sum_axis(t, 0, false))
     println(sum_axis(t, 2, false))
+    let line: f32[3] = [1.0, 5.0, 2.0]
+    println(sum_axis(line, 0, false))
+    println(sum_axis(line, 0, true))
+    let wide: f32[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+    println(sum_axis(wide, 1, false))
+    println(sum_axis(wide, 1, true))
     return 0
 }

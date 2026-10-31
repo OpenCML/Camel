@@ -892,16 +892,17 @@ assert(input.stdout.includes('12.0') && input.stdout.includes('-3.0'), input.std
 timeout_ms = 30000
 
 # A `bf16` or `f16` tensor of a `#gpu` scope: the type gate reads the element type and its two
-# bytes, so the node is no longer excluded as `unresolved_type`, and what the device has no kernel
-# for is a two-byte element -- which the plan says in its own words instead of blaming the type. The
-# reason names the device (`device_element_kernel_missing`) because the host half does compute it:
-# the core's values outside a kernel, and the host serial executor over the same kernel body inside
-# one. Two element types in one case, because both reach the same line and only one of them being
-# read would leave the other refused by the old gate.
+# bytes, so the node is no longer excluded as `unresolved_type`, and this back end carries no device
+# kernel for a two-byte element -- which the plan says in its own words instead of blaming the type.
+# The reason is an id (`device_element_kernel_missing`) because it answers "who is missing the
+# kernel": the device half, because the host half does compute it -- the core's values outside a
+# kernel, and the host serial executor over the same kernel body inside one. Two element types in
+# one case, because both reach the same line and only one of them being read would leave the other
+# refused by the old gate.
 
 [[tests]]
 name = "narrow.type_gate_reads_the_element_type"
-desc = "The region analysis of a `#gpu` scope over a `bf16` and an `f16` tensor names the device's missing kernel (`device_element_kernel_missing`) and never `unresolved_type`: the type gate read the element type, so the reason it is in no region is the two-byte element the device has no kernel for. The host still computes both results (2.0), so the scope keeps working."
+desc = "The region analysis of a `#gpu` scope over a `bf16` and an `f16` tensor names the device's missing kernel (`device_element_kernel_missing`) and never `unresolved_type`: the type gate read the element type, so the reason it is in no region is a kernel this back end does not carry for a two-byte element. The host still computes both results (2.0), so the scope keeps working."
 kind = "behavior"
 case = "../../../cases/gpu/nofallback/narrow_element_kernel.cml"
 args = ["--devices", "cpu", "${case}", "std::nvm"]

@@ -43,8 +43,8 @@ bool tensorElement(ty::TypeCode code) {
 
 /// Whether the element type is one of the two narrow floats: 16-bit types the device path reads and
 /// names (`tiles/dtype.h`). The host computes with one -- the core's own values, and the host serial
-/// executor that runs a kernel body one element at a time -- while no device kernel is written for
-/// one yet, so a narrow element is a gap of the device half alone.
+/// executor that runs a kernel body one element at a time -- while this back end carries no device
+/// kernel for one, so a narrow node stays on the host and the plan says so by name.
 bool narrowElement(DType dtype) { return dtype == DType::F16 || dtype == DType::BF16; }
 
 /// The narrow element type of a value, read from the same facts the shape is; nullopt for every
@@ -180,10 +180,11 @@ std::string eligibility(
     if (!output)
         return "unresolved_type";
     // A narrow element reached this line, so the type gate read it: the device names the type and
-    // knows its two bytes. The node is still not planned, because no device kernel reads a two-byte
-    // element yet (`tiles/dtype.h`). The host half does compute it -- the core's own values, and the
-    // host serial executor that runs the same kernel body -- so the reason names the half that is
-    // missing (`gpuRefusal` says so where a device is in use, and stays silent where none is).
+    // knows its two bytes. The node is still not planned: this back end carries no device kernel for
+    // a two-byte element (`tiles/dtype.h`), so nothing here may store a four-byte value into one.
+    // The host half does compute it -- the core's own values, and the host serial executor that runs
+    // the same kernel body -- so the reason is an id the plan can read (`device_element_kernel_missing`)
+    // and `gpuRefusal` turns it into the sentence that names the device, where a device is in use.
     if (narrowElementType(node->dataType()))
         return "device_element_kernel_missing";
     const rt::fact::Anchor anchor{&graphs, &graph, id};
@@ -372,6 +373,11 @@ gpuRefusal(const rt::GCGraph &graph, const SegmentAnalysis &analysis, rt::gc_nod
     // Unresolved types and index instances are not refusals: the run retries with the actual
     // shapes and decides then; structural host code (`node_kind`, `control_edge`, `inside_loop`)
     // is not an operator's business.
+    //
+    // A narrow element is the one reason this function answers: it is not "this scope is wrong",
+    // it is "the device has no kernel for this element", and it is said only where a device is in
+    // use -- the branch above (`device_element_kernel_missing`). Every other reason the plan names
+    // stays on the plan, where the host half computes the node.
     return "";
 }
 // The reading the residency conclusion is fed with: the graph's placements, and the blocks its

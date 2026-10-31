@@ -94,7 +94,7 @@ void publish(
     camel::core::context::Context &context, const compile_graph_ptr_t &lhs,
     const compile_graph_ptr_t &rhs, const compile_graph_ptr_t &when, GenericRuleInstance &instance) {
     camel::runtime::Program *program = context.reserveProgram();
-    ASSERT(program != nullptr, "The context reserves the program an instance is published in.");
+    GUARD(program != nullptr, "The context reserves the program an instance is published in.");
     encodeToRuntimeProgram(lhs, *program, &context.graphIds());
     instance.program = program;
     instance.lhs     = program->root();
@@ -174,7 +174,7 @@ size_t genericRuleInstance(
     camel::core::context::Context &context, uint64_t ruleId,
     const std::vector<camel::core::type::Type *> &types, const RuleWithArguments &with) {
     Table &table = rulesOf(context);
-    ASSERT(
+    GUARD(
         ruleId >= 1 && ruleId <= table.size(),
         "The id of a generic rule names a rule the context has registered.");
     GenericRuleEntry &entry = *table[static_cast<size_t>(ruleId) - 1];

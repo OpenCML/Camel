@@ -736,7 +736,7 @@ bool Builder::instantiateRuleTemplates(
     const auto lhsTemplate  = std::static_pointer_cast<GenericTemplate>(entry.lhs);
     const auto rhsTemplate  = std::static_pointer_cast<GenericTemplate>(entry.rhs);
     const auto whenTemplate = std::static_pointer_cast<GenericTemplate>(entry.when);
-    ASSERT(lhsTemplate != nullptr && rhsTemplate != nullptr, "A rule has two sides.");
+    GUARD(lhsTemplate != nullptr && rhsTemplate != nullptr, "A rule has two sides.");
     const std::vector<std::string> names = typeParameterNames(lhsTemplate);
     if (names.size() != types.size()) {
         why = std::format(
@@ -906,7 +906,7 @@ RuleConditionAt Builder::ruleConditionVerdict(
 node_handle_t
 Builder::genericValueFor(node_handle_t node, Type *expected, const GCT::node_ptr_t &origin) {
     const auto generic = genericDrefs_.find(node);
-    ASSERT(generic != genericDrefs_.end(), "Not the name of a generic function.");
+    GUARD(generic != genericDrefs_.end(), "Not the name of a generic function.");
     // A name with several generic functions stands for the one the type expected here fixes
     // (design principles 5.5), as a name with several ordinary ones does (overloadValueFor).
     const std::vector<generic_template_ptr_t> candidates = genericOverloadsOf(node);
@@ -2584,7 +2584,7 @@ Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
         // build-time tuple is taken without a FILL, as `indices` and `...` take one.
         const auto *placeholder = tt::as_ptr<TypeOfType>(type);
         const auto *held        = static_cast<const GCT::Node *>(placeholder->expression());
-        ASSERT(held != nullptr, "typeof holds the expression it was made with.");
+        GUARD(held != nullptr, "typeof holds the expression it was made with.");
         GCT::Node *expression = const_cast<GCT::Node *>(held);
         Type *valueType       = inferTypeOf(expression);
         if (valueType == nullptr || valueType->code() == TypeCode::Void) {

@@ -131,6 +131,8 @@ b2 起消费者不再点类型名，写的是 `auto &draft = session.edit(g).edi
    手动再叠一遍全链：`camel cases/opt/generic/generic_passes.cml test::edges_ok std::opt std::gir`
    打出的仍是这两行，说明优化打开后它没有骗人。
 
+**账本只许降的时候，新代码遇到它只有一个动作：换一个不需要这个名字的人来拿图。**（作者，2026-10-31；`modules/transforms/jvp.cpp` 里那条规则路径就是这么过的——它原先收 `GraphDraft &`，改成收 `GraphTransaction &`，用 `GraphTransaction::borrow` 从一个没有事务在手、只有草稿的调用者那里借一个，账页的 files/references 因此各降一格，而不是各涨一格。）
+
 ## 3. 还没填的行
 
 b2 起逐笔往下填：b2.2 起按 `src/passes/test` → `opt/inline` ＋ `opt/generic` →
@@ -1072,3 +1074,130 @@ HANDLE_PROBE refused: InvalidArgument
 **"事务拥有它造出的一切"由类型保证**——`RegionDraft::graph` 就是那个 `unique_ptr<GraphTransaction>`，丢弃即析构——**不由读数证明**。作者自认 00:50/02:50 要这条用例时没看清草稿不在 GC 空间里。
 
 **留下的两句**：**"一条账恒真时，要么改题、要么撤题；把恒真的账留在验收里，等于给自己发一张永远通过的通行证。"** **"一条账恒真时，不是账写对了，是它测的那条路根本不分配——先去找分配发生在哪一步。"**
+
+## 49. `graph_encode.cpp` 那两处：**编码器不再点名存储**（本笔）
+
+**为什么是它、而且是现在**：§46／§47 之后 `compile/gir` 剩 9 处，其中 8 处——`nodeDraftOf`、`DraftGraphBuilder::draft()`、`draftOwners` 的键、`fromDraft`——都在 `questions-2026-10-31-gir-handle-names-a-transaction-or-a-draft.md` 的冻结里（"在裁定之前，GIR 这一层不动"）。**不在冻结里的只有编码器这 2 处，而它的调用者只有 1 个**（`EncodeSession::prepareGraph`）。依判据"先挑调用者最少的"，这一片就是它。
+
+| 处 | 位置 | 判定 |
+|---|---|---|
+| 1 | `graph_encode.cpp` 的 `using camel::runtime::GraphDraft;` | **删**：它只服务第 2 项，第 2 项改完它就是死的 |
+| 2 | `graph_encode.cpp` 的 `collectLiveDraftNodes(const GraphDraft &)` | **改**：收事务，体首一行 `const auto &draft = transaction.graph();`（与 b5a–b5d 同一个写法）；唯一调用点把 `graph->view()` 换成 `graph->transaction()` |
+
+**四个数：37 / 365 / 1 / 4。**（`files` 38 → 37、`references` 367 → 365，**都是代码，散文一格没动**。）
+
+**三种收益**：① 删行 1（`using` 那一行；净行数 +2，是新增的体首行与两行注释）；② 消点 2（一处 `using`、一处"收草稿"的参数）；③ **一个文件从此整片不提这个类型**——`git grep -ow GraphDraft -- src/compile/gir/graph_encode.cpp` 答 0。
+
+**为什么不借此动别的**：它不碰 handle、不碰 `draft()`、不碰 region 的 id——**这三件是冻结的全部内容**；而 `tags` 的五个草稿重载是 §41 判过的边界（"事务交出来的正是草稿"），不是漏网。
+
+**逐字节证明**：`test/cases` 3235 + `examples` 29 = **3264 个 `.cml` 各跑一次 `std::jgir`**，改动前后各一遍，**stdout / stderr / 退出码三者 3264 / 3264 逐字节相同**；同一二进制连跑两遍也是 3264 / 3264 相同（这一次没有出现 §1 那处行序抖动，所以不需要豁免任何文件）。
+
+## 50. 死的前向声明：**六个里有两个**（本笔）
+
+**先核那个结论**："全树 `class GraphDraft;` 只剩一处"——**核过了，不对**。全树有 **6 处** `class GraphDraft;`，另有 1 处 `friend class GraphDraft;`；本笔删 **2 处**，剩 4 处，都是承重的。
+
+| 处 | 位置 | 判定 |
+|---|---|---|
+| 1 | `include/camel/runtime/definitions.h` | **删**：那个头文件里再没有第二处点这个名字，声明是死的 |
+| 2 | `include/camel/runtime/graph.h` 命名空间开头那句 | **删**：同一个头文件的 `friend class GraphDraft;`（`GCGraph` 的私有区）本身就在 `camel::runtime` 里声明了这个名字，所以开头这句是重复的；它前面也没有任何一处用到（另外三处都是注释） |
+| 3 | `include/camel/core/tags.h` | **留**：五处限定名（`camel::runtime::GraphDraft`）靠它 |
+| 4 | `include/camel/runtime/loop.h` | **留**：`LoopDraftView` 的形参与成员靠它 |
+| 5 | `include/camel/runtime/node_ref.h` | **留**：`DraftNodeRef` 的成员与比较靠它 |
+| 6 | `src/runtime/graph_build.h` | **留**：编码器的三个形参靠它 |
+| — | `include/camel/runtime/graph.h` 的 `friend class GraphDraft;` | **不动**：它给的是**访问权**，不是名字；撤它要先答"`GraphDraft` 今天还用不用 `GCGraph` 的私有区"，那是另一问 |
+
+**四个数：36 / 363 / 1 / 4。**（`files` 37 → 36、`references` 365 → 363；**两行删除、零行新增**，这一笔的 diff 就是两行减法。）
+
+**一条判据（协调者给的一句）**：**"降层率的分子是站点数，分母是证明：没有逐字节证明的那一处不许记进账。"**
+
+**逐字节证明**：与上一笔同一套——3264 个 `.cml` 各跑一次 `std::jgir`，改动前后 stdout / stderr / 退出码三者 3264 / 3264 逐字节相同。
+
+## 51. 存储头文件那 31 处 API 面：逐处判过，今天只换得动 2 处（本笔）
+
+**这是一次"逐处点名"，不是一次批量替换。** 31 个代码站点（`draft.h` 17、`draft_session.h` 6、`draft_clone.h` 3、`draft_writes.h` 3、`draft_inline.h` 1、`draft_types.h` 1；另有 4 行注释不在内），逐处问同一个问题：**这一处的调用者手上有没有事务？**
+
+| 判决 | 处数 | 是哪些 | 为什么 |
+|---|---|---|---|
+| **本笔换掉** | **2** | `draft.h` 的 `draftRuntimeNodeRefs`、`draft_writes.h` 的 `isWrittenArgument` | 前者唯一的调用者（`draft_session.cpp` 的 `committedNodeRefs`）手上正是 `found->second->transaction`；后者**唯一的调用者就在自己那个 `.cpp` 里**，它根本不是 API 面 |
+| 备好、没换 | 3 | `draft_session.h` 的 `debugDraftRootOpened`/`debugDraftRootClosed`、`draft_writes.h` 的 `WrittenSlots` 构造 | 前两者唯一的调用者在 `writings.cpp`（另一条车道的文件），而且它们是 `#ifndef NDEBUG`：Release 闸门根本看不见，换它得连带跑一次 Debug 构建；后者两个调用者（`modules/graph/read.cpp` 的 `copy->edit()`、`generic/algebra.cpp`）手上都有事务，下笔可换 |
+| 换不动 | 26 | 见下 | 调用者全在存储内部，**手上没有事务可以递** |
+
+那 26 处的构成：**类型自己的家 8**（`decode` 工厂、构造/析构、拷贝删除 ×2、赋值删除 ×2、`const_cast<GraphDraft *>(this)`）、**类定义 2**（`draft.h` 里 `DraftNodeHeader::owner` 那句、以及类头那句）、**类型自己的守卫 2**（`WritingScope` 的形参与成员，§44"边界三"）、**读者的声明 12**（`controlRegionOf`／`sameSyncBlock`／`nodeIsFreelySchedulable`／`carriesOrdering`／`isUnanchoredPure`／`ungated`／`resolveTupleProjection`／`reinferDraftTypes`／`isWrittenInPlace`／clone 两个）、**会话自己的门 4**（`DraftRootsDebug::Entry::draft`、`tryDraft` ×2、`draft(GraphId)`）。
+
+**结论（这一片真正的话）**：**存储的头文件不是"31 处都有事务可递"，而是"31 处里有 26 处的调用者就是类型自己"**——`controlRegionOf` 在 `draft_inline.cpp` 里被调 5 次、`sameSyncBlock` 在 `draft.cpp` 里被调 3 次，那些地方手上的东西就是 `*this`。**把这种形参换成事务，只能在调用处先 `GraphTransaction::borrow(*this)`，那是拿事务去包一个自己就拥有草稿的对象——不是降层，是加一层。** 所以这一片的上限就是 5 处（2 + 3），剩下的要等类型改名那一笔。
+
+**收益（协调者要的三个数）**：**形参 0 个**（`draftRuntimeNodeRefs` 的形参是换了类型，不是删了）、**`using` 0 个**、**删掉公开声明 1 条 + 它 6 行说明**（`isWrittenArgument` 从 `draft_writes.h` 收进 `draft_writes.cpp` 的匿名命名空间，与"删一个 using"同类：一个名字离开公开面），另加 2 行说明（迁移理由与"这个答案属于一次提交，所以要问会做这次提交的事务"）。**没有一项收益为负，但这一笔的收益也就是这 1 条声明。**
+
+**四个数：36 / 360 / 1 / 4。**（`references` 363 → 360：`draft.h` 的声明 −1、`graph.cpp` 的定义 −1（`const auto &draft = transaction.graph();` 之后它不再点这个名字）、`draft_writes.h` 的声明 −1；`files` 仍是 36。）
+
+**一条判据（协调者给的一句）**：**"前向声明是名字的记忆；删掉它之前先问这个头文件里还有谁记得这个名字。"**
+
+**逐字节证明**：同一套 3264 个 `.cml` × `std::jgir`，与 base1 比 stdout / stderr / 退出码 **3264 / 3264 全同**。
+
+## 52. 头文件那 31 处里备好的 3 处（本笔）
+
+| 处 | 换成 | 代价 |
+|---|---|---|
+| `draft_writes.h` 的 `WrittenSlots` 构造 | 事务：`written_(transaction.graph().nodeSlotCount(), false)` | 两个调用者都有事务——`modules/graph/read.cpp` 的 `copy`（`unique_ptr<GraphTransaction>`）与 `src/passes/opt/generic/algebra.cpp` 的 `transaction` |
+| `draft_session.h` 的 `debugDraftRootOpened` / `debugDraftRootClosed` | 事务：体首 `const GraphDraft &draft = transaction.graph();` | 唯一调用者是 `writings.cpp` 的 `EngineRootScope`，手上有 `transaction_`；**两处都在 `#ifndef NDEBUG` 里，Release 闸门看不见，这一笔另跑一次 Debug 闸门** |
+
+**四个数：36 / 356 / 1 / 4。**（`references` 360 → 356：`draft_session.h` −2、`draft_writes.h` −1、`draft_writes.cpp` 构造的定义 −1；`files` 仍 36。）
+
+**两套闸门（本笔）**：Release `8103 / 8098 / 1 / 2 / 2`，Debug `8103 / 8097 / 1 / 3 / 2`；两套同一红 `gpu_preference.named_device`（本机 8 张卡被别的进程占着）。Debug 那一跑抓到两处 Release 同样会红的编译错（`WrittenSlots` 体里的 `draft`、`modules/graph/read.cpp` 的第二处 `WrittenSlots(node.draft())`），改完重跑。
+
+**逐字节证明**：3264 个 `.cml` × `std::jgir`，与 base1 比 stdout / stderr / 退出码 3264 / 3264 全同。
+
+## 53. b6 的真实天花板：**188 处**
+
+口径：`GraphDraft` 这个名字在"**不改名、只降引用**"下的下界；按站点（occurrence）算，`include/camel/runtime/graph_txn.h` 与 `src/runtime/graph_txn.cpp` 不进账（§0）。今日读数 **356**。
+
+| 档 | 处数 | 构成 |
+|---|---|---|
+| ① 今日已降（**不在**下面的 356 之内，是差额） | **13** | 369 → 356：`95de7ab86` −4、`5e95f465f` −2、`d417ae6fc` −3、本笔 −4 |
+| ② 能降、有代价 | **154** | 见下八行 |
+| ③ 降不掉 | **188** | 类外成员定义 **175**、`draft.h` 里类型自己的声明 **12**（类头、`decode` 工厂、构造、析构、拷贝删除 ×2、赋值删除 ×2、`const_cast<GraphDraft *>(this)`、`DraftNodeHeader::owner`、`WritingScope` ×2）、`graph.h` 的 `friend class GraphDraft;` **1** |
+| 另：注释 | 14 | 可改写，但按 §45 不计进度 |
+
+**188 + 154 + 14 = 356**，三档加注释正好是今日读数。
+
+**② 的逐条（154）**
+
+| 处数 | 是什么 | 代价 |
+|---|---|---|
+| 59 | 存储自己的读者（`draft_inline.cpp` 24、`draft.cpp` 11、`draft_clone.cpp` 11、`draft_types.cpp` 7、`draft_writes.cpp` 2、`draft_construct.cpp` 1、另 3 处头文件声明） | 调用者在类型自己体内，要换只能在调用处先 `GraphTransaction::borrow(*this)`——加一层，不是降层 |
+| 27 | 会话的门（`tryDraft` 返回 ×2、`draft(GraphId)`、`DraftRootsDebug::Entry::draft`、`noteDraftOpened/Closed`、`encode`、`commit`、`edit` 等） | 会话本来就是草稿的持有者；要换得先改"会话交给谁"这一问 |
+| 10 | `graph.cpp` 的读者定义与 debug 记录 | 同上，随 59 一起动 |
+| 6 | GIR 层（`builder_support.h` 1、`draft_graph_builder.cpp` 3、`draft_graph_builder.h` 2） | **冻结**：handle 那一问等作者裁定 |
+| 7 | tiles（`graph_values.h` 2、`graph_values.cpp` 2、`region_extract.cpp` 2、`region_outline.cpp` 1） | **卡在区域 id 那一问** |
+| 11 | tags（`tags.h` 6、`tags.cpp` 5） | §41 边界，本层不碰 |
+| 25 | 其它边界（`node_ref.h` 4、`loop.h` 4、`loop.cpp` 2、`graph_build.h` 4、`operator_instance` 2、`writings` 8、`test/writings` 1） | b3／§44 边界三／编码器形参／`kernelArgumentsOf` 仍阻塞／另一条车道 |
+| 9 | `draft.h` 剩的读者声明 6 + `draft_clone.h` 3 | 随 59 一起动 |
+
+**结论（一句）**：**按"不改名、只降引用"的口径，b6 的终点是 188 处，不是 0 处。** 要 0 处只剩"改名或删类型"那一条路，而那条路是另一问——`GraphDraft` 本体不是 find/replace 的对象（§44）。
+
+**一条判据（协调者给的一句）**：**"一层降不动的时候，正确答案是报出它的天花板和理由，不是继续报进度条。"**
+
+## 54. 会话自己的门：27 处，换掉 26 处，退回 1 处
+
+**这一笔只动一类**：会话把「句柄 → 图」翻一次的地方。逐处「改前收什么 / 改后收什么」：
+
+| 组 | 处数 | 改前 | 改后 |
+|---|---|---|---|
+| `tryDraft`（`draft_session.h:159/160`，`draft_session.cpp` 两处定义） | 4 | 返回 `GraphDraft *` / `const GraphDraft *` | 返回 `GraphTransaction *` / `const GraphTransaction *`（`it->second->transaction.get()`） |
+| `GraphDraftGroup::draft(GraphId)`（`.h:346`，`.cpp:1858`） | 2 | 返回 `GraphDraft &` | 改名 `GraphDraftGroup::transaction(GraphId)`，返回 `GraphTransaction &` |
+| 编码路径的自由函数：`visitDraftGraphs`、`collectDraftDependencyGraphs`、`draftStaticDataType`、`collectDraftStaticGraphRefs`、`draftGraphOrigin`（声明 + 定义）、`encodeDraftGraph`、`draftGraphBytes`、`allocateGraph` | 9 | 形参 `const GraphDraft &draft` | 形参 `const GraphTransaction &transaction`，体首 `const auto &draft = transaction.graph();` |
+| `noteDraftOpened` / `noteDraftClosed` | 2 | 收 `const GraphDraft *` 当身份 | 收 `const GraphTransaction &`，身份取 `&transaction.graph()` |
+| 会话内的本地拼写（`edit()`／`graph()` 的结果、`*uncovered->draft`、`calleeDraftView`） | 9 | `GraphDraft &x = …` / `const GraphDraft &x = …` | `auto &x = …` / `const auto &x = …` |
+| 调用点改动（`engine.cpp` 2、`draft_inline.cpp` 1、`module.cpp` 1） | 0 | —— | 改为交事务，**不新增一个拼写** |
+
+**退回 1 处**：`DraftRootsDebug::Entry::draft`（`draft_session.h:107`）仍记草稿指针——它记的是「哪一张草稿」，而 `GraphTransaction::borrow` 让两张事务可以指同一张草稿；改成事务指针就把「根覆盖一张草稿」换成了「根覆盖一张事务」，是另一个事实。所以 `draft_session.h` 还剩 2 处（这一行 + 一行注释），`files` 只降了 `module.cpp` 这一个文件。
+
+**数**：`files` 36 → **35**，`references` 356 → **329**（−27），`constructions` 1，`decode` 4。
+
+**没有新造一处 `borrow`**：这一笔改掉的每一处，调用者手上本来就有事务。
+
+**一处漏了的调用者**：`GraphDraftGroup::draft` 改名之后，`modules/transforms/jvp.cpp:86` 还是 `group.draft(member)`——那一笔提交时这个文件在我这一支里还不存在（`origin/develop` 后来才带来），合成闸门的构建当场就停了。补一行 `auto &draft = group.transaction(member).edit();`。全树的调用者 1 处（`modules/transforms` 1、`src/execute` 0）。
+
+**一条判据（协调者给的一句）**：**「删掉一个访问器的时候，先 `grep` 它的调用者——库里的 API 不是只有自己在用。」**
+
+**一条判据（协调者给的一句）**：**「`borrow` 不是降层，是把引用挪到另一个函数里——降层只有一种：让人手里本来就有那个东西。」**

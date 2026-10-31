@@ -166,7 +166,7 @@ size_t arrayElementSize(TypeCode code) {
     case TypeCode::Float16:
         return 2;
     default:
-        ASSERT(false, "Not a compact element type");
+        throw std::runtime_error("Not a compact element type");
         return 0;
     }
 }
@@ -386,8 +386,8 @@ Type *ArrayType::elementAlongAxis(size_t axis) const {
 }
 
 Type *ArrayType::resolve(const type_vec_t &typeList) const {
-    ASSERT(typeList.size() > 0, "Type list is empty");
-    ASSERT(!resolved(), "ArrayType is already resolved");
+    GUARD(typeList.size() > 0, "Type list is empty");
+    GUARD(!resolved(), "ArrayType is already resolved");
 
     Type *newElemType = elemType_;
     for (const auto &type : typeList) {
@@ -411,7 +411,7 @@ Type *ArrayType::resolve(const type_vec_t &typeList) const {
         }
     }
     ArrayType *newArray = withElementType(newElemType);
-    ASSERT(newArray->resolved(), "ArrayType is not fully resolved");
+    GUARD(newArray->resolved(), "ArrayType is not fully resolved");
     return newArray;
 }
 
@@ -542,7 +542,7 @@ CastSafety ArrayType::castSafetyFrom(Type *sourceType) const {
 // admitted these two types?" -- it answers that for the types the program wrote, and refuses them
 // there -- but "what does the value hold?", which every answer but Safe asks below.
 slot_t ArrayType::castSlotFrom(slot_t value, Type *sourceType) const {
-    ASSERT(sourceType != nullptr, "castSlotFrom source type is null");
+    GUARD(sourceType != nullptr, "castSlotFrom source type is null");
     const CastSafety safety = castSafetyFrom(sourceType);
     if (safety == CastSafety::Safe) {
         if (sourceType->code() != TypeCode::Array) {
@@ -563,7 +563,7 @@ slot_t ArrayType::castSlotFrom(slot_t value, Type *sourceType) const {
     // only for an array source, and no compiled value has a type that still holds the `Ref`
     // placeholder (design principles 5.1, 5.2). A source of another kind is one the builder
     // refused while reading the program, and its slot is not one this check can read.
-    ASSERT(
+    GUARD(
         resolved() && sourceType->code() == TypeCode::Array &&
             static_cast<const ArrayType *>(sourceType)->resolved(),
         "an array converts from a resolved array type");

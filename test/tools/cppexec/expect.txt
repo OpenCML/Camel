@@ -249,6 +249,11 @@ test/cases/trans/cpp/abs_smallest_int.cml
 # program is the corpus case: a loop whose state is that struct prints it twice.
 test/cases/loops/zero_leaf_state.cml
 
+# A target shape the program computes (`reshape<[n, 3]>`) is read while the program runs, so the
+# count check is too: `[6] -> [3, 3]` is the report, and the generated call is `rt::reshapeBy`.
+# Written from the result type the call carried the caller's [2, 3] and the fault went through.
+test/cases/modules/tensor/shape_inference/computed_extent_run_time.cml
+
 # A position on a value of several dimensions: `m[1]` is the row, `m[1, 0]` names the axis it drops
 # and is the element, `t[1]` of a rank-3 value is the rank-2 value behind it -- and `len` of a row is
 # the dimension that is left.
@@ -299,6 +304,10 @@ test/cases/trans/cpp/tensor_zeros.cml
 # The shape's own refusal: a negative extent is a fault, and the words are the kernel's ("zeros:
 # Shape cannot contain negative values"), not a sentence of this back end's own making.
 test/cases/trans/cpp/fault_tensor_negative_shape.cml
+# The other two element types the tensor module stores: `bf16` and `f16` are the same shaped array,
+# the fill a value of the element type, so the widths one store per element do not make a tensor a
+# runtime object either.
+test/cases/trans/cpp/tensor_ones_half.cml
 # `shape(m)` answers the value's dimensions as an `int[]` of its own -- a value, not a view -- and a
 # sliced value answers the dimensions it kept.
 test/cases/trans/cpp/shape_rank.cml
@@ -326,3 +335,23 @@ test/cases/trans/cpp/arg_axis_rank.cml
 # answer's element type reached by one conversion -- a mean of integers is an f32, not integer
 # division, and a mean of f32 elements is not the f32 sum divided again.
 test/cases/trans/cpp/mean_rank.cml
+# A `var` handed to a `var` parameter is the variable's own cell (design principles 3.5): the
+# callee's write is the caller's, so the generated call passes an `rt::Cell<T>` where the parameter
+# is one -- a plain value was what the compiler rejected.
+test/cases/trans/cpp/var_argument_cell.cml
+# A function value spells the function type of the position it fills: a closure that gives a value
+# where a `void` function type is wanted drops the result where the value is made, so the call is
+# handed the type the parameter has.
+test/cases/trans/cpp/fn_result_dropped.cml
+# `[]` on a struct is the field the name denotes; a name the struct does not have is the
+# interpreter's own FieldNotFound report, with the name in it -- a record is a C++ aggregate, so the
+# name is one the writer reads, not one the program computes.
+test/cases/trans/cpp/field_name_missing.cml
+# An empty literal (`[]`) is written at the element type of the position it fills: `void[]` is not
+# an array any operator takes, and the position -- the result's element or the argument the operator
+# names -- is what the interpreter reads it as.
+test/cases/trans/cpp/empty_literal_takes_the_position.cml
+# The `array` module's kernels -- the sort and its atom `argsort`, the whole-array reductions, the
+# merge of two runs and `dim` -- written as the interpreter's own order, accumulation and
+# comparison, so a run of a `std::cpp` program reads back what `std::fvm` prints.
+test/cases/modules/stdlib/array_kernels_read_back.cml

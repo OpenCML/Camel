@@ -103,7 +103,7 @@ class HalfData : public Data {
     HalfData() = delete;
     /// `bits` is the stored pattern; the type it is given says which of the two formats it is in.
     HalfData(uint16_t bits, type::Type *type) : Data(type), bits_(bits) {
-        ASSERT(
+        GUARD(
             type != nullptr && (type->code() == type::TypeCode::BFloat16 ||
                                 type->code() == type::TypeCode::Float16),
             "HalfData needs bf16 or f16");
@@ -185,7 +185,7 @@ class ComplexData : public Data {
   public:
     ComplexData() = delete;
     ComplexData(double real, double imaginary, type::Type *type) : Data(type) {
-        ASSERT(camel::core::type::isComplex(type->code()), "ComplexData needs a complex type");
+        GUARD(camel::core::type::isComplex(type->code()), "ComplexData needs a complex type");
         if (type->code() == type::TypeCode::Complex64) {
             real      = static_cast<float>(real);
             imaginary = static_cast<float>(imaginary);

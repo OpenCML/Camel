@@ -42,7 +42,7 @@ std::unordered_map<const runtime::GraphDraft *, DraftGraphBuilder *> &draftOwner
 DraftGraphBuilder::DraftGraphBuilder(std::shared_ptr<runtime::GraphTransaction> transaction)
     : arena_(std::make_shared<GraphArena>(kInitialArenaBlockBytes)),
       transaction_(std::move(transaction)) {
-    ASSERT(transaction_ != nullptr, "A compile graph is built in a transaction.");
+    GUARD(transaction_ != nullptr, "A compile graph is built in a transaction.");
     // The front end places every node itself, so a read across the border of an arm is left for
     // the validator to report rather than moving the reader into the arm.
     draft().setInheritsRegions(false);
@@ -62,7 +62,7 @@ void DraftGraphBuilder::setFuncType(camel::core::type::FunctionType *funcType) {
 
 void DraftGraphBuilder::setExitType(camel::core::type::Type *exitType) {
     camel::core::type::FunctionType *funcType = draft().funcType();
-    ASSERT(funcType != nullptr, "A graph under construction has a function type.");
+    GUARD(funcType != nullptr, "A graph under construction has a function type.");
     if (auto *open = funcType->asOpen()) {
         open->setExitType(exitType);
     } else {
@@ -72,7 +72,7 @@ void DraftGraphBuilder::setExitType(camel::core::type::Type *exitType) {
 
 void DraftGraphBuilder::setResources(const camel::core::sem::ResourceSignature &resources) {
     camel::core::type::FunctionType *funcType = draft().funcType();
-    ASSERT(funcType != nullptr, "A graph under construction has a function type.");
+    GUARD(funcType != nullptr, "A graph under construction has a function type.");
     if (auto *open = funcType->asOpen()) {
         // The declaration's own signature, which no other function shares: what a function
         // promises about resources is part of its type, so it is written where the type is.
@@ -97,7 +97,7 @@ void DraftGraphBuilder::setClosureType(camel::core::type::TupleType *closureType
 
 slot_t DraftGraphBuilder::makeStaticSlot(
     const camel::core::data::data_ptr_t &data, camel::core::mm::IAllocator &allocator) {
-    ASSERT(data != nullptr, "Static data cannot be null.");
+    GUARD(data != nullptr, "Static data cannot be null.");
     // A `null` of a nullable type: the constant carries the `T?` it is the null of, and its slot
     // is the null slot of that type whatever the type is. It is not read as a value of the type --
     // `T?` is traced, and there is no traced object behind a null -- so the paths below are not
@@ -112,7 +112,7 @@ slot_t DraftGraphBuilder::makeStaticSlot(
     if (data->type()->isPrimitive()) {
         return makeSlotFromPrimitiveData(data);
     }
-    ASSERT(
+    GUARD(
         false,
         std::format(
             "Unsupported static data type '{}' for slot conversion.",
@@ -127,7 +127,7 @@ runtime::gc_slot_idx_t DraftGraphBuilder::addStaticSlot(slot_t slot) {
 runtime::gc_slot_idx_t
 DraftGraphBuilder::addStaticSlot(slot_t slot, camel::core::type::Type *type) {
     const size_t slotIndex = draft().appendStaticSlot(slot, type);
-    ASSERT(
+    GUARD(
         slotIndex <= static_cast<size_t>(std::numeric_limits<runtime::gc_slot_idx_t>::max()),
         "Compile-time static slot index exceeds runtime gc_slot_idx_t capacity.");
     return static_cast<runtime::gc_slot_idx_t>(-static_cast<int32_t>(slotIndex));
@@ -145,7 +145,7 @@ runtime::gc_slot_idx_t DraftGraphBuilder::addRuntimeSlot(camel::core::type::Type
 }
 
 void DraftGraphBuilder::setStaticSlot(runtime::gc_slot_idx_t index, slot_t slot) {
-    ASSERT(index < 0, "Static slot index must be negative.");
+    GUARD(index < 0, "Static slot index must be negative.");
     draft().setStaticSlot(static_cast<size_t>(-index), slot);
 }
 
@@ -223,14 +223,14 @@ DraftGraphBuilder::addCallNode(camel::core::type::Type *type, const runtime::GCC
 
 runtime::DraftNodeRef
 DraftGraphBuilder::addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t dataIndex) {
-    ASSERT(target != nullptr, "DraftGraphBuilder function target cannot be null.");
+    GUARD(target != nullptr, "DraftGraphBuilder function target cannot be null.");
     return addFuncNode(target, target->funcType()->exitType(), 0, dataIndex);
 }
 
 runtime::DraftNodeRef DraftGraphBuilder::addFuncNode(
     const FuncTarget &target, camel::core::type::Type *type, uint32_t writtenCaptures,
     runtime::gc_slot_idx_t dataIndex) {
-    ASSERT(target != nullptr, "DraftGraphBuilder function target cannot be null.");
+    GUARD(target != nullptr, "DraftGraphBuilder function target cannot be null.");
     const uint8_t runtimeFlags =
         target->draft().isMacroGraph() ? runtime::kGCNodeFlagMacro : 0;
     const runtime::gc_node_ref_t id = draft().addFuncNode(
@@ -258,7 +258,7 @@ DraftGraphBuilder::addRegionPortNode(camel::core::type::Type *type, std::string 
 
 runtime::DraftNodeRef
 DraftGraphBuilder::addOperNode(const oper_idx_ptr_t &op, runtime::gc_slot_idx_t dataIndex) {
-    ASSERT(op != nullptr, "DraftGraphBuilder operator target cannot be null.");
+    GUARD(op != nullptr, "DraftGraphBuilder operator target cannot be null.");
     const runtime::gc_node_ref_t id =
         draft().addOperNode(op->funcType()->exitType(), nullptr, op->uri(), dataIndex);
     const auto node = ref(id);
@@ -270,10 +270,10 @@ DraftGraphBuilder::addOperNode(const oper_idx_ptr_t &op, runtime::gc_slot_idx_t 
 }
 
 void DraftGraphBuilder::retargetOperNode(runtime::DraftNodeRef node, const oper_idx_ptr_t &op) {
-    ASSERT(node && draft().header(node.id)->kind == runtime::GCNodeKind::Oper, "Not an OPER node.");
-    ASSERT(op != nullptr, "DraftGraphBuilder operator target cannot be null.");
+    GUARD(node && draft().header(node.id)->kind == runtime::GCNodeKind::Oper, "Not an OPER node.");
+    GUARD(op != nullptr, "DraftGraphBuilder operator target cannot be null.");
     auto payload = draft().mutablePayloadOf(node.id);
-    ASSERT(payload.size() >= sizeof(runtime::GCOperBody), "OPER payload is too small.");
+    GUARD(payload.size() >= sizeof(runtime::GCOperBody), "OPER payload is too small.");
     auto *body = reinterpret_cast<runtime::GCOperBody *>(payload.data());
     body->op   = nullptr;
     body->oper = camel::core::OperatorTable::instance().intern(op->uri());
@@ -357,27 +357,27 @@ void DraftGraphBuilder::addRuleGraphRef(const graph_ptr_t &graph) {
 
 const std::string &DraftGraphBuilder::nodePortName(runtime::DraftNodeRef node) const {
     auto it = nodePortNames_.find(node.id);
-    ASSERT(it != nodePortNames_.end(), "DraftGraphBuilder node port name not found.");
+    GUARD(it != nodePortNames_.end(), "DraftGraphBuilder node port name not found.");
     return it->second;
 }
 
 const DraftGraphBuilder::FuncTarget &
 DraftGraphBuilder::funcTarget(runtime::DraftNodeRef node) const {
     auto it = funcTargets_.find(node.id);
-    ASSERT(it != funcTargets_.end(), "DraftGraphBuilder function target not found.");
+    GUARD(it != funcTargets_.end(), "DraftGraphBuilder function target not found.");
     return it->second;
 }
 
 const DraftGraphBuilder::DrefTarget &
 DraftGraphBuilder::drefTarget(runtime::DraftNodeRef node) const {
     auto it = drefTargets_.find(node.id);
-    ASSERT(it != drefTargets_.end(), "DraftGraphBuilder DREF target not found.");
+    GUARD(it != drefTargets_.end(), "DraftGraphBuilder DREF target not found.");
     return it->second;
 }
 
 const oper_idx_ptr_t &DraftGraphBuilder::operTarget(runtime::DraftNodeRef node) const {
     auto it = operTargets_.find(node.id);
-    ASSERT(it != operTargets_.end(), "DraftGraphBuilder operator target not found.");
+    GUARD(it != operTargets_.end(), "DraftGraphBuilder operator target not found.");
     return it->second;
 }
 
@@ -386,7 +386,7 @@ void DraftGraphBuilder::registerNodePortName(runtime::DraftNodeRef node, std::st
 }
 
 void DraftGraphBuilder::registerFuncTarget(runtime::DraftNodeRef node, FuncTarget target) {
-    ASSERT(target != nullptr, "DraftGraphBuilder function target cannot be null.");
+    GUARD(target != nullptr, "DraftGraphBuilder function target cannot be null.");
     funcTargets_[node.id] = std::move(target);
 }
 
@@ -395,7 +395,7 @@ void DraftGraphBuilder::registerDrefTarget(runtime::DraftNodeRef node, DrefTarge
 }
 
 void DraftGraphBuilder::registerOperTarget(runtime::DraftNodeRef node, oper_idx_ptr_t target) {
-    ASSERT(target != nullptr, "DraftGraphBuilder operator target cannot be null.");
+    GUARD(target != nullptr, "DraftGraphBuilder operator target cannot be null.");
     registerOperIndex(target);
     operTargets_[node.id] = std::move(target);
 }
@@ -416,7 +416,7 @@ void DraftGraphBuilder::eraseNodeColdData(runtime::DraftNodeRef node) {
 std::shared_ptr<::OperatorIndex>
 DraftGraphBuilder::lookupOperIndex(const ::OperatorIndex *raw) const {
     auto it = operIndexRegistry_.find(raw);
-    ASSERT(it != operIndexRegistry_.end(), "DraftGraphBuilder operator index not found.");
+    GUARD(it != operIndexRegistry_.end(), "DraftGraphBuilder operator index not found.");
     return it->second;
 }
 

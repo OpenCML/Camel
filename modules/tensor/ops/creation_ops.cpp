@@ -57,12 +57,6 @@ InferFn shapedInferFromCall() {
     };
 }
 
-InferFn shapedInfer(std::optional<TypeCode> dtype) {
-    return [dtype](const InferContext &ctx) -> std::optional<Type *> {
-        return tensorOf(dtype, shapeFromArg(ctx, 0));
-    };
-}
-
 slot_t zerosKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("zeros", [&] {
         return wrap(norm.resultType(),

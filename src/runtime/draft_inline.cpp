@@ -1699,7 +1699,8 @@ DraftInlineResult inlineCallableInDraft(
         return result;
     }
 
-    const GraphDraft *calleeDraftView = std::as_const(session).tryDraft(calleeGraph);
+    const auto *calleeTransaction = std::as_const(session).tryDraft(calleeGraph);
+    const auto *calleeDraftView = calleeTransaction ? &calleeTransaction->graph() : nullptr;
     const std::vector<gc_node_ref_t> actualInputs = orderedFuncActualInputs(draft, funcNodeId);
     const auto formalNodes = calleeDraftView ? orderedDirectCallFormalNodes(*calleeDraftView)
                                              : orderedDirectCallFormalNodes(calleeGraph);

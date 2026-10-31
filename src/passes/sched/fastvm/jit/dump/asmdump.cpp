@@ -53,8 +53,8 @@ JitAsmDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) 
     }
 
     for (const auto &[runtimeGraph, entryPc] : linked.offsetMap) {
-        ASSERT(runtimeGraph != nullptr, "JIT assembly dump requires a runtime graph.");
-        ASSERT(
+        GUARD(runtimeGraph != nullptr, "JIT assembly dump requires a runtime graph.");
+        GUARD(
             runtimeGraph->hasFrameLayout(),
             std::format("Graph '{}' has no finalized frame layout.", runtimeGraph->name()));
 

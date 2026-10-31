@@ -48,7 +48,7 @@ gc_node_ref_t bridgeMacroRewriteControl(
     }
 
     const auto *valueHeader = draft.header(valueNodeId);
-    ASSERT(valueHeader != nullptr, "Macro rewrite bridge requires a materialized value node.");
+    GUARD(valueHeader != nullptr, "Macro rewrite bridge requires a materialized value node.");
     camel::runtime::DraftNodeInit gateInit{
         .dataIndex  = valueHeader->dataIndex,
         .dataType   = valueHeader->dataType,

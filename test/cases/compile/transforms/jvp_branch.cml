@@ -1,0 +1,24 @@
+// A branch: the condition is kept as written and each arm is interpreted, so `f` on either side of
+// the comparison differentiates along its own arm.
+//   f(x) = x*x when x > 0, else -x
+//   f( 2) = 4,  f'( 2) = 2x = 4
+//   f(-2) = 2,  f'(-2) = -1
+// The last line is the four numbers folded into one, so a plan can pin all of them with one string:
+// 4*1000 + 4*100 + 2*10 - 1 = 4419.
+import rulesets.jvp
+import { jvp } from transforms
+
+func f(x: float): float {
+    return if x > 0.0 then x * x else -x
+}
+
+func main(): int sync {
+    let (positive, positiveDerivative) = jvp(f)(2.0, 1.0)
+    println(positive)
+    println(positiveDerivative)
+    let (negative, negativeDerivative) = jvp(f)(-2.0, 1.0)
+    println(negative)
+    println(negativeDerivative)
+    println(positive * 1000.0 + positiveDerivative * 100.0 + negative * 10.0 + negativeDerivative)
+    return 0
+}

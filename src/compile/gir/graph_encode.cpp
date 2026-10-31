@@ -44,6 +44,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <stdexcept>
 
 namespace camel::compile::gir {
 
@@ -73,7 +74,6 @@ using camel::runtime::GCGraphPayloadShape;
 using camel::runtime::GCJoinBody;
 using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
-using camel::runtime::GraphDraft;
 using camel::runtime::validateRuntimeGraphPayload;
 
 bool canEncodeRuntimeStaticSlotType(Type *type) {
@@ -97,7 +97,7 @@ bool shouldTraverseStaticSlotType(Type *type) {
 }
 
 camel::runtime::GCFillKind classifyFillKind(Type *type) {
-    ASSERT(type != nullptr, "FILL node requires a target type.");
+    GUARD(type != nullptr, "FILL node requires a target type.");
     switch (type->code()) {
     case TypeCode::Tuple:
         return camel::runtime::GCFillKind::Tuple;
@@ -108,7 +108,7 @@ camel::runtime::GCFillKind classifyFillKind(Type *type) {
     case TypeCode::Function:
         return camel::runtime::GCFillKind::FunctionClosure;
     default:
-        ASSERT(false, std::format("Unsupported FILL type '{}'.", type->toString()));
+        throw std::runtime_error(std::format("Unsupported FILL type '{}'.", type->toString()));
         return camel::runtime::GCFillKind::Tuple;
     }
 }
@@ -225,7 +225,10 @@ std::optional<std::span<const draft_node_ref_t>> liveNodesOf(const PreparedGraph
     return std::span<const draft_node_ref_t>{prepared.liveNodes};
 }
 
-std::vector<draft_node_ref_t> collectLiveDraftNodes(const GraphDraft &draft) {
+/// The nodes the graph of `transaction` reaches from its roots: the caller hands over the owner, not
+/// the graph, so a reader borrows the draft through it and this file names no storage type.
+std::vector<draft_node_ref_t> collectLiveDraftNodes(const runtime::GraphTransaction &transaction) {
+    const auto &draft = transaction.graph();
     std::unordered_set<draft_node_ref_t> visited;
     std::vector<draft_node_ref_t> worklist;
     auto pushRoot = [&](draft_node_ref_t ref) {
@@ -307,7 +310,7 @@ class EncodeSession {
         : rootGraph_(std::move(rootGraph)), program_(program), freshIds_(freshIds) {}
 
     void run() {
-        ASSERT(rootGraph_ != nullptr, "Cannot encode a null compile graph.");
+        GUARD(rootGraph_ != nullptr, "Cannot encode a null compile graph.");
         const auto reachable = collectReachableGraphs(rootGraph_);
         CAMEL_LOG_INFO_S("GIREncode", "Encoding {} reachable compile graphs.", reachable.size());
         prepared_.reserve(reachable.size());
@@ -381,7 +384,7 @@ class EncodeSession {
     }
 
     PreparedGraph *resolvePreparedGraph(const graph_ptr_t &graph) {
-        ASSERT(graph != nullptr, "Cannot resolve a null compile graph.");
+        GUARD(graph != nullptr, "Cannot resolve a null compile graph.");
         if (auto it = preparedBySource_.find(graph.get()); it != preparedBySource_.end()) {
             return it->second;
         }
@@ -401,7 +404,7 @@ class EncodeSession {
                 return &prepared;
             }
         }
-        ASSERT(
+        GUARD(
             false,
             std::format(
                 "Compile graph '{}' (id={}) is not part of the prepared encode set.",
@@ -441,7 +444,7 @@ class EncodeSession {
         // The runtime graph is the part of the draft that its roots reach; the draft keeps the
         // rest (a rewrite need not have erased a node nothing reads) and the graph does not name
         // it.
-        prepared.liveNodes = collectLiveDraftNodes(graph->view());
+        prepared.liveNodes = collectLiveDraftNodes(graph->transaction());
         CAMEL_LOG_INFO_S(
             "GIREncode",
             "Prepare compile graph '{}' reachable nodes={}.",
@@ -449,7 +452,7 @@ class EncodeSession {
             prepared.liveNodes.size());
         for (draft_node_ref_t sourceId : prepared.liveNodes) {
             const auto *header = graph->view().header(sourceId);
-            ASSERT(header != nullptr, "Live compile draft node cannot have a null header.");
+            GUARD(header != nullptr, "Live compile draft node cannot have a null header.");
             if (header->kind == GCNodeKind::Dref) {
                 throw std::runtime_error(
                     std::format(
@@ -518,7 +521,7 @@ class EncodeSession {
         // the graph is built from it. The draft is the graph under construction; nothing is copied.
         for (draft_node_ref_t sourceId : prepared.liveNodes) {
             const auto *header = prepared.source->view().header(sourceId);
-            ASSERT(header != nullptr, "Live source draft node cannot have a null header.");
+            GUARD(header != nullptr, "Live source draft node cannot have a null header.");
             if (header->kind == GCNodeKind::Func) {
                 prepared.source->edit().setCalleeGraph(
                     sourceId,
@@ -545,7 +548,7 @@ class EncodeSession {
         switch (type->code()) {
         case TypeCode::Function: {
             auto *funcObj = fromSlot<StaticFunction *>(slot);
-            ASSERT(funcObj != nullptr, "Compile static function slot payload is null.");
+            GUARD(funcObj != nullptr, "Compile static function slot payload is null.");
             auto *runtimeFunc = ::Function::create(
                 &program_,
                 resolvePreparedGraph(funcObj->graph())->runtimeId,
@@ -650,10 +653,10 @@ class EncodeSession {
 
     void finalizeRuntimeGraph(PreparedGraph &prepared) {
         auto *source = prepared.source.get();
-        ASSERT(source != nullptr, "Prepared graph finalization requires a source graph.");
+        GUARD(source != nullptr, "Prepared graph finalization requires a source graph.");
         for (draft_node_ref_t nodeId : prepared.liveNodes) {
             const auto *header = source->view().header(nodeId);
-            ASSERT(header != nullptr, "A live draft node of the graph being built has a header.");
+            GUARD(header != nullptr, "A live draft node of the graph being built has a header.");
             const auto payload = source->view().payloadOf(nodeId);
             if (header->kind == GCNodeKind::Func) {
                 if (!camel::runtime::isValid(source->view().calleeIdOf(nodeId))) {

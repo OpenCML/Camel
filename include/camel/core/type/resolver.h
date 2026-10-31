@@ -13,6 +13,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <stdexcept>
 
 namespace camel::core::type {
 
@@ -240,10 +241,10 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
         withVars_ = std::move(vars.first);
         normVars_ = std::move(vars.second);
         if (withVars_.first != -1 && withVars_.first != static_cast<int>(withVars_.second.size())) {
-            ASSERT(false, "withVars size mismatch");
+            throw std::runtime_error("withVars size mismatch");
         }
         if (normVars_.first != -1 && normVars_.first != static_cast<int>(normVars_.second.size())) {
-            ASSERT(false, "normVars size mismatch");
+            throw std::runtime_error("normVars size mismatch");
         }
     }
 

@@ -638,6 +638,8 @@ python benchmarks\train.py --check-ksteps --models transformer --device cuda --c
 
 **A/B 要退到引入这条规则之前的那一笔——退得不够远，两侧都一样红。** 同一条红我先做过一次 A/B，退的是类型门 `a53b87e17`，而 `c397d72c2` 引入的 `hostStorage` 两侧都在，于是两侧都红，就被当成了环境；真正把它定住的是上面那三段读数。基线要落在"这条规则还不存在"的那一笔，否则"两侧都红"只说明这条规则被两次带上了。
 
+**两笔都在改同一句话的时候，先定"谁是机器读的、谁是人读的"——id 给机器，句子给人。** 窄元素这条边界上两笔撞在一起：一笔把理由改成 `no narrow-float kernel on this back end`（一句话，直接当 id 用），一笔把它改成 `device_element_kernel_missing`（一个 id，句子留给 `gpuRefusal` 在真用设备时拼）。后者是对的：计划与断言读的是 id，人读的是句子，把句子当 id 用等于把一句话钉进读者的解析里，改一个字就要动所有读者。所以合并时 id 取 `device_element_kernel_missing`，`no narrow-float kernel on this back end` 不再作为字符串出现在任何地方，句子归 `gpuRefusal`（`the device has no kernel for a bf16 element`），另一句 develop 上的"这个后端只带 f32 张量与 i64 位置"各自保留、不重复。
+
 ---
 
 ## 7. 提交顺序与可独立落地
