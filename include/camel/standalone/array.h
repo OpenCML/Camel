@@ -291,6 +291,17 @@ Array<T> take(const Array<T> &xs, const Array<int64_t> &positions, const Site &s
     return out;
 }
 
+/// `array:sum_d` (src/builtin/operators/array_reduce.cpp): the elements added from +0, in the order
+/// they lie, in `double` -- the accumulator the runtime's reductions use for a floating element
+/// type, whichever width the elements have.
+inline double sum(const Array<double> &xs) {
+    double total = 0.0;
+    for (const double x : xs) {
+        total += x;
+    }
+    return total;
+}
+
 /// `tail(xs)` (:struct/tail_arr): all but the first element; the empty array for one or none.
 template <typename T> Array<T> tail(const Array<T> &xs) {
     Array<T> out;

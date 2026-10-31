@@ -499,6 +499,22 @@ Rules buildRules() {
         },
         false,
     };
+    // The reductions and layouts of a module that name their element type in the operator
+    // (`array:sum_d`, ...; src/builtin/operators/array_reduce.cpp): one line per element type,
+    // because the executor takes exactly one and the name is what picked it. Rank 1 only, as the
+    // arrays of this back end are a flat run: a value of several dimensions keeps its own.
+    r["array:sum_d"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (c.normCount() != 1 || value == nullptr || value->anyRank() || value->rank() != 1 ||
+                value->elemType() == nullptr ||
+                value->elemType()->code() != TypeCode::Float64) {
+                return std::nullopt;
+            }
+            return std::format("rt::sum({})", c.operand(0));
+        },
+        false,
+    };
     // The slice of a one-dimensional array, whichever spelling wrote it (design principles 5.4):
     // the six words are the value, the axis, the two bounds, the step and the mask of the bounds
     // written, and a call that leaves the last two out stands for step 1 and "both written". A
