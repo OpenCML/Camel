@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Twentytimes the same command on the same input, and what each run wrote.
 
 A writer whose output depends on the process it runs in makes every red test a matter of luck.
