@@ -1,0 +1,19 @@
+// The negative case for the forward transform: `pow` is a primitive the ruleset has no forward rule
+// for, so `jvp(f)` cannot be built -- and the diagnostic has to say so *at the primitive*, standing
+// on `pow` in `f`, not at the call that asked for `jvp`. A refusal that only prints a reading leaves
+// the reader at the call site guessing which operator it was.
+import { pow } from math
+import rulesets.jvp
+import { jvp } from transforms
+
+func f(x: float): float {
+    return pow(x, 2.0)
+}
+
+func main(): int sync {
+    let g = jvp(f)
+    let (value, tangent) = g(2.0, 1.0)
+    println(value)
+    println(tangent)
+    return 0
+}

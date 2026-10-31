@@ -25,6 +25,7 @@
 #include "camel/core/type/resolver.h"
 #include "camel/utils/type.h"
 
+#include <format>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -142,9 +143,24 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     const JvpGraph built = buildJvpGraph(
         ctx.shared_from_this(), function->program(), function->graph(), std::cout);
     if (built.graph == nullptr) {
-        throwRuntimeFault(
+        if (built.refusedOrigin == camel::source::kInvalidOriginId) {
+            throwRuntimeFault(
+                RuntimeDiag::RuntimeError,
+                "transforms: jvp has no forward transform for this function");
+        }
+        // The fault stands where the primitive was written, not where `jvp` was called: the hint
+        // names the node's origin and keeps the raising site as a related position, so the error
+        // reads `f`'s `file:line` and still tells two calls of the same `jvp` apart
+        // (ExecutionSiteHint::keepRaiseSite). A refusal that only prints a reading would leave the
+        // reader at the call site, guessing which operator in `f` it was.
+        throw camel::core::error::RuntimeFault(
             RuntimeDiag::RuntimeError,
-            "transforms: jvp has no forward transform for this function");
+            {std::format(
+                "transforms: jvp has no forward rule for `{}` ({})", built.refusedUri,
+                built.refusedWhy)},
+            "", nullptr,
+            camel::core::error::ExecutionSiteHint{
+                .cachedOrigin = built.refusedOrigin, .keepRaiseSite = true});
     }
     // The spellings of the operator, side by side. `signature()` is the text a declaration writes
     // (stdlib/signatures/transforms.cml repeats it) and the type `resolve()` gives the call; the two
