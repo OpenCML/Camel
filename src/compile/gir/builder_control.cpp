@@ -4194,9 +4194,11 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
                 // hands on by a sync edge (docs/design/effects/edges.cn.md 5.3).
                 writeSyncStatement(ctrlInput, outputAnchor);
             } else {
-                // The `var` modifier of the returned value: an edge that only orders stands in
-                // until the read is a data edge from the nearest write (design principles 3.5).
-                linkNodes(LinkType::Ctrl, ctrlInput, outputAnchor);
+                // The `var` modifier of the returned value: it only orders -- the modifier is
+                // reached by the data port that reads it, so nothing here carries "used" -- and an
+                // edge that only orders is an order edge (docs/design/effects/edges.cn.md 1, 5.6;
+                // design principles 3.1).
+                linkNodes(LinkType::Order, ctrlInput, outputAnchor);
             }
         }
     }
