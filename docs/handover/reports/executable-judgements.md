@@ -18,3 +18,4 @@
 - **把一条测试从慢层挪进快层的唯一条件是"它快且稳"**：`37 条 / 6.7 秒 / 零红` 就是那个条件，不需要讨论。反过来说，"在慢层待着没被跑过"不是一条测试安全的理由：`gpu/tiles` 那 102 条挪不动是另一件事——它要卡、跳过的条数随卡忙闲摆动、整张 89 秒，那不叫"快且稳"，叫"看机器"。
 - **一条测试进闸的代价不是它自己的耗时，是它和别人的争用**：`feat/mm/gc_pacing` + `gc_soak` 整张跑 37 条 6.7 秒、零红，放进 fast 层后整闸 `total` 只 +37，但 `wall` 从 227.5 s 涨到 275.3 s（**+47.8 s**）——七倍于它们自己的耗时，因为它们是内存带宽的活。**这笔账只有整闸能报**，单跑这两张永远看不见；所以"便宜"这个判断必须在整闸里做，落地写进 `docs/test-plans.md` 的 slow 一节。
 - **同一个错在英文页犯两次**：`docs/language/en/` 比中文页深一层，`../handover/...` 会解析到 `docs/language/handover/...`。中文页链接对、英文页链接错，`docs.links.reader_facing` 只在合并时现形（本地 `check-doc-links` 若只跑中文页就看不到）。改了中英两份规则就同时改两条链接，并跑 `feat/docs_links.plan.toml`。
+- **"每晚跑"如果只是一句话，它会在第一周就被忘掉**：把它写成一条能粘进终端的命令，它才会真的跑。慢层的入口就是 `node scripts/test.js test/plans --tier slow --jobs 8`（没有 nightly 脚本、计划格式也没有 `includes`），实测 163 条、131.4-160.5 s；`gpu/tiles` 在内，跳过条数随卡忙闲在 19-47 之间摆动。**跑一次就发现它不绿**：`agree_with_fvm` 三处 "does not build: clang: error: linker command failed"，是主机的 C++ 链接，不是这次的改动。
