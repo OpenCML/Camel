@@ -341,6 +341,33 @@ REINTERP uri :op/neg_d -> rule jvp_neg -> rhs 85 ports=0 ... portType=- lhsIns=1
 3. **`neg` 的左侧没有端口，`lhsIns=1`**：它那个 Oper 的一个输入不在这个图里。**一元算子的操作数不是
    从端口进的**，替换它第一步得先知道那个输入从哪来，不能套二元那套。
 
+## 判据：以 Fill 收尾的右侧是一个闭包
+
+> **右侧图以 Fill 收尾时，它不是“一个算子的签名”，是一个闭包——替换的第一步是建它，不是调它。**
+
+把那个 Fill 节点的种类、槽数、类型与形参打出来：
+
+```
+REINTERP uri :op/div_d -> rule jvp_div -> rhs 107 ports=1 ... fill=FunctionClosure slots=2 type=(dx: float, dw: float) => float pure norm=2 with=0 args=dx,dw vars=x,w count=2
+REINTERP uri :op/add_d -> rule jvp_add -> rhs 74 ... fill=FunctionClosure slots=2 type=(dx: float, dw: float) => float pure norm=2 with=0 args=dx,dw vars=x,w count=2
+REINTERP uri :op/neg_d -> rule jvp_neg -> rhs 85 ... fill=FunctionClosure slots=1 type=(dx: float) => float pure norm=1 with=0 args=dx vars=x count=1
+```
+
+**三方对齐，一步不差**：
+
+| 规则 | 左侧变量 | 闭包捕获槽 | 闭包形参 |
+|---|---|---|---|
+| `jvp_div` | `x,w`（2） | `slots=2` | `dx,dw` |
+| `jvp_add` | `x,w`（2） | `slots=2` | `dx,dw` |
+| `jvp_neg` | `x`（1） | `slots=1` | `dx` |
+
+所以“建闭包”要的值**就是左侧变量表那两列**（`x`、`w` 的值，按这个顺序），而闭包的形参
+`dx,dw` **是替换自己要提供的切线**——不是从函数 `f` 里读来的东西。
+
+**两步因此钉死**：① 在 `/` 站，用 `x`、`w` 的值调一次右侧图（`rhs 107`），拿到那个闭包；
+② 用 `dx`、`dw` 调这个闭包，得到切线。**第一步的产物是函数值，不是数**——这就是为什么“把右侧
+放到 `/` 那个位置”一句话做不到。
+
 ## 验收（缺一步不算完）
 
 1. **前向**：`f(x) = x*x + 3/x` 在 `x = 2` 处，`f = 5.5`，`f' = 4 - 0.75 = 3.25`。两个数都要打出来。
