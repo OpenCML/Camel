@@ -1,0 +1,16 @@
+/**
+ * A struct field that names a type declared later: a declaration is read in the order the file
+ * writes it, so `State` is not a type at the place `Node` writes the field, and the declaration
+ * of `Node` declares nothing. The body that builds a `Node` then has nothing to build it from:
+ * the unknown type is reported once, where it is written, and the value is not built out of the
+ * half-typed field the declaration left behind.
+ */
+
+type Node = { state: State, children: Node[] }
+type State = { board: int[] }
+
+func main(): int sync {
+    let node: Node = { state: { board: [1] }, children: [] }
+    println(len(node.state.board))
+    return 0
+}

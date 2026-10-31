@@ -7791,6 +7791,13 @@ void Builder::rejectTypeCycle(
 
 Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
     const std::string written = ref.toString();
+    // A declaration that failed declares nothing (visitTypeDecl): a use of its name follows from
+    // that error, and is not built from the half-built type the declaration left where its own
+    // fields were resolved. The scopes are asked after this, because a name is in its own scope
+    // while its fields are read (a struct that holds itself through an array needs that).
+    if (poisonedTypes_.contains(written)) {
+        throw BuildAbortException();
+    }
     // The module's own name may qualify its names (design principles 10.2).
     std::string own = written;
     for (const std::string &self : {module_->name(), module_->declaredName()}) {
