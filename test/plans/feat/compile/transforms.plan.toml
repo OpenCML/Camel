@@ -44,6 +44,24 @@ expect_stdout_contains = ["REINTERP jvp function=f graph=", "exit=Tuple{chain,ta
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# The other construct this transform has no reading for yet, and the same rule about refusals: a
+# loop's state is the LOOP node's value and its rounds are a region of the same graph, so lifting it
+# is its own step. Until then the refusal stands at the loop -- `jvp_loop.cml:10:12`, the `loop`
+# keyword -- and names it, instead of stopping at whichever operand the walk reached first with a
+# `skip=body` reading and a fault at the `jvp(f)` call. The day the state is lifted this case becomes
+# 36 / 24 (see the numbers in the case); today it is the diagnostic.
+[[tests]]
+name = "jvp_loop.refused_at_the_loop"
+desc = "A loop is not reinterpreted yet, and the run says so where the loop is: the fault stands at `jvp_loop.cml:10:12` -- the `loop` keyword in `f` -- and names the construct and the reason (its state is a region of this graph). Before this it stopped at the call site with `skip=body`, which named nothing: a reading, not a diagnostic. The exit is non-zero, so no value from a graph that could not be differentiated is printed."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_loop.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_output_contains = ["jvp_loop.cml:10:12: [Error]:", "jvp does not reinterpret a loop yet"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 # The negative side of the same rule table, and the point of it: a primitive the ruleset has no rule
 # for is not answered with 0 or 1 and is not only printed at -- it is a diagnostic that names the
 # primitive and stands *where the primitive is written*. `pow` is `math:pow_d`, which no forward rule

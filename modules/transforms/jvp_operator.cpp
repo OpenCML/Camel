@@ -153,12 +153,15 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         // reads `f`'s `file:line` and still tells two calls of the same `jvp` apart
         // (ExecutionSiteHint::keepRaiseSite). A refusal that only prints a reading would leave the
         // reader at the call site, guessing which operator in `f` it was.
+        const std::string why = built.refusedConstruct.empty()
+                                    ? std::format(
+                                          "transforms: jvp has no forward rule for `{}` ({})",
+                                          built.refusedUri, built.refusedWhy)
+                                    : std::format(
+                                          "transforms: jvp does not reinterpret {} yet ({})",
+                                          built.refusedConstruct, built.refusedWhy);
         throw camel::core::error::RuntimeFault(
-            RuntimeDiag::RuntimeError,
-            {std::format(
-                "transforms: jvp has no forward rule for `{}` ({})", built.refusedUri,
-                built.refusedWhy)},
-            "", nullptr,
+            RuntimeDiag::RuntimeError, {why}, "", nullptr,
             camel::core::error::ExecutionSiteHint{
                 .cachedOrigin = built.refusedOrigin, .keepRaiseSite = true});
     }

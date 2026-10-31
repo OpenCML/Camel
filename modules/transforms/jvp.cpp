@@ -273,6 +273,24 @@ JvpGraph buildJvpGraph(
             liftedJoin[body->join]   = made;
             joinOfBrch[ref]          = made;
         }
+        // A construct this transform has no reading for is refused before the walk reaches the
+        // nodes it would break on: a loop's state is the LOOP node's value and its rounds are the
+        // region's, so the nodes inside the body read a state that is not lifted -- the walk would
+        // stop at whichever operand came first and report "skip=body", which names nothing. The
+        // refusal is made here, at the loop's own origin, by name.
+        for (gc_node_ref_t ref = 0; ref < function->nodeCount(); ++ref) {
+            const camel::runtime::GCNode *node = function->node(ref);
+            if (node == nullptr || node->kind != rt::GCNodeKind::Loop) {
+                continue;
+            }
+            JvpGraph refused;
+            refused.refusedOrigin =
+                static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+            refused.refusedConstruct = "a loop";
+            refused.refusedWhy =
+                "its state is a region of this graph, and lifting the state is not done yet";
+            return refused;
+        }
         for (std::uint8_t kind = 0; kind <= static_cast<std::uint8_t>(rt::GCNodeKind::Dref); ++kind) {
             bool seen = false;
             for (camel::runtime::gc_node_ref_t ref = 0; ref < function->nodeCount(); ++ref) {
@@ -358,6 +376,21 @@ JvpGraph buildJvpGraph(
                 copied[ref] = true;
                 ++copiedKinds;
                 break;
+            }
+            case rt::GCNodeKind::Loop: {
+                // A loop is a region of this graph, not a node whose inputs are copied: its state
+                // is the LOOP node's value and its rounds are the region's, so lifting it means
+                // lifting the state (a `Lift`, with every read of it projected out) -- not done
+                // yet. It is refused *here*, at the loop, naming it, rather than falling through to
+                // a "skip=body" reading and a fault at the call: the reader has to be sent to the
+                // construct that has no reading, not to the call that asked for `jvp`.
+                JvpGraph refused;
+                refused.refusedOrigin = static_cast<camel::source::origin_id_t>(
+                    function->nodeOrigin(ref));
+                refused.refusedConstruct = "a loop";
+                refused.refusedWhy =
+                    "its state is a region of this graph, and lifting the state is not done yet";
+                return refused;
             }
             case rt::GCNodeKind::Oper: {
                 const auto *body = function->nodeBodyAs<camel::runtime::GCOperBody>(ref);
