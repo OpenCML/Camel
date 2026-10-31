@@ -3,6 +3,7 @@
 
 #include "camel/compile/gct/types.h"
 #include "camel/utils/assert.h"
+#include <stdexcept>
 
 namespace camel::compile::gct {
 
@@ -61,7 +62,7 @@ std::string to_string(NodeKind kind) {
     case NodeKind::SLOOP:
         return "SLOOP";
     default:
-        ASSERT(false, "Unknown NodeKind");
+        throw std::runtime_error("Unknown NodeKind");
     }
     return "UNKNOWN";
 }
