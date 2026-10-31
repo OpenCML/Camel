@@ -425,6 +425,160 @@ Rules buildRules() {
         },
         false,
     };
+    // A store into an element or a field as a value (`xs[i] = v`, `s.x = v` of the plain form,
+    // set_value.cpp): the array or the record with that place changed. The store into a
+    // variable's own array or field is the assignment's (see lowerSetIndexInPlace), and this is
+    // the same change without a variable to hand over.
+    r[":op/set_index"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (value == nullptr || value->anyRank() || value->rank() != 1 || c.normCount() != 3) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::setAt({}, {}, {}, {})",
+                c.operand(0),
+                c.operand(1),
+                c.operand(2),
+                c.site(RuntimeDiag::IndexOutOfRange, marks(3)));
+        },
+        false,
+    };
+    // The field a store writes is an index, so the record's C++ member name is the type's: the
+    // member pointer the runtime takes is that field's (camel/standalone/record.h).
+    r[":op/set_field"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const std::string field = c.fieldName(1);
+            if (c.normCount() != 3 || field.empty()) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::setField({}, &{}::{}, {})",
+                c.norm(0).text,
+                c.cppType(c.normType(0)),
+                field,
+                c.operand(2));
+        },
+        false,
+    };
+    // `xs[positions]` (:op/idx_take, struct.cpp __idx_take_arr__, design principles 5.4): the
+    // elements the positions name, in that order. Only a rank-1 value read by rank-1 positions is
+    // a flat run here (an rt::Array has no shape, cpp_types.cpp): a value of several dimensions
+    // keeps them, and one of an open rank has none, so both run through the bridge. The axis word
+    // a call writes names a dimension, and a rank-1 value has the one.
+    r[":op/idx_take"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value     = asArrayType(c.normType(0));
+            const ArrayType *positions = asArrayType(c.normType(1));
+            if (c.normCount() != 2 || value == nullptr || positions == nullptr ||
+                value->anyRank() || value->rank() != 1 || positions->anyRank() ||
+                positions->rank() != 1 || positions->elemType() == nullptr ||
+                positions->elemType()->code() != TypeCode::Int64) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::take({}, {}, {})",
+                c.operand(0),
+                c.operand(1),
+                c.site(RuntimeDiag::IndexOutOfRange, marks(3)));
+        },
+        false,
+    };
+    // The last element (:struct/last_arr, struct.cpp __last_arr__): of the empty array, the fault a
+    // read of the position -1 gives, named with the position that is not there.
+    r[":struct/last_arr"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (c.normCount() != 1 || value == nullptr || value->anyRank() || value->rank() != 1) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::last({}, {})",
+                c.operand(0),
+                c.site(RuntimeDiag::IndexOutOfRange, marks(3)));
+        },
+        false,
+    };
+    // The reductions and layouts of a module that name their element type in the operator
+    // (`array:sum_d`, ...; src/builtin/operators/array_reduce.cpp): one line per element type,
+    // because the executor takes exactly one and the name is what picked it. Rank 1 only, as the
+    // arrays of this back end are a flat run: a value of several dimensions keeps its own.
+    r["array:sum_d"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (c.normCount() != 1 || value == nullptr || value->anyRank() || value->rank() != 1 ||
+                value->elemType() == nullptr ||
+                value->elemType()->code() != TypeCode::Float64) {
+                return std::nullopt;
+            }
+            return std::format("rt::sum({})", c.operand(0));
+        },
+        false,
+    };
+    // `array:elements` (src/builtin/operators/array_axis.cpp): the elements in row-major order as
+    // an array of one dimension. An rt::Array of this back end is that flat run already -- it keeps
+    // no shape (cpp_types.cpp) -- so the value is the one the call was given, whatever rank the
+    // type wrote: a rank of several dimensions is a run and nothing more here.
+    r["array:elements"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1 || asArrayType(c.normType(0)) == nullptr) {
+                return std::nullopt;
+            }
+            return c.norm(0).text;
+        },
+        false,
+    };
+    // `array:sort_d` (src/builtin/operators/array.cpp): the same elements in the order min and max
+    // use, ties where they stand. A rank-1 run again; the other element types name their own
+    // operator and get their own line when a program needs one.
+    r["array:sort_d"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (c.normCount() != 1 || value == nullptr || value->anyRank() || value->rank() != 1 ||
+                value->elemType() == nullptr ||
+                value->elemType()->code() != TypeCode::Float64) {
+                return std::nullopt;
+            }
+            return std::format("rt::sorted({})", c.operand(0));
+        },
+        false,
+    };
+    // `tensor:reshape` (modules/tensor/kernels/layout.cpp): the same elements in row-major order in
+    // another shape. This back end keeps no shape, so a value it hands back is a flat run -- and
+    // the shape is observable: printing a rank-2 value gives its rows, `[[1.0, 2.0], [3.0, 4.0]]`,
+    // where the run gives `[1.0, 2.0, 3.0, 4.0]`. So only a target of one dimension is faithful
+    // here, where the printed form is the run's own; a target of several dimensions is the shape
+    // this back end does not carry, and it still runs through the bridge. What is left of the
+    // operator is its count check: a target that changes the element count is a fault before
+    // anything is read, and the report states the input's own shape.
+    r["tensor:reshape"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (c.normCount() != 1 || value == nullptr || value->anyRank() || value->rank() != 1) {
+                return std::nullopt;
+            }
+            const ArrayType *target = asArrayType(c.resultType());
+            int64_t count           = -1;
+            std::string shape;
+            if (target != nullptr && !target->anyRank() && target->rank() == 1) {
+                const core::type::ExtentForm &extent = target->extents()[0];
+                if (extent.isConstant()) {
+                    count = extent.constant();
+                    shape = std::format("[{}]", count);
+                }
+            }
+            if (count < 0) {
+                return c.norm(0).text;
+            }
+            const std::string site = c.site(
+                RuntimeDiag::TensorDimensionMismatch,
+                {"reshape",
+                 std::format(
+                     "reshape changes tensor element count: [{}] -> {}", SiteTable::valueMark(0), shape)});
+            return std::format("rt::reshape({}, {}, {})", c.norm(0).text, count, site);
+        },
+        false,
+    };
     // The slice of a one-dimensional array, whichever spelling wrote it (design principles 5.4):
     // the six words are the value, the axis, the two bounds, the step and the mask of the bounds
     // written, and a call that leaves the last two out stands for step 1 and "both written". A

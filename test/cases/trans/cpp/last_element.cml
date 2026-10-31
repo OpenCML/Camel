@@ -1,0 +1,13 @@
+// `last(xs)` (:struct/last_arr): the last element, of an array of one element too. Of the empty
+// array it is the fault a read of the position -1 gives (design principles 5.4): an array with no
+// last element has no value to give.
+
+func main(): int sync {
+    let xs = [1, 2, 3]
+    println(last(xs), last([7]), last(xs[1..3]))
+
+    let empty: int[] = []
+    println(last(empty))
+    println('not reached')
+    return 0
+}

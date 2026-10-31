@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-302 diagnostics: 281 errors, 21 warnings. 15 carry a machine-applicable edit, 287 say why they carry none.
+303 diagnostics: 282 errors, 21 warnings. 15 carry a machine-applicable edit, 288 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -266,6 +266,7 @@ prints one entry.
 | `0x03000203` | [SemanticDiag::TagNameAsValue](#tagnameasvalue) | Error | no |
 | `0x03000204` | [SemanticDiag::RuleLeftIsNotAnOperator](#ruleleftisnotanoperator) | Error | no |
 | `0x03000205` | [SemanticDiag::DuplicateRuleForOperator](#duplicateruleforoperator) | Error | no |
+| `0x03000206` | [SemanticDiag::YieldRequiresStreamHead](#yieldrequiresstreamhead) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8690,6 +8691,39 @@ rule second_rule(x: float, w: float) {
 
 func main(): int sync {
     println(1)
+    return 0
+}
+```
+
+### YieldRequiresStreamHead
+
+`0x03000206` · Error · `SemanticDiag::YieldRequiresStreamHead`
+
+**Fix**
+
+None: choice: the head writes the stream type the body hands out, and what the body yields is the writer's
+
+**Message**
+
+```text
+A function whose body writes 'yield' hands out a stream, and this function's head does not write one.
+```
+
+**Help**
+
+```text
+A body that writes 'yield' is a generator (design principles 5.4): its head writes the stream type it hands out, 'func f(xs: T): U.. sync with one yield in it', and a pull answers the next element and, when the body ends, null. Writing 'yield' in a body whose head writes something else gives that body no way to hand out its elements one at a time.
+```
+
+**Example** (`test/cases/compile/stream/yield_head_no_stream.cml`, run as `camel test/cases/compile/stream/yield_head_no_stream.cml`)
+
+```camel
+func g() sync {
+    yield 1
+}
+
+func main(): int sync {
+    g()
     return 0
 }
 ```

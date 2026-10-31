@@ -33,6 +33,7 @@
 #include "camel/runtime/program.h"
 
 #include <algorithm>
+#include <utility>
 #include <string>
 
 using namespace camel::core::context;
@@ -68,8 +69,90 @@ void printRuleUris(camel::core::context::Context &context, std::ostream &os) {
                 break;
             }
             printed.push_back(uri);
+            // How many ports the right side takes, and how many nodes it has: whether a call can
+            // stand where the operator stood is a question about the right side's own signature,
+            // and a replacement that guessed it would be wrong at the first arity that differs.
+            struct Shape {
+                size_t ports = 0;
+                std::string kinds;
+                /// The type of the single value the graph takes: the packed tuple, when it has one.
+                std::string portType;
+                /// The norm inputs the graph's nodes consume between them: 0 means the operand is
+                /// not wired into this graph at all.
+                size_t inputs = 0;
+            };
+            const auto shapeOf = [](const camel::runtime::GCGraph *graph) {
+                Shape shape;
+                for (camel::runtime::gc_node_ref_t ref = 1; ref <= graph->nodeCount(); ++ref) {
+                    const camel::runtime::GCNode *node = graph->node(ref);
+                    if (node == nullptr) {
+                        continue;
+                    }
+                    if (node->kind == camel::runtime::GCNodeKind::Port) {
+                        ++shape.ports;
+                        if (shape.portType.empty() && node->dataType() != nullptr) {
+                            shape.portType = node->dataType()->toString();
+                        }
+                    }
+                    shape.inputs += static_cast<size_t>(node->withBegin - node->inBegin);
+                    if (!shape.kinds.empty()) {
+                        shape.kinds += ',';
+                    }
+                    shape.kinds += std::to_string(static_cast<int>(node->kind));
+                }
+                return shape;
+            };
+            // The value the right side ends in: a closure, when it ends in a Fill of the
+            // FunctionClosure kind. Its signature says what the replacement still has to supply.
+            std::string closure;
+            {
+                const camel::runtime::GCGraph *graph = instance.rhs;
+                for (camel::runtime::gc_node_ref_t ref = 1; ref <= graph->nodeCount(); ++ref) {
+                    const camel::runtime::GCNode *node = graph->node(ref);
+                    if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Fill ||
+                        node->payload == camel::runtime::kNoPayload) {
+                        continue;
+                    }
+                    const auto *body = graph->nodeBodyAs<camel::runtime::GCFillBody>(ref);
+                    if (body->fillKind != camel::runtime::GCFillKind::FunctionClosure) {
+                        continue;
+                    }
+                    closure = "fill=FunctionClosure slots=" + std::to_string(body->slotCount);
+                    if (auto *fnType =
+                            dynamic_cast<camel::core::type::FunctionType *>(node->dataType())) {
+                        closure += " type=" + fnType->toString();
+                        closure += " norm=" + std::to_string(fnType->normTypesCount());
+                        closure += " with=" + std::to_string(fnType->withTypesCount());
+                        closure += " args=";
+                        bool first = true;
+                        for (const std::string_view name : fnType->argNames()) {
+                            if (!first) {
+                                closure += ',';
+                            }
+                            first = false;
+                            closure += std::string(name);
+                        }
+                    } else if (node->dataType() != nullptr) {
+                        closure += " type=" + node->dataType()->toString();
+                    }
+                    break;
+                }
+            }
+            const Shape lhsShape = shapeOf(instance.lhs);
+            const Shape rhsShape = shapeOf(instance.rhs);
+            const size_t ports   = rhsShape.ports;
             os << "REINTERP uri " << uri << " -> rule " << head.rule
-               << " -> rhs " << camel::runtime::toValue(instance.rhs->id()) << '\n';
+               << " -> rhs " << camel::runtime::toValue(instance.rhs->id()) << " ports=" << ports
+               << " nodes=" << instance.rhs->nodeCount() << " lhsPorts=" << lhsShape.ports
+               << " lhsKinds=" << lhsShape.kinds << " rhsKinds=" << rhsShape.kinds
+               << " portType=" << (rhsShape.portType.empty() ? "-" : rhsShape.portType.c_str())
+               << " lhsIns=" << lhsShape.inputs << " rhsIns=" << rhsShape.inputs
+               << ' ' << (closure.empty() ? "closure=-" : closure.c_str())
+               << " vars=" << head.variables << " count="
+               << (head.variables.empty()
+                       ? 0
+                       : std::count(head.variables.begin(), head.variables.end(), ',') + 1)
+               << '\n';
             break;
         }
     }

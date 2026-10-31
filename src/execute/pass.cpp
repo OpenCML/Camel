@@ -25,7 +25,6 @@
 #include "camel/execute/observer.h"
 #include "camel_pass.h"
 #include "camel/passes/test/chunks.h"
-#include "camel/passes/test/txn_pending.h"
 #include "camel/passes/test/context_lifetime.h"
 #include "camel/passes/test/contexts.h"
 #include "camel/passes/test/derivatives.h"
@@ -966,7 +965,6 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kTagsTestPass, TagsTestPass),
         TEST_PASS(kImplBodyTestPass, ImplBodyTestPass),
         TEST_PASS(kChunksTestPass, ChunksTestPass),
-        TEST_PASS(kTxnPendingTestPass, TxnPendingTestPass),
         TEST_PASS(kRetypeTrivialTestPass, RetypeTrivialTestPass),
         TEST_PASS(kRetypeEnumTestPass, RetypeEnumTestPass),
         TEST_PASS(kEdgesCycleTestPass, EdgesCycleTestPass),

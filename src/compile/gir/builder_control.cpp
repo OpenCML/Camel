@@ -1376,7 +1376,7 @@ Type *Builder::declaredExitTypeHere() const {
     // An undeclared return type is set from the first value returned (see
     // checkDeclaredReturn): before that, a type that is present was declared.
     if (funcType == nullptr || !funcType->hasExitType() ||
-        currGraph_->draft().exitNode() != runtime::kInvalidNodeRef) {
+        currGraph_->view().exitNode() != runtime::kInvalidNodeRef) {
         return nullptr;
     }
     return funcType->exitType();
@@ -1388,7 +1388,7 @@ Type *Builder::ownDeclaredExitType() const {
     }
     FunctionType *funcType = currGraph_ != nullptr ? currGraph_->funcType() : nullptr;
     if (funcType == nullptr || !funcType->hasExitType() ||
-        currGraph_->draft().exitNode() != runtime::kInvalidNodeRef) {
+        currGraph_->view().exitNode() != runtime::kInvalidNodeRef) {
         return nullptr;
     }
     return funcType->exitType();
@@ -3707,7 +3707,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
             const slot_t empty = camel::core::rtdata::toSlot(
                 ::Tuple::create(stateTypes.size(), camel::core::mm::autoSpace()));
-            node_handle_t source = currGraph_->draft().ref(
+            node_handle_t source = currGraph_->view().ref(
                 currGraph_->draft().materializeStaticValue(empty, stateType));
             linkNodes(LinkType::Norm, source, loopValue);
             for (size_t j = 0; j < stateTypes.size(); ++j) {
@@ -3758,7 +3758,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                                              ::Struct::create(count, camel::core::mm::autoSpace()))
                                        : camel::core::rtdata::toSlot(
                                              ::Tuple::create(count, camel::core::mm::autoSpace()));
-            node_handle_t source = currGraph_->draft().ref(
+            node_handle_t source = currGraph_->view().ref(
                 currGraph_->draft().materializeStaticValue(empty, part.type));
             linkNodes(LinkType::Norm, source, fill);
             for (node_handle_t value : values) {
@@ -3864,7 +3864,7 @@ node_handle_t Builder::buildStreamLoop(
             machineType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
         const slot_t empty = camel::core::rtdata::toSlot(
             ::Tuple::create(components.size(), camel::core::mm::autoSpace()));
-        node_handle_t source = currGraph_->draft().ref(
+        node_handle_t source = currGraph_->view().ref(
             currGraph_->draft().materializeStaticValue(empty, machineType));
         linkNodes(LinkType::Norm, source, fill);
         for (node_handle_t component : components) {
@@ -4109,7 +4109,7 @@ node_handle_t Builder::buildStreamLoop(
         const slot_t empty = camel::core::rtdata::toSlot(
             ::Tuple::create(k, camel::core::mm::autoSpace()));
         node_handle_t source =
-            currGraph_->draft().ref(currGraph_->draft().materializeStaticValue(empty, stateType));
+            currGraph_->view().ref(currGraph_->view().materializeStaticValue(empty, stateType));
         linkNodes(LinkType::Norm, source, loopValue);
         for (size_t j = 0; j < k; ++j) {
             node_handle_t component =
@@ -4625,7 +4625,7 @@ void Builder::markLoopStateInPlaceOne(
 }
 
 void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t result) {
-    if (graph->draft().exitNode() != runtime::kInvalidNodeRef) {
+    if (graph->view().exitNode() != runtime::kInvalidNodeRef) {
         return;
     }
     if (result == nullptr) {

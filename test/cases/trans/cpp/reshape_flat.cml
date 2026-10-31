@@ -1,0 +1,18 @@
+// `tensor:reshape` (modules/tensor/kernels/layout.cpp): the elements in row-major order in another
+// shape. This back end keeps no shape, so a target of one dimension is the same run -- the printed
+// form does not change with it -- and a target that changes the element count is the fault the
+// operator raises before it reads anything, with the input's own shape in the message.
+
+import { reshape } from tensor
+
+func main(): int sync {
+    let xs: float[] = [1.0, 2.0, 3.0]
+    println(reshape<[3]>(xs))
+    println(reshape<[3]>([4.0, 5.0, 6.0]))
+    // A target of one dimension that keeps the count: the same value.
+    println(reshape<[3]>(reshape<[3]>(xs)))
+    // A target of one dimension that changes it: the fault, before anything is read.
+    let short: float[] = [1.0, 2.0, 3.0]
+    println(reshape<[2]>(short))
+    return 0
+}

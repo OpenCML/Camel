@@ -1,6 +1,6 @@
 # 一块 region 什么时候算"不成立"？
 
-> 状态：**待裁**（2026-10-31，`lane-gs2b`）
+> 状态：**已裁**（2026-10-31，`fsh-dev = 874af53ff`）——「不成立」包含「编不出来」，判据不变；`openPending`/`assignId` 已按裁定删除。留档于此。
 > 相关：`docs/handover/questions/questions-2026-10-31-gir-handle-names-a-transaction-or-a-draft.md`、
 > `modules/tiles/src/region_outline.cpp`
 

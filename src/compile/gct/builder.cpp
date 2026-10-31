@@ -2160,13 +2160,13 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     // Create an ExitLoad node to represent the exit statement.
     const AST::ExitType astExit = ast->loadAs<AST::ExitStmtLoad>()->exitType();
     if (astExit == AST::ExitType::Yield) {
-        // The syntax reads `yield` (design principles 5.4: a function whose body writes it
-        // produces a stream, and its head writes the stream type). What produces that stream is
-        // the generator state machine of docs/design/io-concurrency-streams/plan.cn.md slice E,
-        // which is not built yet: several `yield`s in one round, any nesting, `match` arms and
-        // `sync` blocks, per-element faults and linear values are all things that machine has to
-        // produce. Refusing it by name here is what keeps a `yield` from running as a `return`:
-        // a wrong value would be worse than a named gap.
+        // A `yield` the generator machine did not claim: it stands in a body the machine builds
+        // (docs/design/io-concurrency-streams/plan.cn.md slice E, visitGeneratorBody below), but in
+        // a shape it narrows away -- a loop that carries two values across the `yield`, each
+        // depending on the round before it, is the shape the narrowing names today. The head is
+        // fine here (a head that writes no stream type is refused by name of its own before this),
+        // so this one is the named gap and stays one: running the `yield` as a `return` would hand
+        // out one value and hide the rest.
         diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("generators");
         throw BuildAbortException();
     }
@@ -5705,6 +5705,8 @@ node_ptr_t Builder::visitGeneratorBody(
     const auto &bodyStmts         = bodyAst->atAs<AST::RepeatedLoad>(0);
 
     // The head writes the stream type, and it is what says what one `yield` hands out.
+    // A `yield` the machine narrows away (a `yield` with no value, a shape it cannot carry) is a
+    // named gap of the machine, not a mistake in the head.
     const auto refuse = [&](const AST::node_ptr_t &atNode) -> void {
         const AST::node_ptr_t atYield = firstOwnYield(atNode);
         diags_->of(SemanticDiag::FeatureNotSupported)
@@ -5717,7 +5719,13 @@ node_ptr_t Builder::visitGeneratorBody(
     // -- "a local read after a `yield`" -- is gone with the shape it named.
     Type *exit = funcType->exitType();
     if (exit == nullptr || exit->code() != TypeCode::Stream) {
-        refuse(bodyStmts->size() > 0 ? bodyStmts->at(0) : bodyAst);
+        // The head is what is wrong: a body that yields hands out a stream, and this head writes
+        // something else. Said at the head, not at the first `yield` the body happens to hold.
+        const AST::node_ptr_t atYield = firstOwnYield(bodyAst);
+        diags_->of(SemanticDiag::YieldRequiresStreamHead)
+            .at((atYield != nullptr ? atYield : bodyAst)->load()->tokenRange())
+            .commit();
+        throw BuildAbortException();
     }
     auto *stream           = static_cast<StreamType *>(exit);
     Type *elemType         = stream->elemType();

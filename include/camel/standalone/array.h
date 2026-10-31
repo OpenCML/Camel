@@ -22,6 +22,7 @@
 #include "camel/standalone/str.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
@@ -29,6 +30,7 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace camel::standalone {
 
@@ -266,6 +268,80 @@ Array<T> sliceSub(
 /// `head(xs)` (:struct/head_arr): the first element; of the empty array IndexOutOfRange at
 /// `site`, as `xs[0]`.
 template <typename T> T head(const Array<T> &xs, const Site &site) { return at(xs, 0, site); }
+
+/// `last(xs)` (:struct/last_arr): the last element; of the empty array IndexOutOfRange at `site`
+/// with the position -1, the one no array has (struct.cpp's __last_arr__ says the same).
+template <typename T> T last(const Array<T> &xs, const Site &site) {
+    if (xs.empty()) [[unlikely]] {
+        fault(site, {"-1", "an array", "0"});
+    }
+    return xs[xs.size() - 1];
+}
+
+/// `array:sort_d` (src/builtin/operators/array.cpp): the elements in the order `min` and `max` use
+/// (design principles 7.7) -- every NaN after every number, -0 below +0, else the usual one -- and
+/// ties in the order they stand, so the result is the one `xs[argsort(xs)]` gives, a stable sort
+/// of the clone the returning form of the store makes.
+inline Array<double> sorted(const Array<double> &xs) {
+    const auto order = [](double a, double b) {
+        if (std::isnan(b)) {
+            return !std::isnan(a);
+        }
+        if (std::isnan(a)) {
+            return false;
+        }
+        if (a == b) {
+            return std::signbit(a) && !std::signbit(b);
+        }
+        return a < b;
+    };
+    std::vector<double> items(xs.begin(), xs.end());
+    std::stable_sort(items.begin(), items.end(), order);
+    Array<double> out;
+    out.reserve(items.size());
+    for (const double item : items) {
+        out.push(item);
+    }
+    return out;
+}
+
+/// `tensor:reshape` (modules/tensor/kernels/layout.cpp): the same elements in row-major order in
+/// another shape. This back end keeps no shape, so the value is the one it was given -- but the
+/// operator compares the element count, and a target that changes it is a fault at `site` before
+/// anything is read, with the input's own shape in the message. `count` below zero asks nothing.
+template <typename T>
+Array<T> reshape(const Array<T> &xs, int64_t count, const Site &site) {
+    if (count >= 0 && static_cast<int64_t>(xs.size()) != count) {
+        fault(site, {std::to_string(xs.size())});
+    }
+    return xs;
+}
+
+/// `xs[idx]` with `idx` an array of positions (:op/idx_take, design principles 5.4): the elements
+/// those positions name, in that order, as a copy. A position outside the array is
+/// IndexOutOfRange at `site` with the position as written, as a plain read is; a position taken
+/// twice is taken twice. The value read is a rank-1 one, so the third word of the call -- the
+/// axis -- is the only axis there is; an array of another shape runs through the bridge.
+template <typename T>
+Array<T> take(const Array<T> &xs, const Array<int64_t> &positions, const Site &site) {
+    Array<T> out;
+    out.reserve(positions.size());
+    for (const int64_t position : positions) {
+        out.push(at(xs, position, site));
+    }
+    return out;
+}
+
+/// `array:sum_d` (src/builtin/operators/array_reduce.cpp): the elements added from +0, in the order
+/// they lie, in `double` -- the accumulator the runtime's reductions use for a floating element
+/// type, whichever width the elements have.
+inline double sum(const Array<double> &xs) {
+    double total = 0.0;
+    for (const double x : xs) {
+        total += x;
+    }
+    return total;
+}
 
 /// `tail(xs)` (:struct/tail_arr): all but the first element; the empty array for one or none.
 template <typename T> Array<T> tail(const Array<T> &xs) {

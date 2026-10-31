@@ -186,6 +186,9 @@ class FunctionEmitter {
     /// `xs[i] = v` becomes `rt::setAt` on the variable's own array, the element checked as a
     /// read checks it; false when the node is not that shape.
     bool lowerSetIndexInPlace(Frame &frame, gc_node_ref_t ref, Block &out);
+    /// `fail<'Kind'>(message)` (:op/fail): the value of type `never`, under the report the
+    /// program's own kind names (design principles 3.9); false for any other operator.
+    bool lowerFail(Frame &frame, gc_node_ref_t ref, const std::string &uri, Block &out);
     /// `map`, `filter`, `reduce`, `foreach`, `attempt`; false for any other operator.
     bool lowerHigherOrder(Frame &frame, gc_node_ref_t ref, const std::string &uri, Block &out);
     /// Whether the variable whose cell is `cell` is used outside this function (design note

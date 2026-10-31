@@ -1773,6 +1773,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::YieldRequiresStreamHead,
+            {
+                "YieldRequiresStreamHead",
+                "A function whose body writes 'yield' hands out a stream, and this function's head does not write one.",
+                "A body that writes 'yield' is a generator (design principles 5.4): its head writes the stream type it hands out, 'func f(xs: T): U.. sync with one yield in it', and a pull answers the next element and, when the body ends, null. Writing 'yield' in a body whose head writes something else gives that body no way to hand out its elements one at a time.",
+            },
+        },
+        {
             SemanticDiag::RuleLeftIsNotAnOperator,
             {
                 "RuleLeftIsNotAnOperator",

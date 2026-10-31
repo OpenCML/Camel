@@ -1,0 +1,37 @@
+// `fail` (:op/fail, design principles 3.9): the fault the program raises itself, under the kind
+// it wrote. It stands as a statement, as the right of a `let`, and as the arm of a branch; a
+// function declared `never` gives no value, so its call stands where an int is wanted; and the
+// fault of a call an `attempt` wraps is an error value whose kind is the one the program wrote.
+
+func stop(m: string): never {
+    return fail<'Stopped'>(m)
+}
+
+func limit(q: float): float {
+    return if q > 0.0 then q else fail<'BadLimit'>('the limit must be positive')
+}
+
+func kind(r: float!): string {
+    return match r {
+        case error e => e.kind
+        case v => format<v>('{}')
+    }
+}
+
+func main(): int sync {
+    // The kind an `attempt` catches, and the value of a call that did not fail.
+    println(kind(attempt(limit)(-1.0)))
+    println((attempt(limit)(2.0) !! -1.0) == 2.0)
+
+    // The right of a `let` and the arm of a branch: the value that is given wins.
+    let picked: int = if true then 7 else fail<'NoValue'>('the arm that gives nothing')
+    println(picked)
+
+    // A call of a `never` function stands where an int is wanted; the input picks the value.
+    let from_call: int = if limit(3.5) > 3.0 then 1 else stop('not reached')
+    println(from_call)
+
+    // The last statement: the fault is raised, nothing after it runs, and the run ends with 1.
+    stop('the end')
+    return 0
+}

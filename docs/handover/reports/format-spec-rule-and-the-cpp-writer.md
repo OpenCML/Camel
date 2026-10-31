@@ -126,17 +126,19 @@ std::cpp  12 33 / abc / 5 12 12
 | `:op/mem_blocks` | 10 | `test/cases/feat/mm/mem_blocks.cml` |
 | `tensor:sum` / `tensor:matmul` / `rand:shuffle_l` | 7 各 | `loops/iterate_tensor.cml` / `modules/onnx/entry/tuple.cml` / `para/core/merge_sort.cml` |
 | `tensor:shape` / `env:get_cwd` | 6 各 | `compile/entry_args/npy_values.cml` / `modules/std/env/basic.cml` |
-| `:op/set_field` / `:op/idx_take` | 4 各 | `compile/nullable_assign.cml` / `feat/mm/gc/gc_born_old.cml` |
-| `:struct/last_arr` | 2 | `test/cases/parse/syntax/subscript_forms.cml` |
 
-读数：**683 → 674** 个程序翻译不出来（这一笔把这 9 个修掉，`:op/set_index_in_place` 一行归零）。按族：
-tensor 414、autodiff 90、rand 34、核心算子（`:op/*`）50、`:struct/*` 2。另有 11 个是类型层面的拒
+读数：**683 → 674 → 666 → 661 → 638 → 629** 个程序翻译不出来（第一笔把 `:op/set_index_in_place` 那 9 个修掉，
+第二笔把 `:op/set_field` / `:op/set_index` 那 5 个修掉，第三笔把 `:op/idx_take` 4 个、`:struct/last_arr`
+2 个修掉，第四笔把 `:op/fail` 那 32 个修掉——四行进表时共 47 个，现在全归零，其中 23 个真的翻译出来了，
+9 个换了桶；第五到七笔就是那 9 个换去的三个算子，见六之二）。按族：
+tensor 414、autodiff 90、rand 34、核心算子（`:op/*`）10、`:struct/*` 0。另有 11 个是类型层面的拒
 （`std::cpp does not translate yet`），4 个**让翻译器崩掉**（segfault，见下）。
 
 这张表把两种东西分开了：tensor / autodiff / rand / tiles 是**整个子系统**（bridge 不运数组与张量，
-`std::cpp` 本来就不打算翻它们，要动是另一个决定）；`:op/*`、`:struct/*` 那 52 个才是**写出器的洞**。
-洞里最大的是 `:op/fail`（32 个）：它要 `never` 贯穿整个 emitter（分支的一个臂、`let` 的右值、
-`attempt` 的边界），不是一个翻译，我没动它。
+`std::cpp` 本来就不打算翻它们，要动是另一个决定）；`:op/*`、`:struct/*` 那时 52 个才是**写出器的洞**，
+现在只剩 `:op/mem_blocks` 10 个（交给了 gpu 那条线）。
+洞里最大的是 `:op/fail`（32 个）：我原以为它要 `never` 贯穿整个 emitter（分支的一个臂、`let` 的右值、
+`attempt` 的边界），那是个多笔的活——**错了**，见下。
 
 **4 个崩**（`rc=139`）：`compile/contextual_empty_array/all_literal.cml`、
 `contextual_empty_array/named_sibling.cml`、`compile/semantic/recursive_struct_array.cml`、
@@ -155,7 +157,7 @@ error[RuntimeDiag::TranslationRefused]: Translation pass 'std::cpp' refused the 
   --> test/cases/compile/semantic/recursive_struct_array.cml:40:19
 ```
 
-（`grown.children[0].value = 20` 是 `:op/set_field`，另一个洞，4 个程序，排在 `:op/fail` 后面。）
+（`grown.children[0].value = 20` 是 `:op/set_field`，当时是另一个洞，5 个程序，下一笔就修掉了。）
 
 顺手撞出**第 5 个崩**，这次在前端不在写出器：`type Node = { state: State, children: Node[] }` 里 `State`
 写在 `Node` **后面**时，`std::fvm` **自己**段错误（`rc=139`）；`State` 写前面就正常，互相递归（`A` 里 `B[]`、
@@ -190,7 +192,112 @@ std::fvm  [9, 2, 3]
 std::cpp  [9, 2, 3]
 ```
 
-## 七、七条判据
+接着修同一个族里的下一处：**`:op/set_field`**（5 个，比普查时多出来的那一个是以前崩的
+`recursive_struct_array.cml`，现在按缺口报了）。也就是 `p.x = 9`、`m[0].x = 9` —— 赋值把"改了一处的
+结构体"当**值**交出来，形状和上一笔的数组一模一样：**变量交出值、一处改变、块共享先复制**。所以它照抄
+第一个的形状，没有另起一套：
+
+```
+对数组：rt::setAt(xs, i, v, at_x_y)          （上一笔的，复用）
+对结构体：rt::setField(s, &Point::x, v)      （新，include/camel/standalone/record.h）
+```
+
+`set_field` 的字段是个**下标**，不是值——名字在类型里，所以规则表通过 `OperatorCall::fieldName` 去问，
+写成成员指针；这一段第一版把 `normTypes`/`norm` 捕获进 lambda，而它们已经被 move 进 `NodeCall` 了，
+所以永远拿到空类型、五条全拒。**"照抄形状"照抄的是语义，不是指针生命周期**，这是这一笔唯一的坑。
+
+读数：**5 → 0**，普查 **674 → 666**，与 `std::fvm` 逐字节相同（五条都 `same`）：
+
+```
+std::fvm  { x: 9, y: 2 } { x: 1, y: 2 }
+std::cpp  { x: 9, y: 2 } { x: 1, y: 2 }
+```
+
+第二列是**存之前读到的那个值**：`rt::setField` 返回新记录、`rt::setAt` 共享时先复制，所以
+`let kept = p; p.x = 9` 之后 `kept` 还是 `{ x: 1, y: 2 }`。`test/cases/trans/cpp/field_store.cml`
+把三处（字段、元素、元素的字段）各钉一遍，每一处都配一个存之前读的值。
+
+再往下是普查里剩下的最小一对，**一处一笔**：`:op/idx_take`（4）和 `:struct/last_arr`（2）。
+`idx_take` 是 `xs[positions]`——按一组位置取元素，`a6c21b186`；`last_arr` 是 `last(xs)`——最后一个
+元素，空数组给"位置 -1"那条故障，`b0b03b861`。两个都照抄上一笔的形状：**只读不写、位置照读的那条
+检查、越界就是读的那条故障、同一条站点**。`rt::take` 内部就调 `rt::at`，所以越界消息与位置原文一字
+不差；`rt::last` 填的也是读填的那三个值（位置、"an array"、长度），所以空数组印出来的就是 `Index -1`
+那一句。
+
+读数：**4 → 0**、**2 → 0**，普查 **666 → 661**（第五个 `gc_born_old.cml` 换了桶：它现在卡在
+`rand:uniform_array`，是模块的洞，不是写出器的）。六条里五条两边逐字节相同（包括两条故障用例）。
+
+```
+std::fvm  [40, 10, 30] [20, 20] [10, 20, 30, 40]
+std::cpp  [40, 10, 30] [20, 20] [10, 20, 30, 40]
+std::fvm  3 7 3     →   Index -1 is out of range for an array of length 0.
+std::cpp  3 7 3     →   Index -1 is out of range for an array of length 0.
+```
+
+两条用例：`test/cases/trans/cpp/take_positions.cml`（一个置换、一个重复位置、一个定长 `f32[3]`）、
+`test/cases/trans/cpp/last_element.cml`（三元素、单元素、空数组那条故障）。
+
+最后是 `:op/fail` 那 32 个——我一直说它"不是一个翻译，是 `never` 贯穿三处"，**这个判断是错的**。真去
+看拒绝原文，32 条是同一句、拦在同一个地方：**在问规则之前**，`lowerOperator` 先看结果的类型能不能写，
+而 `never` 那时映射成 `void`——`void` 不是值，于是"结果类型没有翻译"。**不是三处贯穿，是一处**：`never`
+这个类型在这儿没有值。把它做成真正的类型 `rt::Never`（`struct Never`，向每种类型都能转，但永远转不到，
+因为唯一持有它的方式是结束程序），三处就一起通了：语句、`let` 的右值、分支的臂、参数、`never` 函数的
+返回，全是"值站在要值的地方"。
+
+报告那一半也有现成的：站点本来就有 `kind`/`message`/`location` 三个字段（为 `attempt` 的错误值留的），
+所以 `fail` 的站点是 **ProgramFault 模板换个名字**——`d.name = "RuntimeDiag::" + 程序写的 kind`，
+印出来就是 `error[RuntimeDiag::Stop]`，和解释器一字不差，`attempt` 抓到的错误值说的也是同一个 kind。
+
+读数：**32 → 0**（这一行归零），普查 **661 → 638**。32 个里 **23 个真的翻译出来了**，另外 **9 个换了桶**
+（它们早就过了这个算子，卡在模块的 `array:sum` / `array:element_*` 上）。`feat/trans/cpp` 里的
+`fail_program.cml` 把五种站位各放一个 `fail`，最后留一个没人处理的，两边逐字节相同：
+
+```
+std::fvm  BadLimit / true / 7 / 1 / error[RuntimeDiag::Stopped]: the end ... rc=1
+std::cpp  BadLimit / true / 7 / 1 / error[RuntimeDiag::Stopped]: the end ... rc=1
+```
+
+这就是判据要改的那一条：**32 个程序听起来是 32 个难点，实际是一个类型没有值。**
+
+## 六之二、换桶的那 9 个：三个算子，一处一笔
+
+`:op/fail` 修完之后，32 个里有 9 个**并没有真的翻译出来**，只是"不再卡在 `fail` 上"——它们早就走过
+这个算子，停在前面的模块函数里。**这 9 个按原文分成三句，一句一个新算子**：
+
+| 拒绝原文 | 程序数 | 谁在喊 |
+| --- | --- | --- |
+| `'array:sum_d' on a value of type 'float[]'` | 4 | `statistics::variance_of` |
+| `'array:elements' on a value of type 'float[..]'` | 2（`sum_d` 修完变 4） | `array::flatten<float>` |
+| `'array:sort_d' on a value of type 'float[]'` | 3 | `statistics::quantile<float>` |
+
+三笔，一笔一个 sha，一笔一处：
+
+1. `8fef6467e` **`array:sum_d`**——元素从 +0 加起、按摆放顺序、在 `double` 里累加（运行时的浮点归约
+   就是这么累加的，`sumOf`）。只认 rank 1：这个后端的数组本来就是一条平铺的跑线。
+2. `8cde63796` **`array:elements`**——行主序一条跑线。`rt::Array` 不留形状，所以"取元素"就是给它的那个
+   值本身（`array_axis.cpp` 里 rank ≤ 1 也是原样返回）。**开区间 rank 也通**：`T[..]` 说的是长度未知，
+   不是摆放方式不同。
+3. `eb1eb5c4c` **`array:sort_d`**——`min`/`max` 的那个序（7.7）：NaN 在所有数之后，`-0` 在 `+0` 之前，
+   其余照常；相同元素留在原位（稳定排序，所以 `sort(xs)` 与 `xs[argsort(xs)]` 是同一些位）。
+
+读数：**638 → 629**（9 个全翻译出来了，一行不剩），n = 3194，崩溃 0。用例 `float_reduce.cml`：
+
+```
+std::fvm  7.0 / [-0.0, 0.0, 1.5, 2.5, 3.0] / 7.0 / [3.0, -0.0, 0.0, 1.5, 2.5] / [2.0] / 0.0
+std::cpp  同上，逐字节相同
+```
+
+`-0.0` 排在 `+0.0` 前面这一条，就是这个序里最容易被漏掉的一半。
+
+这 9 个里 8 个两边逐字节相同，`perf_fib_smoke.cml` 印的是耗时（每次都不一样），比不了；另外 4 个是
+**bridged**（还要链 `libcamel`），本机默认 `libstdc++` 比 `libcamel.so` 要求的旧（`GLIBCXX_3.4.35/36`），
+`run.py` 的链接行因此链不上——这是我手工补 `-L<conda>/lib -lstdc++` 之后才比出来的，**不是翻译的问题，
+是这台机器的链接环境问题**。
+
+判据进页：**一个洞归因到一处之后，换桶的那几个不算修好，只算没被它挡住——报数时要把"真的翻译了"与
+"不卡在这了"分开。**
+
+## 七、九条判据
 
 > **裁定也可能基于过时的读数：拿到裁定先去 develop 上复现一次；不复现，就先把前提写下来，再谈要不要改。**
 
@@ -205,3 +312,7 @@ std::cpp  [9, 2, 3]
 > **一个后端拒一条翻译是缺口，崩一次是缺陷；缺口按被拒程序数报，缺陷按崩溃数报，两者不在一个优先级上。**
 
 > **同一个缺陷在写出器和前端各崩一次时，先修前端——写出器只影响一个后端，前端影响所有人。**
+
+> **同一个缺口的第二个实例，先照抄第一个的形状，再谈抽象；照抄的时候只抄语义，不抄指针。**
+
+> **一个洞按"程序数"报完，还要按"难点数"报一次：32 个程序可能只是三处贯穿。**
