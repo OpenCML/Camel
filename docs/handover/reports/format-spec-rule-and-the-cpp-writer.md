@@ -127,17 +127,18 @@ std::cpp  12 33 / abc / 5 12 12
 | `tensor:sum` / `tensor:matmul` / `rand:shuffle_l` | 7 各 | `loops/iterate_tensor.cml` / `modules/onnx/entry/tuple.cml` / `para/core/merge_sort.cml` |
 | `tensor:shape` / `env:get_cwd` | 6 各 | `compile/entry_args/npy_values.cml` / `modules/std/env/basic.cml` |
 
-读数：**683 → 674 → 666 → 661** 个程序翻译不出来（第一笔把 `:op/set_index_in_place` 那 9 个修掉，
+读数：**683 → 674 → 666 → 661 → 638** 个程序翻译不出来（第一笔把 `:op/set_index_in_place` 那 9 个修掉，
 第二笔把 `:op/set_field` / `:op/set_index` 那 5 个修掉，第三笔把 `:op/idx_take` 4 个、`:struct/last_arr`
-2 个修掉——三行进表时共 15 个，现在全归零）。按族：
-tensor 414、autodiff 90、rand 34、核心算子（`:op/*`）32、`:struct/*` 0。另有 11 个是类型层面的拒
+2 个修掉，第四笔把 `:op/fail` 那 32 个修掉——四行进表时共 47 个，现在全归零，其中 23 个真的翻译出来了，
+9 个换了桶）。按族：
+tensor 414、autodiff 90、rand 34、核心算子（`:op/*`）10、`:struct/*` 0。另有 11 个是类型层面的拒
 （`std::cpp does not translate yet`），4 个**让翻译器崩掉**（segfault，见下）。
 
 这张表把两种东西分开了：tensor / autodiff / rand / tiles 是**整个子系统**（bridge 不运数组与张量，
 `std::cpp` 本来就不打算翻它们，要动是另一个决定）；`:op/*`、`:struct/*` 那时 52 个才是**写出器的洞**，
-现在只剩 `:op/fail` 32 个（`:op/mem_blocks` 10 个交给了 gpu 那条线）。
-洞里最大的是 `:op/fail`（32 个）：它要 `never` 贯穿整个 emitter（分支的一个臂、`let` 的右值、
-`attempt` 的边界），不是一个翻译，我没动它。
+现在只剩 `:op/mem_blocks` 10 个（交给了 gpu 那条线）。
+洞里最大的是 `:op/fail`（32 个）：我原以为它要 `never` 贯穿整个 emitter（分支的一个臂、`let` 的右值、
+`attempt` 的边界），那是个多笔的活——**错了**，见下。
 
 **4 个崩**（`rc=139`）：`compile/contextual_empty_array/all_literal.cml`、
 `contextual_empty_array/named_sibling.cml`、`compile/semantic/recursive_struct_array.cml`、
@@ -236,7 +237,29 @@ std::cpp  3 7 3     →   Index -1 is out of range for an array of length 0.
 两条用例：`test/cases/trans/cpp/take_positions.cml`（一个置换、一个重复位置、一个定长 `f32[3]`）、
 `test/cases/trans/cpp/last_element.cml`（三元素、单元素、空数组那条故障）。
 
-## 七、八条判据
+最后是 `:op/fail` 那 32 个——我一直说它"不是一个翻译，是 `never` 贯穿三处"，**这个判断是错的**。真去
+看拒绝原文，32 条是同一句、拦在同一个地方：**在问规则之前**，`lowerOperator` 先看结果的类型能不能写，
+而 `never` 那时映射成 `void`——`void` 不是值，于是"结果类型没有翻译"。**不是三处贯穿，是一处**：`never`
+这个类型在这儿没有值。把它做成真正的类型 `rt::Never`（`struct Never`，向每种类型都能转，但永远转不到，
+因为唯一持有它的方式是结束程序），三处就一起通了：语句、`let` 的右值、分支的臂、参数、`never` 函数的
+返回，全是"值站在要值的地方"。
+
+报告那一半也有现成的：站点本来就有 `kind`/`message`/`location` 三个字段（为 `attempt` 的错误值留的），
+所以 `fail` 的站点是 **ProgramFault 模板换个名字**——`d.name = "RuntimeDiag::" + 程序写的 kind`，
+印出来就是 `error[RuntimeDiag::Stop]`，和解释器一字不差，`attempt` 抓到的错误值说的也是同一个 kind。
+
+读数：**32 → 0**（这一行归零），普查 **661 → 638**。32 个里 **23 个真的翻译出来了**，另外 **9 个换了桶**
+（它们早就过了这个算子，卡在模块的 `array:sum` / `array:element_*` 上）。`feat/trans/cpp` 里的
+`fail_program.cml` 把五种站位各放一个 `fail`，最后留一个没人处理的，两边逐字节相同：
+
+```
+std::fvm  BadLimit / true / 7 / 1 / error[RuntimeDiag::Stopped]: the end ... rc=1
+std::cpp  BadLimit / true / 7 / 1 / error[RuntimeDiag::Stopped]: the end ... rc=1
+```
+
+这就是判据要改的那一条：**32 个程序听起来是 32 个难点，实际是一个类型没有值。**
+
+## 七、九条判据
 
 > **裁定也可能基于过时的读数：拿到裁定先去 develop 上复现一次；不复现，就先把前提写下来，再谈要不要改。**
 
@@ -253,3 +276,5 @@ std::cpp  3 7 3     →   Index -1 is out of range for an array of length 0.
 > **同一个缺陷在写出器和前端各崩一次时，先修前端——写出器只影响一个后端，前端影响所有人。**
 
 > **同一个缺口的第二个实例，先照抄第一个的形状，再谈抽象；照抄的时候只抄语义，不抄指针。**
+
+> **一个洞按"程序数"报完，还要按"难点数"报一次：32 个程序可能只是三处贯穿。**
