@@ -109,7 +109,7 @@ slot_t readForwardedRuntimeValue(GCGraph *graph, gc_node_ref_t nodeRef, Frame *f
         return NullSlot;
     }
     const auto *node = requireNode(graph, current);
-    ASSERT(node->dataIndex != 0, "Taskflow forwarded-value chain resolved to slot 0.");
+    GUARD(node->dataIndex != 0, "Taskflow forwarded-value chain resolved to slot 0.");
     return frame->get<slot_t>(node->dataIndex);
 }
 
@@ -1823,7 +1823,7 @@ void TaskflowExecSchedPass::callClosure(
     GraphPlan *targetPlan, Frame *funcFrame, camel::runtime::gc_data_idx_t funcIdx, size_t argCount,
     FillArgs &&fillArgs, Sink &&sink) {
     std::array<slot_t, 2> args{NullSlot, NullSlot};
-    ASSERT(argCount <= args.size(), "Taskflow closure call takes at most two arguments.");
+    GUARD(argCount <= args.size(), "Taskflow closure call takes at most two arguments.");
     requireCallRoom(region.thread(), site.graph, site.node);
     OpenCall openCall(region.thread().callDepth);
     region.enter();
