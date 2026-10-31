@@ -93,6 +93,14 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::PassBoundaryNodes,
+            {
+                "PassBoundaryNodes",
+                "Pass '{0}' returned a program whose {1} has no {2}.",
+                "A graph runs from its entry node to its exit node. A rewrite may replace either one, but what it puts there must be a node of the graph that is alive: a graph whose entry or exit is gone is a graph nothing can run, and the pass that returned it lost the program's boundary.",
+            },
+        },
+        {
             RuntimeDiag::MacroEvaluationFailed,
             {
                 "MacroEvaluationFailed",

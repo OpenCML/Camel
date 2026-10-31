@@ -302,7 +302,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `FailNotExecuted` | This 'fail' is not executed: {0}. |
 | `StatementAfterFail` | This statement cannot run: the 'fail' written before it never returns. |
 
-**Run time and passes — errors** (`RuntimeDiag`) — 37
+**Run time and passes — errors** (`RuntimeDiag`) — 38
 
 | `RuntimeError` | An error has occurred: {0}. |
 | `DivisionByZero` | Attempted division by zero. |
@@ -314,6 +314,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `TranslationRefused` | Translation pass '{0}' refused the graph: {1}. |
 | `PassInternalError` | Pass '{0}' failed with an internal error: {1}. |
 | `PassBoundaryResources` | Pass '{0}' changed the ambient resources the program touches: before {1}, after {2}. |
+| `PassBoundaryNodes` | Pass '{0}' returned a program whose {1} has no {2}. |
 | `MacroEvaluationFailed` | '{0}' could not be evaluated by std::macro: {1}. |
 | `EntryArgumentMissing` | No value was given for the {0} {1} of 'main'. |
 | `EntryArgumentInvalid` | Cannot bind the argument '{0}' of 'main': {1}. |
