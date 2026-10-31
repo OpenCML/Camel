@@ -295,7 +295,14 @@ void StructType::completeFields(const std::vector<std::pair<std::string, Type *>
     ASSERT(fields.size() == size_, "A struct instance has one field per declared field.");
     size_t refCount = 0;
     for (size_t i = 0; i < size_; ++i) {
-        GUARD(fields[i].first == fieldName(i), "The fields keep the order of the declaration.");
+        GUARD(
+            fields[i].first == fieldName(i),
+            std::format(
+                "field {} is named '{}' here but sits at index {}: a struct instance keeps the order of "
+                "the declaration, so every field after it reads another field's value",
+                i,
+                fieldName(i),
+                i));
         Type *type = fields[i].second;
         ASSERT(type != nullptr, "A completed struct type has a type for every field.");
         typesPtr_[i]     = type;
