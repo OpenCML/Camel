@@ -221,9 +221,10 @@ test/cases/trans/cpp/index_rank.cml
 # a column of it (`m[:, 1]`), and the rank-2 value behind the first row of a rank-3 one.
 test/cases/trans/cpp/slice_rank.cml
 
-# A tensor the runtime builds: `tensor:ones` has no standalone translation, so the program holds a
-# counted handle to the runtime's own value (rt::Foreign) and prints the runtime's text for it --
-# the one line below is std::fvm's, byte for byte.
+# A tensor the runtime builds: `tensor:ones` has a standalone translation that calls the runtime's
+# kernel and converts the value back into the shaped array its Camel type names (rt::Array), so the
+# program prints it with the same `println` as any array -- the one line below is std::fvm's, byte
+# for byte.
 test/cases/trans/cpp/tensor_ones.cml
 # The element type the call states reaches the kernel, so the tensor built is the one the program
 # asked for: `ones::<f64>` is f64 and `ones::<i64>` is i64, whose text `1` is not f32's `1.0`.

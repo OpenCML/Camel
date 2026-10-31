@@ -1,13 +1,15 @@
 /**
  * A tensor result carries the element type the call states.
  *
- * `ones::<f64>` and `ones::<i64>` name the element type of the tensor they build, and the value
- * lives in the runtime module that owns it: the program holds a counted handle to it (rt::Foreign)
- * and prints the runtime's own text. So the element type has to reach the kernel, which reads it
- * from the call's result type; a call that stated none left the kernel filling f32, and
- * `ones::<i64>([2, 2])` then printed `[[1.0, 1.0], [1.0, 1.0]]` where the interpreter prints
- * `[[1, 1], [1, 1]]`. An f64 tensor is not visible in the text -- 1.0 is one text at both widths
- * -- so the integer line is the one that fails when the type is dropped.
+ * `ones::<f64>` and `ones::<i64>` name the element type of the tensor they build, so the type has to
+ * reach the kernel, which reads it from the call's result type; a call that stated none left the
+ * kernel filling f32, and `ones::<i64>([2, 2])` then printed `[[1.0, 1.0], [1.0, 1.0]]` where the
+ * interpreter prints `[[1, 1], [1, 1]]`. An f64 tensor is not visible in the text -- 1.0 is one text
+ * at both widths -- so the integer line is the one that fails when the type is dropped.
+ *
+ * The same type also says how the value comes back: `ones::<i64>([2, 2])` is an `i64[2, 2]`, which
+ * this back end holds as `rt::Array<int64_t>` -- the array's elements, not a handle to a runtime
+ * object -- so a wrong element type would show in the value and in the text at once.
  *
  * `agree_with_fvm` builds and runs this program against std::fvm, byte for byte.
  */
