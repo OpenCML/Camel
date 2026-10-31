@@ -706,6 +706,30 @@ bool Builder::isCallNode(node_handle_t node) {
     return kind == camel::runtime::GCNodeKind::Call || kind == camel::runtime::GCNodeKind::Func;
 }
 
+bool Builder::hasValueVersion(node_handle_t variable) {
+    // The same question valueVersionOf answers, without making the node it would answer with: a
+    // caller that only wants to know whether the read has a version of its own must not leave a
+    // `:var/after` node behind for nothing to use (it would be an effect nothing depends on).
+    const auto modifier = modifierOf(variable);
+    if (!modifier.has_value() || !sameGraph(*modifier, currGraph_)) {
+        return false;
+    }
+    Type *type = nodeTypeOf(*modifier);
+    if (type != nullptr && valueTypeOf(type) != type) {
+        return true;
+    }
+    const auto value = callValues_.find(*modifier);
+    if (value == callValues_.end()) {
+        return isCallNode(*modifier);
+    }
+    for (size_t k = 0; k < value->second.variables.size(); ++k) {
+        if (value->second.variables[k] == variable) {
+            return true;
+        }
+    }
+    return isCallNode(*modifier);
+}
+
 void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
     // A control input, and it has to stay one until the read gets the data edge it is owed: for
     // a call that reads a captured `var` this is the edge that makes the write the read uses
@@ -718,7 +742,7 @@ void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
     // A write that produced a version of its own has that data edge already: the read takes the
     // version, and the control input this helper used to stand in for it is gone with it
     // (Builder::valueVersionOf).
-    if (valueVersionOf(variable) != nullptr) {
+    if (hasValueVersion(variable)) {
         return;
     }
     if (auto modifier = modifierOf(variable); modifier.has_value()) {

@@ -1625,6 +1625,16 @@ bool FunctionEmitter::lowerVariable(
         return true;
     }
     const auto norm = g->normInputsOf(ref);
+    if (id == camel::core::oper::VarAfter) {
+        // The cell after the call that wrote it: the second operand is that call, and the operator
+        // asks nothing of its value -- it is an input so that taking this version makes the call
+        // run (design principles 3.1). The call is emitted for what it does, and what this node
+        // gives is the cell itself, so a read above it reads the variable as the call left it.
+        const CppValue cell = valueOf(frame, norm.front());
+        (void)valueOf(frame, norm[1]);
+        frame.values[ref] = CppValue{cell.text, false, cell.cell};
+        return true;
+    }
     if (id == camel::core::oper::VarTake) {
         // `:var/take` hands the variable's own array to an in-place form. The generated
         // program moves it there (`std::move(cell)` in the form's lowering), so the take is

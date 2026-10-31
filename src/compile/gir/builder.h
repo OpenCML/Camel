@@ -2491,6 +2491,10 @@ class Builder {
     /// A call, whichever node kind draws it: `Call` for a call through a function value, `Func` for
     /// a call of a function the graph names.
     bool isCallNode(node_handle_t node);
+    /// Whether `variable`'s last write gives a version of it -- the question valueVersionOf answers,
+    /// asked without building the node the answer would be: a caller that only asks must not leave
+    /// a `:var/after` node behind with nothing to use it.
+    bool hasValueVersion(node_handle_t variable);
     /// The group of an operator the compiler emits itself (`oper::EnumMake` and the like): the
     /// built-in module registered it; an id is fixed at start-up, the group when that module is
     /// loaded, which is before any module of a program is compiled.

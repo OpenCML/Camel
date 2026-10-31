@@ -2101,6 +2101,15 @@ class CmlPrinter {
             }
             return {cellName(cellReadBy(inputs.front())), 100};
         }
+        if (uri == ":var/after") {
+            // The cell after the call that wrote it: the second input is that call, whose value the
+            // operator does not read, and the value this node gives is the cell itself -- so the
+            // printed program names the cell, as a read of the variable does.
+            if (inputs.size() != 2) {
+                fail(ref, "a variable after a call without a cell and a call");
+            }
+            return {cellName(cellReadBy(inputs.front())), 100};
+        }
         if (uri.starts_with(":var/")) {
             fail(ref, std::format("the operator '{}'", uri));
         }
