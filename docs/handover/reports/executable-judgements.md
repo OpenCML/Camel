@@ -7,11 +7,12 @@
 - **环丢弃的会话数看得见**：`std::stats` 输出的 `cycle_dropped_sessions`（`src/passes/trans/stats/stats.cpp`）。
 - **`develop` 上造不出"多条改写合成的环"**：`opt-cycle-composition-not-found-on-develop.md`——拿掉守卫那一支，fast 层 7898 条一条不红。
 - **一次落地值不值，看一个数**：闸门的 `[SUMMARY] total / pass / fail / skip / known failures`，不是"我看过了"。
-- **报绿之前先报"这张计划有几条进了这一层"**：`tier` 写在计划头上（`test/plans/gpu/tiles.plan.toml:3` 是 `tier = "slow"`，103 条里只有 1 条 `tier = "fast"`），`[SUMMARY] total` 只含**被选中并真的跑了**的条目——`[PLAN] gpu.tiles` 后面跟几条就是几条，不是 103；慢层只有三张计划（`feat/mm/gc_pacing` 15、`feat/mm/gc_soak` 22、`gpu/tiles` 103，合计 140 条），fast 闸除了那个例外一条都不跑。
+- **报绿之前先报"这张计划有几条进了这一层"**：`tier` 写在计划头上（`test/plans/gpu/tiles.plan.toml:3` 是 `tier = "slow"`，103 条里只有 1 条 `tier = "fast"`），`[SUMMARY] total` 只含**被选中并真的跑了**的条目——`[PLAN] gpu.tiles` 后面跟几条就是几条，不是 103；慢层只有三张计划（`feat/mm/gc_pacing` 15、`feat/mm/gc_soak` 22、`gpu/tiles` 103，合计 140 条），fast 闸除了那个例外一条都不跑。（改之前的形状；整张 slow 现在只剩 `gpu/tiles`，见本页最后一条。）
 - **同一个用例在两层的两份条目会分叉**：`a3d119690` 把 `feat/modules/tiles.plan.toml` 的 `gpu_scope.macro_expansion_publishes_the_derived_graph` 翻成 `behavior`，`gpu/tiles.plan.toml` 的 `grad_expand.scope_sees_the_derived_graph` 留成 `negative`；闸门四趟全绿（slow 层没跑），那份红到有人整张跑 slow 才被看见。翻一条用例的 `kind` 之后，先 `git grep -n '<case 路径>' -- test/plans` 数一遍有几份。
 - **`known failures: 2` 这个数只有在两条都登记了失败形态与认领人时才有意义**：否则它只是"两个不知道"——查法见 `known-failures-two.md`（两条都在 `effects_model_edges.plan.toml`，都在等第 9 条第二半，而车主 `lane-order-region` 已不在）。
 - **中转仓库里某条引用该不该删**：`git merge-base --is-ancestor <sha> refs/camel-tmp/develop`（`build-host-staging-refs.md`）。
 - **一个指错位置的诊断，比没有诊断更贵**：它会让人去改那个位置。`let (x, y) = <四元组>` 过去报 `SemanticDiag::InvalidAccessIndex: Invalid access index: '2'`，箭头指着 `func`（1:1）；读者读到的是"函数声明有问题"，而去改函数。同一个错误现在报 `TupleUnpackingCountMismatch` 在 `let (` 上（`src/compile/gir/builder_expr.cpp` 的 ACCS 分支按 `GCT::Tree::unpackCount` 与元组长度比对）。反向也一样：`let (x, y) = <二元组>` 过去静默丢值，现在同一句诊断。
 - **在主机上手动跑任何测试之前**：先复刻闸门的导出（`LD_LIBRARY_PATH=$HOME/camel-eval/conda/envs/clang/lib`、`CAMEL_HOME=<树>/out/latest`、`CAMEL_TEST_SHOW_OUTPUT=1`），否则 `camel` 报 `GLIBCXX_3.4.36 not found`，读到的红全是自己造的。
 - **一条新诊断的迁移成本，要用"全树有几处"来报**：报"我改了三处"听起来像运气——读者没法判断是自己运气好还是树里本来就没有。分母要报出来（`unpack-count-migration.md`：265 处 `let (`，3 处要改，`stdlib`/`examples`/`test` 各 0），而且分母只有整层编译才拿得到，grep 数不出"名字比元素少"。
-- **三张慢计划 140 条测试，我们的闸每晚跑 1 条**：`feat/mm/gc_pacing` 15 条、`feat/mm/gc_soak` 22 条、`gpu/tiles` 103 条整张是 `tier = "slow"`，fast 闸只跑 `gpu/tiles` 里那 1 条例外。**先整张跑一次，再谈要不要把它们挪进快层**——没跑过的绿不是绿，是没读数。
+- **三张慢计划 140 条测试，我们的闸每晚跑 1 条**：`feat/mm/gc_pacing` 15 条、`feat/mm/gc_soak` 22 条、`gpu/tiles` 103 条整张是 `tier = "slow"`，fast 闸只跑 `gpu/tiles` 里那 1 条例外。**先整张跑一次，再谈要不要把它们挪进快层**——没跑过的绿不是绿，是没读数。**（按这条办过一次了：`gc_pacing` + `gc_soak` 37 条 / 6.7 秒 / 零红，两张已改成 `tier = "fast"`，整闸 `total` 8032 → 8069；`gpu/tiles` 不动，理由写在 `docs/test-plans.md:84`。）**
+- **把一条测试从慢层挪进快层的唯一条件是"它快且稳"**：`37 条 / 6.7 秒 / 零红` 就是那个条件，不需要讨论。反过来说，"在慢层待着没被跑过"不是一条测试安全的理由：`gpu/tiles` 那 102 条挪不动是另一件事——它要卡、跳过的条数随卡忙闲摆动、整张 89 秒，那不叫"快且稳"，叫"看机器"。

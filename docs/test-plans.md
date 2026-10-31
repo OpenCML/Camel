@@ -84,8 +84,19 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
 - `slow` is the release gate's layer: the plan files `scripts/release-gate.mjs` names in
   `SLOW_PLANS`, run one by one. It is everything whose result is still worth having but whose cost
   does not belong in the developer loop, and that a shared host can still carry: the large
-  front-end and debugger suites, the paced and soaked collection plans, the GPU tile plans, and any
-  other single test that takes about five seconds or more.
+  front-end and debugger suites, single entries of otherwise-fast plans that take about five
+  seconds or more, and the GPU tile plans.
+- **The slow layer's only whole plan is `gpu/tiles` (103 entries, and it needs devices): it cannot
+  move into the fast layer.** Its entries skip when the cards are busy (`tiles:available()`), so
+  the number that runs swings with what else is on the host -- a fast-layer green there would mean
+  "the cards were free", not "the compiler is right" -- and a whole-plan run takes about 89 s, of
+  which the fast layer's two minutes has none to give. One entry of it (the derived-graph
+  `gpu_scope` case) is already `tier = "fast"`, because it needs the compiler and not a card.
+  The paced and soaked collection plans (`feat/mm/gc_pacing` 15, `feat/mm/gc_soak` 22) used to be
+  the other two whole slow plans; they ran 37 entries in 6.7 s with no red, so both are
+  `tier = "fast"` now. Some individual entries are still `tier = "slow"` inside fast plans
+  (`test/plans/feat/modules/autodiff.plan.toml` 5, `tools/debugger` 4, `parse/frontend`,
+  `modules/random`, `tools/lsp`, `linear/var_reference`, `trans/cpp` 1 each).
 - `milestone` is the layer that only runs at a milestone, on a quiet machine: the plans
   `agents/test.md` holds back (the full suite, the GC poison sweep and stress plans, progen, the
   PyTorch comparisons and the perf/timeit plans -- the ones `scripts/plan-inventory.mjs` lists in
