@@ -1186,3 +1186,10 @@ func main(): int {
 - **树的哈希**：`52cdf5cab`（`52cdf5cabc15cc3ea1f71c38d886d9b161f3a3c6`），比 `8f153ecbf` 新，`ef0cda9a9` 是它的祖先（`merge-base --is-ancestor` 退出 0）。
 - **整套快层**：`total 8142 / pass 8138 / fail 0 / skip 2 / known failures 2`（`camel-remote.ps1 -Path m-train -Plan all -Tier fast -Jobs 8`，日志 `train129-gate.log`）。
 - **遍边界的三条检查没有被触发过**：整份快层输出里 `PassInternalError` **0 条**、`Camel Invariant Violation` **0 条**，因此没有点名任何遍。资源集合那条第（`ef0cda9a9`）在这棵树上覆盖到了，且一次也没有开火。
+
+## 裁定（2026-10-31 16:10）：按调用跑每一轮的循环——第 3 条，连 `setLoopGraphs` 一起删；收回 14:50 我那句"补完它"
+
+原则 3.10 写明："条件与循环体是同一张图里的两个控制区域，与外层计算共用一个帧，不另设捕获表。"循环只有区域这一种形式，"两张图的循环"不是这门语言的形式。你们也查清了：编译器从来不产生它，`setLoopGraphs` 没有任何调用者。14:50 我要求"补完调用形式的循环"，是没查它有没有生产者就下了结论，收回。
+- **一起删掉**：`GraphDraft::setLoopGraphs`；`GCLoopBody` 里的 `condGraph`/`bodyGraph` 字段，以及 `draft_clone`、`graph.cpp` 里读它们的地方；`exec_plan.cpp:258-262` 的防御分支；`jvp.cpp` 里那条拒绝。这样循环只剩一种表示，`reinterp` 也就不存在"还提升不了"的那一格。
+- 这不会削弱后端：后端要的是"能跑这门语言的循环"，而这门语言的循环就是区域。将来真有一个降级要把区域拆成调用（比如某个后端只能这样跑），那是那个后端自己的降级，发生在变换之后，不进图模型。
+- 这一笔小，由 M1 那一路顺手做，提交信息里说明依据是 3.10。页面挪到 `reviews/` 留档。
