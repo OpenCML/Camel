@@ -526,16 +526,16 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.yield_lowering_refused"
-desc = "A body that writes `yield` is refused by name where the generator machine cannot carry it: a `while` loop with one carried value is lowered (stream.generator_loop), so what this holds is the narrowing -- a loop that carries two values across the `yield`, each depending on the round before it, still gets the named gap instead of running with one of them left behind. The graph builder reports SemanticDiag::FeatureNotSupported with `'generators'`, at the `yield` itself."
+desc = "A `yield` in a body whose head the builder does not read as a stream is refused at the `yield`, and the report names the head rather than a missing feature. What this case reaches is the head check itself: the head writes `(int, int)..`, and a stream whose element type is a tuple is not read as a stream type yet -- a hole of the type reader, not of the generator machine (a head of `int..` with the same body lowers)."
 kind = "negative"
 case = "../../../cases/compile/stream/yield_lowering.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::FeatureNotSupported"
-expect_diagnostic_code = "0x03000040"
-expect_diagnostic_line = 13
+expect_diagnostic_name = "SemanticDiag::YieldRequiresStreamHead"
+expect_diagnostic_line = 11
+expect_diagnostic_code = "0x03000206"
 expect_diagnostic_column = 9
-expect_output_contains = ["generators"]
+expect_output_contains = ["hands out a stream"]
 expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
