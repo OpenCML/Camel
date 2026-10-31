@@ -1286,8 +1286,6 @@ expect_output_contains = ["hands out a stream"]
 expect_output_not_contains = ["FeatureNotSupported", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
-timeout_ms = 30000
-timeout_ms = 30000
 
 [[tests]]
 name = "stream.type_function_of_typeof"
