@@ -8,6 +8,11 @@
  * family (`docs/design/program-transforms/README.cn.md` 4.1). Its first form builds the
  * transform's own graph and says what it built; the numbers it will have to compute are
  * `f(2) = 5.5` and `f'(2) = 3.25` for `f(x) = x*x + 3/x`.
+ *
+ * The module's other half is the value-level transform `jvp(f)` -- `reinterp<jvp>(f)` as a call,
+ * not a pass: it answers with a new function, which a pass cannot (modules/transforms/jvp.h).
+ * Its signature is computed from the argument, so it is recorded in
+ * `stdlib/signatures/transforms.cml`.
  */
 
 /// Builds the transform's own graph for every function of the program that is made of operators and
