@@ -159,3 +159,17 @@ RESOURCES node main 15 :var/get: read variable (node 14); result may_alias 0
 **停下来的那一处（按"必须删就停"）**：按新账重录 `core` 之后，`assert(!out.includes(' unordered'), 'the program orders every conflicting pair')`（`test/plans/feat/modules/resources.plan.toml:149`）会红——新账里有一对 **`RESOURCES order main 15 16 resource unordered`**：`main` 的 `CALL` 节点 15 写 node 2，它上面那个 `:var/after` 16 也指 node 2，两者是冲突却**没有顺序**。这不是重录能解决的（删断言 = 删既有行），所以这一段退回旧账、报上去。
 
 **判据**：**重录可以是"形状变了"，不能是"数变松了"；判据是同一份代码在合入前后各跑一次，两段账都能解释。**
+
+## 9. 两边读数相反时
+
+同一对节点 `15`/`16`，`edges` 报图上已有 `N0F [:var/after] -> N0E [ORDER]`；我在合并后的同一棵树上量到的是：`main` 的 ORDER 边只有 `8 -> 15` 和 `10 -> 15`，而 `N0F` 在这棵树里是 `CALL 15`、不是 `:var/after`。两边都在实测，所以先对齐号：`std::gir` 打的是十六进制节点号，账本 `RESOURCES node` 打的是十进制序号，**不是同一套号**；对齐之后才谈谁对。
+
+读数（`effects.cml`，`main`，`15` = `CALL: rmw variable (node 2)`，`16` = `:var/after: read variable (node 2); result same 0`）：
+
+| 前置条件 | 读数 |
+| --- | --- |
+| 同图？ | 是 |
+| 两个方向有 data 路径？ | `15→16` 否，`16→15` 否 |
+| 两端都吃 order？ | `15` 有 2 条 order 前驱（`8`、`10`），`16` **0 条**；`16` 的 ctrl / sync 前驱也各为 0 |
+
+**判据**：**两个人报同一件事的相反读数时，先对齐是哪个用例、哪个节点编号，再谈谁对。**
