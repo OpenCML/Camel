@@ -61,6 +61,9 @@ RulesetsPass::apply(const camel::runtime::Program *program, std::ostream &os) {
         for (const std::string &line : camel::core::forwardRuleDescriptions()) {
             os << "FORWARD " << line << '\n';
         }
+        for (const std::string &line : camel::core::transposeRuleDescriptions()) {
+            os << "TRANSPOSE " << line << '\n';
+        }
     }
     size_t start = 0;
     while (start <= query_.size() && !query_.empty()) {

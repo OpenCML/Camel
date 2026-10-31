@@ -127,7 +127,23 @@ check(
 )
 check(
     not any(" rulesets.transpose " in line for line in forwards),
-    f"and none of them to the transpose family, which no transform reads yet: {forwards}",
+    f"the forward table names the forward family only: {forwards}",
+)
+
+# The transpose table is the second slot: the same five keys, the family a linear function's
+# pullback is written in, and the rules the index already holds for all five.
+transposes = [line for line in bound.splitlines() if line.startswith("TRANSPOSE ")]
+check(
+    len(transposes) == 10,
+    f"ten operators have a transpose rule, got {len(transposes)}: {transposes}",
+)
+check(
+    all(" rulesets.transpose " in line for line in transposes),
+    f"every one of them is bound to the transpose family: {transposes}",
+)
+check(
+    all(not line.endswith("-> no rule") and not line.endswith("-> no such family") for line in transposes),
+    f"and the index answers every binding with a rule the family holds: {transposes}",
 )
 
 if failures:
