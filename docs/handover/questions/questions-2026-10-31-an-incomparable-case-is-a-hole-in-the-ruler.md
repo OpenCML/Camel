@@ -44,3 +44,24 @@
 
 同一份普查还印出 **100 条 `does not build`**（生成的 C++ 编不过）。那既不是 `differs` 也不是
 `refused`，尺子上还没有它这一格——谁要拿这份普查说事，得先把这一格说清楚。
+
+## 合并 `develop` 之后重算一遍（`f84303109` 的树）
+
+语料 3236 个程序：**same 1100 / not a program 1073 / refused 965 / does not build 91 /
+differs 7**。`differs` 的 7 条按同一把尺子分开：
+
+- **① 计时：3 条** —— `linear/nvm/acc.cml`、`linear/nvm/fib.cml`、`perf/fib_recursive.cml`。
+  `fib.cml` 是新出现在这一档的（上一轮它还是 `same`），名单已经补进去。
+- **② 真缺陷：3 条** —— 其中两条这一轮修掉了：
+  - `modules/stdlib/fault_gcd_overflow.cml`：`math:abs` 被译成 `std::abs`，最小值上是未定义行为，
+    优化器把 `abs(a) < 0` 折掉，`gcd` 的拒绝就丢了。改成 `rt::absOf`（num.h 的环绕取负），
+    `abs_smallest_int.cml` 守住两名读数。
+  - `loops/zero_leaf_state.cml`：零字段结构体印成 `{  }` 两个空格；文本是按"开的一半 + 关的一半"
+    拼的，中间没有字段就多留了一个空格。零字段时写成 `{}`。
+  - 剩下的 `compile/array_shape/rank_zero_field_literal.cml`：rank-zero 在 standalone 运行时里还不是
+    一个值（`setShape` 对 `rank == 0` 直接返回），这是给作者的问题，不是一笔补丁能定的。
+- **③ 口径：1 条** —— `consistency/generic_values/candidate_body_fails.cml`，理由同上。
+
+另外 `err_as.cml` 与 `fold_cast_fails.cml`（上一轮列在真缺陷里的两条）在 `develop` 上已经不再
+`differs`：`rt::asShape` 与 `rt::Array<T>::shaped` 落地之后，到固定形状的转换会检查形状了。
+修这两条的是 `develop` 上的提交，不是这一轮的。
