@@ -204,12 +204,12 @@ class FunctionEmitter {
     std::string callDepth(const GCGraph *graph, gc_node_ref_t ref);
 
     /// Names the value of `ref`: a statement `const T name = expr;` (or `expr;` when nothing
-    /// uses it), or the expression itself when it may be moved to its one use. `resultCpp` is the
-    /// C++ type of the value when it is not the one the node's Camel type names (an operator whose
-    /// result the runtime owns); null for the type of the node.
+    /// uses it), or the expression itself when it may be moved to its one use. The C++ type is the
+    /// one the node's Camel type names: a type has one representation, whichever operator built the
+    /// value (docs/design/cpp-standalone/README.cn.md 4).
     void bind(
         Frame &frame, gc_node_ref_t ref, std::string expr, bool inlinable, Block &out,
-        const std::string &hint, const char *resultCpp = nullptr);
+        const std::string &hint);
     const CppValue &valueOf(Frame &frame, gc_node_ref_t ref);
     std::string cppType(const GCGraph *graph, gc_node_ref_t ref, const Type *type);
     /// The accessor of the runtime operator `uri` in the generated file, and the registration that

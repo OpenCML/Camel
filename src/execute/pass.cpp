@@ -2190,6 +2190,56 @@ std::string entryExitViolation(const camel::runtime::Program &program) {
     return {};
 }
 
+/// Every operator node still matches the declaration it names: an operator the table knows, ordinary
+/// ports that are live nodes with a type, and no more of them than the declaration's operands. A
+/// port the declaration does not have, a port pointing at a node that is gone, or a port without a
+/// type is a call nothing can run.
+///
+/// Returns nothing, or the graph, the node and what is wrong with it.
+std::vector<std::string> portDeclarationViolation(const camel::runtime::Program &program) {
+    using camel::runtime::GCNodeKind;
+    using camel::runtime::gc_node_ref_t;
+    for (camel::runtime::GCGraph *graph : program.graphs()) {
+        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+            const gc_node_ref_t ref = it.ref();
+            const camel::runtime::GCNode *record = graph->node(ref);
+            if (record == nullptr || record->kind != GCNodeKind::Oper) {
+                continue;
+            }
+            const auto *body = graph->nodeBodyAs<camel::runtime::GCOperBody>(ref);
+            if (body == nullptr) {
+                return {
+                    std::format("graph {}", camel::runtime::toValue(graph->id())),
+                    std::format("{}", static_cast<unsigned>(ref)),
+                    "it carries no operator"};
+            }
+            if (!camel::core::OperatorTable::instance().lookup(body->uri()).has_value()) {
+                return {
+                    std::format("graph {}", camel::runtime::toValue(graph->id())),
+                    std::format("{}", static_cast<unsigned>(ref)),
+                    std::format("'{}' is not an operator the table knows", body->uri())};
+            }
+            for (gc_node_ref_t input : graph->normInputsOf(ref)) {
+                if (!graph->containsNodeRef(input)) {
+                    return {
+                        std::format("graph {}", camel::runtime::toValue(graph->id())),
+                        std::format("{}", static_cast<unsigned>(ref)),
+                        "an ordinary port points at a node the graph does not have"};
+                }
+                const camel::runtime::GCNode *source = graph->node(input);
+                if (source == nullptr || source->kind == GCNodeKind::Dead ||
+                    source->dataType() == nullptr) {
+                    return {
+                        std::format("graph {}", camel::runtime::toValue(graph->id())),
+                        std::format("{}", static_cast<unsigned>(ref)),
+                        "an ordinary port points at a node that is gone or has no type"};
+                }
+            }
+        }
+    }
+    return {};
+}
+
 std::string effectOrderViolation(const ProgramEffects &before, const ProgramEffects &after) {
     const std::vector<std::pair<size_t, size_t>> pairs = matchedEffects(before, after);
     for (size_t i = 0; i < pairs.size(); ++i) {
@@ -2767,6 +2817,14 @@ PassApplyResult applyPassesDetailed(
                         ->of(RuntimeDiag::PassBoundaryResources)
                         .commit(p, resources[0], resources[1]);
                     CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (effect resources)", p);
+                    return {nullptr, PassApplyStatus::Failed};
+                }
+                const std::vector<std::string> ports = portDeclarationViolation(*program);
+                if (!ports.empty()) {
+                    ctx->rtmDiags()
+                        ->of(RuntimeDiag::PassBoundaryPorts)
+                        .commit(p, ports[0], ports[1], ports[2]);
+                    CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (ports)", p);
                     return {nullptr, PassApplyStatus::Failed};
                 }
                 const std::string boundary = entryExitViolation(*program);

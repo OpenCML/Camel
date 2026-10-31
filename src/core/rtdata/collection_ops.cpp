@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <format>
 #include <numeric>
 #include <vector>
 
@@ -262,7 +263,15 @@ Table *removeFrom(Table *t, slot_t key, const CollectionType *type, bool inTree 
     Table *children[kMaxFanout + 1];
     size_t count = childrenWith(children, t, at, shrunk, nullptr);
     if (underfull(shrunk, type)) {
-        ASSERT(count > 1, "A branch has a neighbour for each of its children.");
+        // The combine below reads children[left] and children[left + 1]: a branch of one child
+        // has no neighbour, and the second read would take whatever follows the filled prefix
+        // of `children`.
+        GUARD(
+            count > 1,
+            std::format(
+                "combining the underfull child at index {} of a branch with {} child(ren): "
+                "there is no neighbouring table to combine it with",
+                at, count));
         const size_t left = at > 0 ? at - 1 : at;
         Table *made[2];
         if (combine(children[left], children[left + 1], made, type) == 2) {

@@ -7,10 +7,17 @@ test/cases/trans/cpp/exec
 test/cases/trans/cpp/exec_mod_scalar.cml
 # The two reduced-precision floating types, at both precisions: storage and the type's own text,
 # arithmetic rounded once, comparison of the widened values, conversion in both directions, the
-# module reductions and comparisons over a value of either, and the reports a conversion or a
-# division gives.
+# module reductions and comparisons over a value of either, the mean (a total and a division, both
+# in f64), the positions argsort and the two arg loops read from a value of either, and the reports
+# a conversion or a division gives.
 test/cases/trans/cpp/narrow_floats.cml
 test/cases/trans/cpp/narrow_reductions.cml
+test/cases/trans/cpp/narrow_mean.cml
+test/cases/trans/cpp/narrow_argmax.cml
+# The library's own operators, where the writer had no rule and a bridged call was the answer: the
+# integer minimum and maximum (the plain comparison, not the IEEE one the floats take) and the
+# square root outside its domain (a NaN, not a fault).
+test/cases/trans/cpp/math_min_max_int.cml
 
 # Values and their text.
 test/cases/loops/iterate_string.cml
@@ -240,10 +247,31 @@ test/cases/trans/cpp/index_rank.cml
 # a column of it (`m[:, 1]`), and the rank-2 value behind the first row of a rank-3 one.
 test/cases/trans/cpp/slice_rank.cml
 
-# A tensor the runtime builds: `tensor:ones` has no standalone translation, so the program holds a
-# counted handle to the runtime's own value (rt::Foreign) and prints the runtime's text for it --
-# the one line below is std::fvm's, byte for byte.
+# `for` over a value of several dimensions walks its first dimension: the item is the row (`atRow`),
+# the rounds are the first extent (not the element count), and a rank-3 value gives rank-2 planes.
+test/cases/trans/cpp/iterate_rows.cml
+
+# A literal of one dimension carries its extents: `[1.0, 2.0, 3.0] as float[]` is one dimension of
+# 3 elements, so `shape` and `len` read [3] and 3, and `as float[3]` has a rank to check.
+test/cases/trans/cpp/literal_open_shape.cml
+
+# `as` states the shape a value must have: a value that holds it is the value (nothing to write, the
+# two sides are one `rt::Array<T>`), and a value that does not stops the program with the
+# interpreter's own sentence -- `conversion to 'float[3, 3]' failed: the array has shape [2, 2]`.
+test/cases/trans/cpp/cast_shape_holds.cml
+test/cases/trans/cpp/cast_shape_fault.cml
+
+# A tensor the runtime builds: `tensor:ones` has a standalone translation that calls the runtime's
+# kernel and converts the value back into the shaped array its Camel type names (rt::Array), so the
+# program prints it with the same `println` as any array -- the one line below is std::fvm's, byte
+# for byte.
 test/cases/trans/cpp/tensor_ones.cml
+# The element type the call states reaches the kernel, so the tensor built is the one the program
+# asked for: `ones::<f64>` is f64 and `ones::<i64>` is i64, whose text `1` is not f32's `1.0`.
+test/cases/trans/cpp/tensor_ones_element.cml
+# The other tensor builder the runtime owns: `tensor:zeros` is one rule with `ones` now, and the
+# line it prints is std::fvm's, byte for byte.
+test/cases/trans/cpp/tensor_zeros.cml
 # `shape(m)` answers the value's dimensions as an `int[]` of its own -- a value, not a view -- and a
 # sliced value answers the dimensions it kept.
 test/cases/trans/cpp/shape_rank.cml
@@ -266,3 +294,8 @@ test/cases/trans/cpp/extreme_axis_rank.cml
 # The position of the extreme along one dimension: the first element of the lane equal to its
 # maximum (minimum), or its first NaN. The answer is an int64 value whatever the source holds.
 test/cases/trans/cpp/arg_axis_rank.cml
+
+# The mean of a whole value: the sum divided by the number of elements, both in f64, and the
+# answer's element type reached by one conversion -- a mean of integers is an f32, not integer
+# division, and a mean of f32 elements is not the f32 sum divided again.
+test/cases/trans/cpp/mean_rank.cml

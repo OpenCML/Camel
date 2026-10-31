@@ -171,6 +171,22 @@ def check_link_line(compiler, msvc):
     return 0
 
 
+def build_pch(workdir, args):
+    """Precompile runtime.h for clang: every generated program includes it, and compiling it once
+    is most of the difference between a two-second build and a three-second one."""
+    compiler, _ = find_compiler()
+    args.pch = None
+    if args.no_pch or not compiler or "clang" not in os.path.basename(compiler).lower():
+        return None
+    pch = os.path.join(workdir, "runtime.pch")
+    header = os.path.join(ROOT, "include", "camel", "standalone", "runtime.h")
+    code, _, _, _ = run([compiler, "-std=c++20", "-O2", "-ffp-contract=off",
+                         "-I", os.path.join(ROOT, "include"),
+                         "-x", "c++-header", header, "-o", pch], 600)
+    args.pch = pch if code == 0 else None
+    return args.pch
+
+
 def needs_of(target, env):
     """The shared libraries the built program needs, as the platform reports them: `ldd` on
     Linux, `otool -L` on macOS, and (on Windows, where an import is resolved when the program
@@ -190,61 +206,140 @@ def needs_of(target, env):
     return out + err
 
 
-def check_standalone(programs, args):
+def check_standalone(paths, args):
     """Every program written by std::cpp must be one the Camel runtime does not have to be part
     of: the generated code names no bridge, and the executable built from it needs no Camel
-    library. The verdict is the artifact's (`ldd`), not the writer's."""
+    library. The verdict is the artifact's (`ldd`), not the writer's.
+
+    `--expect` gives it a list, which is how the whole list is asked rather than one program: a
+    property that holds for one case and is checked on that case is a property of the case."""
     compiler, msvc = find_compiler()
     if not compiler:
         print("FAIL: no C++ compiler found (set CXX)")
         return 2
+    entries = expand(paths + (read_expect(args.expect) if args.expect else []))
+    if not entries:
+        print("FAIL: no programs")
+        return 2
     env = dict(os.environ)
     env.setdefault("CAMEL_HOME", os.path.join(ROOT, "out", "latest"))
     workdir = tempfile.mkdtemp(prefix="cppexec-standalone-")
-    failed = 0
-    for path in programs:
-        rel = os.path.relpath(os.path.abspath(path), ROOT).replace("\\", "/")
-        code, out, err, _ = run([CAMEL, rel] + args.passes + ["std::cpp"], args.timeout, env)
+    build_pch(workdir, args)
+
+    def one(entry):
+        program, entry_args = entry
+        program_rel = os.path.relpath(program, ROOT).replace("\\", "/")
+        shown = program_rel + "".join(" " + a for a in entry_args)
+        rec = {"program": shown, "same_program": program_rel, "bridge": None, "link": "",
+               "ok": False, "lines": [], "reason": ""}
+        # The arguments of a `main` are a run-time thing, so the translation does not see them:
+        # the same program is written once, and what changes is what it is handed when it runs.
+        code, out, err, _ = run([CAMEL, program_rel] + args.passes + ["std::cpp"],
+                                args.timeout, env)
         if code != 0 or "#include" not in out:
-            print("FAIL %s: std::cpp did not write a program" % rel)
-            print("  " + (err or out).strip().splitlines()[-1][:200])
-            failed += 1
-            continue
+            rec["lines"] = ["  FAIL: std::cpp did not write a program",
+                            "  " + (err or out).strip().splitlines()[-1][:200]]
+            rec["reason"] = "std::cpp did not write a program"
+            return rec
         bridges = "camel/standalone/bridge.h" in out
-        stem = re.sub(r"[^A-Za-z0-9_]", "_", rel)[:120]
+        stem = re.sub(r"[^A-Za-z0-9_]", "_", program_rel)[:120]
         source = os.path.join(workdir, stem + ".cpp")
         target = os.path.join(workdir, stem + EXE)
         with open(source, "w", encoding="utf-8", newline="\n") as f:
             f.write(out)
-        cmd = build_command(compiler, msvc, source, target, bridges, env["CAMEL_HOME"])
-        print("%s" % rel)
-        print("  bridge: %s" % ("yes" if bridges else "no"))
-        print("  link: " + " ".join(cmd))
+        cmd = build_command(compiler, msvc, source, target, bridges, env["CAMEL_HOME"], args.pch)
+        rec["bridge"], rec["link"] = bridges, " ".join(cmd)
         code, cout, cerr, _ = run(cmd, 600, env, cwd=workdir)
         if code != 0:
             errors = [l for l in (cout + cerr).splitlines() if "error" in l]
-            print("  FAIL: does not build: " + (errors[0] if errors else "")[:200])
-            failed += 1
-            continue
+            rec["lines"] = ["  FAIL: does not build: " + (errors[0] if errors else "")[:200]]
+            rec["reason"] = "does not build"
+            return rec
         needs = needs_of(target, env)
         if needs is None:
-            print("  PASS: no library tool on this platform; the link line names no Camel library"
-                  if "libcamel" not in " ".join(cmd) else "  FAIL: the link line names libcamel")
-            failed += 0 if "libcamel" not in " ".join(cmd) else 1
-            continue
+            named = "libcamel" in rec["link"]
+            rec["ok"] = not named
+            rec["lines"] = (["  FAIL: the link line names libcamel"] if named else
+                            ["  PASS: no library tool on this platform; the link line names no "
+                             "Camel library"])
+            rec["reason"] = "the link line names libcamel" if named else ""
+            return rec
         camel = sorted({l.strip() for l in needs.splitlines() if "libcamel" in l})
         if camel:
-            print("  FAIL: the built program needs the Camel runtime:")
-            for line in camel:
-                print("    " + line)
-            failed += 1
-        else:
-            print("  needs: none of the Camel runtime")
-    shutil.rmtree(workdir, ignore_errors=True)
+            rec["lines"] = ["  FAIL: the built program needs the Camel runtime:"] + \
+                           ["    " + line for line in camel]
+            # What crossed: the bridge calls the written program makes, which is the reason the
+            # link line has to name the runtime at all.
+            crossed = [l.strip() for l in out.splitlines() if "bridge::" in l]
+            if crossed:
+                rec["lines"] += ["  crosses: " + crossed[0][:160]]
+                for line in crossed[1:4]:
+                    rec["lines"] += ["           " + line.strip()[:160]]
+            rec["reason"] = "needs the Camel runtime"
+            return rec
+        rec["ok"] = True
+        rec["lines"] = ["  needs: none of the Camel runtime"]
+        return rec
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(args.jobs) as pool:
+            records = list(pool.map(one, entries))
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+    failed = [rec for rec in records if not rec["ok"]]
+    baseline = set()
+    if args.baseline:
+        path = os.path.join(ROOT, args.baseline)
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                for line in f:
+                    name = line.split("#", 1)[0].strip()
+                    if name:
+                        baseline.add(name)
+    # A program the baseline names is a known crossing, so its report is the baseline's; the
+    # detail (which operator crossed, what `ldd` said) is printed for what the baseline does not
+    # explain, or for the one program a report is asked about.
+    detailed = records if len(records) == 1 else [
+        rec for rec in failed if rec["same_program"] not in baseline]
+    for rec in detailed:
+        print("%s" % rec["program"])
+        if rec["bridge"] is not None:
+            print("  bridge: %s" % ("yes" if rec["bridge"] else "no"))
+            print("  link: " + rec["link"])
+        for line in rec["lines"]:
+            print(line)
+    if len(records) > 1:
+        # One line per reason, names on that line: a list of forty names is still one line, and a
+        # line is what a report can keep. Printing them one per line loses the verdict.
+        by_reason = collections.defaultdict(list)
+        for rec in records:
+            if rec["ok"] or rec["same_program"] in baseline:
+                continue
+            by_reason[rec["reason"]].append(rec["same_program"])
+        for reason, names in sorted(by_reason.items()):
+            print("  %s (%d): %s" % (reason, len(names), ", ".join(sorted(set(names)))))
+    if args.baseline:
+        # A list of the programs allowed to link the runtime, and nothing else allowed: the whole
+        # list is asked, and the answer has to be exactly the list -- a fifth program that links
+        # it is red, and so is one of these four becoming standalone (the list is then wrong).
+        actual = {rec["same_program"] for rec in failed}
+        extra = sorted(actual - baseline)
+        missing = sorted(baseline - actual)
+        for name in extra:
+            print("  links the runtime and is not in the baseline: " + name)
+        for name in missing:
+            print("  is in the baseline and no longer links the runtime: " + name)
+        if extra or missing:
+            print("FAIL: the programs that link the runtime are not the ones the baseline names "
+                  "(%d extra, %d gone)" % (len(extra), len(missing)))
+            return 1
+        print("PASS: %d of %d program(s) need no Camel runtime; %d link it, all in the baseline"
+              % (len(records) - len(actual), len(records), len(actual)))
+        return 0
     if failed:
-        print("FAIL: %d of %d program(s) are not standalone" % (failed, len(programs)))
+        print("FAIL: %d of %d program(s) are not standalone" % (len(failed), len(records)))
         return 1
-    print("PASS: %d program(s) need no Camel runtime" % len(programs))
+    print("PASS: %d of %d program(s) need no Camel runtime" % (len(records), len(records)))
     return 0
 
 
@@ -303,7 +398,17 @@ def check(entry, workdir, args):
     if code != 0:
         errors = [l for l in (cout + cerr).splitlines() if "error" in l]
         rec["outcome"] = "does not build"
-        rec["detail"] = (errors[0] if errors else (cout + cerr).strip()[-200:])[:200]
+        # The line the compiler named, then the error: a build failure that names a place and
+        # not the text at that place is a failure nobody can read, and the generated program is
+        # temporary. The text comes first because it is the shorter of the two.
+        text = ""
+        at = re.search(re.escape(source) + r":(\d+):", errors[0] if errors else "")
+        if at:
+            lines = out.splitlines()
+            number = int(at.group(1))
+            if 0 < number <= len(lines):
+                text = lines[number - 1].strip() + "  <<  "
+        rec["detail"] = (text + (errors[0] if errors else (cout + cerr).strip()[-200:]))[:400]
         return rec
 
     fcode, fout, ferr, _ = run([CAMEL] + entry_args + [rel] + args.passes + ["std::fvm"], args.timeout, env)
@@ -329,6 +434,99 @@ def check(entry, workdir, args):
         rec["detail"] = ("exit fvm %s, cpp %s; " % (fcode, ccode)) + (
             first_difference(fout, xout) if fout != xout else "same output")
     return rec
+
+
+BACKENDS = ("std::nvm", "std::fvm", "std::cpp", "std::jit")
+
+
+def back_end_run(program, entry_args, args, env, workdir, back_end):
+    """(exit code, text) of one program on one back end. For `std::cpp` that is the program it
+    writes: translated, built, then run -- the same three steps `check` takes."""
+    rel = os.path.relpath(program, ROOT).replace("\\", "/")
+    if back_end != "std::cpp":
+        code, out, err, _ = run([CAMEL] + entry_args + [rel] + args.passes + [back_end],
+                                args.timeout, env)
+        return code, (out + ("\n" + err if err.strip() else ""))
+    code, out, err, _ = run([CAMEL] + entry_args + [rel] + args.passes + ["std::cpp"],
+                            args.timeout, env)
+    if code != 0 or "#include" not in out:
+        return code, (out + err).strip()
+    stem = re.sub(r"[^A-Za-z0-9_]", "_", rel)[:150]
+    source = os.path.join(workdir, stem + ".cpp")
+    target = os.path.join(workdir, stem + EXE)
+    with open(source, "w", encoding="utf-8", newline="\n") as f:
+        f.write(out)
+    compiler, msvc = find_compiler()
+    bridged = "camel/standalone/bridge.h" in out
+    code, cout, cerr, _ = run(
+        build_command(compiler, msvc, source, target, bridged, env["CAMEL_HOME"], args.pch),
+        600, env, cwd=workdir)
+    if code != 0:
+        errors = [l for l in (cout + cerr).splitlines() if "error" in l]
+        return code, (errors[0] if errors else (cout + cerr).strip())
+    code, out, err, _ = run([target] + entry_args, args.timeout, env)
+    return code, (out + ("\n" + err if err.strip() else ""))
+
+
+def check_four(entry, workdir, args):
+    """The four cells of one program, and whether they say the same thing."""
+    program, entry_args = entry
+    rel = os.path.relpath(program, ROOT).replace("\\", "/")
+    env = dict(os.environ)
+    env.setdefault("CAMEL_HOME", os.path.join(ROOT, "out", "latest"))
+    if os.name == "nt":
+        env["PATH"] = os.path.join(env["CAMEL_HOME"], "libs") + os.pathsep + env.get("PATH", "")
+    cells = []
+    for back_end in BACKENDS:
+        code, text = back_end_run(program, entry_args, args, env, workdir, back_end)
+        cells.append({"back_end": back_end, "exit": code, "text": text,
+                      "not_supported": bool(re.search(r"[Nn]ot supported|unsupported|no support",
+                                                      text))})
+    rec = {"program": rel + "".join(" " + a for a in entry_args), "cells": cells}
+    speaking = [c for c in cells if not c["not_supported"]]
+    same = len({(c["exit"], c["text"]) for c in speaking}) == 1 if speaking else False
+    rec["same"] = same
+    rec["silent"] = [c["back_end"] for c in cells if c["not_supported"]]
+    rec["differs"] = [] if same else [c for c in speaking
+                                      if (c["exit"], c["text"]) != (speaking[0]["exit"],
+                                                                    speaking[0]["text"])]
+    return rec
+
+
+def check_four_backends(programs, args):
+    """Every program on the four back ends, one line per cell: a type is implemented when the
+    four say the same sentence, not when one of them runs it."""
+    entries = expand(programs)
+    workdir = tempfile.mkdtemp(prefix="cppexec-")
+    build_pch(workdir, args)
+    try:
+        records = []
+        for entry in entries:
+            rec = check_four(entry, workdir, args)
+            records.append(rec)
+            print("%s  %s" % (rec["program"],
+                              "same" if rec["same"] else "differs"))
+            for cell in rec["cells"]:
+                text = " ".join(cell["text"].split())
+                if len(text) > 200:
+                    text = text[:200] + "..."
+                print("  %-9s %s  %s" % (cell["back_end"], cell["exit"], text or "(no output)"))
+            if rec["silent"]:
+                print("  not run on %s: the back end says so above" % ", ".join(rec["silent"]))
+            for cell in rec["differs"]:
+                print("  differs at %s: %s" % (cell["back_end"],
+                                               " ".join(cell["text"].split())[:300]))
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+    agree = [r for r in records if r["same"]]
+    print("")
+    if len(agree) == len(records):
+        print("PASS: %d of %d programs say the same thing on four back ends"
+              % (len(agree), len(records)))
+        return 0
+    print("FAIL: %d of %d programs speak with more than one voice"
+          % (len(records) - len(agree), len(records)))
+    return 1
 
 
 def expand(paths):
@@ -372,6 +570,12 @@ def main():
     ap.add_argument("--standalone", action="store_true",
                     help="check that the named programs are built without the Camel runtime: no "
                          "bridge in the generated code, no Camel library in what it needs")
+    ap.add_argument("--baseline",
+                    help="with --standalone: a file of the programs allowed to link the runtime; "
+                         "the answer has to be exactly that list, in both directions")
+    ap.add_argument("--four-backends", action="store_true",
+                    help="run each program on std::nvm, std::fvm, std::cpp and std::jit, say what "
+                         "each one said, and fail when they do not all say the same thing")
     ap.add_argument("--no-pch", action="store_true",
                     help="do not precompile camel/standalone/runtime.h (clang)")
     args = ap.parse_args()
@@ -387,9 +591,13 @@ def main():
     if args.link_line:
         return check_link_line(compiler, msvc)
     if args.standalone:
-        if not args.programs:
-            ap.error("--standalone needs at least one program")
+        if not args.programs and not args.expect:
+            ap.error("--standalone needs at least one program, or --expect with a list")
         return check_standalone(args.programs, args)
+    if args.four_backends:
+        if not args.programs:
+            ap.error("--four-backends needs at least one program")
+        return check_four_backends(args.programs, args)
 
     expected = read_expect(args.expect) if args.expect else []
     programs = expand(args.programs + expected)
