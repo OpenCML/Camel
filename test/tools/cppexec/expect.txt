@@ -262,17 +262,19 @@ test/cases/trans/cpp/literal_open_shape.cml
 test/cases/trans/cpp/cast_shape_holds.cml
 test/cases/trans/cpp/cast_shape_fault.cml
 
-# A tensor the runtime builds: `tensor:ones` has a standalone translation that calls the runtime's
-# kernel and converts the value back into the shaped array its Camel type names (rt::Array), so the
-# program prints it with the same `println` as any array -- the one line below is std::fvm's, byte
-# for byte.
+# The three tensor builders of the module, which write their array themselves and call no runtime:
+# the value is elements, so `rt::Array<T>` is the whole of it, and the program needs no Camel
+# library. A tensor whose value is a runtime object still crosses the bridge; a tensor of elements
+# is data.
 test/cases/trans/cpp/tensor_ones.cml
-# The element type the call states reaches the kernel, so the tensor built is the one the program
-# asked for: `ones::<f64>` is f64 and `ones::<i64>` is i64, whose text `1` is not f32's `1.0`.
+# The element type the call states is the array's: `ones::<f64>` is f64 and `ones::<i64>` is i64,
+# whose text `1` is not f32's `1.0`.
 test/cases/trans/cpp/tensor_ones_element.cml
-# The other tensor builder the runtime owns: `tensor:zeros` is one rule with `ones` now, and the
-# line it prints is std::fvm's, byte for byte.
+# The other builder: `tensor:zeros` is one rule with `ones`, and the line it prints is std::fvm's.
 test/cases/trans/cpp/tensor_zeros.cml
+# The shape's own refusal: a negative extent is a fault, and the words are the kernel's ("zeros:
+# Shape cannot contain negative values"), not a sentence of this back end's own making.
+test/cases/trans/cpp/fault_tensor_negative_shape.cml
 # `shape(m)` answers the value's dimensions as an `int[]` of its own -- a value, not a view -- and a
 # sliced value answers the dimensions it kept.
 test/cases/trans/cpp/shape_rank.cml

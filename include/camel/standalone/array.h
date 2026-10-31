@@ -408,18 +408,18 @@ template <typename T> Array<int64_t> shapeOf(const Array<T> &xs) {
 /// `zeros::<T>(shape)` and `ones::<T>(shape)` (`tensor:zeros`, `tensor:ones`): the shaped array of
 /// the call's element type with every element the fill. The shape is the `int[]` the call is given,
 /// so the extents are the value's, read here -- this is the one place in this file that shapes an
-/// array from a value rather than from a type. A negative extent is the fault the interpreter
-/// raises there rather than an empty array: it says the same sentence, at the same site, and the
-/// program stops as it does under the interpreter.
+/// array from a value rather than from a type. A negative extent is the fault the kernel raises
+/// there (`parseShapeArray`, modules/tensor/interop.cpp) rather than an empty array, with the words
+/// the kernel's own report carries: the operator's name, then its sentence.
 template <typename T>
-Array<T> filledArray(const Array<int64_t> &shape, T fill, const Site &site) {
+Array<T> filledArray(const Array<int64_t> &shape, T fill, const char *op, const Site &site) {
     std::vector<int64_t> extents;
     extents.reserve(shape.size());
     std::size_t count = 1;
     for (std::size_t i = 0; i < shape.size(); ++i) {
         const int64_t extent = shape[i];
         if (extent < 0) [[unlikely]] {
-            fault(site, {"Tensor shape cannot contain negative extents"});
+            fault(site, {std::string(op) + ": Shape cannot contain negative values"});
         }
         extents.push_back(extent);
         count *= static_cast<std::size_t>(extent);
