@@ -587,14 +587,17 @@ Rules buildRules() {
         },
         false,
     };
-    // The slice of a one-dimensional array, whichever spelling wrote it (design principles 5.4):
-    // the six words are the value, the axis, the two bounds, the step and the mask of the bounds
-    // written, and a call that leaves the last two out stands for step 1 and "both written". A
-    // value with several dimensions or an open rank is not a flat run here: the bridge runs it.
+    // The slice of one dimension of a value, whichever spelling wrote it (design principles 5.4): the
+    // six words are the value, the axis, the two bounds, the step and the mask of the bounds written,
+    // and a call that leaves the last two out stands for step 1 and "both written". The dimension the
+    // axis names is the one sliced and every other one is kept whole -- `m[0:2]` of a rank-2 value is
+    // its first two rows, `m[:, 1]` its second column -- which is what the runtime's slice does now
+    // that the shape travels with the value. An open rank is still not translated: its rank is a
+    // property of the value, and a slice of it may keep or drop any number of dimensions.
     r[":op/slice_sub"] = {
         [](OperatorCall &c) -> std::optional<std::string> {
             const ArrayType *value = asArrayType(c.normType(0));
-            if (value == nullptr || value->anyRank() || value->rank() != 1 ||
+            if (value == nullptr || value->anyRank() ||
                 c.normCount() < 4 || c.normCount() > 6) {
                 return std::nullopt;
             }

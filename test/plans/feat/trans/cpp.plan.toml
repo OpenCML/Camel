@@ -125,21 +125,6 @@ assert(d.range.start.line === 14 && d.range.start.character === 22 && d.range.en
 timeout_ms = 8000
 
 [[tests]]
-name = "refuse_rank"
-desc = "A rule that declines says which values it declined: a slice of a value of two dimensions is not the one slice this back end has -- it keeps no shape, so `m[0:1]` of `float[2, 3]` is not a run of a block here -- and the refusal names both types it was given ('float[2, 3]' and 'int') where it used to say only \"on values\", which left the reader to guess the shape it wanted. The value is `main`'s parameter: a literal of that type is refused earlier, with its own message."
-kind = "negative"
-case = "../../../cases/trans/cpp/refuse_rank.cml"
-args = ["${case}", "std::cpp"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_line = 13
-expect_diagnostic_column = 14
-expect_output_contains = ["function 'main' uses the operator ':op/slice_sub' on values of type 'float[2, 3]' and 'int' std::cpp does not translate it for yet"]
-expect_output_not_contains = ["internal error", "node#", "non-bridgeable"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-
-[[tests]]
 name = "literal_rank"
 desc = "A literal of several dimensions keeps its shape: the elements lie flat in row order and the extents travel in the same block, so the generated program holds `rt::Array<double>{{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, {3, 2}}` and prints the three rows the interpreter prints -- it printed the first extent's worth of elements (`[1.0, 2.0, 3.0]`) and exited 0 before the shape was carried. The program itself is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
@@ -147,6 +132,18 @@ case = "../../../cases/trans/cpp/literal_rank.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
 expect_stdout_contains = ["const rt::Array<double> array{{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, {3, 2}};"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "slice_rank"
+desc = "A slice names one dimension of a value and keeps every other one whole: `m[0:2]` is the first two rows of a rank-2 value, `m[:, 1]` its second column, `len` of a row range answers the rows it kept, and `t[1:]` of a rank-3 value is the rank-2 value behind its first row. The dimension sliced takes the length the bounds give it and the shape everywhere else is the value's own, so the runtime's slice gathers along an axis instead of over the whole run. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/slice_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::sliceSub("]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

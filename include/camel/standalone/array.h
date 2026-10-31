@@ -224,6 +224,27 @@ template <typename T> class Array {
         }
     }
 
+    /// States the shape a value sliced along one dimension has (`sliceSub`): the source's dimensions,
+/// the sliced one replaced by the length the bounds gave it.
+    void shapeSliced(const Array<T> &source, std::size_t axis, std::size_t count) {
+        if (rep_ == nullptr || axis >= source.rank()) {
+            return;
+        }
+        std::size_t product = count;
+        for (std::size_t i = 0; i < source.rank(); ++i) {
+            if (i != axis) {
+                product *= source.extent(i);
+            }
+        }
+        if (product != size()) {
+            return;
+        }
+        rep_->rank = static_cast<std::uint32_t>(source.rank());
+        for (std::size_t i = 0; i < source.rank(); ++i) {
+            rep_->extents[i] = i == axis ? count : source.extent(i);
+        }
+    }
+
     /// States the shape a value built from another's elements has (`atAxis`): every dimension of
     /// the source except `axis`, when they multiply to the elements this value holds.
     void shapeWithout(const Array<T> &source, std::size_t axis) {
@@ -435,21 +456,74 @@ Array<T> slice(const Array<T> &xs, int64_t start, int64_t end, const Site &site)
 }
 
 /// `xs[a:b]`, `xs[a:b:s]`, `xs[:b]`, `xs[a:]`, `xs[::-1]` and `slice(xs, 0, a, b, s)` (:op/slice_sub)
-/// of a one-dimensional array, as struct.cpp's __slice_sub__ reads them: `written` says which
-/// bounds the program wrote (bit 1 the end, bit 2 the start), a step of 0 or an axis other than the
-/// first is InvalidArgument at `invalid` (values: "[]", what is wrong), and a bound that leaves the
-/// array is SliceOutOfRange at `outOfRange` (values: the start, the end, "an array", the length).
+/// as struct.cpp's __slice_sub__ reads them: `written` says which bounds the program wrote (bit 1
+/// the end, bit 2 the start), a step of 0 or an axis outside the value is InvalidArgument at
+/// `invalid` (values: "[]", what is wrong), and a bound that leaves the dimension is
+/// SliceOutOfRange at `outOfRange` (values: the start, the end, "an array", the length).
+///
+/// One of a value's dimensions is what is sliced, and every other dimension is kept whole
+/// (design principles 5.4): `m[0:2]` of a rank-2 value is its first two rows, `m[:, 1]` its second
+/// column, and the dimension sliced takes the length the bounds give it. A negative axis counts
+/// from the last dimension, which for a value of one dimension is 0 either way.
+template <typename T> void sliceGatherPlane(Array<T> &out,
+                                           const Array<T> &xs,
+                                           std::size_t axis,
+                                           int64_t start,
+                                           int64_t step,
+                                           std::size_t count,
+                                           const std::size_t *stride,
+                                           std::size_t dimension,
+                                           std::size_t offset) {
+    if (dimension == xs.rank()) {
+        out.push(xs[offset]);
+        return;
+    }
+    if (dimension == axis) {
+        for (std::size_t i = 0; i < count; ++i) {
+            sliceGatherPlane(
+                out,
+                xs,
+                axis,
+                start,
+                step,
+                count,
+                stride,
+                dimension + 1,
+                offset + static_cast<std::size_t>(start + static_cast<int64_t>(i) * step) *
+                             stride[dimension]);
+        }
+        return;
+    }
+    for (std::size_t i = 0; i < xs.extent(dimension); ++i) {
+        sliceGatherPlane(
+            out, xs, axis, start, step, count, stride, dimension + 1, offset + i * stride[dimension]);
+    }
+}
+
 template <typename T>
 Array<T> sliceSub(
     const Array<T> &xs, int64_t axis, int64_t startRaw, int64_t endRaw, int64_t step,
     int64_t written, const Site &outOfRange, const Site &invalid) {
-    if (axis != 0 && axis != -1) [[unlikely]] {
-        fault(invalid, {"[]", "a slice axis must be between 0 and 0, not " + std::to_string(axis)});
-    }
     if (step == 0) [[unlikely]] {
         fault(invalid, {"[]", "a slice step must not be 0"});
     }
-    const auto extent     = static_cast<int64_t>(xs.size());
+    const bool severalDimensions = xs.rank() >= 2;
+    if (!severalDimensions && axis != 0 && axis != -1) [[unlikely]] {
+        fault(invalid, {"[]", "a slice axis must be between 0 and 0, not " + std::to_string(axis)});
+    }
+    if (axis == -1) {
+        axis = severalDimensions ? static_cast<int64_t>(xs.rank()) - 1 : 0;
+    }
+    if (severalDimensions &&
+        (axis < 0 || static_cast<std::size_t>(axis) >= xs.rank())) [[unlikely]] {
+        fault(
+            invalid,
+            {"[]",
+             "a slice axis must be between 0 and " + std::to_string(xs.rank() - 1) + ", not " +
+                 std::to_string(axis)});
+    }
+    const auto extent = static_cast<int64_t>(
+        severalDimensions ? xs.extent(static_cast<std::size_t>(axis)) : xs.size());
     const bool wroteEnd   = (written & 1) != 0;
     const bool wroteStart = (written & 2) != 0;
     int64_t start         = 0;
@@ -473,6 +547,23 @@ Array<T> sliceSub(
                 {std::to_string(start), std::to_string(end), "an array", std::to_string(extent)});
         }
         count = start > end ? (start - end + (-step) - 1) / (-step) : 0;
+    }
+    if (severalDimensions) {
+        std::size_t stride[Array<T>::kMaxRank];
+        std::size_t product = 1;
+        for (std::size_t i = xs.rank(); i-- > 0;) {
+            stride[i] = product;
+            product *= xs.extent(i);
+        }
+        const auto dimension = static_cast<std::size_t>(axis);
+        Array<T> shaped;
+        shaped.reserve(xs.extent(dimension) == 0
+                           ? 0
+                           : (xs.size() / xs.extent(dimension)) * static_cast<std::size_t>(count));
+        sliceGatherPlane(
+            shaped, xs, dimension, start, step, static_cast<std::size_t>(count), stride, 0, 0);
+        shaped.shapeSliced(xs, dimension, static_cast<std::size_t>(count));
+        return shaped;
     }
     Array<T> out;
     out.reserve(static_cast<std::size_t>(count));

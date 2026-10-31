@@ -213,3 +213,7 @@ test/cases/trans/cpp/literal_rank.cml
 # and is the element, `t[1]` of a rank-3 value is the rank-2 value behind it -- and `len` of a row is
 # the dimension that is left.
 test/cases/trans/cpp/index_rank.cml
+
+# A slice names one dimension of a value and keeps every other one whole: rows of a rank-2 value,
+# a column of it (`m[:, 1]`), and the rank-2 value behind the first row of a rank-3 one.
+test/cases/trans/cpp/slice_rank.cml
