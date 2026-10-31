@@ -225,3 +225,6 @@ test/cases/trans/cpp/slice_rank.cml
 # counted handle to the runtime's own value (rt::Foreign) and prints the runtime's text for it --
 # the one line below is std::fvm's, byte for byte.
 test/cases/trans/cpp/tensor_ones.cml
+# The element type the call states reaches the kernel, so the tensor built is the one the program
+# asked for: `ones::<f64>` is f64 and `ones::<i64>` is i64, whose text `1` is not f32's `1.0`.
+test/cases/trans/cpp/tensor_ones_element.cml

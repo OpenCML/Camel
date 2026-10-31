@@ -227,11 +227,25 @@ Value valueOf(slot_t slot, Value::Kind kind) {
 
 Value call(
     std::string_view uri, const std::vector<Value> &norm, const std::vector<Value> &with,
-    Value::Kind result) {
+    Value::Kind result, int64_t resultElemCode) {
     ::operator_t op = operatorFor(uri);
     try {
         ArgsOfCall normArgs(norm);
         ArgsOfCall withArgs(with);
+        if (resultElemCode >= 0) {
+            // The call's result type, which a kernel that builds a value reads to know what to
+            // build: `tensor:ones` fills the element type the call states, read as the element of
+            // its result type (modules/tensor/ops/creation_ops.cpp, resultElement), so the type of
+            // the element alone would say nothing. What crosses is the element's code: the Type is
+            // made from it here (Type::create), never parsed from a text of the type, and the
+            // extents are the call's own business -- `T[..]` is the result type such a call
+            // declares (stdlib/tensor.cml).
+            auto *element = camel::core::type::Type::create(
+                static_cast<camel::core::type::TypeCode>(resultElemCode));
+            auto *resultType = camel::core::type::ArrayType::openRank(element);
+            normArgs.setResultType(resultType);
+            withArgs.setResultType(resultType);
+        }
         const slot_t out = op(withArgs, normArgs, *runtime().context);
         return valueOf(out, result);
     } catch (const camel::core::error::RuntimeFault &fault) {

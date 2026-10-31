@@ -51,11 +51,15 @@ struct OperatorFault {
 };
 
 /// Runs the operator `uri` of the runtime on `norm` and `with` and gives its result as
-/// `result`. The runtime is started, and the operator's module loaded, at the first call.
-/// Throws OperatorFault when the operator faults. Implemented in libcamel.
+/// `result`. `resultElemCode` is the element type of the call's result as the integer code of
+/// the type, for an operator whose result is a value the runtime builds and whose kernel reads
+/// the call's result type (`TypeCode`, e.g. `tensor:ones` fills the element type the call
+/// states); -1 means the call states no result type and the runtime reads its own, as it did
+/// before a code could cross. The runtime is started, and the operator's module loaded, at the
+/// first call. Throws OperatorFault when the operator faults. Implemented in libcamel.
 Value call(
     std::string_view uri, const std::vector<Value> &norm, const std::vector<Value> &with,
-    Value::Kind result);
+    Value::Kind result, int64_t resultElemCode = -1);
 
 inline Value arg(bool v) { return {Value::Kind::Bool, v ? 1 : 0, 0, {}}; }
 inline Value arg(int32_t v) { return {Value::Kind::Int32, v, 0, {}}; }
@@ -121,13 +125,15 @@ class Operator {
   public:
     explicit constexpr Operator(const char *uri) : uri_(uri) {}
 
-    /// The call at `place` (whose report a fault of the operator uses).
+    /// The call at `place` (whose report a fault of the operator uses). `resultElemCode` is the
+    /// call's result element type as a `TypeCode`, for the operators that need to be told it
+    /// (bridge::call); -1, the default, states none.
     template <typename R>
     R call(const Place &place, const std::vector<Value> &norm,
-           const std::vector<Value> &with) const {
+           const std::vector<Value> &with, int64_t resultElemCode = -1) const {
         Value v;
         try {
-            v = bridge::call(uri_, norm, with, kindOf<R>());
+            v = bridge::call(uri_, norm, with, kindOf<R>(), resultElemCode);
         } catch (const OperatorFault &f) {
             // The report as `camel` renders it: the message line, the excerpt, the help line;
             // and the one-line form.

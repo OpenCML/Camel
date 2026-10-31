@@ -45,6 +45,19 @@ std::vector<std::string> marks(size_t n) {
     return out;
 }
 
+/// The integer code of the element type a tensor result names, which the bridge turns back into a
+/// type (standalone_bridge.cpp, `Type::create`): a code is what crosses, never the text of a type,
+/// because the tree writes a type's text (`typeToString`) and parses none, and a second spelling
+/// here would be one to keep in step by hand. -1 when the result is not an array type: a call that
+/// states no element type leaves the runtime its own reading, as such a call had before.
+int64_t elementCode(const Type *result) {
+    const ArrayType *array = asArrayType(result);
+    if (array == nullptr) {
+        return -1;
+    }
+    return static_cast<int64_t>(static_cast<uint32_t>(array->elemTypeCode()));
+}
+
 std::string joinedNorm(OperatorCall &call, size_t from = 0) {
     std::string out;
     for (size_t i = from; i < call.normCount(); ++i) {
@@ -916,6 +929,10 @@ Rules buildRules() {
 
     // ---- The results the runtime owns (tensor:*, design note 9) ----
     // `tensor:ones` fills a tensor of the element type the call states with the shape it is given.
+    // The element type is the call's, and it reaches the kernel as the integer code of the type
+    // (`elementCode`): the kernel reads the call's result type to know what to fill, and a call
+    // that stated none left it filling f32 whatever the program wrote -- `ones::<f64>` built an
+    // f32 tensor and `ones::<i64>` printed `1.0` where the interpreter prints `1`.
     // A tensor is not a value this back end writes: it lives in the runtime module that owns it, and
     // the program holds it through a counted handle (`rt::Foreign`, camel/standalone/foreign.h), so
     // what a tensor is is written once, in the runtime, and the program and the interpreter print
@@ -929,10 +946,11 @@ Rules buildRules() {
                 return std::nullopt;
             }
             return std::format(
-                "{}.call<rt::Foreign>({}, {{rt::bridge::arg({})}}, {{}})",
+                "{}.call<rt::Foreign>({}, {{rt::bridge::arg({})}}, {{}}, {})",
                 c.bridgeOperator(),
                 c.place(),
-                c.norm(0).text);
+                c.norm(0).text,
+                elementCode(c.resultType()));
         },
         false,
         "rt::Foreign",

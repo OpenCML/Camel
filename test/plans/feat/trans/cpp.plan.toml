@@ -207,13 +207,25 @@ timeout_ms = 8000
 
 [[tests]]
 name = "tensor_ones"
-desc = "`tensor:ones` crosses the bridge: the pass writes no tensor of its own, so the runtime builds the value and the program holds a counted handle to it -- `const rt::Foreign v1_ones = op_tensor_ones.call<rt::Foreign>(at_13_17, {rt::bridge::arg(lit::array)}, {})`, the shape handed over as the `int[]` it already is -- and prints the runtime's own text for it. The handle's C++ type is the rule's, not the `rt::Array<float>` the Camel type of the result names, because an array the program builds is a value while a tensor is a value the runtime owns. The program itself is built and run by agree_with_fvm, which compares it with std::fvm byte for byte: one line, `[[1.0, 1.0], [1.0, 1.0]]`."
+desc = "`tensor:ones` crosses the bridge: the pass writes no tensor of its own, so the runtime builds the value and the program holds a counted handle to it -- `const rt::Foreign v1_ones = op_tensor_ones.call<rt::Foreign>(at_13_17, {rt::bridge::arg(lit::array)}, {}, 2)`, the shape handed over as the `int[]` it already is and the element type as the integer code of the type (2 is f32) -- and prints the runtime's own text for it. The handle's C++ type is the rule's, not the `rt::Array<float>` the Camel type of the result names, because an array the program builds is a value while a tensor is a value the runtime owns. The program itself is built and run by agree_with_fvm, which compares it with std::fvm byte for byte: one line, `[[1.0, 1.0], [1.0, 1.0]]`."
 kind = "behavior"
 case = "../../../cases/trans/cpp/tensor_ones.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
 expect_stdout_contains = ["const rt::Foreign v1_ones = op_tensor_ones.call<rt::Foreign>(", "rt::bridge::arg(lit::array)", "const rt::bridge::Operator op_tensor_ones{\"tensor:ones\"};", "#include \"camel/standalone/bridge.h\"", "rt::println(v1_ones);"]
 expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Array<float> v1_ones"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "tensor_ones_element"
+desc = "The element type a `tensor:ones` call states reaches the kernel, so the tensor built is the one the program asked for. The rule sends it as the integer code of the type -- `op_tensor_ones.call<rt::Foreign>(at_18_17, {rt::bridge::arg(lit::array)}, {}, 3)` for f64, `..., {}, 1)` for i64 -- and the bridge makes the type from that code (`Type::create`, never a text of a type) as the `T[..]` such a call declares; the kernel reads it as the element of the call's result type (`tensor:ones` fills the element the call states). Before it the call stated no result type, the kernel fell back to f32, and `ones::<i64>([2, 2])` printed `[[1.0, 1.0], [1.0, 1.0]]` where the interpreter prints `[[1, 1], [1, 1]]`. An f64 tensor prints `[[1.0, 1.0], [1.0, 1.0]]` either way -- 1.0 has one text at both widths -- so the integer line is the one that shows the type, and both are checked against std::fvm by agree_with_fvm."
+kind = "behavior"
+case = "../../../cases/trans/cpp/tensor_ones_element.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["op_tensor_ones.call<rt::Foreign>(", "}, {}, 3);", "}, {}, 1);", "rt::bridge::arg(lit::array)", "#include \"camel/standalone/bridge.h\""]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
