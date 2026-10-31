@@ -340,6 +340,14 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
     table.declareResources(
         ":var/take",
         ResourceSpec{.accesses = {cell(AccessMode::ReadModifyWrite)}, .result = alias(0)});
+    // `:var/after(cell, call)`: the cell as it stands after the call that wrote it
+    // (Builder::valueVersionOf). What it reaches is that cell, which the read above it reads and
+    // the call beside it writes; what it gives is the cell itself, so the result is operand 0.
+    table.declareResources(
+        ":var/after",
+        ResourceSpec{
+            .accesses = {cell(AccessMode::Read)},
+            .result   = ResultAlias{.kind = ResultAlias::Kind::Same, .operand = 0}});
     // The assignments: `=` stores its second operand into the cell, and a compound assignment
     // reads the cell, combines and stores. What either gives is the version of the variable --
     // the cell itself (design principles 2.1: a write produces this version's cell,
