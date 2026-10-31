@@ -146,6 +146,11 @@ template <> inline float halfFloatFromBits<F16Format>(uint16_t bits) {
  * A bf16 or an f16 value (rt::BF16, rt::F16 below): sixteen bits of storage holding the pattern of
  * the type (design principles 7.3), the widening to f32 that is exact, and the store rounding every
  * conversion into it goes through.
+ *
+ * Arithmetic on two of them is computed in f32 and rounded once into the element type, which is the
+ * one arithmetic path of the element type: an operator returns the rounded sum, difference, product
+ * or negation. Division is `rt::div`, because dividing by zero is a fault and an operator cannot
+ * report one (num.h).
  */
 template <typename Format> struct Half {
     uint16_t bits = 0;
@@ -174,6 +179,11 @@ template <typename Format> struct Half {
     explicit operator T() const {
         return static_cast<T>(toFloat());
     }
+
+    friend Half operator+(Half a, Half b) { return Half(a.toFloat() + b.toFloat()); }
+    friend Half operator-(Half a, Half b) { return Half(a.toFloat() - b.toFloat()); }
+    friend Half operator*(Half a, Half b) { return Half(a.toFloat() * b.toFloat()); }
+    friend Half operator-(Half a) { return Half(-a.toFloat()); }
 };
 
 /// The two types the language writes.

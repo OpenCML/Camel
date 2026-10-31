@@ -47,6 +47,14 @@ func main(): int sync {
     let halves: f16[] = [h, g]
     println(xs, halves)
 
+    // Arithmetic is computed in f32 and rounded once into the element type: `1.0 / 3.0` as a bf16
+    // is 0.334 where the f32 it widens to is 0.33333334, and `0.1 * 1.5` rounds the exact product
+    // back into the type.
+    println(a + b, b - a, a * b, b / a, b ^ bf16(2.0), -a)
+    println(bf16(1.0) / bf16(3.0), bf16(1.0) + bf16(1.0))
+    println(h + g, g * g, h * h, -h)
+    println(f16(1.0) / f16(3.0))
+
     // A written conversion rounds once into the element type, and reading one as a wider number is
     // exact: the f32 of a bf16 keeps every bit it had.
     let wide: f32 = f32(a)

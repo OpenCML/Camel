@@ -114,12 +114,12 @@ timeout_ms = 8000
 
 [[tests]]
 name = "narrow_floats"
-desc = "bf16 and f16 are core value types of the language (reduced-precision.md b1) and values of the standalone runtime (include/camel/standalone/half.h), so a program that holds one is translated rather than refused: `rt::BF16` and `rt::F16` stand for the two types, sixteen bits of storage whose constant is the pattern itself (`fromBits`, exact for every pattern a program can write), and the text is the type's own shortest text, so `0.1` as a bf16 prints `0.1` and not the `0.100097656` of the f32 it widens to. This entry pinned a refusal before the rules existed; it is now the acceptance case, and the program is built and run by agree_with_fvm, which is what says the two back ends print it byte for byte."
+desc = "bf16 and f16 are core value types of the language (reduced-precision.md b1) and values of the standalone runtime (include/camel/standalone/half.h), so a program that holds one is translated rather than refused: `rt::BF16` and `rt::F16` stand for the two types, sixteen bits of storage whose constant is the pattern itself (`fromBits`, exact for every pattern a program can write), the text is the type's own shortest text (so `0.1` as a bf16 prints `0.1` and not the `0.100097656` of the f32 it widens to), and arithmetic is computed in f32 and rounded once -- `/` through rt::div, where zero is a fault as it is for f32, and `^` through rt::pow. This entry pinned a refusal before the rules existed; it is now the acceptance case, and the program is built and run by agree_with_fvm, which is what says the two back ends print it byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/narrow_floats.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
-expect_stdout_contains = ["rt::BF16", "rt::F16", "rt::BF16::fromBits(uint16_t{", "rt::F16::fromBits(uint16_t{", "rt::halfFromText<rt::BF16>(", "rt::halfFromText<rt::F16>(", "rt::convertArray<rt::BF16>(", "rt::convertArray<rt::F16>("]
+expect_stdout_contains = ["rt::BF16", "rt::F16", "rt::BF16::fromBits(uint16_t{", "rt::F16::fromBits(uint16_t{", "rt::div(", "rt::pow(", "rt::halfFromText<rt::BF16>(", "rt::halfFromText<rt::F16>(", "rt::convertArray<rt::BF16>(", "rt::convertArray<rt::F16>("]
 expect_output_not_contains = ["TranslationRefused", "no such element type", "camel/core/", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

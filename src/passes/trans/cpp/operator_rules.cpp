@@ -303,6 +303,20 @@ Rules buildRules() {
         r[std::format(":op/pow_{}", t)] = runtimeFunction("pow");
     }
 
+    // ---- Reduced-precision arithmetic (half_ops.cpp; include/camel/standalone/half.h) ----
+    // The operators of the standalone type compute in f32 and round once on store, which is the one
+    // arithmetic path of the element type (design principles 7.3), so `+`, `-`, `*` and unary `-`
+    // are written as the f32 ones are. `/` is rt::div because dividing by zero is a fault, and `^`
+    // is rt::pow, whose result is rounded once like every other.
+    for (const char *t : {"bf", "f6"}) {
+        r[std::format(":op/add_{}", t)] = infix("+");
+        r[std::format(":op/sub_{}", t)] = infix("-");
+        r[std::format(":op/mul_{}", t)] = infix("*");
+        r[std::format(":op/neg_{}", t)] = prefix("-");
+        r[std::format(":op/div_{}", t)] = faultingFunction("div", RuntimeDiag::DivisionByZero, 0);
+        r[std::format(":op/pow_{}", t)] = runtimeFunction("pow");
+    }
+
     // ---- Complex numbers (ops.cpp complexBinary, complexPower; include/camel/standalone/
     // complex.h) ----
     // `+`, `-`, `*`, unary `-`, `==` and `!=` are std::complex's, whose arithmetic is the two

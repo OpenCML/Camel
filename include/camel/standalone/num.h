@@ -104,6 +104,11 @@ template <std::same_as<int32_t> T> T div(T a, T b, const Site &site) {
 template <std::same_as<float> T> T div(T a, T b, const Site &site) {
     return detail::divide(a, b, site);
 }
+/// `a / b` on a bf16 or an f16 (:op/div_bf, :op/div_f6): dividing by zero is DivisionByZero at
+/// `site` as it is for f32, and the quotient is computed in f32 and rounded once into the type.
+template <typename Format> Half<Format> div(Half<Format> a, Half<Format> b, const Site &site) {
+    return Half<Format>(detail::divide(a.toFloat(), b.toFloat(), site));
+}
 
 /// `a % b` (:op/mod_*): integers only; by zero is DivisionByZero at `site`; any % -1 is 0.
 inline int64_t mod(int64_t a, int64_t b, const Site &site) {
@@ -123,6 +128,11 @@ template <std::same_as<int32_t> T> T pow(T base, T exponent) {
 }
 template <std::same_as<float> T> T pow(T base, T exponent) {
     return static_cast<T>(std::pow(base, exponent));
+}
+/// `a ^ b` on a bf16 or an f16 (:op/pow_bf, :op/pow_f6): std::pow of the widened values, rounded
+/// once into the type.
+template <typename Format> Half<Format> pow(Half<Format> base, Half<Format> exponent) {
+    return Half<Format>(std::pow(base.toFloat(), exponent.toFloat()));
 }
 
 // ---- Number to number (:op/ltoi, :op/dtol, ...) ----
