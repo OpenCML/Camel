@@ -255,6 +255,10 @@ const camel::runtime::Program *buildContainer(
 
     {
         auto &draft = group.draft(fId);
+        // A member is a graph without a signature until one is written: a graph the program cannot
+        // call, which is what the first attempt's Type=- was. Both members take the signature the
+        // graph they stand in for has.
+        draft.setFuncType(fGraph->funcType());
         const gc_node_ref_t x = draft.addPortNode(F, draft.allocateRuntimeSlot(F));
         const gc_node_ref_t three = draft.materializeStaticValue(camel::core::rtdata::toSlot<double>(3.0), F);
         const gc_node_ref_t value = draft.addOperNode(F, nullptr, ":op/div_d");
@@ -297,7 +301,12 @@ const camel::runtime::Program *buildContainer(
 
     {
         auto &draft = group.draft(mainId);
+        draft.setFuncType(mainGraph->funcType());
         const gc_node_ref_t two = draft.materializeStaticValue(camel::core::rtdata::toSlot<double>(2.0), F);
+        const gc_node_ref_t probeValue =
+            draft.materializeStaticValue(camel::core::rtdata::toSlot<double>(42.0), F);
+        const gc_node_ref_t probe = draft.addOperNode(Type::Void(), nullptr, ":io/println");
+        draft.setNormInputs(probe, std::span<const gc_node_ref_t>(&probeValue, 1));
         auto *emptyClosure = camel::core::type::TupleType::create();
         const gc_node_ref_t fValue = draft.materializeStaticValue(
             camel::core::rtdata::toSlot<::Function *>(::Function::create(
@@ -313,12 +322,23 @@ const camel::runtime::Program *buildContainer(
             draft.materializeStaticValue(camel::core::rtdata::toSlot<int64_t>(0), Type::Int64());
         // println is a statement, not the value of anything: the exit has to follow it, or the
         // program may schedule the print after it has stopped, or not at all.
+        draft.appendOrderDependency(call, probe);
+        draft.appendOrderDependency(print, call);
         draft.appendOrderDependency(zero, print);
         draft.setOutputNode(zero);
         draft.setReturnNode(zero, camel::runtime::GCReturnKind::Self);
     }
 
     group.encode();
+    // A member that was just encoded may have no signature of its own yet: the type is a
+    // reading, and a reading that dereferences a null is a crash, not a measurement.
+    const auto typeText = [](const camel::runtime::GCGraph *graph) -> std::string {
+        const auto *fn = graph != nullptr ? graph->funcType() : nullptr;
+        return fn != nullptr ? fn->toString() : std::string("-");
+    };
+    os << "REINTERP container mainType=" << typeText(group.encoded(mainId))
+       << " oldMainType=" << typeText(mainGraph) << " fType=" << typeText(group.encoded(fId))
+       << " oldFType=" << typeText(fGraph) << '\n';
     os << "REINTERP container root=" << camel::runtime::toValue(mainId)
        << " f=" << camel::runtime::toValue(fId) << " call=" << camel::runtime::toValue(fId)
        << " edge=main__min->f__min\n";
@@ -386,6 +406,12 @@ class ReinterpPass : public RuntimeGraphRewritePass {
         // would replace a working entry with a silent one. The line above says it exists; the next
         // step is making it speak.
         if (const camel::runtime::Program *container = buildContainerFrom(context_, program, os)) {
+            // Installing it is what the next step is for: run as the program root it segfaults
+            // (exit 139) before printing a single line, so the entry it makes is not the entry the
+            // old program had. The line it prints is the reading; the install waits for a container
+            // that speaks.
+            // The probe (a println of 42) does not appear when this program is run, so the root
+            // the group makes is not the entry the pipeline runs. Not installed until it speaks.
             (void)container;
         }
         // Every function of the program that is made of operators: those are the ones a
