@@ -46,6 +46,39 @@ template <typename T> class Array {
         }
     }
 
+    /// A literal of `items` and the shape `shape` states: the elements lie flat in row order --
+    /// the order a literal of several dimensions writes them -- and the shape travels in the same
+    /// block, so a copy of the array is a copy of both. `shape` is what the type states: the writer
+    /// reads it off the type, and a shape that does not multiply to the element count is left as
+    /// the one dimension the elements alone give (no value is worth a crash over a wrong constant).
+    Array(std::initializer_list<T> items, std::initializer_list<std::size_t> shape) {
+        reserve(items.size());
+        for (const T &item : items) {
+            push(item);
+        }
+        if (rep_ == nullptr) {
+            return;
+        }
+        std::size_t product = 1;
+        for (std::size_t extent : shape) {
+            product *= extent;
+        }
+        if (shape.size() == 0 || shape.size() > kMaxRank || product != items.size()) {
+            return;
+        }
+        rep_->rank = static_cast<std::uint32_t>(shape.size());
+        std::size_t i = 0;
+        for (std::size_t extent : shape) {
+            rep_->extents[i++] = extent;
+        }
+    }
+
+    /// A literal of `items` with the shape written as the words of `shape`, which the generated
+    /// program writes from the type of the literal (`rt::Array<double>::shaped`).
+    static Array shaped(std::initializer_list<T> items, std::initializer_list<std::size_t> shape) {
+        return Array(items, shape);
+    }
+
     Array(const Array &other) noexcept : rep_(other.rep_) {
         if (rep_ != nullptr) {
             ++rep_->references;
@@ -60,6 +93,15 @@ template <typename T> class Array {
 
     std::size_t size() const noexcept { return rep_ != nullptr ? rep_->size : 0; }
     bool empty() const noexcept { return size() == 0; }
+    /// The dimensions of the value, and one of them. An array built by appending is one
+    /// dimensional; a literal of several dimensions states its shape (design principles 5.4: the
+    /// shape is part of the value, not of the name). `size()` is the number of elements either way,
+    /// which is what the operators that run over the whole value read.
+    static constexpr std::size_t kMaxRank = 8;
+    std::size_t rank() const noexcept { return rep_ != nullptr ? rep_->rank : 0; }
+    std::size_t extent(std::size_t i) const noexcept {
+        return rep_ != nullptr && i < rep_->rank ? rep_->extents[i] : 0;
+    }
     const T &operator[](std::size_t i) const noexcept { return rep_->items()[i]; }
     const T *begin() const noexcept { return rep_ != nullptr ? rep_->items() : nullptr; }
     const T *end() const noexcept { return begin() + size(); }
@@ -75,6 +117,13 @@ template <typename T> class Array {
         const bool growing = rep_ != nullptr && rep_->references == 1;
         Rep *fresh         = allocate(std::max(
             {capacity, size(), growing ? rep_->capacity * 2 : std::size_t{0}, std::size_t{4}}));
+        if (rep_ != nullptr) {
+            // The shape is the value's too: a block copied because it was shared keeps it.
+            fresh->rank = rep_->rank;
+            for (std::size_t i = 0; i < rep_->rank; ++i) {
+                fresh->extents[i] = rep_->extents[i];
+            }
+        }
         for (std::size_t i = 0; i < size(); ++i) {
             if (rep_->references == 1) {
                 new (fresh->items() + i) T(std::move(rep_->items()[i]));
@@ -93,6 +142,7 @@ template <typename T> class Array {
         }
         new (rep_->items() + rep_->size) T(std::move(item));
         ++rep_->size;
+        rep_->rank = 0; // an appended array is one dimension of what it holds
     }
 
     /// Puts `value` at `index`, in place when the block is this array's alone and a copy of it
@@ -121,6 +171,10 @@ template <typename T> class Array {
         std::size_t references;
         std::size_t size;
         std::size_t capacity;
+        // The shape of a literal of several dimensions; a block built by appending has rank 0 here
+        // and reads as one dimension of `size` elements.
+        std::uint32_t rank;
+        std::size_t extents[Array::kMaxRank];
         T *items() noexcept { return reinterpret_cast<T *>(this + 1); }
     };
     static Rep *allocate(std::size_t capacity) {
@@ -132,6 +186,10 @@ template <typename T> class Array {
         rep->references = 1;
         rep->size       = 0;
         rep->capacity   = capacity;
+        rep->rank       = 0;
+        for (std::size_t &extent : rep->extents) {
+            extent = 0;
+        }
         return rep;
     }
 
@@ -147,8 +205,11 @@ template <typename T> class Array {
     Rep *rep_ = nullptr;
 };
 
-/// `len(xs)` (:struct/len_arr).
-template <typename T> int64_t length(const Array<T> &xs) { return static_cast<int64_t>(xs.size()); }
+/// `len(xs)` (:struct/len_arr): the length of the first dimension, which is what the interpreter
+/// answers for a value of several dimensions (the element count only for a one-dimensional one).
+template <typename T> int64_t length(const Array<T> &xs) {
+    return static_cast<int64_t>(xs.rank() >= 1 ? xs.extent(0) : xs.size());
+}
 
 /// `xs[i]` (:op/idx_arr): an index outside the array is IndexOutOfRange at `site` (values: the
 /// index, "an array", the length).
