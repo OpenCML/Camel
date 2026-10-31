@@ -3,16 +3,20 @@
 // SPDX-License-Identifier: MIT
 
 /**
+ * The scope of this guard, on its first line: every `getenv` call in `src/`, `modules/` and
+ * `include/` -- a header is compiled into the program as much as a source file is, and the
+ * environment does not care which of the three a read sits in.
+ *
  * A run's behaviour is decided by the program, the command line and the build options, not by
  * the environment (design principles 9.3): reading the command line and the program has to be
  * enough to know what a run will do. What is left of the environment switches is a ledger, and
  * this guard keeps it from growing.
  *
- * A site is one `getenv` call under `src/` or `modules/`, whichever name it reads: the scan is by
- * call, not by literal, because a helper that reads a name (`envString(name)`, `envNumber(name,
- * fallback)`) takes its variable from its caller and a scan for `getenv("CAMEL_` would not see
- * it. The Windows spelling `_dupenv_s` is the same reading in the other branch of the same
- * function, and that function is what the ledger allows, so only `getenv` is counted.
+ * A site is one `getenv` call under `src/`, `modules/` or `include/`, whichever name it reads:
+ * the scan is by call, not by literal, because a helper that reads a name (`envString(name)`,
+ * `envNumber(name, fallback)`) takes its variable from its caller and a scan for `getenv("CAMEL_`
+ * would not see it. The Windows spelling `_dupenv_s` is the same reading in the other branch of
+ * the same function, and that function is what the ledger allows, so only `getenv` is counted.
  *
  * A site whose name is not `CAMEL_*` is not a switch: `NO_COLOR` and `CUDA_PATH` are somebody
  * else's convention. A `CAMEL_*` site is allowed only by a line of `LEDGER`, and a line allows
@@ -21,6 +25,11 @@
  * whose site is gone fails too, so clearing a switch means deleting its line, and the list can
  * only shrink towards the one line that stays -- `CAMEL_TILES_NVRTC`, where the CUDA toolchain
  * lives; `CAMEL_HOME` (the installation root) never needs a line at all.
+ *
+ * A reading can also be a pass parameter and still have no case that pins it, and the ledger says
+ * so rather than leaving it to be forgotten: `std::profile variant_trace` prints only for a value
+ * the collector relocates, so nothing pins it today, and pinning it belongs to the collector's
+ * plan -- it is a known-open item, not a switch somebody stopped tracking.
  *
  * What the ledger is for, in one sentence: it does not record what is left to clear, it records
  * what is still there. A line that points at a call site that is gone is a fake asset in the
@@ -37,9 +46,10 @@ import { isRunnerOutput } from './runner-output.mjs'
 const HERE = path.dirname(url.fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(HERE, '..', '..')
 
-// The roots whose code a run links. The tool and the scripts are not: a tool's own switches are
-// its command line.
-const ROOTS = ['src', 'modules']
+// The roots whose code a run links: src/, modules/ and include/ -- a header is compiled into
+// the program as much as a source file is, and the environment does not care which of the three a
+// read sits in. The tool and the scripts are not: a tool's own switches are its command line.
+const ROOTS = ['src', 'modules', 'include']
 const SKIP_DIRS = new Set(['.git', 'out', 'node_modules', 'third_party', 'build', 'sdks'])
 const SOURCE_EXTENSIONS = new Set(['.c', '.cc', '.cpp', '.h', '.hpp', '.hh'])
 
@@ -69,6 +79,23 @@ const LEDGER = [
         why: 'reads the settings of the collection tree (CAMEL_COLL_*) by name; still a switch',
     },
     {
+        at: 'include/camel/standalone/core.h:briefReports',
+        reads: 'CAMEL_ERROR_FORMAT',
+        owner: 'the environment-variable queue, core batch (lane-envsw)',
+        why: 'a generated program reads whether its reports are one line: a diagnostic setting, and a switch still',
+    },
+    {
+        at: 'include/camel/utils/env.h:getEnvIfSet',
+        reads: null,
+        owner: 'none: it is the process environment itself',
+        why: 'the one place where the process environment is read: the names come from the platform and from PATH, not from this program',
+    },
+    {
+        at: 'include/camel/utils/dll_path.h:setupLibrarySearchPathForHost',
+        reads: null,
+        owner: 'none: it is the process environment itself',
+        why: 'reads the PATH entries a helper was handed; the names are the platform spelling, not a switch',
+    },    {
         at: 'modules/tiles/src/cuda_backend.cpp:nvrtcPaths',
         reads: 'CAMEL_TILES_NVRTC',
         owner: 'none: it stays',
