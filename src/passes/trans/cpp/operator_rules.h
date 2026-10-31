@@ -77,12 +77,6 @@ struct OperatorRule {
     /// Its result depends on its arguments only, it has no effect and cannot fault: the
     /// expression may be moved to its one use (and need not be a statement of its own).
     bool inlinable = false;
-    /// The C++ type of the result when it is not the C++ type of the node's Camel type: an
-    /// operator whose result is a value the runtime owns gives an `rt::Foreign`, whatever the type
-    /// of the value it names says (docs/design/cpp-standalone/README.cn.md 9 -- for such an
-    /// operator the representation is the call's, not the type's). Null: the node's type, as
-    /// everywhere else.
-    const char *resultCpp = nullptr;
 };
 
 /// The rule for the operator `uri`, or null when it has no standalone translation.

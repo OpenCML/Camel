@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # Copyright (c) the OpenCML Organization
 # SPDX-License-Identifier: MIT
 

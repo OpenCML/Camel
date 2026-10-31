@@ -44,6 +44,19 @@ std::vector<std::string> marks(size_t n) {
     return out;
 }
 
+/// The integer code of the element type a tensor result names, which the bridge turns back into a
+/// type (standalone_bridge.cpp, `Type::create`): a code is what crosses, never the text of a type,
+/// because the tree writes a type's text (`typeToString`) and parses none, and a second spelling
+/// here would be one to keep in step by hand. -1 when the result is not an array type: a call that
+/// states no element type leaves the runtime its own reading, as such a call had before.
+int64_t elementCode(const Type *result) {
+    const ArrayType *array = asArrayType(result);
+    if (array == nullptr) {
+        return -1;
+    }
+    return static_cast<int64_t>(static_cast<uint32_t>(array->elemTypeCode()));
+}
+
 std::string joinedNorm(OperatorCall &call, size_t from = 0) {
     std::string out;
     for (size_t i = from; i < call.normCount(); ++i) {
@@ -710,6 +723,37 @@ Rules buildRules() {
         },
         false,
     };
+    // `tensor:mean` of the whole value (modules/tensor/ops/reduction_ops.cpp, meanAllKernel): the sum
+    // divided by the number of elements, both in f64, and the answer's element type reached by one
+    // conversion -- the definition `sum(x) / float(numel(x))` (stdlib/tensor_definitions.cml) with
+    // the kernel's own accumulation. A mean of integers is therefore f32 and not integer division,
+    // and a mean of f32 elements is not the f32 sum divided again: the sum is the f64 one, exactly
+    // as the interpreter's `sumAll` returns it. A value with no element divides by zero, and the
+    // interpreter raises that fault rather than answering a NaN.
+    //
+    // The answer's element type is the one the operator states, which is not always the source's,
+    // so it is passed as the runtime template argument: the one place in this file where the rule
+    // reads the result's type to write the call.
+    r["tensor:mean"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (c.normCount() != 1 || value == nullptr || value->elemType() == nullptr ||
+                c.resultType() == nullptr) {
+                return std::nullopt;
+            }
+            const TypeCode element = value->elemType()->code();
+            if (element != TypeCode::Int64 && element != TypeCode::Int32 &&
+                element != TypeCode::Float32 && element != TypeCode::Float64) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::meanAll<{}>({}, {})",
+                c.cppType(c.resultType()),
+                c.operand(0),
+                c.site(RuntimeDiag::DivisionByZero, marks(0)));
+        },
+        false,
+    };
     // `tensor:sum` of the whole value (modules/tensor/ops/reduction_ops.cpp): the elements added from
     // +0 in the order they lie, answering the element type -- an integer result exactly in int64
     // (int32 truncated once into its own width) and a float one by the f64 accumulator converted
@@ -1112,28 +1156,36 @@ Rules buildRules() {
     };
 
     // ---- The results the runtime owns (tensor:*, design note 9) ----
-    // `tensor:ones` fills a tensor of the element type the call states with the shape it is given.
-    // A tensor is not a value this back end writes: it lives in the runtime module that owns it, and
-    // the program holds it through a counted handle (`rt::Foreign`, camel/standalone/foreign.h), so
-    // what a tensor is is written once, in the runtime, and the program and the interpreter print
-    // one tensor the same way -- the reason the shape crosses as the `int[]` it already is, instead
-    // of being rebuilt on this side. The result's C++ type is the handle, not the `rt::Array` the
-    // Camel type `f32[2, 2]` would otherwise name: an array the program builds is that value, a
-    // tensor is this one (which is why the rule says `resultCpp`).
-    r["tensor:ones"] = {
-        [](OperatorCall &c) -> std::optional<std::string> {
-            if (c.normCount() != 1) {
-                return std::nullopt;
-            }
-            return std::format(
-                "{}.call<rt::Foreign>({}, {{rt::bridge::arg({})}}, {{}})",
-                c.bridgeOperator(),
-                c.place(),
-                c.norm(0).text);
-        },
-        false,
-        "rt::Foreign",
+    // `tensor:ones` and `tensor:zeros` fill a tensor of the element type the call states with the
+    // shape it is given. The element type is the call's, and it reaches the kernel as the integer
+    // code of the type (`elementCode`): the kernel reads the call's result type to know what to
+    // fill, and a call that stated none left it filling f32 whatever the program wrote --
+    // `ones::<f64>` built an f32 tensor and `ones::<i64>` printed `1.0` where the interpreter
+    // prints `1`.
+    // The result is a `T[..]`, and in this back end that type has one representation: the shaped
+    // array `rt::Array<T>` a literal of the same type is (docs/design/cpp-standalone/README.cn.md
+    // 4). So the rule names that type -- whatever type the node has -- and the bridge converts the
+    // runtime's own value into it at the boundary, the elements copied out and the shape with them
+    // (camel/standalone/bridge.h): the program prints a tensor with the same `println` as any
+    // array, and never holds a runtime pointer. `rt::Foreign` is not this: it is for the objects
+    // the language itself keeps opaque (`PyObject`, `Device<T>`).
+    // The two builders are one rule: what differs between them is the value the runtime fills in,
+    // not one byte this back end writes, so they cross the same way or not at all. `zeros` was the
+    // last one refused as work not done; its refusal named the missing rule, and the rule is here.
+    auto tensorBuilder = [](OperatorCall &c) -> std::optional<std::string> {
+        if (c.normCount() != 1) {
+            return std::nullopt;
+        }
+        return std::format(
+            "{}.call<{}>({}, {{rt::bridge::arg({})}}, {{}}, {})",
+            c.bridgeOperator(),
+            c.cppType(c.resultType()),
+            c.place(),
+            c.norm(0).text,
+            elementCode(c.resultType()));
     };
+    r["tensor:ones"]  = {tensorBuilder};
+    r["tensor:zeros"] = {tensorBuilder};
 
     return r;
 }

@@ -284,16 +284,13 @@ size_t reduceControlDependencies(camel::runtime::GraphTransaction &transaction, 
                         keep.push_back(root);
                     }
                 }
-                // A GATE keeps one control input only while that input *is* its wait -- a gate with a sync
-                // predecessor waits on that (`docs/design/effects/edges.cn.md` 5.3) and needs none.
-                // With no value seed, an empty frontier otherwise indicates a malformed cycle;
-                // preserve diagnostics.
-                if (keep.empty() &&
-                    ((draft.header(target)->kind == GCNodeKind::Gate &&
-                      draft.syncInputsOf(target).empty()) ||
-                     !hasValues)) {
-                    keep.push_back(roots.back());
-                }
+                // Item 7 of docs/handover/reports/opt-ctrl-inventory.md used to stand here: when every wait of
+                // a target fell away it put one predecessor back. The builder owns that wait now -- a
+                // GATE gets its sync predecessor where the block's chain ends
+                // (docs/design/effects/edges.cn.md 5.3, Builder::writeSyncLink), a place this reduction
+                // cannot see. Measured before removing it: across the whole fast corpus it never fired
+                // once, so no graph that can be built reaches it; one that did would be refused at
+                // commit by the runtime's own "GATE node without a wait" rule (src/runtime/graph.cpp).
                 if (keep.size() < draft.ctrlInputsOf(target).size()) {
                     removed += draft.ctrlInputsOf(target).size() - keep.size();
                     draft.setCtrlInputs(target, keep);
