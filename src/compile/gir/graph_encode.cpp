@@ -194,8 +194,8 @@ void collectCompileStaticGraphRefsRecursive(
 std::vector<graph_ptr_t> staticGraphRefsOf(const graph_ptr_t &source) {
     std::vector<graph_ptr_t> refs = source->staticGraphRefs();
     std::unordered_set<const Object *> visited;
-    const auto staticTypes = source->draft().staticSlotTypes();
-    const auto staticSlots = source->draft().staticSlots();
+    const auto staticTypes = source->view().staticSlotTypes();
+    const auto staticSlots = source->view().staticSlots();
     for (size_t i = 1; i < staticSlots.size() && i < staticTypes.size(); ++i) {
         collectCompileStaticGraphRefsRecursive(refs, staticSlots[i], staticTypes[i], visited);
     }
@@ -421,10 +421,10 @@ class EncodeSession {
         // built from them where it is built (finalizeRuntimeGraph).
         prepared.runtimeId = freshIds_ ? freshIds_->allocate() : graph->graphId();
         // Every compiled graph has a frame layout, one without slots included.
-        if (!graph->draft().hasFrameLayout()) {
-            graph->draft().setRuntimeSlotTypes({});
+        if (!graph->view().hasFrameLayout()) {
+            graph->edit().setRuntimeSlotTypes({});
         }
-        const auto sourceStaticSlots = graph->draft().staticSlots();
+        const auto sourceStaticSlots = graph->view().staticSlots();
         prepared.staticSlots.assign(sourceStaticSlots.begin(), sourceStaticSlots.end());
 
         // The front-end freeze dissolves a GATE that waits on nothing and has a value user: it is
@@ -436,19 +436,19 @@ class EncodeSession {
         // Whether an effect was dropped beside it is reportDroppedEffects' to say, not this
         // structural check's. A gate that still waits -- on the sync chain's tail or on a control
         // input -- and one with no value input are not this case and keep their node.
-        graph->draft().dissolveUnorderedGates();
+        graph->edit().dissolveUnorderedGates();
 
         // The runtime graph is the part of the draft that its roots reach; the draft keeps the
         // rest (a rewrite need not have erased a node nothing reads) and the graph does not name
         // it.
-        prepared.liveNodes = collectLiveDraftNodes(graph->draft());
+        prepared.liveNodes = collectLiveDraftNodes(graph->view());
         CAMEL_LOG_INFO_S(
             "GIREncode",
             "Prepare compile graph '{}' reachable nodes={}.",
             graph->name(),
             prepared.liveNodes.size());
         for (draft_node_ref_t sourceId : prepared.liveNodes) {
-            const auto *header = graph->draft().header(sourceId);
+            const auto *header = graph->view().header(sourceId);
             ASSERT(header != nullptr, "Live compile draft node cannot have a null header.");
             if (header->kind == GCNodeKind::Dref) {
                 throw std::runtime_error(
@@ -459,7 +459,7 @@ class EncodeSession {
             }
         }
         prepared.payloadShape =
-            describeDraftNativePayload(graph->draft(), liveNodesOf(prepared));
+            describeDraftNativePayload(graph->view(), liveNodesOf(prepared));
         CAMEL_LOG_INFO_S(
             "GIREncode",
             "Prepared compile graph '{}' with {} draft nodes.",
@@ -493,14 +493,14 @@ class EncodeSession {
                 ruleGraphPtrs,
                 prepared.payloadShape,
                 prepared.staticSlots,
-                prepared.source->draft().frameSlotTypes());
+                prepared.source->view().frameSlotTypes());
             try {
                 prepared.memory =
                     camel::core::mm::graphSpace().alloc(prepared.bytes, alignof(GCGraph));
             } catch (const camel::core::mm::MemoryExhausted &e) {
                 throw e.during(
                     std::format("encoding graph '{}'", prepared.source->name()),
-                    prepared.source->draft().firstNodeOrigin());
+                    prepared.source->view().firstNodeOrigin());
             }
             prepared.runtime = reinterpret_cast<GCGraph *>(prepared.memory);
             CAMEL_LOG_INFO_S(
@@ -517,10 +517,10 @@ class EncodeSession {
         // function targets), so the callee is written into the draft's own payload here, before
         // the graph is built from it. The draft is the graph under construction; nothing is copied.
         for (draft_node_ref_t sourceId : prepared.liveNodes) {
-            const auto *header = prepared.source->draft().header(sourceId);
+            const auto *header = prepared.source->view().header(sourceId);
             ASSERT(header != nullptr, "Live source draft node cannot have a null header.");
             if (header->kind == GCNodeKind::Func) {
-                prepared.source->draft().setCalleeGraph(
+                prepared.source->edit().setCalleeGraph(
                     sourceId,
                     resolvePreparedGraph(prepared.source->funcTarget(sourceId))->runtimeId);
             }
@@ -652,11 +652,11 @@ class EncodeSession {
         auto *source = prepared.source.get();
         ASSERT(source != nullptr, "Prepared graph finalization requires a source graph.");
         for (draft_node_ref_t nodeId : prepared.liveNodes) {
-            const auto *header = source->draft().header(nodeId);
+            const auto *header = source->view().header(nodeId);
             ASSERT(header != nullptr, "A live draft node of the graph being built has a header.");
-            const auto payload = source->draft().payloadOf(nodeId);
+            const auto payload = source->view().payloadOf(nodeId);
             if (header->kind == GCNodeKind::Func) {
-                if (!camel::runtime::isValid(source->draft().calleeIdOf(nodeId))) {
+                if (!camel::runtime::isValid(source->view().calleeIdOf(nodeId))) {
                     throw std::runtime_error(
                         std::format(
                             "Prepared FUNC node {} in graph '{}' carries a null callee "
@@ -675,7 +675,7 @@ class EncodeSession {
                             payload.size_bytes()));
                 }
                 const auto *body = reinterpret_cast<const GCJoinBody *>(payload.data());
-                if (body->armCount != source->draft().withInputsOf(nodeId).size()) {
+                if (body->armCount != source->view().withInputsOf(nodeId).size()) {
                     throw std::runtime_error(
                         std::format(
                             "Prepared JOIN node {} in graph '{}' has mismatched arm count: "
@@ -683,12 +683,12 @@ class EncodeSession {
                             nodeId,
                             source->name(),
                             body->armCount,
-                            source->draft().withInputsOf(nodeId).size()));
+                            source->view().withInputsOf(nodeId).size()));
                 }
             }
         }
         auto *debugRecord = createGraphDebugRecord(source->name(), source->name());
-        recordDraftDebugData(debugRecord, source->draft(), liveNodesOf(prepared));
+        recordDraftDebugData(debugRecord, source->view(), liveNodesOf(prepared));
 
         const auto &deps = source->dependencyGraphs();
         const auto &subs = source->subGraphs();
@@ -703,8 +703,8 @@ class EncodeSession {
             subPtrs.push_back(resolvePreparedGraph(sub)->runtimeId);
         }
         std::vector<Type *> runtimeStaticTypes(
-            source->draft().staticSlotTypes().begin(),
-            source->draft().staticSlotTypes().end());
+            source->view().staticSlotTypes().begin(),
+            source->view().staticSlotTypes().end());
         CAMEL_LOG_INFO_S(
             "GIREncode",
             "Graph '{}' static-slot counts: values={}, types={}.",
@@ -825,12 +825,12 @@ class EncodeSession {
             prepared.bytes,
             prepared.runtimeId,
             camel::runtime::GCGraphDerivation{
-                camel::runtime::kInvalidGraphId, source->draft().flags()},
+                camel::runtime::kInvalidGraphId, source->view().flags()},
             debugRecord,
-            source->draft().funcType(),
-            source->draft().frameSlotTypes(),
+            source->view().funcType(),
+            source->view().frameSlotTypes(),
             staticDataType,
-            source->draft().closureType(),
+            source->view().closureType(),
             runtimeOuterGraph,
             depPtrs,
             subPtrs,
@@ -846,7 +846,7 @@ class EncodeSession {
                     arena.nodeCount,
                     arena.payloadWordCount,
                     arena.edgeCount);
-                emitDraftNativePayload(source->draft(), arena, liveNodesOf(prepared));
+                emitDraftNativePayload(source->view(), arena, liveNodesOf(prepared));
                 CAMEL_LOG_INFO_S(
                     "GIREncode",
                     "Emit runtime payload finished for graph '{}'.",

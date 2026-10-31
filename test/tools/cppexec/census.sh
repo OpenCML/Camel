@@ -10,6 +10,12 @@
 #
 #   CAMEL_HOME=out/latest bash test/tools/cppexec/census.sh
 #
+# A second argument-shaped form answers "why are these refused": give it an operator pattern and it
+# re-reads those programs and counts the type their first refusal names, which is the operand the
+# rule turned down.
+#
+#   CAMEL_HOME=out/latest bash test/tools/cppexec/census.sh ':op/slice_sub|:op/idx_arr'
+#
 # `CAMEL` overrides the binary (default: $CAMEL_HOME/bin/camel), `JOBS` the width (default 8).
 set -u
 root=$(cd "$(dirname "$0")/../../.." && pwd)
@@ -45,5 +51,14 @@ echo "==== by operator (count) ===="
 grep '^OP|' "$out/refused.txt" | cut -d'|' -f2 | sort | uniq -c | sort -rn
 echo "==== crashes ===="
 grep -c '^CRASH|' "$out/refused.txt" || true
-echo "==== the list itself ===="
-echo "$out/refused.txt"
+echo "==== the list itself (op|program) ===="
+cat "$out/refused.txt" 2>/dev/null || true
+echo "==== the file it is in: $out/refused.txt ====" >&2
+
+if [ $# -ge 1 ]; then
+    echo "==== first operand type, per program whose operator matches: $1 ===="
+    grep '^OP|' "$out/refused.txt" | grep -E "^OP\|$1\|" | cut -d'|' -f3 | while read -r f; do
+        t=$("$CAMEL" "$f" std::cpp 2>&1 | grep -m1 -o "of type '[^']*'" | sed "s/^of type //")
+        printf '%s\n' "${t:-(no type named)}"
+    done | sort | uniq -c | sort -rn
+fi

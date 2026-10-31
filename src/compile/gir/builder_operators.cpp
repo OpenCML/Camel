@@ -732,7 +732,7 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
     compile_graph_ptr_t graph = enterScope(type);
     const bool macroOperator  = camel::core::OperatorTable::instance().isMacro(op->uri());
     if (macroOperator) {
-        graph->draft().setFlags(
+        graph->edit().setFlags(
             static_cast<uint8_t>(graph->view().flags() | camel::runtime::kGraphFlagMacro));
     }
     try {
