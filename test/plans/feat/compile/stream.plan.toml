@@ -1150,6 +1150,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 [[tests]]
+name = "stream.generator_yield_in_block"
+desc = "A `yield` inside a plain block `{ ... }` is a `yield` of the body: the block is a grouping, so the pull stops there and goes on after it, and the two elements are 1 and 2. All four back ends agree."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_yield_in_block.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "12\n"
+expect_output_not_contains = ["[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
 name = "stream.generator_loop_shared_cell_refused"
 desc = "A `loop` whose state has the name of a cell the body already declared is refused by name. The cells of a generator body are keyed by name, so reusing the name would make one table entry stand for two bindings (the `var` and the loop's own state); the shape is held here as a reading until the cells are keyed by binding. The graph builder reports SemanticDiag::FeatureNotSupported with `'generators'` at the loop."
 kind = "negative"

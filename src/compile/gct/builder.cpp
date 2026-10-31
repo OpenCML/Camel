@@ -6006,6 +6006,18 @@ node_ptr_t Builder::visitGeneratorBody(
                         stmt->at(0)->type() == AST::LoadType::Data &&
                         stmt->at(0)->loadAs<AST::DataLoad>()->dataType() == AST::DataType::LoopExpr;
                     if (!isIf && !isMatch && !isLoop) {
+                        if (isStmt && stmtType == AST::StmtType::Block) {
+                            // A plain block is a grouping, not a point of its own: its statements
+                            // are this stretch's statements, and the pull goes on at the arm after
+                            // the block. One more arm carries them.
+                            const int blockPc = newArm();
+                            const int afterPc = newArm();
+                            fill(afterPc, stmts, i + 1, next, nextState);
+                            fill(blockPc, stmt->atAs<AST::RepeatedLoad>(0), 0, afterPc, nextState);
+                            *exec << jumpTo(blockPc);
+                            popScope();
+                            return;
+                        }
                         refuse(stmt);
                     }
                     if (isLoop) {
