@@ -181,3 +181,18 @@ Pass 'std::opt' changed the ambient resources ... before graph 1 (one graph), af
 **还有一条（作者 16:00，第三类之后）**：**"一条今天清单为空的不变量，价值全在'将来有人破坏它时它会响'；所以它必须进闸门，不能只写在文档里。"** 第三条（端口与声明对得上，`RuntimeDiag::PassBoundaryPorts` `0x000013`）就是这样进的：**先量整树 0 处，再挂进闸门**，用例钉的是"不该响时沉默"（`pass_boundary.ports_match_declaration`）。
 
 **作者 08:10 的裁定（账页口径）**：**"环境资源的不变量在程序层面成立；每张图的资源是由节点算出的摘要，随内联变化。"** 所以：`PassBoundaryResources` 比的是**整个程序**那一份（`0x00000D`），**逐图那一版不进树**——它量出的 9 条 `callback.*_opt` 输出一个都没变，**不是缺陷，是尺子伸过了头**。**不变量不是越多越好：一条永远为空的检查，第二条就是噪音；它的价值只在有人能破坏它时才成立。**
+
+## 十七、三条不变量各自变红过：A/B 读数
+
+**一条判据**：**"一条从没红过的检查，和一条不存在的检查，今天看不出区别；A/B 就是把区别造出来。"**
+
+**做法**：`src/execute/pass.cpp` 里给三个检查各加一个临时开关（`CAMEL_AB=resources|nodes|ports` 时该检查直接报一次违规），**一次构建**，然后对 `test/cases/effects/declared.cml`（`std::opt::inline std::opt`）看三个用例的断言各自是红是绿：
+
+| 强制哪一条 | `resources_kept` | `entry_and_exit_kept` | `ports_match_declaration` |
+|---|---|---|---|
+| `CAMEL_AB=resources` | **红** | 绿 | 绿 |
+| `CAMEL_AB=nodes` | 绿 | **红** | 绿 |
+| `CAMEL_AB=ports` | 绿 | 绿 | **红** |
+| 不强制（基线） | 绿 | 绿 | 绿 |
+
+**三条各自单独变红，互不牵连**——这句话现在有读数，不再只是说过。**开关没有提交**：`git status --porcelain` **0 行**，`src/execute/pass.cpp` 与三个检查落树时一字不差。
