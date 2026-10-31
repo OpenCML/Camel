@@ -79,11 +79,25 @@ one, not the last one: the first line of the collfuzz failure said
 `invalid command line: '--coll' 'validate=on'`, and the interesting half was that the run had
 already been given one `--coll`, so this was a second one and the option refuses it.
 
-The spelling is two arguments, `--coll leaf=0,validate=on`. Option and value in one argument
-(`"--coll leaf=0,validate=on"`) is refused with `Invalid --coll key: ' leaf'`, and a second
-`--coll` in the same run is refused with `invalid command line`. A harness that wants to add a
-width to a shape it already passes therefore merges it into the one spec, which is what
+The spelling is two arguments. A probe plan that ran the same case both ways says so:
+
+| Argument list | Result |
+|---|---|
+| `["--coll leaf=0,validate=on", case]` -- option and value in one argument | refused: `Invalid --coll key: ' leaf'. Expected leaf, fanout, pad or validate.` |
+| `["--coll", "leaf=0,validate=on", case]` -- option and value in two | accepted |
+
+A second `--coll` in the same run is refused with `invalid command line`. A harness that wants
+to add a width to a shape it already passes therefore merges it into the one spec, which is what
 collfuzz does with `validate=on`.
+
+The plan for this page first said the opposite -- that the option and its value are one word --
+and it was written from memory. A probe with both spellings refused it. Recorded, because the
+next reader may believe it too:
+
+> 协调方曾要求把 `--coll` 改成一个词；两个 argv 元素的对照实测否掉了它。
+
+A rule about the shape of a command line can only come from a measurement. A rule given from
+memory makes good evidence look like it was never run.
 
 The rule to carry forward: a migration's cost hides in the cases that do not run the program.
 They do not turn red, the new parameters do not reach them, and they leave the statistics
