@@ -667,6 +667,16 @@ inline void markSyncStatement(node_handle_t node) {
         id, static_cast<uint8_t>(draft->header(id)->runtimeFlags | runtime::kGCNodeFlagSyncStatement));
 }
 
+/// The chain link itself: both ends marked as statements of one block, which is what the seal check
+/// reads back (src/runtime/graph_edges.cpp, `checkSyncEdges`), and the sync edge between them. No
+/// control edge: this is the pair as the model wants it, for a caller whose edge is not written for a
+/// consumer that still reads the old kind.
+inline void writeSyncLink(node_handle_t from, node_handle_t to) {
+    markSyncStatement(from);
+    markSyncStatement(to);
+    linkNodes(LinkType::Sync, from, to);
+}
+
 /// One link of a `sync` block's chain: a statement follows the one written before it by a sync edge,
 /// which carries "used" as well as the order (docs/design/effects/edges.cn.md 1). The link is decided
 /// by that sync edge -- what a `sync` block wrote is read back from `syncPredsOf` -- and the control
@@ -680,9 +690,7 @@ inline void markSyncStatement(node_handle_t node) {
 /// something: this is the raw pair, and a chain that reaches a node the graph hands on asks it even
 /// when that node reads the tail (there the wait *is* the only thing that reaches the node).
 inline void writeSyncStatement(node_handle_t from, node_handle_t to) {
-    markSyncStatement(from);
-    markSyncStatement(to);
-    linkNodes(LinkType::Sync, from, to);
+    writeSyncLink(from, to);
     linkNodes(LinkType::Ctrl, from, to);
 }
 
