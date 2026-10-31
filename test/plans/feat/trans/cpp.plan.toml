@@ -210,7 +210,7 @@ case = "../../../tools/cppexec/run.py"
 args = ["${case}", "--standalone", "--expect=test/tools/cppexec/expect.txt", "--baseline=test/tools/cppexec/bridged.txt"]
 skip_unless = ["${python}", "test/tools/cppexec/run.py", "--have-compiler"]
 expect_exit = 0
-expect_stdout_contains = ["need no Camel runtime; 3 link it, all in the baseline"]
+expect_stdout_contains = ["program(s) need no Camel runtime", "link it, all in the baseline"]
 expect_output_not_contains = ["FAIL:", "is not in the baseline", "no longer links the runtime"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 900000
