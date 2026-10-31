@@ -479,6 +479,18 @@ expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 [[tests]]
+name = "print_shape"
+desc = "Printing tells an element from an array of one. A value of no rank *is* the element (design principles 5.4): a field of `f32[..]` holds such a value and `println(first.v)` writes `1.5`, not `[1.5]`. A value that carries a dimension is written as the whole literal -- `[2.5]` -- because the bracket is the difference between an element and an array of one, and a reader who cannot see it cannot tell the two apart. `shape` of a value of one dimension answers the one dimension it has (`[2]`), not the element. agree_with_fvm runs the program and compares its output with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/print_shape.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::println(", "appendText"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "cast_shape_holds"
 desc = "`as` states the shape a value must have. Both types are the same `rt::Array<T>` on this side -- a shape is not a second value -- so the conversion writes no bytes and checks the extents the type states: `rt::asShape(v, {2, 3}, \"float[2, 3]\", at_...)` answers the value itself when the rank and every stated extent are the ones the type says. The program keeps reading and prints both values; agree_with_fvm compares them with std::fvm byte for byte."
 kind = "behavior"
