@@ -1168,9 +1168,9 @@ Rules buildRules() {
     // ---- The results the runtime owns (tensor:*, design note 9) ----
     // `tensor:ones` and `tensor:zeros`: the tensor's element type is the call's and its shape is
     // the `int[]` it is given, and both are things this back end can write without the runtime --
-    // the result is a `T[..]`, which has one representation here (docs/design/cpp-standalone/
-    // README.cn.md 4), the shaped array `rt::Array<T>` a literal of the same type is. So the rule
-    // builds that array: `rt::filledArray<T>(shape, fill, site)`, every element the fill.
+    // the result is a `T[..]`, which has one representation here, the shaped array `rt::Array<T>`
+    // (docs/design/cpp-standalone/README.cn.md 4) a literal of the same type is. So the rule builds
+    // that array: `rt::filledArray<T>(shape, fill, site)`, every element the fill.
     //
     // This is not a bridged call any more. The bridge was right for the tensors whose value is a
     // runtime object -- a handle, `rt::Foreign` -- but a tensor the program only reads as elements
