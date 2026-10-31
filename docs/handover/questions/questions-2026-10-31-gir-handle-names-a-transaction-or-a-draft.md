@@ -59,10 +59,10 @@ void assignId(GraphId id);                                        // attach 之�
 GraphId id() const;   // 未命名时：断言或返回 kInvalidGraphId，二选一要说清
 ```
 
-**两条风险，必须一起答**：
+**两条风险，必须一起答。先看第 1 条——它是作者要付代价的那一句。**
 
-1. **拿不到 id 时能不能安全回滚。** 一张 pending 的事务如果最终没有 `assignId`（extract 之后判定这块 region 不成立），它的草稿**已经从 GC 空间里要过槽位、建过静态值**。`~GraphTransaction` 今天只释放自己的 `graph_`；**pending 的草稿被丢弃时，它登记过的静态值/槽位要不要显式退**？如果不用退（分配器自己回收），那么 pending 就是一个纯"延迟命名"，风险只在别处。
-2. **两张事务同时 pending 会不会撞号。** `GraphId` 从 `context.graphIds()` 分配，**分配时刻决定了编号顺序**。今天 region 的 id 在 attach 时分配，若改成 extract 时就分配，**同一程序里图编号的顺序会变**——`gir` 的黄金文件、`--changed` 的用例快照、以及"同一输入同一输出"里能被观察到的图名/编号都会跟着变。**要么接受编号顺序变（并重录黄金），要么让 pending 事务先不占号、`assignId` 时才占（那 `id()` 在 assign 之前就没有真值）。**
+1. **两张事务同时 pending 会不会撞号，以及编号顺序会变。** `GraphId` 从 `context.graphIds()` 分配，**分配时刻决定了编号顺序**。今天 region 的 id 在 attach 时分配；若改成 extract 时就分配，**同一程序里图编号的顺序会变**——`gir` 的黄金文件、`--changed` 的用例快照、以及"同一输入同一输出"里能被观察到的图名/编号都会跟着变。**这是这一页唯一要作者付代价的地方**：要么接受编号顺序变、重录黄金；要么让 pending 事务先不占号、`assignId` 时才占——**但那 `id()` 在 assign 之前就没有真值**，`openPending()` 的返回值就多了一种"还没有名字"的状态。
+2. **拿不到 id 时能不能安全回滚。** 一张 pending 的事务如果最终没有 `assignId`（extract 之后判定这块 region 不成立），它的草稿**已经从 GC 空间里要过槽位、建过静态值**。`~GraphTransaction` 今天只释放自己的 `graph_`；**pending 的草稿被丢弃时，它登记过的静态值/槽位要不要显式退**？如果不用退（分配器自己回收），那么 pending 就是一个纯"延迟命名"，风险只在别处。
 
 **默认建议**：**先答标签而不是形态**——若作者选上面的②（handle 名字草稿），那么 region 也**不必**要 pending 入口，`tiles` 的 9 处就按"编译期例外"一并记下，这一问自动消失。**只有当作者选①时**，pending 才成为一个真问题。
 
