@@ -50,4 +50,17 @@ std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(const std::string &uri
 /// reader needs it: what was bound, and what the index answers for it.
 std::vector<std::string> forwardRuleDescriptions();
 
+/// Binds `uri`'s transpose rule to the key it is filed under in the transpose family. It is a
+/// second table rather than a second field, because these are two facts about one operator: the
+/// rule for forward mode and the rule for a linear function's transpose live in two rulesets (a
+/// module serves one family), and neither replaces the other.
+void bindTransposeRule(ForwardRuleBinding binding);
+
+/// What `uri`'s transpose rule is called right now, read from the transpose family's index at this
+/// moment -- `forwardRuleOf`'s reading, for the family a linear function's pullback is written in.
+std::optional<camel::parse::ast::RuleMatch> transposeRuleOf(const std::string &uri);
+
+/// The transpose bindings, in the words `forwardRuleDescriptions` writes them.
+std::vector<std::string> transposeRuleDescriptions();
+
 } // namespace camel::core

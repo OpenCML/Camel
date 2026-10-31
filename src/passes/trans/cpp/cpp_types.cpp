@@ -12,6 +12,7 @@
 #include "camel/core/rtdata/tagged.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/rtdata/variant.h"
+#include "camel/core/type/bytes.h"
 #include "camel/core/type/collection.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/func.h"
@@ -400,6 +401,15 @@ bool containsEnumType(const Type *root, const Type *owner) {
 std::optional<std::string> ProgramValues::type(const Type *t) {
     if (t == nullptr) {
         return std::nullopt;
+    }
+    // A `Bytes` is a run of bytes and nothing else (camel/core/rtdata/bytes.h): a length and the
+    // bytes. It is carried as the array of bytes, `rt::Array<uint8_t>` -- the source array's own
+    // representation, rank one, its extent the length -- and not as a class of its own: the
+    // language spells a byte sequence `Bytes` and never `u8[]`, so one C++ type is enough for
+    // both, and a value enters and leaves it without a copy. `rt`'s text of that array is the
+    // interpreter's text of the `Bytes` (`Bytes[00 01]`), which is why the two print alike.
+    if (camel::core::type::isBytesType(t)) {
+        return "rt::Array<uint8_t>";
     }
     switch (t->code()) {
     case TypeCode::Int32:

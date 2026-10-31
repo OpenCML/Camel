@@ -21,19 +21,21 @@ std::map<std::string, ForwardRuleBinding> &bindings() {
     return table;
 }
 
-} // namespace
-
-void bindForwardRule(ForwardRuleBinding binding) {
-    std::lock_guard<std::mutex> lock(bindingMutex());
-    bindings()[binding.uri] = std::move(binding);
+/// The transpose family's bindings, kept apart from the forward ones: one operator has a rule in
+/// each family, and `bindForwardRule` must not overwrite the other fact.
+std::map<std::string, ForwardRuleBinding> &transposeBindings() {
+    static std::map<std::string, ForwardRuleBinding> table;
+    return table;
 }
 
-std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(const std::string &uri) {
+using BindingTable = std::map<std::string, ForwardRuleBinding>;
+
+std::optional<camel::parse::ast::RuleMatch> ruleOf(BindingTable &table, const std::string &uri) {
     ForwardRuleBinding binding;
     {
         std::lock_guard<std::mutex> lock(bindingMutex());
-        const auto at = bindings().find(uri);
-        if (at == bindings().end()) {
+        const auto at = table.find(uri);
+        if (at == table.end()) {
             return std::nullopt;
         }
         binding = at->second;
@@ -41,13 +43,13 @@ std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(const std::string &uri
     return camel::parse::ast::lookupRule(binding.family, binding.head, binding.arity);
 }
 
-std::vector<std::string> forwardRuleDescriptions() {
+std::vector<std::string> descriptionsOf(BindingTable &table) {
     std::vector<std::string> lines;
     std::vector<ForwardRuleBinding> all;
     {
         std::lock_guard<std::mutex> lock(bindingMutex());
-        all.reserve(bindings().size());
-        for (const auto &[uri, binding] : bindings()) {
+        all.reserve(table.size());
+        for (const auto &[uri, binding] : table) {
             (void)uri;
             all.push_back(binding);
         }
@@ -55,8 +57,8 @@ std::vector<std::string> forwardRuleDescriptions() {
     for (const ForwardRuleBinding &binding : all) {
         std::string line = binding.uri + " " + binding.family + " " + binding.head + "/" +
                            std::to_string(binding.arity) + " -> ";
-        const auto answer = camel::parse::ast::lookupRule(
-            binding.family, binding.head, binding.arity);
+        const auto answer =
+            camel::parse::ast::lookupRule(binding.family, binding.head, binding.arity);
         switch (answer.status) {
         case camel::parse::ast::RuleLookup::Found:
             line += answer.rule;
@@ -72,5 +74,29 @@ std::vector<std::string> forwardRuleDescriptions() {
     }
     return lines;
 }
+
+} // namespace
+
+void bindForwardRule(ForwardRuleBinding binding) {
+    std::lock_guard<std::mutex> lock(bindingMutex());
+    bindings()[binding.uri] = std::move(binding);
+}
+
+std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(const std::string &uri) {
+    return ruleOf(bindings(), uri);
+}
+
+std::vector<std::string> forwardRuleDescriptions() { return descriptionsOf(bindings()); }
+
+void bindTransposeRule(ForwardRuleBinding binding) {
+    std::lock_guard<std::mutex> lock(bindingMutex());
+    transposeBindings()[binding.uri] = std::move(binding);
+}
+
+std::optional<camel::parse::ast::RuleMatch> transposeRuleOf(const std::string &uri) {
+    return ruleOf(transposeBindings(), uri);
+}
+
+std::vector<std::string> transposeRuleDescriptions() { return descriptionsOf(transposeBindings()); }
 
 } // namespace camel::core

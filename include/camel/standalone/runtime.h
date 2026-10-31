@@ -9,6 +9,7 @@
 #pragma once
 
 #include "camel/standalone/array.h"
+#include "camel/standalone/bytes.h"
 #include "camel/standalone/complex.h"
 #include "camel/standalone/core.h"
 #include "camel/standalone/entry.h"
@@ -23,3 +24,4 @@
 #include "camel/standalone/random.h"
 #include "camel/standalone/record.h"
 #include "camel/standalone/str.h"
+#include "camel/standalone/text.h"

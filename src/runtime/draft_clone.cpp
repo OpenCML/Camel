@@ -14,6 +14,7 @@
  */
 
 #include "camel/runtime/draft_clone.h"
+#include "camel/runtime/graph_txn.h"
 #include "camel/utils/log.h"
 
 #include <algorithm>
@@ -44,7 +45,8 @@ remapNodeSpan(std::span<const gc_node_ref_t> refs, const std::vector<gc_node_ref
     return remapped;
 }
 
-std::vector<std::byte> loopPayloadBytes(GraphDraft &owner, const GCLoopBody &loop) {
+std::vector<std::byte> loopPayloadBytes(GraphTransaction &transaction, const GCLoopBody &loop) {
+    auto &owner = transaction.edit();
     const GCLoopRef ref{
         .kind            = loop.kind,
         .iterableForm    = loop.iterableForm,
@@ -58,8 +60,9 @@ std::vector<std::byte> loopPayloadBytes(GraphDraft &owner, const GCLoopBody &loo
 }
 
 std::vector<std::byte> clonePayloadBytes(
-    GraphDraft &owner, const GCGraph *sourceGraph, gc_node_ref_t sourceRef,
+    GraphTransaction &transaction, const GCGraph *sourceGraph, gc_node_ref_t sourceRef,
     const std::vector<gc_node_ref_t> &mapping) {
+    auto &owner = transaction.edit();
     const GCNode *sourceNode = sourceGraph->node(sourceRef);
     ASSERT(sourceNode != nullptr, "Runtime draft clone encountered a null source node.");
 
@@ -88,7 +91,7 @@ std::vector<std::byte> clonePayloadBytes(
         return bytes;
     }
     if (sourceNode->kind == GCNodeKind::Loop) {
-        return loopPayloadBytes(owner, loopBodyOf(*sourceGraph, sourceRef));
+        return loopPayloadBytes(transaction, loopBodyOf(*sourceGraph, sourceRef));
     }
     const auto body = sourceGraph->nodePayloadBytes(sourceRef);
     std::vector<std::byte> bytes(body.begin(), body.end());
@@ -122,8 +125,10 @@ camel::core::type::Type *resolveRuntimeNodeDataType(const GCGraph *graph, const 
 }
 
 std::vector<std::byte> clonePayloadBytes(
-    GraphDraft &owner, const GraphDraft &sourceDraft, gc_node_ref_t sourceRef,
+    GraphTransaction &target, const GraphTransaction &source, gc_node_ref_t sourceRef,
     const std::vector<gc_node_ref_t> &mapping) {
+    auto &owner             = target.edit();
+    const auto &sourceDraft = source.graph();
     const DraftNodeHeader *sourceNode = sourceDraft.header(sourceRef);
     ASSERT(sourceNode != nullptr, "Draft graph clone encountered a missing source node.");
 
@@ -151,7 +156,7 @@ std::vector<std::byte> clonePayloadBytes(
         return bytes;
     }
     if (sourceNode->kind == GCNodeKind::Loop) {
-        return loopPayloadBytes(owner, sourceDraft.loopGraphsOf(sourceRef));
+        return loopPayloadBytes(target, sourceDraft.loopGraphsOf(sourceRef));
     }
 
     std::vector<std::byte> bytes(
@@ -164,7 +169,9 @@ std::vector<std::byte> clonePayloadBytes(
     return bytes;
 }
 
-camel::core::type::Type *resolveDraftNodeDataType(const GraphDraft &draft, gc_node_ref_t ref) {
+camel::core::type::Type *resolveDraftNodeDataType(
+    const GraphTransaction &source, gc_node_ref_t ref) {
+    const auto &draft = source.graph();
     const DraftNodeHeader *node = draft.header(ref);
     ASSERT(node != nullptr, "Draft graph clone type resolution requires a live source node.");
     if (node->dataType != nullptr) {
@@ -198,8 +205,9 @@ std::span<const gc_node_ref_t> portsOf(const GCGraph &graph, uint32_t id) {
 /// regions in regions made again as children of it. `Source` is a GCGraph or a GraphDraft.
 template <typename Source>
 void adoptRegions(
-    GraphDraft &owner, const Source &source, const std::vector<gc_node_ref_t> &sourceToCloned,
-    uint32_t intoRegion) {
+    GraphTransaction &transaction, const Source &source,
+    const std::vector<gc_node_ref_t> &sourceToCloned, uint32_t intoRegion) {
+    auto &owner = transaction.edit();
     const size_t count = source.regionCount();
     if (count == 0 && intoRegion == 0) {
         return;
@@ -241,7 +249,8 @@ void adoptRegions(
 } // namespace
 
 DraftGraphCloneResult cloneRuntimeGraphIntoDraft(
-    GraphDraft &owner, const GCGraph *sourceGraph, uint32_t intoRegion) {
+    GraphTransaction &transaction, const GCGraph *sourceGraph, uint32_t intoRegion) {
+    auto &owner = transaction.edit();
     ASSERT(sourceGraph != nullptr, "Runtime draft clone requires a non-null source graph.");
     CAMEL_LOG_INFO_S(
         "DraftClone",
@@ -328,7 +337,7 @@ DraftGraphCloneResult cloneRuntimeGraphIntoDraft(
 
         CAMEL_LOG_INFO_S("DraftClone", "Clone payload for sourceRef={}.", sourceRef);
         const std::vector<std::byte> payload =
-            clonePayloadBytes(owner, sourceGraph, sourceRef, result.sourceToCloned);
+            clonePayloadBytes(transaction, sourceGraph, sourceRef, result.sourceToCloned);
         CAMEL_LOG_INFO_S(
             "DraftClone",
             "Clone payload ready for sourceRef={} bytes={}.",
@@ -448,12 +457,14 @@ DraftGraphCloneResult cloneRuntimeGraphIntoDraft(
     result.returnNode = remapNodeRef(sourceGraph->returnNodeRef(), result.sourceToCloned);
     result.returnKind = sourceGraph->returnKind();
     CAMEL_LOG_INFO_S("DraftClone", "Clone finished for graph '{}'.", sourceGraph->name());
-    adoptRegions(owner, *sourceGraph, result.sourceToCloned, intoRegion);
+    adoptRegions(transaction, *sourceGraph, result.sourceToCloned, intoRegion);
     return result;
 }
 
 DraftGraphCloneResult cloneDraftGraphIntoDraft(
-    GraphDraft &owner, const GraphDraft &sourceDraft, uint32_t intoRegion) {
+    GraphTransaction &target, const GraphTransaction &source, uint32_t intoRegion) {
+    auto &owner             = target.edit();
+    const auto &sourceDraft = source.graph();
     for (GraphId graph : sourceDraft.dependencies()) {
         owner.addDependency(graph);
     }
@@ -500,7 +511,7 @@ DraftGraphCloneResult cloneDraftGraphIntoDraft(
             continue;
         }
 
-        camel::core::type::Type *sourceDataType = resolveDraftNodeDataType(sourceDraft, sourceRef);
+        camel::core::type::Type *sourceDataType = resolveDraftNodeDataType(source, sourceRef);
         pendingNormInputs.push_back(
             remapNodeSpan(sourceDraft.normInputsOf(sourceRef), result.sourceToCloned));
         pendingWithInputs.push_back(
@@ -515,7 +526,7 @@ DraftGraphCloneResult cloneDraftGraphIntoDraft(
             remapNodeSpan(sourceDraft.syncInputsOf(sourceRef), result.sourceToCloned));
 
         const std::vector<std::byte> payload =
-            clonePayloadBytes(owner, sourceDraft, sourceRef, result.sourceToCloned);
+            clonePayloadBytes(target, source, sourceRef, result.sourceToCloned);
 
         gc_slot_idx_t mappedDataIndex = sourceNode->dataIndex;
         if (mappedDataIndex > 0) {
@@ -591,7 +602,7 @@ DraftGraphCloneResult cloneDraftGraphIntoDraft(
     result.outputNode = remapNodeRef(sourceDraft.outputNode(), result.sourceToCloned);
     result.returnNode = remapNodeRef(sourceDraft.returnNode(), result.sourceToCloned);
     result.returnKind = sourceDraft.returnKind();
-    adoptRegions(owner, sourceDraft, result.sourceToCloned, intoRegion);
+    adoptRegions(target, sourceDraft, result.sourceToCloned, intoRegion);
     return result;
 }
 

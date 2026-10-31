@@ -955,8 +955,8 @@ const std::unordered_map<std::string_view, Indexing> &indexings() {
             Indexing{
                 reduceAllIndexing,
                 {meanLaw("mean_f32", f32, f64, f32, LawEmpty::Fault),
-                 meanLaw("mean_i64", i64, i64, f32, LawEmpty::Fault),
-                 meanLaw("mean_bool", boolean, i64, f32, LawEmpty::Fault)}});
+                 meanLaw("mean_i64", i64, i64, i64, LawEmpty::Fault),
+                 meanLaw("mean_bool", boolean, i64, i64, LawEmpty::Fault)}});
         // By axis: floats in f64 rounded once to f32, integers and bools exactly in int64.
         t.emplace(
             "sum_axis",
@@ -971,8 +971,8 @@ const std::unordered_map<std::string_view, Indexing> &indexings() {
             Indexing{
                 reduceAxisIndexing,
                 {meanLaw("mean_axis_f32", f32, f64, f32, LawEmpty::Initial),
-                 meanLaw("mean_axis_i64", i64, i64, f32, LawEmpty::Initial),
-                 meanLaw("mean_axis_bool", boolean, i64, f32, LawEmpty::Initial)}});
+                 meanLaw("mean_axis_i64", i64, i64, i64, LawEmpty::Initial),
+                 meanLaw("mean_axis_bool", boolean, i64, i64, LawEmpty::Initial)}});
         t.emplace(
             "max_axis",
             Indexing{

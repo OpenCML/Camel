@@ -191,6 +191,31 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
         }
     }
 
+    // A region that yields a value yields it to the node that reads it -- the owner of the region --
+    // and a live owner is live because the exit depends on what it reads. So the walk above has to
+    // have reached the result of every live region. A rewrite that drops the link from a region
+    // result leaves the region computing a value nothing takes: the work is still done, the value
+    // is thrown away, and nothing in the graph says so.
+    for (uint32_t r = 1; r < graph->regionCount(); ++r) {
+        const camel::runtime::GCRegion *region = graph->region(r);
+        if (region == nullptr || region->result == camel::runtime::kInvalidNodeRef) {
+            continue;
+        }
+        const gc_node_ref_t owner = region->owner;
+        if (owner == camel::runtime::kInvalidNodeRef || !graph->containsNodeRef(owner) ||
+            !live[owner]) {
+            continue;
+        }
+        GUARD(
+            graph->containsNodeRef(region->result) && live[region->result],
+            std::format(
+                "Region {} yields node {} and its owner {} is in the execution, but that node is "
+                "not: the value the region makes is read by nothing the exit depends on.",
+                r,
+                region->result,
+                owner));
+    }
+
     // The live nodes of each arm region, nested branches included: the nodes whose control region
     // lies in a region are one range of the nodes sorted by the walk position of their control
     // region (in node order within a position).
@@ -436,6 +461,14 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
     // constant while silently skipping the observable work.
     if (startRef != camel::runtime::kInvalidNodeRef) {
         visit(startRef);
+    }
+    // A node a region says runs is laid out even when nothing outside the region reaches it: an
+    // arm's statements have no value user, and the region is the unit the plan is laid out from
+    // (docs/design/effects/edges.cn.md 5.2).
+    for (gc_node_ref_t n = 0; n < live.size(); ++n) {
+        if (live[n] && state[n] != 2) {
+            visit(n);
+        }
     }
     return order;
 }

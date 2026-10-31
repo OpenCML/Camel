@@ -638,6 +638,8 @@ python benchmarks\train.py --check-ksteps --models transformer --device cuda --c
 
 **A/B 要退到引入这条规则之前的那一笔——退得不够远，两侧都一样红。** 同一条红我先做过一次 A/B，退的是类型门 `a53b87e17`，而 `c397d72c2` 引入的 `hostStorage` 两侧都在，于是两侧都红，就被当成了环境；真正把它定住的是上面那三段读数。基线要落在"这条规则还不存在"的那一笔，否则"两侧都红"只说明这条规则被两次带上了。
 
+**拒绝普查的第一产出不是数字，是"这一堆为什么会聚在一起"。** 22 条缺口两条读数（transformer 的 13 与 C2 的 13，共用 4 条，`13 + 13 − 4 = 22`）就数得出来，但数字只说"还剩多少"；要说清"这堆是什么"，得写出它们为什么聚在一起——全是"设备上还没有实现、于是整个 `#gpu` 作用域被拒、节点退回主机"的算子，六族里最大的一族是数学（激活与归一化）6 条，判据是作者 06:10 那句"语言规定这个目标必须有吗"。同理，**26 → 22 这个差值也要带算式**：不是判走了四条，是四条布局算子进了 `operations()`（`device` 5→9）——数变了先要说清数为什么变，再谈两堆。见 `docs/handover/reports/gpu-refusal-census.md`。
+
 **两笔都在改同一句话的时候，先定"谁是机器读的、谁是人读的"——id 给机器，句子给人。** 窄元素这条边界上两笔撞在一起：一笔把理由改成 `no narrow-float kernel on this back end`（一句话，直接当 id 用），一笔把它改成 `device_element_kernel_missing`（一个 id，句子留给 `gpuRefusal` 在真用设备时拼）。后者是对的：计划与断言读的是 id，人读的是句子，把句子当 id 用等于把一句话钉进读者的解析里，改一个字就要动所有读者。所以合并时 id 取 `device_element_kernel_missing`，`no narrow-float kernel on this back end` 不再作为字符串出现在任何地方，句子归 `gpuRefusal`（`the device has no kernel for a bf16 element`），另一句 develop 上的"这个后端只带 f32 张量与 i64 位置"各自保留、不重复。
 
 ---

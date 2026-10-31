@@ -1244,3 +1244,39 @@ DraftGraphCloneResult cloneDraftGraphIntoDraft(GraphDraft &owner, const GraphDra
 **数**：`references` **314**（不动），`files` **35**（不动），`constructions` 1，`decode` 4。**一处 `borrow` 也没有造**——造了也只是把 13 处挪进另一个函数。
 
 **一条判据（协调者给的一句）**：**「一个读者能收事务，只因为它上游有人手里已经拿着事务——不是因为它想要。」**
+
+## 57. `draft_clone` 的两个入口改收事务：三个文件，一次改动
+
+`draft_clone.h` 的两张签名不再出现 `GraphDraft`，`draft_clone.cpp` 的内部函数从事务上取图：
+
+```cpp
+DraftGraphCloneResult cloneRuntimeGraphIntoDraft(
+    GraphTransaction &transaction, const GCGraph *sourceGraph, uint32_t intoRegion = 0);
+DraftGraphCloneResult cloneDraftGraphIntoDraft(
+    GraphTransaction &target, const GraphTransaction &source, uint32_t intoRegion = 0);
+```
+
+| 文件 | 改了什么 |
+|---|---|
+| `include/camel/runtime/draft_clone.h` | 两张签名 + 一行注释（4 处拼写 + 1 处注释） |
+| `src/runtime/draft_clone.cpp` | 9 处拼写：两个入口、`loopPayloadBytes`、两个 `clonePayloadBytes` 重载、`resolveDraftNodeDataType`、`adoptRegions`、以及它们各自的调用点；体首取 `transaction.edit()` / `transaction.graph()` |
+| `src/runtime/draft_inline.cpp` | 唯一的调用点（1830/1831）各传自己手上的事务：`transaction` 与 `calleeTransaction` |
+
+**留下的 4 处（这一个文件仍出列不了，但它不再是文件名）**：`regionOf(const GraphDraft&, id)` 与 `portsOf(const GraphDraft&, id)` 是两个适配重载——`adoptRegions<Source>` 同一个循环既要读 `GCGraph` 也要读一张草稿，这一对重载就是那个「两样都读」的接口；另外两处是注释。
+
+**数**：`files` 35 → **34**，`references` 314 → **301**（−13），`constructions` 1，`decode` 4。**没有一处 `borrow`**。
+
+**一条判据（协调者给的一句）**：**「一次改动要跨三个文件的时候，先问『这三个是不是同一件事』——是，就一起改；不是，就再拆。」**
+
+## 58. 剩下最多的文件是 `src/runtime/draft.cpp` 128 处：它不是一个片，是四样东西
+
+| 处数 | 是什么 | 判读 |
+|---|---|---|
+| **119** | `GraphDraft::name(...)` 这类**类外成员定义** | §53 的 ③：类型自己的体，**不改名就降不掉** |
+| **1** | `std::make_unique<GraphDraft>()`（920） | `constructions` 那一格记的就是它，**不动** |
+| **4** | `"GraphDraft"` 字符串（916/976/1061 的日志类别、2179 的 `ownerKind` 文本） | 不是类型，是文本；改它不降引用，只会改日志 |
+| **4** | 自由函数形参 `owner` / `controlRegionOf` / `statementRegionOf` / `sameSyncBlock`（119/1360/1377/1385） | 调用者全在 `GraphDraft::` 自己的成员体里，**手上没有事务**——和 §56 同一条：不能换，也不能造 `borrow` |
+
+**结论**：这个文件 **93% 是 §53 已定的天花板**（119/128），剩下 9 处里 1 处是账本自己的 `constructions`、4 处是字符串、4 处没有事务可收。**不是同一件事，所以不拆成一笔**——要降它只有 §53/§54 那一问（改名或删类型），不是再来一片。
+
+**一条判据（协调者给的一句）**：**「剩下来的最多处，往往不是最难改的一处，而是最该先问『它是不是同一件事』的一处。」**

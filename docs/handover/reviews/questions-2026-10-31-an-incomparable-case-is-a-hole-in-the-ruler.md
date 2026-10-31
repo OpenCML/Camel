@@ -252,3 +252,99 @@ Statement（`numberLess` 的顺序、f64 累加一次的 `sum`、`IEEE 754-2019`
 尺子按这条站住：`not_comparable` 这一轮**没有涨**（仍是 12 条），每一条都写着"为什么两边不可比"
 ——打印自己测的秒数（`block_sort_merge`、`bootstrap_medians`）、打印当前时间（`modules/std/time`）、
 参考实现在 1e8 元素上自己 exit 1（`para/core/merge_sort`）——没有一条是"比不了就划过去"。
+
+### `Bytes` 一族：`46` 条里 `13` 条转 `same`，`33` 条仍拒（原话见下）
+
+**一条判据（进页，一句话）**：最大的一族先修，是因为它的每一条都在同一个机制上——修一族比修十条散件便宜。
+
+`Bytes` 在解释器里是一个**值**：一块二进制、长度和字节（`camel/core/rtdata/bytes.h`，小值内联在值里、大值在数据块里、可被外部块收养），
+不可变，拷贝一次引用。写的人原来拒它的原话是
+`function 'main' uses a value of type 'Bytes'; std::cpp translates numbers (real and complex), bool, string, enums, arrays, tuples, structs, T?, T!, functions and var variables of these, and void`
+——拒绝点在 `src/passes/trans/cpp/cpp_types.cpp` 的 `ProgramValues::type`：`Bytes` 是运行时注册的 `OtherType`，
+落到 `default` 就返回"没有"。
+
+表示只走一条：`Bytes` 就是**字节的 `rt::Array`**（`rt::Array<uint8_t>`，秩一、extent 是长度），不引入第三套类型；
+它的文本也是 `rt::Array<uint8_t>` 的那一份，写成解释器的 `Bytes[00 01 ff]`（`format.h` 的重载，
+`Bytes` 是语言里唯一的字节序列，`u8[]` 不存在，所以这一个数组类型只有这一种读法）。于是模块的四个核
+（`bytes:encode` / `decode` / `from_array` / `to_array`）、核心的三个字节算子
+（`len`、`a + b`、`==`/`!=`）和两个交叉（`array:to_bytes`、`tensor:to_bytes` 在秩一的数组上）都成了
+同一个类型上的语句：字节、0..255 的值、元素自己的字节（小端、行主序），以及**不是故障的解码错误**
+（`EncodingError`，消息带第几个字节不是 UTF-8）——都是解释器的原话。
+
+尺子上的读数：`same` **1246 → 1259**，`refused` **971 → 958**，`defect` **0**，`not_comparable` 仍是 **12**（这一笔没涨）。
+
+46 条的去向：**13 条 `same`**（`bytes_invalid_utf8`、`struct_predicates`、`tensor/binary_bytes`、
+六个 `reduced_*`、`array_kernels/layout`、`array_reduction_kernels`、`array_sum_rounding`、
+`bytes_fault_from_array`），逐字节读回三条，全部 `BYTE-IDENTICAL`。
+剩下 33 条的原话按族归：`fs:write_bytes`/`read_bytes`/`read_chunk`/`file_size` 6 条（文件系统是一个模块的能力）、
+`hash:sha256_bytes` 3 条、`tensor:from_bytes_*` 6 条（要一个形状，属于形状数组那一类）、
+`tensor:to_bytes` 在 `P[]` 上 2 条（结构体的布局字节）、`:op/atof`/`atobf`/`atof6` 在开秩上 5 条、
+`str:codepoints`/`str:find` 2 条、`ckpt:load_tree` 1 条、`tensor:multiply` 2 条、`rand:*_array` 3 条、
+`:op/slice_bytes` 2 条（切片的越界报告写的是"a Bytes"，数组切片的是"an array"——照抄不了就不动它，
+留着拒并写明）。
+
+### `Json` 11 + `Set<...>` 5：先量形状，两个都不是"缺个拼法"
+
+**一条判据（进页，一句话）**：数据结构的拼法错了，读数不会崩——它会变成一个长得像对的字符串。
+
+`Json` 的形状（`modules/json/value.h`）：**一个 kind 加一格载荷**，载荷的类型随 kind 变——
+`Null` / `Bool`(bool) / `Int`(int) / `Float`(float) / `String`(string) / `Array`(`Json[]`) / `Object`(`Map<string, Json>`)。
+它是一棵**自描述的和类型**：值自己带着"我现在是哪一种"，程序只在运行到才知道。目标那边的既有拼法
+（数字/串/数组/元组/结构体）没有"一个字段的类型取决于另一个字段"的形状——那要一个变体值。
+为它单独造一个 `rt::Json`（tagged union）是第三套表示，这一笔的边界不许；把 `Json` 硬塞进一个
+`{ kind: int, ... }` 结构体也只能装下一种载荷。所以这 11 条**不是写规则能解决的缺拼法，是表示层的决定**，
+留给点名。
+
+`Set<T>` 的形状（`include/camel/core/rtdata/collection.h`）：不是数组，是**持久 B+ 树的 Table**——
+叶子按 key 升序放元素（`Map` 是 key 升序、值跟着 key 排），打印是 `{a, b}`（`Table::print`），
+迭代（`items`/`reduce`）也按升序走。最近的既有拼法是"一个结构体抱住一个排好序的 `T[]`"，
+再加一个 `appendText` 写成 `{..}`——但那是**为集合新写一个值类型**（数组的 `[..]` 打印是共享的，
+不能拿数组冒充集合），同样是第三套表示。`Set` 的 5 条要 `as Set`、`add`、`remove`、`contains`、
+`len`、`union`/`intersect`/`difference`、`items` 全都在，少一个都留拒，所以这一笔一条也没转。
+
+这一轮**没有代码**：两种形状都撞在同一条边界上（表示只走既有那几条），与其造第三套把读数弄成
+"长得像对的字符串"，不如把形状和两个决定摆出来。尺子不动：`same` 1259、`refused` 958、`defect` 0、
+`not_comparable` 12。
+
+### `Json` 11 + `Set<...>` 5 + `Map<...>` 22：三族一条边界问句（问作者，别各修一半）
+
+`Bytes` 修掉之后，声明类型这一类剩 `156` 条 = `82` 该拒 + `74` 该修，而"该修"里有 `38` 条撞的是
+同一件事：`Json` 11、`Set<...>` 5、`Map<...>` 22。三者的形状都在同一处量过了——`Json` 是自描述的
+和类型（kind 决定载荷的类型），`Set`/`Map` 是持久 B+ 树的 Table（升序、打印 `{..}` / `{k: v}`）——
+`include/camel/standalone/` 里没有任何一个对应的值类型可以拿来拼，数组的 `[..]` 文本冒充不了 `{..}`，
+和类型要一个变体。也就是说这三族不是三次缺拼法，是**一次边界问句**：
+`docs/handover/questions/questions-2026-10-31-sum-and-ordered-collections-three-value-types-the-target-does-not-have.md`。
+
+**一条判据（进页，一句话）**：两个类型撞在同一条边界上，就不是两次缺拼法，是一次边界问句——先问，别各修一半。
+
+在这一问被回答之前，这三族**不改判、不动手**：它们仍记在"该修"（写的人还没有拼法），只是拼法要先由
+语言作者定表示；`not_comparable` 仍是 12，没有一条新的。
+
+**引别的树的数字，等于引别人的测量——要么说清是哪棵树哪个 sha，要么先合过来再量。**
+今晚就踩了一次：本车道报 `refused 1005 / defect 54`（HEAD `b3bb51280` + 三笔的树），而另一棵树是
+`971 / 0`；两个数并在一句话里就被读成"今夜的普查退步了"。所以这本页上的每一个数都带 sha，
+换树就重算，不跨树并称。顺带一条读数纪律：`defect` 里的 `does not build` 有一堆是 census 自己那条
+编译命令的链接失败（`para/*`、`trans/cpp/runtime_bridge.cml` 后者在 `expect.txt` 里、闸门全绿），
+报这一档之前先看它们的报错是不是写出器的缺口。
+
+### 开秩转换 `:op/atof`/`atobf`/`atof6` + `str:codepoints`/`str:find`/`from_codepoints`：`7` 条里 `5` 条转 `same`
+
+**一条判据（进页，一句话）**：连着两笔只有判断没有代码的时候，第三笔挑一族能落到 `same` 的——判断的成本要有代码来付。
+
+两条原来拒得不一样：开秩的 5 条是"an operator that has no rule for several value types"（`bf16[..]`、`f32[..]` 这种
+秩要到运行时才知道的值），`str` 的 2 条是"whose result of type `int[]` / `int?` has no translation"。
+两种都不是缺值类型：`bf16[..]` 的值就是 `rt::Array<rt::BF16>` 加上运行时的 extents，`int[]` 是数组，
+`int?` 是 `rt::Opt<int64_t>`。**"形状未定是值的事实"**（`nestedlit` 那条）——所以转换只转元素、形状留在原地：
+`rt::convertArray` 现在把输入的 rank 与 extents 原样照抄（无秩仍是空秩，一个元素仍然只印元素本身），
+于是秩要到运行时才知道的值也能走 `atof`/`atobf`/`atof6`。
+
+`str:codepoints` 回 `int[]`（`camel::utf8::decodeOne` 一步一个码点），`str:from_codepoints` 回 `string!`
+（不是码点的那个数是一个 `EncodingError` 值，消息照抄解释器；只有"比一个字符串还长"是故障），
+`str:find` 回 `int?`（`std::string_view::find` 找字节、`camel::utf8::indexOf` 数字符，解释器的两个函数）。
+三处都放在 `include/camel/standalone/text.h` 里，因为 `Array`/`Opt` 在 `str.h` 之后才声明——
+**没有为新东西造值类型**。
+
+7 条的去向：**5 条 `same`**（`str_chars`、`reduced_scalar`、`bf16_cast_boundaries`、`bf16_cast_no_permission`、
+`bf16_cast_under_strict`），逐字节读回两条（`str_chars`：`[104, 8364, 128512, 233]`；`_under_strict`：`[205, 61]`）。
+仍拒 2 条，各自另一族：`utf8_string.cml` → `str:split`（结果 `string[]`，还没写规则）；
+`bf16_storage.cml` → `tensor:sum_axis` 在 `bf16[..]` 上（按轴求和，形状要丢一维，属于形状那一类）。

@@ -321,12 +321,15 @@ bool Type::assignableFrom(Type *from) const {
     if (to == from)
         return true;
 
-    // Built-in types: composite types containing Ref must be resolved before assignment.
-    // Still an ASSERT: a valid program reaches this. `comprehension_context.annotated` and
-    // `context.var_sibling` ask whether a value assigned to an annotated binding fits, and the
-    // annotation there is a Ref type, so either the callers must resolve it first or this
-    // invariant is narrower than the type system is. A question about the type system, not about
-    // turning a check on, so the check stays where it was.
+    // Still an ASSERT, now with the measurements that settle why. Turning it on aborts 17 plan
+    // cases, not the four the ruling named: `comprehension_context.annotated` (nvm/fvm/jit) and
+    // `context.var_sibling` are where it was first seen, and `rank_zero_slot_field*`,
+    // `rank_zero_slot_tuple_element*`, `rank_zero_slot_nested_field*`, `print_and_recompile` and
+    // `ort_struct_casts` reach it too -- valid programs comparing a name with a primitive target
+    // all over the compiler, not one caller that forgot to resolve. Exempting composite targets
+    // (their own `assignableFrom` answers for them) still leaves the rank_zero family aborting,
+    // so the question is broader than any single caller: it is "which type is a name allowed to
+    // stand for, and who reads it", a question about the type system. Stays a release-time check.
     ASSERT(
         to->code_ != TypeCode::Ref && from->code_ != TypeCode::Ref,
         "Ref type cannot be assigned");

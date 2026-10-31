@@ -4,6 +4,7 @@
 #include "operator_rules.h"
 
 #include "camel/core/numeric_convert.h"
+#include "camel/core/type/bytes.h"
 #include "camel/core/type/composite/array.h"
 #include "fault_sites.h"
 
@@ -838,6 +839,184 @@ Rules buildRules() {
         },
         false,
     };
+    // ---- Binary data: `Bytes` (stdlib/bytes.cml, modules/bytes/module.cpp) ----
+    // A `Bytes` is carried as the array of bytes (`ProgramValues::type`: `rt::Array<uint8_t>`),
+    // rank one and its extent the length -- the source array's own representation, not a class of
+    // its own -- so the module's four kernels and the crossing `array:to_bytes` are statements
+    // about that one type: the text's UTF-8 bytes, the values in 0..255 (a fault naming the
+    // element outside it), the values back, the elements' own bytes, and the decoding that is a
+    // value-level error and not a fault (`EncodingError` at the byte that is not UTF-8, the
+    // interpreter's own kind and message).
+    r["bytes:encode"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1 || c.normType(0) == nullptr ||
+                c.normType(0)->code() != TypeCode::String) {
+                return std::nullopt;
+            }
+            return std::format("rt::bytesOfText({})", c.operand(0));
+        },
+        false,
+    };
+    r["bytes:from_array"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = c.normCount() == 1 ? asArrayType(c.normType(0)) : nullptr;
+            if (value == nullptr || (!value->anyRank() && value->rank() > 1) ||
+                value->elemType() == nullptr || value->elemType()->code() != TypeCode::Int64) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::bytesOfValues({}, {})",
+                c.operand(0),
+                c.site(
+                    RuntimeDiag::InvalidArgument,
+                    {"bytes.from_array",
+                     std::format("element {} is outside 0..255", SiteTable::valueMark(0))}));
+        },
+        false,
+    };
+    r["bytes:to_array"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1 || c.normType(0) == nullptr ||
+                !camel::core::type::isBytesType(c.normType(0))) {
+                return std::nullopt;
+            }
+            return std::format("rt::valuesOfBytes({})", c.operand(0));
+        },
+        false,
+    };
+    r["bytes:decode"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1 || c.normType(0) == nullptr ||
+                !camel::core::type::isBytesType(c.normType(0))) {
+                return std::nullopt;
+            }
+            return std::format("rt::textOfBytes({})", c.operand(0));
+        },
+        false,
+    };
+    // `array:to_bytes` (stdlib/array.cml): the elements' own bytes, little-endian, row-major. The
+    // element types are the ones whose C++ form is the value itself, so `sizeof` is the width the
+    // interpreter writes -- one byte for a bool, two for a half, four for an `i32`/`f32`, eight for
+    // an `i64`/`f64`/`c64`, sixteen for a `c128` -- and a shaped run lies flat, as it does in the
+    // array. A string or a struct of them is `is_plain` but not one of these, and has no rule.
+    r["array:to_bytes"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = c.normCount() == 1 ? asArrayType(c.normType(0)) : nullptr;
+            if (value == nullptr || value->elemType() == nullptr) {
+                return std::nullopt;
+            }
+            switch (value->elemType()->code()) {
+            case TypeCode::Int32:
+            case TypeCode::Int64:
+            case TypeCode::Float32:
+            case TypeCode::Float64:
+            case TypeCode::Bool:
+            case TypeCode::BFloat16:
+            case TypeCode::Float16:
+            case TypeCode::Complex64:
+            case TypeCode::Complex128:
+                return std::format("rt::bytesOfElements({})", c.operand(0));
+            default:
+                return std::nullopt;
+            }
+        },
+        false,
+    };
+    // `len(b)` and `a + b` of two `Bytes` (:struct/len_bytes, :op/add_bytes): the length in bytes
+    // and the bytes of one followed by the bytes of the other -- the array's own length and
+    // concat, which is what the interpreter's kernels do on the byte run.
+    // `str:codepoints` and `str:find` (modules/str/operators.cpp): the code points as `int[]`, and
+    // the position of a needle counted in characters (`camel::utf8::count`, the interpreter's own)
+    // or the null. Neither is a value type: the first is the array of numbers the target already
+    // carries, the second the `int?` it already carries (`rt::Opt<int64_t>`).
+    r["str:codepoints"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1 || c.normType(0) == nullptr ||
+                c.normType(0)->code() != TypeCode::String) {
+                return std::nullopt;
+            }
+            return std::format("rt::codePoints({})", c.operand(0));
+        },
+        false,
+    };
+    r["str:from_codepoints"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = c.normCount() == 1 ? asArrayType(c.normType(0)) : nullptr;
+            if (value == nullptr || value->elemType() == nullptr ||
+                value->elemType()->code() != TypeCode::Int64) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::textOfCodePoints({}, {})",
+                c.operand(0),
+                c.site(
+                    RuntimeDiag::InvalidArgument,
+                    {"str.from_codepoints", "the result is longer than a string can be"}));
+        },
+        false,
+    };
+    // `str:split` (modules/str/operators.cpp): the parts, `string[]` -- an array of strings, which
+    // the target carries; the cuts keep the empty parts, and an empty separator cuts by code point.
+    r["str:split"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1 || c.withCount() != 1) {
+                return std::nullopt;
+            }
+            return std::format("rt::splitText({}, {})", c.operand(0), c.with(0).text);
+        },
+        false,
+    };
+    r["str:find"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1 || c.withCount() != 1) {
+                return std::nullopt;
+            }
+            return std::format("rt::findText({}, {})", c.operand(0), c.with(0).text);
+        },
+        false,
+    };
+    r[":struct/len_bytes"] = runtimeFunction("length");
+    // `a == b` of two `Bytes`: byte for byte, which is the array's `==` (a different length is a
+    // different value, the same length compares the elements in order).
+    r[":op/eq_bytes"]      = infix("==");
+    r[":op/ne_bytes"]      = infix("!=");
+    r[":op/add_bytes"]     = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 2) {
+                return std::nullopt;
+            }
+            return std::format("rt::concat({}, {})", c.operand(0), c.operand(1));
+        },
+        false,
+    };
+    // `tensor:to_bytes` (stdlib/tensor.cml): the same statement as `array:to_bytes` -- the
+    // elements' own bytes in row-major order -- and the value it runs on is an array, not a
+    // device buffer, so the target carries it. The element types are the ones whose C++ form is
+    // the value itself; a `P[]` of a struct has its layout's bytes, which this target does not
+    // pin, and keeps its refusal.
+    r["tensor:to_bytes"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = c.normCount() == 1 ? asArrayType(c.normType(0)) : nullptr;
+            if (value == nullptr || value->elemType() == nullptr) {
+                return std::nullopt;
+            }
+            switch (value->elemType()->code()) {
+            case TypeCode::Int32:
+            case TypeCode::Int64:
+            case TypeCode::Float32:
+            case TypeCode::Float64:
+            case TypeCode::Bool:
+            case TypeCode::BFloat16:
+            case TypeCode::Float16:
+            case TypeCode::Complex64:
+            case TypeCode::Complex128:
+                return std::format("rt::bytesOfElements({})", c.operand(0));
+            default:
+                return std::nullopt;
+            }
+        },
+        false,
+    };
     // `tensor:reshape` (modules/tensor/kernels/layout.cpp): the same elements in row-major order in
     // another shape. The shape travels with the value now (rt::Array holds it), so a target of
     // several dimensions is faithful too -- printing it gives its rows, `[[1.0, 2.0], [3.0, 4.0]]`,
@@ -896,12 +1075,14 @@ Rules buildRules() {
         false,
     };
     // `tensor:mean` of the whole value (modules/tensor/ops/reduction_ops.cpp, meanAllKernel): the sum
-    // divided by the number of elements, both in f64, and the answer's element type reached by one
-    // conversion -- the definition `sum(x) / float(numel(x))` (stdlib/tensor_definitions.cml) with
-    // the kernel's own accumulation. A mean of integers is therefore f32 and not integer division,
-    // and a mean of f32 elements is not the f32 sum divided again: the sum is the f64 one, exactly
-    // as the interpreter's `sumAll` returns it. A value with no element divides by zero, and the
-    // interpreter raises that fault rather than answering a NaN.
+    // divided by the number of elements, the sum in the accumulation `sum` uses and the division in
+    // f64, and the answer's element type reached by one conversion -- the definition
+    // `sum(x) / float(numel(x))` (stdlib/tensor_definitions.cml). A mean keeps the element type
+    // (design principles: `mean` answers `T`), so a mean of integers is `int(sum / numel)` -- the
+    // conversion `int(·)` already has, `[1, 2, 4]` giving `2` -- and a mean of f32 elements is not
+    // the f32 sum divided again: the sum is the f64 one, exactly as the interpreter's `sumAll`
+    // returns it. A value with no element divides by zero, and the interpreter raises that fault
+    // rather than answering a NaN.
     //
     // The answer's element type is the one the operator states, which is not always the source's,
     // so it is passed as the runtime template argument: the one place in this file where the rule
@@ -1002,16 +1183,18 @@ Rules buildRules() {
         false,
     };
     // `tensor:mean_axis` (modules/tensor/kernels/reduce.cpp, reduceAxis): the mean is the sum's own
-    // two steps and not a second average -- each lane added from +0 in ascending order into a
-    // `double`, the unrounded total divided by the extent in `double`, that quotient rounded into the
-    // element type once. So the rule emits the runtime's mean, which walks the lanes the same way and
-    // rounds the same single time; "the sum divided by a count" computed in the element type would be
-    // a different number for an `f32` lane.
+    // two steps and not a second average -- each lane summed by the accumulation `sum_axis` uses
+    // (f64 from +0 for every float element type, the exact `uint64_t` accumulator for an integer),
+    // the unrounded total divided by the extent in `double`, that quotient rounded into the element
+    // type once. So the rule emits the runtime's mean, which walks the lanes the same way and rounds
+    // the same single time; "the sum divided by a count" computed in the element type would be a
+    // different number for an `f32` lane.
     //
-    // Only a floating element type is written: the mean of an integer value is an `f32` in the
-    // kernel, while the operator's signature keeps the value's element type, so the answer's type on
-    // this side would be the integer one -- a different value printed, not a mean. That is left
-    // refused (by name) rather than translated to something else.
+    // An integer element type is written too: `mean` answers `T` (design principles), so the answer
+    // of an integer lane is `int(sum / numel)` -- `[1, 2, 4]` giving `2`. It was refused here while
+    // the kernel answered an f32 that the type then read as an integer (`2.3333333` printed as
+    // `1075139925`): that was the kernel's type being wrong, not the mean of an integer being
+    // untranslatable. `bool` stays out because `mean` is declared `when is_numeric::<T>()`.
     //
     // An empty lane is not refused: the interpreter divides 0.0 by 0.0 and answers the canonical NaN
     // (`[nan, nan]` for a `f32[2, 0]` reduced on axis 1), and the runtime does the same. The refusal
@@ -1024,7 +1207,8 @@ Rules buildRules() {
                 return std::nullopt;
             }
             const TypeCode element = value->elemType()->code();
-            if (element != TypeCode::Float32 && element != TypeCode::Float64) {
+            if (element != TypeCode::Int64 && element != TypeCode::Int32 &&
+                element != TypeCode::Float32 && element != TypeCode::Float64) {
                 return std::nullopt;
             }
             std::string axis;
@@ -1186,8 +1370,10 @@ Rules buildRules() {
         r[uri] = {
             [element](OperatorCall &c) -> std::optional<std::string> {
                 const ArrayType *value = asArrayType(c.normType(0));
-                if (c.normCount() != 1 || value == nullptr || value->anyRank() ||
-                    value->rank() != 1) {
+                // The rank is the value's, not the conversion's: the elements are converted and
+                // the shape stays where it was (rt::convertArray), so a value whose rank is only
+                // known at run time -- `f32[..]` converted by `atof6` -- is carried too.
+                if (c.normCount() != 1 || value == nullptr || value->elemType() == nullptr) {
                     return std::nullopt;
                 }
                 return std::format("rt::convertArray<{}>({})", element, c.operand(0));

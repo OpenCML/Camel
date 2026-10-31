@@ -397,9 +397,21 @@ timeout_ms = 8000
 
 [[tests]]
 name = "mean_axis_rank"
-desc = "The mean along one dimension is the interpreter's own two steps in its order, not a second average: each lane is added from +0 in ascending order into a `double`, the unrounded total is divided by the extent of the lane in `double`, and that quotient is rounded into the element type once -- rounding the sum first, or dividing in the element type, would be a different number for an `f32` lane. So `[2.0, 5.0]` for an `f32[2, 3]` reduced on axis 1 and `[[5.0, 6.0, 7.0, 8.0], [8.0, 7.0, 6.0, 5.0]]` for an `f32[2, 3, 4]` reduced on axis 1, whose lanes are three elements four apart in the run. A value of one dimension answers the mean itself, a value of no dimension: `2.6666667` for an `f32[3]` of [1.0, 5.0, 2.0], with `shape` answering `[]`, and `[2.6666667]` when the dimension is kept. A lane with no element is not refused -- the interpreter divides 0.0 by 0.0 and answers the canonical NaN, so an `f32[2, 0]` reduced on axis 1 answers `[nan, nan]` -- and the answer of an integer value is left refused, because the kernel's mean of an integer is an f32 while the operator's signature keeps the element type. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+desc = "The mean along one dimension is the interpreter's own two steps in its order, not a second average: each lane is added from +0 in ascending order into a `double`, the unrounded total is divided by the extent of the lane in `double`, and that quotient is rounded into the element type once -- rounding the sum first, or dividing in the element type, would be a different number for an `f32` lane. So `[2.0, 5.0]` for an `f32[2, 3]` reduced on axis 1 and `[[5.0, 6.0, 7.0, 8.0], [8.0, 7.0, 6.0, 5.0]]` for an `f32[2, 3, 4]` reduced on axis 1, whose lanes are three elements four apart in the run. A value of one dimension answers the mean itself, a value of no dimension: `2.6666667` for an `f32[3]` of [1.0, 5.0, 2.0], with `shape` answering `[]`, and `[2.6666667]` when the dimension is kept. A lane with no element is not refused -- the interpreter divides 0.0 by 0.0 and answers the canonical NaN, so an `f32[2, 0]` reduced on axis 1 answers `[nan, nan]`. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/mean_axis_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::meanAxis("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "mean_axis_elements"
+desc = "The mean keeps the element type, and its canonical form is `T(sum(float(x)) / float(numel(x)))` with the sum and the division in f64 and one rounding at the end, so an integer value answers an integer: `mean_axis([1, 2, 4] as int[3], 0, false)` is `2` -- `int(7 / 3)`, the conversion `int(·)` already has, and the number a reader would call a lost average is exactly what the normative form asks for -- with `shape` answering `[]` and `keepdims` answering `[2]`, while the same three elements through `f32(xs)` answer `2.3333333`. `[16777216.0, 1.0, -16777216.0]` separates the accumulations: an f32 accumulator loses the `1` and answers `0`, the f64 one keeps it and answers `0.33333334`. Rows of an `int[2, 3]` reduced on axis 1 answer `[2, 4]`. This is the case the rule used to refuse by name, when the kernel answered an f32 quotient into a slot the type said was an integer (`2.3333333` printed as `1075139925`). The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/mean_axis_elements.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
 expect_stdout_contains = ["rt::meanAxis("]

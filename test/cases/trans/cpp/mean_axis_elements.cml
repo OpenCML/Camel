@@ -1,0 +1,29 @@
+/**
+ * The mean keeps the element type, and its canonical form is `T(sum(float(x)) / float(numel(x)))`
+ * with the sum and the division in f64 and one rounding at the end. So the mean of an integer value
+ * is an integer: `[1, 2, 4]` answers `2`, which is `int(7 / 3)` -- the conversion `int(·)` already
+ * has -- and not a lost average. A program that wants a floating mean writes `f32(xs)` first, and
+ * the same three elements then answer `2.3333333`.
+ *
+ * This is the case the writer used to refuse by name: the kernel answered an f32 quotient, the type
+ * said integer, and the answer printed the f32 bits (`2.3333333` as `1075139925`). The runtime now
+ * walks the lanes the interpreter walks, so `agree_with_fvm` compares these lines byte for byte.
+ *
+ * `[16777216.0, 1.0, -16777216.0]` separates the accumulations: an f32 accumulator loses the `1` and
+ * answers `0`, the f64 one keeps it and answers `0.33333334`. The 2-D line reduces rows of three, so
+ * each answer is a lane rather than one run of the whole value.
+ */
+import { mean_axis, shape } from tensor
+
+func main(): int sync {
+    let ints: int[3] = [1, 2, 4]
+    println(mean_axis(ints, 0, false))
+    println(shape(mean_axis(ints, 0, false)))
+    println(mean_axis(ints, 0, true))
+    println(mean_axis(f32(ints), 0, false))
+    let apart: f32[3] = [16777216.0, 1.0, -16777216.0]
+    println(mean_axis(apart, 0, false))
+    let two: int[2, 3] = [[1, 2, 4], [3, 4, 5]]
+    println(mean_axis(two, 1, false))
+    return 0
+}

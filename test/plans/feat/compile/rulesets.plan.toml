@@ -103,3 +103,36 @@ expect_exit = 0
 expect_stdout_contains = ["LOOKUP rulesets.probe_missing +/2 -> add_ok", "LOOKUP rulesets.probe_missing -/1 -> neg_ok", "LOOKUP rulesets.probe_missing */2 -> mul_ok", "LOOKUP rulesets.probe_missing //2 -> no rule", "RULESET rulesets.probe_missing -/2 -> sub_ok"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "rulesets_vmap_elementwise_keys"
+desc = "The `vmap` ruleset files the elementwise tier under the five keys the scalar arithmetic already has: `+`, `-`, `*`, `/` at two operands and `-` at one (`-x` and `x - w` are two primitives that share one token, which is why the operand count is part of the key). `std::rulesets query=` asks the index the way a transform asks it, and the answers are pinned: every key resolves to its `vmap_*` rule and `+` at three operands has no rule. The right side of each rule takes the *lifted* operands and answers the lifted result, which for `vmap` is one batch -- that is what `Lift<T> = RowsOf<T>` says, and the reading beside this one shows the two writings agree bit for bit."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/vmap_ruleset.cml"
+args = ["${case}", "std::rulesets", "query=rulesets.vmap|+|2;rulesets.vmap|-|2;rulesets.vmap|-|1;rulesets.vmap|*|2;rulesets.vmap|/|2;rulesets.vmap|+|3", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["RULESET rulesets.vmap +/2 -> vmap_add", "RULESET rulesets.vmap -/2 -> vmap_sub", "RULESET rulesets.vmap -/1 -> vmap_neg", "RULESET rulesets.vmap */2 -> vmap_mul", "RULESET rulesets.vmap //2 -> vmap_div", "LOOKUP rulesets.vmap +/2 -> vmap_add", "LOOKUP rulesets.vmap -/2 -> vmap_sub", "LOOKUP rulesets.vmap -/1 -> vmap_neg", "LOOKUP rulesets.vmap */2 -> vmap_mul", "LOOKUP rulesets.vmap //2 -> vmap_div", "LOOKUP rulesets.vmap +/3 -> no rule"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vmap_elementwise_agrees_with_row_by_row_map"
+desc = "A batched value is the value with one dimension in front (`Lift<T> = RowsOf<T>`), so an elementwise primitive applied to a batch is that primitive applied element by element: `vmap(f)(xs)` and `xs->map(f)` are the same numbers, bit for bit, and `lift(3.0)` is the batch of one row (`[3.0]`). The case prints each pair -- `[1.5, 4.0, 6.5, 0.25]` for `x*2.0 + x/2.0 - 1.0` and `[0.375, 6.0, -9.0]` for its negation -- and the pairs are compared with each other rather than with a written golden, because what this pins is that the two writings are one computation. `reinterp<vmap>` -- the transform that reads this ruleset -- is not written yet: the row-writing is what `vmap` is today, and the ruleset is the half of the equivalence that does not depend on the transform."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/vmap_ruleset.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split('\n')
+assert(out[0] === out[1] && out[0] === '[1.5, 4.0, 6.5, 0.25]', `f: ${out[0]} vs ${out[1]}`)
+assert(out[2] === out[3] && out[2] === '[0.375, 6.0, -9.0]', `g: ${out[2]} vs ${out[3]}`)
+assert(out[4] === '[3.0]', `lift: ${out[4]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

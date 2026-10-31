@@ -86,14 +86,14 @@ LoopDraftView::LoopDraftView(const Program &program, const GraphDraft &draft, gc
     : draft_(&draft), node_(node) {
     (void)program;
     [[maybe_unused]] const DraftNodeHeader *header = draft.header(node);
-    ASSERT(
+    GUARD(
         header != nullptr && header->kind == GCNodeKind::Loop,
         "LoopDraftView of a node that is not a LOOP node.");
     const GCLoopBody body = draft.loopGraphsOf(node);
     kind_                 = body.kind;
     condRegion_           = draft.loopRegionOf(node, GCRegionKind::LoopCond);
     bodyRegion_           = draft.loopRegionOf(node, GCRegionKind::LoopBody);
-    ASSERT(bodyRegion_ != 0, "A LOOP node has no body region.");
+    GUARD(bodyRegion_ != 0, "A LOOP node has no body region.");
     stateCount_      = draft.normInputsOf(node).size() - (loopHasIterable(kind_) ? 1 : 0);
     collectionCount_ = body.collectionCount;
 }
@@ -105,9 +105,9 @@ Type *LoopDraftView::stateType(size_t j) const {
 }
 
 Type *LoopDraftView::collectionArrayType(size_t c) const {
-    ASSERT(c < collectionCount_, "LoopDraftView: the loop has no such collection slot.");
+    GUARD(c < collectionCount_, "LoopDraftView: the loop has no such collection slot.");
     const auto *value = static_cast<const TupleType *>(valueType());
-    ASSERT(
+    GUARD(
         value != nullptr && value->size() == stateCount_ + collectionCount_,
         "LoopDraftView: the loop's value type does not have the k + s components its shape says.");
     return value->typeAt(collectionValueIndex(c));
@@ -115,7 +115,7 @@ Type *LoopDraftView::collectionArrayType(size_t c) const {
 
 Type *LoopDraftView::collectionElemType(size_t c) const {
     const Type *array = collectionArrayType(c);
-    ASSERT(
+    GUARD(
         array != nullptr && array->code() == TypeCode::Array,
         "LoopDraftView: a collection slot's value type is not an array.");
     return static_cast<const ArrayType *>(array)->elemType();
@@ -129,7 +129,7 @@ std::optional<gc_node_ref_t> LoopDraftView::iterable() const {
 }
 
 gc_node_ref_t LoopDraftView::initialState(size_t j) const {
-    ASSERT(j < stateCount_, "LoopDraftView: no such value of the state.");
+    GUARD(j < stateCount_, "LoopDraftView: no such value of the state.");
     return draft_->normInputsOf(node_)[j + (loopHasIterable(kind_) ? 1 : 0)];
 }
 
@@ -174,7 +174,7 @@ std::vector<gc_node_ref_t> LoopDraftView::externalInputs(bool constants) const {
 }
 
 gc_node_ref_t LoopDraftView::condStateParam(size_t j) const {
-    ASSERT(condRegion_ != 0 && j < stateCount_, "LoopDraftView: no such condition parameter.");
+    GUARD(condRegion_ != 0 && j < stateCount_, "LoopDraftView: no such condition parameter.");
     return draft_->regionPortsOf(condRegion_)[j];
 }
 
@@ -186,7 +186,7 @@ std::optional<gc_node_ref_t> LoopDraftView::bodyElementParam() const {
 }
 
 gc_node_ref_t LoopDraftView::bodyStateParam(size_t j) const {
-    ASSERT(j < stateCount_, "LoopDraftView: no such body parameter.");
+    GUARD(j < stateCount_, "LoopDraftView: no such body parameter.");
     const size_t at = j + (loopHasIterable(kind_) ? 1 : 0);
     return draft_->regionPortsOf(bodyRegion_)[at];
 }
@@ -211,13 +211,13 @@ Type *LoopDraftView::bodyResultType() const { return draft_->header(nextState())
 LoopView::LoopView(const Program &program, const GCGraph &graph, gc_node_ref_t node)
     : program_(&program), graph_(&graph), node_(node) {
     [[maybe_unused]] const GCNode *record = graph.node(node);
-    ASSERT(
+    GUARD(
         record != nullptr && record->kind == GCNodeKind::Loop,
         "LoopView of a node that is not a LOOP node.");
     kind_       = graph.loopKindOf(node);
     condRegion_ = graph.loopRegionOf(node, GCRegionKind::LoopCond);
     bodyRegion_ = graph.loopRegionOf(node, GCRegionKind::LoopBody);
-    ASSERT(bodyRegion_ != 0, "A LOOP node has no body region.");
+    GUARD(bodyRegion_ != 0, "A LOOP node has no body region.");
     stateCount_      = graph.normInputsOf(node).size() - (loopHasIterable(kind_) ? 1 : 0);
     collectionCount_ = graph.loopCollectionCountOf(node);
 }
@@ -225,9 +225,9 @@ LoopView::LoopView(const Program &program, const GCGraph &graph, gc_node_ref_t n
 Type *LoopView::stateType(size_t j) const { return graph_->node(bodyStateParam(j))->dataType(); }
 
 Type *LoopView::collectionArrayType(size_t c) const {
-    ASSERT(c < collectionCount_, "LoopView: the loop has no such collection slot.");
+    GUARD(c < collectionCount_, "LoopView: the loop has no such collection slot.");
     const auto *value = static_cast<const TupleType *>(valueType());
-    ASSERT(
+    GUARD(
         value != nullptr && value->size() == stateCount_ + collectionCount_,
         "LoopView: the loop's value type does not have the k + s components its shape says.");
     return value->typeAt(collectionValueIndex(c));
@@ -235,7 +235,7 @@ Type *LoopView::collectionArrayType(size_t c) const {
 
 Type *LoopView::collectionElemType(size_t c) const {
     const Type *array = collectionArrayType(c);
-    ASSERT(
+    GUARD(
         array != nullptr && array->code() == TypeCode::Array,
         "LoopView: a collection slot's value type is not an array.");
     return static_cast<const ArrayType *>(array)->elemType();
@@ -249,12 +249,12 @@ std::optional<gc_node_ref_t> LoopView::iterable() const {
 }
 
 gc_node_ref_t LoopView::initialState(size_t j) const {
-    ASSERT(j < stateCount_, "LoopView: no such value of the state.");
+    GUARD(j < stateCount_, "LoopView: no such value of the state.");
     return graph_->normInputsOf(node_)[j + (loopHasIterable(kind_) ? 1 : 0)];
 }
 
 gc_node_ref_t LoopView::condStateParam(size_t j) const {
-    ASSERT(condRegion_ != 0 && j < stateCount_, "LoopView: no such condition parameter.");
+    GUARD(condRegion_ != 0 && j < stateCount_, "LoopView: no such condition parameter.");
     return graph_->regionPorts(condRegion_)[j];
 }
 
@@ -266,7 +266,7 @@ std::optional<gc_node_ref_t> LoopView::bodyElementParam() const {
 }
 
 gc_node_ref_t LoopView::bodyStateParam(size_t j) const {
-    ASSERT(j < stateCount_, "LoopView: no such body parameter.");
+    GUARD(j < stateCount_, "LoopView: no such body parameter.");
     const size_t at = j + (loopHasIterable(kind_) ? 1 : 0);
     return graph_->regionPorts(bodyRegion_)[at];
 }
@@ -368,22 +368,22 @@ EffectSummary LoopView::effects() const {
 
 slot_t loopValueComponent(const LoopView &loop, slot_t value, size_t index) {
     if (!loop.valueIsTuple()) {
-        ASSERT(index == 0, "A loop that does not wrap its state has no other component.");
+        GUARD(index == 0, "A loop that does not wrap its state has no other component.");
         return value;
     }
-    ASSERT(
+    GUARD(
         index < loop.valueComponentCount(),
         "A component outside the loop's value tuple was asked for.");
     return fromSlot<Tuple *>(value)->get<slot_t>(index);
 }
 
 slot_t loopStateValue(const LoopView &loop, slot_t value, size_t j) {
-    ASSERT(j < loop.stateCount(), "The loop has no such state value.");
+    GUARD(j < loop.stateCount(), "The loop has no such state value.");
     return loopValueComponent(loop, value, loop.stateValueIndex(j));
 }
 
 slot_t loopCollectedValue(const LoopView &loop, slot_t value, size_t c) {
-    ASSERT(c < loop.collectionCount(), "The loop has no such collection slot.");
+    GUARD(c < loop.collectionCount(), "The loop has no such collection slot.");
     return loopValueComponent(loop, value, loop.collectionValueIndex(c));
 }
 

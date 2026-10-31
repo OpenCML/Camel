@@ -211,6 +211,30 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
+name = "mean_axis_elements"
+desc = "The mean keeps the element type, and its canonical form is `T(sum(float(x)) / float(numel(x)))` with the sum and the division in f64 and one rounding at the end: `mean_axis([1, 2, 4] as int[3], 0, false)` answers `2` (that is `int(7 / 3)`, the conversion `int(·)` already has -- the number a caller reads as a lost average is exactly what the normative form asks for), `shape` of it answers `[]`, `keepdims` answers `[2]`, and the same three elements through `f32(xs)` answer `2.3333333`. `[16777216.0, 1.0, -16777216.0]` separates the accumulations: an f32 accumulator loses the `1` and answers `0`, the f64 one keeps it and answers `0.33333334`. Rows of an `int[2, 3]` reduced on axis 1 answer `[2, 4]`. The four schedulers agree on every line."
+kind = "behavior"
+case = "../../../cases/modules/tensor/mean_axis_elements.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "mean_axis_narrow"
+desc = "A narrow element type keeps the canonical form: the lane is summed in f64 and the unrounded total divided in f64, so the only rounding is the one that stores the quotient on the element type's own grid. Each line puts a `1` where the element type cannot keep it -- `16777216 + 1` is beyond the bf16 significand and `2048 + 1` beyond the f16 one -- so an accumulator of the element type would have lost it and answered `0`, while the f64 one answers `0.334` (bf16) and `0.3333` (f16): the neighbours of `1 / 3` on those two grids. The four schedulers agree on both lines."
+kind = "behavior"
+case = "../../../cases/modules/tensor/mean_axis_narrow.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
 name = "whole_reduction_rounding"
 desc = "The full-form `sum(t)`/`mean(t)` accumulate in f64 and round into the element type once (design principles 7.3): for an f32 tensor of 2^24 followed by 1025 ones the sum answers 16778240 (the exact f64 sum 16778241 rounded once, ties to even) where a per-step f32 fold answers 16777216, and this call answered the f64 accumulation 16778241.0 while its result type was `float`; the array reduction over the same elements and the tensor sum handed the array itself have the same value. The mean of 2^25, 7 and 7 answers 11184815 (the f64 quotient 11184815.333333334 rounded once), while rounding the sum to f32 first and dividing again gives 11184816 — two roundings — and the f64 mean of the widened tensor rounds once into exactly the value the f32 tensor's mean has, the width control."
 kind = "behavior"
@@ -791,7 +815,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "int64_sum_exact"
-desc = "The sum of an int64 tensor accumulates exactly in int64 and wraps on overflow (design principles 5.1, 7.7): 2^53 + 1 + 1 + 1 is 9007199254740995 by axis and 9007199254740996.0 (the exact sum rounded once) in full, where an f64 accumulator gave 9007199254740992.0; INT64_MAX + 1 wraps to INT64_MIN in the full sum too (it used to come out positive)."
+desc = "The sum of an int64 tensor accumulates exactly in int64 and wraps on overflow (design principles 5.1, 7.7): 2^53 + 1 + 1 + 1 is 9007199254740995 by axis and 9007199254740996.0 (the exact sum rounded once) in full, where an f64 accumulator gave 9007199254740992.0; INT64_MAX + 1 wraps to INT64_MIN in the full sum too (it used to come out positive). A mean of that exact sum answers the element type as the mean of any value does (design principles: `mean` is `T(sum(float(x)) / float(numel(x)))`), so `mean(big)` is the integer `3002399751580332` -- the f64 quotient of the exact sum, truncated by the conversion `int(·)` -- where it used to answer the f32 `3002399800000000.0`, and `mean<0>(wrap)` answers `[-4611686018427387904, -2]` where it used to answer `[-4.611686e+18, -2.0]`."
 kind = "behavior"
 case = "../../../cases/modules/tensor/int64_sum.cml"
 args = ["${case}", "${backend}"]
@@ -799,11 +823,11 @@ backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = """9007199254740995
-3002399800000000.0
+3002399751580332
 9007199254740995
 [-9223372036854775804, -4]
 -9223372036854775808
-[-4.611686e+18, -2.0]
+[-4611686018427387904, -2]
 """
 
 [[tests]]
