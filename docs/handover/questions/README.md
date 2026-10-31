@@ -4,13 +4,13 @@
 
 > **索引的价值在于与目录一一对应；一旦少一页，读者就会以为没有那一问。**
 
-> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 3 页**（`gir-handle-names-a-transaction-or-a-draft`、`partial-destructuring-of-a-value-tuple`、`tiles-narrow-dtype`），其余五页已裁完、整体挪进 `reviews/`（`a-version-port-that-accepts-more-than-void` 于 23:50 裁：选 A）。
+> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 4 页**（`gir-handle-names-a-transaction-or-a-draft`、`partial-destructuring-of-a-value-tuple`、`tiles-narrow-dtype`），其余五页已裁完、整体挪进 `reviews/`（`a-version-port-that-accepts-more-than-void` 于 23:50 裁：选 A）。
 >
 > **哪些未决值得成页**：不是所有未决都值得成页——只有**今天有人被它堵住**的才值得。其余留在原则里，等它真的挡住一条车道再成页。所以第 15 节那 8 条不占待裁表，清单在文末，每条写明今天堵着谁。
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
 
-## 现在在等作者：3 页
+## 现在在等作者：4 页
 
 两页在等，都不是旧问题：一页是 `b6` 的最后一块（`gir-handle-names-a-transaction-or-a-draft`，handle 名字事务还是名字草稿，同页第二问问 region 的 id 能不能在 extract 时就分配），一页是 `lane-mcts` 落进来的（`partial-destructuring-of-a-value-tuple`，多值 `loop`/元组解构时名字少于值，该拒绝还是按位置取前几个）。其余五页已在 22:50–23:50 裁完、整体挪进 `reviews/`，见下面"已裁"表。
 
@@ -20,6 +20,7 @@
 |---|---|---|---|
 | [`gir-handle-names-a-transaction-or-a-draft`](questions-2026-10-31-gir-handle-names-a-transaction-or-a-draft.md) | 编译期的 `node_handle_t` 名字一个事务（与 `NodeView` 同型）还是一张草稿；同页第二问：region 的 id 能不能在 extract 时就分配 | 待裁 | **堵 b6 的最后一块**：①名字事务要迁 `nodeDraftOf` 66 个形状不变、但 `DraftGraphBuilder::draft()` 132 个调用点；②名字草稿 0 改动，代价是在 3.6 旁边加一条编译期例外；**同页第二问堵 `tiles` 那 9 处与 `operator_instance` 那 2 处** |
 | [`partial-destructuring-of-a-value-tuple`](questions-2026-10-31-partial-destructuring-of-a-value-tuple.md) | 多值 `loop`/元组的解构，名字少于值时该拒绝（诊断），还是按位置取前几个（今天的实现） | 待裁 | 不堵今天的活（`mcts` 已按"四个名字全写全"绕开）；堵**下一个多状态循环**——两个同型状态就足以让它安静地算错 |
+| [`generator-narrowing-remains`](questions-2026-10-31-generator-narrowing-remains.md) | 生成器机器的 `FeatureNotSupported('generators')` 还留不留：三种更极端的形状（三携带量、嵌套两循环、依赖两前轮）今天全被接受，这条"没实现"的诊断没有形状可钉 | 待裁 | 堵 `lane-mcts` 这一笔的负例覆盖：原来钉它的 `stream.yield_lowering_refused` 随 develop 删除（那条 `loop` 已被降低） |
 | [`tiles-narrow-dtype`](questions-2026-10-31-tiles-narrow-dtype.md) | `tiles` 的设备元素类型层（`DType { F32, F64, I64 }`）要不要为 `F16`/`BF16` 加两个值，还是等 H50 支持面连同 `serial_kernel`、CUDA 代码生成、类型门一起定 | 待裁 | 堵**设备侧的窄浮点**：`#gpu` 里的 `bf16` 张量今天被 `unresolved_type` 排除；做第 1 步会让枚举先于它的四个消费方落地 |
 
 原则第 15 节另列着 6 条未决（另 2 条已成页、22:50 已裁），见文末。
