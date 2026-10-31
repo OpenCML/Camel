@@ -304,6 +304,10 @@ test/cases/trans/cpp/tensor_zeros.cml
 # The shape's own refusal: a negative extent is a fault, and the words are the kernel's ("zeros:
 # Shape cannot contain negative values"), not a sentence of this back end's own making.
 test/cases/trans/cpp/fault_tensor_negative_shape.cml
+# The other two element types the tensor module stores: `bf16` and `f16` are the same shaped array,
+# the fill a value of the element type, so the widths one store per element do not make a tensor a
+# runtime object either.
+test/cases/trans/cpp/tensor_ones_half.cml
 # `shape(m)` answers the value's dimensions as an `int[]` of its own -- a value, not a view -- and a
 # sliced value answers the dimensions it kept.
 test/cases/trans/cpp/shape_rank.cml

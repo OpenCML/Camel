@@ -1,0 +1,19 @@
+/**
+ * A tensor of a reduced-precision float is the same shaped array.
+ *
+ * `bf16` and `f16` are element types the tensor module stores, so `ones::<bf16>` and `zeros::<f16>`
+ * are the shaped array a literal of that type is -- `rt::Array<rt::BF16>`, `rt::Array<rt::F16>` --
+ * not a handle to a runtime object. The fill is a value of the element type rounded once from
+ * 1.0/0.0, so the tensor reads back as its own text and the program needs no Camel library; the
+ * two widths are data like f32 and f64, and one representation is the point.
+ *
+ * `agree_with_fvm` builds and runs this program against std::fvm, byte for byte.
+ */
+
+import { ones, zeros } from tensor
+
+func main(): int sync {
+    println(ones::<bf16>([2, 2]))
+    println(zeros::<f16>([2]))
+    return 0
+}

@@ -466,6 +466,19 @@ expect_stdout_contains = ["const rt::Array<float> v1_zeros = rt::filledArray<flo
 expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign", "bridge::", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+
+[[tests]]
+name = "tensor_half"
+desc = "The two reduced-precision element types are the same array: `ones::<bf16>` writes `rt::filledArray<rt::BF16>(lit::array, rt::BF16(1.0f), \"ones\", at_…)` and `zeros::<f16>` the same with `rt::F16(0.0f)` and `\"zeros\"` over the literal of its own shape (`lit::array_2`) -- the fill is a value of the element type rounded once, which is what the tensor module stores (modules/tensor/dtype.h), so the tensor is `rt::Array<rt::BF16>` / `rt::Array<rt::F16>` and the program needs no Camel library. Before this, a tensor of either width was refused by the rule: the six element types a tensor can hold are one representation, and leaving two of them refused would have made the refusal the second representation. agree_with_fvm builds and runs the program against std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/tensor_ones_half.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::filledArray<rt::BF16>(lit::array, rt::BF16(1.0f), \"ones\", at_", "rt::filledArray<rt::F16>(lit::array_2, rt::F16(0.0f), \"zeros\", at_"]
+expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign", "bridge::", "libcamel"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
 [[tests]]
 name = "index_rank"
 desc = "A position on a value of several dimensions: `m[1]` is the second row (`rt::atRow`, one dimension less and of the row's own extent), `m[1, 0]` writes the axis it drops and is the element (`rt::atAxis`, every other dimension kept whole), and `t[1]` of a rank-3 value is the rank-2 value behind it. `len` of a row answers the dimension that is left. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte -- six lines, rows and elements both. The operator rule that used to turn a value of several dimensions away is gone with it, as are the two module programs that took the same road: `index_two_positions` translates and agrees."
