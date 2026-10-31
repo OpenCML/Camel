@@ -125,6 +125,85 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "narrow_reductions"
+desc = "The module operators over a bf16 or an f16: `tensor::sum` of the whole value (rt::sumAll, the f64 accumulator rounded once into the element type), `math::min`/`math::max` of two values (rt::halfMin/rt::halfMax, the IEEE 754-2019 comparison whose answer is one of the two patterns) and `math::abs` (rt::halfAbs, the sign bit cleared). A half crosses no bridge -- the bridge carries numbers, booleans and strings, and a sixteen-bit value is none of them -- so these need rules of their own here, which is what this entry pins; the readings are compared with the interpreter's by agree_with_fvm."
+kind = "behavior"
+case = "../../../cases/trans/cpp/narrow_reductions.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::sumAll(", "rt::halfMin(", "rt::halfMax(", "rt::halfAbs("]
+expect_output_not_contains = ["TranslationRefused", "rt::bridge", "libcamel"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "narrow_reductions_needs_no_runtime"
+# Red when the `math:min_f`/`math:max_f` rules are deleted: the library's own `min` widens a bf16
+# to `float` before comparing, so the fold reaches `math:min_d`, the bridge, and a link line that
+# names libcamel -- while the program still prints the same lines (agree_with_fvm stays green).
+# That is the case this entry exists for: "standalone" is a claim about the artifact, and only the
+# artifact can falsify it.
+desc = "The program std::cpp writes for a value of bf16 or f16 needs no Camel runtime: the generated code names no operator of the bridge, the link line names no Camel library, and the built executable's own dependencies (`ldd`) hold none. The link line is what falsifies it -- a program whose operator has no standalone translation is linked with libcamel, and a half the bridge cannot carry (bridge::Value has no sixteen-bit kind) must not be emitted as a bridged call. Read as an artifact question, not as a reading of the writer's intent."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/cppexec/run.py"
+args = ["${case}", "--standalone", "test/cases/trans/cpp/narrow_reductions.cml"]
+skip_unless = ["${python}", "test/tools/cppexec/run.py", "--have-compiler"]
+expect_exit = 0
+expect_stdout_contains = ["bridge: no", "needs: none of the Camel runtime", "PASS: 1 program"]
+expect_output_not_contains = ["FAIL", "libcamel"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 120000
+
+[[tests]]
+name = "fault_narrow_text_number"
+desc = "A text that is not a number, read as a bf16, is a fault at run time, and the compiler renders its report into the site the conversion calls: the program is translated rather than refused, and it carries the invalid-text sentence. The value the fault reports is known only when it happens, so the sentence is written with a placeholder where the text goes; that the program *prints* it -- and prints it as the interpreter does, byte for byte -- is what agree_with_fvm compares (test/tools/cppexec/expect.txt)."
+kind = "behavior"
+case = "../../../cases/trans/cpp/fault_narrow_text_number.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["Cannot convert the string", "InvalidNumberText"]
+expect_output_not_contains = ["TranslationRefused"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fault_narrow_text_range"
+desc = "A text beyond what a bf16 can hold: a conversion into a half names the type and the range, which for bf16 is f32's, because the text is read as f32 first (the sentence camel/core/numeric_convert_half.h raises, and the range a value the runtime fills). Both ranges a reduced-precision conversion can name are one diagnostic at one place, so one site in the program carries the range as a value; the byte-for-byte comparison of the report with the interpreter's is agree_with_fvm's, which runs the program."
+kind = "behavior"
+case = "../../../cases/trans/cpp/fault_narrow_text_range.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["the value is outside the range of bf16 ("]
+expect_output_not_contains = ["TranslationRefused"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fault_narrow_f16_range"
+desc = "The one report only f16 reaches: a number f32 holds and f16 does not names the element type's own range (at most 65504), where a text beyond f32 names f32's. One site carries both, with the range as a value the runtime fills, so the program has one sentence and one run faults it one way; that the report is the interpreter's byte for byte is what agree_with_fvm compares."
+kind = "behavior"
+case = "../../../cases/trans/cpp/fault_narrow_f16_range.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["the value is outside the range of f16 ("]
+expect_output_not_contains = ["TranslationRefused"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fault_narrow_div_zero"
+desc = "Dividing a bf16 by zero is a fault, not an infinity: `/` on these types goes through rt::div for that reason, and the report at that site is the interpreter's DivisionByZero. Pinned as the site the program carries; agree_with_fvm compares the whole report with the interpreter's byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/fault_narrow_div_zero.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::div(", "Attempted division by zero."]
+expect_output_not_contains = ["TranslationRefused"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "refuse_tensor_json"
 desc = "The same refusal in --output-format json: one diagnostic, TranslationRefused, stage pass:std::cpp, the range of the operator use `zeros` (line 13, characters 17 to 24), nothing of a translation unit on stdout."
 kind = "behavior"
@@ -165,6 +244,42 @@ case = "../../../cases/trans/cpp/numel_rank.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
 expect_stdout_contains = ["rt::numel("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "arg_axis_rank"
+desc = "The position of the extreme along one dimension: the first element of the lane equal to its maximum (minimum), or its first NaN, taken by the same order as the extreme itself -- a NaN is beyond every number and on a tie the earlier position stays. So `[1, 2]` for the columns of a rank-2 value and `[0, 0, 1]` for its rows, `[[1], [1], [0]]` with keepdims, `[[1, 1], [1, 1]]` for the middle axis of a rank-3 one, and `[1, 0]` where one lane holds a tie (the earlier of two equal maxima) and the other its first NaN. The answer's element type is int64 whatever the value holds, so the rule states a different runtime element type than the value it reads. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/arg_axis_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::argmaxAxis(", "rt::argminAxis("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "extreme_axis_rank"
+desc = "A maximum and a minimum along one dimension fold each lane from the operation's identity (-inf for a maximum of floats, +inf for a minimum, the lowest and the largest value otherwise) and compare with the one statement the interpreter uses: a NaN on either side gives the canonical quiet NaN and -0 is below +0. So `[5.0, 4.0]` and `[-3.0, -2.0]` for the two axes of a rank-2 value, `[[-2.0], [0.0], [-3.0]]` with keepdims, two axes of a rank-3 one, `[0.0, 0.0]` against `[-0.0, -0.0]` for a pair of signed zeros (the sign of the zero survives, which a comparison on values alone would lose), and `[nan, nan]` where a NaN element stands in the lane. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/extreme_axis_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::maxAxis(", "rt::minAxis("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "sum_axis_rank"
+desc = "A reduction along one dimension adds each lane from +0 in ascending order and answers the dimensions it did not reduce, in row-major order: `axis=0` of a rank-2 value sums its columns (`[9.0, 12.0]`), `axis=1` its rows (`[3.0, 7.0, 11.0]`), `keepdims` keeps the reduced dimension as one (`[[3.0], [7.0], [11.0]]`), and the three axes of a rank-3 value each sum a different set -- the middle one pairs elements that are `inner` apart in the run, which no flattening could produce. The axis and the flag arrive either as arguments of the call or as the constant the callee was written with (`sum<1>(xs)`), and the rule reads whichever carried them. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/sum_axis_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::sumAxis("]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

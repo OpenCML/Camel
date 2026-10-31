@@ -5,9 +5,12 @@
 # Written for std::cpp: one construct each (docs/design/cpp-standalone/README.cn.md 12.2).
 test/cases/trans/cpp/exec
 test/cases/trans/cpp/exec_mod_scalar.cml
-# The two reduced-precision floating types, at both precisions: storage and the type's own text
-# (arithmetic, comparison and conversion join it as their rules land).
+# The two reduced-precision floating types, at both precisions: storage and the type's own text,
+# arithmetic rounded once, comparison of the widened values, conversion in both directions, the
+# module reductions and comparisons over a value of either, and the reports a conversion or a
+# division gives.
 test/cases/trans/cpp/narrow_floats.cml
+test/cases/trans/cpp/narrow_reductions.cml
 
 # Values and their text.
 test/cases/loops/iterate_string.cml
@@ -46,6 +49,12 @@ test/cases/consistency/entry/declared_string.cml
 test/cases/linear/runtime/recursion_depth_limit.cml
 test/cases/trans/cpp/exec/site_message.cml
 test/cases/compile/diag_render/runtime_format.cml
+# The three reports a reduced-precision conversion can give, and the one its division gives: the
+# whole standard output and the exit code are the interpreter's, byte for byte (not a keyword).
+test/cases/trans/cpp/fault_narrow_text_number.cml
+test/cases/trans/cpp/fault_narrow_text_range.cml
+test/cases/trans/cpp/fault_narrow_f16_range.cml
+test/cases/trans/cpp/fault_narrow_div_zero.cml
 
 # Tail calls.
 test/cases/consistency/values/tail_deep.cml
@@ -225,3 +234,25 @@ test/cases/trans/cpp/slice_rank.cml
 # counted handle to the runtime's own value (rt::Foreign) and prints the runtime's text for it --
 # the one line below is std::fvm's, byte for byte.
 test/cases/trans/cpp/tensor_ones.cml
+# `shape(m)` answers the value's dimensions as an `int[]` of its own -- a value, not a view -- and a
+# sliced value answers the dimensions it kept.
+test/cases/trans/cpp/shape_rank.cml
+
+# `numel` counts the elements of a value of any rank, and the whole-value `sum` answers the element
+# type -- exact for integers, the f64 accumulator converted once for floats.
+test/cases/trans/cpp/numel_rank.cml
+test/cases/trans/cpp/sum_rank.cml
+
+# A reduction along one dimension adds each lane from +0 in ascending order and answers the
+# dimensions it did not reduce -- `axis=0` sums a rank-2 value's columns, `axis=1` its rows, and the
+# middle axis of a rank-3 value sums elements that are apart in the run.
+test/cases/trans/cpp/sum_axis_rank.cml
+
+# The extreme along one dimension folds each lane from its identity (-inf or +inf, the lowest or the
+# largest value), so one NaN element makes the answer NaN, and compares with the one statement the
+# interpreter uses: a NaN on either side gives NaN, -0 is below +0, otherwise the larger (smaller).
+test/cases/trans/cpp/extreme_axis_rank.cml
+
+# The position of the extreme along one dimension: the first element of the lane equal to its
+# maximum (minimum), or its first NaN. The answer is an int64 value whatever the source holds.
+test/cases/trans/cpp/arg_axis_rank.cml

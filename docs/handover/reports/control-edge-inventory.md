@@ -58,3 +58,55 @@ commits in between are red.
 The header says fourteen construction sites, 53 reader files and 143 edges in 26 pictures; on
 this tree the same greps read 17, 63 and 138. The header is a summary of the tree it was
 written on, not a bound: this page is the count to plan a slice against.
+
+## When a control edge stops being built, who keeps the order it kept
+
+One paragraph, per family of the 17 sites, because a deletion without this answer is a guess.
+
+**1. The `sync` chain of a block** -- `builder_control.cpp:2803`, `builder_expr.cpp:1551`,
+`builder_expr.cpp:1733`, `builder_control.cpp:2891` (already deleted: see the slice below). The
+replacement is the **sync edge**, built at the same place by `linkNodes(LinkType::Sync, ...)` /
+`writeSyncStatement` with `lastSyncedNode_` as the predecessor. This is a rename rather than a
+move: a sync edge orders like an order edge *and* carries "used" like a data port
+(`edges.cn.md` 1.5), which is exactly what the control edge did there, and `syncInputsOf`
+already holds the same pair.
+
+**2. A `var` read after the write that must run first** -- `builder_control.cpp:1359`,
+`builder_expr.cpp:793`, `builder_expr.cpp:1704`, `builder_control.cpp:4201`. The design's answer
+is a **data edge**: the read's port goes to the write's output (`:var/after(cell, call)` when
+the writer is a call through a function value, 5.6). Three of the four already have it, so what
+stands there is an edge that only orders -- `builder_control.cpp:4201` says so in its own
+comment -- and the replacement is an **order edge**. `1359` is the exception and cannot become
+an order edge: the write produced no version, so the read has no data port to the write, and an
+order edge would leave the write unexecuted (an order edge does not carry "used"). It waits on
+5.6 for that writer, not on a swap.
+
+**3. `BRCH` and the arm it owns** -- `builder_control.cpp:2861`, and the duplicate at `2891`
+that this slice removes. The replacement is **nothing**: "`BRCH` 与臂之间没有边，只靠区域归属"
+(5.2). The arm's result is a `JOIN` port and `JOIN` reads port 0, so a data edge already orders
+`BRCH` before the arm and the arm before `JOIN`; the control edge added only the claim that the
+arm runs because of the branch, which region membership already says.
+
+**4. A `GATE`'s control input** -- `builder_operators.cpp:4396`, `4420`. The replacement is
+**nothing**: 5.3 gives the GATE one data port and a sync predecessor. This is the clause the
+second `known_fail` asserts, so it goes with removing that mark, last.
+
+**5. Edges around a region's exit and a loop's iteration** -- `builder_expr.cpp:589` (a pair with
+no data path by construction), `builder_control.cpp:3538` (a sync body's output before the new
+state), `builder_control.cpp:4013` (the body after the pull it reads). `3538` is the `GATE` shape
+again (5.3: the chain tail reaches the block's value, through a `GATE` when the value is shared);
+`4013` has a data port for the element already, so the edge is redundant once that port is
+checked; `589` has no data path by construction and must become an **order edge**, where the
+sealing check (4.6) is what says whether both ends qualify.
+
+**6. `linkCtrl`** (`builder_helpers.h:686`) is the helper the others call and goes with its last
+caller.
+
+## Slice 1: the duplicate sync-chain edge at `builder_control.cpp:2891` (deleted)
+
+The BRCH-to-arm link was written twice: a sync edge and, beside it, a control edge, and the
+comment said the control edge stayed "for as long as the chain of a block is carried as control
+edges too". A sync edge orders like an order edge and carries "used" like a data port, so the
+control edge said nothing the sync edge at the line above did not, and it is gone. Nothing
+replaces it, which is why this is the smallest self-contained slice: no site has to be taught a
+new kind, and the recording changes only where the pair appeared as CTRL.
