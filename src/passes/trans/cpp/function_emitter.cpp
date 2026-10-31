@@ -605,19 +605,6 @@ bool FunctionEmitter::lowerNode(
         std::optional<std::string> text;
         if (GCGraph *function = functionConstantOf(g, ref)) {
             text = functionValue(function, {});
-        } else if (hasSeveralDimensions(type)) {
-            // The constant of such a type is its first extent's worth of elements only, so writing
-            // one would print three numbers where the interpreter prints three rows -- a program
-            // that exits 0 and is wrong. The refusal says what the target does not have, because
-            // that is what is missing: an array here is a flat run of elements, with no shape.
-            refuse(
-                g,
-                ref,
-                std::format(
-                    "{} uses a value of type '{}'; an array in std::cpp is a flat run of elements "
-                    "and carries no shape, so a value of several dimensions has no form there",
-                    describeFunction(g),
-                    typeName(type)));
         } else {
             text = program_.values.constant(g->staticArea()->get<slot_t>(-node->dataIndex), type);
         }

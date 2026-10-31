@@ -1061,11 +1061,27 @@ std::optional<std::string> ProgramValues::constant(slot_t slot, const Type *t) {
     if (t->code() == TypeCode::Array) {
         const auto *array = fromSlot<::Array *>(slot);
         const Type *elem  = static_cast<const ArrayType *>(t)->elemType();
-        auto items        = elements(
-            array != nullptr ? array->size() : 0,
+        // Every element of the run, not `size()`: for a value of several dimensions the runtime
+        // answers the first extent there and the element count in `numel()` (rtdata/array.h), and
+        // reading the first extent wrote the first row's worth of a literal and no more.
+        auto items = elements(
+            array != nullptr ? static_cast<size_t>(array->numel()) : 0,
             [&](size_t i) { return array->get<slot_t>(i); },
             [&](size_t) { return elem; });
-        return items ? std::optional(hoist(*cpp, *items, "array")) : std::nullopt;
+        if (!items) {
+            return std::nullopt;
+        }
+        const size_t rank = array != nullptr ? array->rank() : 0;
+        if (rank >= 2) {
+            // The shape travels with the elements (rt::Array's block holds both): the rows of the
+            // literal are what `appendText` prints, and `len` answers the first extent.
+            std::string shape;
+            for (size_t i = 0; i < rank; ++i) {
+                shape += (i > 0 ? ", " : "") + std::to_string(array->dim(i));
+            }
+            return hoist(*cpp, std::format("{{{}}}, {{{}}}", *items, shape), "array");
+        }
+        return hoist(*cpp, *items, "array");
     }
     if (const TupleType *tuple = asTuple(t); tuple != nullptr && tuple->isNullable()) {
         if (camel::core::rtdata::isNullValue(slot)) {
@@ -1113,67 +1129,6 @@ std::optional<std::string> ProgramValues::constant(slot_t slot, const Type *t) {
         return hoist(*cpp, std::format("{}::make<{}>({})", *cpp, value->tag(), fields), "enum");
     }
     return std::nullopt;
-}
-
-namespace {
-
-/// The walk of `hasSeveralDimensions`, carrying the struct types already entered: a struct may hold
-/// an array of itself (`type Node = { children: Node[] }`), and following it without this stack does
-/// not terminate -- it crashed the writer on `recursive_struct_shapes` before the stack was here.
-/// The stack is a fixed array on the frame, not a `std::set`: this runs for every constant of every
-/// program, and the allocation it saved was worth a second of CPU over the agreement cases.
-bool walksIntoSeveralDimensions(
-    const Type *type, std::array<const Type *, 32> &stack, size_t depth) {
-    if (type == nullptr) {
-        return false;
-    }
-    if (const auto *array = camel::core::type::asArrayType(type)) {
-        // Only a rank the type states. An open rank (`f32[..]`) says nothing about the value's
-        // extents -- a rank-zero field is declared `f32[..]` and reads back as its element -- so
-        // refusing on it refuses programs that are right (`rank_zero_field_literal`). What an open
-        // rank can hide is a rank-2 constant annotated that way; that one still slips through, and
-        // seeing it needs the value's own extents, which is the shape question the page asks.
-        return array->rank() >= 2 || walksIntoSeveralDimensions(array->elemType(), stack, depth);
-    }
-    if (const TupleType *tuple = asTuple(type)) {
-        if (tuple->isNullable()) {
-            return walksIntoSeveralDimensions(tuple->payloadType(), stack, depth);
-        }
-        if (tuple->isTagged() || tuple->isCell()) {
-            return false; // a variant's fields are the ones its tag names, not slots of a value
-        }
-        for (size_t i = 0; i < tuple->size(); ++i) {
-            if (walksIntoSeveralDimensions(tuple->typeAt(i), stack, depth)) {
-                return true;
-            }
-        }
-        return false;
-    }
-    if (type->code() == TypeCode::Struct) {
-        if (depth >= stack.size()) {
-            return true; // deeper than this walk can tell: refuse rather than write a wrong constant
-        }
-        for (size_t i = 0; i < depth; ++i) {
-            if (stack[i] == type) {
-                return false; // already walking it: the cycle holds nothing new
-            }
-        }
-        stack[depth] = type;
-        const auto *record = static_cast<const StructType *>(type);
-        for (size_t i = 0; i < record->size(); ++i) {
-            if (walksIntoSeveralDimensions(record->typeAt(i), stack, depth + 1)) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-} // namespace
-
-bool hasSeveralDimensions(const Type *type) {
-    std::array<const Type *, 32> stack{};
-    return walksIntoSeveralDimensions(type, stack, 0);
 }
 
 } // namespace camel::passes::cpp

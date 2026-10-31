@@ -9,16 +9,17 @@
 > **哪些未决值得成页**：不是所有未决都值得成页——只有**今天有人被它堵住**的才值得。其余留在原则里，等它真的挡住一条车道再成页。所以第 15 节那 8 条不占待裁表，清单在文末，每条写明今天堵着谁。
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
+## 现在在等作者：0 页（4 页都已裁，3 页的改动在车道上）
 
-## 现在在等作者：3 页（两页已裁、等着被挪走）
-
-`rt::Array` 带形状（05:30 裁 A）与 `std::mem::blocks()`（05:10 裁 A）已经裁了，改动在车道上，页还没挪；真正等答复的是下面第 1、3 两页，第 2 页的作者已裁、我们在按 A 的顺序做。
+`questions/` 里现在没有一页在等答复：4 页都被读过、都裁了，改动按裁定往 develop 走。新页从车道落进来时才在这个表里加行。
 
 | 页 | 问什么 | 状态 | 堵着谁 |
 |---|---|---|---|
-| [`what-executes-a-value-taken-by-a-position`](questions-2026-10-31-what-executes-a-value-taken-by-a-position.md) | 被位置直接取走的值（写的值、`void` 调用的值）除了“让门依赖那次写”之外，还有什么能给它执行的理由 | 待裁 | **②a 停造 ctrl**：块外补丁整份套上整闸 `fail 150`（新增 146 条），不止 `var_reference` 的 66 条 |
-| [`std-cpp-needs-a-tensor-type`](questions-2026-10-31-std-cpp-needs-a-tensor-type.md) | `std::cpp` 要不要有 tensor 类型：`Tensor` 在这个后端里一次都没出现，而 `ones 39 + zeros 32 + load_npy_f32 28 + reshape 270` 都在等它 | 待裁 | 369 个程序；拒绝此刻只是先撞在 `int[]` 那一格上，已改说“缺的是 tensor 值” |
-| [`does-rt-array-carry-a-shape`](questions-2026-10-31-does-rt-array-carry-a-shape.md) | 已裁 05:30：**A**，`rt::Array` 带上 `rank`/`extent`；先上多维守卫，再按 下标→切片→`reshape`→`shape`→`numel`→逐元素 的顺序做 | 已裁未落 | 15 个程序 + 264 换桶里回到多维的那部分，记作“等形状（A 进行中）” |
+| [`does-rt-array-carry-a-shape`](questions-2026-10-31-does-rt-array-carry-a-shape.md) | 05:30 裁 **A**：`rt::Array` 带 `rank`/`extent` | 已裁未落 | 守卫与“形状 + 嵌套打印”第一步已落；队列：下标 → 切片 → `reshape` → `shape` → `numel` → 逐元素 |
+| [`std-cpp-needs-a-tensor-type`](questions-2026-10-31-std-cpp-needs-a-tensor-type.md) | 05:50 裁：**张量是 `rt::Foreign` 过桥**，走设计稿第 9 节，第 5 步开工 | 已裁未落 | 369 个程序记作“等第 5 步（外部对象）”；第一笔是 `rt::Foreign` 句柄 |
+| [`mem-blocks-has-no-block-space`](questions-2026-10-31-mem-blocks-has-no-block-space.md) | 05:10 裁 **A**：拒绝并让拒绝说实话（目标不具备，不是尚未实现） | 已裁已落 | 无；普查把 10 个记为“目标不具备” |
+| [`generator-narrowing-remains`](questions-2026-10-31-generator-narrowing-remains.md) | 04:50 裁 **A**：删掉生成器收窄 | 已裁已落 | 无；两处拒绝已删，三条形状转成消费它们的正例 |
+
 
 原则第 15 节另列着 6 条未决（另 2 条已成页、22:50 已裁），见文末。
 

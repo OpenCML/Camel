@@ -203,3 +203,8 @@ test/cases/trans/cpp/loop_state_in_place_multi.cml
 # Complex numbers: c64 and c128 are std::complex<float>/<double>, ^ is repeated squaring for
 # an integer exponent, / faults on the complex zero, and one format specification writes both parts.
 test/cases/trans/cpp/complex_scalar.cml
+
+# A literal of several dimensions keeps its shape: the flat run and the extents in one block, so
+# `println` nests the rows and `len` answers the first dimension -- the two readings the writer used
+# to print as the first extent's worth of elements.
+test/cases/trans/cpp/literal_rank.cml

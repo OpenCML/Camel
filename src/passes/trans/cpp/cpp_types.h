@@ -57,6 +57,7 @@ inline constexpr const char *kNoSuchElementType =
 /// The clause a refusal adds for a value of that kind, or nothing for any other type.
 std::string notTranslatedBecause(const Type *type);
 
+
 /// What the refusals say std::cpp translates.
 inline constexpr const char *kTranslatedTypes =
     "std::cpp translates numbers (real and complex), bool, string, enums, arrays, tuples, structs, T?, T!, "

@@ -5,8 +5,8 @@
  * because the shape is what the reader has to know.
  *
  * The value arrives as the parameter of `main`, not as a literal of several dimensions: a literal
- * of that type is refused earlier and with its own message (refuse_literal_rank.cml), and this case
- * is about the slice.
+ * of that type now keeps its shape (literal_rank.cml) and translates, while the slice over it is
+ * still what this back end cannot write, and this case is about the slice's message.
  */
 
 func main(m: float[2, 3]): int sync {

@@ -162,17 +162,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "refuse_literal_rank"
-desc = "A literal of several dimensions is refused, not written wrongly: an array in std::cpp is a flat run of elements and carries no shape, so the constant of `float[3, 2]` would be its first extent's worth of elements -- `{1.0, 2.0, 3.0}` -- and the program would print three numbers where the interpreter prints three rows, exiting 0. The message says what the target does not have; the case asserts that nothing printed the rows (no `[[` in the output and no flat three either), which the source's line breaks make meaningful."
-kind = "negative"
-case = "../../../cases/trans/cpp/refuse_literal_rank.cml"
+name = "literal_rank"
+desc = "A literal of several dimensions keeps its shape: the elements lie flat in row order and the extents travel in the same block, so the generated program holds `rt::Array<double>{{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, {3, 2}}` and prints the three rows the interpreter prints -- it printed the first extent's worth of elements (`[1.0, 2.0, 3.0]`) and exited 0 before the shape was carried. The program itself is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/literal_rank.cml"
 args = ["${case}", "std::cpp"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_line = 14
-expect_diagnostic_column = 26
-expect_output_contains = ["function 'main' uses a value of type 'float[3, 2]'; an array in std::cpp is a flat run of elements and carries no shape, so a value of several dimensions has no form there"]
-expect_output_not_contains = ["[[", "[1.0, 2.0, 3.0]", "internal error", "node#"]
+expect_exit = 0
+expect_stdout_contains = ["const rt::Array<double> array{{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, {3, 2}};"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
