@@ -1,0 +1,84 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * The `vmap` ruleset: what a batched value is, and how a primitive is written when every operand
+ * carries a batch (`docs/design/program-transforms/README.cn.md` 4.1, 5.4).
+ *
+ *     let rows = lift(xs);          // the batch of rows a function of one value takes
+ *
+ * `Lift<T>` is `RowsOf<T>`: the one value a primitive works on, with one dimension of unknown length
+ * in front of it (`stdlib/types.cml`), which is exactly the type `vmap`'s parameter has. A scalar
+ * `f32` lifts to the batch of `f32` rows (`f32[]`); a row `f32[3]` lifts to the batch of rows
+ * (`f32[?, 3]`). So a batched program is a program over the same values with one more dimension in
+ * front, and an elementwise primitive needs no new arithmetic for it: `bx + bw` is `x + w` applied
+ * element by element, which is the row-by-row application `map` writes out.
+ *
+ * Every rule here is `export`ed: the transform that reads this family is in another module, and a
+ * rule that is not exported is refused where it is imported.
+ *
+ * A rule's right side takes the *lifted* operands and answers the *lifted* result. For `jvp` that is
+ * "the tangents in, the tangent out"; for `vmap` it is "the batches in, the batch out". The
+ * elementwise tier is therefore one rule per primitive, each of them the primitive itself: the
+ * batching of an elementwise operator is that operator.
+ *
+ * This round writes the elementwise tier only. `matmul`, the reductions (`sum`, `sum_axis`, `mean`),
+ * `reshape` and the broadcasting moves need a rule each that says *which* axis the batch is on --
+ * `sum` over a batch sums each row, not the batch -- and they come next, in the same module, with
+ * `RowsOf` doing the work (`reshape` of `RowsOf<T>` is a reshape that keeps the batch dimension).
+ *
+ * Adding a rule changes docs/stdlib-reference.md; regenerate it with
+ * `node scripts/stdlib-reference.mjs --write`.
+ */
+
+import { is_numeric, RowsOf } from types
+
+/// A value of type `T` with its batch in front: the type a batched function takes for one value.
+/// @example is_same::<Lift<f32>, f32[]>()    // true
+/// @example is_same::<Lift<f32[3]>, f32[?, 3]>()    // true
+export type Lift<T> = RowsOf<T>
+
+/// `x` lifted: a constant or a captured value becomes a batch of one row, which every rule
+/// broadcasts over the batch it meets (the elementwise operators of `tensor` take a value beside an
+/// array as that value at every element).
+/// @example lift(3.0)    // [3.0]
+export func lift::<T>(x: T): Lift<T> {
+    let one: Lift<T> = [x]
+    return one
+}
+
+// ---- the elementwise tier ----
+// A rule is filed in its ruleset module under the operator its left side is written with and the
+// number of operands it takes, and a transform reads it from there (`lookupRule("rulesets.vmap",
+// head, arity)`); a rule is not a function a program calls, so the rules below and the functions
+// they call are two things with no name in common.
+//
+// Five keys cover the scalar arithmetic: `+`, `-`, `*`, `/` at two operands and `-` at one. `-x` and
+// `x - w` are two primitives that share one token, which is why the operand count is part of the
+// key (stdlib/rulesets/jvp.cml files the same five).
+
+/// `x + w` batched: the same addition, element by element.
+export rule vmap_add::<T>(x: T, w: T) when is_numeric::<T>() {
+    x + w => (bx: Lift<T>, bw: Lift<T>) => bx + bw
+}
+
+/// `x - w` batched: the same subtraction, element by element.
+export rule vmap_sub::<T>(x: T, w: T) when is_numeric::<T>() {
+    x - w => (bx: Lift<T>, bw: Lift<T>) => bx - bw
+}
+
+/// `x * w` batched: the same product, element by element.
+export rule vmap_mul::<T>(x: T, w: T) when is_numeric::<T>() {
+    x * w => (bx: Lift<T>, bw: Lift<T>) => bx * bw
+}
+
+/// `x / w` batched: the same quotient, element by element.
+export rule vmap_div::<T>(x: T, w: T) when is_numeric::<T>() {
+    x / w => (bx: Lift<T>, bw: Lift<T>) => bx / bw
+}
+
+/// `-x` batched: the same negation, element by element. The key is `-` at one operand, not `-` at
+/// two.
+export rule vmap_neg::<T>(x: T) when is_numeric::<T>() {
+    -x => (bx: Lift<T>) => -bx
+}
