@@ -79,6 +79,23 @@ template <typename T> class Array {
         return Array(items, shape);
     }
 
+    /// The elements of `source` from `offset` on, carrying the dimensions `source` states between
+    /// `from` and `to` (`atRow` takes one dimension off a value). The elements are copied: the
+    /// result is a value of its own, and writing it leaves `source` alone.
+    static Array window(const Array<T> &source, std::size_t offset, std::size_t from, std::size_t to) {
+        std::size_t count = 1;
+        for (std::size_t i = from; i < to; ++i) {
+            count *= source.extent(i);
+        }
+        Array out;
+        out.reserve(count);
+        for (std::size_t i = 0; i < count && offset + i < source.size(); ++i) {
+            out.push(source[offset + i]);
+        }
+        out.shapeFrom(source, from, to);
+        return out;
+    }
+
     Array(const Array &other) noexcept : rep_(other.rep_) {
         if (rep_ != nullptr) {
             ++rep_->references;
@@ -166,6 +183,92 @@ template <typename T> class Array {
         return true;
     }
 
+  public:
+    // The two shape setters the builders use (`window`, `atAxis`): they state the dimensions of a
+    // value made from another's elements. Not part of what a generated program calls.
+    /// States the shape a value built from another's elements has (`window`): the dimensions the
+    /// source states between `from` and `to`, when they multiply to the elements this value holds.
+    void shapeFrom(const Array<T> &source, std::size_t from, std::size_t to) {
+        if (rep_ == nullptr || to <= from || to - from > kMaxRank) {
+            return;
+        }
+        std::size_t product = 1;
+        for (std::size_t i = from; i < to; ++i) {
+            product *= source.extent(i);
+        }
+        if (product != size()) {
+            return;
+        }
+        rep_->rank = static_cast<std::uint32_t>(to - from);
+        for (std::size_t i = 0; i < to - from; ++i) {
+            rep_->extents[i] = source.extent(from + i);
+        }
+    }
+
+    /// States the shape the builder read from the type (`reshape`): `rank` extents, when they
+    /// multiply to the elements this value holds.
+    void shapeOf(const std::size_t *shape, std::size_t rank) {
+        if (rep_ == nullptr || rank == 0 || rank > kMaxRank) {
+            return;
+        }
+        std::size_t product = 1;
+        for (std::size_t i = 0; i < rank; ++i) {
+            product *= shape[i];
+        }
+        if (product != size()) {
+            return;
+        }
+        rep_->rank = static_cast<std::uint32_t>(rank);
+        for (std::size_t i = 0; i < rank; ++i) {
+            rep_->extents[i] = shape[i];
+        }
+    }
+
+    /// States the shape a value sliced along one dimension has (`sliceSub`): the source's dimensions,
+/// the sliced one replaced by the length the bounds gave it.
+    void shapeSliced(const Array<T> &source, std::size_t axis, std::size_t count) {
+        if (rep_ == nullptr || axis >= source.rank()) {
+            return;
+        }
+        std::size_t product = count;
+        for (std::size_t i = 0; i < source.rank(); ++i) {
+            if (i != axis) {
+                product *= source.extent(i);
+            }
+        }
+        if (product != size()) {
+            return;
+        }
+        rep_->rank = static_cast<std::uint32_t>(source.rank());
+        for (std::size_t i = 0; i < source.rank(); ++i) {
+            rep_->extents[i] = i == axis ? count : source.extent(i);
+        }
+    }
+
+    /// States the shape a value built from another's elements has (`atAxis`): every dimension of
+    /// the source except `axis`, when they multiply to the elements this value holds.
+    void shapeWithout(const Array<T> &source, std::size_t axis) {
+        if (rep_ == nullptr || source.rank() < 2 || source.rank() - 1 > kMaxRank) {
+            return;
+        }
+        std::size_t product = 1;
+        for (std::size_t i = 0; i < source.rank(); ++i) {
+            if (i != axis) {
+                product *= source.extent(i);
+            }
+        }
+        if (product != size()) {
+            return;
+        }
+        std::size_t at = 0;
+        for (std::size_t i = 0; i < source.rank(); ++i) {
+            if (i != axis) {
+                rep_->extents[at++] = source.extent(i);
+            }
+        }
+        rep_->rank = static_cast<std::uint32_t>(at);
+    }
+
   private:
     struct Rep {
         std::size_t references;
@@ -218,6 +321,80 @@ template <typename T> T at(const Array<T> &xs, int64_t index, const Site &site) 
         fault(site, {std::to_string(index), "an array", std::to_string(xs.size())});
     }
     return xs[static_cast<std::size_t>(index)];
+}
+
+/// `xs[i]` on a value of several dimensions: the i-th row -- one dimension less than the value and
+/// of the row's own extent, which is the slab the interpreter hands back (design principles 5.4). A
+/// position outside the first dimension is IndexOutOfRange at `site`, as it is on a value of one
+/// dimension. The elements are copied, so the row is a value of its own and a write to either is no
+/// write to the other.
+template <typename T> Array<T> atRow(const Array<T> &xs, int64_t index, const Site &site) {
+    const std::size_t first = xs.rank() >= 1 ? xs.extent(0) : xs.size();
+    if (index < 0 || static_cast<std::size_t>(index) >= first) [[unlikely]] {
+        fault(site, {std::to_string(index), "an array", std::to_string(first)});
+    }
+    if (xs.rank() < 2) {
+        // The type the writer read promises several dimensions, so this is defensive only: the
+        // value is taken as one row of one element.
+        return Array<T>({xs[static_cast<std::size_t>(index)]});
+    }
+    std::size_t inner = 1;
+    for (std::size_t i = 1; i < xs.rank(); ++i) {
+        inner *= xs.extent(i);
+    }
+    return Array<T>::window(xs, static_cast<std::size_t>(index) * inner, 1, xs.rank());
+}
+
+/// Copies the plane `index` along `axis` of `xs`, in the order the remaining dimensions run: the
+/// walk of `atAxis`, one element per combination of the other dimensions' positions.
+template <typename T>
+void gatherAxisPlane(Array<T> &out,
+                     const Array<T> &xs,
+                     std::size_t axis,
+                     std::size_t index,
+                     const std::size_t *stride,
+                     std::size_t dimension,
+                     std::size_t offset) {
+    if (dimension == xs.rank()) {
+        out.push(xs[offset]);
+        return;
+    }
+    if (dimension == axis) {
+        gatherAxisPlane(out, xs, axis, index, stride, dimension + 1, offset + index * stride[dimension]);
+        return;
+    }
+    for (std::size_t i = 0; i < xs.extent(dimension); ++i) {
+        gatherAxisPlane(out, xs, axis, index, stride, dimension + 1, offset + i * stride[dimension]);
+    }
+}
+
+/// `xs[i, axis]` -- a position that names the dimension it drops: the value without that dimension,
+/// every other one kept whole, which is the slab the interpreter hands back (design principles
+/// 5.4). `m[1, 2]` of an `f32[2, 3]` is written as the position on axis 1 and then the position on
+/// axis 0, so a position on a whole dimension is what this must answer, not a prefix of the value.
+template <typename T>
+Array<T> atAxis(const Array<T> &xs, int64_t index, int64_t axis, const Site &site) {
+    const std::size_t rank = xs.rank();
+    if (rank < 2 || axis < 0 || static_cast<std::size_t>(axis) >= rank) {
+        // One dimension is `atRow`'s (the only axis it has), and an axis outside the value's own is
+        // a defect of the generated program rather than a value.
+        return atRow(xs, index, site);
+    }
+    const auto dimension = static_cast<std::size_t>(axis);
+    if (index < 0 || static_cast<std::size_t>(index) >= xs.extent(dimension)) [[unlikely]] {
+        fault(site, {std::to_string(index), "an array", std::to_string(xs.extent(dimension))});
+    }
+    std::size_t stride[Array<T>::kMaxRank];
+    std::size_t count = 1;
+    for (std::size_t i = rank; i-- > 0;) {
+        stride[i] = count;
+        count *= xs.extent(i);
+    }
+    Array<T> out;
+    out.reserve(xs.extent(dimension) == 0 ? 0 : count / xs.extent(dimension));
+    gatherAxisPlane(out, xs, dimension, static_cast<std::size_t>(index), stride, 0, 0);
+    out.shapeWithout(xs, dimension);
+    return out;
 }
 
 /// `xs[i] = value` (:op/set_index_in_place): the array with that element changed, the index
@@ -279,21 +456,74 @@ Array<T> slice(const Array<T> &xs, int64_t start, int64_t end, const Site &site)
 }
 
 /// `xs[a:b]`, `xs[a:b:s]`, `xs[:b]`, `xs[a:]`, `xs[::-1]` and `slice(xs, 0, a, b, s)` (:op/slice_sub)
-/// of a one-dimensional array, as struct.cpp's __slice_sub__ reads them: `written` says which
-/// bounds the program wrote (bit 1 the end, bit 2 the start), a step of 0 or an axis other than the
-/// first is InvalidArgument at `invalid` (values: "[]", what is wrong), and a bound that leaves the
-/// array is SliceOutOfRange at `outOfRange` (values: the start, the end, "an array", the length).
+/// as struct.cpp's __slice_sub__ reads them: `written` says which bounds the program wrote (bit 1
+/// the end, bit 2 the start), a step of 0 or an axis outside the value is InvalidArgument at
+/// `invalid` (values: "[]", what is wrong), and a bound that leaves the dimension is
+/// SliceOutOfRange at `outOfRange` (values: the start, the end, "an array", the length).
+///
+/// One of a value's dimensions is what is sliced, and every other dimension is kept whole
+/// (design principles 5.4): `m[0:2]` of a rank-2 value is its first two rows, `m[:, 1]` its second
+/// column, and the dimension sliced takes the length the bounds give it. A negative axis counts
+/// from the last dimension, which for a value of one dimension is 0 either way.
+template <typename T> void sliceGatherPlane(Array<T> &out,
+                                           const Array<T> &xs,
+                                           std::size_t axis,
+                                           int64_t start,
+                                           int64_t step,
+                                           std::size_t count,
+                                           const std::size_t *stride,
+                                           std::size_t dimension,
+                                           std::size_t offset) {
+    if (dimension == xs.rank()) {
+        out.push(xs[offset]);
+        return;
+    }
+    if (dimension == axis) {
+        for (std::size_t i = 0; i < count; ++i) {
+            sliceGatherPlane(
+                out,
+                xs,
+                axis,
+                start,
+                step,
+                count,
+                stride,
+                dimension + 1,
+                offset + static_cast<std::size_t>(start + static_cast<int64_t>(i) * step) *
+                             stride[dimension]);
+        }
+        return;
+    }
+    for (std::size_t i = 0; i < xs.extent(dimension); ++i) {
+        sliceGatherPlane(
+            out, xs, axis, start, step, count, stride, dimension + 1, offset + i * stride[dimension]);
+    }
+}
+
 template <typename T>
 Array<T> sliceSub(
     const Array<T> &xs, int64_t axis, int64_t startRaw, int64_t endRaw, int64_t step,
     int64_t written, const Site &outOfRange, const Site &invalid) {
-    if (axis != 0 && axis != -1) [[unlikely]] {
-        fault(invalid, {"[]", "a slice axis must be between 0 and 0, not " + std::to_string(axis)});
-    }
     if (step == 0) [[unlikely]] {
         fault(invalid, {"[]", "a slice step must not be 0"});
     }
-    const auto extent     = static_cast<int64_t>(xs.size());
+    const bool severalDimensions = xs.rank() >= 2;
+    if (!severalDimensions && axis != 0 && axis != -1) [[unlikely]] {
+        fault(invalid, {"[]", "a slice axis must be between 0 and 0, not " + std::to_string(axis)});
+    }
+    if (axis == -1) {
+        axis = severalDimensions ? static_cast<int64_t>(xs.rank()) - 1 : 0;
+    }
+    if (severalDimensions &&
+        (axis < 0 || static_cast<std::size_t>(axis) >= xs.rank())) [[unlikely]] {
+        fault(
+            invalid,
+            {"[]",
+             "a slice axis must be between 0 and " + std::to_string(xs.rank() - 1) + ", not " +
+                 std::to_string(axis)});
+    }
+    const auto extent = static_cast<int64_t>(
+        severalDimensions ? xs.extent(static_cast<std::size_t>(axis)) : xs.size());
     const bool wroteEnd   = (written & 1) != 0;
     const bool wroteStart = (written & 2) != 0;
     int64_t start         = 0;
@@ -317,6 +547,23 @@ Array<T> sliceSub(
                 {std::to_string(start), std::to_string(end), "an array", std::to_string(extent)});
         }
         count = start > end ? (start - end + (-step) - 1) / (-step) : 0;
+    }
+    if (severalDimensions) {
+        std::size_t stride[Array<T>::kMaxRank];
+        std::size_t product = 1;
+        for (std::size_t i = xs.rank(); i-- > 0;) {
+            stride[i] = product;
+            product *= xs.extent(i);
+        }
+        const auto dimension = static_cast<std::size_t>(axis);
+        Array<T> shaped;
+        shaped.reserve(xs.extent(dimension) == 0
+                           ? 0
+                           : (xs.size() / xs.extent(dimension)) * static_cast<std::size_t>(count));
+        sliceGatherPlane(
+            shaped, xs, dimension, start, step, static_cast<std::size_t>(count), stride, 0, 0);
+        shaped.shapeSliced(xs, dimension, static_cast<std::size_t>(count));
+        return shaped;
     }
     Array<T> out;
     out.reserve(static_cast<std::size_t>(count));
@@ -367,15 +614,30 @@ inline Array<double> sorted(const Array<double> &xs) {
 }
 
 /// `tensor:reshape` (modules/tensor/kernels/layout.cpp): the same elements in row-major order in
-/// another shape. This back end keeps no shape, so the value is the one it was given -- but the
-/// operator compares the element count, and a target that changes it is a fault at `site` before
-/// anything is read, with the input's own shape in the message. `count` below zero asks nothing.
+/// another shape. The shape travels with the value (design principles 5.4), so the result is a
+/// value of that shape -- a target of several dimensions prints its rows, as the interpreter's
+/// does -- and a target that changes the element count is a fault at `site` before anything is
+/// read, with the input's own count in the message. `count` below zero asks nothing.
 template <typename T>
-Array<T> reshape(const Array<T> &xs, int64_t count, const Site &site) {
+Array<T> reshape(const Array<T> &xs, std::initializer_list<int64_t> shape, int64_t count, const Site &site) {
     if (count >= 0 && static_cast<int64_t>(xs.size()) != count) {
         fault(site, {std::to_string(xs.size())});
     }
-    return xs;
+    Array<T> out;
+    out.reserve(xs.size());
+    for (std::size_t i = 0; i < xs.size(); ++i) {
+        out.push(xs[i]);
+    }
+    std::size_t extents[Array<T>::kMaxRank];
+    std::size_t rank = 0;
+    for (const int64_t extent : shape) {
+        if (extent < 0 || rank >= Array<T>::kMaxRank) {
+            return out; // a dimension the type does not state: the elements alone are the shape
+        }
+        extents[rank++] = static_cast<std::size_t>(extent);
+    }
+    out.shapeOf(extents, rank);
+    return out;
 }
 
 /// `xs[idx]` with `idx` an array of positions (:op/idx_take, design principles 5.4): the elements
