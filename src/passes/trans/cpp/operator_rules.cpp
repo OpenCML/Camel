@@ -1169,14 +1169,16 @@ Rules buildRules() {
     // `tensor:ones` and `tensor:zeros`: the tensor's element type is the call's and its shape is
     // the `int[]` it is given, and both are things this back end can write without the runtime --
     // the result is a `T[..]`, which has one representation here, the shaped array `rt::Array<T>`
-    // (docs/design/cpp-standalone/README.cn.md 4) a literal of the same type is. So the rule builds
-    // that array: `rt::filledArray<T>(shape, fill, site)`, every element the fill.
+    // (docs/design/cpp-standalone/README.cn.md 4) a literal of the same type is. So the rule
+    // builds that array: `rt::filledArray<T>(shape, fill, op, site)`, every element the fill.
     //
     // This is not a bridged call any more. The bridge was right for the tensors whose value is a
     // runtime object -- a handle, `rt::Foreign` -- but a tensor the program only reads as elements
     // is data, and data no runtime has to make. The one thing the runtime still answers here is the
     // shape's own refusal: a negative extent is a fault, and `filledArray` raises it with the
-    // interpreter's sentence rather than building an array nobody asked for.
+    // kernel's own words ("<op>: Shape cannot contain negative values"), measured against std::fvm
+    // rather than guessed -- the first sentence this rule carried was not the one the interpreter
+    // prints, and a fault printed differently is a program that disagrees.
     //
     // The element types are the numbers this array holds; a tensor of anything else (a string, a
     // bool, one of the two reduced-precision floats, whose fill would need its own pattern) keeps
@@ -1199,10 +1201,11 @@ Rules buildRules() {
             default: return std::nullopt;
             }
             return std::format(
-                "rt::filledArray<{}>({}, {}, {})",
+                "rt::filledArray<{}>({}, {}, \"{}\", {})",
                 c.cppType(result->elemType()),
                 c.operand(0),
                 fill,
+                ones ? "ones" : "zeros",
                 c.site(RuntimeDiag::RuntimeError, marks(1)));
         };
     };

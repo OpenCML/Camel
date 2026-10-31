@@ -529,6 +529,132 @@ def check_four_backends(programs, args):
     return 1
 
 
+def first_line_difference(a, b):
+    """The first line that differs, whole. `first_difference` shows a window around the first
+    different column, which is right for a number and wrong for a fault: the sentence is the thing,
+    and half of it is not a report."""
+    la, lb = a.splitlines(), b.splitlines()
+    for i in range(max(len(la), len(lb))):
+        x = la[i] if i < len(la) else "<end>"
+        y = lb[i] if i < len(lb) else "<end>"
+        if x != y:
+            return "line %d: fvm %r, cpp %r" % (i + 1, x, y)
+    return "same lines, different line ends or trailing text"
+
+
+def check_fault(entry, workdir, args):
+    """One `fault_*` program: what std::fvm prints, and what the program std::cpp writes prints.
+    Both texts are stdout and stderr together -- a fault is a report, and where a runtime sends it
+    is not something this check may assume to keep it out of the comparison."""
+    program, entry_args = entry
+    rel = os.path.relpath(program, ROOT).replace("\\", "/")
+    env = dict(os.environ)
+    env.setdefault("CAMEL_HOME", os.path.join(ROOT, "out", "latest"))
+    if os.name == "nt":
+        env["PATH"] = os.path.join(env["CAMEL_HOME"], "libs") + os.pathsep + env.get("PATH", "")
+    rec = {"program": rel + "".join(" " + a for a in entry_args)}
+
+    code, out, err, _ = run([CAMEL] + entry_args + [rel] + args.passes + ["std::cpp"], args.timeout, env)
+    text = out + "\n" + err
+    if code != 0 or "#include" not in out:
+        # A program the writer does not translate has no fault sentence of its own to compare:
+        # the interpreter's is the only one that exists, and this is not where a refusal is judged.
+        rec["outcome"] = "not translated"
+        rec["detail"] = (text.strip().splitlines() or ["exit %s" % code])[-1][:160]
+        return rec
+
+    stem = re.sub(r"[^A-Za-z0-9_]", "_", rel)[:150]
+    source = os.path.join(workdir, stem + ".cpp")
+    target = os.path.join(workdir, stem + EXE)
+    with open(source, "w", encoding="utf-8", newline="\n") as f:
+        f.write(out)
+    compiler, msvc = find_compiler()
+    bridged = "camel/standalone/bridge.h" in out
+    code, cout, cerr, _ = run(
+        build_command(compiler, msvc, source, target, bridged, env["CAMEL_HOME"], args.pch),
+        600, env, cwd=workdir)
+    if code != 0:
+        errors = [l for l in (cout + cerr).splitlines() if "error" in l]
+        rec["outcome"] = "does not build"
+        rec["detail"] = (errors[0] if errors else (cout + cerr).strip()[-200:])[:300]
+        return rec
+
+    fcode, fout, ferr, _ = run([CAMEL] + entry_args + [rel] + args.passes + ["std::fvm"], args.timeout, env)
+    ccode, xout, xerr, _ = run([target] + entry_args, args.timeout, env)
+    ftext, ctext = fout + ferr, xout + xerr
+    rec["fvm_exit"], rec["cpp_exit"] = fcode, ccode
+    if fcode == ccode and ftext == ctext:
+        rec["outcome"] = "same"
+        rec["standalone"] = not bridged
+    else:
+        rec["outcome"] = "differs"
+        rec["detail"] = ("exit fvm %s, cpp %s; " % (fcode, ccode)) + (
+            first_line_difference(ftext, ctext) if ftext != ctext else "same text")
+    return rec
+
+
+def check_faults(paths, args):
+    """Every `fault_*` case under `paths`: the words of its fault have to be the interpreter's, as
+    printed, not a sentence of a back end's own. A fault is part of the language's answer, and a
+    back end may not improve on it. `--fault-baseline` names the ones known not to, in both
+    directions: a fourth is red, and so is one of them starting to agree."""
+    programs = []
+    for root_dir in paths:
+        if os.path.isfile(root_dir):
+            programs.append(os.path.abspath(root_dir))
+            continue
+        for dirpath, _, names in os.walk(root_dir):
+            for name in names:
+                if name.startswith("fault_") and name.endswith(".cml"):
+                    programs.append(os.path.join(dirpath, name))
+    programs.sort()
+    if not programs:
+        print("FAIL: no fault_* case found under %s" % ", ".join(paths))
+        return 1
+    baseline = set(read_expect(args.fault_baseline)) if args.fault_baseline else set()
+    workdir = tempfile.mkdtemp(prefix="cppexec-faults-")
+    build_pch(workdir, args)
+    try:
+        with concurrent.futures.ThreadPoolExecutor(args.jobs) as pool:
+            records = list(pool.map(lambda p: check_fault((p, []), workdir, args), programs))
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+    counts = collections.Counter(r["outcome"] for r in records)
+    print("fault programs: %d   compiler: %s" % (len(records), find_compiler()[0]))
+    for outcome, n in counts.most_common():
+        print("%6d  %5.1f%%  %s" % (n, 100.0 * n / len(records), outcome))
+    differing = [r for r in records if r["outcome"] in ("differs", "does not build")]
+    for rec in differing:
+        print("  %s: %s: %s" % (rec["program"], rec["outcome"], rec.get("detail", "")))
+    silent = [r for r in records if r["outcome"] == "not translated"]
+    for rec in silent:
+        print("  %s: not translated by std::cpp: %s" % (rec["program"], rec.get("detail", "")))
+    if args.fault_baseline:
+        actual = {r["program"] for r in differing}
+        extra = sorted(actual - baseline)
+        missing = sorted(baseline - actual)
+        for name in extra:
+            print("  differs and is not in the baseline: " + name)
+        for name in missing:
+            print("  is in the baseline and now prints what std::fvm prints: " + name)
+        if extra or missing:
+            print("FAIL: the faults that differ are not the ones the baseline names (%d extra, "
+                  "%d gone)" % (len(extra), len(missing)))
+            return 1
+        print("PASS: %d of %d fault program(s) print what std::fvm prints; %d differ, all in the "
+              "baseline (%d not translated, not compared)"
+              % (len(records) - len(actual), len(records), len(actual), len(silent)))
+        return 0
+    if differing:
+        print("FAIL: %d of %d fault program(s) do not print what std::fvm prints"
+              % (len(differing), len(records)))
+        return 1
+    print("PASS: %d of %d fault program(s) print what std::fvm prints (%d not translated, not "
+          "compared)" % (len(records) - len(silent), len(records), len(silent)))
+    return 0
+
+
 def expand(paths):
     """(program, arguments of its main) for every path: a directory gives its programs, a path
     followed by arguments (an entry of an --expect list) that program with them."""
@@ -576,6 +702,12 @@ def main():
     ap.add_argument("--four-backends", action="store_true",
                     help="run each program on std::nvm, std::fvm, std::cpp and std::jit, say what "
                          "each one said, and fail when they do not all say the same thing")
+    ap.add_argument("--faults", nargs="?", const="test/cases", default=None, metavar="DIR",
+                    help="every fault_* case under DIR (test/cases by default): the fault it prints "
+                         "has to be what std::fvm prints, word for word")
+    ap.add_argument("--fault-baseline",
+                    help="with --faults: a file of the fault programs whose words are known to "
+                         "differ, and why; the answer has to be exactly that list")
     ap.add_argument("--no-pch", action="store_true",
                     help="do not precompile camel/standalone/runtime.h (clang)")
     args = ap.parse_args()
@@ -598,6 +730,8 @@ def main():
         if not args.programs:
             ap.error("--four-backends needs at least one program")
         return check_four_backends(args.programs, args)
+    if args.faults:
+        return check_faults([args.faults], args)
 
     expected = read_expect(args.expect) if args.expect else []
     programs = expand(args.programs + expected)

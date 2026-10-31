@@ -1,0 +1,17 @@
+# The `fault_*` cases whose fault is not what std::fvm prints, and why. The check
+# (run.py --faults --fault-baseline=...) asks every such case in test/cases and requires this set to
+# be exactly the ones that differ: a new name is red, and so is a name here that starts agreeing --
+# in that case the line is deleted, because a list that can only grow says nothing.
+#
+# A fault is the language's answer, not a back end's: the sentence std::cpp prints has to be the one
+# the interpreter prints, word for word. A rule that writes its own plausible sentence is the one
+# mistake this list is meant to surface early -- it reads well, so nobody checks it.
+#
+# Program under this line: the interpreter itself warns during the run (`<__assn__>`), and the
+# written program has nothing to warn about: the extra line is the interpreter's diagnostic, not the
+# fault's text, and the fault line under it is the same.
+test/cases/consistency/faults/fault_in_sync_call.cml   # GAP: an interpreter warning in fvm's run, not a fault sentence
+# Program under this line: stdlib's `gcd` refuses the smallest integer in the interpreter, and the
+# standalone `gcd` does not refuse it at all (exit 0 where the interpreter exits 1). A missing
+# check, not a difference of words: the sentence cannot agree until the fault exists.
+test/cases/modules/stdlib/fault_gcd_overflow.cml       # GAP: the standalone gcd has no overflow check

@@ -409,12 +409,12 @@ timeout_ms = 8000
 
 [[tests]]
 name = "tensor_ones"
-desc = "`tensor:ones` writes the tensor itself: `T[..]` is `rt::Array<T>` in this back end, and the rule builds that array from the shape and the fill instead of calling the runtime -- `const rt::Array<float> v1_ones = rt::filledArray<float>(lit::array, 1.0, at_17_17);`, every element the fill, the shape read from the `int[]` the call is given. Nothing crosses the bridge and the program needs no Camel library: the value is data, not a handle. `println` of it is the same `rt::println` as for an array the program wrote itself, and it prints the nested form of the shape. agree_with_fvm builds and runs it against std::fvm byte for byte: one line, `[[1.0, 1.0], [1.0, 1.0]]`."
+desc = "`tensor:ones` writes the tensor itself: `T[..]` is `rt::Array<T>` in this back end, and the rule builds that array from the shape and the fill instead of calling the runtime -- `const rt::Array<float> v1_ones = rt::filledArray<float>(lit::array, 1.0, \"ones\", at_17_17);`, every element the fill, the shape read from the `int[]` the call is given. Nothing crosses the bridge and the program needs no Camel library: the value is data, not a handle. `println` of it is the same `rt::println` as for an array the program wrote itself, and it prints the nested form of the shape. agree_with_fvm builds and runs it against std::fvm byte for byte: one line, `[[1.0, 1.0], [1.0, 1.0]]`."
 kind = "behavior"
 case = "../../../cases/trans/cpp/tensor_ones.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
-expect_stdout_contains = ["const rt::Array<float> v1_ones = rt::filledArray<float>(lit::array, 1.0, at_", "rt::println(v1_ones);"]
+expect_stdout_contains = ["const rt::Array<float> v1_ones = rt::filledArray<float>(lit::array, 1.0, \"ones\", at_", "rt::println(v1_ones);"]
 expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign", "bridge::", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -426,19 +426,19 @@ kind = "behavior"
 case = "../../../cases/trans/cpp/tensor_ones_element.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
-expect_stdout_contains = ["= rt::filledArray<double>(lit::array, 1.0, at_", "= rt::filledArray<int64_t>(lit::array, 1, at_"]
+expect_stdout_contains = ["= rt::filledArray<double>(lit::array, 1.0, \"ones\", at_", "= rt::filledArray<int64_t>(lit::array, 1, \"ones\", at_"]
 expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign", "bridge::", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
 name = "tensor_zeros"
-desc = "`tensor:zeros` is the same rule as `tensor:ones` with the other fill: `const rt::Array<float> v1_zeros = rt::filledArray<float>(lit::array, 0.0, at_18_18);`. What differs between the two builders is the fill and not a byte of the call this back end writes, which is why they are one rule. It was the last tensor builder refused as work not done (`std::cpp has no translation of it yet`), then one that crossed the bridge, and it is the tensor's data now. agree_with_fvm builds and runs it against std::fvm byte for byte: one line, `[[0.0, 0.0], [0.0, 0.0]]`."
+desc = "`tensor:zeros` is the same rule as `tensor:ones` with the other fill: `const rt::Array<float> v1_zeros = rt::filledArray<float>(lit::array, 0.0, \"zeros\", at_18_18);`. What differs between the two builders is the fill and not a byte of the call this back end writes, which is why they are one rule. It was the last tensor builder refused as work not done (`std::cpp has no translation of it yet`), then one that crossed the bridge, and it is the tensor's data now. agree_with_fvm builds and runs it against std::fvm byte for byte: one line, `[[0.0, 0.0], [0.0, 0.0]]`."
 kind = "behavior"
 case = "../../../cases/trans/cpp/tensor_zeros.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
-expect_stdout_contains = ["const rt::Array<float> v1_zeros = rt::filledArray<float>(lit::array, 0.0, at_", "rt::println(v1_zeros);"]
+expect_stdout_contains = ["const rt::Array<float> v1_zeros = rt::filledArray<float>(lit::array, 0.0, \"zeros\", at_", "rt::println(v1_zeros);"]
 expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign", "bridge::", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -565,3 +565,17 @@ expect_diagnostic_column = 13
 expect_stderr_contains = ["std::cpp has no standalone translation of the operator 'str:to_upper': the program it writes calls the Camel runtime there and is built with libcamel."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "every_fault_program_says_what_fvm_says"
+desc = "Every `fault_*` case in test/cases -- 47 of them -- run twice: once by std::fvm, once as the program std::cpp writes, and the two reports compared word for word (stdout and stderr together, and the exit code). A fault is the language's answer, so the words of it belong to the interpreter: a back end that writes its own sentence is not translating the fault, it is inventing one -- and an invented sentence reads well, which is why it survives review. This check exists because the tensor builders' rule did exactly that: `Tensor shape cannot contain negative extents` in place of the kernel's `zeros: Shape cannot contain negative values`, found by measuring, not by reading. The six programs std::cpp does not translate (a refusal is a different answer, and the interpreter's sentence is the only one there is) are counted and named, not compared; the two that differ today are in test/tools/cppexec/fault_words.txt, both marked GAP, and the set has to be exactly that list in both directions."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/cppexec/run.py"
+args = ["${case}", "--faults", "--fault-baseline=test/tools/cppexec/fault_words.txt"]
+skip_unless = ["${python}", "test/tools/cppexec/run.py", "--have-compiler"]
+expect_exit = 0
+expect_stdout_contains = ["fault program(s) print what std::fvm prints"]
+expect_output_not_contains = ["FAIL:", "is not in the baseline", "now prints what std::fvm prints"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 900000
