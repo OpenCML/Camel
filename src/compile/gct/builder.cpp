@@ -1141,6 +1141,12 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                 node_ptr_t nRefNode = tree_->makeNRef(ref.toString());
                 node_ptr_t accsNode = tree_->makeAccs(i);
                 *accsNode << tree_->clone(dRefNode);
+                // How many names this declaration wrote, so the graph builder can refuse a count
+                // the value's tuple cannot meet -- in either direction -- at the declaration, and
+                // not at an element that happens to be past the end.
+                tree_->markUnpack(accsNode, refs.size());
+                setOriginFromAst(
+                    context_, accsNode, ast, camel::source::OriginKind::GctNode, "gct.accs");
                 *nRefNode << accsNode;
                 setOriginFromOrigin(
                     context_,

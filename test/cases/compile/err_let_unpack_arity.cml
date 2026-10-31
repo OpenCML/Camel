@@ -1,0 +1,7 @@
+func main(): int sync {
+    let (x, y) = loop a = 1, b = 2, c = 3, d = 4 while a < 2 do {
+        return (a + 1, b + 1, c + 1, d + 1)
+    }
+    `x=${x} y=${y}`->println
+    return 0
+}
