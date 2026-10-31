@@ -196,10 +196,24 @@ case = "../../../tools/cppexec/run.py"
 args = ["${case}", "--standalone", "test/cases/trans/cpp/narrow_reductions.cml"]
 skip_unless = ["${python}", "test/tools/cppexec/run.py", "--have-compiler"]
 expect_exit = 0
-expect_stdout_contains = ["bridge: no", "needs: none of the Camel runtime", "PASS: 1 program"]
+expect_stdout_contains = ["bridge: no", "needs: none of the Camel runtime", "PASS: 1 of 1 program(s) need no Camel runtime"]
 expect_output_not_contains = ["FAIL", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 120000
+
+[[tests]]
+name = "every_expect_program_links_no_runtime"
+desc = "The same property as narrow_reductions_needs_no_runtime, asked of every program the expect list names instead of one: each is translated, built and its own dependencies read (`ldd`), and the set of programs that still link the Camel runtime has to be exactly the set test/tools/cppexec/bridged.txt names -- 3 of 148 today, each written down there as either the bridge's own exception or a rule still to be written. Both directions are checked: a fourth program that links it is red, and so is one of the three becoming standalone, because the list is then wrong and a list that can only grow says nothing. The three are re:test (a regex engine is not in the header set), tensor:ones (a tensor crosses as a handle) and math:sqrt_d (a gap: the next commit writes the rule and deletes the line)."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/cppexec/run.py"
+args = ["${case}", "--standalone", "--expect=test/tools/cppexec/expect.txt", "--baseline=test/tools/cppexec/bridged.txt"]
+skip_unless = ["${python}", "test/tools/cppexec/run.py", "--have-compiler"]
+expect_exit = 0
+expect_stdout_contains = ["program(s) need no Camel runtime", "link it, all in the baseline"]
+expect_output_not_contains = ["FAIL:", "is not in the baseline", "no longer links the runtime"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 900000
 
 [[tests]]
 name = "fault_narrow_text_number"
@@ -270,6 +284,18 @@ args = ["${case}", "std::cpp"]
 expect_exit = 0
 expect_stdout_contains = ["const rt::Array<double> array{{1.0, 0.0, 0.0, 2.0}, {2, 2}};", "RuntimeDiag::DivisionByZero at 15:37", "Attempted division by zero."]
 expect_output_not_contains = ["TranslationRefused", "ElementTypeMismatch", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_rows_filled"
+desc = "A fill of a value of several dimensions is the elements and the shape in one block: `[[1.0, x], [x, 2.0]]` at a `float[2, 2]` position folds to `rt::Array<double>{{1.0, 2.0, 2.0, 2.0}, {2, 2}}` and prints the two rows the interpreter prints. The fold read the template's first extent (`size()`) instead of its element count (`numel()`), so it wrote the first row's worth of elements and no shape at all, and the generated program printed `[1.0, 2.0]`. agree_with_fvm compares the reading with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/literal_rows_filled.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::Array<double>{{1.0, 2.0, 2.0, 2.0}, {2, 2}}"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -439,6 +465,17 @@ expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_line = 12
 expect_output_contains = ["Translation pass 'std::cpp' refused the graph", "walks a value whose rank is open", "no one C++ type holds both"]
 expect_output_not_contains = ["Segmentation fault", "UnknownInternalError", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+[[tests]]
+name = "literal_open_shape"
+desc = "A literal of one dimension carries the dimension it has. `float[]` names the element type and leaves the length to the value, so the type states no extent -- and the value is one dimension of 3 elements: the constant is written with its extents (`rt::Array<double>::shaped({1.0, 2.0, 3.0}, {3})`), so `shape` and `len` read [3] and 3, and the checked conversion that follows has a rank to compare. A type of open rank (`float[..]`) states nothing about the rank, and a single element there stays the rank-zero value the position promises (compile/array_shape/rank_zero_field_literal.cml)."
+kind = "behavior"
+case = "../../../cases/trans/cpp/literal_open_shape.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["::shaped({1.0, 2.0, 3.0}, {3})", "::shaped({4.0, 5.0}, {2})", "rt::asShape("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 [[tests]]
