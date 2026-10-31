@@ -1392,6 +1392,19 @@ leaf of `tree` at a leaf of the reference is a tuple of the same length.
 
 ## `transforms`: program transforms
 
+#### `jvp`
+
+```camel
+jvp: (f: F) => Jvp<F> when is_function::<F>()
+```
+
+Forward mode: `jvp(f)` gives a function that takes the parameters of `f` followed by their
+tangents and returns the pair `(value, tangent)`. `jvp(f)(2.0, 1.0)` is the value `f(2.0)`
+together with the derivative of `f` at 2 in the direction 1.
+
+- Example (a fragment, not compiled): `let forward = jvp(f)`
+- Why it is not compiled: `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
+
 <a id="tensor"></a>
 
 ## `tensor`: multi-dimensional numeric arrays

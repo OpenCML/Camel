@@ -6,4 +6,5 @@ add_camel_module(
   SOURCES
     module.cpp
     jvp.cpp
+    jvp_operator.cpp
 )
