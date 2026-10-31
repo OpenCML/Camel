@@ -79,6 +79,46 @@ template <typename T> class Array {
         return Array(items, shape);
     }
 
+    /// The array of `items` with the extents `extents` states, row order: what a value the runtime
+    /// built is handed to the program as (bridge.h). A tensor is a `T[..]` whichever module its
+    /// operator belongs to, so its elements are copied out of the runtime's value and its shape
+    /// travels with them -- the same array a literal of that type is, which is what lets one
+    /// `println` print both.
+    static Array fromFlat(std::vector<T> items, const std::vector<int64_t> &extents) {
+        Array out;
+        out.reserve(items.size());
+        for (const T &item : items) {
+            out.push(item);
+        }
+        out.setExtents(extents);
+        return out;
+    }
+
+    /// The extents of the value, when they are the ones the elements multiply to: a shape that does
+    /// not is left off (no value is worth a crash over a wrong constant, the literal's rule).
+    template <typename Range> void setExtents(const Range &extents) {
+        if (rep_ == nullptr) {
+            return;
+        }
+        std::size_t product = 1;
+        std::size_t rank    = 0;
+        for (const auto extent : extents) {
+            if (extent < 0 || rank == kMaxRank) {
+                return;
+            }
+            product *= static_cast<std::size_t>(extent);
+            ++rank;
+        }
+        if (rank == 0 || product != size()) {
+            return;
+        }
+        rep_->rank        = static_cast<std::uint32_t>(rank);
+        std::size_t index = 0;
+        for (const auto extent : extents) {
+            rep_->extents[index++] = static_cast<std::size_t>(extent);
+        }
+    }
+
     /// The elements of `source` from `offset` on, carrying the dimensions `source` states between
     /// `from` and `to` (`atRow` takes one dimension off a value). The elements are copied: the
     /// result is a value of its own, and writing it leaves `source` alone.
