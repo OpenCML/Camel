@@ -152,12 +152,13 @@ class EdgesSyncCycleTestPass : public RuntimeGraphRewritePass {
 };
 
 // The users of a node, read on both sides of the freeze. A draft keeps one list per edge kind as a
-// pass writes the edge; a frozen graph keeps one table built from its input runs, with the sync
-// users beside them because a sync edge is not a port. A pass asking what reads or waits on a node
-// (camel/runtime/effect_liveness.h) must get the same answer from either side, so this pass builds
-// one node read in all four kinds, commits, and prints the four sets of that node and how many
-// nodes of the graph the two sides disagree about. The sets are compared in the runtime refs the
-// commit gives the draft's nodes: a draft's ids stop meaning anything once it is encoded.
+// pass writes the edge; a frozen graph keeps one table built from its input runs, with the two
+// side arrays beside them because neither a sync nor an order edge is a port. A pass asking what
+// reads, waits on or is ordered by a node (camel/runtime/effect_liveness.h; `isUnanchoredPure`
+// reads all six kinds) must get the same answer from either side, so this pass builds one node
+// read in all five kinds, commits, and prints the five sets of that node and how many nodes of the
+// graph the two sides disagree about. The sets are compared in the runtime refs the commit gives
+// the draft's nodes: a draft's ids stop meaning anything once it is encoded.
 class EdgeUsersTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;

@@ -137,8 +137,8 @@ args = ["${case}", "test::edges_sync_cycle"]
 expect_stdout_contains = ["SYNCCYCLE a=", "found=1 on_cycle_a=1 on_cycle_b=1", "EDGES refused", "lies on a cycle of inputs"]
 
 [[tests]]
-name = "the_four_user_sets_read_the_same_on_both_sides_of_the_freeze"
-desc = "The users of a node in the four kinds a pass asks about -- a value port, a context port, a control input, and a place on a `sync` block's chain. A draft keeps one list per kind as a pass writes each edge; the graph a commit makes keeps one table built from the input runs, with the sync users beside them, and it had no accessor for four of those lists at all. The pass builds one node read in all four kinds, compares the two readings node for node in the runtime refs the commit gives the draft's nodes, and prints the four sets of that node and the number of nodes the two sides disagree about: disagree=0 is the assertion, and the four counts are what a reading that named another set would have to get right as well."
+name = "the_five_user_sets_read_the_same_on_both_sides_of_the_freeze"
+desc = "The users of a node in the five kinds a pass asks about -- a value port, a context port, a control input, a place on a `sync` block's chain, and an order edge leaving it. A draft keeps one list per kind as a pass writes each edge; the graph a commit makes keeps one table built from the input runs, with the two side arrays beside them, and it had no accessor for five of those lists at all. The pass builds one node read in all five kinds, compares the two readings node for node in the runtime refs the commit gives the draft's nodes, and prints the five sets of that node and the number of nodes the two sides disagree about: disagree=0 is the assertion, and the five counts are what a reading that named another set would have to get right as well."
 case = "../../../cases/opt/generic/generic_passes.cml"
 args = ["${case}", "test::edge_users"]
-expect_stdout_contains = ["EDGES accepted", "EDGE_USERS norm=2 with=1 ctrl=1 sync=1", "disagree=0"]
+expect_stdout_contains = ["EDGES accepted", "EDGE_USERS norm=2 with=1 ctrl=1 sync=1 order=1", "disagree=0"]
