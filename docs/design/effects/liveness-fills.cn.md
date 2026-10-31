@@ -7,6 +7,7 @@
 - 一句话：**五份拷贝的第一件事不是合并，是列表——列表里的"方向"也是表的一部分。**
 - 一句判据：**不被扫描的页等于没写——数表要放在会被读的那条路上。**
 - 一句判据：**永远 false 的字段不是保守，是没人写的一份名单——它比写错更难发现，因为它从不报错。**
+- 一句判据：**零读点的代码不一定错——要问的是它描述的规则，今天还有没有别的东西在替它说。**
 
 ---
 
@@ -95,3 +96,19 @@
 ## 8. 锁住这张表的用例
 
 `test/plans/feat/opt/edges.plan.toml`，用例 `the_five_user_sets_read_the_same_on_both_sides_of_the_freeze`，pass `test::edge_users`：同一个节点上五组用户逐项比，打印五组计数与不一致的节点数。五轮 A/B（逐一把图侧一个访问器指到另一组）只让这一例变红，其余 14 例绿；其中三组的五个计数与真值逐字相同，只有集合比较能抓住。
+
+## 9. 那个洞的读数（`isWriterWithLaterRead` 没人填）
+
+最小程序：`test/cases/effects/writer_table_through_callee.cml`——`apply(f, v)` 里调 `f(v)`；`main` 里 `var counter = 0`，调用前印一次，把写 `counter` 的闭包交给 `apply`，调用后再印一次。
+
+| 读数 | 值 |
+|---|---|
+| `std::nvm` 输出 | 两行：`0`、`41` |
+| `std::fvm` 输出 | 两行：`0`、`41` |
+| 两个 back end 是否一致 | 一致（用例 `callback.writer_table_through_callee` 用 `backends_agree` 锁住） |
+| 程序里的 `Call` 节点数 | 2（`__root__#1` 调 `main`、`apply#2` 调 `f(v)`） |
+| `effectStandingOf` 对这 2 个节点说什么 | 都是 `HasNoCredential`：`__root__#1:s1,d0,y0,w0`、`apply#2:s1,d0,y0,w0`（s = standing，d/y/w = 数据用户 / 同步 / 写者表字段，全 0） |
+| 回调里写 `counter` 的节点 | `__g_49__#2`，同一次探针的逐节点输出里也是 `HasNoCredential`（`data=0 sync=0 waited=1`） |
+| 读法的来源与去向 | 临时把 `effectStandingOf` 接到 `test::edge_users` 里跑一次，facts 按 pass 的填法从冻结图取（`isWriterWithLaterRead` 仍是 0）；读数后已撤净，`git status` 空 |
+
+**结论**：行为对（两个 back end 都是 `0` / `41`，调用跑了、写发生了、调用之后的读拿到了新版本），判定错（这 2 个节点都说"没有凭据"）。因为它没有调用者，错不产生行为；一旦有人接上它去丢节点，这个形状就是第一个被丢的。所以它不是死码，是一个会咬人的洞——删掉 `isWriterWithLaterRead` 会把洞藏起来。调用为什么还是跑了（靠什么让 `f(v)` 执行）不在这张表里，这里只记"它跑了"和"判定说没凭据"这两件读数。
