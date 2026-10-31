@@ -42,10 +42,11 @@ class GraphTransaction {
     GraphDraft &edit() { return graph_ != nullptr ? *graph_ : *borrowed_; }
     /// The graph as it stands: read-only, for a consumer that only inspects it.
     const GraphDraft &graph() const { return graph_ != nullptr ? *graph_ : *borrowed_; }
-    /// The identity the graph carries (camel/runtime/graph_id.h). A transaction opened with an id
-    /// names it; a graph that has no id to give would be encoded under a number nobody assigned,
-    /// so the id is decided when the transaction is opened, not later.
-    GraphId id() const;
+    /// The identity the graph carries (camel/runtime/graph_id.h). The id is decided when the
+    /// transaction is opened, not later. Kept inline: a member this small defined out of line is
+    /// absent from the shared library unless it is exported, and every module built against the
+    /// inline form then fails to load with an undefined symbol.
+    GraphId id() const { return graph().id(); }
 
   private:
     explicit GraphTransaction(std::unique_ptr<GraphDraft> graph) : graph_(std::move(graph)) {}
