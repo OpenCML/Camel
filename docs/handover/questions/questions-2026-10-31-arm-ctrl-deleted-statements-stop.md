@@ -62,3 +62,15 @@ PROBE-LIVE nodes=370 live=27 deadStatements=19 ids=99,105,112,147,160,174,188,19
 - 若"靠区域归属"：请判"臂的入口与范围该由什么定"——现在 `BranchArmEntries` 取"臂区域在计划序里的第一个节点"，而计划序本身又来自 `live`。
 
 **这一问不能用"补齐快照"或"重录 golden"绕过**：8 行与 2 行是两种行为，不是两种记录。
+
+## 补一次：那 19 条落在哪个臂的范围里
+
+由构造可以确定，不需要再跑一遍：
+
+- `buildExecPlan`（`src/execute/exec_plan.cpp:781`）的 `plan->topo` 就是 `computeExecutionOrder` 的返回值，而 `topoIndexByRef`（同文件 794-797）只给 `topo` 里的节点编号，其余一律 `kNotInPlan`。
+- `BranchArmEntries`（`src/execute/graph_runtime_support.cpp:700-718`）只遍历 `topoOrder`，臂的 `[entry, tail]` 是**计划序里的下标区间**。
+- 那 19 条不在 `live` 里，就不在 `topo` 里，**因此不在任何臂的 `[entry, tail]` 内，也没有任何 BRCH 的跳转目标覆盖它们**：19 条全部如此，0 条在臂内。
+
+**换句话说**：它们不是"在某条臂里而没跑到"，是**没有任何臂认领它们**——它们从计划里就不存在。"有同步前驱"这件事在 `live` 这一关就被用完了，`BranchArmEntries:707-711` 那句"臂的节点排在 BRCH 之前就跳过"根本没有机会被问到。
+
+**补种子也不跑的道理就在这里**：`live` 补上它们，它们进了 `topo`，但 19 条语句所在的区域在那张计划序里没有 BRCH 覆盖它们（臂的入口按区域取，见同一处的注释），于是"进了计划、仍然没人负责让它跑"。**它们缺的不是"被算作要跑"，是"有人负责让它跑"。**
