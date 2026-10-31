@@ -4276,7 +4276,6 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     }
     std::vector<node_handle_t> capturedWrites;
     for (const CapturedUse &use : captured) {
-        orderAfterLastWriter(use.variable, targetNode);
         if (use.written) {
             capturedWrites.push_back(use.origin);
         }

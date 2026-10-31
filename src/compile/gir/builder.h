@@ -2255,8 +2255,6 @@ class Builder {
     void recordWrite(node_handle_t variable, node_handle_t writer) {
         recordWrite(variable, writer, false);
     }
-    // Orders `node` after the last writer of `variable` in the current graph.
-    void orderAfterLastWriter(node_handle_t variable, node_handle_t node);
     // ---- The conservative writer set (design principles 3.1, 3.5) ---------------------------
     // A call through a function value has no callee at the call; which variable it writes is not
     // in its type yet. So the variables some function of the program writes are counted as its

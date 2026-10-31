@@ -800,28 +800,6 @@ bool Builder::hasValueVersion(node_handle_t variable) {
     return isCallNode(*modifier);
 }
 
-void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
-    // A control input, and it has to stay one until the read gets the data edge it is owed: for
-    // a call that reads a captured `var` this is the edge that makes the write the read uses
-    // execute (design principles 3.5, F3), and an order edge would leave the read with the value
-    // from before it. The two uses of this helper are one link today, and telling them apart
-    // needs that data edge. The read is a data edge from the nearest write and writes are
-    // ordered by order edges -- design principles 3.5 (a write through a captured variable is a
-    // write to that cell, tracked where it happens).
-    //
-    // A write that produced a version of its own has that data edge already: the read takes the
-    // version, and the control input this helper used to stand in for it is gone with it
-    // (Builder::valueVersionOf).
-    if (hasValueVersion(variable)) {
-        return;
-    }
-    if (auto modifier = modifierOf(variable); modifier.has_value()) {
-        if (sameGraph(*modifier, currGraph_) && shouldAddSyncCtrlLink(*modifier, node)) {
-            linkNodes(LinkType::Ctrl, *modifier, node);
-        }
-    }
-}
-
 std::any Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     std::any resolved = resolveDRefNode(gct);
     // The name of a rule's binding function is not a function value: the rule is not a `Rule`
