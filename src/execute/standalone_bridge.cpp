@@ -77,14 +77,17 @@ case Value::Kind::IntArray: {
                 // A shape (or any other int array) as the runtime holds it: an `int[]`. It is built
                 // here rather than in the generated code so the program never needs the runtime's
                 // value layout -- the array is the runtime's own, made with its own allocator.
+                // `::Array` spelled out: bridge.h brings in camel::standalone::Array, the program's
+                // array, which is another type under the same name.
                 ArrayType *arrayType = ArrayType::create(Type::Int64());
-                Array *array = Array::create(camel::core::mm::autoSpace(), arrayType, v.ints.size());
+                ::Array *array =
+                    ::Array::create(camel::core::mm::autoSpace(), arrayType, v.ints.size());
                 for (size_t i = 0; i < v.ints.size(); ++i) {
                     array->set<camel::core::rtdata::Int64>(i, v.ints[i]);
                 }
                 std::fprintf(stderr, "bridge: IntArray kind=%d n=%zu\n",
                              static_cast<int>(v.kind), v.ints.size());
-                slots_.push_back(toSlot<Array *>(array));
+                slots_.push_back(toSlot<::Array *>(array));
                 types_.push_back(arrayType);
                 break;
             }
@@ -182,7 +185,7 @@ OperatorFault describe(const camel::core::error::RuntimeFault &fault) {
 /// one every reader of the slot (the printer included) takes a tensor for. A value that is not an
 /// array states no type this side can read, and the printer falls back to the object's own.
 const Type *typeOfValue(camel::core::rtdata::Object *object) {
-    auto *array = dynamic_cast<Array *>(object);
+    auto *array = dynamic_cast<::Array *>(object);
     if (array == nullptr) {
         return nullptr;
     }
