@@ -83,7 +83,7 @@ JvpGraph buildJvpGraph(
     const GraphId member = group.reserve(
         "jvp_of_" + std::string(function->name()), "jvp_of_" + std::string(function->name()));
     {
-        auto &draft = group.draft(member);
+        auto &draft = group.transaction(member).edit();
         draft.setFuncType(signature);
         const gc_node_ref_t value =
             draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));

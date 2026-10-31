@@ -1194,4 +1194,8 @@ HANDLE_PROBE refused: InvalidArgument
 
 **没有新造一处 `borrow`**：这一笔改掉的每一处，调用者手上本来就有事务。
 
+**一处漏了的调用者**：`GraphDraftGroup::draft` 改名之后，`modules/transforms/jvp.cpp:86` 还是 `group.draft(member)`——那一笔提交时这个文件在我这一支里还不存在（`origin/develop` 后来才带来），合成闸门的构建当场就停了。补一行 `auto &draft = group.transaction(member).edit();`。全树的调用者 1 处（`modules/transforms` 1、`src/execute` 0）。
+
+**一条判据（协调者给的一句）**：**「删掉一个访问器的时候，先 `grep` 它的调用者——库里的 API 不是只有自己在用。」**
+
 **一条判据（协调者给的一句）**：**「`borrow` 不是降层，是把引用挪到另一个函数里——降层只有一种：让人手里本来就有那个东西。」**
