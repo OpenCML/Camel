@@ -159,6 +159,44 @@ PROBE jvp_div rhs GraphId=75 name=rulesets.jvp_div__rhs<float> nodes=4
 
 页首那句“找右图里那个调用节点”要按这个读数修正：**桥是“拿到右侧图”，不是“拿到图里的调用节点”。**
 
+## 判据：方向与形状不是一回事
+
+> **裁定给的是方向，读数给的是形状；桥是“拿到右侧图”，不是“拿到图里的调用节点”——差这一句，能让
+> 下一个人在 `Pattern` 里找半天 Call。**
+
+裁定说“把右侧图实例化出来调用”，方向没错，但它没说“那是一条边还是一张图”。读数说的是形状：
+`Pattern::Kind` 里没有 Call，右侧图本身就是被调用的那段代码，所以替换手里要攥的是 `GraphId`
+（`64`/`75`），不是某个节点指针。**方向对了不等于落点对了**；每个跨层的地方都要这样对一次读数。
+
+## 第一个形态：图建出来了，但还没有地方住
+
+`modules/transforms` 里写了一个 pass `transforms::reinterp`：走遍程序里每个“由算子组成”的函数，
+为每个函数在自己的 `GraphDraftGroup` 里预留一张图、建出来、打印 `GraphId` 与节点数。手工跑：
+
+```
+REINTERP target=f primitives=3 other=2 graph=49 nodes=1
+REINTERP target=main primitives=1 other=4 graph=50 nodes=1
+5.5
+```
+
+**建得出来**（`graph=49`、`nodes=1`），primitives 也数对了（`f = x*x + 3/x` 是乘、加、除三个，
+两个常数不算）。它还不是替换：图里只有一个 port 直接接到输出——**先证“建得出来”，再证“建对了”**。
+
+**但它进不了提交**，卡在登记簿上，这条留给作者判：
+
+- `declaration.guard_script`：注册了 pass 就必须在模块的 `.cml` 里声明它，否则
+  `a pass is registered and its module's .cml declares no function for it: transforms::reinterp`。
+- 写了 `stdlib/transforms.cml` 之后，`registry.migrations_stay_migrated` 要求
+  `scripts/stdlib-reference.mjs` 的 `MODULES` 里有一条 `transforms`。
+- 那条一加，`--verify-ops` 就红：`MODULES lists 'transforms', but no module of modules/ registers
+  operators under that name`（`scripts/stdlib-declarations.mjs:470`）——**登记簿的单位是算子，
+  一个只注册 pass 的模块没有算子**。
+- 退到 `UNCHECKED_MODULES` 也不行：它要 `covered_by`，而 `--verify-ops` 看不见一个没有算子的模块。
+
+所以“pass-only 模块在登记簿里住哪”今天没有答案。我没有用 `registered: '<builtin>'` 去糊弄过去，
+也没有把 `GraphDraft` 写成 `auto` 去躲 `graph_draft_ledger` 的计数——**这两个都是让计数变成谎话**。
+工作树已退回 `5db161bc2`，一个红的提交都没留。
+
 ## 验收（缺一步不算完）
 
 1. **前向**：`f(x) = x*x + 3/x` 在 `x = 2` 处，`f = 5.5`，`f' = 4 - 0.75 = 3.25`。两个数都要打出来。
