@@ -668,7 +668,7 @@ void registerBuiltinOperatorTraits() {
     // Creating and reading a variable changes nothing outside the program's variables.
     registry.set(":var/new", {.stateOnly = true});
     registry.set(":var/get", {.stateOnly = true});
-    registry.set(":var/after", {.stateOnly = true});
+    registry.set(":var/after", {});
     registry.set(":var/peek", {.stateOnly = true});
     registry.set(":var/take", {.stateOnly = true});
     // The in-place element set of a path assignment (Builder::pathAssignmentOf) writes the

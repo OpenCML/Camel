@@ -673,7 +673,7 @@ node_handle_t Builder::valueVersionOf(node_handle_t variable) {
         // variable's new version: the read takes `:var/after(cell, call)`, which is the cell as it
         // stands after that call, and the edge from the call is what makes it run (3.1). Whatever
         // the call returns -- nothing, or a value of its own -- is not read here.
-        if (nodeKindOf(*modifier) == camel::runtime::GCNodeKind::Call) {
+        if (isCallNode(*modifier)) {
             return variableAfterCall(variable, *modifier);
         }
         return nullptr;
@@ -692,10 +692,18 @@ node_handle_t Builder::valueVersionOf(node_handle_t variable) {
     // parts of the call's value say nothing about it: the parts come from the callee's
     // captured-value table, and a write recorded through a function value has no row there. The
     // call is then the variable's version as a whole: `:var/after(cell, call)`.
-    if (nodeKindOf(*modifier) == camel::runtime::GCNodeKind::Call) {
+    if (isCallNode(*modifier)) {
         return variableAfterCall(variable, *modifier);
     }
     return nullptr;
+}
+
+/// A call, whichever node kind it is drawn with: `Call` names a call through a function value and
+/// `Func` a call of a function the graph names (the callee is the node's operator), and both are
+/// the write a captured variable takes (recordWrite, throughCallee).
+bool Builder::isCallNode(node_handle_t node) {
+    const auto kind = nodeKindOf(node);
+    return kind == camel::runtime::GCNodeKind::Call || kind == camel::runtime::GCNodeKind::Func;
 }
 
 void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {

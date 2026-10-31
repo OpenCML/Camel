@@ -2488,6 +2488,9 @@ class Builder {
     /// The variable as it stands after `call`: `:var/after(cell, call)`, the version a read takes
     /// when the call that wrote the variable is a call through a function value (valueVersionOf).
     node_handle_t variableAfterCall(node_handle_t variable, node_handle_t call);
+    /// A call, whichever node kind draws it: `Call` for a call through a function value, `Func` for
+    /// a call of a function the graph names.
+    bool isCallNode(node_handle_t node);
     /// The group of an operator the compiler emits itself (`oper::EnumMake` and the like): the
     /// built-in module registered it; an id is fixed at start-up, the group when that module is
     /// loaded, which is before any module of a program is compiled.
