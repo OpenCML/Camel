@@ -90,6 +90,7 @@
 - 拒绝理由里的主语就是这条边界的名字：语言、后端、还是我们。一句 `unsupported` 三种主语读起来一样，收尾却各不相同——语言的进“不支持”，后端的进“这个目标没有”，我们的进“待做”。所以张量拒绝元素类型时，句子里要有主语（`modules/tensor/dtype.h` 的 `noTensorElement`），复数的元素在这条规则之外等裁定，不许顺手归进任何一类。
 - “语言没有”是最容易滥用的一个筐——用它之前先指出一条语言规定，指不出来就是“我们没做”。
 - 改一句话之前，先 grep 谁在断言这句话——`test/` 下面不只是用例，还有计划里的期望。改名那天我 grep 了 `test/plans/*/*.toml` 与 `test/cases/*/*.cml`，漏了 `test/plans/feat/modules/tiles.plan.toml`（两层深）、`test/cases/modules/tiles/plan_check.cpp`（不是 `.cml`）和一行用例注释，于是“0 命中”的结论是假的：计划里的 `expect_stdout_contains`、`assert(...)` 和 C++ 检查都是断言，rename 与它的期望必须在同一笔里改。
+- `grep` 的结论要带上口径：搜了哪几个目录、哪几种扩展名——口径不写，“0 命中”就是假结论。
 
 
 ---
