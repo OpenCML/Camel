@@ -209,3 +209,14 @@ RESOURCES node main 15 :var/get: read variable (node 14); result may_alias 0
 **期望这一侧**：全量计划里写死 `ordered by control` 的有 **8 行**（`resources.plan.toml` 7 行、`effects_syntax.plan.toml` 1 行），写死 `ordered by data` 的 **7 行**。这 8 条控制序对应的对，按上面的分类**全部落在"两端不同资源"或"同一版本"**，**没有一条是"不同版本"那 9 对**——所以改口径**不牵动任何一条 `ordered by control` 期望**；会变的只有那 9 对所在的期望行（其中一半还没重录、仍写着旧号）。
 
 **判据**：**改一条口径之前，先量它会牵动多少条期望——代价是裁决的一半。**
+
+## 11. 折回格子漏了一种算子
+
+`Resolver::originOf` 本来只跟 `Same(k)` / `View(k)` 往后折，`may_alias(k)` 不算——可 `:var/get` 和 `:var/take` 的实参就是它读/搬的那个东西（格子或它的某个版本），它们的 `result may_alias 0` 是给优化器的"不保证同一对象"，对账本却是同一对象。补上这两种算子的折返之后：
+
+- `:var/take` 的实参不再停在一个值节点上，`short` 的 `rmw object (node …)` 折到了那个格子。
+- `array:sort_l_in_place` 落到具体格子上，`main` 的 footprint 里的 **`rmw object (any)` 消失**（原来"可能有任意对象"现在说得出来是哪一个）。
+- **`unordered` 的条数没变**：改前 1 条（`main 15 16`），改后仍是 1 条。这条折叠不是那对 `unordered` 的解药，是另一处的漏写。
+- `core` 的报错从 `missing: RESOURCES node main 19 :var/take: rmw variable (node 18); result may_alias 0` 变成 `missing: RESOURCES footprint main … rmw object (any); external`——红法换了，原因是 footprint 少了一项、期望还写着它。
+
+**判据**：**折回格子漏了一种算子，看起来像"口径不对"；先把折返补全，再谈口径——否则会把一个漏写的分支说成一次设计冲突。**
