@@ -108,37 +108,53 @@ std::cpp  12 33 / abc / 5 12 12
 后面的 `n`），改成**一次左到右解码**；`"x\\ny"` 旧读法是 `\` 加一个真换行（进了 JS 就是行继续），新读法是
 `\` 和 `n` 两个字符。
 
-## 六、`std::cpp` 还缺哪些翻译：一次数清（3186 个程序）
+## 六、`std::cpp` 还缺哪些翻译：一次数清（3195 个程序）
 
-`test/cases/**/*.cml` 全部 3186 个，每个跑一遍 `std::cpp`，把"VM 接受、`std::cpp` 拒"的程序按诊断里的
-算子归类（`… has no translation in std::cpp yet` 会说出是哪一个）：
+`test/cases/**/*.cml` 全部 3195 个，每个跑一遍 `std::cpp`，把"VM 接受、`std::cpp` 拒"的程序按诊断里的
+算子归类。
 
-| 算子 | 被拒程序数 | 一个最小程序 |
-| --- | ---: | --- |
-| `tensor:reshape` | 270 | `test/cases/definitions/check.cml` |
-| `autodiff:grad` | 72 | `test/cases/definitions/grad.cml` |
-| `tensor:ones` | 39 | `test/cases/modules/nn/tensor_smoke.cml` |
-| `tensor:zeros` | 32 | `test/cases/perf/mlp_step.cml` |
-| `:op/fail` | 32 | `test/cases/opt/never_exit/fail_last.cml` |
-| `tensor:load_npy_f32` | 28 | `test/cases/modules/tiles/math_ulp.cml` |
-| `rand:uniform_array` | 23 | `test/cases/modules/nn/lr.cml` |
-| `autodiff:with_grad` | 16 | `test/cases/modules/autodiff/math_sqrt.cml` |
-| `:op/mem_blocks` | 10 | `test/cases/feat/mm/mem_blocks.cml` |
-| `tensor:sum` / `tensor:matmul` / `rand:shuffle_l` | 7 各 | `loops/iterate_tensor.cml` / `modules/onnx/entry/tuple.cml` / `para/core/merge_sort.cml` |
-| `tensor:shape` / `env:get_cwd` | 6 各 | `compile/entry_args/npy_values.cml` / `modules/std/env/basic.cml` |
+**先说尺子，因为它错过一次。** 最初那次普查只认两句话——`has no translation in std::cpp yet` 和
+`std::cpp does not translate yet`——于是漏掉了第三种说法（`on values std::cpp does not translate **it
+for** yet`，约 30 个），也把**类型层面**的拒（`converts a value of type 'f32' to 'f32[..]'`、
+`returns a value of type 'Json'`、`'\'Device<f32[..]>\''` 这些）压成了"另有 11 个"。现在按**一句**
+数：输出里有 `TranslationRefused` 就算被拒，一个程序一行。读数不是 683，是 **999 / 3195**（31%）。
 
-读数：**683 → 674 → 666 → 661 → 638 → 629** 个程序翻译不出来（第一笔把 `:op/set_index_in_place` 那 9 个修掉，
-第二笔把 `:op/set_field` / `:op/set_index` 那 5 个修掉，第三笔把 `:op/idx_take` 4 个、`:struct/last_arr`
-2 个修掉，第四笔把 `:op/fail` 那 32 个修掉——四行进表时共 47 个，现在全归零，其中 23 个真的翻译出来了，
-9 个换了桶；第五到七笔就是那 9 个换去的三个算子，见六之二）。按族：
-tensor 414、autodiff 90、rand 34、核心算子（`:op/*`）10、`:struct/*` 0。另有 11 个是类型层面的拒
-（`std::cpp does not translate yet`），4 个**让翻译器崩掉**（segfault，见下）。
+| 算子 | 被拒程序数 |
+| --- | ---: |
+| （诊断没点名任何算子：类型层面） | 400 |
+| `autodiff:grad` | 88 |
+| `onnx:export_model` | 78 |
+| `tensor:sum` | 45 |
+| `tensor:ones` | 42 |
+| `autodiff:with_grad` | 40 |
+| `tensor:zeros` | 34 |
+| `tensor:load_npy_f32` | 31 |
+| `rand:uniform_array` | 24 |
+| `tensor:multiply` / `tensor:shape` / `tensor:matmul` / `:op/slice_sub` / `:op/mem_blocks` | 15 / 12 / 10 / 10 / 10 |
+| `tiles:inspect` / `tiles:source` / `tensor:add` / `rand:shuffle_l` | 8 / 7 / 7 / 7 |
+| `env:get_cwd` / `tensor:full` / `array:sum_l` | 6 / 5 / 5 |
 
-这张表把两种东西分开了：tensor / autodiff / rand / tiles 是**整个子系统**（bridge 不运数组与张量，
-`std::cpp` 本来就不打算翻它们，要动是另一个决定）；`:op/*`、`:struct/*` 那时 52 个才是**写出器的洞**，
-现在只剩 `:op/mem_blocks` 10 个（交给了 gpu 那条线）。
-洞里最大的是 `:op/fail`（32 个）：我原以为它要 `never` 贯穿整个 emitter（分支的一个臂、`let` 的右值、
-`attempt` 的边界），那是个多笔的活——**错了**，见下。
+其余每个 ≤ 4 个，最长的一串是 `tiles:*`、`tensor:*` 和几个模块的 `fs:`/`io:`/`re:`。tensor 一族合计
+约 250、autodiff 128、onnx 79、tiles 24、rand 35；核心算子（`:op/*`）现在只剩 `:op/slice_sub` 10
+（rank≥2 的值）、`:op/idx_arr` 4、`:op/idx_take` 1、`:op/mem_blocks` 10（gpu 那条线）。
+**4 个崩**（`rc=139`）已修成 0，见下。
+
+这条读数线（旧尺子，只数点名算子的那两句话）是 **683 → 674 → 666 → 661 → 638 → 629 → 593**：
+第一笔 `:op/set_index_in_place` 9 个，第二笔 `:op/set_field` / `:op/set_index` 5 个，第三笔
+`:op/idx_take` 4 个 + `:struct/last_arr` 2 个，第四笔 `:op/fail` 32 个（23 个真翻译、9 个换桶），
+第五到七笔是换桶那 9 个的三个算子（六之二），第八笔 `tensor:reshape`（六之三）。**这条线只用来比
+趋势**；绝对值以 999 为准。
+
+这张表把两种东西分开了：tensor / autodiff / onnx / tiles / rand 是**整个子系统**（bridge 不运数组与
+张量，`std::cpp` 本来就不打算翻它们，要动是另一个决定）；`:op/*` 和 `:struct/*` 才是**写出器的洞**。
+
+**表头那一格是个假的最大值。** 270 个程序被记在 `tensor:reshape` 名下，但按原文看是 7 句、且只有一句
+是真关于 reshape 的：`f32[]` 182、`float[]` 80、`int[]` 5、`fN[][]` 1，其余 2 句在匿名函数和 `check`
+里。更关键的是**它们不是同一个洞**：把 reshape 翻出来之后，只有 **6 个**真的翻译出来了，**264 个换了
+桶**——`onnx:export_model` 78、`tensor:sum` 38、`autodiff:with_grad` 24、`autodiff:grad` 16、类型层面
+15、`tensor:multiply` 10、`:op/slice_sub` 9、`tiles:*` 15……因为拒绝是按"图里第一个走到的算子"报的，
+reshape 只是那条流水线上最先碰到的那个。**一个格子 270 个程序，真正属于这个格子的只有 2 个**
+（修完之后仍停在 `tensor:reshape` 上的只有 2 条）。
 
 **4 个崩**（`rc=139`）：`compile/contextual_empty_array/all_literal.cml`、
 `contextual_empty_array/named_sibling.cml`、`compile/semantic/recursive_struct_array.cml`、
@@ -297,7 +313,32 @@ std::cpp  同上，逐字节相同
 判据进页：**一个洞归因到一处之后，换桶的那几个不算修好，只算没被它挡住——报数时要把"真的翻译了"与
 "不卡在这了"分开。**
 
-## 七、九条判据
+## 六之三、`tensor:reshape`：不是张量计算，是"这条平铺的跑线"换个说法
+
+`reshape` 的语义是"同样的元素、行主序、换个形状"（`modules/tensor/kernels/layout.cpp`）。这个后端
+**不留形状**（`rt::Array` 就是一条跑线），所以：
+
+- **目标是一维**（`reshape<[3]>(xs)`）：值、打印出来的样子、能做的操作全都不变，**就是它自己**。这条
+  能翻，而且 `xs->reshape<[n]>` 跟 `xs->reshape<[m]>` 的差别只有"元素数对不对"。
+- 算子真正做的比较只剩**元素数**：目标若不是同一个数，运行时在**读任何东西之前**就报
+  `TensorDimensionMismatch`，消息里带输入自己的形状（`[3]`）和目标（`[2]`）。这一半照抄了：
+  `rt::reshape(xs, count, site)`，`count` 来自目标类型里写死的长度。
+- **目标是多维**（`reshape<[2, 2]>`）：形状**是能被看见的**——`println` 印出来的是
+  `[[1.0, 2.0], [3.0, 4.0]]`，不是 `[1.0, 2.0, 3.0, 4.0]`。这条**翻不了**，不是没写规则，是这个后端
+  没有形状可印。所以规则只在目标一维时接，多维仍走 bridge。
+
+一笔（`984b1ffac`）：`tensor:reshape` 那一格 **270 → 0**，真翻译出来 **6 个**，264 个换桶（分布见六）。
+用例 `reshape_flat.cml` 三行相同、第四行是那个故障：
+
+```
+std::fvm  [1.0, 2.0, 3.0] / [4.0, 5.0, 6.0] / [1.0, 2.0, 3.0] / error[RuntimeDiag::TensorDimensionMismatch]: ... [3] -> [2].  rc=1
+std::cpp  同上，逐字节相同
+```
+
+判据进页：**表头那一格按"被拒程序数"开工之前，先按"拒绝句数"看一眼——270 个程序可能只是两句话；
+而且这两句话还可能是两条流水线的第一句话。** 这次的 270 是 7 句、1 个真洞、2 个真属于它的程序。
+
+## 七、十条判据
 
 > **裁定也可能基于过时的读数：拿到裁定先去 develop 上复现一次；不复现，就先把前提写下来，再谈要不要改。**
 
@@ -316,3 +357,5 @@ std::cpp  同上，逐字节相同
 > **同一个缺口的第二个实例，先照抄第一个的形状，再谈抽象；照抄的时候只抄语义，不抄指针。**
 
 > **一个洞按"程序数"报完，还要按"难点数"报一次：32 个程序可能只是三处贯穿。**
+
+> **表头那一格按"被拒程序数"开工之前，先按"拒绝句数"看一眼——270 个程序可能只是两句话。**
