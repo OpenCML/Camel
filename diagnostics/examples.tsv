@@ -277,6 +277,7 @@ SemanticDiag::WithDefaultNotConstant	test/cases/compile/with_defaults/default_no
 SemanticDiag::WithDefaultWrongType	test/cases/compile/with_defaults/default_wrong_type.cml
 SemanticDiag::WithPackNeedsNativeDeclaration	test/cases/compile/prelude_signatures/with_pack_with_body.cml
 SemanticDiag::WithParameterAfterDefault	test/cases/compile/with_defaults/after_default.cml
+SemanticDiag::YieldRequiresStreamHead	test/cases/compile/stream/yield_head_no_stream.cml
 SyntaxDiag::AngleCloseAfterSpace	test/cases/parse/syntax/angle_close_after_space.cml
 SyntaxDiag::AsRightSideIsType	test/cases/parse/rulings/stream_type_as_interval.cml
 SyntaxDiag::ComparisonAcrossLines	test/cases/compile/surface/angle_then_name_line.cml

@@ -8720,7 +8720,18 @@ A function whose body writes 'yield' hands out a stream, and this function's hea
 A body that writes 'yield' is a generator (design principles 5.4): its head writes the stream type it hands out, 'func f(xs: T): U.. sync with one yield in it', and a pull answers the next element and, when the body ends, null. Writing 'yield' in a body whose head writes something else gives that body no way to hand out its elements one at a time.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/stream/yield_head_no_stream.cml`, run as `camel test/cases/compile/stream/yield_head_no_stream.cml`)
+
+```camel
+func g() sync {
+    yield 1
+}
+
+func main(): int sync {
+    g()
+    return 0
+}
+```
 
 ### IgnoredSideEffect
 
