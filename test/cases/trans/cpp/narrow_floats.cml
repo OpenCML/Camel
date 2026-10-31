@@ -16,8 +16,10 @@
  *   -0.0           -0.0    -0.0    a negative literal keeps its sign bit, and its text is `-0.0`
  *
  * This case is also the one that used to be `refuse_narrow_float`: bf16 and f16 were refused as an
- * element type this back end did not have, and now they are types it writes. It pins storage and
- * printing here; arithmetic, comparison and conversion join it as their rules land.
+ * element type this back end did not have, and now they are types it writes. It pins the four
+ * things such a type owes -- storage and its text, arithmetic rounded once, comparison of the
+ * widened values, and conversion in both directions -- in one program, so that the two back ends
+ * are compared on one run rather than on four.
  *
  * What it adds to the interpreter's own cases (`test/cases/modules/stdlib/reduced_*.cml`) is the
  * back end: the C++ file built from it must print these lines byte for byte as std::fvm does
@@ -54,6 +56,12 @@ func main(): int sync {
     println(bf16(1.0) / bf16(3.0), bf16(1.0) + bf16(1.0))
     println(h + g, g * g, h * h, -h)
     println(f16(1.0) / f16(3.0))
+
+    // Comparison is the comparison of the widened values: the two zeros are equal, and a value is
+    // equal to the element it rounds to, not to the f32 the literal was written as.
+    println(a < b, a <= b, a == b, a != b, b > a, b >= b)
+    println(bf16(0.0) == bf16(-0.0), a == bf16(0.1))
+    println(h < g, h == f16(0.1), h != g)
 
     // A written conversion rounds once into the element type, and reading one as a wider number is
     // exact: the f32 of a bf16 keeps every bit it had.

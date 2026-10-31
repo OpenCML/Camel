@@ -30,6 +30,7 @@
 
 #include <bit>
 #include <cmath>
+#include <compare>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -150,7 +151,8 @@ template <> inline float halfFloatFromBits<F16Format>(uint16_t bits) {
  * Arithmetic on two of them is computed in f32 and rounded once into the element type, which is the
  * one arithmetic path of the element type: an operator returns the rounded sum, difference, product
  * or negation. Division is `rt::div`, because dividing by zero is a fault and an operator cannot
- * report one (num.h).
+ * report one (num.h). Comparison is the comparison of the widened values, so a NaN equals nothing
+ * and every order against it is false.
  */
 template <typename Format> struct Half {
     uint16_t bits = 0;
@@ -184,6 +186,10 @@ template <typename Format> struct Half {
     friend Half operator-(Half a, Half b) { return Half(a.toFloat() - b.toFloat()); }
     friend Half operator*(Half a, Half b) { return Half(a.toFloat() * b.toFloat()); }
     friend Half operator-(Half a) { return Half(-a.toFloat()); }
+    /// Equality and order of the widened values; the partial order keeps a NaN unordered, so `<`,
+    /// `<=`, `>` and `>=` are false of it exactly as the interpreter's comparison is.
+    friend bool operator==(Half a, Half b) { return a.toFloat() == b.toFloat(); }
+    friend std::partial_ordering operator<=>(Half a, Half b) { return a.toFloat() <=> b.toFloat(); }
 };
 
 /// The two types the language writes.
