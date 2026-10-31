@@ -33,3 +33,4 @@
 - **一条诊断消失之后，它原来的调用点要能一眼认出是缺陷路径**：否则下一个人会把内部错误当成语言面的拒绝（`reportUnbuiltShape` 的八个调用点就是这条的实例：名字与措辞都指向"缺陷"，不指向"不支持"）。
 - **"还没实现"和"这个目标没有"是两句话**：前者是缺口，后者是能力边界——混着说，普查就会替一个不存在的缺口排工。`std::mem::blocks()` 读运行时块空间（作者裁定 2026-10-31：A，拒绝且说实话），措辞里**去掉了 "yet"**，改成"a program std::cpp writes has no runtime block space of its own: the counters are not available on this target"；用例同时钉 `expect_output_not_contains = ["yet", "has no translation"]`，那条不变量就是钉子。普查里这 10 个程序单列成"目标不具备"，不算缺口。
 - **一句拒绝、一个类型、39 个程序的格子，先按程序数排进计划，再按句数派工**——两个数都要，但派工看后者。`tensor:ones`(39)+`tensor:zeros`(32) 两格各 1 句、1 类型，**真翻译 0、换桶 71**：原句把 `int[]`（形状参数）说成"没有翻译"，而数组是翻译得了的，缺的是 tensor 值本身——**换桶就是把拒绝挪到它真正缺的东西上**。
+- **一个缺口落在 270 个程序上时，先问这 270 个是不是都在等同一个类型**；是的话，**派工单位是类型，不是程序**（`tensor:ones/zeros/load_npy/reshape` = 369 个程序，`Tensor` 在 `src/passes/trans/cpp` 里出现 0 次——一件活的 369 张脸）。
