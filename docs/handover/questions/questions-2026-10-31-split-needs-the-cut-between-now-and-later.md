@@ -44,3 +44,20 @@ type Split<F> = ((..ParamsOf<F>) => (ResultOf<F>, ResidualsOf<F>), (ResidualsOf<
 按**甲**做：`split` 的签名写成 `func split::<F>(f: F): Split<F>`，`Split<F>` 用上面的两半定义；
 直线代码的第一版只处理"普通参数里没有依赖 `with` 的"情形（依赖 `with` 的值也归到"以后才有"）。
 若作者选**乙**，回退的是那一层签名与切口的取法，前一半/后一半的走法不变。
+## 落直线档之前，先把"两半能不能造出来"量了（裁决：能，但差一层）
+
+`modules/transforms` 现有的机制够造函数值：`GraphDraftGroup::reserve` 开一个成员，`draft.addPortNode`
+放参数口、`draft.addNode(DraftNodeInit)` / `draft.addCallNode` 放节点、`draft.setOutputNode` 定出口，
+`group.encode()` 之后 `group.encoded(member)` 拿到的就是一个**函数值**（`jvp.cpp` 的 `buildJvpGraph`
+今天是这么造的，只是它把出口直接接到参数口上，还没有搬函数体的节点）。
+
+所以直线档的两半是造得出来的：`first_of_f` 的端口 = "现在就有"的参数，节点 = 不依赖"以后才有"的那一段；
+`second_of_f` 的端口 = 残差 + "以后才有"的参数，节点 = 剩下的一段。**差的不是表示，是"把原函数体的
+每个算子节点搬进新草稿"这一趟走法**——`addNode` 收的是 `DraftNodeInit`（算子的 URI、类型、输入口），
+原图里每个节点要在这一趟里被读出来、按残差切开、再放进对应的成员。这一趟就是直线档的全部工作，
+也是第一版必须先写的东西；没有它，签名落下去也只是一个空壳（`jvp.cpp` 里那句 "Building a graph is not
+transforming one" 说的就是这件事）。
+
+**这一笔没有实现行，也不贴"应该能跑"的数**：搬节点这一趟没有写完之前，`f(x,y) = x*x*y` 的两行数
+（前一半的残差、后一半的结果）是编不出来的。下一笔从"读一个函数的体、把节点搬进草稿"开始，
+读数的形状已经定好：`SPLIT first=<残差个数> second=<节点个数>` 一行，加两行值。
