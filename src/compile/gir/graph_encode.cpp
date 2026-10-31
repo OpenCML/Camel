@@ -422,7 +422,7 @@ class EncodeSession {
         prepared.runtimeId = freshIds_ ? freshIds_->allocate() : graph->graphId();
         // Every compiled graph has a frame layout, one without slots included.
         if (!graph->view().hasFrameLayout()) {
-            graph->draft().setRuntimeSlotTypes({});
+            graph->edit().setRuntimeSlotTypes({});
         }
         const auto sourceStaticSlots = graph->view().staticSlots();
         prepared.staticSlots.assign(sourceStaticSlots.begin(), sourceStaticSlots.end());
@@ -436,12 +436,12 @@ class EncodeSession {
         // Whether an effect was dropped beside it is reportDroppedEffects' to say, not this
         // structural check's. A gate that still waits -- on the sync chain's tail or on a control
         // input -- and one with no value input are not this case and keep their node.
-        graph->draft().dissolveUnorderedGates();
+        graph->edit().dissolveUnorderedGates();
 
         // The runtime graph is the part of the draft that its roots reach; the draft keeps the
         // rest (a rewrite need not have erased a node nothing reads) and the graph does not name
         // it.
-        prepared.liveNodes = collectLiveDraftNodes(graph->draft());
+        prepared.liveNodes = collectLiveDraftNodes(graph->view());
         CAMEL_LOG_INFO_S(
             "GIREncode",
             "Prepare compile graph '{}' reachable nodes={}.",
@@ -459,7 +459,7 @@ class EncodeSession {
             }
         }
         prepared.payloadShape =
-            describeDraftNativePayload(graph->draft(), liveNodesOf(prepared));
+            describeDraftNativePayload(graph->view(), liveNodesOf(prepared));
         CAMEL_LOG_INFO_S(
             "GIREncode",
             "Prepared compile graph '{}' with {} draft nodes.",
@@ -520,7 +520,7 @@ class EncodeSession {
             const auto *header = prepared.source->view().header(sourceId);
             ASSERT(header != nullptr, "Live source draft node cannot have a null header.");
             if (header->kind == GCNodeKind::Func) {
-                prepared.source->draft().setCalleeGraph(
+                prepared.source->edit().setCalleeGraph(
                     sourceId,
                     resolvePreparedGraph(prepared.source->funcTarget(sourceId))->runtimeId);
             }
@@ -688,7 +688,7 @@ class EncodeSession {
             }
         }
         auto *debugRecord = createGraphDebugRecord(source->name(), source->name());
-        recordDraftDebugData(debugRecord, source->draft(), liveNodesOf(prepared));
+        recordDraftDebugData(debugRecord, source->view(), liveNodesOf(prepared));
 
         const auto &deps = source->dependencyGraphs();
         const auto &subs = source->subGraphs();
@@ -846,7 +846,7 @@ class EncodeSession {
                     arena.nodeCount,
                     arena.payloadWordCount,
                     arena.edgeCount);
-                emitDraftNativePayload(source->draft(), arena, liveNodesOf(prepared));
+                emitDraftNativePayload(source->view(), arena, liveNodesOf(prepared));
                 CAMEL_LOG_INFO_S(
                     "GIREncode",
                     "Emit runtime payload finished for graph '{}'.",
