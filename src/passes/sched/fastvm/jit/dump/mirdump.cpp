@@ -54,8 +54,8 @@ static const camel::runtime::Program *applyMirDump(
     }
 
     for (const auto &[runtimeGraph, entryPc] : linked.offsetMap) {
-        ASSERT(runtimeGraph != nullptr, "JIT MIR dump requires a runtime graph.");
-        ASSERT(
+        GUARD(runtimeGraph != nullptr, "JIT MIR dump requires a runtime graph.");
+        GUARD(
             runtimeGraph->hasFrameLayout(),
             std::format("Graph '{}' has no finalized frame layout.", runtimeGraph->name()));
 
