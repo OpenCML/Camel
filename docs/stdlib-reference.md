@@ -79,6 +79,7 @@ Not in this reference: the profiler (`perf`).
 | [optim](#optim) | `import { ... } from optim` | Camel |
 | [autodiff](#autodiff) | `import { ... } from autodiff` | C++ |
 | [rulesets.jvp](#rulesets.jvp) | `import { ... } from rulesets.jvp` | Camel |
+| [rulesets.vmap](#rulesets.vmap) | `import { ... } from rulesets.vmap` | Camel |
 | [sim](#sim) | `import { ... } from sim` | C++ |
 | [onnx](#onnx) | `import { ... } from onnx` | C++ |
 | [built-in](#built-in-functions) | none |  |
@@ -114,6 +115,7 @@ Not in this reference: the profiler (`perf`).
 | [optim](#optim) | `import { ... } from optim` |  |
 | [autodiff](#autodiff) | `import { ... } from autodiff` |  |
 | [rulesets.jvp](#rulesets.jvp) | `import { ... } from rulesets.jvp` |  |
+| [rulesets.vmap](#rulesets.vmap) | `import { ... } from rulesets.vmap` |  |
 | [sim](#sim) | `import { ... } from sim` |  |
 | [onnx](#onnx) | `import { ... } from onnx` |  |
 
@@ -6661,6 +6663,51 @@ The forward rule of `/` on two 64-bit floats.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `div_jvp(6.0, 2.0, (1.0, 0.25))` gives `(3.0, 0.125)`
+
+<a id="rulesets.vmap"></a>
+
+## `rulesets.vmap`: how a batched transform lifts a value
+
+The `vmap` ruleset: what a batched value is, and how a primitive is written when every operand
+carries a batch (`docs/design/program-transforms/README.cn.md` 4.1, 5.4).
+
+    let rows = lift(xs);          // the batch of rows a function of one value takes
+
+`Lift<T>` is `RowsOf<T>`: the one value a primitive works on, with one dimension of unknown length
+in front of it (`stdlib/types.cml`), which is exactly the type `vmap`'s parameter has. A scalar
+`f32` lifts to the batch of `f32` rows (`f32[]`); a row `f32[3]` lifts to the batch of rows
+(`f32[?, 3]`). So a batched program is a program over the same values with one more dimension in
+front, and an elementwise primitive needs no new arithmetic for it: `bx + bw` is `x + w` applied
+element by element, which is the row-by-row application `map` writes out.
+
+Every rule here is `export`ed: the transform that reads this family is in another module, and a
+rule that is not exported is refused where it is imported.
+
+A rule's right side takes the *lifted* operands and answers the *lifted* result. For `jvp` that is
+"the tangents in, the tangent out"; for `vmap` it is "the batches in, the batch out". The
+elementwise tier is therefore one rule per primitive, each of them the primitive itself: the
+batching of an elementwise operator is that operator.
+
+This round writes the elementwise tier only. `matmul`, the reductions (`sum`, `sum_axis`, `mean`),
+`reshape` and the broadcasting moves need a rule each that says *which* axis the batch is on --
+`sum` over a batch sums each row, not the batch -- and they come next, in the same module, with
+`RowsOf` doing the work (`reshape` of `RowsOf<T>` is a reshape that keeps the batch dimension).
+
+Adding a rule changes docs/stdlib-reference.md; regenerate it with
+`node scripts/stdlib-reference.mjs --write`.
+
+#### `lift`
+
+```camel
+lift: (x: T) => Lift<T>
+```
+
+`x` lifted: a constant or a captured value becomes a batch of one row, which every rule
+broadcasts over the batch it meets (the elementwise operators of `tensor` take a value beside an
+array as that value at every element).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `lift(3.0)` gives `[3.0]`
 
 <a id="sim"></a>
 

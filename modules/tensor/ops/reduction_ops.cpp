@@ -46,6 +46,44 @@ using camel::core::error::RuntimeDiag;
 using camel::core::error::throwRuntimeFault;
 namespace k = camel::tensor::kernels;
 
+/// The element type a reduction answers, written once: the whole-tensor form and the axis form
+/// both read this rule (`wholeReductionDtype` and `reduceAxisInfer`), because two copies of it is
+/// how the two came to disagree about the mean of an integer. It is the kernel's own rule
+/// (`modules/tensor/kernels/reduce.cpp`), stated once: `argmax` and `argmin` answer the position,
+/// an `int64`; a bool `sum` and a bool `mean` answer the `int64` count, which is the one width a
+/// count has (design principles 5.1, 7.7) -- and no call reaches either, since `is_numeric`
+/// excludes `bool`; every other pair keeps the element type, `mean` included: `mean` answers `T`
+/// (design principles), so `mean([1, 2, 4])` is `2`.
+TypeCode reductionDtype(k::ReduceOp op, std::optional<TypeCode> dtype) {
+    if (!dtype) {
+        // The operand states no element type (the bare `Tensor` spelling). Such a value reads as
+        // `float` by the element-type rule (an unstated element type takes the array and literal
+        // rule, f64), so the answer is `float` -- the width this reduction answered with while its
+        // result type was `float`, which is what a caller of an unstated element type reads.
+        return TypeCode::Float64;
+    }
+    switch (*dtype) {
+    case TypeCode::Bool:
+    case TypeCode::Int32:
+    case TypeCode::Int64:
+    case TypeCode::Float32:
+    case TypeCode::Float64:
+    case TypeCode::BFloat16:
+    case TypeCode::Float16:
+        if (op == k::ReduceOp::ArgMax || op == k::ReduceOp::ArgMin) {
+            return TypeCode::Int64;
+        }
+        if (*dtype == TypeCode::Bool && (op == k::ReduceOp::Sum || op == k::ReduceOp::Mean)) {
+            return TypeCode::Int64;
+        }
+        // `max_axis` and `min_axis` keep a bool: an extreme of bools is one of them.
+        return *dtype;
+    default:
+        // No other element type is one this reduction answers for.
+        return TypeCode::Float64;
+    }
+}
+
 namespace {
 
 bool keepDimsArg(ArgsView &norm, size_t index) {
@@ -67,20 +105,7 @@ InferFn reduceAxisInfer(k::ReduceOp op) {
     return [op](const InferContext &ctx) -> std::optional<Type *> {
         const TensorFacts in          = ctx.facts(0);
         const bool keepDims           = ctx.has(2) ? ctx.constBool(2).value_or(false) : false;
-        std::optional<TypeCode> dtype = in.dtype;
-        if (op == k::ReduceOp::Mean) {
-            // A mean of floats keeps the element type (f64 stays f64, bf16 and f16 stay
-            // themselves and round once when the mean is stored); a mean of integers and bools
-            // has always been f32.
-            dtype = (dtype == TypeCode::Float64 || dtype == TypeCode::BFloat16 ||
-                     dtype == TypeCode::Float16)
-                        ? dtype
-                        : std::optional(TypeCode::Float32);
-        } else if (op == k::ReduceOp::ArgMax || op == k::ReduceOp::ArgMin) {
-            dtype = TypeCode::Int64;
-        } else if (op == k::ReduceOp::Sum && dtype == TypeCode::Bool) {
-            dtype = TypeCode::Int64;
-        }
+        std::optional<TypeCode> dtype = reductionDtype(op, in.dtype);
         // Without a constant keepdims flag the rank is only known when it cannot change.
         if (ctx.has(2) && !ctx.constBool(2)) {
             return tensorOf(dtype, std::nullopt);
@@ -97,7 +122,7 @@ template <k::ReduceOp Op> OpDef reduceAxisDef(std::string_view name, std::string
             {{"t", ParamKind::Tensor},
              {"axis", ParamKind::Int},
              {"keepdims", ParamKind::Bool, true}},
-        .resultDoc = "float[..]",
+        .resultDoc = "the tensor's element type",
         .infer     = reduceAxisInfer(Op),
         .kernel         = &positionally<reduceAxisKernel<Op>>,
         .traits         = {},
@@ -106,38 +131,11 @@ template <k::ReduceOp Op> OpDef reduceAxisDef(std::string_view name, std::string
     };
 }
 
-/// The element type the whole-tensor `sum` and `mean` answer: the rule of their axis forms
-/// (reduceAxisInfer), so the full form and the axis form agree on the element type the way they
-/// agree on the accumulation. A float element type keeps itself, an int64 or bool sum is int64
-/// (the exact accumulator), and a mean of an integer or bool element type is f32.
+/// The whole-tensor form's element type: `reductionDtype`, the one rule it shares with the axis
+/// form (`reduceAxisInfer`), so the full form and the axis form agree on the element type the way
+/// they agree on the accumulation.
 TypeCode wholeReductionDtype(k::ReduceOp op, std::optional<TypeCode> dtype) {
-    if (!dtype) {
-        // The operand states no element type (the bare `Tensor` spelling). Such a value reads as
-        // `float` by the element-type rule (an unstated element type takes the array and literal
-        // rule, f64), so the answer is `float` — the width this reduction answered with while its
-        // result type was `float`, which is what a caller of an unstated element type reads.
-        return TypeCode::Float64;
-    }
-    switch (*dtype) {
-    case TypeCode::Bool:
-        // A bool tensor is summed exactly in int64; a mean of bools has always been f32.
-        return op == k::ReduceOp::Mean ? TypeCode::Float32 : TypeCode::Int64;
-    case TypeCode::Int32:
-    case TypeCode::Int64:
-        // An integer sum keeps its element type and is the exact int64 accumulator truncated into
-        // it, which is what the axis form stores; a mean of integers has always been f32.
-        return op == k::ReduceOp::Mean ? TypeCode::Float32 : *dtype;
-    case TypeCode::Float32:
-    case TypeCode::Float64:
-    case TypeCode::BFloat16:
-    case TypeCode::Float16:
-        // Every float element type keeps itself: a sum rounds into it once, and a mean keeps
-        // f64, bf16 and f16 and answers f32 for f32 (the axis form's rule).
-        return op == k::ReduceOp::Mean && *dtype == TypeCode::Float32 ? TypeCode::Float32 : *dtype;
-    default:
-        // No other element type is one this reduction answers for.
-        return TypeCode::Float64;
-    }
+    return reductionDtype(op, dtype);
 }
 
 /// The accumulator converted into the result's element type: the one rounding of the
@@ -201,8 +199,17 @@ slot_t meanAllKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("mean", [&] {
         // The accumulation and the division are in f64, and the conversion into the element type
         // is the only rounding of the whole reduction — never a sum rounded to the element type
-        // and then divided again.
-        return elementTypedSlot(result, k::sumAll(t) / static_cast<double>(t->numel()));
+        // and then divided again. An integer element type takes the conversion `int(·)` already
+        // has (toward zero): `mean([1, 2, 4])` is `int(7 / 3) = 2`, which is the normative form
+        // (modules/math/mean.h), not a lost average.
+        const double mean = k::sumAll(t) / static_cast<double>(t->numel());
+        if (result == TypeCode::Int64) {
+            return camel::core::rtdata::toSlot(static_cast<int64_t>(mean));
+        }
+        if (result == TypeCode::Int32) {
+            return camel::core::rtdata::toSlot(static_cast<int32_t>(mean));
+        }
+        return elementTypedSlot(result, mean);
     });
 }
 
@@ -461,7 +468,7 @@ std::vector<OpDef> reductionOps() {
         .name      = "mean",
         .exports   = {"mean"},
         .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "the tensor's element type (f32 for an integer or bool one)",
+        .resultDoc = "the tensor's element type",
         .infer     = wholeReductionInfer(k::ReduceOp::Mean),
         .kernel    = &meanAllKernel,
         .traits    = {}});
