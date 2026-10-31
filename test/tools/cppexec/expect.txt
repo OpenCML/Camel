@@ -234,6 +234,10 @@ test/cases/trans/cpp/slice_rank.cml
 # the rounds are the first extent (not the element count), and a rank-3 value gives rank-2 planes.
 test/cases/trans/cpp/iterate_rows.cml
 
+# A literal's shape is the one it has even when its type names no extents: `[1.0, 2.0, 3.0] as float[]`
+# is a value of one dimension of 3 elements, so `shape` and `len` read [3] and 3.
+test/cases/trans/cpp/literal_open_shape.cml
+
 # A tensor the runtime builds: `tensor:ones` has a standalone translation that calls the runtime's
 # kernel and converts the value back into the shaped array its Camel type names (rt::Array), so the
 # program prints it with the same `println` as any array -- the one line below is std::fvm's, byte

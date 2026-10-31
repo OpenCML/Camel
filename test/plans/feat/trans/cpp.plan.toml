@@ -354,6 +354,17 @@ expect_output_contains = ["Translation pass 'std::cpp' refused the graph", "walk
 expect_output_not_contains = ["Segmentation fault", "UnknownInternalError", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+[[tests]]
+name = "literal_open_shape"
+desc = "A literal's shape is the one it has, whatever its type states. `float[]` names the element type and leaves the length to the value, so the type states no extent -- and the value is still 3 elements of one dimension, which `shape` and `len` read. The constant carries its extents (`rt::Array<double>{{1.0, 2.0, 3.0}, {3}}`); a literal of several dimensions carries the rows it had all along."
+kind = "behavior"
+case = "../../../cases/trans/cpp/literal_open_shape.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["{1.0, 2.0, 3.0}, {3}", "{4.0, 5.0}, {2}"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
 
 [[tests]]
 name = "enum_types"

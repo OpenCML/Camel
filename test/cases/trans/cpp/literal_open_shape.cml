@@ -1,0 +1,19 @@
+/**
+ * A literal's shape is the one it has, whatever its type states.
+ *
+ * `float[]` names the element type and leaves the length to the value, so the type says nothing about
+ * the rank -- and the value is still 3 elements of one dimension: `shape` answers `[3]` and `len`
+ * answers 3, as they do for a value whose type states the extent. The generated literal carries its
+ * shape (`rt::Array<double>{{1.0, 2.0, 3.0}, {3}}`), so the readings are the interpreter's.
+ *
+ * `agree_with_fvm` builds and runs this program against std::fvm, byte for byte.
+ */
+import { shape } from tensor
+
+func main(): int sync {
+    let v = [1.0, 2.0, 3.0] as float[]
+    println(shape(v), len(v))
+    let z: float[] = [4.0, 5.0]
+    println(shape(z), len(z))
+    return 0
+}
