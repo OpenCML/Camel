@@ -305,6 +305,18 @@ inline Array<double> sorted(const Array<double> &xs) {
     return out;
 }
 
+/// `tensor:reshape` (modules/tensor/kernels/layout.cpp): the same elements in row-major order in
+/// another shape. This back end keeps no shape, so the value is the one it was given -- but the
+/// operator compares the element count, and a target that changes it is a fault at `site` before
+/// anything is read, with the input's own shape in the message. `count` below zero asks nothing.
+template <typename T>
+Array<T> reshape(const Array<T> &xs, int64_t count, const Site &site) {
+    if (count >= 0 && static_cast<int64_t>(xs.size()) != count) {
+        fault(site, {std::to_string(xs.size())});
+    }
+    return xs;
+}
+
 /// `xs[idx]` with `idx` an array of positions (:op/idx_take, design principles 5.4): the elements
 /// those positions name, in that order, as a copy. A position outside the array is
 /// IndexOutOfRange at `site` with the position as written, as a plain read is; a position taken

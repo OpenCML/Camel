@@ -543,6 +543,42 @@ Rules buildRules() {
         },
         false,
     };
+    // `tensor:reshape` (modules/tensor/kernels/layout.cpp): the same elements in row-major order in
+    // another shape. This back end keeps no shape, so a value it hands back is a flat run -- and
+    // the shape is observable: printing a rank-2 value gives its rows, `[[1.0, 2.0], [3.0, 4.0]]`,
+    // where the run gives `[1.0, 2.0, 3.0, 4.0]`. So only a target of one dimension is faithful
+    // here, where the printed form is the run's own; a target of several dimensions is the shape
+    // this back end does not carry, and it still runs through the bridge. What is left of the
+    // operator is its count check: a target that changes the element count is a fault before
+    // anything is read, and the report states the input's own shape.
+    r["tensor:reshape"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (c.normCount() != 1 || value == nullptr || value->anyRank() || value->rank() != 1) {
+                return std::nullopt;
+            }
+            const ArrayType *target = asArrayType(c.resultType());
+            int64_t count           = -1;
+            std::string shape;
+            if (target != nullptr && !target->anyRank() && target->rank() == 1) {
+                const core::type::ExtentForm &extent = target->extents()[0];
+                if (extent.isConstant()) {
+                    count = extent.constant();
+                    shape = std::format("[{}]", count);
+                }
+            }
+            if (count < 0) {
+                return c.norm(0).text;
+            }
+            const std::string site = c.site(
+                RuntimeDiag::TensorDimensionMismatch,
+                {"reshape",
+                 std::format(
+                     "reshape changes tensor element count: [{}] -> {}", SiteTable::valueMark(0), shape)});
+            return std::format("rt::reshape({}, {}, {})", c.norm(0).text, count, site);
+        },
+        false,
+    };
     // The slice of a one-dimensional array, whichever spelling wrote it (design principles 5.4):
     // the six words are the value, the axis, the two bounds, the step and the mask of the bounds
     // written, and a call that leaves the last two out stands for step 1 and "both written". A

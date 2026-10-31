@@ -104,6 +104,11 @@ test/cases/trans/cpp/fail_program.cml
 # run, and the order `sort` gives (ties where they stand, -0 below +0).
 test/cases/trans/cpp/float_reduce.cml
 
+# `tensor:reshape` (modules/tensor/kernels/layout.cpp): a target of one dimension is the same run,
+# the printed form unchanged with it; a target that changes the element count is the fault the
+# operator raises before it reads anything.
+test/cases/trans/cpp/reshape_flat.cml
+
 # Output of print / println with a format (design principles 10.6).
 # (test/cases/trans/cpp/exec/print_formats.cml, in the directory above)
 # A formatted string is the same tree as '...'->format<...>: the translator sees no difference.
