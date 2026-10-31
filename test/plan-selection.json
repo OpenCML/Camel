@@ -332,6 +332,11 @@
             "plans": ["feat/showcase_i2.plan.toml"]
         },
         {
+            "comment": "The stream showcase: showcase/s1-stream-fib/fib.cml is pinned by a fast plan (the whole standard output -- the ten Fibonacci numbers below 50 and their sum, 88 -- on the default back end and std::prl, plus the properties that the sequence is Fibonacci and that the total is the sum of the elements), so an edit to the example runs it. The other showcase directories remain on the rule-less allowlist, which is why `showcase/` is still listed there.",
+            "paths": ["showcase/s1-stream-fib/"],
+            "plans": ["feat/showcase_s1.plan.toml"]
+        },
+        {
             "comment": "Example programs and their recorded output.",
             "paths": ["examples/"],
             "plans": ["feat/examples"]
