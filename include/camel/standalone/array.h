@@ -1152,10 +1152,16 @@ Array<T> sumAxis(const Array<T> &xs, int64_t axisArg, bool keepDims, const Site 
 
 /// `tensor:mean_axis` (modules/tensor/kernels/reduce.cpp, reduceAxis): the mean is not "the sum
 /// divided by a count" written a second way -- it is the interpreter's own two steps, in its order.
-/// Each lane is added from +0 in ascending order into a `double` (every float element type does,
-/// design principles 7.3), the *unrounded* total is divided by the extent of the lane in `double`,
-/// and that quotient is rounded into the element type once. Rounding the sum first would give a
-/// different number for an `f32` lane, and so would dividing in the element type.
+/// The lane's sum is the accumulation `sumAxis` uses: every float element type adds into a `double`
+/// from +0 in ascending order, an integer adds exactly in `uint64_t`; the *unrounded* total is then
+/// divided by the extent of the lane in `double`, and that quotient is rounded into the element type
+/// once. Rounding the sum first would give a different number for an `f32` lane, and so would
+/// dividing in the element type.
+///
+/// An integer lane answers `int(sum / numel)`, the conversion `int(·)` already has (toward zero):
+/// `mean_axis([1, 2, 4], 0, false)` is `2`, which is the normative form of `mean` (design
+/// principles; modules/math/mean.h), not a lost average -- a program that wants a floating mean
+/// writes `float(xs)` first. So the answer keeps the element type, as the whole form's does.
 ///
 /// A lane with no element is not refused here: the interpreter does not refuse it either, it divides
 /// `0.0` by `0.0` and answers the canonical NaN -- one per lane, so a `f32[2, 0]` reduced on axis 1
@@ -1169,11 +1175,21 @@ Array<T> meanAxis(const Array<T> &xs, int64_t axisArg, bool keepDims, const Site
         "tensor:mean_axis",
         invalid,
         [](const Array<T> &v, std::size_t base, std::size_t extent, std::size_t inner) {
-            double acc = 0.0;
-            for (std::size_t k = 0; k < extent; ++k) {
-                acc += static_cast<double>(v[base + k * inner]);
+            if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, int32_t>) {
+                std::uint64_t acc = 0;
+                for (std::size_t k = 0; k < extent; ++k) {
+                    acc += static_cast<std::uint64_t>(static_cast<int64_t>(v[base + k * inner]));
+                }
+                return static_cast<T>(
+                    static_cast<double>(static_cast<int64_t>(acc)) /
+                    static_cast<double>(extent));
+            } else {
+                double acc = 0.0;
+                for (std::size_t k = 0; k < extent; ++k) {
+                    acc += static_cast<double>(v[base + k * inner]);
+                }
+                return static_cast<T>(acc / static_cast<double>(extent));
             }
-            return static_cast<T>(acc / static_cast<double>(extent));
         });
 }
 

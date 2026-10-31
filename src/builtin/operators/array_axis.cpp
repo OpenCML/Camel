@@ -35,6 +35,7 @@
 #include "camel/core/rtdata/half.h"
 #include "camel/core/type.h"
 #include "camel/core/type/composite/array.h"
+#include "modules/math/mean.h"
 #include "modules/math/minmax.h"
 
 #include <algorithm>
@@ -180,14 +181,10 @@ template <typename T> bool betterPosition(T x, T best, bool largest) {
 
 template <typename T> slot_t reduceAxis(Reduce op, ArgsView &norm, bool keepdims, size_t axis) {
     const bool position = op == Reduce::ArgMax || op == Reduce::ArgMin;
-    if constexpr (!isFloatElement<T>) {
-        if (op == Reduce::Mean) {
-            refuse(nameOf(op), "the mean is taken of floating-point elements");
-        }
-    }
     const Array *input    = norm.get<Array *>(0);
     const AxisSplit split = splitAt(input, axis);
-    if (split.extent == 0 && op != Reduce::Sum) {
+    if (split.extent == 0 && (op == Reduce::Min || op == Reduce::Max || op == Reduce::ArgMax ||
+                              op == Reduce::ArgMin)) {
         refuse(nameOf(op), std::format("the axis {} has no element", axis));
     }
     const std::vector<int64_t> shape = reducedShape(input, axis, keepdims);
@@ -202,15 +199,11 @@ template <typename T> slot_t reduceAxis(Reduce op, ArgsView &norm, bool keepdims
             const int64_t lane = o * in + i;
             auto at            = [&](int64_t k) -> T { return src[base + k * in]; };
             switch (op) {
-            case Reduce::Sum:
-            case Reduce::Mean: {
+            case Reduce::Sum: {
                 if constexpr (isFloatElement<T>) {
                     double acc = 0.0;
                     for (int64_t k = 0; k < split.extent; ++k) {
                         acc += widened(at(k));
-                    }
-                    if (op == Reduce::Mean) {
-                        acc /= static_cast<double>(split.extent);
                     }
                     out->dataAs<T>()[lane] = T(acc);
                 } else {
@@ -220,6 +213,29 @@ template <typename T> slot_t reduceAxis(Reduce op, ArgsView &norm, bool keepdims
                         acc = static_cast<U>(acc + static_cast<U>(at(k)));
                     }
                     out->dataAs<T>()[lane] = static_cast<T>(acc);
+                }
+            } break;
+            case Reduce::Mean: {
+                // The normative form (design principles; modules/math/mean.h): the lane's sum is the
+                // same accumulation `sum` uses -- f64 from +0 for a float element type, the exact
+                // integer accumulator for an integer one -- divided by the extent in f64, and the
+                // quotient converted into the element type once. An integer lane answers
+                // `int(sum / numel)`: `[1, 2, 4]` gives `2`. A lane with no element divides 0.0 by
+                // 0.0, which is the canonical NaN.
+                if constexpr (isFloatElement<T>) {
+                    double acc = 0.0;
+                    for (int64_t k = 0; k < split.extent; ++k) {
+                        acc += widened(at(k));
+                    }
+                    out->dataAs<T>()[lane] = camel::core::math::meanValue<T>(acc, split.extent);
+                } else {
+                    using U = std::make_unsigned_t<T>;
+                    U acc{};
+                    for (int64_t k = 0; k < split.extent; ++k) {
+                        acc = static_cast<U>(acc + static_cast<U>(at(k)));
+                    }
+                    out->dataAs<T>()[lane] = camel::core::math::meanValue<T>(
+                        static_cast<double>(static_cast<int64_t>(acc)), split.extent);
                 }
             } break;
             case Reduce::Min:

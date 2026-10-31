@@ -327,6 +327,12 @@ test/cases/trans/cpp/sum_axis_rank.cml
 # element type -- not "the sum divided by a count" written a second way.
 test/cases/trans/cpp/mean_axis_rank.cml
 
+# The mean keeps the element type, and its canonical form is T(sum / numel) in f64 with one rounding:
+# `mean_axis([1, 2, 4] as int[3], 0, false)` is `2` -- int(7 / 3), not a lost average -- while the
+# same three elements through `f32(xs)` are `2.3333333`, and 2^24 + 1 - 2^24 separates an f64
+# accumulator (0.33333334) from an f32 one (0).
+test/cases/trans/cpp/mean_axis_elements.cml
+
 # The extreme along one dimension folds each lane from its identity (-inf or +inf, the lowest or the
 # largest value), so one NaN element makes the answer NaN, and compares with the one statement the
 # interpreter uses: a NaN on either side gives NaN, -0 is below +0, otherwise the larger (smaller).

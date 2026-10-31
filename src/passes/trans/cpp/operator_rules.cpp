@@ -896,12 +896,14 @@ Rules buildRules() {
         false,
     };
     // `tensor:mean` of the whole value (modules/tensor/ops/reduction_ops.cpp, meanAllKernel): the sum
-    // divided by the number of elements, both in f64, and the answer's element type reached by one
-    // conversion -- the definition `sum(x) / float(numel(x))` (stdlib/tensor_definitions.cml) with
-    // the kernel's own accumulation. A mean of integers is therefore f32 and not integer division,
-    // and a mean of f32 elements is not the f32 sum divided again: the sum is the f64 one, exactly
-    // as the interpreter's `sumAll` returns it. A value with no element divides by zero, and the
-    // interpreter raises that fault rather than answering a NaN.
+    // divided by the number of elements, the sum in the accumulation `sum` uses and the division in
+    // f64, and the answer's element type reached by one conversion -- the definition
+    // `sum(x) / float(numel(x))` (stdlib/tensor_definitions.cml). A mean keeps the element type
+    // (design principles: `mean` answers `T`), so a mean of integers is `int(sum / numel)` -- the
+    // conversion `int(·)` already has, `[1, 2, 4]` giving `2` -- and a mean of f32 elements is not
+    // the f32 sum divided again: the sum is the f64 one, exactly as the interpreter's `sumAll`
+    // returns it. A value with no element divides by zero, and the interpreter raises that fault
+    // rather than answering a NaN.
     //
     // The answer's element type is the one the operator states, which is not always the source's,
     // so it is passed as the runtime template argument: the one place in this file where the rule
@@ -1002,16 +1004,18 @@ Rules buildRules() {
         false,
     };
     // `tensor:mean_axis` (modules/tensor/kernels/reduce.cpp, reduceAxis): the mean is the sum's own
-    // two steps and not a second average -- each lane added from +0 in ascending order into a
-    // `double`, the unrounded total divided by the extent in `double`, that quotient rounded into the
-    // element type once. So the rule emits the runtime's mean, which walks the lanes the same way and
-    // rounds the same single time; "the sum divided by a count" computed in the element type would be
-    // a different number for an `f32` lane.
+    // two steps and not a second average -- each lane summed by the accumulation `sum_axis` uses
+    // (f64 from +0 for every float element type, the exact `uint64_t` accumulator for an integer),
+    // the unrounded total divided by the extent in `double`, that quotient rounded into the element
+    // type once. So the rule emits the runtime's mean, which walks the lanes the same way and rounds
+    // the same single time; "the sum divided by a count" computed in the element type would be a
+    // different number for an `f32` lane.
     //
-    // Only a floating element type is written: the mean of an integer value is an `f32` in the
-    // kernel, while the operator's signature keeps the value's element type, so the answer's type on
-    // this side would be the integer one -- a different value printed, not a mean. That is left
-    // refused (by name) rather than translated to something else.
+    // An integer element type is written too: `mean` answers `T` (design principles), so the answer
+    // of an integer lane is `int(sum / numel)` -- `[1, 2, 4]` giving `2`. It was refused here while
+    // the kernel answered an f32 that the type then read as an integer (`2.3333333` printed as
+    // `1075139925`): that was the kernel's type being wrong, not the mean of an integer being
+    // untranslatable. `bool` stays out because `mean` is declared `when is_numeric::<T>()`.
     //
     // An empty lane is not refused: the interpreter divides 0.0 by 0.0 and answers the canonical NaN
     // (`[nan, nan]` for a `f32[2, 0]` reduced on axis 1), and the runtime does the same. The refusal
@@ -1024,7 +1028,8 @@ Rules buildRules() {
                 return std::nullopt;
             }
             const TypeCode element = value->elemType()->code();
-            if (element != TypeCode::Float32 && element != TypeCode::Float64) {
+            if (element != TypeCode::Int64 && element != TypeCode::Int32 &&
+                element != TypeCode::Float32 && element != TypeCode::Float64) {
                 return std::nullopt;
             }
             std::string axis;

@@ -4,7 +4,7 @@
 
 > **索引的价值在于与目录一一对应；一旦少一页，读者就会以为没有那一问。**
 
-> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 3 页在等答复**（`whose-effect-is-an-inlined-body`、`what-type-does-a-mean-have`、`does-a-stream-need-a-representation-in-cpp`），其余各页已裁、按裁定往 develop 走（裁完的页作者会挪进 `reviews/`）。
+> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 2 页在等答复**（`does-a-stream-need-a-representation-in-cpp`、`what-type-does-a-mean-have` 已裁、只等落地复核），其余各页已裁、按裁定往 develop 走（裁完的页作者会挪进 `reviews/`）。
 >
 > **哪些未决值得成页**：不是所有未决都值得成页——只有**今天有人被它堵住**的才值得。其余留在原则里，等它真的挡住一条车道再成页。所以第 15 节那 8 条不占待裁表，清单在文末，每条写明今天堵着谁。
 
@@ -14,12 +14,12 @@
 `questions/` 里在等答复的只剩一页：流要不要在 `std::cpp` 里有一套表示（`rt::Stream<T>`），还是不表示、
 改由遍把生成器消解掉。`whose-effect-is-an-inlined-body` 于 08:10 裁（环境资源归调用者）、
 `what-type-does-a-mean-have` 于 14:30 裁 **A**（返回元素类型 `T`，整数均值按规范形 `T(sum/numel)`），
-两页的改动按裁定往 develop 走。
+两页的改动按裁定往 develop 走；均值那一笔已落地（两处缺陷加 `std::cpp` 那条拒绝一起收，见下）。
 
 | 页 | 问什么 | 状态 | 堵着谁 |
 |---|---|---|---|
 | [`does-a-stream-need-a-representation-in-cpp`](questions-2026-10-31-does-a-stream-need-a-representation-in-cpp.md) | 流（`T..`，全语料 35 条）在 `std::cpp` 里给一套表示（`rt::Stream<T>`），还是不表示、改由遍把生成器消解掉；流的类型是递归的（`() => (T, T..)?`），写不成 C++ 别名 | 待裁 | 35 条流拒绝（22 返回值、13 参数）全堵在这；作者第 11 条那三句是这页的不变量 |
-| [`what-type-does-a-mean-have`](questions-2026-10-31-what-type-does-a-mean-have.md) | 14:30 裁 **A**：`mean` 返回元素类型 `T`，整数均值是规范形 `T(sum(float(x)) / float(numel(x)))`（f64 累加与相除、最后舍入一次），要浮点均值先写 `float(xs)`；`bool` 不是 `is_numeric`，签名照收 | 已裁未落 | 两处缺陷：kernel 对整数存成 `f32` 再被当整数读；`array_axis.cpp` 拒整数 `mean`。加 `std::cpp` 按名字那条拒绝 |
+| [`what-type-does-a-mean-have`](../reviews/questions-2026-10-31-what-type-does-a-mean-have.md) | 14:30 裁 **A**：`mean` 返回元素类型 `T`，整数均值是规范形 `T(sum(float(x)) / float(numel(x)))`（f64 累加与相除、最后舍入一次），要浮点均值先写 `float(xs)`；`bool` 不是 `is_numeric`，签名照收 | 已裁已落 | 无；两处缺陷一起收（kernel 的 `outType`、`array_axis.cpp` 的拒绝），`std::cpp` 那条按名字的拒绝随之删掉，读数 `2` 五个后端逐字一致 |
 | [`does-rt-array-carry-a-shape`](questions-2026-10-31-does-rt-array-carry-a-shape.md) | 05:30 裁 **A**：`rt::Array` 带 `rank`/`extent` | 已裁未落 | 队列：`argmax_axis` → 逐元素；`T[..]` 的表示已由 07:30 裁定统一为原生带形状数组 |
 | [`std-cpp-needs-a-tensor-type`](questions-2026-10-31-std-cpp-needs-a-tensor-type.md) | 07:30 收回 05:50：`T[..]` 一律是原生带形状 `rt::Array`，经桥时转换；`rt::Foreign` 只留给 `PyObject`、`Device<T>` | 已裁未落 | `ones`/`zeros` 的表示要改回 `rt::Array`；设计稿 §9 与类型表同笔改 |
 | [`mem-blocks-has-no-block-space`](questions-2026-10-31-mem-blocks-has-no-block-space.md) | 05:10 裁 **A**：拒绝并让拒绝实话（目标不具备，不是尚未实现） | 已裁已落 | 无；普查把 10 个记为“目标不具备” |
