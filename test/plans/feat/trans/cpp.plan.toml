@@ -174,6 +174,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 300000
 
 [[tests]]
+name = "every_expect_program_five_times"
+desc = "The guard the argmax defect grew into: every program the expect list names -- the files and the one directory, 147 of them -- translated five times, and no program may be written two ways. One program is the case the defect was found on; the next shape of it would be some other program, so the question is asked of all of them. Five runs of one command with nothing else alive is what is asked (3.0 s of wall clock on one host, so no run had to be dropped); a program that came back with two hashes is named with both, and the entry goes red."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/cppexec/narrow_repeat.py"
+args = ["${case}", "--expect=test/tools/cppexec/expect.txt", "--runs=5"]
+expect_exit = 0
+expect_stdout_contains = ["runs of each: 5", "runs of one command wrote one program", "PASS: "]
+expect_output_not_contains = ["FAIL:", "were written more than one way", "cell(Tuple)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 600000
+
+[[tests]]
 name = "narrow_reductions_four_backends"
 desc = "A bf16 and an f16 on all four scheduling back ends: std::nvm, std::fvm, std::cpp (the program std::cpp writes, built and run) and std::jit, on the five programs that pin the two types -- the readings of a value of either, and the four faults a conversion or a division can give. What is compared is each back end's own output and exit code, byte for byte: a type is implemented when the four say the same sentence, not when one of them can run it. Nothing is skipped: a back end that could not run a program would say so in its cell, and the cell that differs is named."
 kind = "behavior"
