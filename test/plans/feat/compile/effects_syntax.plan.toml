@@ -35,6 +35,15 @@ expect_exit = 0
 expect_output_not_contains = ["RuntimeDiag::PassBoundaryNodes", "has no entry node", "has no exit node"]
 
 [[tests]]
+name = "pass_boundary.ports_match_declaration"
+desc = "The third boundary, a diagnostic of its own (`RuntimeDiag::PassBoundaryPorts`, 0x04000013): after every pass, every operator node still names an operator the table knows and every ordinary port of it is a live node with a type. A pass may rewrite the graph, but it may not leave a call nothing can run. Measured on the whole tree when it was written: no pass breaks it, so what this pins is the silence."
+kind = "behavior"
+case = "../../../cases/effects/declared.cml"
+args = ["${case}", "std::opt::inline", "std::opt"]
+expect_exit = 0
+expect_output_not_contains = ["RuntimeDiag::PassBoundaryPorts", "no longer matches its declaration"]
+
+[[tests]]
 name = "source.declared_resources"
 desc = "Two calls of `consume` touch the same handle (the value they are given) and are ordered by control, two calls of `tick` touch the group's `db` and `stdout` and are visible outside the program -- naming an ambient resource in a clause promises the effect that comes with it -- and two calls of `bump` touch the same cell: the bodies touch nothing, so the footprint can only come from the clauses. The program's own output is unchanged."
 kind = "behavior"
