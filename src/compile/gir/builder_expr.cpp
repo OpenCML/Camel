@@ -8,6 +8,7 @@
  */
 
 #include "builder.h"
+#include <cstdio>
 #include "builder_helpers.h"
 #include "builder_support.h"
 
@@ -611,7 +612,12 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
                 !nodeTakesAnOrder(read) || !nodeTakesAnOrder(exit)) {
                 continue;
             }
-            if (hasDirectDataDependency(read, exit) || dataPathReaches(read, exit)) {
+            // The value may already carry the read to this write -- the read is an argument of the
+            // call, or feeds one -- and the ordering is written anyway: what the ledger reads is
+            // the two statements, and a read of the cell and a write of it have to be ordered as
+            // statements, not through the value they both mention. Only the opposite direction
+            // would be a cycle, and that is not added.
+            if (dataPathReaches(exit, read)) {
                 continue;
             }
             linkNodes(LinkType::Order, read, exit);
