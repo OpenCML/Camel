@@ -33,9 +33,12 @@ class Complex : public Object {
     static Complex *create(
         double real, double imaginary, camel::core::type::TypeCode code,
         camel::core::mm::IAllocator &allocator) {
-        ASSERT(
+        GUARD(
             camel::core::type::isComplex(code),
-            "A complex value has a complex type code");
+            std::format(
+                "A complex value has a complex type code, and this call passed {}: the value "
+                "would be stored under a type that does not describe it",
+                static_cast<int>(code)));
         if (code == camel::core::type::TypeCode::Complex64) {
             real      = static_cast<float>(real);
             imaginary = static_cast<float>(imaginary);

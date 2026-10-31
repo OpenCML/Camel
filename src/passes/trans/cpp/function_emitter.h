@@ -176,7 +176,7 @@ class FunctionEmitter {
     void lowerFill(Frame &frame, gc_node_ref_t ref, Block &out);
     void lowerAccess(Frame &frame, gc_node_ref_t ref);
     void lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out);
-    void lowerCast(Frame &frame, gc_node_ref_t ref);
+    void lowerCast(Frame &frame, gc_node_ref_t ref, Block &out);
     /// `:var/new`, `:var/get` and the assignments; false for any other operator.
     bool lowerVariable(Frame &frame, gc_node_ref_t ref, const std::string &uri, Block &out);
     /// The in-place form of `append` over `:var/take(xs)` (design principles 11.3): grows the

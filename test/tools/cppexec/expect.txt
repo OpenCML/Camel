@@ -18,6 +18,7 @@ test/cases/trans/cpp/narrow_argmax.cml
 # integer minimum and maximum (the plain comparison, not the IEEE one the floats take) and the
 # square root outside its domain (a NaN, not a fault).
 test/cases/trans/cpp/math_min_max_int.cml
+test/cases/trans/cpp/math_sqrt_domain.cml
 
 # Values and their text.
 test/cases/loops/iterate_string.cml
@@ -238,6 +239,16 @@ test/cases/trans/cpp/literal_rows_computed.cml
 # instead, it printed one row of elements and no shape.
 test/cases/trans/cpp/literal_rows_filled.cml
 
+# `math:abs` of the smallest integer: the value has no positive counterpart, so the answer is the
+# wrap itself -- which is how `stdlib/math.cml`'s `gcd` recognises it and refuses. Written as
+# `std::abs`, the smallest value is undefined behaviour and the refusal is lost.
+test/cases/trans/cpp/abs_smallest_int.cml
+
+# A struct with no fields prints as the two braces with nothing between them (`{}`): written as the
+# opening half and the closing half with no member to separate them, it came out as `{  }`. The
+# program is the corpus case: a loop whose state is that struct prints it twice.
+test/cases/loops/zero_leaf_state.cml
+
 # A position on a value of several dimensions: `m[1]` is the row, `m[1, 0]` names the axis it drops
 # and is the element, `t[1]` of a rank-3 value is the rank-2 value behind it -- and `len` of a row is
 # the dimension that is left.
@@ -254,24 +265,40 @@ test/cases/trans/cpp/iterate_rows.cml
 # A literal of one dimension carries its extents: `[1.0, 2.0, 3.0] as float[]` is one dimension of
 # 3 elements, so `shape` and `len` read [3] and 3, and `as float[3]` has a rank to check.
 test/cases/trans/cpp/literal_open_shape.cml
+# Printing tells an element from an array of one: a value of no rank is the element (`1.5`), and a value
+# that carries a dimension is the whole literal (`[2.5]`), so `shape` answers `[2]` for a value of 2.
+test/cases/trans/cpp/print_shape.cml
+
+# The same rule on a field of `f32[..]`, filled from a literal: the position holds the rank-zero
+# value, so `println(first.v)` writes `1.5` and not `[1.5]`.
+test/cases/compile/array_shape/rank_zero_field_literal.cml
+
+# A type with no fields prints the empty pair: the spaces around the fields are the fields', so a
+# loop state that carries nothing is written `{}` as the interpreter writes it.
+test/cases/loops/zero_leaf_state.cml
 
 # `as` states the shape a value must have: a value that holds it is the value (nothing to write, the
 # two sides are one `rt::Array<T>`), and a value that does not stops the program with the
 # interpreter's own sentence -- `conversion to 'float[3, 3]' failed: the array has shape [2, 2]`.
 test/cases/trans/cpp/cast_shape_holds.cml
 test/cases/trans/cpp/cast_shape_fault.cml
+# A conversion that can fail runs where it is written even when nothing reads its value: the fault of
+# `let unused = open2(...) as float[3, 3]` is the interpreter's, and `not reached` stays unprinted.
+test/cases/trans/cpp/fault_unread_cast.cml
 
-# A tensor the runtime builds: `tensor:ones` has a standalone translation that calls the runtime's
-# kernel and converts the value back into the shaped array its Camel type names (rt::Array), so the
-# program prints it with the same `println` as any array -- the one line below is std::fvm's, byte
-# for byte.
+# The three tensor builders of the module, which write their array themselves and call no runtime:
+# the value is elements, so `rt::Array<T>` is the whole of it, and the program needs no Camel
+# library. A tensor whose value is a runtime object still crosses the bridge; a tensor of elements
+# is data.
 test/cases/trans/cpp/tensor_ones.cml
-# The element type the call states reaches the kernel, so the tensor built is the one the program
-# asked for: `ones::<f64>` is f64 and `ones::<i64>` is i64, whose text `1` is not f32's `1.0`.
+# The element type the call states is the array's: `ones::<f64>` is f64 and `ones::<i64>` is i64,
+# whose text `1` is not f32's `1.0`.
 test/cases/trans/cpp/tensor_ones_element.cml
-# The other tensor builder the runtime owns: `tensor:zeros` is one rule with `ones` now, and the
-# line it prints is std::fvm's, byte for byte.
+# The other builder: `tensor:zeros` is one rule with `ones`, and the line it prints is std::fvm's.
 test/cases/trans/cpp/tensor_zeros.cml
+# The shape's own refusal: a negative extent is a fault, and the words are the kernel's ("zeros:
+# Shape cannot contain negative values"), not a sentence of this back end's own making.
+test/cases/trans/cpp/fault_tensor_negative_shape.cml
 # `shape(m)` answers the value's dimensions as an `int[]` of its own -- a value, not a view -- and a
 # sliced value answers the dimensions it kept.
 test/cases/trans/cpp/shape_rank.cml

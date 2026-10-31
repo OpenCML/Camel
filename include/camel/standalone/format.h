@@ -97,7 +97,18 @@ void appendShapedText(std::string &out, const Array<T> &xs, std::size_t offset, 
 
 /// `[a, b, c]`, and `[[1.0, 2.0], [3.0, 4.0]]` for a value that states a shape of several
 /// dimensions.
+///
+/// A value of no rank *is* the element (design principles 5.4): the brackets are the shape's, and a
+/// position of type `f32[..]` holds such a value, so `println` of it writes the element and not an
+/// array of one. A value that carries a shape of one dimension is written as the whole literal --
+/// the bracket is the difference between an element and an array of one, and a reader who cannot see
+/// it cannot tell the two apart. A value of several elements and no rank is a producer that recorded
+/// none (12.2): its run is written as the literal it would be at one dimension.
 template <typename T> void appendText(std::string &out, const Array<T> &xs) {
+    if (xs.rank() == 0 && xs.size() == 1) {
+        appendText(out, xs[0]);
+        return;
+    }
     if (xs.rank() >= 2) {
         appendShapedText(out, xs, 0, 0);
         return;

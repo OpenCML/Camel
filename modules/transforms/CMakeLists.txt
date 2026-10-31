@@ -5,4 +5,5 @@ add_camel_module(
   NAME transforms
   SOURCES
     module.cpp
+    jvp.cpp
 )

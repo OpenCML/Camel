@@ -158,7 +158,12 @@ template <typename T> constexpr T fromSlot(slot_t slot_value) noexcept {
     static_assert(sizeof(T) <= sizeof(slot_t), "T too large for slot");
     static_assert(std::is_trivially_copyable_v<T>, "T must be trivially_copyable");
 
-    ASSERT(slot_value != DeadSlot, std::format("Accessing uninitialized slot"));
+    GUARD(
+        slot_value != DeadSlot,
+        std::format(
+            "Accessing uninitialized slot: the slot was never written, and reading it as a "
+            "{}-byte value would take the fill pattern for data",
+            sizeof(T)));
 
     if constexpr (std::is_same_v<T, slot_t>) {
         return slot_value;

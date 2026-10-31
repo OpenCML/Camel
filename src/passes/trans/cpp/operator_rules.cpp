@@ -1051,8 +1051,19 @@ Rules buildRules() {
         true,
     };
     r["math:sqrt"]    = cmath("sqrt", true);
+    // The typed square root (math:sqrt_f, math:sqrt_d): std::sqrt answers what the library's
+    // answers, including outside the domain -- a negative operand and a NaN operand both give a
+    // NaN and not a fault, which is what std::fvm answers and what math_sqrt_domain.cml pins.
+    for (const char *t : {"f", "d"}) {
+        r[std::format("math:sqrt_{}", t)] = cmath("sqrt", true);
+    }
+    // The integer absolute value is two's complement, not `std::abs`: the smallest integer has
+    // no positive counterpart, and the library's answer for it is itself -- `gcd` finds it by
+    // asking `abs(a) < 0` (stdlib/math.cml), so the answer is load-bearing. `std::abs` is
+    // undefined there and the test that depends on it can be optimized away
+    // (fault_gcd_overflow.cml: exit 0 where the interpreter refuses the value).
     for (const char *t : {"i", "l"}) {
-        r[std::format("math:abs_{}", t)] = cmath("abs");
+        r[std::format("math:abs_{}", t)] = runtimeFunction("intAbs");
     }
     for (const char *t : {"f", "d"}) {
         r[std::format("math:abs_{}", t)]   = cmath("fabs");
@@ -1150,36 +1161,51 @@ Rules buildRules() {
     };
 
     // ---- The results the runtime owns (tensor:*, design note 9) ----
-    // `tensor:ones` and `tensor:zeros` fill a tensor of the element type the call states with the
-    // shape it is given. The element type is the call's, and it reaches the kernel as the integer
-    // code of the type (`elementCode`): the kernel reads the call's result type to know what to
-    // fill, and a call that stated none left it filling f32 whatever the program wrote --
-    // `ones::<f64>` built an f32 tensor and `ones::<i64>` printed `1.0` where the interpreter
-    // prints `1`.
-    // The result is a `T[..]`, and in this back end that type has one representation: the shaped
-    // array `rt::Array<T>` a literal of the same type is (docs/design/cpp-standalone/README.cn.md
-    // 4). So the rule names that type -- whatever type the node has -- and the bridge converts the
-    // runtime's own value into it at the boundary, the elements copied out and the shape with them
-    // (camel/standalone/bridge.h): the program prints a tensor with the same `println` as any
-    // array, and never holds a runtime pointer. `rt::Foreign` is not this: it is for the objects
-    // the language itself keeps opaque (`PyObject`, `Device<T>`).
-    // The two builders are one rule: what differs between them is the value the runtime fills in,
-    // not one byte this back end writes, so they cross the same way or not at all. `zeros` was the
-    // last one refused as work not done; its refusal named the missing rule, and the rule is here.
-    auto tensorBuilder = [](OperatorCall &c) -> std::optional<std::string> {
-        if (c.normCount() != 1) {
-            return std::nullopt;
-        }
-        return std::format(
-            "{}.call<{}>({}, {{rt::bridge::arg({})}}, {{}}, {})",
-            c.bridgeOperator(),
-            c.cppType(c.resultType()),
-            c.place(),
-            c.norm(0).text,
-            elementCode(c.resultType()));
+    // `tensor:ones` and `tensor:zeros`: the tensor's element type is the call's and its shape is
+    // the `int[]` it is given, and both are things this back end can write without the runtime --
+    // the result is a `T[..]`, which has one representation here, the shaped array `rt::Array<T>`
+    // (docs/design/cpp-standalone/README.cn.md 4) a literal of the same type is. So the rule
+    // builds that array: `rt::filledArray<T>(shape, fill, op, site)`, every element the fill.
+    //
+    // This is not a bridged call any more. The bridge was right for the tensors whose value is a
+    // runtime object -- a handle, `rt::Foreign` -- but a tensor the program only reads as elements
+    // is data, and data no runtime has to make. The one thing the runtime still answers here is the
+    // shape's own refusal: a negative extent is a fault, and `filledArray` raises it with the
+    // kernel's own words ("<op>: Shape cannot contain negative values"), measured against std::fvm
+    // rather than guessed -- the first sentence this rule carried was not the one the interpreter
+    // prints, and a fault printed differently is a program that disagrees.
+    //
+    // The element types are the numbers this array holds; a tensor of anything else (a string, a
+    // bool, one of the two reduced-precision floats, whose fill would need its own pattern) keeps
+    // the bridged call, which is the answer for it and not a refusal of the program.
+    auto tensorBuilder = [](bool ones) {
+        return [ones](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1) {
+                return std::nullopt;
+            }
+            const ArrayType *result = asArrayType(c.resultType());
+            if (result == nullptr || result->elemType() == nullptr) {
+                return std::nullopt;
+            }
+            const char *fill = nullptr;
+            switch (result->elemTypeCode()) {
+            case TypeCode::Float32:
+            case TypeCode::Float64: fill = ones ? "1.0" : "0.0"; break;
+            case TypeCode::Int32:
+            case TypeCode::Int64: fill = ones ? "1" : "0"; break;
+            default: return std::nullopt;
+            }
+            return std::format(
+                "rt::filledArray<{}>({}, {}, \"{}\", {})",
+                c.cppType(result->elemType()),
+                c.operand(0),
+                fill,
+                ones ? "ones" : "zeros",
+                c.site(RuntimeDiag::RuntimeError, marks(1)));
+        };
     };
-    r["tensor:ones"]  = {tensorBuilder};
-    r["tensor:zeros"] = {tensorBuilder};
+    r["tensor:ones"]  = {tensorBuilder(true), false};
+    r["tensor:zeros"] = {tensorBuilder(false), false};
 
     return r;
 }
