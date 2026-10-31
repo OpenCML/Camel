@@ -1,0 +1,30 @@
+/**
+ * The batched reading next to the row-by-row one, and the ruleset that says what batching is.
+ *
+ * `Lift<T> = RowsOf<T>` (stdlib/rulesets/vmap.cml): a batched value is the value with one dimension
+ * in front, so `lift(3.0)` is the batch of one row (`[3.0]`) and an elementwise primitive applied to
+ * a batch is that primitive applied element by element. The two readings of each function are what
+ * pins it: `vmap(f)(xs)` on the batch and `xs->map(f)` written out row by row are the same numbers,
+ * bit for bit, because they are the same arithmetic -- only the writing differs.
+ */
+import { lift } from rulesets.vmap
+import { map, vmap } from array
+
+func f(x: f32): f32 {
+    return x * f32(2.0) + x / f32(2.0) - f32(1.0)
+}
+
+func g(x: f32): f32 {
+    return -f(x)
+}
+
+func main(): int sync {
+    let xs: f32[4] = [1.0, 2.0, 3.0, 0.5]
+    println(vmap(f)(xs))
+    println(xs->map<(x: f32) => f(x)>)
+    let ys: f32[3] = [0.25, -2.0, 4.0]
+    println(vmap(g)(ys))
+    println(ys->map<(x: f32) => g(x)>)
+    println(lift(f32(3.0)))
+    return 0
+}

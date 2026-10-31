@@ -777,6 +777,12 @@ div_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
 div_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
 ```
 
+**`rulesets.vmap`** — import { ... } from rulesets.vmap — 1 name(s)
+
+```text
+lift: (x: T) => Lift<T>
+```
+
 **`sim`** — import { ... } from sim — 2 name(s)
 
 ```text

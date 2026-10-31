@@ -368,6 +368,14 @@ const MODULES = [
         source: 'rulesets/jvp.cml',
     },
     {
+        name: 'rulesets.vmap',
+        title: '`rulesets.vmap`: how a batched transform lifts a value',
+        kind: 'camel',
+        // `Lift<T> = RowsOf<T>`: a batched value is the value with one dimension in front, so the
+        // elementwise tier's rule for a primitive is the primitive itself (`stdlib/rulesets/vmap.cml`).
+        source: 'rulesets/vmap.cml',
+    },
+    {
         name: 'sim',
         title: '`sim`: Monte Carlo simulation',
         kind: 'cpp',

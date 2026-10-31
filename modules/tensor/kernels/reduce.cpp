@@ -15,6 +15,8 @@
 #include "minmax.h"
 #include "parallel.h"
 
+#include "modules/math/mean.h"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -158,19 +160,20 @@ Array *reduceAxis(
     }
 
     TypeCode outType = input->dtype();
-    if (op == ReduceOp::Mean) {
-        // A mean of floats keeps the element type (an f64 tensor averages in f64); a mean of
-        // integers and bools has always been f32. A bf16 or f16 tensor averages with an f64
-        // accumulator and rounds once into its own element type (dtype.h).
-        outType = (outType == TypeCode::Float64 || outType == TypeCode::BFloat16 ||
-                   outType == TypeCode::Float16)
-                      ? outType
-                      : TypeCode::Float32;
-    } else if (op == ReduceOp::ArgMax || op == ReduceOp::ArgMin) {
+    if (op == ReduceOp::ArgMax || op == ReduceOp::ArgMin) {
         outType = TypeCode::Int64;
-    } else if (op == ReduceOp::Sum && outType == TypeCode::Bool) {
+    } else if (outType == TypeCode::Bool && (op == ReduceOp::Sum || op == ReduceOp::Mean)) {
+        // A bool has no sum or mean of its own: both answer the int64 count of its `true`
+        // elements, which is the one width a count has (design principles 5.1, 7.7). No call
+        // reaches either -- `is_numeric` excludes `bool` -- so this is the declaration evaluator's
+        // arithmetic, kept at the width the declaration states. `max_axis` and `min_axis` keep the
+        // bool: an extreme of bools is one of them.
         outType = TypeCode::Int64;
     }
+    // A mean keeps the element type (design principles: `mean` answers `T`, and its normative form
+    // is `T(sum(float(x)) / float(numel(x)))`), so the answer of an integer tensor is an integer:
+    // `[1, 2, 4]` gives `2`, the conversion `int(·)` already has. Storing an f32 quotient into a
+    // slot typed by the element type is what printed the bits of `2.3333333` as `1075139925`.
     Array *out = createTensor(outType, outShape, allocator);
 
     dispatchDType(input->dtype(), [&]<typename T>() {
@@ -178,8 +181,7 @@ Array *reduceAxis(
         forEachLane(split, [&](int64_t lane, int64_t base) {
             const int64_t stride = split.inner;
             switch (op) {
-            case ReduceOp::Sum:
-            case ReduceOp::Mean: {
+            case ReduceOp::Sum: {
                 // Accumulation type: `double` for every floating element type (f32, f64, bf16,
                 // f16), from +0 in ascending order, with one rounding when the element is stored
                 // into the result — never an f32 accumulator and never a rounding per step
@@ -198,25 +200,46 @@ Array *reduceAxis(
                         acc += static_cast<uint64_t>(static_cast<int64_t>(src[base + k * stride]));
                     }
                 }
-                if (op == ReduceOp::Mean) {
-                    double total = 0.0;
-                    if constexpr (camel::core::rtdata::is_ieee_float_v<T>) {
-                        total = acc;
-                    } else {
-                        total = static_cast<double>(static_cast<int64_t>(acc));
-                    }
-                    const double mean = total / static_cast<double>(split.extent);
-                    if constexpr (camel::core::rtdata::is_reduced_float_v<T>) {
-                        out->dataAs<T>()[lane] = T(mean);
-                    } else if (outType == TypeCode::Float64) {
-                        out->dataAs<double>()[lane] = mean;
-                    } else {
-                        out->dataAs<float>()[lane] = static_cast<float>(mean);
-                    }
-                } else if (outType == TypeCode::Int64) {
+                if (outType == TypeCode::Int64) {
                     out->dataAs<int64_t>()[lane] = static_cast<int64_t>(acc);
                 } else {
                     out->dataAs<T>()[lane] = static_cast<T>(acc);
+                }
+                break;
+            }
+            case ReduceOp::Mean: {
+                // The normative form (design principles; `mean` answers `T`, and its canonical form
+                // is `T(sum(float(x)) / float(numel(x)))`): the lane's sum is the same accumulation
+                // `sum` uses -- f64 from +0 in ascending order for every float element type, the
+                // exact int64 accumulator (wrapping) for integers, converted to f64 once -- then
+                // divided by the extent in f64, and the quotient converted into the element type
+                // once by `meanValue<T>` (modules/math/mean.h, the one copy the `array` module's
+                // reduction calls too). An integer lane therefore answers `int(sum / numel)`:
+                // `[1, 2, 4]` gives `2`. A lane with no element divides 0.0 by 0.0: the
+                // canonical NaN.
+                using Acc = std::conditional_t<
+                    camel::core::rtdata::is_ieee_float_v<T>, double, uint64_t>;
+                Acc acc = 0;
+                for (int64_t k = 0; k < split.extent; ++k) {
+                    if constexpr (camel::core::rtdata::is_ieee_float_v<T>) {
+                        acc += static_cast<double>(src[base + k * stride]);
+                    } else {
+                        acc += static_cast<uint64_t>(static_cast<int64_t>(src[base + k * stride]));
+                    }
+                }
+                const double total =
+                    camel::core::rtdata::is_ieee_float_v<T>
+                        ? static_cast<double>(acc)
+                        : static_cast<double>(static_cast<int64_t>(acc));
+                if (outType == TypeCode::Int64) {
+                    // A bool lane: the count of `true` elements divided by the extent, at the int64
+                    // width the declaration states (the same count `sum` answers, divided as a
+                    // mean divides). No call reaches it: `is_numeric` excludes `bool`.
+                    out->dataAs<int64_t>()[lane] =
+                        camel::core::math::meanValue<int64_t>(total, split.extent);
+                } else {
+                    out->dataAs<T>()[lane] =
+                        camel::core::math::meanValue<T>(total, split.extent);
                 }
                 break;
             }

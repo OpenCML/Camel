@@ -7,6 +7,17 @@
 **要作者答的一句**：`mean`（以及 `array.cml` 转发给它的那些名字）**返回元素类型 `T`，还是返回 `f32`**？
 下面两条路的代价各一句，按字面执行即可。
 
+> **裁定（作者，2026-10-31 14:30）：A——`mean` 返回元素类型 `T`。**
+> 整数的均值就是规范形 `T(sum(float(x)) / float(numel(x)))`：按 f64 累加、按 f64 相除，最后按元素类型
+> 舍入一次，求值之后按 `int(·)` 既有的转换规则（向零）变成 `int`。`bool` 不属于 `is_numeric`，所以
+> `mean(bool)` 不合法，签名照这个收。
+>
+> 于是 `mean_axis([1, 2, 4] as int[3], 0, false)` 是 `2`（`int(7 / 3)`），四个调度器与 `std::cpp` 逐字一致。
+>
+> **判据（自这条起）：原则里写着的语义，就不是缺陷——被认为"丢掉了平均"的那个数，正是规范形要求的结果。**
+> 这条判据把本页一开始的读法反过来：`2` 不是"丢了平均"，`1075139925` 才是缺陷（那是 `2.3333333f` 的位模式
+> 被当整数印出来），修的是那个，不是签名。
+
 ## 现象
 
 三处说法，互相不一致：
@@ -59,6 +70,10 @@ error[RuntimeDiag::TranslationRefused]: … uses the operator 'tensor:mean_axis'
 **不裁**（原则：答不出来就问，不定 ad hoc）。若一定要一句倾向：**B**——它是唯一能让"类型"与"答案"
 一致的一条，而 A 的两条下场都无法执行。这条倾向不作为落地依据，等作者裁定。
 
+（裁定取 **A**，这条建议不采纳。回头看，它把"A 的两条下场"当成了 A 的必然后果，其中一条是误判：位模式那一条
+是 **kernel 的类型错**（`outType` 被改成 `f32`，再往声明为 `T` 的槽里写 `float`），不是"返回 `T`"这件事的下场。
+A 真正只有一条下场，而且它不是下场，是规范形本身。）
+
 ## 边界与影响面
 
 - 本页**只记问题**：不动用例、不动 `test/tools/cppexec/expect.txt`，所以 `not_comparable` **不涨**。
@@ -66,3 +81,43 @@ error[RuntimeDiag::TranslationRefused]: … uses the operator 'tensor:mean_axis'
   按裁定改，不按这一页的倾向改。
 - 与这条相邻但不同的一问：`argmax_axis` 与 `array:argmax_axis` 两条身份（已在
   [`one-operator-two-names`](questions-2026-10-31-one-operator-two-names.md) 里记着）。
+
+## 落地（2026-10-31 22:30，`lane-nestedlit`）
+
+**两处缺陷一起收，`std::cpp` 按名字那条拒绝随之删掉。** 规范形写在一个头文件里
+（`modules/math/mean.h` 的 `meanValue<T>(total, count)`），解释器的两条路都调它——`tensor` 的轴内核
+（`modules/tensor/kernels/reduce.cpp`）与 `array` 的归约（`src/builtin/operators/array_axis.cpp`）——
+所以"同一句 `mean_axis` 有两种答案"这件事在结构上不再可能。
+
+1. **kernel 的类型**：`outType` 不再把 `Mean` 改成 `f32`，答案就是元素类型（`reduce.cpp:162`）；
+   `Mean` 的累加与 `Sum` 同一套（浮点 f64 从 +0 升序、整数精确），除法在 f64，最后 `meanValue<T>` 一次
+   舍入。整数那条支的 `sum` 仍是精确 int64（5.1/7.7 的要求），只有除法和最后那次转换在 f64——
+   读数与规范形逐字相同。
+2. **`array` 那条路**：`reduceAxis` 里那句 `the mean is taken of floating-point elements` 删掉了，
+   整数与浮点走同一条实现；空轴也不再为 `mean` 拒绝（只有四个极值拒），与 kernel 对齐。
+3. **`std::cpp` 的规则**（`operator_rules.cpp`）：`tensor:mean_axis` 的元素类型守卫从"只写浮点"放宽到
+   `int64`/`i32`/`f32`/`f64`，`rt::meanAxis<T>` 对整数按 `static_cast<T>`（向零）回答；`bool` 仍不写，
+   因为 `mean` 声明为 `when is_numeric::<T>()`。
+4. **读数**（`std::fvm`；四个调度器 `nvm`/`fvm`/`jit`/`prl` 与 `std::cpp` 逐字一致）：
+
+   ```
+   $ camel test/cases/trans/cpp/mean_axis_elements.cml std::fvm
+   2
+   []
+   [2]
+   2.3333333
+   0.33333334
+   [2, 4]
+   ```
+
+   `python3 test/tools/cppexec/run.py test/cases/trans/cpp/mean_axis_elements.cml` 报 `1 100.0% same`。
+   `mean_axis([1, 2, 4] as int[3], 0, false)` 是 `2`；`f32(ints)` 是 `2.3333333`（要浮点均值先写这一句）。
+
+5. **一条随之显形的缺口**（不是这次改出来的，是"整数 `mean` 不再被拒"之后才被普查看见）：普查那唯一一格
+   `does not build` 是 `test/cases/modules/tensor/int64_sum.cml` 里 `sum<0>(big)`——
+   `const int64_t v5_sum_axis = rt::sumAxis(...)`，节点类型是元素本身而规则写的是数组。这是
+   `sum<axis>` 在秩 1 上的写法问题，记在这里，下一笔修。
+
+6. **闸门**：`[SUMMARY] total: 8133, pass: 8129, fail: 0, skip: 2, known failures: 2`；普查
+   `programs 3341 / compared 3329 / not comparable 12 / same 1251 / refused 977 / differs 0 /
+   does not build 1`（`not_comparable` 没涨）。

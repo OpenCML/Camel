@@ -1,0 +1,17 @@
+// The state's initial value is a value like any other: when it is `x`, its tangent is `x`'s, not
+// zero. `s = x` and three rounds of `s * x` make `f(x) = x**4`, so `f(3) = 81` and `f'(3) = 108`.
+// A lift that hands the initial state `(x, 0)` would read `(81, 0)`, and one that hands it `(0, 0)`
+// would read `(0, 0)`: the two numbers tell the three apart.
+import rulesets.jvp
+import { jvp } from transforms
+
+func f(x: float): float {
+    return loop s = x for i in [1, 2, 3] do s * x
+}
+
+func main(): int sync {
+    let (value, tangent) = jvp(f)(3.0, 1.0)
+    println(value)
+    println(tangent)
+    return 0
+}
