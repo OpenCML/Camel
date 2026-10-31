@@ -1,5 +1,7 @@
 # 同一个 `T[..]`，两种表示：`tensor:*` 的结果该走哪条
 
+> **已裁（作者 2026-10-31 07:30，原文见 [questions-2026-10-29](questions-2026-10-29.md)）**：`T[..]` 只有一种表示——原生带形状 `rt::Array`，判据是类型而不是算子来自哪个模块；`rt::Foreign` 只留给 `PyObject`、`Device<T>` 这类本来就不透明的对象。本页移到 `reviews/` 留档。
+
 **问题（作者裁）**：`tensor:ones` 的签名是 `export func ones::<T>(shape: int[]): T[..]`（`stdlib/signatures/tensor.cml:26`）。按 2026-10-31 05:30 的分界（"看算子的**结果类型**"），`T[..]` 是**带形状的数组**，`std::cpp` 已有原生表示（develop 的 `literal_rank`、`reshape_flat`、`slice_rank` 这批用例正在往这个方向加），它该走原生；按同一天 05:50 的裁定（张量是**外部对象**过桥，`rt::Foreign`，语义只在运行时 tensor 模块里实现一份），它该走 `Foreign`。
 
 **同一个类型，两种表示**。裁据是哪一条：**"算子来自哪个模块"**（`tensor:*` 一律 `Foreign`，其它模块的带形状数组走原生），还是**"结果类型的形状是否具体"**（`T[..]` 这种类型参数化的走 `Foreign`，`f32[2;2]` 这种具体的走原生）？
