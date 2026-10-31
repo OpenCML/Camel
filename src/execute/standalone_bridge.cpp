@@ -27,7 +27,6 @@
 #include "camel/utils/install_layout.h"
 
 #include <array>
-#include <cstdio>
 #include <filesystem>
 #include <mutex>
 #include <unordered_map>
@@ -85,8 +84,6 @@ case Value::Kind::IntArray: {
                 for (size_t i = 0; i < v.ints.size(); ++i) {
                     array->set<camel::core::rtdata::Int64>(i, v.ints[i]);
                 }
-                std::fprintf(stderr, "bridge: IntArray kind=%d n=%zu\n",
-                             static_cast<int>(v.kind), v.ints.size());
                 slots_.push_back(toSlot<::Array *>(array));
                 types_.push_back(arrayType);
                 break;
