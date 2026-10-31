@@ -274,6 +274,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "literal_rows_filled"
+desc = "A fill of a value of several dimensions is the elements and the shape in one block: `[[1.0, x], [x, 2.0]]` at a `float[2, 2]` position folds to `rt::Array<double>{{1.0, 2.0, 2.0, 2.0}, {2, 2}}` and prints the two rows the interpreter prints. The fold read the template's first extent (`size()`) instead of its element count (`numel()`), so it wrote the first row's worth of elements and no shape at all, and the generated program printed `[1.0, 2.0]`. agree_with_fvm compares the reading with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/literal_rows_filled.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::Array<double>{{1.0, 2.0, 2.0, 2.0}, {2, 2}}"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "numel_rank"
 desc = "`numel` counts the elements of a value whatever its rank: six for a rank-2 value, four for its first two rows, eight for a rank-3 one, four for a value of one dimension. It reads the count the value holds and no dimension of it, so a value of several dimensions and one of an open rank are both answered by the run -- which is why this step frees every program that asked for it, the open-rank one included. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
 kind = "behavior"
