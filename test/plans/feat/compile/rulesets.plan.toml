@@ -90,3 +90,16 @@ expect_stdout_contains = ["FORWARD :op/add_d rulesets.jvp +/2 -> jvp_add", "FORW
 expect_output_not_contains = ["-> no rule", "no such family"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "rulesets_probe_missing_says_no_rule_for_div"
+desc = "A ruleset with four of the five scalar primitives answers `no rule` for `/` and a name for the other four. This is the fixture a replacement needs: the missing rule is a property of a test ruleset, not of the production one, so the production rules stay complete. What it pins today is the index's answer and nothing more -- the refusal at the primitive belongs to `reinterp`, which does not exist yet, and the case says so rather than pretending this reading is that refusal."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/rulesets_missing.cml"
+args = ["${case}", "std::rulesets", "query=rulesets.probe_missing|+|2;rulesets.probe_missing|-|1;rulesets.probe_missing|*|2;rulesets.probe_missing|/|2", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["LOOKUP rulesets.probe_missing +/2 -> add_ok", "LOOKUP rulesets.probe_missing -/1 -> neg_ok", "LOOKUP rulesets.probe_missing */2 -> mul_ok", "LOOKUP rulesets.probe_missing //2 -> no rule", "RULESET rulesets.probe_missing -/2 -> sub_ok"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
