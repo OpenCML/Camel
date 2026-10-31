@@ -839,14 +839,15 @@ class NodeCall final : public OperatorCall {
     NodeCall(
         std::string uri, std::vector<CppValue> norm, std::vector<CppValue> with,
         std::vector<const Type *> normTypes, std::vector<const Type *> withTypes,
-        const Type *result,
+        std::vector<bool> withConstant, const Type *result,
         std::function<std::string(RuntimeDiag, const std::vector<std::string> &)> site,
         std::function<std::string()> place,
         std::function<std::string()> bridgeOperator,
         std::function<std::string(const Type *)> cppType,
         std::function<std::string(size_t)> fieldName)
         : uri_(std::move(uri)), norm_(std::move(norm)), with_(std::move(with)),
-          normTypes_(std::move(normTypes)), withTypes_(std::move(withTypes)), result_(result),
+          normTypes_(std::move(normTypes)), withTypes_(std::move(withTypes)),
+          withConstant_(std::move(withConstant)), result_(result),
           site_(std::move(site)), place_(std::move(place)),
           bridgeOperator_(std::move(bridgeOperator)), cppType_(std::move(cppType)),
           fieldName_(std::move(fieldName)) {}
@@ -858,6 +859,7 @@ class NodeCall final : public OperatorCall {
     const CppValue &with(size_t i) const override { return with_[i]; }
     const Type *normType(size_t i) const override { return normTypes_[i]; }
     const Type *withType(size_t i) const override { return withTypes_[i]; }
+    bool withIsConstant(size_t i) const override { return withConstant_[i]; }
     const Type *resultType() const override { return result_; }
     std::string site(RuntimeDiag kind, const std::vector<std::string> &args) override {
         return site_(kind, args);
@@ -871,6 +873,7 @@ class NodeCall final : public OperatorCall {
     std::string uri_;
     std::vector<CppValue> norm_, with_;
     std::vector<const Type *> normTypes_, withTypes_;
+    std::vector<bool> withConstant_;
     const Type *result_;
     std::function<std::string(RuntimeDiag, const std::vector<std::string> &)> site_;
     std::function<std::string()> place_;
@@ -925,6 +928,13 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
     };
     collect(g->normInputsOf(ref), norm, normTypes);
     collect(g->withInputsOf(ref), with, withTypes);
+    // Which of the `with` arguments are constants of the program: a rule that would have to know
+    // one at translation time (the shape a `tensor:reshape` rearranges to) can tell a written
+    // shape from a computed one.
+    std::vector<bool> withConstant;
+    for (gc_node_ref_t input : g->withInputsOf(ref)) {
+        withConstant.push_back(g->node(input)->kind == GCNodeKind::Data);
+    }
     // The arguments' nodes and the first argument's type, kept before they are moved into the
     // call a rule sees: a rule asks for a field name after that, and the field index is a node of
     // the graph (a constant), not a value of the arguments.
@@ -1024,6 +1034,7 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
         std::move(with),
         std::move(normTypes),
         std::move(withTypes),
+        std::move(withConstant),
         node->dataType(),
         [&](RuntimeDiag kind, const std::vector<std::string> &args) {
             return program_.sites.siteFor(g, ref, kind, args);
@@ -1931,6 +1942,7 @@ bool FunctionEmitter::lowerVariable(
              valueOf(frame, norm[1])},
             {},
             {type, g->node(norm[1])->dataType()},
+            {}, // an assignment has no `with` argument at all
             {},
             type,
             [&](RuntimeDiag kind, const std::vector<std::string> &args) {

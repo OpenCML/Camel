@@ -823,6 +823,66 @@ Array<T> reshape(const Array<T> &xs, std::initializer_list<int64_t> shape, int64
     return out;
 }
 
+/// The extents of `xs` between brackets, as the interpreter writes them: `6` for a value of one
+/// dimension and `3, 3` for a value of two. A value that states no shape (rank 0) is the one run of
+/// elements it holds, which is what its extent reads as.
+template <typename T> std::string extentText(const Array<T> &xs) {
+    if (xs.rank() == 0) {
+        return std::to_string(xs.size());
+    }
+    std::string out;
+    for (std::size_t i = 0; i < xs.rank(); ++i) {
+        out += (i == 0 ? "" : ", ") + std::to_string(xs.extent(i));
+    }
+    return out;
+}
+
+/// The shape a program wrote, between brackets, as the interpreter writes it: the elements of the
+/// array are the extents (`reshape<[n, 3]>` with n = 3 is `3, 3`). A shape is a run of extents, not
+/// a value with a shape of its own, so these elements are read as the list they are.
+inline std::string shapeText(const Array<int64_t> &shape) {
+    std::string out;
+    for (std::size_t i = 0; i < shape.size(); ++i) {
+        out += (i == 0 ? "" : ", ") + std::to_string(shape[i]);
+    }
+    return out;
+}
+
+/// `tensor:reshape` with a shape the program computes (`reshape<[n, 3]>(y)`): the target's extents
+/// are the elements of `shape`, read while the program runs, because the type does not state them
+/// (the caller's contract may state another shape entirely). A target that changes the element
+/// count is the fault the interpreter reports, in its own words -- `reshape changes tensor element
+/// count: [6] -> [3, 3]`, the two shapes filled in at `site` -- and nothing is read first. An
+/// extent of -1 is one the elements fill, as `reshape` above, and asks for no check.
+template <typename T>
+Array<T> reshapeBy(const Array<T> &xs, const Array<int64_t> &shape, const Site &site) {
+    std::size_t extents[Array<T>::kMaxRank];
+    std::size_t rank    = 0;
+    bool stated         = true;
+    std::size_t product = 1;
+    for (std::size_t i = 0; i < shape.size(); ++i) {
+        const int64_t extent = shape[i];
+        if (extent < 0 || rank >= Array<T>::kMaxRank) {
+            stated = false; // a dimension the program leaves open: the elements alone are the shape
+            break;
+        }
+        extents[rank++] = static_cast<std::size_t>(extent);
+        product *= static_cast<std::size_t>(extent);
+    }
+    if (stated && product != xs.size()) [[unlikely]] {
+        fault(site, {extentText(xs), shapeText(shape)});
+    }
+    Array<T> out;
+    out.reserve(xs.size());
+    for (std::size_t i = 0; i < xs.size(); ++i) {
+        out.push(xs[i]);
+    }
+    if (stated) {
+        out.setShape(extents, rank);
+    }
+    return out;
+}
+
 /// `xs[idx]` with `idx` an array of positions (:op/idx_take, design principles 5.4): the elements
 /// those positions name, in that order, as a copy. A position outside the array is
 /// IndexOutOfRange at `site` with the position as written, as a plain read is; a position taken

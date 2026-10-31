@@ -702,6 +702,30 @@ Rules buildRules() {
             if (c.normCount() != 1 || target == nullptr || target->anyRank() || target->rank() == 0) {
                 return std::nullopt;
             }
+            // A shape the program computes (`reshape<[n, 3]>(y)`) is the operator's second argument,
+            // a value. The extents read below are the *result type's*, which the caller's contract
+            // may have filled in ([2, 3] where `exact` wants `f32[2, 3]`) rather than the shape the
+            // program meant ([3, 3] with n = 3) -- so a call written from it checks the count of a
+            // shape the program did not ask for, and a reshape that should fault goes through.
+            // Such a reshape is handed to the runtime, whose check reads the values it was given
+            // and reports the count it sees (`reshape changes tensor element count: [6] -> [3, 3]`,
+            // the interpreter's own sentence; bridge.h carries an int array for this reason).
+            if (c.withCount() > 0 && !c.withIsConstant(0)) {
+                // The target's extents are the program's values, so the count check is written
+                // against them: `rt::reshapeBy` reads the shape it is handed and reports the two
+                // shapes the interpreter reports (`[6] -> [3, 3]`), both slots filled at run time.
+                return std::format(
+                    "rt::reshapeBy({}, {}, {})",
+                    c.norm(0).text,
+                    c.with(0).text,
+                    c.site(
+                        RuntimeDiag::TensorDimensionMismatch,
+                        {"reshape",
+                         std::format(
+                             "reshape changes tensor element count: [{}] -> [{}]",
+                             SiteTable::valueMark(0),
+                             SiteTable::valueMark(1))}));
+            }
             std::string words;
             std::string shape;
             int64_t count = 1;
