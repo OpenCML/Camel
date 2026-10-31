@@ -126,10 +126,11 @@ std::cpp  12 33 / abc / 5 12 12
 | `:op/mem_blocks` | 10 | `test/cases/feat/mm/mem_blocks.cml` |
 | `tensor:sum` / `tensor:matmul` / `rand:shuffle_l` | 7 各 | `loops/iterate_tensor.cml` / `modules/onnx/entry/tuple.cml` / `para/core/merge_sort.cml` |
 | `tensor:shape` / `env:get_cwd` | 6 各 | `compile/entry_args/npy_values.cml` / `modules/std/env/basic.cml` |
-| `:op/set_field` / `:op/idx_take` | 4 各 | `compile/nullable_assign.cml` / `feat/mm/gc/gc_born_old.cml` |
+| `:op/idx_take` | 4 | `feat/mm/gc/gc_born_old.cml` |
 | `:struct/last_arr` | 2 | `test/cases/parse/syntax/subscript_forms.cml` |
 
-读数：**683 → 674** 个程序翻译不出来（这一笔把这 9 个修掉，`:op/set_index_in_place` 一行归零）。按族：
+读数：**683 → 674 → 666** 个程序翻译不出来（第一笔把 `:op/set_index_in_place` 那 9 个修掉，这一笔把
+`:op/set_field` / `:op/set_index` 那 5 个修掉，两行归零）。按族：
 tensor 414、autodiff 90、rand 34、核心算子（`:op/*`）50、`:struct/*` 2。另有 11 个是类型层面的拒
 （`std::cpp does not translate yet`），4 个**让翻译器崩掉**（segfault，见下）。
 
@@ -155,7 +156,7 @@ error[RuntimeDiag::TranslationRefused]: Translation pass 'std::cpp' refused the 
   --> test/cases/compile/semantic/recursive_struct_array.cml:40:19
 ```
 
-（`grown.children[0].value = 20` 是 `:op/set_field`，另一个洞，4 个程序，排在 `:op/fail` 后面。）
+（`grown.children[0].value = 20` 是 `:op/set_field`，当时是另一个洞，5 个程序，下一笔就修掉了。）
 
 顺手撞出**第 5 个崩**，这次在前端不在写出器：`type Node = { state: State, children: Node[] }` 里 `State`
 写在 `Node` **后面**时，`std::fvm` **自己**段错误（`rc=139`）；`State` 写前面就正常，互相递归（`A` 里 `B[]`、
@@ -190,7 +191,32 @@ std::fvm  [9, 2, 3]
 std::cpp  [9, 2, 3]
 ```
 
-## 七、七条判据
+接着修同一个族里的下一处：**`:op/set_field`**（5 个，比普查时多出来的那一个是以前崩的
+`recursive_struct_array.cml`，现在按缺口报了）。也就是 `p.x = 9`、`m[0].x = 9` —— 赋值把"改了一处的
+结构体"当**值**交出来，形状和上一笔的数组一模一样：**变量交出值、一处改变、块共享先复制**。所以它照抄
+第一个的形状，没有另起一套：
+
+```
+对数组：rt::setAt(xs, i, v, at_x_y)          （上一笔的，复用）
+对结构体：rt::setField(s, &Point::x, v)      （新，include/camel/standalone/record.h）
+```
+
+`set_field` 的字段是个**下标**，不是值——名字在类型里，所以规则表通过 `OperatorCall::fieldName` 去问，
+写成成员指针；这一段第一版把 `normTypes`/`norm` 捕获进 lambda，而它们已经被 move 进 `NodeCall` 了，
+所以永远拿到空类型、五条全拒。**"照抄形状"照抄的是语义，不是指针生命周期**，这是这一笔唯一的坑。
+
+读数：**5 → 0**，普查 **674 → 666**，与 `std::fvm` 逐字节相同（五条都 `same`）：
+
+```
+std::fvm  { x: 9, y: 2 } { x: 1, y: 2 }
+std::cpp  { x: 9, y: 2 } { x: 1, y: 2 }
+```
+
+第二列是**存之前读到的那个值**：`rt::setField` 返回新记录、`rt::setAt` 共享时先复制，所以
+`let kept = p; p.x = 9` 之后 `kept` 还是 `{ x: 1, y: 2 }`。`test/cases/trans/cpp/field_store.cml`
+把三处（字段、元素、元素的字段）各钉一遍，每一处都配一个存之前读的值。
+
+## 七、八条判据
 
 > **裁定也可能基于过时的读数：拿到裁定先去 develop 上复现一次；不复现，就先把前提写下来，再谈要不要改。**
 
@@ -205,3 +231,5 @@ std::cpp  [9, 2, 3]
 > **一个后端拒一条翻译是缺口，崩一次是缺陷；缺口按被拒程序数报，缺陷按崩溃数报，两者不在一个优先级上。**
 
 > **同一个缺陷在写出器和前端各崩一次时，先修前端——写出器只影响一个后端，前端影响所有人。**
+
+> **同一个缺口的第二个实例，先照抄第一个的形状，再谈抽象。**
