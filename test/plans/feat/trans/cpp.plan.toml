@@ -47,6 +47,24 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 600000
 
 [[tests]]
+name = "link_line_keeps_the_compilers_stdlib"
+# Red when the `-L` of stdlib_dir is deleted from build_command: the printed command then has no
+# directory of the compiler's own libstdc++. agree_with_fvm builds and runs the same link and is
+# the end-to-end of it, but it stays green without the fix on a host whose compiler adds that -L
+# itself (measured: clang 23 does), so the link line is pinned here as well.
+desc = "The command a bridged program is linked with (a program that uses operators the C++ writer has no standalone translation for calls the Camel runtime) names the standard library of the compiler that builds it -- the directory of libstdc++.so the compiler itself reports -- and puts it in the program's rpath, instead of leaving the linker to the host's default search order, which can find a library older than the one libcamel.so was built with (measured: `undefined reference to std::__detail::__wait_impl(...)@GLIBCXX_3.4.35`). A compiler that names no libstdc++.so keeps the link line it had, and this case then passes on that answer; it never invents a directory."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/cppexec/run.py"
+args = ["${case}", "--link-line"]
+skip_unless = ["${python}", "test/tools/cppexec/run.py", "--have-compiler"]
+expect_exit = 0
+expect_stdout_contains = ["link: ", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
 name = "recursion_site_message"
 desc = "The report a call site pre-renders into its rt::Site names the recursion limit the program was translated with (`Maximum recursion depth (1000) exceeded when evaluating graph 'depth'.`), not the value placeholder the old table wrote (`\\0370`, the unit separator and a digit). The `filled` field carries the same text, so the number is still filled in when the fault happens; the program itself is built and run by agree_with_fvm."
 kind = "behavior"
