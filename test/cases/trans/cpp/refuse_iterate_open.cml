@@ -1,0 +1,18 @@
+/**
+ * A `for` over a value whose rank is open is refused, and the refusal says why.
+ *
+ * `T[..]` fixes the element type and leaves the rank to the value, so the item of a `for` is an
+ * element on a value of one dimension and a row on a value of several: no one C++ type holds both,
+ * and the generated program would have to pick one before it knows the value. The refusal names the
+ * loop and states the reason; a value whose rank the type states (`float[2, 3]`) is translated
+ * (test/cases/trans/cpp/iterate_rows.cml).
+ */
+
+func countRows(t: f32[..]): int {
+    return loop c = 0 for row in t do c + 1
+}
+
+func main(): int sync {
+    println(countRows([[1.0, 2.0], [3.0, 4.0]] as float[2, 2]))
+    return 0
+}

@@ -238,10 +238,27 @@ test/cases/trans/cpp/index_rank.cml
 # a column of it (`m[:, 1]`), and the rank-2 value behind the first row of a rank-3 one.
 test/cases/trans/cpp/slice_rank.cml
 
-# A tensor the runtime builds: `tensor:ones` has no standalone translation, so the program holds a
-# counted handle to the runtime's own value (rt::Foreign) and prints the runtime's text for it --
-# the one line below is std::fvm's, byte for byte.
+# `for` over a value of several dimensions walks its first dimension: the item is the row (`atRow`),
+# the rounds are the first extent (not the element count), and a rank-3 value gives rank-2 planes.
+test/cases/trans/cpp/iterate_rows.cml
+
+# `as` states the shape a value must have: a value that holds it is the value (nothing to write, the
+# two sides are one `rt::Array<T>`), and a value that does not stops the program with the
+# interpreter's own sentence -- `conversion to 'float[3, 3]' failed: the array has shape [2, 2]`.
+test/cases/trans/cpp/cast_shape_holds.cml
+test/cases/trans/cpp/cast_shape_fault.cml
+
+# A tensor the runtime builds: `tensor:ones` has a standalone translation that calls the runtime's
+# kernel and converts the value back into the shaped array its Camel type names (rt::Array), so the
+# program prints it with the same `println` as any array -- the one line below is std::fvm's, byte
+# for byte.
 test/cases/trans/cpp/tensor_ones.cml
+# The element type the call states reaches the kernel, so the tensor built is the one the program
+# asked for: `ones::<f64>` is f64 and `ones::<i64>` is i64, whose text `1` is not f32's `1.0`.
+test/cases/trans/cpp/tensor_ones_element.cml
+# The other tensor builder the runtime owns: `tensor:zeros` is one rule with `ones` now, and the
+# line it prints is std::fvm's, byte for byte.
+test/cases/trans/cpp/tensor_zeros.cml
 # `shape(m)` answers the value's dimensions as an `int[]` of its own -- a value, not a view -- and a
 # sliced value answers the dimensions it kept.
 test/cases/trans/cpp/shape_rank.cml

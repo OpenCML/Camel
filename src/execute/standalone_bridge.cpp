@@ -8,7 +8,8 @@
  * The first call creates a Context the way the command-line tool does (module search paths
  * from CAMEL_HOME and the directory of the executable). Each call turns the arguments into
  * slots (a string into a String of the runtime's heap), runs the operator, and turns the result
- * back. The runtime's objects live only during the call; no safepoint is reached in it (an
+ * back -- an array, and a tensor is one, as its elements copied out with the shape the value
+ * states. The runtime's objects live only during the call; no safepoint is reached in it (an
  * operator does not run Camel code), so nothing has to be rooted.
  */
 
@@ -87,6 +88,16 @@ case Value::Kind::IntArray: {
                 slots_.push_back(toSlot<::Array *>(array));
                 types_.push_back(arrayType);
                 break;
+            }
+            case Value::Kind::Array: {
+                // A value that came back through the bridge, handed to another operator of it. No
+                // rule does that yet -- every array the tree builds is a result -- and passing on
+                // bytes no slot holds would be worse than saying so.
+                throw camel::core::error::RuntimeFault::make(
+                    camel::core::error::RuntimeDiag::PassInternalError,
+                    "std::cpp",
+                    "an array that came back through the bridge was passed to an operator that "
+                    "takes one, which the bridge does not do yet");
             }
             case Value::Kind::Void:
                 slots_.push_back(NullSlot);
@@ -191,6 +202,42 @@ const Type *typeOfValue(camel::core::rtdata::Object *object) {
     return dims.empty() ? elem : ArrayType::create(elem, dims);
 }
 
+/// The value an operator returned, as the program holds it: an array -- and a tensor is one, a
+/// `T[..]` like any other (modules/tensor/tensor.h) -- as its elements copied out of the runtime's
+/// value and the extent table that value states.
+///
+/// The elements of a compact array of pure data are the bytes of the element type itself, and that
+/// type's bits are the program's too: `float`, `double`, `int32_t`, `int64_t`, `bool`, the two
+/// sixteen-bit halves (camel/standalone/half.h writes the pattern camel/core/rtdata/half.h writes)
+/// and the complexes make the same run of bytes on either side. So the run is copied as it lies,
+/// which is the copy this conversion costs and accepts. An element the runtime traces (a string, an
+/// array, a struct) has no such bytes, and a view stores its elements behind an index table: no
+/// bridged operator returns either today, and a value of one is a defect of the runtime's table
+/// rather than something to read wrong.
+Value arrayValue(::Array *array) {
+    Value out;
+    out.kind = Value::Kind::Array;
+    if (array == nullptr) {
+        return out;
+    }
+    const TypeCode elem = array->elemTypeCode();
+    if (!array->isCompact() || array->isAggregateElement() || elem == TypeCode::Void ||
+        camel::core::type::isGCTraced(elem)) {
+        throw camel::core::error::RuntimeFault::make(
+            camel::core::error::RuntimeDiag::PassInternalError,
+            "std::cpp",
+            "the operator returned a value this back end cannot hand over as an array: it is a view "
+            "or an element type the bridge does not copy");
+    }
+    const auto dims = array->shapeSpan();
+    out.extents.assign(dims.begin(), dims.end());
+    out.bytes.resize(array->byteSize());
+    if (!out.bytes.empty()) {
+        std::memcpy(out.bytes.data(), array->rawData(), out.bytes.size());
+    }
+    return out;
+}
+
 Value valueOf(slot_t slot, Value::Kind kind) {
     switch (kind) {
     case Value::Kind::Bool:
@@ -207,15 +254,21 @@ Value valueOf(slot_t slot, Value::Kind kind) {
         const auto *s = fromSlot<String *>(slot);
         return {kind, 0, 0, s != nullptr ? std::string(s->view()) : std::string()};
     }
+    case Value::Kind::Array:
+        // A tensor the operator built, as the array the program asked for: the elements copied
+        // out, the shape with them (arrayValue). The program prints it as it prints an array of
+        // the same type that it built itself.
+        return arrayValue(fromSlot<::Array *>(slot));
     case Value::Kind::Foreign: {
-        // A value the runtime owns, handed to the generated program as the counted handle of
-        // camel/standalone/foreign.h: the handle is made here, inside the call (no safepoint is
-        // reached in one), and the Foreign that reaches the program owns its one count. The
-        // runtime keeps the object alive from now on, and the text of it is the runtime's own.
+        // An object the language itself keeps opaque, handed to the generated program as the
+        // counted handle of camel/standalone/foreign.h: the handle is made here, inside the call (no
+        // safepoint is reached in one), and the Foreign that reaches the program owns its one
+        // count. The runtime keeps the object alive from now on, and the text of it is the
+        // runtime's own.
         auto *object = fromSlot<camel::core::rtdata::Object *>(slot);
         auto *root   = new camel::core::mm::RootHandle(
             camel::core::mm::autoSpace(), object, typeOfValue(object), "bridge Foreign");
-        return {kind, 0, 0, {}, {}, root};
+        return {kind, 0, 0, {}, {}, root, {}, {}};
     }
     case Value::Kind::Void:
     default:
@@ -227,11 +280,25 @@ Value valueOf(slot_t slot, Value::Kind kind) {
 
 Value call(
     std::string_view uri, const std::vector<Value> &norm, const std::vector<Value> &with,
-    Value::Kind result) {
+    Value::Kind result, int64_t resultElemCode) {
     ::operator_t op = operatorFor(uri);
     try {
         ArgsOfCall normArgs(norm);
         ArgsOfCall withArgs(with);
+        if (resultElemCode >= 0) {
+            // The call's result type, which a kernel that builds a value reads to know what to
+            // build: `tensor:ones` fills the element type the call states, read as the element of
+            // its result type (modules/tensor/ops/creation_ops.cpp, resultElement), so the type of
+            // the element alone would say nothing. What crosses is the element's code: the Type is
+            // made from it here (Type::create), never parsed from a text of the type, and the
+            // extents are the call's own business -- `T[..]` is the result type such a call
+            // declares (stdlib/tensor.cml).
+            auto *element = camel::core::type::Type::create(
+                static_cast<camel::core::type::TypeCode>(resultElemCode));
+            auto *resultType = camel::core::type::ArrayType::openRank(element);
+            normArgs.setResultType(resultType);
+            withArgs.setResultType(resultType);
+        }
         const slot_t out = op(withArgs, normArgs, *runtime().context);
         return valueOf(out, result);
     } catch (const camel::core::error::RuntimeFault &fault) {

@@ -579,7 +579,7 @@ const CppValue &FunctionEmitter::valueOf(Frame &frame, gc_node_ref_t ref) {
 
 void FunctionEmitter::bind(
     Frame &frame, gc_node_ref_t ref, std::string expr, bool inlinable, Block &out,
-    const std::string &hint, const char *resultCpp) {
+    const std::string &hint) {
     const Type *type  = frame.graph->node(ref)->dataType();
     const size_t uses = liveUses(frame.graph, ref) + frame.results.count(ref);
     if (!isValueType(type) || uses == 0) {
@@ -602,7 +602,7 @@ void FunctionEmitter::bind(
         Stmt::line(
             std::format(
                 "const {} {} = {};",
-                resultCpp != nullptr ? std::string(resultCpp) : cppType(frame.graph, ref, type),
+                cppType(frame.graph, ref, type),
                 name,
                 withoutParentheses(expr))));
     frame.values[ref] = CppValue{name, false};
@@ -962,21 +962,9 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
                 "no runtime block space of its own: the counters are not available on this target",
                 describeFunction(g)));
     }
-    // The tensor builders whose value lives in the runtime: `tensor:ones` has a rule
-    // (operator_rules.cpp), and this back end has no rule for the others yet, so they are refused
-    // as work not done. The sentence names the operator: the shape array is translated and the
-    // bridge carries a tensor now, so neither of those is what is missing.
-    if (uri == "tensor:zeros") {
-        refuse(
-            g,
-            ref,
-            std::format(
-                "{} uses '{}' to build a tensor, and std::cpp has no translation of it yet: the "
-                "value lives in the runtime and crosses the bridge, as 'tensor:ones' does, and this "
-                "operator has no rule in the table",
-                describeFunction(g),
-                uri));
-    }
+    // `tensor:ones` and `tensor:zeros` are rules of the table now (operator_rules.cpp); a tensor
+    // builder the table has no rule for is refused below like any other operator, on the type of
+    // the value it takes or builds.
     if (rule == nullptr) {
         for (const auto types : {&normTypes, &withTypes}) {
             for (const Type *t : *types) {
@@ -1091,8 +1079,7 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
                 uri,
                 types.empty() ? std::string() : " of type " + types));
     }
-    bind(
-        frame, ref, std::move(*expr), rule->inlinable, out, operatorHint(uri), rule->resultCpp);
+    bind(frame, ref, std::move(*expr), rule->inlinable, out, operatorHint(uri));
 }
 
 void FunctionEmitter::lowerLoop(
@@ -1136,6 +1123,22 @@ void FunctionEmitter::lowerLoop(
         const gc_node_ref_t iterable = norm.front();
         array = locals_.unique(std::format("v{}_items", nextValue_++));
         index = locals_.unique(std::format("v{}_round", nextValue_++));
+        // A `for` walks the first dimension (design principles 4.2): on a value of several the item
+        // is a row, one dimension less (`rt::atRow`), and on a value of one it is the element. An
+        // item is not that on an open rank -- a value that is an element at rank 1 and a row above
+        // it has no one C++ type -- which is the reason the index rule of the table refuses the
+        // same type (`:op/idx_arr`): the value the program holds is one type, and which it is is
+        // not a decision a single call can hold.
+        const auto *iterated = asArrayType(g->node(iterable)->dataType());
+        if (iterated != nullptr && iterated->anyRank()) {
+            refuse(
+                g,
+                loop,
+                std::format(
+                    "{} walks a value whose rank is open: an item is an element on a value of one "
+                    "dimension and a row on a value of several, and no one C++ type holds both",
+                    describeFunction(g)));
+        }
         if (g->loopIterableFormOf(loop) == camel::core::LoopIterableForm::Interval) {
             // `for i in a..b`: the graph's sequence is the pair of the interval's two bounds
             // (design principles 4.2, LoopIterableForm::Interval). The C++ this exporter writes
@@ -1203,16 +1206,39 @@ void FunctionEmitter::lowerLoop(
         }
     }
     if (iterates) {
+        const gc_node_ref_t element = g->regionPorts(parts[1]).front();
         round.push_back(Stmt::line(std::format("if ({} >= {}.size()) {{ break; }}", index, array)));
+=======
+        const gc_node_ref_t element = g->regionPorts(parts[1]).front();
+        // The item of a value of several dimensions is its row, one dimension less, which is what
+        // the interpreter hands the body (design principles 4.2): `rt::atRow`, whose elements are
+        // copied -- accepted, as the conversion at the bridge is -- so the body holds a value of
+        // its own. The count of rounds is the first dimension then, not the element count: a value
+        // of 3 rows of 2 elements has 3 items, not 6.
+        const auto *iterated = asArrayType(g->node(norm.front())->dataType());
+        const bool rows      = iterated != nullptr && !iterated->anyRank() && iterated->rank() >= 2;
+        round.push_back(
+            Stmt::line(
+                std::format(
+                    "if ({} >= {}{}) {{ break; }}",
+                    index,
+                    array,
+                    rows ? ".extent(0)" : ".size()")));
+>>>>>>> lane-nestedlit
         const std::string name = locals_.unique(std::format("v{}_item", nextValue_++));
         round.push_back(
             Stmt::line(
                 std::format(
-                    "const {} {} = {}[{}];",
+                    "const {} {} = {};",
                     cppType(g, element, g->node(element)->dataType()),
                     name,
-                    array,
-                    index)));
+                    rows ? std::format(
+                               "rt::atRow({}, {}, {})",
+                               array,
+                               index,
+                               program_.sites.siteFor(
+                                   g, norm.front(), RuntimeDiag::IndexOutOfRange, {}))
+                         : std::format("{}[{}]", array, index))));
         round.push_back(Stmt::line(std::format("++{};", index)));
         frame.values[element] = CppValue{name, false};
     }
@@ -1632,7 +1658,40 @@ void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref) {
     const bool sameStruct =
         fromType != nullptr && toType != nullptr && fromType->code() == TypeCode::Struct &&
         toType->code() == TypeCode::Struct && program_.values.sameRepresentation(fromType, toType);
-    if (to == from || sameStruct) {
+    // A conversion between two arrays is a check of the shape, and nothing else: both types are the
+    // same `rt::Array<T>` on this side, so the writer has no bytes to move -- but the interpreter
+    // checks the extents when the program runs (design principles 5.4), and a program that says
+    // `as f32[2, 3]` of a value that does not hold them faults there. So the check is written, with
+    // the type's own text and the position of the conversion, which is the report the interpreter
+    // gives (`rt::asShape`, camel/standalone/array.h). A type that leaves an extent open (`f32[?]`)
+    // states -1 for it, and that extent is not checked.
+    const auto *targetArray = camel::core::type::asArrayType(toType);
+    const auto *sourceArray =
+        fromType != nullptr ? camel::core::type::asArrayType(fromType) : nullptr;
+    const bool checksShape =
+        targetArray != nullptr && sourceArray != nullptr && !targetArray->anyRank() && to == from;
+    if (checksShape) {
+        std::string extents;
+        for (const auto &form : targetArray->extents()) {
+            extents += (extents.empty() ? "" : ", ") +
+                       std::to_string(form.isConstant() ? form.constant() : -1);
+        }
+        std::string typeText = toType->toString();
+        std::string escaped;
+        for (const char c : typeText) {
+            escaped += c == '"' || c == '\\' ? std::string("\\") + c : std::string(1, c);
+        }
+        // The report's own sentence: the diagnostic's words with one slot, which the fault fills
+        // with the sentence the interpreter writes (`the array has shape [2]`), so the two reports
+        // are one (the site carries the mark the runtime replaces, as `rt::atRow`'s site does).
+        const std::vector<std::string> marks{SiteTable::valueMark(0)};
+        text = std::format(
+            "rt::asShape({}, {{{}}}, \"{}\", {})",
+            value.text,
+            extents,
+            escaped,
+            program_.sites.siteFor(g, ref, RuntimeDiag::RuntimeError, marks));
+    } else if (to == from || sameStruct) {
         frame.values[ref] = value;
         return;
     } else if (

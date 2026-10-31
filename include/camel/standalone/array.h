@@ -82,6 +82,46 @@ template <typename T> class Array {
         return Array(items, shape);
     }
 
+    /// The array of `items` with the extents `extents` states, row order: what a value the runtime
+    /// built is handed to the program as (bridge.h). A tensor is a `T[..]` whichever module its
+    /// operator belongs to, so its elements are copied out of the runtime's value and its shape
+    /// travels with them -- the same array a literal of that type is, which is what lets one
+    /// `println` print both.
+    static Array fromFlat(std::vector<T> items, const std::vector<int64_t> &extents) {
+        Array out;
+        out.reserve(items.size());
+        for (const T &item : items) {
+            out.push(item);
+        }
+        out.setExtents(extents);
+        return out;
+    }
+
+    /// The extents of the value, when they are the ones the elements multiply to: a shape that does
+    /// not is left off (no value is worth a crash over a wrong constant, the literal's rule).
+    template <typename Range> void setExtents(const Range &extents) {
+        if (rep_ == nullptr) {
+            return;
+        }
+        std::size_t product = 1;
+        std::size_t rank    = 0;
+        for (const auto extent : extents) {
+            if (extent < 0 || rank == kMaxRank) {
+                return;
+            }
+            product *= static_cast<std::size_t>(extent);
+            ++rank;
+        }
+        if (rank == 0 || product != size()) {
+            return;
+        }
+        rep_->rank        = static_cast<std::uint32_t>(rank);
+        std::size_t index = 0;
+        for (const auto extent : extents) {
+            rep_->extents[index++] = static_cast<std::size_t>(extent);
+        }
+    }
+
     /// The elements of `source` from `offset` on, carrying the dimensions `source` states between
     /// `from` and `to` (`atRow` takes one dimension off a value). The elements are copied: the
     /// result is a value of its own, and writing it leaves `source` alone.
@@ -385,6 +425,54 @@ template <typename T> Array<T> atRow(const Array<T> &xs, int64_t index, const Si
         inner *= xs.extent(i);
     }
     return Array<T>::window(xs, static_cast<std::size_t>(index) * inner, 1, xs.rank());
+}
+
+/// `xs as f32[2, 3]` where the type states the shape (design principles 5.4: the conversion is where
+/// a shape is checked). The C++ value is the array either way, so the check is all there is to write:
+/// a value that does not hold the extents the type states is the fault the interpreter reports, in
+/// its own words and its own place -- `conversion to 'f32[2, 3]' failed: the array has shape [3, 2]`,
+/// which is what `ArrayType::castSlotFrom` writes (src/core/type/composite/array.cpp), so the
+/// program's report is the interpreter's byte for byte. A stated extent of -1 is one the type leaves
+/// open (`f32[?, 7]`) and is not checked.
+template <typename T>
+Array<T> asShape(
+    const Array<T> &xs,
+    std::initializer_list<int64_t> extents,
+    const char *typeText,
+    const Site &site) {
+    const std::size_t rank = xs.rank();
+    if (rank == 0 && xs.size() > 1) {
+        // A value of several elements and no rank is one whose producer did not record a shape: the
+        // writer's own array constructions (`rt::Array<int>{{1, 2, 3}}`), a window, a comprehension.
+        // The interpreter's value has a shape, so the two cannot be compared here, and a program that
+        // is right must not stop because of a record that is missing: the conversion answers the
+        // value. Which producers those are is the next defect of this kind (design
+        // docs/design/cpp-standalone/README.cn.md 12.2), and the check below is the one that runs
+        // wherever the shape did travel with the value.
+        return xs;
+    }
+    bool holds             = rank == extents.size();
+    if (holds) {
+        std::size_t i = 0;
+        for (const int64_t stated : extents) {
+            if (stated >= 0 && static_cast<int64_t>(xs.extent(i)) != stated) {
+                holds = false;
+                break;
+            }
+            ++i;
+        }
+    }
+    if (!holds) [[unlikely]] {
+        std::string actual = "[";
+        for (std::size_t i = 0; i < rank; ++i) {
+            actual += (i == 0 ? "" : ", ") + std::to_string(xs.extent(i));
+        }
+        actual += "]";
+        fault(
+            site,
+            {std::string("conversion to '") + typeText + "' failed: the array has shape " + actual});
+    }
+    return xs;
 }
 
 /// Copies the plane `index` along `axis` of `xs`, in the order the remaining dimensions run: the
