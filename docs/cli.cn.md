@@ -53,6 +53,10 @@
 - `--gc <collector>`：运行时值的回收器：`generational`（默认；分代，年轻对象会被复制）或 `mark-sweep`（对象地址不变）。详见英文版 `docs/cli.md` 的 "The collector" 一节  
 - `--block-limit <megabytes>`：数据块空间的上限（默认 2048 MB，取值 1 到 2^20 MB）；它只防范失控的分配，最后一个持有者消失时块的内存立即归还  
 - `--graph-gc-mb <megabytes>`：图空间比上次回收后多出这么多时要求回收（默认 64）  
+- `--gc-nursery-mb <megabytes>`、`--gc-promotion-age <n>`、`--gc-large-threshold-kb <kilobytes>`、`--gc-large-budget-mb <megabytes>`、`--gc-growth-percent <n>`、`--gc-heap-limit-mb <megabytes>`：回收器的尺寸，在堆存在之前读入：初生空间（默认 4 MB）、晋升前存活的次回收次数（默认 4）、多大算大对象（generational 默认 64 KB，mark-sweep 4 KB）、两次回收之间允许的大对象字节（默认 4 MB）、该空间的增长比例（默认 100%）、堆上限（默认无）。每一项做什么见“回收器”一节  
+- `--space-segment-kb <kilobytes>`、`--meta-space-limit-mb <megabytes>`、`--graph-space-limit-mb <megabytes>`、`--perm-space-limit-mb <megabytes>`：每个可增长空间的第一个段（段小则小程序也会增长它们），以及 meta、graph、permanent 三个空间的上限；空间用尽时以 `RuntimeDiag::MemoryExhausted` 停下，并指出能抬高它的选项  
+- `--gc-stress <kind=...,alloc=...,safepoint=...>`、`--gc-check <moves,poison,verify=...,config>`：在压力下回收、读回收器：`kind=minor|major|both` 指定回收种类，`alloc=N` 每 N 次分配回收一次，`safepoint=N` 每 N 个安全点回收一次；`moves` 逐行打印移动的对象，`poison` 在每个安全点覆写 from 空间，`verify=before|after|both` 在回收前后检查不变式，`config` 启动时打印解析后的配置  
+- `--coll <leaf=...,fanout=...,pad=...,validate=...>`：`Map`/`Set` 树的宽度，在第一个集合建立之前读入：每个叶子的条目数（默认 64；0 表示所有集合都是一个有序数组）、每个分支的孩子数（默认 64）、`pad=off` 让根以下的表按内容分配、`validate=on` 检查每个操作返回的表  
 - `--native-stack-guard <on|off>`：嵌套调用前是否检查原生栈（默认 `on`）；`off` 只用于测量栈真正到哪里结束，不供正常使用  
 - `--devices <cpu|ordinal[,ordinal...]>`：一条流水线可以使用的设备（设计原则 13.4）：`cpu` 表示只用主机，或者按流水线可用的次序写 CUDA 序号（例如 `0`、`0,1`）。这里点名的设备必须存在：只要已加载的模块拥有设备，启动时就会在**任何图运行之前**检查一次（`--devices cpu` 永远通过；不给这个选项时，缺失只意味着程序在主机上运行）。缺失的序号是运行时诊断 `DeviceUnavailable`（`0x04000070`），报告中点出这个设备、机器上实际有多少 CUDA 设备（或为什么一台都问不到），以及其它同样缺失的序号；退出码为 1。程序即使一次都没有执行到设备操作，也照样报出（见 `modules/tiles/README.md` 的 "Tiles"）。今天一条流水线在第一个序号上执行，多卡执行是 G7。`--devices cpu` 下 `tiles:available()` 为假，需要设备的操作报错，而不是悄悄移到 GPU 上。  
 - `--profile-mode <normal|full>`：`--profile` 启动的剖析器模式；`full` 在写出报告时同时打开 Perfetto 界面（需要 `--profile`）  
@@ -176,7 +180,7 @@
 | `std::tf`、`std::prl` | `linear: bool = false`（逐节点求值），`fanout_all: bool = false`（把每个无序的高阶调用都展开成并行任务），`diag: bool = false`（打印对每张图的决定），`segments: bool = false`（打印当前计划的分段（不是理论上可以切成的分段）：每段的条目与链、每条链等谁，以及每个算子落在哪一段），`bytecode: bool = true`（把串行的图交给字节码解释器），`gc_stats: int = 0`（1：运行结束时打印统计；2：另外每次回收一行） |
 | `onnx::export` | `out: string = ""`（模型文件；见下） |
 
-仍留在环境变量里的是进程的环境，不是某个遍的设置：`CAMEL_HOME`、`CAMEL_STD_LIB`、`CAMEL_PACKAGES`，日志与诊断格式变量，资源上限（`CAMEL_*_SPACE_*`，以及 `--max-recursion-depth`、`--max-macro-depth`、`--max-macro-rounds` 的环境变量写法），回收器的诊断与节奏变量（`CAMEL_GC_HEAP_LIMIT_MB`、`CAMEL_GC_GROWTH_PERCENT`、`CAMEL_GC_PROMOTION_AGE`、`CAMEL_GC_POISON`、`CAMEL_GC_VERIFY`、`CAMEL_GC_STRESS_*`），以及 `CAMEL_STARTUP_PROFILE`。重写引擎的增长预算是上面那些遍的 `growth_budget` 参数，不从环境变量读取。开关是选项和遍参数：`--gc`、`--block-limit`、`--graph-gc-mb`、`--native-stack-guard`、`--profile-mode`，以及 `std::profile` 的 `gc_stats`、`type_stats`、`effect_trace` 参数；测试专用的遍在流水线里写出名字即可。
+仍留在环境变量里的是进程的环境，不是某个遍的设置：`CAMEL_HOME`、`CAMEL_STD_LIB`、`CAMEL_PACKAGES`，日志与诊断格式变量，以及 `CAMEL_STARTUP_PROFILE`。重写引擎的增长预算是上面那些遍的 `growth_budget` 参数，不从环境变量读取。开关是选项和遍参数：`--gc`、`--block-limit`、`--graph-gc-mb`、`--gc-nursery-mb`、`--gc-promotion-age`、`--gc-large-threshold-kb`、`--gc-large-budget-mb`、`--gc-growth-percent`、`--gc-heap-limit-mb`、`--space-segment-kb`、`--meta-space-limit-mb`、`--graph-space-limit-mb`、`--perm-space-limit-mb`、`--gc-stress`、`--gc-check`、`--coll`、`--max-recursion-depth`、`--max-macro-depth`、`--max-macro-rounds`、`--native-stack-guard`、`--profile-mode`，以及 `std::profile` 的 `gc_stats`、`type_stats`、`effect_trace` 参数；测试专用的遍在流水线里写出名字即可。
 
 ### 模块的遍
 

@@ -50,6 +50,7 @@
 #include "camel/core/type/collection.h"
 
 #include <functional>
+#include <optional>
 #include <string>
 
 namespace camel::core::rtdata {
@@ -120,12 +121,12 @@ bool valuesEqual(slot_t a, slot_t b, const type::Type *type);
 namespace table {
 
 /// The widths of the tree: a leaf of a map holds at most `leafCapacity` entries (a leaf of a
-/// set twice as many, in the same room), a branch at most `fanout` children. Read once from
-/// the environment, as a test and measurement control: CAMEL_COLL_LEAF_CAPACITY (0: unbounded,
-/// so that every collection is one sorted array), CAMEL_COLL_FANOUT, CAMEL_COLL_PAD_NODES (0:
-/// a table below a root is allocated for its content only, not at full width) and
-/// CAMEL_COLL_VALIDATE (every table an operation returns is checked with `validate`, and the
-/// process stops at the first violation).
+/// set twice as many, in the same room), a branch at most `fanout` children. A test and
+/// measurement control, read once and set from the command line with
+/// `--coll leaf=<n>,fanout=<n>,pad=on|off,validate=on|off`: a leaf capacity of 0 is unbounded
+/// (every collection is one sorted array), `pad` off allocates a table below a root for its
+/// content only, and `validate` checks every table an operation returns and stops the process
+/// at the first violation.
 struct Shape {
     size_t leafCapacity;
     size_t fanout;
@@ -133,6 +134,18 @@ struct Shape {
     bool validate;
 };
 const Shape &shape();
+
+/// What the command line asked a shape to be. A field nobody set keeps the value `shape()`
+/// would have chosen by itself; the request has to be made before the first collection's shape
+/// is read (it is read once, like the collector's spaces).
+struct ShapeRequest {
+    std::optional<size_t> leafCapacity;
+    std::optional<size_t> fanout;
+    std::optional<bool> padded;
+    std::optional<bool> validate;
+};
+/// Returns false, and changes nothing, when a collection has already been made.
+bool selectShape(const ShapeRequest &request);
 
 /// Whether `key` is in `t`.
 bool has(const Table *t, slot_t key, const type::Type *keyType);
