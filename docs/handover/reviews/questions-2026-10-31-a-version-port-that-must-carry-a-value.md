@@ -124,6 +124,27 @@ return version;
 形状一的实现（`valueVersionOf` 返回调用节点）**只存在于补丁里**：`D:\Temp\version-edge-a.patch`，**5674 字节**，内含 `builder_expr.cpp` 的 10 行与枚举两态化的改动（枚举两态化已单独上车，见 `821185288`）。**它是形状一的唯一记录**，重跑本页第二节的形状一读数时用它。
 
 ## 十、这一页堵着谁
+## 十三、五处 `yet`：目标不具备，还是尚未实现
+
+**一条判据**：**看见 `yet` 先分两件事——是目标语言/后端没有这个东西（目标不具备），还是我们有而没写（尚未实现）。两者的收尾不同：前者进"不支持"的清单，后者进"待做"。**
+
+逐处读过，一处一句：
+
+| 处 | 原文 | 判 |
+|---|---|---|
+| `src/passes/trans/cpp/cpp_types.h:72`（实现在 `cpp_types.cpp:355-`） | `The C++ type of a value of `type`, or nothing when std::cpp does not translate it yet.` | **尚未实现**：映射表是我们自己的，大部分类型已映射到 `rt::Array`/`rt::Cell`/`rt::Opt` 这类运行时类型；没映射的是这张表缺条目，不是 C++ 没有这个类型 |
+| `src/passes/trans/cpp/function_emitter.cpp:690` | `… contains {a function bound to its 'with' arguments \| a read through a reference}, which std::cpp does not translate yet` | **尚未实现**：C++ 有引用，也有捕获的 lambda；缺的是这两种节点在发射器里的写法 |
+| `:973` | `… uses the operator '{}' on values std::cpp does not translate it for yet` | **尚未实现**：规则在 `operator_rules.cpp` 这张表里，没写就是没写（表里已有的算子不受影响） |
+| `:1348` | `… makes a function value of type '{}' std::cpp does not translate yet` | **尚未实现**：函数值就是 lambda，C++ 有 |
+| `src/passes/trans/cpp/operator_rules.cpp:453` | `… neither is bf16 or f16 (this back end has no such element type): those are refused` | **目标不具备**：这一后端的元素类型集合里没有 bf16/f16——注释自己写着 `this back end has no such element type`；要它具备是另一件事（换元素类型层），不是把规则补上 |
+
+**一条判据**：**同一句 `yet` 里，只有收尾是"决定要不要给这个后端一个能力"的那一处才改；收尾是"写规则表"的留着——留着它，才知道还有活。**
+
+**落地的只有那一处**：`operator_rules.cpp:453` 那族（bf16/f16）的拒绝现在说能力边界——`std::cpp ... has type 'bf16'; std::cpp translates numbers (real and complex), ... : this back end has no such element type -- bf16 and f16 are not among the numbers it writes`，**没有 `yet`**；`refuse_tensor` 那一句**保留 `yet`**（它是没写的规则）。负例钉住这条：`test/plans/feat/trans/cpp.plan.toml` 的 `refuse_narrow_float`，断言 **输出没有 `yet`、且说出 `no such element type`**。
+
+**所以五处里四处是"尚未实现"，一处是"目标不具备"**（`operator_rules.cpp:453` 的 bf16/f16）。**四处的收尾都是写规则表；那一处的收尾是决定要不要给这个后端窄浮点。**
+
+## 十四、这一页堵着谁
 
 - **① 的块外那一半**（`builder_operators.cpp:4403`、`:4427`，补丁 `D:\Temp\edges-block-outside.patch`）：门不再造之后，这个变量族正是靠版本边活着的；
 - **③ 停造 ctrl**：`orderAfterLastWriter` 里那条 ctrl 边是这一格的临时替身，它必须在版本边成立之后才拆；

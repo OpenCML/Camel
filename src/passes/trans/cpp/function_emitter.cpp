@@ -882,11 +882,12 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
             g,
             ref,
             std::format(
-                "the result of operator '{}' in {} has type '{}'; {}",
+                "the result of operator '{}' in {} has type '{}'; {}{}",
                 uri,
                 describeFunction(g),
                 typeName(node->dataType()),
-                kTranslatedTypes));
+                kTranslatedTypes,
+                notTranslatedBecause(node->dataType())));
     }
     std::vector<CppValue> norm, with;
     std::vector<const Type *> normTypes, withTypes;
@@ -931,8 +932,20 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
     // `tensor:ones` and `tensor:zeros` build a tensor from a shape array. std::cpp writes no tensor
     // value at all, so naming the shape array as the untranslated thing would blame the wrong
     // side: the array is translated, the tensor is what the pass does not have.
-    if (uri == "tensor:ones" || uri == "tensor:zeros") {
+    // `rand:uniform_array` and `rand:normal_array` draw from a key into a *shaped* array: the key is
+    // a C++-side value (rt::randomStream has the same philox), so naming it is wrong -- the value
+    // they build is a shaped array, and std::cpp writes none.
+    if (uri == "rand:uniform_array" || uri == "rand:normal_array") {
         refuse(
+            g,
+            ref,
+            std::format(
+                "{} uses '{}' to fill a shaped array, and std::cpp writes no shaped array value: the "
+                "pass has no tensor type, so the draw cannot be handed out",
+                describeFunction(g),
+                uri));
+    }
+    if (uri == "tensor:ones" || uri == "tensor:zeros") {        refuse(
             g,
             ref,
             std::format(
