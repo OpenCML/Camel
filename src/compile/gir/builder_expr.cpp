@@ -737,12 +737,15 @@ node_handle_t Builder::valueVersionOf(node_handle_t variable) {
     // the version of it.
     const auto value = callValues_.find(*modifier);
     if (value == callValues_.end()) {
-// The call's captured writes are not in `callValues_` at all: its callee is a function
+        // The call's captured writes are not in `callValues_` at all: its callee is a function
         // value, so there is no mask to build the parts from. The writer registry recorded the call
         // as this variable's write all the same (recordWrite, throughCallee), so the call is the
         // variable's new version: the read takes `:var/after(cell, call)`, which is the cell as it
         // stands after that call, and the edge from the call is what makes it run (3.1). Whatever
         // the call returns -- nothing, or a value of its own -- is not read here.
+        if (nodeKindOf(*modifier) == camel::runtime::GCNodeKind::Call) {
+            return variableAfterCall(variable, *modifier);
+        }
         return nullptr;
     }
     const bool wrapped = value->second.hasReturn || value->second.variables.size() > 1;
