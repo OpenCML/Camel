@@ -14,6 +14,10 @@ test/cases/trans/cpp/narrow_floats.cml
 test/cases/trans/cpp/narrow_reductions.cml
 test/cases/trans/cpp/narrow_mean.cml
 test/cases/trans/cpp/narrow_argmax.cml
+# The library's own operators, where the writer had no rule and a bridged call was the answer: the
+# integer minimum and maximum (the plain comparison, not the IEEE one the floats take) and the
+# square root outside its domain (a NaN, not a fault).
+test/cases/trans/cpp/math_min_max_int.cml
 
 # Values and their text.
 test/cases/loops/iterate_string.cml
