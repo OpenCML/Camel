@@ -81,4 +81,45 @@ CollectorMode collectorMode();
 const char *collectorModeName(CollectorMode mode);
 std::optional<CollectorMode> parseCollectorMode(std::string_view text);
 
+/// How the allocator is sized: the collector's spaces and the block space's first segment. A zero
+/// is "the default", the meaning these numbers have always had (`--gc-nursery-mb`,
+/// `--gc-promotion-age`, `--gc-large-threshold-kb`, `--gc-large-budget-mb`,
+/// `--gc-growth-percent`, `--gc-heap-limit-mb`, `--space-segment-kb`).
+struct AllocatorSizing {
+    size_t nurseryMb        = 0; // the birth space, default 4 MB
+    size_t promotionAge     = 0; // minor collections before promotion, default 4 (1 to 15)
+    size_t largeThresholdKb = 0; // what counts as a large object, default 64 KB (4 KB mark-sweep)
+    size_t largeBudgetMb    = 0; // large-object bytes between collections, default 4 MB
+    size_t growthPercent    = 0; // growth of the large-object space, default 100 %
+    size_t heapLimitMb      = 0; // the heap limit, default none
+    size_t spaceSegmentKb   = 0; // the first segment of every growable space, default as it was
+    size_t metaSpaceLimitMb = 0; // the meta space's limit (--meta-space-limit-mb)
+    size_t graphSpaceLimitMb = 0; // the graph space's limit (--graph-space-limit-mb)
+    size_t permSpaceLimitMb = 0; // the permanent space's limit (--perm-space-limit-mb)
+};
+
+/// Selects the sizing for this process. Like `selectCollectorMode`, it has to be called before
+/// the auto space is first used and returns false when that has already happened.
+bool selectAllocatorSizing(const AllocatorSizing &sizing);
+
+/// What a run asks the collector to do beyond collecting: the stress collection and the readings
+/// (`--gc-stress`, `--gc-check`). They are what was set from the environment, made settable
+/// before the heap exists.
+struct AllocatorChecks {
+    /// Which collection a stress point performs.
+    enum class Stress { None, Minor, Major, Both };
+
+    Stress stress                 = Stress::None;
+    size_t stressEveryAllocations = 0; // collect every N allocations (0: never)
+    size_t stressEverySafepoints  = 0; // collect every N safepoints (0: never)
+    bool logMoves                 = false; // one line per moved object
+    bool poison                   = false; // write over the from-space at every safepoint
+    bool verifyBefore             = false; // check the invariants before a collection
+    bool verifyAfter              = false; // ... and after
+    bool printConfig              = false; // print the resolved configuration at start
+};
+
+/// Selects the checks for this process, under the same rule as the sizing.
+bool selectAllocatorChecks(const AllocatorChecks &checks);
+
 } // namespace camel::core::mm

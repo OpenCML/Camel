@@ -1207,7 +1207,7 @@ assert(out.includes('"stage":"pass:test::exhaust_perm_space"'), `stage missing: 
 assert(out.includes('"name":"RuntimeDiag::MemoryExhausted"'), `name missing: ${out}`)
 assert(out.includes('The permanent space (types and layouts) is exhausted'), `reason missing: ${out}`)
 assert(out.includes('of the limit of 2.0 MB are in use'), `limit missing: ${out}`)
-assert(out.includes('set CAMEL_PERM_SPACE_LIMIT_MB=<megabytes> to raise the limit (it is 2 now)'), `advice missing: ${out}`)
+assert(out.includes('raise it with --perm-space-limit-mb=<megabytes> (it is 2 now)'), `advice missing: ${out}`)
 assert(!out.includes('[12, 2]'), `the program ran: ${out}`)
 }
 """
