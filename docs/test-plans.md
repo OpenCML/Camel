@@ -102,6 +102,19 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
   an ordinary change must not run"), and the eight cases they read mirror to the milestone
   `feat/mm/gc.plan.toml`; so the layer stays, the class stays, and nothing is renamed to route around
   either. A nightly whole run is what keeps them from being forgotten.
+  **The nightly entry is one command, and it is the whole slow layer:
+  `node scripts/test.js test/plans --tier slow --jobs 8`.** There is no `nightly` script and no
+  plan file that includes the layer (the plan format has no `includes`), so the command is the
+  entry; paste it, do not remember it. Measured on this host at `d7ab3a6ab` (clean): **163 entries**
+  (the three whole slow plans are 140 of them; `perf/*`, `lsp`, `debugger`, `cpp`, `autodiff`,
+  `random`, `frontend`, `linear/var_reference` carry the rest as single slow entries), `wall`
+  131.4-160.5 s over three runs, and **it is not green**: `agree_with_fvm` fails in every run --
+  three cases "does not build: clang: error: linker command failed with exit code 1"
+  (`test/cases/consistency/values/max_min_special.cml`, `trans/cpp/exec/scalars.cml`,
+  `compile/diag_render/runtime_regex.cml`), which is the host's C++ link, not the compiler.
+  `gpu/tiles` is in it and skips what it cannot get: `skip: 19` when the cards were mostly free,
+  `skip: 47` when they were not -- the same command, a different number, which is why the skip
+  count is read beside the card report and never as "the GPU suite passed".
   `feat/modules/random.plan.toml`'s `keyed_random.std_cpp_agrees` is the same shape -- it compiles
   C++ like `trans/cpp`'s `agree_with_fvm` -- but nothing runs that layer today; recorded here and
   left alone on purpose, one move at a time. Some individual entries are still `tier = "slow"` inside fast plans
