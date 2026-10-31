@@ -198,7 +198,18 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     switch (nodeKindOf(node)) {
     case runtime::GCNodeKind::Oper: {
         const auto &op = graph->operTarget(node);
-        return op != nullptr && camel::core::OperatorTable::instance().hasExternalEffect(op->uri());
+        if (op == nullptr) {
+            return false;
+        }
+        // The version edge is not a statement of its own: it reads nothing of what it is given and
+        // writes nothing, it orders the call it carries (docs/design/effects/edges.cn.md 3.1, 5.6).
+        // The effect is that call's, and it is reported by its own name when it is not run; calling
+        // the reader of a version an unexecuted statement would name an operator no program can
+        // write, which is how the warning says it looked at the position and not at the thing.
+        if (op->uri() == ":var/after") {
+            return false;
+        }
+        return camel::core::OperatorTable::instance().hasExternalEffect(op->uri());
     }
     case runtime::GCNodeKind::Func: {
         // A call of a function this compiler has a body for is judged by that body first
@@ -1853,7 +1864,7 @@ void Builder::checkDeclaredReturn(
     const GCT::node_ptr_t &value) {
     // Only a DECLARED type is checked: an undeclared one is set from the first value returned,
     // after which hasExitType() is true as well, so the check runs before that happens.
-    if (graph == nullptr || graph->draft().exitNode() != runtime::kInvalidNodeRef) {
+    if (graph == nullptr || graph->view().exitNode() != runtime::kInvalidNodeRef) {
         return;
     }
     FunctionType *funcType = graph->funcType();

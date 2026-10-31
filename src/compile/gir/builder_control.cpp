@@ -1376,7 +1376,7 @@ Type *Builder::declaredExitTypeHere() const {
     // An undeclared return type is set from the first value returned (see
     // checkDeclaredReturn): before that, a type that is present was declared.
     if (funcType == nullptr || !funcType->hasExitType() ||
-        currGraph_->draft().exitNode() != runtime::kInvalidNodeRef) {
+        currGraph_->view().exitNode() != runtime::kInvalidNodeRef) {
         return nullptr;
     }
     return funcType->exitType();
@@ -1388,7 +1388,7 @@ Type *Builder::ownDeclaredExitType() const {
     }
     FunctionType *funcType = currGraph_ != nullptr ? currGraph_->funcType() : nullptr;
     if (funcType == nullptr || !funcType->hasExitType() ||
-        currGraph_->draft().exitNode() != runtime::kInvalidNodeRef) {
+        currGraph_->view().exitNode() != runtime::kInvalidNodeRef) {
         return nullptr;
     }
     return funcType->exitType();
@@ -2722,7 +2722,7 @@ node_handle_t Builder::buildBranch(
     const auto brchDataIndex = brchHeader->dataIndex != 0
                                    ? brchHeader->dataIndex
                                    : currGraph_->addRuntimeSlot(Type::Int64());
-    currGraph_->draft().rewriteNode(
+    currGraph_->edit().rewriteNode(
         nodeIdOf(brchNode),
         runtime::DraftNodeInit{
             .dataIndex    = brchDataIndex,
@@ -2748,7 +2748,7 @@ node_handle_t Builder::buildBranch(
     const auto *joinHeader = nodeHeaderOf(joinNode);
     const auto joinDataIndex =
         joinHeader->dataIndex != 0 ? joinHeader->dataIndex : currGraph_->addRuntimeSlot(joinType);
-    currGraph_->draft().rewriteNode(
+    currGraph_->edit().rewriteNode(
         nodeIdOf(joinNode),
         runtime::DraftNodeInit{
             .dataIndex    = joinDataIndex,
@@ -3201,14 +3201,14 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             params.addNormArg(name, nodeTypeOf(part.ports[i]), false);
         }
         params.setExitType(Type::Void());
-        part.graph->draft().setRegionPorts(part.region, ids);
-        part.graph->draft().setRegionParams(part.region, params.build());
+        part.graph->edit().setRegionPorts(part.region, ids);
+        part.graph->edit().setRegionParams(part.region, params.build());
     };
     const auto declarePorts = [&](ArmBuild &part, bool withElement, const GCT::node_ptr_t &exec) {
         const auto add = [&](const std::string &name, Type *type) -> node_handle_t {
             node_handle_t port = currGraph_->addRegionPortNode(type, name);
             // A port belongs to its region, as the nodes that read it do.
-            part.graph->draft().setNodeRegion(nodeIdOf(port), part.region);
+            part.graph->edit().setNodeRegion(nodeIdOf(port), part.region);
             insertNode(name, port);
             if (recorder_) {
                 recordDeclaration(name, port, exec);
@@ -3618,10 +3618,10 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         // The sequence the loop iterates is the pair of the interval's bounds, not an array
         // (camel::core::LoopIterableForm::Interval): a back end takes the element of a round from
         // the bounds and the round number, so nothing the size of the interval is ever made.
-        currGraph_->draft().setLoopIterableInterval(nodeIdOf(loopNode));
+        currGraph_->edit().setLoopIterableInterval(nodeIdOf(loopNode));
     }
     if (!collected.empty()) {
-        currGraph_->draft().setLoopCollectionCount(
+        currGraph_->edit().setLoopCollectionCount(
             nodeIdOf(loopNode),
             static_cast<uint32_t>(collected.size()));
     }
@@ -3707,8 +3707,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
             const slot_t empty = camel::core::rtdata::toSlot(
                 ::Tuple::create(stateTypes.size(), camel::core::mm::autoSpace()));
-            node_handle_t source = currGraph_->draft().ref(
-                currGraph_->draft().materializeStaticValue(empty, stateType));
+            node_handle_t source = currGraph_->view().ref(
+                currGraph_->edit().materializeStaticValue(empty, stateType));
             linkNodes(LinkType::Norm, source, loopValue);
             for (size_t j = 0; j < stateTypes.size(); ++j) {
                 node_handle_t component =
@@ -3758,8 +3758,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                                              ::Struct::create(count, camel::core::mm::autoSpace()))
                                        : camel::core::rtdata::toSlot(
                                              ::Tuple::create(count, camel::core::mm::autoSpace()));
-            node_handle_t source = currGraph_->draft().ref(
-                currGraph_->draft().materializeStaticValue(empty, part.type));
+            node_handle_t source = currGraph_->view().ref(
+                currGraph_->edit().materializeStaticValue(empty, part.type));
             linkNodes(LinkType::Norm, source, fill);
             for (node_handle_t value : values) {
                 linkNodes(LinkType::With, value, fill);
@@ -3864,8 +3864,8 @@ node_handle_t Builder::buildStreamLoop(
             machineType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
         const slot_t empty = camel::core::rtdata::toSlot(
             ::Tuple::create(components.size(), camel::core::mm::autoSpace()));
-        node_handle_t source = currGraph_->draft().ref(
-            currGraph_->draft().materializeStaticValue(empty, machineType));
+        node_handle_t source = currGraph_->view().ref(
+            currGraph_->edit().materializeStaticValue(empty, machineType));
         linkNodes(LinkType::Norm, source, fill);
         for (node_handle_t component : components) {
             linkNodes(LinkType::With, component, fill);
@@ -3897,8 +3897,8 @@ node_handle_t Builder::buildStreamLoop(
             ids.push_back(nodeIdOf(part.ports[i]));
         }
         params.setExitType(Type::Void());
-        part.graph->draft().setRegionPorts(part.region, ids);
-        part.graph->draft().setRegionParams(part.region, params.build());
+        part.graph->edit().setRegionPorts(part.region, ids);
+        part.graph->edit().setRegionParams(part.region, params.build());
     };
     const auto declarePorts = [&](ArmBuild &part, const GCT::node_ptr_t &exec) {
         // The value each port stands for: the machine is handed the sequence, the flag that says it
@@ -3909,7 +3909,7 @@ node_handle_t Builder::buildStreamLoop(
         size_t handed = 0;
         const auto add = [&](const std::string &name, Type *type) {
             node_handle_t port = currGraph_->addRegionPortNode(type, name);
-            part.graph->draft().setNodeRegion(nodeIdOf(port), part.region);
+            part.graph->edit().setNodeRegion(nodeIdOf(port), part.region);
             insertNode(name, port);
             if (handed < machineInitial.size()) {
                 noteMachinePortOrigin(port, machineInitial[handed]);
@@ -4108,8 +4108,10 @@ node_handle_t Builder::buildStreamLoop(
             stateType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
         const slot_t empty = camel::core::rtdata::toSlot(
             ::Tuple::create(k, camel::core::mm::autoSpace()));
-        node_handle_t source =
-            currGraph_->draft().ref(currGraph_->draft().materializeStaticValue(empty, stateType));
+        // Two steps, because the two halves are not the same side: writing the static value is an
+        // edit, and reading the node it produced is a view.
+        const auto emptyNode = currGraph_->edit().materializeStaticValue(empty, stateType);
+        node_handle_t source = currGraph_->view().ref(emptyNode);
         linkNodes(LinkType::Norm, source, loopValue);
         for (size_t j = 0; j < k; ++j) {
             node_handle_t component =
@@ -4625,7 +4627,7 @@ void Builder::markLoopStateInPlaceOne(
 }
 
 void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t result) {
-    if (graph->draft().exitNode() != runtime::kInvalidNodeRef) {
+    if (graph->view().exitNode() != runtime::kInvalidNodeRef) {
         return;
     }
     if (result == nullptr) {

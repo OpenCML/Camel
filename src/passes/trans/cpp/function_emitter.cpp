@@ -509,14 +509,20 @@ Block FunctionEmitter::lowerSequenceBody(
         return out;
     }
 
-    const bool hasValue =
-        result != kInvalidNodeRef && !isVoid(frame.graph->node(result)->dataType());
+    const bool hasValue = result != kInvalidNodeRef && isValueType(frame.graph->node(result)->dataType());
     switch (tail.kind) {
     case Tail::Kind::Return:
         // A function declared to return nothing ends with `return;` whatever its last value
         // (`return println(...)` in a `void` function gives the string println gives).
         if (isVoid(current_->graph->funcType()->exitType())) {
             out.push_back(Stmt::line("return;"));
+            break;
+        }
+        if (endsFlow(frame.graph->node(result)->dataType())) {
+            // The value's type is `never`: its call was emitted as a statement (bind), it throws
+            // and does not come back, and there is nothing to return. The compiler is told the
+            // line after it is unreachable rather than reading a `return` of no value.
+            out.push_back(Stmt::line("__builtin_unreachable();"));
             break;
         }
         out.push_back(
@@ -563,8 +569,10 @@ void FunctionEmitter::bind(
     const std::string &hint) {
     const Type *type  = frame.graph->node(ref)->dataType();
     const size_t uses = liveUses(frame.graph, ref) + frame.results.count(ref);
-    if (isVoid(type) || uses == 0) {
-        // Only its effect matters. A pure expression nothing uses has none: it is left out.
+    if (!isValueType(type) || uses == 0) {
+        // Only its effect matters. A pure expression nothing uses has none: it is left out. A
+        // `never` value is only its effect: it has no C++ value to bind, and the call ends the
+        // flow instead of producing one.
         if (!inlinable) {
             out.push_back(Stmt::line(expr + ";"));
         }
@@ -861,7 +869,12 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
             g,
             ref,
             std::format(
-                "the result of operator '{}' in {} has type '{}'; {}",
+                // What is missing here is a piece of this table, not a thing the target cannot
+                // do: the sentence says so, and it says it with `yet` (design principles: a core
+                // value type or a core operation is written by every back end, so its absence is
+                // work not done -- only introspection of the runtime itself may be absent by
+                // target, `std::mem::blocks()`).
+                "the result of operator '{}' in {} has type '{}'; {} -- but not this one yet",
                 uri,
                 describeFunction(g),
                 typeName(node->dataType()),
@@ -903,6 +916,43 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
         return;
     }
     const OperatorRule *rule = findOperatorRule(uri);
+    // `std::mem::blocks()` reads the runtime's own block space, which is an introspection of this
+    // runtime: a program std::cpp writes has no block space of the runtime at all, so on this target
+    // the counters are not available. That is a boundary of the target, not a translation still to
+    // be written, and the two are said differently (author's ruling of 2026-10-31: A).
+    // `tensor:ones` and `tensor:zeros` build a tensor from a shape array. std::cpp writes no tensor
+    // value at all, so naming the shape array as the untranslated thing would blame the wrong
+    // side: the array is translated, the tensor is what the pass does not have.
+    // `rand:uniform_array` and `rand:normal_array` draw from a key into a *shaped* array: the key is
+    // a C++-side value (rt::randomStream has the same philox), so naming it is wrong -- the value
+    // they build is a shaped array, and std::cpp writes none.
+    if (uri == "rand:uniform_array" || uri == "rand:normal_array") {
+        refuse(
+            g,
+            ref,
+            std::format(
+                "{} uses '{}' to fill a shaped array, and std::cpp writes no shaped array value: the "
+                "pass has no tensor type, so the draw cannot be handed out",
+                describeFunction(g),
+                uri));
+    }
+    if (uri == "tensor:ones" || uri == "tensor:zeros") {        refuse(
+            g,
+            ref,
+            std::format(
+                "{} uses '{}' to build a tensor, and std::cpp writes no tensor value: the pass has "
+                "no tensor type, so a shape cannot be handed to it",
+                describeFunction(g),
+                uri));
+    }
+    if (uri == ":op/mem_blocks") {        refuse(
+            g,
+            ref,
+            std::format(
+                "{} reads the block counters of the Camel runtime, and a program std::cpp writes has "
+                "no runtime block space of its own: the counters are not available on this target",
+                describeFunction(g)));
+    }
     if (rule == nullptr) {
         for (const auto types : {&normTypes, &withTypes}) {
             for (const Type *t : *types) {
@@ -1304,6 +1354,12 @@ bool FunctionEmitter::bridgeCarries(const Type *type) {
     case TypeCode::Bool:
     case TypeCode::String:
     case TypeCode::Void:
+    // `never` is not a value the bridge passes: it is the edge of a control flow that does not
+    // come back (design principles 3.9). An operator whose result is `never` -- `fail`, and what
+    // it joins with -- is emitted as a call that returns `void` and is never the right side of an
+    // assignment (cppTypes maps the type to void for the same reason). Refusing it left 12
+    // programs in the tree untranslatable for a result nobody can read.
+    case TypeCode::Never:
         return true;
     default:
         return false;
@@ -1561,8 +1617,14 @@ void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref) {
     } else if (target != nullptr && (target->isNullable() || target->isFallible())) {
         text = std::format("{}({})", to, value.text);
     } else if (
-        fromType != nullptr && fromType->code() <= TypeCode::Bool &&
-        toType->code() <= TypeCode::Bool) {
+        fromType != nullptr &&
+        (camel::core::type::isNumericScalar(fromType->code()) ||
+         fromType->code() == TypeCode::Bool) &&
+        (camel::core::type::isNumericScalar(toType->code()) ||
+         toType->code() == TypeCode::Bool)) {
+        // A conversion between numbers is the C++ conversion of their values. The two
+        // reduced-precision types are among them: a static_cast into one of them is the store
+        // rounding, and one out of one is exact (include/camel/standalone/half.h).
         text = std::format("static_cast<{}>({})", to, value.text);
     } else {
         refuse(

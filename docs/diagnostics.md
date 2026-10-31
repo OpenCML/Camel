@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-302 diagnostics: 281 errors, 21 warnings. 15 carry a machine-applicable edit, 287 say why they carry none.
+303 diagnostics: 282 errors, 21 warnings. 15 carry a machine-applicable edit, 288 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -219,7 +219,6 @@ prints one entry.
 | `0x030001D3` | [SemanticDiag::ParamDefaultWrongType](#paramdefaultwrongtype) | Error | no |
 | `0x030001D4` | [SemanticDiag::ParamAfterDefault](#paramafterdefault) | Error | no |
 | `0x030001D6` | [SemanticDiag::ParamArgumentWrongType](#paramargumentwrongtype) | Error | no |
-| `0x030001D7` | [SemanticDiag::ReducedPrecisionUnsupported](#reducedprecisionunsupported) | Error | no |
 | `0x030001D8` | [SemanticDiag::ImplOnBodylessDeclaration](#implonbodylessdeclaration) | Error | no |
 | `0x030001D9` | [SemanticDiag::ImplKernelUnknown](#implkernelunknown) | Error | no |
 | `0x030001DA` | [SemanticDiag::ImplKernelForeign](#implkernelforeign) | Error | no |
@@ -266,6 +265,7 @@ prints one entry.
 | `0x03000203` | [SemanticDiag::TagNameAsValue](#tagnameasvalue) | Error | no |
 | `0x03000204` | [SemanticDiag::RuleLeftIsNotAnOperator](#ruleleftisnotanoperator) | Error | no |
 | `0x03000205` | [SemanticDiag::DuplicateRuleForOperator](#duplicateruleforoperator) | Error | no |
+| `0x03000206` | [SemanticDiag::YieldRequiresStreamHead](#yieldrequiresstreamhead) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -289,6 +289,7 @@ prints one entry.
 | `0x0400000A` | [RuntimeDiag::UnrecognizedGraphPass](#unrecognizedgraphpass) | Error | no |
 | `0x0400000B` | [RuntimeDiag::TranslationRefused](#translationrefused) | Error | no |
 | `0x0400000C` | [RuntimeDiag::PassInternalError](#passinternalerror) | Error | no |
+| `0x0400000D` | [RuntimeDiag::PassBoundaryResources](#passboundaryresources) | Error | no |
 | `0x0400000E` | [RuntimeDiag::MacroEvaluationFailed](#macroevaluationfailed) | Error | no |
 | `0x04000010` | [RuntimeDiag::EntryArgumentMissing](#entryargumentmissing) | Error | no |
 | `0x04000011` | [RuntimeDiag::EntryArgumentInvalid](#entryargumentinvalid) | Error | no |
@@ -2172,19 +2173,14 @@ The feature '{0}' is not supported yet.
 Check the documentation for supported features.
 ```
 
-**Example** (`test/cases/compile/stream/yield_lowering.cml`, run as `camel test/cases/compile/stream/yield_lowering.cml`)
+**Example** (`test/cases/compile/namespace_rules/p12_use.cml`, run as `camel -E short test/cases/compile/namespace_rules/p12_use.cml`)
 
 ```camel
-func running(n: int): (int, int).. {
-    loop i = 0, s = 0 while i < n do {
-        yield (i, s)
-        (i + 1, s + i)
-    }
-}
-
+// use name = qualified name
+import lib
+use inc = lib::Tools::inc
 func main(): int sync {
-    let s = running(3)
-    println(1)
+    println(inc(1))
     return 0
 }
 ```
@@ -6968,36 +6964,6 @@ func main(): int sync {
 }
 ```
 
-### ReducedPrecisionUnsupported
-
-`0x030001D7` · Error · `SemanticDiag::ReducedPrecisionUnsupported`
-
-**Fix**
-
-None: choice: the repair is a decision only the writer can make
-
-**Message**
-
-```text
-The call of '{0}' cannot take a value of the reduced-precision element type '{1}'.
-```
-
-**Help**
-
-```text
-bf16 and f16 are floating types of the language: a literal has one, bf16(x) and f16(x) are written conversions, and the scalar arithmetic and comparison compute in f32 and round once into the element type (design principles 7.3). This call asks for an operation one of them has no overload for - an operation the same type refuses on f32, such as %, or a function that takes a fixed set of types. Write the operation on a type that has it, or read the value as f32 (or f64) first, which is exact: f32(x).
-```
-
-**Example** (`test/cases/modules/stdlib/reduced_arithmetic_refused.cml`, run as `camel test/cases/modules/stdlib/reduced_arithmetic_refused.cml`)
-
-```camel
-func main(): int sync {
-    let xs: bf16[] = []
-    println(xs[0] % xs[0])
-    return 0
-}
-```
-
 ### ImplOnBodylessDeclaration
 
 `0x030001D8` · Error · `SemanticDiag::ImplOnBodylessDeclaration`
@@ -8699,6 +8665,39 @@ func main(): int sync {
 }
 ```
 
+### YieldRequiresStreamHead
+
+`0x03000206` · Error · `SemanticDiag::YieldRequiresStreamHead`
+
+**Fix**
+
+None: choice: the head writes the stream type the body hands out, and what the body yields is the writer's
+
+**Message**
+
+```text
+A function whose body writes 'yield' hands out a stream, and this function's head does not write one.
+```
+
+**Help**
+
+```text
+A body that writes 'yield' is a generator (design principles 5.4): its head writes the stream type it hands out, 'func f(xs: T): U.. sync with one yield in it', and a pull answers the next element and, when the body ends, null. Writing 'yield' in a body whose head writes something else gives that body no way to hand out its elements one at a time.
+```
+
+**Example** (`test/cases/compile/stream/yield_head_no_stream.cml`, run as `camel test/cases/compile/stream/yield_head_no_stream.cml`)
+
+```camel
+func g() sync {
+    yield 1
+}
+
+func main(): int sync {
+    g()
+    return 0
+}
+```
+
 ### IgnoredSideEffect
 
 `0x03100002` · Warn · `SemanticDiag::IgnoredSideEffect`
@@ -9554,6 +9553,67 @@ func main(): int sync {
 }
 ```
 
+### PassBoundaryResources
+
+`0x0400000D` · Error · `RuntimeDiag::PassBoundaryResources`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
+**Message**
+
+```text
+Pass '{0}' changed the ambient resources the program touches: before {1}, after {2}.
+```
+
+**Help**
+
+```text
+An effect is written once and stays where the program put it. A rewrite may move code, copy it, or delete what nothing needs, but the ambient resources a graph touches -- stdout, stderr, stdin, clock, env, fs, rng -- are the program's effects, and the pass list must leave them the same. This is a defect of the pass named, not of the program.
+```
+
+**Example** (`test/cases/effects/declared.cml`, run as `camel test/cases/effects/declared.cml std::opt::inline std::opt`)
+
+```camel
+// What a call touches, written on the declaration (design effects plan 3.1): a resource of the
+// module, a group of them, a handle type and `uses` on a parameter (a cell or a handle) and on a
+// group. The bodies touch nothing: the clause is the whole truth a call site reads.
+
+resource db
+resource console = [db, stdout]
+
+#resource type Stream = { id: int }
+
+/// The body touches nothing; the clause says a call reads and writes the handle it is given.
+func consume(s: Stream): int uses s {
+    return 0
+}
+
+/// The body is empty; every call touches what the group names.
+func tick(): void uses console {
+}
+
+/// The body touches nothing; the clause says a call writes the cell it is given.
+func bump(var t: int): int uses t sync {
+    return 0
+}
+
+func main(): int sync {
+    let s: Stream = { id: 7 }
+    consume(s)
+    consume(s)
+    tick()
+    tick()
+    var cell = 0
+    bump(cell)
+    bump(cell)
+    println(s.id)
+    println(cell)
+    return 0
+}
+```
+
 ### MacroEvaluationFailed
 
 `0x0400000E` · Error · `RuntimeDiag::MacroEvaluationFailed`
@@ -9709,7 +9769,7 @@ Out of memory{0}: {1}.
 The graph, permanent and meta spaces hold the compiled program (its runtime graphs, its types, the constants of the graphs being compiled) and grow with it; each has a total limit that only guards against a compiler that does not stop allocating. If the program is this large, raise the limit with the environment variable the message names. If a pass is named, the growth may be its doing (an inlining or unrolling that does not end): run the pipeline without it. The auto space holds run-time values: it is bounded by the memory of the host, or by CAMEL_GC_HEAP_LIMIT_MB when that is set, in which case the values the program keeps alive do not fit the limit.
 ```
 
-**Example** (`test/cases/compile/stream/interval_loop_not_materialised.cml`, run as `CAMEL_GC_HEAP_LIMIT_MB=8 camel test/cases/compile/stream/interval_loop_not_materialised.cml std::nvm`)
+**Example** (`test/cases/compile/stream/interval_loop_not_materialised.cml`, run as `camel --gc-heap-limit-mb 8 test/cases/compile/stream/interval_loop_not_materialised.cml std::nvm`)
 
 ```camel
 // `for i in 0..n` builds no array (design principles 4.2): the rounds

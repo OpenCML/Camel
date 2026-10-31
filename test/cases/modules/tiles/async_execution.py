@@ -23,6 +23,7 @@ from camel_arg import camel_from_argv  # noqa: E402
 # this tree's `out/latest/bin/camel`. One rule, in one place:
 # test/tools/camel_arg.py. `ARGV` is this process's arguments without the `--camel` pair.
 EXE, ARGV = camel_from_argv(ROOT)
+GCC_CHECK = ['--gc-check', 'verify=both', '--gc-stress', 'safepoint=1,kind=minor']
 # The install that binary lives in: the child is given it as CAMEL_HOME, so the compiler the case
 # runs and the standard library it reads are the same install whichever one `--camel` named.
 INSTALL = str(Path(EXE).resolve().parents[1])
@@ -63,17 +64,15 @@ def run_matrix():
     with tempfile.TemporaryDirectory(prefix='camel-async-public-') as temporary:
         base = Path(temporary)
         env = os.environ.copy()
-        env.update(CAMEL_HOME=INSTALL,
-                   CAMEL_GC_VERIFY='both',
-                   CAMEL_GC_STRESS_SAFEPOINT='1', CAMEL_GC_STRESS_MODE='minor')
+        env.update(CAMEL_HOME=INSTALL)
         for vm in ['std::nvm', 'std::fvm', 'std::jit', 'std::prl']:
             folder = base / vm.replace('::', '-')
             values = prepare(folder)
             env['TILES_TEST_OUT'] = str(folder)
-            result = subprocess.run([EXE, '--gc', 'generational',
+            result = subprocess.run([EXE, *GCC_CHECK, '--gc', 'generational',
                                      str(Path(__file__).with_suffix('.cml')), 'std::macro', vm],
                                     cwd=ROOT, env=env, capture_output=True, text=True, timeout=90)
-            fault = subprocess.run([EXE, '--gc', 'generational',
+            fault = subprocess.run([EXE, *GCC_CHECK, '--gc', 'generational',
                                     str(Path(__file__).with_name('async_execution_fault.cml')), 'std::macro', vm],
                                    cwd=ROOT, env=env, capture_output=True, text=True, timeout=30)
             try:

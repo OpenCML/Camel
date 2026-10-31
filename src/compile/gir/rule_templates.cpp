@@ -100,6 +100,11 @@ void publish(
     instance.lhs     = program->root();
     encodeToRuntimeProgram(rhs, *program, &context.graphIds());
     instance.rhs = program->root();
+    // The builder of the graph just encoded, kept on the instance: a function value that names the
+    // graph is made from the builder (`StaticFunction::create`, static_function.h#StaticFunction::create), and a
+    // transform that runs after this point has only the instance. Nothing new is kept alive -- the
+    // graph is already in the pinned program above -- only the handle is handed on.
+    instance.rhsBuilder = rhs;
     if (when != nullptr) {
         encodeToRuntimeProgram(when, *program, &context.graphIds());
         instance.when      = program->root();
@@ -201,6 +206,18 @@ size_t genericRuleInstance(
         instance.made = instance.lhs != nullptr && instance.rhs != nullptr;
         if (!instance.made) {
             instance.why = "its graphs could not be published in the program it runs in";
+        } else {
+            // The URI of the operator its left side is written with, read from the left side that
+            // was just published: the one fact a transform on a node needs from the rule, since a
+            // node names its operator by URI and the index names it by the way it is written.
+            for (camel::runtime::gc_node_ref_t ref = 1; ref <= instance.lhs->nodeCount(); ++ref) {
+                const camel::runtime::GCNode *node = instance.lhs->node(ref);
+                if (node != nullptr && node->kind == camel::runtime::GCNodeKind::Oper) {
+                    instance.lhsOperatorUri = std::string(
+                        instance.lhs->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri());
+                    break;
+                }
+            }
         }
     }
     entry.instances.push_back(std::move(instance));

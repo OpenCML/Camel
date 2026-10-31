@@ -1,0 +1,14 @@
+/**
+ * A body that writes `yield` is a generator: its head writes the stream type it hands out, and a head
+ * that writes something else gets a report naming the head (SemanticDiag::YieldRequiresStreamHead),
+ * not a missing feature. The generator machine is built; what this program is missing is the type in
+ * its head.
+ */
+func g() sync {
+    yield 1
+}
+
+func main(): int sync {
+    g()
+    return 0
+}

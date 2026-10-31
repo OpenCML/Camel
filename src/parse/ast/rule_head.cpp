@@ -5,9 +5,13 @@
 
 #include "camel/parse/syntax/cst.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <map>
 #include <mutex>
+#include <string>
+#include <vector>
 
 namespace camel::parse::ast {
 
@@ -22,6 +26,9 @@ std::map<std::string, std::map<std::string, std::string>> indexed;
 // rule name because that is what a lookup answers with: a transform reads the rule, then asks what
 // it calls.
 std::map<std::string, std::map<std::string, std::string>> callees;
+// family -> rule name -> the names its left side binds (`a,b`). Kept beside the callee, read from
+// the same declaration: the tuple both sides of the rule take.
+std::map<std::string, std::map<std::string, std::string>> variables;
 
 } // namespace
 
@@ -132,10 +139,59 @@ std::string firstCallIn(syntax::Node node) {
     return {};
 }
 
+/// The names the left side binds, collected in order: a leaf that is written as an identifier.
+/// The layers above an expression hold one child each (the precedence levels), so they are stepped
+/// through; an operator node is stepped into for its operands; a leaf is where a name is written.
+void collectNames(syntax::Node node, std::vector<std::string> &names) {
+    if (!node) {
+        return;
+    }
+    size_t tokens = 0;
+    std::vector<syntax::Node> children;
+    for (size_t index = 0; index < node->childCount(); ++index) {
+        const syntax::Child child = node->child(index);
+        if (child->isToken()) {
+            ++tokens;
+        } else if (child->isNode()) {
+            children.push_back(child->node());
+        }
+    }
+    if (tokens == 0 && children.size() == 1) {
+        collectNames(children.front(), names);
+        return;
+    }
+    if (children.empty()) {
+        const std::string text = node->text();
+        if (!text.empty() &&
+            (std::isalpha(static_cast<unsigned char>(text.front())) || text.front() == '_')) {
+            if (std::find(names.begin(), names.end(), text) == names.end()) {
+                names.push_back(text);
+            }
+        }
+        return;
+    }
+    for (const syntax::Node &child : children) {
+        collectNames(child, names);
+    }
+}
+
 } // namespace
 
 std::string rightCalleeOf(syntax::Node right) {
     return firstCallIn(right);
+}
+
+std::string variableNamesOf(syntax::Node left) {
+    std::vector<std::string> names;
+    collectNames(left, names);
+    std::string joined;
+    for (const std::string &name : names) {
+        if (!joined.empty()) {
+            joined += ',';
+        }
+        joined += name;
+    }
+    return joined;
 }
 
 void collectRuleHead(
@@ -144,6 +200,7 @@ void collectRuleHead(
     std::string rule,
     std::string rhsCallee,
     std::string shape,
+    std::string variables,
     uint32_t arity,
     uint32_t tokenStart,
     uint32_t tokenEnd) {
@@ -153,6 +210,7 @@ void collectRuleHead(
         std::move(rule),
         std::move(rhsCallee),
         std::move(shape),
+        std::move(variables),
         arity,
         tokenStart,
         tokenEnd});
@@ -176,7 +234,8 @@ std::string indexRule(const std::string &family, const RuleHead &rule) {
     const auto at         = rules.find(key);
     if (at == rules.end()) {
         rules.emplace(key, rule.rule);
-        callees[family][rule.rule] = rule.rhsCallee;
+        callees[family][rule.rule]   = rule.rhsCallee;
+        variables[family][rule.rule] = rule.variables;
         return {};
     }
     if (at->second == rule.rule) {
@@ -232,10 +291,19 @@ std::vector<RuleEntry> rulesOf(const std::string &family) {
         if (at2 == std::string::npos) {
             continue;
         }
+        const auto familyVars = variables.find(family);
+        std::string names;
+        if (familyVars != variables.end()) {
+            const auto at3 = familyVars->second.find(rule);
+            if (at3 != familyVars->second.end()) {
+                names = at3->second;
+            }
+        }
         entries.push_back(RuleEntry{
             key.substr(0, at2),
             static_cast<uint32_t>(std::strtoul(key.c_str() + at2 + 1, nullptr, 10)),
-            rule});
+            rule,
+            names});
     }
     return entries;
 }

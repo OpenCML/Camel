@@ -763,7 +763,7 @@ timeout_ms = 30000
 # A collection of more than a leaf's worth of entries is a persistent B+ tree. The shape of the
 # tree is a matter of the implementation and may not show: the cases below print the same under
 # the flat table, the default tree and trees of tiny tables, in which a few dozen entries make
-# a tree several levels high. CAMEL_COLL_VALIDATE=1 checks the invariants of every table an
+# a tree several levels high. `--coll validate=on` checks the invariants of every table an
 # operation returns and stops the process at the first violation.
 
 [[tests]]
@@ -773,10 +773,9 @@ kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/compile/collections/tree_paths.cml"
-args = ["${case}", "${backend}"]
+args = ["--coll", "validate=on", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
-envs = ["CAMEL_COLL_VALIDATE=1"]
 golden = "golden/collections/tree_paths.txt"
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core", "invalid"]
@@ -785,15 +784,14 @@ timeout_ms = 60000
 
 [[tests]]
 name = "tree_paths.flat"
-desc = "`tree_paths.cml` prints the same under the flat table (one sorted array per collection, `CAMEL_COLL_LEAF_CAPACITY=0`), on the four back ends."
+desc = "`tree_paths.cml` prints the same under the flat table (one sorted array per collection, `--coll leaf=0`), on the four back ends."
 kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/compile/collections/tree_paths.cml"
-args = ["${case}", "${backend}"]
+args = ["--coll", "validate=on,leaf=0", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
-envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=0"]
 golden = "golden/collections/tree_paths.txt"
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core", "invalid"]
@@ -807,10 +805,9 @@ kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/compile/collections/tree_paths.cml"
-args = ["${case}", "${backend}"]
+args = ["--coll", "validate=on,leaf=2,fanout=4", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
-envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4"]
 golden = "golden/collections/tree_paths.txt"
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core", "invalid"]
@@ -824,10 +821,9 @@ kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/compile/collections/tree_paths.cml"
-args = ["${case}", "${backend}"]
+args = ["--coll", "validate=on,leaf=5,fanout=4", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
-envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=5", "CAMEL_COLL_FANOUT=4"]
 golden = "golden/collections/tree_paths.txt"
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core", "invalid"]
@@ -836,15 +832,14 @@ timeout_ms = 60000
 
 [[tests]]
 name = "tree_paths.unpadded"
-desc = "`tree_paths.cml` prints the same under trees of tiny tables allocated for their content only (`CAMEL_COLL_PAD_NODES=0`), on the four back ends."
+desc = "`tree_paths.cml` prints the same under trees of tiny tables allocated for their content only (`--coll pad=off`), on the four back ends."
 kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/compile/collections/tree_paths.cml"
-args = ["${case}", "${backend}"]
+args = ["--coll", "validate=on,leaf=5,fanout=4,pad=off", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
-envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=5", "CAMEL_COLL_FANOUT=4", "CAMEL_COLL_PAD_NODES=0"]
 golden = "golden/collections/tree_paths.txt"
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core", "invalid"]
@@ -858,10 +853,9 @@ kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/compile/collections/map_basic.cml"
-args = ["${case}", "${backend}"]
+args = ["--coll", "validate=on,leaf=2,fanout=4", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
-envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4"]
 golden = "golden/collections/map_basic.txt"
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core", "invalid"]
@@ -894,10 +888,9 @@ kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/compile/collections/set_basic.cml"
-args = ["${case}", "${backend}"]
+args = ["--coll", "validate=on,leaf=2,fanout=4", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
-envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4"]
 golden = "golden/collections/set_basic.txt"
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core", "invalid"]
@@ -911,10 +904,9 @@ kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/compile/collections/edges.cml"
-args = ["${case}", "${backend}"]
+args = ["--coll", "validate=on,leaf=2,fanout=4", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
-envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4"]
 golden = "golden/collections/edges.txt"
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core", "invalid"]
@@ -928,10 +920,9 @@ kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/compile/collections/generics.cml"
-args = ["${case}", "${backend}"]
+args = ["--coll", "validate=on,leaf=2,fanout=4", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
-envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4"]
 golden = "golden/collections/generics.txt"
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core", "invalid"]
@@ -945,10 +936,9 @@ kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/compile/collections/macro_constant_trees.cml"
-args = ["${case}", "${backend}"]
+args = ["--coll", "validate=on", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
-envs = ["CAMEL_COLL_VALIDATE=1"]
 golden = "golden/collections/macro_constant_trees.txt"
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core", "invalid"]
@@ -962,8 +952,7 @@ kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/compile/collections/macro_constant_trees.cml"
-args = ["${case}", "std::macro", "std::nvm"]
-envs = ["CAMEL_COLL_VALIDATE=1"]
+args = ["--coll", "validate=on", "${case}", "std::macro", "std::nvm"]
 golden = "golden/collections/macro_constant_trees.txt"
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core", "invalid"]
@@ -977,8 +966,7 @@ kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/compile/collections/macro_constant_trees.cml"
-args = ["${case}", "std::macro", "std::fvm"]
-envs = ["CAMEL_COLL_VALIDATE=1"]
+args = ["--coll", "validate=on", "${case}", "std::macro", "std::fvm"]
 golden = "golden/collections/macro_constant_trees.txt"
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core", "invalid"]
@@ -992,8 +980,7 @@ kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/compile/collections/macro_constant_trees.cml"
-args = ["${case}", "std::macro", "std::jit"]
-envs = ["CAMEL_COLL_VALIDATE=1"]
+args = ["--coll", "validate=on", "${case}", "std::macro", "std::jit"]
 golden = "golden/collections/macro_constant_trees.txt"
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core", "invalid"]
@@ -1007,8 +994,7 @@ kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/compile/collections/macro_constant_trees.cml"
-args = ["${case}", "std::macro", "std::prl"]
-envs = ["CAMEL_COLL_VALIDATE=1"]
+args = ["--coll", "validate=on", "${case}", "std::macro", "std::prl"]
 golden = "golden/collections/macro_constant_trees.txt"
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core", "invalid"]
@@ -1022,8 +1008,7 @@ kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/compile/collections/macro_constant_trees.cml"
-args = ["${case}", "std::macro", "std::opt", "std::fvm"]
-envs = ["CAMEL_COLL_VALIDATE=1"]
+args = ["--coll", "validate=on", "${case}", "std::macro", "std::opt", "std::fvm"]
 golden = "golden/collections/macro_constant_trees.txt"
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core", "invalid"]
@@ -1037,8 +1022,7 @@ kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/compile/collections/macro_constant_trees.cml"
-args = ["${case}", "std::macro", "std::opt::inline", "std::opt", "std::nvm"]
-envs = ["CAMEL_COLL_VALIDATE=1"]
+args = ["--coll", "validate=on", "${case}", "std::macro", "std::opt::inline", "std::opt", "std::nvm"]
 golden = "golden/collections/macro_constant_trees.txt"
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core", "invalid"]
@@ -1047,13 +1031,12 @@ timeout_ms = 60000
 
 [[tests]]
 name = "macro_constant_trees.macro_flat"
-desc = "Collection constants large enough to be trees (a map of 400 strings, a set of 600, a map of 300 function values), made by macro functions, through `std::macro std::fvm` under the flat table (one sorted array per collection, `CAMEL_COLL_LEAF_CAPACITY=0`)."
+desc = "Collection constants large enough to be trees (a map of 400 strings, a set of 600, a map of 300 function values), made by macro functions, through `std::macro std::fvm` under the flat table (one sorted array per collection, `--coll leaf=0`)."
 kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/compile/collections/macro_constant_trees.cml"
-args = ["${case}", "std::macro", "std::fvm"]
-envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=0"]
+args = ["--coll", "validate=on,leaf=0", "${case}", "std::macro", "std::fvm"]
 golden = "golden/collections/macro_constant_trees.txt"
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core", "invalid"]
@@ -1067,8 +1050,7 @@ kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/compile/collections/macro_constant_trees.cml"
-args = ["${case}", "std::macro", "std::fvm"]
-envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4"]
+args = ["--coll", "validate=on,leaf=2,fanout=4", "${case}", "std::macro", "std::fvm"]
 golden = "golden/collections/macro_constant_trees.txt"
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core", "invalid"]

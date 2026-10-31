@@ -527,7 +527,7 @@ std::optional<node_handle_t> Builder::modifierOf(node_handle_t node) const {
     if (it == graphIt->second.end()) {
         return std::nullopt;
     }
-    return graph->draft().ref(it->second);
+    return graph->view().ref(it->second);
 }
 
 void Builder::setModifier(node_handle_t input, node_handle_t modifier) {
@@ -622,9 +622,14 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
         // possible writer of a variable (the conservative writer set), so the write written before
         // it has to keep running, and the version a read takes after the call names it: an order
         // edge alone does not keep a write alive (design principles 3.5, F3).
+        //
+        // Two calls in a row are two writes of the variable, and the second one's "before" is the
+        // first call's version, not the cell: what the read after the second takes is the variable
+        // as both calls left it (`:var/after(:var/after(cell, call1), call2)`). valueVersionOf
+        // answers that for a preceding call as it answers it for a write (valueVersionOf's own
+        // `:var/after` row), so the chain is made here and nowhere else.
         if (auto previous = modifierOf(variable);
-            previous.has_value() && sameGraph(*previous, currGraph_) &&
-            nodeKindOf(*previous) != camel::runtime::GCNodeKind::Call) {
+            previous.has_value() && sameGraph(*previous, currGraph_)) {
             if (node_handle_t version = valueVersionOf(variable); version != nullptr) {
                 writeBeforeCall_[exit][variable] = version;
             }
@@ -1375,7 +1380,9 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
             return node;
         }
     }
-    Type *targetType = boundType(written);
+    // The declared type is a type expression like any other position (design principles 5.6): a
+    // `typeof` written in it is resolved here, without evaluating the expression it names.
+    Type *targetType = resolveTypeNode(boundType(written), gct);
     if (targetType != nullptr && targetType->code() == TypeCode::Function) {
         // A function type written for a function: it says which function a name stands for
         // (the instance of a generic function, one of several overloads, a partial
@@ -2152,6 +2159,20 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     switch (tgtType->code()) {
     case TypeCode::Tuple: {
         const auto &tupleType = tt::as_ptr<TupleType>(tgtType);
+        // A destructuring declaration binds one name per element: `let (x, y) = t` needs a tuple of
+        // two, whichever way the count is wrong (design principles 3.9). Reported here, at the
+        // declaration, and not as an element read past the end -- a name too few used to drop the
+        // remaining elements in silence, and a name too many reported an index the source never
+        // wrote.
+        const auto *gctTree = GCT::Tree::of(gct);
+        const size_t names  = gctTree != nullptr ? gctTree->unpackCount(gct) : 0;
+        // One answer per declaration: every name of it carries the count, and the first reports.
+        if (names != 0 && gct->accessIndex() == 0 && names != tupleType->size()) {
+            diags_->of(SemanticDiag::TupleUnpackingCountMismatch)
+                .atOrigin(gct->origin())
+                .commit();
+            throw BuildAbortException();
+        }
         // A tuple has a fixed length: an element past its end is a compile-time error (it was
         // read unchecked, which crashed the compiler in release builds).
         if (gct->accessIndex() >= tupleType->size()) {

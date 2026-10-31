@@ -1141,6 +1141,12 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                 node_ptr_t nRefNode = tree_->makeNRef(ref.toString());
                 node_ptr_t accsNode = tree_->makeAccs(i);
                 *accsNode << tree_->clone(dRefNode);
+                // How many names this declaration wrote, so the graph builder can refuse a count
+                // the value's tuple cannot meet -- in either direction -- at the declaration, and
+                // not at an element that happens to be past the end.
+                tree_->markUnpack(accsNode, refs.size());
+                setOriginFromAst(
+                    context_, accsNode, ast, camel::source::OriginKind::GctNode, "gct.accs");
                 *nRefNode << accsNode;
                 setOriginFromOrigin(
                     context_,
@@ -2154,14 +2160,16 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     // Create an ExitLoad node to represent the exit statement.
     const AST::ExitType astExit = ast->loadAs<AST::ExitStmtLoad>()->exitType();
     if (astExit == AST::ExitType::Yield) {
-        // The syntax reads `yield` (design principles 5.4: a function whose body writes it
-        // produces a stream, and its head writes the stream type). What produces that stream is
-        // the generator state machine of docs/design/io-concurrency-streams/plan.cn.md slice E,
-        // which is not built yet: several `yield`s in one round, any nesting, `match` arms and
-        // `sync` blocks, per-element faults and linear values are all things that machine has to
-        // produce. Refusing it by name here is what keeps a `yield` from running as a `return`:
-        // a wrong value would be worse than a named gap.
-        diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("generators");
+        // A `yield` the generator machine did not claim reached the statement builder, which means
+        // the machine missed a shape it builds: that is a defect of this builder, not a property of
+        // the program (author's ruling of 2026-10-31: the machine's narrowings are compiler
+        // defects, reported as internal errors with the program to send, and not as a missing
+        // feature).
+        diags_->of(InternalDiag::UnknownInternalError)
+            .at(ast->load()->tokenRange())
+            .commit(
+                "a `yield` reached the statement builder, so the generator machine did not claim "
+                "it; send the program, this is a compiler defect");
         throw BuildAbortException();
     }
     node_ptr_t exitNode = tree_->makeExit(ExitType::Return);
@@ -5698,12 +5706,17 @@ node_ptr_t Builder::visitGeneratorBody(
     const AST::node_ptr_t &bodyAst = funcAst->atAs<AST::StmtBlockLoad>(1);
     const auto &bodyStmts         = bodyAst->atAs<AST::RepeatedLoad>(0);
 
-    // The head writes the stream type, and it is what says what one `yield` hands out.
-    const auto refuse = [&](const AST::node_ptr_t &atNode) -> void {
+    // The head writes the stream type, and it is what says what one `yield` hands out. A shape
+    // this machine does not build is a defect of the machine, not a property of the program: the
+    // ruling of 2026-10-31 retired the "generators are not supported" refusal, and what is left is
+    // a defect reporter -- `reportUnbuiltShape` -- that names the shape and asks for the program.
+    const auto reportUnbuiltShape = [&](const AST::node_ptr_t &atNode) -> void {
         const AST::node_ptr_t atYield = firstOwnYield(atNode);
-        diags_->of(SemanticDiag::FeatureNotSupported)
+        diags_->of(InternalDiag::UnknownInternalError)
             .at((atYield != nullptr ? atYield : atNode)->load()->tokenRange())
-            .commit("generators");
+            .commit(
+                "the generator machine does not build this shape; send the program, this is a "
+                "compiler defect");
         throw BuildAbortException();
     };
     // A local that lives across a `yield` is a cell of the body (see `addTypedCell`), so there is
@@ -5711,7 +5724,13 @@ node_ptr_t Builder::visitGeneratorBody(
     // -- "a local read after a `yield`" -- is gone with the shape it named.
     Type *exit = funcType->exitType();
     if (exit == nullptr || exit->code() != TypeCode::Stream) {
-        refuse(bodyStmts->size() > 0 ? bodyStmts->at(0) : bodyAst);
+        // The head is what is wrong: a body that yields hands out a stream, and this head writes
+        // something else. Said at the head, not at the first `yield` the body happens to hold.
+        const AST::node_ptr_t atYield = firstOwnYield(bodyAst);
+        diags_->of(SemanticDiag::YieldRequiresStreamHead)
+            .at((atYield != nullptr ? atYield : bodyAst)->load()->tokenRange())
+            .commit();
+        throw BuildAbortException();
     }
     auto *stream           = static_cast<StreamType *>(exit);
     Type *elemType         = stream->elemType();
@@ -5792,15 +5811,21 @@ node_ptr_t Builder::visitGeneratorBody(
     // `typeof <that value's expression>`, so the cell has a type and no value yet, and the body
     // that creates the stream evaluates nothing (design principles 5.4). The value is written
     // where the statement is reached, in the arm that reaches it.
-    const auto addTypedCell = [&](const std::string &name,
-                                  const node_ptr_t &expr,
-                                  const AST::node_ptr_t &ast) {
+    const auto addCellOfType = [&](const std::string &name,
+                                   Type *type,
+                                   const AST::node_ptr_t &ast) {
         node_ptr_t ref = tree_->makeNRef(name);
-        *ref << tree_->makeType(TypeOfType::create(expr));
+        *ref << tree_->makeType(type);
         node_ptr_t vari = tree_->makeVari();
         *vari << ref;
         mark(vari, ast, "gct.generator.cell");
         *outer << vari;
+    };
+    // The same cell, typed by the expression whose value it will hold.
+    const auto addTypedCell = [&](const std::string &name,
+                                  const node_ptr_t &expr,
+                                  const AST::node_ptr_t &ast) {
+        addCellOfType(name, TypeOfType::create(expr), ast);
     };
     // The body's declarations that became cells: the statement that writes each, where it stands
     // in `bodyStmts`, and the cell's name. A cell is written where its declaration stands, so an
@@ -5928,6 +5953,9 @@ node_ptr_t Builder::visitGeneratorBody(
             // The last value the stretch built: a loop body's last value is the state of the
             // next round. A stretch that ends in a `yield` builds none.
             node_ptr_t last = nullptr;
+            // The statement that built it, for the loops that carry several values: their body
+            // hands on a tuple, and each element of it is written to its own cell.
+            AST::node_ptr_t lastStmt = nullptr;
             for (size_t i = from; i < stmts->size(); ++i) {
                 const auto &stmt = stmts->at(i);
                 // A cell's name is bound where the stream is created, so the name is in scope
@@ -5966,7 +5994,7 @@ node_ptr_t Builder::visitGeneratorBody(
                     // writes. A `yield` with no value has no element to hand out and keeps the
                     // named refusal.
                     if (values->size() == 0) {
-                        refuse(stmt);
+                        reportUnbuiltShape(stmt);
                     }
                     const auto elementOf = [&](const auto &list) -> node_ptr_t {
                         if (list->size() == 1) {
@@ -6070,7 +6098,7 @@ node_ptr_t Builder::visitGeneratorBody(
                             popScope();
                             return;
                         }
-                        refuse(stmt);
+                        reportUnbuiltShape(stmt);
                     }
                     if (isLoop) {
                         // A `while` loop whose body writes a `yield`. The pull that hands an
@@ -6082,26 +6110,134 @@ node_ptr_t Builder::visitGeneratorBody(
                         const auto &loopLoad = loopAst->loadAs<AST::LoopExprLoad>();
                         const auto &inits    = loopAst->atAs<AST::RepeatedLoad>(0);
                         const AST::node_ptr_t init = inits->size() == 1 ? inits->at(0) : nullptr;
-                        // What the machine carries is exactly one value, and that value is read
+                        if (loopLoad->hasFor()) {
+                            // `loop s = 0 for x in xs do ...`: the machine carries the sequence
+                            // once, where the loop stands, a position that moves by one each round,
+                            // and the fold state the body hands on. Each round writes the element
+                            // at that position into the binder's cell before the body runs.
+                            const auto &seqAst = loopAst->optAtAs<AST::DataLoad>(1);
+                            if (seqAst == nullptr || loopAst->optAtAs<AST::DataLoad>(2) != nullptr ||
+                                loopLoad->state().size() != 1 || init == nullptr ||
+                                !hoistable(init)) {
+                                reportUnbuiltShape(stmt);
+                            }
+                            const std::string stateName = loopLoad->state()[0].toString();
+                            if (std::find(cellNames.begin(), cellNames.end(), stateName) ==
+                                cellNames.end()) {
+                                addTypedCell(stateName, visitData(init), stmt);
+                                cellNames.push_back(stateName);
+                            }
+                            const std::string seqName =
+                                "__gen_for_seq_" + std::to_string(idIndex_++);
+                            node_ptr_t sequence = visitData(seqAst);
+                            addCellOfType(seqName, TypeOfType::create(sequence), stmt);
+                            cellNames.push_back(seqName);
+                            const std::string idxName =
+                                "__gen_for_idx_" + std::to_string(idIndex_++);
+                            addTypedCell(idxName, intLiteral(0), stmt);
+                            cellNames.push_back(idxName);
+                            const auto elementAt = [&]() {
+                                node_ptr_t node = tree_->makeLink(2);
+                                *node << tree_->makeDRef("__idx__") << readCell(seqName)
+                                      << readCell(idxName);
+                                return mark(node, stmt, "gct.generator.for.element");
+                            };
+                            const std::string binderName = loopLoad->binder().toString();
+                            if (std::find(cellNames.begin(), cellNames.end(), binderName) ==
+                                cellNames.end()) {
+                                // The binder's type is the sequence's element type, written the
+                                // way the language writes it -- `ElementOf<typeof xs>`, a type
+                                // function applied to a `typeof`. `typeof` gives the type of the
+                                // value without evaluating it, so the position is static.
+                                std::vector<Type *> binderArguments = {
+                                    TypeOfType::create(sequence)};
+                                addCellOfType(
+                                    binderName,
+                                    TypeCallType::create("ElementOf", binderArguments),
+                                    stmt);
+                                cellNames.push_back(binderName);
+                            }
+                            const int afterPc = newArm();
+                            fill(afterPc, stmts, i + 1, next, nextState);
+                            const int condPc = newArm();
+                            const int bodyPc = newArm();
+                            const int stepPc = newArm();
+                            {
+                                node_ptr_t length = tree_->makeLink(1);
+                                *length << tree_->makeDRef("len") << readCell(seqName);
+                                node_ptr_t condition = tree_->makeLink(2);
+                                *condition << tree_->makeDRef("__lt__") << readCell(idxName)
+                                           << length;
+                                node_ptr_t brch = tree_->makeBrch();
+                                *brch << condition;
+                                node_ptr_t trueCase = tree_->makeCase(CaseType::True);
+                                *trueCase << jumpTo(bodyPc);
+                                node_ptr_t elseCase = tree_->makeCase(CaseType::Else);
+                                *elseCase << jumpTo(afterPc);
+                                *brch << trueCase << elseCase;
+                                mark(brch, stmt, "gct.generator.branch");
+                                *arms[static_cast<size_t>(condPc)] << brch;
+                            }
+                            *arms[static_cast<size_t>(bodyPc)] << writeCell(binderName, elementAt());
+                            fill(
+                                bodyPc,
+                                loopAst->atAs<AST::StmtBlockLoad>(3)->atAs<AST::RepeatedLoad>(0),
+                                0,
+                                stepPc,
+                                stateName);
+                            {
+                                node_ptr_t nextIndex = tree_->makeLink(2);
+                                *nextIndex << tree_->makeDRef("__add__") << readCell(idxName)
+                                           << intLiteral(1);
+                                *arms[static_cast<size_t>(stepPc)]
+                                    << writeCell(idxName, nextIndex);
+                                *arms[static_cast<size_t>(stepPc)] << jumpTo(condPc);
+                            }
+                            *exec << writeCell(seqName, visitData(seqAst));
+                            *exec << writeCell(idxName, intLiteral(0));
+                            *exec << writeCell(stateName, visitData(init));
+                            *exec << jumpTo(condPc);
+                            popScope();
+                            return;
+                        }
+                        // What the machine carries is one value or several, and each is read
                         // once, where the loop stands: a `for` has a sequence and a binder the
                         // arms do not run. A first value that is a constant or a lambda is the
                         // one the loop would start from in any arm; one that depends on the point
                         // the loop stands at is not lowered yet (a cell whose type is inferred is
                         // in place, but reading the cells a computed first value names across
                         // the arm boundary is the next step).
-                        if (init == nullptr || loopLoad->state().size() != 1 || loopLoad->hasFor() ||
-                            !hoistable(init)) {
-                            refuse(stmt);
+                        if (inits->size() == 0 || loopLoad->state().empty() || loopLoad->hasFor() ||
+                            inits->size() != loopLoad->state().size()) {
+                            reportUnbuiltShape(stmt);
                         }
-                        const std::string stateName = loopLoad->state()[0].toString();
-                        // The body already has a cell of that name (a `var` of its own): the loop
-                        // carries that one cell, and the value below is written into it where
-                        // the loop stands. A second cell of the name would be a second writing of
-                        // one variable; the name is one cell with one type.
-                        if (std::find(cellNames.begin(), cellNames.end(), stateName) ==
-                            cellNames.end()) {
-                            addTypedCell(stateName, visitData(init), stmt);
-                            cellNames.push_back(stateName);
+                        // One cell per carried name. The body already may have a cell of that name
+                        // (a `var` of its own): the loop carries that one cell, and the value below
+                        // is written into it where the loop stands. A second cell of the name
+                        // would be a second writing of one variable; the name is one cell with one
+                        // type.
+                        std::vector<std::string> stateNames;
+                        for (size_t k = 0; k < loopLoad->state().size(); ++k) {
+                            const std::string name = loopLoad->state()[k].toString();
+                            const AST::node_ptr_t eachInit = inits->at(k);
+                            if (!hoistable(eachInit)) {
+                                reportUnbuiltShape(stmt);
+                            }
+                            if (std::find(cellNames.begin(), cellNames.end(), name) ==
+                                cellNames.end()) {
+                                addTypedCell(name, visitData(eachInit), stmt);
+                                cellNames.push_back(name);
+                            }
+                            stateNames.push_back(name);
+                        }
+                        // The cells the next round starts from: one name, or a list for a loop
+                        // that carries several, whose body's last value is a tuple of them.
+                        std::string stateName;
+                        for (size_t k = 0; k < stateNames.size(); ++k) {
+                            if (k != 0) {
+                                stateName += ",";
+                            }
+                            stateName += stateNames[k];
                         }
                         // The four points of the loop: past it, at the condition, in the body,
                         // and the step back to the condition.
@@ -6137,7 +6273,9 @@ node_ptr_t Builder::visitGeneratorBody(
                         *arms[static_cast<size_t>(stepPc)] << jumpTo(condPc);
                         // The pull that reaches the loop enters it after writing the state the first round starts
                         // from: the initial value is evaluated here, where the loop stands.
-                        *exec << writeCell(stateName, visitData(init));
+                        for (size_t k = 0; k < stateNames.size(); ++k) {
+                            *exec << writeCell(stateNames[k], visitData(inits->at(k)));
+                        }
                         *exec << jumpTo(condPc);
                         popScope();
                         return;
@@ -6158,7 +6296,7 @@ node_ptr_t Builder::visitGeneratorBody(
                                      AST::DataType::EnumPattern)) {
                                 // The arm binds a name; a binding lives in the arm's own graph, so
                                 // it would have to become a cell to outlive the `yield`.
-                                refuse(caseNode);
+                                reportUnbuiltShape(caseNode);
                             }
                             const int armPc = newArm();
                             fill(
@@ -6220,6 +6358,7 @@ node_ptr_t Builder::visitGeneratorBody(
                 node_ptr_t value = visitStmt(stmt);
                 if (!nextState.empty() && i + 1 == stmts->size()) {
                     last = value;
+                    lastStmt = stmt;
                 } else {
                     *exec << value;
                 }
@@ -6230,9 +6369,62 @@ node_ptr_t Builder::visitGeneratorBody(
                 // already written as a cell) would go round without moving: refused by name
                 // here rather than run as a loop that never advances.
                 if (last == nullptr) {
-                    refuse(from < stmts->size() ? stmts->at(from) : stmts);
+                    reportUnbuiltShape(from < stmts->size() ? stmts->at(from) : stmts);
                 }
-                *exec << writeCell(nextState, last);
+                // One name takes the value itself; a list of names takes the tuple the body built, one
+                // element per name -- the shape a loop that carries several values hands on:
+                // `(i + 1, s + i)` for `loop i = 0, s = 0 ...`. The elements are built where the
+                // writes stand, one visit each.
+                if (nextState.find(',') == std::string::npos) {
+                    *exec << writeCell(nextState, last);
+                } else {
+                    std::vector<std::string> names;
+                    size_t at = 0;
+                    size_t end = 0;
+                    while (at <= nextState.size()) {
+                        end = nextState.find(',', at);
+                        names.push_back(nextState.substr(
+                            at,
+                            end == std::string::npos ? std::string::npos : end - at));
+                        if (end == std::string::npos) {
+                            break;
+                        }
+                        at = end + 1;
+                    }
+                    const AST::node_ptr_t tupleAst =
+                        lastStmt != nullptr && lastStmt->type() == AST::LoadType::Stmt
+                            ? lastStmt->at(0)
+                            : nullptr;
+                    const AST::node_ptr_t tupleItems =
+                        tupleAst != nullptr && tupleAst->type() == AST::LoadType::Data &&
+                                tupleAst->loadAs<AST::DataLoad>()->dataType() ==
+                                    AST::DataType::Tuple &&
+                                tupleAst->size() == 1
+                            ? tupleAst->at(0)
+                            : nullptr;
+                    if (tupleItems == nullptr || tupleItems->size() != names.size()) {
+                        // A loop that carries several values hands them on as a tuple of the
+                        // same length; anything else has no value for one of the names.
+                        reportUnbuiltShape(lastStmt != nullptr ? lastStmt : stmts->at(from));
+                    }
+                    // The next values are built before any of them is written: a state name the
+                    // second element reads must be the value of this round, not the one the first
+                    // write already put there.
+                    std::vector<std::string> nextCells;
+                    for (size_t k = 0; k < names.size(); ++k) {
+                        const std::string nextName =
+                            "__gen_next_" + std::to_string(idIndex_++);
+                        addTypedCell(nextName, readCell(names[k]), lastStmt);
+                        cellNames.push_back(nextName);
+                        nextCells.push_back(nextName);
+                    }
+                    for (size_t k = 0; k < names.size(); ++k) {
+                        *exec << writeCell(nextCells[k], visitData(tupleItems->at(k)));
+                    }
+                    for (size_t k = 0; k < names.size(); ++k) {
+                        *exec << writeCell(names[k], readCell(nextCells[k]));
+                    }
+                }
             }
             if (next >= 0) {
                 *exec << writeCell(pcName, intLiteral(next));
@@ -7214,8 +7406,12 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
         Type *applied = typeFunc->apply(types);
+        // An argument that is still a `typeof` is not concrete yet: `typeof e` is a type
+        // expression (ruling of 2026-10-31), and the graph builder resolves it where the type is
+        // used, without evaluating `e`. Reporting "not applicable" here would refuse the
+        // application before anything had a chance to give the `typeof` its type.
         const bool concrete = std::none_of(types.begin(), types.end(), [](Type *argument) {
-            return containsTypeVar(argument);
+            return containsTypeVar(argument) || containsTypeOf(argument);
         });
         // A pack is what `ParamsOf<F>` computes, and the `..` around it is read by the type that
         // holds it: it is reported where it is used bare, not here.

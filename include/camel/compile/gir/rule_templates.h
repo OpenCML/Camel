@@ -73,6 +73,22 @@ struct GenericRuleInstance {
     const camel::runtime::GCGraph *when  = nullptr;
     /// The number of parameters of the condition, which is the arity of its node list.
     uint32_t whenArity = 0;
+    /// The operator URI the left side is written with, read from the published left side
+    /// (`:op/add_d`, `:op/div_d`). The index is keyed by the *written* head (`+`, `/`), and a graph
+    /// is built of operators named by their URIs; a transform sitting on a node has the URI in hand.
+    /// Recording it here is a fact about this instance -- what its left side is -- and not a
+    /// translation of one key into the other made at the moment of a lookup: a rule whose left side
+    /// changes changes here, and a family that grows or shrinks does not move this line. Empty when
+    /// the instance was not made, or its left side holds no operator node.
+    std::string lhsOperatorUri;
+    /// The compile-time builder the right side was built with (`compile_graph_ptr_t`, a
+    /// `shared_ptr<DraftGraphBuilder>`). Kept because a function value naming a graph is made from
+    /// the callee's *builder*, not from its `GraphId`:
+    /// `StaticFunction::create(const std::shared_ptr<DraftGraphBuilder> &graph, ...)`
+    /// (include/camel/compile/gir/static_function.h#StaticFunction::create). The graphs are already the context's --
+    /// `publish` encodes them into a pinned program -- so keeping this handle keeps nothing alive
+    /// that would otherwise be released; it keeps the *name* a rewritten graph has to write down.
+    std::shared_ptr<camel::compile::gir::DraftGraphBuilder> rhsBuilder;
 };
 
 /// The templates of one generic rule, and one entry per type tuple tried on it.

@@ -1,0 +1,15 @@
+// A scalar function with ONE operator, so that a replacement at one site is the whole chain:
+// `f(x) = 3/x` gives f(2) = 1.5 and f'(x) = -3/x^2, f'(2) = -0.75. The chain version of the same
+// question (`x*x + 3/x`, f = 5.5, f' = 3.25) needs three sites and comes after this one runs. The
+// family is imported because the index holds what a program's ruleset modules put there, and a
+// program that imports none holds nothing to replace with.
+import rulesets.jvp
+
+func f(x: float): float {
+    return 3.0 / x
+}
+
+func main(): int sync {
+    println(f(2.0))
+    return 0
+}

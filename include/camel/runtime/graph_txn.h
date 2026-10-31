@@ -21,10 +21,8 @@ namespace camel::runtime {
 
 class GraphTransaction {
   public:
-    /// A transaction on a graph that does not exist yet, `id` being the identity it will carry:
-    /// what the front end opens for a graph it is about to build.
-    static std::unique_ptr<GraphTransaction>
-    open(GraphId id, camel::core::type::FunctionType *funcType = nullptr);
+    /// A transaction on a new graph with identity `id`, built by whoever holds it.
+    static std::unique_ptr<GraphTransaction> open(GraphId id, camel::core::type::FunctionType *funcType = nullptr);
 
     /// A transaction on `graph`, a version of `program`: the graph's editable form is decoded from
     /// it and stands for it while the transaction is open.
@@ -44,7 +42,10 @@ class GraphTransaction {
     GraphDraft &edit() { return graph_ != nullptr ? *graph_ : *borrowed_; }
     /// The graph as it stands: read-only, for a consumer that only inspects it.
     const GraphDraft &graph() const { return graph_ != nullptr ? *graph_ : *borrowed_; }
-    /// The identity the graph carries (camel/runtime/graph_id.h).
+    /// The identity the graph carries (camel/runtime/graph_id.h). The id is decided when the
+    /// transaction is opened, not later. Kept inline: a member this small defined out of line is
+    /// absent from the shared library unless it is exported, and every module built against the
+    /// inline form then fails to load with an undefined symbol.
     GraphId id() const { return graph().id(); }
 
   private:

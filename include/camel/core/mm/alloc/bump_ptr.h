@@ -160,7 +160,7 @@ class BumpPointerAllocator : public IAllocator {
         });
     }
 
-    // Safepoint poisoning (CAMEL_GC_POISON, see gen.h). Empties the space like reset(), but
+    // Safepoint poisoning (--gc-check poison, see gen.h). Empties the space like reset(), but
     // first overwrites every word of the blocks it held with `poisonWord`, and then keeps
     // allocating above them while at least `minFreeBytes` remain, so the addresses of the
     // objects that were just evacuated are not handed out again until the space has been

@@ -7,7 +7,7 @@ desc = """
 Programs of ordinary size must not run into the capacity of the spaces the compiler keeps the
 program in. The graph, permanent and meta spaces (runtime graphs; types and layouts; constants
 and function objects of the graphs being compiled) grow by segments up to a configurable total
-(CAMEL_GRAPH_SPACE_LIMIT_MB, CAMEL_PERM_SPACE_LIMIT_MB, CAMEL_META_SPACE_LIMIT_MB, 256 MB each
+(`--graph-space-limit-mb`, `--perm-space-limit-mb`, `--meta-space-limit-mb`, 256 MB each
 by default); reaching it is the located diagnostic RuntimeDiag::MemoryExhausted, which names the
 space, the usage, the limit and the variable.
 
@@ -107,7 +107,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "capacity.meta_limit_diagnostic"
-desc = "With the meta space limited to 1 MB, 2000 functions that each own a string constant do not fit (about 1.2 KB each). The program is refused before anything runs with RuntimeDiag::MemoryExhausted, stage compile, at the function that was being compiled, naming the space, the usage, the limit and CAMEL_META_SPACE_LIMIT_MB."
+desc = "With the meta space limited to 1 MB, 2000 functions that each own a string constant do not fit (about 1.2 KB each). The program is refused before anything runs with RuntimeDiag::MemoryExhausted, stage compile, at the function that was being compiled, naming the space, the usage, the limit and `--meta-space-limit-mb`."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/scale/scale.py"
@@ -120,7 +120,7 @@ timeout_ms = 120000
 
 [[tests]]
 name = "capacity.graph_limit_diagnostic"
-desc = "With the graph space limited to 1 MB, the runtime graphs of 2000 functions do not fit (about 0.8 KB each, more with an `if` or a lambda). The program is refused before anything runs with RuntimeDiag::MemoryExhausted, naming the graph that was being encoded, the space, the limit and CAMEL_GRAPH_SPACE_LIMIT_MB."
+desc = "With the graph space limited to 1 MB, the runtime graphs of 2000 functions do not fit (about 0.8 KB each, more with an `if` or a lambda). The program is refused before anything runs with RuntimeDiag::MemoryExhausted, naming the graph that was being encoded, the space, the limit and `--graph-space-limit-mb`."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/scale/scale.py"
@@ -133,7 +133,7 @@ timeout_ms = 120000
 
 [[tests]]
 name = "capacity.perm_limit_diagnostic"
-desc = "With the permanent space limited to 2 MB, compiling 2750 functions with a lambda hits the limit, and the run ends with exit 1 and the located resource-exhaustion diagnostic: the space, the limit and CAMEL_PERM_SPACE_LIMIT_MB. Which phase hits it is not pinned (the types are interned, so the lambdas share their types and the encoding of the runtime graphs is what runs out), and neither is whether a function can be named; what is pinned is that the limit is a clean refusal in any phase and that tearing the half-built program down afterwards does not crash (it used to end in a segmentation fault)."
+desc = "With the permanent space limited to 2 MB, compiling 2750 functions with a lambda hits the limit, and the run ends with exit 1 and the located resource-exhaustion diagnostic: the space, the limit and `--perm-space-limit-mb`. Which phase hits it is not pinned (the types are interned, so the lambdas share their types and the encoding of the runtime graphs is what runs out), and neither is whether a function can be named; what is pinned is that the limit is a clean refusal in any phase and that tearing the half-built program down afterwards does not crash (it used to end in a segmentation fault)."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/scale/scale.py"
@@ -146,12 +146,11 @@ timeout_ms = 120000
 
 [[tests]]
 name = "capacity.growth_nvm_gc_stress"
-desc = "The three spaces grow by segments while the program is compiled and run: with a first segment of 32 KB (CAMEL_SPACE_SEGMENT_KB, a test control; since types are interned, the permanent space of 500 functions no longer fills three segments of 64 KB) 500 functions of all shapes need several segments of each space. The program prints the sum the generator computed and the statistics line shows at least 3 segments per space. Pipeline: std::nvm, with a verified major collection (heap verification before and after) at every safepoint: objects of the auto space are reached through graphs in several segments of the graph space."
+desc = "The three spaces grow by segments while the program is compiled and run: with a first segment of 32 KB (`--space-segment-kb`, a test control; since types are interned, the permanent space of 500 functions no longer fills three segments of 64 KB) 500 functions of all shapes need several segments of each space. The program prints the sum the generator computed and the statistics line shows at least 3 segments per space. Pipeline: std::nvm, with a verified major collection (heap verification before and after) at every safepoint: objects of the auto space are reached through graphs in several segments of the graph space."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/scale/scale.py"
-args = ["${case}","run","mixed","500","std::profile gc_stats=1 report=false hints=false"]
-envs = ["CAMEL_SPACE_SEGMENT_KB=32", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+args = ["${case}","run","mixed","500","std::profile gc_stats=1 report=false hints=false", "--camel-options", "--gc-stress safepoint=1,kind=major --gc-check verify=both --space-segment-kb 32"]
 expect_exit = 0
 expect_stdout_contains = ["OK mixed n=500"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -169,12 +168,11 @@ timeout_ms = 300000
 
 [[tests]]
 name = "capacity.growth_fvm_gc_stress"
-desc = "The three spaces grow by segments while the program is compiled and run: with a first segment of 32 KB (CAMEL_SPACE_SEGMENT_KB, a test control; since types are interned, the permanent space of 500 functions no longer fills three segments of 64 KB) 500 functions of all shapes need several segments of each space. The program prints the sum the generator computed and the statistics line shows at least 3 segments per space. Pipeline: std::fvm, with a verified major collection at every safepoint."
+desc = "The three spaces grow by segments while the program is compiled and run: with a first segment of 32 KB (`--space-segment-kb`, a test control; since types are interned, the permanent space of 500 functions no longer fills three segments of 64 KB) 500 functions of all shapes need several segments of each space. The program prints the sum the generator computed and the statistics line shows at least 3 segments per space. Pipeline: std::fvm, with a verified major collection at every safepoint."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/scale/scale.py"
-args = ["${case}","run","mixed","500","std::profile gc_stats=1 report=false hints=false","std::fvm"]
-envs = ["CAMEL_SPACE_SEGMENT_KB=32", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+args = ["${case}","run","mixed","500","std::profile gc_stats=1 report=false hints=false","std::fvm", "--camel-options", "--gc-stress safepoint=1,kind=major --gc-check verify=both --space-segment-kb 32"]
 expect_exit = 0
 expect_stdout_contains = ["OK mixed n=500"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -192,12 +190,11 @@ timeout_ms = 300000
 
 [[tests]]
 name = "capacity.growth_jit"
-desc = "The three spaces grow by segments while the program is compiled and run: with a first segment of 32 KB (CAMEL_SPACE_SEGMENT_KB, a test control; since types are interned, the permanent space of 500 functions no longer fills three segments of 64 KB) 500 functions of all shapes need several segments of each space. The program prints the sum the generator computed and the statistics line shows at least 3 segments per space. Pipeline: std::jit."
+desc = "The three spaces grow by segments while the program is compiled and run: with a first segment of 32 KB (`--space-segment-kb`, a test control; since types are interned, the permanent space of 500 functions no longer fills three segments of 64 KB) 500 functions of all shapes need several segments of each space. The program prints the sum the generator computed and the statistics line shows at least 3 segments per space. Pipeline: std::jit."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/scale/scale.py"
-args = ["${case}","run","mixed","500","std::profile gc_stats=1 report=false hints=false","std::jit"]
-envs = ["CAMEL_SPACE_SEGMENT_KB=32"]
+args = ["${case}","run","mixed","500","std::profile gc_stats=1 report=false hints=false","std::jit", "--camel-options", "--space-segment-kb 32"]
 expect_exit = 0
 expect_stdout_contains = ["OK mixed n=500"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -215,12 +212,11 @@ timeout_ms = 300000
 
 [[tests]]
 name = "capacity.growth_tf_gc_stress"
-desc = "The three spaces grow by segments while the program is compiled and run: with a first segment of 32 KB (CAMEL_SPACE_SEGMENT_KB, a test control; since types are interned, the permanent space of 500 functions no longer fills three segments of 64 KB) 500 functions of all shapes need several segments of each space. The program prints the sum the generator computed and the statistics line shows at least 3 segments per space. Pipeline: std::tf, with a verified major collection at every safepoint the scheduler polls: workers allocate while the collector asks the spaces which objects are theirs."
+desc = "The three spaces grow by segments while the program is compiled and run: with a first segment of 32 KB (`--space-segment-kb`, a test control; since types are interned, the permanent space of 500 functions no longer fills three segments of 64 KB) 500 functions of all shapes need several segments of each space. The program prints the sum the generator computed and the statistics line shows at least 3 segments per space. Pipeline: std::tf, with a verified major collection at every safepoint the scheduler polls: workers allocate while the collector asks the spaces which objects are theirs."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/scale/scale.py"
-args = ["${case}","run","mixed","500","std::profile gc_stats=1 report=false hints=false","std::tf"]
-envs = ["CAMEL_SPACE_SEGMENT_KB=32", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+args = ["${case}","run","mixed","500","std::profile gc_stats=1 report=false hints=false","std::tf", "--camel-options", "--gc-stress safepoint=1,kind=major --gc-check verify=both --space-segment-kb 32"]
 expect_exit = 0
 expect_stdout_contains = ["OK mixed n=500"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -238,12 +234,11 @@ timeout_ms = 300000
 
 [[tests]]
 name = "capacity.growth_simplify_gc_stress"
-desc = "The three spaces grow by segments while the program is compiled and run: with a first segment of 32 KB (CAMEL_SPACE_SEGMENT_KB, a test control; since types are interned, the permanent space of 500 functions no longer fills three segments of 64 KB) 500 functions of all shapes need several segments of each space. The program prints the sum the generator computed and the statistics line shows at least 3 segments per space. Pipeline: std::opt std::nvm, with a verified major collection at every safepoint: the rewrite releases the graphs it replaces and allocates new ones across segments."
+desc = "The three spaces grow by segments while the program is compiled and run: with a first segment of 32 KB (`--space-segment-kb`, a test control; since types are interned, the permanent space of 500 functions no longer fills three segments of 64 KB) 500 functions of all shapes need several segments of each space. The program prints the sum the generator computed and the statistics line shows at least 3 segments per space. Pipeline: std::opt std::nvm, with a verified major collection at every safepoint: the rewrite releases the graphs it replaces and allocates new ones across segments."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/scale/scale.py"
-args = ["${case}","run","mixed","500","std::profile gc_stats=1 report=false hints=false","std::opt","std::nvm"]
-envs = ["CAMEL_SPACE_SEGMENT_KB=32", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+args = ["${case}","run","mixed","500","std::profile gc_stats=1 report=false hints=false","std::opt","std::nvm", "--camel-options", "--gc-stress safepoint=1,kind=major --gc-check verify=both --space-segment-kb 32"]
 expect_exit = 0
 expect_stdout_contains = ["OK mixed n=500"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -259,13 +254,31 @@ for (const space of ["graph", "perm", "meta"]) {
 """
 timeout_ms = 300000
 
+# The parameters below are the case's proof, not tuning: `kind=minor` (not `major`) is what keeps
+# collecting while the dead value is still in the old space and unreached, `--space-segment-kb 1` is
+# what holds it there with only a hundred functions, and 100 is the floor -- 50 at the same settings
+# no longer turns red, while 100 turns red ten times in ten. Do not "speed it up" by weakening any
+# of the three, and do not try `kind=all`: it is not a value `--gc-stress` accepts, the run exits
+# before doing anything, and the case would look broken instead of fast.
+[[tests]]
+name = "capacity.dead_function_closure_verify"
+desc = "A verified collection also walks the objects a normal collection never reaches: `--gc-check verify=both` enumerates every old object, dead ones included, to check the remembered set (gc_debug.cpp, verifyRememberedSetUnlocked). A function value whose program the collector has already freed is one of them, and `Function::updateRefs` asked it for the closure's layout through `tupleType()`, which reads `program_->graph(graphId_)` first -- through a pointer that walk may no longer use. With a minor collection at every safepoint (`--gc-stress safepoint=1,kind=minor`, a test control) and a first segment of 1 KB, 100 functions of all shapes reach that state inside a second: the run aborted with the invariant at src/core/rtdata/func.cpp (Function::tupleType, its `graph() != nullptr` guarantee) in ten runs out of ten. The layout the closure needs is the one the value was created with (`closureType()`), which asks nothing of the program, and with that read the case passes. The program prints the sum the generator computed."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/scale/scale.py"
+args = ["${case}","run","mixed","100","std::profile gc_stats=1 report=false hints=false","std::opt","std::nvm", "--camel-options", "--gc-stress safepoint=1,kind=minor --gc-check verify=both --space-segment-kb 1"]
+expect_exit = 0
+expect_stdout_contains = ["OK mixed n=100"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
 [[tests]]
 name = "capacity.perm_query_types"
 desc = "Queries must not fill the permanent space. A program of 120 lines under std::opt::specialize std::opt: the rewrites ask for every user of every value whether it is passed to a var parameter, and every question used to leave a new function type in the permanent space (1.4 million of them, past 256 MB; 'Permanent space exhausted' at the old 32 MB). The answers are memoized per operator and argument types, and an unchanged graph keeps the type of its static area across a commit. The program prints what the run without passes prints, inside a permanent space limited to 32 MB, and the statistics line shows less than 4 MB in use (measured: 673 KB; 77 KB without passes)."
 kind = "behavior"
 case = "../../../cases/feat/mm/capacity/perm_query_types.cml"
-args = ["${case}","std::opt::specialize","std::opt","std::profile gc_stats=1 report=false hints=false"]
-envs = ["PROGEN_I0=4", "PROGEN_I1=5", "CAMEL_PERM_SPACE_LIMIT_MB=32"]
+args = ["--perm-space-limit-mb", "32", "${case}","std::opt::specialize","std::opt","std::profile gc_stats=1 report=false hints=false"]
+envs = ["PROGEN_I0=4", "PROGEN_I1=5"]
 expect_exit = 0
 expect_stdout_contains = ["L3 (0, -21) (0, -21)", "L5 (6, -21) 4", "L6 [-2, -2, -2, -2, -2, -2] 4", "L7 5", "L8 (a, -21)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

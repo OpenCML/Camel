@@ -4,21 +4,22 @@
 
 > **索引的价值在于与目录一一对应；一旦少一页，读者就会以为没有那一问。**
 
-> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 2 页**（`gir-handle-names-a-transaction-or-a-draft`、`partial-destructuring-of-a-value-tuple`），其余五页已裁完、整体挪进 `reviews/`（`a-version-port-that-accepts-more-than-void` 于 23:50 裁：选 A）。
+> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 6 页**（`gir-handle-names-a-transaction-or-a-draft`、`partial-destructuring-of-a-value-tuple`、`tiles-narrow-dtype`），其余五页已裁完、整体挪进 `reviews/`（`a-version-port-that-accepts-more-than-void` 于 23:50 裁：选 A）。
 >
 > **哪些未决值得成页**：不是所有未决都值得成页——只有**今天有人被它堵住**的才值得。其余留在原则里，等它真的挡住一条车道再成页。所以第 15 节那 8 条不占待裁表，清单在文末，每条写明今天堵着谁。
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
+## 现在在等作者：0 页（4 页都已裁，3 页的改动在车道上）
 
-## 现在在等作者：2 页（另 1 页已裁、改动在落）
-
-两页在等：一页是 `b6` 的最后一块（`gir-handle-names-a-transaction-or-a-draft`，handle 名字事务还是名字草稿，同页第二问问 region 的 id 能不能在 extract 时就分配），一页是 `lane-mcts` 落进来的（`partial-destructuring-of-a-value-tuple`，多值 `loop`/元组解构时名字少于值，该拒绝还是按位置取前几个）。`lane-fmt` 那页（`does-rt-array-carry-a-shape`）**05:30 已裁：A，`rt::Array` 带形状**，改动按 A 的队列在落；页留在 `questions/` 等作者自己挪。其余五页已在 22:50–23:50 裁完、整体挪进 `reviews/`，见下面"已裁"表。
+`questions/` 里现在没有一页在等答复：4 页都被读过、都裁了，改动按裁定往 develop 走。新页从车道落进来时才在这个表里加行。
 
 | 页 | 问什么 | 状态 | 堵着谁 |
 |---|---|---|---|
-| [`gir-handle-names-a-transaction-or-a-draft`](questions-2026-10-31-gir-handle-names-a-transaction-or-a-draft.md) | 编译期的 `node_handle_t` 名字一个事务（与 `NodeView` 同型）还是一张草稿；同页第二问：region 的 id 能不能在 extract 时就分配 | 待裁 | **堵 b6 的最后一块**：①名字事务要迁 `nodeDraftOf` 66 个形状不变、但 `DraftGraphBuilder::draft()` 132 个调用点；②名字草稿 0 改动，代价是在 3.6 旁边加一条编译期例外；**同页第二问堵 `tiles` 那 9 处与 `operator_instance` 那 2 处** |
-| [`partial-destructuring-of-a-value-tuple`](questions-2026-10-31-partial-destructuring-of-a-value-tuple.md) | 多值 `loop`/元组的解构，名字少于值时该拒绝（诊断），还是按位置取前几个（今天的实现） | 待裁 | 不堵今天的活（`mcts` 已按"四个名字全写全"绕开）；堵**下一个多状态循环**——两个同型状态就足以让它安静地算错 |
-| [`does-rt-array-carry-a-shape`](questions-2026-10-31-does-rt-array-carry-a-shape.md) | `rt::Array` 要不要带形状：带，多维下标/切片/`shape` 才有意义；不带，`std::cpp` 最后 15 个核心算子程序只能继续拒 | 已裁未落 | **05:30——A：带形状**（原生多维数组是核心类型，原则 5.4；后端表示不了核心类型就不算完成，所以 A 是终点、不是可选项；B 不选，翻译了但不等价比拒绝更坏）；**先上守卫** | 15 个核心算子程序记作"等形状（A 进行中）"：形状与嵌套打印已落（`ee451e689` 守卫、`6a8efdc1d` 形状），下标与 `reshape` 已落（`9024c230f`，`:op/idx_arr` 4 → 1），切片已落（`d42365fb7`，`:op/slice_sub` 11 → 1），`shape` 已落（`6e0a766ee`，20 → 3），`numel` 与全值 `sum` 已落（`cebe415da`，`numel` 6 → 0、`sum` 50 → 28），**全值和放开到任意秩已落（`9f4da9827`，28 → 0、放行 9 个，被拒 982）**，沿轴归约与逐元素运算待做，每步以与 `std::fvm` 逐字一致验收 |
+| [`does-rt-array-carry-a-shape`](questions-2026-10-31-does-rt-array-carry-a-shape.md) | 05:30 裁 **A**：`rt::Array` 带 `rank`/`extent` | 已裁未落 | 守卫与“形状 + 嵌套打印”第一步已落；队列：下标 → 切片 → `reshape` → `shape` → `numel` → 逐元素 |
+| [`std-cpp-needs-a-tensor-type`](questions-2026-10-31-std-cpp-needs-a-tensor-type.md) | 05:50 裁：**张量是 `rt::Foreign` 过桥**，走设计稿第 9 节，第 5 步开工 | 已裁未落 | 369 个程序记作“等第 5 步（外部对象）”；第一笔是 `rt::Foreign` 句柄 |
+| [`mem-blocks-has-no-block-space`](questions-2026-10-31-mem-blocks-has-no-block-space.md) | 05:10 裁 **A**：拒绝并让拒绝说实话（目标不具备，不是尚未实现） | 已裁已落 | 无；普查把 10 个记为“目标不具备” |
+| [`generator-narrowing-remains`](questions-2026-10-31-generator-narrowing-remains.md) | 04:50 裁 **A**：删掉生成器收窄 | 已裁已落 | 无；两处拒绝已删，三条形状转成消费它们的正例 |
+
 
 原则第 15 节另列着 6 条未决（另 2 条已成页、22:50 已裁），见文末。
 

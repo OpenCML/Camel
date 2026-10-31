@@ -3,6 +3,9 @@
 
 #include "camel/runtime/graph_txn.h"
 
+#include "camel/core/error/diagnostics.h"
+#include "camel/core/error/diagnostics/messages/internal.h"
+
 namespace camel::runtime {
 
 std::unique_ptr<GraphTransaction>

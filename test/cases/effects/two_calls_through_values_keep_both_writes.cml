@@ -1,0 +1,26 @@
+/**
+ * Two calls through function values in a row are two writes of `counter`, and the second call's
+ * "before" is the first call's version: the read after them takes the variable as both calls left
+ * it. `1 + 1 + 10` is `12`.
+ *
+ * Before the chain was made (a call recorded as writing through a callee only when what came
+ * before it was a write and not another call), this program printed `10`: the first call ran
+ * nothing and the write `counter = 1` was lost with it.
+ *
+ * The sequential schedulers only: nothing orders the two calls against each other, so a parallel
+ * one may interleave them, and then the number is the interleaving's.
+ */
+
+var counter = 0
+
+func run(a: () => void, b: () => void): int {
+    counter = 1
+    a()
+    b()
+    return counter
+}
+
+func main(): int sync {
+    println(run(() => { counter = counter + 1 }, () => { counter = counter + 10 }))
+    return 0
+}

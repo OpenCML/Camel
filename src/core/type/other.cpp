@@ -28,7 +28,7 @@ TypeCode registerOtherType(const std::string &typeName, TypeFlag flags) {
 }
 
 std::string OtherType::typeName() const {
-    ASSERT(camel::core::type::isOtherType(code_), "Not an OtherType");
+    GUARD(camel::core::type::isOtherType(code_), "Not an OtherType");
     return OtherTypeRegistry::getTypeName(code_);
 }
 

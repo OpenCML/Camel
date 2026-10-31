@@ -10,6 +10,12 @@
 
 > **把"还没做"钉成负例，等于把缺口写成语言规则；缺口要么被修掉，要么被记在待办里，不能出现在验收里。**
 
+> **"先证明能跑，再删拒绝"的顺序不能倒：先删拒绝只能得到一个更响的错，先证明能跑才能得到一个更弱的拒绝清单。**
+
+> **一个挂住的循环，先问它为什么不前进；能打印出第一轮，就是步进没接上，打不出来就是建图就把自己绕进去了。**
+
+> **类型位里塞一个调用表达式，等于让建图去求值；类型位只许放静态的东西。**
+
 日期：2026-10-31　读数树：`lane-gen`（`5803e9039`）
 
 **这一页只列形状，不删任何代码。** 本机不构建（Windows 上构建会蓝屏），所以每一行都是**静态读代码 + 对照已有用例**得来，标"未跑"的触发程序没有实际跑过。
@@ -34,7 +40,7 @@
 | `yield` 包在块语句里 | **已有用例** `stream.generator_yield_in_block`（`{ yield 1 }` 后 `yield 2`） | **有**（已删并转绿：`117/117/0`，`01a46940c`） | 已做：块单独一个 arm，块后接着原来的 arm |
 | `loop` 没有单个初值 | `loop while c do { yield 1 }`（未跑） | 没有（`init == nullptr` 直接拒） | 支持 0 状态循环：不建状态单元，只保留条件/体/回边四个点 |
 | `loop` 带两个及以上状态 | **已有用例** `yield_lowering.cml`（`loop i = 0, s = 0 … { yield (i, s); (i + 1, s + i) }`） | **有**：把两值装进一个元组单元 `loop st = (0, 0) while … do { let (i, s) = st; yield (i, s); (i + 1, s + i) }`（未跑，按单状态路径推断） | 把多状态拆成元组状态；或给机器加多状态的 arm 布局 |
-| `for` 循环里有 `yield` | `func g(): int.. sync { for x in xs { yield x } }`（未跑） | **有**：写成 `loop i = 0 while i < n do { yield xs[i]; i + 1 }`（`generators_loop.cml` 是那个绿形状） | 把 `for` 展开成 `loop`（迭代器本身占一个状态，得和第 6 行一起做） |
+| `for` 循环里有 `yield` | **已有用例** `stream.generator_for_yield`：`loop n = 0 for x in xs do { yield x; n + 1 }`（**表里原来的 `for x in xs { … }` 根本不过解析器**：`Unexpected 'for'; expected '}'`；语言里只有 `loop s = init for x in xs do …` 这一种写法） | **有**（已删并转绿：`125/125/0`，四后端输出 `123`，`062a9873e`） | 已做：序列单元（循环处求值一次）+ 位置单元（每轮 `idx + 1`）+ 绑定单元（每轮写 `__idx__(seq, idx)`），条件 `idx < len(seq)`；绑定单元的类型取 `typeof __idx__(xs, 0)`（**整类型、字面位置**）——`ElementOf<typeof xs>` 这种写法被语言拒（`TypeOfNotWholeType`：`typeof` 只能当整个类型），而 `typeof __idx__(xs, idx)`（被读单元做操作数）会让建图去求值、永不返回 |
 | `loop` 初值依赖当前点 | `var c = 0; loop i = c while i < 3 do { yield i; i + 1 }`（未跑） | 没有（`!hoistable(init)` 直接拒） | 允许读单元的初值：把初值求值放进第一个 arm，而不是提到循环前 |
 | 循环状态名与体内单元重名 | **已有用例** `stream.generator_loop_shared_cell`（`var i = 0` 后写 `loop i = 0 while i < 3 do { yield i; i + 1 }`，循环后再 `yield i`） | **有**（已转正：`120/120/0`，四后端输出 `123`，`a1182780f`） | 已做：循环状态复用体内那个单元（一个名字一个单元），并把"读在声明前"的检查限定在体自己的语句表上 |
 | `match` 臂绑定名字，臂里有 `yield` | `func g(x: int): int.. sync { match x { case n => { yield n } } }`（未跑） | 没有（`Ref`/`EnumPattern` 绑定被拒：绑定活在臂的图里，活不过 `yield`） | 把绑定提升成单元（与"局部跨 `yield`"是同一套：`addTypedCell`） |
@@ -44,7 +50,9 @@
 ## 两个数
 
 - **形状 11 条**（表的前 11 行；`loop` 的四个子形状分开数）。
-- **余下 2 条**：`for` + `yield`、双状态 `loop`（`yield_lowering_refused` 是作者留着待翻转的标记，不算）。
+- **余下 1 条**：双状态 `loop`（`yield_lowering_refused` 是作者留着待翻转的标记，不算）。
+- **`for` + `yield` 已删并转绿**：先红（`124/120/4`，`generators_for_yield.cml:8:9` `FeatureNotSupported`）→ 位置状态三单元 + `len` 条件 → 绿（`125/125/0`，四后端 `123`），`062a9873e`。中途挂住那次不是运行期不前进：`std::gir` 一个字符也打不出来，把绑定单元的类型从 `typeof __idx__(seq, idx)`（单元做操作数）换成 `int` 后 gir 立刻打印——**类型位里塞一个调用表达式，等于让建图去求值**。
+- **`for` + `yield` 的图（`std::gir` 读数）**：`__gen_for_seq_0` 是 `var int[]`、`__gen_for_idx_1` 是 `var int`、绑定单元 `x` 是 `var int`；条件 `:op/lt_l`、取元素 `:op/idx_arr`、步进 `:op/add_l`，`len` 落在 `:struct/len_arr`。
 - **`yield a, b` 已删并转绿**：先红（`112/108/4`，四个后端都是 `FeatureNotSupported('generators')`）→ 删分支、用 `TupleDataFactory` 装元组 → 绿（`112/112/0`），`139d3a62d`。
 - **块里的 `yield` 已删并转绿**：先红（`117/113/4`，四个后端都是 `FeatureNotSupported('generators')`，位置 `generators_yield_in_block.cml:7:7`）→ 给裸块加一个 arm、拉取停在块内、块后继续 → 绿（`117/117/0`，四后端四条 `[PASS]`），`01a46940c`。
 - **状态名重名先红了、负例也钉了，但作者裁定不许钉负例**（2026-10-31）：第一次删法回来 `UnresolvedReference('i')`；把 `refuse` 放回、写成负例是错的处理——**负例等于把缺口写成语言规则**。改正：循环状态复用体内那个单元（一个名字一个单元），并把"读在声明前"的检查限定在体自己的语句表上（块里的语句位置不是体里的位置，之前的误报就来自这里）。`stream.generator_loop_shared_cell` 翻成正例：`120/120/0`，四后端输出 `123`（0、1、2，再是循环后的 3，与同一段逻辑写成普通循环逐步打印的结果相同），`a1182780f`。

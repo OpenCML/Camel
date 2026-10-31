@@ -178,6 +178,11 @@ class Result:
         self.spaces = spaces
 
 
+# The `--option value` words the caller wrote before the subcommand: they belong to camel, not to
+# this tool, and every run gets them (a plan test passes its collector settings this way).
+CAMEL_OPTIONS: List[str] = []
+
+
 def run_file(path: Path, passes: List[str], env_extra: Optional[dict] = None,
              timeout: float = 600.0, options: Optional[List[str]] = None
              ) -> Tuple[int, str, str, float, int]:
@@ -189,7 +194,8 @@ def run_file(path: Path, passes: List[str], env_extra: Optional[dict] = None,
     if env_extra:
         env.update(env_extra)
     start = time.perf_counter()
-    proc = subprocess.Popen([exe, *(options or []), str(path), *passes], stdout=subprocess.PIPE,
+    proc = subprocess.Popen([exe, *CAMEL_OPTIONS, *(options or []), str(path), *passes],
+                            stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, env=env)
     peak_kb = 0
     try:
@@ -240,10 +246,10 @@ def run_shape(shape: str, n: int, passes: List[str], env_extra: Optional[dict] =
                   f"exit {code}, expected '{expected}': " + " | ".join(detail[:3])[:400], spaces)
 
 
-LIMIT_ENV = {
-    "graph": "CAMEL_GRAPH_SPACE_LIMIT_MB",
-    "perm": "CAMEL_PERM_SPACE_LIMIT_MB",
-    "meta": "CAMEL_META_SPACE_LIMIT_MB",
+LIMIT_OPTION = {
+    "graph": "--graph-space-limit-mb",
+    "perm": "--perm-space-limit-mb",
+    "meta": "--meta-space-limit-mb",
 }
 
 
@@ -254,8 +260,9 @@ def run_limited(space: str, megabytes: int, shape: str, n: int, passes: List[str
     with tempfile.TemporaryDirectory(prefix="camel_scale_") as tmp:
         path = Path(tmp) / f"scale_{shape}_{n}.cml"
         path.write_text(text, encoding="utf-8", newline="\n")
-        code, out, err, _, _ = run_file(path, passes, {LIMIT_ENV[space]: str(megabytes)},
-                                        options=["--output-format", "json"])
+        code, out, err, _, _ = run_file(
+            path, passes,
+            options=[LIMIT_OPTION[space], str(megabytes), "--output-format", "json"])
     sys.stdout.write(out)
     sys.stdout.write(err)
     print(f"camel exit={code}")
@@ -362,6 +369,21 @@ def check_fanout(n: int) -> int:
 
 
 def main(argv: List[str]) -> int:
+    # `--camel-options "<words>"` are camel's, not this tool's: a plan test passes the collector
+    # settings it wants this way, one string, split here and put before the file in every run.
+    rest: List[str] = []
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--camel-options" and i + 1 < len(argv):
+            CAMEL_OPTIONS.extend(argv[i + 1].split())
+            i += 2
+        elif argv[i].startswith("--camel-options="):
+            CAMEL_OPTIONS.extend(argv[i].split("=", 1)[1].split())
+            i += 1
+        else:
+            rest.append(argv[i])
+            i += 1
+    argv = rest
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="cmd", required=True)
     g = sub.add_parser("gen")
@@ -383,7 +405,7 @@ def main(argv: List[str]) -> int:
     w = sub.add_parser("wide")
     w.add_argument("n", type=int, nargs="?", default=WIDE_N)
     lim = sub.add_parser("limit")
-    lim.add_argument("space", choices=sorted(LIMIT_ENV))
+    lim.add_argument("space", choices=sorted(LIMIT_OPTION))
     lim.add_argument("megabytes", type=int)
     lim.add_argument("shape", choices=SHAPES)
     lim.add_argument("n", type=int)

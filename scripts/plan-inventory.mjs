@@ -105,12 +105,12 @@ export const FORBIDDEN = [
     { file: 'test/plans/perf/showcase_d4.plan.toml', reason: 'a line-by-line comparison with the Python counterpart: a measurement, like the showcase plans above' },
     { file: 'test/plans/perf/step_budget.plan.toml', reason: 'the measured half: the step budget and its profile (the count guards are perf.step_counts, in SLOW_PLANS)' },
     { file: 'test/plans/perf/reduce_layout.plan.toml', reason: 'the measured half: the per-operator profile (the count guard is perf.reduce_layout_counts, in SLOW_PLANS)' },
-    // GC stress and poison: every case sets CAMEL_GC_STRESS_*, CAMEL_GC_POISON or CAMEL_GC_VERIFY.
-    { file: 'test/plans/feat/mm/gc.plan.toml', reason: 'GC stress + poison (`CAMEL_GC_STRESS_*`, `CAMEL_GC_POISON=1`)' },
-    { file: 'test/plans/feat/mm/gc_collections.plan.toml', reason: 'collection stress (`CAMEL_GC_STRESS_ALLOC` + `CAMEL_GC_VERIFY=both`)' },
+    // GC stress and poison: every case passes --gc-stress, --gc-check poison or --gc-check verify.
+    { file: 'test/plans/feat/mm/gc.plan.toml', reason: 'GC stress + poison (`--gc-stress`, `--gc-check poison`)' },
+    { file: 'test/plans/feat/mm/gc_collections.plan.toml', reason: 'collection stress (`--gc-stress alloc` + `--gc-check verify=both`)' },
     { file: 'test/plans/feat/mm/gc_elder_exhaustion.plan.toml', reason: 'elder-generation exhaustion (`gc_elder_*`; agents/test.md)' },
     { file: 'test/plans/feat/opt/progen.plan.toml', reason: 'progen random-program check (agents/test.md)' },
-    { file: 'test/plans/gpu/tiles_regions.plan.toml', reason: 'region run under GC stress (`CAMEL_GC_STRESS_SAFEPOINT=1` + `CAMEL_GC_VERIFY`)' },
+    { file: 'test/plans/gpu/tiles_regions.plan.toml', reason: 'region run under GC stress (`--gc-stress safepoint=1` + `--gc-check verify`)' },
     // Files whose milestone entries are held back; the whole file is skipped (the runner cannot
     // select a test by name, so naming the file would start the held-back tests).
     { file: 'test/plans/feat/modules/autodiff.plan.toml', reason: 'its 5 milestone tests compare against PyTorch (`*_vs_torch64`)' },
@@ -118,7 +118,7 @@ export const FORBIDDEN = [
         file: 'test/plans/feat/modules/onnx.plan.toml',
         reason: 'its 4 milestone tests: 2 PyTorch comparisons + 2 that cannot be selected apart from them',
     },
-    { file: 'test/plans/feat/linear/jit_framed.plan.toml', reason: 'its 2 milestone tests are GC stress (`CAMEL_GC_STRESS_SAFEPOINT` + `CAMEL_GC_VERIFY`)' },
+    { file: 'test/plans/feat/linear/jit_framed.plan.toml', reason: 'its 2 milestone tests are GC stress (`--gc-stress safepoint` + `--gc-check verify`)' },
 ]
 
 export function rel(abs) {

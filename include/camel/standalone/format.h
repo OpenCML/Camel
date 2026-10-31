@@ -28,6 +28,7 @@
 #include "camel/standalone/complex.h"
 #include "camel/standalone/core.h"
 #include "camel/standalone/fn.h"
+#include "camel/standalone/half.h"
 #include "camel/standalone/opt.h"
 #include "camel/standalone/str.h"
 #include "camel/utils/format_spec.h"
@@ -58,6 +59,12 @@ inline void appendText(std::string &out, float v) { out += camel::utils::floatTe
 inline void appendText(std::string &out, bool v) { out += v ? "true" : "false"; }
 inline void appendText(std::string &out, const Str &v) { out += v.view(); }
 inline void appendText(std::string &out, const Unit &) { out += "null"; }
+
+/// A bf16 or an f16: its own shortest text (half.h, the one float text rule), so a value prints
+/// the same under `println`, `string(x)` and a `{}` of `format`.
+template <typename Format> void appendText(std::string &out, Half<Format> v) {
+    out += halfText(v);
+}
 
 /// One dimension of a value that has a shape: the elements from `offset`, then, for a deeper
 /// dimension, one bracket group per extent. The rows are what the interpreter prints for a value of
@@ -189,7 +196,7 @@ namespace detail {
 
 /// One argument of `format`, classified as the runtime hands it to fmt.
 struct FormatArg {
-    enum class Kind { Integer, Float32, Float64, C64, C128, Text, Array } kind;
+    enum class Kind { Integer, Float32, Float64, Half, C64, C128, Text, Array } kind;
     int64_t integer  = 0;
     double real      = 0;
     double imaginary = 0;
@@ -204,6 +211,14 @@ inline FormatArg formatArg(int64_t v) { return {FormatArg::Kind::Integer, v, 0, 
 inline FormatArg formatArg(int32_t v) { return {FormatArg::Kind::Integer, v, 0, 0, {}}; }
 inline FormatArg formatArg(double v) { return {FormatArg::Kind::Float64, 0, v, 0, {}}; }
 inline FormatArg formatArg(float v) { return {FormatArg::Kind::Float32, 0, v, 0, {}}; }
+/// A bf16 or an f16: a number, so a specification writes it as it writes an f32 of the widened
+/// value; a placeholder without one writes the text of its own type (the runtime's rule, so
+/// `{}` and `println` agree), which `text` already holds.
+template <typename Format> FormatArg formatArg(Half<Format> v) {
+    FormatArg arg{FormatArg::Kind::Half, 0, v.toFloat(), 0, {}};
+    appendText(arg.text, v);
+    return arg;
+}
 inline FormatArg formatArg(std::complex<float> v) {
     return {FormatArg::Kind::C64, 0, v.real(), v.imag(), {}};
 }
@@ -525,6 +540,13 @@ inline std::string formatOne(const FormatArg &arg, std::string_view specText, bo
     case FormatArg::Kind::Float32:
         return hasSpec ? formatFloat(static_cast<float>(arg.real), parseSpec(specText))
                        : camel::utils::floatText(static_cast<float>(arg.real));
+    case FormatArg::Kind::Half:
+        // No specification -- `{}` and the empty `{:}` alike -- is the text of the element's own
+        // type; any other specification is the widened value as an f32, which is what the runtime
+        // does with a half under a format (`{:10}` of a bf16 0.1 is `0.100097656`, not `0.1`).
+        return hasSpec && !specText.empty()
+                   ? formatFloat(static_cast<float>(arg.real), parseSpec(specText))
+                   : arg.text;
     case FormatArg::Kind::Float64:
         return hasSpec ? formatFloat(arg.real, parseSpec(specText))
                        : camel::utils::floatText(arg.real);
@@ -556,6 +578,7 @@ template <> struct SpecPerElement<int32_t> : std::true_type {};
 template <> struct SpecPerElement<int64_t> : std::true_type {};
 template <> struct SpecPerElement<float> : std::true_type {};
 template <> struct SpecPerElement<double> : std::true_type {};
+template <typename Format> struct SpecPerElement<Half<Format>> : std::true_type {};
 
 /// The text of a numeric array with `spec` applied to each element -- `'{:.4f}'->format<xs>` is
 /// `[0.7692, 0.7808]`: the specification acts on every element on its own, while the brackets

@@ -41,7 +41,7 @@ constexpr std::string_view kCauseLargeBudget      = "large object budget";
 constexpr std::string_view kCauseElderExhausted   = "elder space budget";
 constexpr std::string_view kCauseElderBlockBudget = "promoted block budget";
 constexpr std::string_view kCauseHeapLimit        = "heap limit";
-constexpr const char *kHeapLimitEnv               = "CAMEL_GC_HEAP_LIMIT_MB";
+constexpr const char *kHeapLimitSetting           = "--gc-heap-limit-mb";
 
 double megabytes(uint64_t bytes) { return static_cast<double>(bytes) / (1024.0 * 1024.0); }
 
@@ -561,7 +561,7 @@ bool GenerationalAllocatorWithGC::debugRunRememberedSetSelfTest() {
 
 bool GenerationalAllocatorWithGC::debugRunPoisonSelfTest() {
     if (!debugConfig().poisonAtSafepoints) {
-        throw std::runtime_error("GC poison self-test requires CAMEL_GC_POISON=1");
+        throw std::runtime_error("GC poison self-test requires --gc-check poison");
     }
     const slot_t poisonWord = poison::word();
 
@@ -678,7 +678,7 @@ void GenerationalAllocatorWithGC::checkHeapLimitUnlocked(size_t requestBytes) {
             requestBytes,
             held,
             heapLimitBytes_,
-            kHeapLimitEnv);
+            kHeapLimitSetting);
     }
     if (!heapLimitExceeded_) {
         heapLimitExceeded_ = true;
@@ -882,7 +882,7 @@ void GenerationalAllocatorWithGC::collectAtSafepointUnlocked(
                 heapLimitRequest_,
                 held,
                 heapLimitBytes_,
-                kHeapLimitEnv);
+                kHeapLimitSetting);
         }
     }
 
