@@ -13,3 +13,5 @@
 - **中转仓库里某条引用该不该删**：`git merge-base --is-ancestor <sha> refs/camel-tmp/develop`（`build-host-staging-refs.md`）。
 - **一个指错位置的诊断，比没有诊断更贵**：它会让人去改那个位置。`let (x, y) = <四元组>` 过去报 `SemanticDiag::InvalidAccessIndex: Invalid access index: '2'`，箭头指着 `func`（1:1）；读者读到的是"函数声明有问题"，而去改函数。同一个错误现在报 `TupleUnpackingCountMismatch` 在 `let (` 上（`src/compile/gir/builder_expr.cpp` 的 ACCS 分支按 `GCT::Tree::unpackCount` 与元组长度比对）。反向也一样：`let (x, y) = <二元组>` 过去静默丢值，现在同一句诊断。
 - **在主机上手动跑任何测试之前**：先复刻闸门的导出（`LD_LIBRARY_PATH=$HOME/camel-eval/conda/envs/clang/lib`、`CAMEL_HOME=<树>/out/latest`、`CAMEL_TEST_SHOW_OUTPUT=1`），否则 `camel` 报 `GLIBCXX_3.4.36 not found`，读到的红全是自己造的。
+- **一条新诊断的迁移成本，要用"全树有几处"来报**：报"我改了三处"听起来像运气——读者没法判断是自己运气好还是树里本来就没有。分母要报出来（`unpack-count-migration.md`：265 处 `let (`，3 处要改，`stdlib`/`examples`/`test` 各 0），而且分母只有整层编译才拿得到，grep 数不出"名字比元素少"。
+- **三张慢计划 140 条测试，我们的闸每晚跑 1 条**：`feat/mm/gc_pacing` 15 条、`feat/mm/gc_soak` 22 条、`gpu/tiles` 103 条整张是 `tier = "slow"`，fast 闸只跑 `gpu/tiles` 里那 1 条例外。**先整张跑一次，再谈要不要把它们挪进快层**——没跑过的绿不是绿，是没读数。
