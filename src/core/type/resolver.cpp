@@ -147,7 +147,7 @@ bool namesOfList(const std::string &text, std::vector<std::string> &names) {
 /// The declared signature as an operator's type: closed, with its parameter names, var marks
 /// kept.
 FunctionType *closedSignature(FunctionType *declared) {
-    ASSERT(declared->hasExitType(), "A declared operator has a result type");
+    GUARD(declared->hasExitType(), "A declared operator has a result type");
     FunctionTypeFactory factory;
     for (size_t i = 0; i < declared->withTypesCount(); ++i) {
         if (declared->hasWithRest() && i + 1 == declared->withTypesCount()) {
@@ -500,7 +500,7 @@ std::optional<FunctionType *> DeclaredFuncTypeResolver::resolveForCall(
 
 std::optional<FunctionType *> StaticFuncTypeResolver::resolve(
     const type_vec_t &with, const type_vec_t &norm) const {
-    ASSERT(funcType_, "FunctionType is null");
+    GUARD(funcType_, "FunctionType is null");
     const size_t withCount = funcType_->withTypesCount();
     const size_t normCount = funcType_->normTypesCount();
     if (withCount != with.size() || normCount != norm.size()) {

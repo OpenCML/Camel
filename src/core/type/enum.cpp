@@ -82,7 +82,7 @@ EnumDecl::EnumDecl(
 }
 
 void EnumDecl::define(std::vector<EnumVariant> variants) {
-    ASSERT(!defined(), "An enum declaration is defined once.");
+    GUARD(!defined(), "An enum declaration is defined once.");
     variants_ = std::move(variants);
     defined_.store(true, std::memory_order_release);
 }
@@ -151,7 +151,7 @@ bool EnumType::pending() const {
 }
 
 const std::vector<EnumVariant> &EnumType::variants() const {
-    ASSERT(complete(), "The variants of an enum prototype are not those of a value.");
+    GUARD(complete(), "The variants of an enum prototype are not those of a value.");
     std::call_once(variantsOnce_, [this] {
         type_bindings_t bindings;
         for (size_t i = 0; i < decl_->params().size(); ++i) {
@@ -257,8 +257,8 @@ CastSafety EnumType::castSafetyFrom(Type *sourceType) const {
 }
 
 slot_t EnumType::castSlotFrom(slot_t value, Type *sourceType) const {
-    ASSERT(sourceType != nullptr, "castSlotFrom source type is null");
-    ASSERT(
+    GUARD(sourceType != nullptr, "castSlotFrom source type is null");
+    GUARD(
         castSafetyFrom(sourceType) == CastSafety::Safe,
         "castSlotFrom only allowed when castSafetyFrom returns Safe");
     return value;

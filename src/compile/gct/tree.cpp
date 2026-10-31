@@ -281,11 +281,10 @@ const std::string *Tree::internReference(std::string_view name) {
 }
 
 void Tree::append(Node &parent, Node *child) {
-    // Still an ASSERT: a valid program reaches this. `match_guard.first_match_wins`
-    // (test/cases/compile/...) appends a node that already has a parent, so either the builder
-    // shares a subtree here on purpose or this tree is not a tree. Which of the two is a
-    // question about the builder, not about turning a check on.
-    ASSERT((child->flags_ & Node::kAttached) == 0, "Node already has a parent");
+    GUARD(
+        (child->flags_ & Node::kAttached) == 0,
+        "Node already has a parent: this tree gives a node one parent, so the same expression "
+        "hangs here twice and would be evaluated twice");
     const size_t count = parent.childCount_;
     if (count == childCapacity(count)) {
         auto **grown = static_cast<Node **>(allocate(childCapacity(count + 1) * sizeof(Node *)));
