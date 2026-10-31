@@ -254,6 +254,24 @@ for (const space of ["graph", "perm", "meta"]) {
 """
 timeout_ms = 300000
 
+# The parameters below are the case's proof, not tuning: `kind=minor` (not `major`) is what keeps
+# collecting while the dead value is still in the old space and unreached, `--space-segment-kb 1` is
+# what holds it there with only a hundred functions, and 100 is the floor -- 50 at the same settings
+# no longer turns red, while 100 turns red ten times in ten. Do not "speed it up" by weakening any
+# of the three, and do not try `kind=all`: it is not a value `--gc-stress` accepts, the run exits
+# before doing anything, and the case would look broken instead of fast.
+[[tests]]
+name = "capacity.dead_function_closure_verify"
+desc = "A verified collection also walks the objects a normal collection never reaches: `--gc-check verify=both` enumerates every old object, dead ones included, to check the remembered set (gc_debug.cpp, verifyRememberedSetUnlocked). A function value whose program the collector has already freed is one of them, and `Function::updateRefs` asked it for the closure's layout through `tupleType()`, which reads `program_->graph(graphId_)` first -- through a pointer that walk may no longer use. With a minor collection at every safepoint (`--gc-stress safepoint=1,kind=minor`, a test control) and a first segment of 1 KB, 100 functions of all shapes reach that state inside a second: the run aborted with the invariant at src/core/rtdata/func.cpp (Function::tupleType, its `graph() != nullptr` guarantee) in ten runs out of ten. The layout the closure needs is the one the value was created with (`closureType()`), which asks nothing of the program, and with that read the case passes. The program prints the sum the generator computed."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/scale/scale.py"
+args = ["${case}","run","mixed","100","std::profile gc_stats=1 report=false hints=false","std::opt","std::nvm", "--camel-options", "--gc-stress safepoint=1,kind=minor --gc-check verify=both --space-segment-kb 1"]
+expect_exit = 0
+expect_stdout_contains = ["OK mixed n=100"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
 [[tests]]
 name = "capacity.perm_query_types"
 desc = "Queries must not fill the permanent space. A program of 120 lines under std::opt::specialize std::opt: the rewrites ask for every user of every value whether it is passed to a var parameter, and every question used to leave a new function type in the permanent space (1.4 million of them, past 256 MB; 'Permanent space exhausted' at the old 32 MB). The answers are memoized per operator and argument types, and an unchanged graph keeps the type of its static area across a commit. The program prints what the run without passes prints, inside a permanent space limited to 32 MB, and the statistics line shows less than 4 MB in use (measured: 673 KB; 77 KB without passes)."

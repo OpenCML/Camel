@@ -6,6 +6,7 @@
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/complex.h"
+#include "camel/core/rtdata/half.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tagged.h"
@@ -409,6 +410,12 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
         return "float";
     case TypeCode::Float64:
         return "double";
+    // A reduced-precision number: sixteen bits of storage, computed on as f32 and rounded once on
+    // store (include/camel/standalone/half.h, design principles 7.3).
+    case TypeCode::BFloat16:
+        return "rt::BF16";
+    case TypeCode::Float16:
+        return "rt::F16";
     case TypeCode::Bool:
         return "bool";
     // A complex number is std::complex of its parts' width (include/camel/standalone/complex.h).
@@ -1009,6 +1016,15 @@ std::optional<std::string> ProgramValues::constant(slot_t slot, const Type *t) {
     }
     case TypeCode::Void:
         return "rt::Unit{}";
+    // A reduced-precision constant is its pattern, written as one: the bits a slot holds in its low
+    // half are the bits the standalone value stores, so the literal is exact for every pattern a
+    // program can write, a NaN's payload included.
+    case TypeCode::BFloat16:
+        return std::format(
+            "rt::BF16::fromBits(uint16_t{{{}}})", camel::core::rtdata::halfBitsOfSlot(slot));
+    case TypeCode::Float16:
+        return std::format(
+            "rt::F16::fromBits(uint16_t{{{}}})", camel::core::rtdata::halfBitsOfSlot(slot));
     case TypeCode::String: {
         const auto *str = fromSlot<String *>(slot);
         return string(str != nullptr ? str->view() : std::string_view());

@@ -17,6 +17,15 @@ timeout_ms = 12000
 # ---- A source program: the clause is what a call touches ----
 
 [[tests]]
+name = "pass_boundary.resources_kept"
+desc = "A pass may move code, inline a body into its caller, copy it or delete what nothing needs; what it may not do is change which ambient resources the program touches. `PassBoundaryResources` is checked after every pass of the list, and this program -- two calls that touch a cell, a group's `db` and `stdout` -- goes through two rewriting passes with the program's own output unchanged and the check silent. The count of effects is not the invariant (inlining copies a body and the copies are not all run): the set of resources is."
+kind = "behavior"
+case = "../../../cases/effects/declared.cml"
+args = ["${case}", "std::opt::inline", "std::opt"]
+expect_exit = 0
+expect_output_not_contains = ["PassBoundaryResources", "changed the ambient resources", "failed with an internal error"]
+
+[[tests]]
 name = "source.declared_resources"
 desc = "Two calls of `consume` touch the same handle (the value they are given) and are ordered by control, two calls of `tick` touch the group's `db` and `stdout` and are visible outside the program -- naming an ambient resource in a clause promises the effect that comes with it -- and two calls of `bump` touch the same cell: the bodies touch nothing, so the footprint can only come from the clauses. The program's own output is unchanged."
 kind = "behavior"

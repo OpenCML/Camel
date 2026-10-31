@@ -4,6 +4,7 @@
 #include "operator_rules.h"
 
 #include "camel/core/numeric_convert.h"
+#include "camel/core/numeric_convert_half.h"
 #include "camel/core/type/composite/array.h"
 #include "fault_sites.h"
 
@@ -213,6 +214,31 @@ OperatorRule checkedTextConversion(
         false};
 }
 
+/// A bf16 or an f16 read from a text (`bf16(s)`; cast.cpp __stobf__): `rt::halfFromText<To>(x,
+/// invalidSite, f32RangeSite, halfRangeSite)`. The text is read as f32 first, so a text that is
+/// not a number and one beyond f32 are the f32 refusals, with the element type's name in them as
+/// the runtime's own path puts it; the third report is the range of the element type itself
+/// (camel/core/numeric_convert_half.h, the same sentences).
+OperatorRule halfFromTextRule(const char *to, const char *target, std::string halfRangeReason) {
+    return {
+        [to, target, halfRangeReason = std::move(halfRangeReason)](
+            OperatorCall &c) -> std::optional<std::string> {
+            const std::string text = SiteTable::valueMark(0);
+            return std::format(
+                "rt::halfFromText<{}>({}, {}, {}, {})",
+                to,
+                c.norm(0).text,
+                c.site(RuntimeDiag::InvalidNumberText, {text, target, "a number"}),
+                c.site(
+                    RuntimeDiag::ConversionOutOfRange,
+                    {"'" + text + "'", target, camel::core::floatRangeReason<float>(target)}),
+                c.site(
+                    RuntimeDiag::ConversionOutOfRange,
+                    {"'" + text + "'", target, halfRangeReason}));
+        },
+        false};
+}
+
 /// `std::f(x)` of <cmath> (modules/math/operators.cpp). With `toFloat`, an integer argument
 /// is converted first, as __math_sqrt__ does: an i32 to f32, an int to float.
 OperatorRule cmath(const char *function, bool toFloat = false) {
@@ -275,6 +301,27 @@ Rules buildRules() {
     for (const char *t : {"i", "l", "f", "d"}) {
         r[std::format(":op/div_{}", t)] = faultingFunction("div", RuntimeDiag::DivisionByZero, 0);
         r[std::format(":op/pow_{}", t)] = runtimeFunction("pow");
+    }
+
+    // ---- Reduced-precision arithmetic (half_ops.cpp; include/camel/standalone/half.h) ----
+    // The operators of the standalone type compute in f32 and round once on store, which is the one
+    // arithmetic path of the element type (design principles 7.3), so `+`, `-`, `*` and unary `-`
+    // are written as the f32 ones are. `/` is rt::div because dividing by zero is a fault, `^` is
+    // rt::pow, whose result is rounded once like every other, and a comparison is the comparison of
+    // the widened values: the two zeros are equal and a NaN is ordered against nothing.
+    for (const char *t : {"bf", "f6"}) {
+        r[std::format(":op/add_{}", t)] = infix("+");
+        r[std::format(":op/sub_{}", t)] = infix("-");
+        r[std::format(":op/mul_{}", t)] = infix("*");
+        r[std::format(":op/neg_{}", t)] = prefix("-");
+        r[std::format(":op/div_{}", t)] = faultingFunction("div", RuntimeDiag::DivisionByZero, 0);
+        r[std::format(":op/pow_{}", t)] = runtimeFunction("pow");
+        r[std::format(":op/lt_{}", t)]  = infix("<");
+        r[std::format(":op/le_{}", t)]  = infix("<=");
+        r[std::format(":op/gt_{}", t)]  = infix(">");
+        r[std::format(":op/ge_{}", t)]  = infix(">=");
+        r[std::format(":op/eq_{}", t)]  = infix("==");
+        r[std::format(":op/ne_{}", t)]  = infix("!=");
     }
 
     // ---- Complex numbers (ops.cpp complexBinary, complexPower; include/camel/standalone/
@@ -359,6 +406,33 @@ Rules buildRules() {
     for (const char *t : {"i", "l", "f", "d", "a"}) {
         r[std::format(":op/{}tos", t)] = runtimeFunction("toText");
     }
+    // A bf16 or an f16 (cast.cpp): a written conversion rounds once into the element type -- a
+    // literal of the language arrives this way -- and no numeric permission is involved, because
+    // the type the program wrote is the precision it asked for. The compute precision of the type
+    // is f32, which is what a static_cast of these values goes through; the widening directions
+    // are exact, and a value beyond the type is an infinity as it is for f32 (no fault).
+    r[":op/bftobf"] = identity();
+    r[":op/f6tof6"] = identity();
+    for (const char *from : {"i", "l", "f", "d"}) {
+        r[std::format(":op/{}tobf", from)] = cast("rt::BF16");
+        r[std::format(":op/{}tof6", from)] = cast("rt::F16");
+    }
+    r[":op/bftof"] = cast("float");
+    r[":op/f6tof"] = cast("float");
+    r[":op/bftod"] = cast("double");
+    r[":op/f6tod"] = cast("double");
+    r[":op/bftoi"] =
+        checkedConversion("truncate", "int32_t", "i32", RuntimeDiag::ConversionOutOfRange);
+    r[":op/f6toi"] =
+        checkedConversion("truncate", "int32_t", "i32", RuntimeDiag::ConversionOutOfRange);
+    r[":op/bftol"] =
+        checkedConversion("truncate", "int64_t", "int", RuntimeDiag::ConversionOutOfRange);
+    r[":op/f6tol"] =
+        checkedConversion("truncate", "int64_t", "int", RuntimeDiag::ConversionOutOfRange);
+    r[":op/stobf"] = halfFromTextRule(
+        "rt::BF16", "bf16", camel::core::halfRangeReason<camel::core::rtdata::BFloat16>("bf16"));
+    r[":op/stof6"] = halfFromTextRule(
+        "rt::F16", "f16", camel::core::halfRangeReason<camel::core::rtdata::Float16>("f16"));
     // A number to a complex value, and a complex value to the other width (cast.cpp, the c64
     // and c128 groups of globals.cpp): the imaginary part of a number is zero.
     r[":op/ctoc"] = identity();
@@ -604,6 +678,43 @@ Rules buildRules() {
         },
         false,
     };
+    // `tensor:sum` of the whole value (modules/tensor/ops/reduction_ops.cpp): the elements added from
+    // +0 in the order they lie, answering the element type -- an integer result exactly in int64
+    // (int32 truncated once into its own width) and a float one by the f64 accumulator converted
+    // once. The total of a value of several dimensions is the total of its run and reads none of its
+    // dimensions, so every rank is this one rule, the open one included: what a rank would be needed
+    // for is the result's own shape, and this operator's answer has none. The axis form
+    // (`tensor:sum_axis`) is the one that reads a dimension, and it is a step of its own.
+    r["tensor:sum"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (c.normCount() != 1 || value == nullptr || value->elemType() == nullptr) {
+                return std::nullopt;
+            }
+            const TypeCode element = value->elemType()->code();
+            if (element != TypeCode::Int64 && element != TypeCode::Int32 &&
+                element != TypeCode::Float32 && element != TypeCode::Float64 &&
+                element != TypeCode::Bool) {
+                return std::nullopt;
+            }
+            return std::format("rt::sumAll({})", c.operand(0));
+        },
+        false,
+    };
+    // `numel(xs)` (`stdlib/array.cml`): how many elements the value has. It needs no dimension of
+    // the value -- only the count -- so a value of several dimensions and one of an open rank are
+    // both read off the run it keeps: `numel` of a rank-zero value is one, as the interpreter's is.
+    for (const char *uri : {"array:numel", "tensor:numel"}) {
+        r[uri] = {
+            [](OperatorCall &c) -> std::optional<std::string> {
+                if (c.normCount() != 1 || asArrayType(c.normType(0)) == nullptr) {
+                    return std::nullopt;
+                }
+                return std::format("rt::numel({})", c.operand(0));
+            },
+            false,
+        };
+    }
     // The slice of one dimension of a value, whichever spelling wrote it (design principles 5.4): the
     // six words are the value, the axis, the two bounds, the step and the mask of the bounds written,
     // and a call that leaves the last two out stands for step 1 and "both written". The dimension the
@@ -631,17 +742,17 @@ Rules buildRules() {
         },
         false,
     };
-    // A type name applied to a one-dimensional numeric array converts every element. A value with
-    // several dimensions or an open rank is not a flat run here, and neither is bf16 or f16: the
-    // language's core value types (reduced-precision.md b1 -- literals, scalar arithmetic,
-    // comparison, conversion), 16 bits of storage, computed in f32 and rounded to nearest even once,
-    // the same rule `dtype.h` and the interpreter follow. C++ can carry them, so what is missing is
-    // an rt:: value and the rules over it, not an ability of the target: these are refused the way
-    // the other array operators refuse a value they have not been written for yet.
+    // A type name applied to a one-dimensional numeric array converts every element, at every
+    // element type this back end has -- bf16 and f16 included, now that the runtime holds them
+    // (reduced-precision.md b1). A value with several dimensions or an open rank is not a flat run
+    // here, so it is refused the way the other array operators refuse a shape they were not
+    // written for.
     for (const auto &[uri, element] : {std::pair<const char *, const char *>{":op/atoi", "int32_t"},
                                       {":op/atol", "int64_t"},
                                       {":op/atof", "float"},
-                                      {":op/atod", "double"}}) {
+                                      {":op/atod", "double"},
+                                      {":op/atobf", "rt::BF16"},
+                                      {":op/atof6", "rt::F16"}}) {
         r[uri] = {
             [element](OperatorCall &c) -> std::optional<std::string> {
                 const ArrayType *value = asArrayType(c.normType(0));

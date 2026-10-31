@@ -113,15 +113,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "refuse_narrow_float"
-desc = "A value of bf16 is a core value type of the language (reduced-precision.md b1: literals, scalar arithmetic, comparison, conversion), 16 bits of storage computed in f32 and rounded to nearest even once -- C++ carries it, so the refusal here is work not done, not an ability the target lacks. The sentence names the operator and the type and ends in `yet`, as every refusal about a rule that is not written does; it does not claim the back end has no such element type, which would send a reader away from the code that is missing."
-kind = "negative"
-case = "../../../cases/trans/cpp/refuse_narrow_float.cml"
+name = "narrow_floats"
+desc = "bf16 and f16 are core value types of the language (reduced-precision.md b1) and values of the standalone runtime (include/camel/standalone/half.h), so a program that holds one is translated rather than refused: `rt::BF16` and `rt::F16` stand for the two types, sixteen bits of storage whose constant is the pattern itself (`fromBits`, exact for every pattern a program can write), the text is the type's own shortest text (so `0.1` as a bf16 prints `0.1` and not the `0.100097656` of the f32 it widens to), and arithmetic is computed in f32 and rounded once -- `/` through rt::div, where zero is a fault as it is for f32, and `^` through rt::pow. This entry pinned a refusal before the rules existed; it is now the acceptance case, and the program is built and run by agree_with_fvm, which is what says the two back ends print it byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/narrow_floats.cml"
 args = ["${case}", "std::cpp"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_output_contains = ["has type 'bf16'", "-- but not this one yet"]
-expect_output_not_contains = ["no such element type"]
+expect_exit = 0
+expect_stdout_contains = ["rt::BF16", "rt::F16", "rt::BF16::fromBits(uint16_t{", "rt::F16::fromBits(uint16_t{", "rt::div(", "rt::pow(", "rt::halfFromText<rt::BF16>(", "rt::halfFromText<rt::F16>(", "rt::convertArray<rt::BF16>(", "rt::convertArray<rt::F16>("]
+expect_output_not_contains = ["TranslationRefused", "no such element type", "camel/core/", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -154,6 +153,30 @@ case = "../../../cases/trans/cpp/literal_rank.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
 expect_stdout_contains = ["const rt::Array<double> array{{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, {3, 2}};"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "numel_rank"
+desc = "`numel` counts the elements of a value whatever its rank: six for a rank-2 value, four for its first two rows, eight for a rank-3 one, four for a value of one dimension. It reads the count the value holds and no dimension of it, so a value of several dimensions and one of an open rank are both answered by the run -- which is why this step frees every program that asked for it, the open-rank one included. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/numel_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::numel("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "sum_rank"
+desc = "The whole-value `sum` answers the element type: an integer result is the exact int64 accumulator (int64 as it stands) and a float one is the f64 accumulator converted once, added from +0 in the order the elements lie -- `6.0` for a `float[3]`, `10` for an `int[4]`, `0.6` for an `f32[3]` whose f64 total is not the f32 sum, `21.0` for a rank-2 value, `36.0` for a rank-3 one and `6.0` for a column of two. Every rank is one rule because the total reads none of the dimensions: the sum of a whole value is the sum of the same run however it is grouped, so nothing is flattened to reach it -- the axis form (`tensor:sum_axis`) is the one that reads a dimension. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/sum_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::sumAll("]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
