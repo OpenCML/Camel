@@ -220,3 +220,14 @@ RESOURCES node main 15 :var/get: read variable (node 14); result may_alias 0
 - `core` 的报错从 `missing: RESOURCES node main 19 :var/take: rmw variable (node 18); result may_alias 0` 变成 `missing: RESOURCES footprint main … rmw object (any); external`——红法换了，原因是 footprint 少了一项、期望还写着它。
 
 **判据**：**折回格子漏了一种算子，看起来像"口径不对"；先把折返补全，再谈口径——否则会把一个漏写的分支说成一次设计冲突。**
+
+重录只动那一行（`main` 的 footprint）：
+
+```
+改前  RESOURCES footprint main rmw ambient rng; write ambient stdout; read ambient fs; rmw object (any); external
+改后  RESOURCES footprint main rmw ambient rng; write ambient stdout; read ambient fs; external
+```
+
+"精度变好"就是这一项：`rmw object (any)`（"可能碰到某个对象"）变成了具体格子，于是 footprint 不再需要"任意对象"那一条。重录之后 `core` 回到它原来的红法——`missing: RESOURCES node main 19 :var/take: rmw variable (node 18); result may_alias 0`，也就是那对 `unordered` 挡住的那半，等作者裁。`unordered` 仍是 **1**。
+
+**判据**：**折返补全之后红法变了，说明它改的是精度不是口径——精度变好要重录期望，口径之争才等裁定。**
