@@ -26,3 +26,22 @@ expect_exit = 0
 expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_div,jvp_add", "REINTERP jvp op signature=(f: (float) => float) => (float, float) => (float, float)", "lifted=(float, float) => (float, float) graph=(float, float) => (float, float) same=yes", "5.5", "3.25"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# The negative side of the same rule table, and the point of it: a primitive the ruleset has no rule
+# for is not answered with 0 or 1 and is not only printed at -- it is a diagnostic that names the
+# primitive and stands *where the primitive is written*. `pow` is `math:pow_d`, which no forward rule
+# is bound for, so `jvp(f)` cannot build; the error is at `f`'s `pow` (`file:line:col`) and the
+# process stops without running `main`, while the call site is kept beside it as a related position.
+[[tests]]
+name = "rulesets_probe_missing.at_the_primitive"
+desc = "With a primitive carrying no forward rule, `jvp(f)` is a diagnostic and not a value: it names the operator (`math:pow_d`) and the reason no rule was found, and its position is the primitive's own -- `rulesets_probe_missing.cml:10:12`, the `pow` in `f` -- which is the position a reader has to be sent to, not the `jvp(f)` call. The reading line still names what was refused (`skip=rule uri=math:pow_d`), and the run's exit is non-zero: the program does not go on to print a value it could not differentiate."
+kind = "behavior"
+case = "../../../cases/compile/transforms/rulesets_probe_missing.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 1
+expect_output_contains = ["skip=rule uri=math:pow_d", "rulesets_probe_missing.cml:10:12: [Error]:", "jvp has no forward rule for `math:pow_d`"]
+expect_stdout_not_contains = ["5.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

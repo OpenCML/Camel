@@ -30,8 +30,11 @@
 #pragma once
 
 #include "camel/core/context/context.h"
+#include "camel/core/source/ids.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/runtime/graph.h"
+
+#include <string>
 
 namespace camel::transforms {
 
@@ -39,6 +42,13 @@ namespace camel::transforms {
 struct JvpGraph {
     const camel::runtime::Program *program = nullptr;
     camel::runtime::GCGraph *graph         = nullptr;
+    /// Where the build stopped, when `graph` is null: the primitive the ruleset has no rule for, as
+    /// the origin of that node in `function` (its source position), what the primitive is and why it
+    /// was refused. A refusal that only prints is a reading, not a diagnosis: the kernel raises a
+    /// fault *at this node* so the error names the operator in `f`, not the call that asked for `jvp`.
+    camel::source::origin_id_t refusedOrigin = camel::source::kInvalidOriginId;
+    std::string refusedUri;
+    std::string refusedWhy;
 };
 
 /// The signature `reinterp<jvp>(f)` has for `function`, or nullptr when the function has no forward

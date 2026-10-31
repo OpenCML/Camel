@@ -12,6 +12,7 @@
 #include "camel/parse/ast/rule_head.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
+#include "camel/runtime/graph_txn.h"
 
 #include <algorithm>
 #include <array>
@@ -46,9 +47,14 @@ namespace {
 /// it answers with the tangents. Nothing is captured and no closure is built -- the operands are the
 /// rule's own parameters.
 gc_node_ref_t buildRuleTangent(
-    camel::core::context::Context &context, camel::runtime::GraphDraft &draft, std::string_view uri,
-    const std::vector<gc_node_ref_t> &values, const std::vector<gc_node_ref_t> &tangents,
-    std::string &ruleName, std::string &why) {
+    camel::core::context::Context &context, camel::runtime::GraphTransaction &transaction,
+    std::string_view uri, const std::vector<gc_node_ref_t> &values,
+    const std::vector<gc_node_ref_t> &tangents, std::string &ruleName, std::string &why) {
+    // The graph is written through the transaction that holds it, never through a reference taken
+    // beside it: `GraphTransaction::borrow` exists for a caller that has a draft whose owner is not a
+    // transaction at hand, and the ledger of direct connections to the graph store counts the ones
+    // that skip it.
+    auto &draft = transaction.edit();
     const auto match = camel::core::forwardRuleOf(std::string(uri));
     if (!match.has_value()) {
         why = "the operator has no forward rule bound at all";
@@ -180,6 +186,10 @@ JvpGraph buildJvpGraph(
         "jvp_of_" + std::string(function->name()), "jvp_of_" + std::string(function->name()));
     {
         auto &draft = group.draft(member);
+        // The writings a caller builds from a draft alone still go through a transaction
+        // (GraphTransaction::borrow): the draft's owner is the group, and a rule's tangent is built
+        // by a piece of code that is handed the transaction rather than the graph.
+        auto transaction = camel::runtime::GraphTransaction::borrow(draft);
         draft.setFuncType(signature);
         const gc_node_ref_t value =
             draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
@@ -300,13 +310,20 @@ JvpGraph buildJvpGraph(
                 std::string ruleName;
                 std::string ruleWhy;
                 tangentOf[ref] =
-                    buildRuleTangent(*context, draft, uri, inputs, tangents, ruleName, ruleWhy);
+                    buildRuleTangent(*context, *transaction, uri, inputs, tangents, ruleName, ruleWhy);
                 if (tangentOf[ref] == rt::kInvalidNodeRef) {
                     // Named, not guessed: the transform has no derivative for this operator, and
-                    // the caller is told which one and why.
+                    // the refusal carries the place the primitive was written -- the node's origin,
+                    // which the kernel turns into a fault at that `file:line` -- so the error names
+                    // the operator in `f`, not the call that asked for `jvp`.
                     os << "REINTERP jvp function=" << function->name() << " skip=rule uri=" << uri
                        << " reason=" << ruleWhy << '\n';
-                    return JvpGraph{};
+                    JvpGraph refused;
+                    refused.refusedOrigin = static_cast<camel::source::origin_id_t>(
+                        function->nodeOrigin(ref));
+                    refused.refusedUri = std::string(uri);
+                    refused.refusedWhy = ruleWhy;
+                    return refused;
                 }
                 if (std::find(usedRules.begin(), usedRules.end(), ruleName) == usedRules.end()) {
                     usedRules.push_back(ruleName);
