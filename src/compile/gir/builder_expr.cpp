@@ -2152,6 +2152,20 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     switch (tgtType->code()) {
     case TypeCode::Tuple: {
         const auto &tupleType = tt::as_ptr<TupleType>(tgtType);
+        // A destructuring declaration binds one name per element: `let (x, y) = t` needs a tuple of
+        // two, whichever way the count is wrong (design principles 3.9). Reported here, at the
+        // declaration, and not as an element read past the end -- a name too few used to drop the
+        // remaining elements in silence, and a name too many reported an index the source never
+        // wrote.
+        const auto *gctTree = GCT::Tree::of(gct);
+        const size_t names  = gctTree != nullptr ? gctTree->unpackCount(gct) : 0;
+        // One answer per declaration: every name of it carries the count, and the first reports.
+        if (names != 0 && gct->accessIndex() == 0 && names != tupleType->size()) {
+            diags_->of(SemanticDiag::TupleUnpackingCountMismatch)
+                .atOrigin(gct->origin())
+                .commit();
+            throw BuildAbortException();
+        }
         // A tuple has a fixed length: an element past its end is a compile-time error (it was
         // read unchecked, which crashed the compiler in release builds).
         if (gct->accessIndex() >= tupleType->size()) {

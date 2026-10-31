@@ -11,4 +11,5 @@
 - **同一个用例在两层的两份条目会分叉**：`a3d119690` 把 `feat/modules/tiles.plan.toml` 的 `gpu_scope.macro_expansion_publishes_the_derived_graph` 翻成 `behavior`，`gpu/tiles.plan.toml` 的 `grad_expand.scope_sees_the_derived_graph` 留成 `negative`；闸门四趟全绿（slow 层没跑），那份红到有人整张跑 slow 才被看见。翻一条用例的 `kind` 之后，先 `git grep -n '<case 路径>' -- test/plans` 数一遍有几份。
 - **`known failures: 2` 这个数只有在两条都登记了失败形态与认领人时才有意义**：否则它只是"两个不知道"——查法见 `known-failures-two.md`（两条都在 `effects_model_edges.plan.toml`，都在等第 9 条第二半，而车主 `lane-order-region` 已不在）。
 - **中转仓库里某条引用该不该删**：`git merge-base --is-ancestor <sha> refs/camel-tmp/develop`（`build-host-staging-refs.md`）。
+- **一个指错位置的诊断，比没有诊断更贵**：它会让人去改那个位置。`let (x, y) = <四元组>` 过去报 `SemanticDiag::InvalidAccessIndex: Invalid access index: '2'`，箭头指着 `func`（1:1）；读者读到的是"函数声明有问题"，而去改函数。同一个错误现在报 `TupleUnpackingCountMismatch` 在 `let (` 上（`src/compile/gir/builder_expr.cpp` 的 ACCS 分支按 `GCT::Tree::unpackCount` 与元组长度比对）。反向也一样：`let (x, y) = <二元组>` 过去静默丢值，现在同一句诊断。
 - **在主机上手动跑任何测试之前**：先复刻闸门的导出（`LD_LIBRARY_PATH=$HOME/camel-eval/conda/envs/clang/lib`、`CAMEL_HOME=<树>/out/latest`、`CAMEL_TEST_SHOW_OUTPUT=1`），否则 `camel` 报 `GLIBCXX_3.4.36 not found`，读到的红全是自己造的。
