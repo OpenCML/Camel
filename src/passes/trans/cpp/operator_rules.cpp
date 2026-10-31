@@ -1058,7 +1058,12 @@ Rules buildRules() {
         r[std::format("math:sqrt_{}", t)] = cmath("sqrt", true);
     }
     for (const char *t : {"i", "l"}) {
-        r[std::format("math:abs_{}", t)] = cmath("abs");
+        // The integer absolute value is two's complement, not `std::abs`: the smallest integer has
+        // no positive counterpart, and the library's answer for it is itself -- `gcd` finds it by
+        // asking `abs(a) < 0` (stdlib/math.cml), so the answer is load-bearing. `std::abs` is
+        // undefined there and the test that depends on it can be optimized away
+        // (fault_gcd_overflow.cml: exit 0 where the interpreter refuses the value).
+        r[std::format("math:abs_{}", t)] = runtimeFunction("intAbs");
     }
     for (const char *t : {"f", "d"}) {
         r[std::format("math:abs_{}", t)]   = cmath("fabs");

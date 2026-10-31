@@ -174,6 +174,17 @@ template <std::signed_integral T> T intMax(T a, T b) {
     return a < b ? b : a;
 }
 
+/// `math::abs` of an int32 or int64 value (math:abs_i, math:abs_l): the value with its sign cleared
+/// in two's complement, so the smallest integer comes back as itself -- which is what the
+/// interpreter answers, and what `stdlib/math.cml` reads to find that integer (`abs(a) < 0` in
+/// `gcd`). `std::abs` is undefined on it: the value a build happened to return was not even the
+/// negative number, and a compiler may delete the test that depends on it
+/// (fault_gcd_overflow.cml measured both).
+template <std::signed_integral T> T intAbs(T a) {
+    using U = std::make_unsigned_t<T>;
+    return a < 0 ? static_cast<T>(U(0) - static_cast<U>(a)) : a;
+}
+
 // ---- Number to number (:op/ltoi, :op/dtol, ...) ----
 
 namespace detail {

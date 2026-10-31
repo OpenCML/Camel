@@ -82,8 +82,9 @@
 - 把“不稳定”压成“稳定地错”是进步；把“稳定地错”修掉再压成“稳定地对”，才算修完。所以那条守卫不只盯当初出错的那个程序：`expect.txt` 里的每一个程序各跑五次，任何一个写出两种写法都报出名字与两个哈希（`narrow_repeat.py --expect=test/tools/cppexec/expect.txt --runs=5`）。缺陷的形状会被下一次改动换掉，只盯着它当初的样子，等于把守门人派去守一扇已经拆掉的门。
 - 一条只在一个用例上成立的性质，进闸门时要铺成全部用例；否则它测的是那个用例，不是这个性质。“生成的程序不链 `libcamel`”原来只在一条窄类型用例上钉着，现在对 `expect.txt` 里的每一个程序各查一次链接行与 `ldd`（`run.py --standalone --expect=…`），答案必须是 `test/tools/cppexec/bridged.txt` 那一份名单——**159 个里 158 个不链，1 个仍链**：`re:test`（正则引擎不在头文件里）。**两个方向都查**：多出第三个是红，名单里的某个不再链也是红——只能变长的名单什么也没说。原本在这里的四个都写成了规则、名单因此短了四行（`math:max_l`、`math:sqrt_d`，以及两个张量构建算子 `tensor:zeros`/`tensor:ones`——它们的结果是元素，不是运行时对象，所以不再过桥）：一笔修完就删一行，名单才有读的意义。
 - 名单里的每一条都要写明它是“缺口”还是“例外”；写成“已知”两个字的，下一个人既不会修也不会放过。`bridged.txt` 里只剩 `re:test` 一条，带一句“exception, not a gap”——它的答案就是桥，谁去“修”它等于把桥拆了。
-- 故障句是语言的一部分；重写一句像样的，比写错一行代码更难查——因为它读起来是对的。`tensor:zeros`/`tensor:ones` 的规则第一版给负长度写的是一句自己的话（`Tensor shape cannot contain negative extents`），量出来 `std::fvm` 印的是内核的 `zeros: Shape cannot contain negative values`，于是程序在它唯一打印的那一行上与解释器不一致。现在 `fault_*` 用例的故障句全部对 `std::fvm` 逐字比较（`run.py --faults`，47 个用例，stdout 与 stderr 合起来比，退出码一起比），仍不一致的两个写在 `test/tools/cppexec/fault_words.txt` 里、都标成缺口，名单两个方向都查。
+- 故障句是语言的一部分；重写一句像样的，比写错一行代码更难查——因为它读起来是对的。`tensor:zeros`/`tensor:ones` 的规则第一版给负长度写的是一句自己的话（`Tensor shape cannot contain negative extents`），量出来 `std::fvm` 印的是内核的 `zeros: Shape cannot contain negative values`，于是程序在它唯一打印的那一行上与解释器不一致。现在 `fault_*` 用例的故障句全部对 `std::fvm` 逐字比较（`run.py --faults`，47 个用例，stdout 与 stderr 合起来比，退出码一起比），仍不一致的一个写在 `test/tools/cppexec/fault_words.txt` 里、标成例外（那是解释器自己的 Warn，不是故障句），名单两个方向都查。
 - 域外与 NaN 的行为，先写一行决定再写代码，而且这一行要与 `std::fvm` 逐字节一致：`sqrt(-1.0)`、`sqrt(-4.0)` 与 `sqrt(nan)` 都答 `nan`（`is_nan` 为真），**不是故障**；`math:sqrt_f`/`math:sqrt_d` 因此写成 `std::sqrt`，用例 `math_sqrt_domain.cml` 把这六行输出钉住。先量后写，量出来不一致就停下——把自己以为的行为写成规则，比不写更糟。
+- 两边的故障句对不上，先问“这一边有没有这条故障”；缺故障比措辞不同严重一级。`fault_gcd_overflow.cml` 量出来是 `exit fvm 1 / cpp 0`：不是句子不同，是 standalone 的 `gcd` 压根没有“最小整数”那条拒绝——因为 `math:abs_i`/`math:abs_l` 写成 `std::abs`，它在 `INT64_MIN` 上是未定义行为，量出来的值既不是它本身也不是它的相反数，而 `stdlib/math.cml` 的 `gcd` 正是靠 `abs(a) < 0` 找这个值。整数绝对值因此写成 `rt::intAbs`（二补数取反，最小值回到自己），`gcd` 的拒绝与句子的原文就都回来了。先补故障，再谈措辞。
 
 
 ---
