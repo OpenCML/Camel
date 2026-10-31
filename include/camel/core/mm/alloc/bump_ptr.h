@@ -22,6 +22,7 @@
 #include <memory>
 #include <mutex>
 #include <thread>
+#include <stdexcept>
 
 namespace camel::core::mm {
 
@@ -45,7 +46,7 @@ class BumpPointerAllocator : public IAllocator {
 #ifndef NDEBUG
         AllocationDebugScope debugScope;
 #endif
-        ASSERT(align == alignof(slot_t), "Alignment other than 8 bytes is not supported");
+        GUARD(align == alignof(slot_t), "Alignment other than 8 bytes is not supported");
         SharedOperationGuard guard(*this);
 
         // Round total_size up.
@@ -117,7 +118,7 @@ class BumpPointerAllocator : public IAllocator {
 
     void free(void *ptr) override {
         withExclusiveAccess([&] {
-            ASSERT(containsUnlocked(ptr), "Pointer does not belong to this allocator");
+            GUARD(containsUnlocked(ptr), "Pointer does not belong to this allocator");
 
             // Roll top_ back to the object header position.
             auto *newTop = reinterpret_cast<std::byte *>(ptr) - sizeof(ObjectHeader);
@@ -186,7 +187,7 @@ class BumpPointerAllocator : public IAllocator {
     void rewindIfShort(size_t neededBytes) {
         withExclusiveAccess([&] {
             std::byte *top = top_.load(std::memory_order_relaxed);
-            ASSERT(begin_ == top, "rewindIfShort() requires an empty space");
+            GUARD(begin_ == top, "rewindIfShort() requires an empty space");
             if (static_cast<size_t>(end_ - top) < neededBytes) {
                 begin_ = start_;
                 top_.store(start_, std::memory_order_release);
@@ -228,9 +229,9 @@ class BumpPointerAllocator : public IAllocator {
 
                 // Validate the header.
                 size_t obj_size = header->size();
-                ASSERT(obj_size >= sizeof(ObjectHeader), "Invalid object size");
-                ASSERT(obj_size % alignof(slot_t) == 0, "Object size not aligned");
-                ASSERT(current + obj_size <= topSnapshot, "Object extends beyond top");
+                GUARD(obj_size >= sizeof(ObjectHeader), "Invalid object size");
+                GUARD(obj_size % alignof(slot_t) == 0, "Object size not aligned");
+                GUARD(current + obj_size <= topSnapshot, "Object extends beyond top");
 
                 visitor(header);
                 current += obj_size;
@@ -239,7 +240,7 @@ class BumpPointerAllocator : public IAllocator {
     }
 
     void freeBulk(const std::vector<ObjectHeader *> & /*objects*/) override {
-        ASSERT(false, "Bump pointer allocator does not support bulk free");
+        throw std::runtime_error("Bump pointer allocator does not support bulk free");
     }
 
     void swap(BumpPointerAllocator &other) {

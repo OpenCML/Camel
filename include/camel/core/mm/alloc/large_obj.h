@@ -52,7 +52,7 @@ class LargeObjectAllocator : public IAllocator {
         AllocationDebugScope debugScope;
 #endif
         std::lock_guard<std::mutex> lock(mutex_);
-        ASSERT(align == alignof(slot_t), "Alignment other than 8 bytes is not supported");
+        GUARD(align == alignof(slot_t), "Alignment other than 8 bytes is not supported");
 
         // Round total_size up to slot_t alignment.
         size_t total_size = alignUp(sizeof(ObjectHeader) + size, alignof(slot_t));
@@ -127,8 +127,8 @@ class LargeObjectAllocator : public IAllocator {
         std::lock_guard<std::mutex> lock(mutex_);
         for (auto *hdr : allocated_) {
             // Validate the header.
-            ASSERT(hdr->size() >= sizeof(ObjectHeader), "Invalid object size");
-            ASSERT(hdr->size() % alignof(slot_t) == 0, "Object size not aligned");
+            GUARD(hdr->size() >= sizeof(ObjectHeader), "Invalid object size");
+            GUARD(hdr->size() % alignof(slot_t) == 0, "Object size not aligned");
 
             visitor(hdr);
         }
