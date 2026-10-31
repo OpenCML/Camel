@@ -303,7 +303,17 @@ def check(entry, workdir, args):
     if code != 0:
         errors = [l for l in (cout + cerr).splitlines() if "error" in l]
         rec["outcome"] = "does not build"
-        rec["detail"] = (errors[0] if errors else (cout + cerr).strip()[-200:])[:200]
+        # The line the compiler named, then the error: a build failure that names a place and
+        # not the text at that place is a failure nobody can read, and the generated program is
+        # temporary. The text comes first because it is the shorter of the two.
+        text = ""
+        at = re.search(re.escape(source) + r":(\d+):", errors[0] if errors else "")
+        if at:
+            lines = out.splitlines()
+            number = int(at.group(1))
+            if 0 < number <= len(lines):
+                text = lines[number - 1].strip() + "  <<  "
+        rec["detail"] = (text + (errors[0] if errors else (cout + cerr).strip()[-200:]))[:400]
         return rec
 
     fcode, fout, ferr, _ = run([CAMEL] + entry_args + [rel] + args.passes + ["std::fvm"], args.timeout, env)

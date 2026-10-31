@@ -425,6 +425,24 @@ Array<T> setAt(Array<T> xs, int64_t index, std::type_identity_t<T> value, const 
     return xs;
 }
 
+/// `array:elements` (src/builtin/operators/array_axis.cpp): the elements in row-major order as an
+/// array of one dimension. An rt::Array keeps the shape its type stated (design principles 5.4),
+/// so a value of several dimensions has to lose it here: `len` is the length of the first
+/// dimension (stdlib/prelude.cml), and every operator that reads a length after `some_elements`
+/// -- `array::mean` divides by `len(es)` -- means the element count, which is the first dimension
+/// of the flat run and not of the shaped one. A value of one dimension is returned as it stands.
+template <typename T> Array<T> flatten(const Array<T> &xs) {
+    if (xs.rank() <= 1) {
+        return xs;
+    }
+    Array<T> out;
+    out.reserve(xs.size());
+    for (const T &x : xs) {
+        out.push(x);
+    }
+    return out;
+}
+
 /// A type name applied to an array (:op/atoi, :op/atol, :op/atof, :op/atod): every element converted
 /// by the C++ conversion, which is what the runtime's does (core/array_convert.h).
 template <typename To, typename From> Array<To> convertArray(const Array<From> &xs) {

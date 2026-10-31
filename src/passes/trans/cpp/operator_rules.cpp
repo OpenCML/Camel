@@ -619,13 +619,22 @@ Rules buildRules() {
         false,
     };
     // `array:elements` (src/builtin/operators/array_axis.cpp): the elements in row-major order as
-    // an array of one dimension. An rt::Array of this back end is that flat run already -- it keeps
-    // no shape (cpp_types.cpp) -- so the value is the one the call was given, whatever rank the
-    // type wrote: a rank of several dimensions is a run and nothing more here.
+    // an array of one dimension. An rt::Array keeps the shape the type stated, so a value of
+    // several dimensions -- or one whose rank the type leaves open -- is flattened here
+    // (rt::flatten); a run of one dimension already is the answer. Without that, an operator
+    // reading "the length" of the result reads the first dimension of a shaped value: the mean of
+    // a 2x2 value divided by 2 instead of by 4, and printed half its answer.
     r["array:elements"] = {
         [](OperatorCall &c) -> std::optional<std::string> {
-            if (c.normCount() != 1 || asArrayType(c.normType(0)) == nullptr) {
+            if (c.normCount() != 1) {
                 return std::nullopt;
+            }
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (value == nullptr) {
+                return std::nullopt;
+            }
+            if (value->anyRank() || value->rank() != 1) {
+                return std::format("rt::flatten({})", c.operand(0));
             }
             return c.norm(0).text;
         },
