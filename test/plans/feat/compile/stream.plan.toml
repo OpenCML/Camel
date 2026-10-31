@@ -1269,3 +1269,16 @@ expect_exit = 0
 expect_stdout_exact = "7\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+[[tests]]
+name = "stream.type_function_of_typeof_nested"
+desc = "A type function applied to a `typeof` of a type that is itself a type function applied to a `typeof`: `ElementOf<ElementOf<typeof xss>>` over an `int[][]` is `int`, so the resolution goes all the way down rather than one layer. The ruling of 2026-10-31 makes both layers type expressions; a resolution that stopped at the first would leave a `typeof` inside and refuse the declaration."
+kind = "behavior"
+case = "../../../cases/compile/stream/type_function_of_typeof_nested.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "7\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
