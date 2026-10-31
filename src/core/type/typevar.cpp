@@ -133,7 +133,7 @@ TypeFunctionType::create(const std::string &name, std::vector<std::string> param
 }
 
 Type *TypeFunctionType::apply(const type_vec_t &arguments) const {
-    ASSERT(arguments.size() == params_.size(), "Type function applied to a wrong argument count.");
+    GUARD(arguments.size() == params_.size(), "Type function applied to a wrong argument count.");
     type_bindings_t bindings;
     bindings.reserve(params_.size());
     for (size_t i = 0; i < params_.size(); ++i) {
@@ -1282,6 +1282,5 @@ std::string typeBindingsToString(const type_bindings_t &bindings) {
 }
 
 } // namespace camel::core::type
-
 
 

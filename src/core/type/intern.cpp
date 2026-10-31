@@ -83,7 +83,7 @@ Type *TypeTable::intern(
                         !std::equal(words.begin(), words.end(), canonical.words.begin()));
     Type *plain = nullptr;
     if (named) {
-        ASSERT(canonical.make != nullptr, "A named key needs the constructor of its plain twin.");
+        GUARD(canonical.make != nullptr, "A named key needs the constructor of its plain twin.");
         // The twin may itself be a type registered as a named one (its key equals this one's
         // name-erased key), in which case its own canonical id is the one that names no spelling
         // at all: take that, so the relation is a function and not one step.
