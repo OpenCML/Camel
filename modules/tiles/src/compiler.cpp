@@ -27,6 +27,7 @@
 #include "tiles/internal/access.h"
 #include "tiles/internal/capability.h"
 #include "tiles/internal/compiled_scope.h"
+#include "tiles/internal/dtype_map.h"
 #include "tiles/internal/kernel_ir.h"
 #include "tiles/program.h"
 #include <algorithm>
@@ -908,7 +909,7 @@ class Compiler {
             const size_t arity       = opName == "scalar_neg" ? 1 : 2;
             if (args.size() != arity)
                 throw std::runtime_error("scalar operation arity");
-            const auto code = width == DType::F32 ? ty::TypeCode::Float32 : ty::TypeCode::Float64;
+            const auto code = elementTypeOf(width);
             Node node{.op = opName, .shape = {}, .dtype = width};
             for (const auto &arg : args) {
                 if (!arg.type || arg.type->code() != code)

@@ -46,6 +46,17 @@ returned for rework when it misses any of these, however well it tests:
   slice whose steps cannot be placed one by one cannot be debugged when it fails, because nothing
   tells you which step failed. The steps are reported while the work is in flight, not only with the
   finished commit: "it is nearly there" is not a location.
+- **Each step's acceptance is one reading that can be pasted.** A step of a slice lands when there is
+  an output line, a diagnostic or a test result that says what it did, before and after. A step whose
+  acceptance is a sentence ("the type layer is ready") is not a step: it hides the boundary that the
+  next failure will cross.
+- **"Only f32 is supported" is not one switch, it is forty tests.** Count the sites before starting a
+  second element type, and turn the type comparisons into one exhaustive mapping rather than editing
+  each site by hand: a back end that looks like it is "almost there" is a back end whose per-site
+  guesses have not been counted yet.
+- **A red reading is worth more than "basically working".** When a run cannot produce the reading a
+  step promised, report the red one with the line it failed at. Red locates the failure; "basically
+  working" leaves the next reader to find it again.
 - **Documents cite files and symbols, never line numbers.** A line number moves with every edit; cite `src/compile/gir/builder.cpp` and the function, type or test name instead.
 
 - **Documentation moves with the code.** A commit that changes a module's behaviour or invariants updates that module's page under `docs/internals/` (or, until the reorganisation lands, its page under `docs/technical/`) and the affected `docs/reference/` (today `docs/language/`) sections in the same commit. Those pages say what is true now: responsibilities, core data structures, invariants, interfaces, where the code lives — no history, no task numbers, no line numbers.
