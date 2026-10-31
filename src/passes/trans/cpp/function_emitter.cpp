@@ -1645,7 +1645,40 @@ void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref) {
     const bool sameStruct =
         fromType != nullptr && toType != nullptr && fromType->code() == TypeCode::Struct &&
         toType->code() == TypeCode::Struct && program_.values.sameRepresentation(fromType, toType);
-    if (to == from || sameStruct) {
+    // A conversion between two arrays is a check of the shape, and nothing else: both types are the
+    // same `rt::Array<T>` on this side, so the writer has no bytes to move -- but the interpreter
+    // checks the extents when the program runs (design principles 5.4), and a program that says
+    // `as f32[2, 3]` of a value that does not hold them faults there. So the check is written, with
+    // the type's own text and the position of the conversion, which is the report the interpreter
+    // gives (`rt::asShape`, camel/standalone/array.h). A type that leaves an extent open (`f32[?]`)
+    // states -1 for it, and that extent is not checked.
+    const auto *targetArray = camel::core::type::asArrayType(toType);
+    const auto *sourceArray =
+        fromType != nullptr ? camel::core::type::asArrayType(fromType) : nullptr;
+    const bool checksShape =
+        targetArray != nullptr && sourceArray != nullptr && !targetArray->anyRank() && to == from;
+    if (checksShape) {
+        std::string extents;
+        for (const auto &form : targetArray->extents()) {
+            extents += (extents.empty() ? "" : ", ") +
+                       std::to_string(form.isConstant() ? form.constant() : -1);
+        }
+        std::string typeText = toType->toString();
+        std::string escaped;
+        for (const char c : typeText) {
+            escaped += c == '"' || c == '\\' ? std::string("\\") + c : std::string(1, c);
+        }
+        // The report's own sentence: the diagnostic's words with one slot, which the fault fills
+        // with the sentence the interpreter writes (`the array has shape [2]`), so the two reports
+        // are one (the site carries the mark the runtime replaces, as `rt::atRow`'s site does).
+        const std::vector<std::string> marks{SiteTable::valueMark(0)};
+        text = std::format(
+            "rt::asShape({}, {{{}}}, \"{}\", {})",
+            value.text,
+            extents,
+            escaped,
+            program_.sites.siteFor(g, ref, RuntimeDiag::RuntimeError, marks));
+    } else if (to == from || sameStruct) {
         frame.values[ref] = value;
         return;
     } else if (

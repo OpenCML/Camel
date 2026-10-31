@@ -365,6 +365,29 @@ expect_stdout_contains = ["{1.0, 2.0, 3.0}, {3}", "{4.0, 5.0}, {2}"]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+[[tests]]
+name = "cast_shape_holds"
+desc = "`as` states the shape a value must have. Both types are the same `rt::Array<T>` on this side -- a shape is not a second value -- so the conversion writes no bytes and checks the extents the type states: `rt::asShape(v, {2, 3}, \"float[2, 3]\", at_...)` answers the value itself when the rank and every stated extent are the ones the type says. The program keeps reading and prints both values; agree_with_fvm compares them with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/cast_shape_holds.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::asShape(", "float[2, 3]", "{2, 3}"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "cast_shape_fault"
+desc = "A value that does not hold the shape its type states stops the program at the conversion, with the interpreter's own sentence: `conversion to 'float[3, 3]' failed: the array has shape [2, 2]` -- the same words `ArrayType::castSlotFrom` writes, at the conversion's own position, so the two reports are one. The translation succeeds and the check is the site's (`rt::asShape(v, {3, 3}, \"float[3, 3]\", at_...)`, a RuntimeError site); agree_with_fvm runs the program and compares the report and the exit status with std::fvm's."
+kind = "behavior"
+case = "../../../cases/trans/cpp/cast_shape_fault.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::asShape(", "float[3, 3]", "RuntimeDiag::RuntimeError"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
 
 [[tests]]
 name = "enum_types"

@@ -426,6 +426,44 @@ template <typename T> Array<T> atRow(const Array<T> &xs, int64_t index, const Si
     return Array<T>::window(xs, static_cast<std::size_t>(index) * inner, 1, xs.rank());
 }
 
+/// `xs as f32[2, 3]` where the type states the shape (design principles 5.4: the conversion is where
+/// a shape is checked). The C++ value is the array either way, so the check is all there is to write:
+/// a value that does not hold the extents the type states is the fault the interpreter reports, in
+/// its own words and its own place -- `conversion to 'f32[2, 3]' failed: the array has shape [3, 2]`,
+/// which is what `ArrayType::castSlotFrom` writes (src/core/type/composite/array.cpp), so the
+/// program's report is the interpreter's byte for byte. A stated extent of -1 is one the type leaves
+/// open (`f32[?, 7]`) and is not checked.
+template <typename T>
+Array<T> asShape(
+    const Array<T> &xs,
+    std::initializer_list<int64_t> extents,
+    const char *typeText,
+    const Site &site) {
+    const std::size_t rank = xs.rank();
+    bool holds             = rank == extents.size();
+    if (holds) {
+        std::size_t i = 0;
+        for (const int64_t stated : extents) {
+            if (stated >= 0 && static_cast<int64_t>(xs.extent(i)) != stated) {
+                holds = false;
+                break;
+            }
+            ++i;
+        }
+    }
+    if (!holds) [[unlikely]] {
+        std::string actual = "[";
+        for (std::size_t i = 0; i < rank; ++i) {
+            actual += (i == 0 ? "" : ", ") + std::to_string(xs.extent(i));
+        }
+        actual += "]";
+        fault(
+            site,
+            {std::string("conversion to '") + typeText + "' failed: the array has shape " + actual});
+    }
+    return xs;
+}
+
 /// Copies the plane `index` along `axis` of `xs`, in the order the remaining dimensions run: the
 /// walk of `atAxis`, one element per combination of the other dimensions' positions.
 template <typename T>
