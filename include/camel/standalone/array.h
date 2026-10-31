@@ -328,7 +328,10 @@ template <typename T> class Array {
     /// States the shape a reduction along one dimension leaves (`sumAxis`): the source's dimensions
     /// with the reduced one dropped, or written as one when the caller asked to keep it. The source
     /// may hold another element type, which is why this reads its shape and not its elements: an
-    /// argmax answers positions of the value it read.
+    /// argmax answers positions of the value it read. A value of one dimension leaves no dimension at
+    /// all -- the answer *is* the one element it reduced to (design principles 5.4) -- so rank zero is
+    /// recorded as the fact it is (`zeroDim`), and the answer prints as that element rather than as an
+    /// array of one.
     template <typename U> void shapeReduced(const Array<U> &source, std::size_t axis, bool keepDims) {
         if (rep_ == nullptr || axis >= source.rank()) {
             return;
@@ -341,7 +344,8 @@ template <typename T> class Array {
         if (product != size() || rank > kMaxRank) {
             return;
         }
-        rep_->rank = static_cast<std::uint32_t>(rank);
+        rep_->rank    = static_cast<std::uint32_t>(rank);
+        rep_->zeroDim = rank == 0;
         for (std::size_t i = 0; i < rank; ++i) {
             rep_->extents[i] = keepDims && i == axis ? 1 : source.extent(i < axis ? i : i + 1);
         }
@@ -1024,15 +1028,18 @@ template <typename T> int64_t numel(const Array<T> &xs) { return static_cast<int
 /// `extent` elements `inner` apart, one lane per position of every other dimension, in row-major
 /// order of the answer. The lane is read where it lies -- no lane is gathered into a run of its own,
 /// and nothing is transposed first -- and the answer keeps the dimensions it did not reduce, or
-/// keeps the reduced one as a one when the caller asked for that. `R` is the answer's element type,
-/// which is not always the source's: an argmax answers positions.
+/// keeps the reduced one as a one when the caller asked for that. A value of one dimension is the
+/// case where there is nothing else: its one lane is the whole value, so the answer is of no
+/// dimension and *is* the element it reduced to (design principles 5.4), which is why the walk runs
+/// over the rank the value has rather than over two or more. `R` is the answer's element type, which
+/// is not always the source's: an argmax answers positions.
 template <typename T, typename R, typename Lane>
 Array<R> axisReduce(
     const Array<T> &xs, int64_t axisArg, bool keepDims, const char *name, const Site &invalid,
     Lane lane) {
     const auto rank    = static_cast<int64_t>(xs.rank());
     const int64_t axis = axisArg < 0 ? axisArg + rank : axisArg;
-    if (rank < 2 || axis < 0 || axis >= rank) [[unlikely]] {
+    if (rank < 1 || axis < 0 || axis >= rank) [[unlikely]] {
         fault(
             invalid,
             {"[]",
@@ -1132,7 +1139,7 @@ Array<T> extremeAxis(
     const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid, const Site &empty) {
     const auto rank    = static_cast<int64_t>(xs.rank());
     const int64_t axis = axisArg < 0 ? axisArg + rank : axisArg;
-    if (rank >= 2 && axis >= 0 && axis < rank) {
+    if (rank >= 1 && axis >= 0 && axis < rank) {
         const auto dimension = static_cast<std::size_t>(axis);
         if (xs.extent(dimension) == 0) [[unlikely]] {
             fault(
@@ -1202,13 +1209,14 @@ template <bool Maximum, typename T> bool beyondExtreme(T v, T best) {
 /// `tensor:argmax_axis` and `tensor:argmin_axis` (modules/tensor/kernels/reduce.cpp): the position
 /// of the first element of the lane that equals its maximum (minimum), or of its first NaN. The
 /// answer's element type is int64 whatever the source holds, so it is a value of positions and not
-/// of elements; a lane with no element has no position, and the interpreter refuses that.
+/// of elements; a lane with no element has no position, and the interpreter refuses that. A value of
+/// one dimension answers one position, which is the answer itself (design principles 5.4).
 template <bool Maximum, typename T>
 Array<int64_t> argExtremeAxis(
     const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid, const Site &empty) {
     const auto rank    = static_cast<int64_t>(xs.rank());
     const int64_t axis = axisArg < 0 ? axisArg + rank : axisArg;
-    if (rank >= 2 && axis >= 0 && axis < rank) {
+    if (rank >= 1 && axis >= 0 && axis < rank) {
         const auto dimension = static_cast<std::size_t>(axis);
         if (xs.extent(dimension) == 0) [[unlikely]] {
             fault(

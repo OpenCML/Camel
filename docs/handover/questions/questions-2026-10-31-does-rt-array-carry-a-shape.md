@@ -49,10 +49,22 @@
   空轴的拒绝还是旧说法——cpp 印 `error[RuntimeDiag::InvalidArgument]: Invalid argument of '[]': …`，
   解释器印 `error[RuntimeDiag::RuntimeError]: … reduce: 'tensor:argmax_axis': the axis 1 has no element`
   （模块的 `std::invalid_argument` 被 `runKernel` 包上 `reduce:` 前缀），要按后者造一条 site。
+- **秩一的沿轴归约**：`f32[3]` 的 axis 0 今天答的是**秩零**——去掉该轴就是那个位置本身（5.4），
+  `argmax_axis(xs, 0, false)` 印 `1`、`shape` 答 `[]`，`keepdims` 要回来的是 `[1]`，`argmin` 印 `0`
+  （形状 `[]`），`max_axis` / `min_axis` 印 `5.0` / `1.0`；五条与 `std::fvm` 逐字节相同。改了三处：
+  写出的规则（`rank() < 2` → `< 1`，开区间仍拒，因为它的秩写不出来）、运行时的车道走法
+  （`axisReduce` 的 `rank < 1`，`extremeAxis` / `argExtremeAxis` 的空轴守卫 `rank >= 1`）、
+  **答案的形状**（`shapeReduced` 记 `rank = 0` 的同时要记 `zeroDim = rank == 0`——只把数字写成 0、
+  不记"零维"这条事实，答案就印成 `[1]` 而不是 `1`，第一次跑正是这样）。
+  **下一项**：`tensor:sum_axis` 自己的规则仍写 `rank() < 2`（理由与这里同一条、也已经不成立），
+  `std::fvm` 对 `f32[3]` 的 axis 0 答 `8.0`、`keepdims` 答 `[8.0]`。
 
 **判据：形状进到表示里之后，下一个要改的是所有还在数元素的地方——一个一个来，每个都配一条多维用例。**
 数元素的代码不会自己消失，只会换个形状继续数；而一条用对称维写的用例，正好替它把错拆盖住。所以每一项的
 验收都带一条**各维不同**的多维用例，并且把**形状印出来**，不是只比值。
+
+**三个维数相等的用例不是用例，是运气——验收要先问"错拆会不会也过"。** 秩一那一格也是这句话的另一面：
+`rank = 0` 与"零维"不是同一个数字，只写前者，答案印成 `[1]` 而解释器印 `1`，值一样、事实不一样。
 
 **要作者答的一句（已答，留档）**：`rt::Array`（standalone 运行时里那个平铺的 `T*` + `size`）**要不要带
 形状**？带着它，`std::cpp` 才能翻多维的下标、切片与 `tensor:shape`；不带，只能继续拒，把这 15 个（以及
