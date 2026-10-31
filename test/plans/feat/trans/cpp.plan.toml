@@ -301,12 +301,12 @@ timeout_ms = 8000
 
 [[tests]]
 name = "abs_smallest_int"
-desc = "`math:abs` of the smallest integer answers the value itself -- it has no positive counterpart -- and the translation writes that wrap (`rt::absOf`) instead of `std::abs`, whose answer for the smallest value is undefined behaviour and may be folded positive. `stdlib/math.cml`'s `gcd` recognises the smallest integer by `abs(a) < 0`, so the fold is what keeps its refusal: the program prints the negative value and then the fault, and agree_with_fvm compares the reading with std::fvm byte for byte."
+desc = "`math:abs` of the smallest integer answers the value itself -- it has no positive counterpart -- and the translation writes that wrap (`rt::intAbs`) instead of `std::abs`, whose answer for the smallest value is undefined behaviour and may be folded positive. `stdlib/math.cml`'s `gcd` recognises the smallest integer by `abs(a) < 0`, so the fold is what keeps its refusal: the program prints the negative value and then the fault, and agree_with_fvm compares the reading with std::fvm byte for byte."
 kind = "behavior"
 case = "../../../cases/trans/cpp/abs_smallest_int.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
-expect_stdout_contains = ["rt::absOf(", "gcd does not accept the smallest integer"]
+expect_stdout_contains = ["rt::intAbs(", "gcd does not accept the smallest integer"]
 expect_output_not_contains = ["std::abs(", "TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
