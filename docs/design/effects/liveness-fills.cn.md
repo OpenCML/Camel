@@ -1,11 +1,12 @@
 # 效应活性判定的填充点：六处位置、五份字段集
 
 - 状态：**数表**。只记位置与数：不含决定，不含提议，不改任何判定。
-- 基于：`origin/develop` 的 `76297223f`（下列行号在本分支上也相同，两种树里都验过）。
-- 对象：`EffectLivenessFacts`（`include/camel/runtime/effect_liveness.h`，6 个字段）被哪些地方填、每个地方填哪几个、从哪一侧（输入 / 用户）读。
+- 基于：`origin/develop` 的 `76297223f`，加本分支删掉一个字段的那一笔（`effect_liveness.h` 因此少了 3 行，该文件的行号以当前树为准）。
+- 对象：`EffectLivenessFacts`（`include/camel/runtime/effect_liveness.h`，5 个字段）被哪些地方填、每个地方填哪几个、从哪一侧（输入 / 用户）读。
 - 写法：引用写 `文件#符号`（仓库的引用检查只认符号），行号写在括号里，作描述用。提交列是该行字符最近一次被改动的提交（按行 blame），只写 sha。
 - 一句话：**五份拷贝的第一件事不是合并，是列表——列表里的"方向"也是表的一部分。**
 - 一句判据：**不被扫描的页等于没写——数表要放在会被读的那条路上。**
+- 一句判据：**永远 false 的字段不是保守，是没人写的一份名单——它比写错更难发现，因为它从不报错。**
 
 ---
 
@@ -24,7 +25,7 @@
 
 ## 2. 五份字段集：2 / 2 / 3 / 2 / 2
 
-五份共 **11 次赋值**，落在 6 个字段上：
+五份共 **11 次赋值**：
 
 | 字段 | 赋值处数 | 位置（行） |
 |---|---|---|
@@ -32,10 +33,13 @@
 | `isSyncStatement` | 5 | 处 1、2、3、4、5 |
 | `hasDataUser` | 1 | 处 3（92 行） |
 | `isWaitedOn` | 1 | 处 3（93 行） |
-| `hasWriterWithLaterRead` | 0 | — |
-| `isCallThroughValue` | 0 | — |
+| `isWriterWithLaterRead` | 0 | 赋值 0，读点 1（`src/runtime/effects.cpp#effectStandingOf`，第 120 行；该函数调用者 0） |
+| ~~`isCallThroughValue`~~ | 已删 | `06a579a50`（删 4 行：3 行注释 + 1 行声明；读点 0、赋值 0） |
 
-两个字段零填充：`hasWriterWithLaterRead`、`isCallThroughValue` 在 `src/` 与 `include/` 里只有声明（`include/camel/runtime/effect_liveness.h#EffectLivenessFacts`，第 44、48 行），没有任何赋值。
+两个名字查过全树：
+
+- `isCallThroughValue`：读点 **0**、赋值 **0** —— 已删（`06a579a50`），字段连同它的 3 行注释。
+- `isWriterWithLaterRead`：赋值 **0**、读点 **1** —— 留在原处。那一个读点在 `effectStandingOf`（调用者 0）的条件里，删掉它等于把这个函数对 3.1 第三条凭据（写者表）的唯一表述一起删掉：该字段是代码里唯一说出这件事的地方，删它是对答案的决定，不是删死码。它的注释现在写明"没有调用者填它"（`include/camel/runtime/effect_liveness.h#EffectLivenessFacts`，第 42–45 行）。
 
 ## 3. `hasWaitEdge` 的三种写法
 
@@ -68,9 +72,9 @@
 
 | 项 | 位置（文件#符号，第 N 行） | 提交 | 调用者 |
 |---|---|---|---|
-| `EffectLivenessFacts`（6 个字段） | 声明 `include/camel/runtime/effect_liveness.h#EffectLivenessFacts`（第 35–62 行） | `30fa22344`（该段最晚；同段还有 `821185288`、`a882b3aaf`、`21f2f3be8`） | — |
-| `effectStandingOf` | 定义 `src/runtime/effects.cpp#effectStandingOf`（第 117–129 行）；声明 `include/camel/runtime/effect_liveness.h#effectStandingOf`（第 71 行） | `821185288`、`30fa22344` | **0**（全树只有声明、定义，和 `src/passes/opt/generic/gates.cpp#bypassValueGate` 的一处注释引用，第 27 行） |
-| `keepsEffectAlive` | 定义 `src/runtime/effects.cpp#keepsEffectAlive`（第 131–133 行）；声明 `include/camel/runtime/effect_liveness.h#keepsEffectAlive`（第 74 行） | `30fa22344` | **0** |
+| `EffectLivenessFacts`（5 个字段） | 声明 `include/camel/runtime/effect_liveness.h#EffectLivenessFacts`（第 35–59 行） | `06a579a50`（最晚；同段还有 `30fa22344`、`821185288`、`a882b3aaf`、`21f2f3be8`） | — |
+| `effectStandingOf` | 定义 `src/runtime/effects.cpp#effectStandingOf`（第 117–129 行）；声明 `include/camel/runtime/effect_liveness.h#effectStandingOf`（第 68 行） | `821185288`、`30fa22344` | **0**（全树只有声明、定义，和 `src/passes/opt/generic/gates.cpp#bypassValueGate` 的一处注释引用，第 27 行） |
+| `keepsEffectAlive` | 定义 `src/runtime/effects.cpp#keepsEffectAlive`（第 131–133 行）；声明 `include/camel/runtime/effect_liveness.h#keepsEffectAlive`（第 71 行） | `30fa22344` | **0** |
 
 ## 6. 两侧的名字（读同一批边）
 
