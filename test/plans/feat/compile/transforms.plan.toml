@@ -80,6 +80,23 @@ expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float)
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# A call is lifted as a call: the callee gets a lifted graph of its own, and it gets exactly one --
+# `f(x) = g(x) + g(x)` calls `g` twice and the reading says `callees=1`. The numbers are checked
+# against the derivative written by hand: `g(x) = x*x`, `f(x) = 2*x*x`, so `f(3) = 18` and
+# `f'(3) = 4x = 12`.
+[[tests]]
+name = "jvp_call.callee_is_lifted_once"
+desc = "A function that calls another one is reinterpreted through the call, not around it: a `Func` node names the callee graph, so the lift gives the callee a graph of its own with the lifted signature, and the call passes `(value, tangent)` in and answers with the pair. `f(x) = g(x) + g(x)` with `g(x) = x*x` reads `(18, 12)` at `x = 3, dx = 1` -- `f = 2x*x`, `f' = 4x` -- and `REINTERP jvp callees=1` says the two calls of `g` made one graph, not two."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_call.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["REINTERP jvp function=g graph=", "REINTERP jvp function=f graph=", "REINTERP jvp callees=1", "18.0", "12.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 # The negative side of the same rule table, and the point of it: a primitive the ruleset has no rule
 # for is not answered with 0 or 1 and is not only printed at -- it is a diagnostic that names the
 # primitive and stands *where the primitive is written*. `pow` is `math:pow_d`, which no forward rule
