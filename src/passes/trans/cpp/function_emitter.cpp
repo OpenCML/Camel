@@ -267,6 +267,19 @@ std::string FunctionEmitter::cppType(const GCGraph *graph, gc_node_ref_t ref, co
             kTranslatedTypes));
 }
 
+std::string FunctionEmitter::bridgeOperator(
+    const GCGraph *graph, gc_node_ref_t ref, const std::string &uri) {
+    auto [it, added] = program_.bridgedOperators.try_emplace(uri, std::string());
+    if (added) {
+        it->second = std::format("op_{}", cppIdentifier(uri));
+    }
+    if (program_.firstBridgedGraph == nullptr) {
+        program_.firstBridgedGraph = graph;
+        program_.firstBridgedNode  = ref;
+    }
+    return it->second;
+}
+
 std::string FunctionEmitter::signatureOf(const Member &m) const {
     std::string out = std::format("{} {}([[maybe_unused]] rt::Depth depth", m.result, m.name);
     for (const Parameter &p : m.params) {
@@ -566,7 +579,7 @@ const CppValue &FunctionEmitter::valueOf(Frame &frame, gc_node_ref_t ref) {
 
 void FunctionEmitter::bind(
     Frame &frame, gc_node_ref_t ref, std::string expr, bool inlinable, Block &out,
-    const std::string &hint) {
+    const std::string &hint, const char *resultCpp) {
     const Type *type  = frame.graph->node(ref)->dataType();
     const size_t uses = liveUses(frame.graph, ref) + frame.results.count(ref);
     if (!isValueType(type) || uses == 0) {
@@ -589,7 +602,7 @@ void FunctionEmitter::bind(
         Stmt::line(
             std::format(
                 "const {} {} = {};",
-                cppType(frame.graph, ref, type),
+                resultCpp != nullptr ? std::string(resultCpp) : cppType(frame.graph, ref, type),
                 name,
                 withoutParentheses(expr))));
     frame.values[ref] = CppValue{name, false};
@@ -828,11 +841,15 @@ class NodeCall final : public OperatorCall {
         std::vector<const Type *> normTypes, std::vector<const Type *> withTypes,
         const Type *result,
         std::function<std::string(RuntimeDiag, const std::vector<std::string> &)> site,
+        std::function<std::string()> place,
+        std::function<std::string()> bridgeOperator,
         std::function<std::string(const Type *)> cppType,
         std::function<std::string(size_t)> fieldName)
         : uri_(std::move(uri)), norm_(std::move(norm)), with_(std::move(with)),
           normTypes_(std::move(normTypes)), withTypes_(std::move(withTypes)), result_(result),
-          site_(std::move(site)), cppType_(std::move(cppType)), fieldName_(std::move(fieldName)) {}
+          site_(std::move(site)), place_(std::move(place)),
+          bridgeOperator_(std::move(bridgeOperator)), cppType_(std::move(cppType)),
+          fieldName_(std::move(fieldName)) {}
 
     std::string_view uri() const override { return uri_; }
     size_t normCount() const override { return norm_.size(); }
@@ -845,6 +862,8 @@ class NodeCall final : public OperatorCall {
     std::string site(RuntimeDiag kind, const std::vector<std::string> &args) override {
         return site_(kind, args);
     }
+    std::string place() override { return place_(); }
+    std::string bridgeOperator() override { return bridgeOperator_(); }
     std::string cppType(const Type *type) const override { return cppType_(type); }
     std::string fieldName(size_t argIndex) override { return fieldName_(argIndex); }
 
@@ -854,6 +873,8 @@ class NodeCall final : public OperatorCall {
     std::vector<const Type *> normTypes_, withTypes_;
     const Type *result_;
     std::function<std::string(RuntimeDiag, const std::vector<std::string> &)> site_;
+    std::function<std::string()> place_;
+    std::function<std::string()> bridgeOperator_;
     std::function<std::string(const Type *)> cppType_;
     std::function<std::string(size_t)> fieldName_;
 };
@@ -920,9 +941,6 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
     // runtime: a program std::cpp writes has no block space of the runtime at all, so on this target
     // the counters are not available. That is a boundary of the target, not a translation still to
     // be written, and the two are said differently (author's ruling of 2026-10-31: A).
-    // `tensor:ones` and `tensor:zeros` build a tensor from a shape array. std::cpp writes no tensor
-    // value at all, so naming the shape array as the untranslated thing would blame the wrong
-    // side: the array is translated, the tensor is what the pass does not have.
     // `rand:uniform_array` and `rand:normal_array` draw from a key into a *shaped* array: the key is
     // a C++-side value (rt::randomStream has the same philox), so naming it is wrong -- the value
     // they build is a shaped array, and std::cpp writes none.
@@ -936,15 +954,6 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
                 describeFunction(g),
                 uri));
     }
-    if (uri == "tensor:ones" || uri == "tensor:zeros") {        refuse(
-            g,
-            ref,
-            std::format(
-                "{} uses '{}' to build a tensor, and std::cpp writes no tensor value: the pass has "
-                "no tensor type, so a shape cannot be handed to it",
-                describeFunction(g),
-                uri));
-    }
     if (uri == ":op/mem_blocks") {        refuse(
             g,
             ref,
@@ -952,6 +961,21 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
                 "{} reads the block counters of the Camel runtime, and a program std::cpp writes has "
                 "no runtime block space of its own: the counters are not available on this target",
                 describeFunction(g)));
+    }
+    // The tensor builders whose value lives in the runtime: `tensor:ones` has a rule
+    // (operator_rules.cpp), and this back end has no rule for the others yet, so they are refused
+    // as work not done. The sentence names the operator: the shape array is translated and the
+    // bridge carries a tensor now, so neither of those is what is missing.
+    if (uri == "tensor:zeros") {
+        refuse(
+            g,
+            ref,
+            std::format(
+                "{} uses '{}' to build a tensor, and std::cpp has no translation of it yet: the "
+                "value lives in the runtime and crosses the bridge, as 'tensor:ones' does, and this "
+                "operator has no rule in the table",
+                describeFunction(g),
+                uri));
     }
     if (rule == nullptr) {
         for (const auto types : {&normTypes, &withTypes}) {
@@ -982,14 +1006,7 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
         }
         // No standalone translation: the operator of the runtime module runs through the
         // bridge (camel/standalone/bridge.h), and the program links libcamel.
-        auto [it, added] = program_.bridgedOperators.try_emplace(uri, std::string());
-        if (added) {
-            it->second = std::format("op_{}", cppIdentifier(uri));
-        }
-        if (program_.firstBridgedGraph == nullptr) {
-            program_.firstBridgedGraph = g;
-            program_.firstBridgedNode  = ref;
-        }
+        const std::string accessor = bridgeOperator(g, ref, uri);
         auto values = [&](const std::vector<CppValue> &args,
                           const std::vector<const Type *> &types) {
             std::string out;
@@ -1005,7 +1022,7 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
         };
         std::string expr = std::format(
             "{}.call<{}>({}, {}, {})",
-            it->second,
+            accessor,
             *program_.values.type(node->dataType()),
             program_.sites.placeFor(g, ref),
             values(norm, normTypes),
@@ -1023,6 +1040,8 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
         [&](RuntimeDiag kind, const std::vector<std::string> &args) {
             return program_.sites.siteFor(g, ref, kind, args);
         },
+        [&]() { return program_.sites.placeFor(g, ref); },
+        [&]() { return bridgeOperator(g, ref, uri); },
         [&](const Type *t) { return program_.values.type(t).value_or("void"); },
         [&](size_t argIndex) {
             // The field a store writes is an index the compiler put in a constant
@@ -1072,7 +1091,8 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
                 uri,
                 types.empty() ? std::string() : " of type " + types));
     }
-    bind(frame, ref, std::move(*expr), rule->inlinable, out, operatorHint(uri));
+    bind(
+        frame, ref, std::move(*expr), rule->inlinable, out, operatorHint(uri), rule->resultCpp);
 }
 
 void FunctionEmitter::lowerLoop(
@@ -1823,6 +1843,8 @@ bool FunctionEmitter::lowerVariable(
             [&](RuntimeDiag kind, const std::vector<std::string> &args) {
                 return program_.sites.siteFor(g, ref, kind, args);
             },
+            [&]() { return program_.sites.placeFor(g, ref); },
+            [&]() { return bridgeOperator(g, ref, op); },
             [&](const Type *t) { return program_.values.type(t).value_or("void"); },
             // A compound assignment writes no field of a record: its operator takes a value and
             // the variable's own, and the field name is not among them.
