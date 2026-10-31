@@ -1,8 +1,12 @@
-"""Twentytimes the same command on the same input, and what each run wrote.
+#!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
+"""Twenty times the same command on the same input, and what each run wrote.
 
 A writer whose output depends on the process it runs in makes every red test a matter of luck.
-This asks the question directly: translate one program twenty times (in one process, then in
-twenty) and say how many runs wrote each shape of the program.
+This asks the question directly: translate one program twenty times, then twenty-four more with
+eight alive at a time, and say what each run wrote.
 """
 import collections
 import concurrent.futures
