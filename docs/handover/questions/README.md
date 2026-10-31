@@ -9,7 +9,7 @@
 > **哪些未决值得成页**：不是所有未决都值得成页——只有**今天有人被它堵住**的才值得。其余留在原则里，等它真的挡住一条车道再成页。所以第 15 节那 8 条不占待裁表，清单在文末，每条写明今天堵着谁。
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
-## 现在在等作者：3 页（`whose-effect-is-an-inlined-body`、`can-a-tensor-hold-a-complex`、`can-a-ref-type-be-assigned`）
+## 现在在等作者：4 页（`whose-effect-is-an-inlined-body`、`can-a-tensor-hold-a-complex`、`can-a-ref-type-be-assigned`、`what-type-does-a-mean-have`）
 
 `questions/` 里只有一页在等答复：内联把体搬进调用者图后，那张图多出来的环境资源归谁。其余页面都已裁，改动按裁定往 develop 走（裁完的页作者会挪进 `reviews/`）。新页从车道落进来时才在这个表里加行。
 
@@ -17,6 +17,7 @@
 |---|---|---|---|
 | [`whose-effect-is-an-inlined-body`](questions-2026-10-31-whose-effect-is-an-inlined-body.md) | 内联把体搬进调用者图后，那张图多出来的环境资源归调用者、归原来的体，还是谁内联谁在区域记录里登记 | 待裁 | 逐图版的效应边界不变量（今天量出 9 条 `callback.*_opt` 全是这个形状，尺子伸过了头） |
 | [`does-rt-array-carry-a-shape`](questions-2026-10-31-does-rt-array-carry-a-shape.md) | 05:30 裁 **A**：`rt::Array` 带 `rank`/`extent` | 已裁未落 | 队列：`argmax_axis` → 逐元素；`T[..]` 的表示已由 07:30 裁定统一为原生带形状数组 |
+| [`what-type-does-a-mean-have`](questions-2026-10-31-what-type-does-a-mean-have.md) | `mean` 返回元素类型 `T` 还是 `f32`：签名说 `T`，kernel 对整数答 `f32`（整数 `[1, 2, 4]` 的均值印成 `1075139925`，那是 `2.3333333f` 的位模式），`array_axis.cpp` 又直接拒非浮点 | 待裁 | `std::cpp` 侧"整数 `mean` 按名字拒"是误诊的产物：病因是类型，不是没写规则；这一格要等裁定才能落 |
 | [`can-a-tensor-hold-a-complex`](questions-2026-10-31-can-a-tensor-hold-a-complex.md) | 张量能不能装复数：`c64`/`c128` 今天在两后端都是 `NoMatchingFunction`，是签名收窄到实数、还是张量模块加复数 dtype | 待裁 | 张量元素类型的最后两个缺口（`string`/`bool` 已判为“语言没有”） |
 | [`can-a-ref-type-be-assigned`](questions-2026-10-31-can-a-ref-type-be-assigned.md) | `Type::assignableFrom` 的“两边都不是 `Ref`”被四个合法用例打破（`comprehension_context.annotated` 三个后端 + `context.var_sibling`）：是调用方该先解析标注，还是 `Ref` 本来就该由这个谓词回答 | 待裁 | `src/core/type` 那一族的收尾（58 处里剩这 1 处 `ASSERT`） |
 | [`std-cpp-needs-a-tensor-type`](questions-2026-10-31-std-cpp-needs-a-tensor-type.md) | 07:30 收回 05:50：`T[..]` 一律是原生带形状 `rt::Array`，经桥时转换；`rt::Foreign` 只留给 `PyObject`、`Device<T>` | 已裁未落 | `ones`/`zeros` 的表示要改回 `rt::Array`；设计稿 §9 与类型表同笔改 |
