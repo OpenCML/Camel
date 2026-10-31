@@ -1072,3 +1072,20 @@ HANDLE_PROBE refused: InvalidArgument
 **"事务拥有它造出的一切"由类型保证**——`RegionDraft::graph` 就是那个 `unique_ptr<GraphTransaction>`，丢弃即析构——**不由读数证明**。作者自认 00:50/02:50 要这条用例时没看清草稿不在 GC 空间里。
 
 **留下的两句**：**"一条账恒真时，要么改题、要么撤题；把恒真的账留在验收里，等于给自己发一张永远通过的通行证。"** **"一条账恒真时，不是账写对了，是它测的那条路根本不分配——先去找分配发生在哪一步。"**
+
+## 49. `graph_encode.cpp` 那两处：**编码器不再点名存储**（本笔）
+
+**为什么是它、而且是现在**：§46／§47 之后 `compile/gir` 剩 9 处，其中 8 处——`nodeDraftOf`、`DraftGraphBuilder::draft()`、`draftOwners` 的键、`fromDraft`——都在 `questions-2026-10-31-gir-handle-names-a-transaction-or-a-draft.md` 的冻结里（"在裁定之前，GIR 这一层不动"）。**不在冻结里的只有编码器这 2 处，而它的调用者只有 1 个**（`EncodeSession::prepareGraph`）。依判据"先挑调用者最少的"，这一片就是它。
+
+| 处 | 位置 | 判定 |
+|---|---|---|
+| 1 | `graph_encode.cpp` 的 `using camel::runtime::GraphDraft;` | **删**：它只服务第 2 项，第 2 项改完它就是死的 |
+| 2 | `graph_encode.cpp` 的 `collectLiveDraftNodes(const GraphDraft &)` | **改**：收事务，体首一行 `const auto &draft = transaction.graph();`（与 b5a–b5d 同一个写法）；唯一调用点把 `graph->view()` 换成 `graph->transaction()` |
+
+**四个数：37 / 365 / 1 / 4。**（`files` 38 → 37、`references` 367 → 365，**都是代码，散文一格没动**。）
+
+**三种收益**：① 删行 1（`using` 那一行；净行数 +2，是新增的体首行与两行注释）；② 消点 2（一处 `using`、一处"收草稿"的参数）；③ **一个文件从此整片不提这个类型**——`git grep -ow GraphDraft -- src/compile/gir/graph_encode.cpp` 答 0。
+
+**为什么不借此动别的**：它不碰 handle、不碰 `draft()`、不碰 region 的 id——**这三件是冻结的全部内容**；而 `tags` 的五个草稿重载是 §41 判过的边界（"事务交出来的正是草稿"），不是漏网。
+
+**逐字节证明**：`test/cases` 3235 + `examples` 29 = **3264 个 `.cml` 各跑一次 `std::jgir`**，改动前后各一遍，**stdout / stderr / 退出码三者 3264 / 3264 逐字节相同**；同一二进制连跑两遍也是 3264 / 3264 相同（这一次没有出现 §1 那处行序抖动，所以不需要豁免任何文件）。
