@@ -112,6 +112,16 @@ const MODULES = [
         // spell yet: it is rendered as `?` (an inferred result), not as `void`.
     },
     {
+        name: 'transforms',
+        title: '`transforms`: program transforms',
+        kind: 'cpp',
+        // A module of passes: it registers no operator, so `--verify-ops` has none to check. What it
+        // registers is a pass, declared in this .cml and registered in modules/transforms.
+        source: 'transforms.cml',
+        declaration: true,
+        passes_only: true,
+    },
+    {
         name: 'tensor',
         title: '`tensor`: multi-dimensional numeric arrays',
         kind: 'cpp',
