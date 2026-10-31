@@ -632,6 +632,8 @@ python benchmarks\train.py --check-ksteps --models transformer --device cuda --c
 
 （`--torch-device`/`--camel-devices` 是本计划要加的两个参数：`compare.py` 的 `camel_arg_command` 把 `--devices 0` 放在目标文件之前；`train.py` 的 `CAMEL_CONFIGS` 加一条 GPU 配置，`run_camel_full` 把 `--devices` 传下去，`model_torch` 按 `--device` 把权重与输入搬到 CUDA。GPU 配置的遍序是 `std::macro tiles::compile std::nvm`：`std::macro` 必须在 `tiles::compile` **之前**——派生图只有在编译期展开出来，才会被当成同一个单元的图（§2.6）；顺序反了 `tiles::compile` 会报缺少前置遍并点名 `std::macro`。）
 
+**把一条红归给环境之前，先量出它是从哪一步开始是 0 的——归因也要读数。** 一条设备读数不对时，三段各打一个点：`load`（宿主→设备的拷贝做完，设备缓冲里是什么）、`launch`（核跑完是什么）、`readback`（交回宿主的是什么）；哪一步先变成 0，就是哪一步的错，`--devices cpu` 跑同一程序是宿主那一半的对照。三段都读对了而值仍不对，才轮得到"机器/驱动"的说法——"环境"这两个字要有读数才配写。`gpu_preference.named_device` 就是这样定出来的：`load` 阶段设备缓冲已经是 8 个零（`hostStorage` 对 f64 标量没有规则，读的是空的 `data`），不是核没跑，也不是读回；修在 `hostStorage`，同日 870e10935。
+
 ---
 
 ## 7. 提交顺序与可独立落地
