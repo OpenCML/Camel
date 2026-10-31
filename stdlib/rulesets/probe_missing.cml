@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // A ruleset that deliberately lacks one of the five scalar arithmetic primitives: there is a rule
 // for `+`, `-` (both arities) and `*`, and none for `/`. A replacement that walks a function has to
 // stop at the `/` it meets and say so there -- writing four rules is how the fifth one's absence is
