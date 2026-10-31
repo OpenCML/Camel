@@ -601,6 +601,22 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
         }
         uses = std::move(pending);
     }
+    // A read that took a version of this variable with `:var/after` is a read of this cell: the
+    // write written below it must run after it, or the read sees the value this write leaves
+    // (docs/design/effects/edges.cn.md 5.6). It is not in `pendingUses_`: what it used is the
+    // version, not the cell.
+    if (auto reads = versionReads_.find(variable); reads != versionReads_.end()) {
+        for (node_handle_t read : reads->second) {
+            if (read == exit || !sameGraph(read, currGraph_) || !linkCheek(read, exit) ||
+                !nodeTakesAnOrder(read) || !nodeTakesAnOrder(exit)) {
+                continue;
+            }
+            if (hasDirectDataDependency(read, exit) || dataPathReaches(read, exit)) {
+                continue;
+            }
+            linkNodes(LinkType::Order, read, exit);
+        }
+    }
     // A store is one of the cell's known users (collapseNonEscapingVariableReads): a user the builder
     // did not record -- a:var/take, a call handed the `var` -- makes the cell escape.
     knownCellUsers_.insert(exit);
@@ -1642,6 +1658,11 @@ node_handle_t Builder::variableAfterCall(node_handle_t variable, node_handle_t c
     stampPermissions(node);
     linkNodes(LinkType::Norm, before, node);
     linkNodes(LinkType::Norm, call, node);
+    // This node reads the variable as the call left it. A write of the same cell written below it
+    // has to run after it, or the read would see that write -- the WAR half of 5.6, and the reason
+    // the read is recorded here: it is not a `VariableUse` of a read of the cell, it is a use of
+    // the version.
+    versionReads_[before].push_back(node);
     return node;
 }
 
