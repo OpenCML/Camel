@@ -674,7 +674,7 @@ bool FunctionEmitter::lowerNode(
         return false;
     }
     case GCNodeKind::Cast:
-        lowerCast(frame, ref);
+        lowerCast(frame, ref, out);
         return false;
     case GCNodeKind::Fill:
         lowerFill(frame, ref, out);
@@ -1577,6 +1577,12 @@ void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
     for (size_t i = 0; i < items.size(); ++i) {
         list += (i ? ", " : "") + items[i];
     }
+    // A value of one dimension carries the dimension it has, as a constant does (the literal's rule):
+    // the elements alone are a value of no rank, and `shape`, `len` and `appendText` all read the rank
+    // -- a value of one element would print as the element, which is the one reading it is not. Written
+    // as a call, because with an element type an `{n}` can itself stand for (`rt::Array<T>`, a struct of
+    // one field) the braced pair is read as one more element.
+    //
     // A value of several dimensions is the elements and the shape in one block, and the block is
     // written as both: `rt::Array<double>{{1.0, 2.0, 2.0, 2.0}, {2, 2}}`. The constructor takes
     // the element count from the shape's product (standalone/array.h), so the fold has to write
@@ -1586,7 +1592,9 @@ void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
     if (type->code() == TypeCode::Array) {
         const auto *array = camel::core::rtdata::fromSlot<::Array *>(constant);
         const size_t rank = array != nullptr ? array->rank() : 0;
-        if (rank >= 2) {
+        if (rank == 1) {
+            value = std::format("{}::shaped({{{}}}, {{{}}})", cppName, list, array->dim(0));
+        } else if (rank >= 2) {
             std::string shape;
             for (size_t i = 0; i < rank; ++i) {
                 shape += (i > 0 ? ", " : "") + std::to_string(array->dim(i));
@@ -1652,7 +1660,7 @@ void FunctionEmitter::lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out
     bind(frame, ref, expr + ")", false, out, "call");
 }
 
-void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref) {
+void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref, Block &out) {
     // A value entering `T?` or `T!` (design principles 3.8), `null` entering `T?`, a failed
     // value passed on with another payload (`->`), a conversion between numbers.
     const GCGraph *g          = frame.graph;
@@ -1742,6 +1750,15 @@ void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref) {
                 describeFunction(g),
                 typeName(fromType),
                 typeName(toType)));
+    }
+    if (checksShape && liveUses(g, ref) + frame.results.count(ref) == 0) {
+        // A conversion that checks a shape is a statement that can stop the program: the check is
+        // what reports, and a value nobody reads is not a check nobody may skip. So it is written
+        // where it stands and its value is dropped -- losing a value wastes it, losing a check
+        // loses the fault it reports (design principles 3.4: a fault is observable).
+        out.push_back(Stmt::line(text + ";"));
+        frame.values[ref] = CppValue{"", false};
+        return;
     }
     frame.values[ref] = CppValue{text, false};
 }

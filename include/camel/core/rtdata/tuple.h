@@ -65,7 +65,12 @@ class Tuple : public rtdata::Object {
     /// renders a value that may still be under construction (a collection a higher-order
     /// operator is filling) and shows its unwritten elements instead of aborting.
     slot_t slotAt(size_t index) const {
-        ASSERT(index < size(), "Index out of range");
+        GUARD(
+            index < size(),
+            std::format(
+                "Tuple field out of range: field {} of a tuple with {} fields",
+                index,
+                size()));
         if (isView()) {
             const ViewData *view = viewData();
             if (view->layout->slotShaped) {
@@ -73,13 +78,23 @@ class Tuple : public rtdata::Object {
                 return reinterpret_cast<const slot_t *>(view->bytes)[index];
             }
             const auto *tupleType = static_cast<const type::TupleType *>(view->type);
-            ASSERT(index < tupleType->size(), "Index out of range");
+            GUARD(
+                index < tupleType->size(),
+                std::format(
+                    "Tuple field out of range: field {} of the {} fields this view stores",
+                    index,
+                    tupleType->size()));
             const type::Type *fieldType = tupleType->typeAt(index);
             const std::byte *at = view->bytes + view->layout->fieldOffsets[index];
             if (fieldType->code() == type::TypeCode::Struct ||
                 fieldType->code() == type::TypeCode::Tuple) {
                 const type::DataLayout *layout = type::pureDataLayout(fieldType);
-                ASSERT(layout != nullptr, "A compact field has a layout");
+                GUARD(
+                    layout != nullptr,
+                    std::format(
+                        "A compact field of type '{}' has a layout, and this one has none: the "
+                        "field is stored by its bytes and cannot be read without them",
+                        fieldType->toString()));
                 return rtdata::pureViewOf(at, fieldType, layout, layout->size);
             }
             return rtdata::readPureScalar(at, fieldType->code());
@@ -92,13 +107,30 @@ class Tuple : public rtdata::Object {
     }
 
     template <typename T> void set(size_t index, T value) {
-        ASSERT(index < size(), "Index out of range");
+        GUARD(
+            index < size(),
+            std::format(
+                "Tuple field out of range: a write at field {} of a tuple with {} fields",
+                index,
+                size()));
         data_[index] = rtdata::toSlot(value);
     }
 
     template <typename T> void set(size_t index, T value, const type::TupleType *tupleType) {
-        ASSERT(index < size(), "Index out of range");
-        ASSERT(tupleType != nullptr && index < tupleType->size(), "TupleType is invalid.");
+        GUARD(
+            index < size(),
+            std::format(
+                "Tuple field out of range: a write at field {} of a tuple with {} fields",
+                index,
+                size()));
+        GUARD(
+            tupleType != nullptr && index < tupleType->size(),
+            std::format(
+                "TupleType is invalid for this write: the field is {} and the type passed "
+                "describes {}",
+                index,
+                tupleType == nullptr ? std::string("no fields")
+                                     : std::to_string(tupleType->size()) + " fields"));
         // A view is not a value: materialise it at the store boundary (see Struct::set). Only
         // an aggregate field can hold one, so the common scalar write pays no call.
         const type::Type *fieldType = tupleType->typeAt(index);
@@ -114,11 +146,17 @@ class Tuple : public rtdata::Object {
     }
 
     slot_t *data() {
-        ASSERT(!isView(), "A compact element view has no slot array");
+        GUARD(
+            !isView(),
+            "A compact element view has no slot array: its bytes belong to another value, so "
+            "there are no slots here to hand out");
         return data_;
     }
     const slot_t *data() const {
-        ASSERT(!isView(), "A compact element view has no slot array");
+        GUARD(
+            !isView(),
+            "A compact element view has no slot array: its bytes belong to another value, so "
+            "there are no slots here to hand out");
         return data_;
     }
 
@@ -127,7 +165,14 @@ class Tuple : public rtdata::Object {
 
     virtual bool
     equals(const rtdata::Object *other, const type::Type *type, bool deep = false) const override {
-        ASSERT(type && type->code() == type::TypeCode::Tuple, "Type must be TupleType");
+        GUARD(
+            type != nullptr && type->code() == type::TypeCode::Tuple,
+            std::format(
+                "Type must be TupleType, and this call passed {}: the fields are read and "
+                "written through the tuple type's field types",
+                type == nullptr
+                    ? std::string("none")
+                    : "code " + std::to_string(static_cast<int>(type->code()))));
         if (!isOfSameCls(this, other))
             return false;
 
@@ -184,7 +229,14 @@ class Tuple : public rtdata::Object {
     virtual rtdata::Object *clone(
         camel::core::mm::IAllocator &allocator, const type::Type *type,
         bool deep = false) const override {
-        ASSERT(type && type->code() == type::TypeCode::Tuple, "Type must be TupleType");
+        GUARD(
+            type != nullptr && type->code() == type::TypeCode::Tuple,
+            std::format(
+                "Type must be TupleType, and this call passed {}: the fields are read and "
+                "written through the tuple type's field types",
+                type == nullptr
+                    ? std::string("none")
+                    : "code " + std::to_string(static_cast<int>(type->code()))));
         if (isView()) {
             return rtdata::materializeAggregate(viewData()->bytes, type, allocator);
         }
@@ -222,11 +274,21 @@ class Tuple : public rtdata::Object {
     }
 
     virtual void print(std::ostream &os, const type::Type *type) const override {
-        ASSERT(type && type->code() == type::TypeCode::Tuple, "Type must be TupleType");
+        GUARD(
+            type != nullptr && type->code() == type::TypeCode::Tuple,
+            std::format(
+                "Type must be TupleType, and this call passed {}: the fields are read and "
+                "written through the tuple type's field types",
+                type == nullptr
+                    ? std::string("none")
+                    : "code " + std::to_string(static_cast<int>(type->code()))));
         const type::TupleType *tupleType = static_cast<const type::TupleType *>(type);
         if (tupleType->isTagged()) {
             // `T?` / `T!`: the value or the error, not the box (rtdata/tagged.h).
-            ASSERT(!isView(), "A tagged tuple is not compact pure data");
+            GUARD(
+                !isView(),
+                "A tagged tuple is not compact pure data: a view has no tag bits of its own, so "
+                "printing it would read the wrong field");
             rtdata::printTaggedSlots(os, data_, tupleType);
             return;
         }
