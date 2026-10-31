@@ -32,7 +32,13 @@ name = "agree_with_fvm"
 # The default layer. It is the only test of the tree that catches a generated C++ program that
 # builds and runs but prints what the interpreter does not -- a format specification that reached
 # the writer as plain text padded the whole array and exited 0 -- so it runs with the plan: about
-# 40 s of C++ compilations at 8 jobs, and nothing else looks at this.
+# 40 s of wall clock at 8 jobs, and nothing else looks at this.
+#
+# Its bound is 900 s, not 600: the runner fails a test whose own CPU time is more than a quarter of
+# its timeout, and 129 C++ compilations at -O2 cost about 150 s of CPU on this host -- at 600 the
+# test sat exactly on the margin and failed on the host's contention with 129 of 129 programs
+# agreeing (151.6 s against a 150 s quarter). The work cannot be made smaller without dropping
+# programs, so the number is raised, with this note, as docs/test-plans.md asks.
 tier = "fast"
 desc = "The programs of test/tools/cppexec/expect.txt are translated with std::cpp, built with the system's C++ compiler and run; each prints what std::fvm prints and exits with its code: scalars and their text, strings, branches as statements, the order of effects, faults with their located report, the recursion limit, tail calls as loops (also between two functions), exit codes, complex numbers (arithmetic, `^`, the math functions, their text and formatting, a faulting division), and operators of runtime modules through the bridge."
 kind = "behavior"
@@ -66,6 +72,7 @@ expect_stdout_contains = ["link: ", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+||||||| 0ff64eda8
 
 [[tests]]
 name = "recursion_site_message"
@@ -141,16 +148,31 @@ timeout_ms = 8000
 
 [[tests]]
 name = "refuse_rank"
-desc = "A rule that declines says which values it declined: a slice of a value of two dimensions is not the one slice this back end has -- it keeps no shape, so `m[0:1]` of `float[2, 3]` is not a run of a block here -- and the refusal names both types it was given ('float[2, 3]' and 'int') where it used to say only \"on values\", which left the reader to guess the shape it wanted."
+desc = "A rule that declines says which values it declined: a slice of a value of two dimensions is not the one slice this back end has -- it keeps no shape, so `m[0:1]` of `float[2, 3]` is not a run of a block here -- and the refusal names both types it was given ('float[2, 3]' and 'int') where it used to say only \"on values\", which left the reader to guess the shape it wanted. The value is `main`'s parameter: a literal of that type is refused earlier, with its own message."
 kind = "negative"
 case = "../../../cases/trans/cpp/refuse_rank.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 13
 expect_diagnostic_column = 14
 expect_output_contains = ["function 'main' uses the operator ':op/slice_sub' on values of type 'float[2, 3]' and 'int' std::cpp does not translate it for yet"]
 expect_output_not_contains = ["internal error", "node#", "non-bridgeable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "refuse_literal_rank"
+desc = "A literal of several dimensions is refused, not written wrongly: an array in std::cpp is a flat run of elements and carries no shape, so the constant of `float[3, 2]` would be its first extent's worth of elements -- `{1.0, 2.0, 3.0}` -- and the program would print three numbers where the interpreter prints three rows, exiting 0. The message says what the target does not have; the case asserts that nothing printed the rows (no `[[` in the output and no flat three either), which the source's line breaks make meaningful."
+kind = "negative"
+case = "../../../cases/trans/cpp/refuse_literal_rank.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 26
+expect_output_contains = ["function 'main' uses a value of type 'float[3, 2]'; an array in std::cpp is a flat run of elements and carries no shape, so a value of several dimensions has no form there"]
+expect_output_not_contains = ["[[", "[1.0, 2.0, 3.0]", "internal error", "node#"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
