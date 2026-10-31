@@ -901,6 +901,19 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
         return;
     }
     const OperatorRule *rule = findOperatorRule(uri);
+    // `std::mem::blocks()` reads the runtime's own block space, which is an introspection of this
+    // runtime: a program std::cpp writes has no block space of the runtime at all, so on this target
+    // the counters are not available. That is a boundary of the target, not a translation still to
+    // be written, and the two are said differently (author's ruling of 2026-10-31: A).
+    if (uri == ":op/mem_blocks") {
+        refuse(
+            g,
+            ref,
+            std::format(
+                "{} reads the block counters of the Camel runtime, and a program std::cpp writes has "
+                "no runtime block space of its own: the counters are not available on this target",
+                describeFunction(g)));
+    }
     if (rule == nullptr) {
         for (const auto types : {&normTypes, &withTypes}) {
             for (const Type *t : *types) {
