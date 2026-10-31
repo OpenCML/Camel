@@ -94,8 +94,11 @@ namespace {
 void checkBindingKinds(core::context::Context &context) {
     namespace ty = core::type;
     namespace td = core::rtdata;
-    runtime::GraphDraft draft;
-    auto *scalar = ty::Type::Float64();
+    // The graph this check builds has an owner: the transaction hands the draft out and keeps
+    // the id, so the check cannot leave a draft behind that nobody named.
+    auto transaction = runtime::GraphTransaction::open(context.graphIds().allocate());
+    auto &draft      = transaction->edit();
+    auto *scalar     = ty::Type::Float64();
     auto input   = draft.addPortNode(scalar, draft.allocateRuntimeSlot(scalar));
     draft.appendNormPort(input);
     const auto constant = draft.materializeStaticValue(td::toSlot(3.5), scalar);
@@ -108,7 +111,6 @@ void checkBindingKinds(core::context::Context &context) {
     draft.setOutputNode(output);
     draft.setExitNode(output);
     draft.setReturnNode(output, runtime::GCReturnKind::Self);
-    draft.setId(context.graphIds().allocate());
     auto *graph    = draft.encode("tiles.test.binding", "tiles.test.binding");
     auto *function = ::Function::create(
         runtime::makeProgram(context, nullptr, std::span(&graph, 1)),
