@@ -1,10 +1,12 @@
 /**
- * A `yield` in a body whose head the builder does not read as a stream is refused at the `yield`,
- * and the report names the head: a body that yields is a generator, and its head writes the stream
- * type it hands out (SemanticDiag::YieldRequiresStreamHead). What this case reaches is the head
- * check itself -- the head writes `(int, int)..`, and a stream whose element type is a tuple is not
- * read as a stream type yet, while a head of `int..` with the same body lowers. The `yield` is on
- * line 13.
+ * A body that writes `yield` is refused by name where the generator machine cannot carry it yet
+ * (docs/design/io-concurrency-streams/plan.cn.md slice E, lines 282-307): `yield` now parses, and
+ * running it as a `return` would give a wrong value, so the graph builder reports
+ * `SemanticDiag::FeatureNotSupported` with `'generators'` in the message. What the machine carries
+ * across a `yield` is one value, written once where the loop stands
+ * (cases/compile/stream/generators_loop.cml is that shape); a loop that carries two -- `i` and `s`,
+ * each depending on the round before it -- is refused here rather than run with one of them left
+ * behind. The `yield` is on line 13; what it means is already ruled.
  */
 func running(n: int): (int, int).. {
     loop i = 0, s = 0 while i < n do {

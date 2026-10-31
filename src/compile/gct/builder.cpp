@@ -5705,11 +5705,13 @@ node_ptr_t Builder::visitGeneratorBody(
     const auto &bodyStmts         = bodyAst->atAs<AST::RepeatedLoad>(0);
 
     // The head writes the stream type, and it is what says what one `yield` hands out.
+    // A `yield` the machine narrows away (a `yield` with no value, a shape it cannot carry) is a
+    // named gap of the machine, not a mistake in the head.
     const auto refuse = [&](const AST::node_ptr_t &atNode) -> void {
         const AST::node_ptr_t atYield = firstOwnYield(atNode);
-        diags_->of(SemanticDiag::YieldRequiresStreamHead)
+        diags_->of(SemanticDiag::FeatureNotSupported)
             .at((atYield != nullptr ? atYield : atNode)->load()->tokenRange())
-            .commit();
+            .commit("generators");
         throw BuildAbortException();
     };
     // A local that lives across a `yield` is a cell of the body (see `addTypedCell`), so there is
@@ -5717,7 +5719,13 @@ node_ptr_t Builder::visitGeneratorBody(
     // -- "a local read after a `yield`" -- is gone with the shape it named.
     Type *exit = funcType->exitType();
     if (exit == nullptr || exit->code() != TypeCode::Stream) {
-        refuse(bodyStmts->size() > 0 ? bodyStmts->at(0) : bodyAst);
+        // The head is what is wrong: a body that yields hands out a stream, and this head writes
+        // something else. Said at the head, not at the first `yield` the body happens to hold.
+        const AST::node_ptr_t atYield = firstOwnYield(bodyAst);
+        diags_->of(SemanticDiag::YieldRequiresStreamHead)
+            .at((atYield != nullptr ? atYield : bodyAst)->load()->tokenRange())
+            .commit();
+        throw BuildAbortException();
     }
     auto *stream           = static_cast<StreamType *>(exit);
     Type *elemType         = stream->elemType();
