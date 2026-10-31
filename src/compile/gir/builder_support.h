@@ -182,11 +182,10 @@ inline bool sameGraph(node_handle_t lhs, const compile_graph_ptr_t &graph) {
 
 inline void linkNodes(LinkType type, node_handle_t from, node_handle_t to) {
     GUARD(from != nullptr && to != nullptr, "Cannot link null draft nodes.");
-    // Still an ASSERT: `inferTypeOf` builds the expression in a scratch `__typeof__` graph and
-    // reaches back into the graph it was called from, so this pair is reached by a valid program
-    // under `Builder::visitAccsNode`. Whether that link is the bug or this invariant is, is a
-    // question for the compiler's owner, not for a sweep of the checks.
-    ASSERT(nodeGraphOf(from) == nodeGraphOf(to), "Compile-time link must stay within one graph.");
+    GUARD(
+        nodeGraphOf(from) == nodeGraphOf(to),
+        "Compile-time link must stay within one graph: an edge belongs to the graph that owns "
+        "both of its ends, and a link into another graph outlives the graph it was built in");
     nodeGraphOf(from)->link(toDraftEdgeKind(type), from, to, toPortRole(type));
 }
 
