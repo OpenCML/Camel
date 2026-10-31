@@ -150,15 +150,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "narrow_argmax"
-# Not in test/tools/cppexec/expect.txt yet: the program translates, but the C++ it writes does not
-# always build. Roughly half the runs of the same command produce `const Tuple v3_items =
-# rt::range(...)` -- a loop's range value typed as a cell -- and clang rejects the assignment; the
-# other half build and agree with std::fvm. Same command, same input, both outcomes (measured on
-# one host, both from the expect list and from a single positional program), so the emission is
-# not deterministic and pinning a reading on it would pin a coin. What this entry keeps is the
-# translation: the rule is there and the positions are its job; the reading waits for the writer
-# to emit the same program twice.
-desc = "The positions read from a value of bf16 or f16: `argsort` names its element type (`array:argsort_bf`, `array:argsort_f6`) and answers with an index, so the rule is one per type but the answer's type is everyone's -- the case where a narrow float's operator result is not a narrow float. `array::argmax` and `argmin` are Camel loops over `argsort` of two elements, so they follow from it, and the order is the one `min` and `max` state (NaN last, -0 below +0, ties where they stand). The program is translated into rt::halfArgsort and no bridged call; the readings are compared with the interpreter's once the emitted program builds every time (see the note above)."
+desc = "The positions read from a value of bf16 or f16: `argsort` names its element type (`array:argsort_bf`, `array:argsort_f6`) and answers with an index, so the rule is one per type but the answer's type is everyone's -- the case where a narrow float's operator result is not a narrow float. `array::argmax` and `argmin` are Camel loops over `argsort` of two elements, so they follow from it, and the order is the one `min` and `max` state (NaN last, -0 below +0, ties where they stand). It is translated into rt::halfArgsort with no bridged call, and its readings are in expect.txt: what kept them out was the writer, not this type -- a `for i in a..b` loop declared its items with the type of the node that holds the interval's two bounds, and that pair is written as a struct as soon as the program has a value of the same shape (function_emitter.cpp, the interval's array)."
 kind = "behavior"
 case = "../../../cases/trans/cpp/narrow_argmax.cml"
 args = ["${case}", "std::cpp"]
@@ -167,6 +159,19 @@ expect_stdout_contains = ["rt::halfArgsort("]
 expect_output_not_contains = ["TranslationRefused", "rt::bridge", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "narrow_one_program_twenty_times"
+desc = "One command, one input, twenty runs of it, and then twenty-four more with eight alive at a time: every run has to write the same program. A writer whose output depends on the process it runs in turns every later red into a matter of luck, so the question is asked directly rather than assumed -- the program is narrowed to the two types and the reading it writes is the one that exposed it (`for i in a..b` over a bf16 array's length, which wrote `const Tuple ..._items = rt::range(...)` while the program also held a value of two ints). Pinned: one program shape, twenty of twenty, and no disagreement among runs that overlap."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/cppexec/narrow_repeat.py"
+args = ["${case}", "test/cases/trans/cpp/narrow_argmax.cml"]
+expect_exit = 0
+expect_stdout_contains = ["20 of 20: exit 0", "PASS: 20 runs of one command wrote one program", "runs, 8 at a time:"]
+expect_output_not_contains = ["FAIL:", "cell(Tuple)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 300000
 
 [[tests]]
 name = "narrow_reductions_four_backends"
