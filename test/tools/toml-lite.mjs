@@ -71,6 +71,13 @@ function splitTopLevel(value, delimiter = ',') {
     return parts
 }
 
+// The escapes of a basic string. They are decoded in one pass, left to right: replacing them one
+// sequence at a time consumed the wrong one, because the pass for `\n` ran before the pass for
+// `\\`, so `"\\n"` -- an escaped backslash and an `n`, which TOML reads as the two characters the
+// script then sees as its own `\n` escape -- came out as a backslash and a real line end, i.e. as
+// a line continuation in the script the plan builds.
+const BASIC_STRING_ESCAPES = { n: '\n', r: '\r', t: '\t', '"': '"', '\\': '\\' }
+
 function parseString(raw) {
     if (raw.length < 2) {
         throw new Error(`invalid string literal: ${raw}`)
@@ -80,12 +87,7 @@ function parseString(raw) {
     if (quote === "'") {
         return body
     }
-    return body
-        .replace(/\\n/g, '\n')
-        .replace(/\\r/g, '\r')
-        .replace(/\\t/g, '\t')
-        .replace(/\\"/g, '"')
-        .replace(/\\\\/g, '\\')
+    return body.replace(/\\(.)/g, (whole, ch) => BASIC_STRING_ESCAPES[ch] ?? whole)
 }
 
 function parseValue(raw) {
