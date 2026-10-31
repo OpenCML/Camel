@@ -1405,6 +1405,33 @@ together with the derivative of `f` at 2 in the direction 1.
 - Example (a fragment, not compiled): `let forward = jvp(f)`
 - Why it is not compiled: `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
 
+#### `split`
+
+```camel
+split: (f: (v: float, d: float) => (float, float)) => (v: float, d: float) => (float, float)
+```
+
+The step of `vjp` that separates a lifted function into the part computable now and the linear
+residue (design 4.4). Not implemented: the operator has a signature and no rule, so a call is
+refused where it is composed (`stdlib/vjp.cml`) and names this step. The signature is the
+shape the library's compositions can be written with today.
+fragment of the composition: `let (fwd, lin) = split(jvp(f))`.
+
+- Example (a fragment, not compiled): `let step = split`
+- Why it is not compiled: `split` takes the lifted function a `jvp` call writes, so the example is a
+
+#### `transpose`
+
+```camel
+transpose: (f: (v: float, d: float) => (float, float)) => (v: float, d: float) => (float, float)
+```
+
+The step of `vjp` that walks the linear residue backwards, so a cotangent comes back as the
+pullback (design 4.4). Not implemented, for the same reason and with the same reading.
+
+- Example (a fragment, not compiled): `let step = transpose`
+- Why it is not compiled: the same lifted function, walked backwards: `let back = transpose(lin)`.
+
 <a id="tensor"></a>
 
 ## `tensor`: multi-dimensional numeric arrays

@@ -194,6 +194,56 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 } // namespace
 
+namespace {
+
+/// The steps `vjp` is written in terms of that are not implemented yet (`split` and `transpose`).
+/// The signature is the shape the library declares -- the function it was given, back again -- so a
+/// program that names them type-checks; the kernel is the refusal, and it names the step that is
+/// missing instead of the composition, so a reader is sent to the line of `stdlib/vjp.cml` that asks
+/// for it. Nothing here is a placeholder that one day returns something: a step either has a rule or
+/// says it has none.
+class StepResolver final : public FuncTypeResolver {
+  public:
+    std::optional<FunctionType *> resolve(
+        const type_vec_t &with, const type_vec_t &norm) const override {
+        if (!with.empty() || norm.size() != 1 || norm[0] == nullptr ||
+            norm[0]->code() != TypeCode::Function) {
+            return std::nullopt;
+        }
+        FunctionTypeFactory factory;
+        factory.addNormArg("f", norm[0], false);
+        factory.setExitType(norm[0]);
+        return factory.build();
+    }
+
+    /// The declaration's text: one parameter named `f`, the result the same function.
+    std::string signature() const override {
+        return "(f: (float, float) => (float, float)) => (float, float) => (float, float)";
+    }
+};
+
+/// Refuses the step it is named for, at the line that asked for it.
+slot_t stepKernel(ArgsView &with, ArgsView &norm, Context &ctx, std::string_view step) {
+    (void)with;
+    (void)norm;
+    (void)ctx;
+    throwRuntimeFault(
+        RuntimeDiag::RuntimeError,
+        std::string{"transforms: `"} + std::string{step} +
+            "` has no rule for this function (the step of `vjp` that does this is not bound for "
+            "this function's graph)");
+}
+
+slot_t splitKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return stepKernel(with, norm, ctx, "split");
+}
+
+slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return stepKernel(with, norm, ctx, "transpose");
+}
+
+} // namespace
+
 const std::vector<oper_group_ptr_t> &operatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         // One rule: `jvp` takes a function and gives its forward transform (design principles 9.9
@@ -201,6 +251,12 @@ const std::vector<oper_group_ptr_t> &operatorGroups() {
         OperatorGroup::create(
             "jvp",
             {{"transforms:jvp", std::make_shared<JvpResolver>()}}),
+        // The two steps of `vjp` that are not written yet (stdlib/vjp.cml): the shape is the
+        // library's, the refusal is theirs.
+        OperatorGroup::create(
+            "split", {{"transforms:split", std::make_shared<StepResolver>()}}),
+        OperatorGroup::create(
+            "transpose", {{"transforms:transpose", std::make_shared<StepResolver>()}}),
     };
     return groups;
 }
@@ -208,13 +264,16 @@ const std::vector<oper_group_ptr_t> &operatorGroups() {
 std::unordered_map<std::string, operator_t> operatorKernels() {
     return {
         {"jvp", &jvpKernel},
+        {"split", &splitKernel},
+        {"transpose", &transposeKernel},
     };
 }
 
 void registerOperatorMetadata() {
     // It builds a graph: the call does something the compiler cannot see from the arguments alone,
     // so it is declared, as every operator must be (design principles 3.3), as not pure.
-    camel::core::OperatorTable::instance().declare("transforms", {{"jvp", false}});
+    camel::core::OperatorTable::instance().declare(
+        "transforms", {{"jvp", false}, {"split", false}, {"transpose", false}});
     // `jvp` reads the graph of the function value it receives -- that is the whole transform -- so
     // it refuses a loop there as `grad` does (OperatorTraits::readsGraphs; op-semantics 11.4).
     camel::core::OperatorTable::instance().set(
