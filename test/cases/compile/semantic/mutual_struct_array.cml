@@ -1,0 +1,15 @@
+/**
+ * Two structs that mention each other through an array: neither is declared while the other
+ * writes its name, so the first field is an unknown type; the two cannot be brought into each
+ * other by any order, and each declaration declares nothing. The name is reported where it is
+ * written, and the body that builds a value of it does not run.
+ */
+
+type A = { b: B[] }
+type B = { a: A[] }
+
+func main(): int sync {
+    let a: A = { b: [] }
+    println(len(a.b))
+    return 0
+}
