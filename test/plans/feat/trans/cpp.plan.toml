@@ -442,6 +442,17 @@ expect_output_not_contains = ["Segmentation fault", "UnknownInternalError", "int
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 [[tests]]
+name = "literal_open_shape"
+desc = "A literal of one dimension carries the dimension it has. `float[]` names the element type and leaves the length to the value, so the type states no extent -- and the value is one dimension of 3 elements: the constant is written with its extents (`rt::Array<double>::shaped({1.0, 2.0, 3.0}, {3})`), so `shape` and `len` read [3] and 3, and the checked conversion that follows has a rank to compare. A type of open rank (`float[..]`) states nothing about the rank, and a single element there stays the rank-zero value the position promises (compile/array_shape/rank_zero_field_literal.cml)."
+kind = "behavior"
+case = "../../../cases/trans/cpp/literal_open_shape.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["::shaped({1.0, 2.0, 3.0}, {3})", "::shaped({4.0, 5.0}, {2})", "rt::asShape("]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+[[tests]]
 name = "cast_shape_holds"
 desc = "`as` states the shape a value must have. Both types are the same `rt::Array<T>` on this side -- a shape is not a second value -- so the conversion writes no bytes and checks the extents the type states: `rt::asShape(v, {2, 3}, \"float[2, 3]\", at_...)` answers the value itself when the rank and every stated extent are the ones the type says. The program keeps reading and prints both values; agree_with_fvm compares them with std::fvm byte for byte."
 kind = "behavior"
