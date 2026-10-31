@@ -73,15 +73,37 @@ std::cpp  [0.769200, 0.780800]
 钉住它的用例是 `test/cases/trans/cpp/format_array.cml`，列进 `test/tools/cppexec/expect.txt`
 （由 `feat/trans/cpp.agree_with_fvm` 翻译、编译、运行、与 `std::fvm` 逐字节比）。
 
-## 五、顺带的两条
+## 五、`agree_with_fvm` 那一片红：`:var/after` 从来没有翻译
 
-- `test/tools/toml-lite.mjs` 的转义：**换序修不好**（`\\` 先塌成 `\` 之后，`\n` 那一遍仍会咬住后面的
-  `n`），改成**一次左到右解码**；`"x\\ny"` 旧读法是 `\` 加一个真换行（进了 JS 就是行继续），新读法是
-  `\` 和 `n` 两个字符。
-- `feat/trans/cpp.agree_with_fvm` 在 develop 上就是红的，与格式无关：`std::cpp` 拒绝
-  `test/cases/linear/nvm/var_params.cml` 与 `test/cases/trans/cpp/exec/variables.cml`，理由
-  `:var/after … has no translation in std::cpp yet`。它是 `slow` 层，`-Plan all -Tier fast` 看不到它。
+`feat/trans/cpp.agree_with_fvm` 是 `slow` 层，`-Plan all -Tier fast` 跑不到它。它在慢层里**是红的**——
+`std::cpp` 直接拒绝整个程序：
 
-## 六、一条判据
+```
+:var/after … on a value of type 'var int', which has no translation in std::cpp yet
+```
+
+`test/cases/linear/nvm/var_params.cml` 与 `test/cases/trans/cpp/exec/variables.cml` 都在这个理由下被拒。
+但整闸只跑 `-Tier fast`，这一片红从来没进过读数：**缺口不需要被藏起来，它只要待在没人跑的那一层就够了。**
+
+`:var/after(cell, call)` 是"变量在被那次调用写过之后的版本"（`(var T, any) => var T`）：结果是那个单元本身，
+第二个实参是那次调用、**不被读、可以是 `void`**。写出器补上它（`23298498c`）之后，生成的程序里那次调用
+本来就是自己的一条语句，效果按图给的顺序跑，版本就是那个单元——与一次写留下的一样。
+
+两个程序现在都编译、运行、与 `std::fvm` 逐字节相同：
+
+```
+std::fvm  12 33 / abc / 5 12 12
+std::cpp  12 33 / abc / 5 12 12
+```
+
+整张 `feat/trans/cpp.plan.toml`（含 slow 那一项，118 个程序）：`[SUMMARY] total: 11, pass: 11, fail: 0`。
+
+顺带一条：`test/tools/toml-lite.mjs` 的转义，**换序修不好**（`\\` 先塌成 `\` 之后，`\n` 那一遍仍会咬住
+后面的 `n`），改成**一次左到右解码**；`"x\\ny"` 旧读法是 `\` 加一个真换行（进了 JS 就是行继续），新读法是
+`\` 和 `n` 两个字符。
+
+## 六、两条判据
 
 > **裁定也可能基于过时的读数：拿到裁定先去 develop 上复现一次；不复现，就先把前提写下来，再谈要不要改。**
+
+> **一个后端缺一条翻译，不会报错，只会把整个计划留在慢层；慢层没人跑，缺口就一直绿着。**
