@@ -524,6 +524,8 @@ python3 test/tools/cppexec/run.py [--passes "std::opt::inline"] [--jobs N] 程�
 | D11 内联之后不认区域形态与 `SYNC` | 6.2、6.4；先 `std::opt::inline` 的全语料一行（12.1） |
 | D12 `camel-cpp` 与文档 | 第 10 节；`docs/cpp_export_build.md` 改写 |
 
+表示统一之后，新暴露的缺陷都属于同一条：别人以为数组后端早就有这两条律，其实只有旧表示有。
+
 ### 12.4 变基到 `fsh-dev` 的 `d270689c` 时的改动
 
 - **图的存储。** 算子以 `OperId` 识别：变量与 `:mark/` 算子按 `oper::VarNew`、`oper::VarGet`、`oper::MapArr` 等与 `OperatorTable::isAssignment` 认，不再比较 URI 文字；译法表（第 8 节）仍以 URI 为键，那是算子的公开名字，模块算子也没有固定的 id。函数类型不再带捕获的名字，捕获形参的名字取 `graph->captureNames()`（与 `std::gir` 相同）。帧布局的改动不影响转译器（它不读帧）。
