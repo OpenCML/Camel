@@ -1,6 +1,6 @@
 id = "mm.gc_pacing"
 order = 367
-tier = "fast"
+tier = "slow"
 tags = ["feat", "mm", "gc", "pacing", "block"]
 desc = """
 What asks for a collection, how much one frees, and how high the program's memory gets.

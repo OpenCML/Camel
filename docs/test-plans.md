@@ -92,9 +92,13 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
   "the cards were free", not "the compiler is right" -- and a whole-plan run takes about 89 s, of
   which the fast layer's two minutes has none to give. One entry of it (the derived-graph
   `gpu_scope` case) is already `tier = "fast"`, because it needs the compiler and not a card.
-  The paced and soaked collection plans (`feat/mm/gc_pacing` 15, `feat/mm/gc_soak` 22) used to be
-  the other two whole slow plans; they ran 37 entries in 6.7 s with no red, so both are
-  `tier = "fast"` now. Some individual entries are still `tier = "slow"` inside fast plans
+  The paced and soaked collection plans (`feat/mm/gc_pacing` 15, `feat/mm/gc_soak` 22) are the
+  other two whole slow plans, and they are cheap: 37 entries in 6.7 s with no red. **Flipping them
+  to `tier = "fast"` was tried and reverted**: the runner self-test refuses to let an ordinary
+  change name a plan of the `feat/mm/gc_*` class ("is a plan an ordinary change must not run"),
+  and the eight cases they read live in the GC directory whose mirror is the milestone
+  `feat/mm/gc.plan.toml`. A tier flip cannot settle that; the plan class has to be narrowed, or
+  the plans renamed, and that is the author's call. Some individual entries are still `tier = "slow"` inside fast plans
   (`test/plans/feat/modules/autodiff.plan.toml` 5, `tools/debugger` 4, `parse/frontend`,
   `modules/random`, `tools/lsp`, `linear/var_reference`, `trans/cpp` 1 each).
 - `milestone` is the layer that only runs at a milestone, on a quiet machine: the plans
