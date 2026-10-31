@@ -936,6 +936,26 @@ class GCGraph : public camel::core::rtdata::Object {
     std::span<const gc_node_ref_t> withOutputsOf(gc_node_ref_t ref) const;
     std::span<const gc_node_ref_t> ctrlOutputsOf(gc_node_ref_t ref) const;
 
+    /// The four user sets of `ref`, under the names the draft side gives them
+    /// (`normUsersOf`, `withUsersOf`, `ctrlUsersOf`, `syncUsersOf` of camel/runtime/draft.h): the
+    /// nodes that read a value of it in each kind, and -- the fourth -- the statements that follow
+    /// it in a `sync` block's chain (docs/design/effects/edges.cn.md 1.5, where an edge kind is one
+    /// notion on both sides of a freeze).
+    ///
+    /// `normOutputsOf` and its two siblings are the same three runs, so a reader of a graph asks
+    /// either name and gets the same list. The fourth has no sibling because a sync edge is not a
+    /// port: it is kept beside the input runs' groups (`GCUseIndex::sync`), and `waitUsersOf` is
+    /// the union of that one with the control users.
+    ///
+    /// They exist so that a question about what observes a node -- the liveness question of
+    /// camel/runtime/effect_liveness.h reads a data user and a wait, `isUnanchoredPure` reads all
+    /// six edge kinds on both sides -- is asked of a frozen graph the way it is asked of a draft,
+    /// rather than every caller spelling the traversal again.
+    std::span<const gc_node_ref_t> normUsersOf(gc_node_ref_t ref) const;
+    std::span<const gc_node_ref_t> withUsersOf(gc_node_ref_t ref) const;
+    std::span<const gc_node_ref_t> ctrlUsersOf(gc_node_ref_t ref) const;
+    std::span<const gc_node_ref_t> syncUsersOf(gc_node_ref_t ref) const;
+
     std::span<const gc_node_ref_t> normPorts() const;
     std::span<const gc_node_ref_t> withPorts() const;
     std::span<const gc_node_ref_t> closureNodes() const;
