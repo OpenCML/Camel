@@ -96,8 +96,15 @@ void appendShapedText(std::string &out, const Array<T> &xs, std::size_t offset, 
 }
 
 /// `[a, b, c]`, and `[[1.0, 2.0], [3.0, 4.0]]` for a value that states a shape of several
-/// dimensions.
+/// dimensions. A value whose shape is the zero-dimensional one is the element itself, so it prints
+/// as that element: `1.5`, not `[1.5]` (design principles 5.4, the interpreter's text).
 template <typename T> void appendText(std::string &out, const Array<T> &xs) {
+    if (xs.zeroDimensional()) {
+        if (xs.size() != 0) {
+            appendText(out, xs[0]);
+        }
+        return;
+    }
     if (xs.rank() >= 2) {
         appendShapedText(out, xs, 0, 0);
         return;
