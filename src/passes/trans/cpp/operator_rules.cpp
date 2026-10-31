@@ -925,6 +925,56 @@ Rules buildRules() {
     // `len(b)` and `a + b` of two `Bytes` (:struct/len_bytes, :op/add_bytes): the length in bytes
     // and the bytes of one followed by the bytes of the other -- the array's own length and
     // concat, which is what the interpreter's kernels do on the byte run.
+    // `str:codepoints` and `str:find` (modules/str/operators.cpp): the code points as `int[]`, and
+    // the position of a needle counted in characters (`camel::utf8::count`, the interpreter's own)
+    // or the null. Neither is a value type: the first is the array of numbers the target already
+    // carries, the second the `int?` it already carries (`rt::Opt<int64_t>`).
+    r["str:codepoints"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1 || c.normType(0) == nullptr ||
+                c.normType(0)->code() != TypeCode::String) {
+                return std::nullopt;
+            }
+            return std::format("rt::codePoints({})", c.operand(0));
+        },
+        false,
+    };
+    r["str:from_codepoints"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = c.normCount() == 1 ? asArrayType(c.normType(0)) : nullptr;
+            if (value == nullptr || value->elemType() == nullptr ||
+                value->elemType()->code() != TypeCode::Int64) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::textOfCodePoints({}, {})",
+                c.operand(0),
+                c.site(
+                    RuntimeDiag::InvalidArgument,
+                    {"str.from_codepoints", "the result is longer than a string can be"}));
+        },
+        false,
+    };
+    // `str:split` (modules/str/operators.cpp): the parts, `string[]` -- an array of strings, which
+    // the target carries; the cuts keep the empty parts, and an empty separator cuts by code point.
+    r["str:split"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1 || c.withCount() != 1) {
+                return std::nullopt;
+            }
+            return std::format("rt::splitText({}, {})", c.operand(0), c.with(0).text);
+        },
+        false,
+    };
+    r["str:find"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1 || c.withCount() != 1) {
+                return std::nullopt;
+            }
+            return std::format("rt::findText({}, {})", c.operand(0), c.with(0).text);
+        },
+        false,
+    };
     r[":struct/len_bytes"] = runtimeFunction("length");
     // `a == b` of two `Bytes`: byte for byte, which is the array's `==` (a different length is a
     // different value, the same length compares the elements in order).
@@ -1315,8 +1365,10 @@ Rules buildRules() {
         r[uri] = {
             [element](OperatorCall &c) -> std::optional<std::string> {
                 const ArrayType *value = asArrayType(c.normType(0));
-                if (c.normCount() != 1 || value == nullptr || value->anyRank() ||
-                    value->rank() != 1) {
+                // The rank is the value's, not the conversion's: the elements are converted and
+                // the shape stays where it was (rt::convertArray), so a value whose rank is only
+                // known at run time -- `f32[..]` converted by `atof6` -- is carried too.
+                if (c.normCount() != 1 || value == nullptr || value->elemType() == nullptr) {
                     return std::nullopt;
                 }
                 return std::format("rt::convertArray<{}>({})", element, c.operand(0));
