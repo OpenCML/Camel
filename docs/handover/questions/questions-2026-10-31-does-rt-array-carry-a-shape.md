@@ -42,6 +42,17 @@
   （四条各停在 `tensor:sum_axis` / `tensor:mean_axis` / `array:sum_f` / `tensor:to_bytes`）。
 - 下一项：**`tensor:mean_axis`**，其后 `array:sum_f`（带名字的元素类型那一族），再后 `tensor:sort` 与逐元素运算。
   每一步的验收都是与 `std::fvm` 逐字一致，翻过去的拒绝随之删掉。
+- **`argmax_axis` 的逐元素复核**：计算在 `91ef6c041` 已经是沿 `extent(axis)` 走、答案形状是"去掉该轴"，
+  但证明它的用例是对称维（`2x2x2`），outer / extent / inner 三个数错拆也照样过。补上两条不对称的：
+  `f32[2, 3]` 的 axis 1 印 `[2]` 与 `[1, 0]`，`f32[2, 3, 4]` 的 axis 1 印 `[2, 4]` 与
+  `[[2, 2, 2, 2], [0, 0, 0, 0]]`，形状与位置一起印出来，两条与 `std::fvm` 逐字节相同。**留下的下一项**：
+  空轴的拒绝还是旧说法——cpp 印 `error[RuntimeDiag::InvalidArgument]: Invalid argument of '[]': …`，
+  解释器印 `error[RuntimeDiag::RuntimeError]: … reduce: 'tensor:argmax_axis': the axis 1 has no element`
+  （模块的 `std::invalid_argument` 被 `runKernel` 包上 `reduce:` 前缀），要按后者造一条 site。
+
+**判据：形状进到表示里之后，下一个要改的是所有还在数元素的地方——一个一个来，每个都配一条多维用例。**
+数元素的代码不会自己消失，只会换个形状继续数；而一条用对称维写的用例，正好替它把错拆盖住。所以每一项的
+验收都带一条**各维不同**的多维用例，并且把**形状印出来**，不是只比值。
 
 **要作者答的一句（已答，留档）**：`rt::Array`（standalone 运行时里那个平铺的 `T*` + `size`）**要不要带
 形状**？带着它，`std::cpp` 才能翻多维的下标、切片与 `tensor:shape`；不带，只能继续拒，把这 15 个（以及
