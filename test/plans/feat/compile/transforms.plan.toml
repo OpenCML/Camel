@@ -10,6 +10,6 @@ args = ["${case}", "transforms::reinterp", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["REINTERP uri :op/add_d -> rule jvp_add -> rhs ", "REINTERP uri :op/mul_d -> rule jvp_mul -> rhs ", "REINTERP uri :op/div_d -> rule jvp_div -> rhs ", "vars=x,w count=2", "fill=FunctionClosure slots=2", "type=(dx: float, dw: float) => float", "REINTERP closure graph=107 layout=(float, float) built=yes slots=x,w", "REINTERP target=f primitives=3 other=2 graph=", "nodes=1", "5.5"]
+expect_stdout_contains = ["REINTERP uri :op/add_d -> rule jvp_add -> rhs ", "REINTERP uri :op/mul_d -> rule jvp_mul -> rhs ", "REINTERP uri :op/div_d -> rule jvp_div -> rhs ", "vars=x,w count=2", "fill=FunctionClosure slots=2", "type=(dx: float, dw: float) => float", "REINTERP closure graph=107 layout=(float, float) built=yes slots=x,w", "REINTERP target=f primitives=1 other=2 graph=", "nodes=1", "1.5"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

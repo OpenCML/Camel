@@ -47,7 +47,6 @@ bool isValueType(const Type *type);
 /// Whether a value of `type` ends the flow: its call throws and does not come back.
 bool endsFlow(const Type *type);
 
-||||||| 0ff64eda8
 /// What the refusals say std::cpp translates.
 inline constexpr const char *kTranslatedTypes =
     "std::cpp translates numbers (real and complex), bool, string, enums, arrays, tuples, structs, T?, T!, "

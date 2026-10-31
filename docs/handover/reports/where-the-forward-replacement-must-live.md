@@ -432,6 +432,26 @@ REINTERP closure graph=107 layout=(float, float) built=yes slots=x,w
 **换句话说：`f' = 3.25` 不是“把 `/` 换掉”能到的，它是整条链都换了才有的数。** 一条链上三处，
 少一处就没有导数——这也解释了为什么“先把闭包建出来”这一步必须单独量清楚：链上每个站点都要重复它。
 
+## 判据：一个站点跑通，再谈链
+
+> **一条链三个站点都换了才有导数——所以先用一个站点的函数把形状跑通，再谈链。**
+
+用例已按 A 换成 `f(x) = 3.0 / x`（`test/cases/compile/transforms/reinterp_scalar.cml`）。**替换建不出来，
+卡在一处结构上**：
+
+- 建“调 `107` 得闭包”需要**被调图的 `DraftGraphBuilder`**：
+  `StaticFunction::create(const std::shared_ptr<DraftGraphBuilder> &graph, …)`
+  （`include/camel/compile/gir/static_function.h:28`）；
+- `GenericRuleInstance` 存的是 `rhs`（一个 `GCGraph*`）与 `program`，**没有那个 builder**；
+  builder 只在实例化的那一刻活在 `src/compile/gir/rule_templates.cpp` 里；
+- 所以从 `modules/transforms` 拿到的 `GraphId 107` 是**不够**的：节点能建（`draft.h` 里有
+  `addFillNode`/`addCallNode`/`addStaticSlot`），但**函数值本身建不出来**。
+
+**结论（这一笔真正量到的东西）**：**替换要么发生在 `genericRuleInstance` 的同一层**（那里 builder 还在
+手上），**要么 `GenericRuleInstance` 得把那个 builder 一起留住**。这是一个要作者/你点头的设计选择，
+不是写两行代码的事——我没有绕开它（比如拿 `::Function::create` 假装建出静态函数值，那会在运行期
+找不到图）。
+
 ## 验收（缺一步不算完）
 
 1. **前向**：`f(x) = x*x + 3/x` 在 `x = 2` 处，`f = 5.5`，`f' = 4 - 0.75 = 3.25`。两个数都要打出来。
