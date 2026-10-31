@@ -199,6 +199,12 @@ tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 tree_unzip: (r: R, s: S) => ?
 ```
 
+**`transforms`** — import { ... } from transforms — 1 name(s)
+
+```text
+jvp: (f: F) => Jvp<F> when is_function::<F>()
+```
+
 **`tensor`** — import { ... } from tensor — 61 name(s)
 
 ```text

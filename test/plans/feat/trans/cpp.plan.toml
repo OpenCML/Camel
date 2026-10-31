@@ -203,7 +203,7 @@ timeout_ms = 120000
 
 [[tests]]
 name = "every_expect_program_links_no_runtime"
-desc = "The same property as narrow_reductions_needs_no_runtime, asked of every program the expect list names instead of one: each is translated, built and its own dependencies read (`ldd`), and the set of programs that still link the Camel runtime has to be exactly the set test/tools/cppexec/bridged.txt names -- 3 of 148 today, each written down there as either the bridge's own exception or a rule still to be written. Both directions are checked: a fourth program that links it is red, and so is one of the three becoming standalone, because the list is then wrong and a list that can only grow says nothing. The three are re:test (a regex engine is not in the header set), tensor:ones (a tensor crosses as a handle) and math:sqrt_d (a gap: the next commit writes the rule and deletes the line)."
+desc = "The same property as narrow_reductions_needs_no_runtime, asked of every program the expect list names instead of one: each is translated, built and its own dependencies read (`ldd`), and the set of programs that still link the Camel runtime has to be exactly the set test/tools/cppexec/bridged.txt names -- 1 today, written down there as the bridge's own exception and not a gap. Both directions are checked: a second program that links it is red, and so is the one here becoming standalone, because the list is then wrong and a list that can only grow says nothing. What is left is re:test (a regex engine is not in the header set); the tensor builders left it when they stopped calling the bridge, and the line was deleted the same commit."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/cppexec/run.py"
@@ -295,6 +295,42 @@ case = "../../../cases/trans/cpp/literal_rows_filled.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
 expect_stdout_contains = ["rt::Array<double>{{1.0, 2.0, 2.0, 2.0}, {2, 2}}"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "abs_smallest_int"
+desc = "`math:abs` of the smallest integer answers the value itself -- it has no positive counterpart -- and the translation writes that wrap (`rt::intAbs`) instead of `std::abs`, whose answer for the smallest value is undefined behaviour and may be folded positive. `stdlib/math.cml`'s `gcd` recognises the smallest integer by `abs(a) < 0`, so the fold is what keeps its refusal: the program prints the negative value and then the fault, and agree_with_fvm compares the reading with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/abs_smallest_int.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::intAbs(", "gcd does not accept the smallest integer"]
+expect_output_not_contains = ["std::abs(", "TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "empty_struct_text"
+desc = "A struct with no fields prints as the two braces with nothing between them: `{}`. Written as the opening half (`{ `) and the closing half (` }`) with no member to separate them, the generated text was `{  }`, two spaces the interpreter does not print -- the corpus case is a loop whose zero-leaf state struct is printed twice. agree_with_fvm compares the reading with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/loops/zero_leaf_state.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["out += \"{}\";"]
+expect_output_not_contains = ["{  }", "TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "reshape_computed_shape"
+desc = "A target shape the program computes at run time (`reshape<[n, 3]>(y)` with n a parameter) is the operator's value argument, so the extents the call writes are those values, not the ones the caller's contract put in the result type: `rt::reshapeBy(y, rt::Array<int64_t>{n, 3}, at_...)` reads them, and a target that changes the element count reports `[6] -> [3, 3]` -- both shapes filled at run time, the interpreter's sentence. Written from the type, the call carried `{2, 3}` and the fault never happened. agree_with_fvm compares the reading with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/modules/tensor/shape_inference/computed_extent_run_time.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::reshapeBy(", "reshape changes tensor element count: ["]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -397,39 +433,52 @@ timeout_ms = 8000
 
 [[tests]]
 name = "tensor_ones"
-desc = "`tensor:ones` crosses the bridge, and what comes back is the value its Camel type names: `T[..]` is `rt::Array<T>` in this back end, one representation whichever module built the value, so the call is `const rt::Array<float> v1_ones = op_tensor_ones.call<rt::Array<float>>(at_13_17, {rt::bridge::arg(lit::array)}, {}, 2)` -- the shape handed over as the `int[]` it already is, the element type as the integer code of the type (2 is f32), and the result converted at the boundary into the shaped array the program holds (the elements copied out, the shape with them; camel/standalone/bridge.h). `println` of it is the same `rt::println` as for an array the program wrote itself, and it prints the nested form of the shape. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte: one line, `[[1.0, 1.0], [1.0, 1.0]]`. Nothing here is a handle: `rt::Foreign` is for the objects the language keeps opaque."
+desc = "`tensor:ones` writes the tensor itself: `T[..]` is `rt::Array<T>` in this back end, and the rule builds that array from the shape and the fill instead of calling the runtime -- `const rt::Array<float> v1_ones = rt::filledArray<float>(lit::array, 1.0, \"ones\", at_17_17);`, every element the fill, the shape read from the `int[]` the call is given. Nothing crosses the bridge and the program needs no Camel library: the value is data, not a handle. `println` of it is the same `rt::println` as for an array the program wrote itself, and it prints the nested form of the shape. agree_with_fvm builds and runs it against std::fvm byte for byte: one line, `[[1.0, 1.0], [1.0, 1.0]]`."
 kind = "behavior"
 case = "../../../cases/trans/cpp/tensor_ones.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
-expect_stdout_contains = ["const rt::Array<float> v1_ones = op_tensor_ones.call<rt::Array<float>>(", "rt::bridge::arg(lit::array)", "const rt::bridge::Operator op_tensor_ones{\"tensor:ones\"};", "#include \"camel/standalone/bridge.h\"", "rt::println(v1_ones);"]
-expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign"]
+expect_stdout_contains = ["const rt::Array<float> v1_ones = rt::filledArray<float>(lit::array, 1.0, \"ones\", at_", "rt::println(v1_ones);"]
+expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign", "bridge::", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
 name = "tensor_ones_element"
-desc = "The element type a `tensor:ones` call states still reaches the kernel, and the value it fills is still the array the result type names: the two facts are one call now. The rule sends the type as the integer code -- `op_tensor_ones.call<rt::Array<double>>(at_18_17, {rt::bridge::arg(lit::array)}, {}, 3)` for f64, `..., {}, 1)` for i64 -- and the bridge makes the type from that code (`Type::create`, never a text of a type) as the `T[..]` such a call declares; the kernel reads it as the element of the call's result type. Without it the call stated no result type, the kernel fell back to f32, and `ones::<i64>([2, 2])` printed `[[1.0, 1.0], [1.0, 1.0]]` where the interpreter prints `[[1, 1], [1, 1]]`. The elements cross back as the array's (`rt::Array<int64_t>`, `rt::Array<double>`), so the wrong width would show twice: in the value and in the text. An f64 tensor prints `[[1.0, 1.0], [1.0, 1.0]]` either way -- 1.0 has one text at both widths -- so the integer line is the one that shows the type, and both are checked against std::fvm by agree_with_fvm."
+desc = "The element type a `tensor:ones` call states is the array's, and it is now the template argument of the call this back end writes: `rt::filledArray<double>(lit::array, 1.0, at_18_17)` for f64 and `rt::filledArray<int64_t>(lit::array, 1, at_19_17)` for i64 -- the fill is `1.0` for the floats and `1` for the integers, which is the type showing twice, in the value and in the text. A call that dropped the type would fill the wrong array, and `ones::<i64>([2, 2])` would print `[[1.0, 1.0], [1.0, 1.0]]` where the interpreter prints `[[1, 1], [1, 1]]`; an f64 tensor prints the same text at both widths, so the integer line is the one that shows it. agree_with_fvm compares both lines with std::fvm."
 kind = "behavior"
 case = "../../../cases/trans/cpp/tensor_ones_element.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
-expect_stdout_contains = ["const rt::Array<double> v1_ones = op_tensor_ones.call<rt::Array<double>>(", "const rt::Array<int64_t> v2_ones = op_tensor_ones.call<rt::Array<int64_t>>(", "}, {}, 3);", "}, {}, 1);", "rt::bridge::arg(lit::array)", "#include \"camel/standalone/bridge.h\""]
-expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign"]
+expect_stdout_contains = ["= rt::filledArray<double>(lit::array, 1.0, \"ones\", at_", "= rt::filledArray<int64_t>(lit::array, 1, \"ones\", at_"]
+expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign", "bridge::", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
 name = "tensor_zeros"
-desc = "`tensor:zeros` translates, and it is the same rule as `tensor:ones`: `const rt::Array<float> v1_zeros = op_tensor_zeros.call<rt::Array<float>>(at_17_18, {rt::bridge::arg(lit::array)}, {}, 2)`, the shape handed over as the `int[]` it already is, the element type as the integer code of the type, and the tensor converted back at the boundary into the shaped array the result type names -- `println` of it prints the nested form, the same text as for a literal of that shape. What differed from `ones` was the fill the runtime writes, not a byte of what this back end writes, which is why the two builders are one rule. It was the last tensor builder refused as work not done (`std::cpp has no translation of it yet`). The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte: one line, `[[0.0, 0.0], [0.0, 0.0]]`."
+desc = "`tensor:zeros` is the same rule as `tensor:ones` with the other fill: `const rt::Array<float> v1_zeros = rt::filledArray<float>(lit::array, 0.0, \"zeros\", at_18_18);`. What differs between the two builders is the fill and not a byte of the call this back end writes, which is why they are one rule. It was the last tensor builder refused as work not done (`std::cpp has no translation of it yet`), then one that crossed the bridge, and it is the tensor's data now. agree_with_fvm builds and runs it against std::fvm byte for byte: one line, `[[0.0, 0.0], [0.0, 0.0]]`."
 kind = "behavior"
 case = "../../../cases/trans/cpp/tensor_zeros.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
-expect_stdout_contains = ["const rt::Array<float> v1_zeros = op_tensor_zeros.call<rt::Array<float>>(", "rt::bridge::arg(lit::array)", "}, {}, 2);", "const rt::bridge::Operator op_tensor_zeros{\"tensor:zeros\"};", "#include \"camel/standalone/bridge.h\"", "rt::println(v1_zeros);"]
-expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign"]
+expect_stdout_contains = ["const rt::Array<float> v1_zeros = rt::filledArray<float>(lit::array, 0.0, \"zeros\", at_", "rt::println(v1_zeros);"]
+expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign", "bridge::", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+
+[[tests]]
+name = "tensor_half"
+desc = "The two reduced-precision element types are the same array: `ones::<bf16>` writes `rt::filledArray<rt::BF16>(lit::array, rt::BF16(1.0f), \"ones\", at_…)` and `zeros::<f16>` the same with `rt::F16(0.0f)` and `\"zeros\"` over the literal of its own shape (`lit::array_2`) -- the fill is a value of the element type rounded once, which is what the tensor module stores (modules/tensor/dtype.h), so the tensor is `rt::Array<rt::BF16>` / `rt::Array<rt::F16>` and the program needs no Camel library. Before this, a tensor of either width was refused by the rule: the six element types a tensor can hold are one representation, and leaving two of them refused would have made the refusal the second representation. agree_with_fvm builds and runs the program against std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/tensor_ones_half.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::filledArray<rt::BF16>(lit::array, rt::BF16(1.0f), \"ones\", at_", "rt::filledArray<rt::F16>(lit::array_2, rt::F16(0.0f), \"zeros\", at_"]
+expect_output_not_contains = ["TranslationRefused", "internal error", "rt::Foreign", "bridge::", "libcamel"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
 [[tests]]
 name = "index_rank"
 desc = "A position on a value of several dimensions: `m[1]` is the second row (`rt::atRow`, one dimension less and of the row's own extent), `m[1, 0]` writes the axis it drops and is the element (`rt::atAxis`, every other dimension kept whole), and `t[1]` of a rank-3 value is the rank-2 value behind it. `len` of a row answers the dimension that is left. The program is built and run by agree_with_fvm, which compares it with std::fvm byte for byte -- six lines, rows and elements both. The operator rule that used to turn a value of several dimensions away is gone with it, as are the two module programs that took the same road: `index_two_positions` translates and agrees."
@@ -479,6 +528,18 @@ expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 [[tests]]
+name = "print_shape"
+desc = "Printing tells an element from an array of one. A value of no rank *is* the element (design principles 5.4): a field of `f32[..]` holds such a value and `println(first.v)` writes `1.5`, not `[1.5]`. A value that carries a dimension is written as the whole literal -- `[2.5]` -- because the bracket is the difference between an element and an array of one, and a reader who cannot see it cannot tell the two apart. `shape` of a value of one dimension answers the one dimension it has (`[2]`), not the element, and a value grown by `append` states that it is one dimension (`[3, 4]`). The same holds under a specification: `'{:>6}'->format<x>` writes `   1.5` for a value of no rank and `[   1.5]` for an array of one, because the bracket is the shape's and not the format's. agree_with_fvm runs the program and compares its output with std::fvm byte for byte."
+kind = "behavior"
+case = "../../../cases/trans/cpp/print_shape.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::println(", "appendText"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "cast_shape_holds"
 desc = "`as` states the shape a value must have. Both types are the same `rt::Array<T>` on this side -- a shape is not a second value -- so the conversion writes no bytes and checks the extents the type states: `rt::asShape(v, {2, 3}, \"float[2, 3]\", at_...)` answers the value itself when the rank and every stated extent are the ones the type says. The program keeps reading and prints both values; agree_with_fvm compares them with std::fvm byte for byte."
 kind = "behavior"
@@ -501,6 +562,18 @@ expect_stdout_contains = ["rt::asShape(", "float[3, 3]", "RuntimeDiag::RuntimeEr
 expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+[[tests]]
+name = "fault_unread_cast"
+desc = "A conversion that can fail runs where it is written, whether or not its value is read. `let unused = open2(...) as float[3, 3]` states a shape and the check is the statement (design principles 5.4); dropping it because its value is unread would drop the fault with it. The generated function keeps `rt::asShape(open2(...), {3, 3}, \"float[3, 3]\", at_...)` where it stands and answers what the interpreter answers: `conversion to 'float[3, 3]' failed: the array has shape [2, 2]`, `not reached` unprinted. agree_with_fvm compares the report and the exit status byte for byte, and `opt/fault_preservation/chained_cast.cml` is the same statement reached through another pass."
+kind = "behavior"
+case = "../../../cases/trans/cpp/fault_unread_cast.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::asShape(", "float[3, 3]", "RuntimeDiag::RuntimeError"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
 
 [[tests]]
 name = "enum_types"
@@ -540,3 +613,17 @@ expect_diagnostic_column = 13
 expect_stderr_contains = ["std::cpp has no standalone translation of the operator 'str:to_upper': the program it writes calls the Camel runtime there and is built with libcamel."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "every_fault_program_says_what_fvm_says"
+desc = "Every `fault_*` case in test/cases -- 47 of them -- run twice: once by std::fvm, once as the program std::cpp writes, and the two reports compared word for word (stdout and stderr together, and the exit code). A fault is the language's answer, so the words of it belong to the interpreter: a back end that writes its own sentence is not translating the fault, it is inventing one -- and an invented sentence reads well, which is why it survives review. This check exists because the tensor builders' rule did exactly that: `Tensor shape cannot contain negative extents` in place of the kernel's `zeros: Shape cannot contain negative values`, found by measuring, not by reading. The six programs std::cpp does not translate (a refusal is a different answer, and the interpreter's sentence is the only one there is) are counted and named, not compared; the two that differ today are in test/tools/cppexec/fault_words.txt, both marked GAP, and the set has to be exactly that list in both directions."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/cppexec/run.py"
+args = ["${case}", "--faults", "--fault-baseline=test/tools/cppexec/fault_words.txt"]
+skip_unless = ["${python}", "test/tools/cppexec/run.py", "--have-compiler"]
+expect_exit = 0
+expect_stdout_contains = ["fault program(s) print what std::fvm prints"]
+expect_output_not_contains = ["FAIL:", "is not in the baseline", "now prints what std::fvm prints"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 900000

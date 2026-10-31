@@ -115,11 +115,12 @@ const MODULES = [
         name: 'transforms',
         title: '`transforms`: program transforms',
         kind: 'cpp',
-        // A module of passes: it registers no operator, so `--verify-ops` has none to check. What it
-        // registers is a pass, declared in this .cml and registered in modules/transforms.
+        // The pass `reinterp` is declared in this .cml and registered in modules/transforms, so
+        // `--verify-ops` passes over it. The operator `jvp` answers a function built from its
+        // argument's type, so its entry is in the signature file named by `computed:`.
         source: 'transforms.cml',
         declaration: true,
-        passes_only: true,
+        computed: 'signatures/transforms.cml',
     },
     {
         name: 'tensor',

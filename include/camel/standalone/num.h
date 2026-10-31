@@ -94,6 +94,16 @@ template <std::same_as<int32_t> T> constexpr T sub(T a, T b) { return detail::wr
 template <std::same_as<int32_t> T> constexpr T mul(T a, T b) { return detail::wrapMul(a, b); }
 template <std::same_as<int32_t> T> constexpr T neg(T a) { return detail::wrapNeg(a); }
 
+/// `math:abs` of an integer (modules/math/operators.cpp, `__math_abs__`): the positive
+/// counterpart, and the smallest integer has none -- the wrap of it is itself, which is the answer
+/// the interpreter gives, and what a check written as `abs(a) < 0` reads (stdlib/math.cml's `gcd`
+/// refuses the smallest integer that way). `std::abs` of the smallest value is undefined behaviour,
+/// so the wrap is the only writing of it.
+constexpr int64_t absOf(int64_t a) { return a < 0 ? detail::wrapNeg(a) : a; }
+template <std::same_as<int32_t> T> constexpr T absOf(T a) {
+    return a < T{0} ? detail::wrapNeg(a) : a;
+}
+
 /// `a / b` (:op/div_*): dividing by zero is DivisionByZero at `site`, for floats too; the
 /// smallest integer divided by -1 wraps around.
 inline int64_t div(int64_t a, int64_t b, const Site &site) { return detail::divide(a, b, site); }
@@ -172,6 +182,17 @@ template <std::signed_integral T> T intMin(T a, T b) {
 
 template <std::signed_integral T> T intMax(T a, T b) {
     return a < b ? b : a;
+}
+
+/// `math::abs` of an int32 or int64 value (math:abs_i, math:abs_l): the value with its sign cleared
+/// in two's complement, so the smallest integer comes back as itself -- which is what the
+/// interpreter answers, and what `stdlib/math.cml` reads to find that integer (`abs(a) < 0` in
+/// `gcd`). `std::abs` is undefined on it: the value a build happened to return was not even the
+/// negative number, and a compiler may delete the test that depends on it
+/// (fault_gcd_overflow.cml measured both).
+template <std::signed_integral T> T intAbs(T a) {
+    using U = std::make_unsigned_t<T>;
+    return a < 0 ? static_cast<T>(U(0) - static_cast<U>(a)) : a;
 }
 
 // ---- Number to number (:op/ltoi, :op/dtol, ...) ----

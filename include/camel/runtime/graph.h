@@ -570,6 +570,9 @@ class GCUseIndex {
     /// (docs/design/effects/edges.cn.md 1.5). Kept beside the input runs' groups because a sync
     /// edge is not a port.
     std::span<const gc_node_ref_t> sync(gc_node_ref_t ref) const { return group(ref, 3); }
+    /// The users an order edge names: the nodes `ref` must run before when both run, along an edge
+    /// that carries no "used" (GCGraphOrderEdge). Also a side array, so also beside the port groups.
+    std::span<const gc_node_ref_t> order(gc_node_ref_t ref) const { return group(ref, 4); }
 
   private:
     std::span<const gc_node_ref_t> group(gc_node_ref_t ref, size_t kind) const {
@@ -577,7 +580,7 @@ class GCUseIndex {
         return {users_.data() + begins_[at], begins_[at + 1] - begins_[at]};
     }
 
-    static constexpr size_t kGroups = 4;
+    static constexpr size_t kGroups = 5;
     std::vector<gc_node_ref_t> users_;
     std::vector<uint32_t> begins_; // kGroups per node, then the end
 };
@@ -935,6 +938,28 @@ class GCGraph : public camel::core::rtdata::Object {
     std::span<const gc_node_ref_t> normOutputsOf(gc_node_ref_t ref) const;
     std::span<const gc_node_ref_t> withOutputsOf(gc_node_ref_t ref) const;
     std::span<const gc_node_ref_t> ctrlOutputsOf(gc_node_ref_t ref) const;
+
+    /// The five user sets of `ref`, under the names the draft side gives them (`normUsersOf`,
+    /// `withUsersOf`, `ctrlUsersOf`, `syncUsersOf`, `orderUsersOf` of camel/runtime/draft.h): the
+    /// nodes that read a value of it in each kind, and the two kinds that are not ports -- the
+    /// statements that follow it in a `sync` block's chain, and the nodes it is ordered before
+    /// (docs/design/effects/edges.cn.md 1.5, where an edge kind is one notion on both sides of a
+    /// freeze).
+    ///
+    /// `normOutputsOf` and its two siblings are the same three runs, so a reader of a graph asks
+    /// either name and gets the same list. The last two have no sibling because neither a sync nor
+    /// an order edge is a port: both are kept beside the input runs' groups (`GCUseIndex::sync`,
+    /// `GCUseIndex::order`), and `waitUsersOf` is the union of the control and the sync users.
+    ///
+    /// They exist so that a question about what observes a node -- the liveness question of
+    /// camel/runtime/effect_liveness.h reads a data user and a wait, `isUnanchoredPure` reads all
+    /// six edge kinds on both sides -- is asked of a frozen graph the way it is asked of a draft,
+    /// rather than every caller spelling the traversal again.
+    std::span<const gc_node_ref_t> normUsersOf(gc_node_ref_t ref) const;
+    std::span<const gc_node_ref_t> withUsersOf(gc_node_ref_t ref) const;
+    std::span<const gc_node_ref_t> ctrlUsersOf(gc_node_ref_t ref) const;
+    std::span<const gc_node_ref_t> syncUsersOf(gc_node_ref_t ref) const;
+    std::span<const gc_node_ref_t> orderUsersOf(gc_node_ref_t ref) const;
 
     std::span<const gc_node_ref_t> normPorts() const;
     std::span<const gc_node_ref_t> withPorts() const;

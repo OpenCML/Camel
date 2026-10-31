@@ -122,17 +122,17 @@ class TupleType : public CompositeType {
     bool isFallible() const { return tag_ == Tag::Fallible; }
     /// `T` of a `T?` or `T!`.
     Type *payloadType() const {
-        ASSERT(isTagged(), "payloadType() is defined for T? and T! only");
+        GUARD(isTagged(), "payloadType() is defined for T? and T! only");
         return typeAt(0);
     }
 
     size_t size() const { return size_; }
     Type *typeAt(size_t index) const {
-        ASSERT(index < size_, "TupleType: index out of range");
+        GUARD(index < size_, "TupleType: index out of range");
         return const_cast<Type *>(typesPtr_[index]);
     }
     TypeCode codeAt(size_t index) const {
-        ASSERT(index < size_, "TupleType: index out of range");
+        GUARD(index < size_, "TupleType: index out of range");
         return typeCodesPtr_[index];
     }
     std::span<Type *const> types() const { return std::span<Type *const>(typesPtr_, size_); }

@@ -62,24 +62,36 @@ template <typename T> class Array {
         if (rep_ == nullptr) {
             return;
         }
-        std::size_t product = 1;
-        for (std::size_t extent : shape) {
-            product *= extent;
+        // `setShape` is the one place that decides whether a shape is recorded, and `{}` is the
+        // shape with no dimensions rather than the absence of one: a struct field declared
+        // `f32[..]` filled from a literal is that value.
+        std::size_t extents[kMaxRank];
+        std::size_t rank = 0;
+        for (const std::size_t extent : shape) {
+            if (rank == kMaxRank) {
+                return;
+            }
+            extents[rank++] = extent;
         }
-        if (shape.size() == 0 || shape.size() > kMaxRank || product != items.size()) {
-            return;
-        }
-        rep_->rank = static_cast<std::uint32_t>(shape.size());
-        std::size_t i = 0;
-        for (std::size_t extent : shape) {
-            rep_->extents[i++] = extent;
-        }
+        setShape(extents, rank);
     }
 
-    /// A literal of `items` with the shape written as the words of `shape`, which the generated
+    /// The array of `items` with the shape written as the words of `shape`, which the generated
     /// program writes from the type of the literal (`rt::Array<double>::shaped`).
     static Array shaped(std::initializer_list<T> items, std::initializer_list<std::size_t> shape) {
         return Array(items, shape);
+    }
+
+    /// A value of no rank: the one element *is* the value (design principles 5.4). A position whose
+    /// type is `f32[..]` holds such a value when something is written into it, and the difference
+    /// between it and an array of one element is what `println` prints (`1.5` and `[1.5]`), so it is
+    /// made by its own constructor rather than by appending one element.
+    static Array element(T item) {
+        Array out;
+        out.push(std::move(item));
+        out.rep_->rank   = 0;
+        out.rep_->zeroDim = true; // the value *is* that element, not an array of one
+        return out;
     }
 
     /// The array of `items` with the extents `extents` states, row order: what a value the runtime
@@ -159,6 +171,18 @@ template <typename T> class Array {
     /// which is what the operators that run over the whole value read.
     static constexpr std::size_t kMaxRank = 8;
     std::size_t rank() const noexcept { return rep_ != nullptr ? rep_->rank : 0; }
+    /// Whether the shape recorded is the one with no dimensions (`setShape` with rank 0): the value
+    /// is the element it holds (design principles 5.4), and prints as that element. A block that
+    /// records no shape at all is a different thing -- `rank() == 0` too, because there is no rank
+    /// to state -- and reads as one dimension of `size()` elements. Rank zero is a fact, not a
+    /// number: the shape is there, and it is zero-dimensional.
+    bool zeroDimensional() const noexcept { return rep_ != nullptr && rep_->zeroDim; }
+
+    /// Whether the value *is* the element it holds: the zero-dimensional shape, with an element to
+    /// be. `Array::element` is what makes one, where `push` grows a value into its first dimension.
+    /// The empty array is not an element: it holds nothing to be, and its shape is the one
+    /// dimension of nothing -- `[0]` -- as the interpreter answers.
+    bool isElement() const noexcept { return zeroDimensional() && size() != 0; }
     std::size_t extent(std::size_t i) const noexcept {
         return rep_ != nullptr && i < rep_->rank ? rep_->extents[i] : 0;
     }
@@ -180,6 +204,7 @@ template <typename T> class Array {
         if (rep_ != nullptr) {
             // The shape is the value's too: a block copied because it was shared keeps it.
             fresh->rank = rep_->rank;
+            fresh->zeroDim = rep_->zeroDim;
             for (std::size_t i = 0; i < rep_->rank; ++i) {
                 fresh->extents[i] = rep_->extents[i];
             }
@@ -196,13 +221,22 @@ template <typename T> class Array {
     }
 
     /// Adds `item` at the end, in place when the block is this array's alone.
+    ///
+    /// An appended array is one dimension of what it holds, and it now says so: the rank is left at 0
+    /// only for a value that *is* the element (design principles 5.4), and a value of one element with
+    /// no rank is indistinguishable from it -- `println` would write `2.0` where the interpreter writes
+    /// `[2.0]`. A value grown past one dimension keeps the extents it was given.
     void push(T item) {
         if (rep_ == nullptr || rep_->references != 1 || rep_->size == rep_->capacity) {
             reserve(std::max(size() + 1, size() * 2));
         }
         new (rep_->items() + rep_->size) T(std::move(item));
         ++rep_->size;
-        rep_->rank = 0; // an appended array is one dimension of what it holds
+        if (rep_->rank <= 1) {
+            rep_->rank          = 1;
+            rep_->extents[0]    = rep_->size;
+        }
+        rep_->zeroDim = false; // the dimension it just made is not the empty shape
     }
 
     /// Puts `value` at `index`, in place when the block is this array's alone and a copy of it
@@ -249,9 +283,11 @@ template <typename T> class Array {
     }
 
     /// States the shape the builder read from the type (`reshape`): `rank` extents, when they
-    /// multiply to the elements this value holds.
+    /// multiply to the elements this value holds. Rank zero is a shape too -- the one with no
+    /// dimensions -- and it is recorded as such: a value of one element and no dimensions is the
+    /// element, and a block that records nothing is a different thing entirely.
     void setShape(const std::size_t *shape, std::size_t rank) {
-        if (rep_ == nullptr || rank == 0 || rank > kMaxRank) {
+        if (rep_ == nullptr || rank > kMaxRank) {
             return;
         }
         std::size_t product = 1;
@@ -262,6 +298,7 @@ template <typename T> class Array {
             return;
         }
         rep_->rank = static_cast<std::uint32_t>(rank);
+        rep_->zeroDim = rank == 0;
         for (std::size_t i = 0; i < rank; ++i) {
             rep_->extents[i] = shape[i];
         }
@@ -339,9 +376,12 @@ template <typename T> class Array {
         std::size_t references;
         std::size_t size;
         std::size_t capacity;
-        // The shape of a literal of several dimensions; a block built by appending has rank 0 here
-        // and reads as one dimension of `size` elements.
+        // The shape of a literal of several dimensions; a block built by appending has rank 0
+        // here at the moment it is made and reads as one dimension of `size` elements. `zeroDim`
+        // tells the two apart: the shape with no dimensions (`setShape` with rank 0) against no
+        // shape recorded at all.
         std::uint32_t rank;
+        bool zeroDim;
         std::size_t extents[Array::kMaxRank];
         T *items() noexcept { return reinterpret_cast<T *>(this + 1); }
     };
@@ -355,6 +395,7 @@ template <typename T> class Array {
         rep->size       = 0;
         rep->capacity   = capacity;
         rep->rank       = 0;
+        rep->zeroDim    = false;
         for (std::size_t &extent : rep->extents) {
             extent = 0;
         }
@@ -392,17 +433,51 @@ template <typename T> T at(const Array<T> &xs, int64_t index, const Site &site) 
 /// the interpreter's `int[]` -- `[3, 2]` for a rank-2 value, `[4]` for one of a single dimension.
 /// It is a value, not a view: the array copies its extents into storage of its own, so a write to
 /// the answer cannot reach the value it describes.
+///
+/// The answer is itself one dimension of `rank` numbers, and it says so: a `shape` nobody shaped
+/// would print as an element when it holds one number (`2` for a value of 2) where the interpreter
+/// prints `[2]`, and `shape` of a value of no rank -- which *is* the element, and only `Array::element`
+/// makes one -- is the empty run. The rank is the test, not the element count: `push` gives every
+/// grown array the one dimension it has.
 template <typename T> Array<int64_t> shapeOf(const Array<T> &xs) {
     Array<int64_t> out;
-    if (xs.rank() <= 1) {
-        out.push(static_cast<int64_t>(xs.size()));
+    const std::size_t rank = xs.rank();
+    if (xs.isElement()) {
         return out;
     }
-    out.reserve(xs.rank());
-    for (std::size_t i = 0; i < xs.rank(); ++i) {
-        out.push(static_cast<int64_t>(xs.extent(i)));
+    if (rank <= 1) {
+        out.push(static_cast<int64_t>(xs.size()));
+    } else {
+        out.reserve(rank);
+        for (std::size_t i = 0; i < rank; ++i) {
+            out.push(static_cast<int64_t>(xs.extent(i)));
+        }
     }
+    const std::int64_t count = static_cast<std::int64_t>(out.size());
+    out.setExtents(std::initializer_list<std::int64_t>{count});
     return out;
+}
+
+/// `zeros::<T>(shape)` and `ones::<T>(shape)` (`tensor:zeros`, `tensor:ones`): the shaped array of
+/// the call's element type with every element the fill. The shape is the `int[]` the call is given,
+/// so the extents are the value's, read here -- this is the one place in this file that shapes an
+/// array from a value rather than from a type. A negative extent is the fault the kernel raises
+/// there (`parseShapeArray`, modules/tensor/interop.cpp) rather than an empty array, with the words
+/// the kernel's own report carries: the operator's name, then its sentence.
+template <typename T>
+Array<T> filledArray(const Array<int64_t> &shape, T fill, const char *op, const Site &site) {
+    std::vector<int64_t> extents;
+    extents.reserve(shape.size());
+    std::size_t count = 1;
+    for (std::size_t i = 0; i < shape.size(); ++i) {
+        const int64_t extent = shape[i];
+        if (extent < 0) [[unlikely]] {
+            fault(site, {std::string(op) + ": Shape cannot contain negative values"});
+        }
+        extents.push_back(extent);
+        count *= static_cast<std::size_t>(extent);
+    }
+    return Array<T>::fromFlat(std::vector<T>(count, fill), extents);
 }
 
 /// `xs[i]` on a value of several dimensions: the i-th row -- one dimension less than the value and
@@ -820,6 +895,66 @@ Array<T> reshape(const Array<T> &xs, std::initializer_list<int64_t> shape, int64
         extents[rank++] = static_cast<std::size_t>(extent);
     }
     out.setShape(extents, rank);
+    return out;
+}
+
+/// The extents of `xs` between brackets, as the interpreter writes them: `6` for a value of one
+/// dimension and `3, 3` for a value of two. A value that states no shape (rank 0) is the one run of
+/// elements it holds, which is what its extent reads as.
+template <typename T> std::string extentText(const Array<T> &xs) {
+    if (xs.rank() == 0) {
+        return std::to_string(xs.size());
+    }
+    std::string out;
+    for (std::size_t i = 0; i < xs.rank(); ++i) {
+        out += (i == 0 ? "" : ", ") + std::to_string(xs.extent(i));
+    }
+    return out;
+}
+
+/// The shape a program wrote, between brackets, as the interpreter writes it: the elements of the
+/// array are the extents (`reshape<[n, 3]>` with n = 3 is `3, 3`). A shape is a run of extents, not
+/// a value with a shape of its own, so these elements are read as the list they are.
+inline std::string shapeText(const Array<int64_t> &shape) {
+    std::string out;
+    for (std::size_t i = 0; i < shape.size(); ++i) {
+        out += (i == 0 ? "" : ", ") + std::to_string(shape[i]);
+    }
+    return out;
+}
+
+/// `tensor:reshape` with a shape the program computes (`reshape<[n, 3]>(y)`): the target's extents
+/// are the elements of `shape`, read while the program runs, because the type does not state them
+/// (the caller's contract may state another shape entirely). A target that changes the element
+/// count is the fault the interpreter reports, in its own words -- `reshape changes tensor element
+/// count: [6] -> [3, 3]`, the two shapes filled in at `site` -- and nothing is read first. An
+/// extent of -1 is one the elements fill, as `reshape` above, and asks for no check.
+template <typename T>
+Array<T> reshapeBy(const Array<T> &xs, const Array<int64_t> &shape, const Site &site) {
+    std::size_t extents[Array<T>::kMaxRank];
+    std::size_t rank    = 0;
+    bool stated         = true;
+    std::size_t product = 1;
+    for (std::size_t i = 0; i < shape.size(); ++i) {
+        const int64_t extent = shape[i];
+        if (extent < 0 || rank >= Array<T>::kMaxRank) {
+            stated = false; // a dimension the program leaves open: the elements alone are the shape
+            break;
+        }
+        extents[rank++] = static_cast<std::size_t>(extent);
+        product *= static_cast<std::size_t>(extent);
+    }
+    if (stated && product != xs.size()) [[unlikely]] {
+        fault(site, {extentText(xs), shapeText(shape)});
+    }
+    Array<T> out;
+    out.reserve(xs.size());
+    for (std::size_t i = 0; i < xs.size(); ++i) {
+        out.push(xs[i]);
+    }
+    if (stated) {
+        out.setShape(extents, rank);
+    }
     return out;
 }
 

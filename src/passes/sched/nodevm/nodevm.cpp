@@ -147,7 +147,7 @@ void bindMarkedFunctionFrame(
 }
 
 inline gc_data_idx_t planDataIndex(const camel::runtime::ExecPlan &plan, gc_node_ref_t nodeRef) {
-    ASSERT(
+    GUARD(
         nodeRef < plan.dataIndexByRef.size(),
         "NodeVM cached data-index lookup is out of range.");
     return plan.dataIndexByRef[nodeRef];
@@ -155,17 +155,17 @@ inline gc_data_idx_t planDataIndex(const camel::runtime::ExecPlan &plan, gc_node
 
 inline gc_data_idx_t dataIndexOf(const GCGraph *graph, gc_node_ref_t nodeRef) {
     const auto *node = graph ? graph->node(nodeRef) : nullptr;
-    ASSERT(node != nullptr, "NodeVM runtime node lookup resolved to null.");
+    GUARD(node != nullptr, "NodeVM runtime node lookup resolved to null.");
     return node->dataIndex;
 }
 
 void bindDirectCallFrameSlots(
     Frame *sourceFrame, Frame *targetFrame, const camel::runtime::ExecPlan *layout,
     std::span<const runtime_data_idx_t> argSlots, std::vector<slot_t> &scratch) {
-    ASSERT(sourceFrame != nullptr, "NodeVM direct-call source frame is null.");
-    ASSERT(targetFrame != nullptr, "NodeVM direct-call target frame is null.");
-    ASSERT(layout != nullptr, "NodeVM direct-call execution plan is null.");
-    ASSERT(
+    GUARD(sourceFrame != nullptr, "NodeVM direct-call source frame is null.");
+    GUARD(targetFrame != nullptr, "NodeVM direct-call target frame is null.");
+    GUARD(layout != nullptr, "NodeVM direct-call execution plan is null.");
+    GUARD(
         argSlots.size() == layout->calleePortSlots.size(),
         "NodeVM direct-call cache arity mismatch.");
 
@@ -488,7 +488,7 @@ slot_t NodeVMSchedPass::call(
             switch (n->kind) {
             case GCNodeKind::Cast: {
                 const auto normInputs = en.normInputs();
-                ASSERT(!normInputs.empty(), "CAST node must have one norm input.");
+                GUARD(!normInputs.empty(), "CAST node must have one norm input.");
                 const auto srcIdx = planDataIndex(*currPlan, normInputs.front());
                 Type *srcType     = currFrame->typeAt<Type>(srcIdx);
                 Type *tgtType     = n->dataType();
@@ -499,7 +499,7 @@ slot_t NodeVMSchedPass::call(
 
             case GCNodeKind::Copy: {
                 const auto normInputs = en.normInputs();
-                ASSERT(!normInputs.empty(), "COPY node must have one norm input.");
+                GUARD(!normInputs.empty(), "COPY node must have one norm input.");
                 gc_data_idx_t srcIdx = planDataIndex(*currPlan, normInputs.front());
                 TypeCode srcCode     = currFrame->codeAt(srcIdx);
                 if (isGCTraced(srcCode)) {
@@ -516,14 +516,14 @@ slot_t NodeVMSchedPass::call(
             case GCNodeKind::Fill: {
                 const auto normInputs = en.normInputs();
                 const auto dataInputs = en.withInputs();
-                ASSERT(!normInputs.empty(), "FILL node must have one source input.");
+                GUARD(!normInputs.empty(), "FILL node must have one source input.");
                 const auto srcIdx = planDataIndex(*currPlan, normInputs.front());
                 Type *srcType     = n->dataType();
-                ASSERT(isGCTraced(srcType->code()), "FILL target type is not GC-traced in NodeVM.");
+                GUARD(isGCTraced(srcType->code()), "FILL target type is not GC-traced in NodeVM.");
                 Object *sourceObj = currFrame->get<Object *>(srcIdx);
-                ASSERT(sourceObj != nullptr, "FILL source object is null in NodeVM.");
+                GUARD(sourceObj != nullptr, "FILL source object is null in NodeVM.");
                 Object *srcObj = sourceObj->clone(mm::autoSpace(), srcType, false);
-                ASSERT(srcObj != nullptr, "FILL target data is null.");
+                GUARD(srcObj != nullptr, "FILL target data is null.");
                 std::vector<slot_t> fillValues;
                 fillValues.reserve(dataInputs.size());
                 for (auto input : dataInputs) {
@@ -539,13 +539,13 @@ slot_t NodeVMSchedPass::call(
 
             case GCNodeKind::Accs: {
                 const auto normInputs = en.normInputs();
-                ASSERT(!normInputs.empty(), "ACCS node must have one source input.");
+                GUARD(!normInputs.empty(), "ACCS node must have one source input.");
                 gc_data_idx_t srcIdx = planDataIndex(*currPlan, normInputs.front());
                 const auto *body     = en.bodyAs<GCAccsBody>();
                 if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
                     size_t idx = body->value;
                     Tuple *t   = currFrame->get<Tuple *>(srcIdx);
-                    ASSERT(idx < t->size(), "Tuple index out of bounds in NodeVM.");
+                    GUARD(idx < t->size(), "Tuple index out of bounds in NodeVM.");
                     currFrame->set(n->dataIndex, t->get<slot_t>(idx));
                 } else {
                     const std::string_view keyView = body->key();
@@ -562,7 +562,7 @@ slot_t NodeVMSchedPass::call(
                 currFrame->set(n->dataIndex, fromSlot<Int32>(static_cast<Int32>(jumpIdx)));
 
                 const auto *body = en.bodyAs<GCBrchBody>();
-                ASSERT(jumpIdx < en.armCount, "Branch arm index out of range in NodeVM.");
+                GUARD(jumpIdx < en.armCount, "Branch arm index out of range in NodeVM.");
                 // The arm runs from its first executable node in the linear order (not from
                 // its recorded head: after inlining, nodes of the arm can precede the head)
                 // through its tail. An arm with nothing to execute resumes at the JOIN.
@@ -588,9 +588,9 @@ slot_t NodeVMSchedPass::call(
             case GCNodeKind::Join: {
                 const auto nargs = en.normInputs();
                 const auto wargs = en.withInputs();
-                ASSERT(!nargs.empty(), "JOIN must have norm input (branch index).");
+                GUARD(!nargs.empty(), "JOIN must have norm input (branch index).");
                 int32_t brIndex = currFrame->get<int32_t>(planDataIndex(*currPlan, nargs.front()));
-                ASSERT(
+                GUARD(
                     brIndex >= 0 && static_cast<size_t>(brIndex) < wargs.size(),
                     "JOIN branch index out of range in NodeVM.");
                 if (n->dataIndex == 0) {
@@ -609,10 +609,10 @@ slot_t NodeVMSchedPass::call(
 
             case GCNodeKind::Call: {
                 const auto withInputs = en.withInputs();
-                ASSERT(!withInputs.empty(), "CALL node must have exactly one callee input");
+                GUARD(!withInputs.empty(), "CALL node must have exactly one callee input");
                 Function *func =
                     currFrame->get<Function *>(planDataIndex(*currPlan, withInputs.front()));
-                ASSERT(func != nullptr, "NodeVM CALL resolved a null Function callee.");
+                GUARD(func != nullptr, "NodeVM CALL resolved a null Function callee.");
                 auto *funcRuntimeGraph = programs_.graphOf(func);
                 GUARD(
                     funcRuntimeGraph != nullptr,
@@ -838,7 +838,7 @@ const camel::runtime::Program *
 NodeVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     camel::runtime::GCGraph *graph = program->root();
     (void)os;
-    ASSERT(graph != nullptr, "NodeVM requires a non-null runtime root graph.");
+    GUARD(graph != nullptr, "NodeVM requires a non-null runtime root graph.");
     if (camel::profile::enabled()) {
         camel::profile::setBackend("std::nvm");
     }
@@ -852,8 +852,8 @@ NodeVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
 slot_t NodeVMSchedPass::callFunction(
     ::Function *function, std::span<const slot_t> arguments,
     std::span<const slot_t> withArguments) {
-    ASSERT(function != nullptr, "callFunction needs a function value.");
-    ASSERT(
+    GUARD(function != nullptr, "callFunction needs a function value.");
+    GUARD(
         function->program() != nullptr && function->graph() != nullptr,
         "callFunction needs a function value with a body.");
     // The captures are read from the value immediately before the call: making the closure vector
@@ -879,12 +879,12 @@ slot_t NodeVMSchedPass::callGraph(
     camel::execute::RunScope runScope(programs_, *context_, program);
     Frame *frame      = framePool_.acquire(graph);
     const auto ports  = graph->normPorts();
-    ASSERT(ports.size() == arguments.size(), "callGraph needs one argument per parameter.");
+    GUARD(ports.size() == arguments.size(), "callGraph needs one argument per parameter.");
     for (size_t i = 0; i < ports.size(); ++i) {
         frame->set(graph->node(ports[i])->dataIndex, arguments[i]);
     }
     const auto withPorts = graph->withPorts();
-    ASSERT(
+    GUARD(
         withPorts.size() == withArguments.size(),
         "callGraph needs one argument per with parameter.");
     for (size_t i = 0; i < withPorts.size(); ++i) {
@@ -894,7 +894,7 @@ slot_t NodeVMSchedPass::callGraph(
     // they are read from, and nothing else writes them, so a caller that does not know them (it
     // has the graph and not the function value) leaves them empty.
     const auto closureNodes = graph->closureNodes();
-    ASSERT(
+    GUARD(
         closure.empty() || closureNodes.size() == closure.size(),
         "callGraph needs one closure value per capture of the graph.");
     for (size_t i = 0; i < closureNodes.size() && i < closure.size(); ++i) {
@@ -909,7 +909,7 @@ void NodeVMSchedPass::evalMarkedOperator(
     // The way the operator calls its function is its declaration's (OperatorSemantics::
     // elementCalls); NodeVM runs every call in order, whatever the calls leave open.
     const auto *calls = camel::core::OperatorTable::instance().elementCalls(oper);
-    ASSERT(calls != nullptr, "A marked operator declares how it calls its function.");
+    GUARD(calls != nullptr, "A marked operator declares how it calls its function.");
     switch (calls->shape) {
     case camel::core::sem::ElementShape::Map:
         // `apply` (f from T to T) returns a new array, like `map`: it no longer changes the
@@ -935,7 +935,7 @@ void NodeVMSchedPass::evalMarkedOperator_map_arr(
     camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, Frame &currFrame) {
     const auto normInputs = graph->normInputsOf(nodeRef);
     const auto withInputs = graph->withInputsOf(nodeRef);
-    ASSERT(
+    GUARD(
         !normInputs.empty() && !withInputs.empty(),
         "map_arr requires array and function inputs.");
     const auto arrSlot    = dataIndexOf(graph, normInputs.front());
@@ -962,7 +962,7 @@ void NodeVMSchedPass::evalMarkedOperator_filter_arr(
     camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, Frame &currFrame) {
     const auto normInputs = graph->normInputsOf(nodeRef);
     const auto withInputs = graph->withInputsOf(nodeRef);
-    ASSERT(
+    GUARD(
         !normInputs.empty() && !withInputs.empty(),
         "filter_arr requires array and function inputs.");
     const auto arrSlot    = dataIndexOf(graph, normInputs.front());
@@ -995,7 +995,7 @@ void NodeVMSchedPass::evalMarkedOperator_reduce_arr(
     camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, Frame &currFrame) {
     const auto normInputs = graph->normInputsOf(nodeRef);
     const auto withInputs = graph->withInputsOf(nodeRef);
-    ASSERT(
+    GUARD(
         !normInputs.empty() && withInputs.size() >= 2,
         "reduce_arr requires array, function, and initial value inputs.");
     const auto arrSlot    = dataIndexOf(graph, normInputs.front());
@@ -1026,7 +1026,7 @@ void NodeVMSchedPass::evalMarkedOperator_foreach_arr(
     camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, Frame &currFrame) {
     const auto normInputs = graph->normInputsOf(nodeRef);
     const auto withInputs = graph->withInputsOf(nodeRef);
-    ASSERT(
+    GUARD(
         !normInputs.empty() && !withInputs.empty(),
         "foreach_arr requires array and function inputs.");
     const auto arrSlot   = dataIndexOf(graph, normInputs.front());
@@ -1050,10 +1050,10 @@ void NodeVMSchedPass::evalMarkedOperator_foreach_arr(
 void NodeVMSchedPass::evalMarkedOperator_isolate(
     camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, Frame &currFrame) {
     const auto normInputs = graph->normInputsOf(nodeRef);
-    ASSERT(!normInputs.empty(), "The fault-isolation node requires a function input.");
+    GUARD(!normInputs.empty(), "The fault-isolation node requires a function input.");
     const auto resultSlot = dataIndexOf(graph, nodeRef);
     Function *func        = currFrame.get<Function *>(dataIndexOf(graph, normInputs.front()));
-    ASSERT(
+    GUARD(
         func != nullptr && programs_.graphOf(func) != nullptr,
         "Fault-isolation callee is null.");
     auto *target = programs_.graphOf(func);
@@ -1081,7 +1081,7 @@ void NodeVMSchedPass::evalMarkedOperator_isolate(
         }
         // Every activation inside the boundary released its frames and its depth count
         // while the exception passed (see call()); nothing of the boundary is left.
-        ASSERT(
+        GUARD(
             currRecursionDepth_ == depthBefore,
             "A fault left the call depth changed at its isolation boundary.");
         currFrame.set(resultSlot, camel::execute::isolatedFaultToError(fault));

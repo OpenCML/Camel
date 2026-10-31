@@ -550,8 +550,21 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
             decl += std::format("    {} {};\n", member.cpp, member.name);
         }
         decl += std::format("    bool operator==(const {} &) const = default;\n}};\n", name);
-        // Its text, as the runtime prints it: `(1, a)` and `{ x: 1, y: 2.5 }`.
+        // Its text, as the runtime prints it: `(1, a)`, `{ x: 1, y: 2.5 }`, and `{}` for a struct
+        // with no fields -- the two braces with nothing between them, because the spaces around
+        // the fields are the fields' own and there is nothing to separate. A tuple with no fields
+        // prints `()`, and the interpreter writes `{}` for a loop state that carries nothing
+        // (loops/zero_leaf_state.cml).
         decl += std::format("inline void appendText(std::string &out, const {} &v) {{\n", name);
+        if (members.empty()) {
+            decl += std::format(
+                "    (void)v;\n    out += \"{}\";\n}}\n\n", isTuple ? "()" : "{}");
+            declarations_ += decl;
+            layouts_.emplace(layout, name);
+            representations_.emplace(key, name);
+            out = name;
+            return out;
+        }
         decl += std::format("    out += \"{}\";\n", isTuple ? "(" : "{ ");
         for (size_t i = 0; i < members.size(); ++i) {
             if (i > 0) {
@@ -562,7 +575,8 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
             }
             decl += std::format("    appendText(out, v.{});\n", members[i].name);
         }
-        decl += std::format("    out += \"{}\";\n}}\n\n", isTuple ? ")" : " }");
+        decl += std::format("    out += \"{}\";\n", isTuple ? ")" : " }");
+        decl += "}\n\n";
         declarations_ += decl;
         layouts_.emplace(layout, name);
         representations_.emplace(key, name);
@@ -1062,22 +1076,38 @@ std::optional<std::string> ProgramValues::constant(slot_t slot, const Type *t) {
             return std::nullopt;
         }
         const size_t rank = array != nullptr ? array->rank() : 0;
-        // A value of one dimension whose type leaves the length open (`float[]`) is still one
-        // dimension: the type says so, and the elements are how long it is, which `shape` and `len`
-        // read. A type of open rank (`float[..]`) says nothing about the rank, and a single element
-        // there is the rank-zero value the position promises (design principles 5.4: a rank-zero
-        // array *is* the element), so its constant keeps the rank it was made with. The two-list
+        // A value of one dimension carries the one dimension it has, whatever it holds: the type of
+        // open rank (`float[..]`) says nothing about the rank, but the value does, and `push` and
+        // `Array::element` (standalone/array.h) are what record it. A value of no rank is the
+        // rank-zero value a position of open rank promises (5.4: a rank-zero array *is* the
+        // element), and `element` is how it is written. Neither branch counts elements. The two-list
         // constructor is written as a call, not as a braced pair: with an element type an `{n}` can
         // itself stand for (`rt::Array<T>`, a struct of one field) the initializer would read `{3}`
         // as one more element.
-        const bool oneDimension =
-            rank == 1 && (array->dim(0) != 1 || !static_cast<const ArrayType *>(t)->anyRank());
+        if (rank == 0 && array != nullptr && array->numel() != 0 &&
+            static_cast<const ArrayType *>(t)->anyRank()) {
+            // A value of no rank, in a position of open rank, is the element itself: `element` says
+            // so, where an appended array is one dimension of what it holds (standalone/array.h). A
+            // value of one dimension keeps that and prints as the literal.
+            return hoist(*cpp, std::format("{}::element({})", *cpp, *items), "array");
+        }
+        const bool oneDimension = rank == 1;
         if (oneDimension) {
             return hoist(
                 *cpp,
                 std::format(
                     "{}::shaped({{{}}}, {{{}}})", *cpp, *items, std::to_string(array->dim(0))),
                 "array");
+        }
+        if (rank == 0 && array != nullptr && array->numel() == 1 &&
+            static_cast<const ArrayType *>(t)->anyRank()) {
+            // A value of no dimensions: the empty shape is written, so the block records it and the
+            // value prints as its element (`rt::Array::zeroDimensional`, format.h), the way the
+            // interpreter's zero-dimensional value does. `f32[..]` is the type that admits one (a
+            // field filled from a literal); a one-dimensional type of one element is still a run,
+            // which the branch above keeps in brackets. Written as the call the one-dimensional
+            // branch writes: a braced pair would read `{}` as one more element.
+            return hoist(*cpp, std::format("{}::shaped({{{}}}, {{}})", *cpp, *items), "array");
         }
         if (rank >= 2) {
             // The shape travels with the elements (rt::Array's block holds both): the rows of the

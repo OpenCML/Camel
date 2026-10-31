@@ -139,6 +139,28 @@ OperatorRule withArgument(const char *name) {
     };
 }
 
+/// The element type of an array type, or null when `type` is not one.
+const Type *arrayElementOf(const Type *type) {
+    const ArrayType *array = asArrayType(type);
+    return array != nullptr ? array->elemType() : nullptr;
+}
+
+/// The C++ element type an empty literal (`[]`, of type `void[]`) takes from the position it fills,
+/// or nothing when the operand is not one: an empty literal has no element type of its own, so the
+/// position's -- `position` is the element type that position gives -- is the one it is written
+/// with. `rt::Array<void>` is not an array any operator takes, and C++ cannot convert one.
+std::string emptyLiteralElement(OperatorCall &c, const Type *position) {
+    const Type *element = arrayElementOf(c.normType(0));
+    if (element == nullptr || element->code() != TypeCode::Void) {
+        return {};
+    }
+    if (position == nullptr || position->code() == TypeCode::Void) {
+        return {};
+    }
+    const std::string written = c.cppType(position);
+    return written == "void" ? std::string() : written;
+}
+
 /// `x.name()`: a part of a tagged value (opt.h).
 OperatorRule method(const char *name) {
     return {
@@ -702,6 +724,30 @@ Rules buildRules() {
             if (c.normCount() != 1 || target == nullptr || target->anyRank() || target->rank() == 0) {
                 return std::nullopt;
             }
+            // A shape the program computes (`reshape<[n, 3]>(y)`) is the operator's second argument,
+            // a value. The extents read below are the *result type's*, which the caller's contract
+            // may have filled in ([2, 3] where `exact` wants `f32[2, 3]`) rather than the shape the
+            // program meant ([3, 3] with n = 3) -- so a call written from it checks the count of a
+            // shape the program did not ask for, and a reshape that should fault goes through.
+            // Such a reshape is handed to the runtime, whose check reads the values it was given
+            // and reports the count it sees (`reshape changes tensor element count: [6] -> [3, 3]`,
+            // the interpreter's own sentence; bridge.h carries an int array for this reason).
+            if (c.withCount() > 0 && !c.withIsConstant(0)) {
+                // The target's extents are the program's values, so the count check is written
+                // against them: `rt::reshapeBy` reads the shape it is handed and reports the two
+                // shapes the interpreter reports (`[6] -> [3, 3]`), both slots filled at run time.
+                return std::format(
+                    "rt::reshapeBy({}, {}, {})",
+                    c.norm(0).text,
+                    c.with(0).text,
+                    c.site(
+                        RuntimeDiag::TensorDimensionMismatch,
+                        {"reshape",
+                         std::format(
+                             "reshape changes tensor element count: [{}] -> [{}]",
+                             SiteTable::valueMark(0),
+                             SiteTable::valueMark(1))}));
+            }
             std::string words;
             std::string shape;
             int64_t count = 1;
@@ -973,17 +1019,57 @@ Rules buildRules() {
         };
     }
     r[":struct/len_arr"]      = runtimeFunction("length");
-    r[":struct/concat_arr"]   = runtimeFunction("concat");
-    r[":struct/append_arr"]   = withArgument("append");
+    r[":struct/concat_arr"]   = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const std::string empty = emptyLiteralElement(c, arrayElementOf(c.resultType()));
+            if (!empty.empty()) {
+                return std::format("rt::concat(rt::Array<{}>{{}}, {})", empty, c.norm(1).text);
+            }
+            return std::format("rt::concat({}, {})", c.norm(0).text, c.norm(1).text);
+        },
+        false,
+    };
+    // An empty literal (`[]`) is of type `void[]`: it has no element type of its own, and the one
+    // the position gives -- the array the result is, the element the operator names -- is the type
+    // it is written with. Written from its own type, `rt::Array<void>` is not an array these
+    // operators take, and the C++ compiler rejected the call.
+    r[":struct/append_arr"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const std::string empty = emptyLiteralElement(c, arrayElementOf(c.resultType()));
+            if (!empty.empty()) {
+                return std::format("rt::append(rt::Array<{}>{{}}, {})", empty, c.with(0).text);
+            }
+            return std::format("rt::append({}, {})", c.norm(0).text, c.with(0).text);
+        },
+        false,
+    };
     // The loop-state form (Builder::markLoopStateInPlace): writing in place is an optimisation of
     // `append`, and this back end has only the copying form, which gives the same values.
-    r[":struct/append_arr_owned"] = withArgument("append");
+    r[":struct/append_arr_owned"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const std::string empty = emptyLiteralElement(c, arrayElementOf(c.resultType()));
+            if (!empty.empty()) {
+                return std::format("rt::append(rt::Array<{}>{{}}, {})", empty, c.with(0).text);
+            }
+            return std::format("rt::append({}, {})", c.norm(0).text, c.with(0).text);
+        },
+        false,
+    };
     // The private copy one state of a loop takes (Builder::markLoopStateInPlace, per state),
     // which the same rewrite puts before the loop: an Array here is a value, and `append` copies
     // a block that another holder shares, so the copy itself has nothing to do (rt::append takes
     // the array by value).
     r[":struct/copy_arr"] = identity();
-    r[":struct/contains_arr"] = withArgument("contains");
+    r[":struct/contains_arr"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const std::string empty = emptyLiteralElement(c, c.withType(0));
+            if (!empty.empty()) {
+                return std::format("rt::contains(rt::Array<{}>{{}}, {})", empty, c.with(0).text);
+            }
+            return std::format("rt::contains({}, {})", c.norm(0).text, c.with(0).text);
+        },
+        false,
+    };
     r[":struct/zip"]          = {
         [](OperatorCall &c) -> std::optional<std::string> {
             std::string args;
@@ -1051,8 +1137,19 @@ Rules buildRules() {
         true,
     };
     r["math:sqrt"]    = cmath("sqrt", true);
+    // The typed square root (math:sqrt_f, math:sqrt_d): std::sqrt answers what the library's
+    // answers, including outside the domain -- a negative operand and a NaN operand both give a
+    // NaN and not a fault, which is what std::fvm answers and what math_sqrt_domain.cml pins.
+    for (const char *t : {"f", "d"}) {
+        r[std::format("math:sqrt_{}", t)] = cmath("sqrt", true);
+    }
+    // The integer absolute value is two's complement, not `std::abs`: the smallest integer has
+    // no positive counterpart, and the library's answer for it is itself -- `gcd` finds it by
+    // asking `abs(a) < 0` (stdlib/math.cml), so the answer is load-bearing. `std::abs` is
+    // undefined there and the test that depends on it can be optimized away
+    // (fault_gcd_overflow.cml: exit 0 where the interpreter refuses the value).
     for (const char *t : {"i", "l"}) {
-        r[std::format("math:abs_{}", t)] = cmath("abs");
+        r[std::format("math:abs_{}", t)] = runtimeFunction("intAbs");
     }
     for (const char *t : {"f", "d"}) {
         r[std::format("math:abs_{}", t)]   = cmath("fabs");
@@ -1150,36 +1247,57 @@ Rules buildRules() {
     };
 
     // ---- The results the runtime owns (tensor:*, design note 9) ----
-    // `tensor:ones` and `tensor:zeros` fill a tensor of the element type the call states with the
-    // shape it is given. The element type is the call's, and it reaches the kernel as the integer
-    // code of the type (`elementCode`): the kernel reads the call's result type to know what to
-    // fill, and a call that stated none left it filling f32 whatever the program wrote --
-    // `ones::<f64>` built an f32 tensor and `ones::<i64>` printed `1.0` where the interpreter
-    // prints `1`.
-    // The result is a `T[..]`, and in this back end that type has one representation: the shaped
-    // array `rt::Array<T>` a literal of the same type is (docs/design/cpp-standalone/README.cn.md
-    // 4). So the rule names that type -- whatever type the node has -- and the bridge converts the
-    // runtime's own value into it at the boundary, the elements copied out and the shape with them
-    // (camel/standalone/bridge.h): the program prints a tensor with the same `println` as any
-    // array, and never holds a runtime pointer. `rt::Foreign` is not this: it is for the objects
-    // the language itself keeps opaque (`PyObject`, `Device<T>`).
-    // The two builders are one rule: what differs between them is the value the runtime fills in,
-    // not one byte this back end writes, so they cross the same way or not at all. `zeros` was the
-    // last one refused as work not done; its refusal named the missing rule, and the rule is here.
-    auto tensorBuilder = [](OperatorCall &c) -> std::optional<std::string> {
-        if (c.normCount() != 1) {
-            return std::nullopt;
-        }
-        return std::format(
-            "{}.call<{}>({}, {{rt::bridge::arg({})}}, {{}}, {})",
-            c.bridgeOperator(),
-            c.cppType(c.resultType()),
-            c.place(),
-            c.norm(0).text,
-            elementCode(c.resultType()));
+    // `tensor:ones` and `tensor:zeros`: the tensor's element type is the call's and its shape is
+    // the `int[]` it is given, and both are things this back end can write without the runtime --
+    // the result is a `T[..]`, which has one representation here, the shaped array `rt::Array<T>`
+    // (docs/design/cpp-standalone/README.cn.md 4) a literal of the same type is. So the rule
+    // builds that array: `rt::filledArray<T>(shape, fill, op, site)`, every element the fill.
+    //
+    // This is not a bridged call any more. The bridge was right for the tensors whose value is a
+    // runtime object -- a handle, `rt::Foreign` -- but a tensor the program only reads as elements
+    // is data, and data no runtime has to make. The one thing the runtime still answers here is the
+    // shape's own refusal: a negative extent is a fault, and `filledArray` raises it with the
+    // kernel's own words ("<op>: Shape cannot contain negative values"), measured against std::fvm
+    // rather than guessed -- the first sentence this rule carried was not the one the interpreter
+    // prints, and a fault printed differently is a program that disagrees.
+    //
+    // The element types are the ones the tensor module itself stores (modules/tensor/dtype.h):
+    // f32, f64, i32, i64 and the two reduced-precision floats, whose fill is a value of their own
+    // type rounded once from 1.0/0.0 (`rt::BF16(1.0f)`), so the tensor a program reads is one
+    // array whatever its width. Anything else is refused here, not bridged: a `string` or a `bool`
+    // tensor never reaches this rule (the signature's `when is_numeric` refuses the call first),
+    // and a complex one has no dtype in the tensor module, so there is no interpreter value to
+    // agree with -- a written call would be a second answer, not a translation.
+    auto tensorBuilder = [](bool ones) {
+        return [ones](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1) {
+                return std::nullopt;
+            }
+            const ArrayType *result = asArrayType(c.resultType());
+            if (result == nullptr || result->elemType() == nullptr) {
+                return std::nullopt;
+            }
+            const char *fill = nullptr;
+            switch (result->elemTypeCode()) {
+            case TypeCode::Float32:
+            case TypeCode::Float64: fill = ones ? "1.0" : "0.0"; break;
+            case TypeCode::Int32:
+            case TypeCode::Int64: fill = ones ? "1" : "0"; break;
+            case TypeCode::BFloat16: fill = ones ? "rt::BF16(1.0f)" : "rt::BF16(0.0f)"; break;
+            case TypeCode::Float16: fill = ones ? "rt::F16(1.0f)" : "rt::F16(0.0f)"; break;
+            default: return std::nullopt;
+            }
+            return std::format(
+                "rt::filledArray<{}>({}, {}, \"{}\", {})",
+                c.cppType(result->elemType()),
+                c.operand(0),
+                fill,
+                ones ? "ones" : "zeros",
+                c.site(RuntimeDiag::RuntimeError, marks(1)));
+        };
     };
-    r["tensor:ones"]  = {tensorBuilder};
-    r["tensor:zeros"] = {tensorBuilder};
+    r["tensor:ones"]  = {tensorBuilder(true), false};
+    r["tensor:zeros"] = {tensorBuilder(false), false};
 
     return r;
 }

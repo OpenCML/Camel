@@ -42,9 +42,9 @@ namespace camel::compile::gir {
 
 node_handle_t
 Builder::applyDecoratorAnno(const GCT::node_ptr_t &annoNode, node_handle_t funcValueNode) {
-    ASSERT(annoNode && annoNode->type() == GCT::NodeKind::ANNO, "Expected ANNO node.");
-    ASSERT(annoNode->size() == 1, "ANNO node should have exactly one lowered expression child.");
-    ASSERT(funcValueNode != nullptr, "Decorator input function value is null.");
+    GUARD(annoNode && annoNode->type() == GCT::NodeKind::ANNO, "Expected ANNO node.");
+    GUARD(annoNode->size() == 1, "ANNO node should have exactly one lowered expression child.");
+    GUARD(funcValueNode != nullptr, "Decorator input function value is null.");
 
     // `@name` or `@name<args>`: either way the expression is the decorator to call.
     const auto &decorator = annoNode->at(0);
@@ -69,7 +69,7 @@ Builder::applyDecoratorAnno(const GCT::node_ptr_t &annoNode, node_handle_t funcV
 compile_graph_ptr_t Builder::buildDecoratedGraph(
     const std::string &funcName, const compile_graph_ptr_t &rawGraph,
     const std::vector<GCT::node_ptr_t> &annoNodes) {
-    ASSERT(rawGraph != nullptr, "Raw function graph is null.");
+    GUARD(rawGraph != nullptr, "Raw function graph is null.");
     if (annoNodes.empty()) {
         return rawGraph;
     }

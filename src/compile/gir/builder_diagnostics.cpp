@@ -1221,7 +1221,7 @@ void Builder::markNonRetainingReads() {
         }
         node_handle_t cell = draft.ref(normInputsOf(read).front());
         const auto peek    = peekGroup->resolve({}, {nodeTypeOf(cell)}, statics);
-        ASSERT(peek.has_value(), "__var_peek__ rejected a variable.");
+        GUARD(peek.has_value(), "__var_peek__ rejected a variable.");
         nodeGraphOf(read)->retargetOperNode(read, *peek);
     }
     syncedReads_.clear();
@@ -1433,7 +1433,7 @@ void Builder::rejectAmbiguousCallAt(
     // value all come here. Listing the candidates in declaration order lets a reader see
     // both the one written here and the one that makes the choice ambiguous; the help says
     // how to choose (annotate the literal, add a cast).
-    ASSERT(!candidates.empty(), "An ambiguity has candidates.");
+    GUARD(!candidates.empty(), "An ambiguity has candidates.");
     diags_->of(SemanticDiag::AmbiguousCall)
         .atOrigin(origin)
         .commit(name, argumentTypes, strutil::join(candidates, "; ", [](const std::string &s) {
@@ -1448,7 +1448,7 @@ void Builder::rejectAmbiguousCall(
     std::vector<std::string> signatures;
     signatures.reserve(candidates.size());
     for (FunctionType *candidate : candidates) {
-        ASSERT(candidate != nullptr, "An ambiguity lists function types.");
+        GUARD(candidate != nullptr, "An ambiguity lists function types.");
         signatures.push_back(candidate->toString());
     }
     rejectAmbiguousCall(name, argumentTypes, signatures, origin);

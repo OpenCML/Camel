@@ -10,6 +10,7 @@
 
 #include "camel/utils/assert.h"
 #include "camel/utils/str.h"
+#include <stdexcept>
 
 enum Modifier : uint32_t {
     None = 0,
@@ -28,7 +29,7 @@ inline std::string to_string(Modifier mod) {
     case Modifier::None:
         return "";
     default:
-        ASSERT(false, "Unknown Modifier");
+        throw std::runtime_error("Unknown Modifier");
         return "unknown";
     }
 }
@@ -46,7 +47,7 @@ inline std::string to_string(ExitType type) {
     case ExitType::Yield:
         return "yield";
     default:
-        ASSERT(false, "Unknown ExitType");
+        throw std::runtime_error("Unknown ExitType");
         return "unknown";
     }
 }
