@@ -59,3 +59,17 @@
 7. 用例：四行程序（`tensor::ones::<f32>([2,2])` + 打印），`std::cpp` 与 `std::fvm` 输出并排。
 
 **为什么第 1 步不能先单独落地**：签名是泛型 `T[..]`，同一 URI 在不同调用点有不同的结果类型；只做门、不传描述，桥拿不到 `Type*`，`RootHandle` 不成立（它的 `Type*` 是追踪与析构的依据，不能让它是空）。
+## 今天按结果类型分桶的读数（树 `a43e4f62d`）
+
+尺子：`test/tools/cppexec/tensor_buckets.py`（只测量）。树 `a43e4f62d`，build-info `a43e4f62dd (clean)`，1244 个源文件。
+
+| 桶 | 数 |
+|---|---|
+| 被"等第 5 步"的算子拒绝的程序 | **140** |
+| ① 结果是原生带形状数组 | **28**（`rand:uniform_array` 24、`rand:normal_array` 4） |
+| ② 结果是 `tensor` 模块对象 | **110**（`ones` 42、`zeros` 37、`load_npy_f32` 31） |
+| ③ 两种说法都像 | **2** |
+
+③ 的两条：`test/cases/modules/tiles/matmul_edges.cml`、`test/cases/modules/tiles/max_special.cml`，都是 `tensor:reshape`。
+
+**数目带树**：上面本页开头那 369 是 `lane-mcts` 那棵树上的数（reshape 270 + ones 39 + zeros 32 + load_npy 28）。**`tensor:reshape` 已在 develop 落地**，那 270 个不再以它的身份被拒，本格只剩 2 个；其余格也随树移动。**同一把尺子量不同的树，总数会变；不带树的数目是在替另一棵树说话。**
