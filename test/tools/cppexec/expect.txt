@@ -217,3 +217,8 @@ test/cases/trans/cpp/index_rank.cml
 # A slice names one dimension of a value and keeps every other one whole: rows of a rank-2 value,
 # a column of it (`m[:, 1]`), and the rank-2 value behind the first row of a rank-3 one.
 test/cases/trans/cpp/slice_rank.cml
+
+# A tensor the runtime builds: `tensor:ones` has no standalone translation, so the program holds a
+# counted handle to the runtime's own value (rt::Foreign) and prints the runtime's text for it --
+# the one line below is std::fvm's, byte for byte.
+test/cases/trans/cpp/tensor_ones.cml
