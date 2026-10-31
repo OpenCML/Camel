@@ -6,6 +6,9 @@
  * Before the chain was made (a call recorded as writing through a callee only when what came
  * before it was a write and not another call), this program printed `10`: the first call ran
  * nothing and the write `counter = 1` was lost with it.
+ *
+ * The sequential schedulers only: nothing orders the two calls against each other, so a parallel
+ * one may interleave them, and then the number is the interleaving's.
  */
 
 var counter = 0
