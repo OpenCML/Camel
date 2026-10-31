@@ -234,6 +234,11 @@ test/cases/trans/cpp/literal_rank.cml
 # fault where they are written.
 test/cases/trans/cpp/literal_rows_computed.cml
 
+# Folding a filled value of several dimensions: the run and the shape are what is left, and the
+# fold writes both (`{{1.0, 2.0, 2.0, 2.0}, {2, 2}}`). Written from the template's first extent
+# instead, it printed one row of elements and no shape.
+test/cases/trans/cpp/literal_rows_filled.cml
+
 # A position on a value of several dimensions: `m[1]` is the row, `m[1, 0]` names the axis it drops
 # and is the element, `t[1]` of a rank-3 value is the rank-2 value behind it -- and `len` of a row is
 # the dimension that is left.
@@ -246,6 +251,10 @@ test/cases/trans/cpp/slice_rank.cml
 # `for` over a value of several dimensions walks its first dimension: the item is the row (`atRow`),
 # the rounds are the first extent (not the element count), and a rank-3 value gives rank-2 planes.
 test/cases/trans/cpp/iterate_rows.cml
+
+# A literal of one dimension carries its extents: `[1.0, 2.0, 3.0] as float[]` is one dimension of
+# 3 elements, so `shape` and `len` read [3] and 3, and `as float[3]` has a rank to check.
+test/cases/trans/cpp/literal_open_shape.cml
 
 # `as` states the shape a value must have: a value that holds it is the value (nothing to write, the
 # two sides are one `rt::Array<T>`), and a value that does not stops the program with the
