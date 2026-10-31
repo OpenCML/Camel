@@ -5881,6 +5881,9 @@ node_ptr_t Builder::visitGeneratorBody(
             // The last value the stretch built: a loop body's last value is the state of the
             // next round. A stretch that ends in a `yield` builds none.
             node_ptr_t last = nullptr;
+            // The statement that built it, for the loops that carry several values: their body
+            // hands on a tuple, and each element of it is written to its own cell.
+            AST::node_ptr_t lastStmt = nullptr;
             for (size_t i = from; i < stmts->size(); ++i) {
                 const auto &stmt = stmts->at(i);
                 // A cell's name is bound where the stream is created, so the name is in scope
@@ -6069,16 +6072,16 @@ node_ptr_t Builder::visitGeneratorBody(
                             const std::string binderName = loopLoad->binder().toString();
                             if (std::find(cellNames.begin(), cellNames.end(), binderName) ==
                                 cellNames.end()) {
-                                // The binder's type is the sequence's element type: `typeof` of the index
-                            // call over the sequence itself and a literal position, which is a
-                            // type the builder can compute without reading a cell.
-                            {
+                                // The binder's type is the sequence's element type: `typeof` of
+                                // the index call over the sequence itself and a literal position,
+                                // which is a type the builder can compute without reading a cell.
+                                // `typeof` has to be the whole type, so `ElementOf<typeof xs>` is
+                                // not a way to write it.
                                 node_ptr_t sample = tree_->makeLink(2);
                                 *sample << tree_->makeDRef("__idx__") << visitData(seqAst)
                                         << intLiteral(0);
                                 addTypedCell(binderName, sample, stmt);
                                 cellNames.push_back(binderName);
-                            }
                             }
                             const int afterPc = newArm();
                             fill(afterPc, stmts, i + 1, next, nextState);
@@ -6123,26 +6126,44 @@ node_ptr_t Builder::visitGeneratorBody(
                             popScope();
                             return;
                         }
-                        // What the machine carries is exactly one value, and that value is read
+                        // What the machine carries is one value or several, and each is read
                         // once, where the loop stands: a `for` has a sequence and a binder the
                         // arms do not run. A first value that is a constant or a lambda is the
                         // one the loop would start from in any arm; one that depends on the point
                         // the loop stands at is not lowered yet (a cell whose type is inferred is
                         // in place, but reading the cells a computed first value names across
                         // the arm boundary is the next step).
-                        if (init == nullptr || loopLoad->state().size() != 1 || loopLoad->hasFor() ||
-                            !hoistable(init)) {
+                        if (inits->size() == 0 || loopLoad->state().empty() || loopLoad->hasFor() ||
+                            inits->size() != loopLoad->state().size()) {
                             refuse(stmt);
                         }
-                        const std::string stateName = loopLoad->state()[0].toString();
-                        // The body already has a cell of that name (a `var` of its own): the loop
-                        // carries that one cell, and the value below is written into it where
-                        // the loop stands. A second cell of the name would be a second writing of
-                        // one variable; the name is one cell with one type.
-                        if (std::find(cellNames.begin(), cellNames.end(), stateName) ==
-                            cellNames.end()) {
-                            addTypedCell(stateName, visitData(init), stmt);
-                            cellNames.push_back(stateName);
+                        // One cell per carried name. The body already may have a cell of that name
+                        // (a `var` of its own): the loop carries that one cell, and the value below
+                        // is written into it where the loop stands. A second cell of the name
+                        // would be a second writing of one variable; the name is one cell with one
+                        // type.
+                        std::vector<std::string> stateNames;
+                        for (size_t k = 0; k < loopLoad->state().size(); ++k) {
+                            const std::string name = loopLoad->state()[k].toString();
+                            const AST::node_ptr_t eachInit = inits->at(k);
+                            if (!hoistable(eachInit)) {
+                                refuse(stmt);
+                            }
+                            if (std::find(cellNames.begin(), cellNames.end(), name) ==
+                                cellNames.end()) {
+                                addTypedCell(name, visitData(eachInit), stmt);
+                                cellNames.push_back(name);
+                            }
+                            stateNames.push_back(name);
+                        }
+                        // The cells the next round starts from: one name, or a list for a loop
+                        // that carries several, whose body's last value is a tuple of them.
+                        std::string stateName;
+                        for (size_t k = 0; k < stateNames.size(); ++k) {
+                            if (k != 0) {
+                                stateName += ",";
+                            }
+                            stateName += stateNames[k];
                         }
                         // The four points of the loop: past it, at the condition, in the body,
                         // and the step back to the condition.
@@ -6178,7 +6199,9 @@ node_ptr_t Builder::visitGeneratorBody(
                         *arms[static_cast<size_t>(stepPc)] << jumpTo(condPc);
                         // The pull that reaches the loop enters it after writing the state the first round starts
                         // from: the initial value is evaluated here, where the loop stands.
-                        *exec << writeCell(stateName, visitData(init));
+                        for (size_t k = 0; k < stateNames.size(); ++k) {
+                            *exec << writeCell(stateNames[k], visitData(inits->at(k)));
+                        }
                         *exec << jumpTo(condPc);
                         popScope();
                         return;
@@ -6261,6 +6284,7 @@ node_ptr_t Builder::visitGeneratorBody(
                 node_ptr_t value = visitStmt(stmt);
                 if (!nextState.empty() && i + 1 == stmts->size()) {
                     last = value;
+                    lastStmt = stmt;
                 } else {
                     *exec << value;
                 }
@@ -6273,7 +6297,60 @@ node_ptr_t Builder::visitGeneratorBody(
                 if (last == nullptr) {
                     refuse(from < stmts->size() ? stmts->at(from) : stmts);
                 }
-                *exec << writeCell(nextState, last);
+                // One name takes the value itself; a list of names takes the tuple the body built, one
+                // element per name -- the shape a loop that carries several values hands on:
+                // `(i + 1, s + i)` for `loop i = 0, s = 0 ...`. The elements are built where the
+                // writes stand, one visit each.
+                if (nextState.find(',') == std::string::npos) {
+                    *exec << writeCell(nextState, last);
+                } else {
+                    std::vector<std::string> names;
+                    size_t at = 0;
+                    size_t end = 0;
+                    while (at <= nextState.size()) {
+                        end = nextState.find(',', at);
+                        names.push_back(nextState.substr(
+                            at,
+                            end == std::string::npos ? std::string::npos : end - at));
+                        if (end == std::string::npos) {
+                            break;
+                        }
+                        at = end + 1;
+                    }
+                    const AST::node_ptr_t tupleAst =
+                        lastStmt != nullptr && lastStmt->type() == AST::LoadType::Stmt
+                            ? lastStmt->at(0)
+                            : nullptr;
+                    const AST::node_ptr_t tupleItems =
+                        tupleAst != nullptr && tupleAst->type() == AST::LoadType::Data &&
+                                tupleAst->loadAs<AST::DataLoad>()->dataType() ==
+                                    AST::DataType::Tuple &&
+                                tupleAst->size() == 1
+                            ? tupleAst->at(0)
+                            : nullptr;
+                    if (tupleItems == nullptr || tupleItems->size() != names.size()) {
+                        // A loop that carries several values hands them on as a tuple of the
+                        // same length; anything else has no value for one of the names.
+                        refuse(lastStmt != nullptr ? lastStmt : stmts->at(from));
+                    }
+                    // The next values are built before any of them is written: a state name the
+                    // second element reads must be the value of this round, not the one the first
+                    // write already put there.
+                    std::vector<std::string> nextCells;
+                    for (size_t k = 0; k < names.size(); ++k) {
+                        const std::string nextName =
+                            "__gen_next_" + std::to_string(idIndex_++);
+                        addTypedCell(nextName, readCell(names[k]), lastStmt);
+                        cellNames.push_back(nextName);
+                        nextCells.push_back(nextName);
+                    }
+                    for (size_t k = 0; k < names.size(); ++k) {
+                        *exec << writeCell(nextCells[k], visitData(tupleItems->at(k)));
+                    }
+                    for (size_t k = 0; k < names.size(); ++k) {
+                        *exec << writeCell(names[k], readCell(nextCells[k]));
+                    }
+                }
             }
             if (next >= 0) {
                 *exec << writeCell(pcName, intLiteral(next));

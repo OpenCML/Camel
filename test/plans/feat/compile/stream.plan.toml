@@ -326,7 +326,6 @@ expect_output_not_contains = ["UnknownInternalError", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
-
 [[tests]]
 name = "stream.interval_loop_fused"
 desc = "The graph of `for i in 0..n` holds no array and no `:struct/range`: the loop's sequence is the pair of bounds (`\"iterable\": \"interval\"`), where the same interval bound to a name lowers to the `:struct/range` call that builds the `int[]`."
@@ -338,7 +337,6 @@ expect_output_contains = ["\"iterable\": \"interval\""]
 expect_output_not_contains = ["struct/range", "UnknownInternalError", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
-
 
 [[tests]]
 name = "stream.interval_loop_not_materialised"
@@ -366,7 +364,6 @@ expect_output_not_contains = ["No matching function found", "UnknownInternalErro
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
-
 [[tests]]
 name = "stream.range_two_arguments"
 desc = "The two-parameter `range(a, b)` is deleted: `a..b` is the one spelling, and the built-in group has one signature -- three parameters -- so the call is refused where it stands, under the name the program wrote, as any other call the overload set has no match for."
@@ -383,7 +380,6 @@ expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
-
 [[tests]]
 name = "stream.interval_cml"
 desc = "`std::cml` prints the interval as `a..b` again: the operator a value-position interval lowers to is the interval's own spelling, and the printed program compiles back to the same graph (the round trip itself is pinned by feat.trans.cml, over test/cases/trans/cml/interval.cml)."
@@ -394,7 +390,6 @@ expect_exit = 0
 expect_stdout_contains = ["let xs: int[] = 1..5", "println(0..n)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
-
 
 [[tests]]
 name = "stream.interval_loop_cml"
@@ -407,7 +402,6 @@ expect_stdout_contains = ["for i in 0..5", "for i in 3..3", "for i in 5..1", "fo
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
-
 [[tests]]
 name = "stream.range_step"
 desc = "`range(a, b, step)` is the integers `a`, `a + step`, ... below `b`, and above `b` when the step is negative: the array form of the interval with a step, empty when the step carries the start to the side it does not go, and `range(a, b, 1)` the same integers as `a..b`. The step may be an expression."
@@ -419,7 +413,6 @@ expect_stdout_exact = "[0, 3, 6, 9]\n[0, 3, 6]\n[1]\n[10, 7, 4, 1]\n[10, 7, 4]\n
 expect_output_not_contains = ["UnknownInternalError", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
-
 
 [[tests]]
 name = "stream.range_step_zero"
@@ -437,7 +430,6 @@ expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
-
 [[tests]]
 name = "stream.range_step_runtime"
 desc = "A step the compiler does not know is the run's: `range(0, 10, k)` with `k` 3 and -3 is the sequence it names, and with `k` 0 the fault the array form raises, RuntimeDiag::InvalidArgument, at the call ."
@@ -450,7 +442,6 @@ expect_output_contains = ["[0, 3, 6, 9]", "[]", "the step is 0 (from 0 to 10); a
 expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
-
 
 [[tests]]
 name = "stream.range_two_arguments_builtin"
@@ -468,7 +459,6 @@ expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
-
 [[tests]]
 name = "stream.yield_keyword"
 desc = "`yield` is a control keyword: the token table lists it and `retStmt` reads it, so a program can no longer use it as a name. The stream plan's negative acceptance for the generator slice (`docs/design/io-concurrency-streams/plan.cn.md:307`) is this program, its t9, which compiled and printed `1` while `yield` was an ordinary identifier."
@@ -484,7 +474,6 @@ expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
-
 [[tests]]
 name = "stream.yield_statement_is_read"
 desc = "The syntax of a generator: `yield` is the third alternative of `retStmt`, so `yield e` parses wherever a statement stands, in a `loop` and in an `if` (the two shapes the plan's acceptance names) and in a body whose head writes the stream type (design principles 5.4). This entry is the parse of the statement and nothing more: what the two functions hand out is pinned by stream.generator_loop (the loop) and stream.generator (the `if` arms), and the file compiles as a whole since the machine lowers both shapes."
@@ -495,7 +484,6 @@ expect_exit = 0
 expect_output_not_contains = ["[Error]", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
-
 
 [[tests]]
 name = "stream.yield_ast"
@@ -508,7 +496,6 @@ expect_stdout_contains = ["ExitStmt: yield"]
 expect_output_not_contains = ["IdentDef: yield", "RefData: yield", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
-
 
 [[tests]]
 name = "stream.yield_formatting"
@@ -523,22 +510,6 @@ expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
-
-[[tests]]
-name = "stream.yield_lowering_refused"
-desc = "A body that writes `yield` is refused by name where the generator machine cannot carry it: a `while` loop with one carried value is lowered (stream.generator_loop), so what this holds is the narrowing -- a loop that carries two values across the `yield`, each depending on the round before it, still gets the named gap instead of running with one of them left behind. The graph builder reports SemanticDiag::FeatureNotSupported with `'generators'`, at the `yield` itself."
-kind = "negative"
-case = "../../../cases/compile/stream/yield_lowering.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::FeatureNotSupported"
-expect_diagnostic_code = "0x03000040"
-expect_diagnostic_line = 13
-expect_diagnostic_column = 9
-expect_output_contains = ["generators"]
-expect_output_not_contains = ["UnknownInternalError"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 10000
 [[tests]]
 name = "stream.cell_from_null_stays_void"
 desc = "A `var` whose first value is `null` does not take a type from a later assignment: it stays `void`, and reading it as a `T?` is refused. Measured while choosing how the generator lowering carries its state, and pinned so the constraint that choice rests on is a reading rather than a belief."
@@ -563,7 +534,6 @@ expect_output_contains = ["Expected ',' or ')' before '!'"]
 expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
-
 
 [[tests]]
 name = "stream.step_value"
@@ -1182,6 +1152,29 @@ name = "stream.generator_for_yield_gir"
 desc = "The graph the `for` shape builds, printed before any backend runs: the position cell and the binder cell are in it, and the step's write of the position is where the next round's value comes from."
 kind = "behavior"
 case = "../../../cases/compile/stream/generators_for_yield.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+timeout_ms = 30000
+
+[[tests]]
+name = "stream.generator_loop_two_states"
+desc = "`loop i = 0, s = 0 while i < n do { yield (i, s); (i + 1, s + i) }`: the machine carries two values across the pull, each depending on the round before it. Three rounds hand out (0, 0), (1, 0) and (2, 1), which fold into 1021; a stream that hands out nothing folds into 0. All four back ends agree."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_loop_two_states.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "1021\n0\n"
+expect_output_not_contains = ["[Error]", "[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "stream.generator_loop_two_states_gir"
+desc = "The graph the two-state loop builds, printed before any backend runs: both state cells are in it, and the body's tuple is what writes them."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_loop_two_states.cml"
 args = ["${case}", "std::gir"]
 expect_exit = 0
 timeout_ms = 30000
