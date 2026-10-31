@@ -94,6 +94,11 @@ test/cases/trans/cpp/take_positions.cml
 # empty array the fault a read of the position -1 gives.
 test/cases/trans/cpp/last_element.cml
 
+# `fail<'Kind'>(message)` (:op/fail): the fault the program raises itself, reported under the kind
+# it wrote -- as a statement, as a `let`'s right, as a branch's arm, and through `attempt`, whose
+# error value says the same kind.
+test/cases/trans/cpp/fail_program.cml
+
 # Output of print / println with a format (design principles 10.6).
 # (test/cases/trans/cpp/exec/print_formats.cml, in the directory above)
 # A formatted string is the same tree as '...'->format<...>: the translator sees no difference.

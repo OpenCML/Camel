@@ -90,13 +90,27 @@ std::string SiteTable::siteFor(
     return name;
 }
 
+std::string SiteTable::siteForProgramFault(
+    const GCGraph *graph, gc_node_ref_t node, const std::string &kind) {
+    const auto key = std::make_tuple(
+        static_cast<const void *>(graph), static_cast<uint16_t>(node), static_cast<uint32_t>(0));
+    if (auto it = programFaults_.find(key); it != programFaults_.end()) {
+        return sites_[it->second].name;
+    }
+    std::string name = makeSite(
+        nodeOriginNear(graph, node), RuntimeDiag::ProgramFault, {valueMark(0)}, {}, kind);
+    programFaults_.emplace(key, sites_.size() - 1);
+    return name;
+}
+
 std::string SiteTable::siteAt(
     uint64_t origin, RuntimeDiag kind, const std::vector<std::string> &args) {
     return makeSite(origin, kind, args);
 }
 
 std::string SiteTable::makeSite(
-    uint64_t origin, RuntimeDiag kind, const std::vector<std::string> &args, std::string filled) {
+    uint64_t origin, RuntimeDiag kind, const std::vector<std::string> &args, std::string filled,
+    const std::string &named) {
     // The templates take up to ten arguments; those not given are empty.
     std::array<std::string, 10> a;
     for (size_t i = 0; i < args.size() && i < a.size(); ++i) {
@@ -107,6 +121,11 @@ std::string SiteTable::makeSite(
         builder.atOrigin(origin);
     }
     Diagnostic d = builder.commit(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9]);
+    if (!named.empty()) {
+        // A fault the program names itself (`fail<'Kind'>`): the report says the program's kind,
+        // as the runtime's own failure does (src/core/error/runtime.cpp, the fault's kind).
+        d.name = std::format("RuntimeDiag::{}", named);
+    }
     d.sourceContext = context_->sourceContext();
 
     // What `camel` prints when its output is not a terminal: no colours, no wrapping.

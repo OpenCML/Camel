@@ -898,7 +898,8 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
         g->normInputsOf(ref).begin(), g->normInputsOf(ref).end());
     const Type *firstNormType = normTypes.empty() ? nullptr : normTypes.front();
 
-    if (lowerVariable(frame, ref, uri, out) || lowerHigherOrder(frame, ref, uri, out)) {
+    if (lowerVariable(frame, ref, uri, out) || lowerHigherOrder(frame, ref, uri, out) ||
+        lowerFail(frame, ref, uri, out)) {
         return;
     }
     const OperatorRule *rule = findOperatorRule(uri);
@@ -1861,6 +1862,60 @@ bool FunctionEmitter::lowerSetIndexInPlace(Frame &frame, gc_node_ref_t ref, Bloc
     // As the append form: the node stands for the variable's own value, the cell with its
     // marking, and a read of it dereferences the cell once.
     frame.values[ref] = CppValue{cell.text, false, cell.cell};
+    return true;
+}
+
+// ---- The bottom type ----
+
+bool FunctionEmitter::lowerFail(
+    Frame &frame, gc_node_ref_t ref, const std::string &uri, Block &out) {
+    if (uri != ":op/fail") {
+        return false;
+    }
+    const GCGraph *g = frame.graph;
+    // `fail<'Kind'>(message)`: the kind is a constant of the graph -- the tag the program wrote,
+    // which is what the fault's report is named after (design principles 3.9) -- and the message
+    // is the call's argument. Both are wanted, and neither is a value of the program's own words.
+    const auto with   = g->withInputsOf(ref);
+    const auto norm   = g->normInputsOf(ref);
+    std::string kind;
+    if (!with.empty()) {
+        const auto *node = g->node(with[0]);
+        if (node->kind == GCNodeKind::Data && node->dataType() != nullptr &&
+            node->dataType()->code() == camel::core::type::TypeCode::String) {
+            if (const auto *text = camel::core::rtdata::fromSlot<::String *>(
+                    g->staticArea()->get<slot_t>(-node->dataIndex));
+                text != nullptr) {
+                kind = text->toString();
+            }
+        }
+    }
+    if (kind.empty()) {
+        refuse(
+            g,
+            ref,
+            std::format(
+                "{} fails with a kind that is not a constant, and std::cpp names the report of "
+                "the fault after the kind it was written with",
+                describeFunction(g)));
+    }
+    if (norm.size() != 1) {
+        refuse(
+            g,
+            ref,
+            std::format(
+                "{} fails with {} arguments, and std::cpp translates the message of a fail",
+                describeFunction(g),
+                norm.size()));
+    }
+    const std::string site = program_.sites.siteForProgramFault(g, ref, kind);
+    bind(
+        frame,
+        ref,
+        std::format("rt::fail({}, {})", site, valueOf(frame, norm[0]).text),
+        false,
+        out,
+        "fail");
     return true;
 }
 
