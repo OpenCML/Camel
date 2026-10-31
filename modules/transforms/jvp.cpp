@@ -49,25 +49,47 @@ FunctionType *jvpSignature(FunctionType *function) {
 
 JvpGraph buildJvpGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    camel::runtime::GCGraph *function) {
-    // The skeleton, and nothing else yet: the five steps are fixed, none of them is written.
-    //
-    // 1. A new member of a group of its own: `GraphDraftGroup group(context, program)`, one reserved
-    //    member, its signature `jvpSignature(function->funcType())`.
-    // 2. Each parameter of `function` becomes one port of the lifted pair's type; the pair's first
-    //    element is the value the primitive reads, its second is the tangent the caller passed.
-    // 3. Every node is copied in order: a `Port` reads the first element of its lifted parameter, a
-    //    constant or a captured value is lifted with a zero tangent, and a primitive keeps its value
-    //    while its tangent becomes a call of the closure its rule instance carries
-    //    (`GenericRuleInstance::rhsBuilder`, typed by the tuple it captures -- the one thing
-    //    measured for certain, f9d352ce4), fed the lifted tangents of its inputs.
-    // 4. The exit is the lifted result: `Tuple{value, tangent}`.
-    // 5. The group is encoded and its program answered with, together with the member graph -- the
-    //    new function value whose caller decides which direction to ask about.
-    (void)context;
-    (void)program;
-    (void)function;
-    return JvpGraph{};
+    camel::runtime::GCGraph *function, std::ostream &os) {
+    if (program == nullptr || function == nullptr) {
+        return JvpGraph{};
+    }
+    FunctionType *signature = jvpSignature(function->funcType());
+    if (signature == nullptr) {
+        os << "REINTERP jvp function=" << function->name() << " skip=signature\n";
+        return JvpGraph{};
+    }
+    // One parameter, for now: with two the exit would need a way to combine two lifted pairs into
+    // the one lifted result, and that is a node in the body -- step 3's business, not this one's.
+    if (function->funcType()->normTypesCount() != 1) {
+        os << "REINTERP jvp function=" << function->name()
+           << " skip=params " << function->funcType()->normTypesCount() << "\n";
+        return JvpGraph{};
+    }
+
+    // Steps 1 and 2: a new member with the lifted signature, and one port per parameter, the port
+    // itself being the lifted pair `(value, tangent)` the caller passes.
+    auto *lifted = TupleType::create(std::vector<Type *>{Type::Float64(), Type::Float64()});
+    camel::runtime::GraphDraftGroup group(context, program);
+    const GraphId member = group.reserve(
+        "jvp_of_" + std::string(function->name()), "jvp_of_" + std::string(function->name()));
+    {
+        auto &draft = group.draft(member);
+        draft.setFuncType(signature);
+        const gc_node_ref_t param = draft.addPortNode(lifted, draft.allocateRuntimeSlot(lifted));
+        // Placeholder, and said so: the graph answers with the parameter it was given, so `value`
+        // is the caller's value and the `tangent` half is whatever the caller passed -- no
+        // primitive has been rewritten yet, and nothing has been differentiated. What this layer
+        // establishes is that the new graph exists, with the lifted signature, and is addressable.
+        draft.setOutputNode(param);
+        draft.setReturnNode(param, rt::GCReturnKind::Self);
+    }
+    group.encode();
+    const camel::runtime::GCGraph *made = group.encoded(member);
+    const auto *madeType = made != nullptr ? made->funcType() : nullptr;
+    os << "REINTERP jvp function=" << function->name() << " graph=" << rt::toValue(member)
+       << " type=" << (madeType != nullptr ? madeType->toString() : std::string("-"))
+       << " exit=param tangent=placeholder(from caller, not computed)\n";
+    return JvpGraph{group.program(), const_cast<camel::runtime::GCGraph *>(made)};
 }
 
 } // namespace camel::transforms
