@@ -29,6 +29,11 @@ std::string leftHeadOf(syntax::Node left, std::string &shape, uint32_t &arity);
 /// is written in the rule -- so a reader of the ruleset reads it from here rather than keeping a
 /// second copy of the mapping in C++.
 std::string rightCalleeOf(syntax::Node right);
+/// The names the rule's left side binds, in the order it writes them (`a / b` gives `a,b`), joined
+/// by commas. Its two sides are graphs over one tuple -- `lhsPorts=1` against `rhsPorts=1` -- and
+/// the tuple is exactly these names in this order, so a transform that has to assemble it reads
+/// the list here, where the declaration is still syntax. Empty for a left side that binds nothing.
+std::string variableNamesOf(syntax::Node left);
 
 /// What a ruleset's index holds for one rule: the head of its left side, its operand count, and the
 /// rule's name.
@@ -39,6 +44,9 @@ struct RuleHead {
     // nothing: the name a transform resolves to replace the operator with the rule's meaning.
     std::string rhsCallee;
     std::string shape; // when the left side is not one operator: the shape's name, else empty
+    // The names the left side binds, in order, joined by commas (`a,b`): the tuple both sides of
+    // the rule take. Read from the same syntax as `rhsCallee`, at the same place.
+    std::string variables;
     uint32_t arity = 0; // how many operands the head takes: 2 for `a + b`, 1 for `-a`
     // The rule's tokens in its module's buffer, for a diagnostic about the rule itself.
     uint32_t tokenStart = 0;
@@ -53,6 +61,7 @@ void collectRuleHead(
     std::string rule,
     std::string rhsCallee,
     std::string shape,
+    std::string variables,
     uint32_t arity,
     uint32_t tokenStart,
     uint32_t tokenEnd);
@@ -97,6 +106,7 @@ struct RuleEntry {
     std::string head; // the operator of the rule's left side
     uint32_t arity = 0;
     std::string rule;
+    std::string variables; // the names the left side binds, in order, joined by commas
 };
 
 /// Everything `family` holds, in key order (`head` then `arity`): what a printer of the index reads.

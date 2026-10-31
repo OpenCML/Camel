@@ -247,6 +247,78 @@ REINTERP target=main primitives=1 other=4 graph=113 nodes=1
 （注意这个用例得 `import rulesets.jvp`——索引里只有程序自己的 ruleset 模块放进去的东西，不 import
 就一条都没有，`reinterp` 会安静地只打 `target=` 那两行。**“没有输出”和“没有规则”是两件事**。）
 
+## 判据：第一笔只换一个原语
+
+> **逐原语替换的第一笔只换一个原语——三个一起换，验不过时不知道是谁的错。**
+
+## 那一笔之前先量到的一件事：右侧不是算子的签名
+
+把右侧图的端口数也打出来之后：
+
+```
+REINTERP uri :op/mul_d -> rule jvp_mul -> rhs 63 ports=1 nodes=4
+REINTERP uri :op/add_d -> rule jvp_add -> rhs 74 ports=1 nodes=4
+REINTERP uri :op/neg_d -> rule jvp_neg -> rhs 85 ports=0 nodes=3
+REINTERP uri :op/sub_d -> rule jvp_sub -> rhs 96 ports=1 nodes=4
+REINTERP uri :op/div_d -> rule jvp_div -> rhs 107 ports=1 nodes=4
+```
+
+**`jvp_div__rhs<float>` 只有 1 个端口，而它要替换的 `:op/div_d` 有两个操作数。** 所以“把 `div_tangent`
+的调用放到 `/` 站的那个位置”**过不了类型**：右侧不是算子的替换品，它是**规则整个左侧的变量**上的一张
+图（值、切线的成对输入），端口是那组变量的入口。
+
+这一条把“第一笔”的写法改掉了：**先要有“规则的变量表 → 一个元组”的打包**（把 `/` 两个操作数的值与
+切线按规则左侧的顺序装进去），才谈得上调用。端口数是这把尺子，不是猜测。
+
+## 判据：先让端口数与变量数对上
+
+> **替换一个算子之前，先让右侧的端口数与左侧的变量数对上；对不上就是还差一次打包，不是差一次调用。**
+
+把两侧的形状都打出来（节点种类：`0`=Data、`1`=Port、`4`=Fill、`11`=Oper，
+`include/camel/runtime/graph.h` 的 `GCNodeKind`）：
+
+```
+REINTERP uri :op/mul_d -> rule jvp_mul -> rhs 63 ports=1 nodes=4 lhsPorts=1 lhsKinds=1,11 rhsKinds=1,0,4
+REINTERP uri :op/add_d -> rule jvp_add -> rhs 74 ports=1 nodes=4 lhsPorts=1 lhsKinds=1,11 rhsKinds=1,0,4
+REINTERP uri :op/neg_d -> rule jvp_neg -> rhs 85 ports=0 nodes=3 lhsPorts=0 lhsKinds=11 rhsKinds=0,4
+REINTERP uri :op/sub_d -> rule jvp_sub -> rhs 96 ports=1 nodes=4 lhsPorts=1 lhsKinds=1,11 rhsKinds=1,0,4
+REINTERP uri :op/div_d -> rule jvp_div -> rhs 107 ports=1 nodes=4 lhsPorts=1 lhsKinds=1,11 rhsKinds=1,0,4
+```
+
+**两侧都只有一个端口**：左侧是 `Port + Oper`（拿一个值去匹配那个算子），右侧是 `Port + Data + Fill`
+（从一个值算出结果）。所以那个“打包”**不是右侧的私有约定，是整个规则的接口**——两侧吃的是同一个元组，
+只是左边拿去匹配、右边拿去做。
+
+**变量表拿不到，卡在这里（不是猜的）**：三份表示里都没有变量的名字——
+
+- 两侧的实例图只有节点种类，没有名字（上面那行就是全部内容）；
+- `runtime::Pattern` 的 `Var` 只带下标（`include/camel/runtime/writings.h:64-75`）；
+- 声明的源码只剩一个 origin id（`GenericRuleEntry::where`，
+  `include/camel/compile/gir/rule_templates.h`）。
+
+**名字只在 `src/compile/gir/builder.cpp:897` 那一处还在手上**（`leftHeadOf(sides[0], …)` 与紧随的
+`collectRuleHead(…)`，`sides` 还是语法节点），而 `RuleHead`（`include/camel/parse/ast/rule_head.h`）
+没有承载它的字段。所以下一笔是：**让 `collectRuleHead` 多带一列变量名，与 `rhsCallee` 走同一条路**——
+它已经从同一份语法里读出了被调函数，变量名是同一处的第二个事实。
+
+## 判据：名字最后存在的那一处
+
+> **名字在两个实例图上都不剩的时候，唯一还在手上的那一处就是它最后一次存在的地方；要补的不是寄存器，
+> 是那一处的第二个事实。**
+
+补上了那一列（`RuleHead::variables`，`include/camel/parse/ast/rule_head.h`），在
+`src/parse/ast/builder.cpp:902` 读（与 `rhsCallee` 同一处语法、同一行代码的邻座）：
+
+```
+REINTERP uri :op/add_d -> rule jvp_add -> rhs 74 ports=1 nodes=4 lhsPorts=1 lhsKinds=1,11 rhsKinds=1,0,4 vars=x,w count=2
+REINTERP uri :op/div_d -> rule jvp_div -> rhs 107 ports=1 nodes=4 lhsPorts=1 lhsKinds=1,11 rhsKinds=1,0,4 vars=x,w count=2
+REINTERP uri :op/neg_d -> rule jvp_neg -> rhs 85 ports=0 nodes=3 lhsPorts=0 lhsKinds=11 rhsKinds=0,4 vars=x count=1
+```
+
+**变量数 2 对端口数 1**：右侧吃的确实是打包后的一个元组。**而 `neg` 是 1 对 0**——它左侧连端口都没有
+（`lhsKinds=11`，只有那个 Oper），所以“一元运算的变量不从端口来”是另一个事实，替换它之前得先知道它的
+操作数从哪进。**两个算子的形状不一样，不能一套代码套到底。**
+
 ## 验收（缺一步不算完）
 
 1. **前向**：`f(x) = x*x + 3/x` 在 `x = 2` 处，`f = 5.5`，`f' = 4 - 0.75 = 3.25`。两个数都要打出来。
