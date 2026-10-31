@@ -1,9 +1,9 @@
 /// A `bf16` and an `f16` tensor in a `#gpu` scope: the type gate reads the element type and its two
-/// bytes, so the plan no longer reports the type as `unresolved_type` for it -- and the kernel that
-/// would compute with one is not written yet, so the reason the node is in no region is
-/// `narrow_element_kernel_missing` instead. The scope still compiles and the host computes the
-/// values; the reading separates "the device cannot read the type" from "the kernel is not written",
-/// which are two different repairs.
+/// bytes, so the plan no longer reports the type as `unresolved_type` for it -- and this back end
+/// carries no narrow-float kernel, so the reason the node is in no region is
+/// `no narrow-float kernel on this back end` instead. The scope still compiles and the host computes
+/// the values; the reading separates "the device cannot read the type" from "this back end has no
+/// kernel for it", which are two different repairs.
 
 import { sum } from tensor
 import { regions } from tiles
