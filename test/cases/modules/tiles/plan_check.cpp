@@ -15,9 +15,13 @@
 #include "tiles/internal/index_expr.h"
 #include "tiles/internal/access.h"
 #include "tiles/internal/codegen_cache.h"
+#include "tiles/internal/kernel_ir.h"
 #include "tiles/internal/scalar_expr.h"
+#include "tiles/internal/serial_execute.h"
 #include <cmath>
 #include <iostream>
+#include <iomanip>
+#include <sstream>
 #include <limits>
 #include <stdexcept>
 #include <atomic>
@@ -205,6 +209,126 @@ void checkCastLikeBoundary() {
     rejects(conversion, [](auto &) {}, "operand dtype mismatch");
     std::cout << "tiles cast_like boundary: plans never name it, and a conversion is rejected\n";
 }
+
+size_t elementWidth(kernel::ScalarType type) {
+    return type == kernel::ScalarType::F16 || type == kernel::ScalarType::BF16     ? 2
+           : type == kernel::ScalarType::F32 || type == kernel::ScalarType::I32 ||
+                     type == kernel::ScalarType::U32                               ? 4
+                                                                                   : 8;
+}
+
+// One pointwise program over three elements, multiplied either by the constant two or by itself, with
+// the product stored in `store`: the store's type is what decides whether the narrowing happens.
+Program narrowProduct(DType element, DType store, bool square) {
+    const std::vector<float> values = {0.1f, 0.25f, 1.5f};
+    Program p;
+    p.nodes = {
+        {.op = "input", .shape = {3}, .dtype = element, .data = values},
+        {.op = "input", .shape = {3}, .dtype = element, .data = {2.0f, 2.0f, 2.0f}},
+        {.op     = "multiply",
+         .shape  = {3},
+         .inputs = square ? std::vector<size_t>{0, 0} : std::vector<size_t>{0, 1},
+         .dtype  = store}};
+    return p;
+}
+
+// Every value the body's stores wrote, in store order: the whole kernel, run on the host.
+std::vector<kernel::ScalarValue> serialStores(const Program &p) {
+    Launch launch{.node = 2, .members = {2}, .elements = 3, .name = "k_row"};
+    const auto body = kernel::serialBody(p, launch);
+    std::vector<kernel::SerialBuffer> buffers;
+    for (const auto &node : p.nodes)
+        // An input's bytes are the host copy's, rounded once into its element type; an intermediate
+        // starts as the zeros the body is about to write over.
+        buffers.push_back(
+            {kernel::ScalarType(node.dtype),
+             node.data.empty() ? std::vector<std::byte>(bytes(node)) : hostStorage(node)});
+    const auto run = kernel::serialExecute(
+        body, {launch.blockX, launch.blockY, launch.gridX, launch.gridY}, std::move(buffers));
+    std::vector<kernel::ScalarValue> stored;
+    for (const auto &write : run.writes)
+        stored.push_back(write.value);
+    return stored;
+}
+
+void requireStored(
+    const std::vector<kernel::ScalarValue> &stored, size_t index, uint64_t bits, const char *what) {
+    if (stored.size() <= index || stored[index].bits != bits)
+        throw std::runtime_error(std::string("narrow serial value mismatch: ") + what);
+}
+
+/// A narrow element has no kernel on any device yet, so no device can report what one computes. The
+/// body the lowering already produces can, because the serial executor walks that body's own
+/// statements: the readings below are the three numbers the language defines for `x * 2.0` on a bf16
+/// and an f16 element, the product in f32 and the element each type writes back. Every pinned bit is
+/// derived by hand from the two rules -- arithmetic in f32, one round-to-nearest-even into the
+/// element -- and not copied from a run, so a lowering that rounded twice or truncated reds here.
+void checkNarrowSerialRun() {
+    using namespace camel::tiles::kernel;
+    // 0.1 reads as bf16 0x3DCD and f16 0x2E66: the load is the one rounding of the input. Doubling
+    // moves the exponent only, so the product is exact in f32 and in both element types.
+    const auto bf16Intermediate = serialStores(narrowProduct(DType::BF16, DType::F32, false));
+    const auto f16Intermediate  = serialStores(narrowProduct(DType::F16, DType::F32, false));
+    const auto bf16Stored       = serialStores(narrowProduct(DType::BF16, DType::BF16, false));
+    const auto f16Stored        = serialStores(narrowProduct(DType::F16, DType::F16, false));
+    requireStored(bf16Intermediate, 0, 0x3E4D0000ULL, "2 * bf16(0.1) in f32 is 0.2001953125");
+    requireStored(f16Intermediate, 0, 0x3E4CC000ULL, "2 * f16(0.1) in f32 is 0.199951171875");
+    requireStored(bf16Stored, 0, 0x3E4DULL, "the bf16 write-back is the same number, in bf16");
+    requireStored(f16Stored, 0, 0x3266ULL, "the f16 write-back is the same number, in f16");
+    // The other elements are exact in both types: 0.5 and 3.0, so only the first element is a reading.
+    requireStored(bf16Stored, 1, 0x3F00ULL, "bf16 0.5");
+    requireStored(bf16Stored, 2, 0x4040ULL, "bf16 3.0");
+    // The written bits are printed from the run itself, so the line a reader sees cannot disagree
+    // with the value the executor stored: the assertion above already proved they are the hand ones.
+    const auto written = [](const kernel::ScalarValue &value) {
+        std::ostringstream out;
+        out << "0x" << std::hex << std::uppercase << std::setw(4) << std::setfill('0') << value.bits;
+        return out.str();
+    };
+    std::cout << "tiles narrow serial: f32 intermediate 0.2001953125 with a bf16 element and "
+                 "0.199951171875 with an f16 element, bf16 wrote "
+              << written(bf16Stored.at(0)) << " 0.2001953125, f16 wrote " << written(f16Stored.at(0))
+              << " 0.199951171875\n";
+    // The same elements squared, where the store really rounds: 0.0100193... is nearer to bf16
+    // 0x3C24 than to its neighbours, and 0.00999511... is nearer to f16 0x211E, one rounding each.
+    const auto bf16Squared = serialStores(narrowProduct(DType::BF16, DType::BF16, true));
+    const auto f16Squared  = serialStores(narrowProduct(DType::F16, DType::F16, true));
+    requireStored(bf16Squared, 0, 0x3C24ULL, "0.0100193 rounded once into bf16 is 0.010009765625");
+    requireStored(f16Squared, 0, 0x211EULL, "0.00999511 rounded once into f16 is 0.0099945068359375");
+    std::cout << "tiles narrow serial: a store that rounds writes bf16 " << written(bf16Squared.at(0))
+              << " 0.010009765625 and f16 " << written(f16Squared.at(0))
+              << " 0.0099945068359375, one nearest-even rounding each\n";
+    // An f64 reaches a narrow element only through a reduction, and that single rounding from f64 is
+    // not written yet: the conversion refuses it rather than rounding twice through an f32.
+    bool refusedDouble = false;
+    try {
+        (void)kernel::ScalarExpr::cast(
+            kernel::ScalarType::F16, kernel::ScalarExpr::literal(kernel::ScalarValue::f64(0.1)));
+    } catch (const std::exception &) {
+        refusedDouble = true;
+    }
+    if (!refusedDouble)
+        throw std::runtime_error("a narrow conversion accepted an f64 operand");
+    // Every register type the layer names, one at a time: an element type the executor cannot hold
+    // must be counted here and refused, not executed at a neighbour's width.
+    size_t refused = 0;
+    for (const auto type : {ScalarType::F32, ScalarType::F64, ScalarType::F16, ScalarType::BF16,
+                            ScalarType::I32, ScalarType::U32, ScalarType::I64}) {
+        const KernelBody body{
+            {{MemorySpace::Global, type, 0, 1, true}},
+            {Store{{0, IndexExpr(0), Predicate(true)}, ScalarExpr::literal({type, 0})}}};
+        std::vector<SerialBuffer> buffers = {{type, std::vector<std::byte>(elementWidth(type))}};
+        try {
+            (void)serialExecute(body, SerialGrid{}, std::move(buffers));
+        } catch (const std::exception &) {
+            ++refused;
+        }
+    }
+    if (refused != 0)
+        throw std::runtime_error(
+            "the serial executor refused " + std::to_string(refused) + " numeric element types");
+    std::cout << "tiles narrow serial: 7 numeric element types, 0 refused\n";
+}
 } // namespace
 
 int main() {
@@ -231,6 +355,7 @@ int main() {
         checkLoopSourceCache();
         checkMultiResultStorage();
         checkCastLikeBoundary();
+        checkNarrowSerialRun();
         using kernel::ScalarExpr;
         using kernel::ScalarValue;
         using kernel::ScalarOp;

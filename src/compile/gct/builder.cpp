@@ -26,6 +26,7 @@
 #include "camel/utils/scope.h"
 #include "camel/utils/token.h"
 #include "camel/utils/type.h"
+#include <stdexcept>
 
 #define DEBUG_LEVEL -1
 
@@ -432,7 +433,7 @@ static void reportLiteralCastFailure(
 node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     ENTER("Module");
     // The root of a file, and the module the file is; the file's name is its name.
-    ASSERT(ast->type() == AST::LoadType::Module, "Expected the module load at the root");
+    GUARD(ast->type() == AST::LoadType::Module, "Expected the module load at the root");
     // Extract different parts of the module node
     auto importNodes   = ast->atAs<AST::RepeatedLoad>(0);
     auto exportOptNode = ast->atAs<AST::OptionalLoad>(1);
@@ -768,7 +769,7 @@ ImportDecl(string path, Ref[] refs, Ref as) ;
 void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
     ENTER("ImportDecl");
     // Ensure the AST node is of the expected type
-    ASSERT(ast->type() == AST::LoadType::Import, "Expected ImportLoad type");
+    GUARD(ast->type() == AST::LoadType::Import, "Expected ImportLoad type");
 
     // Extract the import load details
     const auto &load     = ast->loadAs<AST::ImportLoad>();
@@ -925,7 +926,7 @@ ExportDecl(Ref[] refs) ;
 node_ptr_t Builder::visitExport(const AST::node_ptr_t &ast) {
     ENTER("ExportDecl");
     // Ensure the AST node is of the expected type
-    ASSERT(ast->type() == AST::LoadType::Export, "Expected ExportLoad type");
+    GUARD(ast->type() == AST::LoadType::Export, "Expected ExportLoad type");
 
     // Extract the export load details
     const auto &load = ast->loadAs<AST::ExportLoad>();
@@ -940,7 +941,7 @@ node_ptr_t Builder::visitExport(const AST::node_ptr_t &ast) {
 
 node_ptr_t Builder::visitStmt(const AST::node_ptr_t &ast) {
     ENTER("Stmt");
-    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type");
+    GUARD(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type");
     const auto &stmt    = ast->loadAs<AST::StmtLoad>();
     node_ptr_t stmtNode = nullptr;
 
@@ -1018,7 +1019,7 @@ DataDecl(bool isVar, Ref[] refs) : Type* type, Data* value;
 node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
     ENTER("DataDecl");
     // Ensure the provided AST node is of type Stmt
-    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for DataDecl");
+    GUARD(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for DataDecl");
 
     // Extract data declaration details, including whether it's a variable, references, type nodes,
     // and data nodes
@@ -1090,7 +1091,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
             }
 
             // Ensure the data node is of type Data
-            ASSERT(
+            GUARD(
                 dataASTNode->type() == AST::LoadType::Data,
                 "A declaration requires Data type nodes");
             // Create a reference node and link the data node to it. A value of a
@@ -1620,8 +1621,8 @@ void Builder::attachTagUses(const GCT::node_ptr_t &gct, const AST::node_ptr_t &a
 
 node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
     ENTER("FuncDecl");
-    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for FuncDecl");
-    ASSERT(ast->size() >= 1, "FuncDecl AST should have at least one child.");
+    GUARD(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for FuncDecl");
+    GUARD(ast->size() >= 1, "FuncDecl AST should have at least one child.");
 
     const auto &funcDataNode = ast->atAs<AST::FuncDataLoad>(ast->size() - 1);
     const auto &declLoad     = ast->loadAs<AST::FuncDeclLoad>();
@@ -1658,7 +1659,7 @@ node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
             continue;
         }
         for (const auto &annoAst : *child) {
-            ASSERT(annoAst->type() == AST::LoadType::Data, "FuncAnno should lower to AST Data.");
+            GUARD(annoAst->type() == AST::LoadType::Data, "FuncAnno should lower to AST Data.");
             node_ptr_t annoExprNode = visitData(annoAst);
             node_ptr_t annoNode     = tree_->makeAnno();
             *annoNode << annoExprNode;
@@ -1722,7 +1723,7 @@ void findTypeMention(
 
 node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
     ENTER("TypeDecl");
-    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for TypeDecl");
+    GUARD(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for TypeDecl");
     const auto &typeNode = ast->optAtAs<AST::TypeLoad>(0);
     Type *type;
     const auto &typeLoad = ast->loadAs<AST::TypeDeclLoad>();
@@ -2076,7 +2077,7 @@ Type *Builder::declareStructType(const AST::node_ptr_t &ast, const AST::TypeDecl
 std::vector<EnumVariant>
 Builder::buildEnumVariants(const AST::node_ptr_t &ast, const EnumType *instance) {
     const auto enumLoad = ast->loadAs<AST::EnumTypeLoad>();
-    ASSERT(
+    GUARD(
         enumLoad->variants().size() == ast->size(),
         "Every variant of an enum has one node with its field types");
     std::vector<EnumVariant> variants;
@@ -2124,7 +2125,7 @@ UsingNamespace(Ref ref) ;
 */
 node_ptr_t Builder::visitUsingNamespaceDecl(const AST::node_ptr_t &ast) {
     ENTER("UsingNamespaceDecl");
-    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for UsingNamespace");
+    GUARD(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for UsingNamespace");
     const auto &load = ast->loadAs<AST::UsingNamespaceLoad>();
     // It applies to the block it is written in (visitStmtBlock, visitModule), and what it
     // names is found where a name is used (design principles 10.2); here it is only checked.
@@ -2143,7 +2144,7 @@ ExprStmt() : Data data ;
 */
 node_ptr_t Builder::visitExprStmt(const AST::node_ptr_t &ast) {
     ENTER("ExprStmt");
-    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for ExprStmt");
+    GUARD(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for ExprStmt");
     node_ptr_t exprNode = visitData(ast->atAs<AST::DataLoad>(0));
     LEAVE("ExprStmt");
     return exprNode;
@@ -2155,7 +2156,7 @@ ExitStmt(ExitType type) : Data* data ;
 node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     ENTER("ExitStmt");
     // Ensure the AST node is of the expected type (Stmt)
-    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for ExitStmt");
+    GUARD(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for ExitStmt");
 
     // Create an ExitLoad node to represent the exit statement.
     const AST::ExitType astExit = ast->loadAs<AST::ExitStmtLoad>()->exitType();
@@ -2262,7 +2263,7 @@ node_ptr_t Builder::visitDecoratedBlock(const AST::node_ptr_t &ast) {
     funcNode->setDecoratedBlock();
     *funcNode << typeNode << execNode;
     for (const auto &annoAst : *ast->atAs<AST::RepeatedLoad>(1)) {
-        ASSERT(annoAst->type() == AST::LoadType::Data, "A decorator should lower to AST Data.");
+        GUARD(annoAst->type() == AST::LoadType::Data, "A decorator should lower to AST Data.");
         node_ptr_t annoNode = tree_->makeAnno();
         *annoNode << visitData(annoAst);
         *funcNode << annoNode;
@@ -2279,7 +2280,7 @@ node_ptr_t Builder::visitDecoratedBlock(const AST::node_ptr_t &ast) {
 node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast, bool decorators) {
     ENTER("StmtBlock");
     // Ensure the AST node is of the expected type (Stmt)
-    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for StmtBlock");
+    GUARD(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for StmtBlock");
     // The block's children after the statement list are its decorators (`FuncAnno`) and the
     // tags written before it (`#tag { ... }`); only a decorator list makes it decorated.
     const bool decorated = decorators && ast->size() > 1 &&
@@ -2331,7 +2332,7 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast, bool decorators) 
     }
     for (const auto &stmt : *stmts) {
         // Ensure each item in the block is a statement
-        ASSERT(stmt->type() == AST::LoadType::Stmt, "Expected a statement in StmtBlock");
+        GUARD(stmt->type() == AST::LoadType::Stmt, "Expected a statement in StmtBlock");
         const bool stmtUnused = blockUnused || stmt.get() != last;
         const auto stmtType   = stmt->loadAs<AST::StmtLoad>()->stmtType();
         valueUse_.unusedCtrl  = nullptr;
@@ -2373,7 +2374,7 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast, bool decorators) 
 
 node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
     ENTER("Data");
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for visitData");
+    GUARD(ast->type() == AST::LoadType::Data, "Expected DataLoad type for visitData");
     const auto &data    = ast->loadAs<AST::DataLoad>();
     node_ptr_t dataNode = nullptr;
 
@@ -2466,7 +2467,7 @@ UnaryExpr(UnaryDataOp op) := Data data ;
 node_ptr_t Builder::visitUnaryExpr(const AST::node_ptr_t &ast) {
     ENTER("UnaryExpr");
     // Ensure the AST node is of the expected type (Data)
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for UnaryExpr");
+    GUARD(ast->type() == AST::LoadType::Data, "Expected DataLoad type for UnaryExpr");
 
     // Extract the unary expression load and the associated data node
     const auto &unaryExpr   = ast->loadAs<AST::UnaryExprLoad>();
@@ -2487,7 +2488,7 @@ node_ptr_t Builder::visitUnaryExpr(const AST::node_ptr_t &ast) {
     } break;
     default:
         // If the operator is unknown, assert and return nullptr
-        ASSERT(false, "Unknown unary operation");
+        throw std::runtime_error("Unknown unary operation");
         return nullptr;
     }
     auto unaryAstBundle = astSemantic(context_, ast);
@@ -2558,7 +2559,7 @@ BinaryExpr(BinaryDataOp op) := Data lhs, Data rhs ;
 node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     ENTER("BinaryExpr");
     // Ensure the AST node is of the expected type (Data)
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for BinaryExpr");
+    GUARD(ast->type() == AST::LoadType::Data, "Expected DataLoad type for BinaryExpr");
 
     // Extract the binary expression load and the left-hand side (LHS) AST node
     const auto &binaryExpr = ast->loadAs<AST::BinaryExprLoad>();
@@ -2742,13 +2743,13 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     } break;
     case AST::BinaryDataOp::Index:
         // A subscript is built above, one node per dimension it writes (design principles 5.4).
-        ASSERT(false, "A subscript reached the ordinary binary operands");
+        throw std::runtime_error("A subscript reached the ordinary binary operands");
         return nullptr;
     default: {
         // Every other operator is a call of the group the table of operator_names.cpp gives
         // its symbol: plain, compound assignment and `=` alike.
         const auto group = camel::core::binaryOperatorGroup(AST::to_string(binaryExpr->op()));
-        ASSERT(group.has_value(), "Unknown binary operation");
+        GUARD(group.has_value(), "Unknown binary operation");
         if (!group)
             return nullptr;
         opNode = tree_->makeDRef(std::string(*group));
@@ -2857,7 +2858,7 @@ ReservedExpr(ReservedDataOp op) := Data lhs, Any? rhs ;
 node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     ENTER("ReservedExpr");
     // Ensure the AST node is of the expected type (Data)
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ReservedExpr");
+    GUARD(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ReservedExpr");
 
     node_ptr_t res           = nullptr;
     const auto &reservedExpr = ast->loadAs<AST::ReservedExprLoad>();
@@ -3254,7 +3255,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     } break;
 
     default:
-        ASSERT(false, "Unknown reserved operation");
+        throw std::runtime_error("Unknown reserved operation");
         res = nullptr;
     }
 
@@ -3267,7 +3268,7 @@ IfExpr() : Data cond, StmtBlock then, StmtBlock? else ;
 node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
     ENTER("IfExpr");
     // Ensure the AST node is of the expected type (Data)
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for IfExpr");
+    GUARD(ast->type() == AST::LoadType::Data, "Expected DataLoad type for IfExpr");
 
     // Create a branch node to represent the conditional expression
     node_ptr_t brchNode = tree_->makeBrch();
@@ -3422,7 +3423,7 @@ node_ptr_t Builder::visitLoopExpr(const AST::node_ptr_t &ast) {
 node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
     ENTER("MatchExpr");
     // Ensure the AST node is of the expected type (Data)
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for MatchExpr");
+    GUARD(ast->type() == AST::LoadType::Data, "Expected DataLoad type for MatchExpr");
 
     // The subject is any expression, evaluated once before the cases; a name among them is
     // read here, once, and the arms read the value through the branch.
@@ -3553,7 +3554,7 @@ matchTypeExpr
 */
 node_ptr_t Builder::visitMatchType(const AST::node_ptr_t &ast) {
     ENTER("MatchType");
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for MatchType");
+    GUARD(ast->type() == AST::LoadType::Data, "Expected DataLoad type for MatchType");
     node_ptr_t matchNode = tree_->makeTypeMatch();
     setOriginFromAst(
         context_,
@@ -3670,7 +3671,7 @@ shape is known (`checkStaticHeadNames`): `fields` gives the triple (name, type, 
 */
 node_ptr_t Builder::visitStaticFor(const AST::node_ptr_t &ast) {
     ENTER("StaticFor");
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StaticFor");
+    GUARD(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StaticFor");
     const auto &load = ast->loadAs<AST::StaticForLoad>();
     checkStaticHeadNames(
         ast,
@@ -3732,7 +3733,7 @@ tags) for `fields`, one thing for everything else.
 */
 node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
     ENTER("StaticLoop");
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StaticLoop");
+    GUARD(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StaticLoop");
     const auto &load = ast->loadAs<AST::StaticLoopLoad>();
     // `fields T` is the only head that names a type (`F`): `indices ts` and a written sequence
     // bind one name, the entry itself.
@@ -3807,7 +3808,7 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
 
 node_ptr_t Builder::visitStaticAccess(const AST::node_ptr_t &ast) {
     ENTER("StaticAccess");
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StaticAccess");
+    GUARD(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StaticAccess");
     node_ptr_t accessNode = tree_->makeStaticAccess();
     setOriginFromAst(
         context_,
@@ -3837,7 +3838,7 @@ node_ptr_t Builder::visitStaticComprehension(const AST::node_ptr_t &ast, bool is
         ast,
         camel::source::OriginKind::GctNode,
         "gct.static.comprehension");
-    ASSERT(ast->size() == 1, "A static comprehension has its generator as its only child.");
+    GUARD(ast->size() == 1, "A static comprehension has its generator as its only child.");
     *compNode << visitStaticFor(ast->at(0));
     LEAVE("StaticComprehension");
     return compNode;
@@ -3845,7 +3846,7 @@ node_ptr_t Builder::visitStaticComprehension(const AST::node_ptr_t &ast, bool is
 
 node_ptr_t Builder::visitShapeComprehension(const AST::node_ptr_t &ast) {
     ENTER("ShapeComprehension");
-    ASSERT(
+    GUARD(
         ast->size() == 2 && ast->at(0)->type() == AST::LoadType::Type,
         "A shape comprehension has its type first, its generator second.");
     node_ptr_t compNode = tree_->makeShapeComprehension();
@@ -3887,7 +3888,7 @@ enum LiteralType {
 node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
     ENTER("Literal");
     // Ensure the AST node is of the expected type (Data)
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for Literal");
+    GUARD(ast->type() == AST::LoadType::Data, "Expected DataLoad type for Literal");
 
     // Extract the literal load and its value
     const auto &literal  = ast->loadAs<AST::LiteralLoad>();
@@ -3930,7 +3931,7 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         // `'...'->format<...>` tree (design principles 11.5; AST Builder::visitFStringData),
         // and a pattern refuses one instead of producing a formatted-string literal. There is
         // therefore no source text that can put a FString literal in the GCT.
-        ASSERT(
+        GUARD(
             false,
             "A formatted-string literal reached the GCT: the AST builder no longer lowers "
             "every formatted string to a format call.");
@@ -4027,7 +4028,7 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         data = Data::null();
     } break;
     default: {
-        ASSERT(false, "Unknown literal type");
+        throw std::runtime_error("Unknown literal type");
         throw BuildAbortException();
     }
     }
@@ -4091,7 +4092,7 @@ static Tree::LiteralElement writtenElement(const node_ptr_t &node) {
 
 node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     ENTER("ArrayData");
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ArrayData");
+    GUARD(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ArrayData");
     if (ast->size() > 1) {
         node_ptr_t res = visitComprehension(ast);
         LEAVE("ArrayData");
@@ -4999,7 +5000,7 @@ node_ptr_t Builder::visitStructInto(const AST::node_ptr_t &ast, Type *structType
                 break;
             }
         }
-        ASSERT(written != nullptr, "A struct literal field was checked to exist by name.");
+        GUARD(written != nullptr, "A struct literal field was checked to exist by name.");
         Type *fieldType      = sType->typeAt(i);
         const auto &valueAst = (*written)->atAs<AST::DataLoad>(0);
         bool nested          = false;
@@ -5076,7 +5077,7 @@ StructData() : NamedData* dataList ;
 node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
     ENTER("StructData");
     // Ensure the AST node is of the expected type (Data)
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StructData");
+    GUARD(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StructData");
 
     StructDataFactory factory;
     bool dangling       = false;
@@ -5134,7 +5135,7 @@ TupleData() : Data* data ;
 node_ptr_t Builder::visitTupleData(const AST::node_ptr_t &ast) {
     ENTER("TupleData");
     // Ensure the AST node is of the expected type (Data)
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for TupleData");
+    GUARD(ast->type() == AST::LoadType::Data, "Expected DataLoad type for TupleData");
 
     TupleDataFactory factory;
     bool dangling       = false;
@@ -5175,7 +5176,7 @@ stands for are decided when the call is instantiated.
 */
 node_ptr_t Builder::visitSpreadArg(const AST::node_ptr_t &ast) {
     ENTER("SpreadArg");
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for SpreadArg");
+    GUARD(ast->type() == AST::LoadType::Data, "Expected DataLoad type for SpreadArg");
     node_ptr_t operand    = visitData(ast->atAs<AST::DataLoad>(0));
     node_ptr_t spreadNode = tree_->makeSpreadArg();
     *spreadNode << operand;
@@ -5200,7 +5201,7 @@ FuncData(Ref ref) : FuncType funcType, StmtBlock body ;
 */
 node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     ENTER("FuncData");
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for FuncData");
+    GUARD(ast->type() == AST::LoadType::Data, "Expected DataLoad type for FuncData");
     const auto &funcData = ast->loadAs<AST::FuncDataLoad>();
     // The type variables a declaration binds are in scope in the rest of its signature and in
     // its body, and nowhere else.
@@ -6472,7 +6473,7 @@ RefData(Ref ref) ;
 */
 node_ptr_t Builder::visitRefData(const AST::node_ptr_t &ast) {
     ENTER("RefData");
-    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for RefData");
+    GUARD(ast->type() == AST::LoadType::Data, "Expected DataLoad type for RefData");
     const auto &refData = ast->loadAs<AST::RefDataLoad>();
     node_ptr_t refNode  = tree_->makeDRef(refData->ref());
     LEAVE("RefData");
@@ -6490,7 +6491,7 @@ principles 5.9).
 Type *Builder::visitType(const AST::node_ptr_t &ast) {
     ENTER("Type");
     // Ensure the AST node is of the expected type (Type)
-    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for visitType");
+    GUARD(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for visitType");
 
     // Extract the type load from the AST node
     const auto &type = ast->loadAs<AST::TypeLoad>();
@@ -6583,7 +6584,7 @@ StreamType : Type type ;
 */
 Type *Builder::visitStreamType(const AST::node_ptr_t &ast) {
     ENTER("StreamType");
-    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for StreamType");
+    GUARD(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for StreamType");
     Type *elemType = visitType(ast->atAs<AST::TypeLoad>(0));
     LEAVE("StreamType");
     return StreamType::create(elemType);
@@ -6594,7 +6595,7 @@ NullableType : Type type ;
 */
 Type *Builder::visitNullableType(const AST::node_ptr_t &ast) {
     ENTER("NullableType");
-    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for NullableType");
+    GUARD(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for NullableType");
     Type *payload       = visitType(ast->atAs<AST::TypeLoad>(0));
     const bool fallible = ast->loadAs<AST::NullableTypeLoad>()->fallible();
     // The same mark twice (`T??`, `T!!`) adds nothing a program could tell apart; `T?!` and
@@ -6622,7 +6623,7 @@ first and `typeof` is the only operation a `TypeExpr` carries.
 Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     ENTER("TypeExpr");
     // Ensure the AST node is of the expected type (Type)
-    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for TypeExpr");
+    GUARD(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for TypeExpr");
 
     Type *res;
     const auto &typeExpr = ast->loadAs<AST::TypeExprLoad>();
@@ -6634,7 +6635,7 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
         // node; the graph builder builds it where this type is used and replaces the
         // placeholder by its type. The node is not attached to a parent: it is reachable from
         // the type and is visited per instance.
-        ASSERT(ast->size() == 1, "typeof has its expression as its only child.");
+        GUARD(ast->size() == 1, "typeof has its expression as its only child.");
         node_ptr_t expression = visitData(ast->at(0));
         res                   = TypeOfType::create(expression);
     } break;
@@ -6645,7 +6646,7 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
         // computes (`..ParamsOf<F>`, a pack written out); what the body may not do is name two
         // different head packs, since then nothing says which one it ranges over. Anything else
         // that leaves the expansion without members is reported where a call would bind it.
-        ASSERT(ast->size() == 1, "A pack expansion has its type as its only child.");
+        GUARD(ast->size() == 1, "A pack expansion has its type as its only child.");
         Type *body = visitType(ast->at(0));
         if (body == nullptr) {
             res = Type::Void();
@@ -6691,7 +6692,7 @@ is one dimension of three. The pack makes the rank open after the extents writte
 */
 Type *Builder::visitArrayType(const AST::node_ptr_t &ast) {
     ENTER("ArrayType");
-    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for ArrayType");
+    GUARD(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for ArrayType");
     const auto &arrayTypeLoad = ast->loadAs<AST::ArrayTypeLoad>();
     Type *type                = visitType(ast->atAs<AST::TypeLoad>(0));
     for (const AST::DimGroup &group : arrayTypeLoad->dims()) {
@@ -6742,7 +6743,7 @@ StructType() : NamedType* types ;
 Type *Builder::visitStructType(const AST::node_ptr_t &ast) {
     ENTER("StructType");
     // Ensure the AST node is of the expected type (Type)
-    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for StructType");
+    GUARD(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for StructType");
 
     StructTypeFactory factory;
     // The fields of the struct a type declaration writes are its own: a tag written on one of
@@ -6779,7 +6780,7 @@ TupleType() : Type* types ;
 Type *Builder::visitTupleType(const AST::node_ptr_t &ast) {
     ENTER("TupleType");
     // Ensure the AST node is of the expected type (Type)
-    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for TupleType");
+    GUARD(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for TupleType");
 
     // Create a vector to store the types of the tuple elements
     vector<Type *> types;
@@ -6805,7 +6806,7 @@ is, and fills the value into each call that leaves the parameter out (design pri
 Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults *defaultsOut) {
     ENTER("FuncType");
     // Ensure the AST node is of the expected type (Type)
-    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for FuncType");
+    GUARD(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for FuncType");
 
     // Extract the function type load from the AST node
     auto const &typeLoad = ast->loadAs<AST::FuncTypeLoad>();
@@ -7000,7 +7001,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             // A `constas` parameter of the `with` list is a value a call gives in angle brackets
             // (design principles 5.4); it writes its type and may default.
             if (!signature) {
-                ASSERT(false, "A constas parameter outside a function declaration.");
+                throw std::runtime_error("A constas parameter outside a function declaration.");
                 throw BuildAbortException();
             }
             if (paramPair->size() == 0) {
@@ -7070,7 +7071,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
                 // The parser admits `constas` only in a declaration's own parameter list
                 // (`parseParentParams(true, true)`, the single call site in parser.cpp), so this
                 // is a compiler bug rather than anything a program can write.
-                ASSERT(false, "A constas parameter outside a function declaration.");
+                throw std::runtime_error("A constas parameter outside a function declaration.");
                 throw BuildAbortException();
             }
             if (paramPair->size() == 0) {
@@ -7099,7 +7100,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             if (open && !signature) {
                 // The parser admits `..` in a declaration's parameter list and in a function
                 // type (`(..A) => R`), never in a lambda's.
-                ASSERT(false, "A rest parameter in a lambda.");
+                throw std::runtime_error("A rest parameter in a lambda.");
                 throw BuildAbortException();
             }
             if (pi + 1 != normParams.size()) {
@@ -7308,8 +7309,8 @@ SpecType : Type base, RepeatedLoad typeOrData ;
 */
 Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
     ENTER("SpecType");
-    ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for SpecType");
-    ASSERT(ast->size() >= 1, "SpecType must have base type");
+    GUARD(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for SpecType");
+    GUARD(ast->size() >= 1, "SpecType must have base type");
     typeFunctionBase_ = ast->size() >= 2;
     Type *base        = visitType(ast->atAs<AST::TypeLoad>(0));
     if (ast->size() < 2) {
@@ -7717,7 +7718,7 @@ RefType(Ref ref) ;
 Type *Builder::visitRefType(const AST::node_ptr_t &ast) {
     ENTER("RefType");
     // Ensure the AST node is of the expected type (Type)
-    ASSERT(ast->load()->type() == AST::LoadType::Type, "Expected TypeLoad type for RefType");
+    GUARD(ast->load()->type() == AST::LoadType::Type, "Expected TypeLoad type for RefType");
 
     // Extract the reference type load from the AST node
     auto const &typeLoad = ast->loadAs<AST::RefTypeLoad>();

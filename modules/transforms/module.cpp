@@ -24,10 +24,12 @@
 #include "module.h"
 
 #include "jvp.h"
+#include "jvp_operator.h"
 
 #include "camel/compile/gir/rule_templates.h"
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/execute/executor.h"
 #include "camel/runtime/draft.h"
 #include "camel/execute/pass/opt.h"
 #include "camel/execute/pass/params.h"
@@ -276,7 +278,22 @@ class ReinterpPass : public RuntimeGraphRewritePass {
 
 } // namespace
 
-TransformsModule::TransformsModule(context_ptr_t ctx) : BuiltinModule("transforms", ctx) {}
+/// The executors this module's operators run on: `jvp` is the only one, and its kernel builds the
+/// transform's graph when the call runs (jvp_operator.cpp).
+class TransformsExecutor : public Executor {
+  public:
+    explicit TransformsExecutor(context_ptr_t ctx)
+        : Executor(std::move(ctx), camel::transforms::operatorKernels()) {}
+};
+
+TransformsModule::TransformsModule(context_ptr_t ctx) : BuiltinModule("transforms", ctx) {
+    // `jvp` is one of the module's operators, beside the pass: `reinterp<jvp>(f)` is a value-level
+    // transform (jvp.h), so it is reached as a call and not as a pass.
+    camel::transforms::registerOperatorMetadata();
+    for (const auto &group : camel::transforms::operatorGroups()) {
+        exportEntity(group->name(), group);
+    }
+}
 
 module_ptr_t TransformsModule::create(context_ptr_t ctx) {
     return std::make_shared<TransformsModule>(ctx);
@@ -292,6 +309,9 @@ bool TransformsModule::load() {
         return std::make_unique<ReinterpPass>(ctx);
     };
     registerModulePass("transforms::reinterp", std::move(descriptor));
+    context_->registerExecutorFactory("transforms", [ctx = context_]() -> executor_ptr_t {
+        return std::make_shared<TransformsExecutor>(ctx);
+    });
     loaded_ = true;
     return true;
 }

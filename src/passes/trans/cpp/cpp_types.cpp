@@ -1100,6 +1100,16 @@ std::optional<std::string> ProgramValues::constant(slot_t slot, const Type *t) {
                     "{}::shaped({{{}}}, {{{}}})", *cpp, *items, std::to_string(array->dim(0))),
                 "array");
         }
+        if (rank == 0 && array != nullptr && array->numel() == 1 &&
+            static_cast<const ArrayType *>(t)->anyRank()) {
+            // A value of no dimensions: the empty shape is written, so the block records it and the
+            // value prints as its element (`rt::Array::zeroDimensional`, format.h), the way the
+            // interpreter's zero-dimensional value does. `f32[..]` is the type that admits one (a
+            // field filled from a literal); a one-dimensional type of one element is still a run,
+            // which the branch above keeps in brackets. Written as the call the one-dimensional
+            // branch writes: a braced pair would read `{}` as one more element.
+            return hoist(*cpp, std::format("{}::shaped({{{}}}, {{}})", *cpp, *items), "array");
+        }
         if (rank >= 2) {
             // The shape travels with the elements (rt::Array's block holds both): the rows of the
             // literal are what `appendText` prints, and `len` answers the first extent.

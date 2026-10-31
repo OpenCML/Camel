@@ -1,0 +1,17 @@
+// The forward transform as a function value: `jvp(f)` is a call like any other, and it gives a
+// function whose parameters are the values and their tangents and whose result is the pair
+// `(value, tangent)`. `f(x) = x*x + 3/x` has f(2) = 5.5 and f'(2) = 3.25. The value this program
+// prints is 5.5, computed by the graph the transform copied; the tangent it prints is the one the
+// caller passed (1.0), because the rules have not been closed over yet -- the reading says so.
+import { jvp } from transforms
+
+func f(x: float): float {
+    return x * x + 3.0 / x
+}
+
+func main(): int sync {
+    let (value, tangent) = jvp(f)(2.0, 1.0)
+    println(value)
+    println(tangent)
+    return 0
+}

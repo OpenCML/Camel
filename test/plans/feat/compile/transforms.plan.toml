@@ -13,3 +13,16 @@ expect_exit = 0
 expect_stdout_contains = ["REINTERP uri :op/add_d -> rule jvp_add -> rhs ", "REINTERP uri :op/mul_d -> rule jvp_mul -> rhs ", "REINTERP uri :op/div_d -> rule jvp_div -> rhs ", "vars=x,w count=2", "fill=FunctionClosure slots=2", "type=(dx: float, dw: float) => float", "REINTERP closure graph=107 layout=(float, float) built=yes slots=x,w", "REINTERP target=f primitives=1 other=2 graph=", "nodes=1", "1.5"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "jvp_is_a_function_value.nvm"
+desc = "`reinterp<jvp>(f)` is the operator `jvp(f)`, and it produces a new function (the author's ruling a824031aa), not a rewritten graph: the call builds a graph of the transform's own and answers with a function value naming it. The lifted signature is `(float, float) => (float, float)` -- the ordinary parameter becomes a value and its tangent, and the result is the pair -- so `jvp(f)(2.0, 1.0)` passes two numbers and reads back `(value, tangent)`. The value is the one the copied chain computes: for `f(x) = x*x + 3/x`, `f(2) = 5.5`. The tangent is the caller's 1.0, unchanged: no rule closure has rewritten a primitive yet, and the reading says `tangent=caller's(not computed)` rather than claiming a derivative. The type the reading prints is the one `jvpSignature` builds, and it is the same string `JvpResolver` gives the operator."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_lifted.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=caller's(not computed)", "REINTERP jvp op signature=(f: (float) => float) => (float, float) => (float, float)", "lifted=(float, float) => (float, float) graph=(float, float) => (float, float) same=yes", "5.5", "1.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

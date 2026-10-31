@@ -97,3 +97,51 @@ std::fvm : 2.5           std::cpp : [2.5]
 （`include/camel/standalone/array.h`），因为那里的 `rank == 0` 表示"没写形状"，于是同一个值被
 当成一维的一个元素，印成 `[1.5]`。要修先得定语义：**rank 0 是"没有维度"，还是"没有写维度"**。
 这是给作者的问题，已在本页记着，等裁定。
+
+## 四个格子：`does not build` 是缺陷，不是拒绝
+
+**判据（一句话）**：**编译不过不是"拒绝"，是缺陷；把缺陷算进拒绝里，就是让尺子替翻译器开脱。**
+
+**尺子的第二读法**：`test/tools/cppexec/census.sh` 现在一次读四个格子，语料是
+`test/cases benchmarks examples exemplars`（`run.py` 判定，脚本只数格子）：
+
+| 格子 | 是什么 |
+| --- | --- |
+| `same` | 译了、编了、跑了，输出与退出码都和 `std::fvm` 一致 |
+| `refused` | `std::cpp` 拒绝（`TranslationRefused`） |
+| `differs` | 译了、编了、跑了，输出与 `std::fvm` 不一致 |
+| `does not build` | **C++ 编译器**拒绝了 `std::cpp` 写出来的程序 |
+
+`defect = differs + does not build`，报在 `refused` 之前；`does not build` 的每一条都印编译器
+自己的第一行，连同它指的那行程序文本。
+
+**读数（3323 个程序）**：
+
+| | 条数 |
+| --- | ---: |
+| `same` | 1204 |
+| **`defect`（`differs` 0 + `does not build` 7）** | **7** |
+| `refused` | 1003 |
+| 不是程序（`not a program`） | 1100 |
+| 不可比（名单，已从 `differs` 里剔除） | 9 |
+
+**不可比的 9 条**：8 条打印自己量到的时间或当前时间（`linear/nvm/acc.cml`、`linear/nvm/fib.cml`、
+`perf/fib_recursive.cml`、`linear/jit/perf_fib_smoke.cml`、`para/core/monte_carlo_pi.cml`、
+`para/core/unordered_foreach_timing.cml`、`modules/std/time/basic.cml`、`examples/perf/fibs.cml`），
+1 条参考读数本身坏了（`consistency/generic_values/candidate_body_fails.cml`，`std::fvm` 自己以
+`PassInternalError` 停下）。名字与理由在 `census.sh` 的 `not_comparable` 里。
+
+**7 条编不过的程序（编译器原话第一行）**：
+
+| 程序 | 编译器说 |
+| --- | --- |
+| `compile/binding_join/join.cml` | `error: no matching function for call to 'append'` |
+| `compile/native/idx_field_missing.cml` | `error: no viable conversion from 'const S' to 'const Str'` |
+| `effects/callback_write_through_parameter.cml` | `error: no matching function for call to 'apply'` |
+| `effects/value_made_after_a_call_captures_its_version.cml` | `error: no matching function for call to 'run'` |
+| `linear/byref/var_argument_reads_the_nearest_write.cml` | `error: no matching function for call to 'bump'` |
+| `linear/operators/string_plus_assign.cml` | `error: no matching function for call to 'append'` |
+| `opt/defun/widened_own_values.cml` | `error: no matching function for call to 'apply'` |
+
+这 7 条一条也不进 `refused`：**它们是写给 C++ 的那一侧的错**，而 `refused` 是"这个程序我不译"的
+回答。把两者并成一格，读数会好看，缺陷会消失。

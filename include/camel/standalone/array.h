@@ -62,18 +62,18 @@ template <typename T> class Array {
         if (rep_ == nullptr) {
             return;
         }
-        std::size_t product = 1;
-        for (std::size_t extent : shape) {
-            product *= extent;
+        // `setShape` is the one place that decides whether a shape is recorded, and `{}` is the
+        // shape with no dimensions rather than the absence of one: a struct field declared
+        // `f32[..]` filled from a literal is that value.
+        std::size_t extents[kMaxRank];
+        std::size_t rank = 0;
+        for (const std::size_t extent : shape) {
+            if (rank == kMaxRank) {
+                return;
+            }
+            extents[rank++] = extent;
         }
-        if (shape.size() == 0 || shape.size() > kMaxRank || product != items.size()) {
-            return;
-        }
-        rep_->rank = static_cast<std::uint32_t>(shape.size());
-        std::size_t i = 0;
-        for (std::size_t extent : shape) {
-            rep_->extents[i++] = extent;
-        }
+        setShape(extents, rank);
     }
 
     /// The array of `items` with the shape written as the words of `shape`, which the generated
@@ -170,6 +170,12 @@ template <typename T> class Array {
     /// which is what the operators that run over the whole value read.
     static constexpr std::size_t kMaxRank = 8;
     std::size_t rank() const noexcept { return rep_ != nullptr ? rep_->rank : 0; }
+    /// Whether the shape recorded is the one with no dimensions (`setShape` with rank 0): the value
+    /// is the element it holds (design principles 5.4), and prints as that element. A block that
+    /// records no shape at all is a different thing -- `rank() == 0` too, because there is no rank
+    /// to state -- and reads as one dimension of `size()` elements. Rank zero is a fact, not a
+    /// number: the shape is there, and it is zero-dimensional.
+    bool zeroDimensional() const noexcept { return rep_ != nullptr && rep_->zeroDim; }
     std::size_t extent(std::size_t i) const noexcept {
         return rep_ != nullptr && i < rep_->rank ? rep_->extents[i] : 0;
     }
@@ -191,6 +197,7 @@ template <typename T> class Array {
         if (rep_ != nullptr) {
             // The shape is the value's too: a block copied because it was shared keeps it.
             fresh->rank = rep_->rank;
+            fresh->zeroDim = rep_->zeroDim;
             for (std::size_t i = 0; i < rep_->rank; ++i) {
                 fresh->extents[i] = rep_->extents[i];
             }
@@ -222,6 +229,7 @@ template <typename T> class Array {
             rep_->rank          = 1;
             rep_->extents[0]    = rep_->size;
         }
+        rep_->zeroDim = false; // the dimension it just made is not the empty shape
     }
 
     /// Puts `value` at `index`, in place when the block is this array's alone and a copy of it
@@ -268,9 +276,11 @@ template <typename T> class Array {
     }
 
     /// States the shape the builder read from the type (`reshape`): `rank` extents, when they
-    /// multiply to the elements this value holds.
+    /// multiply to the elements this value holds. Rank zero is a shape too -- the one with no
+    /// dimensions -- and it is recorded as such: a value of one element and no dimensions is the
+    /// element, and a block that records nothing is a different thing entirely.
     void setShape(const std::size_t *shape, std::size_t rank) {
-        if (rep_ == nullptr || rank == 0 || rank > kMaxRank) {
+        if (rep_ == nullptr || rank > kMaxRank) {
             return;
         }
         std::size_t product = 1;
@@ -281,6 +291,7 @@ template <typename T> class Array {
             return;
         }
         rep_->rank = static_cast<std::uint32_t>(rank);
+        rep_->zeroDim = rank == 0;
         for (std::size_t i = 0; i < rank; ++i) {
             rep_->extents[i] = shape[i];
         }
@@ -358,9 +369,12 @@ template <typename T> class Array {
         std::size_t references;
         std::size_t size;
         std::size_t capacity;
-        // The shape of the value; a block built by appending says it is one dimension of `size`
-        // elements, and rank 0 is only a value that *is* the element (design principles 5.4).
+        // The shape of a literal of several dimensions; a block built by appending has rank 0
+        // here at the moment it is made and reads as one dimension of `size` elements. `zeroDim`
+        // tells the two apart: the shape with no dimensions (`setShape` with rank 0) against no
+        // shape recorded at all.
         std::uint32_t rank;
+        bool zeroDim;
         std::size_t extents[Array::kMaxRank];
         T *items() noexcept { return reinterpret_cast<T *>(this + 1); }
     };
@@ -374,6 +388,7 @@ template <typename T> class Array {
         rep->size       = 0;
         rep->capacity   = capacity;
         rep->rank       = 0;
+        rep->zeroDim    = false;
         for (std::size_t &extent : rep->extents) {
             extent = 0;
         }
