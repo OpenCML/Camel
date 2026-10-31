@@ -4,6 +4,7 @@
 - 基于：`origin/develop` 的 `357cdcddd`（72 小时冲刺计划，M6 一行），和 `docs/design/program-transforms/README.cn.md` 第 5 节"求导的验收对照三样"。
 - 用途：M6 的验收是"三组组合有数"（T+48）。这一页是"数"的那一半：解析导数与有限差分各算一遍，两条独立的路，谁先到都能对。
 - 判据：**先写期望值，再写实现——反过来的话，期望值就成了实现的复印件。**
+- 判据：**一个断言要证明"数变少了"，先得有那个数——没有计数的地方，"下降"就不是可断言的。**（第 4.1 节是这句话的读数：今天没有那个数。）
 
 ## 1. 两个函数与它们的导数
 
@@ -93,6 +94,24 @@
 | 时间 / 内存 | 只记不追 |
 
 验证方式：同一组期望值跑两遍（加 / 不加 `remat`），逐位比数值；残差数比引擎报的计数。数值这一半可以直接复用第 2 节的表——`remat` 不该让任何一个数变化，所以它不需要自己的期望值。
+
+### 4.1 残差数今天怎么读：**没有这个数**
+
+"残差数比引擎报的计数"这句话的前提是先有那个计数。查过整棵树，今天没有：
+
+| 读法 | 今天的读数 |
+|---|---|
+| `camel test/cases/modules/autodiff/loop_grad_capture_table.cml std::stats` | `GRAPH_STATS {"graphs":3,"nodes":23,"edges":19,"opers":6,"direct_calls":0,"indirect_calls":2,"closures":0,"branches":0,"loops":1,"bytes":848,"specializations":0,"cycle_dropped_sessions":0}`——12 个字段，**没有一个与残差有关**（`loops:1` 只说明图里有一个 `LOOP`） |
+| `std::gir` | 不打印 `collectionCount`（`src/passes/trans/json/gir.cpp` 里没有这个字段），所以连"每轮几个残差"都读不到 |
+| 日志（`-v` 到 `trace`） | `modules/autodiff` 里没有任何日志点，`residual` 在 `src/`、`include/` 里也没有一处被打印 |
+
+残差这件事在引擎里是有的，只是**没有外露成一个数**：它在两处，形状不同——循环的磁带（`include/camel/runtime/loop.h#LoopView::collectionCount`，每个 `LOOP` 一个数，表示每轮收集几个残差）和直线代码的回传捕获（`modules/autodiff/pullback.cpp` 的 `captures_` / `residualTypes`，只在建回传图的那一刻存在）。
+
+**加它要改的那一处**：`modules/autodiff/pullback.cpp` 中建回传图、`captures_` 与 `residualTypes` 都已定下的那一处——这是全树唯一同时知道"哪些值是残差"的地方；图走一遍读不出来，因为走图时残差与普通捕获的值没有区别。所以它不能塞进 `std::stats`（那是图尺寸的读数，不是"这次求导存了几个值"的读数），得由求导自己报一行。
+
+**M1/M3 之后这一处就不需要了**：`split` 的额外输出**按定义**就是残差（`docs/design/program-transforms/README.cn.md` 4.2），所以那时残差数等于 `split` 结果的元数——一个图的读数，`remat` 的"数变少了"可以断言成"`split` 的输出少了几个"。在那之前，"下降"不可断言，只能记。
+
+判据：**一个断言要证明"数变少了"，先得有那个数——没有计数的地方，"下降"就不是可断言的。**
 
 ## 5. 边界
 
