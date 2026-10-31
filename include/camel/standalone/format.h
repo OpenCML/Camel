@@ -95,6 +95,24 @@ void appendShapedText(std::string &out, const Array<T> &xs, std::size_t offset, 
     out += ']';
 }
 
+/// `Bytes[00 01 ff]`: a `Bytes` is an array of bytes and prints as the interpreter's `Bytes` does
+/// (`camel::core::rtdata::BytesObject::print`), the bytes' own hex in order, `Bytes[` and `]`
+/// around them. It is the only value whose element type is a byte -- the language spells a byte
+/// sequence `Bytes`, never `u8[]` -- so the array of bytes has that one reading.
+inline void appendText(std::string &out, const Array<uint8_t> &xs) {
+    constexpr char hex[] = "0123456789abcdef";
+    out += "Bytes[";
+    for (std::size_t i = 0; i < xs.size(); ++i) {
+        if (i > 0) {
+            out += ' ';
+        }
+        const uint8_t byte = xs[i];
+        out += hex[byte >> 4];
+        out += hex[byte & 15];
+    }
+    out += ']';
+}
+
 /// `[a, b, c]`, and `[[1.0, 2.0], [3.0, 4.0]]` for a value that states a shape of several
 /// dimensions.
 ///

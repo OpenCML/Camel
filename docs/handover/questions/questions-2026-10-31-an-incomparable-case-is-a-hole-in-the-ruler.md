@@ -252,3 +252,33 @@ Statement（`numberLess` 的顺序、f64 累加一次的 `sum`、`IEEE 754-2019`
 尺子按这条站住：`not_comparable` 这一轮**没有涨**（仍是 12 条），每一条都写着"为什么两边不可比"
 ——打印自己测的秒数（`block_sort_merge`、`bootstrap_medians`）、打印当前时间（`modules/std/time`）、
 参考实现在 1e8 元素上自己 exit 1（`para/core/merge_sort`）——没有一条是"比不了就划过去"。
+
+### `Bytes` 一族：`46` 条里 `13` 条转 `same`，`33` 条仍拒（原话见下）
+
+**一条判据（进页，一句话）**：最大的一族先修，是因为它的每一条都在同一个机制上——修一族比修十条散件便宜。
+
+`Bytes` 在解释器里是一个**值**：一块二进制、长度和字节（`camel/core/rtdata/bytes.h`，小值内联在值里、大值在数据块里、可被外部块收养），
+不可变，拷贝一次引用。写的人原来拒它的原话是
+`function 'main' uses a value of type 'Bytes'; std::cpp translates numbers (real and complex), bool, string, enums, arrays, tuples, structs, T?, T!, functions and var variables of these, and void`
+——拒绝点在 `src/passes/trans/cpp/cpp_types.cpp` 的 `ProgramValues::type`：`Bytes` 是运行时注册的 `OtherType`，
+落到 `default` 就返回"没有"。
+
+表示只走一条：`Bytes` 就是**字节的 `rt::Array`**（`rt::Array<uint8_t>`，秩一、extent 是长度），不引入第三套类型；
+它的文本也是 `rt::Array<uint8_t>` 的那一份，写成解释器的 `Bytes[00 01 ff]`（`format.h` 的重载，
+`Bytes` 是语言里唯一的字节序列，`u8[]` 不存在，所以这一个数组类型只有这一种读法）。于是模块的四个核
+（`bytes:encode` / `decode` / `from_array` / `to_array`）、核心的三个字节算子
+（`len`、`a + b`、`==`/`!=`）和两个交叉（`array:to_bytes`、`tensor:to_bytes` 在秩一的数组上）都成了
+同一个类型上的语句：字节、0..255 的值、元素自己的字节（小端、行主序），以及**不是故障的解码错误**
+（`EncodingError`，消息带第几个字节不是 UTF-8）——都是解释器的原话。
+
+尺子上的读数：`same` **1246 → 1259**，`refused` **971 → 958**，`defect` **0**，`not_comparable` 仍是 **12**（这一笔没涨）。
+
+46 条的去向：**13 条 `same`**（`bytes_invalid_utf8`、`struct_predicates`、`tensor/binary_bytes`、
+六个 `reduced_*`、`array_kernels/layout`、`array_reduction_kernels`、`array_sum_rounding`、
+`bytes_fault_from_array`），逐字节读回三条，全部 `BYTE-IDENTICAL`。
+剩下 33 条的原话按族归：`fs:write_bytes`/`read_bytes`/`read_chunk`/`file_size` 6 条（文件系统是一个模块的能力）、
+`hash:sha256_bytes` 3 条、`tensor:from_bytes_*` 6 条（要一个形状，属于形状数组那一类）、
+`tensor:to_bytes` 在 `P[]` 上 2 条（结构体的布局字节）、`:op/atof`/`atobf`/`atof6` 在开秩上 5 条、
+`str:codepoints`/`str:find` 2 条、`ckpt:load_tree` 1 条、`tensor:multiply` 2 条、`rand:*_array` 3 条、
+`:op/slice_bytes` 2 条（切片的越界报告写的是"a Bytes"，数组切片的是"an array"——照抄不了就不动它，
+留着拒并写明）。
