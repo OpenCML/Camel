@@ -1,0 +1,16 @@
+// A function that gives a value where a `void` function type is wanted: the function value is
+// made at the position's type and the result is dropped there (design principles 3.9), which is
+// what the interpreter does. The generated code used to spell the closure's own type
+// (`(x: int) => int`), and the C++ compiler rejected the call.
+//
+// Run: camel test/cases/trans/cpp/fn_result_dropped.cml std::cpp
+
+func apply(f: (x: int) => void) sync {
+    f(3)
+}
+
+func main(): int sync {
+    apply((x: int) => x * 10)
+    println('done')
+    return 0
+}
