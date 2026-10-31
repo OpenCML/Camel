@@ -74,6 +74,17 @@ Three failures are older than this move: `stream.tee_report`,
 under poisoning). The same three fail at `e566ff707`, the commit this migration starts from, and
 they are slow-tier copies, outside the fast gate.
 
+A harness case that fails prints dozens of lines at once. Read the command line on the first
+one, not the last one: the first line of the collfuzz failure said
+`invalid command line: '--coll' 'validate=on'`, and the interesting half was that the run had
+already been given one `--coll`, so this was a second one and the option refuses it.
+
+The spelling is two arguments, `--coll leaf=0,validate=on`. Option and value in one argument
+(`"--coll leaf=0,validate=on"`) is refused with `Invalid --coll key: ' leaf'`, and a second
+`--coll` in the same run is refused with `invalid command line`. A harness that wants to add a
+width to a shape it already passes therefore merges it into the one spec, which is what
+collfuzz does with `validate=on`.
+
 The rule to carry forward: a migration's cost hides in the cases that do not run the program.
 They do not turn red, the new parameters do not reach them, and they leave the statistics
 quietly.
