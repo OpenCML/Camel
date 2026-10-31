@@ -515,6 +515,19 @@ Rules buildRules() {
         },
         false,
     };
+    // `array:elements` (src/builtin/operators/array_axis.cpp): the elements in row-major order as
+    // an array of one dimension. An rt::Array of this back end is that flat run already -- it keeps
+    // no shape (cpp_types.cpp) -- so the value is the one the call was given, whatever rank the
+    // type wrote: a rank of several dimensions is a run and nothing more here.
+    r["array:elements"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 1 || asArrayType(c.normType(0)) == nullptr) {
+                return std::nullopt;
+            }
+            return c.norm(0).text;
+        },
+        false,
+    };
     // The slice of a one-dimensional array, whichever spelling wrote it (design principles 5.4):
     // the six words are the value, the axis, the two bounds, the step and the mask of the bounds
     // written, and a call that leaves the last two out stands for step 1 and "both written". A
