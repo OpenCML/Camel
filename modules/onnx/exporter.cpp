@@ -457,7 +457,14 @@ gc_node_ref_t declaringCellOf(const GCGraph *g, gc_node_ref_t version) {
         if (id == core::oper::VarNew) {
             return version;
         }
-        if (!core::OperatorTable::instance().isAssignment(id)) {
+        // `:var/after(version, call)` is a version of the variable and not a write of it: the call
+        // may have written it, and the operator hands on that version's cell. Its first input is
+        // the version to follow and its second is the call, which is not a version of anything --
+        // so the chain is walked through it exactly as through an assignment
+        // (docs/design/effects/edges.cn.md 3.1). Only this operator is added here: an operator the
+        // walk does not know still ends it, because a chain that was not walked to its declaration
+        // is not evidence that the declaration is local.
+        if (id != core::oper::VarAfter && !core::OperatorTable::instance().isAssignment(id)) {
             return camel::runtime::kInvalidNodeRef;
         }
         const auto inputs = g->normInputsOf(version);
@@ -577,6 +584,13 @@ void Evaluator::refuseEffects(GCGraph *root) {
                 const bool onLocalVariable =
                     body->oper == core::oper::VarNew ||
                     (readsOrAssignsVariable(body->oper) && !g->normInputsOf(ref).empty() &&
+                     isLocalVariable(g, g->normInputsOf(ref).front())) ||
+                    // `:var/after` hands on a version of a variable of this function: it is the
+                    // version a call that may have written the variable left, and what the model
+                    // sees is the variable, which the read above it translates. So it is no effect
+                    // of the model when the variable is local -- and the call it orders is an
+                    // effect of its own, visited by this same walk.
+                    (body->oper == core::oper::VarAfter && !g->normInputsOf(ref).empty() &&
                      isLocalVariable(g, g->normInputsOf(ref).front()));
                 // An in-place form handed `:var/take` of a local variable changes only that
                 // variable's own array (design principles 11.3). The read of the variable
@@ -3566,6 +3580,13 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
             if (core::oper::isVariableRead(id) || id == core::oper::VarTake) {
                 // A read, or the handover of the variable's own value to an in-place form,
                 // which changes only what the variable is then assigned.
+                continue;
+            }
+            if (id == core::oper::VarAfter) {
+                // `:var/after(cell, call)` hands on the version the call left: it changes nothing
+                // itself. Whatever the call wrote is an assignment in this graph -- the call was
+                // inlined, or it would not be a local variable's story -- and that assignment is
+                // enumerated here as a user of the cell in its own right.
                 continue;
             }
             if (!core::OperatorTable::instance().isAssignment(id) ||
