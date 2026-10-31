@@ -509,14 +509,20 @@ Block FunctionEmitter::lowerSequenceBody(
         return out;
     }
 
-    const bool hasValue =
-        result != kInvalidNodeRef && !isVoid(frame.graph->node(result)->dataType());
+    const bool hasValue = result != kInvalidNodeRef && isValueType(frame.graph->node(result)->dataType());
     switch (tail.kind) {
     case Tail::Kind::Return:
         // A function declared to return nothing ends with `return;` whatever its last value
         // (`return println(...)` in a `void` function gives the string println gives).
         if (isVoid(current_->graph->funcType()->exitType())) {
             out.push_back(Stmt::line("return;"));
+            break;
+        }
+        if (endsFlow(frame.graph->node(result)->dataType())) {
+            // The value's type is `never`: its call was emitted as a statement (bind), it throws
+            // and does not come back, and there is nothing to return. The compiler is told the
+            // line after it is unreachable rather than reading a `return` of no value.
+            out.push_back(Stmt::line("__builtin_unreachable();"));
             break;
         }
         out.push_back(
@@ -563,8 +569,10 @@ void FunctionEmitter::bind(
     const std::string &hint) {
     const Type *type  = frame.graph->node(ref)->dataType();
     const size_t uses = liveUses(frame.graph, ref) + frame.results.count(ref);
-    if (isVoid(type) || uses == 0) {
-        // Only its effect matters. A pure expression nothing uses has none: it is left out.
+    if (!isValueType(type) || uses == 0) {
+        // Only its effect matters. A pure expression nothing uses has none: it is left out. A
+        // `never` value is only its effect: it has no C++ value to bind, and the call ends the
+        // flow instead of producing one.
         if (!inlinable) {
             out.push_back(Stmt::line(expr + ";"));
         }
@@ -1256,6 +1264,12 @@ bool FunctionEmitter::bridgeCarries(const Type *type) {
     case TypeCode::Bool:
     case TypeCode::String:
     case TypeCode::Void:
+    // `never` is not a value the bridge passes: it is the edge of a control flow that does not
+    // come back (design principles 3.9). An operator whose result is `never` -- `fail`, and what
+    // it joins with -- is emitted as a call that returns `void` and is never the right side of an
+    // assignment (cppTypes maps the type to void for the same reason). Refusing it left 12
+    // programs in the tree untranslatable for a result nobody can read.
+    case TypeCode::Never:
         return true;
     default:
         return false;

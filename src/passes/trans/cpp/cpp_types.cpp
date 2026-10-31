@@ -36,6 +36,12 @@ using camel::core::type::TypeCode;
 
 bool isVoid(const Type *type) { return type != nullptr && type->code() == TypeCode::Void; }
 
+bool isValueType(const Type *type) {
+    return type != nullptr && !isVoid(type) && type->code() != TypeCode::Never;
+}
+
+bool endsFlow(const Type *type) { return type != nullptr && type->code() == TypeCode::Never; }
+
 std::string cppStringLiteral(std::string_view bytes) {
     std::string out = "\"";
     for (unsigned char c : bytes) {

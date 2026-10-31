@@ -123,7 +123,13 @@ OperatorFault describe(const camel::core::error::RuntimeFault &fault) {
     }
     const auto d = camel::core::error::DiagnosticBuilder::of(fault.diag(), nullptr)
                        .commit(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9]);
-    return {d.name, "0x" + camel::core::error::Diagnostic::hex8(d.diagCode()), d.message, d.suggestion};
+    // A fault the program raised with `fail<'Kind'>` is reported under the kind it wrote, not
+    // under the catalogue entry it travels as (design principles 3.9, RuntimeFault::kind): the
+    // VM renders it that way, and a reader comparing the two paths must not see two names for
+    // one fault.
+    const std::string name =
+        fault.kind().empty() ? d.name : std::string("RuntimeDiag::") + fault.kind();
+    return {name, "0x" + camel::core::error::Diagnostic::hex8(d.diagCode()), d.message, d.suggestion};
 }
 
 ::operator_t operatorFor(std::string_view uri) {
