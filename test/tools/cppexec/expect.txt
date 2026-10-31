@@ -82,6 +82,23 @@ test/cases/consistency/new_values/peek.cml
 test/cases/linear/byref/element_assigned.cml
 test/cases/consistency/faults/element_assigned_out_of_range.cml
 
+# `s.x = v` and a path through a field (:op/set_field, :op/set_index): the record or the array
+# with one place changed, and the value another variable read before the store keeps what it had.
+test/cases/trans/cpp/field_store.cml
+
+# `xs[positions]` (:op/idx_take): the elements those positions name, in that order, as a copy --
+# a position can repeat, and a fixed-size value is taken the same way.
+test/cases/trans/cpp/take_positions.cml
+
+# `last(xs)` (:struct/last_arr): the last element of an array of one element too, and of the
+# empty array the fault a read of the position -1 gives.
+test/cases/trans/cpp/last_element.cml
+
+# `fail<'Kind'>(message)` (:op/fail): the fault the program raises itself, reported under the kind
+# it wrote -- as a statement, as a `let`'s right, as a branch's arm, and through `attempt`, whose
+# error value says the same kind.
+test/cases/trans/cpp/fail_program.cml
+
 # Output of print / println with a format (design principles 10.6).
 # (test/cases/trans/cpp/exec/print_formats.cml, in the directory above)
 # A formatted string is the same tree as '...'->format<...>: the translator sees no difference.

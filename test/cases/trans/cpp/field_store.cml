@@ -1,0 +1,25 @@
+// A store into a field, into an element, and along a path (design principles 3.5, 6.11): the
+// whole variable is rebound to the value with one place changed. Records and arrays are values,
+// so another variable that holds one keeps what it had when the store happens.
+
+type Point = { x: int, y: int }
+
+func main(): int sync {
+    // A field of a variable, and a value that was read before the store.
+    var p: Point = { x: 1, y: 2 }
+    let kept: Point = p
+    p.x = 9
+    println(p, kept)
+
+    // An element of a variable's array, and a path through it.
+    var m: Point[] = [{ x: 1, y: 2 }, { x: 3, y: 4 }]
+    let before = m
+    m[0].x = 7
+    println(m, before)
+
+    // A field an array field of the record holds: the element and the field, in that order.
+    var s: Point = { x: 1, y: 2 }
+    s.x += 5
+    println(s)
+    return 0
+}

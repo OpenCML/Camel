@@ -54,6 +54,10 @@ class OperatorCall {
         camel::core::error::RuntimeDiag kind, const std::vector<std::string> &args) = 0;
     /// The C++ type of `type` ("void" when it has none).
     virtual std::string cppType(const Type *type) const = 0;
+    /// The C++ member name of the field the argument `argIndex` of a store names
+    /// (`:op/set_field`): a field index is one the compiler wrote, not a value of the program, so
+    /// it is not among the arguments' text. Empty when that argument is not such a constant.
+    virtual std::string fieldName(size_t argIndex) = 0;
 
     /// The C++ text of argument `i` to pass to an overloaded runtime function: a bare literal
     /// is written with its type when every argument is one (camel/standalone/num.h).
