@@ -10,12 +10,3 @@
 # EXCEPTION: a regex engine is not in the standalone header set and is not meant to be -- the
 # bridge is how a program that needs one runs.
 test/cases/compile/diag_render/runtime_regex.cml   # re:test -- exception, not a gap
-# EXCEPTION: a tensor crosses the bridge as a handle (rt::Foreign); standalone operators over
-# tensors are a different piece of work, and the bridge is what makes them work today.
-test/cases/trans/cpp/tensor_ones.cml               # tensor:ones -- exception, not a gap
-# GAP: the f64 square root has no rule yet; the next commit writes it and deletes this line.
-test/cases/trans/cpp/exec/scalars.cml              # math:sqrt_d -- gap
-# GAP: creating a tensor by the module's operator still crosses the bridge; the standalone rule
-# that builds the array directly is not written yet, so the next commit writes it and deletes these.
-test/cases/trans/cpp/tensor_zeros.cml             # tensor:zeros -- gap
-test/cases/trans/cpp/tensor_ones_element.cml      # tensor:ones -- gap

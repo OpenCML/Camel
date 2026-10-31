@@ -405,6 +405,28 @@ template <typename T> Array<int64_t> shapeOf(const Array<T> &xs) {
     return out;
 }
 
+/// `zeros::<T>(shape)` and `ones::<T>(shape)` (`tensor:zeros`, `tensor:ones`): the shaped array of
+/// the call's element type with every element the fill. The shape is the `int[]` the call is given,
+/// so the extents are the value's, read here -- this is the one place in this file that shapes an
+/// array from a value rather than from a type. A negative extent is the fault the interpreter
+/// raises there rather than an empty array: it says the same sentence, at the same site, and the
+/// program stops as it does under the interpreter.
+template <typename T>
+Array<T> filledArray(const Array<int64_t> &shape, T fill, const Site &site) {
+    std::vector<int64_t> extents;
+    extents.reserve(shape.size());
+    std::size_t count = 1;
+    for (std::size_t i = 0; i < shape.size(); ++i) {
+        const int64_t extent = shape[i];
+        if (extent < 0) [[unlikely]] {
+            fault(site, {"Tensor shape cannot contain negative extents"});
+        }
+        extents.push_back(extent);
+        count *= static_cast<std::size_t>(extent);
+    }
+    return Array<T>::fromFlat(std::vector<T>(count, fill), extents);
+}
+
 /// `xs[i]` on a value of several dimensions: the i-th row -- one dimension less than the value and
 /// of the row's own extent, which is the slab the interpreter hands back (design principles 5.4). A
 /// position outside the first dimension is IndexOutOfRange at `site`, as it is on a value of one

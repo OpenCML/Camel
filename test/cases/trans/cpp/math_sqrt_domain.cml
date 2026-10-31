@@ -1,0 +1,30 @@
+/**
+ * The square root outside its domain is a NaN, not a fault: `sqrt(-1.0)` and `sqrt(-4.0)` answer
+ * a NaN (is_nan true) and the program runs on, and a NaN operand answers a NaN as well.
+ *
+ * That is what std::fvm answers, and the writer's rule (math:sqrt_f, math:sqrt_d -> std::sqrt)
+ * has to answer the same bytes. The operands come from a function so that nothing can fold them
+ * at compile time: the question is what the call answers, not what constant folding knows.
+ */
+
+import { sqrt, nan, is_nan } from math
+
+func neg(x: float): float { return -x }
+
+func main(): int sync {
+    let m1 = neg(1.0)
+    let r = sqrt(m1)
+    print(r)
+    print(is_nan(r))
+
+    let n = nan
+    let r2 = sqrt(n)
+    print(r2)
+    print(is_nan(r2))
+
+    let f = neg(4.0)
+    let r3 = sqrt(f)
+    print(r3)
+    print(is_nan(r3))
+    return 0
+}
