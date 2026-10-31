@@ -42,6 +42,8 @@
 
 namespace camel::runtime {
 
+class GraphTransaction;
+
 /// The kinds of edge a node can have (docs/design/effects/edges.cn.md sections 1 and 1.5):
 /// **Data** -- the value of the node comes from the port (one kind: the ports of a node are one
 /// ordered list and each carries a role, `PortRole`, declared with the frozen graph, so that a
@@ -952,12 +954,13 @@ uint32_t controlRegionOf(const GraphDraft &draft, gc_node_ref_t id);
 /// through. Every other region separates blocks.
 bool sameSyncBlock(const GraphDraft &draft, gc_node_ref_t a, gc_node_ref_t b);
 
-/// The runtime node id every live node of `draft` takes when the draft is encoded, indexed by
-/// draft node id (`kInvalidNodeRef` for a node the draft erased, which no commitment keeps unless
-/// the draft keeps its ids). The commit drops the dead places and numbers the rest in order, so a
-/// step recorded with draft ids can name a node of the program the commit made (rewrite design
-/// 8.7, `explain`: a `Node` of the program finds the rewrite it was made by).
-std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphDraft &draft);
+/// The runtime node id every live node of the transaction's draft takes when the draft is encoded,
+/// indexed by draft node id (`kInvalidNodeRef` for a node the draft erased, which no commitment
+/// keeps unless the draft keeps its ids). The commit drops the dead places and numbers the rest in
+/// order, so a step recorded with draft ids can name a node of the program the commit made (rewrite
+/// design 8.7, `explain`: a `Node` of the program finds the rewrite it was made by). The answer is
+/// about a commitment, so it is asked of the transaction that would make it.
+std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphTransaction &transaction);
 
 /// `nodeIsFreelySchedulable` (camel/runtime/graph.h) asked of a node of a draft. `byShape` lets
 /// the shapes of the types decide for an elementwise operator (it cannot fail when every shape is

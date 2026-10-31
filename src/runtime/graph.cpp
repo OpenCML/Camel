@@ -15,6 +15,7 @@
 #include "camel/runtime/graph.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/exec_plan.h"
+#include "camel/runtime/graph_txn.h"
 #include "camel/runtime/loop.h"
 #include "runtime/graph_build.h"
 
@@ -1258,7 +1259,8 @@ void emitDraftPayload(
 
 } // namespace
 
-std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphDraft &draft) {
+std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphTransaction &transaction) {
+    const auto &draft = transaction.graph();
     return planDraftPayload(draft).runtimeRefsByDraftId;
 }
 

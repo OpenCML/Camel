@@ -1445,7 +1445,7 @@ std::vector<gc_node_ref_t> RuntimeGraphDraftSession::committedNodeRefs(GCGraph *
     if (found == drafts_.end() || found->second->transaction == nullptr) {
         return {};
     }
-    return draftRuntimeNodeRefs(found->second->transaction->graph());
+    return draftRuntimeNodeRefs(*found->second->transaction);
 }
 
 const Program *RuntimeGraphDraftSession::commitChecked() {

@@ -58,34 +58,12 @@ bool isVarParam(const type::FunctionType *funcType, bool isWith, size_t index) {
                   : index < funcType->normTypesCount() && funcType->normIsVarAt(index);
 }
 
-} // namespace
-
-type::FunctionType *operatorOverloadType(
-    std::string_view uri, const type::type_vec_t &with, const type::type_vec_t &norm) {
-    OperQueryKey key{std::string(uri), with.size(), with};
-    key.types.insert(key.types.end(), norm.begin(), norm.end());
-    {
-        std::lock_guard lock(operQueryMutex);
-        if (const auto it = operQueryMemo().find(key); it != operQueryMemo().end()) {
-            return it->second;
-        }
-    }
-    type::FunctionType *answer = nullptr;
-    if (const auto resolver = camel::core::OperatorTable::instance().resolver(uri)) {
-        try {
-            const std::vector<type::StaticArg> statics(norm.size());
-            const auto resolved = resolver->resolveWith(with, norm, statics);
-            answer              = resolved ? *resolved : nullptr;
-        } catch (const camel::core::mm::MemoryExhausted &) {
-            throw; // not an answer about the overload
-        } catch (const std::exception &) {
-            answer = nullptr;
-        }
-    }
-    std::lock_guard lock(operQueryMutex);
-    return operQueryMemo().emplace(std::move(key), answer).first->second;
-}
-
+/// True when the argument at position `index` of `user`'s norm (or with) inputs is written by
+/// `user`: for an OPER, what the operator's resource declaration says (design principles 3.3;
+/// an operator without one is read conservatively, OperatorTable::writesOperand); for a FUNC,
+/// a `var` parameter of the graph it calls; for a CALL, a `var` parameter of its callee's type.
+/// Only `isWrittenInPlace` below asks it: the question is about one argument, the answer a pass
+/// wants is about one value, so the finer one stays here rather than on the draft's surface.
 bool isWrittenArgument(const GraphDraft &draft, gc_node_ref_t user, bool isWith, size_t index) {
     const DraftNodeHeader *h = draft.header(user);
     if (!h) {
@@ -124,6 +102,34 @@ bool isWrittenArgument(const GraphDraft &draft, gc_node_ref_t user, bool isWith,
     default:
         return false;
     }
+}
+
+} // namespace
+
+type::FunctionType *operatorOverloadType(
+    std::string_view uri, const type::type_vec_t &with, const type::type_vec_t &norm) {
+    OperQueryKey key{std::string(uri), with.size(), with};
+    key.types.insert(key.types.end(), norm.begin(), norm.end());
+    {
+        std::lock_guard lock(operQueryMutex);
+        if (const auto it = operQueryMemo().find(key); it != operQueryMemo().end()) {
+            return it->second;
+        }
+    }
+    type::FunctionType *answer = nullptr;
+    if (const auto resolver = camel::core::OperatorTable::instance().resolver(uri)) {
+        try {
+            const std::vector<type::StaticArg> statics(norm.size());
+            const auto resolved = resolver->resolveWith(with, norm, statics);
+            answer              = resolved ? *resolved : nullptr;
+        } catch (const camel::core::mm::MemoryExhausted &) {
+            throw; // not an answer about the overload
+        } catch (const std::exception &) {
+            answer = nullptr;
+        }
+    }
+    std::lock_guard lock(operQueryMutex);
+    return operQueryMemo().emplace(std::move(key), answer).first->second;
 }
 
 bool isWrittenInPlace(const GraphDraft &draft, gc_node_ref_t id) {
