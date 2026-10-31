@@ -4,6 +4,7 @@
 // Checked tensor schedules and interval-based storage reuse for one ordered stream.
 
 #include "camel/core/operator_table.h"
+#include "tiles/dtype.h"
 #include "tiles/device.h"
 #include "tiles/internal/kernel_ir.h"
 #include "tiles/internal/row_kernel.h"
@@ -27,10 +28,10 @@ size_t bytes(const Node &node) {
     if (!node.results.empty())
         return 0; // Operation producers carry dependencies; only their results hold values.
     // The width is the element's own: this used to read "eight bytes for f64, four otherwise",
-    // which would have made an i64 value four bytes per element and read half of it.
-    const size_t width = node.dtype == DType::F32   ? sizeof(float)
-                         : node.dtype == DType::F64 ? sizeof(double)
-                                                    : sizeof(int64_t);
+    // which would have made an i64 value four bytes per element and read half of it, and an "else"
+    // would make a bf16 value four bytes and read past it. dtypeWidth is exhaustive over the
+    // element types, so a type added to the enum cannot fall through to a size that is not its own.
+    const size_t width = dtypeWidth(node.dtype);
     const size_t count = elements(node.shape);
     if (count > SIZE_MAX / width)
         throw std::runtime_error("typed tensor byte size overflows");
