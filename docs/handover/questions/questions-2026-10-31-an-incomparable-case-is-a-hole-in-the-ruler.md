@@ -282,3 +282,26 @@ Statement（`numberLess` 的顺序、f64 累加一次的 `sum`、`IEEE 754-2019`
 `str:codepoints`/`str:find` 2 条、`ckpt:load_tree` 1 条、`tensor:multiply` 2 条、`rand:*_array` 3 条、
 `:op/slice_bytes` 2 条（切片的越界报告写的是"a Bytes"，数组切片的是"an array"——照抄不了就不动它，
 留着拒并写明）。
+
+### `Json` 11 + `Set<...>` 5：先量形状，两个都不是"缺个拼法"
+
+**一条判据（进页，一句话）**：数据结构的拼法错了，读数不会崩——它会变成一个长得像对的字符串。
+
+`Json` 的形状（`modules/json/value.h`）：**一个 kind 加一格载荷**，载荷的类型随 kind 变——
+`Null` / `Bool`(bool) / `Int`(int) / `Float`(float) / `String`(string) / `Array`(`Json[]`) / `Object`(`Map<string, Json>`)。
+它是一棵**自描述的和类型**：值自己带着"我现在是哪一种"，程序只在运行到才知道。目标那边的既有拼法
+（数字/串/数组/元组/结构体）没有"一个字段的类型取决于另一个字段"的形状——那要一个变体值。
+为它单独造一个 `rt::Json`（tagged union）是第三套表示，这一笔的边界不许；把 `Json` 硬塞进一个
+`{ kind: int, ... }` 结构体也只能装下一种载荷。所以这 11 条**不是写规则能解决的缺拼法，是表示层的决定**，
+留给点名。
+
+`Set<T>` 的形状（`include/camel/core/rtdata/collection.h`）：不是数组，是**持久 B+ 树的 Table**——
+叶子按 key 升序放元素（`Map` 是 key 升序、值跟着 key 排），打印是 `{a, b}`（`Table::print`），
+迭代（`items`/`reduce`）也按升序走。最近的既有拼法是"一个结构体抱住一个排好序的 `T[]`"，
+再加一个 `appendText` 写成 `{..}`——但那是**为集合新写一个值类型**（数组的 `[..]` 打印是共享的，
+不能拿数组冒充集合），同样是第三套表示。`Set` 的 5 条要 `as Set`、`add`、`remove`、`contains`、
+`len`、`union`/`intersect`/`difference`、`items` 全都在，少一个都留拒，所以这一笔一条也没转。
+
+这一轮**没有代码**：两种形状都撞在同一条边界上（表示只走既有那几条），与其造第三套把读数弄成
+"长得像对的字符串"，不如把形状和两个决定摆出来。尺子不动：`same` 1259、`refused` 958、`defect` 0、
+`not_comparable` 12。
