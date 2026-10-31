@@ -11,6 +11,7 @@ test/cases/loops/iterate_string.cml
 test/cases/consistency/values/enums.cml
 test/cases/consistency/values/deep_enum_chain.cml
 test/cases/trans/cpp/recursive_enum_shapes.cml
+test/cases/trans/cpp/recursive_struct_shapes.cml
 test/cases/consistency/values/int_wrap.cml
 test/cases/consistency/values/int_min_div.cml
 test/cases/consistency/values/float_special.cml

@@ -138,9 +138,27 @@ tensor 414、autodiff 90、rand 34、核心算子（`:op/*`）50、`:struct/*` 2
 洞里最大的是 `:op/fail`（32 个）：它要 `never` 贯穿整个 emitter（分支的一个臂、`let` 的右值、
 `attempt` 的边界），不是一个翻译，我没动它。
 
-**4 个崩**（`rc=139`，与本题无关但同一批扫出来的）：`compile/contextual_empty_array/all_literal.cml`、
+**4 个崩**（`rc=139`）：`compile/contextual_empty_array/all_literal.cml`、
 `contextual_empty_array/named_sibling.cml`、`compile/semantic/recursive_struct_array.cml`、
-`recursive_struct_array_gc.cml`。空字面量数组与递归结构数组，翻译器直接段错误。
+`recursive_struct_array_gc.cml`。四个都是"结构体通过数组装自己"（`type Node = { value: int, children: Node[] }`）。
+`gdb` 的栈帧是没头的 `ProgramValues::type` 自己套自己：`type(Node)` 去算成员的 C++ 类型，成员是 `Node[]`，
+`type(Node[])` 又要 `type(Node)` —— 名字还没登记就先走成员，走不完。这一笔（`12034b9e4`）把这种结构体的名字
+在走成员**之前**登记进去（枚举那条路早就是这么写的），成员走完再把 layout 记上；别的类型走的还是原来那条路，
+名字顺序也没动。另外 `array.h` 把 `alignof(T)` 的静态检查从类作用域挪进了 `allocate`：`Node` 里的
+`rt::Array<Node>` 会在 `Node` 还没完整时点名它，而只有分配才需要尺寸与对齐。
+
+四条读数：**139 → 0 / 0 / 1 / 0**。前两条、第四条翻译出来且与 `std::fvm` 逐字节相同（`0 2 0 7`、`9 1 0 0`、
+`10 178 1024 / 4`）；第三条给的是诊断，不是崩：
+
+```
+error[RuntimeDiag::TranslationRefused]: Translation pass 'std::cpp' refused the graph: function 'main' uses the operator ':op/set_field' on a value of type 'Node', which has no translation in std::cpp yet.
+  --> test/cases/compile/semantic/recursive_struct_array.cml:40:19
+```
+
+（`grown.children[0].value = 20` 是 `:op/set_field`，另一个洞，4 个程序，排在 `:op/fail` 后面。）
+
+顺手撞出**第 5 个崩**，这次在前端不在写出器：`type Node = { state: State, children: Node[] }` 里 `State`
+写在 `Node` **后面**时，`std::fvm` 自己也段错误（`rc=139`），`State` 写前面就正常。与本题无关，单独记一笔。
 
 这一笔修的是洞里最大的**一条翻译**：`:op/set_index_in_place`（9 个），`xs[i] = v` 现在与
 `acc = acc->append<v>` 同一个形状（`eae9f9f5b`）——变量把数组交出去，`rt::setAt` 按读的方式检查下标
@@ -152,7 +170,7 @@ std::fvm  [9, 2, 3]
 std::cpp  [9, 2, 3]
 ```
 
-## 七、四条判据
+## 七、六条判据
 
 > **裁定也可能基于过时的读数：拿到裁定先去 develop 上复现一次；不复现，就先把前提写下来，再谈要不要改。**
 
@@ -161,3 +179,7 @@ std::cpp  [9, 2, 3]
 > **一个计划能抓"两个后端悄悄不一致"，它就该在快层；抓不到不一致的计划才配待在慢层。**
 
 > **一个后端缺哪条翻译，用"被拒程序数"报，不用"我碰到的那两个"报；今晚两个是碰到的，剩下多少没人知道。**
+
+> **普查的价值在分母：`674 / 3186` 这个数比"我碰到的那两个"有用得多。**
+
+> **一个后端拒一条翻译是缺口，崩一次是缺陷；缺口按被拒程序数报，缺陷按崩溃数报，两者不在一个优先级上。**

@@ -121,9 +121,11 @@ template <typename T> class Array {
         std::size_t capacity;
         T *items() noexcept { return reinterpret_cast<T *>(this + 1); }
     };
-    static_assert(alignof(T) <= alignof(Rep), "elements must not need more alignment");
-
     static Rep *allocate(std::size_t capacity) {
+        // Checked here rather than at the class scope: the array of a struct that holds the array
+        // (`Node { children: Node[] }`, design principles 5.2) names its element type before that
+        // type is complete, and the alignment is only ever needed to allocate.
+        static_assert(alignof(T) <= alignof(Rep), "elements must not need more alignment");
         auto *rep       = static_cast<Rep *>(::operator new(sizeof(Rep) + capacity * sizeof(T)));
         rep->references = 1;
         rep->size       = 0;

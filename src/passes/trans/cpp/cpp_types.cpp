@@ -25,6 +25,7 @@
 #include <cmath>
 #include <format>
 #include <limits>
+#include <set>
 #include <system_error>
 #include <unordered_set>
 #include <vector>
@@ -264,6 +265,43 @@ const TupleType *asTuple(const Type *type) {
                                                               : nullptr;
 }
 
+/// Whether a value of `member` holds a value of the type `key` names, however deep: the walk
+/// follows every position that holds a value (a struct's fields, a tuple's items, an array's
+/// elements) and stops at a type it has already gone through. A member that comes back to the
+/// struct being declared is the one case the C++ declaration cannot write in the order the
+/// members are read: the name has to be in scope before the walk starts.
+bool holdsSelf(const Type *member, const std::string &key, std::set<std::string> &seen) {
+    if (member == nullptr) {
+        return false;
+    }
+    if (member->mangle() == key) {
+        return true;
+    }
+    if (!seen.insert(member->mangle()).second) {
+        return false;
+    }
+    if (const TupleType *tuple = asTuple(member); tuple != nullptr) {
+        for (size_t i = 0; i < tuple->size(); ++i) {
+            if (holdsSelf(tuple->typeAt(i), key, seen)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    if (member->code() == TypeCode::Array) {
+        return holdsSelf(static_cast<const ArrayType *>(member)->elemType(), key, seen);
+    }
+    if (member->code() == TypeCode::Struct) {
+        const auto *record = static_cast<const StructType *>(member);
+        for (size_t i = 0; i < record->size(); ++i) {
+            if (holdsSelf(record->typeAt(i), key, seen)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 /// The C++ name of the struct declaration of a named struct type: the declaration's name,
 /// module-qualified as the type system writes it (`models::Point` becomes `models_Point`), with
 /// the instance's type arguments when it is generic (`Pair<int>` becomes `Pair_int`). The name
@@ -423,6 +461,24 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
         const bool isTuple = tuple != nullptr;
         const auto *record = static_cast<const StructType *>(t);
         const size_t n     = isTuple ? tuple->size() : record->size();
+        // A struct that holds a value of itself (`Node { children: Node[] }`, design principles
+        // 5.2) would walk its own members forever: its name is registered before the walk, as an
+        // enum's is below, and the layout -- which only the walk can give -- is recorded once the
+        // declaration is written. Such a type is the only claimant of that layout, so no other
+        // type is made an alias of it.
+        bool holdsItself = false;
+        for (size_t i = 0; i < n && !holdsItself; ++i) {
+            std::set<std::string> seen;
+            holdsItself = holdsSelf(isTuple ? tuple->typeAt(i) : record->typeAt(i), key, seen);
+        }
+        std::string name;
+        if (holdsItself) {
+            name = isTuple               ? names_.unique("Tuple")
+                   : record->named()     ? names_.unique(declaredStructName(t))
+                                         : names_.unique("Record");
+            types_.emplace(key, name);
+            representations_.emplace(key, name);
+        }
         struct Member {
             const Type *type = nullptr;
             std::string cpp;
@@ -447,7 +503,8 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
             layout += std::format("{}:{}={};", member.name.size(), member.name, member.cpp);
             members.push_back(std::move(member));
         }
-        if (const auto existing = layouts_.find(layout); existing != layouts_.end()) {
+        if (const auto existing = layouts_.find(layout);
+            !holdsItself && existing != layouts_.end()) {
             // One C++ struct already has this layout. A named type gets a name of its own for
             // it (the declaration's); an anonymous one is simply that struct.
             if (!isTuple && record->named()) {
@@ -466,13 +523,14 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
             representations_.emplace(key, existing->second);
             return existing->second;
         }
-        std::string name;
-        if (isTuple) {
-            name = names_.unique("Tuple");
-        } else if (record->named()) {
-            name = names_.unique(declaredStructName(t));
-        } else {
-            name = names_.unique("Record");
+        if (!holdsItself) {
+            if (isTuple) {
+                name = names_.unique("Tuple");
+            } else if (record->named()) {
+                name = names_.unique(declaredStructName(t));
+            } else {
+                name = names_.unique("Record");
+            }
         }
         std::string decl = std::format("/// {}\nstruct {} {{\n", t->toString(), name);
         for (const Member &member : members) {
