@@ -4530,30 +4530,6 @@ bool statesARank(const ArrayType *type) {
     return true;
 }
 
-/// Whether `ast` is a literal written as a value with nothing to compute in it (`1.0`,
-/// `(1.0, 2.0)`): a nested array literal whose elements are all of these is a constant array,
-/// which is what a position that states a rank takes. A literal with a name or a call in it is
-/// built when the program runs, and keeps that path.
-bool isConstantLiteral(const AST::node_ptr_t &ast) {
-    if (ast == nullptr || ast->type() != AST::LoadType::Data) {
-        return false;
-    }
-    switch (ast->loadAs<AST::DataLoad>()->dataType()) {
-    case AST::DataType::Literal:
-        return true;
-    case AST::DataType::Array:
-    case AST::DataType::Tuple: {
-        for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
-            if (!isConstantLiteral(item)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    default:
-        return false;
-    }
-}
 
 } // namespace
 
@@ -4800,8 +4776,12 @@ node_ptr_t Builder::visitRankedArrayInto(
     // The elements of the literal in the order the flattened value holds them, each built in the
     // element type the position gives it, as an array literal's elements are (design principles
     // 5.1). The shape is the one the literal writes, which is the position's by the checks above.
+    // An element the program computes is one of those elements like any other: it has no value of
+    // its own, so the flat value keeps its position as a hole and the computed node stands for it
+    // (`[[1.0, 0.0 / 0.0], [0.0 / 0.0, 2.0]]` is the four elements of a `float[2, 2]`, not two
+    // rows). Built as rows it stayed an array of the leaf type the computed rows' leaves gave it,
+    // and the declaration that asked for the shape reported the type it could not fit.
     std::vector<AST::node_ptr_t> leaves;
-    bool constant = true;
     const auto collect = [&](const auto &self, const AST::node_ptr_t &node) -> void {
         const auto &items = *node->atAs<AST::RepeatedLoad>(0);
         if (!items.empty() && isArrayLiteralData(items.front())) {
@@ -4810,17 +4790,9 @@ node_ptr_t Builder::visitRankedArrayInto(
             }
             return;
         }
-        for (const auto &item : items) {
-            constant &= isConstantLiteral(item);
-        }
         leaves.insert(leaves.end(), items.begin(), items.end());
     };
     collect(collect, ast);
-    if (!constant) {
-        // An element the program computes is not a constant array: the ordinary build keeps the
-        // path it had for it.
-        return visitArrayInto(ast, arrayType, entered);
-    }
 
     ArrayDataFactory factory;
     factory.setElemType(elemType);

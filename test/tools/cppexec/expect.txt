@@ -224,6 +224,11 @@ test/cases/trans/cpp/complex_scalar.cml
 # to print as the first extent's worth of elements.
 test/cases/trans/cpp/literal_rank.cml
 
+# A rank-2 literal whose leaves are computed is one value of four elements, not two rows of them:
+# the flat run carries the two computed leaves as the elements they sit in, and the divisions
+# fault where they are written.
+test/cases/trans/cpp/literal_rows_computed.cml
+
 # A position on a value of several dimensions: `m[1]` is the row, `m[1, 0]` names the axis it drops
 # and is the element, `t[1]` of a rank-3 value is the rank-2 value behind it -- and `len` of a row is
 # the dimension that is left.

@@ -1,0 +1,18 @@
+/**
+ * A nested literal at a position that states a rank is the value of that shape even when a leaf
+ * is computed: `[[1.0, 0.0 / 0.0], [0.0 / 0.0, 2.0]]` is the four elements of a `float[2, 2]`,
+ * and the computed ones are the elements they sit in. Built as two rows it took the leaf type its
+ * rows' leaves gave it, so the first row was an array where the literal said `float` and the
+ * declaration was reported against it (`Cannot insert data of type 'float[]' into a(n) array with
+ * element type 'float'`) instead of the program being the value it writes.
+ *
+ * The two divisions are the fault the language gives them (`RuntimeDiag::DivisionByZero`), so the
+ * reading is that report, located at the first one; `agree_with_fvm` compares it with std::fvm
+ * byte for byte, and the C++ program holds the value as one flat constant of four elements with
+ * its shape (`rt::Array<double>{{1.0, 0.0, 0.0, 2.0}, {2, 2}}`).
+ */
+func main(): int sync {
+    let w: float[2, 2] = [[1.0, 0.0 / 0.0], [0.0 / 0.0, 2.0]]
+    println(w)
+    return 0
+}
