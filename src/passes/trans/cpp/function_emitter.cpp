@@ -674,7 +674,7 @@ bool FunctionEmitter::lowerNode(
         return false;
     }
     case GCNodeKind::Cast:
-        lowerCast(frame, ref);
+        lowerCast(frame, ref, out);
         return false;
     case GCNodeKind::Fill:
         lowerFill(frame, ref, out);
@@ -1620,7 +1620,7 @@ void FunctionEmitter::lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out
     bind(frame, ref, expr + ")", false, out, "call");
 }
 
-void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref) {
+void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref, Block &out) {
     // A value entering `T?` or `T!` (design principles 3.8), `null` entering `T?`, a failed
     // value passed on with another payload (`->`), a conversion between numbers.
     const GCGraph *g          = frame.graph;
@@ -1710,6 +1710,15 @@ void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref) {
                 describeFunction(g),
                 typeName(fromType),
                 typeName(toType)));
+    }
+    if (checksShape && liveUses(g, ref) + frame.results.count(ref) == 0) {
+        // A conversion that checks a shape is a statement that can stop the program: the check is
+        // what reports, and a value nobody reads is not a check nobody may skip. So it is written
+        // where it stands and its value is dropped -- losing a value wastes it, losing a check
+        // loses the fault it reports (design principles 3.4: a fault is observable).
+        out.push_back(Stmt::line(text + ";"));
+        frame.values[ref] = CppValue{"", false};
+        return;
     }
     frame.values[ref] = CppValue{text, false};
 }

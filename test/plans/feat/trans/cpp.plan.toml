@@ -388,6 +388,18 @@ expect_stdout_contains = ["rt::asShape(", "float[3, 3]", "RuntimeDiag::RuntimeEr
 expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+[[tests]]
+name = "fault_unread_cast"
+desc = "A conversion that can fail runs where it is written, whether or not its value is read. `let unused = open2(...) as float[3, 3]` states a shape and the check is the statement (design principles 5.4); dropping it because its value is unread would drop the fault with it. The generated function keeps `rt::asShape(open2(...), {3, 3}, \"float[3, 3]\", at_...)` where it stands and answers what the interpreter answers: `conversion to 'float[3, 3]' failed: the array has shape [2, 2]`, `not reached` unprinted. agree_with_fvm compares the report and the exit status byte for byte, and `opt/fault_preservation/chained_cast.cml` is the same statement reached through another pass."
+kind = "behavior"
+case = "../../../cases/trans/cpp/fault_unread_cast.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::asShape(", "float[3, 3]", "RuntimeDiag::RuntimeError"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
 
 [[tests]]
 name = "enum_types"

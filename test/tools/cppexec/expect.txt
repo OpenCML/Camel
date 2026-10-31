@@ -243,6 +243,9 @@ test/cases/trans/cpp/literal_open_shape.cml
 # interpreter's own sentence -- `conversion to 'float[3, 3]' failed: the array has shape [2, 2]`.
 test/cases/trans/cpp/cast_shape_holds.cml
 test/cases/trans/cpp/cast_shape_fault.cml
+# A conversion that can fail runs where it is written even when nothing reads its value: the fault of
+# `let unused = open2(...) as float[3, 3]` is the interpreter's, and `not reached` stays unprinted.
+test/cases/trans/cpp/fault_unread_cast.cml
 
 # A tensor the runtime builds: `tensor:ones` has a standalone translation that calls the runtime's
 # kernel and converts the value back into the shaped array its Camel type names (rt::Array), so the
