@@ -1,4 +1,0 @@
-// The pending-transaction self-test runs from the pass `test::txn_pending`; the program does nothing.
-func main(): int sync {
-    return 0
-}
