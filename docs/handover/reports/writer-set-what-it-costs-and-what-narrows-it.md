@@ -19,11 +19,37 @@
 - 同一取样里"每个变量的写者函数"是 1–2 个，**没有跨模块的写者**。
 - 验收程序 `test/cases/effects/two_references_write_one_object_unsynced.cml`：names 1、pairs 2（`counter` 由 `twice` 和传入的 lambda 各写一次），改前打 `1`、改后打 `3`。
 
-## 2. 三条已知边界，以及"今天会不会给出错的数"
+## 2. 三条已知边界，以及"今天给出什么数"
 
-1. **只经 `var` 实参传出去才被写的变量不在扫描里。** 调用点没有被调者的类型，说不出"这次实参是哪个单元的引用"。**会给出错的数**：写只发生在被调者里、调用点又不认识它时，读仍拿旧值（正是 `twice` 在 `sync` 外的形状，若把它改成经 `var` 参数写，就退回去）。
-2. **调用之后才第一次捕获的变量，按书写顺序当"之后"**（`claimedWriters_`）。**会给出错的数，但只在一种排版下**：读写在调用与首次捕获之间时，读拿不到这次调用（它取的是那个 `:var/after` 之前的版本）；读写在捕获之后则正确。
-3. **两次相邻的未知调用，前一次本身也是未知调用修饰时，不串 `writeBeforeCall_`。** 第二次调用成为版本，第一次调用可能因此没有读者而被丢。**会给出错的数**：`f(v); g(v); return x` 这种连写两次调用、中间不读的形状，第一次调用可能不执行。
+每一条都配一个最小程序和**实跑读数**（`std::nvm`，四个后端同数）。"对的数"指按语言语义应得的输出。
+
+1. **只经 `var` 实参传出去才被写的变量不在扫描里。** 调用点没有被调者的类型，说不出"这次实参是哪个单元的引用"。
+   ```camel
+   var counter = 0
+   func apply(f: (var x: int) => void) { f(counter) }
+   func main(): int sync { apply((var y: int) => { y = 3 }); println(counter); return 0 }
+   ```
+   **读数是 `3`，对的数也是 `3`。** 今天对不是集合算出来的：调用点把 `counter` 的单元交给 `f`，写入落在同一个单元上。会错的形状是读要的是一份"调用之前的拷贝"而不是那个单元（例如读发生在另一个 `var` 传递链的另一端），**该形状未测**——构造它需要把单元再交出去一层，超出这个最小程序。
+
+2. **调用之后才第一次捕获的变量，按书写顺序当"之后"**（`claimedWriters_`）。
+   ```camel
+   var counter = 1
+   func run(f: () => void): int { f(); let read = () => counter; return read() }
+   func main(): int sync { println(run(() => { counter = 5 })); return 0 }
+   ```
+   **读数是 `1`，对的数是 `5`——今天给出错的数。** 调用在 `run` 里、读写在调用之后才写下的那个闭包里，读拿的是 `run` 捕获时的版本。
+
+3. **两次相邻的未知调用，前一次本身也是未知调用修饰时，不串 `writeBeforeCall_`。**
+   ```camel
+   var counter = 0
+   func run(a: () => void, b: () => void): int { counter = 1; a(); b(); return counter }
+   func main(): int sync {
+       println(run(() => { counter = counter + 1 }, () => { counter = counter + 10 })); return 0
+   }
+   ```
+   **读数是 `10`，对的数是 `12`——今天给出错的数。** 第一次调用没有执行，且 `counter = 1` 那一版也丢了。
+
+**判据**：**收窄的每一步都要能说"还剩谁在集合里"；说不出名单的收窄，等于换了一个猜。**
 
 ## 3. 下一页：按函数值类型里的资源收窄，需要什么
 
@@ -36,7 +62,7 @@
 
 - `param` 好用：调用点知道实参在第几个普通形参位置，`ParamUse::index` 对得上，`cls == Variable` 加 `mode` 就能说出"这次调用写的是第 k 个实参那个单元"，而不是"程序里某个写过这个名字的函数"。
 - **`captures` 不好用**：它只有位置（`std::vector<uint8_t>`，按捕获位置），**不带名字、不带作用域**。闭包捕获的是调用点外层的单元，而调用点这一层只有"这个函数值"和它的类型，没有一个把"捕获位置"翻回"哪个单元"的映射。这是这一步真正的缺口——要么让推断出的闭包类型记下捕获的名字（编译期它明明知道），要么在调用点把函数值与它的捕获列表一起留着。
-- 另有一条现成的旁路：`test/cases/resources/effects.cml` 的 `inc()`（`let inc = () => ...; inc()`）今天仍走"未知被调者"，其实闭包图在构建时就认识；按值收窄的第一步可以是"被调者是本层能解析到图的函数值时，用那张图的捕获表"，不必等类型。
+- 旁路（"被调者是本层能解析到图的函数值就用它的捕获表"）**今天给不出任何收窄**：取样 5 个程序（含 `resources/effects.cml` 的 12 个、`two_references_write_one_object_unsynced.cml` 的 1 个）共 **16 个未知调用点，能解析到图的 0 个**。原因是未知路径上被调者只是形参的引用（`DREF`），不是 `FunctionData` 节点，`functionValueGraphOf`（`src/compile/gir/builder_calls.cpp:101`）只能从后者取出图；捕获表本身是有的（`include/camel/runtime/graph.h:656` 的 `captureNames()`），但那条路径取不到图。`inc()` 那种 `let inc = () => ...; inc()` 的调用**根本不走未知路径**（构建时就有 `targetGraph`），所以也不能靠它收窄。
 
 ## 4. 判据
 
