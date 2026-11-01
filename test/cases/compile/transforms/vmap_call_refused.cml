@@ -1,0 +1,21 @@
+/**
+ * What the elementwise tier refuses, and how it says so: a call in the body is a construct the tier
+ * does not batch yet, and it is refused *at the call*, by name, with the reason -- never copied and
+ * hoped for. `g` calls `f`, so `vmap(g)` stops there even though every primitive of `g` has a rule.
+ */
+import rulesets.vmap
+import { vmap } from transforms
+
+func f(x: float): float {
+    return x * 2.0
+}
+
+func g(x: float): float {
+    return f(x) + 1.0
+}
+
+func main(): int sync {
+    let xs: float[3] = [1.0, 2.0, 3.0]
+    println(vmap(g)(xs))
+    return 0
+}

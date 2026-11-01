@@ -9,4 +9,6 @@ add_camel_module(
     jvp_operator.cpp
     transpose.cpp
     transpose_operator.cpp
+    vmap.cpp
+    vmap_operator.cpp
 )
