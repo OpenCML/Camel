@@ -402,11 +402,17 @@ FunctionType *jvpSignature(FunctionType *function) {
     for (size_t i = 0; i < function->normTypesCount(); ++i) {
         Type *parameter = function->normTypeAt(i);
         const camel::core::TangentSpaceAnswer answer = camel::core::tangentSpaceOf(parameter);
-        if (!answer.hasSpace()) {
-            return nullptr;
-        }
+        // A parameter with no tangent space -- the `n` of `xs[n]` -- takes no tangent port, and the
+        // lift carries on: the same rule as `Tangent<bool> = ()` with a contribution of zero, stated
+        // once, here, by the same question the walk asks (`tangentSpaceOf`). The signature layer used
+        // to refuse such a function outright; that refusal is gone, because refusing would make a
+        // program that differentiates with respect to `xs` stop compiling for the sake of an index it
+        // was told to leave alone. Ports, not a `()` slot: an empty slot would be a place a cotangent
+        // could be written, and there is nothing to write (design principles 9.9).
         params.emplace_back(parameter, false);
-        params.emplace_back(answer.space, false);
+        if (answer.hasSpace()) {
+            params.emplace_back(answer.space, false);
+        }
     }
     if (params.empty()) {
         return nullptr;
@@ -574,12 +580,20 @@ bool liftGraph(
                 parameterType, draft.allocateRuntimeSlot(parameterType));
             draft.appendNormPort(value);
             valuePorts.push_back(value);
-            camel::core::type::Type *tangentType =
-                camel::core::tangentSpaceOf(parameterType).space;
-            const gc_node_ref_t tangent = draft.addPortNode(
-                tangentType, draft.allocateRuntimeSlot(tangentType));
-            draft.appendNormPort(tangent);
-            tangentPorts.push_back(tangent);
+            // A parameter with no tangent space takes no tangent port at all -- the same question the
+            // signature asks, so the two layers cannot disagree about which parameters have a slot.
+            const camel::core::TangentSpaceAnswer tangentSpace =
+                camel::core::tangentSpaceOf(parameterType);
+            if (tangentSpace.hasSpace()) {
+                const gc_node_ref_t tangent = draft.addPortNode(
+                    tangentSpace.space, draft.allocateRuntimeSlot(tangentSpace.space));
+                draft.appendNormPort(tangent);
+                tangentPorts.push_back(tangent);
+            } else {
+                // No port, and a place in this list that says so: the list is indexed by the
+                // parameter's position, so it cannot simply be shorter.
+                tangentPorts.push_back(rt::kInvalidNodeRef);
+            }
         }
         // Which parameter a port of the original body is, by its place in that list.
         std::unordered_map<gc_node_ref_t, size_t> parameterOf;
@@ -746,7 +760,7 @@ bool liftGraph(
                 const auto parameter = parameterOf.find(ref);
                 if (parameter != parameterOf.end() && parameter->second < valuePorts.size()) {
                     copyOf[ref]    = valuePorts[parameter->second];
-                    tangentOf[ref] = tangentPorts[parameter->second];
+                    tangentOf[ref] = tangentPorts[parameter->second]; // invalid when the parameter has no tangent space
                     copied[ref]    = true;
                     ++copiedKinds;
                     break;
