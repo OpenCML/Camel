@@ -93,3 +93,15 @@ assert(out === '19 0', `unexpected output: ${out}`)
 # Measured 3.5 s in a gate run at -Jobs 8 and 5.4 s in a slower one; four times the slower
 # measurement is 21.6 s, so the old 20 s was at the margin, and 40 s is 7.4x the slow one.
 timeout_ms = 40000
+
+[[tests]]
+name = "calling_incomplete"
+desc = "A function with no declared return type that calls itself is refused where the call is written: the callee's type is what its body is still being inferred from, so the call has nothing to type itself with. The report names the function and prints the type it had at that moment rather than inferring one from the call."
+kind = "negative"
+case = "../../../cases/compile/return_type/calling_incomplete.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::CallingIncompleteFunction"
+expect_output_contains = ["Cannot call function 'f' with type '(n: int) => <null>' as its type is not fully constructed yet."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000

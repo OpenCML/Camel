@@ -151,3 +151,13 @@ case = "../../../cases/compile/module_load/imported_main.cml"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_exact = "43\n"
+
+[[tests]]
+name = "load.module_not_found"
+desc = "A module the search roots do not hold is a semantic error that names it and says where it looked: the report reads `Module 'no_such_module' not found. Search attempts:` and then one line per root, so a reader can tell a missing file from a missing root."
+kind = "negative"
+case = "../../../cases/compile/module_load/module_not_found.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ModuleNotFound"
+expect_output_contains = ["Module 'no_such_module' not found."]
