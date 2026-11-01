@@ -99,12 +99,11 @@ class SplitResolver final : public FuncTypeResolver {
         return std::nullopt;
     }
 
-    /// The text is the one a declaration writes (`stdlib/signatures/transforms.cml`), for the shape
-    /// the step computes at the type it is given: the forward half takes the values and answers
-    /// `(result, residuals)`, the backward half takes the residuals and the tangents and answers the
-    /// tangent. The residual position is the compiler's (author, 2026-11-01), so the text writes the
-    /// one-parameter placeholder; what the graphs carry is what the graph says, printed beside it as
-    /// `residuals=`.
+    /// The text is the one the declaration writes (`stdlib/signatures/transforms.cml`), and it is used
+    /// for one thing: naming the overload in a refusal that lists what the operator accepts. The
+    /// residual position in it is the compiler's (author, 2026-11-01), so it is not a reading of
+    /// anything -- the count the step prints comes from the graph (`residuals=`) and the halves' types
+    /// come from the graphs (`type=`), never from this spelling.
     std::string signature() const override {
         return "(f: (float, float) => (float, float)) => ((float) => (float, (float)), ((float), "
                "float) => float)";
@@ -165,10 +164,10 @@ slot_t splitKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     auto *pair = ::Tuple::create(2, mm::autoSpace());
     pair->set<slot_t>(0, toSlot<::Function *>(forwardFunction), halves.pair);
     pair->set<slot_t>(1, toSlot<::Function *>(backwardFunction), halves.pair);
-    const std::string pairText =
-        halves.pair != nullptr ? halves.pair->toString() : std::string("-");
-    std::cout << "REINTERP split op signature=" << SplitResolver{}.signature()
-              << " resolved=" << pairText << " residuals=" << built.residuals << '\n';
+    // The reading of what the step built is the graph's own (`REINTERP split ... type= ... residuals=`,
+    // split.cpp). The operator's declaration text used to be printed beside it, with the pair's type
+    // read from that placeholder; both are gone: the placeholder is the type a call site is checked
+    // against, not a fact about the two halves (author, 2026-11-01).
     return toSlot<::Tuple *>(pair);
 }
 

@@ -147,38 +147,36 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
     std::vector<gc_node_ref_t> stack;
     stack.reserve(graph->nodeCount());
 
-    // Only what the exit depends on is laid out. A rewrite may leave nodes nothing uses (the
-    // inner branch of an inlined callee whose result the caller's body ignores); they still
-    // hang off live nodes as users. The branch handling below walks users, so it has to know
-    // which of them are part of the execution.
+    // Only what the exit depends on, and what the regions say runs, is laid out. A rewrite may leave
+    // nodes nothing uses (the inner branch of an inlined callee whose result the caller's body
+    // ignores); they still hang off live nodes as users. The branch handling below walks users, so
+    // it has to know which of them are part of the execution.
     const gc_node_ref_t startRef = graph->exitNodeRef() != camel::runtime::kInvalidNodeRef
                                        ? graph->exitNodeRef()
                                        : graph->returnNodeRef();
+    // Two sets, because the ruling keeps them apart (docs/design/effects/edges.cn.md 5.2):
+    //
+    //   * `used` -- what the exit depends on. The walk from the exit along the edges that carry
+    //     "used": data ports and sync edges. This is the set the region-result check below reads.
+    //   * `live` -- what the execution holds. It starts as `used` and then takes the seed the
+    //     ruling names: **the results of the regions**. A region runs because its owner runs, so
+    //     its result is part of the execution whether or not anything downstream reads it.
+    //
+    // The members of a region are not seeds. They are the region's *range*: laid out below as the
+    // arm's own piece because the arm runs, not because liveness reached them. Seeding them, as
+    // this walk used to, is what made the control edge from the branch to its arm the only reason
+    // an arm's statements were ever laid out.
+    std::vector<uint8_t> used(graph->nodeCount(), 0);
     std::vector<uint8_t> live(graph->nodeCount(), 0);
-    {
-        std::vector<gc_node_ref_t> work{startRef};
-        // The plan is the region's, not the exit's alone: a node the graph puts in a region runs
-        // because its region runs (docs/design/effects/edges.cn.md 5.2 -- an arm is entered by
-        // belonging to it), so every node of a region is part of the execution, and what it reads
-        // and waits on is reached from it. Walking back from the exit alone would leave the
-        // statements of an arm out whenever nothing downstream reads what they made, which is what
-        // the control edge between the branch and its arm used to prevent.
-        const camel::runtime::ControlRegions seedRegions(*graph);
-        for (gc_node_ref_t n = 0; n < graph->nodeCount(); ++n) {
-            if (!graph->containsNodeRef(n) || graph->node(n) == nullptr) {
-                continue;
-            }
-            if (seedRegions.controlOf(n) != 0) {
-                work.push_back(n);
-            }
-        }
+    const camel::runtime::ControlRegions seedRegions(*graph);
+    const auto reachBack = [&](std::vector<gc_node_ref_t> &work, std::vector<uint8_t> &reached) {
         while (!work.empty()) {
             const gc_node_ref_t n = work.back();
             work.pop_back();
-            if (!graph->containsNodeRef(n) || live[n]) {
+            if (!graph->containsNodeRef(n) || reached[n]) {
                 continue;
             }
-            live[n] = 1;
+            reached[n] = 1;
             for (auto inputs :
                  {graph->ctrlInputsOf(n), graph->normInputsOf(n), graph->withInputsOf(n)}) {
                 work.insert(work.end(), inputs.begin(), inputs.end());
@@ -189,13 +187,32 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
                 work.push_back(edge.pred);
             }
         }
+    };
+    {
+        std::vector<gc_node_ref_t> fromExit{startRef};
+        reachBack(fromExit, used);
+        live = used;
+        std::vector<gc_node_ref_t> seeds;
+        seeds.reserve(graph->regionCount());
+        // Every control region in the walk order (position 0 is the body, which is not a region).
+        for (uint32_t at = 1; at < static_cast<uint32_t>(seedRegions.size()); ++at) {
+            const camel::runtime::GCRegion *region = graph->region(seedRegions.regionAt(at));
+            if (region == nullptr || region->result == camel::runtime::kInvalidNodeRef) {
+                continue;
+            }
+            seeds.push_back(region->result);
+        }
+        reachBack(seeds, live);
     }
 
     // A region that yields a value yields it to the node that reads it -- the owner of the region --
-    // and a live owner is live because the exit depends on what it reads. So the walk above has to
-    // have reached the result of every live region. A rewrite that drops the link from a region
-    // result leaves the region computing a value nothing takes: the work is still done, the value
-    // is thrown away, and nothing in the graph says so.
+    // and an owner the exit depends on is one whose reads the exit depends on. So the walk from the
+    // exit has to have reached the result of every such region. A rewrite that drops the link from a
+    // region result leaves the region computing a value nothing takes: the work is still done, the
+    // value is thrown away, and nothing in the graph says so.
+    //
+    // The check reads `used`, not `live`: the region's result is now a seed of `live`, so asking
+    // `live` here would answer itself and the sentence below would never fire.
     for (uint32_t r = 1; r < graph->regionCount(); ++r) {
         const camel::runtime::GCRegion *region = graph->region(r);
         if (region == nullptr || region->result == camel::runtime::kInvalidNodeRef) {
@@ -203,11 +220,11 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
         }
         const gc_node_ref_t owner = region->owner;
         if (owner == camel::runtime::kInvalidNodeRef || !graph->containsNodeRef(owner) ||
-            !live[owner]) {
+            !used[owner]) {
             continue;
         }
         GUARD(
-            graph->containsNodeRef(region->result) && live[region->result],
+            graph->containsNodeRef(region->result) && used[region->result],
             std::format(
                 "Region {} yields node {} and its owner {} is in the execution, but that node is "
                 "not: the value the region makes is read by nothing the exit depends on.",
@@ -216,16 +233,22 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
                 owner));
     }
 
-    // The live nodes of each arm region, nested branches included: the nodes whose control region
-    // lies in a region are one range of the nodes sorted by the walk position of their control
-    // region (in node order within a position).
+    // The members of each arm region, nested branches included: the nodes whose control region lies
+    // in a region are one range of the nodes sorted by the walk position of their control region
+    // (in node order within a position). The range is read from membership, not from liveness: an
+    // arm's range is the members of its region (docs/design/effects/edges.cn.md 5.2), so a member
+    // belongs to the piece its region is laid out as even when nothing reached it.
     const camel::runtime::ControlRegions regions(*graph);
+    const auto isMember = [&](gc_node_ref_t n) {
+        return graph->containsNodeRef(n) && graph->node(n) != nullptr &&
+               regions.controlOf(n) != 0;
+    };
     std::vector<gc_node_ref_t> grouped;
     std::vector<uint32_t> groupStart;
     if (regions.any()) {
         groupStart.assign(regions.size() + 1, 0);
         for (gc_node_ref_t n = 0; n < live.size(); ++n) {
-            if (live[n]) {
+            if (isMember(n)) {
                 ++groupStart[regions.tin(regions.controlOf(n)) + 1];
             }
         }
@@ -235,7 +258,7 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
         grouped.resize(groupStart.back());
         std::vector<uint32_t> fill(groupStart.begin(), groupStart.end() - 1);
         for (gc_node_ref_t n = 0; n < live.size(); ++n) {
-            if (live[n]) {
+            if (isMember(n)) {
                 grouped[fill[regions.tin(regions.controlOf(n))]++] = n;
             }
         }
@@ -443,7 +466,7 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
         // hold anyway is a node nothing reaches, so its order says nothing and is not visited:
         // no other edge is followed from it.
         for (const camel::runtime::GCGraphOrderEdge &edge : graph->orderPredsOf(index)) {
-            if (live[edge.pred]) {
+            if (live[edge.pred] || isMember(edge.pred)) {
                 visit(edge.pred);
             }
         }
@@ -464,9 +487,11 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
     }
     // A node a region says runs is laid out even when nothing outside the region reaches it: an
     // arm's statements have no value user, and the region is the unit the plan is laid out from
-    // (docs/design/effects/edges.cn.md 5.2).
+    // (docs/design/effects/edges.cn.md 5.2). What says a node runs is its membership, so the loop
+    // reads membership: an arm's range is the members of its region, and that range is the only
+    // thing an arm's statements need in order to be laid out.
     for (gc_node_ref_t n = 0; n < live.size(); ++n) {
-        if (live[n] && state[n] != 2) {
+        if ((live[n] || isMember(n)) && state[n] != 2) {
             visit(n);
         }
     }
