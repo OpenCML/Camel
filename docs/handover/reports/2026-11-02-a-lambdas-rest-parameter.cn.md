@@ -557,3 +557,43 @@ help: Ensure the index is within bounds for arrays or refers to a valid field in
 **把断言里的前提变成代码里的分支。** 断言在 release 里不存在，所以它守的前提在 release 里也**没有守卫**；
 凡是"断言 + 紧接着解引用"的写法，正确形态都是**先判、判不过就报诊断**（编译期）或**报错返回**（运行期）。
 A2 的改法就是这一族的模板：`if (gct->accessByIndex()) { 报 InvalidAccessIndex; throw; }`。
+
+## 16. 前端六处"同形未证"的处置：全部有 release 下的界/分支保证
+
+| 处 | 最小程序形状 | 结果 | 归属 |
+|---|---|---|---|
+| `gct/node.h:219 exportName(i)` | 需要一个 `EXPT` 节点上超出 `exportCount()` 的下标。**造不出**：两处调用都是 `for (i < exportCount())`（`gir/builder_modules.cpp:721`、`:1322`），没有语法能让下标越界 | **安全**（release 下有界） | 不修 |
+| `gct/node.h:239 loopStateName(j)` | 需要 `j >= loopStateCount()`。**造不出**：调用点自带界（`gir/builder_control.cpp:2962` 的 `j < k`） | **安全** | 不修 |
+| `gct/node.h:244 loopElementName()` | 需要"有 iterable 但 `names` 为空"的 `LOOP`。**造不出**：语法上 `for x in xs` 必给元素名，所以"有 iterable ⇒ 至少一个名字"；两处调用还各自被 `withElement == loopHasIterable(kind)` 守着（`builder_control.cpp:3200`、`:3221`；`:3996` 在 for 支内） | **安全** | 不修 |
+| `gct/node.h:315 enumCase()` | 需要 `caseType() != Enum` 时取 `enumCase()`。**造不出**：唯一调用点先做枚举模式检查，不匹配就报 `EnumPatternMismatch` 并中止（`gir/builder_enum.cpp:353-358`） | **安全** | 不修 |
+| `gct/node.h:339 typeCaseTypeAt(i)` | 需要 `i >= typeCaseCount()`。**造不出**：调用点都按 `typeCaseCount()` 遍历（`gir/builder_static.cpp:83`、`:463`、`:531`、`:539`） | **安全** | 不修 |
+| `gct/node.h:420 staticLoopStateName(j)` | 同 239。**造不出**：`for (j < staticLoopStateCount())`（`builder_static.cpp:360`、`:1200`） | **安全** | 不修 |
+
+**六处的共同结论**：这六处与 A2 **不同形**——A2 的前提（"名字存在")由**程序写法**选择，而六处的前提（"下标在表内"）
+由**调用点自己的循环界**在 release 下保证。**所以一处都不修、也没有"改前改后 rc"。**
+只要某天调用点不再自带界，这里就会退化成 A2——**模板仍是那一句：把断言里的前提变成代码里的分支。**
+
+`git grep -c 'ASSERT' src`：本轮**未改**（没有删断言，也没有新增），数值不变。
+
+## 17. 全量闸门：不是 0，有 2 条 fail（都不是本车道）
+
+`-Plan test/plans -Tier all -Jobs 8`：
+
+```
+[FAIL] progen_check     133.02 s cpu of 150.00 s budget, 88.00 s wall
+[FAIL] progen_fixed                                           17.36 s
+```
+
+单跑 `test/plans/feat/opt/progen.plan.toml`（`-Jobs 2`）**仍然两条都红**（`133.27 s cpu / 107.90 s wall`、`24.99 s`），
+所以**不是并发负载**。`progen_fixed` 的红是这样的：
+
+```
+F20 findings/inline_crash_function_argument.cml [std::opt std::nvm]: REFUSED:RuntimeDiag::PassInternalError:
+    Pass 'std::opt::fold' failed with an internal error: graph '__root__' has effect n…
+progen fixed: 29 findings, 480 runs
+4 wrong
+```
+
+**判断**：这两条与本节改动无关——`std::opt::fold` 的 `PassInternalError` 不是本车道能产生的形态（本车道的改动要么给
+`SemanticDiag`，要么照常建节点），且 `progen_check` 是 CPU 预算（133 s 对 150 s 的余量）。**但"无关"只是判断，
+不是读数**：要证它在 `develop` 上同样红，得在另一棵树跑同一计划——**本车道没有第二棵树，这一条留给主检出。**
