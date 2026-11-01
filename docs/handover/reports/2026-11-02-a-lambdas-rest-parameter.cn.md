@@ -1195,3 +1195,64 @@ A2（`p.1` on a struct）已经在 `assert` 审计里证明这条路有效一次
 
 **S1 的第二次证据**（按你要求并列写）：**A2**（`p.1` 作用在结构体上，`rc=139 ×3` → `InvalidAccessIndex`）是第一次；
 **`enum.cpp:131`**（null 枚举读 tag，`ASSERT` → `InvalidArgument`）是第二次。**两次都是"断言的前提变成分支"。**
+
+## 36. `a..b->f` 的优先级：读数钉死，加了一条点名优先级的诊断（不改优先级）
+
+**① 最小程序的读数（`minimal/generator_reject.cml` 原样）**：
+
+```camel
+let n = (-2)..(-1)->reduce<(p: string, q: int): string => p, "cd">
+```
+
+**改前**：`rc=1`，`error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <(p: string, q: int) => string pure, string> (int).`
+——**括号里那个 `(int)` 就是证据**：`reduce` 拿到的是 **`int`**，不是区间。**`..` 比 `->` 弱，`->` 落到右操作数 `(-1)` 上。**
+
+**② 对照（加括号就好）**：`let n = ((-2)..(-1))->reduce<…>` → **`rc=0`**。
+**两侧合起来就是"这是优先级问题，不是缺功能"。**
+
+**③ 改法（只加诊断，不动优先级）**：**`..` 的右操作数是 `->` 链时给一条具名诊断**。
+`parseRange`（`parser_expr.cpp:243-263`）在解析右操作数之后看一眼 CST 节点：`NK::LinkExpr` ⇒ `error(RangeRightIsLink, {}, dotToken)`；
+`report.cpp` 里补一支把它变成诊断（位置指在 `..` 上）：
+
+```
+error[SyntaxDiag::RangeRightIsLink]: The right side of '..' is a '->' call: '..' binds looser than '->',
+       so the call lands on the last value rather than on the interval.
+help: The interval is an expression, and the call is written after it in parentheses: (a..b)->reduce(f).
+      Written without them, a..b->reduce(f) is a..(b->reduce(f)), which asks the last value of the interval
+      to be reduced. The precedence is the language's, so the parentheses are the program's to add.
+```
+
+**④ 为什么是"右操作数"而不是"`->` 的左操作数是 `..`"**：这一句要写清，因为**实际形状与预期是镜像的**——
+`..` 比 `->` 弱，所以 `a..b->f` 解析成 `a..(b->f)`，**`->` 的左操作数是 `b`，`..` 根本不在它左边**。
+**能检出的位置只有"`..` 的右操作数是一条 `->` 链"，而这正好是生成器写出来的那个形状。**
+
+**⑤ 新码怎么加的（今天第二次踩同一处，写清楚）**：**`diagnostics/registry.tsv` 是唯一事实源，`syntax.h` / `syntax.cpp` 是生成物**
+（脚本头注释：`include/…messages/*.h` the enums, generated；`src/…messages/*.cpp` the message tables, generated）。
+**我第一次直接改 `syntax.h`/`syntax.cpp`，`--write` 把两处改动整个抹掉了**（`git status` 里只剩另两个文件），
+**改成往 `registry.tsv` 加一行（`syntax RangeRightIsLink 0x000013 error … edit`）再 `--write`，306 个码、0 new number，生成回来的是同一份**。
+⇒ **纪律：改诊断只改 `registry.tsv`，别碰生成物。**
+
+**⑥ 读数**：`feat/parse` 114/114；全量见 §37。**优先级本身没动**——**要不要改优先级是作者的事**，页里明写"默认不改"。
+## 37. 读数与给作者的一节
+
+**全量**：`[SUMMARY] total: 8368, pass: 8356, fail: 0, skip: 10, known failures: 2`（比基线多一条，就是新加的那支用例）。
+`feat/parse` 114/114；`--coverage-check`、`--pinned-coverage-check`、`--verify-doc`、`camel-for-ai --check` 四条本地闸门全绿
+（新增码 306 个，`289 of 306` 有按码钉死的用例——新码是第 289 个）。
+
+**新码落地时要跟着动的四处（记下来，免得下次再踩）**：
+1. `diagnostics/registry.tsv` 加一行（唯一事实源）；
+2. `--write` 生成 `syntax.h` / `syntax.cpp` / `docs/diagnostics.md`；
+3. 一支用例 + 计划条目（否则 `catalog.coverage_zero` 与 `catalog.pinned_coverage` 会红）；
+4. `node scripts/camel-for-ai.mjs --write`（否则 `docs.ai_reference.current` 会红）。
+
+## 38. 给作者：generator v6 的写法在 v6 之后被解析成另一个意思
+
+**这是"生成器与编译器不一致"的可执行解释，比 11.8% 这个数更有用**：
+
+- 生成器写 `a..b->reduce<…>`，**它以为** `->` 作用在 `a..b` 上；
+- 编译器读 `a..b->reduce<…>` 为 **`a..(b->reduce<…>)`**，于是把 `b`（一个 `int`）交给 `reduce`；
+- 于是报的是 **`NoMatchingFunction … (int)`**——**一条与作者意图无关、也指不出病因的诊断**；
+- **同一个程序加一对括号 `(a..b)->reduce<…>` 就编过**（`rc=0`）——**所以这不是"函数不存在"，是"优先级读法不同"**。
+
+**这条现在会直接点名**：`SyntaxDiag::RangeRightIsLink`（`0x02000013`）说"`..` 比 `->` 弱，调用落在最后一个值上，要加括号"。
+**优先级本身没改**（改不改是作者的裁决）；**改的只是"被误解时不至于只看到一条签名不匹配"**。

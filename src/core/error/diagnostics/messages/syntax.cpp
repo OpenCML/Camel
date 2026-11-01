@@ -141,6 +141,14 @@ const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
             },
         },
         {
+            SyntaxDiag::RangeRightIsLink,
+            {
+                "RangeRightIsLink",
+                "The right side of '..' is a '->' call: '..' binds looser than '->', so the call lands on the last value rather than on the interval.",
+                "The interval is an expression, and the call is written after it in parentheses: (a..b)->reduce(f). Written without them, a..b->reduce(f) is a..(b->reduce(f)), which asks the last value of the interval to be reduced. The precedence is the language's, so the parentheses are the program's to add.",
+            },
+        },
+        {
             SyntaxDiag::WhenAfterBody,
             {
                 "WhenAfterBody",

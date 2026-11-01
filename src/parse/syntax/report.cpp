@@ -669,6 +669,15 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
             continue;
         }
 
+        // 6c. `a..b->f`: the '->' of the right operand, not of the interval. `..` binds looser,
+        //     so the call lands on the last value; the parentheses are what makes it an interval call.
+        if (error.kind == SyntaxError::Kind::RangeRightIsLink) {
+            if (once(SyntaxDiag::RangeRightIsLink, offending)) {
+                diagnostics.of(SyntaxDiag::RangeRightIsLink).at(at(offending)).commit();
+            }
+            continue;
+        }
+
         // 7. A '(' or '[' still open where a statement starts, a block ends or the file ends;
         //    or the end of the file with a block open.
         if (!open.empty()) {

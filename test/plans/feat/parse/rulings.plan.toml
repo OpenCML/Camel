@@ -332,3 +332,17 @@ expect_diagnostic_column = 13
 expect_output_contains = ["'..' takes two functions or two integers", "the left operand is 'int'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "rulings.range_right_is_link"
+desc = "The right operand of `..` is a `->` chain: `..` binds looser than `->`, so the call lands on the last value of the interval. The refusal names the precedence and says to add the parentheses, instead of a signature that does not match the call it was never given."
+kind = "negative"
+case = "../../../cases/parse/rulings/range_right_is_link.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::RangeRightIsLink"
+expect_diagnostic_code = "0x02000013"
+expect_diagnostic_line = 5
+expect_output_contains = ["binds looser than", "(a..b)->reduce(f)"]
+expect_output_not_contains = ["UnknownInternalError", "NoMatchingFunction"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

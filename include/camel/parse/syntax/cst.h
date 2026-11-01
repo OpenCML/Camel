@@ -84,6 +84,7 @@ struct SyntaxError {
         LineStartsWithSign,    // a line starting with `+` that cannot start a statement
         WhenAfterBody,         // `rule f(x) { … } when c`: the condition belongs before the body
         AsRightSideIsType,     // `x as int..5`: the interval reading of `..` where a type stands
+        RangeRightIsLink,      // `a..b->f`: the `->` of the right operand, not of the interval
     };
     /// Members of `expected` that are not token kinds.
     enum Pseudo : uint8_t {
