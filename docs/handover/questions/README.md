@@ -14,8 +14,10 @@
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
 
-## 现在在等作者：0 页（与目录逐项一致）
-目录里没有待裁的页：最后三页（`whether-the-empty-tangent-needs-a-port`、`is-an-arm-block-a-sync-chain`、`does-the-pause-cover-a-lambdas-parameter-list`）已由作者在读完之后整体挪进 `reviews/`，`30191828b` 带进的两条裁定见下。**索引此前仍列着这三行**，指向已被 `git mv` 走的名字——一条指向不存在文件的索引比没有索引更坏，所以这三行在这一笔里删掉，判据仍旧是"以目录为准"。
+## 现在在等作者：1 页（与目录逐项一致）
+| 页 | 问句 | 默认建议 |
+|---|---|---|
+| [`whether-a-transpose-rule-answers-every-name-or-the-first`](questions-2026-11-02-whether-a-transpose-rule-answers-every-name-or-the-first.md) | 一条转置规则是"只答它左侧第一个名字的余切"，还是"答左侧每个名字的余切" | **按 B 落地**（一条规则按左侧顺序返回每个名字的余切，元组）：A 之下 `grad((x) => x / 4.0)` 会除零（第二位把被除数塞进除数槽），所以树逼着按 B 走；`transforms` 52/52，`grad((x) => x / 4.0)`@8 = `0.25`、`grad((x) => 4.0 / x)`@2 = `-1.0`；等作者确认这个读法 |
 
 **17:30 作者把 `nested-branch-stops-in-jvp` 也挪进 `reviews/` 并在 `questions-2026-10-29.md` 记了两条裁定**（`fsh-dev` 的 `9c2e5c7df`）：前端变换实例化**先停手**（已进树的不撤，等负责人一起处理），嵌套分支按区域**从内到外递归**、不为“嵌套”另写一支（`vjp` 在 `2 / 0.5 / -1` 处 `4.0 / 2.0 / 3.0`，四个后端一致）。
 

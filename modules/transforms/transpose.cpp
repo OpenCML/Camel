@@ -4,6 +4,7 @@
 #include "transpose.h"
 
 #include "jvp.h"
+#include "rule_expand.h"
 
 #include "camel/core/forward.h"
 #include "camel/core/mm.h"
@@ -197,6 +198,10 @@ struct TransposeState {
     camel::runtime::GraphDraftGroup &group;
     const camel::runtime::Program *program;
     std::unordered_map<uint32_t, GraphId> callees;
+    /// The context whose rule table the transpose reads. `TransposeState` is where it belongs: it is
+    /// what the build is handed (`buildTransposeGraph`), it is not a field of any value the language
+    /// names, and the rule's right side is looked up by name in the table the context keeps.
+    const camel::core::context::context_ptr_t &context;
 };
 
 bool buildTransposeMember(
@@ -430,8 +435,28 @@ bool buildTransposeMember(
             }
             cotangent[ref] = primitive(":op/add_d", {cotangent[ref], node});
         };
-        const auto negate = [&](gc_node_ref_t node) {
-            return primitive(":op/sub_d", {zero(), node});
+        // One position's cotangent: the rule the index filed for this operator, its right side
+        // expanded where the operator stood. What stands in the graph is the rule's own function of
+        // the cotangent -- `mul_cotangent(c, ct)`, `neg_cotangent(ct)` -- so no law is written here
+        // a second time, and the numbers are the library's (design principles 5.5: one writing).
+        //
+        // The rule answers one cotangent per name its left side writes, in that order -- a tuple --
+        // and `position` is the name whose cotangent this is. The operands' values are handed over
+        // in the left side's own order, because that is the order the right side binds them in: the
+        // dividend stays the dividend and the divisor stays the divisor, whichever position is being
+        // answered. Which of them the answer at `position` reads is the rule's own business -- the
+        // expansion asks only for those -- so a position that needs nothing it does not have is
+        // answered even where the walk carries no value for the other operand (a transposed loop
+        // body's own state, or a divisor that is the differentiated value itself).
+        const auto ruleCotangent = [&](const std::string &ruleName,
+                                       std::span<const gc_node_ref_t> inputs, size_t position,
+                                       gc_node_ref_t ct, std::string &why) -> gc_node_ref_t {
+            const auto valueOf = [&](size_t slot) -> gc_node_ref_t {
+                return slot < inputs.size() ? knownValue(inputs[slot]) : rt::kInvalidNodeRef;
+            };
+            return camel::transforms::expandRuleByName(
+                *state.context, group, group.transaction(member), ruleName, valueOf, {ct}, position,
+                why);
         };
         const auto noteRule = [&usedRules](const std::string &name) {
             if (std::find(usedRules.begin(), usedRules.end(), name) == usedRules.end()) {
@@ -974,51 +999,23 @@ bool buildTransposeMember(
                     return {};
                 }
                 noteRule(rule->rule);
-                if (rule->rule == "add_t") {
-                    for (size_t i = 0; i < inputs.size(); ++i) {
-                        if (!isConstant(inputs[i])) {
-                            deliver(inputs[i], local[ref], ref);
-                        }
+                for (size_t i = 0; i < inputs.size(); ++i) {
+                    if (isConstant(inputs[i])) {
+                        continue;
                     }
-                    continue;
-                }
-                if (rule->rule == "sub_t" || rule->rule == "neg_t") {
-                    bool first = true;
-                    for (size_t i = 0; i < inputs.size(); ++i) {
-                        if (isConstant(inputs[i])) {
-                            continue;
-                        }
-                        deliver(inputs[i], first ? local[ref] : negate(local[ref]), ref);
-                        first = false;
+                    std::string why;
+                    const gc_node_ref_t answer =
+                        ruleCotangent(rule->rule, inputs, i, local[ref], why);
+                    if (answer == rt::kInvalidNodeRef) {
+                        armsOk = false;
+                        os << "TRANSPOSE function=" << function->name()
+                           << " skip=cotangent-needs-a-value uri=" << body->uri()
+                           << " position=" << i << " reason=" << why << '\n';
+                        return {};
                     }
-                    continue;
+                    deliver(inputs[i], answer, ref);
                 }
-                if (rule->rule == "mul_t" || rule->rule == "div_t") {
-                    for (size_t i = 0; i < inputs.size(); ++i) {
-                        if (isConstant(inputs[i])) {
-                            continue;
-                        }
-                        const size_t other = inputs.size() == 2 ? 1 - i : 0;
-                        const gc_node_ref_t c = knownValue(inputs[other]);
-                        if (c == rt::kInvalidNodeRef) {
-                            armsOk = false;
-                            return {};
-                        }
-                        if (rule->rule == "mul_t") {
-                            deliver(inputs[i], primitive(":op/mul_d", {local[ref], c}), ref);
-                        } else if (i == 0) {
-                            deliver(inputs[i], primitive(":op/div_d", {local[ref], c}), ref);
-                        } else {
-                            const gc_node_ref_t a = constantValue(inputs[0]);
-                            const gc_node_ref_t top = primitive(":op/mul_d", {local[ref], a});
-                            const gc_node_ref_t sq  = primitive(":op/mul_d", {c, c});
-                            deliver(inputs[i], negate(primitive(":op/div_d", {top, sq})), ref);
-                        }
-                    }
-                    continue;
-                }
-                armsOk = false;
-                return {};
+                continue;
             }
             return portCotangents;
         };
@@ -1306,55 +1303,22 @@ bool buildTransposeMember(
                 }
                 const gc_node_ref_t ct = cotangent[ref];
                 noteRule(rule->rule);
-                const std::string &law = rule->rule;
-                if (law == "add_t") {
-                    for (size_t i = 0; i < inputs.size(); ++i) {
-                        if (!isConstant(inputs[i])) {
-                            addCotangent(inputs[i], ct);
-                        }
+                for (size_t i = 0; i < inputs.size(); ++i) {
+                    if (isConstant(inputs[i]) || !wantsCotangent(inputs[i])) {
+                        // A value parameter of a partial transposition takes no cotangent, and
+                        // computing one would need the value of a participating parameter -- the
+                        // one thing this graph does not have.
+                        continue;
                     }
-                } else if (law == "sub_t" || law == "neg_t") {
-                    bool first = true;
-                    for (size_t i = 0; i < inputs.size(); ++i) {
-                        if (isConstant(inputs[i])) {
-                            continue;
-                        }
-                        addCotangent(inputs[i], first ? ct : negate(ct));
-                        first = false;
+                    std::string why;
+                    const gc_node_ref_t answer = ruleCotangent(rule->rule, inputs, i, ct, why);
+                    if (answer == rt::kInvalidNodeRef) {
+                        os << "TRANSPOSE function=" << function->name()
+                           << " skip=cotangent-needs-a-value uri=" << uri << " position=" << i
+                           << " reason=" << why << '\n';
+                        return false;
                     }
-                } else if (law == "mul_t" || law == "div_t") {
-                    for (size_t i = 0; i < inputs.size(); ++i) {
-                        if (isConstant(inputs[i]) || !wantsCotangent(inputs[i])) {
-                            // A value parameter of a partial transposition takes no cotangent, and
-                            // computing one would need the value of a participating parameter -- the
-                            // one thing this graph does not have.
-                            continue;
-                        }
-                        const size_t other = inputs.size() == 2 ? 1 - i : 0;
-                        const gc_node_ref_t c = knownValue(inputs[other]);
-                        if (c == rt::kInvalidNodeRef) {
-                            os << "TRANSPOSE function=" << function->name()
-                               << " skip=residual uri=" << uri << " operand=" << inputs[other]
-                               << '\n';
-                            return false;
-                        }
-                        if (law == "mul_t") {
-                            addCotangent(inputs[i], primitive(":op/mul_d", {ct, c}));
-                            continue;
-                        }
-                        if (i == 0) {
-                            addCotangent(inputs[i], primitive(":op/div_d", {ct, c}));
-                        } else {
-                            const gc_node_ref_t a   = constantValue(inputs[0]);
-                            const gc_node_ref_t top = primitive(":op/mul_d", {ct, a});
-                            const gc_node_ref_t sq  = primitive(":op/mul_d", {c, c});
-                            addCotangent(inputs[i], negate(primitive(":op/div_d", {top, sq})));
-                        }
-                    }
-                } else {
-                    os << "TRANSPOSE function=" << function->name() << " skip=law rule=" << law
-                       << " uri=" << uri << '\n';
-                    return false;
+                    addCotangent(inputs[i], answer);
                 }
                 break;
             }
@@ -1848,13 +1812,13 @@ bool buildTransposeMember(
         draft.setOutputNode(result);
         draft.setReturnNode(result, rt::GCReturnKind::Self);
     }
-    std::string rules;
+    std::string rhs;
     for (const std::string &rule : usedRules) {
-        rules += (rules.empty() ? "" : ",") + rule;
+        rhs += (rhs.empty() ? "" : ",") + rule;
     }
     os << "TRANSPOSE function=" << function->name() << " graph=" << rt::toValue(member)
        << " type=" << signature->toString() << " nodes=" << nodeCount
-       << " arms=" << armRegionsBuilt.size() << " rules=" << (rules.empty() ? "-" : rules)
+       << " arms=" << armRegionsBuilt.size() << " rhs=" << (rhs.empty() ? "-" : rhs)
        << '\n';
     return true;
 }
@@ -1869,7 +1833,7 @@ TransposeGraph buildTransposeGraph(
     const GraphId member = group.reserve(
         "transpose_of_" + std::string(function->name()),
         "transpose_of_" + std::string(function->name()));
-    TransposeState state{group, program, {}};
+    TransposeState state{group, program, {}, context};
     if (!buildTransposeMember(state, function, member, os)) {
         return TransposeGraph{};
     }

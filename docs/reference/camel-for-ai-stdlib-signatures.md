@@ -767,7 +767,7 @@ update: (opt: Sgd, params: P, grads: G, state: SgdState) => (P, SgdState)
 update: (opt: Adam, params: P, grads: G, state: AdamState<P>) => (P, AdamState<P>)
 ```
 
-**`autodiff`** — import { ... } from autodiff — 15 name(s)
+**`autodiff`** — import { ... } from autodiff — 19 name(s)
 
 ```text
 grad: (f: F) => Gradient<F> when is_function::<F>()
@@ -780,11 +780,15 @@ sub_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 mul_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 div_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
 neg_tangent: (x: T, dx: T) => T when is_float::<T>()
-add_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
-sub_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
-mul_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
-div_cotangent: (x: T, c: T, ct: T) => T when is_float::<T>()
-neg_cotangent: (x: T, ct: T) => T when is_float::<T>()
+add_cotangent: (ct: T) => T when is_float::<T>()
+sub_cotangent: (ct: T) => T when is_float::<T>()
+mul_cotangent: (c: T, ct: T) => T when is_float::<T>()
+div_cotangent: (c: T, ct: T) => T when is_float::<T>()
+neg_cotangent: (ct: T) => T when is_float::<T>()
+add_cotangent_c: (ct: T) => T when is_float::<T>()
+sub_cotangent_c: (ct: T) => T when is_float::<T>()
+mul_cotangent_c: (x: T, ct: T) => T when is_float::<T>()
+div_cotangent_c: (x: T, c: T, ct: T) => T when is_float::<T>()
 ```
 
 **`rulesets.jvp`** — import { ... } from rulesets.jvp — 7 name(s)

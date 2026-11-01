@@ -294,7 +294,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=sum_of_scaled graph=", "type=(float, float) => float nodes=6 arms=0 rules=add_t,mul_t", "TRANSPOSE function=scaled_chain graph=", "rules=mul_t,add_t", "TRANSPOSE op signature=(f: (float) => float | ((..Residuals), float, ...) => float) => (knowns.., cotangent) => (cotangents..)", "transposed=(float, float) => float", "same=yes", "5.0", "20.0"]
+expect_stdout_contains = ["TRANSPOSE function=sum_of_scaled graph=", "type=(float, float) => float nodes=6 arms=0 rhs=add_t,mul_t", "TRANSPOSE function=scaled_chain graph=", "rhs=mul_t,add_t", "TRANSPOSE op signature=(f: (float) => float | ((..Residuals), float, ...) => float) => (knowns.., cotangent) => (cotangents..)", "transposed=(float, float) => float", "same=yes", "5.0", "20.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -339,7 +339,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=pick graph=", "type=(float, float) => float nodes=9 arms=2 rules=mul_t", "TRANSPOSE function=merged graph=", "nodes=12 arms=2 rules=add_t,mul_t", "2.0", "3.0", "7.0", "4.0"]
+expect_stdout_contains = ["TRANSPOSE function=pick graph=", "type=(float, float) => float nodes=9 arms=2 rhs=mul_t", "TRANSPOSE function=merged graph=", "nodes=12 arms=2 rhs=add_t,mul_t", "2.0", "3.0", "7.0", "4.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -352,7 +352,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=thrice graph=", "type=(float, float) => float", "nodes=11 arms=0 rules=mul_t", "TRANSPOSE function=quad graph=", "8.0", "16.0"]
+expect_stdout_contains = ["TRANSPOSE function=thrice graph=", "type=(float, float) => float", "nodes=11 arms=0 rhs=mul_t", "TRANSPOSE function=quad graph=", "8.0", "16.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -580,7 +580,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=g graph=", "TRANSPOSE function=f graph=", "rules=add_t", "4.0"]
+expect_stdout_contains = ["TRANSPOSE function=g graph=", "TRANSPOSE function=f graph=", "rhs=add_t", "4.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 # A rule's tangent function is a plain function of several floats: `mul_tangent(x, w, dx, dw)` is
@@ -597,7 +597,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=autodiff::mul_tangent<float> graph=", "type=(float, float, float, float, float) => (float, float, float, float) nodes=7 arms=0 rules=add_t,mul_t", "TRANSPOSE function=mt graph=", "nodes=5 arms=0 rules=-", "(0.0, 1.0, 2.0, 3.0)"]
+expect_stdout_contains = ["TRANSPOSE function=autodiff::mul_tangent<float> graph=", "type=(float, float, float, float, float) => (float, float, float, float) nodes=7 arms=0 rhs=add_t,mul_t", "TRANSPOSE function=mt graph=", "nodes=5 arms=0 rhs=-", "(0.0, 1.0, 2.0, 3.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -628,7 +628,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=autodiff::add_tangent<float> graph=", "type=(float, float, float, float, float) => (float, float, float, float) nodes=5 arms=0 rules=add_t", "TRANSPOSE function=at graph=", "nodes=5 arms=0 rules=-", "(0.0, 0.0, 1.0, 1.0)", "(0.0, 0.0, 2.0, 2.0)"]
+expect_stdout_contains = ["TRANSPOSE function=autodiff::add_tangent<float> graph=", "type=(float, float, float, float, float) => (float, float, float, float) nodes=5 arms=0 rhs=add_t", "TRANSPOSE function=at graph=", "nodes=5 arms=0 rhs=-", "(0.0, 0.0, 1.0, 1.0)", "(0.0, 0.0, 2.0, 2.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -694,3 +694,14 @@ expect_stdout_contains = ["TANGENT type=float space=self", "TANGENT type=f32 spa
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+[[tests]]
+name = "grad_of_a_division"
+desc = "`grad((x) => x / 4.0)` at 8 is `0.25`, not a crash and not a division by zero: the transposed `div_tangent` divides by `w * w`, a value rather than a constant, so `div_t`'s second position is reached and answered by the rule's second component -- which reads both operands, the way its law does -- instead of by the first component with the operands swapped (`ct / 0`, since the dividend there is `x * dw` and `dw` is the zero tangent of a constant). `grad((x) => 4.0 / x)` at 2 is `-1.0`: the differentiated value is the divisor, its cotangent is `-(ct * x / (c * c))`, and both values it needs are carried. `grad((x) => -x)` is `-1.0` -- the negation's cotangent is `-ct` -- and the multiplication and subtraction beside it keep their numbers."
+kind = "behavior"
+case = "../../../cases/compile/transforms/grad_of_a_division.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["3.0", "1.0", "-1.0", "0.25", "-1.0", "TRANSPOSE function=autodiff::div_tangent<float> graph="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
