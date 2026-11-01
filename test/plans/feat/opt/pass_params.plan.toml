@@ -582,3 +582,15 @@ expect_output_contains = ["Pass 'test::broken_maker' failed with an internal err
 expect_output_not_contains = ["terminate called", "DiagnosticsLimitExceededException"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
+
+[[tests]]
+name = "pass_guard.error_value_from_a_pass_is_reported"
+desc = "A pass is `(f: F) => F!` (design principles 9.1): one that cannot produce the program ends with an error value, and that value is its answer. The driver reads the status the pipeline returns and reports the value as an error nobody handled -- with the pass that made it -- and the run exits non-zero. This case is what makes 'the driver reports it' a tested claim: the reader existed in tools/ while this lane's first reading, grepping src/include/modules, called it missing."
+kind = "behavior"
+case = "../../../cases/compile/pass_guard/plain.cml"
+args = ["${case}", "test::fails_with_value"]
+expect_exit = 1
+expect_output_contains = ["RuntimeDiag::UnhandledError", "An error value reached the exit of 'main' without being handled: TestFailure: this test pass ended with an error value", "the error was made by <test::fails_with_value>"]
+expect_output_not_contains = ["terminate called"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000

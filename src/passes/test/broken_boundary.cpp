@@ -10,6 +10,7 @@
 #include "camel/passes/test/broken_boundary.h"
 
 #include "camel/core/context/context.h"
+#include "camel/core/rtdata/tagged.h"
 #include "camel/core/type/base.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
@@ -119,4 +120,12 @@ DanglePortTestPass::apply(const camel::runtime::Program *program, std::ostream &
     os << "test::dangle_port: operator node " << static_cast<unsigned>(target)
        << " port 0 now reads a node the graph does not have\n";
     return session.commit();
+}
+
+const camel::runtime::Program *FailsWithValueTestPass::apply(
+    const camel::runtime::Program *program, std::ostream &os) {
+    os << "test::fails_with_value: ending with an error value instead of a program\n";
+    failWithErrorValue(camel::core::rtdata::makeError(
+        "TestFailure", "this test pass ended with an error value", "<test::fails_with_value>"));
+    return nullptr;
 }

@@ -983,6 +983,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kLeakBranchArmPass, LeakBranchArmTestPass),
         TEST_PASS(kShareBranchArmPass, ShareBranchArmTestPass),
         TEST_PASS(kOperatorSemanticsTestPass, OperatorSemanticsTestPass),
+        TEST_PASS(kFailsWithValueTestPass, FailsWithValueTestPass),
         // A pass that refuses to be built. The throw is the point: it is what the construction
         // receiver exists to turn into a named diagnostic instead of a terminate.
         {
@@ -3186,11 +3187,6 @@ PassApplyResult applyPassesDetailed(
     return {program, PassApplyStatus::Transformed};
 }
 
-const camel::runtime::Program *applyPasses(
-    const camel::runtime::Program *program, const std::vector<std::string> &passes,
-    const context_ptr_t &ctx, std::ostream &os) {
-    return applyPassesDetailed(program, passes, ctx, os).program;
-}
 
 
 

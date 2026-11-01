@@ -45,3 +45,14 @@ class DanglePortTestPass : public RuntimeGraphRewritePass {
 /// declares that it cannot be built, which is the other thing a construction site has to receive --
 /// a break while being built, as opposed to a parameter the declaration already refused.
 inline constexpr const char *kBrokenMakerTestPass = "test::broken_maker";
+
+/// A pass that ends with an error value and no program (design principles 9.1, `(f: F) => F!`):
+/// the value is its answer, and the driver that ran the list has to report it. The case that runs
+/// this pass is what makes "the driver reports it" a tested claim rather than a comment.
+inline constexpr const char *kFailsWithValueTestPass = "test::fails_with_value";
+class FailsWithValueTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
