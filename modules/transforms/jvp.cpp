@@ -1029,12 +1029,14 @@ bool liftGraph(
                             made, static_cast<uint8_t>(rt::kGCNodeFlagSyncStatement));
                     }
                 }
-                if (node->dataType() != Type::Float64()) {
+                if (!camel::core::tangentSpaceOf(node->dataType()).hasSpace()) {
                     // A discrete value -- a comparison's `bool`, a count's `int` -- has no tangent:
                     // it is copied so the nodes that read it have their operand, and no rule is
                     // asked to produce a derivative for it (design principles 9.9: a discrete
                     // value's derivative is zero by definition, and a zero nobody reads is not
-                    // worth a node).
+                    // worth a node). Whether a value has a tangent at all is `tangentSpaceOf`'s
+                    // answer, not a comparison with `float`: an array of floats is its own tangent
+                    // space, and it is walked like a float -- by the rule filed under its operator.
                     break;
                 }
                 const std::string_view uri = body->uri();
@@ -1057,6 +1059,15 @@ bool liftGraph(
                 }
                 std::vector<gc_node_ref_t> tangents;
                 for (gc_node_ref_t original : originals) {
+                    // An operand with no tangent space -- the `i` of `xs[i]`, a branch's condition --
+                    // contributes no slot: the rule is handed the tangents of the operands that have
+                    // one, in their own order (design principles 9.9, and the same "no slot" the
+                    // `Tangent<bool> = ()` reading uses -- a slot that does not exist, not a zero
+                    // that does).
+                    const NodeFace *input = function.node(original);
+                    if (input != nullptr && !camel::core::tangentSpaceOf(input->dataType()).hasSpace()) {
+                        continue;
+                    }
                     if (tangentOf[original] == rt::kInvalidNodeRef) {
                         complete = false;
                         break;
