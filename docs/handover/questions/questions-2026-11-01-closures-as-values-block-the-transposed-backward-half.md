@@ -75,7 +75,7 @@ B **新增**一条表示，且与裁定正面冲突；C 让 `split` 多背一个
 - 调用者数：每个算子 **1 个注册点 + 1 个 kernel**（`split_operator.cpp:179/:186`、`jvp_operator.cpp:218/:225`、`transpose_operator.cpp:170/:177`），**外部 C++ 调用点 0**。
 - 判据：**能删 342 行**（`split_operator.cpp` 179、`jvp_operator.cpp:81-226` 146、`transforms.cml:54-62,66` 10、`vjp.cml:47-53` 7），
   **但要搬 1720 行**（`split.cpp` 694 + `jvp.cpp` 1026）进一个新 pass。**按“删不掉就是净负”，甲是净负。**
-  （复核 2026-11-01：上面的行数是当天的文件量，今天读作 `split_operator.cpp` **196**、`jvp_operator.cpp` **263**、`transforms.cml` **116**、`vjp.cml` **94**，`split.cpp` **1037**、`jvp.cpp` **1305** —— 三个 `transforms/*.cpp` 随 `lane-gs6`、`lane-reinterp2` 两笔合并长出来，之后 `split.cpp` 又随 `914e09263`、`e0c206239`（残差元组自成一个类型）多了 96 行，`jvp.cpp` 随 `728b9f27c`、`4fbdc4e3a`（提升带上它来自的图）多了 27 行；`vjp.cml` 随 `lane-m4-assembly` 的泛型化变短。命令：`node test/tools/check-doc-readings.mjs`。）
+  （复核 2026-11-01：上面的行数是当天的文件量，今天读作 `split_operator.cpp` **198**、`jvp_operator.cpp` **263**、`transforms.cml` **116**、`vjp.cml` **94**，`split.cpp` **1029**、`jvp.cpp` **1305**（split 替身删除后重读：split_operator.cpp +2、split.cpp −8，见 21f92616） —— 三个 `transforms/*.cpp` 随 `lane-gs6`、`lane-reinterp2` 两笔合并长出来，之后 `split.cpp` 又随 `914e09263`、`e0c206239`（残差元组自成一个类型）多了 96 行，`jvp.cpp` 随 `728b9f27c`、`4fbdc4e3a`（提升带上它来自的图）多了 27 行；`vjp.cml` 随 `lane-m4-assembly` 的泛型化变短。命令：`node test/tools/check-doc-readings.mjs`。）
 
 **乙 —— 每次实例化新铸一个刚性类型，并在原则 5.10 上开一条例外**
 - 一个 `TypeCode` 落地要动 **7 点**：枚举（`type/base.h:56` + `TypeFlag` `:39`）、`typeCodeToString`（`base.cpp:65`，35 分支且 `:111` 有 `default:` **漏了不报错**）、

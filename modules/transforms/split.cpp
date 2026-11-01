@@ -758,24 +758,16 @@ SplitHalves splitHalvesWith(FunctionType *function, Type *residuals) {
     }
 
     // The residuals: the values the backward half reads, in program order. Which values those are is a
-    // property of the *graph*, so the graph answers it (`residualsOf`) and the tuple it names is the
-    // one the halves are typed with when the graph is in hand. A caller that has no graph -- the
-    // operator resolver, which sees types only -- gets a stand-in: one member per value parameter.
-    // It is the type a call site is checked against and nothing else; it is not a reading, and the
-    // count a reading states comes from the graph (`residuals=`).
+    // property of the *graph*, so the graph answers it (`residualsOf`), and the tuple it names is the one
+    // the halves are typed with when the graph is in hand. A caller with no graph (the operator resolver,
+    // which sees types only) gets the transform's own residuals tuple with no members: a signature has no
+    // reading to name, and the count a reading states comes from the graph (`residuals=`).
     if (residuals == nullptr) {
-        std::vector<Type *> residualTypes;
-        for (size_t i = 0; i < count; i += 2) {
-            residualTypes.push_back(function->normTypeAt(i));
-        }
-        residuals = TupleType::create(residualTypes);
+        residuals = TupleType::residuals({});
     }
-    // Whichever way it was named, the tuple is the transform's own kind of tuple
-    // (`TupleType::residuals`): the members are the graph's answer, so a program neither
-    // destructures the tuple nor reads an element of it -- it hands it on whole, to the backward
-    // half beside the tangents (SemanticDiag::ResidualsAreNotVisible). Marking it here is what makes
-    // that hold on both sides at once: the halves' types in the graphs, and the type a call site is
-    // checked against.
+    // Whichever way it was named, the tuple is the transform's own kind (`TupleType::residuals`), so a
+    // program hands it on whole and can neither destructure it nor read an element
+    // (SemanticDiag::ResidualsAreNotVisible) -- in the halves' graphs and at the call site alike.
     if (residuals->code() == TypeCode::Tuple &&
         !static_cast<TupleType *>(residuals)->isResiduals()) {
         residuals = TupleType::residuals(static_cast<TupleType *>(residuals)->types());
