@@ -66,6 +66,42 @@ expect_stdout_starts_with = "start\n"
 expect_output_contains = ["Maximum recursion depth (100) exceeded"]
 expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
+# --- the same boundary whatever pipeline produced the graph ---------------------------------
+#
+# The count is a property of the program, not of the graph a pass handed to the scheduler:
+# std::opt::devirtualize rewrites the entry's call of main from a call through a function value
+# (`CALL` of a closure) into a direct call (`FUNC main$lift0`), which is the same call. Measured
+# before the fix on both interpreters, that spelling was worth a frame: with the limit at 100,
+# depth(100) ran and depth(101) was the first to stop, so one pass changed which program fails
+# (and which effects run). Both back ends folded the entry graph's activation into main's -- a tail
+# call reuses its caller's activation -- and the room check subtracts the entry graph's activation
+# and its call of main by name, so the fold left one activation fewer to subtract. The entry's
+# callee now gets an activation of its own, the way the value-call spelling gives it one, and the
+# compiled path's depth budget counts the calls open whichever spelling put them there
+# (camel/execute/limits.h, src/passes/sched/{nodevm,fastvm}). The two entries below are the
+# boundary the plan already pins for the plain pipeline, once more after the pass.
+
+[[tests]]
+name = "limit.direct.after_devirtualize.fits"
+desc = "Limit 100 after std::opt::devirtualize: depth(99) still runs, on all four back ends."
+args = ["--max-recursion-depth", "100", "${case}", "std::opt::devirtualize", "${backend}"]
+envs = ["N=99"]
+expect_exit = 0
+expect_stdout_starts_with = "start\n99\ndone\n"
+
+[[tests]]
+name = "limit.direct.after_devirtualize.exceeds"
+desc = "Limit 100 after std::opt::devirtualize: depth(100) still stops with MaxRecursionDepthExceeded at the recursive call -- the pass does not buy a frame. Red before the fix: exit 0 and `start\n100\ndone\n`."
+args = ["--max-recursion-depth", "100", "${case}", "std::opt::devirtualize", "${backend}"]
+envs = ["N=100"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 38
+expect_stdout_starts_with = "start\n"
+expect_output_contains = ["Maximum recursion depth (100) exceeded", "--max-recursion-depth"]
+expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
+
 [[tests]]
 name = "limit.map.fits"
 desc = "Limit 100, recursion inside a map element (one more call open): depth(98) runs."

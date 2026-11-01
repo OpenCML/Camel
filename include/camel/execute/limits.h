@@ -30,6 +30,14 @@ namespace camel::execute {
 /// (kEntryCalls). So with a limit of L, `depth(L - 1)` called from `main` is the deepest that
 /// runs, for `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)`: L calls of `depth` are
 /// open at the bottom.
+///
+/// It is the same for every pipeline that produces the graph, too: a pass that rewrites a call
+/// through a function value into a direct call (std::opt::devirtualize does that to the entry's
+/// call of `main`) changes the spelling of that call and nothing about the program, so the deepest
+/// call that runs is the same with and without it. Each scheduler folds a tail call into its
+/// caller's activation; the entry graph's activation and its call of `main` are exactly the two
+/// activations the count subtracts, so the entry's call of its callee is made with an activation of
+/// its own, whatever its spelling.
 inline constexpr size_t kEntryCalls               = 1;
 inline constexpr size_t kDefaultMaxRecursionDepth = 1000;
 inline constexpr const char *kMaxRecursionDepthOption = "--max-recursion-depth";
