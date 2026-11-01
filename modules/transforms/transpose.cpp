@@ -937,18 +937,20 @@ bool buildTransposeMember(
             // The answer of the residual form is one cotangent per tangent, in the order the
             // tangents stand: the residuals came in as one tuple, the cotangents go out as one. The
             // answer of a plain function is one cotangent per parameter, in the order they stand.
-            const auto &ports     = function->normPorts();
+            //
+            // A parameter no cotangent reached is answered with a zero. A parameter the graph never
+            // reads pulls nothing back -- the `x` and `w` of `add_tangent(x, w, dx, dw) = dx + dw`
+            // are in the signature and nowhere in the body -- and refusing the whole function
+            // because one of its parameters has no derivative would refuse a function that is
+            // written correctly. The zero is the same statement the walk makes when it drops the
+            // cotangent of a residual: that component is read, not differentiated.
+            const auto &ports      = function->normPorts();
             const size_t firstPort = bundlesResiduals ? 1 : 0;
             std::vector<gc_node_ref_t> parts;
-            bool everyTangent = true;
             for (size_t i = firstPort; i < ports.size(); ++i) {
-                if (!hasCotangent[ports[i]]) {
-                    everyTangent = false;
-                    break;
-                }
-                parts.push_back(cotangent[ports[i]]);
+                parts.push_back(hasCotangent[ports[i]] ? cotangent[ports[i]] : zero());
             }
-            if (everyTangent && !parts.empty()) {
+            if (!parts.empty()) {
                 std::vector<Type *> partTypes;
                 std::vector<size_t> slots;
                 for (size_t i = 0; i < parts.size(); ++i) {
