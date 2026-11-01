@@ -772,6 +772,14 @@ class GraphDraft {
     /// Ends the region `id` (unless `keepRegion`) and the regions inside it; nodes that are still
     /// in them go to the region around.
     void retireRegion(uint32_t id, bool keepRegion = false);
+    /// The join a BRCH node names. **No validation**: a draft is allowed to be inconsistent while it
+    /// is being written -- a rewrite may move the branch before it moves the join, or build the two
+    /// in either order -- so the refusal happens where the graph is published, in
+    /// `encodeDraftGraph`, which runs `camel::runtime::checkGraphCrossReferences` on the graph the
+    /// draft produced (and `EdgeChecker` runs the same four checks on a frozen graph). A setter that
+    /// refused here would become a fifth answer to "is this join sound", and the draft needs to be
+    /// able to hold the state in between.
+    void setBrchJoin(gc_node_ref_t brch, gc_node_ref_t join);
     /// The region a node is put in when it is added without one (0: the body). The front end
     /// sets it to the arm it is writing; passes leave it alone.
     uint32_t insertRegion() const { return insertRegion_; }
