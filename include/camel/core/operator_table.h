@@ -131,6 +131,18 @@ inline constexpr OperId VarAfter        = 21; // ":var/after"
 /// principles 3.3). Its traits are the conservative ones an undeclared operator gets -- it has an
 /// effect and may fault -- because an operator a pass could drop, merge, move or compute early
 /// would undo the reason it was inserted.
+///
+/// No program written in Camel reaches that insertion today, and a reader should know it before
+/// trusting 3.3 to this operator: a branch over a condition that can be folded is folded before a
+/// pass sees it, and the rules that would replace the reader of a computation that may fault
+/// refuse to fire, because dropping the reader would drop the fault. What keeps an effect running
+/// across a removal today is the older mechanism beside it -- the statement chain, the waits a
+/// removal inherits, and the order edges a dissolved branch hands on (opt/generic/rewrite.cpp,
+/// `inheritedWait` and the branch's `after` list). The insertion is exercised, and only by
+/// construction, in src/passes/test/keepnode.cpp and test/plans/feat/opt/keep_node.plan.toml:
+/// measured there, `KEEPNODE keep=1 reads_the_divisor=1`, and the same pass with the insertion
+/// switched off reads `keep=0`. The day a program reaches this path, that plan is what has to keep
+/// passing, and the pass has to go.
 inline constexpr OperId Keep            = 22; // ":op/keep"
 inline constexpr OperId kWellKnownCount = 23; // kNoOper included
 
