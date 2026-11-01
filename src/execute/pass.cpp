@@ -975,6 +975,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kCommitConflictTestPass, CommitConflictTestPass),
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
         TEST_PASS(kKeepShapeTestPass, KeepShapeTestPass),
+        TEST_PASS(kKeepInspectTestPass, KeepInspectTestPass),
         TEST_PASS(kContextLifetimeTestPass, ContextLifetimeTestPass),
         TEST_PASS(kContextsTestPass, ContextsTestPass),
         TEST_PASS(kDerivativesTestPass, DerivativesTestPass),
