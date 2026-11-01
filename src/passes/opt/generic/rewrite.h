@@ -176,6 +176,30 @@ std::vector<gc_node_ref_t> orderedSources(const camel::runtime::GraphTransaction
 bool readsNoWrittenSlot(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id);
 
 /**
+ * The value that stands for what a rewrite removes: `value`, with the nodes whose last read the
+ * removal takes routed through `:op/keep(x, value)` on the way (design principles 3.3).
+ *
+ * A pass that removes the last use of a node whose running is observed -- an effect, or a
+ * computation that may fault -- may not leave it leaning on an order edge: a sequential edge only
+ * orders, it keeps nothing alive (3.3 as amended, 9.7). It routes the node through `:op/keep(x, v)`
+ * instead, whose result is `v` and whose `x` is an input no result takes, so `x` stays in the
+ * data-use set the liveness function reads while `v` stands where the removed node's value did.
+ *
+ * `removed` is the node whose going takes the reads; `alsoGoing` names nodes whose reads do not
+ * count because they go away too (a dissolved branch and its join, the code of an arm that is not
+ * taken). Returns `value` itself when no read goes out with the removal.
+ *
+ * With `value` invalid the removal leaves nothing in the value -- the node is read by no one, which
+ * is why it goes -- and the operator carries the effect's own value (`:op/keep(x, x)`): it is then
+ * the statement that reads the effect, and the caller hands it the place the removed node stood in
+ * (`handChainPlaceTo`). The last node built is returned, or the invalid ref when
+ * nothing goes out.
+ */
+gc_node_ref_t keepThroughValue(
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t removed, gc_node_ref_t value,
+    const std::function<bool(gc_node_ref_t)> &alsoGoing = {});
+
+/**
  * Replaces node `id` by `replacement` (or just removes it when `replacement` is invalid, which
  * requires `id` to have no value users) and erases it. Ordering is preserved: every user of
  * `id`, value or control, inherits `id`'s control predecessors, because a pure node on a

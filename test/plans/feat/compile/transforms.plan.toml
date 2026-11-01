@@ -153,45 +153,79 @@ expect_stdout_not_contains = ["5.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 # The derivative as a library (design 4.4): the surface is `vjp`/`grad`/`with_grad`, and the middle
-# step of `transpose(split(reinterp<jvp>(f)))` is not implemented. What is checked is the *shape* of
-# the refusal -- which step, and where -- because a name that answers "not implemented yet" leaves
-# the reader nowhere. This is the assertion that has to be replaced by numbers the day the step
-# lands; the skipped test below is where those numbers go.
+# step of `transpose(split(reinterp<jvp>(f)))` is `split`.
 #
-# The refusal moved once `transpose` stopped being a stand-in: it is a real transform now, and the
-# shape `split` stands in with -- a lifted function `(float, float) => (float, float)` -- is not the
-# shape `transpose` takes (a function of one `float` parameter). So the composition is refused when
-# the call is typed, still at the line of `stdlib/vjp.cml` that composes it and still in terms of a
-# transform rather than "not implemented". When `split` returns the shape `transpose` takes, the same
-# test reads as a runtime refusal naming `split`; the two readings are one step apart, and this line
-# is where that step will show up.
+# All three steps are written and the assembly is now written out too: `jvp` lifts every `float`
+# parameter, `split` answers the pair of halves, and `stdlib/vjp.cml` takes the pair apart and hands
+# the linear half to `transpose`. What the composition still lacks is that half's type: `transpose`
+# walks a function of one `float` parameter, and the half it is given takes the residuals first and
+# the seeds after them (`(res, dx, dy) => value`). The refusal is still the right shape: at the line
+# of `stdlib/vjp.cml` that composes the transform, naming the type it takes and does not find.
+#
+# `have-library-vjp.mjs --missing` is the same behaviour probe asked the other way round: it is 0
+# while the composition does not build, so this entry retires itself the day it does -- the refusal
+# then has nothing to read, and the comparison below is what runs. Nobody deletes a test to make a
+# library land.
 [[tests]]
 name = "vjp_api.names_the_missing_step"
-desc = "`vjp(f)` is `transpose(split(reinterp<jvp>(f)))` written in `stdlib/vjp.cml`. The middle step is declared as an operator with no implementation, so a call is refused at the line of the library that composes it -- not at the `vjp(f)` call in the program, and not in a sentence of the form `not implemented yet`, which sends the reader to no line at all. Today the refusal names `transpose`, because `transpose` is real and `split` still stands in with a shape it does not take. The run exits non-zero and prints no value."
+desc = "`vjp(f)` is `transpose(split(reinterp<jvp>(f)))` written in `stdlib/vjp.cml`. The composition is assembled there and one step of it cannot be built, so a call is refused at the line of the library that composes it -- not at the `vjp(f)` call in the program, and not in a sentence of the form `not implemented yet`, which sends the reader to no line at all. Today the refusal names `transpose`, and it names the same call in both declarations the stand-in spells (a function of one parameter and of two): the wall is a shape, not an arity. The run exits non-zero and prints no value."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_missing_step.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
+skip_unless = ["node", "test/tools/have-library-vjp.mjs", "--missing"]
 expect_exit = 1
-expect_output_contains = ["stdlib/vjp.cml:33:", "Invalid call to 'transpose'"]
+expect_output_contains = ["stdlib/vjp.cml:47:", "stdlib/vjp.cml:59:", "Invalid call to 'transpose'"]
 expect_output_not_contains = ["not implemented", "尚未实现", "unimplemented"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The comparison the author named: one `f` with two parameters, and the library's gradient beside
+# the derivative worked out on paper. `f(x, y) = x*x*y` at `(3, 2)` has `df/dx = 2*x*y = 12` and
+# `df/dy = x*x = 9`, and both numbers are printed -- `library` first, `analytic` under it -- so the
+# reading is a comparison. The surface is JAX's (the author's ruling of 2026-11-01): `vjp(f)(x)` is
+# the pair `(y, pullback)` and `pullback(ct)` is the cotangent of `f`'s parameters, so the call is
+# `vjp(f)(3.0, 2.0)` and then `pullback(1.0)`. The juxtaposed call `transpose` writes is the
+# internal assembly; it is not a standard-library signature and nothing here writes it.
+#
+# The gate is a behaviour probe and not a file check: `test/tools/have-library-vjp.mjs` compiles and
+# runs a program that builds `vjp(f)` and calls it, so it answers "is the composition assembled?"
+# rather than "is there a split.cpp?". While `transpose` still takes a function of one parameter and
+# `split` hands back the pair of halves, the gate refuses and this entry skips with its reason
+# printed; the day the shapes meet it starts running -- and it also runs the comparison itself and
+# prints the numbers, so one command answers "is the assembly done?", while a disagreement is this
+# entry's red and never the gate's skip. `18.0` is `3*3*2` and `12`/`9` are the author's, worked out
+# on paper: none of them is a reading of today's tree.
+[[tests]]
+name = "vjp_api.analytic_gradient"
+desc = "The library's gradient against the derivative worked out on paper, on the author's example: `f(x, y) = x*x*y` at `x = 3`, `y = 2`, so `df/dx = 2*x*y = 12` and `df/dy = x*x = 9`. `vjp(f)(3.0, 2.0)` gives the pair `(y, pullback)` and `pullback(1.0)` gives the two cotangents, in JAX's order; the program prints `f(3, 2) = 18.0`, `library y = 18.0`, then `library`/`analytic` for `df/dx` and `df/dy`. The library half comes from `transpose(split(reinterp<jvp>(f)))` in `stdlib/vjp.cml` and nothing else -- not from the C++ autodiff. Skipped while the composition cannot be built (`transpose` takes a function of one parameter, `split` hands back the pair of halves); the precondition prints the refusal, so a skip always says why."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_analytic_gradient.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+skip_unless = ["node", "test/tools/have-library-vjp.mjs"]
+expect_exit = 0
+expect_stdout_contains = ["f(3, 2) = 18.0", "library  y = 18.0", "library  df/dx = 12.0", "analytic df/dx = 12.0", "library  df/dy = 9.0", "analytic df/dy = 9.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 # The numbers the day the steps land. `f(x) = x*x*x`, so `vjp(f)(3.0, 1.0)` is `(27.0, 27.0)` and
 # `grad(f)(3.0)` is `27.0`; the three-step composition is checked against the derivative written by
-# hand, not against the C++ autodiff. Skipped, not red, while `split` has no implementation: a skip
-# says "not yet", a red says "wrong", and a library that is honestly not written is the first.
+# hand, not against the C++ autodiff. Skipped, not red, while the composition does not run -- today
+# the pair `split` hands back is not the function `transpose` walks (test/tools/have-vjp.mjs is the
+# question, and it is the composition itself that answers): a skip says "not yet", a red says
+# "wrong", and a library whose last step is honestly not assembled is the first.
 [[tests]]
 name = "vjp_api.gradient_when_the_steps_land"
-desc = "With `split` and `transpose` implemented, `vjp(f)(3.0, 1.0)` on `f(x) = x*x*x` reads `(27.0, 27.0)` and `grad(f)(3.0)` reads `27.0`: the library's three-step composition against the derivative written by hand. The test is skipped while `modules/transforms/split.cpp` does not exist, so a not-yet-written library is a skip and never a red."
+desc = "With `split` and `transpose` implemented, `vjp(f)(3.0, 1.0)` on `f(x) = x*x*x` reads `(27.0, 27.0)` and `grad(f)(3.0)` reads `27.0`: the library's three-step composition against the derivative written by hand. The test is skipped while the composition does not run (test/tools/have-vjp.mjs), so a not-yet-assembled library is a skip and never a red."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_gradient.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
-skip_unless = ["node", "-e", "process.exit(require('fs').existsSync('modules/transforms/split.cpp') ? 0 : 1)"]
+skip_unless = ["node", "test/tools/have-vjp.mjs"]
 expect_exit = 0
 expect_stdout_contains = ["27.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -202,17 +236,15 @@ timeout_ms = 20000
 # and it is the *compiler's* type: no signature names it (`stdlib/signatures/transforms.cml` writes
 # it out in a comment, as the author wrote it), so what a test can read is what the halves are worth,
 # not the type's spelling. `f(x) = x*x*x` at 3: the first half gives `27.0` and the residuals, the
-# second turns them and the cotangent `1.0` back into `27.0`. Skipped while `split` has no
-# implementation; the numbers are already written down.
+# second turns them and the cotangent `1.0` back into `27.0`.
 [[tests]]
 name = "vjp_api.split_halves"
-desc = "`split(jvp(f))` gives the two halves of `Lift<T> = (T, Tangent<T>)`: the first takes the ordinary parameters and answers `(ResultOf<F>, ResidualsOf<F>)` -- for `f(x) = x*x*x` at 3, the value `27.0` and the residuals in program order -- and the second takes those residuals and the cotangent `1.0` and answers `27.0`. `ResidualsOf<F>` is the compiler's type function and appears in no signature; the test reads the numbers, not its spelling. Skipped while `modules/transforms/split.cpp` does not exist."
+desc = "`split(jvp(f))` gives the two halves of `Lift<T> = (T, Tangent<T>)`: the first takes the ordinary parameters and answers `(ResultOf<F>, ResidualsOf<F>)` -- for `f(x) = x*x*x` at 3, the value `27.0` and the residuals in program order -- and the second takes those residuals and the cotangent `1.0` and answers `27.0`. `ResidualsOf<F>` is the compiler's type function and appears in no signature; the test reads the numbers, not its spelling."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_split_halves.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "stdout"]
-skip_unless = ["node", "-e", "process.exit(require('fs').existsSync('modules/transforms/split.cpp') ? 0 : 1)"]
 expect_exit = 0
 expect_stdout_contains = ["27.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -227,7 +259,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=sum_of_scaled graph=", "type=(float, float) => float nodes=6 arms=0 rules=add_t,mul_t", "TRANSPOSE function=scaled_chain graph=", "rules=mul_t,add_t", "TRANSPOSE op signature=(f: (float) => float) => (float, float) => (float)", "transposed=(float, float) => float", "same=yes", "5.0", "20.0"]
+expect_stdout_contains = ["TRANSPOSE function=sum_of_scaled graph=", "type=(float, float) => float nodes=6 arms=0 rules=add_t,mul_t", "TRANSPOSE function=scaled_chain graph=", "rules=mul_t,add_t", "TRANSPOSE op signature=(f: (float) => float | ((..Residuals), float, ...) => float) => (knowns.., cotangent) => (cotangents..)", "transposed=(float, float) => float", "same=yes", "5.0", "20.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -273,5 +305,31 @@ backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
 expect_stdout_contains = ["TRANSPOSE function=pick graph=", "type=(float, float) => float nodes=9 arms=2 rules=mul_t", "TRANSPOSE function=merged graph=", "nodes=12 arms=2 rules=add_t,mul_t", "2.0", "3.0", "7.0", "4.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_runs_a_loop_rounds_backwards.nvm"
+desc = "`transpose` of a loop whose body only uses constants: the rounds run in the other direction, and a constant multiplier is the same multiplier whatever order it arrives in, so a loop of the same number of rounds with each rule replaced by its transpose is the pullback. The round count is the loop's own -- the two bounds of the interval are copied with the loop, and nothing in the case says three -- which the four-round loop in the same file settles: it answers 16 where the three-round one answers 8. For `thrice(x) = loop s = x for i in 0..3 do s * 2.0` the value at x = 1 is 2*2*2 = 8 and the pullback of 1.0 is 8 too; a pullback is linear in its cotangent, so 2.0 at x = 1 pulls back to 16, and that is the same graph read twice. A body that needed the round's own state would be refused by name (`skip=state` with the origin), never answered with a cotangent from nowhere."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_loop.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["TRANSPOSE function=thrice graph=", "type=(float, float) => float", "nodes=11 arms=0 rules=mul_t", "TRANSPOSE function=quad graph=", "8.0", "16.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_transposes_the_callee_and_calls_it.nvm"
+desc = "A call is a graph of its own, so transposing one means transposing that graph: the callee's transpose is built once beside the caller's (one graph per callee, the rule \`jvp\` reads for a lifted function, so two calls of one function call one graph), and the call site passes the arguments it already has and then the cotangent. `g(x) = 2.0*x` called twice and added gives 4 at x = 1, and a pullback through two calls is the sum of the two pullbacks, 2 + 2 = 4 at cotangent 1. The reading is the callee's own TRANSPOSE line followed by the caller's, which is the footprint of one transpose per callee rather than one per call."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_call.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["TRANSPOSE function=g graph=", "TRANSPOSE function=f graph=", "rules=add_t", "4.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

@@ -130,4 +130,6 @@ std::optional<ForwardRuleBinding> vmapBindingOf(const std::string &uri) {
     return at->second;
 }
 
+std::vector<std::string> vmapRuleDescriptions() { return descriptionsOf(vmapBindings()); }
+
 } // namespace camel::core

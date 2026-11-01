@@ -8,14 +8,15 @@
 // the one 4.2 and 4.4 write; the first run after the implementation lands is what pins it, and the
 // numbers are the author's example either way: (9, 3) now, 6 for dx = 1 in split_backward_tangent.
 import rulesets.jvp
+import { jvp, split } from transforms
 
 func g(x: float): float {
     return x * x
 }
 
 func main(): int sync {
-    let f = transforms::reinterp::<jvp>(g)
-    let (fwd, lin) = transforms::split(f)
+    let f = jvp(g)
+    let (fwd, lin) = split(f)
     let (y, r0) = fwd(3.0)
     let dy = lin(r0, 1.0)
     println("forward y=", y)

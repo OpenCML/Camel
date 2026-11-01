@@ -11,14 +11,16 @@
  * from `jvpSignature(f)` in modules/transforms/jvp.cpp.
  *
  * `Jvp<F>` names the result type the resolver computes:
- *   - every ordinary parameter of `F` becomes two parameters, the value and its tangent (one
- *     parameter today: the transform copies one body -- the pass prints `skip=params` for more);
+ *   - every ordinary parameter of `F` becomes two parameters, the value and its tangent, so
+ *     `jvp(f)` for `f(x, y)` takes `(x, dx, y, dy)`;
  *   - the result is the pair `(value, tangent)`, the same shape in and out;
- *   - `F` must take no `with` parameter and must have a single `float` parameter and a `float`
- *     result, because a captured value has no port to enter the copied graph by.
+ *   - `F` must take no `with` parameter, at least one parameter, every parameter a `float` and a
+ *     `float` result, because a captured value has no port to enter the copied graph by and a
+ *     tangent is a `float` direction.
  * The tangent of an input is the seed: `jvp(f)(2.0, 1.0)` asks for the derivative in the
  * direction 1, and `jvp(f)(2.0, 2.0)` for twice it. Nothing here picks the direction for the
- * caller.
+ * caller, so a function of several parameters is read one direction per run (`jvp(f)(3.0, 1.0, 2.0,
+ * 0.0)` is `df/dx` at (3, 2)).
  * It is not a type a program can write.
  *
  * For reference only: these declarations are not compiled. They are checked against the operators
@@ -33,25 +35,6 @@
 /// @example is_same::<Tangent<float>, float>()    // true
 export type Tangent<T>
 
-/// The residuals of `f`: the values the backward half of `split` reads, numbered in the order they
-/// appear in the program (`r0`, `r1`, ...), so the backward half's code corresponds line for line to
-/// the original and a reading can be compared byte for byte. A *type function*: the split step
-/// computes it from `f`'s graph, no program writes it, and it appears in no signature -- a signature
-/// that named it would be a signature a caller could have written, and this one is the compiler's.
-/// Where a reader needs the shape, it is written out here, as the author wrote it (15:25):
-///
-///     type Split<F> = ((..ParamsOf<F>) => (ResultOf<F>, ResidualsOf<F>),
-///                      (ResidualsOf<F>, ..WithOf<F>) => ResultOf<F>)
-///
-/// The first half takes the ordinary parameters and answers with the result and the residuals; the
-/// second takes the residuals and the `with` parameters and answers with the result. The second half
-/// is linear in the cotangent it is given -- that is the condition the transpose step (M3) reads --
-/// and both halves speak in `Tangent<T>` above. `split`'s own declaration below therefore does not
-/// name this function: it is the compiler's, and the declaration a reader checks is the operator's.
-/// @example-fragment the shape is a type function, so the example is a fragment of the type it
-/// computes for a function of one number: `ResidualsOf<(x: float) => float>` is a tuple of the
-/// values the backward half reads, in program order.
-export type ResidualsOf<F>
 
 /// Forward mode: `jvp(f)` gives a function that takes the parameters of `f` followed by their
 /// tangents and returns the pair `(value, tangent)`. `jvp(f)(2.0, 1.0)` is the value `f(2.0)`
@@ -60,9 +43,23 @@ export type ResidualsOf<F>
 /// @example let forward = jvp(f)
 export func jvp::<F>(f: F): Jvp<F> when is_function::<F>()
 /// The step of `vjp` that separates a lifted function into the part computable now and the linear
-/// residue (design 4.4). Not implemented: the operator has a signature and no rule, so a call is
-/// refused where it is composed (`stdlib/vjp.cml`) and names this step. The signature is the
-/// shape the library's compositions can be written with today.
+/// residue (design 4.2, 4.4). Implemented for the straight-line tier (`modules/transforms/split.cpp`):
+/// the halves are built from the graph, and what crosses the cut -- the residuals -- is read off the
+/// graph too, so a body that needs a value it computed carries it instead of computing it again.
+///
+/// The cut, as the author writes it (15:25; revised 2026-11-01): the first half takes the ordinary
+/// parameters and answers with the result and the *residuals* -- the values the second half reads --
+/// and the second takes the residuals and the `with` parameters and answers with the result.
+///
+///     type Split<F> = ((..ParamsOf<F>) => (ResultOf<F>,  _),
+///                      (_, ..WithOf<F>) => ResultOf<F>)
+///
+/// The residual position is written `_` and is not a type a program can name: the residuals are a
+/// property of `f`'s graph, so their number and their types are read where the graph is in hand, and
+/// the compiler fills the position at instantiation (`ResidualsOf<F>` was the earlier spelling of a
+/// type function doing that, and it is gone). The second half is linear in the cotangent it is given
+/// -- that is the condition the transpose step (M3) reads -- and both halves speak in `Tangent<T>`
+/// at the top of this file.
 /// @example-fragment `split` takes the lifted function a `jvp` call writes, so the example is a
 /// fragment of the composition: `let (fwd, lin) = split(jvp(f))`.
 /// @example let step = split
