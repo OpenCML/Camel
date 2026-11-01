@@ -80,6 +80,23 @@ Type *ruleElementTypeOf(Type *type) {
     return type;
 }
 
+/// The type of the first operand of the node at `ref`, or nullptr when it has none. A rule is
+/// generic in the element its *operands* are made of, and the node's own `dataType()` is the type of
+/// what it answers: `argmax_axis` takes a tensor of numbers and answers `int64` positions, so asking
+/// the node would instantiate its rule at `int64` and apply it to floats.
+Type *firstOperandTypeOf(camel::runtime::GCGraph &function, gc_node_ref_t ref) {
+    for (const gc_node_ref_t input : function.normInputsOf(ref)) {
+        if (input >= function.nodeCount()) {
+            continue;
+        }
+        const rt::GCNode *operand = function.node(input);
+        if (operand != nullptr) {
+            return operand->dataType();
+        }
+    }
+    return nullptr;
+}
+
 /// The rule `rulesets.vmap` files for `uri`, or nullptr and why not. The family is read through the
 /// operator's key: `vmapBindingOf` answers the key the operator's batching rule is filed under, and
 /// the head and the operand count in it are the operator's, not this family's. The key comes from
@@ -214,6 +231,7 @@ VmapGraph buildVmapGraph(
     size_t copiedKinds = 0;
     size_t seenKinds   = 0;
     std::vector<std::string> usedRules;
+    std::vector<std::string> usedElements;
     std::vector<gc_node_ref_t> liftOf;
 
     camel::runtime::GraphDraftGroup group(context, program);
@@ -302,7 +320,22 @@ VmapGraph buildVmapGraph(
         const auto batchThroughRule = [&](gc_node_ref_t ref, const std::string &uri,
                                           const camel::parse::ast::RuleMatch &match)
             -> gc_node_ref_t {
-            Type *elementType     = ruleElementTypeOf(function->node(ref)->dataType());
+            // The instance is made at the element type the primitive works on, because that is the
+            // type the rule is generic in -- read from an operand, not from the node, whose type is
+            // what the primitive answers.
+            Type *operandType = firstOperandTypeOf(*function, ref);
+            Type *elementType = ruleElementTypeOf(
+                operandType != nullptr ? operandType : function->node(ref)->dataType());
+            // What the instance was made at, in the reading: a rule is generic in its operands'
+            // element, so this is the one fact a wrong reading of the element would show.
+            const std::string element = elementType != nullptr ? elementType->toString() : "-";
+            bool seenElement          = false;
+            for (const std::string &known : usedElements) {
+                seenElement = seenElement || known == element;
+            }
+            if (!seenElement) {
+                usedElements.push_back(element);
+            }
             const uint64_t ruleId = ruleIdOf(*context, match.rule);
             if (ruleId == 0) {
                 refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
@@ -586,11 +619,16 @@ VmapGraph buildVmapGraph(
     for (const std::string &rule : usedRules) {
         rules += (rules.empty() ? "" : ",") + rule;
     }
+    std::string elements;
+    for (const std::string &element : usedElements) {
+        elements += (elements.empty() ? "" : ",") + element;
+    }
     os << "REINTERP vmap function=" << function->name() << " graph=" << rt::toValue(member)
        << " type=" << (madeType != nullptr ? madeType->toString() : std::string("-"))
        << " nodes=" << function->nodeCount() << " kinds=" << copiedKinds << '/' << seenKinds
        << " " << askedFoundMissing(refused)
-       << " rules=" << (rules.empty() ? "-" : rules) << '\n';
+       << " rules=" << (rules.empty() ? "-" : rules)
+       << " elements=" << (elements.empty() ? "-" : elements) << '\n';
     VmapGraph built = refused;
     built.program   = group.program();
     built.graph     = const_cast<rt::GCGraph *>(made);

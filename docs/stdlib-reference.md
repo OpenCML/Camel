@@ -1777,15 +1777,15 @@ The entries of the first axis that indices name, in that order.
 #### `one_hot`
 
 ```camel
-one_hot: (labels: int64[..] | number[], classes: int) => int64[..]
+one_hot: (labels: int64[..] | number[], classes: int) => f32[..]
 ```
 
 Each label (an integer below classes) expanded to a row of classes with a 1 at its position:
-an `int64` tensor of shape [labels, classes].
+a `f32` tensor of shape [labels, classes], each row a distribution over the classes.
 
 - Pure.
 - Failure: fault `IndexOutOfRange` when a label is outside [0, classes), and fault `InvalidArgument` when classes is negative.
-- Example: `one_hot([0, 2] as int[], 3)` gives `[[1, 0, 0], [0, 0, 1]]`
+- Example: `one_hot([0, 2] as int[], 3)` gives `[[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]`
 
 #### `shape`
 

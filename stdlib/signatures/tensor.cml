@@ -146,11 +146,11 @@ export func concat(a: float[..] | number[], b: float[..] | number[], axis: int):
 export func take(t: float[..], indices: int64[..] | number[]): float[..]
 
 /// Each label (an integer below classes) expanded to a row of classes with a 1 at its position:
-/// an `int64` tensor of shape [labels, classes].
+/// a `f32` tensor of shape [labels, classes], each row a distribution over the classes.
 /// @pure
 /// @fails fault `IndexOutOfRange` when a label is outside [0, classes), and fault `InvalidArgument` when classes is negative
-/// @example one_hot([0, 2] as int[], 3)    // [[1, 0, 0], [0, 0, 1]]
-export func one_hot(labels: int64[..] | number[], classes: int): int64[..]
+/// @example one_hot([0, 2] as int[], 3)    // [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
+export func one_hot(labels: int64[..] | number[], classes: int): f32[..]
 
 // ---- reduction ----
 

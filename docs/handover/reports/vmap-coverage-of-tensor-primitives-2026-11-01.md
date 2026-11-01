@@ -20,7 +20,7 @@ func main(): int sync {
 
 跑 `camel <case> std::nvm`，读两条里的一条：答了就是 `REINTERP vmap function=f graph=… asked=A found=F missing=M rules=… elements=…`，
 没答就是 `REINTERP vmap function=f skip=body construct=- uri=tensor:X asked=1 found=0 missing=1`
-加一句诊断原文。行/批的秩、元素类型按原语的声明调整（`f32` 行给 `softmax` 族、`int` 行给 `one_hot`），
+加一句诊断原文。行/批的秩、元素类型按原语的声明调整（`f32` 行给 `softmax` 族、`int` 行给 `one_hot` 的标签），
 每行的「探测体」就是那一次用的表达式，照抄可复现。**共 48 个程序，48 行读数，一个原语不漏。**
 
 **读数形状**（全表同一把尺子）：`asked` 是走到的原语数，`found` 是被规则集答了的数，`missing` 是差；
@@ -75,6 +75,7 @@ transforms: vmap has no rule for `tensor:<名字>` (the operator has no batching
 | 布局 | `tensor:permute` | `permute<[1, 0]>(x)` | — |
 | 布局 | `tensor:concat` | `concat<0>(x, x)` | — |
 | 布局 | `tensor:take` | `take(x, [0, 1])` | — |
+| 布局 | `tensor:one_hot` | `one_hot(x, 3)`（`x: int[2]`） | — |
 | like | `tensor:zeros_like` | `zeros_like(x)` | — |
 | like | `tensor:ones_like` | `ones_like(x)` | — |
 | nn | `tensor:softmax` | `softmax<0>(x)`（`x: f32[2, 3]`） | — |
@@ -100,11 +101,20 @@ transforms: vmap has no rule for `tensor:<名字>` (the operator has no batching
 | `tensor:load_npy_*` | `load_npy::<float>("coverage.npy")` | 同上，同一句：先说常量不能上批 |
 | `tensor:from_bytes_*` | `from_bytes::<float>(to_bytes(x), [2, 3])` | `uri=tensor:to_bytes asked=1 found=0 missing=1` 加 "no batching rule key bound at all" —— 它先卡在自己的实参上 |
 
-**一条写不出来**：
+**上表里 `tensor:one_hot` 那一行曾经写不出来**：第一版探测时它在批里**编译不过**，原文是
+`Return type 'f32[2, 3]' does not match the function's declared return type 'int[..]'`——那不是批的问题，
+是**声明与算子自己不一致**：`stdlib/signatures/tensor.cml` 说回 `int64[..]`，而算子那侧
+（`modules/tensor/ops/layout_ops.cpp:443` 的注释、`oneHotKernel`、`oneHotInfer`、OpDef 的 `resultDoc = "float[..]"`、
+`setVjp(defs, "one_hot", &noGradient)` 上那句 "the float one-hot rows"）全都说 **f32**。
+照现有用例判，f32 那一侧是多数也是语义：`test/plans/feat/modules/tensor.plan.toml` 的 `take_one_hot` 钉着
+`one_hot=[[0.0, 1.0, 0.0], [1.0, 0.0, 0.0]]`，`discrete_zero` 钉着 `one_hot=(-2.0,0.0,2.0)`，
+`softmax_labels` 把它与 `f32` logits 一起用。所以改的是**声明**（`f32[..]`，正文与 `@example` 一起），
+算子一个字节没动；改完这一行就是上表的 `uri=tensor:one_hot asked=1 found=0 missing=1`：
+`one_hot` 也是「键没绑」，不是「规则缺」。
 
-| 原语 | 探测体 | 实测原文 |
-|---|---|---|
-| `tensor:one_hot` | `one_hot(x, 3)`（`x: int[2]`） | `Return type 'f32[2, 3]' does not match the function's declared return type 'int[..]'` —— `stdlib/signatures/tensor.cml:153` 声明回 `int64[..]`，`modules/tensor/ops/layout_ops.cpp:443` 的注释与 kernel 回 `float32` 行。**声明与算子今天就不一致**，所以它在批里也写不出来；这不是批规则的缺，是那条声明自己的问题 |
+**顺带记一句**：这条错声明在树上活了很久，因为**没有任何检查看声明的结果类型**——
+`registry.signatures_match`（`stdlib-reference.mjs --verify-ops`）比的是名字、参数个数、参数名与纯度，
+结果类型只由生成页带出去。要防它再来一次，得给 `--verify-ops` 加一条「声明的结果类型与算子的 `resultDoc` 一致」。
 
 ## 三、没有整轴形态的四个名字
 
