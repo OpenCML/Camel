@@ -274,9 +274,46 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
             groupStart[regions.tin(region) + 1] - groupStart[regions.tin(region)]);
     };
 
+    // The JOIN that closes the branch a node belongs to: the node is a BRCH, or a member of one of
+    // its arms. Anything else belongs to no branch and gets kInvalidNodeRef.
+    const auto branchPieceOf = [&](gc_node_ref_t index) -> gc_node_ref_t {
+        const auto *node = graph->node(index);
+        if (node == nullptr) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        gc_node_ref_t brch = camel::runtime::kInvalidNodeRef;
+        if (node->kind == camel::runtime::GCNodeKind::Brch) {
+            brch = index;
+        } else if (const uint32_t control = regions.controlOf(index); control != 0) {
+            const camel::runtime::GCRegion *region = graph->region(control);
+            if (region != nullptr && region->kind == camel::runtime::GCRegionKind::Arm) {
+                brch = region->owner;
+            }
+        }
+        if (brch == camel::runtime::kInvalidNodeRef) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        const auto *body = graph->nodeBodyAs<camel::runtime::GCBrchBody>(brch);
+        return body != nullptr ? body->join : camel::runtime::kInvalidNodeRef;
+    };
+
     std::function<void(gc_node_ref_t)> visit = [&](gc_node_ref_t index) {
         if (!graph->containsNodeRef(index)) {
             return;
+        }
+        // A branch is one piece: the BRCH, the arms its regions hold, and the JOIN that closes it.
+        // A back end jumps into an arm at the entry the plan gives it and lands on the JOIN at the
+        // end, so both ends have to be in the plan whenever the branch is -- an arm with no member
+        // of its own has its range fall back to that JOIN (BranchArmEntries), and a join nothing
+        // reads is in the plan because the branch it closes is. Nothing reaches the two by an edge
+        // (docs/design/effects/edges.cn.md 5.2), so the piece is laid out as a whole here: whoever
+        // asks for the BRCH, for its JOIN or for a member of one of its arms gets all of it.
+        if (const gc_node_ref_t piece = branchPieceOf(index);
+            piece != camel::runtime::kInvalidNodeRef && piece != index && state[piece] == 0) {
+            visit(piece);
+            if (state[index] == 2) {
+                return;
+            }
         }
         if (state[index] == 2) {
             return;
@@ -317,6 +354,7 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
         }
         state[index] = 1;
         stack.push_back(index);
+
 
         // Schedulers run a taken arm as the range of its region and skip everything else between
         // the BRCH and the JOIN, so each arm is laid out as one piece, one after the other, and

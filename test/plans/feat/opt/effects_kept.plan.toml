@@ -184,7 +184,7 @@ args = ["${case}", "test::keepshape", "std::jgir"]
 # One backend: the graph is the same one on each, and the test reads the drawing, not a run.
 backends = ["nvm"]
 expect_exit = 0
-expect_stdout_contains = ["KEEPSHAPE keep=1 uri=:op/keep", "\"label\": \":op/keep\""]
+expect_stdout_contains = ["KEEPSHAPE keep=1 uri=:op/keep", "\"label\": \":op/keep\"", "\"exit\": \"g2n5\""]
 # Two shapes of the same operator, side by side, because one alone would say the wrong thing about
 # where it lives. `keep_shapes.real_pipeline` is the operator as `std::opt` writes it over an
 # existing case -- two nodes, and the output `5` unchanged. `keep_shapes.no_order_edge` is the
@@ -237,3 +237,56 @@ expect_exit = 0
 expect_stdout_contains = ["[FAMILY] :op/keep cases=3 nodes=6", "[FAMILY] :enum/tag cases=6 nodes=6", "[FAMILY] :enum/field cases=4 nodes=5", "[FAMILY] :enum/make cases=0 nodes=0", "[FAMILY] ok"]
 expect_output_not_contains = ["[FAMILY] RED"]
 timeout_ms = 300000
+# The three dumps of the same graph, read for content and not for "it did not crash". Before the
+# fix in `replaceNode` (src/passes/opt/generic/rewrite.cpp) the rewritten graph named no exit at
+# all: `std::nvm` ran it (exit 99, printing `1`), `std::jgir` printed `"exit": "g2n4294967295"` --
+# a name for a node the document did not hold -- and `std::gir` stopped at `Runtime graph exit node
+# is missing` (src/passes/trans/dot/graphviz.cpp#dumpGraph). Now the node that stands for the
+# removed value takes the graph's name, and the three dumps read the same graph:
+#   * gir/rgir draw the exchange: the `:op/keep` node feeds the graph's EXIT;
+#   * jgir names that same node (`g2n5`).
+[[tests]]
+name = "keep_shape.dot"
+desc = "The graph drawn by `std::gir` after the rewrite: the `:op/keep` node is there and it is what the graph's EXIT edge leaves from."
+case = "../../../cases/opt/effects/keep_shape.cml"
+args = ["${case}", "test::keepshape", "std::gir"]
+# One backend: the drawing is the graph, not a run.
+backends = ["nvm"]
+expect_exit = 0
+# The node identifiers are the dump's own; they move if the graph changes, and that is a red
+# someone should read rather than a number to keep green.
+expect_stdout_contains = ["KEEPSHAPE keep=1 uri=:op/keep", "N04 [label=\":op/keep\", type=\"OPER\"", "N04 -> O02 [label=\"0\", type=\"EXIT\"]"]
+
+[[tests]]
+name = "keep_shape.rdot"
+desc = "The same graph drawn by `std::rgir`: the same operator, the same EXIT edge, in the styled form."
+case = "../../../cases/opt/effects/keep_shape.cml"
+args = ["${case}", "test::keepshape", "std::rgir"]
+backends = ["nvm"]
+expect_exit = 0
+# The rich dump wraps a label at its own width, so the operator reads `:op/\nkeep` there; the
+# edge into the EXIT node is the part that says what the drawing claims. Both are asserted.
+expect_stdout_contains = ["KEEPSHAPE keep=1 uri=:op/keep", "label=\":op/\\nkeep\", type=\"OPER\"", "N04 -> O02 [label=\"0\", type=\"EXIT\", style=solid]"]
+
+# The other shape, and the reason the fix is not one-case-deep: a graph that names no exit at all
+# happens (the empty tuple and the field access of a static expansion), `std::nvm` runs it, and the
+# two dumps have to say the same thing about it -- `null` in the document, a comment over the EXIT
+# node in the drawing, no invented edge in either.
+[[tests]]
+name = "no_exit.dot"
+desc = "A graph that names no exit at all: `std::gir` draws it, says so over the EXIT node, and draws no EXIT edge."
+case = "../../../cases/compile/static_expansion/fields_and_access.cml"
+args = ["${case}", "std::gir"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["// exit: none -- this graph names no result", "label=\"EXIT\", type=\"EXIT\""]
+expect_output_not_contains = ["Runtime graph exit node is missing"]
+
+[[tests]]
+name = "no_exit.json"
+desc = "The same graph in `std::jgir`: the field is `null`, which is what the drawing's comment says in words."
+case = "../../../cases/compile/static_expansion/fields_and_access.cml"
+args = ["${case}", "std::jgir"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["\"exit\": null"]

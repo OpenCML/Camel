@@ -30,6 +30,23 @@
 判法：把 5 条真的按库的写法改一遍、跑一遍，改不动或跑不过的记下走图/声明面拒绝它的那一档；
 用例文件一条都没改（`git diff test/cases/modules/autodiff/` 为空），老读数在各行里作对照。
 
+**声明面这一笔做到哪、为什么退回来（量过的，不是判断）**：试过让 `vjp`/`grad` 泛型于参数类型
+（`grad::<T>(f: (x: T) => float): (x: T) => T`）。库里编得过，数组改用例的报错也确实从
+`No matching function found for argument types: <> ((xs: float[]) => float pure)` 变成库体内 `jvp` 的具名拒绝；
+但**同一次改动打死了 `grad(x => x + 1.0)` 这种 lambda 调用**：
+`error[SemanticDiag::LambdaParameterWithoutType]: The type of the parameter 'x' of this lambda is not written and cannot be inferred: nothing here expects a function type.`
+（`grad_where_the_tangent_ignores_the_operands` 的三行全红），因为参数类型成了类型变量、lambda 无处取 `float`。
+补一条 `float` 重载当推定源也不行：同一模块里 `vjp` 一个泛型声明加一个非泛型声明 =
+`error[SemanticDiag::Redeclaration]: Redeclaration of reference: 'vjp'`。所以**已退回 develop 的声明**
+（`vjp` 一元、二元 + `grad` 各一条 `float`），主线读数不变。
+
+**"对任意 `F` 泛型、只留一条声明"要的那块砖在哪**：设计 6.1 的类型函数**是有的**——
+`type Vjp<F> = (..ParamsOf<F>) => (ResultOf<F>, Pullback<F>)`（`import { ParamsOf, ResultOf, Tangent } from types`）
+在库里能解析、能写；卡住的是声明之后：**没有函数体就必须有一个 C++ 算子**扛着这个名字，
+`error[SemanticDiag::NativeDeclarationNotLoaded]: The declaration 'vjp' names the operator 'tsp:vjp', which no loaded module implements.`
+而写得出函数体就得先让**三个算子（`jvp`/`split`/`transpose`）在编译期给出一份对任意 `F` 的形状**
+（作者排序里的第 2 步），不然一条函数体没法同时伺候不同元数。本轮不动 `jvp.cpp`。
+
 | 试点用例 | 类 | 结论 | 卡在哪一档 |
 | --- | --- | --- | --- |
 | `collapse` | `with` | 需要新能力 | `REINTERP split … skip=forward construct=a tangent port`（体里有函数调用） |
@@ -71,8 +88,8 @@
 | 1 | `adjoint_cast_array` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
 | 2 | `adjoint_concat_array` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
 | 3 | `adjoint_reshape_array` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
-| 4 | `array_slice_grad` | 不过 | **试点 4/5：需要库补** — `with <xs: float[]>` 改成 `func subscript(xs: float[]): float` + `grad(subscript)(xs)` 是纯拼写（编得过），但库只声明 `grad(f: (x: float) => float)`：`error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> ((xs: float[]) => float pure)`。要的是 `Vjp<F>` 泛型声明（设计 6.1）。老读数 `[0.0, 2.0, 3.0, 0.0, 0.0]` / `[0.0, 0.0, 5.0, 3.0, 2.0]` / `nonzero=115.0` |
-| 5 | `array_take_grad` | 不过 | **试点 5/5：需要库补** — 同 `array_slice_grad`：`func repeated(xs: float[]): float` + `grad(repeated)(xs)` 是纯拼写，卡在同一处 `No matching function found for argument types: <> ((xs: float[]) => float pure)`（库只声明 `(x: float) => float`）。要 `Vjp<F>` 泛型（设计 6.1）。老读数 `[7.0, 0.0, 3.0, 0.0, 0.0]` / `[0.0, 3.0, 0.0, 0.0, 2.0]` / `nonzero=136.0` |
+| 4 | `array_slice_grad` | 不过 | **试点 4/5：需要库补** — `with <xs: float[]>` 改成 `func subscript(xs: float[]): float` 是拼写；`grad(subscript)(xs)` 仍**编不过**，库只声明 `(x: float) => float`：`error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> ((xs: float[]) => float pure)`。真正的补法是作者排序第 2 步（`vjp`/`grad` 对任意 `F` 泛型、只留一条声明），本轮量过它缺什么：`type Vjp<F> = (..ParamsOf<F>) => …` 能解析，但声明要么有函数体（要三个算子在编译期给出对任意 `F` 的形状）、要么由 C++ 算子扛着（`NativeDeclarationNotLoaded`）。老读数 `[0.0, 2.0, 3.0, 0.0, 0.0]` / `[0.0, 0.0, 5.0, 3.0, 2.0]` / `nonzero=115.0` |
+| 5 | `array_take_grad` | 不过 | **试点 5/5：需要库补** — 同 `array_slice_grad`：`func repeated(xs: float[]): float` 是拼写，`grad(repeated)(xs)` 卡在同一处 `No matching function … ((xs: float[]) => float pure)`；补法同上（作者排序第 2 步），不是每条用例的事。老读数 `[7.0, 0.0, 3.0, 0.0, 0.0]` / `[0.0, 3.0, 0.0, 0.0, 2.0]` / `nonzero=136.0` |
 | 6 | `collapse` | 不过 | **试点 1/5：需要新能力** — `with <x: float>` 改成参数是纯拼写，`func h(x: float)` + `grad(h)(2.0)` 编得过（老读数 `collapse dh=22.0`，改写后同一输入应仍是 22.0）；但函数体里调了 `sq`，`split` 拒绝：`REINTERP split function=jvp_of_h skip=forward construct=a tangent port uri=- why=the value half reads the tangent of parameter 0, which the forward half does not take` |
 | 7 | `collapse_random` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
 | 8 | `collapse_runtime` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
