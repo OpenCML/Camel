@@ -197,7 +197,7 @@ tool = "node"
 case = "../../../../test/tools/check-vjp-ruleset.mjs"
 args = ["${case}", "--drop", "rulesets.jvp"]
 expect_exit = 0
-expect_stdout_contains = ["the library imports rulesets.jvp", "jvp has no forward rule for `:op/mul_d`", "note: raised here", "stdlib/vjp.cml:", "prints 3 x 27.0"]
+expect_stdout_contains = ["the library imports rulesets.jvp", "jvp has no forward rule for `:op/mul_d`", "note: raised here", "stdlib/vjp.cml:", "prints 2 x 27.0 + 1 x (27.0)"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
 
@@ -209,7 +209,7 @@ tool = "node"
 case = "../../../../test/tools/check-vjp-ruleset.mjs"
 args = ["${case}", "--drop", "rulesets.transpose"]
 expect_exit = 0
-expect_stdout_contains = ["the library imports rulesets.transpose", "transpose has no transpose for this function", "skip=rule uri=:op/add_d reason=no-such-family", "stdlib/vjp.cml:", "prints 3 x 27.0"]
+expect_stdout_contains = ["the library imports rulesets.transpose", "transpose has no transpose for this function", "skip=rule uri=:op/add_d reason=no-such-family", "stdlib/vjp.cml:", "prints 2 x 27.0 + 1 x (27.0)"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
 
