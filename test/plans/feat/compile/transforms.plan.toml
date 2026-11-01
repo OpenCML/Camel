@@ -505,6 +505,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "transpose_loop_escape.int_is_a_zero_tangent_space"
+desc = "An escape whose target is not a float: `int_escape(x) = let n = int(3x); loop s = x for i in 0..3 do s + float(n)` reads an integer inside the loop body, and the answer is 1.0 -- `x` contributes 1 and the truncation contributes 0, because an integer is a zero tangent space and `float(int(3x))` is a step function that is constant between its jumps. The number and the reason are printed together: the forward reading is 10.0 (1 plus three rounds of `int(3)`), so the integer is really there and really used, and `TRANSPOSE function=int_escape contribution=0 node=<n> type=int space=none from=<cast>` says which value contributes the zero. The two controls are the other half: `g(x) = float(int(5x)) + x` is 1.0 (an integer branch beside a float one does not swallow it), `h(x) = x + x` is 2.0 (no integer anywhere, and not 1). Every transpose is asked twice at different cotangents and the plan asserts the second answers -- 5, 3, 4 -- so the answers must scale with the cotangent and cannot be satisfied by a forward reading; `skip=` must not appear at all, because this shape used to answer a refusal and a refusal is not an answer."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_loop_escape_int.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+expect_output_contains = ["TRANSPOSE function=int_escape contribution=0 node=", "type=int space=none", "TRANSPOSE function=int_escape graph=", "10.0", "5.0", "3.0", "4.0"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "transpose_transposes_the_callee_and_calls_it.nvm"
 desc = "A call is a graph of its own, so transposing one means transposing that graph: the callee's transpose is built once beside the caller's (one graph per callee, the rule \`jvp\` reads for a lifted function, so two calls of one function call one graph), and the call site passes the arguments it already has and then the cotangent. `g(x) = 2.0*x` called twice and added gives 4 at x = 1, and a pullback through two calls is the sum of the two pullbacks, 2 + 2 = 4 at cotangent 1. The reading is the callee's own TRANSPOSE line followed by the caller's, which is the footprint of one transpose per callee rather than one per call."
 kind = "behavior"
