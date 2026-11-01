@@ -100,6 +100,13 @@ FunctionType *transposeSignature(FunctionType *function) {
     return FunctionType::create(camel::core::type::param_vec_t{}, params, Type::Float64());
 }
 
+/// Whether a loop whose body let a cotangent escape carries that cotangent as a state of its own.
+/// On, the loop is built with a second state -- the running sum of what escaped -- and answers the
+/// escaped value with the state's own cotangent plus that sum. Off, the loop refuses exactly as it
+/// did before the channel existed, which is what the A/B of the reading below flips: the same case,
+/// the same line, `skip=state` instead of `carried=1`.
+constexpr bool kCarryEscapedCotangents = true;
+
 /// What the graphs of one transpose share: one group (a callee's transpose is another member of
 /// it, exactly as `jvp` lifts one graph per callee) and the callees already transposed, so that
 /// two calls of one function call one graph.
@@ -167,6 +174,25 @@ bool buildTransposeMember(
             return draft.materializeStaticValue(
                 camel::core::rtdata::toSlot<double>(0.0), Type::Float64(),
                 rt::kGCNodeFlagConstant);
+        };
+        // A tuple of these values, as a node of the new graph, and the type that names it: the Fill
+        // the builder writes for a state tuple (`builder_control.cpp`, `gir.loop.split`), so a loop
+        // that carries more than one value is the shape every consumer of a loop already reads.
+        const auto tupleOf = [&](const std::vector<gc_node_ref_t> &parts) {
+            std::vector<Type *> partTypes(parts.size(), Type::Float64());
+            Type *const tupleType = camel::core::type::TupleType::create(partTypes);
+            ::Tuple *emptyTuple   = ::Tuple::create(parts.size(), mm::autoSpace());
+            const gc_node_ref_t source = draft.materializeStaticValue(
+                camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(emptyTuple), tupleType);
+            std::vector<size_t> slots;
+            for (size_t i = 0; i < parts.size(); ++i) {
+                slots.push_back(i);
+            }
+            const gc_node_ref_t tuple =
+                draft.addFillNode(tupleType, rt::makeFillPayload(rt::GCFillKind::Tuple, slots));
+            draft.setNormInputs(tuple, std::span<const gc_node_ref_t>(&source, 1));
+            draft.setWithInputs(tuple, std::span<const gc_node_ref_t>(parts));
+            return std::pair<gc_node_ref_t, Type *>{tuple, tupleType};
         };
 
         // The cotangent of a value in the original graph, as a node of the new one: `k summed
@@ -738,6 +764,9 @@ bool buildTransposeMember(
                     return false;
                 }
                 const gc_node_ref_t oldBodyResult = function->region(bodyRegionOld)->result;
+                // The state's initial value is the loop's last norm input; the escapes are compared
+                // with it below, so it is read once here.
+                const auto oldNorm = function->normInputsOf(ref);
                 const uint32_t newRegion =
                     draft.addRegion(rt::GCRegionKind::LoopBody, 0);
                 draft.setInsertRegion(newRegion);
@@ -758,22 +787,35 @@ bool buildTransposeMember(
                 const gc_node_ref_t bodyCotangent =
                     runArm(bodyRegionOld, oldBodyResult, ctPort, regionPorts.back());
                 allowEscapes = false;
+                // What the channel needs, and what it does not: one value escaped, and that value is
+                // the one the state starts from. Then the loop can carry the sum and the answer of
+                // the parameter is the state's own cotangent plus that sum -- two paths into one
+                // value, which add. A loop with more than one escape needs one accumulator per
+                // value; until it has them, it refuses as it did before.
+                const bool carries =
+                    kCarryEscapedCotangents && escapes.size() == 1 && !oldNorm.empty() &&
+                    escapes.begin()->first == oldNorm.back();
                 if (armsOk && bodyCotangent != rt::kInvalidNodeRef && !escapes.empty()) {
-                    // The body's cotangents have a channel now, but the loop still hands back
-                    // one state: the refusal says how many are waiting, and for which values, so
-                    // the step that adds the accumulators knows the count from a reading. Each
-                    // escape gets a line of its own, in target order so that the reading does not
-                    // move with the map's: which value the round only read (`target`), which of the
-                    // body's products handed the cotangent out (`from`, the node the rule ran on),
-                    // and the loop's own two input lists -- norm and with are what an escape has to
-                    // be given back through, so a step that adds the capture channel reads both.
+                    // What escaped, read the same way whether or not it can be handed back: the
+                    // count, and one line per escape, in target order so that the reading does not
+                    // move with the map's -- which value the round only read (`target`), which of
+                    // the body's products handed the cotangent out (`from`, the node the rule ran
+                    // on), and the loop's own two input lists, norm and with, which are what a
+                    // second state has to be added to.
                     std::vector<std::pair<gc_node_ref_t, Escape>> caught(
                         escapes.begin(), escapes.end());
                     std::sort(
                         caught.begin(), caught.end(), [](const auto &left, const auto &right) {
                             return left.first < right.first;
                         });
-                    os << "TRANSPOSE function=" << function->name() << " skip=state node=" << ref
+                    // `skip=state` said the loop refused because its one state had nowhere to put
+                    // what escaped. When the channel is built nothing is skipped, so the same line
+                    // says `carried=1` and keeps every other field: the reading survives the fix,
+                    // which is what makes a refusal and an answer comparable. The `norm` and `with`
+                    // lists in the ESCAPE lines stay the loop's own -- they are what the second
+                    // state has to be added to, not what the escape was.
+                    os << "TRANSPOSE function=" << function->name()
+                       << (carries ? " carried=1" : " skip=state") << " node=" << ref
                        << " origin=" << regionOrigin << " captures=" << caught.size() << '\n';
                     for (const auto &entry : caught) {
                         const camel::runtime::GCNode *carrier = function->node(entry.first);
@@ -797,21 +839,41 @@ bool buildTransposeMember(
                         }
                         os << "]\n";
                     }
-                    return false;
+                    if (!carries) {
+                        return false;
+                    }
                 }
                 if (!armsOk || bodyCotangent == rt::kInvalidNodeRef) {
                     os << "TRANSPOSE function=" << function->name() << " skip=state node=" << ref
                        << " origin=" << regionOrigin << '\n';
                     return false;
                 }
-                draft.setRegionResult(newRegion, bodyCotangent);
+                // The captured cotangent becomes a state of its own, so the region grows a port for
+                // it and hands back a pair: the cotangent of the carried state, and the sum. The
+                // port list is written again rather than kept from above, because whether there is
+                // a second state is known only after the body ran -- the same way a branch's arm
+                // grows its ports when its own walk learns what it reads.
+                gc_node_ref_t regionResult = bodyCotangent;
+                Type *loopType             = Type::Float64();
+                if (carries) {
+                    const gc_node_ref_t accPort = draft.addPortNode(
+                        Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
+                    newPorts.push_back(accPort);
+                    draft.setRegionPorts(newRegion, std::span<const gc_node_ref_t>(newPorts));
+                    const gc_node_ref_t accNext =
+                        primitive(":op/add_d", {accPort, escapes.begin()->second.cotangent});
+                    const std::vector<gc_node_ref_t> pairParts{bodyCotangent, accNext};
+                    const auto pair = tupleOf(pairParts);
+                    regionResult    = pair.first;
+                    loopType        = pair.second;
+                }
+                draft.setRegionResult(newRegion, regionResult);
                 draft.setInsertRegion(0);
                 const gc_node_ref_t loopNode = draft.addLoopNode(
-                    rt::loopBodyOf(*function, ref), Type::Float64());
+                    rt::loopBodyOf(*function, ref), loopType);
                 draft.setRegionOwner(newRegion, loopNode, function->region(bodyRegionOld)->index);
                 draft.setNodeOrigin(loopNode, static_cast<uint32_t>(function->region(bodyRegionOld)->origin));
                 std::vector<gc_node_ref_t> loopNorm;
-                const auto oldNorm = function->normInputsOf(ref);
                 for (size_t i = 0; i + 1 < oldNorm.size(); ++i) {
                     const gc_node_ref_t copied = forward(oldNorm[i]);
                     if (!complete || copied == rt::kInvalidNodeRef) {
@@ -822,15 +884,31 @@ bool buildTransposeMember(
                     loopNorm.push_back(copied);
                 }
                 loopNorm.push_back(ctLoop);
+                if (carries) {
+                    // The sum starts at zero: a round that never reaches the value adds nothing.
+                    loopNorm.push_back(zero());
+                }
                 draft.setNormInputs(loopNode, std::span<const gc_node_ref_t>(loopNorm));
                 // The With inputs of a loop are the results of its parts and its round: the round is
                 // a value of its own, and the body's state port is what the previous round left.
                 const gc_node_ref_t roundValue = draft.materializeStaticValue(
                     camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(0), Type::Int64(),
                     rt::kGCNodeFlagConstant);
-                const std::array<gc_node_ref_t, 2> loopWith{bodyCotangent, roundValue};
+                const std::array<gc_node_ref_t, 2> loopWith{regionResult, roundValue};
                 draft.setWithInputs(loopNode, std::span<const gc_node_ref_t>(loopWith));
-                result = loopNode;
+                if (carries) {
+                    // The loop's value is the pair of last states, so the two the answer needs are
+                    // read out of it: the carried cotangent and the sum of what escaped. They add,
+                    // because both are cotangents of the one value the loop's state starts from.
+                    const auto component = [&](uint32_t index) {
+                        const gc_node_ref_t part = draft.addAccsNode(Type::Float64(), index);
+                        draft.setNormInputs(part, std::span<const gc_node_ref_t>(&loopNode, 1));
+                        return part;
+                    };
+                    result = primitive(":op/add_d", {component(0), component(1)});
+                } else {
+                    result = loopNode;
+                }
                 break;
             }
             case rt::GCNodeKind::Call:

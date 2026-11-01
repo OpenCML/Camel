@@ -1,14 +1,14 @@
 // A loop body that reads the function's own parameter: every round's cotangent lands on `x`, a value
-// the round only read, so it has to leave the loop through a capture channel. That channel is not
-// built yet, and this case does not pretend otherwise -- it prints the reading the refusal gives, so
-// that the step that adds the channel starts from a number: which value escaped, which of the body's
-// products handed the cotangent out, and the loop's own norm and with inputs, which are what the
-// escape has to be given back through.
+// the round only read, so it has to leave the loop through a capture channel. The loop carries it as
+// a second state -- the running sum of what escaped -- and the answer is the state's own cotangent
+// (8) plus that sum (7).
 //
 // `read_one(x) = loop s = x for i in 0..3 do 2.0*s + x` is `s = 2s + x` three times, `8x + 7x = 15x`
-// on paper, so `transpose(read_one)(1, 1)` owes 15. The reading is `captures=1` and one `ESCAPE`
-// line whose target is the parameter port and whose `from` is the body's `add` -- the product that
-// actually escapes, which is an `Oper`, not a port standing nearby.
+// on paper, so `transpose(read_one)(1, 1)` answers 15. The reading is kept beside it: the loop still
+// says how many values escaped and which product handed each one out, `carried=1` in place of
+// `skip=state` -- nothing is skipped now -- and the ESCAPE line still names the parameter port and
+// the body's `add`, because a reading that vanished when the fix landed could not be compared with
+// the refusal it replaced.
 import { transpose } from transforms
 import rulesets.transpose
 

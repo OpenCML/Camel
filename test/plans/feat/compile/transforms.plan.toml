@@ -356,43 +356,44 @@ expect_stdout_contains = ["TRANSPOSE function=thrice graph=", "type=(float, floa
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
-# The three readings below are an observation, not a repair. A loop body that reads a value from
-# outside its own region sends a round's cotangent to that value, and the loop hands back one state,
-# so the transpose refuses. The refusal is what these cases read: `captures` is how many values are
-# waiting, and one `ESCAPE` line names each of them -- the value the cotangent landed on (`target`),
-# the node whose rule handed it out (`from`, always an `Oper`: the body's own product, never a port),
-# and the loop's `norm` and `with` inputs, which are what a capture channel has to be given back
-# through. The three shapes differ in exactly the ways the channel has to handle: one value read once
-# by one product, one value read twice by two products (one accumulator, not two), and two values of
-# two different node kinds (a parameter port and a product computed before the loop).
+# A loop body that reads a value from outside its own region sends a round's cotangent to that value,
+# and the loop hands back one state -- so the transpose used to refuse. It now carries that cotangent
+# as a second state, the running sum of what escaped, and answers the value with the state's own
+# cotangent plus that sum. The reading did not go away when the fix landed: `captures` is how many
+# values escaped and one `ESCAPE` line still names each of them -- the value the cotangent landed on
+# (`target`), the node whose rule handed it out (`from`, always an `Oper`: the body's own product,
+# never a port), and the loop's `norm` and `with` inputs. The one field that changed meaning is
+# `skip=state`: nothing is skipped on the two shapes the channel covers, so those lines say
+# `carried=1` and keep every other field, which is what makes a refusal and an answer comparable.
 #
-# These three pin a refusal that is known to be wrong as an answer: each case names, on paper, the
-# number the capture channel owes (15, 22 and 29), and when that channel lands these assertions turn
-# into those numbers. Until then the reading is the only thing that can be checked, which is the
-# point -- the step that builds the channel starts from what escaped, not from a guess at it.
+# The three shapes are the channel's three cases: one value read once by one product (answered), one
+# value read twice by two products, one accumulator not two (answered), and two values of two
+# different node kinds, a parameter port and a product computed before the loop (still refused: it
+# needs one accumulator per value, which is the next cut). The numbers are the paper ones -- 15, 22,
+# and 29 through `x` and `k` -- so a case that stops answering 15 says so.
 [[tests]]
 name = "transpose_loop_escape.names_the_value_one_read"
-desc = "`read_one(x) = loop s = x for i in 0..3 do 2.0*s + x` reads the parameter inside the loop body, so every round's cotangent lands on `x` and has to leave the loop. That channel is not built, so the transpose refuses and the run exits non-zero: `skip=state` with `captures=1` and one `ESCAPE` line. On paper the pullback of 1.0 is 15 (`s = 2s + x` three times is `8x + 7x`), which is the number the channel owes and this case cannot yet ask for; it asks for the reading instead, so the step that adds the channel starts from a count and a pair of input lists rather than from a guess. `from` is an `Oper` -- the body's own `add` -- because the product that escapes is what the rule handed out, not a port standing near it."
+desc = "`read_one(x) = loop s = x for i in 0..3 do 2.0*s + x` reads the parameter inside the loop body, so every round's cotangent lands on `x` and has to leave the loop. The loop now carries it as a second state and answers 15 -- `s = 2s + x` three times is `8x + 7x`, the state's own cotangent 8 plus the carried sum 7 -- where before this cut it refused with `skip=state`. The reading is kept: `carried=1` in place of `skip=state`, `captures=1`, and the `ESCAPE` line still names the parameter port as the target and the body's `add` as the product that handed the cotangent out. A channel that dropped that line when it started working could not be compared with the refusal it replaced."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_loop_escape_reads_one.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
-expect_exit = 1
-expect_output_contains = ["TRANSPOSE function=read_one skip=state node=10 origin=0 captures=1", "ESCAPE target=0 from=9 kindOfFrom=11 kindOfTarget=1 typeOfTarget=float norm=[3,0,] with=[9,11,]"]
+expect_exit = 0
+expect_output_contains = ["TRANSPOSE function=read_one carried=1 node=10 origin=0 captures=1", "ESCAPE target=0 from=9 kindOfFrom=11 kindOfTarget=1 typeOfTarget=float norm=[3,0,] with=[9,11,]", "TRANSPOSE function=read_one graph=", "type=(float, float) => float", "15.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
 name = "transpose_loop_escape.one_value_read_twice_is_one_capture"
-desc = "`read_twice(x) = loop s = x for i in 0..3 do 2.0*s + x + x` reads the parameter through two different `add`s, so two products hand a cotangent to the same value. The count is `captures=1`: the collection is keyed by the value that escaped, not by the product, and a step that keyed it by the product would hand the cotangent back twice. `from` names the product the reverse walk reached first. On paper the pullback of 1.0 is 22 (`s = 2s + 2x` three times is `8x + 14x`), which is 15 if one of the two reads were dropped -- the number this reading has to keep apart from the previous case's."
+desc = "`read_twice(x) = loop s = x for i in 0..3 do 2.0*s + x + x` reads the parameter through two different `add`s, so two products hand a cotangent to the same value. The count is `captures=1`: the collection is keyed by the value that escaped, not by the product, and one carried sum is the cotangent of one value -- 22, since `s = 2s + 2x` three times is `8x + 14x`, where keying by product would hand the cotangent back twice and 15 would be the previous file's number. `from` names the product the reverse walk reached first."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_loop_escape_reads_twice.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
-expect_exit = 1
-expect_output_contains = ["TRANSPOSE function=read_twice skip=state node=11 origin=0 captures=1", "ESCAPE target=0 from=10 kindOfFrom=11 kindOfTarget=1 typeOfTarget=float norm=[3,0,] with=[10,12,]"]
+expect_exit = 0
+expect_output_contains = ["TRANSPOSE function=read_twice carried=1 node=11 origin=0 captures=1", "ESCAPE target=0 from=10 kindOfFrom=11 kindOfTarget=1 typeOfTarget=float norm=[3,0,] with=[10,12,]", "22.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
