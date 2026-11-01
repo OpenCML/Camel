@@ -189,3 +189,44 @@ for the gate tells which path to fix. That measurement was not taken in this rou
 
 Where it belongs in the code is beside \`inheritedWait\` in \`replaceNode\`, or -- if the erasing path is
 \`pruneBranch\`/\`eraseNode\` -- in that path, by routing it through the same protection.
+
+
+## Fourth round: the print, and the one measurement still missing
+
+Two one-off prints were added and removed (\`pruneBranch\` entry; every \`GraphDraft::eraseNode\` with its
+kind, normal-input count and control-input count), then the two pipelines were run on
+\`inline_crash_function_argument.cml\`.
+
+- \`std::opt::inline std::opt::fold\` calls \`pruneBranch\` six times (BRCH nodes 2, 18, 29, 8, 4, 19) and
+  erases **kind 13 (Gate)** nodes 39, 40, 41, 42 -- **all with \`ctrlIn=0\`**;
+- \`std::opt::inline\` alone prints no \`pruneBranch\` and no erase for those nodes.
+
+That \`ctrlIn=0\` is the reading that matters: a gate whose control input had already been unlinked when
+it was erased. \`replaceNode\` unlinks the control users before erasing (rewrite.cpp:418-420), so the
+order of events is consistent with the gate having gone **through \`replaceNode\`** after all -- the third
+round's hypothesis (\`pruneBranch\` erasing the arm) is not what the print shows.
+
+And then the predicates say the protection should have fired: \`orderedSources\` (rewrite.cpp:152) walks
+**normal and with inputs** and keeps those that \`carriesOrdering\`, so the reduce is in \`lastReadsGoingOut\`;
+\`keepThroughValue\` then wraps it through \`:op/keep\` unless the replacement already reaches it.
+
+**The one measurement not yet taken** is inside that last step: for this (removed gate, reduce) pair, what
+\`lastRead\` holds, whether \`reaches(source, value)\` was true, and what \`stood\` was. That print goes in
+\`keepThroughValue\` and answers it in one build.
+
+## Why this round did not change code
+
+The fix is one line away **only if** the answer is "\`lastRead\` was empty" or "\`reaches\` was true".
+Either answer changes which of the two branches to touch (the scan, or the value-reaches test), and a
+guess would be a fourth wrong certainty. The rule stands and is unchanged:
+
+> **Folding away a GATE does not lose the value -- it loses the wait the gate was holding for someone
+> else, and that wait has to land on the gate's producer.**
+
+## And the contract sentence, as ruled
+
+> **Deleting a node has two paths, and only one of them keeps an observed run -- that is the shape of
+> today's bug.**
+\`eraseNode\` (src/runtime/draft.cpp:1674) removes a node and closes the chain; it does not look at what
+the node was the last reader of. \`replaceNode\` (src/passes/opt/generic/rewrite.cpp:314) does. Every
+pass that reaches for \`eraseNode\` directly is one that gets no protection.
