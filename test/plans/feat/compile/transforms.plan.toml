@@ -26,3 +26,15 @@ expect_exit = 0
 expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed rules=mul,div,add", "REINTERP jvp op signature=(f: (float) => float) => (float, float) => (float, float)", "lifted=(float, float) => (float, float) graph=(float, float) => (float, float) same=yes", "5.5", "3.25"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+[[tests]]
+name = "transpose_runs_the_data_flow_backwards.nvm"
+desc = "`transpose(f)` is the pullback of a linear function's graph, built the way `jvp` builds the forward one: a new function value naming a graph of the transform's own, with `f` untouched. The walk runs the graph backwards -- a value used k times receives k cotangents that add -- and each primitive is replaced by the rule the `rulesets.transpose` family files under its operator, asked of the index by `transposeRuleOf` rather than matched against the uri in C++. For `f(x) = 2*x + 3*x` the parameter is used twice, so the cotangent 1.0 pulls back to 2 + 3 = 5; for `f(x) = (x*2 + x*3) * 4` the outer 4 reaches the sum before it splits, so the answer is 4*2 + 4*3 = 20. A primitive whose other operand is not a constant needs that operand's forward value, which is a residual this step does not have: it is refused by name, never answered with a wrong cotangent."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_straight_line.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["TRANSPOSE function=sum_of_scaled graph=", "type=(float) => float", "rules=add_t,mul_t", "TRANSPOSE function=scaled_chain graph=", "rules=mul_t,add_t", "TRANSPOSE op signature=(f: (float) => float) => (float) => (float)", "same=yes", "5.0", "20.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

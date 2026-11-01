@@ -7,4 +7,6 @@ add_camel_module(
     module.cpp
     jvp.cpp
     jvp_operator.cpp
+    transpose.cpp
+    transpose_operator.cpp
 )
