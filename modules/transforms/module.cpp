@@ -25,6 +25,7 @@
 
 #include "jvp.h"
 #include "jvp_operator.h"
+#include "transpose_operator.h"
 
 #include "camel/compile/gir/rule_templates.h"
 #include "camel/compile/gir/static_function.h"
@@ -292,6 +293,11 @@ TransformsModule::TransformsModule(context_ptr_t ctx) : BuiltinModule("transform
     // transform (jvp.h), so it is reached as a call and not as a pass.
     camel::transforms::registerOperatorMetadata();
     for (const auto &group : camel::transforms::operatorGroups()) {
+        exportEntity(group->name(), group);
+    }
+    // `transpose` is the second one, and it is the same kind of value: the pullback of a linear
+    // function's graph, built when the call runs (transpose.cpp).
+    for (const auto &group : camel::transforms::transposeOperatorGroups()) {
         exportEntity(group->name(), group);
     }
 }

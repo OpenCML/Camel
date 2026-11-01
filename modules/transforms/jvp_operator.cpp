@@ -14,6 +14,7 @@
 #include "jvp_operator.h"
 
 #include "jvp.h"
+#include "transpose_operator.h"
 
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
@@ -262,11 +263,10 @@ const std::vector<oper_group_ptr_t> &operatorGroups() {
 }
 
 std::unordered_map<std::string, operator_t> operatorKernels() {
-    return {
-        {"jvp", &jvpKernel},
-        {"split", &splitKernel},
-        {"transpose", &transposeKernel},
-    };
+    std::unordered_map<std::string, operator_t> kernels = transposeOperatorKernels();
+    kernels["jvp"] = &jvpKernel;
+    kernels["split"] = &splitKernel;
+    return kernels;
 }
 
 void registerOperatorMetadata() {
@@ -278,6 +278,10 @@ void registerOperatorMetadata() {
     // it refuses a loop there as `grad` does (OperatorTraits::readsGraphs; op-semantics 11.4).
     camel::core::OperatorTable::instance().set(
         "transforms:jvp", {.pure = false, .readsGraphs = true});
+    // `transpose` builds a graph of its own from the one it is handed, for the same two reasons.
+    camel::core::OperatorTable::instance().declare("transforms", {{"transpose", false}});
+    camel::core::OperatorTable::instance().set(
+        "transforms:transpose", {.pure = false, .readsGraphs = true});
 }
 
 } // namespace camel::transforms

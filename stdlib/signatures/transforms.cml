@@ -68,8 +68,10 @@ export func jvp::<F>(f: F): Jvp<F> when is_function::<F>()
 /// @example let step = split
 export func split(f: (v: float, d: float) => (float, float)): (v: float, d: float) => (float, float)
 
-/// The step of `vjp` that walks the linear residue backwards, so a cotangent comes back as the
-/// pullback (design 4.4). Not implemented, for the same reason and with the same reading.
-/// @example-fragment the same lifted function, walked backwards: `let back = transpose(lin)`.
-/// @example let step = transpose
-export func transpose(f: (v: float, d: float) => (float, float)): (v: float, d: float) => (float, float)
+/// The transpose of a linear function: `transpose(f)` takes the cotangent of `f`'s result and
+/// gives the cotangent of its parameter. The data flow runs backwards -- each primitive is replaced
+/// by the rule the `rulesets.transpose` family files under it, and a value used k times receives k
+/// cotangents that add. `f(x) = 2*x + 3*x` transposed at the cotangent `1.0` gives `5.0`.
+/// @example-fragment `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
+/// @example let back = transpose(f)
+export func transpose::<F>(f: F): Transpose<F> when is_function::<F>()
