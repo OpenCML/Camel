@@ -45,8 +45,14 @@ struct TransposeGraph {
 /// value for it, because it is what the answer is a cotangent of -- so the signature is the values and
 /// the cotangent in, one cotangent per participant out. Empty means every parameter participates, which
 /// is the ordinary transposition.
+/// `answersOf`, when given, is filled with the position of the parameter each member of the answer
+/// tuple is the cotangent of, in the order the answer writes them. A caller that builds a call to
+/// this member reads the positions here instead of deciding them again from the parameter list:
+/// `xs[i]` has an `int` parameter, which the member reads as a value and answers nothing for, so the
+/// answer's slots and the callee's parameters are not the same list.
 camel::core::type::FunctionType *transposeSignature(
-    camel::core::type::FunctionType *function, const std::vector<bool> &participates = {});
+    camel::core::type::FunctionType *function, const std::vector<bool> &participates = {},
+    std::vector<size_t> *answersOf = nullptr);
 
 /// Builds the graph of `transpose(f)` for the graph `function` of `program`. The graph `function`
 /// is read, never changed. `os` receives what was built: which rule every primitive on the path was

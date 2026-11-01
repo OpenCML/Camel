@@ -32,7 +32,12 @@ using camel::core::type::Type;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GraphId;
 
-FunctionType *transposeSignature(FunctionType *function, const std::vector<bool> &participates) {
+FunctionType *transposeSignature(
+    FunctionType *function, const std::vector<bool> &participates,
+    std::vector<size_t> *answersOf) {
+    if (answersOf != nullptr) {
+        answersOf->clear();
+    }
     if (function == nullptr) {
         return nullptr;
     }
@@ -74,6 +79,9 @@ FunctionType *transposeSignature(FunctionType *function, const std::vector<bool>
             }
             if (participates[i]) {
                 cotangentsOfParticipants.push_back(Type::Float64());
+                if (answersOf != nullptr) {
+                    answersOf->push_back(i);
+                }
             } else {
                 params.emplace_back(Type::Float64(), false);
             }
@@ -112,6 +120,9 @@ FunctionType *transposeSignature(FunctionType *function, const std::vector<bool>
                 params.emplace_back(parameter, false);
                 if (space.hasSpace()) {
                     cotangentsOfAll.push_back(space.space);
+                    if (answersOf != nullptr) {
+                        answersOf->push_back(i);
+                    }
                 }
             }
             params.emplace_back(Type::Float64(), false);
@@ -140,6 +151,9 @@ FunctionType *transposeSignature(FunctionType *function, const std::vector<bool>
         std::vector<Type *> tangents;
         for (size_t i = 1; i < count; ++i) {
             tangents.push_back(camel::core::tangentSpaceOf(function->normTypeAt(i)).space);
+            if (answersOf != nullptr) {
+                answersOf->push_back(i);
+            }
         }
         return FunctionType::create(
             camel::core::type::param_vec_t{}, params,
@@ -151,6 +165,9 @@ FunctionType *transposeSignature(FunctionType *function, const std::vector<bool>
     camel::core::type::param_vec_t params;
     params.emplace_back(Type::Float64(), false);
     params.emplace_back(Type::Float64(), false);
+    if (answersOf != nullptr) {
+        answersOf->push_back(0);
+    }
     return FunctionType::create(camel::core::type::param_vec_t{}, params, Type::Float64());
 }
 
@@ -1310,6 +1327,17 @@ bool buildTransposeMember(
                         // one thing this graph does not have.
                         continue;
                     }
+                    if (!hasTangentSpace(inputs[i])) {
+                        // An operand whose type has no tangent space is not a position a cotangent
+                        // goes to: there is nothing for one to be. The rule's right side is written
+                        // for the positions that answer one -- `xs[i]`'s right side answers `xs`'s
+                        // cotangent alone, because the `i` is an `int` -- so asking it for this
+                        // position is not a gap in the rule but a question with no answer, and it is
+                        // recorded the way a cotangent landing on such a value always is rather than
+                        // refused. Same query as `transposeSignature`: the type answers.
+                        noteZero(inputs[i], ref);
+                        continue;
+                    }
                     std::string why;
                     const gc_node_ref_t answer = ruleCotangent(rule->rule, inputs, i, ct, why);
                     if (answer == rt::kInvalidNodeRef) {
@@ -1678,17 +1706,31 @@ bool buildTransposeMember(
                 } else {
                     transposed = known->second;
                 }
-                // A callee of one parameter answers one cotangent; a callee of several answers one for
-                // each, in the order its parameters stand. Both are one call: the parameters as they
-                // stand at the call site, then the cotangent.
+                // The member takes the callee's parameters *as values* and then the cotangent, and
+                // answers one cotangent for each parameter a cotangent can land on. Which those are
+                // is `transposeSignature`'s answer, read here rather than counted a second time: for
+                // `xs[i]` the member reads the array *and* the `int` index -- both are values the
+                // transposed graph needs -- and answers the array's cotangent alone, so its answer is
+                // a one-long tuple of arrays and not `(float, float)`. A member of the residual form
+                // takes the bundle and nothing else, because the values it reads are in it.
                 const size_t calleeParams = callee->funcType()->normTypesCount();
                 if (calleeParams == 0 || inputs.size() != argumentAt + calleeParams) {
                     os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
                        << " callee=" << callee->name() << " params=" << calleeParams << '\n';
                     return false;
                 }
+                std::vector<size_t> answersOf;
+                FunctionType *calleeType = transposeSignature(callee->funcType(), {}, &answersOf);
+                if (calleeType == nullptr || calleeType->normTypesCount() == 0) {
+                    os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
+                       << " callee=" << callee->name() << " signature\n";
+                    return false;
+                }
+                // Every parameter of the member but the seed is a value it reads, so the call hands
+                // one forwarded value per such parameter, in the order the member takes them.
+                const size_t memberValues = calleeType->normTypesCount() - 1;
                 std::vector<gc_node_ref_t> arguments;
-                for (size_t i = 0; i < calleeParams; ++i) {
+                for (size_t i = 0; i < memberValues; ++i) {
                     const gc_node_ref_t argument = forward(inputs[argumentAt + i]);
                     if (argument == rt::kInvalidNodeRef) {
                         os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
@@ -1697,20 +1739,8 @@ bool buildTransposeMember(
                     }
                     arguments.push_back(argument);
                 }
-                FunctionType *calleeType = transposeSignature(callee->funcType());
-                if (calleeType == nullptr) {
-                    os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
-                       << " callee=" << callee->name() << " signature\n";
-                    return false;
-                }
-                // The callee's transpose stands where the call stood: it takes the arguments as the
-                // call has them and then the cotangent, and answers one cotangent for each argument
-                // -- a number for one parameter, one tuple for several.
-                Type *const answerType =
-                    calleeParams == 1
-                        ? Type::Float64()
-                        : camel::core::type::TupleType::create(
-                              std::vector<Type *>(calleeParams, Type::Float64()));
+                // What the call answers is what the member answers.
+                Type *const answerType = calleeType->exitType();
                 std::vector<gc_node_ref_t> callArgs;
                 // Where the callee stood at the call site, it stands in the transposed call: as the
                 // first normal input when the original wrote it in place, as a `with` input when the
@@ -1747,14 +1777,28 @@ bool buildTransposeMember(
                     draft.setWithInputs(
                         made, std::span<const gc_node_ref_t>(&calleeValue, size_t(1)));
                 }
-                for (size_t i = 0; i < calleeParams; ++i) {
-                    if (calleeParams == 1) {
-                        addCotangent(inputs[argumentAt], made);
-                        break;
+                // The cotangent goes back where the member answers it: one slot per *answering*
+                // parameter, in the member's order -- not one per parameter of the callee. The `int`
+                // of `xs[i]` is a parameter the member reads and answers nothing for, so no slot of
+                // the answer is its, and a cotangent handed to it would be a value invented for a
+                // position that has none.
+                const auto *answerTuple = answerType == nullptr
+                                              ? nullptr
+                                              : dynamic_cast<const camel::core::type::TupleType *>(
+                                                    answerType);
+                for (size_t k = 0; k < answersOf.size(); ++k) {
+                    if (answersOf[k] >= calleeParams) {
+                        continue;
                     }
-                    const gc_node_ref_t part = draft.addAccsNode(Type::Float64(), static_cast<uint32_t>(i));
+                    if (answerTuple == nullptr) {
+                        // One parameter, one answer: the cotangent is the call's value.
+                        addCotangent(inputs[argumentAt + answersOf[k]], made);
+                        continue;
+                    }
+                    const gc_node_ref_t part = draft.addAccsNode(
+                        answerTuple->typeAt(k), static_cast<uint32_t>(k));
                     draft.setNormInputs(part, std::span<const gc_node_ref_t>(&made, 1));
-                    addCotangent(inputs[argumentAt + i], part);
+                    addCotangent(inputs[argumentAt + answersOf[k]], part);
                 }
                 break;
             }
@@ -1778,18 +1822,50 @@ bool buildTransposeMember(
             const auto &ports      = function->normPorts();
             const size_t firstPort = bundlesResiduals ? 1 : 0;
             std::vector<gc_node_ref_t> parts;
+            // Each answered parameter's cotangent, and the type it has: an array parameter's
+            // cotangent is an array. The type comes from the parameter's own answer
+            // (`tangentSpaceOf`, the query the signature reads), so nothing here says `float` on
+            // behalf of a type that is not one. A parameter with no tangent space answers nothing
+            // and has no slot, which is what keeps the tuple the signature promised and the tuple
+            // this builds the same length.
+            std::vector<Type *> partTypes;
             for (size_t i = firstPort; i < ports.size(); ++i) {
                 if (partial && !participatesOf(i)) {
                     // A value parameter of a partial transposition: no cotangent is answered for it.
                     continue;
                 }
-                parts.push_back(hasCotangent[ports[i]] ? cotangent[ports[i]] : zero());
+                const camel::runtime::GCNode *portNode = function->node(ports[i]);
+                const Type *portType = portNode != nullptr ? portNode->dataType() : nullptr;
+                const camel::core::TangentSpaceAnswer space =
+                    portType == nullptr ? camel::core::TangentSpaceAnswer{}
+                                        : camel::core::tangentSpaceOf(portType);
+                if (portType != nullptr && !space.hasSpace()) {
+                    // Nothing can be where a cotangent goes, so this parameter answers none: the
+                    // `i` of `xs[i]` is an `int`.
+                    continue;
+                }
+                if (hasCotangent[ports[i]]) {
+                    parts.push_back(cotangent[ports[i]]);
+                    partTypes.push_back(space.space);
+                    continue;
+                }
+                if (portType == nullptr || space.space == Type::Float64()) {
+                    parts.push_back(zero());
+                    partTypes.push_back(Type::Float64());
+                    continue;
+                }
+                // A value with a cotangent space and no cotangent: the graph never read it. A zero of
+                // its own space would have to be built from the value's shape, which this walk does
+                // not carry for anything but a number; refuse by name rather than answer a `float`
+                // where an array is promised.
+                os << "TRANSPOSE function=" << function->name() << " skip=unread-parameter port="
+                   << ports[i] << " type=" << (portType != nullptr ? portType->toString() : "?")
+                   << '\n';
+                return false;
             }
             if (!parts.empty()) {
-                std::vector<Type *> partTypes;
                 std::vector<size_t> slots;
                 for (size_t i = 0; i < parts.size(); ++i) {
-                    partTypes.push_back(Type::Float64());
                     slots.push_back(i);
                 }
                 Type *const tupleType = camel::core::type::TupleType::create(partTypes);
