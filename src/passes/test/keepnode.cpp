@@ -2,23 +2,22 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * Draft-level readings of `:op/keep`, beside the ones `std::opt` already writes: `replaceNode`
- * (opt/generic/rewrite.cpp) is the code under test, and the shape it acts on is built here by hand
- * so the two sides of the question can both be read -- where a keeper is due, and where none is.
+ * Draft-only: `:op/keep` is built here, in a graph the program already has, and `replaceNode`
+ * (opt/generic/rewrite.cpp) is the code under test. Reachability is not a claim this file makes:
+ * `std::opt` writes this node on its own today, in three cases under test/cases/opt/effects/
+ * (branch_keeps_outer_effect, dce_effect_under_pure_arithmetic, fold_keeps_arm_effect), whose
+ * counts and names are pinned by test/cases/opt/pass_written/check.mjs. What that path cannot do
+ * is fault on purpose, so the shape is also built by hand here: a branch over a static condition
+ * is folded before a pass sees it, and every rule that would replace the reader of a computation
+ * that may fault refuses to fire, because dropping the reader would drop the fault (see the note
+ * at core/operator_table.h, `Keep`).
  *
- * Where it is due: the removal takes the last read of a node whose running is observed, and a
- * division by zero is the one such node whose running is visible from outside -- the program faults
- * if and only if it ran. The value the program prints is routed through the node that takes the
- * division's place, so the run says the whole of it:
+ * The node that must keep running is a division by zero: whether the program faults is then a
+ * reading of whether that node still runs. The value the program prints is routed through the
+ * node that takes the division's place, so the run says the whole of it:
  *
- *   test::keep_node       KEEPNODE keep=<n> reads_the_divisor=<0|1> printed=<0|1>, and the program
- *                         faults on the division, which it can only do through the keeper
- *
- * Where none is due: a node that reads nothing observed, and a node whose observed source still has
- * another reader after the removal. Neither may get a keeper, and the program prints what it prints
- * without any pass:
- *
- *   test::keep_node_pure  KEEPNODE_PURE keep_pure=<n> keep_shared=<n>
+ *   test::keep_node   prints KEEPNODE keep=<n> reads_the_divisor=<0|1> printed=<0|1>
+ *                     and leaves the program faulting on the division if the keep runs
  */
 
 #include "camel/passes/test/keepnode.h"
@@ -57,11 +56,8 @@ gc_node_ref_t op(
 }
 
 /// The operator of a node, or kNoOper when it is not an operator: one place to read the payload.
-/// It reads through the transaction and never names the draft type: the direct-connection ledger
-/// (test/cases/runtime/graph_draft_ledger) counts the files that name it, and its numbers may only
-/// fall.
-OperId operOf(const GraphTransaction &transaction, gc_node_ref_t id) {
-    const auto &draft            = transaction.graph();
+OperId operOf(GraphTransaction &transaction, gc_node_ref_t id) {
+    auto &draft                    = transaction.edit();
     const DraftNodeHeader *header = draft.header(id);
     if (header == nullptr || header->kind != GCNodeKind::Oper) {
         return camel::core::kNoOper;

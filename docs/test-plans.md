@@ -691,6 +691,18 @@ path nothing); it runs with the default test set (`test/plans/feat/consistency/r
   build (the case's `none` mode prints the failing check; write the two goldens from
   `normalize_doc` / `normalize_text`), do not hand-edit the number, and do not loosen the case: a
   profile row's position is not a count and moves whenever an imported declaration does.
+- `normalize_graph_ids`
+  Replaces the graph id in a transform's reading line with `<GRAPH>` (`REINTERP remat function=h
+  in_recompute=0 out_recompute=1 graph=49`, `REINTERP jvp function=h graph=56 type=...`). The id is
+  the per-run allocation index of the graph the transform made, not the reading itself: adding any
+  declaration that reserves a graph renumbers it, the way an origin id is renumbered by parsing
+  another file. **Only the run's allocation index is normalized; the bits, the function name and the
+  structural claim stay exact** -- a golden asserts that the transform made one graph and set these
+  bits on it, not which number the run gave it. Normalizing the id lets a plan pin the whole line
+  with `expect_stdout_exact` instead of matching fragments, and without a red test whenever an
+  unrelated module grows.
+  Only a `REINTERP` line is touched; an id printed elsewhere (a `forward=` / `backward=` half, a
+  slot or an origin) is a different claim and keeps its number.
 - `normalize_node_ids`
   Renumbers `node#N` in a rich DOT dump (`std::rgir`, `std::argir`) by first appearance *within
   each graph*: the first id a graph prints becomes `n0`, the next distinct one `n1`, and an id

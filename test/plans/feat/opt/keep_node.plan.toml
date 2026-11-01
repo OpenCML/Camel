@@ -6,16 +6,9 @@ desc = "`:op/keep` where a keeper is due and where none is: a test-only pass bui
 
 # Design principles 3.3 and 9.7: a pass that removes the last use of a node whose running is
 # observed leaves a keeper on data -- `:op/keep(x, v)` gives `v`, and `x` stays read through a data
-# edge.
-#
-# `std::opt` already writes that node today: over the three cases in opt/effects --
-# branch_keeps_outer_effect, dce_effect_under_pure_arithmetic, fold_keeps_arm_effect -- it draws two
-# keepers each, six in all (`std::opt std::gir | grep -c ':op/keep'`). What this plan adds is the
-# read either side of that count, which a running pipeline cannot give: where a keeper is due and
-# the kept node still runs (`.run`), and where none is due and none appears (`.pure`). The shape is
-# built at the graph level because a program cannot choose it: `test::keep_node` makes a division by
-# zero whose only reader is replaced and routes the program's own print through what takes that
-# reader's place.
+# edge. `std::opt` writes that node on its own today; what this plan adds is the read either side of
+# the count, which a running pipeline cannot give -- where a keeper is due and the kept node still
+# runs (`.run`), and where none is due and none appears (`.pure`).
 #
 #   keep_node_shape.reference  the program as written: `side` prints, then `2`
 #   keep_node_shape.gir        `:op/keep` is in the graph the pass returns
@@ -25,10 +18,10 @@ desc = "`:op/keep` where a keeper is due and where none is: a test-only pass bui
 #                              program prints what it printed without any pass
 #
 # The reading with the insertion switched off, measured by hand (opt/generic/rewrite.cpp,
-# keepThroughValue returning `value` on entry): `KEEPNODE keep=0 reads_the_divisor=0`. That is the
-# red this plan turns into. The counter-case has one of its own: with the "it is the node's last
-# reader" test in `lastReadsGoingOut` relaxed, `keep_shared` reads 1 and the pass dies on a keeper
-# with no reader and no place in the chain.
+# keepThroughValue returning `value` on entry): `KEEPNODE keep=0 reads_the_divisor=0`. The
+# counter-case has one of its own: with the "it is the node's last reader" test in
+# `lastReadsGoingOut` relaxed, `keep_shared` reads 1 and the pass dies on a keeper with no reader
+# and no place in the chain.
 
 [defaults]
 kind = "behavior"

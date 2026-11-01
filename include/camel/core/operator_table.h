@@ -135,23 +135,21 @@ inline constexpr OperId VarAfter        = 21; // ":var/after"
 /// When it is written: `keepThroughValue` (src/passes/opt/generic/rewrite.cpp), called by
 /// `replaceNode` for a node that has no sync user -- one that holds no place in a `sync` block's
 /// chain. That shape is not hypothetical, so the operator is not unreachable today: `std::opt` over
-/// test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml already draws two of these nodes, and
-/// the same run over branch_keeps_outer_effect.cml and fold_keeps_arm_effect.cml draws two each --
-/// six in all, read as `std::opt std::gir | grep -c ':op/keep'`. What 3.3 still leans on for the
-/// graphs the builder writes is the chain: an effect written inside a `sync` block has a place in
-/// it, and a pass that removes the statement hands that place on instead of reaching for this
-/// operator (rewrite.h, replaceNode). This operator is for the read that has no such place -- and a
-/// graph that keeps neither is refused at the commit ("effect node ... with neither a read of its
-/// value nor a place in its chain"), which is what `test::keepshape` measures.
+/// test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml already draws two of these nodes.
+/// What 3.3 still leans on for the graphs the builder writes is the chain: an effect written inside
+/// a `sync` block has a place in it, and a pass that removes the statement hands that place on
+/// instead of reaching for this operator (rewrite.h, replaceNode). This operator is for the read
+/// that has no such place -- and a graph that keeps neither is refused at the commit ("effect node
+/// ... with neither a read of its value nor a place in its chain"), which is what
+/// `test::keepshape` measures.
 ///
-/// Two plans hold the rest of the account. test/plans/feat/opt/keep_node.plan.toml builds the shape
-/// at the draft level, where the counter-cases can be read beside it
-/// (src/passes/test/keepnode.cpp): `KEEPNODE keep=1 reads_the_divisor=1` where a keeper is due,
-/// `keep=0` with the insertion switched off, and `KEEPNODE_PURE keep_pure=0 keep_shared=0` where
-/// none may appear and none does. test/plans/feat/opt/unused_value_chain.plan.toml guards the older
-/// mechanism that keeps 3.3 true where the chain does exist: with the inherited waits switched off,
-/// twelve of its cases go red, while the cases one would expect to guard it, in
-/// test/plans/feat/opt/effects_kept.plan.toml, stay green.
+/// The insertion is also exercised by construction, in src/passes/test/keepnode.cpp and
+/// test/plans/feat/opt/keep_node.plan.toml: measured there, `KEEPNODE keep=1 reads_the_divisor=1`,
+/// and the same pass with the insertion switched off reads `keep=0`. An earlier version of this
+/// comment said no program reached the insertion. The counts that refuted it are 3 of the 5
+/// programs under test/cases/opt/effects/ (each holding two nodes) and 7 in the whole
+/// test/cases/opt tree; both counts, their per-file node counts and their names are pinned by
+/// `keep_shape.reachability`, so a rule that starts or stops writing this node is a red run.
 inline constexpr OperId Keep            = 22; // ":op/keep"
 inline constexpr OperId kWellKnownCount = 23; // kNoOper included
 
