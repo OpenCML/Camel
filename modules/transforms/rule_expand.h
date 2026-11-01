@@ -8,7 +8,9 @@
 #include "camel/runtime/graph.h"
 #include "camel/runtime/graph_txn.h"
 
+#include <functional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace camel::transforms {
@@ -29,6 +31,22 @@ camel::runtime::gc_node_ref_t expandRuleRightSide(
     camel::runtime::GraphDraftGroup &group, camel::runtime::GraphTransaction &transaction,
     const camel::compile::gir::GenericRuleInstance &instance,
     const std::vector<camel::runtime::gc_node_ref_t> &values,
+    const std::vector<camel::runtime::gc_node_ref_t> &tangents, std::string &why);
+
+/// The same expansion, reached from the rule's *name*: the transform that has a rule's name and its
+/// operands -- and no instance, because it never runs a rule itself -- asks here.
+///
+/// `valueOf` answers an operand's value by the place the right side binds it, and is asked only for
+/// the places the right side's body reads. That is what lets a position be answered where one of the
+/// operands has no value: the rule that answers it names only the other one, so the walk is never
+/// asked for a value it does not carry.
+///
+/// Answers the expanded node, or `kInvalidNodeRef` with `why`: no rule of that name in this context,
+/// an instance that did not come about, or a value the rule reads and the walk lacks.
+camel::runtime::gc_node_ref_t expandRuleByName(
+    camel::core::context::Context &context, camel::runtime::GraphDraftGroup &group,
+    camel::runtime::GraphTransaction &transaction, std::string_view ruleName,
+    const std::function<camel::runtime::gc_node_ref_t(size_t)> &valueOf,
     const std::vector<camel::runtime::gc_node_ref_t> &tangents, std::string &why);
 
 } // namespace camel::transforms

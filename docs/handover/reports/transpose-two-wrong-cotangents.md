@@ -9,6 +9,14 @@ Both are inside the five `law == ...` branches of `modules/transforms/transpose.
 re-writes the law instead of expanding the rule's right side. Both are dead weight *and* wrong, which
 is the argument for deleting the branches rather than keeping them.
 
+**Update (2026-11-02, `lane-m4-assembly`):** the five branches are gone and both positions now expand
+the rule's right side. **T1 is repaired** -- `-x` answers `-1.0` / `-2.0`, measured on `std::nvm`.
+**T2 changes shape but is not repaired**: the branch's `-ct/x` is gone, and the position is still never
+reached (a divisor is a constant); under today's reading of "one rule answers the first name", the
+position would answer `ct/x`. That gap is the pending question
+[`whether-a-transpose-rule-answers-every-name-or-the-first`](../questions/questions-2026-11-02-whether-a-transpose-rule-answers-every-name-or-the-first.md),
+which also covers `x - c`'s second position (`+ct` where the law says `-ct`).
+
 ## T1 -- `neg` answers the cotangent with the wrong sign
 
 `transpose` of `neg(x) = -x` at `x = 5`, cotangent `1`:
@@ -32,6 +40,9 @@ Once `transpose` expands the rule's right side instead of dispatching by name, t
 branch was protecting. So the acceptance for the branch deletion lists `-x` going from `1.0/2.0` to
 `-1.0/-2.0` as **a repair, not a regression**.
 
+**Repaired** (2026-11-02): measured `-1.0` / `-2.0` on `std::nvm`, and `x * 3.0` / `x - 1.0` unchanged
+at `3.0`/`6.0` and `1.0`/`2.0`, so the repair did not move the two positions that were already right.
+
 ## T2 -- `div` answers the cotangent in the divisor from `x * x`, not `c * c`
 
 The branch computes, for the second operand of `x / c`:
@@ -52,8 +63,10 @@ transposes, so `isConstant(inputs[1])` skips the position before the formula is 
 this is dead code *and* wrong: nothing measured it, so nothing noticed.
 
 **The library already has the right answer** here too: `div_cotangent_c(x, c, ct)` is written for
-exactly this position, and is called by nothing today. The rule path reaches it, so this number
-becomes the law's number as a consequence of deleting the branch.
+exactly this position, and is called by nothing today. The rule path does **not** reach it, because
+"one rule answers the first name" is the reading in force: the second position asks the same rule with
+the operands' values in the other order, which answers `ct/x` -- still not the law. Reaching
+`div_cotangent_c` needs the rule's right side to answer both names, which is the pending question.
 
 ## What would count as fixed
 
@@ -62,3 +75,8 @@ becomes the law's number as a consequence of deleting the branch.
   value it needs is not there -- but not `-ct/x`.
 - Neither is asserted before that: a case asserting a number the tree does not answer would only
   record the defect, and `known_fail` would record it as one backend's problem.
+
+**After the branch deletion**: the first bullet holds (measured). The second does not: the position is
+unreachable today, and if it were reached it would answer `ct/x`. Refusing it by name would be the
+better of the two, and is what the pending question's default asks for when the value is missing; with
+the value present the rule answers, and the answer is the first name's.

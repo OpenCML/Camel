@@ -26,27 +26,27 @@ import { zeros_like } from tensor
 
 /// The transpose of `x + c`: the cotangent of the sum is the cotangent of `x`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
-    x + c => (ct: T) => add_cotangent(x, c, ct)
+    x + c => (ct: T) => add_cotangent(ct)
 }
 
 /// The transpose of `x - c`.
 export rule sub_t::<T>(x: T, c: T) when is_float::<T>() {
-    x - c => (ct: T) => sub_cotangent(x, c, ct)
+    x - c => (ct: T) => sub_cotangent(ct)
 }
 
 /// The transpose of `x * c`: `ct * c`.
 export rule mul_t::<T>(x: T, c: T) when is_float::<T>() {
-    x * c => (ct: T) => mul_cotangent(x, c, ct)
+    x * c => (ct: T) => mul_cotangent(c, ct)
 }
 
 /// The transpose of `x / c`: `ct / c`.
 export rule div_t::<T>(x: T, c: T) when is_float::<T>() {
-    x / c => (ct: T) => div_cotangent(x, c, ct)
+    x / c => (ct: T) => div_cotangent(c, ct)
 }
 
 /// The transpose of `-x`: `-ct`.
 export rule neg_t::<T>(x: T) when is_float::<T>() {
-    -x => (ct: T) => neg_cotangent(x, ct)
+    -x => (ct: T) => neg_cotangent(ct)
 }
 // ---- the transpose rule of `:op/idx_arr` ----
 //

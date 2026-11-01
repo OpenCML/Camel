@@ -116,32 +116,38 @@ export func neg_tangent::<T>(x: T, dx: T): T when is_float::<T>() {
 }
 
 /// The cotangent of `x` in `x + c`: the cotangent of the sum, unchanged.
-/// @example add_cotangent(3.0, 5.0, 2.0)    // 2.0
-export func add_cotangent::<T>(x: T, c: T, ct: T): T when is_float::<T>() {
+///
+/// The first five take only the values their answer is a function of -- `ct`, and the other name
+/// where the answer reads it. A transpose rule's right side names what it calls with exactly these,
+/// so a position whose answer does not read an operand asks for no value of it; that is what lets
+/// the transposed loop body answer a rule whose other operand is the round's own state (design
+/// principles: a value the walk does not carry costs nothing unless the rule reads it).
+/// @example add_cotangent(2.0)    // 2.0
+export func add_cotangent::<T>(ct: T): T when is_float::<T>() {
     return ct
 }
 
 /// The cotangent of `x` in `x - c`: the cotangent of the difference, unchanged.
-/// @example sub_cotangent(3.0, 5.0, 2.0)    // 2.0
-export func sub_cotangent::<T>(x: T, c: T, ct: T): T when is_float::<T>() {
+/// @example sub_cotangent(2.0)    // 2.0
+export func sub_cotangent::<T>(ct: T): T when is_float::<T>() {
     return ct
 }
 
 /// The cotangent of `x` in `x * c`: `ct * c`.
-/// @example mul_cotangent(3.0, 5.0, 2.0)    // 10.0
-export func mul_cotangent::<T>(x: T, c: T, ct: T): T when is_float::<T>() {
+/// @example mul_cotangent(5.0, 2.0)    // 10.0
+export func mul_cotangent::<T>(c: T, ct: T): T when is_float::<T>() {
     return ct * c
 }
 
 /// The cotangent of `x` in `x / c`: `ct / c`.
-/// @example div_cotangent(6.0, 4.0, 2.0)    // 0.5
-export func div_cotangent::<T>(x: T, c: T, ct: T): T when is_float::<T>() {
+/// @example div_cotangent(4.0, 2.0)    // 0.5
+export func div_cotangent::<T>(c: T, ct: T): T when is_float::<T>() {
     return ct / c
 }
 
 /// The cotangent of `x` in `-x`: `-ct`.
-/// @example neg_cotangent(3.0, 2.0)    // -2.0
-export func neg_cotangent::<T>(x: T, ct: T): T when is_float::<T>() {
+/// @example neg_cotangent(2.0)    // -2.0
+export func neg_cotangent::<T>(ct: T): T when is_float::<T>() {
     return -ct
 }
 
@@ -156,6 +162,8 @@ export func neg_cotangent::<T>(x: T, ct: T): T when is_float::<T>() {
 //
 // `x` keeps its own names above (`mul_cotangent` and so on) and nothing here replaces them: `vjp` and
 // `jvp` call those, and their meaning -- the cotangent of the first name -- is the meaning they keep.
+// What changed is only their parameters: each takes the values its answer reads, so a rule that can
+// be answered without an operand does not name it and does not need it.
 
 /// The cotangent of `c` in `x + c`: the cotangent of the sum, unchanged.
 /// @example add_cotangent_c(3.0, 5.0, 2.0)    // 2.0

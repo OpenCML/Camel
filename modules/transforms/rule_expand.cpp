@@ -7,8 +7,10 @@
 #include "camel/core/type/base.h"
 
 #include <algorithm>
+#include <functional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -55,51 +57,95 @@ bool findRuleRightSide(
     const rt::GCGraph *rhs = instance.rhs;
     // The exit node is the graph's value-producing node; a gate may stand in front of it when the
     // value is carried out of a block.
-    gc_node_ref_t fill = rhs->exitNodeRef();
-    for (size_t guard = 0; guard < 8 && fill != rt::kInvalidNodeRef; ++guard) {
-        const rt::GCNode *node = rhs->node(fill);
+    gc_node_ref_t exitRef = rhs->exitNodeRef();
+    for (size_t guard = 0; guard < 8 && exitRef != rt::kInvalidNodeRef; ++guard) {
+        const rt::GCNode *node = rhs->node(exitRef);
         if (node == nullptr || node->kind != rt::GCNodeKind::Gate) {
             break;
         }
-        const auto carried = rhs->normInputsOf(fill);
-        fill = carried.empty() ? rt::kInvalidNodeRef : carried.front();
+        const auto carried = rhs->normInputsOf(exitRef);
+        exitRef = carried.empty() ? rt::kInvalidNodeRef : carried.front();
     }
-    const rt::GCNode *exit = fill == rt::kInvalidNodeRef ? nullptr : rhs->node(fill);
-    if (exit == nullptr || exit->kind != rt::GCNodeKind::Fill) {
-        why = "the rule's right side does not answer with a function of the tangents";
+    const rt::GCNode *exit = exitRef == rt::kInvalidNodeRef ? nullptr : rhs->node(exitRef);
+    if (exit == nullptr) {
+        why = "the rule's right side has no value to answer with";
         return false;
     }
-    const auto *fillBody = rhs->nodeBodyAs<rt::GCFillBody>(fill);
-    if (fillBody == nullptr || fillBody->fillKind != rt::GCFillKind::FunctionClosure) {
-        why = "the rule's right side does not answer with a function of the tangents";
-        return false;
-    }
-    // The graph the closure runs is the static function value the FILL fills its slots with.
-    const std::span<const slot_t> slots = rhs->staticSlots();
-    for (gc_node_ref_t input : rhs->normInputsOf(fill)) {
-        const rt::GCNode *node = rhs->node(input);
-        if (node == nullptr || node->kind != rt::GCNodeKind::Data || node->dataIndex >= 0) {
-            continue;
+    // A right side answers a *function of the tangents*, and there are two shapes of that answer.
+    // One captures the operands: a FILL of the FunctionClosure kind, whose static input names the
+    // graph the closure runs and whose with inputs are the captured values. One captures nothing --
+    // a rule whose answer is a function of the tangent alone -- and then there is nothing to carry
+    // with the value, so the builder hands over the function value itself (`builder_calls.cpp`:
+    // "if (hasClosure)"), a Data node over a static function slot. Same graph, no wrapper.
+    gc_node_ref_t functionNode = rt::kInvalidNodeRef;
+    if (exit->kind == rt::GCNodeKind::Fill) {
+        const auto *fillBody = rhs->nodeBodyAs<rt::GCFillBody>(exitRef);
+        if (fillBody == nullptr || fillBody->fillKind != rt::GCFillKind::FunctionClosure) {
+            why = std::string("the rule's right side ends in a fill of kind ") +
+                  (fillBody == nullptr ? std::string("?")
+                                       : std::to_string(static_cast<int>(fillBody->fillKind))) +
+                  ", not a function of the tangents";
+            return false;
         }
-        const size_t at = static_cast<size_t>(-static_cast<std::ptrdiff_t>(node->dataIndex));
-        if (at >= slots.size()) {
-            continue;
+        for (gc_node_ref_t input : rhs->normInputsOf(exitRef)) {
+            const rt::GCNode *node = rhs->node(input);
+            if (node != nullptr && node->kind == rt::GCNodeKind::Data && node->dataIndex < 0) {
+                functionNode = input;
+                break;
+            }
         }
-        const auto *function = camel::core::rtdata::fromSlot<const ::Function *>(slots[at]);
-        if (function == nullptr) {
-            continue;
-        }
-        found.body = instance.program->graph(function->graphId());
-        if (found.body == nullptr) {
-            break;
-        }
-        for (gc_node_ref_t capture : rhs->withInputsOf(fill)) {
+        for (gc_node_ref_t capture : rhs->withInputsOf(exitRef)) {
             found.captures.push_back(capture);
         }
-        return true;
+    } else if (exit->kind == rt::GCNodeKind::Data && exit->dataIndex < 0) {
+        functionNode = exitRef;
+    } else {
+        why = std::string("the rule's right side ends in a node of kind ") +
+              std::to_string(static_cast<int>(exit->kind)) + ", not a function of the tangents";
+        return false;
+    }
+    if (functionNode == rt::kInvalidNodeRef) {
+        why = "the rule's right side names no graph for the function it answers with";
+        return false;
+    }
+    // The graph the answer runs is the static function value the Data node holds.
+    const std::span<const slot_t> slots = rhs->staticSlots();
+    const size_t at = static_cast<size_t>(
+        -static_cast<std::ptrdiff_t>(rhs->node(functionNode)->dataIndex));
+    if (at < slots.size()) {
+        const auto *function = camel::core::rtdata::fromSlot<const ::Function *>(slots[at]);
+        if (function != nullptr) {
+            found.body = instance.program->graph(function->graphId());
+            if (found.body != nullptr) {
+                return true;
+            }
+        }
     }
     why = "the rule's right side names no graph for the function it answers with";
     return false;
+}
+
+/// Which of the body's ports some node of the body reads. A port nothing reads is a value the
+/// expansion must not ask for: the right side names it nowhere, and a caller that has no value for
+/// it is a caller the expansion can still serve.
+///
+/// `jvp` never needed this (it always has the operands' values); `transpose` does. The two operands
+/// of `x * c` are not both available where a loop body's own state stands in one of them, while the
+/// answer that position needs reads only the other -- the constant -- and the rule says so by
+/// naming only that one.
+std::vector<bool> portsReadByBody(const rt::GCGraph &body) {
+    std::vector<bool> read(body.nodeCount(), false);
+    for (gc_node_ref_t ref = 0; ref < body.nodeCount(); ++ref) {
+        if (body.node(ref) == nullptr) {
+            continue;
+        }
+        for (gc_node_ref_t input : body.normInputsOf(ref)) {
+            if (input < read.size()) {
+                read[input] = true;
+            }
+        }
+    }
+    return read;
 }
 
 } // namespace
@@ -133,8 +179,11 @@ gc_node_ref_t expandRuleRightSide(
         return rt::kInvalidNodeRef;
     }
     // A capture is a port of the right side's graph, which is one of the arguments the rule is
-    // called with: the operands, in the order the left side writes them.
-    const auto rhsPorts = instance.rhs->normPorts();
+    // called with: the operands, in the order the left side writes them. Only the captures the body
+    // actually reads are bound: a right side that names one operand asks for that one only, and the
+    // caller may have no value for the other (a transposed loop body's own state).
+    const auto read            = portsReadByBody(*body);
+    const auto rhsPorts        = instance.rhs->normPorts();
     std::unordered_map<gc_node_ref_t, gc_node_ref_t> bound;
     for (size_t i = 0; i < capturePorts.size(); ++i) {
         const auto at = std::find(rhsPorts.begin(), rhsPorts.end(), right.captures[i]);
@@ -142,9 +191,12 @@ gc_node_ref_t expandRuleRightSide(
             why = "a value the rule's right side captures is not one of its parameters";
             return rt::kInvalidNodeRef;
         }
+        if (!read[capturePorts[i]]) {
+            continue;
+        }
         const size_t argument = static_cast<size_t>(at - rhsPorts.begin());
-        if (argument >= values.size()) {
-            why = "the rule's right side captures more values than the rule binds";
+        if (argument >= values.size() || values[argument] == rt::kInvalidNodeRef) {
+            why = "the rule's right side reads a value the caller does not carry";
             return rt::kInvalidNodeRef;
         }
         bound[capturePorts[i]] = values[argument];
@@ -163,9 +215,12 @@ gc_node_ref_t expandRuleRightSide(
         }
         if (node->kind == rt::GCNodeKind::Port) {
             // A port of the body is a value the call passes: bound, never copied, so the copy has
-            // no parameters of its own.
+            // no parameters of its own. A port nothing reads is neither bound nor copied.
             const auto at = bound.find(ref);
             if (at == bound.end()) {
+                if (!read[ref]) {
+                    continue;
+                }
                 why = "the rule's right side reads a value that is neither a capture nor a tangent";
                 return rt::kInvalidNodeRef;
             }
@@ -297,6 +352,47 @@ gc_node_ref_t expandRuleRightSide(
         return rt::kInvalidNodeRef;
     }
     return at->second;
+}
+
+gc_node_ref_t expandRuleByName(
+    camel::core::context::Context &context, camel::runtime::GraphDraftGroup &group,
+    camel::runtime::GraphTransaction &transaction, std::string_view ruleName,
+    const std::function<gc_node_ref_t(size_t)> &valueOf,
+    const std::vector<gc_node_ref_t> &tangents, std::string &why) {
+    using camel::core::type::Type;
+    const std::vector<Type *> types{Type::Float64()};
+    const auto *instance =
+        camel::compile::gir::genericRuleInstanceByName(context, ruleName, types, {}, why);
+    if (instance == nullptr) {
+        return rt::kInvalidNodeRef;
+    }
+    RuleRightSide right;
+    if (!findRuleRightSide(*instance, right, why)) {
+        return rt::kInvalidNodeRef;
+    }
+    // Ask for the values the body reads, and only those: a slot nothing reads stays invalid and is
+    // never bound, so no operand is invented for a position the rule does not answer with.
+    const auto read         = portsReadByBody(*right.body);
+    const auto capturePorts = right.body->closureNodes();
+    const auto rhsPorts     = instance->rhs->normPorts();
+    std::vector<gc_node_ref_t> values(rhsPorts.size(), rt::kInvalidNodeRef);
+    for (size_t i = 0; i < right.captures.size() && i < capturePorts.size(); ++i) {
+        if (!read[capturePorts[i]]) {
+            continue;
+        }
+        const auto at = std::find(rhsPorts.begin(), rhsPorts.end(), right.captures[i]);
+        if (at == rhsPorts.end()) {
+            why = "a value the rule's right side captures is not one of its parameters";
+            return rt::kInvalidNodeRef;
+        }
+        const size_t slot = static_cast<size_t>(at - rhsPorts.begin());
+        values[slot]      = valueOf(slot);
+        if (values[slot] == rt::kInvalidNodeRef) {
+            why = "the walk has no value for an operand the rule's right side reads";
+            return rt::kInvalidNodeRef;
+        }
+    }
+    return expandRuleRightSide(group, transaction, *instance, values, tangents, why);
 }
 
 } // namespace camel::transforms

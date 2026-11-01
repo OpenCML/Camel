@@ -294,7 +294,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=sum_of_scaled graph=", "type=(float, float) => float nodes=6 arms=0 rules=add_t,mul_t", "TRANSPOSE function=scaled_chain graph=", "rules=mul_t,add_t", "TRANSPOSE op signature=(f: (float) => float | ((..Residuals), float, ...) => float) => (knowns.., cotangent) => (cotangents..)", "transposed=(float, float) => float", "same=yes", "5.0", "20.0"]
+expect_stdout_contains = ["TRANSPOSE function=sum_of_scaled graph=", "type=(float, float) => float nodes=6 arms=0 rhs=add_t,mul_t", "TRANSPOSE function=scaled_chain graph=", "rhs=mul_t,add_t", "TRANSPOSE op signature=(f: (float) => float | ((..Residuals), float, ...) => float) => (knowns.., cotangent) => (cotangents..)", "transposed=(float, float) => float", "same=yes", "5.0", "20.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -339,7 +339,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=pick graph=", "type=(float, float) => float nodes=9 arms=2 rules=mul_t", "TRANSPOSE function=merged graph=", "nodes=12 arms=2 rules=add_t,mul_t", "2.0", "3.0", "7.0", "4.0"]
+expect_stdout_contains = ["TRANSPOSE function=pick graph=", "type=(float, float) => float nodes=9 arms=2 rhs=mul_t", "TRANSPOSE function=merged graph=", "nodes=12 arms=2 rhs=add_t,mul_t", "2.0", "3.0", "7.0", "4.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -352,7 +352,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=thrice graph=", "type=(float, float) => float", "nodes=11 arms=0 rules=mul_t", "TRANSPOSE function=quad graph=", "8.0", "16.0"]
+expect_stdout_contains = ["TRANSPOSE function=thrice graph=", "type=(float, float) => float", "nodes=11 arms=0 rhs=mul_t", "TRANSPOSE function=quad graph=", "8.0", "16.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -580,14 +580,14 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=g graph=", "TRANSPOSE function=f graph=", "rules=add_t", "4.0"]
+expect_stdout_contains = ["TRANSPOSE function=g graph=", "TRANSPOSE function=f graph=", "rhs=add_t", "4.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 # A rule's tangent function is a plain function of several floats: `mul_tangent(x, w, dx, dw)` is
 # `dx*w + x*dw`, so the transposed half of a lifted graph calls it with the operands in front of
 # the tangents. `Transpose<F>` has a shape for that -- every parameter is a value the graph reads and
 # every parameter is also where a cotangent goes -- and the laws are still the ruleset's, which is
-# what `rules=add_t,mul_t` on the callee's line says: nothing in C++ knows what `mul_tangent` is.
+# what `rhs=add_t,mul_t` on the callee's line says: nothing in C++ knows what `mul_tangent` is.
 [[tests]]
 name = "transpose_many_parameters"
 desc = "`transpose(mt)` where `mt(x, w, dx, dw) = mul_tangent(x, w, dx, dw)`: a function of four floats and no residual tuple, which the signature step had no shape for before. The transpose takes all four as they stand, then the cotangent, and answers one cotangent per parameter -- `(float, float, float, float, float) => (float, float, float, float)`. At (3, 2, 1, 0) with cotangent 1 the four answers are the partial derivatives of `dx*w + x*dw`, `(dw, dx, w, x)` = `(0.0, 1.0, 2.0, 3.0)`: the operands' two, which the split half that calls it drops because a residual is read rather than differentiated, and the tangents' two, which it keeps. The node counts are the two graphs' own -- five nodes for `mt` (four ports and the call) and seven for `mul_tangent` (four ports, two products, the sum) -- and the rules are read off the walk, so the case pins the shape, the counts and the laws rather than any node's number."
@@ -597,7 +597,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=autodiff::mul_tangent<float> graph=", "type=(float, float, float, float, float) => (float, float, float, float) nodes=7 arms=0 rules=add_t,mul_t", "TRANSPOSE function=mt graph=", "nodes=5 arms=0 rules=-", "(0.0, 1.0, 2.0, 3.0)"]
+expect_stdout_contains = ["TRANSPOSE function=autodiff::mul_tangent<float> graph=", "type=(float, float, float, float, float) => (float, float, float, float) nodes=7 arms=0 rhs=add_t,mul_t", "TRANSPOSE function=mt graph=", "nodes=5 arms=0 rhs=-", "(0.0, 1.0, 2.0, 3.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -628,7 +628,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=autodiff::add_tangent<float> graph=", "type=(float, float, float, float, float) => (float, float, float, float) nodes=5 arms=0 rules=add_t", "TRANSPOSE function=at graph=", "nodes=5 arms=0 rules=-", "(0.0, 0.0, 1.0, 1.0)", "(0.0, 0.0, 2.0, 2.0)"]
+expect_stdout_contains = ["TRANSPOSE function=autodiff::add_tangent<float> graph=", "type=(float, float, float, float, float) => (float, float, float, float) nodes=5 arms=0 rhs=add_t", "TRANSPOSE function=at graph=", "nodes=5 arms=0 rhs=-", "(0.0, 0.0, 1.0, 1.0)", "(0.0, 0.0, 2.0, 2.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

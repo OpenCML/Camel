@@ -92,6 +92,6 @@ func main(): int sync {
     let w = 5.0
     let dx = 2.0
     let ct = 7.0
-    println('transform_rules adjoint={}'->format<mul_tangent(x, w, dx, 0.0) * ct == dx * mul_cotangent(x, w, ct)>)
+    println('transform_rules adjoint={}'->format<mul_tangent(x, w, dx, 0.0) * ct == dx * mul_cotangent(w, ct)>)
     return 0
 }
