@@ -25,6 +25,8 @@
 
 #include "jvp.h"
 #include "jvp_operator.h"
+#include "vmap.h"
+#include "vmap_operator.h"
 
 #include "camel/compile/gir/rule_templates.h"
 #include "camel/compile/gir/static_function.h"
@@ -279,19 +281,33 @@ class ReinterpPass : public RuntimeGraphRewritePass {
 
 } // namespace
 
-/// The executors this module's operators run on: `jvp` is the only one, and its kernel builds the
-/// transform's graph when the call runs (jvp_operator.cpp).
+/// The executors this module's operators run on: `jvp` and `vmap`, whose kernels build the
+/// transform's graph when the call runs (jvp_operator.cpp, vmap_operator.cpp). One executor per
+/// module, so the two kernel tables are handed over as one.
 class TransformsExecutor : public Executor {
   public:
-    explicit TransformsExecutor(context_ptr_t ctx)
-        : Executor(std::move(ctx), camel::transforms::operatorKernels()) {}
+    explicit TransformsExecutor(context_ptr_t ctx) : Executor(std::move(ctx), kernels()) {}
+
+  private:
+    static std::unordered_map<std::string, operator_t> kernels() {
+        auto all = camel::transforms::operatorKernels();
+        for (auto &[name, kernel] : camel::transforms::vmapOperatorKernels()) {
+            all[name] = kernel;
+        }
+        return all;
+    }
 };
 
 TransformsModule::TransformsModule(context_ptr_t ctx) : BuiltinModule("transforms", ctx) {
-    // `jvp` is one of the module's operators, beside the pass: `reinterp<jvp>(f)` is a value-level
-    // transform (jvp.h), so it is reached as a call and not as a pass.
+    // `jvp` and `vmap` are the module's operators, beside the pass: `reinterp<jvp>(f)` and
+    // `reinterp<vmap>(f)` are value-level transforms (jvp.h, vmap.h), so they are reached as calls
+    // and not as passes.
     camel::transforms::registerOperatorMetadata();
+    camel::transforms::registerVmapOperatorMetadata();
     for (const auto &group : camel::transforms::operatorGroups()) {
+        exportEntity(group->name(), group);
+    }
+    for (const auto &group : camel::transforms::vmapOperatorGroups()) {
         exportEntity(group->name(), group);
     }
 }

@@ -7,4 +7,6 @@ add_camel_module(
     module.cpp
     jvp.cpp
     jvp_operator.cpp
+    vmap.cpp
+    vmap_operator.cpp
 )

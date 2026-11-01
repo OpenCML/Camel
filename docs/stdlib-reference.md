@@ -1407,6 +1407,28 @@ together with the derivative of `f` at 2 in the direction 1.
 - Example (a fragment, not compiled): `let forward = jvp(f)`
 - Why it is not compiled: `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
 
+#### `vmap`
+
+```camel
+vmap: (f: F) => Vmap<F> when is_function::<F>()
+```
+
+Batching: `vmap(f)` gives the function that applies `f` to every row of a batch. A row is one
+dimension less than the batch: for `f: (f32) => f32` it is `(f32[]) => f32[]`, and for
+`f: (f32[3]) => f32` it is `(f32[?, 3]) => f32[]` -- `Lift<T> = RowsOf<T>`, the value with one
+dimension of unknown length in front of it (`stdlib/types.cml`). The arithmetic of every
+elementwise primitive is that primitive (`bx + bw` is `x + w` element by element), which is why
+`vmap(f)(xs)` and the row-by-row `map` answer the same bits.
+
+The rules come from `stdlib/rulesets/vmap.cml`: the transform asks that family, by the operator's
+key, for every primitive of `f`, and calls the function the rule names with the batches. An
+operator with no rule is refused by name at the primitive, never batched by a guess; a call, a
+branch or a loop in the body is refused the same way, because the elementwise tier batches
+straight-line bodies.
+
+- Example (a fragment, not compiled): `let batched = vmap(f)`
+- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+
 <a id="tensor"></a>
 
 ## `tensor`: multi-dimensional numeric arrays
@@ -6708,6 +6730,75 @@ array as that value at every element).
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `lift(3.0)` gives `[3.0]`
+
+### The elementwise tier
+
+A rule is filed in its ruleset module under the operator its left side is written with and the
+number of operands it takes, and a transform reads it from there (`lookupRule("rulesets.vmap",
+head, arity)`); a rule is not a function a program calls, so the rules below and the functions
+they call are two things with different names.
+
+The right side of each rule *names* the function that does the batched arithmetic
+(`vmap_add(bx, bw)`), and that name is the part a batching transform reads. A rule's right side is
+two arrows: the outer one takes the primitive's operands, the inner one takes the lifted half. A
+batched graph has no unbatched operands to give the outer one -- `Lift<T>` replaced the whole
+chain with batches -- so the transform calls the named function with the batches instead, and the
+rule mechanism is unchanged. `rhsCalleeOf("rulesets.vmap", "vmap_rule_add")` is `vmap_add`.
+
+Five keys cover the scalar arithmetic: `+`, `-`, `*`, `/` at two operands and `-` at one. `-x` and
+`x - w` are two primitives that share one token, which is why the operand count is part of the
+key (stdlib/rulesets/jvp.cml files the same five).
+
+#### `vmap_add`
+
+```camel
+vmap_add: (a: T[], b: T[]) => T[] when is_numeric::<T>()
+```
+
+`x + w` of one row, batched: the same addition, element by element.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_add([1.0, 2.0], [3.0, 4.0])` gives `[4.0, 6.0]`
+
+#### `vmap_sub`
+
+```camel
+vmap_sub: (a: T[], b: T[]) => T[] when is_numeric::<T>()
+```
+
+`x - w` of one row, batched.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+
+#### `vmap_mul`
+
+```camel
+vmap_mul: (a: T[], b: T[]) => T[] when is_numeric::<T>()
+```
+
+`x * w` of one row, batched.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+
+#### `vmap_div`
+
+```camel
+vmap_div: (a: T[], b: T[]) => T[] when is_numeric::<T>()
+```
+
+`x / w` of one row, batched.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+
+#### `vmap_neg`
+
+```camel
+vmap_neg: (a: T[]) => T[] when is_numeric::<T>()
+```
+
+`-x` of one row, batched. The key is `-` at one operand, not `-` at two.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 
 <a id="sim"></a>
 

@@ -31,3 +31,19 @@
 /// @example-fragment `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
 /// @example let forward = jvp(f)
 export func jvp::<F>(f: F): Jvp<F> when is_function::<F>()
+
+/// Batching: `vmap(f)` gives the function that applies `f` to every row of a batch. A row is one
+/// dimension less than the batch: for `f: (f32) => f32` it is `(f32[]) => f32[]`, and for
+/// `f: (f32[3]) => f32` it is `(f32[?, 3]) => f32[]` -- `Lift<T> = RowsOf<T>`, the value with one
+/// dimension of unknown length in front of it (`stdlib/types.cml`). The arithmetic of every
+/// elementwise primitive is that primitive (`bx + bw` is `x + w` element by element), which is why
+/// `vmap(f)(xs)` and the row-by-row `map` answer the same bits.
+///
+/// The rules come from `stdlib/rulesets/vmap.cml`: the transform asks that family, by the operator's
+/// key, for every primitive of `f`, and calls the function the rule names with the batches. An
+/// operator with no rule is refused by name at the primitive, never batched by a guess; a call, a
+/// branch or a loop in the body is refused the same way, because the elementwise tier batches
+/// straight-line bodies.
+/// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
+/// @example let batched = vmap(f)
+export func vmap::<F>(f: F): Vmap<F> when is_function::<F>()

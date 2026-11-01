@@ -80,13 +80,15 @@
 - 不动 `modules/transforms`、`autodiff`、`stdlib/rulesets` 的接口；core 只读已有的 `forwardBindingOf`，`jvp` 的路径一字未改。
 - 规则机制一行不改：右边点名的名字走 `rhsCalleeOf`，与 `jvp` 读 `add_tangent` 是同一个入口。
 
-## 六、工作区里已有一版草稿（**未提交**，未过闸）
+## 六、草稿（已就地提交）
 
-断网前已按上面的 1-5 步写过一版，停在"读数对、闸门没全绿"：
+断网前已按上面的 1-5 步写过一版，提交时读数已齐、闸门还差一格：
 
 - 新文件：`modules/transforms/vmap.h`（77 行）、`vmap.cpp`（479 行）、`vmap_operator.h`（30 行）、`vmap_operator.cpp`（189 行）；改 `module.cpp`（+28/-4）、`CMakeLists.txt`（+2）、`stdlib/rulesets/vmap.cml`（+75/-20）、`stdlib/signatures/transforms.cml`（+18/-1）。
 - 读数（`vmap_elementwise.cml`，四个后端一致）：`REINTERP vmap function=f graph=232 type=(float[]) => float[] nodes=8 kinds=8/8 asked=4 found=4 rules=vmap_rule_mul,vmap_rule_div,vmap_rule_add,vmap_rule_sub`，然后 `[1.5, 4.0, 6.5, 0.25]` 两遍（`vmap(f)(xs)` 与 `xs->map(f)` 逐位相同）；`g` 一侧 `asked=5 found=5`、`[0.375, 6.0, -9.0]` 两遍；`REINTERP vmap op … same=yes`（算子签名与建出来的图一致）。
 - 全量快闸 **8139 / 8145 过，2 红**：`registry.docs_complete`、`docs.links.citations`。后者已定位并修好（`vmap.h` 里一处 `src/builtin/operators/derivative.cpp:512-516` 是"引行号"，改成 `#bindForwardRule`，本地 `node scripts/check-doc-links.mjs --citations` 现在是 `524 of 524`）；前者要 `--camel` 二进制，断网只能在主机上验，怀疑是新算子 `vmap` / 类型 `Vmap<F>` 的登记或示例。
 - 上一笔已提交的绿 sha：`05a8b3496`（`forwardBindingOf`）。
+
+**判据（自这一拿起）**：**四后端一致说"这不是某一个后端碰巧对了"，两遍一致说"这不是偶然"——两个都要有，缺一个就只是"跑通了"。**
 
 **预计改哪个文件、几行**：`modules/transforms/vmap.cpp` 约 480 行（新文件，其中规则读取 1-6 步约 60 行照 `jvp.cpp:50-129` 抄改、构建约 300 行）、`vmap_operator.cpp` 约 190 行、`vmap.h` 约 77 行、规则集 `stdlib/rulesets/vmap.cml` 约 +75/-20 行、`module.cpp` 约 +28 行、`CMakeLists.txt` +2 行、`stdlib/signatures/transforms.cml` +18 行。
