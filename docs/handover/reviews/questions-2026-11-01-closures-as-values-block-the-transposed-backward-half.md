@@ -99,3 +99,21 @@ B **新增**一条表示，且与裁定正面冲突；C 让 `split` 多背一个
 
 **两条拒绝落在同一处、同一个原因**：`let h = double` 里的值是一个 DATA 节点、装着一个函数常量（GIR 写作
 `Function(graph=double, tupleSlots=0)`），而 `GCGraph::calleeIdOf` 只从 `GCNodeKind::Func` 节点里取图 id——函数常量的图存在静态区、以图级引用记着（`kGraphRefStatic`），没有"这个节点指向哪个图"的取值口。所以**把捕获拿掉并不会让这一条过**：先缺的是名字；捕获是之后的、还没走到的第二件事（即便有了名字，被转置的被调方还得把捕获值收成自己的参数）。今天能过的是**按名字写出来的调用**（`g(x)`，见 `test/cases/compile/transforms/transpose_call.cml`），因为那种调用落成 FUNC 节点。纸面答案：无捕获那条欠 **2**（余切 2 时 **4**），带捕获那条欠 **2**（余切 3 时 **6**）。两条都登记成 `kind = "negative"` 的用例、拒绝行钉死——名字那一步落地时第一条会先变绿、第二条还会红，红在哪一眼就能看出区别。
+
+**落地 2026-11-01（`lane-gs6`）**：名字那一步做了，而且**只有一个入口**——`GCGraph::staticFunctionGraphOf`
+（`src/runtime/graph.cpp`，就在 `calleeIdOf` 旁边），连同它旁边的 `GCStaticFunctionAnswer`。它**拒绝**而不是猜：
+节点必须是 DATA、必须有一个静态槽、类型必须是函数类型、槽里必须是函数值、该值必须指名一个图、而那个图必须是**本图记着的静态引用**
+（`kGraphRefStatic`）；失败时回答里带原因，`reason` 只有七个词之一——
+`not-a-node`、`not-a-data-node`、`no-static-slot`、`not-a-function-type`、`no-function-value`、
+`function-names-no-graph`、`not-a-static-reference`，另加 `function-closure`（值是一个正在拼装的闭包：静态函数加捕获，运行时填成一个值，
+它在这里不指图）。**静态槽的字节永远不会被当作 id 读**——这就是那个入口存在的理由，下一个想"直接读静态槽"的人先看这句。
+
+量出来的两条：
+- 无捕获（`double(x) = 2x`，`g(x) = let h = double; h(x)`）：**答了** `TRANSPOSE function=g graph=50 ... nodes=3`，`2.0`，余切 2 时 `4.0`——纸面答案 2；
+- 带捕获（`g2(x) = let h = (y: float) => y*x; h(2.0)`）：仍拒，且**拒绝往后挪了一层**：
+  `TRANSPOSE function=g2 skip=call node=4 callee=none value=3:0 with=2:4 reason=function-closure`。
+  名字已经拿到（否则不会有 `reason`，A/B 关掉入口时这一行连 `reason` 都没有），现在缺的是**捕获**：被转置的被调方得把捕获值
+  收成自己的参数。纸面答案仍是 2（余切 3 时 6）。
+
+顺带一条同源的事实：转置后的调用必须把被调值放回原来的位置——原调用把被调方当 `with` 输入传，转置后的调用就得传一个**转置图的静态函数值**
+（空闭包）；放错位置得到的是"CALL node 3 without callee input"。

@@ -171,6 +171,16 @@ constexpr bool kZeroTangentIntegers = true;
 /// `arg=1 callee=autodiff::mul_tangent<float>`.
 constexpr bool declaredKernelSplit = true;
 
+/// Whether a callee that arrives as a *value* is named. `calleeIdOf` answers for a FUNC node -- a call
+/// written by name; a function value put into a `let` and called is a DATA node holding a static
+/// function, and `GCGraph::staticFunctionGraphOf` is the one entry that turns it into a graph id (or
+/// says which check refused: not a data node, no static slot, not a function type, no function value,
+/// no graph, not a static reference of this graph). Off, that shape refuses with
+/// `skip=call callee=none`, which is what the transform did before this entry existed -- the A/B of
+/// `transpose_function_value_no_capture.cml` flips exactly this. On, a value with no capture names its
+/// graph and transposes; a closure names its graph too, and then fails later, on the capture.
+constexpr bool kNameFunctionValues = true;
+
 /// What the graphs of one transpose share: one group (a callee's transpose is another member of
 /// it, exactly as `jvp` lifts one graph per callee) and the callees already transposed, so that
 /// two calls of one function call one graph.
@@ -1635,11 +1645,26 @@ bool buildTransposeMember(
                 // same way.
                 GraphId calleeId  = function->calleeIdOf(inputs.empty() ? ref : inputs.front());
                 size_t argumentAt = (!inputs.empty() && rt::isValid(calleeId)) ? 1 : 0;
+                // What the one entry that names a *value* answered, when it was asked. Empty means
+                // `calleeIdOf` answered and no value had to be named.
+                std::string_view namedReason;
                 if (!rt::isValid(calleeId)) {
                     const auto captured = function->withInputsOf(ref);
                     if (!captured.empty()) {
                         calleeId   = function->calleeIdOf(captured.front());
                         argumentAt = 0;
+                        if (!rt::isValid(calleeId)) {
+                            // `calleeIdOf` answers for a FUNC node -- a call written by name. A
+                            // function value kept in a `let` is a DATA node holding a static
+                            // function, and `staticFunctionGraphOf` is the one entry that turns that
+                            // value into a graph id, or says which check refused.
+                            if (kNameFunctionValues) {
+                                const auto named =
+                                    function->staticFunctionGraphOf(captured.front());
+                                calleeId    = named.graph;
+                                namedReason = named.reason;
+                            }
+                        }
                     }
                 }
                 if (!rt::isValid(calleeId) && !isCall) {
@@ -1670,6 +1695,9 @@ bool buildTransposeMember(
                     const auto captured = function->withInputsOf(ref);
                     if (!captured.empty()) {
                         os << " with=" << describe(captured.front());
+                    }
+                    if (!namedReason.empty()) {
+                        os << " reason=" << namedReason;
                     }
                     os << '\n';
                     return false;
@@ -1723,9 +1751,30 @@ bool buildTransposeMember(
                         : camel::core::type::TupleType::create(
                               std::vector<Type *>(calleeParams, Type::Float64()));
                 std::vector<gc_node_ref_t> callArgs;
+                // Where the callee stood at the call site, it stands in the transposed call: as the
+                // first normal input when the original wrote it in place, as a `with` input when the
+                // original took it as a value (`let h = double; h(x)`). A call whose callee value is
+                // put back in the wrong place is a CALL node without a callee.
+                gc_node_ref_t calleeValue = rt::kInvalidNodeRef;
                 if (isCall) {
-                    // A call through a value takes the callee's transpose as its first input.
-                    callArgs.push_back(draft.addFuncNode(transposed, Type::Float64()));
+                    if (argumentAt == 1) {
+                        // Written in place: a FUNC node, whose type is the call's value.
+                        calleeValue = draft.addFuncNode(transposed, Type::Float64());
+                        callArgs.push_back(calleeValue);
+                    } else {
+                        // Taken as a value: it has to be a function value, a static function of the
+                        // transposed graph with an empty closure (nothing captured). A call whose
+                        // callee *captures* cannot be transposed here -- the transposed callee would
+                        // have to take the captured values as parameters of its own -- and refusing
+                        // that is the next question this shape asks, not one this step answers.
+                        auto *closureType = camel::core::type::TupleType::create(
+                            std::vector<Type *>{});
+                        auto *function = ::Function::create(
+                            state.program, transposed, closureType,
+                            camel::core::mm::autoSpace());
+                        calleeValue = draft.materializeStaticValue(
+                            toSlot<::Function *>(function), calleeType);
+                    }
                 }
                 callArgs.insert(callArgs.end(), arguments.begin(), arguments.end());
                 callArgs.push_back(cotangent[ref]);
@@ -1733,6 +1782,10 @@ bool buildTransposeMember(
                     isCall ? draft.addCallNode(answerType, rt::GCCallBody{})
                            : draft.addFuncNode(transposed, answerType);
                 draft.setNormInputs(made, std::span<const gc_node_ref_t>(callArgs));
+                if (calleeValue != rt::kInvalidNodeRef && argumentAt == 0) {
+                    draft.setWithInputs(
+                        made, std::span<const gc_node_ref_t>(&calleeValue, size_t(1)));
+                }
                 for (size_t i = 0; i < calleeParams; ++i) {
                     if (calleeParams == 1) {
                         addCotangent(inputs[argumentAt], made);
