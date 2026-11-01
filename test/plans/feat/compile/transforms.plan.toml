@@ -371,3 +371,33 @@ expect_stdout_contains = ["(0.0, 1.0, 2.0, 3.0)", "(0.0, 2.0, 4.0, 6.0)"]
 expect_stdout_not_contains = ["(0.0, 1.0, 2.0, 3.0)\n(0.0, 1.0, 2.0, 3.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+# A parameter the body never reads has no cotangent to hand back, and the answer for it is zero, not
+# a refusal: `add_tangent(x, w, dx, dw) = dx + dw` does not depend on `x` or `w` at all.
+[[tests]]
+name = "transpose_unread_parameters"
+desc = "`transpose(at)` where `at(x, w, dx, dw) = add_tangent(x, w, dx, dw) = dx + dw`: the operand parameters are in the signature and nowhere in the body, so the walk finds no cotangent for them, and the transposed graph answers a zero for each rather than refusing the whole function. The four answers at (3, 2, 1, 0) are `(0.0, 0.0, 1.0, 1.0)` at cotangent 1 and `(0.0, 0.0, 2.0, 2.0)` at cotangent 2 -- the two zeros that say the sum does not depend on its summands, and the two ones that double with the seed. Both graphs are five nodes (four ports and the sum) and the law is `add_t`, read off the walk: nothing here knows what `add_tangent` computes, and no rule was written for it."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_unread_parameters.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["TRANSPOSE function=autodiff::add_tangent<float> graph=", "type=(float, float, float, float, float) => (float, float, float, float) nodes=5 arms=0 rules=add_t", "TRANSPOSE function=at graph=", "nodes=5 arms=0 rules=-", "(0.0, 0.0, 1.0, 1.0)", "(0.0, 0.0, 2.0, 2.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The same missing cotangent, seen from the library: `grad` is
+# `transpose(split(reinterp(jvp(f))))`, so a tangent function that ignores its operands is on every
+# `grad` of a sum, and a refusal there is a refusal of the plainest derivative there is.
+[[tests]]
+name = "grad_where_the_tangent_ignores_the_operands"
+desc = "`grad((x) => x + 1.0)` at 3 is `1.0`: the lifted tangent of the sum is `add_tangent`, whose body is `dx + dw` and which ignores the operands, so the transposed half answers a zero for them and the derivative of the straight line comes out. `grad((x) => x*x*x + 1.0)` at 3 is 27 -- the cube lifted through `mul_tangent` plus a constant the lift does not touch -- and `grad((x) => x*x + 1.0)` at 3 is 6, so the sum contributes nothing in both directions while the term that is not constant answers its own derivative. A refusable zero would fail all three, since every one of them is a sum."
+kind = "behavior"
+case = "../../../cases/compile/transforms/grad_where_the_tangent_ignores_the_operands.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "stdout"]
+expect_exit = 0
+expect_stdout_contains = ["1.0", "27.0", "6.0", "TRANSPOSE function=autodiff::add_tangent<float> graph="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
