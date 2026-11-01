@@ -2017,6 +2017,9 @@ if (mode === '--write' || mode === '--verify-doc') {
             if (!readBy.has(full)) unread.push(shown(full))
         }
     }
+    // A module the page leaves out is announced with its reason in every mode, and this one is a
+    // mode too: a `pending` column says *that* it is out, and only this line says why.
+    announcePending()
     console.log(
         'auditing: the module table against the library on disk (every entry reads a file that is ' +
             'there) and, for each module, what its declarations have and have not',
