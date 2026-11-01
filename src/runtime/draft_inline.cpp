@@ -566,40 +566,27 @@ bool onCallCycle(const Program &program, const GCGraph *graph) {
 }
 
 /// True when node `id` runs inside an arm of a branch of the draft (between a BRCH and its JOIN).
+/// True when node `id` runs inside an arm of a branch of the draft (between a BRCH and its JOIN).
+///
+/// Asked of the regions, which is where an arm says what is in it (docs/design/effects/edges.cn.md
+/// 5.2). This used to be a reachability walk from every BRCH through the nodes its edges reach,
+/// stopped at the JOIN -- and the only way into an arm that walk had was the ctrl edge the builder
+/// draws from the BRCH to the arm's first node. That edge is a position the regions already carry,
+/// and the answer here decides something else: whether binding constants into a call may unroll a
+/// recursion (collectDirectFuncSpecializations). Reading it off the edge meant that deleting the
+/// edge let a guarded recursion unroll one level per rewriting round.
 bool insideBranchArm(const GraphTransaction &transaction, gc_node_ref_t id) {
     const auto &draft = transaction.graph();
-    for (gc_node_ref_t brch = 0; brch < draft.nodeSlotCount(); ++brch) {
-        const auto *h = draft.header(brch);
-        if (!h || h->kind != GCNodeKind::Brch) {
-            continue;
+    if (!draft.alive(id)) {
+        return false;
+    }
+    uint32_t region = camel::runtime::controlRegionOf(draft, id);
+    while (region != 0) {
+        const GCRegion &holder = draft.region(region);
+        if (holder.kind == GCRegionKind::Arm) {
+            return true;
         }
-        const gc_node_ref_t join =
-            reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(brch).data())->join;
-        std::vector<bool> seen(draft.nodeSlotCount(), false);
-        std::vector<gc_node_ref_t> work;
-        for (auto users : {draft.normUsersOf(brch),
-                           draft.withUsersOf(brch),
-                           draft.ctrlUsersOf(brch),
-                           draft.syncUsersOf(brch)}) {
-            work.insert(work.end(), users.begin(), users.end());
-        }
-        while (!work.empty()) {
-            const gc_node_ref_t n = work.back();
-            work.pop_back();
-            if (n == join || n >= seen.size() || seen[n] || !draft.header(n)) {
-                continue;
-            }
-            if (n == id) {
-                return true;
-            }
-            seen[n] = true;
-            for (auto users : {draft.normUsersOf(n),
-                               draft.withUsersOf(n),
-                               draft.ctrlUsersOf(n),
-                               draft.syncUsersOf(n)}) {
-                work.insert(work.end(), users.begin(), users.end());
-            }
-        }
+        region = holder.parent;
     }
     return false;
 }
