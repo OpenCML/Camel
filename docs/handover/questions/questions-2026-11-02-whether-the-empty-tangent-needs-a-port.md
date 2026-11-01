@@ -109,3 +109,24 @@ TRANSPOSE … skip=rule uri=:op/idx_arr reason=unbound          ← 键没绑上
 **`gs6` 那天量 `transpose` 时格子全是 `no-such-family`，根因是测量程序漏了 `import rulesets.transpose`**——**"测量程序的 import 也是被测量的一部分"**。看到 `skip=rule` 先分这两类：**`no-such-family` 去看 import，`unbound` 去看绑定表**；**别去改规则名的可见性**（`export` 与否不在这条链上：`index_into` 私有与公开，`unbound` 都会是 `unbound`）。
 
 `transposeBindings()` 是 `src/core/forward.cpp:26` 的**函数内 `static`**（`static std::map<std::string, ForwardRuleBinding> table;`），所以"另一个实例"不成立——进程内只有一张表。
+## 「按形状展开」这一步今天撞到的是缺一个读者，不是缺一个想法
+
+`transpose.cpp:1312–1363` 先把规则名记进读数、再按名字分派：
+```
+1313  noteRule(rule->rule);          // `rules=add_t,mul_t` 就是它记的
+1314  const std::string &law = rule->rule;
+1315..1358  add_t / sub_t / neg_t / mul_t / div_t 五条分支
+1359  else → skip=law rule=…
+```
+**读数是"按名字分派"的证据，不是"按形状"的证据**：换成形状路径时，读数也得跟着换说法（`law=` → `rhs=`），否则读数会说着旧机制。
+
+但"按形状展开"要用的是**规则右侧那个函数的参数签名**，而 `include/camel/parse/ast/rule_head.h` 今天只给四个读者：
+```
+rhsCalleeOf(family, rule)   // 右侧调用的函数名（`add_tangent` / `scatter_into`），没有参数表
+lookupRule(family, head, arity)
+ruleFamilies()
+RuleEntry{ head, arity, rule, variables }   // variables 是左侧绑定的名字
+```
+**没有"右侧的参数表"这个读者**。所以"从右侧签名读出余切位置与已知值位置"**今天表达不出来**——要加一个读者（不是字段，是从规则内容里读出来的东西），按原则 2.3 属于"能从内容推出"，可以做，**但要先把它写成一句话证明，而不是顺手加**。
+
+**这一步的可验收标准（作者已裁）**：五条规则各打印一行 `law=<名字> cotangentAt=<i> knownAt=<j…> sizeDependent=<yes/no>`，**必须与五条分支语义一一对上**；对不上就说明这套词汇表达不了现有五条，**那也是结论**，要写清差在哪一格。**今天这一条没有交出，因为读者不在。**
