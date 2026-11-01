@@ -1172,3 +1172,16 @@ expect_output_contains = ["this type takes no arguments"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
+
+[[tests]]
+name = "generics.type_variable_unused"
+desc = "A type parameter the signature never writes is declared for nothing: `T` is at the head, every call has to take one for it, and no parameter or result type can use it, so the declaration relates nothing. A warning, not a refusal -- the program runs -- and the repair is to write `T` in a type or drop it from `::<...>`."
+kind = "negative"
+case = "../../../cases/compile/generics/type_variable_unused.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "1\n"
+expect_diagnostic_name = "SemanticDiag::TypeVariableUnused"
+expect_output_contains = ["The type parameter 'T' is declared at the head but never written in the signature."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000

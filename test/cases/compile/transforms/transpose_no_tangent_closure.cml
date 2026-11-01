@@ -12,12 +12,15 @@
 // The transpose is asked at cotangent 1 and 3, so the answers are 2 then 6: proportional, and 6 is a
 // number no forward line prints.
 //
-// Measured 2026-11-01: the call is refused -- `TRANSPOSE function=g2 skip=call node=4 callee=none
-// value=3:0 with=2:4` -- and the no-capture companion (`transpose_function_value_no_capture.cml`) is
-// refused for the same reason, so the boundary this case marks is not the capture: it is the name. A
-// function value put into a local is a DATA node holding a function constant, and nothing here turns
-// that value into a graph id (`calleeIdOf` reads FUNC nodes only). The capture is the second, still
-// unreached problem. Both readings stand on the question page
+// Measured 2026-11-01, after the name entry landed: the call is still refused, and the refusal moved
+// one layer on -- `TRANSPOSE function=g2 skip=call node=4 callee=none value=3:0 with=2:4
+// reason=function-closure`. The reason is the answer to "which value is this": a closure being
+// assembled, a static function and the values it captured filled into one value at run time, so it
+// names no graph at the point where a call needs one. The no-capture companion
+// (`transpose_function_value_no_capture.cml`) names its graph and answers 2.0 and 4.0, so what is left
+// here is exactly the capture: a transposed callee would have to take the captured values as parameters
+// of its own, which this transform does not do (it refuses `with` parameters outright, as `jvp` does).
+// The paper answer this case owes is 2 (and 6 at cotangent 3). Both readings stand on the question page
 // `docs/handover/reviews/questions-2026-11-01-closures-as-values-block-the-transposed-backward-half.md`.
 import { transpose } from transforms
 import rulesets.transpose

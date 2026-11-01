@@ -2284,6 +2284,64 @@ GraphId GCGraph::calleeIdOf(gc_node_ref_t ref) const {
     return index < refCount_ ? refs_[index] : kInvalidGraphId;
 }
 
+std::string GCStaticFunctionAnswer::describe() const {
+    if (hasGraph()) {
+        return std::format("graph={}", toValue(graph));
+    }
+    return std::format("none reason={}", reason);
+}
+
+GCStaticFunctionAnswer GCGraph::staticFunctionGraphOf(gc_node_ref_t ref) const {
+    // One entry, and every step that can fail says so instead of falling through to a guess. The
+    // static area is a table of values, not a table of ids: a slot is only ever read as the value its
+    // type says it holds, and a graph id comes from that value's own record of the graph it names.
+    const GCNode *n = node(ref);
+    if (n == nullptr) {
+        return {.reason = "not-a-node"};
+    }
+    if (n->kind == GCNodeKind::Fill && n->hasPayload() &&
+        nodeBodyAs<GCFillBody>(ref)->fillKind == GCFillKind::FunctionClosure) {
+        // A closure being assembled: a static function and the values it captured, filled into one
+        // value at run time. It names no graph *here*, because the graph is one input of the fill and
+        // the captured values are the others -- a name for it would be a name for a half-built
+        // function, and a transposed callee for it would have to take those captures as parameters of
+        // its own.
+        return {.reason = "function-closure"};
+    }
+    if (n->kind != GCNodeKind::Data) {
+        return {.reason = "not-a-data-node"};
+    }
+    if (n->dataIndex >= 0 || staticArea() == nullptr) {
+        return {.reason = "no-static-slot"};
+    }
+    const camel::core::type::Type *type = n->dataType();
+    if (type == nullptr || type->code() != TypeCode::Function) {
+        return {.reason = "not-a-function-type"};
+    }
+    auto *value = camel::core::rtdata::fromSlot<::Function *>(
+        staticArea()->get<slot_t>(static_cast<size_t>(-n->dataIndex)));
+    if (value == nullptr) {
+        return {.reason = "no-function-value"};
+    }
+    const GCGraph *callee = value->graph();
+    if (callee == nullptr) {
+        return {.reason = "function-names-no-graph"};
+    }
+    // It has to be a graph this one records as a static reference. A function value that names some
+    // other graph is a value from another program: following it would run a graph this one does not
+    // call, which is what a caller holding a stale value would be asking for.
+    const GraphId id = callee->id();
+    for (size_t r = 0; r < refCount_; ++r) {
+        if (refs_[r] == id) {
+            if ((refRoles_[r] & kGraphRefStatic) != 0) {
+                return {.graph = id};
+            }
+            break;
+        }
+    }
+    return {.reason = "not-a-static-reference"};
+}
+
 gc_node_ref_t GCGraph::matchedJoinOutputOf(gc_node_ref_t ref) const {
     const auto outputs = withOutputsOf(ref);
     if (outputs.size() != 1) {

@@ -78,7 +78,30 @@ camel test/cases/modules/autodiff/jax_vmap.cml std::nvm   # 退出码 0，打出
 
 ## 结论
 
-**库层今天能过：1 / 127**（按退出码 0 且打出数是 5 条，其中 4 条不 import 库，不算库层能过；见上一节）。
+> **量法（2026-11-01 定）**：一条用例算不算“过”，按**它自己的期望退出码**判——有的用例守的就是 exit 1（`with_grad_old_name` 守 `value_and_grad` 不存在，`grad_refuse_*` 守具名拒绝），一律按 exit 0 量会把它们的“过”记成“不过”。四类的数按这个口径重记。
+
+**库层今天能过：12 / 118**（`node scripts/autodiff-migration-ledger.mjs` 的读数：`[LEDGER] total=127 library=118 pass=12 with=54 array=46 other=6`）。12 条里 **4 条真的跑出数**（`transform_rules`、`jax_batching`、`jax_vmap`、`jax_vmap_tensor`），**8 条守住的是拒绝**（`err_vjp_annotation`、6 条 `grad_function_value_*`、`with_grad_old_name`——它们期望 exit 1，库也确实拒了）。
+
+上一版手记的 **2** 就是这么错的：手记一律按 exit 0 数"过"，把 8 条"期望被拒"的用例记成了"不过"。工具按**每条用例自己的期望**（退出码 + 计划里点名的输出串）判，所以是 12。
+
+**这个工具只读不写**：它扫用例、跑一遍、打印表与那一行 `[LEDGER]`，不更新本页——本页仍由人手改，工具给数。
+（2026-11-01 23:00 重算：118 个顶层用例逐条跑，另 9 个在 `jax_names/` 子目录。）
+
+重算方法与上一版同一套（复制成 `.probe.cml`、把 `from autodiff` 里的 `vjp`/`grad`/`with_grad` 改从 `vjp` 取、跑 `std::nvm`、跑完即删），**只改了一处错**：上一版把 `import { … } from autodiff` 整条换成 `from vjp`，于是库里仍有的辅助名（`add_tangent`、`zero_tangent` 等）被判成"库里没有这个名字"。正确写法是**两行**——transform 的三个名字从 `vjp` 取，其余仍从 `autodiff` 取。改对之后 `transform_rules` 从"不过"变"过"（它只用 `add_tangent`，而 `add_tangent` 一直在 `stdlib/autodiff.cml` 里）。
+
+四类的分子/分母（118 个顶层用例，分母不变）：
+
+| 类（按今天第一条诊断的形态量，不是按写法归类） | 条数 | 过 | 卡在哪 |
+| --- | --- | --- | --- |
+| `with` 形参函数（诊断里是 `(<x: float> () => float pure)` 这种带 `with` 的函数类型） | 54 | 0 | 声明面：函数的类型带 `with` 形参，库的 `grad`/`vjp` 只收 `(x: float) => float`；`with_grad` 的体（`return vjp(f)`）给不出 `F` |
+| 数组/张量形参（诊断里是 `[]`、`[..]`、`f32`、`Model` 等） | 46 | 0 | 声明面 + 走图：`jvpSignature` 的四处 float 写死（见 `questions-2026-11-01-the-array-parameter-waits-for-the-compile-time-step.md`） |
+| 其余（名字缺失、注解写法、只测名字解析） | 6 | 0 | 名字本身（`remat`、`stop_gradient`、`value_and_grad`）、`@vjp` 注解 |
+| 过 | — | 12 | 见上一段：4 条跑出数、8 条按期望拒绝 |
+
+118 个顶层用例的账：54 + 46 + 6 + 12 = 118。另有 `jax_names/` 子目录 9 个（`jax_vmap*`、`jax_names/jvp` 等）不在 `vjp` 这条路上，不记入分母。
+
+**100 条 `NoMatchingFunction` 的形态只有两种**：函数的类型带 `with` 形参（`(<x: float> () => float pure)`、`(<w: float> (n: int) => float)` 等），或函数的形参是数组/张量（`(<xs: float[]> …)`、`(<x: f32[..]> …)`）。**没有一条是"只差一个拼写"**——这是这一版和上一版一致的结论，只是现在有了逐条证据（`/tmp/m4/probe127b.tsv` 的 118 行）。
+
 
 **试点 5 条已判完（`with` 类 3、数组类 2）：已迁 0 条 — 纯拼写 0、需要库补 2、需要新能力 3。**
 判法：把 5 条真的按库的写法改一遍、跑一遍，改不动或跑不过的记下走图/声明面拒绝它的那一档；
@@ -264,7 +287,7 @@ camel test/cases/modules/autodiff/jax_vmap.cml std::nvm   # 退出码 0，打出
 | 124 | `vjp_user_b` | 不过 | 不在 `vjp` 这条路上：不 import `autodiff` 的名字（`prelude` 的 `jvp`/`vmap`） |
 | 125 | `whole_extrema_grad` | 不过 | **试点 3/5：需要新能力** — 改成 `func high(w: float)` + `grad(high)(5.0)` 后，前向走图直接拒绝函数体：`REINTERP jvp function=high skip=body`（体里用 `w` 建 `float[2, 2]` 再取 `max`）。老读数 `1.0 / 0.0 / 1.0 / 0.0` |
 | 126 | `whole_extrema_tie_grad` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
-| 127 | `with_grad_old_name` | 不过 | 库里没有 value_and_grad |
+| 127 | `with_grad_old_name` | **过**（按期望退出码） | 它守的就是这个名字不存在：`UnresolvedReference: 'value_and_grad'`，exit 1 —— 按 exit 0 量会把它记成"不过" |
 ## 这一笔没做的
 
 - 没有改任何用例（`git diff test/cases/modules/autodiff/` 为空），迁移哪一批等点名。
