@@ -12,7 +12,7 @@
 // at the copy, and runs the same program twice.
 //
 // Each half is a claim and each claim is read off a run:
-//   dropped  -- the program exits 1 and the diagnostic stands on the library's own line
+//   dropped  -- the program exits 1 and the diagnostic stands on the program's call line
 //               (`stdlib/vjp.cml:<line>:`), naming what is missing. The expected words differ per
 //               line: without `rulesets.jvp` the forward walk has no rule for `:op/mul_d`, without
 //               `rulesets.transpose` the backward walk has no family for `:op/add_d`.
@@ -20,7 +20,7 @@
 //
 // So this is a case per import line, and it goes red when the line it guards is gone from the
 // library (nothing to drop, and the half that matters is the restored one), when the run stops
-// somewhere else, or when a diagnostic no longer points into the library.
+// somewhere else, or when a diagnostic no longer points at the call.
 //
 // Usage: node test/tools/check-vjp-ruleset.mjs --drop rulesets.jvp
 //        node test/tools/check-vjp-ruleset.mjs --drop rulesets.transpose
@@ -132,7 +132,11 @@ say1.push(`dropping that one line in a copy of the library, and running the same
 
 const without = run({ CAMEL_STD_LIB: copyRoot })
 const diagnostics = without.text.split('\n').filter((line) => /error\[|^note:|-->\s|^TRANSPOSE\s/.test(line))
-const onLibrary = diagnostics.some((line) => /-->\s.*stdlib\/vjp\.cml:[0-9]+:[0-9]+/.test(line))
+// The transform is one call in the library and the three steps behind it are the operator's
+// (`modules/transforms/vjp.cpp`), so a missing ruleset is found where the call runs: the program's
+// own line. It used to stand on `stdlib/vjp.cml:<line>` because the body called `jvp` there, and
+// the body is gone.
+const onProgram = diagnostics.some((line) => /-->\s.*vjp_carries_its_ruleset\.cml:[0-9]+:[0-9]+/.test(line))
 const named = diagnostics.some((line) => line.includes(expected.words))
 const reading = expected.reading === null || diagnostics.some((line) => line.includes(expected.reading))
 const raised = expected.raised === null || diagnostics.some((line) => line.includes(expected.raised))
@@ -161,8 +165,11 @@ if (without.status === 0) {
 if (!named) failed.push(`the diagnostic does not say \`${expected.words}\``)
 if (!reading) failed.push(`the walk's own reading does not say \`${expected.reading}\``)
 if (!raised) failed.push(`the diagnostic does not carry \`${expected.raised}\``)
-if (!onLibrary) {
-    failed.push('the diagnostic does not stand on a `stdlib/vjp.cml:<line>:<column>`')
+if (!onProgram) {
+    failed.push(
+        'the diagnostic does not stand on the program\'s own line ' +
+            '(`vjp_carries_its_ruleset.cml:<line>:<column>`)',
+    )
 }
 if (restored.status !== 0) failed.push(`with the line back the program exits ${restored.status}, not 0`)
 if (numbers.length !== 3) failed.push(`with the line back the program prints ${numbers.length} reading(s), not 3`)
@@ -175,7 +182,7 @@ if (failed.length > 0) {
     process.exit(1)
 }
 say([
-    `  ${drop} is load-bearing: dropped, ${expected.what} on the library's own line;`,
+    `  ${drop} is load-bearing: dropped, ${expected.what} at the call;`,
     '  back, the library answers.',
 ])
 fs.rmSync(tmp, { recursive: true, force: true })
