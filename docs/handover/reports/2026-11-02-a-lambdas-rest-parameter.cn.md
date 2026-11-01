@@ -159,3 +159,32 @@ FUNC 节点上，由 GIR 按 `expected` 填；`..xs` 可以走**同一条通道*
 
 **所以判据 1 的表是一张反表**：原来打算"逐点传"，实测是"一个点都不用动，换到 GIR 那条已有的通道上"。
 `..xs` 的元组取值（体内 `..xs`）仍是 `NK::RestValue`，与形参表相邻、不挡 `vjp`。
+
+## 6. 19:10 裁定与它量到的那一格
+
+作者 2026-11-01 19:10（M4）：**lambda 的 `..xs` 不在暂停范围内**——暂停针对的是"前端里一张按算子名查的
+变换表"和"实参必须编译期已知"，而 **lambda 的形参按期望类型定型是语言本来就有的规则**（原则第 5 节：
+`let f: (x: float) => float = x => …` 的 `x` 就是这么得到类型的）；`..xs` 只是这条规则**用在包上**。
+所以本页第 3 节"相撞"的定性作废，第 3½ 节的裁定仍然成立，只是理由换成这一句。
+
+**已落地（`d025d5c25`）**：吸收位 + 三形式展开，`rest_params` **15/15**；`LambdaRestParameterNotLowered`
+删除，`--check` **306 → 305**；`--pinned-coverage` 同笔复核 **288 of 305**、地板仍 16。
+`(..xs)`／`(..xs: float[..])` 在没有期望类型的位置给出 `"nothing here expects a function type"`
+（此处不可能），在有期望类型的位置（实参位：`apply((..xs) => 0.0)`、`apply_one((..ys: float[..]) => 1.0)`）
+**建得出、跑得通**（新用例 `lambda_rest_annotated.cml`）。
+
+**`vjp` 并成一条：试过，卡在"体内取值"这一格。** 一条泛型的体是
+
+    let (forward, linear) = split(jvp(f))
+    return (..xs) => { let (value, residuals) = forward(..xs) … }
+
+**签名这一半通了**（形参表按 `Vjp<F>` 的 `ParamsOf<F>` 展开），**体这一半不通**：
+
+    error[SemanticDiag::UnresolvedReference]: Unresolved reference: 'xs'.
+      [in the instance 'vjp<(x: float) => float>' of the generic function 'vjp' with F = (x: float) => float]
+      --> out/latest/stdlib/vjp.cml:72:44
+
+原因：`..xs` 在**调用**里（`forward(..xs)`）走的是"展开一个编译期元组"那条规则，**要求 `xs` 是一个值**；
+而 lambda 的 `..xs` 今天只展开成**形参名**（`xs_0`, `xs_1`），**没有一个叫 `xs` 的元组值**。
+`vjp` 的体需要它，所以 `vjp` 并成一条要等 `NK::RestValue` 的下降（`..xs` 作为元组取值的路径），
+那是与"形参表"相邻的另一格。**不是暂停、不是相撞**，是那一格还没做。
