@@ -369,3 +369,49 @@ Available overloads:
 
 **注意**：这条读数与 `xs[0]` 那条（§7②）是**同一处**——rest 参数的包是元组、`[]` 定义在数组上；而这里是
 `grad` 把形参定型成 `float`。两者都不是"到不了"，都是**具名拒绝 + 列出可用重载**。
+
+## 11. 泛型 `grad`：试过了，两条都是要裁的格（停手，不自己发明）
+
+按"一条泛型声明"改写（照 `vjp` 的写法，`pullback(1.0)` 直接返回各参数的余切元组）：
+
+```camel
+export func grad::<F>(f: F): (..ParamsOf<F>) => (..Tangent<ParamsOf<F>>) when is_function::<F>() {
+    let reading = vjp(f)
+    return (..xs) => {
+        let (value, pullback) = reading(..xs)
+        let _ = value
+        pullback(1.0)
+    }
+}
+```
+
+**能编过**（`BUILD_EXIT=0`，`rest_params 16/16`），**但对调用方有两个后果，都实测**：
+
+**(a) 命名函数可以，但一元结果从"一个数"变成"一元组"**（`grad` 对 `x + 3`/`x - 3`/`x * 3`/`-x`）：
+
+```
+add (1.0) 0.9999999999621422
+sub (1.0) 1.0000000000065512
+mul (3.0) 3.000000000064062
+neg (1.0) -1.0000000000065512
+```
+
+值都对，**形状不再是 `1.0` 而是 `(1.0)`** —— 与判据 2「`grad((x) => x * 2.0)(3.0)` 仍得 `2.0`」冲突。
+
+**(b) 内联 lambda 失去定型位置**（`grad(f: F)` 这个位置不再是函数类型）：
+
+```
+error[SemanticDiag::LambdaParameterWithoutType]: The type of the parameter 'x' of this lambda is not
+written and cannot be inferred: nothing here expects a function type.
+  --> f_scal2.cml:4:19
+```
+
+数组那条同理（参数名 `xs`）。也就是说：**泛型化把"`grad` 的形参位置给 lambda 定型"这件事拿掉了**——而
+`vjp` 没有这个问题，因为它的调用方传的是**已声明的函数名**，不是 lambda 字面量。
+
+**结论：停手报负责人，不自己发明。** 冲突是两格：
+1. **一元 `grad` 的返回形状**：`2.0` 还是 `(2.0)`（作者 2026-11-01 14:30 的裁定是"pullback 一律回元组、不给一个参数开例外"，但如果 `grad` 也一律回元组，判据 2 就不成立）；
+2. **lambda 字面量的定型**：`grad(f: F)` 与 `grad(f: (x: float) => float)` 二者只能选一个，除非有
+   `Grad<F>` 这类类型函数 + 一条"位置上的 `F` 仍是函数类型"的表达方式（`types.cml` 里今天没有 `Grad<F>`）。
+
+**已回滚**：`stdlib/vjp.cml` 回到 HEAD，工作树干净；上面 (a)(b) 两次读数是在临时改动下取得的，已记在此处。
