@@ -209,12 +209,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "present.remat"
-desc = "`remat` is the name the recompute-in-the-backward transform has -- JAX's `jax.checkpoint` under its other name, chosen so the persistence word `checkpoint` stays the `ckpt` module's -- and the `transforms` module exports it, so the import that pinned the absence resolves and the program prints the value: `remat(square)` is a function over `square`'s graph with the recompute property, and its value at 2.0 is 4.0. The flip of the pin is the proof that the name arrived under this spelling; `modules.remat` reads the property itself."
+desc = "`remat` is the name the recompute-in-the-backward transform has -- JAX's `jax.checkpoint` under its other name, chosen so the persistence word `checkpoint` stays the `ckpt` module's -- and the `transforms` module exports it, so the import that pinned the absence resolves and the program prints the value: `remat(square)` is a function over `square`'s graph with the recompute property, and its value at 2.0 is 4.0. The flip of the pin is the proof that the name arrived under this spelling; the transform prints its own reading line beside the value (`REINTERP remat ... in_recompute=0 out_recompute=1`, with the run's graph id), which is why the value is matched as a line and not as the whole output, and `modules.remat` reads the property itself."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/jax_names/remat.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "jax_remat g=4.0\n"
+expect_stdout_contains = ["jax_remat g=4.0", "in_recompute=0 out_recompute=1"]
 expect_output_not_contains = ["UnknownInternalError", "never printed"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
