@@ -31,6 +31,39 @@
 整段是**解码 + 重写**，图从未被执行；每轮的内联候选、特化绑定、去虚拟化全是 0，而图仍在长。所以那条边
 今天撑着的不是"要不要算这条臂"，而是"这一轮算不算有变化"。
 
+## 一之补：谁在说"这一轮变了"——已指名（临时标签已删）
+
+在三处置 `changed` 的语句旁各挂一个标签，并在会话每轮结束前打印一行：
+
+```
+REWRITE changed=<specialize|devirtualize|inline|none> roundChanged=0/1 inlines= gains= graphs= nodes=
+```
+
+`export_loop.cml std::macro`，同一台机、同一条命令、`timeout 25`，两个状态各一次：
+
+| 状态 | 结果 | 轮数 | 标签 | inlines / growth / nodes |
+|---|---|---|---|---|
+| **边留着（今天）** | **exit 0** | **5** | 前两轮 `inline`，之后 `none`（收敛） | 2 / 30 / 39→82 |
+| **边删掉** | **exit 124** | **230+** | **全是 `inline`** | 每轮 1–2 / 4936→5046 / 4078→4184 |
+
+**谁在说变了：内联那一处（`engine.cpp:1091` 的 `appliedInlineCount++` 旁）。** 它每轮都能内联一次，
+是因为一个把"这条臂的调用"判成普通调用的判断——`isDraftBranchArmHead`（`engine.cpp:325`-`:338`）：
+
+```cpp
+for (gc_node_ref_t pred : draft.waitInputsOf(nodeId)) {   // 就是被删的那条 ctrl 边
+    if (predHeader && predHeader->kind == GCNodeKind::Brch) return true;
+}
+```
+
+它的返回值 `isArm` 同时喂给 `shouldInlineTarget(isSmall, isArm, …)` 和
+`suppressNonRecursiveArmInlining`（`engine.cpp:1047`-`:1064`）。边一没，臂里那个调用就不算"臂"，
+于是**每一轮多内联一层递归**：`growth` 每轮 +22、`nodes` 每轮 +34，`kMaxSessions = 32` 被顶满，
+`applyOptimizeRewritePass` 便认为程序变了、再来一轮，直到超时。
+
+**作者那句"某处判断'这条臂要不要算'读的还是 ctrl 边"，在 `isDraftBranchArmHead` 上成立**——只是它判的
+不是"要不要算这条臂"，而是"**这条臂里的调用要不要内联**"。修法因此很具体：这个判断改成问区域
+（`controlRegionOf(draft, nodeId)` 是 Arm、以及它是不是该 arm 的入口），不再问 `waitInputsOf`。
+
 ## 二、两条路的代价
 
 - **甲：让会话真的收敛。** 把"这一轮算什么变化"找出来——三处置 `changed` 的地方今天都没做事，说明
