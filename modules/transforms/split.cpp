@@ -528,8 +528,9 @@ SplitHalves splitHalvesWith(FunctionType *function, Type *residuals) {
     // The residuals: the values the backward half reads, in program order. Which values those are is a
     // property of the *graph*, so the graph answers it (`residualsOf`) and the tuple it names is the
     // one the halves are typed with when the graph is in hand. A caller that has no graph -- the
-    // operator resolver, which sees types only -- asks for the placeholder: one slot per value
-    // parameter, the most a type can say, and the shape the call site is checked against.
+    // operator resolver, which sees types only -- gets a stand-in: one member per value parameter.
+    // It is the type a call site is checked against and nothing else; it is not a reading, and the
+    // count a reading states comes from the graph (`residuals=`).
     if (residuals == nullptr) {
         std::vector<Type *> residualTypes;
         for (size_t i = 0; i < count; i += 2) {
