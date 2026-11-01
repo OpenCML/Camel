@@ -372,7 +372,11 @@ timeout_ms = 20000
 # nothing is added across values -- `read_outer` below, whose 29 is 15 through `x` and 14 through `k`.
 #
 # The three shapes are the channel's three cases and their paper numbers are 15, 22 and 29, so a case
-# that stops answering its number says so.
+# that stops answering its number says so. A fourth shape -- a loop that already carries two states
+# before anything escapes -- is on the same page as a reading of where it stops: refused at
+# `skip=output` before the loop is reached, because a multi-state loop's value is a tuple and a tuple
+# can only be used by reading a component of it. Its paper number, 10, is what the cut that gives a
+# component a cotangent has to answer.
 [[tests]]
 name = "transpose_loop_escape.names_the_value_one_read"
 desc = "`read_one(x) = loop s = x for i in 0..3 do 2.0*s + x` reads the parameter inside the loop body, so every round's cotangent lands on `x` and has to leave the loop. The loop carries it as a second state and answers 15 -- `s = 2s + x` three times is `8x + 7x`, the state's own cotangent 8 plus the carried sum 7 -- where before this cut it refused with `skip=state`. The reading is kept: `carried=1` in place of `skip=state`, `answer=summed` because the escaped value is the one the state starts from, `captures=1`, and the `ESCAPE` line still names the parameter port as the target and the body's `add` as the product that handed the cotangent out. A channel that dropped that line when it started working could not be compared with the refusal it replaced."
@@ -409,6 +413,19 @@ backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 0
 expect_output_contains = ["TRANSPOSE function=read_outer carried=2 node=12 origin=0 captures=2 answer=per-target", "ESCAPE target=0 from=11 kindOfFrom=11 kindOfTarget=1 typeOfTarget=float norm=[4,0,] with=[11,13,]", "ESCAPE target=1 from=10 kindOfFrom=11 kindOfTarget=11 typeOfTarget=float norm=[4,0,] with=[11,13,]", "29.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_loop_escape.two_states_are_refused_before_the_loop"
+desc = "The shape that would put the accumulator after two states: `carried(x) = let q = 2x; (loop s = x, p = x for i in 0..3 do (s + p, p + q)).0`, whose paper value is `10x` (rounds `s' = s + p`, `p' = p + q` from `s = p = x` reach `s = 10x, p = 7x`). The case reads the algebra and the refusal together: the forward evaluator prints 10 and 7, and the transpose then refuses at `TRANSPOSE function=carried skip=output` -- before the loop node, with no `carried=` line. The control the case carries (`select_only`, which returns `t.0` of a tuple and has no loop) refuses at the same line when it is the one transposed, so the refusal belongs to the component read, not to the loop: `transpose` takes a function returning a `float`, so a tuple-valued loop can never be its output, and using it means reading a component, which the reverse walk never gives a cotangent. That is why 10 is a target for the next cut and not a measurement of this one -- neither the accumulator's position nor the order of the states can be wrong yet, because nothing reaches them. When a tuple component has a cotangent this case must stop refusing and answer 10 through a `carried=1` line."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_loop_escape_two_states.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 1
+expect_output_contains = ["10.0", "7.0", "TRANSPOSE function=carried skip=output"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
