@@ -208,7 +208,7 @@ transpose: (f: F) => Transpose<F> when is_function::<F>()
 vmap: (f: F) => Vmap<F> when is_function::<F>()
 ```
 
-**`tensor`** — import { ... } from tensor — 61 name(s)
+**`tensor`** — import { ... } from tensor — 65 name(s)
 
 ```text
 zeros: (shape: int[]) => T[..] when is_numeric::<T>()
@@ -244,6 +244,10 @@ sum: (t: T[..]) => T
 sum: (t: float[..], axis: int, keepdims?: bool) => float[..]
 mean: (t: T[..]) => T
 mean: (t: float[..], axis: int, keepdims?: bool) => float[..]
+max: (t: T[..]) => T
+min: (t: T[..]) => T
+argmax: (t: T[..]) => int
+argmin: (t: T[..]) => int
 max: (t: float[..], axis: int, keepdims?: bool) => float[..]
 min: (t: float[..], axis: int, keepdims?: bool) => float[..]
 argmax: (t: float[..], axis: int, keepdims?: bool) => int64[..]
@@ -780,7 +784,7 @@ div_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
 div_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
 ```
 
-**`rulesets.vmap`** — import { ... } from rulesets.vmap — 17 name(s)
+**`rulesets.vmap`** — import { ... } from rulesets.vmap — 19 name(s)
 
 ```text
 lift: (x: T) => Lift<T>
@@ -800,6 +804,8 @@ vmap_argmax_axis: (xs: T[..], axis: int[], keepdims: bool[]) => int[..]
 vmap_argmin_axis: (xs: T[..], axis: int[], keepdims: bool[]) => int[..]
 vmap_sum: (xs: T[..]) => T[..] when is_numeric::<T>()
 vmap_mean: (xs: T[..]) => T[..] when is_float::<T>()
+vmap_max: (xs: T[..]) => T[..] when is_numeric::<T>()
+vmap_min: (xs: T[..]) => T[..] when is_numeric::<T>()
 ```
 
 **`sim`** — import { ... } from sim — 2 name(s)

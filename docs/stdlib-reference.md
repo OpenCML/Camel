@@ -1781,11 +1781,11 @@ one_hot: (labels: int64[..] | number[], classes: int) => f32[..]
 ```
 
 Each label (an integer below classes) expanded to a row of classes with a 1 at its position:
-a `float32` tensor of shape [labels, classes].
+a `f32` tensor of shape [labels, classes], each row a distribution over the classes.
 
 - Pure.
 - Failure: fault `IndexOutOfRange` when a label is outside [0, classes), and fault `InvalidArgument` when classes is negative.
-- Example: `one_hot([0, 2] as int[], 3)` gives `[[1, 0, 0], [0, 0, 1]]`
+- Example: `one_hot([0, 2] as int[], 3)` gives `[[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]`
 
 #### `shape`
 
@@ -1883,6 +1883,61 @@ The same mean over one axis; keepdims keeps the axis with extent 1.
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `DivisionByZero` when the axis is empty.
 - Example: `mean<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[1.5, 3.5]`
+
+#### `max`
+
+```camel
+max: (t: T[..]) => T
+```
+
+IEEE 754-2019 maximum of every element (design principles 7.7): a NaN anywhere gives `nan`, and
+-0 is below +0. An extremum has no identity, so a tensor with no element is a fault rather than
+an answer. The axis form below is the same name, chosen by arity (design principles 7.3).
+
+- Pure.
+- Failure: fault `InvalidArgument` when the tensor has no element.
+- Example: `max([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `4.0`
+
+#### `min`
+
+```camel
+min: (t: T[..]) => T
+```
+
+IEEE 754-2019 minimum of every element: a NaN anywhere gives `nan`, and -0 is below +0. A tensor
+with no element is a fault.
+
+- Pure.
+- Failure: fault `InvalidArgument` when the tensor has no element.
+- Example: `min([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `1.0`
+
+#### `argmax`
+
+```camel
+argmax: (t: T[..]) => int
+```
+
+The position of the maximum of every element, counted in row-major order and answered as an
+`int`: the first NaN's position if there is one, +0 above -0, and the earliest position on a
+tie (design principles 7.7). A tensor with no element is a fault.
+
+- Pure.
+- Failure: fault `InvalidArgument` when the tensor has no element.
+- Example: `argmax([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `3`
+
+#### `argmin`
+
+```camel
+argmin: (t: T[..]) => int
+```
+
+The position of the minimum of every element, counted in row-major order and answered as an
+`int`: the first NaN's position if there is one, -0 below +0, and the earliest position on a
+tie. A tensor with no element is a fault.
+
+- Pure.
+- Failure: fault `InvalidArgument` when the tensor has no element.
+- Example: `argmin([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `0`
 
 #### `max`
 
@@ -6759,15 +6814,16 @@ A rule's right side takes the *lifted* operands and answers the *lifted* result.
 elementwise tier is therefore one rule per primitive, each of them the primitive itself: the
 batching of an elementwise operator is that operator.
 
-This round writes the elementwise tier, `matmul`, the six reductions along an axis, and the two
+This round writes the elementwise tier, `matmul`, the six reductions along an axis, and the four
 over every axis. The first group need a rule that says *which* axis the batch is on: a batch of
 rows under `matmul` is the axes before its last two, and a reduction along an axis keeps the axis
 it reduces and gains the batch axis in front, so its rule is written in terms of the operator's
 own axis argument (`batched_axis`). A reduction over every axis takes no axis at all -- there is
 none of the operator's to shift -- so its rule keeps the batch axis in front and folds away the
-axes the row had after it, over the rank the value itself carries (`shape`). `max` and `min` have
-no such operator to write a rule for: they are declared with an axis, and the reduction of every
-axis is `max_axis(xs, ...)` over a rank the caller already knows.
+axes the row had after it, over the rank the value itself carries (`shape`). `sum`, `mean`, `max`
+and `min` are written that way; `argmax` and `argmin` are not, because their answer is the
+position counted in row-major order and no fold of axis positions produces that number -- see the
+paragraph below `vmap_min`.
 
 `reshape` and the broadcasting moves are the next tier.
 
@@ -7076,6 +7132,33 @@ integer row's mean is `f32`, which is not the element the rule would be written 
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_mean([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])` gives `[2.0, 5.0]`
+
+#### `vmap_max`
+
+```camel
+vmap_max: (xs: T[..]) => T[..] when is_numeric::<T>()
+```
+
+`max(xs)` batched: one maximum per row, folded the same way `sum` is. No accumulator is chosen,
+because IEEE 754-2019 maximum carries an element and is exactly associative and commutative
+(design principles 7.7): the axes of a row may be folded away in any order and the bits are the
+same, so the batch axis in front and the row's axes folded from the first is the same value as
+the row's own `max`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_max([[1.0, 5.0, 2.0], [4.0, 0.0, 3.0]] as float[2, 3])` gives `[5.0, 4.0]`
+
+#### `vmap_min`
+
+```camel
+vmap_min: (xs: T[..]) => T[..] when is_numeric::<T>()
+```
+
+`min(xs)` batched: the same fold, with the IEEE 754-2019 minimum. -0 is below +0 and a NaN is
+beyond every number, so the fold answers both readings the whole-tensor form does.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_min([[1.0, 5.0, 2.0], [4.0, 0.0, 3.0]] as float[2, 3])` gives `[1.0, 0.0]`
 
 <a id="sim"></a>
 

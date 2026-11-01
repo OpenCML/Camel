@@ -9,6 +9,12 @@
  * the full forms and are selected by arity. Softmax-family operators take an
  * optional axis that defaults to the last one.
  *
+ * `max(t)` / `min(t)` / `argmax(t)` / `argmin(t)` are the whole-tensor forms of the four reductions
+ * that used to have only the axis form (design principles 7.3 names them under one name; 7.7 gives
+ * them the readings below). They answer an element (max/min) or the position counted in row-major
+ * order (argmax/argmin, an int64), and a tensor with no element is `InvalidArgument` -- an extremum
+ * has no identity, unlike `sum`, whose identity is 0 (7.7).
+ *
  * Where the accumulation happens, per form (reduction and rounding are one rule,
  * design principles 7.3):
  *
@@ -220,6 +226,59 @@ InferFn wholeReductionInfer(k::ReduceOp op) {
     };
 }
 
+/// The name a whole-tensor extremum reports its fault under: design principles 7.7 gives the
+/// operator whose identity does not exist the fault, so the reading says which of the four was
+/// asked about a tensor with no element.
+const char *wholeExtremumName(k::ReduceOp op) {
+    switch (op) {
+    case k::ReduceOp::Max:
+        return "max";
+    case k::ReduceOp::Min:
+        return "min";
+    case k::ReduceOp::ArgMax:
+        return "argmax";
+    default:
+        return "argmin";
+    }
+}
+
+/// `max(t)`, `min(t)`, `argmax(t)`, `argmin(t)`: the same four reductions the axis forms are, over
+/// every element, and chosen by arity (design principles 7.3 names them under one name). They carry
+/// an element and never round (7.7), so no accumulation type is chosen here; and since an extremum
+/// has no identity, a tensor with no element is a fault, not an answer -- `InvalidArgument`, raised
+/// outside `runKernel`, which would turn it into a kernel error (7.1: a kernel agrees with its
+/// definition, faults included).
+template <k::ReduceOp Op> slot_t extremumAllKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    Array *t          = tensorArg(norm, 0);
+    const char *name  = wholeExtremumName(Op);
+    const bool maximum = Op == k::ReduceOp::Max || Op == k::ReduceOp::ArgMax;
+    if (t->numel() == 0) {
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            name,
+            std::string("a tensor with no element has no ") + (maximum ? "maximum" : "minimum"));
+    }
+    const TypeCode result = resultElementCode(norm.resultType());
+    return runKernel(name, [&]() -> slot_t {
+        if (Op == k::ReduceOp::ArgMax || Op == k::ReduceOp::ArgMin) {
+            // A position, counted in row-major order: an int64, the one width a position has.
+            return camel::core::rtdata::toSlot(k::argExtremumAll(Op, t));
+        }
+        if (result == TypeCode::Int32) {
+            return camel::core::rtdata::toSlot(static_cast<int32_t>(k::extremumAllInt(Op, t)));
+        }
+        if (result == TypeCode::Bool) {
+            // An extreme of bools is one of them (as by axis); no call reaches it, `is_numeric`
+            // excludes bool, but a declaration that states `T` must still be answered.
+            return camel::core::rtdata::toSlot(k::extremumAllInt(Op, t) != 0);
+        }
+        if (result == TypeCode::Int64) {
+            return camel::core::rtdata::toSlot(k::extremumAllInt(Op, t));
+        }
+        return elementTypedSlot(result, k::extremumAllFloat(Op, t));
+    });
+}
+
 int64_t axisOrLast(ArgsView &norm, size_t index) {
     return hasArg(norm, index) ? intArg(norm, index) : -1;
 }
@@ -329,6 +388,28 @@ void sumVjp(VjpBuilder &b, const VjpCall &call) {
                 call.inputs[0],
                 "tensor:broadcast_like",
                 {*dy, call.inputs[0]}));
+    }
+}
+
+// max / min over every element: the same rule as the axis forms, which send the gradient to the
+// elements equal to the extremum (the selection is a bool mask and a mask is not a number, 5.1, so
+// the conversion the multiplication needs is written and `cast_like` puts the mask at the
+// gradient's element type). What differs from the axis form is the spread: the extremum is one
+// value and the gradient is one value, so both are broadcast over the tensor rather than expanded
+// along an axis. `strict_eq` is the same comparison the axis rule selects with, so a tie shares the
+// gradient the same way, and a NaN extremum selects nothing -- as by axis.
+void extremumAllVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 1, 1);
+    if (auto dy = b.gradientOf(call.output)) {
+        const vjp_node_t x = call.inputs[0];
+        const vjp_node_t spread =
+            addTensorOperFor(b, x, "tensor:broadcast_like", {*dy, x});
+        const vjp_node_t extreme =
+            addTensorOperFor(b, x, "tensor:broadcast_like", {call.output, x});
+        const vjp_node_t selected = addTensorOper(b, "tensor:strict_eq", {x, extreme});
+        const vjp_node_t share =
+            addTensorOperFor(b, x, "tensor:cast_like", {selected, spread});
+        b.accumulateGradient(x, addTensorOper(b, "tensor:multiply", {share, spread}));
     }
 }
 
@@ -477,6 +558,38 @@ std::vector<OpDef> reductionOps() {
     defs.push_back(reduceAxisDef<k::ReduceOp::Min>("min_axis", "min"));
     defs.push_back(reduceAxisDef<k::ReduceOp::ArgMax>("argmax_axis", "argmax"));
     defs.push_back(reduceAxisDef<k::ReduceOp::ArgMin>("argmin_axis", "argmin"));
+    defs.push_back(OpDef{
+        .name      = "max",
+        .exports   = {"max"},
+        .params    = {{"t", ParamKind::Tensor}},
+        .resultDoc = "the tensor's element type",
+        .infer     = wholeReductionInfer(k::ReduceOp::Max),
+        .kernel    = &extremumAllKernel<k::ReduceOp::Max>,
+        .traits    = {}});
+    defs.push_back(OpDef{
+        .name      = "min",
+        .exports   = {"min"},
+        .params    = {{"t", ParamKind::Tensor}},
+        .resultDoc = "the tensor's element type",
+        .infer     = wholeReductionInfer(k::ReduceOp::Min),
+        .kernel    = &extremumAllKernel<k::ReduceOp::Min>,
+        .traits    = {}});
+    defs.push_back(OpDef{
+        .name      = "argmax",
+        .exports   = {"argmax"},
+        .params    = {{"t", ParamKind::Tensor}},
+        .resultDoc = "the row-major position of the maximum, an int",
+        .infer     = wholeReductionInfer(k::ReduceOp::ArgMax),
+        .kernel    = &extremumAllKernel<k::ReduceOp::ArgMax>,
+        .traits    = {}});
+    defs.push_back(OpDef{
+        .name      = "argmin",
+        .exports   = {"argmin"},
+        .params    = {{"t", ParamKind::Tensor}},
+        .resultDoc = "the row-major position of the minimum, an int",
+        .infer     = wholeReductionInfer(k::ReduceOp::ArgMin),
+        .kernel    = &extremumAllKernel<k::ReduceOp::ArgMin>,
+        .traits    = {}});
 
     defs.push_back(OpDef{
         .name      = "softmax",
@@ -521,6 +634,10 @@ std::vector<OpDef> reductionOps() {
         .traits    = {}});
     setVjp(defs, "sum", &sumVjp);
     setVjp(defs, "mean", &meanVjp);
+    setVjp(defs, "max", &extremumAllVjp);
+    setVjp(defs, "min", &extremumAllVjp);
+    setVjp(defs, "argmax", &camel::core::noGradient);
+    setVjp(defs, "argmin", &camel::core::noGradient);
     setVjp(defs, "sum_axis", &sumAxisVjp);
     setVjp(defs, "mean_axis", &meanAxisVjp);
     setVjp(defs, "max_axis", &extremumAxisVjp);

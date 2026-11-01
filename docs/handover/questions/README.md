@@ -4,7 +4,7 @@
 
 > **索引的价值在于与目录一一对应；一旦少一页，读者就会以为没有那一问。**
 
-> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 6 页**（`gir-handle-names-a-transaction-or-a-draft`、`partial-destructuring-of-a-value-tuple`、`tiles-narrow-dtype`），其余五页已裁完、整体挪进 `reviews/`（`a-version-port-that-accepts-more-than-void` 于 23:50 裁：选 A）。
+> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 `questions/` 里有 4 页**（`call-form-loops-and-setloopgraphs`、`what-argument-does-a-batched-rule-take`、`folding-a-branch-away-must-keep-the-effect-alive`、`a-batched-argmax-needs-a-flat-view`），其余已裁完、整体挪进 `reviews/`。
 >
 > **哪些未决值得成页**：不是所有未决都值得成页——只有**今天有人被它堵住**的才值得。其余留在原则里，等它真的挡住一条车道再成页。所以第 15 节那 8 条不占待裁表，清单在文末，每条写明今天堵着谁。
 
@@ -16,7 +16,9 @@
 | `call-form-loops-and-setloopgraphs` | 按调用跑每一轮的循环形式没有任何生产者（`setLoopGraphs` 全仓无调用者），这条拒绝该留、该删，还是连 `setLoopGraphs` 一起删 | 留着拒绝 |
 | `what-argument-does-a-batched-rule-take` | 批处理规则的右边该拿批、还是拿未批的值（`vmap` 的图里没有未批的值） | 右边点名一个普通库函数，以批为实参建调用 |
 | `folding-a-branch-away-must-keep-the-effect-alive` | 3.3「顺序边保活」与 F2「顺序边只排序」冲突，`fold` 把臂折掉后 `println` 不再执行 | 甲：`:op/keep` 数据边保活，3.3 加限定语 |
-| `whether-a-reduction-can-be-written-without-an-axis` | `sum`/`mean` 有一实参的整轴形态，`max`/`min`/`argmax`/`argmin` 没有（不是规则缺，是没有这个算子）：要不要补 | 不补：整轴 `max` 就是 `max_axis(x, 0, false)` 折秩 |
+| `a-batched-argmax-needs-a-flat-view` | 整轴 `argmax`/`argmin` 有算子、没有批规则：批一行要读它的扁平位置，而 `reshape` 的形状只能写在尖括号里——为一条批规则改语言表面（`reshape` 收运行期形状 / 加扁平位置算子 / 规则集能写扫描或取对角），还是保持按名拒绝 | 保持按名拒绝，等作者 |
+
+`whether-a-reduction-can-be-written-without-an-axis` 已裁已落（`5fd6fd902`，选 B：四条整轴形态都补），整体挪进 `reviews/`；它带出来的新问题（批 `argmax`/`argmin` 缺扁平视图）就是上面最后一页。
 
 15:10 与 15:25 的四页已裁并挪进 `reviews/`：流要表示（`rt::Stream<T>`）、`Json`/`Set`/`Map` 是缺口、`Ref` 在判定入口集中解析一次、`split` 的切口是 `Lift` 的两个分量。
 

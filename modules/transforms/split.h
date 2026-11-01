@@ -25,6 +25,10 @@
  * slot per value parameter -- and that placeholder is what a call site is checked against, never what
  * the graphs carry. Nothing on the far side of the cut is recomputed.
  *
+ * That placeholder is still the call site's type, and it is the one place where type and graph
+ * disagree: written up with the readings in
+ * docs/handover/reviews/questions-2026-11-01-the-residual-slot-has-no-type-until-execution.md.
+ *
  * `g(x) = x*x` at 3 reads `forward y= 9.0`, `residual r0= (3.0)` and `tangent dx1= 6.0`, and 12.0 and
  * 0.0 for dx = 2 and dx = 0. On a lifted graph that computes nothing (two parameter ports and one tuple
  * fill -- what `reinterp<jvp>` produces for `f(x) = x`) no value crosses at all: `fwd(3.0)` is 3.0,

@@ -20,18 +20,21 @@ func main(): int sync {
 
 跑 `camel <case> std::nvm`，读两条里的一条：答了就是 `REINTERP vmap function=f graph=… asked=A found=F missing=M rules=… elements=…`，
 没答就是 `REINTERP vmap function=f skip=body construct=- uri=tensor:X asked=1 found=0 missing=1`
-加一句诊断原文。行/批的秩、元素类型按原语的声明调整（`f32` 行给 `softmax` 族、`int` 行给 `one_hot`），
-每行的「探测体」就是那一次用的表达式，照抄可复现。**共 48 个程序，48 行读数，一个原语不漏。**
+加一句诊断原文。行/批的秩、元素类型按原语的声明调整（`f32` 行给 `softmax` 族、`int` 行给 `one_hot` 的标签），
+每行的「探测体」就是那一次用的表达式，照抄可复现。**共 52 个程序，52 行读数，一个原语不漏**
+（其中 4 个是整轴形态补上之后才量的：`max`、`min`、`argmax`、`argmin`）。
 
 **读数形状**（全表同一把尺子）：`asked` 是走到的原语数，`found` 是被规则集答了的数，`missing` 是差；
 `elements=` 是实例按哪个元素类型造的。
 
-## 一、有批规则的原语（9 条）
+## 一、有批规则的原语（11 条）
 
 | 原语 | 探测体 | 整轴形态 | 批规则 | 读数 |
 |---|---|---|---|---|
 | `tensor:sum` | `sum(x)` | **有**（`sum(t)`） | 有 | `asked=1 found=1 missing=0 rules=vmap_rule_sum elements=float` |
 | `tensor:mean` | `mean(x)` | **有**（`mean(t)`） | 有 | `asked=1 found=1 missing=0 rules=vmap_rule_mean elements=float` |
+| `tensor:max` | `max(x)` | **有**（`max(t)`） | 有 | `asked=1 found=1 missing=0 rules=vmap_rule_max elements=float` |
+| `tensor:min` | `min(x)` | **有**（`min(t)`） | 有 | `asked=1 found=1 missing=0 rules=vmap_rule_min elements=float` |
 | `tensor:sum_axis` | `sum_axis(x, 0, false)` | 无（沿轴） | 有 | `asked=1 found=1 missing=0 rules=vmap_rule_sum_axis elements=float` |
 | `tensor:mean_axis` | `mean_axis(x, 0, false)` | 无（沿轴） | 有 | `asked=1 found=1 missing=0 rules=vmap_rule_mean_axis elements=float` |
 | `tensor:max_axis` | `max_axis(x, 0, false)` | 无（沿轴） | 有 | `asked=1 found=1 missing=0 rules=vmap_rule_max_axis elements=float` |
@@ -75,6 +78,7 @@ transforms: vmap has no rule for `tensor:<名字>` (the operator has no batching
 | 布局 | `tensor:permute` | `permute<[1, 0]>(x)` | — |
 | 布局 | `tensor:concat` | `concat<0>(x, x)` | — |
 | 布局 | `tensor:take` | `take(x, [0, 1])` | — |
+| 布局 | `tensor:one_hot` | `one_hot(x, 3)`（`x: int[2]`） | — |
 | like | `tensor:zeros_like` | `zeros_like(x)` | — |
 | like | `tensor:ones_like` | `ones_like(x)` | — |
 | nn | `tensor:softmax` | `softmax<0>(x)`（`x: f32[2, 3]`） | — |
@@ -100,32 +104,76 @@ transforms: vmap has no rule for `tensor:<名字>` (the operator has no batching
 | `tensor:load_npy_*` | `load_npy::<float>("coverage.npy")` | 同上，同一句：先说常量不能上批 |
 | `tensor:from_bytes_*` | `from_bytes::<float>(to_bytes(x), [2, 3])` | `uri=tensor:to_bytes asked=1 found=0 missing=1` 加 "no batching rule key bound at all" —— 它先卡在自己的实参上 |
 
-**一条写不出来**：
+**上表里 `tensor:one_hot` 那一行曾经写不出来**：第一版探测时它在批里**编译不过**，原文是
+`Return type 'f32[2, 3]' does not match the function's declared return type 'int[..]'`——那不是批的问题，
+是**声明与算子自己不一致**：`stdlib/signatures/tensor.cml` 说回 `int64[..]`，而算子那侧
+（`modules/tensor/ops/layout_ops.cpp:443` 的注释、`oneHotKernel`、`oneHotInfer`、OpDef 的 `resultDoc = "float[..]"`、
+`setVjp(defs, "one_hot", &noGradient)` 上那句 "the float one-hot rows"）全都说 **f32**。
+照现有用例判，f32 那一侧是多数也是语义：`test/plans/feat/modules/tensor.plan.toml` 的 `take_one_hot` 钉着
+`one_hot=[[0.0, 1.0, 0.0], [1.0, 0.0, 0.0]]`，`discrete_zero` 钉着 `one_hot=(-2.0,0.0,2.0)`，
+`softmax_labels` 把它与 `f32` logits 一起用。所以改的是**声明**（`f32[..]`，正文与 `@example` 一起），
+算子一个字节没动；改完这一行就是上表的 `uri=tensor:one_hot asked=1 found=0 missing=1`：
+`one_hot` 也是「键没绑」，不是「规则缺」。
+
+**顺带记一句**：这条错声明在树上活了很久，因为**没有任何检查看声明的结果类型**——
+`registry.signatures_match`（`stdlib-reference.mjs --verify-ops`）比的是名字、参数个数、参数名与纯度，
+结果类型只由生成页带出去。要防它再来一次，得给 `--verify-ops` 加一条「声明的结果类型与算子的 `resultDoc` 一致」。
+
+**两个有整轴形态、没有批规则的**（单独量，不是上表那 39 条的形状）：
 
 | 原语 | 探测体 | 实测原文 |
 |---|---|---|
-| `tensor:one_hot` | `one_hot(x, 3)`（`x: int[2]`） | `Return type 'f32[2, 3]' does not match the function's declared return type 'int[..]'` —— `stdlib/signatures/tensor.cml:153` 声明回 `int64[..]`，`modules/tensor/ops/layout_ops.cpp:443` 的注释与 kernel 回 `float32` 行。**声明与算子今天就不一致**，所以它在批里也写不出来；这不是批规则的缺，是那条声明自己的问题 |
+| `tensor:argmax` | `argmax(x)`（`x: float[2, 3]`） | `REINTERP vmap function=row_argmax skip=body construct=- uri=tensor:argmaxasked=1 found=0 missing=1`，诊断 `transforms: vmap has no rule for tensor:argmax (the operator has no batching rule key bound at all)` |
+| `tensor:argmin` | `argmin(x)`（同上） | `REINTERP vmap function=row_argmin skip=body construct=- uri=tensor:argminasked=1 found=0 missing=1`，同一句诊断 |
 
-## 三、没有整轴形态的四个名字
+**为什么这两条写不出规则**：它们的答案是**整行按行优先展开的位置**，折掉行的一个轴得到的是**逐轴的位置**
+（`float[2, 3]` 行的 `argmax` 是 `5`，不是 `[1, 2]`），两者之间要按各轴的长度加权合成，而那个权重沿折叠
+越走越少一层、并不是同一张数组；要把一行当**一条线**来数，就得先有这一行的**扁平视图**，`reshape` 的形状
+要写在尖括号里（编译期常量），而批出的行各轴长度是值的、不是类型的。`argmax_axis` 直接用在批轴上只对
+一维的行正确、对更深的行错，所以也没有写成规则。可走的路有三条，都要作者点头：让 `reshape` 收运行期形状、
+加一个 kernel 级的扁平整轴位置算子、或让规则集能写扫描/取对角；三条都不在本车道能定的范围里。
 
-`sum` 与 `mean` 有一实参的整轴声明（`sum::<T>(t: T[..]): T`、`mean::<T>(t: T[..]): T`），
-`max` / `min` / `argmax` / `argmin` **没有**：`stdlib/signatures/tensor.cml` 里它们只写了带 `axis` 的那一条，
-`modules/tensor/ops/reduction_ops.cpp` 里也只有 `reduceAxisDef<Max>("max_axis", "max")` 这样的沿轴注册，
-没有 `tensor:max` / `tensor:min` 的整轴 OpDef。实测写 `max(x)` 的原文：
+## 三、整轴形态：四个名字都补上了（`5fd6fd902` 的裁定之后）
+
+最初量这一列时，`sum` 与 `mean` 有一实参的整轴声明，`max` / `min` / `argmax` / `argmin` **没有**：
+`stdlib/signatures/tensor.cml` 里它们只写了带 `axis` 的那一条，`modules/tensor/ops/reduction_ops.cpp` 里也只有
+`reduceAxisDef<Max>("max_axis", "max")` 这样的沿轴注册，写 `max(x)` 的原文是：
 
 ```
 No matching function found for argument types: <> (float[2, 3]).
 ```
 
-`min` / `argmax` / `argmin` 同一句（这四个名字各用一个程序量，写法就是一实参调用）。要不要补整轴算子是单独一页
-（`docs/handover/questions/questions-2026-11-01-whether-a-reduction-can-be-written-without-an-axis.md`），
-默认建议是**不补**。
+作者按 `docs/design-principles.cn.md:548`（"整体归约与沿轴归约同名……沿一个轴的形式带 `with <axis, keepdims>`，
+在同一个名字之下"）裁定：这四条**本来就该能写**，今天写不出来是实现落后于原则，不是语言里没有这个东西；
+于是四种整轴形态补齐（`OpDef` + kernel + 类型推导 + 签名 + `vjp` + 文档），实测读数：
+
+| 原语 | 读数 | 语义读数 |
+|---|---|---|
+| `max` | `max([[1,2,3],[4,5,6],[-1,0,1]] 行)` = `3.0` 每行 | NaN 传播、`-0 < +0`（IEEE 754-2019 `maximum`） |
+| `min` | 同形 = `1.0` 每行 | 同一条 `minimum` |
+| `argmax` | `argmax([[4,1,6],[3,2,5]])` = `2` | 行优先展开的位置；并列取最小；有 NaN 取第一个 NaN 的位置 |
+| `argmin` | 同形 = `4` | 同形 |
+
+四条在空张量上**都是故障**，不是拒绝编译，也不是答案（`design-principles.cn.md:575`：`mean`、`min`、`max`、
+`argmax`、`argmin` 没有单位元），种类 `InvalidArgument`，原文（`attempt` 隔离后打印，四个名字各一句）：
+
+```
+error InvalidArgument: Invalid argument of 'max': a tensor with no element has no maximum.
+error InvalidArgument: Invalid argument of 'min': a tensor with no element has no minimum.
+error InvalidArgument: Invalid argument of 'argmax': a tensor with no element has no maximum.
+error InvalidArgument: Invalid argument of 'argmin': a tensor with no element has no minimum.
+```
+
+批规则与整轴形态是两件事：`max` / `min` 的整轴规则写了（折掉行后面的每个轴，读数见上表第一节），
+`argmax` / `argmin` 的没有写（原因见第二节末尾）。补形态的原始提议页
+（`docs/handover/questions/questions-2026-11-01-whether-a-reduction-can-be-written-without-an-axis.md`）
+里那条"默认不补"的建议因此被作者否掉了，那一页留着作记录。
 
 ## 四、这张表回答了什么
 
-- **M5 覆盖完了没有**：`tensor:*` 里**只有 9 条**有批规则，其余 39 条一条都没有。这 9 条是"有批的语义"的那一组归约加 `matmul`；
-  逐元素、布局、创建、nn 全在规则之外，而且是**键都没绑**（不是"绑了键、规则集里缺一条"）——诊断原文分得清：
+- **M5 覆盖完了没有**：`tensor:*` 里**只有 11 条**有批规则（`sum`、`mean`、`max`、`min`、四条沿轴归约、`matmul`），
+  其余 39 条一条都没有，而且是**键都没绑**（不是"绑了键、规则集里缺一条"）——诊断原文分得清：
   没键是 `the operator has no batching rule key bound at all`，有键缺规则才是 `the ruleset holds no rule for this operator and operand count`。
-  今天 `tensor:*` 上**没有一条**落进后者。
-- 顺带的一条：`sum`/`mean` 的整轴形态**有**规则，`max`/`min`/`argmax`/`argmin` 连形态都**没有**，
-  所以"整轴归约"这一组不是四条同形，是两条同形、四条只有沿轴。
+  今天 `tensor:*` 上**只有 `argmax` / `argmin` 两条**落在"有形态、没键"这一格，它们缺的是扁平的视图而不是规则集里的一行。
+- 顺带的一条：`sum`/`mean`/`max`/`min` 的整轴形态**有**规则，`argmax`/`argmin` 有形态没规则，
+  所以"整轴归约"这一组现在是四条同形加两条差一口气，而不是全部只有沿轴。
