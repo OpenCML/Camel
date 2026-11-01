@@ -1,0 +1,41 @@
+# The transform entry points, and what each one decided about its function argument.
+#
+# An operator belongs here when it builds a graph out of the graph of a function value it is handed:
+# that is what makes the argument's *name* matter, and it is what `test/tools/check-transform-entry-points.mjs`
+# enforces. The set is not a list of names in the checker -- the checker reads `readsGraphs` out of the
+# sources and refuses any operator of `transforms` or `autodiff` this file does not mention, so a fourth
+# entry point is a red check naming it, not a decision nobody notices.
+#
+# Columns: uri, decision, note. A decision is one of
+#   declared       the operator declares CallSpec::staticFunctionArg, and the checker verifies that the
+#                  declaration is really in the sources with a real argument index -- a file that says
+#                  `declared` and does not declare it is red, naming the operator.
+#   undeclared     the operator does NOT declare it, and the note says what it does today instead. This
+#                  is a finding held open on purpose: the author's rule reaches it, and filling it in is
+#                  a decision with its own measurement, not a line added to keep a check green.
+#
+# Measured 2026-11-02 with a capturing closure `let h = (y: float) => y * x` (x = 3, y = 2, so the
+# answer that has the capture is 6.0 at one element, and vmap over [2.0, 4.0] is 18.0):
+#   - transpose, jvp, split   refused at the call, `error[SemanticDiag::TransformArgumentIsNotAKnownFunction]`
+#                             at the argument, line and column asserted in three cases.
+#   - transform:vmap          **accepted and answers 20.0** where the capture says 18.0, and the same 20.0
+#                             at x = 5 (so it is the capture that is dropped, not a coincidence); the
+#                             element takes the closure's `with` slot and `x` is never multiplied in.
+#   - transforms:remat        **accepted and answers 0.0** where the capture says 6.0.
+#   - autodiff:grad (and its three siblings)
+#                             refused earlier, by its own rule: `NotDifferentiable`, "it has no `with`
+#                             parameter, and grad differentiates the first `with` parameter", on the
+#                             `h`. So the argument rule has nothing to add to that shape today -- but the
+#                             operator is still an entry point and the file still says so.
+#
+# The two silent numbers are why this file exists: `vmap` and `remat` do not refuse and are not wrong on
+# purpose, and nothing in the tree says so today except this comment.
+transforms:transpose	declared	Builds the pullback of a linear function's graph at the call.
+transforms:jvp	declared	Builds the forward lift from the graph it is handed, at the call.
+transforms:split	declared	Splits the lifted graph at the call; with the declaration off it did not fall back to a reading but broke an invariant in visitLinkNode.
+transforms:vmap	undeclared	Measured: answers 20.0 for a capturing closure whose capture says 18.0, and 20.0 again at another capture value -- the capture is dropped, silently.
+transforms:remat	undeclared	Measured: answers 0.0 for a capturing closure whose capture says 6.0, silently.
+autodiff:grad	undeclared	Measured: refused earlier by NotDifferentiable (no `with` parameter) before any argument rule could speak.
+autodiff:grad_aux	undeclared	The two-parameter form of grad; refuses the same shape the same way.
+autodiff:with_grad	undeclared	Same entry as grad with the weights passed beside it; no argument rule today.
+autodiff:with_grad_aux	undeclared	The two-parameter form of with_grad; no argument rule today.

@@ -786,3 +786,20 @@ expect_exit = 0
 expect_stdout_exact = "remaining=3 run=callee_parameter,body_has_call,split_of_a_branch compile=direct,handed_to_split cut=compile/run\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+# A rule that lives in three places is a rule someone forgets in the fourth. The set of transform entry
+# points is read out of the sources (`readsGraphs`), and every one of them has to be decided in
+# `modules/transforms/entry-points.tsv`: `declared` is verified against the sources (a commented-out or
+# `-1` declaration does not count), `undeclared` is printed with what the operator does instead. A fourth
+# entry point is red until someone decides it, and the six undecided ones are printed on every run rather
+# than living in a comment nobody reads.
+[[tests]]
+name = "entry_points.the_rule_is_declared_where_it_applies"
+desc = "Every transform entry point -- an operator of `transforms` or `autodiff` whose traits say `readsGraphs = true` -- has to say what it does with the function argument it is handed, and the alternatives are checked differently: `declared` must be a real `CallSpec::staticFunctionArg` in the sources with an argument index >= 0 (the A/B that comments it out, or sets it to -1, is red naming the operator), and `undeclared` is printed with the measurement that makes it a decision held open. Today: nine entry points, three declared (`transpose`, `jvp`, `split`) and six recorded as undecided, two of which answer silently wrong numbers -- `transforms:vmap` answers 20.0 where the capture says 18.0, `transforms:remat` answers 0.0 where the capture says 6.0 -- and four of which (`autodiff:grad` and its two-parameter and `with_grad` forms) refuse earlier on their own rule, `NotDifferentiable`. The reading is one line per undecided operator plus the count, so a new entry point or a dropped declaration is a red line naming it."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/check-transform-entry-points.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["[entry-points] total: 9, declared: 3, undeclared: 6", "[entry-points] ok: 9 transform entry points, 3 declared and verified, 6 recorded as not declared", "transforms:vmap -- Measured: answers 20.0", "transforms:remat -- Measured: answers 0.0", "autodiff:grad -- Measured: refused earlier by NotDifferentiable"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 30000
