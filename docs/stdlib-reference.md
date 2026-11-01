@@ -6563,8 +6563,9 @@ The transform that trades memory for recomputation -- the same values, with the 
 recomputed in the backward pass instead of kept -- is named `remat` here. JAX calls it
 `jax.checkpoint` and, by its other name, `jax.remat`; in this tree "checkpoint" is the persistence
 module `stdlib/ckpt.cml` and stays that, so the transform takes the other word and there is no
-second name for a reader to disambiguate. It is not implemented yet: the name is not a value, and
-a call to it is refused like any other name that does not resolve.
+second name for a reader to disambiguate. The value it gives is the function itself, so a call
+through it is a call of the same function and no number moves; the recomputation is what the
+backward pass does with the section, not a second meaning of the value.
 
 `stop_gradient` marks a value as a constant, and the mathematics of the local rules is written
 here, where the library keeps one statement of it: `add_tangent` and its siblings are the tangent
@@ -6638,6 +6639,23 @@ Gives its argument unchanged and cuts the gradient at this point: a value passed
 argument's own type.
 
 - Example: `stop_gradient(3.0)` gives `3.0`
+
+#### `remat`
+
+```camel
+remat: (f: F) => F pure when is_function::<F>()
+```
+
+Gives `f` unchanged and marks the calls of that value: on the backward pass the section it
+covers may be recomputed instead of kept, so the same numbers are read from less memory. The
+value of a call through it is the value of the same call without it, so adding or removing
+`remat` moves no number and no gradient; what the name says beyond that is about what the
+backward pass stores, and no value tells a recomputed section from a carried one. A program
+that wants the values alone cannot tell the two paths apart, which is what makes the transform
+safe to put around any call.
+
+- Example (a fragment, not compiled): `let remembered = remat(f)`
+- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
 
 ### The local rules of the scalar arithmetic
 
@@ -6877,16 +6895,17 @@ A rule's right side takes the *lifted* operands and answers the *lifted* result.
 elementwise tier is therefore one rule per primitive, each of them the primitive itself: the
 batching of an elementwise operator is that operator.
 
-This round writes the elementwise tier, `matmul`, the six reductions along an axis, and the four
+This round writes the elementwise tier, `matmul`, the six reductions along an axis, and the six
 over every axis. The first group need a rule that says *which* axis the batch is on: a batch of
 rows under `matmul` is the axes before its last two, and a reduction along an axis keeps the axis
 it reduces and gains the batch axis in front, so its rule is written in terms of the operator's
 own axis argument (`batched_axis`). A reduction over every axis takes no axis at all -- there is
 none of the operator's to shift -- so its rule keeps the batch axis in front and folds away the
 axes the row had after it, over the rank the value itself carries (`shape`). `sum`, `mean`, `max`
-and `min` are written that way; `argmax` and `argmin` are not, because their answer is the
-position counted in row-major order and no fold of axis positions produces that number -- see the
-paragraph below `vmap_min`.
+and `min` are written that way. `argmax` and `argmin` answer a *position*, which no fold of axis
+positions produces (`argmax` of a `float[2, 3]` row is 5, not `[1, 2]`), so their rule reads the
+batch as one line instead: `reshape<[shape(xs)[0], -1]>(xs)` puts a row's elements on its last
+axis, and `argmax_axis` along that axis counts them -- see the section below `vmap_rule_min`.
 
 `reshape` and the broadcasting moves are the next tier.
 
@@ -7222,6 +7241,43 @@ beyond every number, so the fold answers both readings the whole-tensor form doe
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_min([[1.0, 5.0, 2.0], [4.0, 0.0, 3.0]] as float[2, 3])` gives `[1.0, 0.0]`
+
+### The positions over every axis
+
+`argmax(xs)` and `argmin(xs)` answer one position over the whole row, counted in row-major order,
+and no fold of axis positions produces that number: folding a row's axes hands back a position per
+axis (`argmax` of a `float[2, 3]` row is 5, not `[1, 2]`). What produces it is the shape the row's
+own elements form as one line. `reshape<[shape(xs)[0], -1]>(xs)` is the batch read as
+`[rows, -1]`, which lays the rows' elements end to end, so its *last* axis counts exactly one
+row's elements and a position along it is the position over that row.
+
+The shape `reshape` takes is written in angle brackets and may hold a value (`shape(xs)[0]`), not
+only a constant: it is checked where the shape is known, so `-1` stands for the extent the value
+itself states (design principles 5.4).
+
+#### `vmap_argmax`
+
+```camel
+vmap_argmax: (xs: T[..]) => int[..] when is_numeric::<T>()
+```
+
+`argmax(xs)` batched: one row-major position per row, read as a reshape of the batch to
+`[rows, -1]` and a reduction of its last axis -- which is one row's elements.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_argmax([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])` gives `[1, 2]`
+
+#### `vmap_argmin`
+
+```camel
+vmap_argmin: (xs: T[..]) => int[..] when is_numeric::<T>()
+```
+
+`argmin(xs)` batched: the same reading of the batch as `[rows, -1]`, with the earlier position on
+a tie.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_argmin([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])` gives `[0, 0]`
 
 <a id="sim"></a>
 

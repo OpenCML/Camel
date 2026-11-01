@@ -196,6 +196,12 @@ bool buildTransposeMember(
             }
             return constantOf[ref];
         };
+        // A round's cotangent can land on a value the round only read: that cotangent has to
+        // leave the loop, and this is where it is caught. `allowEscapes` is on while a LOOP's
+        // body runs -- a branch arm has nowhere to put a capture, so there an outside target is
+        // still a refusal.
+        bool allowEscapes = false;
+        std::unordered_map<gc_node_ref_t, gc_node_ref_t> escapes;
         const auto addCotangent = [&](gc_node_ref_t ref, gc_node_ref_t node) {
             if (!hasCotangent[ref]) {
                 cotangent[ref]    = node;
@@ -420,6 +426,15 @@ bool buildTransposeMember(
                     } else {
                         portCotangent = primitive(":op/add_d", {portCotangent, node});
                     }
+                    return;
+                }
+                if (allowEscapes) {
+                    // The round read this value from outside: its cotangent leaves the loop
+                    // through the capture channel, accumulated over the rounds.
+                    auto &slot = escapes[target];
+                    slot       = slot == rt::kInvalidNodeRef
+                                     ? node
+                                     : primitive(":op/add_d", {slot, node});
                     return;
                 }
                 armsOk = false;
@@ -727,8 +742,29 @@ bool buildTransposeMember(
                     draft.addPortNode(Type::Float64(), draft.allocateRuntimeSlot(Type::Float64()));
                 newPorts.push_back(ctPort);
                 draft.setRegionPorts(newRegion, std::span<const gc_node_ref_t>(newPorts));
+                escapes.clear();
+                allowEscapes = true;
                 const gc_node_ref_t bodyCotangent =
                     runArm(bodyRegionOld, oldBodyResult, ctPort, regionPorts.back());
+                allowEscapes = false;
+                if (armsOk && bodyCotangent != rt::kInvalidNodeRef && !escapes.empty()) {
+                    // The body's cotangents have a channel now, but the loop still hands back
+                    // one state: the refusal says how many are waiting, and for which values, so
+                    // the step that adds the accumulators knows the count from a reading.
+                    os << "TRANSPOSE function=" << function->name() << " skip=state node=" << ref
+                       << " origin=" << regionOrigin << " captures=" << escapes.size() << " nodes=";
+                    for (const auto &entry : escapes) {
+                        const camel::runtime::GCNode *carrier = function->node(entry.first);
+                        os << entry.first << '('
+                           << (carrier != nullptr ? static_cast<int>(carrier->kind) : -1) << ','
+                           << (carrier != nullptr && carrier->dataType() != nullptr
+                                   ? carrier->dataType()->toString()
+                                   : std::string("-"))
+                           << "),";
+                    }
+                    os << '\n';
+                    return false;
+                }
                 if (!armsOk || bodyCotangent == rt::kInvalidNodeRef) {
                     os << "TRANSPOSE function=" << function->name() << " skip=state node=" << ref
                        << " origin=" << regionOrigin << '\n';
