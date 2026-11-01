@@ -57,6 +57,10 @@ returned for rework when it misses any of these, however well it tests:
 - **A red reading is worth more than "basically working".** When a run cannot produce the reading a
   step promised, report the red one with the line it failed at. Red locates the failure; "basically
   working" leaves the next reader to find it again.
+- **The first refusal on a chain moves as the layers before it are fixed, so name it again every
+  round.** A line number or a message quoted last round is evidence about last round's tree; carrying
+  it forward is how a fixed site keeps being "the reason". Re-run, quote what the tree says now, and
+  if the message cannot tell two layers apart, say so and make it tell.
 - **Documents cite files and symbols, never line numbers.** A line number moves with every edit; cite `src/compile/gir/builder.cpp` and the function, type or test name instead.
 
 - **Documentation moves with the code.** A commit that changes a module's behaviour or invariants updates that module's page under `docs/internals/` (or, until the reorganisation lands, its page under `docs/technical/`) and the affected `docs/reference/` (today `docs/language/`) sections in the same commit. Those pages say what is true now: responsibilities, core data structures, invariants, interfaces, where the code lives — no history, no task numbers, no line numbers.

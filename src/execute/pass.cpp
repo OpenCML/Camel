@@ -32,6 +32,7 @@
 #include "camel/passes/test/edges.h"
 #include "camel/passes/test/graph_release.h"
 #include "camel/passes/test/keepfn.h"
+#include "camel/passes/test/bounds.h"
 #include "camel/passes/test/keepshape.h"
 #include "camel/passes/test/rules.h"
 #include "camel/passes/test/saturate.h"
@@ -43,6 +44,7 @@
 #include "camel/passes/test/exhaust_perm_space.h"
 #include "camel/passes/test/throw_bad_alloc.h"
 #include "camel/passes/test/exec_plan.h"
+#include "camel/passes/test/graph_faces.h"
 #include "camel/passes/test/regions.h"
 #include "camel/passes/test/retype.h"
 #include "camel/passes/test/arm_loop_regions.h"
@@ -985,6 +987,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kCommitConflictTestPass, CommitConflictTestPass),
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
         TEST_PASS(kKeepShapeTestPass, KeepShapeTestPass),
+        TEST_PASS(kBoundsFlipTestPass, BoundsFlipTestPass),
         TEST_PASS(kKeepInspectTestPass, KeepInspectTestPass),
         TEST_PASS(kContextLifetimeTestPass, ContextLifetimeTestPass),
         TEST_PASS(kContextsTestPass, ContextsTestPass),
@@ -1012,6 +1015,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kSaturateWideTestPass, SaturateWideTestPass),
         TEST_PASS(kSaturateOneRoundTestPass, SaturateOneRoundTestPass),
         TEST_PASS(kSaturatePropsTestPass, SaturatePropsTestPass),
+        TEST_PASS(kGraphFacesTestPass, GraphFacesTestPass),
         TEST_PASS(kRegionsTestPass, RegionsTestPass),
         TEST_PASS(kArmLoopRegionsTestPass, ArmLoopRegionsTestPass),
         TEST_PASS(kLoopInputsTestPass, LoopInputsTestPass),
@@ -1715,6 +1719,10 @@ struct EffectSite {
     /// reads to be sure a place it names is a place that holds the node.
     camel::runtime::gc_node_ref_t node = camel::runtime::kInvalidNodeRef;
     std::vector<std::string> resources; // the ambient resources it names, sorted and deduplicated
+    /// The ambient resources and the way each is used: writing one is not reading it, and the
+    /// boundary is what the program does to state it does not own. Kept beside `resources` because
+    /// the two questions are asked separately -- which resources, and how.
+    std::vector<std::pair<std::string, camel::core::sem::AccessMode>> uses; // name, way
 };
 
 /// One graph of a program in one topological order, with the users of each node: the order says
@@ -1891,11 +1899,14 @@ ProgramEffects collectEffects(const camel::runtime::Program &program) {
                               // what two graphs are compared by
                 }
                 site.resources.push_back(access.resource.name);
+                site.uses.emplace_back(access.resource.name, access.mode);
             }
             std::sort(site.resources.begin(), site.resources.end());
             site.resources.erase(
                 std::unique(site.resources.begin(), site.resources.end()),
                 site.resources.end());
+            std::sort(site.uses.begin(), site.uses.end());
+            site.uses.erase(std::unique(site.uses.begin(), site.uses.end()), site.uses.end());
             effects.sites.push_back(std::move(site));
         }
     }
@@ -2156,48 +2167,65 @@ OrderVerdict orderedInProgram(const ProgramEffects &effects, EffectSite earlier,
 /// code, copies it, inlines a body, or deletes what nothing needs; none of that may add or remove an
 /// effect on state the program does not own.
 ///
-/// The whole program is compared, not one graph at a time: inlining moves an effect from a callee
-/// graph into its caller and deletes the callee, which changes each graph's own resources and the
-/// program's none. The order of those effects is `effectOrderViolation`; this is the other half of
-/// the boundary, which resources the program touches at all.
+/// The boundary is the set of standard ambient resources *and the way each is used*: a pass that
+/// turns a write of `stdout` into a read of it has changed what the program does to state it does
+/// not own, and the names alone would not say so. The whole program is compared, not one graph at a
+/// time: inlining moves an effect from a callee graph into its caller and deletes the callee, which
+/// changes each graph's own resources and the program's none. The order of those effects is
+/// `effectOrderViolation`; this is the other half of the boundary.
+///
+/// The name a resource use is reported by: `stdout (write)`, not `stdout`.
+std::string useText(const std::string &name, camel::core::sem::AccessMode mode) {
+    std::string out = name;
+    out += " (";
+    out.append(camel::core::sem::accessModeName(mode));
+    out += ")";
+    return out;
+}
+
+/// The standard ambient resources of a program and the way each is used, sorted and deduplicated:
+/// what the boundary compares. A non-standard resource is the module's business, not this one's.
+std::vector<std::string> ambientUsesOf(const ProgramEffects &effects) {
+    std::vector<std::string> uses;
+    for (const EffectSite &site : effects.sites) {
+        for (const std::pair<std::string, camel::core::sem::AccessMode> &use : site.uses) {
+            if (camel::core::sem::isStandardResource(use.first)) {
+                uses.push_back(useText(use.first, use.second));
+            }
+        }
+    }
+    std::sort(uses.begin(), uses.end());
+    uses.erase(std::unique(uses.begin(), uses.end()), uses.end());
+    return uses;
+}
+
+/// The same list as one line: `nothing` for none.
+std::string useListText(const std::vector<std::string> &uses) {
+    if (uses.empty()) {
+        return std::string("nothing");
+    }
+    std::string out;
+    for (const std::string &use : uses) {
+        if (!out.empty()) {
+            out += ", ";
+        }
+        out += use;
+    }
+    return out;
+}
+/// The boundary itself: the standard ambient resources the program touches, and the way it uses
+/// each, must be the same before and after a pass. A pass moves code, copies it, inlines a body, or
+/// deletes what nothing needs; none of that may add, remove or re-aim an effect on state the
+/// program does not own.
 ///
 /// Returns nothing for a pass that kept them, or the two lists the diagnostic names.
 std::vector<std::string> effectResourcesViolation(const ProgramEffects &before, const ProgramEffects &after) {
-    // The language's own ambient resources are the boundary here: a module may declare a resource
-    // of its own (	iles:driver) and a pass of that module may bring it into the program, which is
-    // the module's business, not a change to what the program does to state it does not own.
-    const auto resourcesOf = [](const ProgramEffects &effects) {
-        std::vector<std::string> names;
-        for (const EffectSite &site : effects.sites) {
-            for (const std::string &name : site.resources) {
-                if (camel::core::sem::isStandardResource(name)) {
-                    names.push_back(name);
-                }
-            }
-        }
-        std::sort(names.begin(), names.end());
-        names.erase(std::unique(names.begin(), names.end()), names.end());
-        return names;
-    };
-    const auto text = [](const std::vector<std::string> &names) {
-        if (names.empty()) {
-            return std::string("nothing");
-        }
-        std::string out;
-        for (const std::string &name : names) {
-            if (!out.empty()) {
-                out += ", ";
-            }
-            out += name;
-        }
-        return out;
-    };
-    const std::vector<std::string> was = resourcesOf(before);
-    const std::vector<std::string> is  = resourcesOf(after);
+    const std::vector<std::string> was = ambientUsesOf(before);
+    const std::vector<std::string> is  = ambientUsesOf(after);
     if (was == is) {
         return {};
     }
-    return {text(was), text(is)};
+    return {useListText(was), useListText(is)};
 }
 
 /// Every graph a pass returns keeps an entry and an exit: the node it starts at and the node whose
@@ -3016,7 +3044,6 @@ const camel::runtime::Program *applyPasses(
     const context_ptr_t &ctx, std::ostream &os) {
     return applyPassesDetailed(program, passes, ctx, os).program;
 }
-
 
 
 
