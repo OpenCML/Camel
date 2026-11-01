@@ -377,3 +377,34 @@ assert(values[4] === '[1, 0]', `the two-axis row answered ${values[4]}`)
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+# The row-wise `max` and `min` of a batch are one `reshape` and one axis reduction, not a fold over
+# the row's axes: IEEE 754-2019 maximum carries an element and is exactly associative and
+# commutative (design principles 7.7), so a single pass over the flattened row answers the same bits
+# the fold answered, and the fold was a duplicate. `sum` and `mean` keep their fold: folding rounds
+# the row's axes once each, and one pass over the flattened row rounds once, which is a different
+# number for a float. The readings below are what both spellings printed, bit for bit -- the -0 of a
+# row that holds one, the NaN of a row that holds one, and a row of two axes on both sides.
+[[tests]]
+name = "vmap_row_max_and_min_are_one_pass"
+desc = "The batched `max`/`min` of a row through the batching transform: `[[1.0, -0.0, 2.0], [3.0, 5.0, 4.0], [nan, 1.0, 2.0]]` answers `[2.0, 5.0, nan]` and `[-0.0, 3.0, nan]`, a row of two axes answers `[6.0, nan]` and `[1.0, nan]`, and an `int` batch answers `[5, 4]` and `[1, 0]`. The control beside them is `sum`, which keeps its fold (two roundings of a float row are not one), so its `[3.0, 12.0, nan]` is unchanged. The helper the fold used to be (`fold_max_axes`, `fold_min_axes`) is gone: `deleted_row_reduction_helpers.mjs` asserts the names are not in the ruleset and that the two keys still name their callees, so the replacement is the operator and the key is intact."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_row_reductions.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[2.0, 5.0, nan]\n[-0.0, 3.0, nan]\n[3.0, 12.0, nan]\n[6.0, nan]\n[1.0, nan]\n[5, 4]\n[1, 0]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vmap_fold_helpers_are_gone"
+desc = "The two fold helpers the row-wise `max` and `min` used are deleted from `stdlib/rulesets/vmap.cml`, and what replaced them is the operator: `max_axis(reshape<[shape(xs)[0], -1]>(xs), 1, false)` and the same with `min_axis`. The keys `max/1` and `min/1` still name `vmap_max` and `vmap_min` -- the deletion is a helper's, not a key's -- and `sum`/`mean` still fold, because a float row folded twice is two roundings and flattened once is one."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/compile/rulesets/deleted_row_reduction_helpers.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["deleted_helpers: ok"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

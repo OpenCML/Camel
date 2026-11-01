@@ -400,29 +400,23 @@ export rule vmap_rule_mean::<T>(xs: T[..]) when is_float::<T>() {
     mean(xs) => (bxs: Lift<T[..]>) => vmap_mean(bxs)
 }
 
-/// `max(xs)` batched: one maximum per row, folded the same way `sum` is. No accumulator is chosen,
-/// because IEEE 754-2019 maximum carries an element and is exactly associative and commutative
-/// (design principles 7.7): the axes of a row may be folded away in any order and the bits are the
-/// same, so the batch axis in front and the row's axes folded from the first is the same value as
-/// the row's own `max`.
+/// `max(xs)` batched: one maximum per row. The row's axes are flattened into one (`shape(xs)[0]`
+/// is the batch extent, `-1` the rest) and the maximum is taken over that axis in one pass: IEEE
+/// 754-2019 maximum carries an element and is exactly associative and commutative (design
+/// principles 7.7), so the axes of a row may be folded away in any order -- or in one pass over
+/// the flattened row -- and the bits are the same: -0 below +0, a NaN anywhere beyond every
+/// number, in either shape.
 /// @example vmap_max([[1.0, 5.0, 2.0], [4.0, 0.0, 3.0]] as float[2, 3])    // [5.0, 4.0]
 export func vmap_max::<T>(xs: T[..]): T[..] when is_numeric::<T>() {
-    return fold_max_axes::<T>(xs, len(shape(xs)) - 1)
+    return max_axis(reshape<[shape(xs)[0], -1]>(xs), 1, false)
 }
 
-func fold_max_axes::<T>(xs: T[..], left: int): T[..] when is_numeric::<T>() {
-    return if left <= 0 then xs else fold_max_axes::<T>(max_axis(xs, 1, false), left - 1)
-}
-
-/// `min(xs)` batched: the same fold, with the IEEE 754-2019 minimum. -0 is below +0 and a NaN is
-/// beyond every number, so the fold answers both readings the whole-tensor form does.
+/// `min(xs)` batched: the same one-pass minimum over the flattened row, with the IEEE 754-2019
+/// `minimum`. -0 is below +0 and a NaN is beyond every number, so the answer is the one the
+/// whole-tensor form gives.
 /// @example vmap_min([[1.0, 5.0, 2.0], [4.0, 0.0, 3.0]] as float[2, 3])    // [1.0, 0.0]
 export func vmap_min::<T>(xs: T[..]): T[..] when is_numeric::<T>() {
-    return fold_min_axes::<T>(xs, len(shape(xs)) - 1)
-}
-
-func fold_min_axes::<T>(xs: T[..], left: int): T[..] when is_numeric::<T>() {
-    return if left <= 0 then xs else fold_min_axes::<T>(min_axis(xs, 1, false), left - 1)
+    return min_axis(reshape<[shape(xs)[0], -1]>(xs), 1, false)
 }
 
 /// `max(xs)` batched: the batch axis stays in front and the row's axes are folded away.
