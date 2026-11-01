@@ -475,8 +475,12 @@ struct Half {
                 retargetedCalls.insert(ref);
                 return true;
             }
+            // A fact about the call, not about the half it is copied into: when the rule's expansion
+            // recorded how many of the call's trailing arguments are tangents, the copy is the same
+            // call and says the same thing. It is what `transpose` reads at a call inside an arm.
             const gc_node_ref_t made = draft.addFuncNode(
-                callee, node->dataType(), 0, draft.allocateRuntimeSlot(node->dataType()), 0);
+                callee, node->dataType(), 0, draft.allocateRuntimeSlot(node->dataType()), 0,
+                source->callTangentArgsOf(ref));
             draft.setNormInputs(made, inputs);
             draft.addDependency(callee);
             copyOf[ref] = made;

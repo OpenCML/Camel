@@ -18,19 +18,20 @@
  *    transposed through the graph it was lifted from, because the tangent half of a lift is linear in
  *    the tangents -- the cotangent of tangent i is the primal's cotangent of value i, computed from
  *    the values only.
- * 3. **`arm-stop region=1 node=7 arg=1`**: the arm's call is a **rule kernel**,
+ * 3. **`arm-stop region=1 node=7 arg=1`** (before the split was read at all): the arm's call is a **rule kernel**,
  *    `autodiff::mul_tangent<float>`, whose arguments are `(x, w, dx, dw)`. Transposing it as a plain
  *    function wants all four values, and a tangent has none in the transposed graph -- tangents are
  *    what the answer is a cotangent of, so they are not among its parameters.
- * 4. **`kernel=mul_tangent values=2`**: the split is declared, in one table in
- *    `modules/transforms/jvp.h` (each kernel's value arity and the operator whose derivative it
- *    computes), and read rather than guessed from a name; and the member it asks for is now built.
- *    A **participating set** turns a transposition into a linear map's: the parameters outside the set
- *    are the ports (the values the graph reads), the parameters inside it are what the answer is a
- *    cotangent of, and a cotangent that lands on an outside parameter is dropped before its
- *    coefficient is looked at -- the coefficient would be a participating parameter's value, which is
- *    exactly what does not exist. `transpose(mul_tangent)` is therefore
- *    `(x, w, ct) => (t̄dx, t̄dw)`, and the call site in the arm passes `x`, `w` and its cotangent.
+ * 4. **`arm-stop ... arg=1`, with the split declared in one place**: which of a kernel call's
+ *    arguments are tangents is **the rule's** fact, so `reinterp` records it on the call it produces
+ *    (`GCNode::tangentArgs`, the reading is `TRANSPOSE ... arm-call ... tangent-args=2`), and `transpose` reads the
+ *    node rather than a second table. The member it asks for is built: a **participating set** turns
+ *    a transposition into a linear map's -- the parameters outside the set are the ports (the values
+ *    the graph reads), the parameters inside it are what the answer is a cotangent of, and a
+ *    cotangent that lands on an outside parameter is dropped before its coefficient is looked at
+ *    (the coefficient would be a participating parameter's value, which is exactly what does not
+ *    exist). `transpose(mul_tangent)` is therefore `(x, w, ct) => (t̄dx, t̄dw)`, and the call site in
+ *    the arm passes `x`, `w` and its cotangent.
  *
  * A second thing the answer needed: an arm of a residual-bundle half stops at its **tangent** port, not
  * at the bundle -- the answer is the cotangent of the tangents, while the bundle's cotangent is

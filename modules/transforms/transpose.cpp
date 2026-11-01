@@ -163,12 +163,12 @@ constexpr bool kTupleCotangents = true;
 /// below flips back to: `skip=state`, with no answer at all.
 constexpr bool kZeroTangentIntegers = true;
 
-/// Whether the declared value/tangent split of a rule kernel is read (`TangentKernelDecl` in `jvp.h`).
-/// On, a kernel call inside an arm is transposed as the linear map it is: the values are ports, the
-/// tangents are what the answer is a cotangent of, and the call site passes the values and the
-/// cotangent only. Off, the kernel is transposed as a plain function of all its parameters, which needs
-/// the tangents' values -- the A/B of the two readings, `kernel=mul_tangent values=2` against
-/// `arg=1 callee=autodiff::mul_tangent<float>`.
+/// Whether a call's recorded tangent-argument count is read (`GCNode::tangentArgs`: how many of the
+/// call's trailing arguments a rule's expansion said are tangents). On, a kernel call inside an arm is
+/// transposed as the linear map it is -- the values are ports, the tangents are what the answer is a
+/// cotangent of, and the call site passes the values and the cotangent only. Off, the count is unread,
+/// the call is a plain function of all its parameters, and the arm stops at the tangent that has no
+/// value: `arm-stop region=1 node=7 arg=1 callee=autodiff::mul_tangent<float>`. The A/B of the two readings.
 constexpr bool declaredKernelSplit = true;
 
 /// Whether a callee that arrives as a *value* is named. `calleeIdOf` answers for a FUNC node -- a call
@@ -743,28 +743,16 @@ bool buildTransposeMember(
                         armsOk = false;
                         return {};
                     }
-                    // A **rule kernel** -- `mul_tangent` and its four siblings -- is declared in `jvp.h`
-                    // as `values` values followed by that many tangents, and that declaration is what
-                    // makes the call transposable: the kernel is linear in its tangents, so the
-                    // transposition answers for the tangents only and takes the values as ports. The
-                    // participating set says so -- the parameters at and after `values` are the ones a
-                    // cotangent is answered for -- and the call site therefore passes the values and
-                    // this node's cotangent, and nothing else.
-                    const TangentKernelDecl *kernel =
-                        declaredKernelSplit ? tangentKernelOf(callee->name()) : nullptr;
-                    if (!declaredKernelSplit) {
-                        // The A/B of this reading: with the declaration unread, a kernel is a plain
-                        // function of all its parameters again, and the call stops where it stopped
-                        // before the participating set existed -- at the tangent that has no value.
-                        if (const TangentKernelDecl *declared = tangentKernelOf(callee->name())) {
-                            os << "TRANSPOSE function=" << function->name() << " arm-stop region="
-                               << oldRegion << " node=" << ref << " kernel=" << declared->name
-                               << " values=" << declared->values << " primal=" << declared->primal
-                               << '\n';
-                            armsOk = false;
-                            return {};
-                        }
-                    }
+                    // A **rule kernel** call -- `mul_tangent(x, w, dx, dw)` -- is linear in its
+                    // tangents, so its transposition answers for the tangents only and takes the values
+                    // as ports. Which arguments are tangents is **the rule's** fact, recorded on this
+                    // node when `reinterp` expanded the rule that produced it (`GCNode::tangentArgs`,
+                    // `addFuncNode`'s last argument): the values are the captures the rule bound,
+                    // the tangents are the lambda's own parameters. The rule is the one source;
+                    // nothing here re-derives the split, and there is no second table to keep in step
+                    // when a rule is added.
+                    const uint16_t tangentArgs =
+                        declaredKernelSplit ? function->callTangentArgsOf(ref) : 0;
                     // The values a call inside an arm takes: a parameter (a stop), a residual
                     // projection, or a constant -- the shapes a cut half's arm has. A value the arm
                     // computes and hands to a call is not reached yet, and is refused by name.
@@ -816,18 +804,21 @@ bool buildTransposeMember(
                     size_t valueCount = callee->funcType()->normTypesCount();
                     size_t tangentBase = 0;
                     size_t answerCount = valueCount;
-                    if (kernel != nullptr) {
+                    if (tangentArgs > 0) {
                         const size_t calleeParams = callee->funcType()->normTypesCount();
-                        if (kernel->values == 0 || kernel->values > calleeParams) {
+                        os << "TRANSPOSE function=" << function->name() << " arm-call region="
+                           << oldRegion << " node=" << ref << " callee=" << callee->name()
+                           << " args=" << callInputs.size() << " tangent-args=" << tangentArgs << '\n';
+                        if (tangentArgs > calleeParams) {
                             os << "TRANSPOSE function=" << function->name() << " arm-stop region="
-                               << oldRegion << " node=" << ref << " kernel=" << kernel->name
-                               << " values=" << kernel->values << " params=" << calleeParams << '\n';
+                               << oldRegion << " node=" << ref << " tangent-args=" << tangentArgs
+                               << " params=" << calleeParams << '\n';
                             armsOk = false;
                             return {};
                         }
-                        valueCount  = kernel->values;
-                        tangentBase = kernel->values;
-                        answerCount = calleeParams - kernel->values;
+                        valueCount  = calleeParams - tangentArgs;
+                        tangentBase = valueCount;
+                        answerCount = tangentArgs;
                         participates.assign(calleeParams, false);
                         for (size_t i = valueCount; i < calleeParams; ++i) {
                             participates[i] = true;
