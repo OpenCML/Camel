@@ -1,0 +1,17 @@
+// `#remat` on a function: a standard tag, so the spelling and the position are checked, and nothing
+// else changes -- `g` is tagged and `f` calls it, and the program answers 7.0 like any other program.
+// The pass that gives the tag meaning is `split`; until it reads the tag, this entry is what says the
+// declaration is harmless.
+#remat
+func g(x: float): float {
+    return x * 2.0
+}
+
+func f(x: float): float {
+    return g(x) + 1.0
+}
+
+func main(): int sync {
+    println("f(3.0)= ", f(3.0))
+    return 0
+}

@@ -158,3 +158,15 @@ expect_stdout_contains = ["identity y= 3", "identity dx1= 1", "type=(float) => (
 skip_unless = ["node", "test/tools/have-split.mjs"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "remat_tag_is_a_standard_tag"
+desc = "`#remat` written on a function is a standard tag, so it compiles, checks its own position, and changes nothing: `g` is tagged and `f` calls it, and the program prints 7.0 either way. **What this entry is for**: the tag exists in the standard table (`src/core/tags.cpp`, next to `strict`), so the spelling and the placement are checked by the compiler even though no pass reads it yet. The pass that gives it meaning is `split` (its reading is the next piece of this work); `std::gir` does not print declaration tags today, which this entry does not claim -- it claims that a function carrying the tag is an ordinary function to every other pass."
+kind = "behavior"
+case = "../../../cases/transforms/split/remat_tag.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["7.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
