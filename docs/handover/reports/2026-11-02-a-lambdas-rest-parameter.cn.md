@@ -1492,3 +1492,42 @@ size_t constantBytesOf(slot_t value, const type::Type *type, size_t stopAt, size
 
 **⑥ 本轮没有改代码**：**没有把任何一个新量塞进 `opt::fold`**（`stdlib/opt.cml` 与 `stdlib/std.cml` 未动，`git status` 为空）；
 所以 regressions 沿用上一轮的读数（全量 `8369/8357/0`）。**这一条要作者点头才能往下走**：要么准我暴露 `constant_bytes`，要么给一个他认为可接受的量。
+
+## 45. A9 收尾：`constant_bytes` 就是 `constantBytesOf`，`opt::fold` 现在量的是同一个数
+
+**走的甲案**（"同一个函数、同一个默认值、两个阶段量同一个数"），三个条件逐条对：
+
+**① 同一个 C++ 函数，没有第二份实现**：`constantBytesOf` 从 `generic.cpp` 的匿名命名空间**原样搬出**到
+`include/camel/passes/opt/constant_bytes.h` + `src/passes/opt/constant_bytes.cpp`——**签名、函数体、注释都没动**（深度 8、`stopAt` 即停、头部 `4 * sizeof(slot_t) = 32` 三条性质原封不动地跟着走）。
+`fitsConstantBudget` 改成经头文件调用它；`graph` 模块的 `constant_bytes` 直接调它。**一处算法，两个调用者。**
+
+**② 只读、无副作用**：`constant_bytes(n: Node): int` 不打开事务、不改图；`stdlib/graph.cml` 里与 `is_constant` 并排声明，文档与 example 都已进 `docs/stdlib-reference.md`。
+**"加它之后全量读数与加它之前一字不差"**——加它那一笔（`de37ecf0a`）的 `feat/opt` 是 **1141/1141**，与加它之前同一批用例同一个数。
+
+**③ `opt::fold` 现在有预算**（**阶段参数，不读环境变量**）：
+```camel
+with <
+    /// Bytes of constants this pass may materialize in a graph: the same measure and the same
+    /// default as `std::opt::fold` (`constantBytesOf`), read through `constant_bytes`; a value
+    /// above it is left as the computation that builds it, and 0 materializes none.
+    constant_budget: int = 8388608
+>
+```
+参数沿 `fold_rounds → fold_round → fold_one → put_value` 一路传下去，`put_value` 的判据是 `constant_bytes(value) < budget`。
+
+**④ 读数（逐个数）**：
+
+| 程序 | `opt::fold` 改前 | `opt::fold` 改后 | `std::opt::fold` |
+|---|---|---|---|
+| `minimal/fold_interval.cml` | 43,890,910 | **2,229** | 2,221 |
+| `feat/mm/gc/gc_block_pacing.cml` | 43,899,403 | **10,762** | 10,714 |
+| `para/core/block_sort_merge.cml` | 34,904,296 | **15,655** | 15,378 |
+
+**两侧差值 0.4%–1.8%（8 / 48 / 277 字节）**：**这不是判据不同，是两条流水线的记账不同**（`opt::fold` 只跑折叠，`std::opt::fold` 是整条 `std::opt` 的折叠阶段）。**判据一致的最强证据不是字节数，是下面这条**。
+
+**⑤ 一致性用例**（`test/cases/opt/camel_passes/fold_constant_budget.cml`，两支 golden）：
+`opt::fold std::gir` 与 `std::opt::fold std::gir` 的 dump **逐字节相同**（两份 golden 都是 2157 字节，`Get-FileHash` 相同）——**同一个值，两个阶段做的是同一个决定、画出同一张图**：图里留的是 `:struct/range`（生成它的那次计算，`N03`），**不是 500 万个元素**。
+
+**⑥ 回归**：`feat/opt` **1143/1143**（新增两支 golden 用例）；全量见 §46。`docs/cli.md` 与 `docs/cli.cn.md` 的参数表把 `opt::fold` 并到 `std::opt`、`std::opt::fold` 那一行（**参数名与默认值照原生遍**）。
+
+**⑦ 这一族的规矩又厚了一层**：A8 缺 `is_anchor`、A9 缺 `constant_budget`，**两次都不是"实现写错"，是"约束没随实现搬过去"**——而 A9 还多一层：**量约束需要一个量，那个量不能自己发明，得让两个阶段共用一个函数**。

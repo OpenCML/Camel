@@ -140,7 +140,7 @@ export func is_constant(n: Node): bool
 /// `constant_budget`, so that a pass written in Camel can ask the same question the native pass asks. The
 /// cost is the value's elements plus the shape that describes them, the walk follows members 8 deep, and a
 /// node that is no constant costs 0.
-/// @example-fragment t is an open transaction and n a node of its graph
+/// @example-fragment n is a node of the surrounding pass
 /// @example constant_bytes(n)
 export func constant_bytes(n: Node): int
 /// The type of the node's value, null when it has none.
