@@ -2062,8 +2062,12 @@ const EXCEPTIONS = {
 const EXAMPLE_STOPS = {
     // The example calls a name the description introduces and the declaration does not take
     // (`inputs(n)` with `n` a node of the surrounding pass), or names a value the wrapper cannot
-    // bind at all: 39 of them, most of them marked a fragment.
-    'a semantic error': 39,
+    // bind at all: 40 of them, most of them marked a fragment. The fortieth arrived with the
+    // author's one declaration for every arity: `stdlib/vjp.cml#vjp` is generic over `F` now, so
+    // the harness cannot make the `f` its example reads and the example stops as
+    // UnresolvedReference 'f' -- recorded here rather than excused. `stdlib/vjp.cml#with_grad`
+    // has the same shape and was already counted in the 39.
+    'a semantic error': 40,
     // `split`'s example reaches the compiler with a function-typed parameter bound by name and the
     // compile graph keeps a live dereference node (`internal error: Compile graph '__doc_example'
     // still contains a live DREF node`). That is the compiler's own class, not the example's.

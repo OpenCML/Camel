@@ -1,0 +1,44 @@
+{
+ "pipeline": [],
+ "env": {},
+ "expected": [],
+ "outcome": "RUN_ERROR",
+ "diagnostic": "InternalDiag::UnknownInternalError",
+ "detail": "An error has occurred: Runtime graph 'main' breaks its edge invariants (1 violation(s)):\n  graph 'main' node 3 (10): passes a bool as ordinary argument 0 of 'u39', which takes a bool?.",
+ "actual": [],
+ "reproduced": {
+  "RUN_ERROR": 10
+ },
+ "origin": {
+  "seed": 1718,
+  "features": [
+   "append",
+   "array",
+   "builtin",
+   "capture",
+   "closure",
+   "comprehension",
+   "effects",
+   "env",
+   "float",
+   "func",
+   "hof",
+   "if",
+   "ifnoelse",
+   "logic",
+   "loop",
+   "macro",
+   "match",
+   "narrowing",
+   "nullable",
+   "opover",
+   "partial",
+   "rec",
+   "string",
+   "struct",
+   "tuple",
+   "var",
+   "varparam"
+  ]
+ }
+}
