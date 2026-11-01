@@ -1,0 +1,25 @@
+/**
+ * `vmap(f)` where `f` multiplies by a matrix written in its body: the batch is one axis in front of
+ * the product, and the matrix is the batch of one row. `rulesets.vmap` files one rule for `matmul`,
+ * and the rule is the operator over the lifted operands -- `matmul`'s own batch axes are the ones
+ * before its last two, so there is no row loop in the graph and no reshape around it.
+ *
+ * The numbers are small enough to read by hand. With `w = [[1, 2], [3, 4]]` a row `[[p, q], [r, s]]`
+ * becomes `[[p + 3q, 2p + 4q], [r + 3s, 2r + 4s]]`, so the two rows below answer
+ * `[[7, 10], [15, 22]]` and `[[23, 34], [31, 46]]`.
+ */
+import rulesets.vmap
+import { vmap as row_vmap } from array
+import { matmul } from tensor
+import { vmap } from transforms
+
+func f(a: float[2, 2]): float[2, 2] {
+    return matmul(a, [[1.0, 2.0], [3.0, 4.0]] as float[2, 2])
+}
+
+func main(): int sync {
+    let batch: float[2, 2, 2] = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]]
+    println(vmap(f)(batch))
+    println(row_vmap(f)(batch))
+    return 0
+}

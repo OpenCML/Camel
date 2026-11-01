@@ -63,11 +63,31 @@ std::vector<std::string> forwardRuleDescriptions();
 /// module serves one family), and neither replaces the other.
 void bindTransposeRule(ForwardRuleBinding binding);
 
+/// Binds `uri`'s batching rule to the key it is filed under in `rulesets.vmap`. A third table, for
+/// the reason the transpose bindings are a second one: an operator has one rule per family (a
+/// forward rule in `rulesets.jvp`, a batching rule in `rulesets.vmap`), and the two are written by
+/// different hands -- so a binding may never replace the other fact, and a family that reads one
+/// key cannot be made to read the other's.
+///
+/// The key is the operator's, not the family's: which spelling its rule's left side writes and how
+/// many operands that spelling takes. A batching transform reads it here and asks its own family's
+/// index with it (`lookupRule("rulesets.vmap", head, arity)`), because the spellings a rule can be
+/// filed under are those of an expression (`x @ w` is `@` at two operands, `sum_axis(xs, axis,
+/// keepdims)` is `sum_axis` at three), not of the URI the node holds.
+void bindVmapRule(ForwardRuleBinding binding);
+
 /// What `uri`'s transpose rule is called right now, read from the transpose family's index at this
 /// moment -- `forwardRuleOf`'s reading, for the family a linear function's pullback is written in.
 std::optional<camel::parse::ast::RuleMatch> transposeRuleOf(const std::string &uri);
 
 /// The transpose bindings, in the words `forwardRuleDescriptions` writes them.
 std::vector<std::string> transposeRuleDescriptions();
+
+/// The binding for `uri` in the batching family: the family the rule is written in and the key it
+/// is filed under there. `nullopt` when the operator was never given a batching rule key, which is
+/// not the same fact as a ruleset that lacks the rule: an operator whose key is recorded and whose
+/// family holds no rule for it is a hole, and one with no key was never given a batching rule at
+/// all. The batching transform reports the two apart, because the repairs differ.
+std::optional<ForwardRuleBinding> vmapBindingOf(const std::string &uri);
 
 } // namespace camel::core

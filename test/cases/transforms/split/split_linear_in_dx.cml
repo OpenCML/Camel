@@ -6,14 +6,15 @@
 //
 // The case runs when `split` exists (design doc 4.2); the plan skips it until then.
 import rulesets.jvp
+import { jvp, split } from transforms
 
 func g(x: float): float {
     return x * x
 }
 
 func main(): int sync {
-    let f = transforms::reinterp::<jvp>(g)
-    let (fwd, lin) = transforms::split(f)
+    let f = jvp(g)
+    let (fwd, lin) = split(f)
     let (_y, r0) = fwd(3.0)
     let once = lin(r0, 1.0)
     let twice = lin(r0, 2.0)

@@ -19,18 +19,20 @@
  * function with the batches as its arguments. The rule mechanism is unchanged; what differs is
  * which half of a rule a transform can ask for.
  *
- * A family other than the bound one is read through the operator's *key*: `bindForwardRule` keeps
- * one family per operator (the five scalar keys belong to `rulesets.jvp`,
- * `src/builtin/operators/derivative.cpp#bindForwardRule`), and binding again replaces. The key --
- * which token, how many operands -- is a property of the operator, so
- * `camel::core::forwardBindingOf(uri)` reads it and `lookupRule("rulesets.vmap", head, arity)` asks
- * this family.
+ * A family other than the one an operator's key was first recorded for is read through that *key*:
+ * `bindVmapRule` keeps the family this transform reads, one entry per operator
+ * (`src/builtin/operators/derivative.cpp#registerFloatVmapRules` for the scalar arithmetic, the
+ * tensor module for `matmul` and the axis reductions), and binding again replaces. The key -- which
+ * token, how many operands -- is a property of the operator, so `camel::core::vmapBindingOf(uri)`
+ * reads it and `lookupRule("rulesets.vmap", head, arity)` asks this family.
  *
- * What is built today is the elementwise tier: a body of ports, constants and the five arithmetic
- * primitives. A primitive with no rule, and any other construct (a call, a branch, a loop), is
- * refused *by name* at the node it was written at -- never copied and hoped for (design principles
- * 9.9). `matmul`, the reductions and `reshape` are the next tiers: each of them needs a rule that
- * says which axis the batch is on, and `sum` over a batch is not the batch's sum.
+ * What is built today is the elementwise tier, `matmul` and the reductions along an axis: a body of
+ * ports, constants and primitives that have a rule. A primitive with no rule, and any other
+ * construct (a call, a branch, a loop), is refused *by name* at the node it was written at -- never
+ * copied and hoped for (design principles 9.9). A reduction is batched in terms of the axis it was
+ * given (`sum_axis` at one axis further in), and the reductions over every axis (`tensor:sum`) have
+ * no batching rule: a batch of rows under them is not the rows' sums, and the whole-array form
+ * takes no axis to shift. `reshape` is the next tier.
  */
 
 #pragma once
