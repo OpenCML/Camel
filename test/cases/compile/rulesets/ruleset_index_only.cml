@@ -1,0 +1,11 @@
+/**
+ * Nothing but the ruleset: `std::rulesets` prints the index of every ruleset module the program
+ * builds, so this program is what the table entry pins -- twenty lines, one per key of
+ * `rulesets.vmap`, with no transform running to add its own reading to the output
+ * (`ruleset_index_bodies.cml` is the same table printed beside the transform's findings).
+ */
+import rulesets.vmap
+
+func main(): int sync {
+    return 0
+}

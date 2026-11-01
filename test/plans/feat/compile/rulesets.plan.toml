@@ -386,16 +386,52 @@ timeout_ms = 20000
 # row that holds one, the NaN of a row that holds one, and a row of two axes on both sides.
 [[tests]]
 name = "vmap_row_max_and_min_are_one_pass"
-desc = "The batched `max`/`min` of a row through the batching transform: `[[1.0, -0.0, 2.0], [3.0, 5.0, 4.0], [nan, 1.0, 2.0]]` answers `[2.0, 5.0, nan]` and `[-0.0, 3.0, nan]`, a row of two axes answers `[6.0, nan]` and `[1.0, nan]`, and an `int` batch answers `[5, 4]` and `[1, 0]`. The control beside them is `sum`, which keeps its fold (two roundings of a float row are not one), so its `[3.0, 12.0, nan]` is unchanged. The helper the fold used to be (`fold_max_axes`, `fold_min_axes`) is gone: `deleted_row_reduction_helpers.mjs` asserts the names are not in the ruleset and that the two keys still name their callees, so the replacement is the operator and the key is intact."
+desc = "The batched `max`/`min` of a row through the batching transform (`vmap` from `transforms`, not the row-by-row helper in `array`, which takes the same values through another path and would prove nothing about a rule): `[[1.0, -0.0, 2.0], [3.0, 5.0, 4.0], [nan, 1.0, 2.0]]` answers `[2.0, 5.0, nan]` and `[-0.0, 3.0, nan]`, a row of two axes answers `[6.0, nan]` and `[1.0, nan]`, and an `int` batch answers `[5, 4]` and `[1, 0]`. The control beside them is `sum`, which keeps its fold (two roundings of a float row are not one), so its `[3.0, 12.0, nan]` is unchanged. The readings name the rule that answered -- `asked=1 found=1 missing=0 rules=vmap_rule_max elements=float`, the same for `vmap_rule_min`, for `elements=int`, and `rules=vmap_rule_sum elements=float` for the control -- which is what makes this the transform's path. The helper the fold used to be (`fold_max_axes`, `fold_min_axes`) is gone: `deleted_row_reduction_helpers.mjs` asserts the names are not in the ruleset and that the two keys still name their callees, so the replacement is the operator and the key is intact."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vmap_row_reductions.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_exact = "[2.0, 5.0, nan]\n[-0.0, 3.0, nan]\n[3.0, 12.0, nan]\n[6.0, nan]\n[1.0, nan]\n[5, 4]\n[1, 0]\n"
+expect_stdout_contains = ["[2.0, 5.0, nan]", "[-0.0, 3.0, nan]", "[3.0, 12.0, nan]", "[6.0, nan]", "[1.0, nan]", "[5, 4]", "[1, 0]", "rules=vmap_rule_max elements=float", "rules=vmap_rule_min elements=float", "rules=vmap_rule_max elements=int", "rules=vmap_rule_min elements=int", "rules=vmap_rule_sum elements=float"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# The batching index has two doors, and this entry is the second door of the table below: a program
+# with one body per key asks the transform for each, and the check compares what the transform
+# answers with what the table prints. `printed=20 looked=20 hit=18` is the reading: the table holds
+# twenty keys, the index answers all twenty with the same rule names, and the program's eighteen
+# bodies reach eighteen of them (`mul_tensor/2` and `index_into/2` have no source spelling -- they
+# are the keys of a rule's own right side). The eight keys that a reader of the *tail* of a long
+# stdout does not see -- the five arithmetic tokens and `argmax/1`, `argmax_axis/3`, `argmin/1` --
+# are asserted by name, because a table that prints twenty rows and is read as twelve is the same
+# table as a table of twelve to anyone who reads the tail.
+[[tests]]
+name = "ruleset_index_agrees_with_the_transform"
+desc = "Both doors of the batching index, compared on one program: the table `std::rulesets` prints (twenty rows, `RULESET rulesets.vmap <head>/<arity> -> <rule> (rhs <callee>)`), the answers `lookupRule` gives for the same twenty keys (`LOOKUP ... -> <rule>`), and the `asked=1 found=1 missing=0 rules=<rule>` readings the transform prints for the eighteen primitives a body reaches. All three have to say the same thing: the table's size is the index's, every answer is the table's rule for that key, and every hit is a row of the table with the same rule name. The eight keys a tail-reading of the output does not show (`*/2`, `+/2`, `-/1`, `-/2`, `//2`, `argmax/1`, `argmax_axis/3`, `argmin/1`) are asserted by name."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/compile/rulesets/ruleset_index_agrees_with_the_transform.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "printed=20 looked=20 hit=18 six_eights=8 first=*/2 last=sum_axis/3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+# The table itself, once, with nothing else in the output: twenty lines in key order. A key added or
+# dropped is red here, which is the half of the pair that the plan report cannot show on its own --
+# a long stdout is elided as `... N line(s) before`, so a reader counting the visible rows of a
+# twenty-row table reads twelve.
+[[tests]]
+name = "ruleset_index_table_is_the_whole_index"
+desc = "The whole `rulesets.vmap` table, twenty lines in key order, printed by a program that does nothing but import the ruleset (so no transform adds a reading of its own): `*/2`, `+/2`, `-/1`, `-/2`, `//2`, `argmax/1`, `argmax_axis/3`, `argmin/1`, `argmin_axis/3`, `index_into/2`, `matmul/2`, `max/1`, `max_axis/3`, `mean/1`, `mean_axis/3`, `min/1`, `min_axis/3`, `mul_tensor/2`, `sum/1`, `sum_axis/3`. Twenty keys, each with the rule and the callee the index holds -- a key added or dropped is red, and the first five plus the arg* family are the ones the plan report elides as `... N line(s) before` from the head of the output."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/ruleset_index_only.cml"
+args = ["${case}", "std::rulesets"]
+expect_exit = 0
+expect_stdout_exact = "RULESET rulesets.vmap */2 -> vmap_rule_mul (rhs vmap_mul)\nRULESET rulesets.vmap +/2 -> vmap_rule_add (rhs vmap_add)\nRULESET rulesets.vmap -/1 -> vmap_rule_neg (rhs vmap_neg)\nRULESET rulesets.vmap -/2 -> vmap_rule_sub (rhs vmap_sub)\nRULESET rulesets.vmap //2 -> vmap_rule_div (rhs vmap_div)\nRULESET rulesets.vmap argmax/1 -> vmap_rule_argmax (rhs vmap_argmax)\nRULESET rulesets.vmap argmax_axis/3 -> vmap_rule_argmax_axis (rhs vmap_argmax_axis)\nRULESET rulesets.vmap argmin/1 -> vmap_rule_argmin (rhs vmap_argmin)\nRULESET rulesets.vmap argmin_axis/3 -> vmap_rule_argmin_axis (rhs vmap_argmin_axis)\nRULESET rulesets.vmap index_into/2 -> vmap_rule_idx (rhs idx_batch)\nRULESET rulesets.vmap matmul/2 -> vmap_rule_matmul (rhs vmap_matmul)\nRULESET rulesets.vmap max/1 -> vmap_rule_max (rhs vmap_max)\nRULESET rulesets.vmap max_axis/3 -> vmap_rule_max_axis (rhs vmap_max_axis)\nRULESET rulesets.vmap mean/1 -> vmap_rule_mean (rhs vmap_mean)\nRULESET rulesets.vmap mean_axis/3 -> vmap_rule_mean_axis (rhs vmap_mean_axis)\nRULESET rulesets.vmap min/1 -> vmap_rule_min (rhs vmap_min)\nRULESET rulesets.vmap min_axis/3 -> vmap_rule_min_axis (rhs vmap_min_axis)\nRULESET rulesets.vmap mul_tensor/2 -> vmap_rule_mul_tensor (rhs vmap_mul_tensor)\nRULESET rulesets.vmap sum/1 -> vmap_rule_sum (rhs vmap_sum)\nRULESET rulesets.vmap sum_axis/3 -> vmap_rule_sum_axis (rhs vmap_sum_axis)\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 40000
 
 [[tests]]
 name = "vmap_fold_helpers_are_gone"
