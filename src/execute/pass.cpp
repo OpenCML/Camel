@@ -33,6 +33,7 @@
 #include "camel/passes/test/graph_release.h"
 #include "camel/passes/test/keepfn.h"
 #include "camel/passes/test/bounds.h"
+#include "camel/passes/test/inlineuse.h"
 #include "camel/passes/test/keepshape.h"
 #include "camel/passes/test/rules.h"
 #include "camel/passes/test/saturate.h"
@@ -379,6 +380,20 @@ size_t constantBudgetOf(const PassArgs &args) {
     return bytes < 0 ? 0 : static_cast<size_t>(bytes);
 }
 
+/// The `settle_runs` parameter of `std::opt`: how many runs of the rewrite in a row may each change
+/// the same graph before the pass reports that the rewrite does not settle. It is an internal bound
+/// of the engine, exposed so that a test can prove the report happens at all (a run that changes
+/// nothing ends the loop, so the runaway shows up across runs, not inside one); it is not a tuning
+/// knob, and a value below 1 is refused rather than read as "never report".
+size_t settleRunsOf(const PassArgs &args) {
+    const int64_t runs = args.getInt("settle_runs");
+    if (runs < 1) {
+        throw std::runtime_error(
+            std::format("std::opt: settle_runs must be at least 1, got {}", runs));
+    }
+    return static_cast<size_t>(runs);
+}
+
 PassMaker makeGraphVizPass(GraphVizDumpConfig config) {
     return [config](const context_ptr_t &ctx, const PassArgs &) {
         return std::make_unique<GraphVizDumpPass>(ctx, config);
@@ -411,6 +426,7 @@ PassMaker optimizePass() {
         config.checkScreens        = args.getBool("check_screens");
         config.growthBudget        = growthBudgetOf(args, "std::opt");
         config.constantBudgetBytes = constantBudgetOf(args);
+        config.settleRuns          = settleRunsOf(args);
         return std::make_unique<OptimizeRewritePass>(ctx, config);
     };
 }
@@ -988,6 +1004,8 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
         TEST_PASS(kKeepShapeTestPass, KeepShapeTestPass),
         TEST_PASS(kBoundsFlipTestPass, BoundsFlipTestPass),
+        TEST_PASS(kInlineUseTestPass, InlineUseTestPass),
+        TEST_PASS(kInlineUseDropTestPass, InlineUseDropTestPass),
         TEST_PASS(kKeepInspectTestPass, KeepInspectTestPass),
         TEST_PASS(kContextLifetimeTestPass, ContextLifetimeTestPass),
         TEST_PASS(kContextsTestPass, ContextsTestPass),
@@ -1255,6 +1273,9 @@ struct ResolvedPass {
 };
 
 /// Resolves one specification: the pass name and its `key=value` words. Prints nothing.
+std::optional<camel::execute::detail::ParamProblem> valueProblem(
+    const std::string &name, const PassArgs &args);
+
 ResolvedPass resolvePass(const std::string &spec, const context_ptr_t &ctx) {
     ResolvedPass result;
     camel::execute::detail::ParsedSpec parsed;
@@ -1313,11 +1334,39 @@ ResolvedPass resolvePass(const std::string &spec, const context_ptr_t &ctx) {
         result.paramProblem = std::move(problem);
         return result;
     }
+    // A value the declaration's type accepted but the pass cannot use. This is where it is
+    // reported: the pipeline is still being read, so the diagnostic carries the position of the
+    // word, the way a wrongly typed parameter does -- and the pass is never built, so nothing here
+    // can end up as an exception nothing catches.
+    if (auto problem = valueProblem(parsed.name, args)) {
+        result.paramProblem = std::move(problem);
+        return result;
+    }
     result.factory =
         [make = descriptor->descriptor.make, args = std::move(args)](const context_ptr_t &ctx) {
             return make(ctx, args);
         };
     return result;
+}
+
+/// A value the declaration's type accepted and the pass cannot use: checked while the pipeline is
+/// read, so the report has a position and the pass is never built with a value it refuses.
+std::optional<camel::execute::detail::ParamProblem> valueProblem(
+    const std::string &name, const PassArgs &args) {
+    using camel::execute::detail::ParamProblem;
+    using camel::execute::detail::ParamProblemKind;
+    // `std::opt settle_runs`: the bound the rewrite engine reports at. It is an internal bound
+    // (see settleRunsOf), and 0 is refused rather than read as "never report".
+    if (name == "std::opt" && args.given("settle_runs") && args.getInt("settle_runs") < 1) {
+        ParamProblem problem;
+        problem.kind = ParamProblemKind::OutOfRange;
+        problem.name = "settle_runs";
+        problem.found = args.text("settle_runs");
+        problem.expected = "at least 1";
+        problem.text = std::format("settle_runs must be at least 1, got {}", args.text("settle_runs"));
+        return problem;
+    }
+    return std::nullopt;
 }
 
 /// A parameter written wrongly at a pass call: the language's own diagnostics for a call, at the
@@ -1344,6 +1393,10 @@ Diagnostic parameterDiagnostic(
     case Kind::WrongType:
         diag = DiagnosticBuilder::of(SemanticDiag::ParamArgumentWrongType)
                    .commit(problem.name, specName(spec), problem.found, problem.expected);
+        break;
+    case Kind::OutOfRange:
+        diag = DiagnosticBuilder::of(RuntimeDiag::InvalidPassParameter).commit(spec, problem.text);
+        diag.stage = "typecheck";
         break;
     case Kind::Missing:
         diag = DiagnosticBuilder::of(SemanticDiag::ParamArgumentMissing)

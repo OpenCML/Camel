@@ -3155,6 +3155,13 @@ class Builder {
     /// (`out = out->append<i>; total += len(out)` in a loop stays linear). See the definition
     /// for the conditions; a read that does not meet every one of them stays `:var/get`.
     void markNonRetainingReads();
+    /// Answers the value-level transform calls the modules instantiate at compile time
+    /// (`camel/compile/gir/compile_time.h`): a call whose value is a function, written where its
+    /// graph is known, holds the value the transform built instead of a call that builds one.
+    /// Runs once, with the other steps that settle a program: every body is in hand and nothing
+    /// has been encoded, so a graph a transform builds is numbered after the program's own.
+    /// A shape no module answers is left exactly as it was, so it keeps the reading it had.
+    void instantiateCompileTimeTransforms();
     /// Function graphs whose return type is not declared but taken from their body, by `GraphId`:
     /// the graph is built and dropped long before this question is asked, so its address says
     /// nothing.

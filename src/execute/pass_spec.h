@@ -20,7 +20,7 @@ namespace camel::execute::detail {
 /// Why a specification was refused. The first four are what a call of an ordinary function is
 /// refused for; `Syntax` covers a specification that is not `name key=value ...` at all (the
 /// removed parentheses form, a bare word, an argument that is not a constant).
-enum class ParamProblemKind { Syntax, Unknown, Duplicate, WrongType, Missing };
+enum class ParamProblemKind { Syntax, Unknown, Duplicate, WrongType, Missing, OutOfRange };
 
 struct ParamProblem {
     ParamProblemKind kind = ParamProblemKind::Syntax;

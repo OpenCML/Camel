@@ -1,0 +1,8 @@
+// A declaration binds a name to a value: `let x` names a binding and gives it nothing, so there is
+// nothing to bind. Refused at the name, with both forms that would fix it -- `= <value>` or
+// `: <type> = <value>` -- in the message.
+
+func main(): int sync {
+    let x
+    return 0
+}

@@ -93,7 +93,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ReturnNeedsConversion` | The returned value needs an explicit conversion to the function's declared return type '{0}': {1}. |
 | `VarArgumentTypeMismatch` | The argument of '{0}' at the 'var' parameter '{1}' has type {3}, and a 'var' argument is read and written by the callee: it is accepted only when its type and the parameter's type {2} accept each other's values. |
 | `ImportNameConflict` | The name '{0}' is imported from the modules '{1}' and '{2}' with {3}. |
-| `FeatureNotSupported` | The feature '{0}' is not supported yet. |
 | `TypeVariableRedeclared` | The type parameter '{0}' is declared twice at the head of this declaration. |
 | `TypeVariableNotBindable` | The type variable '{0}' of '{1}' can never be bound: {2}. |
 | `GenericArgumentsMismatch` | The generic function '{0}' cannot be called with argument types {1}: {2}. |
@@ -254,6 +253,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `CompOperandGenericWithoutType` | '..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type. |
 | `RangeStepZero` | The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers. |
 | `SliceStepZero` | The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are. |
+| `TransformArgumentIsNotAKnownFunction` | '{0}' is applied to {1}, and a transform's argument has to be a function this program knows before it runs. |
 | `WithPackNeedsNativeDeclaration` | The pack '..{0}' among the 'with' parameters needs a declaration without a body. |
 | `ImplOnBodylessDeclaration` | The body-less declaration '{0}' cannot carry '#impl({1})': it has no Camel body. |
 | `ImplKernelUnknown` | The '#impl' tag of '{0}' names '{1}', which is no body-less declaration. |
@@ -304,7 +304,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `FailNotExecuted` | This 'fail' is not executed: {0}. |
 | `StatementAfterFail` | This statement cannot run: the 'fail' written before it never returns. |
 
-**Run time and passes — errors** (`RuntimeDiag`) — 39
+**Run time and passes — errors** (`RuntimeDiag`) — 38
 
 | `RuntimeError` | An error has occurred: {0}. |
 | `DivisionByZero` | Attempted division by zero. |
@@ -328,7 +328,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `OperandTypeUnsupported` | '{0}' does not support a value of type '{1}'; it takes {2}. |
 | `FieldNotFound` | The struct has no field '{0}'. |
 | `InvalidArgument` | Invalid argument of '{0}': {1}. |
-| `FileSystemError` | '{0}' failed for '{1}': {2}. |
 | `RegexInvalid` | '{0}': '{1}' is not a valid regular expression: {2}. |
 | `TimeFormatFailed` | '{0}' failed: {1}. |
 | `GradientElementTypeMismatch` | The gradient of a value of type '{0}' has element type '{1}': {2}. A gradient must have the element type of the value it is the gradient of (design principles 9.9); accumulated as it is, the value would be read at the wrong width and answer with a number that is not the derivative. |

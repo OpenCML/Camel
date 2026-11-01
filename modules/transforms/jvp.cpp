@@ -37,6 +37,12 @@ using camel::runtime::GraphId;
 
 namespace {
 
+/// Whether a rule's expansion records how many of the arguments of the call it produces are tangents
+/// (`addFuncNode`'s last argument, `GCNode::tangentArgs`). On, the fact lives on the node and
+/// `transpose` reads it there. Off, the call records nothing, and the transpose of a kernel inside an
+/// arm stops again at the tangent that has no value -- the A/B of the two readings.
+constexpr bool kRecordTangentArgs = true;
+
 /// The graph a rule's right side answers with, read from the right side itself.
 ///
 /// The right side of `x * w => (dx, dw) => mul_tangent(x, w, dx, dw)` is a graph that builds the
@@ -244,8 +250,25 @@ gc_node_ref_t expandRuleRightSide(
                 why = "the rule's right side calls a function it does not name";
                 return rt::kInvalidNodeRef;
             }
+            // How many of the call's arguments are tangents -- the rule's own split, recorded on the
+            // call the rule produced. The right side binds the values as its captures and takes the
+            // tangents as its own parameters (`x * w => (dx, dw) => mul_tangent(x, w, dx, dw)`), so an
+            // argument that is one of this expansion's tangent ports is a tangent, and the count is
+            // read off the rule. This is the one place the fact exists in the tree: `transpose` reads
+            // the node rather than re-deriving the split from a name, and there is no second table to
+            // keep in step when a rule is added.
+            uint16_t tangentArgs = 0;
+            if (kRecordTangentArgs && !inputs.empty() && !tangents.empty()) {
+                for (size_t i = inputs.size(); i-- > 0;) {
+                    if (std::find(tangents.begin(), tangents.end(), inputs[i]) == tangents.end()) {
+                        break;
+                    }
+                    ++tangentArgs;
+                }
+            }
             const gc_node_ref_t made = draft.addFuncNode(
-                callee, node->dataType(), 0, draft.allocateRuntimeSlot(node->dataType()), 0);
+                callee, node->dataType(), 0, draft.allocateRuntimeSlot(node->dataType()), 0,
+                tangentArgs);
             if (!inputs.empty()) {
                 draft.setNormInputs(made, inputs);
             }
@@ -414,6 +437,29 @@ bool liftGraph(
 
 } // namespace
 
+/// The build itself, for a caller that has already decided which program the lift's graphs go into:
+/// the draft group's. `program` is the program the callee graphs of a body are looked up in (the
+/// frozen graph's own for a run-time lift, nothing for one of the lift's own), and `group` is where
+/// the lifted graphs are written.
+JvpGraph buildJvpGraphInGroup(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    camel::runtime::GraphDraftGroup &group, const GraphRead &function, std::string_view name,
+    camel::runtime::GraphId self, std::ostream &os) {
+    const GraphId member = group.reserve(
+        "jvp_of_" + std::string(name), "jvp_of_" + std::string(name));
+    LiftState state{context, program, group};
+    JvpGraph refusal;
+    if (!liftGraph(state, function, name, self, member, os, refusal)) {
+        return refusal;
+    }
+    // The count the "one graph per callee" rule is read from: the callee graphs this lift made, in
+    // the order they were first called. A function called twice is one entry.
+    os << "REINTERP jvp callees=" << state.callees.size() << '\n';
+    group.encode();
+    const camel::runtime::GCGraph *made = group.encoded(member);
+    return JvpGraph{group.program(), const_cast<camel::runtime::GCGraph *>(made)};
+}
+
 /// The same build for a caller that holds a frozen graph: the face is made here and lives for the
 /// call. The name and the identity are the caller's because they are the two facts a draft does
 /// not have (it is named and numbered when it is encoded).
@@ -444,19 +490,27 @@ JvpGraph buildJvpGraph(
     // wants `df/dx` and `df/dy` separately runs it twice with (1, 0) and (0, 1).
 
     camel::runtime::GraphDraftGroup group(context, program);
-    const GraphId member = group.reserve(
-        "jvp_of_" + std::string(name), "jvp_of_" + std::string(name));
-    LiftState state{context, program, group};
-    JvpGraph refusal;
-    if (!liftGraph(state, function, name, self, member, os, refusal)) {
-        return refusal;
+    return buildJvpGraphInGroup(context, program, group, function, name, self, os);
+}
+JvpGraph buildJvpGraphOfItsOwn(
+    const camel::core::context::context_ptr_t &context, const GraphRead &function,
+    std::string_view name, camel::runtime::GraphId self, std::ostream &os) {
+    if (context == nullptr) {
+        return JvpGraph{};
     }
-    // The count the "one graph per callee" rule is read from: the callee graphs this lift made, in
-    // the order they were first called. A function called twice is one entry.
-    os << "REINTERP jvp callees=" << state.callees.size() << '\n';
-    group.encode();
-    const camel::runtime::GCGraph *made = group.encoded(member);
-    return JvpGraph{group.program(), const_cast<camel::runtime::GCGraph *>(made)};
+    FunctionType *signature = jvpSignature(function.funcType());
+    if (signature == nullptr) {
+        os << "REINTERP jvp function=" << name << " skip=signature\n";
+        return JvpGraph{};
+    }
+    // The program the lift's own graphs go into: an empty program of the context's, reserved here
+    // and kept by the context for as long as the value that names it lives. The graph the lift
+    // reads is a draft of the caller's, so there is no program of its to extend; the graph the
+    // caller's body calls is a graph of its own, the way the run-time kernel makes one, and this is
+    // the same build writing into it.
+    camel::runtime::Program *base = context->reserveProgram();
+    camel::runtime::GraphDraftGroup group(context, base);
+    return buildJvpGraphInGroup(context, base, group, function, name, self, os);
 }
 
 namespace {
@@ -1293,7 +1347,13 @@ bool liftGraph(
             rules += (rules.empty() ? "" : ",") + rule;
         }
         os << "REINTERP jvp function=" << name << " graph=" << rt::toValue(member)
-           << " liftedFrom=" << rt::toValue(source)
+           // The graph the lift was asked about. A run-time lift knows it -- it is the callee graph
+           // the call named -- and prints its id there. A build-time lift does not and cannot: the
+           // callee's runtime id is handed out when the program is encoded, which is after this
+           // build, and a number here would read as the id of some graph. So the reading is a word
+           // for "not assigned yet" rather than a number that looks like an answer.
+           << " liftedFrom="
+           << (rt::isValid(source) ? std::to_string(rt::toValue(source)) : std::string("unassigned"))
            << " type=" << signature->toString() << " nodes=" << function.nodeCount()
            << " kinds=" << copiedKinds << '/' << seenKinds
            << " exit=Tuple{chain,tangent} tangent=computed source=ruleset rules="

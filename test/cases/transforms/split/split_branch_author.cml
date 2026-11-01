@@ -1,0 +1,39 @@
+/**
+ * **The author's own shape**, asked for by name: `f(x) = if x > 0 then x * x else 3 * x`, whose
+ * derivative at `x = 2.0` and `x = -2.0` is **4.0** and **3.0**.
+ *
+ * It stands beside `split_branch_arms` rather than replacing it, and the two say different things:
+ *
+ * - `split_branch_arms` cuts `if x > 0.0 then x * x else 0.5 * x` and pins `4.0` and `0.5`. Both its
+ *   arms are linear, so those two numbers alone would not tell a cut that picked the arm from one that
+ *   blended them -- what distinguishes them is the shape, not the value.
+ * - this case is the author's example, and its second arm (`3 * x`) is deliberately *not* `x * x`
+ *   scaled: a blend, or a backward half that recomputed the comparison and took a different arm,
+ *   could not land on 4.0 and 3.0 together.
+ *
+ * The read path here is the cut itself, `split(jvp(f))`, and not `vjp`. `vjp` is the same cut with a
+ * `transpose` after it, and `transpose` takes this graph too now: a `bool` residual has no cotangent
+ * space, which is stated once in the cotangent space (`addCotangent` drops a target that is not a
+ * `float`), an arm of a residual-bundle half stops at its tangent port, and a rule kernel's
+ * transposition takes the values and the cotangent only. `split_branch_author_vjp.cml` reads the
+ * author's 4.0 and 3.0 through `vjp`, which is this case's two numbers through one more transform.
+ */
+import rulesets.jvp
+import { jvp, split } from transforms
+
+func f(x: float): float {
+    return if x > 0.0 then x * x else 3.0 * x
+}
+
+func main(): int sync {
+    let (forward, backward) = split(jvp(f))
+    let (up, upResiduals)   = forward(2.0)
+    // f(2) = 4, and d/dx (x*x) = 2x = 4 there.
+    'author x=2.0 value={}'->format<up>->println
+    'author x=2.0 dfdx={}'->format<backward(upResiduals, 1.0)>->println
+    let (down, downResiduals) = forward(-2.0)
+    // f(-2) = -6, and d/dx (3*x) = 3 there -- the arm the condition did not take at 2.0.
+    'author x=-2.0 value={}'->format<down>->println
+    'author x=-2.0 dfdx={}'->format<backward(downResiduals, 1.0)>->println
+    return 0
+}

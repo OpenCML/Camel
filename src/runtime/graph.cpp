@@ -952,7 +952,7 @@ void emitDraftPayload(
         GCNode &record   = payload.nodes[planned.ref];
         record.kind      = draftHeader->kind;
         record.flags     = draftHeader->runtimeFlags;
-        record.reserved  = 0;
+        record.tangentArgs = draftHeader->tangentArgs;
         record.dataIndex = slotOf(planned.draftId);
         record.typeId    = typeIdOf(effectiveDraftNodeType(draft, *draftHeader));
         record.inBegin   = appendInputs(draft.normInputsOf(planned.draftId));
@@ -1319,7 +1319,7 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape) 
 }
 
 void collectStaticGraphRefsRecursive(
-    std::vector<GraphId> &refs, slot_t slot, Type *type,
+    const Program &program, std::vector<GraphId> &refs, slot_t slot, Type *type,
     std::unordered_set<const Object *> &visited);
 
 GCGraphDebugRecord *createGraphDebugRecord(std::string mangledName, std::string name) {
@@ -1951,7 +1951,7 @@ void validateRuntimeGraphCalls(const Program &program, const GCGraph *graph, Gra
         std::vector<GraphId> referenced;
         std::unordered_set<const Object *> visited;
         for (size_t i = 1; i < slots.size() && i < types->size(); ++i) {
-            collectStaticGraphRefsRecursive(referenced, slots[i], types->typeAt(i), visited);
+            collectStaticGraphRefsRecursive(program, referenced, slots[i], types->typeAt(i), visited);
         }
         const auto refs = graph->refs();
         for (GraphId ref : referenced) {
@@ -2247,7 +2247,7 @@ uint64_t GCGraph::nodeContentHash(gc_node_ref_t ref) const {
     };
     mixValue(n->kind);
     mixValue(n->flags);
-    mixValue(n->reserved);
+    mixValue(n->tangentArgs);
     mixValue(n->dataIndex);
     // The type enters as its canonical id: two records that name one structure, however their
     // keys spell the names in it, are the same content (camel/core/type/intern.h).
@@ -2282,6 +2282,69 @@ GraphId GCGraph::calleeIdOf(gc_node_ref_t ref) const {
     }
     const uint32_t index = nodeBodyAs<GCFuncRef>(ref)->ref;
     return index < refCount_ ? refs_[index] : kInvalidGraphId;
+}
+
+uint16_t GCGraph::callTangentArgsOf(gc_node_ref_t ref) const {
+    const GCNode *n = node(ref);
+    return n != nullptr && n->kind == GCNodeKind::Func ? n->tangentArgs : 0;
+}
+
+std::string GCStaticFunctionAnswer::describe() const {
+    if (hasGraph()) {
+        return std::format("graph={}", toValue(graph));
+    }
+    return std::format("none reason={}", reason);
+}
+
+GCStaticFunctionAnswer GCGraph::staticFunctionGraphOf(gc_node_ref_t ref) const {
+    // One entry, and every step that can fail says so instead of falling through to a guess. The
+    // static area is a table of values, not a table of ids: a slot is only ever read as the value its
+    // type says it holds, and a graph id comes from that value's own record of the graph it names.
+    const GCNode *n = node(ref);
+    if (n == nullptr) {
+        return {.reason = "not-a-node"};
+    }
+    if (n->kind == GCNodeKind::Fill && n->hasPayload() &&
+        nodeBodyAs<GCFillBody>(ref)->fillKind == GCFillKind::FunctionClosure) {
+        // A closure being assembled: a static function and the values it captured, filled into one
+        // value at run time. It names no graph *here*, because the graph is one input of the fill and
+        // the captured values are the others -- a name for it would be a name for a half-built
+        // function, and a transposed callee for it would have to take those captures as parameters of
+        // its own.
+        return {.reason = "function-closure"};
+    }
+    if (n->kind != GCNodeKind::Data) {
+        return {.reason = "not-a-data-node"};
+    }
+    if (n->dataIndex >= 0 || staticArea() == nullptr) {
+        return {.reason = "no-static-slot"};
+    }
+    const camel::core::type::Type *type = n->dataType();
+    if (type == nullptr || type->code() != TypeCode::Function) {
+        return {.reason = "not-a-function-type"};
+    }
+    auto *value = camel::core::rtdata::fromSlot<::Function *>(
+        staticArea()->get<slot_t>(static_cast<size_t>(-n->dataIndex)));
+    if (value == nullptr) {
+        return {.reason = "no-function-value"};
+    }
+    const GCGraph *callee = value->graph();
+    if (callee == nullptr) {
+        return {.reason = "function-names-no-graph"};
+    }
+    // It has to be a graph this one records as a static reference. A function value that names some
+    // other graph is a value from another program: following it would run a graph this one does not
+    // call, which is what a caller holding a stale value would be asking for.
+    const GraphId id = callee->id();
+    for (size_t r = 0; r < refCount_; ++r) {
+        if (refs_[r] == id) {
+            if ((refRoles_[r] & kGraphRefStatic) != 0) {
+                return {.graph = id};
+            }
+            break;
+        }
+    }
+    return {.reason = "not-a-static-reference"};
 }
 
 gc_node_ref_t GCGraph::matchedJoinOutputOf(gc_node_ref_t ref) const {
@@ -2549,7 +2612,7 @@ void GCGraph::updateRefs(
 }
 
 void collectStaticGraphRefsRecursive(
-    std::vector<GraphId> &refs, slot_t slot, Type *type,
+    const Program &program, std::vector<GraphId> &refs, slot_t slot, Type *type,
     std::unordered_set<const Object *> &visited) {
     if (!shouldTraverseStaticSlotType(type) || slot == NullSlot) {
         return;
@@ -2573,7 +2636,14 @@ void collectStaticGraphRefsRecursive(
                 "collecting the static graph references of a function value: it names graph {}, which "
                 "is not a graph in this program, so the reference would point at nothing",
                 static_cast<int>(target)));
-        pushUnique(refs, target);
+        // A value of another program's graph -- a transform builds a graph of its own while the
+        // program is compiled, and the value names that program (StaticProgramFunction,
+        // compile/gir/static_function.h) -- is not a reference of this program: a call through it
+        // enters the graph in the program the value names, so this table does not carry the id and
+        // not carrying it is not a missing entry.
+        if (funcObj->program() == &program) {
+            pushUnique(refs, target);
+        }
 
         if (::Tuple *closure = funcObj->tuple()) {
             TupleType *closureType = const_cast<TupleType *>(funcObj->tupleType());
@@ -2582,6 +2652,7 @@ void collectStaticGraphRefsRecursive(
                     continue;
                 }
                 collectStaticGraphRefsRecursive(
+                    program,
                     refs,
                     closure->get<slot_t>(i),
                     closureType->typeAt(i),
@@ -2597,6 +2668,7 @@ void collectStaticGraphRefsRecursive(
                 continue;
             }
             collectStaticGraphRefsRecursive(
+                program,
                 refs,
                 tuple->get<slot_t>(i),
                 tupleType->typeAt(i),
@@ -2611,6 +2683,7 @@ void collectStaticGraphRefsRecursive(
         }
         for (size_t i = 0; i < array->size(); ++i) {
             collectStaticGraphRefsRecursive(
+                program,
                 refs,
                 array->get<slot_t>(i),
                 arrayType->elemType(),
@@ -2625,6 +2698,7 @@ void collectStaticGraphRefsRecursive(
                 continue;
             }
             collectStaticGraphRefsRecursive(
+                program,
                 refs,
                 st->get<slot_t>(i),
                 structType->typeAt(i),
@@ -2638,7 +2712,7 @@ void collectStaticGraphRefsRecursive(
                 fromSlot<camel::core::rtdata::Table *>(slot),
                 coll,
                 [&](slot_t inner, Type *innerType) {
-                    collectStaticGraphRefsRecursive(refs, inner, innerType, visited);
+                    collectStaticGraphRefsRecursive(program, refs, inner, innerType, visited);
                 });
         }
         break;

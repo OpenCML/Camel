@@ -638,6 +638,7 @@ kind = "negative"
 case = "../../../cases/modules/rules/node_of_misuse.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NodeOfNotAParameter"
 expect_output_contains = ["NodeOfNotAParameter", "'x' is not a const parameter of the rule 'drop_by_node'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000

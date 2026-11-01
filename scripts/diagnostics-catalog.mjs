@@ -17,6 +17,10 @@
 //   node scripts/diagnostics-catalog.mjs --verify-doc  docs/diagnostics.md is what --write produces
 //   node scripts/diagnostics-catalog.mjs --coverage    list the codes no test mentions (report only)
 //   node scripts/diagnostics-catalog.mjs --coverage-check  fail if any code is mentioned by no test
+//   node scripts/diagnostics-catalog.mjs --name-coverage   the semantic codes no case asserts by name
+//   node scripts/diagnostics-catalog.mjs --name-coverage-check  fail if that set grew past the record
+//   node scripts/diagnostics-catalog.mjs --no-producer   the semantic codes no code constructs
+//   node scripts/diagnostics-catalog.mjs --no-producer-check  fail if any registered code is one
 //   node scripts/diagnostics-catalog.mjs --pin-examples   fill in the example pins of new diagnostics
 //   --root DIR                                        read and write under DIR (the proof cases)
 //
@@ -53,6 +57,60 @@ const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 const REGISTRY_REL = 'diagnostics/registry.tsv'
 const DOC_REL = 'docs/diagnostics.md'
 const EXAMPLES_REL = 'diagnostics/examples.tsv'
+
+// The number of semantic codes with no case that asserts them by name, which `--name-coverage-check`
+// refuses to see grow. It counts what is *not* done, so it is the one number here expected to fall,
+// and it fell twice, recorded apart so neither hides in the other:
+//   23 -> 22  `load.module_not_found` pinned `ModuleNotFound`.
+//   22 -> 14  `calling_incomplete` pinned `CallingIncompleteFunction`, and the counter learned the
+//             `verify_script` form (`diagnostics[0].name === 'SemanticDiag::X'`, `.code === '0x...'`),
+//             which these seven had been pinned by all along: StatementAfterReturn,
+//             UnusedFallibleValue, EffectNotExecuted, IgnoredSideEffect, NeverArgumentCall,
+//             FailNotExecuted, StatementAfterFail.
+//   14 -> 6   `null_test_never_null` pinned `NullTestNeverNull`; the counter learned the rendered form
+//             a `-E short` run prints (`name=SemanticDiag::X, code=0x...`, which six had been pinned
+//             by: ModuleParseFailed, ImportedModuleHasErrors, ComprehensionSourceRefused,
+//             ExitInUnusedBranch, DimensionNameUsedOnce, FunctionTypeArgumentNotInferred); and the one
+//             code no path raises, `FeatureNotSupported`, left the target as unraisable instead of
+//             holding a place no case can take.
+//    6 -> 5   `generics.type_variable_unused` pinned `TypeVariableUnused` (`FeatureNotSupported` had
+//             already left the target by being deleted, not by being counted differently: nothing
+//             raised it, so the registry no longer declares it).
+//    5 -> 4   a section-qualified name inside an `expect_*_contains` needle is a pin -- the needle
+//             requires the emitted name in the output -- so `TagHasNoReader` (`tags.plan.toml`, beside
+//             the message it prints) had been pinned all along.
+//    4 -> 3   `NodeOfNotAParameter` was pinned by a bare name in a needle; its test now asserts
+//             `expect_diagnostic_name` too, which is the first-class form and makes the pin readable
+//             rather than incidental. No case was written for it: one existed.
+//    3 -> 1   a test can be a script: `test/cases/trans/cml_contract.py` runs the std::cml refusals
+//             and asserts the name each one reports, so `CmlUnsupportedConstruct` and
+//             `CmlBigConstant` were pinned in a file no count had read. Only a script under `test/`
+//             counts as a case -- this file is one too (`diag_catalog` runs it), and reading it let
+//             its own comments pin a name that nothing asserted.
+//    1 -> 0   the name on its own in a needle: `WithPackNeedsNativeDeclaration` is required by
+//             `prelude_signatures.plan.toml` without the section in front of it, and that test now
+//             also asserts `expect_diagnostic_name` and the sentence it prints.
+// A case added for a code lowers it in that commit; a correction lowers it in the commit that
+// teaches the counter the form, and names what it found.
+// The same ratchet for producers: the number of codes in each section that no code
+// constructs. Measured on this tree: internal 0 of 1, lexical 0 of 5, syntax 0 of 19,
+// semantic 0 of 238, runtime 1 of 43 (`FileSystemError`, which is in the message table and in the
+// isolation predicate and nowhere else).
+const NO_PRODUCER_RECORDED = new Map([
+    ['semantic', 0],
+    ['internal', 0],
+    ['lexical', 0],
+    ['syntax', 0],
+    ['runtime', 0],
+])
+
+const NAME_COVERAGE_RECORDED = new Map([
+    ['semantic', 0],
+    ['internal', 0],
+    ['lexical', 0],
+    ['syntax', 0],
+    ['runtime', 2],
+])
 
 // The sections, in the order the headers are included. `id` is also the stem of the two
 // generated files; the type byte of the printed code is read from DiagType in base.h, under the
@@ -513,6 +571,37 @@ function walk(dir, predicate, out = []) {
     return out
 }
 
+// The codes some code constructs. A producer is an occurrence of the name in the compiler's own
+// sources -- src, include, modules -- with comments removed and the message table left out (the
+// table names every code, including one nothing raises). Not the `.of(...)` shape alone: a code can
+// be chosen by a ternary inside the call (`of(cond ? SemanticDiag::A : SemanticDiag::B)`) or
+// returned by a helper that picks one (`return SemanticDiag::NotDifferentiable`) and constructed by
+// its caller. Both are producers, and a rule that read only `of(SemanticDiag::X)` would call ten
+// live codes dead.
+function producedNames(root) {
+    const files = [
+        ...walk(path.join(root, 'src'), (f) => /\.(cpp|h|hpp|cc)$/.test(f)),
+        ...walk(path.join(root, 'include'), (f) => /\.(cpp|h|hpp|cc)$/.test(f)),
+        ...walk(path.join(root, 'modules'), (f) => /\.(cpp|h|hpp|cc)$/.test(f)),
+    ].filter((f) => !/[\\/]diagnostics[\\/]messages[\\/]/.test(f))
+    const names = new Set()
+    for (const file of files) {
+        const text = fs
+            .readFileSync(file, 'utf8')
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/\/\/.*$/gm, '')
+            // A switch label names a code to classify it, not to raise it: `case
+            // RuntimeDiag::FileSystemError:` sits in the "does this fault isolate?" predicate, and
+            // counting it kept that code looking alive while nothing constructed it.
+            .replace(/\bcase\s+[A-Za-z_:]*Diag::[A-Za-z0-9_]+\s*:/g, '')
+        // Every section, section-qualified: `SyntaxDiag::X` and `RuntimeDiag::X` are as much a
+        // producer as `SemanticDiag::X`, and keeping the section in the key means a name that
+        // appears under one cannot make a code of another look alive.
+        for (const m of text.matchAll(/\b([A-Za-z]+Diag)::([A-Za-z0-9_]+)/g)) names.add(`${m[1]}::${m[2]}`)
+    }
+    return names
+}
+
 function loadTests(root) {
     const tests = []
     for (const planPath of walk(path.join(root, 'test', 'plans'), (f) => f.endsWith('.plan.toml')).sort()) {
@@ -767,16 +856,22 @@ function rewriteRegistry(root, records, lines) {
 const argv = process.argv.slice(2)
 let mode = '--check'
 let root = DEFAULT_ROOT
+// `--section <id>` narrows the name-coverage modes to one section, so a single section can be read
+// or checked while the others keep their numbers. It narrows the report, never the reading: the
+// pins are collected the same way whichever sections are printed.
+let sectionFilter = null
 for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--root') {
         root = path.resolve(argv[++i] || '')
+    } else if (argv[i] === '--section') {
+        sectionFilter = argv[++i] || null
     } else {
         mode = argv[i]
     }
 }
-if (!['--check', '--write', '--generate', '--verify-doc', '--coverage', '--coverage-check', '--pin-examples'].includes(mode)) {
+if (!['--check', '--write', '--generate', '--verify-doc', '--coverage', '--coverage-check', '--name-coverage', '--name-coverage-check', '--no-producer', '--no-producer-check', '--pin-examples'].includes(mode)) {
     console.log(
-        'usage: node scripts/diagnostics-catalog.mjs --check | --write | --generate | --verify-doc | --coverage | --coverage-check | --pin-examples [--root DIR]'
+        'usage: node scripts/diagnostics-catalog.mjs --check | --write | --generate | --verify-doc | --coverage | --coverage-check | --name-coverage | --name-coverage-check | --no-producer | --no-producer-check | --pin-examples [--root DIR]'
     )
     process.exit(2)
 }
@@ -819,6 +914,7 @@ if (mode === '--coverage' || mode === '--coverage-check') {
         for (const e of missing) console.log(`  ${hex8(e.code)}  ${e.fullName}`)
         process.exit(0)
     }
+
 
     // The property is the bijection between the two sets -- every code the registry declares is
     // mentioned by a test, and every code a test mentions is one the registry declares -- and not a
@@ -899,9 +995,206 @@ if (mode === '--coverage' || mode === '--coverage-check') {
     process.exit(0)
 }
 
-// --pin-examples fills in the pin of every diagnostic that has none and leaves the ones already
-// written alone: the first run pins what the search would have shown that day, and from then on
-// adding a test changes no other diagnostic's example.
+// ---- the stronger direction: a code a case acts on, not one the prose names -------------------
+// `--coverage-check` asks that every code be *mentioned* by a test, and a plan's prose counts as a
+// mention, so a sentence that would not notice the compiler emitting a different diagnostic keeps
+// it green. This counts the other thing: a case that *pins* the report a run produced -- the name
+// through `expect_diagnostic_name`, the number through `expect_diagnostic_code`, and the same two
+// read out of a `verify_script` (`diagnostics[0].name === 'SemanticDiag::X'`, which usually pins the
+// line and the column beside it). A code with none of those is a diagnostic whose identity no test
+// would notice changing.
+//
+// Both checks stay, and both run in `compile.diag_catalog`: this one narrows what counts, it does
+// not replace the wider one, because replacing it would drop the question "does any test at all
+// exercise this code" for the codes this one still counts as unpinned, and the wider check is the
+// layer that holds that question at zero.
+//
+// Measured again after the deletion of FileSystemError (runtime 43 -> 42 codes): runtime 2 of 42.
+//
+// Measured again after the syntax round: syntax 0 of 19 (four cases: ExtraSemicolon,
+// MissingInitializer, UnmatchedClosingDelimiter, ComparisonAcrossLines) and runtime 3 of 43 --
+// RegexInvalid, TimeFormatFailed and FormatFailed are pinned by the golden snapshots of
+// `diag_render`, whose text comparison requires the rendered name. The three left are the ones no
+// minimal program reaches, listed in the round's report: PassBoundaryNodes and PassBoundaryPorts
+// need a pass that returns a broken graph, and FileSystemError has no producer at all today.
+//
+// The ratchet is per section, because the sections stand in very different places and one number
+// would hide the other four. Measured when the map was written (307 codes, before
+// `FeatureNotSupported` was deleted): internal 0 of 1, lexical 0 of 5, syntax 5 of 19,
+// semantic 0 of 238, runtime 6 of 43. A section whose number is low is not a section nobody tested:
+// it is where the next case goes, one per round, starting with the one whose message carries a fact
+// the reader needs.
+//
+// The count is a ratchet. `NAME_COVERAGE_RECORDED` is where the tree stands, the check fails when
+// the set grows past it -- a case that stopped pinning its code is a regression here -- and it is
+// lowered in the commit that adds a case, or in the commit that teaches this counter a form of
+// assertion it was missing, which is a correction and is recorded as one. The list is printed so
+// the next case can be picked without re-deriving it.
+if (mode === '--name-coverage' || mode === '--name-coverage-check') {
+    const entries = catalogEntries(records)
+    const sectionOf = new Map(entries.map((e) => [e.name, e.type]))
+    const plans = walk(path.join(root, 'test', 'plans'), (f) => f.endsWith('.plan.toml'))
+    const pinned = new Set()
+    for (const file of plans) {
+        let text = fs
+            .readFileSync(file, 'utf8')
+            .replace(/^\s*#.*$/gm, '')
+            .replace(/desc\s*=\s*"""([\s\S]*?)"""/g, '')
+            .replace(/^\s*desc\s*=.*$/gm, '')
+        // `expect_output_not_contains` requires the words to be *absent*, so a name there is the
+        // opposite of a pin: drop those lists before anything reads a name out of a needle.
+        text = text.replace(/expect_(?:output|stdout|stderr)_not_contains\s*=\s*\[[\s\S]*?\]/g, '')
+        for (const m of text.matchAll(/expect_diagnostic_name\s*=\s*["']([A-Za-z]+)::([A-Za-z]+)["']/g)) {
+            pinned.add(`${m[1]}::${m[2]}`)
+        }
+        for (const m of text.matchAll(/expect_diagnostic_code\s*=\s*["']?(0[xX][0-9A-Fa-f]{8})["']?/g)) {
+            pinned.add(m[1].toLowerCase())
+        }
+        for (const m of text.matchAll(/\.name\s*===\s*["']([A-Za-z]+)::([A-Za-z]+)["']/g)) {
+            pinned.add(`${m[1]}::${m[2]}`)
+        }
+        for (const m of text.matchAll(/\.code\s*===\s*["'](0[xX][0-9A-Fa-f]{8})["']/g)) {
+            pinned.add(m[1].toLowerCase())
+        }
+        for (const n of text.matchAll(/name=([A-Za-z]+)::([A-Za-z]+)/g)) pinned.add(`${n[1]}::${n[2]}`)
+        for (const c of text.matchAll(/\bcode=(0[xX][0-9A-Fa-f]{8})/g)) pinned.add(c[1].toLowerCase())
+        for (const n of text.matchAll(/\b([A-Za-z]+Diag)::([A-Za-z0-9_]+)/g)) pinned.add(`${n[1]}::${n[2]}`)
+        // The name on its own, without the section in front of it: a needle that requires the word
+        // requires the name the compiler emitted, and the registered names are unique enough that a
+        // word of them in a needle can only be that code. Only registered names are looked for, and
+        // the `not_contains` lists and `desc` blocks are gone by now, so this cannot read prose or an
+        // absence guard -- that is the pair of mistakes this counter has made: a reverse guard read as
+        // a pin, and a file read as its own test.
+        for (const [name, section] of sectionOf) {
+            if (text.includes(name)) pinned.add(`${section}::${name}`)
+        }
+        // A snapshot test compares a whole report against a golden file, so a name in that file is
+        // required text: the run has to print it exactly. Read the files the plan points at.
+        for (const g of text.matchAll(/^\s*golden\s*=\s*["']([^"']+)["']/gm)) {
+            const golden = path.resolve(path.dirname(file), g[1])
+            if (!fs.existsSync(golden)) continue
+            const body = fs.readFileSync(golden, 'utf8')
+            for (const n of body.matchAll(/\b([A-Za-z]+Diag)::([A-Za-z0-9_]+)/g)) pinned.add(`${n[1]}::${n[2]}`)
+            for (const [name, section] of sectionOf) {
+                if (body.includes(name)) pinned.add(`${section}::${name}`)
+            }
+        }
+        // A test can be a script rather than a plan case, and then the assertion is inside it:
+        // `cml_contract.py` runs five refusals and asserts the name each one reports. Only a script
+        // under `test/` is a case: this file is one too (`diag_catalog` runs it), and reading it let
+        // its own comments pin a name that nothing asserted.
+        for (const m of text.matchAll(/^\s*case\s*=\s*["']([^"']+)["']/gm)) {
+            if (!/\.(py|mjs|js|sh)$/.test(m[1])) continue
+            const script = path.resolve(path.dirname(file), m[1])
+            if (!script.startsWith(path.join(root, 'test') + path.sep)) continue
+            if (!fs.existsSync(script)) continue
+            const body = fs.readFileSync(script, 'utf8')
+            for (const [name, section] of sectionOf) {
+                if (body.includes(`"${name}"`) || body.includes(`'${name}'`)) {
+                    pinned.add(`${section}::${name}`)
+                }
+            }
+        }
+    }
+    // A code nothing raises cannot be pinned by a case, so it is not a target: it is listed apart
+    // and does not sit in the set this check refuses to see grow.
+    const raised = producedNames(root)
+    const report = SECTIONS.filter((s) => sectionFilter === null || s.id === sectionFilter).map((s) => {
+        const all = entries.filter((e) => e.sectionId === s.id)
+        const unraisable = all.filter((e) => !raised.has(e.fullName))
+        const target = all.filter((e) => raised.has(e.fullName))
+        const missing = target.filter((e) => !pinned.has(e.fullName) && !pinned.has(hex8(e.code).toLowerCase()))
+        return { id: s.id, target, missing, unraisable, recorded: NAME_COVERAGE_RECORDED.get(s.id) }
+    })
+    if (report.length === 0) {
+        console.log(`name coverage: no section named '${sectionFilter}'`)
+        process.exit(2)
+    }
+    for (const r of report) {
+        console.log(
+            `${r.id} codes with no case that asserts them by name: ${r.missing.length} of ${r.target.length}`
+                + ` (recorded ${r.recorded})`
+        )
+        for (const e of r.missing) console.log(`  ${hex8(e.code)}  ${e.fullName}`)
+    }
+    const unraisable = report.flatMap((r) => r.unraisable)
+    if (unraisable.length > 0) {
+        console.log('no path raises these, so no case can pin them:')
+        for (const e of unraisable) console.log(`  ${hex8(e.code)}  ${e.fullName}`)
+    }
+    if (mode === '--name-coverage') process.exit(0)
+    if (report.every((r) => r.target.length === 0) || pinned.size === 0) {
+        console.log('name coverage: the run read no code or no assertion, which is not a pass')
+        process.exit(1)
+    }
+    for (const r of report) {
+        if (r.recorded === undefined || r.recorded === null) {
+            console.log(`name coverage: ${r.id} has no recorded value; add one to NAME_COVERAGE_RECORDED`)
+            process.exit(1)
+        }
+        if (r.missing.length > r.recorded) {
+            console.log(
+                `name coverage: ${r.id} grew by ${r.missing.length - r.recorded} past the ${r.recorded}`
+                    + ' this file records: a case that pinned its diagnostic stopped pinning it, or a'
+                    + ` ${r.id} code was added with no case of its own. Fix that case, or add one and`
+                    + ' lower the record in the same commit, with the reason the number moved.'
+            )
+            process.exit(1)
+        }
+    }
+    process.exit(0)
+}
+
+// ---- every registered code has a producer ------------------------------------------------------
+// A diagnostic nobody constructs is either a path that should refuse and does not, or a row that
+// outlived its last use. Either way the registry is claiming something about the compiler that the
+// compiler does not do, and the audit entry "every registered diagnostic code has a producer" is
+// the rule this holds. `FeatureNotSupported` was such a row for a month: after the generator
+// refusal retired (2026-10-31) nothing constructed it, and no test could see that, because a code
+// with no producer is also a code no case can pin.
+//
+// A producer is an occurrence of the name in code -- src, include, modules -- with comments and the
+// message table left out. Not the `.of(...)` shape alone: a code can be chosen by a ternary inside
+// the call (`of(cond ? SemanticDiag::A : SemanticDiag::B)`) or returned by a helper that picks one
+// (`return SemanticDiag::NotDifferentiable`) and constructed by its caller, and both are producers.
+if (mode === '--no-producer' || mode === '--no-producer-check') {
+    const entries = catalogEntries(records)
+    const produced = producedNames(root)
+    const report = SECTIONS.filter((s) => sectionFilter === null || s.id === sectionFilter).map((s) => {
+        const all = entries.filter((e) => e.sectionId === s.id)
+        const dead = all.filter((e) => !produced.has(e.fullName))
+        return { id: s.id, all, dead, recorded: NO_PRODUCER_RECORDED.get(s.id) }
+    })
+    if (report.length === 0) {
+        console.log(`no producer: no section named '${sectionFilter}'`)
+        process.exit(2)
+    }
+    for (const r of report) {
+        console.log(
+            `${r.id} codes no code constructs: ${r.dead.length} of ${r.all.length}`
+                + ` (recorded ${r.recorded})`
+        )
+        for (const e of r.dead) console.log(`  ${hex8(e.code)}  ${e.fullName}`)
+    }
+    if (mode === '--no-producer') process.exit(0)
+    for (const r of report) {
+        if (r.recorded === undefined || r.recorded === null) {
+            console.log(`no producer: ${r.id} has no recorded value; add one to NO_PRODUCER_RECORDED`)
+            process.exit(1)
+        }
+        if (r.dead.length > r.recorded) {
+            console.log(
+                `no producer: ${r.id} grew by ${r.dead.length - r.recorded} past the ${r.recorded} this`
+                    + ' file records. A registered code that nothing constructs is either a path that'
+                    + ' should refuse and does not, or a row that outlived its last use. Find the path,'
+                    + ' or delete the row in the commit that says which it was.'
+            )
+            process.exit(1)
+        }
+    }
+    process.exit(0)
+}
+
 if (mode === '--pin-examples') {
     const entries = catalogEntries(records)
     const tests = loadTests(root)

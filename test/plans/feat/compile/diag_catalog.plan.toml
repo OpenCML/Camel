@@ -67,3 +67,27 @@ expect_exit = 0
 expect_stdout_contains = ["every diagnostic code the registry declares is mentioned by a test, and every code a test cites is one the registry declares"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
+
+[[tests]]
+name = "catalog.name_coverage"
+desc = "The stronger direction of the same question: a mention in prose covers a code, an assertion on the report does not. Counts the semantic codes no case pins with `expect_diagnostic_name` (or `expect_diagnostic_code`) and refuses to see the set grow past the number the script records, so a case that stops pinning its diagnostic is a failure here instead of a quiet loss of cover."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/diagnostics-catalog.mjs"
+args = ["${case}", "--name-coverage-check"]
+expect_exit = 0
+expect_stdout_contains = ["semantic codes with no case that asserts them by name:"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+[[tests]]
+name = "catalog.no_producer"
+desc = "Every registered semantic code is constructed somewhere in src, include or modules. A row nothing raises is either a path that should refuse and does not, or a row that outlived its last use -- `FeatureNotSupported` was the second kind for a month, and no case could see it, because a code with no producer is also a code no case can pin. Comments and the message table do not count as producers; a ternary inside the call and a helper that returns the code do."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/diagnostics-catalog.mjs"
+args = ["${case}", "--no-producer-check"]
+expect_exit = 0
+expect_stdout_contains = ["semantic codes no code constructs: 0 of"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 30000

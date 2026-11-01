@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-307 diagnostics: 286 errors, 21 warnings. 15 carry a machine-applicable edit, 292 say why they carry none.
+306 diagnostics: 285 errors, 21 warnings. 15 carry a machine-applicable edit, 291 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -75,7 +75,6 @@ prints one entry.
 | `0x03000021` | [SemanticDiag::ArgumentNeedsConversion](#argumentneedsconversion) | Error | no |
 | `0x03000022` | [SemanticDiag::ReturnNeedsConversion](#returnneedsconversion) | Error | no |
 | `0x03000027` | [SemanticDiag::ImportNameConflict](#importnameconflict) | Error | no |
-| `0x03000040` | [SemanticDiag::FeatureNotSupported](#featurenotsupported) | Error | no |
 | `0x03000051` | [SemanticDiag::TypeVariableRedeclared](#typevariableredeclared) | Error | no |
 | `0x03000052` | [SemanticDiag::TypeVariableNotBindable](#typevariablenotbindable) | Error | no |
 | `0x03000053` | [SemanticDiag::GenericArgumentsMismatch](#genericargumentsmismatch) | Error | no |
@@ -268,6 +267,7 @@ prints one entry.
 | `0x03000206` | [SemanticDiag::YieldRequiresStreamHead](#yieldrequiresstreamhead) | Error | no |
 | `0x03000207` | [SemanticDiag::RuleRightUsesOuterVariable](#rulerightusesoutervariable) | Error | no |
 | `0x03000208` | [SemanticDiag::ResidualsAreNotVisible](#residualsarenotvisible) | Error | no |
+| `0x03000209` | [SemanticDiag::TransformArgumentIsNotAKnownFunction](#transformargumentisnotaknownfunction) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -304,7 +304,6 @@ prints one entry.
 | `0x04000032` | [RuntimeDiag::OperandTypeUnsupported](#operandtypeunsupported) | Error | no |
 | `0x04000033` | [RuntimeDiag::FieldNotFound](#fieldnotfound) | Error | no |
 | `0x04000034` | [RuntimeDiag::InvalidArgument](#invalidargument) | Error | no |
-| `0x04000036` | [RuntimeDiag::FileSystemError](#filesystemerror) | Error | no |
 | `0x04000039` | [RuntimeDiag::RegexInvalid](#regexinvalid) | Error | no |
 | `0x0400003A` | [RuntimeDiag::TimeFormatFailed](#timeformatfailed) | Error | no |
 | `0x0400003C` | [RuntimeDiag::GradientElementTypeMismatch](#gradientelementtypemismatch) | Error | no |
@@ -586,7 +585,18 @@ Unexpected '{0}': no '{1}' is open here.
 Remove the '{0}', or add the '{1}' it was meant to close.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/parse/syntax/unmatched_closing_delimiter.cml`, run as `camel test/cases/parse/syntax/unmatched_closing_delimiter.cml`)
+
+```camel
+// A closing delimiter with nothing open: refused at the delimiter, and the message names both
+// repairs -- remove it, or add the opener it was meant to close -- because only the writer knows
+// which of the two happened.
+
+func main(): int sync {
+    let x: int = 1)
+    return x
+}
+```
 
 ### MissingThen
 
@@ -641,7 +651,19 @@ Unexpected ';': there is no statement between it and the ';' before it.
 Statements are separated by a line break or by one ';'. Remove the extra ';'.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/parse/syntax/extra_semicolon.cml`, run as `camel test/cases/parse/syntax/extra_semicolon.cml`)
+
+```camel
+// Statements are separated by a line break or by one `;`. A second `;` with nothing between it and
+// the one before it is refused where it is written: the parser does not read it as an empty
+// statement, because a reader who wrote it meant one statement, not two.
+
+func main(): int sync {
+    let x: int = 1;;
+    println(x)
+    return 0
+}
+```
 
 ### AssignmentInCondition
 
@@ -663,7 +685,21 @@ None: choice: the condition was meant as a comparison or as an assignment, and t
 To compare, write '==': if x == 1 then ...
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/parse/syntax/assignment_in_condition.cml`, run as `camel test/cases/parse/syntax/assignment_in_condition.cml`)
+
+```camel
+// `=` assigns; it is not the comparison a condition asks for, and a condition that assigns is
+// almost always a comparison written one `=` short. The parser refuses it at the `=` rather than
+// reading it as an assignment or as `==`, and names the operator to write instead.
+
+func main(): int sync {
+    let x: int = 1
+    if x = 1 then
+        println('one')
+    end
+    return 0
+}
+```
 
 ### KeywordAsIdentifier
 
@@ -745,7 +781,18 @@ The declaration of '{0}' has no value.
 A declaration binds a name to a value: let {0} = <value>, or with a type: let {0}: <type> = <value>.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/parse/syntax/missing_initializer.cml`, run as `camel test/cases/parse/syntax/missing_initializer.cml`)
+
+```camel
+// A declaration binds a name to a value: `let x` names a binding and gives it nothing, so there is
+// nothing to bind. Refused at the name, with both forms that would fix it -- `= <value>` or
+// `: <type> = <value>` -- in the message.
+
+func main(): int sync {
+    let x
+    return 0
+}
+```
 
 ### MissingToken
 
@@ -2153,38 +2200,6 @@ import { f } from conf_c
 
 func main(): int sync {
     println(f(1))
-    return 0
-}
-```
-
-### FeatureNotSupported
-
-`0x03000040` · Error · `SemanticDiag::FeatureNotSupported`
-
-**Fix**
-
-None: choice: the repair is a decision only the writer can make
-
-**Message**
-
-```text
-The feature '{0}' is not supported yet.
-```
-
-**Help**
-
-```text
-Check the documentation for supported features.
-```
-
-**Example** (`test/cases/compile/namespace_rules/p12_use.cml`, run as `camel -E short test/cases/compile/namespace_rules/p12_use.cml`)
-
-```camel
-// use name = qualified name
-import lib
-use inc = lib::Tools::inc
-func main(): int sync {
-    println(inc(1))
     return 0
 }
 ```
@@ -8788,6 +8803,59 @@ func main(): int sync {
 }
 ```
 
+### TransformArgumentIsNotAKnownFunction
+
+`0x03000209` · Error · `SemanticDiag::TransformArgumentIsNotAKnownFunction`
+
+**Fix**
+
+None: choice: whether to declare the function at the top level or to pass the one the closure would have captured is the writer's decision
+
+**Message**
+
+```text
+'{0}' is applied to {1}, and a transform's argument has to be a function this program knows before it runs.
+```
+
+**Help**
+
+```text
+The transform builds the transformed graph at the call, out of the graph of the function it is given, so it has to name that graph now: a declared function, or a lambda that captures nothing. Neither a parameter nor a closure that captures a value names one until the program runs. Pass a declared function, or a lambda that captures nothing, instead.
+```
+
+**Example** (`test/cases/compile/transforms/jvp_arg_not_a_static_function.cml`, run as `camel test/cases/compile/transforms/jvp_arg_not_a_static_function.cml ${backend}`)
+
+```camel
+// The same rule, on the second transform: `jvp(h)` where `h` is a closure holding `x`.
+//
+// `jvp` reads the graph of the function value it is given -- that is the whole transform -- so it needs
+// the same thing `transpose` needs: a graph it can name at the call. A closure that captures a value
+// names none (the static function is known, the captured value is not), and the refusal is the same
+// diagnostic, at the same place, pointing at the same argument:
+//
+//   error[SemanticDiag::TransformArgumentIsNotAKnownFunction]: 'jvp' is applied to a closure that
+//   captures a value, and a transform's argument has to be a function this program knows before it runs.
+//
+// What the case is here for: the rule is one rule. `transpose`, `jvp` and `split` all declare the same
+// call-site fact (`CallSpec::staticFunctionArg`), so a shape refused at one of them is refused at all
+// three, and a reader who learns it once has learned it everywhere. Before the declaration this program
+// compiled and the lift refused once it ran, in the run-time half's own words.
+import { jvp } from transforms
+import rulesets.jvp
+
+func by_capture(x: float): float {
+    let h = (y: float) => y * x
+    let forward = jvp(h)
+    let (value, tangent) = forward(2.0, 1.0)
+    return value + tangent
+}
+
+func main(): int sync {
+    println(by_capture(3.0))
+    return 0
+}
+```
+
 ### IgnoredSideEffect
 
 `0x03100002` · Warn · `SemanticDiag::IgnoredSideEffect`
@@ -10168,28 +10236,6 @@ func main(): int sync {
     return 0
 }
 ```
-
-### FileSystemError
-
-`0x04000036` · Error · `RuntimeDiag::FileSystemError`
-
-**Fix**
-
-None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-
-**Message**
-
-```text
-'{0}' failed for '{1}': {2}.
-```
-
-**Help**
-
-```text
-Check the path and the permissions of the directories on it.
-```
-
-*No example: no test small enough to show raises it.*
 
 ### RegexInvalid
 

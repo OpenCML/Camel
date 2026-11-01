@@ -338,7 +338,7 @@ expect_diagnostic_code = "0x0200000A"
 expect_diagnostic_line = 9
 expect_diagnostic_column = 14
 expect_output_contains = ["Unexpected '&'; expected '='."]
-expect_output_not_contains = ["never printed", "UnknownInternalError", "FeatureNotSupported"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -354,7 +354,7 @@ expect_diagnostic_code = "0x01000000"
 expect_diagnostic_line = 9
 expect_diagnostic_column = 14
 expect_output_contains = ["Illegal character"]
-expect_output_not_contains = ["never printed", "UnknownInternalError", "FeatureNotSupported"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -370,7 +370,7 @@ expect_diagnostic_code = "0x0200000A"
 expect_diagnostic_line = 9
 expect_diagnostic_column = 14
 expect_output_contains = ["Unexpected '+'; expected '='."]
-expect_output_not_contains = ["never printed", "UnknownInternalError", "FeatureNotSupported"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -386,6 +386,80 @@ expect_diagnostic_code = "0x0200000A"
 expect_diagnostic_line = 9
 expect_diagnostic_column = 14
 expect_output_contains = ["Unexpected 'of'; expected '='."]
-expect_output_not_contains = ["never printed", "UnknownInternalError", "FeatureNotSupported"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.assignment_in_condition"
+desc = "A condition that assigns is refused at the '=': the two operators are written differently, and a condition is where the difference matters. The report names the operator to write instead, and the parser does not guess which of the two the writer meant."
+kind = "negative"
+case = "../../../cases/parse/syntax/assignment_in_condition.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::AssignmentInCondition"
+expect_diagnostic_code = "0x02000005"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 10
+expect_output_contains = ["'=' assigns; it cannot be used in the condition of an 'if'.", "To compare, write '==': if x == 1 then ..."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.extra_semicolon"
+desc = "Statements are separated by a line break or by one ';'. A second ';' with no statement between it and the one before it is refused where it is written, instead of being read as an empty statement."
+kind = "negative"
+case = "../../../cases/parse/syntax/extra_semicolon.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::ExtraSemicolon"
+expect_diagnostic_code = "0x02000004"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 20
+expect_output_contains = ["Unexpected ';': there is no statement between it and the ';' before it.", "Statements are separated by a line break or by one ';'. Remove the extra ';'."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.missing_initializer"
+desc = "A declaration binds a name to a value: 'let x' names a binding and gives it nothing. Refused at the name, with both forms that fix it in the message."
+kind = "negative"
+case = "../../../cases/parse/syntax/missing_initializer.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::MissingInitializer"
+expect_diagnostic_code = "0x02000008"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 9
+expect_output_contains = ["The declaration of 'x' has no value.", "A declaration binds a name to a value: let x = <value>, or with a type: let x: <type> = <value>."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.unmatched_closing_delimiter"
+desc = "A closing delimiter with nothing open is refused at the delimiter, and both repairs are named, because only the writer knows which of them happened."
+kind = "negative"
+case = "../../../cases/parse/syntax/unmatched_closing_delimiter.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnmatchedClosingDelimiter"
+expect_diagnostic_code = "0x02000002"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 19
+expect_output_contains = ["Unexpected ')': no '(' is open here.", "Remove the ')', or add the '(' it was meant to close."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.comparison_across_lines"
+desc = "A '>' ending its line inside a chain of comparisons is read as a comparison with the next line: 'a >' then 'b < c' parses as 'a > b < c', which is never what a program means. The run also fails to type the chain, and this warning is the diagnostic that points at the cause rather than at the overload list."
+kind = "negative"
+case = "../../../cases/parse/syntax/comparison_across_lines.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::ComparisonAcrossLines"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 10
+expect_output_contains = ["This '>' is read as a comparison with the next line, which starts with 'b'", "A '>' after a space, at the end of a line, is the comparison operator"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

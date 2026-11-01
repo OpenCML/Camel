@@ -1,0 +1,8 @@
+// A module the search roots do not hold: the report names the module and says where it looked, so
+// a reader can tell a missing file from a missing root (design principles 10.1).
+
+import { nothing } from no_such_module
+
+func main(): int sync {
+    return 0
+}
