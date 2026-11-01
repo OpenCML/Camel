@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-306 diagnostics: 285 errors, 21 warnings. 15 carry a machine-applicable edit, 291 say why they carry none.
+307 diagnostics: 286 errors, 21 warnings. 15 carry a machine-applicable edit, 292 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -268,6 +268,7 @@ prints one entry.
 | `0x03000207` | [SemanticDiag::RuleRightUsesOuterVariable](#rulerightusesoutervariable) | Error | no |
 | `0x03000208` | [SemanticDiag::ResidualsAreNotVisible](#residualsarenotvisible) | Error | no |
 | `0x03000209` | [SemanticDiag::TransformArgumentIsNotAKnownFunction](#transformargumentisnotaknownfunction) | Error | no |
+| `0x0300020A` | [SemanticDiag::LambdaRestParameterNotLowered](#lambdarestparameternotlowered) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8852,6 +8853,43 @@ func by_capture(x: float): float {
 
 func main(): int sync {
     println(by_capture(3.0))
+    return 0
+}
+```
+
+### LambdaRestParameterNotLowered
+
+`0x0300020A` · Error · `SemanticDiag::LambdaRestParameterNotLowered`
+
+**Fix**
+
+None: choice: the repair is to write the parameters out
+
+**Message**
+
+```text
+The rest parameter '..{0}' of a lambda is not lowered yet.
+```
+
+**Help**
+
+```text
+A rest parameter of a function declaration stands for the arguments a call leaves over, and the call site is what expands them; a lambda has no such call site yet, because the front end does not build the parameters its rest parameter would stand for. Write the parameters out: '(x: float, y: float) => body'.
+```
+
+**Example** (`test/cases/compile/rest_params/lambda_rest_untyped.cml`, run as `camel test/cases/compile/rest_params/lambda_rest_untyped.cml`)
+
+```camel
+// A lambda's parameter list takes a rest parameter: `(..xs) => body` parses. The parameters it
+// stands for are the ones the function type the lambda stands in would give, and the front end does
+// not build those yet, so the program is refused by name -- at the shape, with a position -- rather
+// than by a compiler error.
+//
+// The day the parameters are built, this case is the one whose expectation moves: it goes from a
+// diagnostic to a program that runs.
+func main(): int {
+    let slope = (..xs) => 0.0
+    let _ = slope
     return 0
 }
 ```
