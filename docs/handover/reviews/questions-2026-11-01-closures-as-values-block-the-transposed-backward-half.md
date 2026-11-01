@@ -167,3 +167,25 @@ A/B 把三处的 `staticFunctionArg` 置为 `-1`：`transpose` 回到 `TRANSPOSE
 把 `20.0` 钉进断言等于把缺陷变成规格；用例断的是补上之后的拒绝原文。`autodiff:grad` 一族则登记为"今天无事可做"：
 它先被 `NotDifferentiable`（`it has no 'with' parameter`）挡掉，参数那条规则轮不到说话。
 
+**9 × 6 实参形状矩阵（2026-11-02 实测，同一台机 `88zjwei`、同一棵树、`std::nvm`；程序由 `test/tools/emit-transform-matrix.mjs` 生成，每格 ≤10 行）**
+
+形状：**S1** 声明的具名函数（`func dbl`） · **S2** 无捕获 lambda · **S3** 调用点内联的捕获 lambda（捕获局部 `x = 3.0`） · **S4** 形参（变换写在 `func via(f: …)` 里，调用方传 `dbl`） · **S5** 局部变量持有的捕获闭包（`let h = (y) => y * x`，按名传） · **S6** 算子/内置作为值。
+每格记三样之一：**答案（数与纸笔相等）** / **拒绝（诊断码与位置）** / **崩（不改写地贴出保证行）**；`n/a` 一律带理由。**纸笔期望**列在行里（`transpose` 的调用是 `back(knowns=3.0, cotangent=1.0)`，签名 `(knowns.., cotangent) => cotangents`）。
+
+| 入口 | 纸笔 | S1 具名 | S2 无捕获 | S3 捕获内联 | S4 形参 | S5 捕获变量 | S6 算子 |
+|---|---|---|---|---|---|---|---|
+| `transpose` | `2.0` | `2.0` | `2.0` | 拒绝 `0x03000209` @6:26 | `2.0` | 拒绝 `0x03000209` @6:26 | n/a：`(:op/mul_d)` 不是表达式（`SyntaxDiag::UnexpectedToken`，`:` 处） |
+| `jvp` | `4.0 / 2.0` | `4.0 / 2.0` | `4.0 / 2.0` | 拒绝 `0x03000209` @7:22 | `4.0 / 2.0` | 拒绝 `0x03000209` @7:22 | n/a：同上 |
+| `split` | `4.0 / 2.0` | **崩**：`builder_operators.cpp(3831) visitLinkNode` / `Guarantee: dataType->code() == TypeCode::Function` / `Reading: Target node of LINK must be a function or operator node.`（core dumped） | **崩**：同上 | 拒绝 `0x03000209` @7:22 | **崩**：同上 | 拒绝 `0x03000209` @7:22 | n/a：同上 |
+| `vmap` | `2.0 / 4.0` | `2.0 / 4.0` | `2.0 / 4.0` | 拒绝 `0x03000209` @7:24 | `2.0 / 4.0` | 拒绝 `0x03000209` @7:24 | n/a：同上 |
+| `remat` | `4.0` | `4.0` | `4.0` | 拒绝 `0x03000209` @6:23 | `4.0` | 拒绝 `0x03000209` @6:23 | n/a：同上 |
+| `grad` | `2.0`（`d/dw(x·w)`，`x=2`） | `2.0` | 拒绝 `NotDifferentiable`（无 `with` 形参） | 拒绝 `NotDifferentiable` | n/a：带 `with` 的函数写成形参类型的拼法不存在——`func via(f: <float> (x: float) => float)` 报 `SyntaxDiag::MissingToken: Expected ':' before '>'` | 拒绝 `NotDifferentiable` | n/a：同上 |
+| `grad(f, true)` | `(2.0, 1.0)` | `(2.0, 1.0)` | 拒绝 `NotDifferentiable` | 拒绝 `NotDifferentiable` | n/a：同上 | 拒绝 `NotDifferentiable` | n/a：同上 |
+| `with_grad` | `6.0 / 2.0` | `6.0 / 2.0` | 拒绝 `NotDifferentiable` | 拒绝 `NotDifferentiable` | n/a：同上 | 拒绝 `NotDifferentiable` | n/a：同上 |
+| `with_grad(f, true)` | `(6.0, 1.0)` + `2.0` | `(6.0, 1.0)` + `2.0` | 拒绝 `NotDifferentiable` | 拒绝 `NotDifferentiable` | n/a：同上 | 拒绝 `NotDifferentiable` | n/a：同上 |
+
+读这张表要知道的三件事：
+1. **没有一格 `SILENT-WRONG`**：凡是给了数的格子，数与纸笔相等（`transpose` 的 `2.0` 是 `cotangent 1.0 × 2`，`grad` 的 `2.0` 是 `∂(x·w)/∂w = x = 2`，`with_grad` 的 `6.0/2.0` 是 `f(2)` 与 `∂/∂w`）。这与第十轮之前的 `vmap` 20.0、`remat` 0.0 不矛盾：那两个数出在**补声明之前**，今天同一个形状已经被拒绝。
+2. **`split` 那三格是崩，不是拒绝也不是数**：`split` 的实参必须是 `jvp` 升起的那张图（库里的写法是 `split(jvp(f))`），但**一个普通的具名函数、一个无捕获 lambda、一个形参**都能过调用点，然后在 builder 里撞 `LINK` 的保证。这是"该拒绝却崩"，比"该拒绝却给数"更难查：没有诊断可读，只有 core。
+3. **S4 形参在 `transpose`/`jvp`/`vmap`/`remat` 上全部给正确答案**，这与 `staticFunctionArgRefusesParameters` 关着一致——参数半边今天不是"拒绝"，是"照算"。`grad` 一族反过来：它们的 S2/S3/S5 全被 `NotDifferentiable` 先挡掉，所以那张"该不该有实参规则"的账对它们仍然是空的。
+
