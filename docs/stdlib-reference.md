@@ -6771,10 +6771,10 @@ array as that value at every element).
 
 ### The elementwise tier
 
-A rule is filed in its ruleset module under the operator its left side is written with and the
-number of operands it takes, and a transform reads it from there (`lookupRule("rulesets.vmap",
-head, arity)`); a rule is not a function a program calls, so the rules below and the functions
-they call are two things with different names.
+A rule is filed in its ruleset module under the head of its left side -- an operator's token, or
+the name a call writes -- and the number of operands that head takes, and a transform reads it
+from there (`lookupRule("rulesets.vmap", head, arity)`); a rule is not a function a program calls,
+so the rules below and the functions they call are two things with different names.
 
 The right side of each rule *names* the function that does the batched arithmetic
 (`vmap_add(bx, bw)`), and that name is the part a batching transform reads. A rule's right side is

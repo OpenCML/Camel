@@ -84,7 +84,7 @@ Type *ruleElementTypeOf(Type *type) {
 /// operator's key: `vmapBindingOf` answers the key the operator's batching rule is filed under, and
 /// the head and the operand count in it are the operator's, not this family's. The key comes from
 /// the operator's own module (`camel/core/forward.h#bindVmapRule`), because the spelling a rule is
-/// written with (`x @ w`, `sum_axis(xs, axis, keepdims)`) is not the URI the node holds
+/// written with (`matmul(x, w)`, `sum_axis(xs, axis, keepdims)`) is not the URI the node holds
 /// (`tensor:matmul`, `tensor:sum_axis`).
 std::optional<camel::parse::ast::RuleMatch> ruleOfUri(const std::string &uri, std::string &why) {
     const auto binding = camel::core::vmapBindingOf(uri);
