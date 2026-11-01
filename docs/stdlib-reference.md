@@ -6759,13 +6759,17 @@ A rule's right side takes the *lifted* operands and answers the *lifted* result.
 elementwise tier is therefore one rule per primitive, each of them the primitive itself: the
 batching of an elementwise operator is that operator.
 
-This round writes the elementwise tier, `matmul`, and the four reductions along an axis. The last
-two need a rule that says *which* axis the batch is on: a batch of rows under `matmul` is the axes
-before its last two, and a reduction keeps the axis it reduces and gains the batch axis in front,
-so its rule is written in terms of the operator's own axis argument (`batched_axis`). A reduction
-over every axis (`tensor:sum`) has no rule and is refused by name: a batch of rows under it is not
-the rows' own sums, and there is no axis of the operator's to shift, so its batched meaning would
-have to be guessed from the rank. `reshape` and the broadcasting moves are the next tier.
+This round writes the elementwise tier, `matmul`, the six reductions along an axis, and the two
+over every axis. The first group need a rule that says *which* axis the batch is on: a batch of
+rows under `matmul` is the axes before its last two, and a reduction along an axis keeps the axis
+it reduces and gains the batch axis in front, so its rule is written in terms of the operator's
+own axis argument (`batched_axis`). A reduction over every axis takes no axis at all -- there is
+none of the operator's to shift -- so its rule keeps the batch axis in front and folds away the
+axes the row had after it, over the rank the value itself carries (`shape`). `max` and `min` have
+no such operator to write a rule for: they are declared with an axis, and the reduction of every
+axis is `max_axis(xs, ...)` over a rank the caller already knows.
+
+`reshape` and the broadcasting moves are the next tier.
 
 Adding a rule changes docs/stdlib-reference.md; regenerate it with
 `node scripts/stdlib-reference.mjs --write`.
@@ -6943,6 +6947,74 @@ vmap_min_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
 
 - A native operator of this module: an opaque node, pure.
 - Example: `vmap_min_axis([[1.0, 5.0], [3.0, 4.0]] as float[2, 2], [0], [false])` gives `[1.0, 3.0]`
+
+### The positions along an axis
+
+`argmax_axis` and `argmin_axis` are the reductions whose *result* element is not the operand's:
+they take any numeric tensor and answer `int` positions (the operator's own signature spells that
+type `int64`). That is why their rules are the ones that show what a batching rule is generic in
+-- the element the operands are made of, read from an operand, never from the type of the node the
+result is (`modules/transforms/vmap.cpp`'s `firstOperandTypeOf`). A rule instantiated at the
+result's element type would be a rule about `int` arrays applied to floats.
+
+#### `vmap_argmax_axis`
+
+```camel
+vmap_argmax_axis: (xs: T[..], axis: int[], keepdims: bool[]) => int[..]
+```
+
+`argmax_axis(xs, axis, keepdims)` batched: each row's position of its largest element along the
+axis it was given. The positions are `int` whatever the operand's element is, so the type this
+function is generic in is the operand's (`T`), not its result's.
+    // [1, 2]
+
+- A native operator of this module: an opaque node, pure.
+- Example: `vmap_argmax_axis([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3], [0], [false])`
+
+#### `vmap_argmin_axis`
+
+```camel
+vmap_argmin_axis: (xs: T[..], axis: int[], keepdims: bool[]) => int[..]
+```
+
+`argmin_axis(xs, axis, keepdims)` batched: each row's position of its smallest element along the
+axis it was given, with the earlier position on a tie.
+    // [0, 0]
+
+- A native operator of this module: an opaque node, pure.
+- Example: `vmap_argmin_axis([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3], [0], [false])`
+
+### The reductions over every axis
+
+`sum(xs)` and `mean(xs)` take no axis at all, so there is none of the operator's to move one place
+in. What they do to a batch is keep the batch axis in front and fold away the axes the row had
+after it: a batch of rows arrives as one number per row, which is the shape the batch axis
+already is. The fold is written over the value's own rank (`shape`), because the rank is a fact
+about the value and not about the type -- `T[..]` says a tensor, never how many axes.
+
+#### `vmap_sum`
+
+```camel
+vmap_sum: (xs: T[..]) => T[..] when is_numeric::<T>()
+```
+
+`sum(xs)` batched: one sum per row. The batch axis stays in front; each of the row's axes is
+folded away in turn, so a batch of `float[3]` rows answers one number per row.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_sum([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])` gives `[6.0, 15.0]`
+
+#### `vmap_mean`
+
+```camel
+vmap_mean: (xs: T[..]) => T[..] when is_float::<T>()
+```
+
+`mean(xs)` batched: one mean per row, folded the same way `sum` is. A mean is of a float: an
+integer row's mean is `f32`, which is not the element the rule would be written in.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_mean([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])` gives `[2.0, 5.0]`
 
 <a id="sim"></a>
 
