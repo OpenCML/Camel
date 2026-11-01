@@ -118,6 +118,28 @@ class GraphRead {
         return true;
     }
 
+
+
+    /// The regions of the graph, and the region a node is in (0 is the function's own body).
+    virtual uint32_t regionCountOf() const = 0;
+    virtual const camel::runtime::GCRegion &regionOf(uint32_t id) const = 0;
+    virtual uint32_t regionOfNode(gc_node_ref_t ref) const = 0;
+    /// The ports of region `id`, in the runtime graph's numbering (a draft's ids are mapped the
+    /// way its input lists are).
+    virtual std::vector<gc_node_ref_t> regionPortsOf(uint32_t id) const = 0;
+
+    /// The statements this one follows in the same `sync` block. A frozen graph keeps them as
+    /// `GCGraphSyncEdge` and a draft as a list of ids; the face answers the predecessor, which is
+    /// the only part of the edge the lift reads.
+    virtual std::vector<gc_node_ref_t> syncInputsOf(gc_node_ref_t ref) const = 0;
+
+    /// The node the graph's value comes from, `kInvalidNodeRef` when it has none.
+    virtual gc_node_ref_t exitRefOf() const = 0;
+    /// The graph's static area (the constants it was given).
+    virtual std::span<const ::slot_t> staticSlotsOf() const = 0;
+    /// Where the node was written in the source, 0 when it has no position.
+    virtual uint64_t originOf(gc_node_ref_t ref) const = 0;
+
     /// The operator of an OPER node, empty for another kind of node.
     std::string operUriOf(gc_node_ref_t ref) const;
     /// How many arms a BRCH node has, 0 for another kind of node.
@@ -157,6 +179,22 @@ class DraftGraphRead final : public GraphRead {
     std::vector<gc_node_ref_t> withInputsOf(gc_node_ref_t ref) const override;
     std::vector<gc_node_ref_t> ctrlInputsOf(gc_node_ref_t ref) const override;
     GraphId calleeIdOf(gc_node_ref_t ref) const override;
+    uint32_t regionCountOf() const override {
+        return static_cast<uint32_t>(txn_.graph().regionCount());
+    }
+    const camel::runtime::GCRegion &regionOf(uint32_t id) const override {
+        return txn_.graph().region(id);
+    }
+    uint32_t regionOfNode(gc_node_ref_t ref) const override;
+    std::vector<gc_node_ref_t> regionPortsOf(uint32_t id) const override;
+    std::vector<gc_node_ref_t> syncInputsOf(gc_node_ref_t ref) const override;
+    gc_node_ref_t exitRefOf() const override;
+    std::span<const ::slot_t> staticSlotsOf() const override {
+        return txn_.graph().staticSlots();
+    }
+    uint64_t originOf(gc_node_ref_t ref) const override {
+        return txn_.graph().nodeOrigin(sourceIdOf(ref));
+    }
     NodeFace nodeFaceOf(gc_node_ref_t ref) const override;
     std::span<const std::byte> payloadOf(gc_node_ref_t ref) const override;
 
@@ -200,6 +238,18 @@ class FrozenGraphRead final : public GraphRead {
         return mappedListOf(graph_.ctrlInputsOf(ref));
     }
     GraphId calleeIdOf(gc_node_ref_t ref) const override { return graph_.calleeIdOf(ref); }
+    uint32_t regionCountOf() const override { return graph_.regionCount(); }
+    const camel::runtime::GCRegion &regionOf(uint32_t id) const override {
+        return *graph_.region(id);
+    }
+    uint32_t regionOfNode(gc_node_ref_t ref) const override { return graph_.nodeRegion(ref); }
+    std::vector<gc_node_ref_t> regionPortsOf(uint32_t id) const override;
+    std::vector<gc_node_ref_t> syncInputsOf(gc_node_ref_t ref) const override;
+    gc_node_ref_t exitRefOf() const override { return graph_.exitNodeRef(); }
+    std::span<const ::slot_t> staticSlotsOf() const override {
+        return graph_.staticSlots();
+    }
+    uint64_t originOf(gc_node_ref_t ref) const override { return graph_.nodeOrigin(ref); }
     NodeFace nodeFaceOf(gc_node_ref_t ref) const override;
     std::span<const std::byte> payloadOf(gc_node_ref_t ref) const override {
         return graph_.nodePayloadBytes(ref);

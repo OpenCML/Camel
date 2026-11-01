@@ -122,6 +122,24 @@ std::vector<gc_node_ref_t> DraftGraphRead::ctrlInputsOf(gc_node_ref_t ref) const
     return mappedListOf(txn_.graph().ctrlInputsOf(sourceIdOf(ref)));
 }
 
+uint32_t DraftGraphRead::regionOfNode(gc_node_ref_t ref) const {
+    const camel::runtime::DraftNodeHeader *header = txn_.graph().header(sourceIdOf(ref));
+    return header == nullptr ? 0 : header->region;
+}
+
+std::vector<gc_node_ref_t> DraftGraphRead::regionPortsOf(uint32_t id) const {
+    return mappedListOf(txn_.graph().regionPortsOf(id));
+}
+
+std::vector<gc_node_ref_t> DraftGraphRead::syncInputsOf(gc_node_ref_t ref) const {
+    return mappedListOf(txn_.graph().syncInputsOf(sourceIdOf(ref)));
+}
+
+gc_node_ref_t DraftGraphRead::exitRefOf() const {
+    const gc_node_ref_t exit = txn_.graph().exitNode();
+    return exit == kInvalidNodeRef ? kInvalidNodeRef : mappedIdOf(exit);
+}
+
 NodeFace DraftGraphRead::nodeFaceOf(gc_node_ref_t ref) const {
     NodeFace face;
     const camel::runtime::DraftNodeHeader *header = txn_.graph().header(sourceIdOf(ref));
@@ -199,6 +217,19 @@ gc_cnt_t GraphRead::armCountOf(gc_node_ref_t ref) const {
     }
     return body.armCount;
 }
+std::vector<gc_node_ref_t> FrozenGraphRead::regionPortsOf(uint32_t id) const {
+    const std::span<const gc_node_ref_t> ports = graph_.regionPorts(id);
+    return std::vector<gc_node_ref_t>(ports.begin(), ports.end());
+}
+
+std::vector<gc_node_ref_t> FrozenGraphRead::syncInputsOf(gc_node_ref_t ref) const {
+    std::vector<gc_node_ref_t> preds;
+    for (const camel::runtime::GCGraphSyncEdge &edge : graph_.syncPredsOf(ref)) {
+        preds.push_back(edge.pred);
+    }
+    return preds;
+}
+
 NodeFace FrozenGraphRead::nodeFaceOf(gc_node_ref_t ref) const {
     NodeFace face;
     const camel::runtime::GCNode *node = graph_.node(ref);
@@ -246,6 +277,28 @@ bool FrozenGraphRead::hasPayload(gc_node_ref_t ref) const {
 
 
 std::string firstDifference(const GraphRead &draft, const GraphRead &frozen) {
+    // The graph's own facts, before its nodes: the regions it has, the static area it was given
+    // and the value it answers. A draft carries a compile-time identity where the encoding carries
+    // a runtime one, so the identity is not a fact the two sides share and is not compared here.
+    if (draft.regionCountOf() != frozen.regionCountOf()) {
+        return std::format(
+            "regions: draft has {}, frozen has {}", draft.regionCountOf(), frozen.regionCountOf());
+    }
+    if (draft.exitRefOf() != frozen.exitRefOf()) {
+        return std::format(
+            "exit: draft {} frozen {}", draft.exitRefOf(), frozen.exitRefOf());
+    }
+    // The values in a draft's static area are not compared, only how many there are: the same
+    // place holds a pointer on one side of some constants and the interned id of what it points at
+    // on the other (the relation a node's type has, and the face has no mapping between the two),
+    // so a comparison of the values would report a difference wherever a constant is not a plain
+    // number. The count is a fact both sides answer the same way.
+    if (draft.staticSlotsOf().size() != frozen.staticSlotsOf().size()) {
+        return std::format(
+            "static slots: draft has {}, frozen has {}",
+            draft.staticSlotsOf().size(),
+            frozen.staticSlotsOf().size());
+    }
     if (draft.nodeSlotCount() != frozen.nodeSlotCount()) {
         return std::format(
             "node slots: draft has {}, frozen has {}",
@@ -265,6 +318,15 @@ std::string firstDifference(const GraphRead &draft, const GraphRead &frozen) {
         }
         if (!draft.alive(ref)) {
             continue;
+        }
+        // The region a node is in belongs to the graph the node is in, so it is compared beside
+        // the record rather than in it.
+        if (draft.regionOfNode(ref) != frozen.regionOfNode(ref)) {
+            return std::format(
+                "node {}: region draft={} frozen={}",
+                ref,
+                draft.regionOfNode(ref),
+                frozen.regionOfNode(ref));
         }
         // Read through the record the lift asks for, so what is compared here is the same struct a
         // reader of the two faces gets: a field that is in `NodeFace` and not compared below is a
