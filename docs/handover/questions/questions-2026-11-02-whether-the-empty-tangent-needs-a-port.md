@@ -62,3 +62,26 @@ registry [FAIL] registry.signatures_match / registry.result_types_match / regist
 `Derivative of '{}' expects 3 or 4 inputs (base, index, delta, axis)`：**这个算子取三个或四个操作数，`axis` 可选**，三参声明与注册形状对不上。
 
 **所以"想怎么用"不能决定声明怎么写**：声明必须与注册的真实形状一致，四红就是那张注册表在说"你写错了"。同一件事的另一个读数：**规则右侧能名的只有函数**（`expandRuleRightSide` 的 `Func` 分支），所以在规则集里写 `:tangent/scatter_add_arr` 也得先有一个能名的函数——"不新造库名"并不等于"不用声明"，只是把声明挪进规则集、不放进公共库面。
+
+## 规则集能做什么、不能做什么（三条今天量出来的）
+
+| 想做的事 | 能不能 | 证据 |
+|---|---|---|
+| 规则右侧直接写一个算子（`=> (ct) => :tangent/scatter_add_arr(...)`） | **不能** | 展开只走 `Func` 分支（按 `calleeIdOf` 取被调图），`Oper` 分支只处理**函数体里已有**的算子节点：规则右侧只能名一个函数 |
+| 规则集里写一条**不 `export`** 的函数，用 `#op(...)` 绑内建算子 | **能**，且**不复现** `registry` 四红 | 四红只在把公共名加进 `stdlib/signatures/autodiff.cml` 时出现；同一条声明搬进 `stdlib/rulesets/transpose.cml` 且不 `export`，`transforms 46/46` 绿 |
+| `#op` 的写法 | `#op('tangent:scatter_add_arr')` **不认**；`#op(':tangent/scatter_add_arr')`（**带前导冒号**）才认 | `NativeDeclarationNotLoaded: The declaration 'scatter_into' names the operator 'tangent:scatter_add_arr', which no loaded module implements` |
+
+第一条与 `derivative.cpp:386` 的"3 或 4 个操作数（`base, index, delta, axis`，`axis` 可选）"是并列的两条：**一个说右侧只能名函数，一个说声明要按注册的真实形状写**。两个都是"注册表说了算"，不是调用处想怎么写就怎么写。
+
+## 三条红的归属（`transposeSignature` 那一支）
+
+放开 `transposeSignature` 的多参数分支后红了三条：`transpose_many_parameters`、`transpose_many_parameters.is_linear_in_the_cotangent`、`transpose_unread_parameters`。**逐条查过它们的签名，形参全是 `float`**：
+
+```
+transpose_many_parameters   func mt(x: float, w: float, dx: float, dw: float): float
+transpose_unread_parameters func at(x: float, w: float, dx: float, dw: float): float
+```
+
+**每个形参都有切空间**，所以这三条红**不是"期望该改"，是我那次改动自己删了一个种子参数**（把返回签名少了一个位置）。按"全部参数都有切空间 → 红说明改动错了"这条判据，这一支到此为止：**要重做的话，正确改法是保留原有的种子参数、只放开循环里的类型判断**，而不是改期望。
+
+（`transpose_unread_parameters` 尤其说明既有不变量：**不被读的参数仍然要有一份余切**——这与"没有切空间的形参不产出余切"是两件事，别混。）
