@@ -77,3 +77,10 @@ modules/transforms/jvp.cpp:131   gc_node_ref_t expandRuleRightSide(
 **今天真正卡住的是一个对象（`GenericRuleInstance`），不是一堵墙。**
 
 四道墙的顺序与措辞取自实际读数；与派工时的记法相比，第一道这里明确写成**"不是墙，是测量造成的假象"**，第四道明确写成**"卡的是一个对象"**——这两处是记录时改的，不是事后改的口径。
+
+---
+
+## 附：这五条分支里有两条不只是重复，是错数
+
+拆到 `law == ...` 那五条分支时发现，其中两条给出的数与定律不一致——`neg` 的余切符号反了，`div` 第二位的算式把分子当成了分母。两条都量到了具体数字，记在
+[`transpose-two-wrong-cotangents.md`](transpose-two-wrong-cotangents.md)：**不加断言、不标 `known_fail`**，与 `vmap`/`remat` 内核的读数同一类处理。库里的 `neg_cotangent` / `div_cotangent_c` 就是对的答案，所以走规则右侧展开之后这两个数会自动对——这同时是"删分支"最硬的理由。
