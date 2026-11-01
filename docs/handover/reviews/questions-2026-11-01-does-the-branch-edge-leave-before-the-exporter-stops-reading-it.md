@@ -1,5 +1,7 @@
 # 分支那条边，是不是该等导出器不再读它之后才走
 
+> **裁定（2026-11-01 13:10，已裁）**：选 **甲**——先把 124 定位到具体函数，**不能带着一个解释不了的超时删边**。作者给的方向：超时在 `std::macro` 下、尾递归从 `Loop` 变成了 `If`，像是某处判断"这条臂要不要算"读的还是 ctrl 边。原文见 [`questions-2026-10-29.md`](questions-2026-10-29.md) 末节。
+
 > **问什么**：S1 的收尾是删掉 `src/compile/gir/builder_control.cpp:2864`（`linkArmEntries` 里的
 > `linkNodes(LinkType::Ctrl, brchNode, node)`，从 BRCH 连到臂入口的那条 ctrl 边）。接链修法已经落了
 > （`e6bfe5d09`），`positions.cml` 在删边后回到 10 行、次序不变——但**删边之后导出器坏了**，而且坏法

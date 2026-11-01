@@ -1511,7 +1511,7 @@ declarations show, because the result of a call is the exit type its resolver gi
 #### `vjp`
 
 ```camel
-vjp: (f: (x: float) => float) => (x: float) => (float, (ct: float) => float)
+vjp: (f: (x: T) => float) => (x: T) => (float, (ct: float) => T)
 ```
 
 The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
@@ -1525,7 +1525,7 @@ The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x
 #### `vjp`
 
 ```camel
-vjp: (f: (x: float, y: float) => float) => (x: float, y: float) => (float, (ct: float) => (float, float))
+vjp: (f: (x: T, y: U) => float) => (x: T, y: U) => (float, (ct: float) => (T, U))
 ```
 
 The same transform for a function of two parameters: `vjp(f)(x, y)` is `(value, pullback)` and
@@ -7332,6 +7332,124 @@ a tie.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_argmin([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])` gives `[0, 0]`
+
+### Reshape
+
+`reshape<dims>(x)` is the batching rule whose answer is a *shape*: a row's elements are already in
+row-major order and a batch's rows are contiguous, so the batched reshape is the same elements
+with the batch's axis written in front of the row's target.
+
+The target is the operator's second argument, in `with` position (`OpDef::params` is `t` then
+`shape`, `withAfterNorm`), and a `with` argument reaches a rule like any other: lifted to the batch
+of one row. One row of a batch is contiguous, so its flat reading *is* the target's extents in
+order -- that is the whole trick, and it is why the shape position takes a runtime value: the
+written extents are a value, not something this rule's text could spell. `reshape<...>` takes an
+`int[]` computed at runtime (it already takes `shape(xs)[0]` in the reductions above), so the
+batched shape is `[the batch's rows, the written extents...]`.
+
+#### `vmap_reshape`
+
+```camel
+vmap_reshape: (xs: T[..], dims: int[..]) => T[..] when is_numeric::<T>()
+```
+
+`reshape<dims>(xs)` batched: each row laid out in the shape the call wrote, the batch's axis in
+front of it.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_reshape([[1.0, 2.0, 3.0, 4.0]] as float[1, 4], [2, 2])` gives `[[[1.0, 2.0], [3.0, 4.0]]]`
+
+### Unsqueeze
+
+`unsqueeze<axis>(x)` adds an axis of extent one *inside* the row, so the batch's axis is in front
+of it: the written axis moves one place in, exactly as a reduction's axis does (`batched_axis`).
+
+#### `vmap_unsqueeze`
+
+```camel
+vmap_unsqueeze: (xs: T[..], axis: int[]) => T[..] when is_numeric::<T>()
+```
+
+`unsqueeze<axis>(xs)` batched: the row's axis of extent one, one place further in.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_unsqueeze([[1.0, 2.0]] as float[1, 2], [0])` gives `[[[1.0, 2.0]]]`
+
+### Transpose, permute, concat and dim
+
+The rest of the layout tier whose axis or permutation is written in angle brackets: each is a
+`with` argument, so each arrives as the batch of one row and the rule shifts it the same way a
+reduction's axis is shifted. `transpose` writes no axis at all -- the operator swaps the last two
+axes of whatever it is given, and a batch's last two axes are the row's -- so its rule is the
+operator over the batch and nothing else.
+
+#### `vmap_transpose`
+
+```camel
+vmap_transpose: (xs: T[..]) => T[..] when is_numeric::<T>()
+```
+
+`transpose(xs)` batched: the operator swaps the last two axes, and a batch's last two axes are the
+row's last two.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_transpose([[[1.0, 2.0], [3.0, 4.0]]] as float[1, 2, 2])` gives `[[[1.0, 3.0], [2.0, 4.0]]]`
+
+#### `vmap_permute`
+
+```camel
+vmap_permute: (xs: T[..], perm: int[..]) => T[..] when is_numeric::<T>()
+```
+
+`permute<perm>(xs)` batched: the row's axes in the written order, the batch's axis in front.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_permute([[[1.0, 2.0], [3.0, 4.0]]] as float[1, 2, 2], [1, 0])` gives `[[[1.0, 3.0], [2.0, 4.0]]]`
+
+#### `vmap_concat`
+
+```camel
+vmap_concat: (a: T[..], b: T[..], axis: int[]) => T[..] when is_numeric::<T>()
+```
+
+`concat<axis>(xs, ys)` batched: the axis the row joins along is one place further in, and the two
+operands are the batch's rows, so the join is along the row's axis of the batch.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_concat([[1.0]] as float[1, 1], [[2.0]] as float[1, 1], [0])` gives `[[[1.0], [2.0]]]`
+
+#### `vmap_dim`
+
+```camel
+vmap_dim: (xs: T[..], axis: int[]) => int[] when is_numeric::<T>()
+```
+
+`dim<axis>(xs)` batched: one extent per row, each being the batch's extent one place further in.
+The answer of a batched `dim` is a *batch of extents* (an `int[]`), not one `int`: every row has
+the same extent, because the batch's axis adds nothing to the row's.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_dim([[[1.0, 2.0], [3.0, 4.0]]] as float[1, 2, 2], [1])` gives `[2]`
+
+### Where
+
+`where(cond, a, b)` is elementwise on three arrays of the row's shape, and the condition is one of
+them: the batch's axis is in front of all three, and a condition that is a constant of the row's
+shape is lifted to a batch of one row, which broadcasts against the batch. The rule is the
+operator over the batch, and it is instantiated on the element of the *arms* -- a condition is a
+`bool` and the answer is the arms' element, so the transform reads the first port that is not a
+condition to name the rule's `T`.
+
+#### `vmap_where`
+
+```camel
+vmap_where: (cond: bool[..], a: T[..], b: T[..]) => T[..] when is_numeric::<T>()
+```
+
+`where(cond, a, b)` batched: the operator over the batch, all three operands one axis in front.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_where([[true, false, true]] as bool[1, 3], [[1.0, 2.0, 3.0]] as float[1, 3], [[4.0, 5.0, 6.0]] as float[1, 3])` gives `[[1.0, 5.0, 3.0]]`
 
 <a id="sim"></a>
 

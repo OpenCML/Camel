@@ -1,18 +1,9 @@
-// A destination for the residual tuple: what a program reads when it destructures it.
+// The residuals of a `split`, destructured: refused.
 //
-// `f(x, y) = x*x*y*y` crosses the cut with four values -- the graph says `residuals=4`, and the
-// forward half answers `(36.0, (3.0, 2.0, 9.0, 4.0))`. The call site's static type is not that
-// tuple: the operator resolver sees types only, so it writes the stand-in `splitHalvesOf` builds,
-// one member per value parameter, and this function's stand-in has two. The destructure below
-// therefore asks for two names and gets the two parameters; the two products are never handed to
-// the program at all.
-//
-// **This case pins a wrong behaviour, so that a fix shows up as a diff.** The numbers it prints are
-// today's, not the ones the transform should print: a program that could see the whole tuple would
-// read `r0= 9.0` and `r1= 4.0` for the two products. The tuple itself is intact -- the backward half
-// still reads all four -- which is why the pullback below is the right `(24.0, 36.0)`: the drop is
-// in the type, not in the value. The question, and the two ways to close it, are in
-// docs/handover/questions/questions-2026-11-01-is-a-splits-residual-count-a-number-the-type-can-carry.md.
+// `f(x, y) = x*x*y*y` crosses the cut with four values (`residuals=4`), and the tuple a program gets
+// is the transform's own (`TupleType::residuals`): its members are the graph's answer, so a program
+// does not read them. `let (r0, r1) = residuals` is `SemanticDiag::ResidualsAreNotVisible` at the
+// `let`; the tuple goes to the second half whole, as the last line below does.
 import rulesets.jvp
 import rulesets.transpose
 import { jvp, split, transpose } from transforms
