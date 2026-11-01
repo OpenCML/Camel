@@ -41,7 +41,7 @@
  */
 
 import { is_float, is_numeric, RowsOf } from types
-import { argmax, argmax_axis, argmin, argmin_axis, matmul, max, max_axis, mean, mean_axis, min, min_axis, reshape, shape, sum, sum_axis } from tensor
+import { argmax, argmax_axis, argmin, argmin_axis, concat, dim, matmul, max, max_axis, mean, mean_axis, min, min_axis, numel, permute, reshape, shape, sum, sum_axis, transpose, unsqueeze } from tensor
 
 // `tensor` is imported for its operators, not its names. A rule is written as the primitive's own
 // spelling (`x * w`), and it is instantiated at the type the primitive works on -- a row, `f32[3]`,
@@ -488,4 +488,123 @@ export rule vmap_rule_max_axis::<T>(xs: T[..], axis: int, keepdims: bool) when i
 export rule vmap_rule_min_axis::<T>(xs: T[..], axis: int, keepdims: bool) when is_numeric::<T>() {
     min_axis(xs, axis, keepdims) => (bxs: Lift<T[..]>, baxis: Lift<int>, bkeep: Lift<bool>) =>
         vmap_min_axis(bxs, baxis, bkeep)
+}
+
+// ---- reshape ----
+//
+// `reshape<dims>(x)` is the batching rule whose answer is a *shape*: a row's elements are already in
+// row-major order and a batch's rows are contiguous, so the batched reshape is the same elements
+// with the batch's axis written in front of the row's target.
+//
+// The target is the operator's second argument, in `with` position (`OpDef::params` is `t` then
+// `shape`, `withAfterNorm`), and a `with` argument reaches a rule like any other: lifted to the batch
+// of one row. One row of a batch is contiguous, so its flat reading *is* the target's extents in
+// order -- that is the whole trick, and it is why the shape position takes a runtime value: the
+// written extents are a value, not something this rule's text could spell. `reshape<...>` takes an
+// `int[]` computed at runtime (it already takes `shape(xs)[0]` in the reductions above), so the
+// batched shape is `[the batch's rows, the written extents...]`.
+
+/// The extents of the single row a lifted constant holds, in order: the flat reading of one row.
+func flat_dims(dims: int[..]): int[] {
+    return range(0, numel(dims), 1)->map<(i: int): int => dims[i]>
+}
+
+/// The shape a batch is reshaped to: the batch's rows, then the extents the row's call wrote.
+func batched_shape(xs: float[..], dims: int[..]): int[] {
+    let row = flat_dims(dims)
+    return range(0, len(row) + 1, 1)->map<(i: int): int => if i == 0 then shape(xs)[0] else row[i - 1]>
+}
+
+/// `reshape<dims>(xs)` batched: each row laid out in the shape the call wrote, the batch's axis in
+/// front of it.
+/// @example vmap_reshape([[1.0, 2.0, 3.0, 4.0]] as float[1, 4], [2, 2])    // [[[1.0, 2.0], [3.0, 4.0]]]
+export func vmap_reshape::<T>(xs: T[..], dims: int[..]): T[..] when is_numeric::<T>() {
+    return reshape<batched_shape(xs, dims)>(xs)
+}
+
+/// `reshape<dims>(x)` batched: the batch's axis in front of the row's target shape. The target is the
+/// call's `with` argument, which arrives as the batch of one row (`flat_dims` reads it back). The key
+/// counts the parenthesized operand only, so it is `reshape/1` -- the shape is not an operand.
+export rule vmap_rule_reshape::<T>(x: T[..], dims: int[]) when is_numeric::<T>() {
+    reshape<dims>(x) => (bx: Lift<T[..]>, bdims: int[..]) => vmap_reshape(bx, bdims)
+}
+
+// ---- unsqueeze ----
+//
+// `unsqueeze<axis>(x)` adds an axis of extent one *inside* the row, so the batch's axis is in front
+// of it: the written axis moves one place in, exactly as a reduction's axis does (`batched_axis`).
+
+/// `unsqueeze<axis>(xs)` batched: the row's axis of extent one, one place further in.
+/// @example vmap_unsqueeze([[1.0, 2.0]] as float[1, 2], [0])    // [[[1.0, 2.0]]]
+export func vmap_unsqueeze::<T>(xs: T[..], axis: int[]): T[..] when is_numeric::<T>() {
+    return unsqueeze<batched_axis(axis)>(xs)
+}
+
+/// `unsqueeze<axis>(x)` batched: the axis the row adds is one place further in.
+export rule vmap_rule_unsqueeze::<T>(x: T[..], axis: int) when is_numeric::<T>() {
+    unsqueeze<axis>(x) => (bx: Lift<T[..]>, baxis: Lift<int>) => vmap_unsqueeze(bx, baxis)
+}
+
+// ---- transpose, permute, concat and dim ----
+//
+// The rest of the layout tier whose axis or permutation is written in angle brackets: each is a
+// `with` argument, so each arrives as the batch of one row and the rule shifts it the same way a
+// reduction's axis is shifted. `transpose` writes no axis at all -- the operator swaps the last two
+// axes of whatever it is given, and a batch's last two axes are the row's -- so its rule is the
+// operator over the batch and nothing else.
+
+/// `transpose(xs)` batched: the operator swaps the last two axes, and a batch's last two axes are the
+/// row's last two.
+/// @example vmap_transpose([[[1.0, 2.0], [3.0, 4.0]]] as float[1, 2, 2])    // [[[1.0, 3.0], [2.0, 4.0]]]
+export func vmap_transpose::<T>(xs: T[..]): T[..] when is_numeric::<T>() {
+    return transpose(xs)
+}
+
+/// `transpose(x)` batched: the operator over the batch.
+export rule vmap_rule_transpose::<T>(x: T[..]) when is_numeric::<T>() {
+    transpose(x) => (bx: Lift<T[..]>) => vmap_transpose(bx)
+}
+
+/// The permutation a batch needs: the batch's axis first, then the row's axes one place further in.
+func batched_perm(perm: int[..]): int[] {
+    let row = flat_dims(perm)
+    return range(0, len(row) + 1, 1)->map<(i: int): int => if i == 0 then 0 else row[i - 1] + 1>
+}
+
+/// `permute<perm>(xs)` batched: the row's axes in the written order, the batch's axis in front.
+/// @example vmap_permute([[[1.0, 2.0], [3.0, 4.0]]] as float[1, 2, 2], [1, 0])    // [[[1.0, 3.0], [2.0, 4.0]]]
+export func vmap_permute::<T>(xs: T[..], perm: int[..]): T[..] when is_numeric::<T>() {
+    return permute<batched_perm(perm)>(xs)
+}
+
+/// `permute<perm>(x)` batched: the row's axes in the written order, the batch's axis in front.
+export rule vmap_rule_permute::<T>(x: T[..], perm: int[]) when is_numeric::<T>() {
+    permute<perm>(x) => (bx: Lift<T[..]>, bperm: int[..]) => vmap_permute(bx, bperm)
+}
+
+/// `concat<axis>(xs, ys)` batched: the axis the row joins along is one place further in, and the two
+/// operands are the batch's rows, so the join is along the row's axis of the batch.
+/// @example vmap_concat([[1.0]] as float[1, 1], [[2.0]] as float[1, 1], [0])    // [[[1.0], [2.0]]]
+export func vmap_concat::<T>(a: T[..], b: T[..], axis: int[]): T[..] when is_numeric::<T>() {
+    return concat<batched_axis(axis)>(a, b)
+}
+
+/// `concat<axis>(x, y)` batched: the row's axis, one place further in.
+export rule vmap_rule_concat::<T>(x: T[..], y: T[..], axis: int) when is_numeric::<T>() {
+    concat<axis>(x, y) => (bx: Lift<T[..]>, by: Lift<T[..]>, baxis: Lift<int>) =>
+        vmap_concat(bx, by, baxis)
+}
+
+/// `dim<axis>(xs)` batched: one extent per row, each being the batch's extent one place further in.
+/// The answer of a batched `dim` is a *batch of extents* (an `int[]`), not one `int`: every row has
+/// the same extent, because the batch's axis adds nothing to the row's.
+/// @example vmap_dim([[[1.0, 2.0], [3.0, 4.0]]] as float[1, 2, 2], [1])    // [2]
+export func vmap_dim::<T>(xs: T[..], axis: int[]): int[] when is_numeric::<T>() {
+    let extent = dim<batched_axis(axis)>(xs)
+    return range(0, shape(xs)[0], 1)->map<(i: int): int => extent>
+}
+
+/// `dim<axis>(x)` batched: the extent one place further in.
+export rule vmap_rule_dim::<T>(x: T[..], axis: int) when is_numeric::<T>() {
+    dim<axis>(x) => (bx: Lift<T[..]>, baxis: Lift<int>) => vmap_dim(bx, baxis)
 }
