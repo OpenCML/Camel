@@ -16,8 +16,9 @@
  * principles 7.7), so one pass over the flattened row and a fold axis by axis answer the same bits:
  * -0 stays below +0, a NaN anywhere stays beyond every number, in either shape.
  */
-import { vmap } from array
-import { max, min, sum } from array
+import { vmap } from transforms
+import rulesets.vmap
+import { max, min, sum } from tensor
 import { nan } from math
 
 func rowmax(r: float[3]): float {
