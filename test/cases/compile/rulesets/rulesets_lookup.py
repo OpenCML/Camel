@@ -23,16 +23,17 @@ That gap is the reading a transpose operator has to close, so it is pinned here 
 remembered.
 
 The third family is `rulesets.vmap`, and the program imports it for one reason: the binding table
-names it as the family of `tensor:multiply`'s batching rule. The forward table is read as a whole,
-so a binding whose family is not in the program prints `-> no rule`, and that line is the thing the
-table must never show for a binding that has a rule. The family is therefore part of the fixture,
-and the counts below are what it adds: six rules (the five elementwise keys and `mul_tensor`) and
-one operator whose forward rule lives in the batching family, because that is where a batching rule
-is written.
+names it as the family of the array primitives' batching rules (`tensor:multiply`, `:op/idx_arr`).
+The forward table is read as a whole, so a binding whose family is not in the program prints
+`-> no rule`, and that line is the thing the table must never show for a binding that has a rule. The
+family is therefore part of the fixture, and the counts below are what it adds: seven rules (the five
+elementwise keys, `mul_tensor` and `index_into`) and two operators whose forward rule lives in the
+batching family, because that is where a batching rule is written.
 
-Query the array product's key like any other: `rulesets.vmap` at `mul_tensor` with two operands is
-`vmap_rule_mul_tensor`. A call is a key (`f(a, b)` is `f` at two operands), which is how an operator
-with no token of its own -- the product of two arrays -- is written down.
+Query the array primitives' keys like any other: `rulesets.vmap` at `mul_tensor` with two operands is
+`vmap_rule_mul_tensor`, and at `index_into` with two is `vmap_rule_idx`. A call is a key (`f(a, b)` is
+`f` at two operands), which is how an operator with no token of its own -- the product of two arrays,
+the element of a row -- is written down.
 
 Usage: python rulesets_lookup.py [--camel PATH]
 """
@@ -67,6 +68,8 @@ QUERIES = [
     # The array product, filed under a call because the operator has no token of its own.
     ("rulesets.vmap|mul_tensor|2", "LOOKUP rulesets.vmap mul_tensor/2 -> vmap_rule_mul_tensor"),
     ("rulesets.vmap|mul_tensor|3", "LOOKUP rulesets.vmap mul_tensor/3 -> no rule"),
+    # And the array index, likewise: `xs[i]` is a bracket form, which is none of the three shapes.
+    ("rulesets.vmap|index_into|2", "LOOKUP rulesets.vmap index_into/2 -> vmap_rule_idx"),
 ]
 
 failures: list[str] = []
@@ -110,9 +113,9 @@ check(lines == expected, f"the answers are {expected}, got {lines}")
 
 # The index itself is listed by the same pass, one line per rule, and the program still runs. Three
 # families are in the program: the two scalar ones (five keys each) and the batching family the array
-# product's key is filed in (five elementwise keys and `mul_tensor`).
+# primitives' keys are filed in (five elementwise keys, `mul_tensor` and `index_into`).
 listed = [line for line in asked.splitlines() if line.startswith("RULESET ")]
-check(len(listed) == 16, f"the index lists sixteen rules, got {len(listed)}: {listed}")
+check(len(listed) == 17, f"the index lists seventeen rules, got {len(listed)}: {listed}")
 check(
     "RULESET rulesets.jvp -/1 -> jvp_neg (rhs neg_tangent)" in listed
     and "RULESET rulesets.transpose -/2 -> sub_t (rhs sub_cotangent)" in listed,
@@ -135,23 +138,27 @@ check(
 )
 
 # The bindings are the other half: a rule in the index is used by a transform only when an operator
-# is bound to that family's key. Forward mode binds eleven operators: the ten scalar ones, whose five
-# keys the forward family holds, and `tensor:multiply`, whose rule is the batching family's (the
-# array product is batched by a transform, and that is the rule it has). The transpose family binds
-# none, which is what a transpose operator has to change first.
+# is bound to that family's key. Forward mode binds twelve operators: the ten scalar ones, whose five
+# keys the forward family holds, and the two array primitives whose rules the batching family holds
+# (`tensor:multiply` and `:op/idx_arr` -- a transform batches them, and that is the rule they have).
+# The transpose family binds none, which is what a transpose operator has to change first.
 code, bound = run(["std::rulesets", "forward=true"])
 check(code == 0, f"the program exits 0 asking for the bindings (got {code}):\n{bound}")
 forwards = [line for line in bound.splitlines() if line.startswith("FORWARD ")]
-check(len(forwards) == 11, f"eleven operators have a forward rule, got {len(forwards)}: {forwards}")
-scalars = [line for line in forwards if not line.startswith("FORWARD tensor:")]
+check(len(forwards) == 12, f"twelve operators have a forward rule, got {len(forwards)}: {forwards}")
+scalars = [line for line in forwards if not line.startswith("FORWARD tensor:") and not line.startswith("FORWARD :op/idx")]
 check(
     len(scalars) == 10 and all(" rulesets.jvp " in line for line in scalars),
     f"the ten scalar operators are bound to the forward family: {forwards}",
 )
-arrays = [line for line in forwards if line.startswith("FORWARD tensor:")]
+arrays = [line for line in forwards if line.startswith("FORWARD tensor:") or line.startswith("FORWARD :op/idx")]
 check(
-    arrays == ["FORWARD tensor:multiply rulesets.vmap mul_tensor/2 -> vmap_rule_mul_tensor"],
-    f"the array product is bound to the family that holds its batching rule: {forwards}",
+    arrays
+    == [
+        "FORWARD :op/idx_arr rulesets.vmap index_into/2 -> vmap_rule_idx",
+        "FORWARD tensor:multiply rulesets.vmap mul_tensor/2 -> vmap_rule_mul_tensor",
+    ],
+    f"the array primitives are bound to the family that holds their batching rules: {forwards}",
 )
 check(
     not any(" rulesets.transpose " in line for line in forwards),

@@ -180,6 +180,27 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "vmap_batches_the_element_of_a_row"
+desc = "`r[0] + r[1]` on a row, batched: `:op/idx_arr` is the one primitive of the elementwise tier that reduces rank, so it is the one whose rule's type parameter is not its operand's type -- a rule is instantiated at the primitive's result type (`f32`), while the value indexed is the row (`f32[3]`). The rule states the row as `T[]` and its batch as `Lift<T[]>` (`f32[?, ?]`), hands back `Lift<T>` (one element per row), and costs one strided read per row. The reading says the rules were reached -- `asked=3 found=3 missing=0 rules=vmap_rule_idx,vmap_rule_idx,vmap_rule_add` -- and the values say the two writings are one computation: `[[1, 2, 3], [4, 5, 6]]` gives `[3.0, 9.0]` both ways, and a batch of one row gives `[15.0]`."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/vmap_row_element.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["type=(f32[?, 3]) => f32[]", "asked=3 found=3 missing=0 rules=vmap_rule_idx,vmap_rule_idx,vmap_rule_add", "same=yes"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
+assert(values.length === 4, `printed ${values.length} values: ${JSON.stringify(values)}`)
+assert(values[0] === values[1] && values[0] === '[3.0, 9.0]', `rows: ${values[0]} vs ${values[1]}`)
+assert(values[2] === values[3] && values[2] === '[15.0]', `one row: ${values[2]} vs ${values[3]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "vmap_transform_refuses_a_call_by_name"
 desc = "What the elementwise tier refuses, and that it says so at the node it was written at: `g` calls `f`, and `vmap(g)` stops at that call -- `skip=body construct=a call` with `asked=0 found=0`, because the walk never reached a primitive. The refusal is never a copied node hoping for the best: a construct the tier does not batch is named, with the reason, and the program exits with the fault at the call site."
 kind = "behavior"

@@ -528,6 +528,16 @@ template <typename F> void registerFloatTransposeRules() {
     camel::core::bindTransposeRule({std::string(F::neg), "rulesets.transpose", "-", 1});
 }
 
+/// The array index -- `xs[i]`, `:op/idx_arr` -- has a forward rule as well, and it is keyed
+/// differently from the five above: `xs[i]` is a bracket form, which is none of `a <op> b`, `<op> a`
+/// or `f(a, b)`, so the operator has no token a rule's left side could be written with. Its rule is
+/// therefore filed under a call -- `index_into(x, i)`, the function whose body is the operator
+/// (stdlib/rulesets/vmap.cml) -- and the family is the batching one, because that rule says what a
+/// batch of rows does, which is the only reading this operator has a rule for.
+void registerArrayForwardRules() {
+    camel::core::bindForwardRule({":op/idx_arr", "rulesets.vmap", "index_into", 2});
+}
+
 void registerBuiltinDerivatives() {
     auto &registry = DerivativeRegistry::instance();
     registerFloatRules<F64>(registry);
@@ -536,6 +546,7 @@ void registerBuiltinDerivatives() {
     registerFloatForwardRules<F32>();
     registerFloatTransposeRules<F64>();
     registerFloatTransposeRules<F32>();
+    registerArrayForwardRules();
     registry.setRule(":op/dtod", identityVjp);
     registry.setRule(":op/ftof", identityVjp);
     registry.setRule(":op/dtof", dtofVjp);

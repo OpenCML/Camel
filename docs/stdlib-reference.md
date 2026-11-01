@@ -6874,6 +6874,29 @@ the row -- so a call says its row type, since a batch of rows is a shape `T` can
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_mul_tensor::<f32[2]>([[1.0, 2.0], [3.0, 4.0]] as f32[2, 2], [[10.0, 10.0], [10.0, 10.0]] as f32[2, 2])` gives `[[10.0, 20.0], [30.0, 40.0]]`
 
+### The element of a row
+
+`r[0]` on a row is `:op/idx_arr`, and batching it gathers one element per row. This is the one rank
+where the rule's type parameter is not the type the operand has: a rule is instantiated at its
+primitive's *result* type (`modules/transforms/vmap.cpp`, `elementType = node->dataType()`), which
+for an index is the element (`f32`) while the value being indexed is the row (`f32[3]`). So the row
+is spelled from the element -- `T[]`, an array of `T` -- and the batch of rows is one dimension in
+front of that, `Lift<T[]>`, which for a row of `f32` is `f32[?, ?]`. The index is a batch as well
+(a constant in the body lifts to a batch of one row), so the gather reads it through `at`, the
+one-row broadcast every helper here uses.
+
+#### `idx_batch`
+
+```camel
+idx_batch: (xs: Lift<T[]>, i: int[]) => Lift<T>
+```
+
+One element per row: row `j` of the batch contributes `xs[j][i[j]]`, and the results are the batch
+`Lift<T>`. Cost is one strided read per row -- `len(xs)` of them, no copy of any row.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `idx_batch::<f32>([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3], [2, 1])` gives `[3.0, 5.0]`
+
 <a id="sim"></a>
 
 ## `sim`: Monte Carlo simulation
