@@ -728,9 +728,23 @@ bool buildTransposeMember(
                 camel::runtime::GCGraph *callee = state.program->graph(calleeId);
                 if (callee == nullptr) {
                     // The callee is the value the first input carries, and a value that is
-                    // itself computed -- a call's result, an indirect call -- names no graph here.
+                    // itself computed -- a call's result, a returned closure -- names no graph
+                    // here. The refusal names the node that carries that value and its kind, so a
+                    // reader can see what stands in the way without a dump.
+                    const auto describe = [&](gc_node_ref_t value) {
+                        const camel::runtime::GCNode *carrier = function->node(value);
+                        return std::to_string(value) + ':' +
+                               std::to_string(carrier != nullptr
+                                                  ? static_cast<int>(carrier->kind)
+                                                  : -1);
+                    };
                     os << "TRANSPOSE function=" << function->name() << " skip=call node=" << ref
-                       << " callee=none\n";
+                       << " callee=none value=" << describe(inputs.front());
+                    const auto captured = function->withInputsOf(ref);
+                    if (!captured.empty()) {
+                        os << " with=" << describe(captured.front());
+                    }
+                    os << '\n';
                     return false;
                 }
                 GraphId transposed = rt::kInvalidGraphId;
