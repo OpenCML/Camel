@@ -716,11 +716,25 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         }
     }
     const bool resultInArm = std::ranges::find(regions[*arm], result) != regions[*arm].end();
-    draft.replaceAllValueUses(join, result);
+    // The code that goes away was the last reader of an effect, or of a computation that may fault
+    // (design principles 3.3, 9.7). What takes the branch's place in the value is `:op/keep(x, v)`
+    // rather than `v`, so the node keeps the data use that says it runs; an order edge it was left
+    // with would only order, and a branch folded away may leave it with none at all (3.3 as
+    // amended). The reads counted are the JOIN's own: an arm written as a name (`then a`) is read
+    // through the JOIN's `with` port, and the branch, the JOIN and the arms that go away read
+    // nothing that this removal has to keep.
+    const auto goingAway = [&](gc_node_ref_t n) { return n == join || n == brch || removed(n); };
+    const gc_node_ref_t stood = keepThroughValue(transaction, join, result, goingAway);
+    if (stood != result) {
+        // What follows the branch waits on the value it found there, and that value is now the node
+        // that carries the effect's read.
+        after.push_back(stood);
+    }
+    draft.replaceAllValueUses(join, stood);
     if (!resultInArm) {
         for (gc_node_ref_t user : joinValueUsers) {
             for (gc_node_ref_t pred : after) {
-                if (pred != result && !dropped[pred]) {
+                if (pred != result && pred != stood && !dropped[pred]) {
                     camel::runtime::appendControlDependency(transaction, pred, user);
                 }
             }
@@ -735,13 +749,13 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         }
     }
     if (draft.exitNode() == join) {
-        draft.setExitNode(result);
+        draft.setExitNode(stood);
     }
     if (draft.outputNode() == join) {
-        draft.setOutputNode(result);
+        draft.setOutputNode(stood);
     }
     if (draft.returnNode() == join) {
-        draft.setReturnNode(result, draft.returnKind());
+        draft.setReturnNode(stood, draft.returnKind());
     }
 
     // 5.7: the branch's place in the block's chain is handed to the taken arm's chain tail --
