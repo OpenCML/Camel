@@ -1,0 +1,60 @@
+// The 15:30 ruling, measured: a transform's argument has to be a function the program knows before it
+// runs, and the closure that captures a value is refused where it is written.
+//
+// The author's 15:30 review (docs/handover/reviews/questions-2026-10-29.md) fixes the end of the class
+// "被调者是参数或捕获": not "support the capture one day", but a compile error at the call, because the
+// transform builds the transformed graph right there, out of the graph of the function it is handed.
+//
+// Two shapes stand side by side here, and only one of them is refused:
+//
+//   `by_param` -- `transpose(f)` where `f` is a parameter. The compiler instantiates the body per call
+//   site, so at `by_param(double)` the argument *is* `double` and the transpose is built: this answers
+//   2.0, the paper answer. The parameter only becomes a problem when it stays one, and that is what the
+//   standard library's own `vjp(f: F)` does at stdlib/vjp.cml#vjp -- which is why the parameter half of
+//   the refusal is declared off, with the measurement beside it (CallSpec::
+//   staticFunctionArgRefusesParameters). Turning it on refuses `vjp`'s body and eight `vjp_api` cases.
+//
+//   `by_capture` -- `transpose(h)` where `h` is a closure holding `x`. Nothing here can name the graph:
+//   the static function is known, but the captured value is not, so the transposed graph would have to
+//   take the capture as a parameter of its own. It is refused at the call, on the argument's line:
+//
+//     error[SemanticDiag::TransformArgumentIsNotAKnownFunction]: 'transpose' is applied to a closure
+//     that captures a value, and a transform's argument has to be a function this program knows before
+//     it runs.
+//        --> .../transpose_arg_not_a_static_function.cml:15:26
+//         |
+//      15 |     let back = transpose(h)
+//         |                          ^
+//
+// Before the refusal existed this program *compiled* and then failed in the run-time half with
+// `TRANSPOSE function=__g_51__ skip=residual uri=:op/mul_d operand=1` -- a number a reader has to
+// decode, after the program has already started. The point of the error is that it is the same fact,
+// said where the mistake is.
+//
+// A function that is known by name and calls a closure *inside its body* is the other class
+// (transpose_no_tangent_closure.cml): its argument is a name, so nothing here refuses it, and the 15:30
+// review gives that one a different end -- the body's calls instantiate at compile time by recursion
+// into the called graph.
+import { transpose } from transforms
+import rulesets.transpose
+
+func double(x: float): float {
+    return 2.0 * x
+}
+
+func by_param(f: (x: float) => float): float {
+    let back = transpose(f)
+    return back(2.0, 1.0)
+}
+
+func by_capture(x: float): float {
+    let h = (y: float) => y * x
+    let back = transpose(h)
+    return back(1.0, 1.0)
+}
+
+func main(): int sync {
+    println(by_param(double))
+    println(by_capture(3.0))
+    return 0
+}
