@@ -62,6 +62,27 @@ ROUNDTRIP checked=494 equivalent=447 not_equivalent=47 over_budget=0 unfaithful=
 
 对照这一刀之前（476 / 1881 / 417 / 45 / 14）：打印 **476 → 516**、拒绝 **1881 → 1841**、等价 **417 → 447**、拒绝家族最大的那类 **762 → 716**、家族数仍 48（没升）。**两条线没守住**：不等价 45 → 47、产不出 canonical 文档 14 → 22。原因不是调用形状写错，而是**新打出来的程序撞上打印机另外两个旧缺陷**：① 二维数组字面量只打第一行——`[[1.0, 2.0], [3.0, 4.0]]` 打成 `[1.0, 2.0]`，于是 `let cml1: f32[2, 2] = [1.0, 2.0]` 编不过（`DimensionMismatch`，3 例）；② `byref` 的 `var` 实参（`linear/byref/var_argument_declared.cml`）。22 条里 7 条落在 `array_shape`/`tensor`/`linear/byref`。
 
+**2026-11-02 第五刀：先补两个旧缺陷，把两条边界的读数收回来。** 裁决是「先补漏再加水」：上一刀多打的 113 个程序里有 8 个撞在打印机**自己**的旧错上，先把这两处修掉，再谈"调用怎么写"。
+
+**① 二维数组字面量只打第一行。** `constantText` 的 `Array` 支路按 `value->size()` 迭代、元素一律用 `elemType()` 打，而一个多维度数组的 `size()` 是**一行**的槽数：`[[1.0, 2.0], [3.0, 4.0]]` 打成 `[1.0, 2.0]`，于是 `let cml1: f32[2, 2] = [1.0, 2.0]` 以 `DimensionMismatch` 编不过。改成按值自己的秩递归（`arrayText`：每维一层方括号，元素按行主序线性走 `getSlot`），秩 0 的数组按设计原则 5.4 打成元素本身。三例改前 → 改后：
+
+| 用例 | 改前 | 改后 |
+| :-- | :-- | :-- |
+| `array_shape/let_shape.cml` | `let cml1: f32[2, 2] = [1.0, 2.0]` | `let cml1: f32[2, 2] = [[1.0, 2.0], [3.0, 4.0]]` |
+| `array_shape/literal_length.cml` | `let cml1: f32[] = [1.0, 2.0]`（4 个只剩 2 个） | `let cml1: f32[] = [1.0, 2.0, 3.0, 4.0]` |
+| `array_shape/open_rank_element.cml` | `let grid: f32[2, 2] = [1.0, 2.0]` | `let grid: f32[2, 2] = [[1.0, 2.0], [3.0, 4.0]]` |
+
+**② `byref` 的 `var` 实参。** `var a: f32[..] = [1.0, 2.0, 3.0]` 的图是 `DATA → COPY → CAST → :var/new`，打印机为了让字面量那个 `f32[]` 类型有个落脚处，先写 `let cml1: f32[] = [1.0, 2.0, 3.0]`、再写 `var a: f32[..] = (cml1 as f32[..])`——而 `let` 是一个 store，图里没有这个节点，于是这一例从"能打印"变成"不等价"。改成：**只被一处读、且那一处自己写着类型的字面量不另起 `let`**（`typeWrittenByUse`：穿过 `COPY` 看唯一用户；用户是 `as` 时，只有值的类型没有比 `as` 多说一句才省标注——一个未知 extent 的 `f32[]` 对开秩 `f32[..]` 正是这种，而 `f32[2, 2]` 对 `f32[..]` 有形状要说，标注留着；用户是 `:var/new` 时按 `var` 声明的类型比）。现在打成 `var a: f32[..] = ([1.0, 2.0, 3.0] as f32[..])`，编得过且**与源等价**。
+
+```
+node test/tools/cml-sweep.mjs --jobs 16
+SWEEP files=3358 printed=516 refused=1841 frontend=1001 timeout=0
+REFUSALS families=48
+ROUNDTRIP checked=502 equivalent=458 not_equivalent=44 over_budget=0 unfaithful=14
+```
+
+判据逐条：打印 **516（不低于 516，没掉）**、等价 **447 → 458**、拒绝 **1841（不变）**、拒绝家族 **48（没升）**、**不等价 47 → 44（≤45）**、**产不出文档 22 → 14（≤14）**；按文件比 `DIFFERENT` **只少不多**（对上一笔报的那棵树新增 0、减少 11；对合并 `origin/develop = da27eca0a` 之后的基线新增 0、减少 3）。账是这样走的：合并后先量到 516/455/47/14（数组那条修完已经回到 14），再修 ② 与两个秩 0 的 `var` 用例，把 47 收到 44。
+
 **模块算子的名字还不打。** 让模块算子（`tensor:sum`、`transforms:jvp`）也走表之后，打印涨到 589、等价 481，但产不出文档涨到 60：错误分布 24 条 `UnexpectedToken`（`xs->sum()` 这类**带接收者的调用**被打成前缀调用 `sum(xs)`）、9 条 `DimensionMismatch`（上面那条旧缺陷）、8 条 `ImportNameNotExported`（URI 的模块前缀不是声明导出时的名字）、7 条 `NoMatchingFunction`、3 条 `Redeclaration`、3 条 `UnresolvedReference`、2 条 `MissingComma`。所以表还缺一列：**调用怎么写**（前缀 / 带接收者的 `->` / 有没有 `<...>`，以及名字从哪个模块导出）。这一列不在这一刀里，模块算子因此仍然被拒——`compile/transforms` 那 34 个也还在，等这一列。打印器已能按需写 `import { name, name } from module`（`collectImports`，仅模块算子触发，今天不触发）。
 
 **补声明清单（按节点数）。** 全语料里被打印机点名、确实没有任何声明的算子 **143 个、12520 个节点**。前 12：`:str/format` 1019、`tensor:sum` 934、`tensor:multiply` 862、`tensor:reshape` 856、`:op/tag_is_null` 689、`:struct/len_arr` 585、`tensor:add` 582、`:op/assn_l` 569、`:mark/map_arr` 389、`tensor:subtract` 324、`tensor:matmul` 238、`:op/slice_sub` 219。

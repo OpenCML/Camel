@@ -1011,6 +1011,67 @@ class CmlPrinter {
         }
     }
 
+    /// Whether the one place that reads this value writes its type itself. A cast states the type it
+    /// produces, so a literal under a cast of the value's own type needs no `let` of its own: the
+    /// `as` writes the type, and binding the literal first would add a node the graph does not
+    /// have (a `let` is a store, the graph's copy of the value is not).
+    bool typeWrittenByUse(gc_node_ref_t ref) {
+        const camel::runtime::GCNode *self = graph_->node(ref);
+        if (self == nullptr) {
+            return false;
+        }
+        // The graph's own copy of the value is not a name it needs: look past it to the one place
+        // the value is read.
+        gc_node_ref_t user = ref;
+        const camel::runtime::GCNode *node = nullptr;
+        for (;;) {
+            const auto users = graph_->normOutputsOf(user);
+            if (users.size() != 1) {
+                return false;
+            }
+            user = users.front();
+            node = graph_->node(user);
+            if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Copy) {
+                break;
+            }
+        }
+        const Type *mine   = self->dataType();
+        if (mine == nullptr || node->dataType() == nullptr) {
+            return false;
+        }
+        if (node->kind == camel::runtime::GCNodeKind::Oper) {
+            // A `var` declaration writes the type of the value it starts with (`var w: f32 = 1.0`),
+            // so a literal written there needs no `let` of its own either.
+            const auto *body = graph_->nodeBodyAs<camel::runtime::GCOperBody>(user);
+            if (body == nullptr || body->uri() != ":var/new" ||
+                node->dataType()->code() != TypeCode::Tuple) {
+                return false;
+            }
+            const auto *cell = static_cast<const TupleType *>(node->dataType());
+            if (!cell->isCell() || cell->size() != 1) {
+                return false;
+            }
+            const Type *valueType = cell->typeAt(0);
+            return valueType != nullptr && typeText(mine) == typeText(valueType);
+        }
+        if (node->kind != camel::runtime::GCNodeKind::Cast) {
+            return false;
+        }
+        // The cast writes a type; the question is whether the value's own type says something the
+        // cast does not. An array of one unknown extent (`f32[]`) under a cast to an open-rank
+        // array (`f32[..]`) says nothing more, so the annotation is a `let` the graph does not
+        // have. A value whose type has extents to lose (`f32[2, 2]` under `f32[..]`) keeps its
+        // annotation: the cast cannot say the shape for it.
+        const Type *theirs = node->dataType();
+        if (theirs == nullptr || mine->code() != TypeCode::Array ||
+            theirs->code() != TypeCode::Array) {
+            return false;
+        }
+        const auto *value  = static_cast<const ArrayType *>(mine);
+        const auto *casted = static_cast<const ArrayType *>(theirs);
+        return value->rank() == 1 && value->extents()[0].isUnknown() && casted->rank() == 0;
+    }
+
     bool needsAnnotation(gc_node_ref_t ref) const {
         const camel::runtime::GCNode *node = graph_->node(ref);
         if (node->kind != camel::runtime::GCNodeKind::Data &&
@@ -1532,7 +1593,7 @@ class CmlPrinter {
             }
             // A single use keeps the call where the source had it: lifting it into a
             // `let` would move the effect ahead of the expression it belongs to.
-        } else if (users > 1 || needsAnnotation(ref)) {
+        } else if ((users > 1 || needsAnnotation(ref)) && !typeWrittenByUse(ref)) {
             const Expr value       = expression(ref);
             const std::string name = freshName();
             declared_[ref]         = name;
@@ -2529,6 +2590,32 @@ class CmlPrinter {
         }
     }
 
+    /// The text of an array constant: one bracket per extent of the value's own shape. `rank` is the
+    /// number of extents `dim` still has to write, `dim` the one being written, and `next` the
+    /// linear element the walk has reached -- the elements are contiguous in row-major order, so
+    /// the recursion never has to multiply strides out.
+    std::string arrayText(
+        const Array *value, const ArrayType *arrayType, size_t rank, size_t dim, size_t &next) {
+        if (rank == 0) {
+            // A rank-zero array is the element itself (design principles 5.4).
+            return constantText(value->getSlot(0), arrayType->elemType());
+        }
+        const size_t length = static_cast<size_t>(value->dim(dim));
+        std::string text    = "[";
+        for (size_t i = 0; i < length; ++i) {
+            if (i != 0) {
+                text += ", ";
+            }
+            if (dim + 1 == rank) {
+                text += constantText(value->getSlot(next++), arrayType->elemType());
+            } else {
+                text += arrayText(value, arrayType, rank, dim + 1, next);
+            }
+        }
+        text += "]";
+        return text;
+    }
+
     std::string constantText(slot_t slot, const Type *type) {
         switch (type->code()) {
         case TypeCode::Int32:
@@ -2573,13 +2660,16 @@ class CmlPrinter {
         }
         case TypeCode::Array: {
             const auto *value = fromSlot<Array *>(slot);
-            const auto *arrayType = static_cast<const ArrayType *>(type);
-            std::string text = "[";
-            for (size_t i = 0; value != nullptr && i < value->size(); ++i) {
-                text += (i ? ", " : "") + constantText(value->get<slot_t>(i), arrayType->elemType());
+            if (value == nullptr) {
+                return "[]";
             }
-            text += "]";
-            return text;
+            const auto *arrayType = static_cast<const ArrayType *>(type);
+            // One bracket per extent, not one bracket per slot: `size()` is the count of a single
+            // row for a value of more than one extent, so a `f32[2, 2]` constant is `[[1.0, 2.0],
+            // [3.0, 4.0]]` and not `[1.0, 2.0]`. The elements lie in row-major order, so the walk
+            // is linear and only the brackets come from the shape.
+            size_t next = 0;
+            return arrayText(value, arrayType, static_cast<size_t>(value->rank()), 0, next);
         }
         case TypeCode::Tuple: {
             const auto *value = fromSlot<Tuple *>(slot);
