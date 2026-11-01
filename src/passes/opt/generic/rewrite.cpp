@@ -252,7 +252,11 @@ gc_node_ref_t keepThroughValue(
     camel::runtime::GraphTransaction &transaction, gc_node_ref_t removed, gc_node_ref_t value,
     const std::function<bool(gc_node_ref_t)> &alsoGoing) {
     auto &draft = transaction.edit();
-    if (value == kInvalidNodeRef || !draft.alive(value)) {
+    // A value that is invalid is the removal with nothing in its place: the node going away is read
+    // by no one, so there is no reader to hand an effect's value to, and the operator carries the
+    // effect's own value -- it is the statement that reads it and stands where the node stood.
+    const bool carried = value != kInvalidNodeRef;
+    if (carried && !draft.alive(value)) {
         return value;
     }
     const auto lastRead = lastReadsGoingOut(transaction, removed, alsoGoing);
@@ -263,19 +267,16 @@ gc_node_ref_t keepThroughValue(
     // read that node on the way, so the removal takes no read of it.
     std::vector<gc_node_ref_t> goingOut;
     for (gc_node_ref_t source : lastRead) {
-        if (source != value && !reaches(transaction, source, value)) {
+        if (!carried) {
+            goingOut.push_back(source);
+        } else if (source != value && !reaches(transaction, source, value)) {
             goingOut.push_back(source);
         }
     }
     if (goingOut.empty()) {
         return value;
     }
-    const auto *valueHeader = draft.header(value);
-    if (valueHeader == nullptr || valueHeader->dataType == nullptr) {
-        return value;
-    }
-    camel::core::type::Type *const type = valueHeader->dataType;
-    gc_node_ref_t kept                  = value;
+    gc_node_ref_t kept = value;
     // The node stands where the removed node stood: it is body of the same block, so it is written
     // into the same region and not into whichever one the draft last inserted into.
     const uint32_t region   = draft.nodeRegion(removed);
@@ -284,12 +285,17 @@ gc_node_ref_t keepThroughValue(
         draft.setInsertRegion(region);
     }
     for (gc_node_ref_t source : goingOut) {
+        const gc_node_ref_t passed = carried ? kept : source;
+        const auto *header         = draft.header(passed);
+        if (header == nullptr || header->dataType == nullptr) {
+            break;
+        }
         const gc_node_ref_t node = draft.addOperNode(
-            type, nullptr, camel::core::kWellKnownOperatorUris[camel::core::oper::Keep]);
+            header->dataType, nullptr, camel::core::kWellKnownOperatorUris[camel::core::oper::Keep]);
         if (node == kInvalidNodeRef) {
             break;
         }
-        const gc_node_ref_t inputs[2] = {source, kept};
+        const gc_node_ref_t inputs[2] = {source, passed};
         draft.setNormInputs(node, inputs);
         // Diagnostics on the value the operator passes on point where the effect was written: the
         // node the readers see is the one that took its place in the value.
