@@ -1,0 +1,24 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
+# The read face of a draft (include/camel/compile/gir/graph_read.h) is what the transform's lift will
+# read a graph through the day it reads a draft instead of a frozen graph. A face that is right and a
+# second model of the graph that happens to agree on the cases somebody tried look the same from the
+# outside, so the claim is not checked by a test that prints numbers and reads them: the encoder asks
+# the same graph twice as it builds it -- once as the draft it was written as, once as the graph it
+# was encoded to -- and refuses a graph whose two readings disagree. Every program in this tree has
+# had the question asked; this plan's case is the one written for it, so that what is asked is in
+# front of a reader in one place: a call, an operator, a cast, the front end's placeholders on the
+# draft side, and a numbering that changes between the two.
+
+[[tests]]
+name = "graph_read.draft_agrees_with_frozen"
+desc = "One graph, asked twice: the draft the compiler wrote and the frozen graph built from it answer the same node slots, the same live nodes, the same kind, data index, type, flags and payload presence for every node, the same three input lists (normal, with, control) in the same order, the same callee for every FUNC node and the same operator for every OPER node (camel/compile/gir/graph_read.h). The encoder asks this of every graph it encodes and refuses a graph whose two readings disagree, so the assertion here is the one every program in the tree makes: this case compiles and answers. The case is chosen so the graphs are not all one kind -- a FUNC node with a callee (`twice`), an OPER node with an operator, and the placeholders the front end leaves on the draft side, which is where a face that only copied ids would pass and prove nothing."
+kind = "behavior"
+case = "../../../cases/compile/graph_read/callee_and_oper.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["5.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

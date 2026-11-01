@@ -22,16 +22,17 @@
  * elementwise tier is therefore one rule per primitive, each of them the primitive itself: the
  * batching of an elementwise operator is that operator.
  *
- * This round writes the elementwise tier, `matmul`, the six reductions along an axis, and the four
+ * This round writes the elementwise tier, `matmul`, the six reductions along an axis, and the six
  * over every axis. The first group need a rule that says *which* axis the batch is on: a batch of
  * rows under `matmul` is the axes before its last two, and a reduction along an axis keeps the axis
  * it reduces and gains the batch axis in front, so its rule is written in terms of the operator's
  * own axis argument (`batched_axis`). A reduction over every axis takes no axis at all -- there is
  * none of the operator's to shift -- so its rule keeps the batch axis in front and folds away the
  * axes the row had after it, over the rank the value itself carries (`shape`). `sum`, `mean`, `max`
- * and `min` are written that way; `argmax` and `argmin` are not, because their answer is the
- * position counted in row-major order and no fold of axis positions produces that number -- see the
- * paragraph below `vmap_min`.
+ * and `min` are written that way. `argmax` and `argmin` answer a *position*, which no fold of axis
+ * positions produces (`argmax` of a `float[2, 3]` row is 5, not `[1, 2]`), so their rule reads the
+ * batch as one line instead: `reshape<[shape(xs)[0], -1]>(xs)` puts a row's elements on its last
+ * axis, and `argmax_axis` along that axis counts them -- see the section below `vmap_rule_min`.
  *
  * `reshape` and the broadcasting moves are the next tier.
  *
@@ -40,7 +41,7 @@
  */
 
 import { is_float, is_numeric, RowsOf } from types
-import { argmax_axis, argmin_axis, matmul, max, max_axis, mean, mean_axis, min, min_axis, shape, sum, sum_axis } from tensor
+import { argmax, argmax_axis, argmin, argmin_axis, matmul, max, max_axis, mean, mean_axis, min, min_axis, reshape, shape, sum, sum_axis } from tensor
 
 // `tensor` is imported for its operators, not its names. A rule is written as the primitive's own
 // spelling (`x * w`), and it is instantiated at the type the primitive works on -- a row, `f32[3]`,
@@ -399,29 +400,23 @@ export rule vmap_rule_mean::<T>(xs: T[..]) when is_float::<T>() {
     mean(xs) => (bxs: Lift<T[..]>) => vmap_mean(bxs)
 }
 
-/// `max(xs)` batched: one maximum per row, folded the same way `sum` is. No accumulator is chosen,
-/// because IEEE 754-2019 maximum carries an element and is exactly associative and commutative
-/// (design principles 7.7): the axes of a row may be folded away in any order and the bits are the
-/// same, so the batch axis in front and the row's axes folded from the first is the same value as
-/// the row's own `max`.
+/// `max(xs)` batched: one maximum per row. The row's axes are flattened into one (`shape(xs)[0]`
+/// is the batch extent, `-1` the rest) and the maximum is taken over that axis in one pass: IEEE
+/// 754-2019 maximum carries an element and is exactly associative and commutative (design
+/// principles 7.7), so the axes of a row may be folded away in any order -- or in one pass over
+/// the flattened row -- and the bits are the same: -0 below +0, a NaN anywhere beyond every
+/// number, in either shape.
 /// @example vmap_max([[1.0, 5.0, 2.0], [4.0, 0.0, 3.0]] as float[2, 3])    // [5.0, 4.0]
 export func vmap_max::<T>(xs: T[..]): T[..] when is_numeric::<T>() {
-    return fold_max_axes::<T>(xs, len(shape(xs)) - 1)
+    return max_axis(reshape<[shape(xs)[0], -1]>(xs), 1, false)
 }
 
-func fold_max_axes::<T>(xs: T[..], left: int): T[..] when is_numeric::<T>() {
-    return if left <= 0 then xs else fold_max_axes::<T>(max_axis(xs, 1, false), left - 1)
-}
-
-/// `min(xs)` batched: the same fold, with the IEEE 754-2019 minimum. -0 is below +0 and a NaN is
-/// beyond every number, so the fold answers both readings the whole-tensor form does.
+/// `min(xs)` batched: the same one-pass minimum over the flattened row, with the IEEE 754-2019
+/// `minimum`. -0 is below +0 and a NaN is beyond every number, so the answer is the one the
+/// whole-tensor form gives.
 /// @example vmap_min([[1.0, 5.0, 2.0], [4.0, 0.0, 3.0]] as float[2, 3])    // [1.0, 0.0]
 export func vmap_min::<T>(xs: T[..]): T[..] when is_numeric::<T>() {
-    return fold_min_axes::<T>(xs, len(shape(xs)) - 1)
-}
-
-func fold_min_axes::<T>(xs: T[..], left: int): T[..] when is_numeric::<T>() {
-    return if left <= 0 then xs else fold_min_axes::<T>(min_axis(xs, 1, false), left - 1)
+    return min_axis(reshape<[shape(xs)[0], -1]>(xs), 1, false)
 }
 
 /// `max(xs)` batched: the batch axis stays in front and the row's axes are folded away.
@@ -432,6 +427,43 @@ export rule vmap_rule_max::<T>(xs: T[..]) when is_numeric::<T>() {
 /// `min(xs)` batched: the same fold.
 export rule vmap_rule_min::<T>(xs: T[..]) when is_numeric::<T>() {
     min(xs) => (bxs: Lift<T[..]>) => vmap_min(bxs)
+}
+
+// ---- the positions over every axis ----
+//
+// `argmax(xs)` and `argmin(xs)` answer one position over the whole row, counted in row-major order,
+// and no fold of axis positions produces that number: folding a row's axes hands back a position per
+// axis (`argmax` of a `float[2, 3]` row is 5, not `[1, 2]`). What produces it is the shape the row's
+// own elements form as one line. `reshape<[shape(xs)[0], -1]>(xs)` is the batch read as
+// `[rows, -1]`, which lays the rows' elements end to end, so its *last* axis counts exactly one
+// row's elements and a position along it is the position over that row.
+//
+// The shape `reshape` takes is written in angle brackets and may hold a value (`shape(xs)[0]`), not
+// only a constant: it is checked where the shape is known, so `-1` stands for the extent the value
+// itself states (design principles 5.4).
+
+/// `argmax(xs)` batched: one row-major position per row, read as a reshape of the batch to
+/// `[rows, -1]` and a reduction of its last axis -- which is one row's elements.
+/// @example vmap_argmax([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])    // [1, 2]
+export func vmap_argmax::<T>(xs: T[..]): int[..] when is_numeric::<T>() {
+    return argmax_axis(reshape<[shape(xs)[0], -1]>(xs), 1, false)
+}
+
+/// `argmin(xs)` batched: the same reading of the batch as `[rows, -1]`, with the earlier position on
+/// a tie.
+/// @example vmap_argmin([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])    // [0, 0]
+export func vmap_argmin::<T>(xs: T[..]): int[..] when is_numeric::<T>() {
+    return argmin_axis(reshape<[shape(xs)[0], -1]>(xs), 1, false)
+}
+
+/// `argmax(xs)` batched: the row read as one line, reduced along its last axis.
+export rule vmap_rule_argmax::<T>(xs: T[..]) when is_numeric::<T>() {
+    argmax(xs) => (bxs: Lift<T[..]>) => vmap_argmax(bxs)
+}
+
+/// `argmin(xs)` batched: the same line.
+export rule vmap_rule_argmin::<T>(xs: T[..]) when is_numeric::<T>() {
+    argmin(xs) => (bxs: Lift<T[..]>) => vmap_argmin(bxs)
 }
 
 /// `sum_axis(xs, axis, keepdims)` batched: the axis the row reduces is one place further in.

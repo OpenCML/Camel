@@ -24,7 +24,7 @@ func over_batch(): f32 {
     return sum(vmap(sq)(batch))
 }
 
-func main(): int {
+func main(): int sync {
     let xs: f32[] = [1.0, 2.0, 3.0]
     let gs = grad(over_batch)<xs>()
     println(gs[0])

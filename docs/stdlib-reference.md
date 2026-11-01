@@ -52,6 +52,7 @@ Not in this reference: the profiler (`perf`).
 | [ckpt](#ckpt) | `import { ... } from ckpt` | C++ |
 | [tree](#tree) | `import { ... } from tree` | Camel |
 | [transforms](#transforms) | `import { ... } from transforms` | C++ |
+| [vjp](#vjp) | `import { ... } from vjp` | Camel |
 | [tensor](#tensor) | `import { ... } from tensor` | C++ |
 | [types](#types) | `import { ... } from types` | Camel |
 | [array](#array) | `import { ... } from array` | Camel |
@@ -88,6 +89,7 @@ Not in this reference: the profiler (`perf`).
 | [ckpt](#ckpt) | `import { ... } from ckpt` |  |
 | [tree](#tree) | `import { ... } from tree` |  |
 | [transforms](#transforms) | `import { ... } from transforms` |  |
+| [vjp](#vjp) | `import { ... } from vjp` |  |
 | [tensor](#tensor) | `import { ... } from tensor` |  |
 | [types](#types) | `import { ... } from types` |  |
 | [array](#array) | `import { ... } from array` |  |
@@ -649,7 +651,8 @@ slice: <axis: int, start: int, end: int, step: int = 1> (x: Bytes) => Bytes
 The same slice of a `Bytes`, by byte: it has the one axis 0, and the result is a `Bytes`.
 `b[1:3]` and `b->slice<0, 1, 3>` are the same bytes.
 
-- Example: `encode('hello')->slice<0, 1, 4>` gives `the bytes of 'ell'`
+- Example (a fragment, not compiled): `encode('hello')->slice<0, 1, 4>` gives `the bytes of 'ell'`
+- Why it is not compiled: the example names `encode`, which is `bytes`'s, and a doc example is compiled with this module's names only
 
 #### `concat`
 
@@ -1477,6 +1480,89 @@ straight-line bodies.
 
 - Example (a fragment, not compiled): `let batched = vmap(f)`
 - Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+
+#### `remat`
+
+```camel
+remat: (f: F) => F when is_function::<F>()
+```
+
+Memory for recomputation: `remat(f)` gives a function whose graph is `f`'s graph with the
+property "a call of it is recomputed on the backward pass instead of kept" (the author's ruling
+of 2026-11-01). The property is the graph's, not the call site's and not a tag's: the call
+answers with a new graph whose body is the body it was given, so a call through it is a call of
+the same function and no value changes -- what changes is what a step that cuts the graph in two
+has to keep across the cut. `split` reads the property: the values of a marked graph that cannot
+be recomputed from the parameters are not residuals, and the backward half computes them again
+(`modules/transforms/split.cpp`). JAX writes the same transform as `jax.checkpoint`, whose other
+name is `jax.remat`; in this tree "checkpoint" is the persistence module `ckpt`, so the transform
+takes the other word.
+
+The type is the argument's own: a function in, the same function out, which is the whole of what
+the name says. `modules/transforms/remat_operator.cpp` answers `(f: F) => F` and builds the graph
+the value stands on; the shapes a call site can write today are the ones `jvp`'s and `split`'s
+declarations show, because the result of a call is the exit type its resolver gives.
+
+- Example (a fragment, not compiled): `let remembered = remat(f)`
+- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+
+<a id="vjp"></a>
+
+## `vjp`: the derivative, as a library
+
+#### `vjp`
+
+```camel
+vjp: (f: (x: float) => float) => (x: float) => (float, (ct: float) => float)
+```
+
+The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
+`(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters. The juxtaposed call
+`transpose(residuals, ct)` is the internal step, not this signature.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example (a fragment, not compiled): `let reading = vjp(f)`
+- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+
+#### `vjp`
+
+```camel
+vjp: (f: (x: float, y: float) => float) => (x: float, y: float) => (float, (ct: float) => (float, float))
+```
+
+The same transform for a function of two parameters: `vjp(f)(x, y)` is `(value, pullback)` and
+`pullback(ct)` gives both cotangents, in the order `f` takes the parameters.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example (a fragment, not compiled): `let reading_of_two = vjp(f)`
+- Why it is not compiled: `f` is a function value of two parameters, so the example is a fragment of a program that declares one
+
+#### `grad`
+
+```camel
+grad: (f: (x: float) => float) => (x: float) => float
+```
+
+The gradient of a function of one parameter: `vjp` with the seed 1, its second half taken --
+`grad(f)(x)` is `vjp(f)(x).1(1.0)` (author's ruling of 2026-11-01). Read `grad(f)` as a name for
+that reading of `vjp`, not as a second transform.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example (a fragment, not compiled): `let slope = grad(f)`
+- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+
+#### `with_grad`
+
+```camel
+with_grad: (f: F) => F when is_function::<F>()
+```
+
+The gradient of the first `with` parameter of `f` (design principles 9.9): the same `vjp`, taken
+with respect to a captured value instead of a parameter.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example (a fragment, not compiled): `let slope_over_the_capture = with_grad(f)`
+- Why it is not compiled: `f` captures the value it differentiates against, so the example is a fragment of a program that declares one
 
 <a id="tensor"></a>
 
@@ -6559,12 +6645,12 @@ scalar (it gives the result and the pullback from the cotangent of the result to
 and `jvp` is forward mode (the result and its tangent along a direction); both land with the
 autodiff lane, not before they work.
 
-The transform that trades memory for recomputation -- the same values, with the annotated section
-recomputed in the backward pass instead of kept -- is named `remat` here. JAX calls it
-`jax.checkpoint` and, by its other name, `jax.remat`; in this tree "checkpoint" is the persistence
-module `stdlib/ckpt.cml` and stays that, so the transform takes the other word and there is no
-second name for a reader to disambiguate. It is not implemented yet: the name is not a value, and
-a call to it is refused like any other name that does not resolve.
+The memory-for-recomputation transform -- `remat` -- is not here: it is a transform of the
+`transforms` module (`stdlib/signatures/transforms.cml`), because what it changes is a property of
+a graph and a call site, not a derivative. JAX calls the same transform `jax.checkpoint` and, by
+its other name, `jax.remat`; in this tree "checkpoint" is the persistence module
+`stdlib/ckpt.cml` and stays that, so the transform takes the other word and there is no second
+name for a reader to disambiguate.
 
 `stop_gradient` marks a value as a constant, and the mathematics of the local rules is written
 here, where the library keeps one statement of it: `add_tangent` and its siblings are the tangent
@@ -6877,16 +6963,17 @@ A rule's right side takes the *lifted* operands and answers the *lifted* result.
 elementwise tier is therefore one rule per primitive, each of them the primitive itself: the
 batching of an elementwise operator is that operator.
 
-This round writes the elementwise tier, `matmul`, the six reductions along an axis, and the four
+This round writes the elementwise tier, `matmul`, the six reductions along an axis, and the six
 over every axis. The first group need a rule that says *which* axis the batch is on: a batch of
 rows under `matmul` is the axes before its last two, and a reduction along an axis keeps the axis
 it reduces and gains the batch axis in front, so its rule is written in terms of the operator's
 own axis argument (`batched_axis`). A reduction over every axis takes no axis at all -- there is
 none of the operator's to shift -- so its rule keeps the batch axis in front and folds away the
 axes the row had after it, over the rank the value itself carries (`shape`). `sum`, `mean`, `max`
-and `min` are written that way; `argmax` and `argmin` are not, because their answer is the
-position counted in row-major order and no fold of axis positions produces that number -- see the
-paragraph below `vmap_min`.
+and `min` are written that way. `argmax` and `argmin` answer a *position*, which no fold of axis
+positions produces (`argmax` of a `float[2, 3]` row is 5, not `[1, 2]`), so their rule reads the
+batch as one line instead: `reshape<[shape(xs)[0], -1]>(xs)` puts a row's elements on its last
+axis, and `argmax_axis` along that axis counts them -- see the section below `vmap_rule_min`.
 
 `reshape` and the broadcasting moves are the next tier.
 
@@ -7202,11 +7289,12 @@ integer row's mean is `f32`, which is not the element the rule would be written 
 vmap_max: (xs: T[..]) => T[..] when is_numeric::<T>()
 ```
 
-`max(xs)` batched: one maximum per row, folded the same way `sum` is. No accumulator is chosen,
-because IEEE 754-2019 maximum carries an element and is exactly associative and commutative
-(design principles 7.7): the axes of a row may be folded away in any order and the bits are the
-same, so the batch axis in front and the row's axes folded from the first is the same value as
-the row's own `max`.
+`max(xs)` batched: one maximum per row. The row's axes are flattened into one (`shape(xs)[0]`
+is the batch extent, `-1` the rest) and the maximum is taken over that axis in one pass: IEEE
+754-2019 maximum carries an element and is exactly associative and commutative (design
+principles 7.7), so the axes of a row may be folded away in any order -- or in one pass over
+the flattened row -- and the bits are the same: -0 below +0, a NaN anywhere beyond every
+number, in either shape.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_max([[1.0, 5.0, 2.0], [4.0, 0.0, 3.0]] as float[2, 3])` gives `[5.0, 4.0]`
@@ -7217,11 +7305,49 @@ the row's own `max`.
 vmap_min: (xs: T[..]) => T[..] when is_numeric::<T>()
 ```
 
-`min(xs)` batched: the same fold, with the IEEE 754-2019 minimum. -0 is below +0 and a NaN is
-beyond every number, so the fold answers both readings the whole-tensor form does.
+`min(xs)` batched: the same one-pass minimum over the flattened row, with the IEEE 754-2019
+`minimum`. -0 is below +0 and a NaN is beyond every number, so the answer is the one the
+whole-tensor form gives.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_min([[1.0, 5.0, 2.0], [4.0, 0.0, 3.0]] as float[2, 3])` gives `[1.0, 0.0]`
+
+### The positions over every axis
+
+`argmax(xs)` and `argmin(xs)` answer one position over the whole row, counted in row-major order,
+and no fold of axis positions produces that number: folding a row's axes hands back a position per
+axis (`argmax` of a `float[2, 3]` row is 5, not `[1, 2]`). What produces it is the shape the row's
+own elements form as one line. `reshape<[shape(xs)[0], -1]>(xs)` is the batch read as
+`[rows, -1]`, which lays the rows' elements end to end, so its *last* axis counts exactly one
+row's elements and a position along it is the position over that row.
+
+The shape `reshape` takes is written in angle brackets and may hold a value (`shape(xs)[0]`), not
+only a constant: it is checked where the shape is known, so `-1` stands for the extent the value
+itself states (design principles 5.4).
+
+#### `vmap_argmax`
+
+```camel
+vmap_argmax: (xs: T[..]) => int[..] when is_numeric::<T>()
+```
+
+`argmax(xs)` batched: one row-major position per row, read as a reshape of the batch to
+`[rows, -1]` and a reduction of its last axis -- which is one row's elements.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_argmax([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])` gives `[1, 2]`
+
+#### `vmap_argmin`
+
+```camel
+vmap_argmin: (xs: T[..]) => int[..] when is_numeric::<T>()
+```
+
+`argmin(xs)` batched: the same reading of the batch as `[rows, -1]`, with the earlier position on
+a tie.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_argmin([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])` gives `[0, 0]`
 
 <a id="sim"></a>
 

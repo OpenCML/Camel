@@ -1,8 +1,7 @@
-# M4 组装：库层 `vjp` 已按设计 4.4 拼好，落地只差 M3 转置那次调用
+# M4 组装：库层 `vjp` 拼好了，作者的三条读数由程序自己给出
 
-对象：`stdlib/vjp.cml`，分支 `lane-m4-assembly`（含 `lane-m4` 与 `origin/develop`，含 `split` 改成残差图定那笔）。
-判据：组装"完成"当且仅当探针 **`node test/tools/have-library-vjp.mjs` 打印出 `12.0` 与 `9.0` 并退出 0**。
-那就是落地那天唯一的验证命令——它先建库、再跑对照用例，两个数直接印在上面。
+对象：`stdlib/vjp.cml`，分支 `lane-m4-assembly`（含 `lane-m4`、`origin/develop`、`split` 改成残差图定那笔）。
+判据（已满足）：**一个只 `import { grad, vjp } from vjp` 的程序**给出 `18.0` / `(12.0, 9.0)` 与 `27.0`。
 
 ## 组装长什么样
 
@@ -19,47 +18,61 @@ return (x, y) => {
 （同一裁定）：`vjp(f)(x)` 给 `(y, pullback)`，`pullback(ȳ)` 给余切，`grad(f)(x) = vjp(f)(x).1(1.0)`；
 并列形状只在文件内部，没有对外签名。
 
-`Vjp<F>`/`Split<F>`/`ParamsOf<F>` 还没有（设计 6.1），所以 `vjp` 按 arity 各声明一次（一个 `float`
-参数、两个 `float` 参数）——`tensor` 对"一个名字按接受的类型声明一次"就是这么做的，泛型落地时换掉声明、不换 body。
+## 库带上它组合的规则集
+
+`vjp` 是 `transpose(split(reinterp<jvp>(f)))`，所以它要 `rulesets.jvp`（正向规则）和
+`rulesets.transpose`（反向走图时问的那些规则）。两行都写在 `stdlib/vjp.cml` 顶部：
+
+```camel
+import rulesets.jvp
+import rulesets.transpose
+```
+
+理由只有一句：**一个库要能自己兑现它对外承诺的调用，否则每个调用者都得知道它的内部组成**——
+与"pass 是前置条件就诊断它"同一口径。所以调用它的四个程序**只 import 库**。
+
+## 两条用例，各钉一行 import
+
+程序源码分辨不出这两行（调用者一行都不 import），所以只能做 A/B：
+`test/tools/check-vjp-ruleset.mjs` 把**其中一行**在"库的副本"里注释掉、`CAMEL_STD_LIB` 指过去，
+同一个程序跑两遍——拿掉时必须在**库自己那一行**停住并说出缺什么，放回时三个读数都在。
+
+| 用例 | 拿掉 | 读数 |
+| --- | --- | --- |
+| `vjp_api.the_jvp_import_is_load_bearing` | `rulesets.jvp` | `jvp has no forward rule for ':op/mul_d'`，`note: raised here` → `stdlib/vjp.cml:49:35` |
+| `vjp_api.the_transpose_import_is_load_bearing` | `rulesets.transpose` | `TRANSPOSE … skip=rule uri=:op/add_d reason=no-such-family` → `transpose has no transpose for this function` @ `stdlib/vjp.cml:56:30` |
+
+两条都验过反向：把该行从**装机后的库**里去掉，对应用例红（`the library does not import …，so there
+is nothing to drop`），放回去绿。工具里也写了原因：跑在计划里时 runner 给子进程
+`CAMEL_ERROR_FORMAT=short`，那一种格式只有一行消息、没有 `note:` 和 `-->`，所以工具自己按名字要
+`text`（rich）那一种——它读的是那两行位置，不改走图判了什么。
 
 ## 今天的读数（可复现）
 
 ```
-$ node test/tools/have-library-vjp.mjs          # 退出 0：组合编得过，跑不起来
-the library `vjp` stops in the graph (M4): the type layer takes the shape `split` hands back and
-the module compiles, but the walk that runs a function backwards refuses a construct inside it.
-  evidence (the walk's own reading, then the diagnostic raised at the `transpose` call)
-    TRANSPOSE function=split_of_jvp_of_f_backward skip=call node=11 callee=none
-    error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: transpose has no transpose for this function.
-  what is missing: transposing that construct -- giving it a transpose of its own and replacing
-  the site it is written at, which is the step named to the M3 lane.
+$ node scripts/test.js test/plans/feat/compile/transforms.plan.toml
+[PASS] vjp_api.carries_its_own_ruleset.nvm        27.0 / 27.0 / 27.0
+[PASS] vjp_api.analytic_gradient.nvm             f(3, 2) = 18.0, library y = 18.0,
+                                                  library/analytic df/dx = 12.0, df/dy = 9.0
+[PASS] vjp_api.the_jvp_import_is_load_bearing
+[PASS] vjp_api.the_transpose_import_is_load_bearing
+[SUMMARY] total: 21, pass: 21, fail: 0
 ```
 
-`split` 改成"残差归图"（作者 08:10 裁定）之后，类型层不再拒：残差位是没人写得出的 `_`，
-`Split<F>` 的形状由编译器在实例化时填，所以 `vjp.cml` 不写它，按 `let (forward, linear) = split(jvp(f))`
-让编译器推。一个参数的 `vjp` 里那次 `transpose` 给的是**一个元素的元组**（参数只有一个），
-pullback 取出那个数给出——因为 `grad(f)(x)` 和 `vjp(f)(x).1(1.0)` 是一个数。
+最后一步（转置"多参数被调函数"）由 `origin/develop` 的 `047f30f0b` 带进来；
+`probe_library_vjp.cml` 读 `39.0`（= 18 + 12 + 9）。
 
-探针按**撞墙顺序**报，每一条都带凭据：类型层 → 图层（`TRANSPOSE … skip=…` 读数行 + 调用点的
-`RuntimeDiag`）→ 跑 `12 / 9`。它不认节点种类、不认行号，所以墙往下一层挪的那天它自己跟着挪，
-没有人去改代码。`--missing` 问的是反面（组合建不起来时为 0），
-`vjp_api.names_the_missing_step` 靠它在组合真的能建的那天自己退出。
+## 参考页：`pending` 已退场
 
-计划：`node scripts/test.js test/plans/feat/compile/transforms.plan.toml`
-→ `[SUMMARY] total: 19, pass: 17, fail: 0, skip: 2`（两个 skip 都在等 M3 转置 `Call`）。
+`vjp` 跑了得起来，所以 `scripts/stdlib-reference.mjs` 里那句 `pending:` 删掉了，`--write` 重生成：
 
-## 落地那天跟着动的地方
+- `docs/stdlib-reference.md`：**519 条**（`--verify-doc` 说 up to date）；
+- `--audit`：**468 / 635**，37 条模块、8 个未读文件（与原表一致）；
+- `--verify-docs`：416 个示例编译、**85** 个标 fragment（原 81；多出来的是 `vjp` 的四个 `@example`，
+  它们引用未声明的 `f`，本来就是 fragment）。
 
-1. `vjp_api.names_the_missing_step` 自己跳过（`--missing` 变 1）；它今天钉的是
-   `stdlib/vjp.cml:51:` / `transpose has no transpose for this function` / `TRANSPOSE function=split_of_jvp_of_f_backward skip=call`，
-   那三句随之作废，不用谁去删。
-2. `vjp_api.analytic_gradient` 自动开始跑并断言 `12.0` / `9.0`；`have-vjp.mjs` 门后的
-   `vjp_gradient.cml` 也已改成 JAX 形状（27.0 三个数不变）。
-3. `scripts/stdlib-reference.mjs` 里 `vjp` 的 `pending:` 一行删掉再 `--write`，参考页就收进这个模块；
-   `--verify-docs` 在它编得过的当天会自己报"该删这一行了"。
+## 还留着的两条旧账（不在本分支）
 
-## 这支分支今天为什么也是绿的
-
-组装没让任何既有断言失效：拒绝那一读仍然停在库自己那一行（只是行号与措辞跟着组装走），
-两个数仍然由门挡着。所以它可以随时并进 `develop`；两个数在 `transpose` 能转置那次调用之前不会出现，
-也不会假装出现。
+1. `Vjp<F>`/`Split<F>`/`ParamsOf<F>` 的泛型声明（设计 6.1）：`vjp` 仍按 arity 各声明一次。
+2. 残差位那个"类型由编译器填"的问题（`questions-2026-11-01-the-residual-slot-has-no-type-until-execution.md`，
+   甲/乙 两案已报价）：今天不影响任何读数。

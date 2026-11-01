@@ -127,18 +127,11 @@ const MODULES = [
         name: 'vjp',
         title: '`vjp`: the derivative, as a library',
         kind: 'camel',
-        // `vjp` is the composition of three transforms, and the third -- the walk `transpose` runs
-        // -- cannot take the backward half yet. The module compiles; a pullback raises where the
-        // walk refuses a `Call` inside that half. Listing it as `pending` keeps it out of the page
-        // -- a page a reader trusts does not show a call that raises the moment it is made --
-        // without pretending the module is not there: every mode prints why, and `--verify-docs`
-        // turns red the day its examples compile, which is the one line to delete (`pending:`
-        // below) when it does.
-        pending:
-            '`stdlib/vjp.cml` compiles, and what it cannot do yet is run: `transpose` refuses a ' +
-            '`Call` inside the backward half `split` hands back (`skip=call` in the walk), so a ' +
-            'pullback raises instead of answering and an example that calls one would show that ' +
-            'error where the reading belongs',
+        // `vjp` is the composition of three transforms, and all three are written: `jvp` lifts,
+        // `split` answers the two halves, and `transpose` walks the backward one. The module
+        // compiles and imports the two rulesets it composes, so a program that imports `vjp` gets a
+        // derivative and a pullback never raises. It was listed as `pending` until the walk took a
+        // callee of several parameters; that reason retired with the step.
     },
     {
         name: 'tensor',
@@ -1165,7 +1158,8 @@ function splitArguments(text) {
 function declaredParams(entry) {
     return entry.norm
         .map((text) => {
-            const match = text.match(/^(\w+)\s*\??\s*:\s*(.+)$/)
+            // A pack writes its dots before the name (`...rest: T`); the dots are not part of it.
+            const match = text.match(/^(?:\.{2,3})?(\w+)\s*\??\s*:\s*(.+)$/)
             return match ? { text, name: match[1], type: match[2].trim() } : null
         })
         .filter(Boolean)
@@ -1363,7 +1357,15 @@ function runCamelCompile(file, cwd) {
                 .split(/\r?\n/)
                 .map((entry) => entry.trim())
                 .find((entry) => /\b(error|fault)\b/i.test(entry))
-            resolve({ ok: false, message: (line || output.trim().split(/\r?\n/)[0] || `exit ${code}`).slice(0, 240) })
+            // The diagnostic's own name, taken before the message is shortened: the class of the
+            // stop is the kind in `(name=SemanticDiag::UnresolvedReference, ...)`, and a message cut
+            // at 240 characters can lose it.
+            const name = /[(]name=([A-Za-z]+)Diag::/.exec(line || '') || /error\[([A-Za-z]+)Diag::/.exec(line || '')
+            resolve({
+                ok: false,
+                diagnostic: name === null ? null : name[1],
+                message: (line || output.trim().split(/\r?\n/)[0] || `exit ${code}`).slice(0, 240),
+            })
         })
     })
 }
@@ -1380,28 +1382,41 @@ async function compileExample(job) {
             const asStatement = await runCamelCompile(file, dir)
             if (asStatement.ok) return { ...job, ok: true }
         }
-        return { ...job, ok: result.ok, message: result.message }
+        return { ...job, ok: result.ok, message: result.message, diagnostic: result.diagnostic }
     } finally {
         fs.rmSync(dir, { recursive: true, force: true })
     }
 }
 
 // Compiles every example of a module, at most JOBS at a time; one temp directory per example. An
-// entry that marks its example a fragment is not compiled: the marker is the record of that, and
-// docProblems requires the reason.
+// entry that marks its example a fragment is compiled too, and the job remembers that it is one:
+// the marker is a claim about what the compiler will say, and only the compiler can settle it.
 async function compileExamples(module, entries) {
     const jobs = []
     const fragments = []
     const seen = new Set()
+    let declared = 0
     for (const entry of entries) {
-        if (seen.has(entry.name)) continue
-        seen.add(entry.name)
-        if (entry.fragments.length > 0) {
-            fragments.push(entry)
-            continue
-        }
+        if (entry.fragments.length > 0) fragments.push(entry)
         for (const example of entry.examples) {
-            jobs.push({ module, entries, entry, code: exampleCode(example), file: entry.file, line: entry.line, name: entry.name })
+            declared++
+            const code = exampleCode(example)
+            // The same call written twice -- the module's declaration file and its computed
+            // signatures, or two overloads sharing a doc block -- is one program: dedupe on the
+            // text, not the name, so a second entry's *different* example is still compiled.
+            const key = `${entry.name}\u0000${code}`
+            if (seen.has(key)) continue
+            seen.add(key)
+            jobs.push({
+                module,
+                entries,
+                entry,
+                code,
+                file: entry.file,
+                line: entry.line,
+                name: entry.name,
+                fragment: entry.fragments.length > 0,
+            })
         }
     }
     const results = new Array(jobs.length)
@@ -1414,7 +1429,7 @@ async function compileExamples(module, entries) {
         }
     }
     await Promise.all(Array.from({ length: width }, worker))
-    return { results: results.filter(Boolean), fragments }
+    return { results: results.filter(Boolean), fragments, declared }
 }
 
 // ---- auditing the documentation ------------------------------------------------------------
@@ -1475,23 +1490,70 @@ function docProblems(entries) {
     return problems
 }
 
-// The check the plan runs: the doc-comment rule above, plus every example compiled. It needs a
-// built compiler, like --verify-ops.
+// The class of an example that does not compile, read off the diagnostic the compiler reports. The
+// text format names it `error[SemanticDiag::UnresolvedReference]`, the short format ends the line
+// with `(name=SemanticDiag::UnresolvedReference, code=0x0300000B)`, and an internal error says so in
+// words; the first word after the `Diag::` (or the words) is the kind. The vocabulary is the
+// compiler's own -- lexical, syntax, semantic, internal -- so a kind this table does not hold is a
+// diagnostic type someone added, and the run refuses it rather than filing it under "other". null
+// is that refusal.
+const EXAMPLE_STOP_NAMES = new Map([
+    ['lexical', 'a lexical error'],
+    ['syntax', 'a syntax error'],
+    ['semantic', 'a semantic error'],
+    ['internal', 'an internal error'],
+])
+
+function exampleStopClass(result) {
+    const text = (result && result.message) || ''
+    if (result && result.diagnostic) return EXAMPLE_STOP_NAMES.get(result.diagnostic.toLowerCase()) || null
+    if (/\binternal error\b/i.test(text)) return EXAMPLE_STOP_NAMES.get('internal')
+    const found = /\b(?:error\[|name=)([A-Za-z]+)Diag::/.exec(text)
+    return found === null ? null : EXAMPLE_STOP_NAMES.get(found[1].toLowerCase()) || null
+}
+
+// The check the plan runs: the doc-comment rule above, plus every example compiled -- the ones a
+// reader is shown and the ones marked a fragment, because a marker is a claim ("this example is not
+// a program of its own") and a claim nobody tries stays true only until someone writes a wrong one.
+// It needs a built compiler, like --verify-ops.
 async function verifyDocs() {
     const problems = []
     let checked = 0
     let fragments = 0
+    // What happened to every example of every module, counted so that none of them is dropped: how many
+    // were written, how many are a program of their own, the ones that compile, and the ones that do
+    // not, by class and one by one.
+    const coverage = { written: 0, programs: 0, compiled: 0, stops: {}, unlabelled: [], stale: [], stopped: [] }
+    const tally = (result) => {
+        if (result.ok) {
+            coverage.compiled++
+            // A fragment the checker just compiled: the marker is stale, and the page says "not
+            // compiled" about a program that compiles. Counted and named, never silent.
+            if (result.fragment) coverage.stale.push(result)
+            return
+        }
+        const label = exampleStopClass(result)
+        coverage.stopped.push({ ...result, label })
+        if (label === null) coverage.unlabelled.push(result)
+        else coverage.stops[label] = (coverage.stops[label] || 0) + 1
+    }
     for (const module of MODULES) {
         const pending = pendingReason(module)
+        const entries = parseDeclarations(module)
+        const compiled = await compileExamples(module, entries)
+        coverage.written += compiled.declared
+        coverage.programs += compiled.results.length
+        fragments += compiled.fragments.length
+        for (const result of compiled.results) tally(result)
         if (pending !== null) {
-            // Not compiled as a problem -- the module is left out on purpose -- but compiled all
-            // the same, because "the examples compile now" is the signal that the omission is over
-            // and the page should carry the module. A pending module that still fails is the
-            // expected state and says nothing; an empty result (no examples to read) says nothing
-            // either, since there is nothing to be ready.
-            const compiled = await compileExamples(module, parseDeclarations(module))
-            const broken = compiled.results.filter((result) => !result.ok)
-            if (compiled.results.length > 0 && broken.length === 0) {
+            // Not compiled as a problem -- the module is left out on purpose -- but compiled all the
+            // same, because "the examples compile now" is the signal that the omission is over and
+            // the page should carry the module. Only the examples the page would present count: a
+            // module whose every example is marked a fragment has nothing to show, and the marker is
+            // about what the reading can carry, not about what the compiler says. A pending module
+            // that still fails says nothing; an empty result says nothing either.
+            const presented = compiled.results.filter((result) => !result.fragment)
+            if (presented.length > 0 && presented.every((result) => result.ok)) {
                 problems.push(
                     `stdlib/${module.name}.cml is listed as pending in MODULES ('${pending}') but its examples ` +
                         `compile now: drop its 'pending' entry in scripts/stdlib-reference.mjs, run --write, and the ` +
@@ -1500,13 +1562,13 @@ async function verifyDocs() {
             }
             continue
         }
-        const entries = parseDeclarations(module)
         problems.push(...docProblems(entries))
-        const compiled = await compileExamples(module, entries)
-        fragments += compiled.fragments.length
         for (const result of compiled.results) {
             checked++
-            if (!result.ok) {
+            // A marked fragment that does not compile is what the marker is for: the run counts it
+            // and the class table says why. An example the page presents as a program has to
+            // compile, and the failure names the file, the entry and the compiler's own words.
+            if (!result.ok && !result.fragment) {
                 problems.push(
                     `${result.file}:${result.line}: '${result.name}' has an @example that does not compile: ` +
                         `\`${result.code}\`: ${result.message}`,
@@ -1514,7 +1576,7 @@ async function verifyDocs() {
             }
         }
     }
-    return { problems, checked, fragments }
+    return { problems, checked, fragments, coverage }
 }
 
 // The Camel a doc example compiles as: the entry inside `main`, with the module's names in
@@ -1768,7 +1830,7 @@ function withoutConditions(text) {
 }
 
 // The commas of `text` that are not inside a group, or null when the text does not balance.
-function splitTopLevel(text) {
+function splitTopLevel(text, separator = ',') {
     const parts = []
     let at = 0
     let depth = 0
@@ -1781,7 +1843,7 @@ function splitTopLevel(text) {
         if ('([{<'.includes(c)) depth++
         else if (')]}>'.includes(c)) {
             if (--depth < 0) return null
-        } else if (c === ',' && depth === 0) {
+        } else if (c === separator && depth === 0) {
             parts.push(text.slice(at, i))
             at = i + 1
         }
@@ -1877,8 +1939,411 @@ function claimedResult(signature) {
     return arrow < 0 ? '' : signature.slice(arrow + 2)
 }
 
+// What a registered parameter says it takes (`modules/tensor/ops/op_def.cpp`, `kindText`). These
+// are not types but sets of them, and `float[..]` in one is the operator's spelling for "a tensor",
+// not for f64: the kind is what the argument reader takes, and a tensor of any element type is one
+// it takes. A signature a resolver builds instead writes real types; those are compared as types.
+const KIND_SETS = new Map([
+    ['Tensor', ['tensor']],
+    ['float[..] | number[]', ['tensor', 'array']],
+    ['float[..] | number', ['tensor', 'number']],
+    ['float[..] | number[] | number', ['tensor', 'array', 'number']],
+    ['int', ['int']],
+    ['number', ['number']],
+    ['bool', ['bool']],
+    ['string', ['string']],
+    ['Bytes', ['Bytes']],
+    ['int[]', ['array']],
+])
+
+// Whether a kind takes everything a need asks for: an `int` is a `number`. A kind that takes a
+// tensor does not take an array, and the other way round, and `f32` is not `float`.
+function kindCovers(kind, need) {
+    if (kind === need) return true
+    return kind === 'number' && ['int', 'i32', 'f32', 'float'].includes(need)
+}
+
+// A type variable: `A` in `bf16(x: A)` binds whatever the caller passes, so it takes everything.
+const TYPE_VARIABLE = /^[A-Z]$/
+
+// The exceptions this check carries, class by class, as data rather than prose: every stop is
+// classified, these are the classes and their counts, and the run compares itself with them. A stop
+// that matches no class fails ("an exception with no label"), a class that is not in this table
+// fails, and a count that moved fails with the number the run found -- so the only way past is to
+// name the class and update the number here, in a commit that says why the list grew or shrank.
+const EXCEPTIONS = {
+    // The operator's own result text is a shape no type variable holds: a function type, a tuple, a
+    // record, a `gradient of W0`, a generic application (`Device<T>`), a named aggregate (`Tensor`),
+    // a bare type variable, or no result text at all; and the two cases where the rule reads and the
+    // declaration is the side that does not (`T[..]` from `from_bytes` and `load_npy`, `Jvp<F>` from
+    // the transforms).
+    result: {
+        'rule states no result': 1,
+        'rule states a function type': 2,
+        'rule states a tuple': 6,
+        'rule states a record': 1,
+        'rule states a gradient-of result': 1,
+        'rule states a generic application': 1,
+        'rule states a named type': 14,
+        'rule states a type variable': 1,
+        'declaration states a type variable': 12,
+        'declaration states a generic application': 2,
+    },
+    // The same question one position to the left: a parameter the operator writes as a function
+    // type, a `grad of P`, a named aggregate (`NumericAggregate`, `Device<T>`), an untyped pack; a
+    // declaration that writes a bare `T`; and two parameter lists that are not a list at all or not
+    // the same length.
+    parameter: {
+        'rule states no parameter list': 1,
+        'declared arity differs from rule arity': 4,
+        'untyped pack ..rest': 6,
+        'function-typed parameter': 9,
+        'grad of P': 2,
+        'named-type parameter': 5,
+        'bare type variable parameter': 7,
+    },
+}
+
+// An operator a merge brings in joins the table by name rather than by a number that only one tree
+// can hold: the counts above are the tree without it, and this entry is the delta the tree with it
+// must show. The operator is still checked where it is present -- it has to be *found* in the class
+// named here, so a change in what it states is not excused by the entry -- and a tree without it
+// holds the numbers above, so both trees are described rather than one being wrong.
+const EXCEPTIONS_JOINED = {
+    'transforms:remat': {
+        // The memory-for-recomputation operator: its declaration writes the type variable (`f: F`
+        // in, `F` out) and the operator states the function type the call gets, so neither side can
+        // be read from the other. It is the same state `jvp`, `split`, `transpose` and `vmap` are
+        // in, and it joins both of their classes.
+        parameter: 'function-typed parameter',
+        result: 'declaration states a type variable',
+        why: 'the declaration writes `f: F` and the operator states `((float, float) => float) => (float, float) => float`',
+    },
+}
+
+// The examples that do not compile, by the kind of diagnostic that stopped them, and the examples a
+// `@example-fragment` marker calls "not compiled" that the checker compiles anyway. Both are
+// numbers the run compares its own tally with: a class that appears, moves or disappears fails, so
+// the only way past is to change the number here, in a commit that says why the list moved.
+const EXAMPLE_STOPS = {
+    // The example calls a name the description introduces and the declaration does not take
+    // (`inputs(n)` with `n` a node of the surrounding pass), or names a value the wrapper cannot
+    // bind at all: 39 of them, most of them marked a fragment.
+    'a semantic error': 39,
+    // `split`'s example reaches the compiler with a function-typed parameter bound by name and the
+    // compile graph keeps a live dereference node (`internal error: Compile graph '__doc_example'
+    // still contains a live DREF node`). That is the compiler's own class, not the example's.
+    'an internal error': 1,
+}
+
+// A fragment is a claim -- "this example is not a program of its own" -- and the marker is only
+// honest while the compiler agrees. The run compiles every marked example and counts the ones that
+// compile: 54 do, so 54 pages still say "not compiled" about a program that compiles. It is not a
+// licence -- the number cannot grow quietly, and a marker that starts compiling shows up here the
+// moment it does -- and it is not the end state: dropping a marker is one deleted line, and the
+// count goes down with it.
+const STALE_FRAGMENTS = 54
+
+// Compare what the run found with what the two numbers above record. Returns the problems, so the
+// caller can exit non-zero: a bounded list is only kept bounded if something counts it.
+function exampleProblems(coverage) {
+    const problems = []
+    const stopped = coverage.programs - coverage.compiled
+    const counted = coverage.unlabelled.length + Object.values(coverage.stops).reduce((sum, one) => sum + one, 0)
+    if (stopped !== counted) {
+        problems.push(
+            `${stopped} example(s) do not compile, and ${counted} of them were counted: an example that is neither ` +
+                'compiled nor counted is the skip this check exists to refuse',
+        )
+    }
+    for (const one of coverage.unlabelled) {
+        problems.push(
+            `an example that does not compile with no class: ${one.file}:${one.line}: '${one.name}': ${one.message}`,
+        )
+    }
+    for (const label of Object.keys(coverage.stops).sort()) {
+        if (EXAMPLE_STOPS[label] === undefined) {
+            problems.push(
+                `the example class '${label}' is not in EXAMPLE_STOPS: ${coverage.stops[label]} example(s) stop there, ` +
+                    'and a new class is a new promise to keep -- add it with its count and say why',
+            )
+        } else if (EXAMPLE_STOPS[label] !== coverage.stops[label]) {
+            problems.push(
+                `EXAMPLE_STOPS['${label}'] records ${EXAMPLE_STOPS[label]}, and the run found ${coverage.stops[label]}: ` +
+                    'update the number in the same commit and say why the class moved',
+            )
+        }
+    }
+    for (const label of Object.keys(EXAMPLE_STOPS)) {
+        if (coverage.stops[label] === undefined) {
+            problems.push(
+                `EXAMPLE_STOPS['${label}'] records ${EXAMPLE_STOPS[label]}, and the run found none: ` +
+                    'the class is gone, so remove it and say why',
+            )
+        }
+    }
+    if (coverage.stale.length !== STALE_FRAGMENTS) {
+        problems.push(
+            `STALE_FRAGMENTS records ${STALE_FRAGMENTS}, and ${coverage.stale.length} example(s) a marker calls ` +
+                'not compiled compile: update the number in the same commit and say why, or drop the marker',
+        )
+    }
+    return problems
+}
+
+// Compare what the run found with what EXCEPTIONS records. Returns the problems, so the caller can
+// exit non-zero: a bounded list is only kept bounded if something counts it.
+function exceptionProblems(found) {
+    const problems = []
+    for (const half of ['result', 'parameter']) {
+        const { byLabel, byLabelNames, unlabelled } = found[half]
+        const recorded = EXCEPTIONS[half]
+        // The operators this tree registers that the table knows join a class: their entry is what
+        // the class holds with them, so a merge that lands one does not move a number that only the
+        // other tree could hold. They are checked first: the class named has to hold the operator
+        // itself, so a change in what it states is a failure, not an entry that passes for free.
+        const joined = Object.entries(EXCEPTIONS_JOINED).filter(
+            ([uri, entry]) => entry[half] !== undefined && found.present.has(uri),
+        )
+        for (const [uri, entry] of joined) {
+            const label = entry[half]
+            if (!(byLabelNames[label] || []).includes(uri)) {
+                problems.push(
+                    `EXCEPTIONS_JOINED['${uri}'].${half} names the class '${label}', and the run puts ${uri} ` +
+                        `in no such class: ${entry.why}. Either it is compared now -- then remove the entry -- ` +
+                        'or it stopped where a different class names it',
+                )
+            }
+        }
+        const expected = (label) => (recorded[label] || 0) + joined.filter(([, entry]) => entry[half] === label).length
+        for (const one of unlabelled) {
+            problems.push(`an exception with no label: ${one.name} (${one.uri}): ${one.detail}`)
+        }
+        for (const label of Object.keys(byLabel).sort()) {
+            if (recorded[label] === undefined) {
+                problems.push(
+                    `the exception class '${label}' is not in EXCEPTIONS.${half}: ${byLabel[label]} overload(s) carry it, ` +
+                        'and a new class is a new promise to keep -- add it with its count and say why',
+                )
+            } else if (expected(label) !== byLabel[label]) {
+                const mine = joined.filter(([, entry]) => entry[half] === label).map(([uri]) => uri)
+                problems.push(
+                    `EXCEPTIONS.${half}['${label}'] records ${expected(label)}` +
+                        `${mine.length > 0 ? ` (${recorded[label]} plus ${mine.join(', ')})` : ''}, and the run found ` +
+                        `${byLabel[label]}: update the number in the same commit and say why the class moved`,
+                )
+            }
+        }
+        for (const label of Object.keys(recorded)) {
+            if (byLabel[label] === undefined) {
+                problems.push(
+                    `EXCEPTIONS.${half}['${label}'] records ${recorded[label]}, and the run found none: ` +
+                        'the class is gone, so remove it and say why',
+                )
+            }
+        }
+    }
+    return problems
+}
+
+// The class a result the checker cannot read belongs to, or null when it belongs to none of them.
+// The rule's side is read first: it is the operator that decides what it gives back; when it reads,
+// the declaration that does not is the side the class names.
+function resultStopClass(claimedType, claimed, promised) {
+    if ((claimedType || '').trim() === '') return 'rule states no result'
+    if (claimed === null || claimed.opaque) {
+        const shape = classifyOpaque(claimedType)
+        return shape === null ? null : `rule states ${shape}`
+    }
+    for (const one of promised) {
+        if (one.declared !== null && !one.declared.opaque) continue
+        const shape = classifyOpaque(one.declaredText)
+        return shape === null ? null : `declaration states ${shape}`
+    }
+    return null
+}
+
+// What a piece of text that is not a type this checker reads looks like, as a phrase: 'a function
+// type', 'a tuple', 'a record', 'a gradient-of result', 'a generic application', 'a type variable'
+// or 'a named type'. A type variable is a single capital letter (`T`, `A`), which is how the
+// declarations and the registered signatures spell it; a longer capitalised word is a named type
+// (`Tensor`, `NumericAggregate`, `DeviceAggregate`). null when the text has no shape this checker
+// has a class for -- that exception is unlabelled, and the run refuses it.
+function classifyOpaque(text) {
+    const source = (text || '').trim()
+    if (source.includes('=>')) return 'a function type'
+    if (source.startsWith('(')) return 'a tuple'
+    if (source.startsWith('{')) return 'a record'
+    if (/\bof\b/.test(source)) return 'a gradient-of result'
+    if (/^[A-Z]\w*</.test(source)) return 'a generic application'
+    if (/^[A-Z](\[.*\])?$/.test(source)) return 'a type variable'
+    if (/^[A-Z]\w*/.test(source)) return 'a named type'
+    return null
+}
+
+// Whether the two sides write the same type. A named type (`Json`, `Graph`, `Map<K, V>`) is opaque
+// to this checker, so the texts are all it has; the same text on both sides is the comparison.
+function sameTypeText(declared, operator) {
+    const mine = canonicalResult(declared)
+    const theirs = canonicalResult(operator)
+    return mine !== null && theirs !== null && mine.text === theirs.text
+}
+
+// How one position stands: 'fit' when the operator takes what the declaration promises, 'mismatch'
+// when both sides are read and it does not, 'unreadable' when one side is a type this checker has
+// no reading for and the two do not even spell it the same way.
+function paramVerdict(declared, operator) {
+    const accepted = operatorAccepts(operator)
+    if (accepted !== undefined && accepted.any === true) return 'fit'
+    if (typeof declared === 'string' && sameTypeText(declared, operator)) return 'fit'
+    const needs = declaredNeeds(declared)
+    if (accepted === undefined || needs === null) return 'unreadable'
+    return needs.every((need) => accepted.kinds.some((kind) => kindCovers(kind, need))) ? 'fit' : 'mismatch'
+}
+
+// The classes a parameter that is not a type this checker reads can belong to, by the shape
+// classifyOpaque names. The same shape is the same class on either side: a function-typed parameter
+// is one whether the operator or the declaration writes it.
+const PARAMETER_SHAPES = new Map([
+    ['a function type', 'function-typed parameter'],
+    ['a tuple', 'tuple-typed parameter'],
+    ['a record', 'record-typed parameter'],
+    ['a gradient-of result', 'grad of P'],
+    ['a generic application', 'named-type parameter'],
+    ['a type variable', 'bare type variable parameter'],
+    ['a named type', 'named-type parameter'],
+])
+
+// The class a parameter the checker cannot compare belongs to, or null when it belongs to none.
+// `declared` and `operator` are the two texts at the position that stopped it, `stop` says which
+// part of the parameter list was unreadable: 'no-list' (no parameter list at all), 'pack' (a pack
+// written without a type), 'arity' or 'position'.
+function parameterStopClass(stop, declared, operator) {
+    if (stop === 'no-list') return 'rule states no parameter list'
+    if (stop === 'pack') return 'untyped pack ..rest'
+    if (stop === 'arity') return 'declared arity differs from rule arity'
+    const shape = classifyOpaque(operator) || classifyOpaque(declared)
+    return shape === null ? null : PARAMETER_SHAPES.get(shape) || null
+}
+
+// What an operator's parameter text accepts, as `{ kinds: [...] }` or `{ any: true }`, or undefined
+// when the text is neither a kind, a union of them, one scalar type nor a tensor.
+function operatorAccepts(text) {
+    const source = (text || '').trim()
+    const direct = KIND_SETS.get(source)
+    if (direct !== undefined) return { kinds: direct }
+    const parts = splitTopLevel(source, '|')
+    if (parts !== null && parts.length > 1) {
+        const kinds = []
+        for (const part of parts) {
+            const one = operatorAccepts(part)
+            if (one === undefined) return undefined
+            if (one.any === true) return { any: true }
+            for (const kind of one.kinds) if (!kinds.includes(kind)) kinds.push(kind)
+        }
+        return { kinds }
+    }
+    if (TYPE_VARIABLE.test(source)) return { any: true }
+    const at = dimensionIndex(source)
+    if (at >= 0) {
+        const base = source.slice(0, at).trim()
+        if (TYPE_VARIABLE.test(base) || RESULT_SCALARS.get(base) !== undefined) {
+            // `[]` is a rank-one array and every other suffix a tensor, the same reading the
+            // declaration side takes.
+            return { kinds: [source.slice(at).trim() === '[]' ? 'array' : 'tensor'] }
+        }
+        return undefined
+    }
+    const scalar = RESULT_SCALARS.get(source)
+    if (scalar !== undefined) return { kinds: [scalar] }
+    return undefined
+}
+
+// What a declaration requires of one position, as the set it names: 'tensor', 'array', 'int',
+// 'i32', 'f32', 'float', 'bf16', 'f16', 'c64', 'c128', 'bool', 'string', 'Bytes' or 'number'. null
+// when the text is not a type this checker reads -- a bare type variable (`F`), a module's own type
+// (`OptimizerState`, `Device<f32[..]>`), a function type (`(a: float) => float`) or a tuple.
+function declaredNeed(text) {
+    const source = (text || '').trim()
+    if (source === '') return null
+    // A function type, a tuple or a record: nothing a parameter kind names.
+    if (source.startsWith('(') || source.startsWith('{')) return null
+    if (source === 'Tensor') return 'tensor'
+    const at = dimensionIndex(source)
+    if (at < 0) {
+        if (source === 'number') return 'number'
+        const known = RESULT_SCALARS.get(source)
+        if (known === undefined) return null
+        // `void` and `never` are not values a parameter takes.
+        if (known === 'void' || known === 'never') return null
+        return known
+    }
+    // The bracket suffix decides the arrangement: `[]` is the rank-one array a kind writes as
+    // `int[]` (the element type a declaration names there is narrower than what the kind says, so
+    // it is not compared), and every other suffix -- `[..]`, `[?]`, `[n]`, `[n, m]` -- is a
+    // tensor, including a type variable applied to dimensions.
+    if (source.slice(at).trim() === '[]') return 'array'
+    return dimensionsOf(source.slice(at).trim()) === null ? null : 'tensor'
+}
+
+// Every set a declared parameter names, or null when one of them is a type this checker does not
+// read. A union names several alternatives and every one of them has to be taken.
+function declaredNeeds(text) {
+    const parts = splitTopLevel((text || '').trim(), '|')
+    if (parts === null) return null
+    const needs = []
+    for (const part of parts) {
+        const one = part.trim()
+        if (one === '') return null
+        const need = declaredNeed(one)
+        if (need === null) return null
+        if (!needs.includes(need)) needs.push(need)
+    }
+    return needs.length === 0 ? null : needs
+}
+
+// The parameter types a registered signature states, in order, or null when its text cannot be read
+// as a list of `name: type` positions.
+function signatureParams(signature) {
+    let text = (signature || '').trim()
+    // A signature may open with its const type parameters (`<count: int> (x: T) => T`, or
+    // `::<T>(bytes: Bytes, shape: int[]) => T[..]`); they are not positions of the call, and the
+    // declaration states them as `::<count: int>`.
+    if (text.startsWith('::')) text = text.slice(2).trim()
+    if (text.startsWith('<')) {
+        const close = partnerBracket(text, 0)
+        if (close < 0) return null
+        text = text.slice(close + 1).trim()
+    }
+    if (!text.startsWith('(')) return null
+    const close = partnerBracket(text, 0)
+    if (close < 0) return null
+    const inner = text.slice(1, close).trim()
+    if (inner === '') return []
+    const parts = splitTopLevel(inner)
+    if (parts === null) return null
+    const types = []
+    for (const part of parts) {
+        const named = /^(?:\.{2,3})?(\w+)\s*\??\s*:\s*(.+)$/.exec(part.trim())
+        if (named !== null) {
+            types.push(named[2].trim())
+            continue
+        }
+        // A position with no name is just its type (`(c128) => string`); a pack with no type
+        // (`..rest`) has none to compare, and the overload is listed instead.
+        const bare = part.trim()
+        if (bare === '' || /^\.{2,3}/.test(bare)) return null
+        types.push(bare)
+    }
+    return types
+}
+
 function verifyOps() {
     const registered = registeredOperators()
+    // Which operator URIs this tree's build registers: the joined entries below are keyed by it, so
+    // the table can say what a class holds with an operator that another lane brings in, and what it
+    // holds without it, without one of the two trees having to be wrong.
+    const present = new Set(registered.map((op) => op.uri))
     const problems = []
     // The overloads whose result type the two sides state in a form this checker cannot compare:
     // a bounded list, printed by the caller, never a silent skip.
@@ -1888,6 +2353,11 @@ function verifyOps() {
     // finds equal. A run that compared no result type at all promises nothing, so it is refused
     // the way a run that reached no operator is.
     let resultsCompared = 0
+    // The same two counts for the parameters: what the operator says it takes, position by
+    // position, against what the declaration says, and the overloads whose parameter types are
+    // stated in a form neither side can be read from.
+    let paramsCompared = 0
+    const paramsUnchecked = []
     for (const module of MODULES.filter((m) => m.kind === 'cpp' || m.native)) {
         const registeredName = module.registered || module.name
         const file = path.relative(REPO_ROOT, sourceOf(module)).replace(/\\/g, '/')
@@ -1992,16 +2462,79 @@ function verifyOps() {
             // comparison is per position, so a name that several declarations share type by type
             // is compared against every rule that answers to it.
             //
-            // The parameter types are not compared this way. A declaration of one name may differ
-            // from the registered rule in type (that is what an overload is: `len` is declared for
-            // `string`, `T[..]`, `Map<K, V>` and `Set<T>`, and one rule of `len` writes
-            // `Map<K, V> | Set<T>`), and the two sides spell the same type in different words
-            // (`i32` for `int`, `(a: float, b: float) => float` for `(...) => NumericAggregate`,
-            // `P` for `grad of P`): comparing them item by item reports one difference per
-            // overload and per alias, which is what it did when it was tried (408 differences,
-            // still 15 when only names with one declaration and one rule were compared). The
-            // result type is a different matter, and it is compared below: a name's result is not
-            // what an overload picks between.
+            // The parameter types are compared the way a kind is compared with a type, not the way
+            // two types are. A declaration of one name differs from the registered rule in type
+            // (that is what an overload is: `len` is declared for `string`, `T[..]`, `Map<K, V>`
+            // and `Set<T>`, and one rule of `len` writes `Map<K, V> | Set<T>`), and the two sides
+            // spell the types in different words (`i32` for `int`): comparing them as equal texts
+            // reports one difference per overload and per alias, which is what it did when it was
+            // tried (408 differences). What the two sides do say is comparable, though, because
+            // the operator's side is a set of kinds (`Tensor` is any tensor) and the declaration's
+            // is one type: the declaration may narrow a kind, but it may not promise a value the
+            // operator does not take, because that is a reader sent to a call the operator refuses.
+            // A kind this table does not hold, a parameter text that is not `name: type`, and a
+            // declared type that is a bare variable or a module's own type are all "not compared":
+            // counted and named, the same bounded list the result half has.
+            const ruleParams = signatureParams(op.signature)
+            const promisedParams = []
+            for (const entry of matching) {
+                const params = declaredParams(entry)
+                const key = params.map((one) => one.type).join('\u0001')
+                if (promisedParams.some((other) => other.key === key)) continue
+                const verdicts =
+                    ruleParams === null || params.length !== ruleParams.length
+                        ? null
+                        : params.map((one, i) => paramVerdict(one.type, ruleParams[i]))
+                promisedParams.push({ entry, params, verdicts, key })
+            }
+            const fits = (one) => one.verdicts !== null && one.verdicts.every((verdict) => verdict === 'fit')
+            const readableParams = (one) => one.verdicts !== null && one.verdicts.every((verdict) => verdict !== 'unreadable')
+            if (promisedParams.length > 0 && promisedParams.some(fits)) {
+                // One of the name's declarations stating what this operator takes is what the
+                // promise is for this operator, the same rule the result half follows: a name
+                // declared once per type it accepts has several declarations and several rules.
+                paramsCompared++
+            } else if (promisedParams.some(readableParams)) {
+                // Both sides of these are read and no declaration fits: the first position one
+                // promises more than the operator takes is the difference.
+                for (const one of promisedParams.filter(readableParams)) {
+                    const at = one.verdicts.findIndex((verdict) => verdict === 'mismatch')
+                    problems.push(
+                        `${one.entry.file}:${one.entry.line}: '${one.entry.name}' declares parameter ${at + 1} ` +
+                            `\`${one.params[at].type}\`, and ${op.uri} takes \`${ruleParams[at]}\`: ${op.signature}`,
+                    )
+                }
+            } else {
+                // One side or the other is not readable as a type, so the overload is named with the
+                // piece that stopped the comparison, and that piece classifies the stop.
+                const first = promisedParams[0]
+                let stop = 'no-list'
+                let detail = `the registered signature \`${op.signature}\` is not a list of \`name: type\` positions`
+                let at = -1
+                if (ruleParams === null && /\([^)]*\.\./.test(op.signature)) {
+                    stop = 'pack'
+                    detail = `the registered signature \`${op.signature}\` writes a pack without a type`
+                } else if (ruleParams !== null && promisedParams.some((one) => one.verdicts === null)) {
+                    stop = 'arity'
+                    detail = `the declaration states ${first.params.length} parameter(s) and the operator ${ruleParams.length}`
+                } else if (ruleParams !== null) {
+                    at = first.verdicts.findIndex((verdict) => verdict === 'unreadable')
+                    stop = 'position'
+                    detail =
+                        operatorAccepts(ruleParams[at]) === undefined
+                            ? `parameter ${at + 1}: the operator takes \`${ruleParams[at]}\`, which is not a type this checker reads`
+                            : `parameter ${at + 1}: the declaration takes \`${first.params[at].type}\`, which is not a type this checker reads`
+                }
+                // The stop is classified from the two texts at the position that stopped it, and the
+                // result half still runs: one half stopping says nothing about the other.
+                paramsUnchecked.push({
+                    name: op.name,
+                    uri: op.uri,
+                    stop,
+                    label: parameterStopClass(stop, at >= 0 ? first.params[at].type : '', at >= 0 ? ruleParams[at] : ''),
+                    detail,
+                })
+            }
             const ruleNames = registeredNames(op.signature)
             if (ruleNames !== null) {
                 for (const entry of matching) {
@@ -2030,7 +2563,10 @@ function verifyOps() {
             // operator's result is the name's result for this rule, so a declaration is compared
             // only when none of them agrees.
             const claimedText = claimedResult(op.signature)
-            const claimed = canonicalResult(claimedText)
+            // A `uses ...` or `when ...` clause after the result is about the operator, not about
+            // its type, the same reading the declaration's side takes.
+            const claimedType = withoutConditions(claimedText)
+            const claimed = canonicalResult(claimedType)
             const promised = []
             for (const entry of matching) {
                 const declaredText = withoutConditions(entry.result)
@@ -2051,7 +2587,13 @@ function verifyOps() {
                 promised.some((one) => one.declared !== null && FLOAT_ELEMENTS.has(one.declared.text.replace(/\[.*$/, '')))
             const readable =
                 claimed !== null && !claimed.opaque && promised.every((one) => one.declared !== null && !one.declared.opaque)
-            if (agreed) {
+            // A claim this checker cannot read but the declaration writes in the same words is the
+            // same promise: the text is all either side has (`Json[]?` is opaque to the reader and
+            // identical on both sides here).
+            const spelledAlike =
+                claimed === null &&
+                promised.some((one) => one.declaredText.replace(/\s+/g, '') === claimedType.replace(/\s+/g, ''))
+            if (agreed || spelledAlike) {
                 resultsCompared++
             } else if (readable && !followsArgument) {
                 for (const one of promised) {
@@ -2061,14 +2603,17 @@ function verifyOps() {
                     )
                 }
             } else {
-                const why = readable ? 'element' : 'read'
+                const label = readable
+                    ? 'declaration-names-an-element-the-rule-takes-from-its-argument'
+                    : resultStopClass(claimedType, claimed, promised)
                 for (const one of promised) {
                     unchecked.push({
                         name: one.entry.name,
                         uri: op.uri,
                         declared: one.declaredText,
                         claimed: claimedText.trim(),
-                        why,
+                        label,
+                        detail: `declares \`${one.declaredText}\`, the operator says \`${claimedText.trim()}\``,
                     })
                 }
             }
@@ -2132,7 +2677,31 @@ function verifyOps() {
             previous = entry.name
         }
     }
-    return { problems, checked, unchecked, resultsCompared }
+    // The exceptions, counted the way EXCEPTIONS records them: by class, with the ones that carry no
+    // class kept apart so the run can refuse them by name.
+    const tally = (list) => {
+        const byLabel = {}
+        const byLabelNames = {}
+        const unlabelled = []
+        for (const one of list) {
+            if (typeof one.label !== 'string' || one.label === '') {
+                unlabelled.push(one)
+                continue
+            }
+            byLabel[one.label] = (byLabel[one.label] || 0) + 1
+            ;(byLabelNames[one.label] = byLabelNames[one.label] || []).push(one.uri)
+        }
+        return { byLabel, byLabelNames, unlabelled, total: list.length }
+    }
+    return {
+        problems,
+        checked,
+        unchecked,
+        resultsCompared,
+        paramsCompared,
+        paramsUnchecked,
+        found: { result: tally(unchecked), parameter: tally(paramsUnchecked), present },
+    }
 }
 
 // ---- main -----------------------------------------------------------------------------------
@@ -2293,63 +2862,141 @@ if (mode === '--write' || mode === '--verify-doc') {
     console.log(`the module table matches the library: ${MODULES.length} entry(ies), ${unread.length} file(s) it does not read`)
 } else if (mode === '--verify-docs') {
     announcePending()
-    const { problems, checked, fragments } = await verifyDocs()
+    const { problems, checked, fragments, coverage } = await verifyDocs()
     for (const problem of problems) console.log(problem)
+    // Every example of every module, counted: the ones that compile, the ones that do not (by the
+    // kind of diagnostic that stopped them), and the ones a marker calls "not compiled" that compile
+    // anyway. A name is never lost between those lists; the last line of the run says which counts
+    // the script records, and exampleProblems refuses a run whose numbers moved.
+    const stopped = coverage.programs - coverage.compiled
+    const announceExamples = (list, what, detail) => {
+        if (list.length === 0) return
+        const names = list.map((one) => one.name).filter((name, i, all) => all.indexOf(name) === i)
+        const shown = names.slice(0, EXCEPTIONS_SHOWN)
+        const more = names.length > shown.length ? `, and ${names.length - shown.length} more` : ''
+        console.log(`the ${what}: ${shown.join(', ')}${more}`)
+        for (const one of list.slice(0, EXCEPTIONS_SHOWN)) {
+            console.log(`    ${one.file}:${one.line}: '${one.name}': ${detail(one)}`)
+        }
+    }
+    console.log(
+        `the examples: ${coverage.written} written in the modules, ${coverage.programs} a program of their own, ` +
+            `${coverage.compiled} compile, ${stopped} do not, and ${coverage.stale.length} marked a fragment compile anyway`,
+    )
+    for (const label of Object.keys(coverage.stops).sort()) console.log(`    ${label}: ${coverage.stops[label]}`)
+    // Every example that does not compile, by name: the class it stops on and the compiler's own
+    // words, cut to the part that says what is wrong.
+    announceExamples(
+        coverage.stopped,
+        'examples that do not compile',
+        (one) => `${one.label === null ? 'no class' : one.label}: ${one.message.slice(0, 120)}`,
+    )
+    announceExamples(
+        coverage.stale,
+        'examples a marker calls not compiled that compile',
+        () => 'the example compiles, so the marker claims something the compiler disproves',
+    )
+    const mismatched = exampleProblems(coverage)
+    for (const problem of mismatched) console.log(problem)
     if (problems.length > 0) {
         console.log(`${problems.length} documentation problem(s) in ${checked} compiled example(s)`)
         process.exit(1)
     }
+    if (mismatched.length > 0) {
+        console.log(`${mismatched.length} example class(es) the run found and the script does not record`)
+        process.exit(1)
+    }
     console.log(
-        `every declared name has a description and an @example: ${checked} example(s) compile, ` +
-            `${fragments} marked fragment(s) not compiled`,
+        `every declared name has a description and an @example: ${checked} example(s) checked, ` +
+            `${fragments} entry(ies) marked a fragment were compiled too`,
+    )
+    console.log(
+        `the example counts are the ones the script records: ${stopped} that do not compile in ` +
+            `${Object.keys(EXAMPLE_STOPS).length} class(es), ${STALE_FRAGMENTS} marked a fragment that compile`,
     )
 } else if (mode === '--verify-ops') {
-    const { problems, checked, unchecked, resultsCompared } = verifyOps()
+    const { problems, checked, unchecked, resultsCompared, paramsCompared, paramsUnchecked, found } = verifyOps()
     for (const problem of problems) console.log(problem)
-    // The overloads whose result could not be read on one side or the other: a bounded exception,
-    // named, never a silent skip. A name that leaves this list (its type became readable) and a
-    // name that joins it both show in the run's output, and a failure adds what the two sides said.
-    if (unchecked.length > 0) {
-        const names = unchecked.map((one) => one.name).filter((name, i, all) => all.indexOf(name) === i)
+    // The overloads whose types could not be read on one side or the other: a bounded exception,
+    // named, classified and never a silent skip. A name that leaves a list (its type became
+    // readable) and a name that joins it both show in the run's output, and a failure adds what the
+    // two sides said.
+    const announce = (what, why, list, classes, detail) => {
+        if (list.length === 0) return
+        const names = list.map((one) => one.name).filter((name, i, all) => all.indexOf(name) === i)
         // One list length, so how many names are shown and how many are counted as left over cannot
         // drift apart.
         const shown = names.slice(0, EXCEPTIONS_SHOWN)
         const more = names.length > shown.length ? `, and ${names.length - shown.length} more` : ''
-        console.log(
-            `the declared result type was not compared for ${names.length} operator(s) -- a type variable, a named ` +
-                `type or a sentence on one side, or an element type the operator takes from its argument: ` +
-                `${shown.join(', ')}${more}`,
-        )
-        if (problems.length > 0) {
-            for (const one of unchecked.slice(0, EXCEPTIONS_SHOWN)) {
-                console.log(`    ${one.name} (${one.uri}): declares \`${one.declared}\`, the operator says \`${one.claimed}\``)
-            }
+        console.log(`the declared ${what} was not compared for ${names.length} operator(s) -- ${why}: ${shown.join(', ')}${more}`)
+        // The classes, counted the way EXCEPTIONS records them, then the same bounded detail as the
+        // names, so a reader of a green run still knows which piece is not read and why.
+        for (const label of Object.keys(classes.byLabel).sort()) {
+            console.log(`    ${label}: ${classes.byLabel[label]}`)
         }
+        for (const one of list.slice(0, EXCEPTIONS_SHOWN)) console.log(`    ${detail(one)}`)
     }
+    announce(
+        'result type',
+        'a type variable, a named type or a sentence on one side, or an element type the operator takes from its argument',
+        unchecked,
+        found.result,
+        (one) => `${one.name} (${one.uri}): ${one.detail}`,
+    )
+    announce(
+        'parameter types',
+        'a parameter that is a function type, a module\'s own type, a nameless pack or a bare type variable on one side',
+        paramsUnchecked,
+        found.parameter,
+        (one) => `${one.name} (${one.uri}): ${one.detail}`,
+    )
+    // The list is data: the run counts its own exceptions by class and compares them with the
+    // numbers in EXCEPTIONS. A stop with no class, a class the table does not hold, or a class that
+    // moved fails here, so the list cannot grow or shrink without someone writing the class down.
+    const mismatched = exceptionProblems(found)
+    for (const problem of mismatched) console.log(problem)
     if (problems.length > 0) {
         console.log(`${problems.length} difference(s) between the declarations and the registered operators`)
         process.exit(1)
     }
+    if (mismatched.length > 0) {
+        console.log(`${mismatched.length} exception class(es) the run found and EXCEPTIONS does not record`)
+        process.exit(1)
+    }
+    // What the run compared its own lists with, so a reader of a green run sees the totals the table
+    // pins as well as the counts it printed above.
+    const recorded = (half) => {
+        const counts = Object.values(EXCEPTIONS[half])
+        // The joined entries count here too: the totals this line prints are the ones the run found,
+        // whether or not this tree has the operator they are keyed by.
+        const joined = Object.entries(EXCEPTIONS_JOINED).filter(
+            ([uri, entry]) => entry[half] !== undefined && found.present.has(uri),
+        ).length
+        return `${counts.reduce((sum, one) => sum + one, 0) + joined} in ${counts.length} class(es)`
+    }
+    console.log(
+        `the exception lists are the ones EXCEPTIONS records: result ${recorded('result')}, parameter ${recorded('parameter')}`,
+    )
     // A run that reached no operator compared nothing: the probe imported nothing the reference
     // lists, or MODULES is empty. It has to say that, not report agreement.
     if (checked === 0) {
         console.log('verified 0 registered operator overloads: the declarations were compared with nothing')
         process.exit(1)
     }
-    // The same for the half of the signature that compares types: a run that read no result type
-    // at all has compared no promise and must not report agreement either.
-    if (resultsCompared === 0) {
+    // The same for each half of the signature that compares types: a run that read no result type
+    // or no parameter type at all has compared no promise and must not report agreement either.
+    if (resultsCompared === 0 || paramsCompared === 0) {
         console.log(
-            'compared the declared result type of 0 of the registered operators: no signature states a result ' +
-                'this checker can read',
+            `compared the declared result type of ${resultsCompared} and the declared parameter types of ${paramsCompared} ` +
+                'of the registered operators: no signature states types this checker can read',
         )
         process.exit(1)
     }
     console.log(`the declarations agree with the ${checked} registered operator overloads`)
-    console.log(
-        `the declared result type agrees with the operator's own for ${resultsCompared} of them` +
-            (unchecked.length > 0 ? `; ${unchecked.length} overload(s) with a result this checker cannot read are listed above` : ''),
-    )
+    const left = (list) =>
+        list.length > 0 ? `; ${list.length} overload(s) with types this checker cannot read are listed above` : ''
+    console.log(`the declared result type agrees with the operator's own for ${resultsCompared} of them${left(unchecked)}`)
+    console.log(`the declared parameter types fit what the operator takes for ${paramsCompared} of them${left(paramsUnchecked)}`)
 } else {
     console.log(USAGE)
     process.exit(2)

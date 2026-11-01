@@ -1,0 +1,124 @@
+/**
+ * The batching index of `rulesets.vmap`, asked from both of its doors: the table `std::rulesets`
+ * prints (one line per key, `RULESET <family> <head>/<arity> -> <rule>`), and the `asked=/found=`
+ * readings the batching transform prints when it meets the same primitive. The two are supposed to
+ * be one table read twice, so this program carries one body per primitive the ruleset keys, and the
+ * checker beside it (`ruleset_index_agrees_with_the_transform.mjs`) compares the doors name for
+ * name: a rule the transform hits but the table does not print, or the other way round, is red.
+ *
+ * The bodies are the smallest that reach each head: the scalar arithmetic on an element
+ * (`x + 2.0`, `-x`), the whole-row reductions on a row (`sum`, `mean`, `max`, `min`, `argmax`,
+ * `argmin`), the same six with an axis word, and a row's matrix product. `mul_tensor/2` and
+ * `index_into/2` have no body here on purpose: they are the keys of a rule's own right side
+ * (`vmap_matmul` multiplies through `mul_tensor`, `idx_batch` reads through `index_into`), and no
+ * source spelling reaches them from outside the ruleset.
+ */
+import rulesets.vmap
+import { vmap } from transforms
+import { argmax, argmax_axis, argmin, argmin_axis, matmul, max, max_axis, mean, mean_axis, min, min_axis, sum, sum_axis } from tensor
+
+// ---- the scalar arithmetic: `+/2`, `-/2`, `*/2`, `//2`, `-/1` ----
+func plus(x: float): float {
+    return x + 2.0
+}
+
+func minus(x: float): float {
+    return x - 2.0
+}
+
+func times(x: float): float {
+    return x * 2.0
+}
+
+func divide(x: float): float {
+    return x / 2.0
+}
+
+func negate(x: float): float {
+    return -x
+}
+
+// ---- the whole-row reductions: `sum/1`, `mean/1`, `max/1`, `min/1`, `argmax/1`, `argmin/1` ----
+func row_sum(r: float[3]): float {
+    return sum(r)
+}
+
+func row_mean(r: float[3]): float {
+    return mean(r)
+}
+
+func row_max(r: float[3]): float {
+    return max(r)
+}
+
+func row_min(r: float[3]): float {
+    return min(r)
+}
+
+func row_argmax(r: float[3]): int {
+    return argmax(r)
+}
+
+func row_argmin(r: float[3]): int {
+    return argmin(r)
+}
+
+// ---- the same six with an axis word: `sum_axis/3` ... `argmin_axis/3` ----
+// A row of two axes, so the answer is the rank below the row's (and its static type says so: the
+// axis reductions are declared `T[..]`/`int[..]`, an open rank, because which axis an axis word
+// drops is a fact at the call).
+func plane_sum_axis(r: float[2, 3]): float[..] {
+    return sum_axis(r, 0, false)
+}
+
+func plane_mean_axis(r: float[2, 3]): float[..] {
+    return mean_axis(r, 0, false)
+}
+
+func plane_max_axis(r: float[2, 3]): float[..] {
+    return max_axis(r, 0, false)
+}
+
+func plane_min_axis(r: float[2, 3]): float[..] {
+    return min_axis(r, 0, false)
+}
+
+func plane_argmax_axis(r: float[2, 3]): int[..] {
+    return argmax_axis(r, 0, false)
+}
+
+func plane_argmin_axis(r: float[2, 3]): int[..] {
+    return argmin_axis(r, 0, false)
+}
+
+// ---- a row's matrix product: `matmul/2` ----
+func flat_mul(r: float[2, 2]): float[2, 2] {
+    let eye: float[2, 2] = [[1.0, 0.0], [0.0, 1.0]]
+    return matmul(r, eye)
+}
+
+func main(): int sync {
+    let xs: float[3] = [1.0, 2.0, 3.0]
+    let rows: float[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+    let planes: float[2, 2, 2] = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]]
+    let tiles: float[2, 2, 3] = [[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], [[7.0, 8.0, 9.0], [10.0, 11.0, 12.0]]]
+    println(vmap(plus)(xs))
+    println(vmap(minus)(xs))
+    println(vmap(times)(xs))
+    println(vmap(divide)(xs))
+    println(vmap(negate)(xs))
+    println(vmap(row_sum)(rows))
+    println(vmap(row_mean)(rows))
+    println(vmap(row_max)(rows))
+    println(vmap(row_min)(rows))
+    println(vmap(row_argmax)(rows))
+    println(vmap(row_argmin)(rows))
+    println(vmap(plane_sum_axis)(tiles))
+    println(vmap(plane_mean_axis)(tiles))
+    println(vmap(plane_max_axis)(tiles))
+    println(vmap(plane_min_axis)(tiles))
+    println(vmap(plane_argmax_axis)(tiles))
+    println(vmap(plane_argmin_axis)(tiles))
+    println(vmap(flat_mul)(planes))
+    return 0
+}

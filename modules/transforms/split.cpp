@@ -321,11 +321,25 @@ struct Half {
             copyOf[ref] = made;
             return true;
         }
-        case rt::GCNodeKind::Func:
-            return refuseAt(
-                refusal, source, ref, "a function value",
-                "the plumbing copies a straight-line body of ports, constants, primitives, fills and "
-                "calls; a function value built by the body is a later tier");
+        case rt::GCNodeKind::Func: {
+            // A call to a named function, which is the shape a rule reaches a half in now that
+            // `reinterp` expands a rule's right side at the match site (`jvp.cpp`): what was a call
+            // through a function value is a call the graph names. The callee is a graph of the
+            // program and not a value on either side of the cut, so the copy names the same graph and
+            // the call's inputs are placed on this half's side.
+            const GraphId callee = source->calleeIdOf(ref);
+            if (!rt::isValid(callee)) {
+                return refuseAt(
+                    refusal, source, ref, "a call to a named function",
+                    "the node names no callee graph, so there is no function to call");
+            }
+            const gc_node_ref_t made = draft.addFuncNode(
+                callee, node->dataType(), 0, draft.allocateRuntimeSlot(node->dataType()), 0);
+            draft.setNormInputs(made, inputs);
+            draft.addDependency(callee);
+            copyOf[ref] = made;
+            return true;
+        }
         case rt::GCNodeKind::Brch:
         case rt::GCNodeKind::Join:
             return refuseAt(refusal, source, ref, "a branch", "the plumbing copies straight-line bodies");
@@ -454,6 +468,19 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted) {
         if (ports[i] < nodeCount) {
             portIndex[ports[i]] = i;
         }
+    }
+    // A graph that says its calls are recomputed on the backward pass (`remat`,
+    // kGraphFlagRecomputeBackward, camel/runtime/graph.h) crosses the cut with its parameters and
+    // nothing else: every other value is computed again in the backward half from them, because a
+    // value that is not a residual is not where Half's walk stops -- it copies what produces it
+    // instead (the `crossesCut` branch of copyHalf). The mark says "store less, compute again", and
+    // this is the whole of what it buys at the cut: the parameters are what the call is given, and
+    // what the body made of them is not carried. The values are the same either way; only the count
+    // of what crosses the cut changes, which is why the reading below prints the mark beside it.
+    if (lifted.recomputesOnBackward()) {
+        std::erase_if(found, [&portIndex](gc_node_ref_t ref) {
+            return portIndex[ref] == Residual::kNotAParameter;
+        });
     }
     std::sort(found.begin(), found.end(), [&portIndex](gc_node_ref_t a, gc_node_ref_t b) {
         const bool aIsPort = portIndex[a] != Residual::kNotAParameter;
@@ -714,7 +741,13 @@ SplitGraph buildSplitGraph(
        << " type=" << (forwardMade != nullptr && forwardMade->funcType() != nullptr
                            ? forwardMade->funcType()->toString()
                            : std::string("-"))
-       << " residuals=" << built.residuals << '\n';
+       << " residuals=" << built.residuals;
+    // Printed only when the graph being cut carries the mark, so every other cut keeps the line it
+    // had: `remat`'s own line says the property was set, and this one says what the cut did with it.
+    if (function->recomputesOnBackward()) {
+        os << " recompute=1";
+    }
+    os << '\n';
     built.program  = group.program();
     built.forward  = const_cast<rt::GCGraph *>(forwardMade);
     built.backward = const_cast<rt::GCGraph *>(backwardMade);

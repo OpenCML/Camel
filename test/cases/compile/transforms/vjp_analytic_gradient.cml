@@ -11,11 +11,12 @@
 // `transpose` writes is the internal assembly and does not reach this file.
 //
 // Skipped, not red, while the composition cannot be run: the module compiles against the pair
-// `split` hands back, and the walk `transpose` runs refuses a `Call` inside the backward half, so
-// the pullback raises where the library composes it. The plan asks
-// `test/tools/have-library-vjp.mjs` first and prints its reason with the skip; the day the walk
-// takes that call, this case runs and the two columns are printed one under the other.
-import rulesets.jvp
+// `split` hands back, and the walk `transpose` runs still refuses a call whose callee takes several
+// parameters (`mul_tangent(x, w, dx, dw)` in the backward half), so the pullback raises where the
+// library composes it. The plan asks `test/tools/have-library-vjp.mjs` first and prints its reason
+// with the skip; the day the walk takes that call, this case runs and the two columns are printed
+// one under the other. The rulesets the composition needs are `stdlib/vjp.cml`'s own imports, so
+// this program imports the library and nothing else.
 import { vjp } from vjp
 
 func f(x: float, y: float): float {
