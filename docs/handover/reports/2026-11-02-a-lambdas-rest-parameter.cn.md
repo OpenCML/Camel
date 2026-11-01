@@ -258,3 +258,22 @@ GIR 里留下的只是被摊开的实参。**旧的三种说法（`RestValue`／
 `Norm` 连接时它是一个值、摊不开；`With` 连接时它是待摊开的实参，由 `expandRestArgument` 消费掉。
 
 **一句话**：FILL 是\这个元组\，\With\ 与 \Norm\ 的差别是\成员是不是实参\：\With\ 的成员会被摊开并消费，\Norm\ 的成员只是值，摊不开。
+
+## 8. P1-12 的量：结论是"这条计划建立在一个错前提上"（显式作废）
+
+P1-12 的原话是"同一个签名写在三处，收成一处"。把三处挨个读过之后，**没有"三处写法"这件事**。逐处如下。
+
+| 处 | 存什么 | 是什么 |
+|---|---|---|
+| `include/camel/core/type/composite/func.h` | **一份紧凑布局**：`withCount_`/`normCount_`，类型、`TypeCode`、名字都在 `trailing()` 上 | **存储**（唯一一份）。`paramCount()`（:328）、`argNamesCount()`（:273）是算术；`:331`、`:335`、`:340` 按 `paramCount()` 做指针算术 |
+| `include/camel/core/type/resolver.h` | **工厂**：`FuncTypeResolver::resolve(...)` 算出 `FunctionType *`；另有 `fixedSignature()`（:95，默认 nullptr）、`declaredSignature()`（:104）、`graftedSignature()`（:116）返回它自己持有的那份 | **产出的类型**，不是签名的第二份文本。实现处：`:226`（`funcType_`）、`:294`/`:295`（`fixed_`/`declared_`）、`:401`/`:408` |
+| `src/compile/gir/builder.h` | `buildFuncBody(..., const FunctionType *written = nullptr)` —— **构造参数，没有成员存它** | **传进去的东西**，不是存储 |
+
+**结论（三选一里的第三种：混合，且"三份来源"不成立）**：
+- **存储**只有一处（`func.h` 的紧凑布局）；
+- **算术**多处（`func.h` 里按 `paramCount()` 的指针算术）；
+- **产出**一处来源（`resolver` 工厂给出的类型），**不是文本的第二份**；
+- **传参**一处（`written`），**按"要传不要存"验过：`builder.h` 里没有成员接它**。
+
+**所以 P1-12 作废**：它假定的"同一个签名写三处"不存在，实际是"**一份紧凑布局，多处按参数个数做指针算术**"。
+把算术收到一处是另一种改动（不是 P1-12 说的那件），而且没有重复文本可收——**没有可迁移的东西**。
