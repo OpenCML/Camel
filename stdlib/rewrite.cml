@@ -150,7 +150,7 @@ with <over: F, samples: int = 100, seed: int = 0>
 export func check::<F>(rules: Rule[]): CheckReport when is_function::<F>()
 
 /// The report's fixed rendering, one line per row, for a caller that wants it as a value.
-/// @example-fragment a report comes from a check
+/// @example-fragment `report` is the report a check gives back: the example writes what reads it, and a doc example has no check to run
 /// @example check_text(report)    // 'sampled add_zero: proposition equality, evidence samples 100, ...'
 export func check_text(r: CheckReport): string
 
@@ -199,25 +199,25 @@ export func why_not::<F>(r: Run<F>): string!
 // ---- reading a rule ----
 
 /// The name of the rule `r`.
-/// @example-fragment a rule comes from the library
+/// @example-fragment `r` is a rule of the library: the example writes the question, and a doc example has no library to take one from
 /// @example rule_name(r)    // 'int_add_zero'
 #op('rewrite:name')
 export func rule_name(r: Rule): string
 
 /// Whether the rule `r` may also be applied from right to left.
-/// @example-fragment a rule comes from the library
+/// @example-fragment `r` is a rule of the library: the example writes the question, and a doc example has no library to take one from
 /// @example rule_two_way(r)    // false
 #op('rewrite:two_way')
 export func rule_two_way(r: Rule): bool
 
 /// How many rewrites the rule `r` needs before it may fire.
-/// @example-fragment a rule comes from the library
+/// @example-fragment `r` is a rule of the library: the example writes the question, and a doc example has no library to take one from
 /// @example rule_needs(r)    // 0
 #op('rewrite:needs')
 export func rule_needs(r: Rule): int
 
 /// How many constants the rule `r` adds to the function.
-/// @example-fragment a rule comes from the library
+/// @example-fragment `r` is a rule of the library: the example writes the question, and a doc example has no library to take one from
 /// @example rule_consts(r)    // 0
 #op('rewrite:consts')
 export func rule_consts(r: Rule): int
