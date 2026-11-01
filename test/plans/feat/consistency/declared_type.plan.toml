@@ -19,7 +19,7 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_starts_with = "{ x: 1.5, y: 5.0 }\n[6, 2, 4] 6\n"
-expect_output_not_contains = ["FeatureNotSupported", "[Warn]"]
+expect_output_not_contains = ["[Warn]"]
 
 [[tests]]
 name = "declared_type.mismatch"

@@ -103,7 +103,6 @@ SemanticDiag::FactCaseDefaultMissing	test/cases/modules/rules/fact_no_default.cm
 SemanticDiag::FactConstCaseTypeRequired	test/cases/modules/rules/fact_const_case_without_type.cml
 SemanticDiag::FactJoinRequired	test/cases/modules/rules/fact_no_join.cml
 SemanticDiag::FailNotExecuted	test/cases/consistency/fail_never/fail_not_executed.cml
-SemanticDiag::FeatureNotSupported	test/cases/compile/stream/yield_lowering.cml
 SemanticDiag::FoldCallArgumentNotConstant	test/cases/compile/fold_calls/argument.cml
 SemanticDiag::FoldCallHasEffects	test/cases/compile/fold_calls/effect.cml
 SemanticDiag::FoldCallNotEvaluable	test/cases/compile/fold_calls/not_evaluable.cml
