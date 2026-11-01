@@ -528,6 +528,7 @@ GCGraph *encodeDraftGraph(
         subGraphs,
         staticGraphRefs,
         ruleGraphs,
+        draft.liftedFromRefs(),
         payloadShape,
         [&](GCGraphPayloadArena &payload) { emitDraftNativePayload(draft, payload); },
         staticSlots);
@@ -555,6 +556,9 @@ size_t draftGraphBytes(
     const std::vector<GraphId> ruleGraphPlaceholders(
         draft.ruleGraphs().size(),
         kInvalidGraphId);
+    const std::vector<GraphId> liftedFromPlaceholders(
+        draft.liftedFromRefs().size(),
+        kInvalidGraphId);
     std::vector<slot_t> staticSlots(draft.staticSlots().begin(), draft.staticSlots().end());
     if (staticDataType && staticSlots.size() < staticDataType->size()) {
         staticSlots.resize(staticDataType->size(), NullSlot);
@@ -564,6 +568,7 @@ size_t draftGraphBytes(
         subGraphPlaceholders,
         staticRefPlaceholders,
         ruleGraphPlaceholders,
+        liftedFromPlaceholders,
         describeDraftNativePayload(draft),
         staticSlots,
         draft.frameSlotTypes());
