@@ -71,9 +71,12 @@ const EXAMPLES_REL = 'diagnostics/examples.tsv'
 //             ExitInUnusedBranch, DimensionNameUsedOnce, FunctionTypeArgumentNotInferred); and the one
 //             code no path raises, `FeatureNotSupported`, left the target as unraisable instead of
 //             holding a place no case can take.
+//    6 -> 5   `generics.type_variable_unused` pinned `TypeVariableUnused` (`FeatureNotSupported` had
+//             already left the target by being deleted, not by being counted differently: nothing
+//             raised it, so the registry no longer declares it).
 // A case added for a code lowers it in that commit; a correction lowers it in the commit that
 // teaches the counter the form, and names what it found.
-const NAME_COVERAGE_RECORDED = 6
+const NAME_COVERAGE_RECORDED = 5
 
 // The sections, in the order the headers are included. `id` is also the stem of the two
 // generated files; the type byte of the printed code is read from DiagType in base.h, under the

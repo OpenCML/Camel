@@ -21,15 +21,19 @@
  * 3. **`arm-stop region=1 node=7 arg=1`** (today): the arm's call is not a lift of a user function but
  *    a **rule kernel**, `autodiff::mul_tangent<float>`, whose arguments are `(x, y, dx, dy)`.
  *    Transposing it needs all four *values*, and `dx` has no value in the transposed graph -- tangents
- *    are what the answer is a cotangent of, so they are not among its parameters. This is not
- *    bookkeeping but a statement the design does not make yet: a rule kernel is linear in its tangent
- *    arguments, so its transpose needs the value arguments only. Until that is said somewhere (a rule
- *    table entry, or a mark on the tangent parameters of a lifted signature), the arm's call cannot be
- *    transposed -- and no number invented here would be the author's 3.0.
+ *    are what the answer is a cotangent of, so they are not among its parameters.
+ * 4. **`kernel=mul_tangent values=2 primal=:op/mul_d`** (today): the split *is* now declared -- the
+ *    kernels live in one table in `modules/transforms/jvp.h`, each with its value arity and the
+ *    operator whose derivative it computes, and it is read here rather than guessed from a name. What
+ *    the declaration does not yet do is build the member: a transposed member is built from the
+ *    callee's whole signature, so its call site still has to pass the tangents' values, and those are
+ *    the one thing the transposed graph does not have. A kernel's transposition is a *linear-map*
+ *    transpose -- the values and the cotangent in, one cotangent per tangent out -- and nothing in the
+ *    tree builds that shape of member yet.
  *
- * What the case therefore pins today is `arm-stop region=1 node=7 arg=1`, then `skip=arm arm=0`. The
- * day a rule kernel can be transposed knowing which parameters are linear, this entry fails and asks to
- * be re-read -- which is the point of pinning a refusal rather than an excuse.
+ * What the case therefore pins today is `arm-stop region=1 node=7 kernel=mul_tangent values=2`, then
+ * `skip=arm arm=0`. The day a member can be built from the values only, this entry fails and asks to be
+ * re-read -- which is the point of pinning a refusal rather than an excuse.
  */
 import { vjp } from vjp
 
