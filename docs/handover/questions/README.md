@@ -15,13 +15,9 @@
 ## 现在在等作者：1 页（与目录逐项一致）
 | 页 | 问句 | 默认建议 |
 |---|---|---|
-<<<<<<< HEAD
 | [`whether-the-empty-tangent-needs-a-port`](questions-2026-11-02-whether-the-empty-tangent-needs-a-port.md) | 没有切空间的形参（`int`/`bool`/`string`）在端口上是"少一个端口"，还是有一个类型为 `()` 的端口 | **沿用"没有槽"**（M3 的 `Tangent<bool> = ()` 就是 `contribution=0`，走图层今天也是"不占槽"）；沿用不了就保持在签名层拒绝，并把差距写在这一页上 |
-||||||| 3645cdb0b
-=======
 
 **17:30 作者把 `nested-branch-stops-in-jvp` 也挪进 `reviews/` 并在 `questions-2026-10-29.md` 记了两条裁定**（`fsh-dev` 的 `9c2e5c7df`）：前端变换实例化**先停手**（已进树的不撤，等负责人一起处理），嵌套分支按区域**从内到外递归**、不为“嵌套”另写一支（`vjp` 在 `2 / 0.5 / -1` 处 `4.0 / 2.0 / 3.0`，四个后端一致）。
->>>>>>> origin/develop
 
 **16:10 作者把最后一页也挪进 `reviews/`**（`fsh-dev` 的 `56ce9259c`）：`whether-a-function-value-can-take-a-computed-pack`——lambda 形参表收无类型的 `..xs`（选 ①，不改 5.6），类型从期望类型来，落地后 `vjp` 并成一条声明。所以这一节现在是空的，不是没人在问。
 
