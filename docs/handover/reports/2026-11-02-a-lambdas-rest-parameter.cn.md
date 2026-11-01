@@ -75,7 +75,26 @@
 
 这一节的实测没有落地任何代码：试完即回退。
 
-## 4. 结论：`Vjp<F>` 作为类型可用，作为 lambda 形参表不可用
+## 3½. 18:50 裁定：实现，不是拒绝（覆盖上文"相撞"的定性）
+
+作者 2026-11-01 18:50 直接裁了这一格，方向比本页的默认建议更实：
+
+> **`LambdaRestParameterNotLowered` 是"暂不支持"诊断**——`858e9d409` 把崩溃换成了具名诊断，比崩溃
+> 好，但文案 "is not lowered yet" 属于明令禁止的那一类。16:10 已经裁定 lambda 收 `..xs`，**类型取自
+> 期望类型**；**下一笔就是实现它**，这条诊断在同一笔里删掉。
+>
+> **按期望类型展开成具名形参**：实例化时 `ParamsOf<F>` 已经具体，`..xs` 就是那几个形参。
+
+所以上文第 3 节"两条路都撞墙"的结论要改一句话：**它不是撞墙，是缺了一个可用的更早时刻**——lambda
+建形参时要读**期望类型**，而 17:30 停下的门槛（"建图时替它建形参"）由这条裁定放开。第 4 节"`vjp` 走
+返回类型、不走形参表"也随之作废：`vjp` 并成一条泛型就等这一步。
+
+**落地要点（下一笔）**：`(..xs)` 展开成 `(xs_0: T1, xs_1: T2, …)`，每一格来自 `ParamsOf<期望类型>`
+的第 k 个成员；`(..xs: ..ParamsOf<F>)` 用写出来的那个包；`(..xs: float[..])` 的每一格是 `float[..]`。
+`..xs` 作为**元组**在体内取值仍是 `NK::RestValue`（`src/compile` 里没有下降路径），那是与"形参表"相邻
+的另一格——`vjp` 的体用不到它，所以并成一条不必等它。
+
+## 4. 结论：`Vjp<F>` 作为类型可用；作为 lambda 形参表——18:50 裁定后由"不可用"改为"下一笔实现"
 
 **`Vjp<F>` 作为类型可用**（`d8105565a` 已落地）：`Pullback<F>`、`Vjp<F>`、`Jvp<F>`、`Transpose<F>`
 写进 `stdlib/types.cml`，用的全是 `types` 已有的词（`ParamsOf`、`ResultOf`、`Tangent`），**没有给类型
@@ -107,3 +126,65 @@
 
 **这是 P1-12 剩下的那一半**：类型已经能在 `.cml` 里写出来并可被引用；`vjp` 的**签名**仍在 C++ 里，
 因为一条泛型声明需要一个 `(..xs)` 的体。
+
+## 5. 期望类型其实已经在现场——在 GIR，不在 `visitFuncType`
+
+第一段的量法（"把期望类型传进 `visitFuncType`"）量出了**相反**的结论：**不用传，因为设计早就把这件事
+放到 GIR 那一级了**。
+
+`visitFuncType` 的全部调用点（`src/compile/gct/builder.cpp`，共 2 处，另 1 处是定义）：
+
+| 行 | 是什么 | 那里知不知道期望类型 |
+|---|---|---|
+| 5243 | `func f::<T>(…)` 的**声明签名**（`declSignature_ = true`） | 不知道——它**就是**那个类型；且 `..xs` 在这里走 `addRestArg`，根本进不到 lambda 那一支 |
+| 6529 | `visitTypeExpr` 派发 `TypeType::Func`：写在**类型位置**的函数类型（注解、泛型实参） | 不知道——注解本身就是类型，没有"期望"可言 |
+
+**结论一句话**：要改的调用点是 **0 个**；能传的也是 0 个——因为真正的展开点在
+`src/compile/gir/builder.cpp:1143-1165`，那里 `expected` 已经**在手上**：
+
+    // A lambda takes the types it does not write from the function type of the position it
+    // stands in (design principles 5.9). That expected type reaches this point through the one
+    // channel of the expected type (`expected`): an argument to a parameter of function type,
+    // the value of a declared type, or the result of a function whose result type is a function
+    // type.
+    if (expected == nullptr) { … LambdaParameterWithoutType … "nothing here expects a function type" }
+
+也就是说：**省略类型的 lambda 形参**（`(x) => …`）早就靠 `Tree::UnwrittenParam{index, origin}` 记在
+FUNC 节点上，由 GIR 按 `expected` 填；`..xs` 可以走**同一条通道**——它是"位置 k 上没写类型、且是最后一格"
+的那种形参，展开规则就是"取 `ParamsOf<expected>` 的第 k 个及之后的成员"。
+
+**这带来两个好处**：① 不需要给 `visitFuncType` 加 `Type *expected`（少一个参数、少两处传递）；
+② "这里没有期望类型"的文案**已经存在且是对的**——`"nothing here expects a function type"`，它说的是
+**此处不可能**，正是 18:50 裁定允许留下的那一类；`(..xs)` 没有期望类型时用它，而不是 `is not lowered yet`。
+
+**所以判据 1 的表是一张反表**：原来打算"逐点传"，实测是"一个点都不用动，换到 GIR 那条已有的通道上"。
+`..xs` 的元组取值（体内 `..xs`）仍是 `NK::RestValue`，与形参表相邻、不挡 `vjp`。
+
+## 6. 19:10 裁定与它量到的那一格
+
+作者 2026-11-01 19:10（M4）：**lambda 的 `..xs` 不在暂停范围内**——暂停针对的是"前端里一张按算子名查的
+变换表"和"实参必须编译期已知"，而 **lambda 的形参按期望类型定型是语言本来就有的规则**（原则第 5 节：
+`let f: (x: float) => float = x => …` 的 `x` 就是这么得到类型的）；`..xs` 只是这条规则**用在包上**。
+所以本页第 3 节"相撞"的定性作废，第 3½ 节的裁定仍然成立，只是理由换成这一句。
+
+**已落地（`d025d5c25`）**：吸收位 + 三形式展开，`rest_params` **15/15**；`LambdaRestParameterNotLowered`
+删除，`--check` **306 → 305**；`--pinned-coverage` 同笔复核 **288 of 305**、地板仍 16。
+`(..xs)`／`(..xs: float[..])` 在没有期望类型的位置给出 `"nothing here expects a function type"`
+（此处不可能），在有期望类型的位置（实参位：`apply((..xs) => 0.0)`、`apply_one((..ys: float[..]) => 1.0)`）
+**建得出、跑得通**（新用例 `lambda_rest_annotated.cml`）。
+
+**`vjp` 并成一条：试过，卡在"体内取值"这一格。** 一条泛型的体是
+
+    let (forward, linear) = split(jvp(f))
+    return (..xs) => { let (value, residuals) = forward(..xs) … }
+
+**签名这一半通了**（形参表按 `Vjp<F>` 的 `ParamsOf<F>` 展开），**体这一半不通**：
+
+    error[SemanticDiag::UnresolvedReference]: Unresolved reference: 'xs'.
+      [in the instance 'vjp<(x: float) => float>' of the generic function 'vjp' with F = (x: float) => float]
+      --> out/latest/stdlib/vjp.cml:72:44
+
+原因：`..xs` 在**调用**里（`forward(..xs)`）走的是"展开一个编译期元组"那条规则，**要求 `xs` 是一个值**；
+而 lambda 的 `..xs` 今天只展开成**形参名**（`xs_0`, `xs_1`），**没有一个叫 `xs` 的元组值**。
+`vjp` 的体需要它，所以 `vjp` 并成一条要等 `NK::RestValue` 的下降（`..xs` 作为元组取值的路径），
+那是与"形参表"相邻的另一格。**不是暂停、不是相撞**，是那一格还没做。

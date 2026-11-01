@@ -153,3 +153,27 @@ law=<名字> params=[(x: T), …] → cotangentAt=<i> knownAt=<j…> sizeDepende
 `transforms 51/51` 必须逐字不变，`if (law == …)` 不动。
 
 **这一轮没有再往前，是因为 `rightParamsOf` 要写一个新的 CST 走读**（同族的 `rightCalleeOf`/`variableNamesOf` 各是一小段），**不是加一个字段就完**；写它需要与 `cst::Expr` 的形状对齐，**改错了会红在解析层**——那比 `transpose` 那层红更难查。
+## 19:10 的读数是**待复现**的，不是已复现的
+
+作者给的读数：`f(xs, n) = xs[n] * xs[0]` 在 `([3.0, 2.0], 1)` 处 `grad` 对 `xs` 得 `[2.0, 3.0]`，`n` 没有余切。**今天没有复现出来**，卡在**两层前置**：
+
+1. **`stdlib/vjp.cml` 里 `grad` 只有 `float` 那一份声明**，没有数组/多参 arm。`grad(f)([3.0, 2.0], 1)` 在**重载解析**这一步就被拒：
+   `grad and with_grad differentiate the first 'with' parameter of a function that returns a float …`
+2. **即使补上 arm，它会停在 `transpose` 的五个 `law` 名字分派上**（`skip=law rule=…`）。
+
+**这两件事是一件事的两半**：arm 只有在 `law` 分派解决后才有意义，否则只是把墙往前挪一格。
+
+**写这一段的规矩**：作者给读数是**要求复现**，不是**允许引用**；复现不了时写"待复现 + 卡在哪一层 + 前置是哪两件"，**不许写成"已按裁定落地"**。
+
+## 一处最容易被下一个人搞错的地方：没有端口要占位，不能少一个元素
+
+```
+modules/transforms/jvp.cpp
+  tangentPorts.push_back(tangent);                 // 有切空间：真端口
+  else tangentPorts.push_back(rt::kInvalidNodeRef); // 没有：位置占位
+  …
+  tangentOf[ref] = tangentPorts[parameter->second]; // ← 按形参位置索引
+```
+那份 tangent 列表是**按形参位置索引**的，**列表缩短会把后面几位静默错位**。所以"没有切空间"必须写成**位置占位**。
+
+**判据仍然只有一个**：`camel::core::tangentSpaceOf`（签名层与遍历层共用）；`kInvalidNodeRef` **只是索引对齐，不是第二个判据**。
