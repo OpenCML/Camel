@@ -201,16 +201,17 @@ std::span<const std::byte> DraftGraphRead::payloadOf(gc_node_ref_t ref) const {
     return txn_.graph().payloadOf(sourceIdOf(ref));
 }
 const NodeFace *GraphRead::node(gc_node_ref_t ref) const {
-    if (!recordsBuilt_) {
-        records_.resize(static_cast<size_t>(nodeSlotCount()));
-        for (gc_cnt_t at = 0; at < nodeSlotCount(); ++at) {
-            records_[at] = nodeFaceOf(at);
-        }
-        recordsBuilt_ = true;
-    }
-    if (ref >= records_.size() || !records_[ref].alive) {
+    // Asked for on every call rather than kept: an erased node is erased for the next ask, and a
+    // face that answered from a table built once would keep answering for a node its graph no
+    // longer has. The record itself is still the face's -- one slot per id, written again on each
+    // ask -- so the pointer is valid for as long as the face is, and no longer.
+    if (ref >= nodeSlotCount() || !alive(ref)) {
         return nullptr;
     }
+    if (records_.size() < static_cast<size_t>(nodeSlotCount())) {
+        records_.resize(static_cast<size_t>(nodeSlotCount()));
+    }
+    records_[ref] = nodeFaceOf(ref);
     return &records_[ref];
 }
 

@@ -42,6 +42,7 @@
 #include "camel/passes/test/exhaust_perm_space.h"
 #include "camel/passes/test/throw_bad_alloc.h"
 #include "camel/passes/test/exec_plan.h"
+#include "camel/passes/test/graph_faces.h"
 #include "camel/passes/test/regions.h"
 #include "camel/passes/test/retype.h"
 #include "camel/passes/test/arm_loop_regions.h"
@@ -1000,6 +1001,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kSaturateWideTestPass, SaturateWideTestPass),
         TEST_PASS(kSaturateOneRoundTestPass, SaturateOneRoundTestPass),
         TEST_PASS(kSaturatePropsTestPass, SaturatePropsTestPass),
+        TEST_PASS(kGraphFacesTestPass, GraphFacesTestPass),
         TEST_PASS(kRegionsTestPass, RegionsTestPass),
         TEST_PASS(kArmLoopRegionsTestPass, ArmLoopRegionsTestPass),
         TEST_PASS(kLoopInputsTestPass, LoopInputsTestPass),
@@ -3002,7 +3004,6 @@ const camel::runtime::Program *applyPasses(
     const context_ptr_t &ctx, std::ostream &os) {
     return applyPassesDetailed(program, passes, ctx, os).program;
 }
-
 
 
 

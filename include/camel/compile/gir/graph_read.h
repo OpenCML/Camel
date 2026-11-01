@@ -142,9 +142,9 @@ class GraphRead {
     // any of these forwarding names changes no answer.
     gc_cnt_t nodeCount() const { return nodeSlotCount(); }
     /// The node's record, `nullptr` when the id names no node -- the same answer `GCGraph::node`
-    /// gives, so a reader's null check reads the same on a face. The records are held by the face
-    /// itself: built on the first ask and kept until the face dies, so the pointer is valid as
-    /// long as the face is.
+    /// gives, so a reader's null check reads the same on a face. The record is asked for again on
+    /// every call and written into a slot the face holds, so an erased node is a null the next
+    /// time it is asked for, and the pointer is valid for as long as the face is.
     const NodeFace *node(gc_node_ref_t ref) const;
     uint32_t regionCount() const { return regionCountOf(); }
     const camel::runtime::GCRegion *region(uint32_t id) const { return &regionOf(id); }
@@ -175,10 +175,8 @@ class GraphRead {
     gc_cnt_t armCountOf(gc_node_ref_t ref) const;
 
   protected:
-    /// The records `node` hands out, built once on the first ask. A face reads one graph, so this
-    /// is one vector the size of the graph's id space; it is thrown away with the face.
+    /// The slots `node` writes its records into, one per id of the graph the face reads.
     mutable std::vector<NodeFace> records_;
-    mutable bool recordsBuilt_ = false;
 };
 
 /// The face of a build-time draft: what a graph answers while it is being built.
