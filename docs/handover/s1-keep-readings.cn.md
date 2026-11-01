@@ -24,10 +24,26 @@
 "9.7 的用例"因此不在 9.7 里，而在别处（`git grep -l 顺序边` 命中 10 个文档与若干计划）。**要逐个确认，
 得先把它们定位出来**；这一页不假装已经确认。
 
+## 2.5 `:op/keep` 本身还不存在
+
+`git grep 'op/keep\|:op::keep' -- src include` **零命中**：这个算子还没写。所以"把 fold 改成数据保活"
+之前，先要有这个算子本身。
+
+## 2.6 候选用例位置（不是 N，也不是 M）
+
+`git grep -E 'EffectNotExecuted|顺序边' -- test/plans test/cases` 命中 **17 个文件、17 行**，其中用例：
+`test/cases/compile/diag_json/dropped_effects.cml`、`diag_options/warning.cml`、
+`unused_values/effect_body.cml`、`consistency/partial_application/var_parameter_effect.cml`、
+`effects/effect_through_parameter.cml`、`effects/generic_parameter_takes_instantiation.cml`、
+`modules/rules/bench.cml`、`modules/tiles/gpu_scope_unused_effect.cml`，以及
+`feat/compile/diag_json.plan.toml`(6)、`diag_options.plan.toml`(9)、`effects_syntax.plan.toml`(4)。
+
+**这 17 处里哪几条真的"靠顺序边保活"要逐条读**——这一轮读到定位为止，**`N`、`M` 仍不给**。
+
 ## 3. 一句结论
 
-**3.3 与 9.7 都还是旧模型的写法；`N`、`M` 两个数这一轮给不出**——用例清单尚未定位，先定位再确认，
-不为凑数编一条"共 N 条、M 条不成立"。
+**`:op/keep` 还不存在（`src` 里零命中），用例已定位到 17 处但未逐条判**；所以 `N`、`M` 这一轮仍不给，
+先写算子、再逐条判、再改遍。
 
 ## 4. 下一步
 
