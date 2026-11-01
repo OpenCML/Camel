@@ -131,6 +131,7 @@ inline constexpr OperId VarAfter        = 21; // ":var/after"
 /// principles 3.3). Its traits are the conservative ones an undeclared operator gets -- it has an
 /// effect and may fault -- because an operator a pass could drop, merge, move or compute early
 /// would undo the reason it was inserted.
+D
 ///
 /// When it is written: `keepThroughValue` (src/passes/opt/generic/rewrite.cpp), called by
 /// `replaceNode` for a node that has no sync user -- one that holds no place in a `sync` block's
@@ -142,6 +143,13 @@ inline constexpr OperId VarAfter        = 21; // ":var/after"
 /// that has no such place -- and a graph that keeps neither is refused at the commit ("effect node
 /// ... with neither a read of its value nor a place in its chain"), which is what
 /// `test::keepshape` measures.
+///
+/// The insertion is also exercised by construction, in src/passes/test/keepnode.cpp and
+/// test/plans/feat/opt/keep_node.plan.toml: measured there, `KEEPNODE keep=1 reads_the_divisor=1`,
+/// and the same pass with the insertion switched off reads `keep=0`. An earlier version of this
+/// comment said no program reached the insertion; the count above is why it does not say that --
+/// 8 of the 106 programs under test/cases/opt/ carry a `:op/keep` node, and that number is pinned
+/// by a plan entry so that a change in either direction is a red run.
 inline constexpr OperId Keep            = 22; // ":op/keep"
 inline constexpr OperId kWellKnownCount = 23; // kNoOper included
 
