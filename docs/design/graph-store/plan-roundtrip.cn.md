@@ -183,6 +183,32 @@ the literal into a constant array, and the program written back builds a differe
 **291/293 = 99.3% 是"语言的事实"，不是打印机的手艺**：实例图在源码里**没有写法**（源写 `vmap(f)`，实例由调用点定），`namespace`/`module` 区域**打印机不支持**。所以这一族**不该在补名字这一层动**，两条路都等作者裁，页面见 `docs/handover/reviews/questions-2026-11-02-generic-instances-and-namespace-blocks.md`（两条各带代价，默认两条都不做）。
 
 **一处更正（把我上一刀的读数收回）：** 上一刀我报"`PLAIN` 两个、名字是 `rulesets.`（以句点结尾）⇒ 前端拼前缀漏了成员名"——**不成立**：那是我统计脚本的截断错误（`sed` 在第一个句点处截断），真名是 `rulesets.jvp::lift<float>` 与 `rulesets.probe_missing::add_ok__lhs`。用正确的提取重扫：**以 `::`、`.` 或 `<` 结尾的名字计数为 0**，`PLAIN` 为 0。所以"前端拼名字漏成员名"这条缺陷**没有可修的点**，这一刀只有分类、没有代码改动。
+**2026-11-02 第十一刀（作者缺陷清单 A7 的第 1 条）：`fail<'Kind'>(message)` 是语句，打印机漏了它。** 缺陷原文：`consistency/fail_never/statement_after_fail` 原程序打印 `before`、报故障、`exit 1`；打印出来的程序打印 `before`、`after`、`exit 0`——**`fail` 语句被丢了**。
+
+`git grep -n ":op/fail\|kFailOperatorUri" -- src include` 指到 `include/camel/core/operator_names.h#kFailOperatorUri`：`kFailOperatorUri = ":op/fail"`，注释写着"它**不是效果**，所以它的值不被需要的地方没有东西运行它"。`src/passes/trans/cml/cml.cpp` 的语句走查（`processNode`）只把 `nodeEffect(ref)` 为真的节点当语句打印，而 `fail` 的值类型是 `never`、用户数 0、又不是效果 ⇒ **它是被"跳过"的，不是被当成值表达式丢了**（值表达式那条路也走不到：`users == 0` 时那一支只在有名字或有效果时产出）。
+
+修法：在语句走查里按 URI 认出它，按语言的写法打印（`emitFail`）——`with` 槽里的常量字符串是 `'Kind'`、唯一一个 norm 输入是消息；**kind 不是常量字符串时具名拒绝**（`fail<'Kind'>` 是唯一写法，写别的 kind 就是假打印）：
+
+```
+a 'fail' whose kind is not a constant string: the statement is written `fail<'Kind'>` and the
+kind is the value it holds, so a print that cannot read it cannot write the statement
+```
+
+两侧读数（同一对程序，`std::nvm`）：原程序 `before` + `error[RuntimeDiag::NoPremise]: the premise of this program does not hold`、`rc=1`；打印出来的程序 `before` + 同一句 `RuntimeDiag::NoPremise`、`rc=1`（逐字一致）。
+
+判据（合并 `origin/develop = 03c7065cc` 之后**重测的基线** `550 / 1809 / 540 / 495 / 45 / 10 / 52`，语料 3360 个文件，旧数不跨基线比）：
+
+| 读数 | 基线 | 本刀 | 说明 |
+| --- | --- | --- | --- |
+| `printed` | 550 | **553** | 只增；新打印的 3 条是 `consistency/fail_never/fail_located.cml`、`opt/never_exit/fail_last.cml`、`opt/generic/fold_fail_is_intended.cml`——它们此前唯一挡路的就是这个写不出的 `fail` 语句 |
+| `refused` | 1809 | 1806 | 与上面同一件事（-3） |
+| `checked` | 540 | 543 | 同上 |
+| `equivalent` | 495 | **499** | 只增（+3 新打印 + 1 原不等价转等价） |
+| `not_equivalent` | 45 | **44** | -1，正是 `statement_after_fail`（它现在打印得忠实） |
+| `unfaithful` | 10 | **10** | 不升；`DIFFERENT` **-1 新增 0** |
+| `families` | 52 | **52** | 不升；kind 不是常量的那条具名拒绝在本语料里**一次没触发** |
+
+**两套计数（写进页，免得下一个人以为数字被改动）：** `EXAMPLE_STOPS` 的键是**诊断类别**（`a semantic error`、`an internal error`），值是该类的条数，**不是总停止数**。作者 22:30 那一笔记的 `40` 是 `a semantic error` 类，总停止数是 **41**；本轮把 `vjp` 的 `@example` 修好之后，`a semantic error` 回到 **39**、总停止数 **40**（`vjp` 已不在"编不过"的名单里，那份名单现在是 34 个名字、40 条，多为 `f`/`encode`/`n` 这类 fragment）。两个数一起看才不误会。
 **补声明清单（按节点数）。** 全语料里被打印机点名、确实没有任何声明的算子 **143 个、12520 个节点**。前 12：`:str/format` 1019、`tensor:sum` 934、`tensor:multiply` 862、`tensor:reshape` 856、`:op/tag_is_null` 689、`:struct/len_arr` 585、`tensor:add` 582、`:op/assn_l` 569、`:mark/map_arr` 389、`tensor:subtract` 324、`tensor:matmul` 238、`:op/slice_sub` 219。
 
 **更正两份旧数。** ① 之前报的「353 条没有声明」其实是「没有 `#op` 标签」的数，不是「没有声明」：`:op/add_l`（3244 节点）、`:op/mul_d`（801）这一批由 `globals.cpp` 的组（`__add__`、`__mul__`）**原生登记**，打印机从不点名它们，所以它们不是缺口；真正的缺口是上面 143 条。② `:op/keep` 已在 `fsh-dev 5773c9482` 删掉，全语料图里 **0 个节点**，扣前扣后都是 353（它与上面那 143 条无关）。
