@@ -14,25 +14,70 @@
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
 
-## 现在在等作者：0 页（与目录逐项一致）
-目录里没有待裁的页：最后三页（`whether-the-empty-tangent-needs-a-port`、`is-an-arm-block-a-sync-chain`、`does-the-pause-cover-a-lambdas-parameter-list`）已由作者在读完之后整体挪进 `reviews/`，`30191828b` 带进的两条裁定见下。**索引此前仍列着这三行**，指向已被 `git mv` 走的名字——一条指向不存在文件的索引比没有索引更坏，所以这三行在这一笔里删掉，判据仍旧是"以目录为准"。
+## 现在在等作者：58 页（与目录逐项一致）
 
-**17:30 作者把 `nested-branch-stops-in-jvp` 也挪进 `reviews/` 并在 `questions-2026-10-29.md` 记了两条裁定**（`fsh-dev` 的 `9c2e5c7df`）：前端变换实例化**先停手**（已进树的不撤，等负责人一起处理），嵌套分支按区域**从内到外递归**、不为“嵌套”另写一支（`vjp` 在 `2 / 0.5 / -1` 处 `4.0 / 2.0 / 3.0`，四个后端一致）。
+**这一节按目录重建，不是按谁记得什么。** 2026-11-02 之前它只列 0 页，而各条车道在自己的分支上写了 58 页（另 1 页进 `reviews/`）——**写在车道分支上的问题等于没问**：作者的规矩是他每轮先读这里。这一笔把那 59 页从车道分支收进 `develop`，索引同时在同一个提交里重建。判据仍旧是"以目录为准"。
 
-**16:10 作者把最后一页也挪进 `reviews/`**（`fsh-dev` 的 `56ce9259c`）：`whether-a-function-value-can-take-a-computed-pack`——lambda 形参表收无类型的 `..xs`（选 ①，不改 5.6），类型从期望类型来，落地后 `vjp` 并成一条声明。所以这一节现在是空的，不是没人在问。
-
-**14:30 作者裁完并亲自把八页挪进 `reviews/`**（`fsh-dev` 的 `235987b44`）：这八页是 `who-owns-the-count-of-a-splits-residuals`、`whether-transpose-takes-the-cotangent-beside-the-parameters`、`closures-as-values-block-the-transposed-backward-half`、`split-has-landed-and-the-host-is-up`、`inliner-chain-joining-as-its-own-change`、`optional-with-arguments-and-the-batching-key`、`probe-plan-kept-or-dropped`、`t-plus-24-status-and-where-the-hour-went`。裁定四条：M4 第二步是 `jvp`/`split`/`transpose` 的**编译期实例化**、`vjp` 仍是 `transpose(split(jvp(f)))` 组合；`Vjp<F>` 拉回一律元组，`grad(f)(x) = vjp(f)(x).1(1.0).0`；`probe.machine` 删；可选 with 参数走 A 的窄版（前端把声明默认值物化）。
-
-[`does-remat-change-what-split-stores`](../reviews/questions-2026-11-01-does-remat-change-what-split-stores.md) 已裁并挪进 `reviews/`（作者，2026-11-01）：`remat` 是**图变换**，标记是**图的属性**（`kGraphFlagRecomputeBackward`），`split` 是它的读法——跨切只留入口值、后一半重算。原默认建议（A：标记归 `split`）方向对，裁定更具体。
-
-`whether-a-reduction-can-be-written-without-an-axis` 已裁已落（`5fd6fd902`，选 B：四条整轴形态都补），整体挪进 `reviews/`；它带出来的新问题（批 `argmax`/`argmin` 缺扁平视图）就是上面最后一页。
-
-**13:10 作者裁完并亲自挪进 `reviews/` 的两页**：`is-a-splits-residual-count-a-number-the-type-can-carry`（项数是任意 N、由图给；路就是 A：编译期实例化；残差不可解构）与 `does-the-branch-edge-leave-before-the-exporter-stops-reading-it`（选甲：先把 124 定位到具体函数再删边）。两页的 `裁定：` 行由我们补上，推导过程见 `reviews/questions-2026-10-29.md` 末节。
-
-15:10 与 15:25 的四页已裁并挪进 `reviews/`：流要表示（`rt::Stream<T>`）、`Json`/`Set`/`Map` 是缺口、`Ref` 在判定入口集中解析一次、`split` 的切口是 `Lift` 的两个分量。
-
-原则第 15 节另列着 6 条未决（另 2 条已成页、22:50 已裁），见文末。
-
+| 页 | 问什么 | 状态 |
+|---|---|---|
+| [`2026-11-02-p1-13-should-the-loader-expand-the-op-wildcard`](2026-11-02-p1-13-should-the-loader-expand-the-op-wildcard.md) | `#op` 的通配，该由加载器展开，还是每个名字各写一条？ | 待裁 |
+| [`2026-11-02-p1-13-tensor-and-array-same-name-is-it-one-call-shape`](2026-11-02-p1-13-tensor-and-array-same-name-is-it-one-call-shape.md) | `tensor:` 与 `array:` 的同名算子，是不是同一个调用形状？ | 待裁 |
+| [`defun-tag-in-the-type.cn`](defun-tag-in-the-type.cn.md) | 问题：文档是否取代 `defun.cpp:8-10` 那句「函数值已经是标签 + 环境」 | 待裁 |
+| [`function-type-structural-vs-enum.cn`](function-type-structural-vs-enum.cn.md) | 问题：函数类型是结构别名（5.2），「每个函数类型一个 enum」是名义类型，两者如何并存 | 待裁 |
+| [`generator-cell-type-by-inference.cn`](generator-cell-type-by-inference.cn.md) | 问题：单元的类型由「只求类型的推导」定，还是由运行时状态的首个写入定 | 待裁 |
+| [`questions-2026-10-30-allocation-failure-in-the-faults-table`](questions-2026-10-30-allocation-failure-in-the-faults-table.md) | 分配失败算不算 `faults` 表该声明的故障 | 待裁 |
+| [`questions-2026-10-30-cell-type`](questions-2026-10-30-cell-type.md) | A 的"只带类型"的单元，类型从哪来 | 待裁 |
+| [`questions-2026-10-30-cycle-guard-edge-kinds`](questions-2026-10-30-cycle-guard-edge-kinds.md) | 问题：环的守卫走 5 类边，冻结走 4 类——这个差是有意的吗 | 待裁 |
+| [`questions-2026-10-30-defun-tag-in-the-type`](questions-2026-10-30-defun-tag-in-the-type.md) | 问题：文档是否取代 `defun.cpp:8-10` 那句「函数值已经是标签 + 环境」 | 待裁 |
+| [`questions-2026-10-30-function-type-structural-vs-enum`](questions-2026-10-30-function-type-structural-vs-enum.md) | 问题：函数类型是结构别名（5.2），「每个函数类型一个 enum」是名义类型，两者如何并存 | 待裁 |
+| [`questions-2026-10-30-generator-read-before-write`](questions-2026-10-30-generator-read-before-write.md) | 生成器里"先读后写"的单元：内部错误还是用户可见诊断 | 待裁 |
+| [`questions-2026-10-30-grad-builds-its-graph-at-runtime`](questions-2026-10-30-grad-builds-its-graph-at-runtime.md) | 问题：去函数化的验收数不到 `grad` 造出的那个函数值 | 待裁 |
+| [`questions-2026-10-30-jvp-family-anchor`](questions-2026-10-30-jvp-family-anchor.md) | `#jvp` 这一族规则没有挂点 | 待裁 |
+| [`questions-2026-10-30-jvp-tag-scope`](questions-2026-10-30-jvp-tag-scope.md) | `#jvp` 标注点写在哪个模块：标签有自己的命名空间，而运算符声明在 `prelude` | 待裁 |
+| [`questions-2026-10-30-literal-head-type-expression`](questions-2026-10-30-literal-head-type-expression.md) | 算出来的类型能不能当字面量的头：这条规则铺到哪为止 | 待裁 |
+| [`questions-2026-10-30-match-type-guard`](questions-2026-10-30-match-type-guard.md) | `match type` 里能不能用类型函数做守卫 | 待裁 |
+| [`questions-2026-10-30-may-fault-boundary`](questions-2026-10-30-may-fault-boundary.md) | `sync` 链上「可能出故障」的边界：是「显式声明了故障」，还是「没声明就当作可能」？ | 待裁 |
+| [`questions-2026-10-30-narrow-float-tangent`](questions-2026-10-30-narrow-float-tangent.md) | 窄浮点算不算"浮点"：`Tangent<f16>` 的射程 | 待裁 |
+| [`questions-2026-10-30-operator-family-names`](questions-2026-10-30-operator-family-names.md) | 算子族在 stdlib 里怎么露出名字：`add` 能不能重载成两个参数 | 待裁 |
+| [`questions-2026-10-30-probe-plan-kept-or-dropped`](questions-2026-10-30-probe-plan-kept-or-dropped.md) | 待决：`probe.machine` 这条自称「用例集完成前会被删掉」的探针计划，留下还是删掉 | 待裁 |
+| [`questions-2026-10-30-region-count-account`](questions-2026-10-30-region-count-account.md) | 区域数的那本账：10 是在哪张图上量的 | 待裁 |
+| [`questions-2026-10-30-reinterp-rule-set`](questions-2026-10-30-reinterp-rule-set.md) | `reinterp<H>`：规则集 `H` 以什么形式交给算子 | 待裁 |
+| [`questions-2026-10-30-reserved-name-in-library`](questions-2026-10-30-reserved-name-in-library.md) | 库里的声明能不能叫保留名：`__add__` 与 `ReservedIdentifier` | 待裁 |
+| [`questions-2026-10-30-tangent-in-prelude`](questions-2026-10-30-tangent-in-prelude.md) | `prelude` 放不下 `Tangent` 与 `export tag`：一引入类型函数，它自己的声明整片连锁失败 | 待裁 |
+| [`questions-2026-10-30-tiles-12-not-10`](questions-2026-10-30-tiles-12-not-10.md) | tiles：裁定说 22 条期望应回到 10，改完读到 12 | 待裁 |
+| [`questions-2026-10-30-two-behaviour-diffs-left`](questions-2026-10-30-two-behaviour-diffs-left.md) | 判定改对之后仍剩两个行为错：臂里的写抢在读到它之前，`prl` 一行不打印 | 待裁 |
+| [`questions-2026-10-30-undeclared-faults`](questions-2026-10-30-undeclared-faults.md) | 没声明 `faults` 的算子：第三态，还是一张没写完的表 | 待裁 |
+| [`questions-2026-10-30-what-counts-as-a-statement`](questions-2026-10-30-what-counts-as-a-statement.md) | `sync` 块里「谁算语句」：建图与 tiles 用的是两个定义 | 待裁 |
+| [`questions-2026-10-30-what-keeps-a-nested-calls-value-alive`](questions-2026-10-30-what-keeps-a-nested-calls-value-alive.md) | 表达式里的嵌套调用：它的「值」靠什么存活？ | 待裁 |
+| [`questions-2026-10-30-write-before-read`](questions-2026-10-30-write-before-read.md) | "写之前读是编译错误"由谁证 | 待裁 |
+| [`questions-2026-10-31-a-folded-constant-holds-elements-and-shape`](questions-2026-10-31-a-folded-constant-holds-elements-and-shape.md) | 折出来的常量：值只剩元素与形状，折叠只盯元素就会丢掉形状 | 待裁 |
+| [`questions-2026-10-31-a-prescribed-fix-that-cannot-be-written`](questions-2026-10-31-a-prescribed-fix-that-cannot-be-written.md) | 指定的修法修不出来时：报根因、改根因所在的那一层 | 待裁 |
+| [`questions-2026-10-31-an-incomparable-case-is-a-hole-in-the-ruler`](questions-2026-10-31-an-incomparable-case-is-a-hole-in-the-ruler.md) | 不可比的用例不是噪声，是尺子的漏洞 | 待裁 |
+| [`questions-2026-10-31-does-a-version-edge-order-two-writes`](questions-2026-10-31-does-a-version-edge-order-two-writes.md) | 版本边算不算"两次写同一资源的调用之间的排序" | 待裁 |
+| [`questions-2026-10-31-does-rt-array-carry-a-shape`](questions-2026-10-31-does-rt-array-carry-a-shape.md) | `rt::Array` 要不要带形状：15 个程序全挡在同一道门上，那道门是谁立的 | 待裁 |
+| [`questions-2026-10-31-generator-cell-type-by-inference`](questions-2026-10-31-generator-cell-type-by-inference.md) | 问题：单元的类型由「只求类型的推导」定，还是由运行时状态的首个写入定 | 待裁 |
+| [`questions-2026-10-31-generator-narrowing-remains`](questions-2026-10-31-generator-narrowing-remains.md) | 生成器的收窄还留不留：`FeatureNotSupported('generators')` 今天没有形状可钉 | 待裁 |
+| [`questions-2026-10-31-mem-blocks-has-no-block-space`](questions-2026-10-31-mem-blocks-has-no-block-space.md) | `std::mem::blocks()` 在 standalone 程序里没有块空间：能不能报，报什么 | 待裁 |
+| [`questions-2026-10-31-std-cpp-needs-a-tensor-type`](questions-2026-10-31-std-cpp-needs-a-tensor-type.md) | `std::cpp` 要不要有 tensor 类型 | 待裁 |
+| [`questions-2026-10-31-tag-argument-of-a-rule`](questions-2026-10-31-tag-argument-of-a-rule.md) | 标签的参数能不能是一个 `rule`：`#jvp(add_jvp)` 的实参今天被拒 | 待裁 |
+| [`questions-2026-10-31-tag-import-rechecks-prelude`](questions-2026-10-31-tag-import-rechecks-prelude.md) | 从 `prelude` 引入一个名字，会让 `prelude` 自己的 `#op` 声明在没有实现模块的上下文里求值 | 待裁 |
+| [`questions-2026-10-31-tiles-narrow-dtype`](questions-2026-10-31-tiles-narrow-dtype.md) | tiles 设备侧的元素类型层要不要加 `F16` / `BF16` | 待裁 |
+| [`questions-2026-10-31-what-carries-a-wait-for-a-write`](questions-2026-10-31-what-carries-a-wait-for-a-write.md) | 一问：值在门后等一次写、或等一次调用——这件事该由哪种边承担？ | 待裁 |
+| [`questions-2026-10-31-what-executes-a-value-taken-by-a-position`](questions-2026-10-31-what-executes-a-value-taken-by-a-position.md) | 被位置取走的值，怎么拿到执行的理由（不靠 ctrl）？ | 待裁 |
+| [`questions-2026-10-31-where-the-tag-for-an-operator-can-sit`](questions-2026-10-31-where-the-tag-for-an-operator-can-sit.md) | `#jvp` 挂不到 `prelude` 的运算符声明旁边，那它该挂在哪 | 待裁 |
+| [`questions-2026-10-31-which-results-cross-the-bridge`](questions-2026-10-31-which-results-cross-the-bridge.md) | 同一个 `T[..]`，两种表示：`tensor:*` 的结果该走哪条 | 待裁 |
+| [`questions-2026-10-31-whose-effect-is-an-inlined-body`](questions-2026-10-31-whose-effect-is-an-inlined-body.md) | 内联把体搬进调用者图之后，那张图多出来的环境资源归谁 | 待裁 |
+| [`questions-2026-11-01-closures-as-values-block-the-transposed-backward-half`](questions-2026-11-01-closures-as-values-block-the-transposed-backward-half.md) | 库层 `vjp` 的最后一堵墙：`split` 的后一半把闭包当值搬，而转置没有地方放它 | 待裁 |
+| [`questions-2026-11-01-inliner-chain-joining-as-its-own-change`](questions-2026-11-01-inliner-chain-joining-as-its-own-change.md) | 内联的接链修法要不要单独立项 | 待裁 |
+| [`questions-2026-11-01-optional-with-arguments-and-the-batching-key`](questions-2026-11-01-optional-with-arguments-and-the-batching-key.md) | 一个可选的角度参数，让同一个批规则键有了两种元数 | 待裁 |
+| [`questions-2026-11-01-split-has-landed-and-the-host-is-up`](questions-2026-11-01-split-has-landed-and-the-host-is-up.md) | 给决策者的一页状态：`split` 已落地（你 07:30 看到的是旧状态），主机正常，只剩 `transpose` 收残差这一道墙 | 待裁 |
+| [`questions-2026-11-01-t-plus-24-status-and-where-the-hour-went`](questions-2026-11-01-t-plus-24-status-and-where-the-hour-went.md) | T+24 的状态，以及中午那一小时去哪了（状态页，无需裁定） | 待裁 |
+| [`questions-2026-11-01-whether-transpose-takes-the-cotangent-beside-the-parameters`](questions-2026-11-01-whether-transpose-takes-the-cotangent-beside-the-parameters.md) | `transpose(f)` 的余切从哪里进：与 `f` 的参数并列，还是由 `split` 提供 | 待裁 |
+| [`questions-2026-11-01-who-owns-the-count-of-a-splits-residuals`](questions-2026-11-01-who-owns-the-count-of-a-splits-residuals.md) | 残差是图的属性，元组项数是类型的属性：让 `split` 的两半项数由谁定 | 待裁 |
+| [`questions-2026-11-02-does-the-unused-division-have-to-fault`](questions-2026-11-02-does-the-unused-division-have-to-fault.md) | 作者 20:30 那条读数在今天不产生除零：按规则删，还是按读数据删？ | 待裁 |
+| [`questions-2026-11-02-four-ways-to-write-zero`](questions-2026-11-02-four-ways-to-write-zero.md) | 发现：`split` 要给"切线实参"造零，而树上已经有四份造零的写法，没有一份能直接用 | 待裁 |
+| [`questions-2026-11-02-is-a-lifted-graph-another-kind-of-graph`](questions-2026-11-02-is-a-lifted-graph-another-kind-of-graph.md) | 问题：一张提升图（`(..Lift<P>) => Lift<R>`）是"另一种图"，还是"同一张图带着一段来历"？ | 待裁 |
+| [`questions-2026-11-02-whether-a-transpose-rule-answers-every-name-or-the-first`](questions-2026-11-02-whether-a-transpose-rule-answers-every-name-or-the-first.md) | 一条转置规则，是"只答它左侧第一个名字的余切"，还是"答左侧每个名字的余切"？ | 待裁 |
 ## 已裁：按还堵着的活排
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
