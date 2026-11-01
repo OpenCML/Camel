@@ -723,7 +723,11 @@ std::vector<OpDef> layoutOps() {
         .name      = "one_hot",
         .exports   = {"one_hot"},
         .params    = {{"labels", ParamKind::TensorLike}, {"classes", ParamKind::Int}},
-        .resultDoc = "float[..]",
+        // The rows are `f32` whatever the labels are (`oneHotInfer`, and the kernel's
+        // `createTensor(TypeCode::Float32, ...)`), so this is the one element type to state: the
+        // family word `float[..]` would say the element type follows an argument, and this operator
+        // has no such argument.
+        .resultDoc = "f32[..]",
         .infer     = oneHotInfer,
         .kernel    = &oneHotKernel,
         .traits    = {}});

@@ -318,6 +318,60 @@ int64_t sumAllInt64(const Array *input) {
     });
 }
 
+double extremumAllFloat(ReduceOp op, const Array *input) {
+    // No accumulator: the fold carries an element of T from the identity of design principles 7.7
+    // (minmax.h), and IEEE 754-2019 maximum/minimum are exactly associative and commutative, so
+    // the row-major order is one of many that give the same bits. A NaN anywhere gives the
+    // canonical NaN, -0 stays below +0, and nothing rounds -- the one conversion below is into the
+    // double answer, which holds every float element type exactly.
+    return dispatchDType(input->dtype(), [&]<typename T>() -> double {
+        if constexpr (camel::core::rtdata::is_ieee_float_v<T>) {
+            const T *src = input->dataAs<T>();
+            T best       = op == ReduceOp::Max ? maximumIdentity<T>() : minimumIdentity<T>();
+            for (uint64_t i = 0; i < input->numel(); ++i) {
+                best = op == ReduceOp::Max ? maximum(best, src[i]) : minimum(best, src[i]);
+            }
+            return static_cast<double>(best);
+        } else {
+            // An int32, int64 or bool tensor: `extremumAllInt` answers it without this conversion.
+            return static_cast<double>(extremumAllInt(op, input));
+        }
+    });
+}
+
+int64_t extremumAllInt(ReduceOp op, const Array *input) {
+    // The integral fold, exact: an element of the tensor as it stands (design principles 7.7 has
+    // no conversion and no rounding here), taken from the type's lowest or largest value.
+    return dispatchDType(input->dtype(), [&]<typename T>() -> int64_t {
+        const T *src = input->dataAs<T>();
+        T best       = op == ReduceOp::Max ? maximumIdentity<T>() : minimumIdentity<T>();
+        for (uint64_t i = 0; i < input->numel(); ++i) {
+            best = op == ReduceOp::Max ? maximum(best, src[i]) : minimum(best, src[i]);
+        }
+        return static_cast<int64_t>(best);
+    });
+}
+
+int64_t argExtremumAll(ReduceOp op, const Array *input) {
+    // The position of the first extremum in the stored order (design principles 7.7). `beyondExtreme`
+    // is the axis form's comparison (minmax.h), so the whole-tensor form and the axis form say the
+    // same thing about NaN, -0 and a tie: the first NaN wins, +0 is above -0, the earlier position
+    // stays. A tie therefore keeps the smallest position, which is the one this fold keeps.
+    return dispatchDType(input->dtype(), [&]<typename T>() -> int64_t {
+        const T *src    = input->dataAs<T>();
+        const bool max  = op == ReduceOp::ArgMax;
+        T best          = src[0];
+        int64_t bestIdx = 0;
+        for (uint64_t i = 1; i < input->numel(); ++i) {
+            if (max ? beyondExtreme<true>(src[i], best) : beyondExtreme<false>(src[i], best)) {
+                best    = src[i];
+                bestIdx = static_cast<int64_t>(i);
+            }
+        }
+        return bestIdx;
+    });
+}
+
 namespace {
 
 enum class SoftmaxKind { Softmax, LogSoftmax };

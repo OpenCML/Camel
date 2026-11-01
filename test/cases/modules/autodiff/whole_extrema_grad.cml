@@ -1,0 +1,35 @@
+/**
+ * The pullback of a whole-tensor extremum: `max` and `min` send the gradient to the elements equal
+ * to the extremum (the same rule the axis forms use), with the extremum and the cotangent broadcast
+ * over the tensor rather than expanded along an axis.
+ *
+ * `grad` differentiates the first `with` parameter, so the tensor is built in the body of a function
+ * of `w`. `high` is `4.0` while `w` is below the maximum, so its derivative is `0` there and `1` at
+ * `w = 5`, where `w` is the maximum. `low` moves the other way: it is `2.0` while `w` is above it,
+ * so its derivative is `0` at `w = 3` and `1` at `w = 1`.
+ *
+ * A tie shares the gradient the way the axis form does: `strict_eq` selects both equal elements, so
+ * each of them receives the cotangent in full.
+ */
+import { grad } from autodiff
+import { max, min } from tensor
+
+with <w: float>
+func high(): float {
+    let xs: float[2, 2] = [[w, 4.0], [3.0, 2.0]]
+    return max(xs)
+}
+
+with <w: float>
+func low(): float {
+    let xs: float[2, 2] = [[w, 4.0], [3.0, 2.0]]
+    return min(xs)
+}
+
+func main(): int sync {
+    println(grad(high)<5.0>())
+    println(grad(high)<3.0>())
+    println(grad(low)<1.0>())
+    println(grad(low)<3.0>())
+    return 0
+}
