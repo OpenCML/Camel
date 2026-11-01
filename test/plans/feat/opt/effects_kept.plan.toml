@@ -212,21 +212,22 @@ args = ["${case}", "test::keepshape", "test::keepinspect", "${backend}"]
 expect_exit = 99
 expect_stdout_exact = "KEEPSHAPE keep=1 uri=:op/keep data_user=1 sync_statement=0 wait_edge=0 waited_on=0 standing=alive\nKEEPSPOTS keeps=1 in_chain=0 out_of_chain=1 waited=0\n1\n"
 
-# "Is `:op/keep` reachable?" is a number, not an opinion: the cases of `test/cases/opt/effects`
-# that hold one, with their names, pinned against what was measured on 2026-11-01 (three of five,
-# two nodes each) plus the two witnesses outside that directory. A change in the count is a
-# decision to look at -- a rule that started writing the operator, or one that stopped -- and the
-# names are what says which.
+# "Is an operator the passes write still reachable?" is a number, and the number is pinned by name
+# for the whole family: `:op/keep` over `test/cases/opt/effects` (three cases, two nodes each),
+# `:enum/tag` and `:enum/field` over `test/cases/opt/defun`, and `:enum/make` pinned to zero because
+# no case reaches that path of the defunctionalizer today -- an empty set with an owner, so a case
+# that starts holding one is a red line and not a surprise. One more case means a rule started
+# writing the operator, one fewer means a rule stopped, and the names are what says which.
 [[tests]]
-name = "keep_shape.reachability"
-desc = "The pinned count of cases whose graph holds `:op/keep` under `std::opt`, by name: `opt/effects` three of five with two nodes each, and the two witness cases outside it."
+name = "pass_written.inventory"
+desc = "The operators the passes write, counted by case and pinned by name: `:op/keep` (three of five effect cases), `:enum/tag` and `:enum/field` (six and four of ten defun cases), and `:enum/make` pinned to zero with the writer it would have."
 kind = "behavior"
 tool = "node"
-case = "../../../cases/opt/effects/keep_reachability/check.mjs"
+case = "../../../cases/opt/pass_written/check.mjs"
 args = ["${case}"]
 # One run: the check runs the binary itself over the cases it names.
 backends = ["nvm"]
 expect_exit = 0
-expect_stdout_contains = ["[KEEP] effects cases=3 nodes=6 of 5", "[KEEP]   effects dce_effect_under_pure_arithmetic.cml nodes=2", "[KEEP]   witness generic/unread_gate.cml nodes=2", "[KEEP] ok"]
-expect_output_not_contains = ["[KEEP] RED"]
+expect_stdout_contains = ["[FAMILY] :op/keep cases=3 nodes=6 of 5", "[FAMILY] :enum/tag cases=6 nodes=6 of 10", "[FAMILY] :enum/field cases=4 nodes=5 of 10", "[FAMILY] :enum/make cases=0 nodes=0 of 10", "[FAMILY] ok"]
+expect_output_not_contains = ["[FAMILY] RED"]
 timeout_ms = 300000
