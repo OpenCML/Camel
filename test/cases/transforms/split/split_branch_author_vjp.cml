@@ -1,0 +1,36 @@
+/**
+ * The same shape as `split_branch_author.cml`, read through `vjp` -- and the refusal is what this case
+ * pins, because the gap is real and must not be silent.
+ *
+ * `vjp = transpose . split . reinterp<jvp>`. The cut now builds the author's branch
+ * (`split_branch_author.cml` reads 4.0 and 3.0 through it), so the refusal is `transpose`'s:
+ *
+ *     TRANSPOSE function=split_of_jvp_of_f_backward skip=signature
+ *
+ * and then, at the call site, `transforms: transpose has no transpose for this function`.
+ *
+ * Why: the condition crosses the cut as a residual so the backward half picks the arm the same way the
+ * forward half did (design 4.2), and a condition is a `bool`. `transposeSignature` takes a residuals
+ * bundle whose members are all `float` (`modules/transforms/transpose.cpp`: `bundle->typeAt(i) !=
+ * Type::Float64()` returns nullptr, which prints `skip=signature`). So the two facts cannot both hold
+ * as the code stands, and the choice between them is the author's:
+ *
+ * 1. `transpose` admits a known value that is not a float -- the bundle is "values the walk cannot
+ *    carry", and a bool is such a value;
+ * 2. the cut carries the condition in another form (a float, or the arm index as an int).
+ *
+ * Nothing in this lane changes `transpose` or the residual typing to make the number appear: a number
+ * bought that way would not be the author's 3.0. The plan pins the refusal, so the day either choice is
+ * made this case fails and asks to be re-read.
+ */
+import { vjp } from vjp
+
+func f(x: float): float {
+    return if x > 0.0 then x * x else 3.0 * x
+}
+
+func main(): int sync {
+    let (y, pullback) = vjp(f)(2.0)
+    'author vjp value={} dfdx={}'->format<y, pullback(1.0)>->println
+    return 0
+}
