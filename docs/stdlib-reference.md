@@ -1846,7 +1846,7 @@ its element type, `bool` as `int64`.
 #### `sum`
 
 ```camel
-sum: (t: float[..], axis: int, keepdims?: bool) => float[..]
+sum: (t: T[..], axis: int, keepdims?: bool) => T[..]
 ```
 
 The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis with extent 1.
@@ -1875,7 +1875,7 @@ is a fault.
 #### `mean`
 
 ```camel
-mean: (t: float[..], axis: int, keepdims?: bool) => float[..]
+mean: (t: T[..], axis: int, keepdims?: bool) => T[..]
 ```
 
 The same mean over one axis; keepdims keeps the axis with extent 1.
@@ -1887,7 +1887,62 @@ The same mean over one axis; keepdims keeps the axis with extent 1.
 #### `max`
 
 ```camel
-max: (t: float[..], axis: int, keepdims?: bool) => float[..]
+max: (t: T[..]) => T
+```
+
+IEEE 754-2019 maximum of every element (design principles 7.7): a NaN anywhere gives `nan`, and
+-0 is below +0. An extremum has no identity, so a tensor with no element is a fault rather than
+an answer. The axis form below is the same name, chosen by arity (design principles 7.3).
+
+- Pure.
+- Failure: fault `InvalidArgument` when the tensor has no element.
+- Example: `max([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `4.0`
+
+#### `min`
+
+```camel
+min: (t: T[..]) => T
+```
+
+IEEE 754-2019 minimum of every element: a NaN anywhere gives `nan`, and -0 is below +0. A tensor
+with no element is a fault.
+
+- Pure.
+- Failure: fault `InvalidArgument` when the tensor has no element.
+- Example: `min([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `1.0`
+
+#### `argmax`
+
+```camel
+argmax: (t: T[..]) => int
+```
+
+The position of the maximum of every element, counted in row-major order and answered as an
+`int`: the first NaN's position if there is one, +0 above -0, and the earliest position on a
+tie (design principles 7.7). A tensor with no element is a fault.
+
+- Pure.
+- Failure: fault `InvalidArgument` when the tensor has no element.
+- Example: `argmax([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `3`
+
+#### `argmin`
+
+```camel
+argmin: (t: T[..]) => int
+```
+
+The position of the minimum of every element, counted in row-major order and answered as an
+`int`: the first NaN's position if there is one, -0 below +0, and the earliest position on a
+tie. A tensor with no element is a fault.
+
+- Pure.
+- Failure: fault `InvalidArgument` when the tensor has no element.
+- Example: `argmin([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `0`
+
+#### `max`
+
+```camel
+max: (t: T[..], axis: int, keepdims?: bool) => T[..]
 ```
 
 IEEE 754-2019 maximum over the axis (exactly associative and commutative: any order gives
@@ -1900,7 +1955,7 @@ the same bits); keepdims keeps the axis with extent 1.
 #### `min`
 
 ```camel
-min: (t: float[..], axis: int, keepdims?: bool) => float[..]
+min: (t: T[..], axis: int, keepdims?: bool) => T[..]
 ```
 
 IEEE 754-2019 minimum over the axis (exactly associative and commutative); keepdims keeps the
@@ -1947,6 +2002,19 @@ definition in Camel, in `f32`.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank.
+- Example: `softmax([1.0, 1.0] as f32[])` gives `[0.5, 0.5]`
+
+#### `softmax`
+
+```camel
+softmax: (t: float[..], axis?: int) => float[..]
+```
+
+The same softmax of an `f64` tensor: the kernel takes the element type of the tensor it is
+given, so the result is `f64` as well.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank.
 - Example: `softmax([[1.0, 1.0]] as float[1, 2])` gives `[[0.5, 0.5]]`
 
 #### `log_softmax`
@@ -1957,6 +2025,18 @@ log_softmax: (t: f32[..], axis?: int) => f32[..]
 
 The log of the softmax over the axis (-1 by default), computed as its normative definition in
 Camel, in `f32`.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank.
+- Example: `log_softmax([1.0, 1.0] as f32[])` gives `[-0.6931472, -0.6931472]`
+
+#### `log_softmax`
+
+```camel
+log_softmax: (t: float[..], axis?: int) => float[..]
+```
+
+The same log softmax of an `f64` tensor, in `f64`.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank.
@@ -1974,6 +2054,18 @@ The gradient of the softmax of y with the incoming gradient dy, over the axis (-
 - Failure: fault `RuntimeError` when the axis is outside the rank.
 - Example: `softmax_grad(y, dy)`
 
+#### `softmax_grad`
+
+```camel
+softmax_grad: (y: float[..], dy: float[..], axis?: int) => float[..]
+```
+
+The same gradient in `f64`: y and dy are `f64` tensors and the result is one too.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank.
+- Example: `softmax_grad(y, dy)`
+
 #### `layer_norm`
 
 ```camel
@@ -1982,6 +2074,19 @@ layer_norm: (x: f32[..], gamma: f32[..], beta: f32[..], eps?: number) => f32[..]
 
 Layer normalization of x with gamma and beta, whose extents are the trailing ones of x, over
 the trailing axes; eps is 1e-5 by default. The result is `f32`.
+
+- Pure.
+- Failure: fault `TensorDimensionMismatch` when gamma or beta does not match the trailing extents of x.
+- Example: `layer_norm(x, gamma, beta)`
+
+#### `layer_norm`
+
+```camel
+layer_norm: (x: float[..], gamma: float[..], beta: float[..], eps?: number) => float[..]
+```
+
+The same normalization of `f64` tensors, in `f64`: x, gamma and beta are `f64` and the result
+is one too.
 
 - Pure.
 - Failure: fault `TensorDimensionMismatch` when gamma or beta does not match the trailing extents of x.
@@ -2010,6 +2115,19 @@ linear: (x: f32[..], weight: f32[..], bias?: f32[..]) => f32[..]
 
 The affine transform of x by a rank-2 weight [in, out] whose rows are the features of x, plus
 a rank-1 bias [out] when given.
+
+- Pure.
+- Failure: fault `TensorDimensionMismatch` when the features of x are not the rows of weight, or bias is not rank 1 of the output extent.
+- Example: `linear(x, weight, bias)`
+
+#### `linear`
+
+```camel
+linear: (x: float[..], weight: float[..], bias?: float[..]) => float[..]
+```
+
+The same transform of `f64` operands, in `f64`: it takes the element type of its operands
+(the `f32` path is the fused one, the other element types go through `matmul` and the addition).
 
 - Pure.
 - Failure: fault `TensorDimensionMismatch` when the features of x are not the rows of weight, or bias is not rank 1 of the output extent.
@@ -6759,15 +6877,16 @@ A rule's right side takes the *lifted* operands and answers the *lifted* result.
 elementwise tier is therefore one rule per primitive, each of them the primitive itself: the
 batching of an elementwise operator is that operator.
 
-This round writes the elementwise tier, `matmul`, the six reductions along an axis, and the two
+This round writes the elementwise tier, `matmul`, the six reductions along an axis, and the four
 over every axis. The first group need a rule that says *which* axis the batch is on: a batch of
 rows under `matmul` is the axes before its last two, and a reduction along an axis keeps the axis
 it reduces and gains the batch axis in front, so its rule is written in terms of the operator's
 own axis argument (`batched_axis`). A reduction over every axis takes no axis at all -- there is
 none of the operator's to shift -- so its rule keeps the batch axis in front and folds away the
-axes the row had after it, over the rank the value itself carries (`shape`). `max` and `min` have
-no such operator to write a rule for: they are declared with an axis, and the reduction of every
-axis is `max_axis(xs, ...)` over a rank the caller already knows.
+axes the row had after it, over the rank the value itself carries (`shape`). `sum`, `mean`, `max`
+and `min` are written that way; `argmax` and `argmin` are not, because their answer is the
+position counted in row-major order and no fold of axis positions produces that number -- see the
+paragraph below `vmap_min`.
 
 `reshape` and the broadcasting moves are the next tier.
 
@@ -7076,6 +7195,33 @@ integer row's mean is `f32`, which is not the element the rule would be written 
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `vmap_mean([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])` gives `[2.0, 5.0]`
+
+#### `vmap_max`
+
+```camel
+vmap_max: (xs: T[..]) => T[..] when is_numeric::<T>()
+```
+
+`max(xs)` batched: one maximum per row, folded the same way `sum` is. No accumulator is chosen,
+because IEEE 754-2019 maximum carries an element and is exactly associative and commutative
+(design principles 7.7): the axes of a row may be folded away in any order and the bits are the
+same, so the batch axis in front and the row's axes folded from the first is the same value as
+the row's own `max`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_max([[1.0, 5.0, 2.0], [4.0, 0.0, 3.0]] as float[2, 3])` gives `[5.0, 4.0]`
+
+#### `vmap_min`
+
+```camel
+vmap_min: (xs: T[..]) => T[..] when is_numeric::<T>()
+```
+
+`min(xs)` batched: the same fold, with the IEEE 754-2019 minimum. -0 is below +0 and a NaN is
+beyond every number, so the fold answers both readings the whole-tensor form does.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_min([[1.0, 5.0, 2.0], [4.0, 0.0, 3.0]] as float[2, 3])` gives `[1.0, 0.0]`
 
 <a id="sim"></a>
 
