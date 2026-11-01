@@ -438,6 +438,37 @@ export func operator >(x: bf16, y: bf16): bool
 #op(':op/gt_s')
 export func operator >(x: string, y: string): bool
 
+// ---- ordering: `>=` ----
+
+/// Whether the first of two 64-bit floats is greater than or equal to the second.
+/// @example 2.5 >= 2.5    // true
+#op(':op/ge_d')
+export func operator >=(x: float, y: float): bool
+
+/// Whether the first of two 32-bit floats is greater than or equal to the second.
+#op(':op/ge_f')
+export func operator >=(x: f32, y: f32): bool
+
+/// Whether the first of two 32-bit integers is greater than or equal to the second.
+#op(':op/ge_i')
+export func operator >=(x: i32, y: i32): bool
+
+/// Whether the first of two 64-bit integers is greater than or equal to the second.
+#op(':op/ge_l')
+export func operator >=(x: int, y: int): bool
+
+/// Whether the first of two half floats is greater than or equal to the second.
+#op(':op/ge_f6')
+export func operator >=(x: f16, y: f16): bool
+
+/// Whether the first of two bfloat16 values is greater than or equal to the second.
+#op(':op/ge_bf')
+export func operator >=(x: bf16, y: bf16): bool
+
+/// Whether the first of two strings is greater than or equal to the second.
+#op(':op/ge_s')
+export func operator >=(x: string, y: string): bool
+
 // ---- conversions ----
 //
 // Numeric types are never converted implicitly; these functions do it. There is one conversion
