@@ -87,6 +87,7 @@ Camel's most central characteristic is that it is graph-native. Its other proper
 - **The data model of the graph is the most important design**: it must be clearly defined, stable, and open to the outside. The module cache, writing passes in Camel, compiling computation code into GPU kernels and `std::cpp` are all built on it.
 - **Node attributes belong to the externally visible graph data model**; passes written in Camel can read and write them too.
 - **The internal representation of the compiler core may be completely restructured**, for the speed and memory efficiency of the whole pipeline.
+- **The graph data model holds only general, language-level concepts**; this is Camel's most central standard. Before a library or a transform stores something it needs to know, ask three things: can it be derived from the graph's content (then it is not stored, since a stored copy is a second source of truth); is it an intention the user writes (then it goes through an existing mechanism that has a source spelling, such as a tag); is it a type (then it uses what the type system already has). Only a general need that none of the three covers adds a field to nodes, graphs or types. A transform's result depends only on its input graph's content, not on where the graph came from or on marks the user cannot see: a graph is a value.
 
 ### 2.4 Capacity and defaults
 
@@ -95,7 +96,8 @@ Camel's most central characteristic is that it is graph-native. Its other proper
 
 ### 2.5 Round trip between graph and source
 
-- **A graph and the source have the same expressive power**: any legal graph can be written as Camel source, and writing it back and compiling it again gives the same graph (names, source locations and the like excepted). This is enforced by a round-trip test (all test cases and randomly generated programs); a graph structure that cannot be written back is regarded as a gap in the language and must be filled.
+- **A graph and the source have the same expressive power**: any legal graph can be written as Camel source, and writing it back and compiling it again gives a graph with the same semantics: the program behaves the same and no necessary semantic information is lost; names, source locations and readability do not count (the test treats isomorphism after canonicalization as sufficient, with inlined parts flattened). This is enforced by a round-trip test (all test cases and randomly generated programs); a graph structure that cannot be written back is regarded as a gap in the language and must be filled.
+- Annotations are of two kinds: one used only by compile-time computation, whose effect is already in the graph's structure (such as `#op`, which binds a declaration to an operator), need not be in the graph; one that a later pass or a back end reads (such as `#strict`, `#jvp(rule)`, `#remat`, node attributes) must be on the graph and must be written back to source.
 - The standard pass `std::cml` exports the current graph as Camel source: the product is as readable as possible, but human readability is not a constraint; generic instances are written as functions of concrete types, and the inlined parts need not be restored; large constants are put in a data file beside it and referred to from the source.
 
 ---
