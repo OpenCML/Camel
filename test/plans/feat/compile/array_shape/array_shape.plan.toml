@@ -988,3 +988,29 @@ expect_exit = 0
 expect_stdout_exact = "1.0\n2.5\n1.0\n2.5\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+# The open rank's position reads the element the value holds: position 3 of a `float[2, 2]` is its
+# fourth element and the bound is the four elements, not the first dimension's two. Before this, the
+# read took the element (`Array::getSlot`) while the check counted a dimension, so `at(xs, 3)` was
+# refused as out of range for a length-2 first dimension.
+[[tests]]
+name = "open_rank_reads_its_elements"
+desc = "A position on an open-rank value is flat (design principles 5.4): `at(x: float[..], i: int)` on a `float[2, 2]` answers 1.0, 4.0, 2.0 and 3.0 for 0, 3, 1 and 2 -- the elements in row order, not rows -- and 4 is the fault `Index 4 is out of range for the elements of length 4`, which names what was counted. The same check refused the pullback of an array literal's third computed element (test/cases/modules/autodiff/literal_pullback.cml)."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/open_rank_reads_its_elements.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n4.0\n2.0\n3.0\nerror IndexOutOfRange: Index 4 is out of range for the elements of length 4.\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "open_rank_reads_its_elements_fvm"
+desc = "The same readings on the bytecode VM: the bound is the kernel's, so every scheduler counts the same elements and answers the same four numbers and the same fault."
+kind = "behavior"
+case = "../../../../cases/compile/array_shape/open_rank_reads_its_elements.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1.0\n4.0\n2.0\n3.0\nerror IndexOutOfRange: Index 4 is out of range for the elements of length 4.\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
