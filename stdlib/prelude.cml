@@ -285,6 +285,20 @@ export func operator -(x: c128): c128
 #op(':op/idx_arr')
 export func operator []::<T>(xs: T[], i: int): T
 
+/// The character at position i of a string.
+/// @example 'abc'[1]    // 'b'
+#op(':op/idx_str')
+export func operator [](s: string, i: int): string
+
+/// The value stored under key, or null when the map has no such key.
+/// @example ([('a', 1)] as Map<string, int>)['a']    // 1
+#op(':coll/map_idx')
+export func operator []::<K, V>(m: Map<K, V>, key: K): V?
+
+/// A copy of the array holding the elements at the given indices along the axis.
+#op(':op/idx_take')
+export func operator []::<T>(arr: T[], indices: int[], axis: int): T[]
+
 // ---- comparison ----
 //
 // `==` and `!=` are operators of their own group (`__eq__`, `__ne__`; operator_names.h), and the
