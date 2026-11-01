@@ -1,0 +1,4 @@
+func nested(t: { p: { x: int }, q: (int, int) }): string sync {
+    let p: { x: int } = t.p
+    let v: int = p.1
+}

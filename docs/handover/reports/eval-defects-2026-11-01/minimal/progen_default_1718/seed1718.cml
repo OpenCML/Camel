@@ -1,0 +1,9 @@
+func u39(a40: bool?, a41: bool): bool {
+    return true;
+}
+
+func main(): int sync {
+    var v72 = false;
+    let n79 = u39(v72, 3 > 0);
+    return 0;
+}
