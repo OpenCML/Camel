@@ -3,7 +3,8 @@
 // `(27.0, pullback)` and `pullback(1.0)` is `27.0`; `grad(f)(3.0)` is the same number read through
 // the wrapper. All three come from the library's own composition --
 // `transpose(split(reinterp<jvp>(f)))` -- and not from the C++ autodiff. Skipped while the
-// composition cannot be built (the plan's `skip_unless`).
+// composition cannot be run: the module compiles, and the walk `transpose` runs refuses the `Call`
+// inside the backward half, so the pullback raises (the plan's `skip_unless`).
 import rulesets.jvp
 import { grad, vjp } from vjp
 

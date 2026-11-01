@@ -199,7 +199,7 @@ timeout_ms = 20000
 # on paper: none of them is a reading of today's tree.
 [[tests]]
 name = "vjp_api.analytic_gradient"
-desc = "The library's gradient against the derivative worked out on paper, on the author's example: `f(x, y) = x*x*y` at `x = 3`, `y = 2`, so `df/dx = 2*x*y = 12` and `df/dy = x*x = 9`. `vjp(f)(3.0, 2.0)` gives the pair `(y, pullback)` and `pullback(1.0)` gives the two cotangents, in JAX's order; the program prints `f(3, 2) = 18.0`, `library y = 18.0`, then `library`/`analytic` for `df/dx` and `df/dy`. The library half comes from `transpose(split(reinterp<jvp>(f)))` in `stdlib/vjp.cml` and nothing else -- not from the C++ autodiff. Skipped while the composition cannot be built (`transpose` takes a function of one parameter, `split` hands back the pair of halves); the precondition prints the refusal, so a skip always says why."
+desc = "The library's gradient against the derivative worked out on paper, on the author's example: `f(x, y) = x*x*y` at `x = 3`, `y = 2`, so `df/dx = 2*x*y = 12` and `df/dy = x*x = 9`. `vjp(f)(3.0, 2.0)` gives the pair `(y, pullback)` and `pullback(1.0)` gives the two cotangents, in JAX's order; the program prints `f(3, 2) = 18.0`, `library y = 18.0`, then `library`/`analytic` for `df/dx` and `df/dy`. The library half comes from `transpose(split(reinterp<jvp>(f)))` in `stdlib/vjp.cml` and nothing else -- not from the C++ autodiff. Skipped while the composition cannot be run (the walk `transpose` runs refuses a `Call` inside the backward half); the precondition prints the refusal, so a skip always says why."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_analytic_gradient.cml"
 args = ["${case}", "${backend}"]
