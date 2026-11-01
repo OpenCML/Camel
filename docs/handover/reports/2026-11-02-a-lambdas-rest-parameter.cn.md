@@ -126,3 +126,36 @@
 
 **这是 P1-12 剩下的那一半**：类型已经能在 `.cml` 里写出来并可被引用；`vjp` 的**签名**仍在 C++ 里，
 因为一条泛型声明需要一个 `(..xs)` 的体。
+
+## 5. 期望类型其实已经在现场——在 GIR，不在 `visitFuncType`
+
+第一段的量法（"把期望类型传进 `visitFuncType`"）量出了**相反**的结论：**不用传，因为设计早就把这件事
+放到 GIR 那一级了**。
+
+`visitFuncType` 的全部调用点（`src/compile/gct/builder.cpp`，共 2 处，另 1 处是定义）：
+
+| 行 | 是什么 | 那里知不知道期望类型 |
+|---|---|---|
+| 5243 | `func f::<T>(…)` 的**声明签名**（`declSignature_ = true`） | 不知道——它**就是**那个类型；且 `..xs` 在这里走 `addRestArg`，根本进不到 lambda 那一支 |
+| 6529 | `visitTypeExpr` 派发 `TypeType::Func`：写在**类型位置**的函数类型（注解、泛型实参） | 不知道——注解本身就是类型，没有"期望"可言 |
+
+**结论一句话**：要改的调用点是 **0 个**；能传的也是 0 个——因为真正的展开点在
+`src/compile/gir/builder.cpp:1143-1165`，那里 `expected` 已经**在手上**：
+
+    // A lambda takes the types it does not write from the function type of the position it
+    // stands in (design principles 5.9). That expected type reaches this point through the one
+    // channel of the expected type (`expected`): an argument to a parameter of function type,
+    // the value of a declared type, or the result of a function whose result type is a function
+    // type.
+    if (expected == nullptr) { … LambdaParameterWithoutType … "nothing here expects a function type" }
+
+也就是说：**省略类型的 lambda 形参**（`(x) => …`）早就靠 `Tree::UnwrittenParam{index, origin}` 记在
+FUNC 节点上，由 GIR 按 `expected` 填；`..xs` 可以走**同一条通道**——它是"位置 k 上没写类型、且是最后一格"
+的那种形参，展开规则就是"取 `ParamsOf<expected>` 的第 k 个及之后的成员"。
+
+**这带来两个好处**：① 不需要给 `visitFuncType` 加 `Type *expected`（少一个参数、少两处传递）；
+② "这里没有期望类型"的文案**已经存在且是对的**——`"nothing here expects a function type"`，它说的是
+**此处不可能**，正是 18:50 裁定允许留下的那一类；`(..xs)` 没有期望类型时用它，而不是 `is not lowered yet`。
+
+**所以判据 1 的表是一张反表**：原来打算"逐点传"，实测是"一个点都不用动，换到 GIR 那条已有的通道上"。
+`..xs` 的元组取值（体内 `..xs`）仍是 `NK::RestValue`，与形参表相邻、不挡 `vjp`。
