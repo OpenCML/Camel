@@ -80,7 +80,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rulesets_lookup_answers_and_says_why_not"
-desc = "The index is asked through `lookupRule(family, head, arity)` -- the function a transform asks -- by the `std::rulesets` pass (`query=`), and the answers are pinned: `-` with one operand in `rulesets.jvp` is `jvp_neg`, `-` with two is `jvp_sub` (two primitives, one token), `-` with three has no rule, and a family no module declares is unknown. The two ways of not finding a rule are named apart, because the repairs differ: write the rule, or import the ruleset. A program that asks nothing prints nothing."
+desc = "The index is asked through `lookupRule(family, head, arity)` -- the function a transform asks -- by the `std::rulesets` pass (`query=`), and the answers are pinned: `-` with one operand in `rulesets.jvp` is `jvp_neg`, `-` with two is `jvp_sub` (two primitives, one token), `-` with three has no rule, and a family no module declares is unknown. The two ways of not finding a rule are named apart, because the repairs differ: write the rule, or import the ruleset. A program that asks nothing prints nothing. The three binding tables are then checked against the index the same pass printed, and nothing in the case counts rules: every binding resolves, asking the index for that key answers the same rule the binding printed, and each family holds exactly the keys its table binds -- so a rule or a binding added to either half is checked as it is added, instead of a written number going red for the one change that cannot be wrong."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/compile/rulesets/rulesets_lookup.py"

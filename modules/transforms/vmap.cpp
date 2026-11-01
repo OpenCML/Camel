@@ -80,6 +80,25 @@ Type *ruleElementTypeOf(Type *type) {
     return type;
 }
 
+/// The element type a rule is instantiated at: the element of the value the primitive is *given*, not
+/// of the value it answers. The two are the same for every arithmetic primitive and different for the
+/// reductions whose result element is not the operand's -- `argmax_axis` takes a numeric tensor and
+/// answers positions, and its rule is generic in the operand's element because that is what its
+/// parameters are made of. Reading the node's own type would instantiate those rules at the positions'
+/// type, which is a type the function they call is not generic in.
+Type *firstOperandTypeOf(const rt::GCGraph &function, gc_node_ref_t ref) {
+    for (gc_node_ref_t input : function.normInputsOf(ref)) {
+        if (input >= function.nodeCount()) {
+            continue;
+        }
+        Type *type = function.node(input)->dataType();
+        if (type != nullptr) {
+            return ruleElementTypeOf(type);
+        }
+    }
+    return nullptr;
+}
+
 /// The rule `rulesets.vmap` files for `uri`, or nullptr and why not. The family is read through the
 /// operator's key: `vmapBindingOf` answers the key the operator's batching rule is filed under, and
 /// the head and the operand count in it are the operator's, not this family's. The key comes from
@@ -214,6 +233,11 @@ VmapGraph buildVmapGraph(
     size_t copiedKinds = 0;
     size_t seenKinds   = 0;
     std::vector<std::string> usedRules;
+    // The element type each rule was instantiated at, in the order they were reached: the reading
+    // states it because it is the one type a rule of this family is generic in, and the reductions
+    // whose result element is not the operand's make that worth printing (`argmax_axis` answers
+    // positions and its rule is generic in the operand's element).
+    std::vector<std::string> elementTypes;
     std::vector<gc_node_ref_t> liftOf;
 
     camel::runtime::GraphDraftGroup group(context, program);
@@ -302,7 +326,10 @@ VmapGraph buildVmapGraph(
         const auto batchThroughRule = [&](gc_node_ref_t ref, const std::string &uri,
                                           const camel::parse::ast::RuleMatch &match)
             -> gc_node_ref_t {
-            Type *elementType     = ruleElementTypeOf(function->node(ref)->dataType());
+            Type *elementType     = firstOperandTypeOf(*function, ref);
+            if (elementType == nullptr) {
+                elementType = ruleElementTypeOf(function->node(ref)->dataType());
+            }
             const uint64_t ruleId = ruleIdOf(*context, match.rule);
             if (ruleId == 0) {
                 refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
@@ -357,6 +384,7 @@ VmapGraph buildVmapGraph(
             const gc_node_ref_t call = draft.addCallNode(resultType);
             draft.setNormInputs(call, arguments);
             draft.setWithInputs(call, std::span<const gc_node_ref_t>(&named, 1));
+            elementTypes.push_back(elementType != nullptr ? elementType->toString() : std::string("-"));
             return call;
         };
 
@@ -586,11 +614,32 @@ VmapGraph buildVmapGraph(
     for (const std::string &rule : usedRules) {
         rules += (rules.empty() ? "" : ",") + rule;
     }
+    // The element types the rules were instantiated at, each once, in the order reached: a body whose
+    // two rules were made at one element type says so once (`elements=float`), and one that mixed two
+    // names both.
+    std::string elements;
+    std::vector<std::string> distinctElements;
+    for (const std::string &element : elementTypes) {
+        bool seen = false;
+        for (const std::string &already : distinctElements) {
+            if (already == element) {
+                seen = true;
+                break;
+            }
+        }
+        if (!seen) {
+            distinctElements.push_back(element);
+        }
+    }
+    for (const std::string &element : distinctElements) {
+        elements += (elements.empty() ? "" : ",") + element;
+    }
     os << "REINTERP vmap function=" << function->name() << " graph=" << rt::toValue(member)
        << " type=" << (madeType != nullptr ? madeType->toString() : std::string("-"))
        << " nodes=" << function->nodeCount() << " kinds=" << copiedKinds << '/' << seenKinds
        << " " << askedFoundMissing(refused)
-       << " rules=" << (rules.empty() ? "-" : rules) << '\n';
+       << " rules=" << (rules.empty() ? "-" : rules)
+       << " elements=" << (elements.empty() ? "-" : elements) << '\n';
     VmapGraph built = refused;
     built.program   = group.program();
     built.graph     = const_cast<rt::GCGraph *>(made);
