@@ -69,3 +69,5 @@ Runtime graph 'f' breaks its edge invariants (1 violation(s)):
 > **已修**：`b21d30d8b`（收尾循环只按存活）、`4ea783758`（顺序前驱访问只按存活）、`d7836f2e9`（问题页：`let z = 1/0` 前端判死，按规则删）、`595fa5143`（P0-3 的凭据判据）。**读数**：24 格四后端相同；`let z=1/0` 四后端 × `opt` 全 `2`、不报除零；`nonlive_members` 0/0；A4b 两支 × 四组合两侧逐字相同 ⇒ **这些读数分辨不出机制，改动按 3.1 的"当且仅当"保留，不按读数声称**。
 >
 > **行号说明**：作者清单写 `:532`/`:534`；实际改的是 **`:509`**（顺序前驱访问），`:532` 是注释行，`:534` 在第一笔起就已经是 `live[n]`。复查请按符号：`git grep -n 'isMember' src/execute` → 定义 `:242`、分组 `:251`/`:261`，`|| isMember` **0 处**。
+
+**替代了靶子，页里写明**：`test/cases/trans/reduced/`（`verify` 车道收的 4 条）**不在这棵树上**，所以 A4b 那两侧用的是 `docs/handover/reports/eval-defects-2026-11-01/minimal/` 里的 `recompile_segv.cml` 与 `cml_segv.cml`。下一位若在原目录下量，请把四格补上——结论（分辨不出）不变的话不必重写这页，变了就另写一页。
