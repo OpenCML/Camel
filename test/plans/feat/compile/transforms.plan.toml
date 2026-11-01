@@ -597,7 +597,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=autodiff::mul_tangent<float> graph=", "type=(float, float, float, float, float) => (float, float, float, float) nodes=7 arms=0 rhs=add_t,mul_t", "TRANSPOSE function=mt graph=", "nodes=5 arms=0 rules=-", "(0.0, 1.0, 2.0, 3.0)"]
+expect_stdout_contains = ["TRANSPOSE function=autodiff::mul_tangent<float> graph=", "type=(float, float, float, float, float) => (float, float, float, float) nodes=7 arms=0 rhs=add_t,mul_t", "TRANSPOSE function=mt graph=", "nodes=5 arms=0 rhs=-", "(0.0, 1.0, 2.0, 3.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -628,7 +628,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["TRANSPOSE function=autodiff::add_tangent<float> graph=", "type=(float, float, float, float, float) => (float, float, float, float) nodes=5 arms=0 rhs=add_t", "TRANSPOSE function=at graph=", "nodes=5 arms=0 rules=-", "(0.0, 0.0, 1.0, 1.0)", "(0.0, 0.0, 2.0, 2.0)"]
+expect_stdout_contains = ["TRANSPOSE function=autodiff::add_tangent<float> graph=", "type=(float, float, float, float, float) => (float, float, float, float) nodes=5 arms=0 rhs=add_t", "TRANSPOSE function=at graph=", "nodes=5 arms=0 rhs=-", "(0.0, 0.0, 1.0, 1.0)", "(0.0, 0.0, 2.0, 2.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
