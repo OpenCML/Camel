@@ -200,6 +200,11 @@ void registerSplitOperatorMetadata() {
     // so it refuses a loop there (OperatorTraits::readsGraphs).
     camel::core::OperatorTable::instance().set(
         "transforms:split", {.pure = false, .readsGraphs = true});
+    // And it builds what it builds out of that graph at the call, so the argument has to name one before
+    // the program runs -- the same fact `jvp` and `transpose` declare (CallSpec::staticFunctionArg), so
+    // that a shape refused at one transform is refused at all three, by the same diagnostic.
+    camel::core::OperatorTable::instance().declareCallSpec(
+        "transforms:split", {.staticFunctionArg = 0});
 }
 
 } // namespace camel::transforms
