@@ -95,9 +95,39 @@ void appendShapedText(std::string &out, const Array<T> &xs, std::size_t offset, 
     out += ']';
 }
 
+/// `Bytes[00 01 ff]`: a `Bytes` is an array of bytes and prints as the interpreter's `Bytes` does
+/// (`camel::core::rtdata::BytesObject::print`), the bytes' own hex in order, `Bytes[` and `]`
+/// around them. It is the only value whose element type is a byte -- the language spells a byte
+/// sequence `Bytes`, never `u8[]` -- so the array of bytes has that one reading.
+inline void appendText(std::string &out, const Array<uint8_t> &xs) {
+    constexpr char hex[] = "0123456789abcdef";
+    out += "Bytes[";
+    for (std::size_t i = 0; i < xs.size(); ++i) {
+        if (i > 0) {
+            out += ' ';
+        }
+        const uint8_t byte = xs[i];
+        out += hex[byte >> 4];
+        out += hex[byte & 15];
+    }
+    out += ']';
+}
+
 /// `[a, b, c]`, and `[[1.0, 2.0], [3.0, 4.0]]` for a value that states a shape of several
-/// dimensions.
+/// dimensions. A value whose shape is the zero-dimensional one is the element itself, so it prints
+/// as that element: `1.5`, not `[1.5]` (design principles 5.4, the interpreter's text).
+///
+/// A value of no rank *is* the element (design principles 5.4): the brackets are the shape's, and a
+/// position of type `f32[..]` holds such a value, so `println` of it writes the element and not an
+/// array of one. A value that carries a shape of one dimension is written as the whole literal --
+/// the bracket is the difference between an element and an array of one, and a reader who cannot see
+/// it cannot tell the two apart. The rank is the whole test: a value is grown into one dimension by
+/// `push` (array.h) and made of no rank by `Array::element`, so nothing here counts elements.
 template <typename T> void appendText(std::string &out, const Array<T> &xs) {
+    if (xs.isElement()) {
+        appendText(out, xs[0]);
+        return;
+    }
     if (xs.rank() >= 2) {
         appendShapedText(out, xs, 0, 0);
         return;
@@ -583,8 +613,18 @@ template <typename Format> struct SpecPerElement<Half<Format>> : std::true_type 
 /// The text of a numeric array with `spec` applied to each element -- `'{:.4f}'->format<xs>` is
 /// `[0.7692, 0.7808]`: the specification acts on every element on its own, while the brackets
 /// and the `, ` between elements are the array's own form (design principles 7.7).
+///
+/// A value of no rank has no bracket to write (5.4): it *is* the element, so the specification acts
+/// on that element and the text is the element's -- `'{:>6}'->format<z.v>` of a `f32[..]` field is
+/// `   1.5`, which is the interpreter's reading. A value of one dimension keeps its brackets even
+/// when it holds one element: `[[   1.5]]` is an array of one, and the spec path is where the two
+/// readings would otherwise be told apart by nothing.
 template <typename T>
 void appendArrayUnder(std::string &out, const Array<T> &xs, std::string_view spec) {
+    if (xs.isElement()) {
+        out += formatOne(formatArg(xs[0]), spec, true);
+        return;
+    }
     out += '[';
     for (std::size_t i = 0; i < xs.size(); ++i) {
         if (i > 0) {

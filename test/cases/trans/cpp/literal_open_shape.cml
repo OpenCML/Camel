@@ -1,0 +1,23 @@
+/**
+ * A literal of one dimension carries the dimension it has, whatever its type states.
+ *
+ * `float[]` names the element type and leaves the length to the value, so the type states no extent
+ * -- and the value is still one dimension of 3 elements: `shape` answers `[3]` and `len` answers 3.
+ * Its constant is written with the extents it has (`rt::Array<double>::shaped({1.0, 2.0, 3.0}, {3})`),
+ * so the readings are the interpreter's, and so is the checked conversion that comes after them:
+ * without the extents a value of several elements has no rank to compare, and `as float[3]` on it
+ * could not tell 3 elements from any other count.
+ *
+ * `agree_with_fvm` builds and runs this program against std::fvm, byte for byte.
+ */
+import { shape } from tensor
+
+func main(): int sync {
+    let v = [1.0, 2.0, 3.0] as float[]
+    println(shape(v), len(v))
+    let z: float[] = [4.0, 5.0]
+    println(shape(z), len(z))
+    let w = v as float[3]
+    println(w)
+    return 0
+}

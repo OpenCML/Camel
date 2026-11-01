@@ -42,6 +42,8 @@
 
 namespace camel::runtime {
 
+class GraphTransaction;
+
 /// The kinds of edge a node can have (docs/design/effects/edges.cn.md sections 1 and 1.5):
 /// **Data** -- the value of the node comes from the port (one kind: the ports of a node are one
 /// ordered list and each carries a role, `PortRole`, declared with the frozen graph, so that a
@@ -565,10 +567,10 @@ class GraphDraft {
     GraphId calleeIdOf(gc_node_ref_t id) const;
     GCGraph *calleeGraphOf(gc_node_ref_t id) const;
     void setCalleeGraph(gc_node_ref_t id, GraphId callee);
-    /// What LOOP node `id` names: its condition graph (invalid for a For loop), its body graph,
-    /// its form and its collection count.
+    /// What LOOP node `id` is: its form, its iterable form and its collection count. A loop names no
+    /// graph -- the condition and the body are regions of the graph it is written in (design
+    /// principles 3.10).
     GCLoopBody loopGraphsOf(gc_node_ref_t id) const;
-    void setLoopGraphs(gc_node_ref_t id, GraphId cond, GraphId body);
     /// The graphs the payloads of FUNC and LOOP nodes index (GCFuncRef, GCLoopRef): the
     /// reference table of the graph the draft was decoded from, then the graphs added since.
     std::span<const GraphId> payloadGraphs() const { return payloadGraphs_; }
@@ -583,8 +585,8 @@ class GraphDraft {
     /// hands on carries the new version of each (camel::runtime::GCFuncRef::reserved).
     uint32_t funcWriteMaskOf(gc_node_ref_t id) const;
     void setFuncWriteMask(gc_node_ref_t id, uint32_t writtenCaptures);
-    /// A LOOP node calling `body.condGraph` and `body.bodyGraph` (camel/runtime/loop.h); the
-    /// caller links its inputs and keeps the two graphs among the draft's dependencies.
+    /// A LOOP node (camel/runtime/loop.h): its form, its collection count and its iterable form. The
+    /// caller links its inputs and writes the body's regions on the draft it is made in.
     gc_node_ref_t
     addLoopNode(const GCLoopBody &body, camel::core::type::Type *type, gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t addOperNode(
@@ -952,12 +954,13 @@ uint32_t controlRegionOf(const GraphDraft &draft, gc_node_ref_t id);
 /// through. Every other region separates blocks.
 bool sameSyncBlock(const GraphDraft &draft, gc_node_ref_t a, gc_node_ref_t b);
 
-/// The runtime node id every live node of `draft` takes when the draft is encoded, indexed by
-/// draft node id (`kInvalidNodeRef` for a node the draft erased, which no commitment keeps unless
-/// the draft keeps its ids). The commit drops the dead places and numbers the rest in order, so a
-/// step recorded with draft ids can name a node of the program the commit made (rewrite design
-/// 8.7, `explain`: a `Node` of the program finds the rewrite it was made by).
-std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphDraft &draft);
+/// The runtime node id every live node of the transaction's draft takes when the draft is encoded,
+/// indexed by draft node id (`kInvalidNodeRef` for a node the draft erased, which no commitment
+/// keeps unless the draft keeps its ids). The commit drops the dead places and numbers the rest in
+/// order, so a step recorded with draft ids can name a node of the program the commit made (rewrite
+/// design 8.7, `explain`: a `Node` of the program finds the rewrite it was made by). The answer is
+/// about a commitment, so it is asked of the transaction that would make it.
+std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphTransaction &transaction);
 
 /// `nodeIsFreelySchedulable` (camel/runtime/graph.h) asked of a node of a draft. `byShape` lets
 /// the shapes of the types decide for an elementwise operator (it cannot fail when every shape is

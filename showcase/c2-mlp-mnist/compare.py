@@ -460,6 +460,18 @@ def build_report(args, manifest, camel_run, torch_run, compile_times, compile_st
         ],
     )
 
+    # The curve itself, not only the worst row of the agreement table: a training run is judged by
+    # the loss falling from the first logged step to the last, and that is a reading the report has
+    # to carry so a plan can assert it without re-parsing the program's output.
+    torch_by_step = dict(torch["steps"])
+    loss_table = markdown_table(
+        ["step", "Camel", "PyTorch"],
+        [
+            [str(step), fmt(loss), fmt(torch_by_step[step]) if step in torch_by_step else "n/a"]
+            for step, loss in camel["steps"]
+        ],
+    )
+
     size_table = markdown_table(
         ["section", "Camel (SLOC)", "PyTorch (SLOC)"],
         [[row["section"], str(row["camel"]), str(row["torch"])] for row in size],
@@ -510,6 +522,15 @@ The training-loss row is a relative difference with a unit floor,
 would measure rounding noise rather than a divergence. `compare.py` exits non-zero when one
 of them is not met. The checkpoint line is not a comparison between the two: each
 implementation must load back exactly what it saved.
+
+## Loss curve
+
+{loss_table}
+
+One row per logged step, in the order the run produced it: the loss the two programs report at the
+same step. A training run is judged by this curve falling from its first logged step to its last,
+which is what the plan's bound on `showcase_c2.plan.toml` asserts; every row is also checked
+against the tolerance above, and this table is the shape those numbers make.
 
 ## Performance
 

@@ -1,0 +1,12 @@
+# The programs of test/tools/cppexec/expect.txt that still link the Camel runtime when std::cpp
+# writes them, and why. The check (run.py --standalone --expect=... --baseline=...) asks the whole
+# list and requires exactly this set: a new name is red, and so is a name here that stops linking
+# it -- in that case the line is deleted, because a list that can only grow says nothing.
+#
+# Every line says whether it is a GAP (a rule the writer is missing, so the next person should
+# write it and then delete the line) or an EXCEPTION (the bridge is the answer, and the next
+# person should not). "known" alone tells neither.
+#
+# EXCEPTION: a regex engine is not in the standalone header set and is not meant to be -- the
+# bridge is how a program that needs one runs.
+test/cases/compile/diag_render/runtime_regex.cml   # re:test -- exception, not a gap

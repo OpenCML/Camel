@@ -141,6 +141,9 @@ class FunctionEmitter {
         std::unordered_map<gc_node_ref_t, CppValue> values;
         /// Nodes already lowered as part of something else (the arms of a branch, its JOIN).
         std::unordered_set<gc_node_ref_t> consumed;
+        /// A closure node's graph and the value of each capture, kept so that a call can spell
+        /// the function value the way the parameter's function type does.
+        std::unordered_map<gc_node_ref_t, std::pair<GCGraph *, std::vector<std::string>>> closures;
         /// The results of the sequences being lowered: each is used once more, by the end of
         /// its sequence (a return, or the assignment of a branch's value).
         std::unordered_multiset<gc_node_ref_t> results;
@@ -176,7 +179,7 @@ class FunctionEmitter {
     void lowerFill(Frame &frame, gc_node_ref_t ref, Block &out);
     void lowerAccess(Frame &frame, gc_node_ref_t ref);
     void lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out);
-    void lowerCast(Frame &frame, gc_node_ref_t ref);
+    void lowerCast(Frame &frame, gc_node_ref_t ref, Block &out);
     /// `:var/new`, `:var/get` and the assignments; false for any other operator.
     bool lowerVariable(Frame &frame, gc_node_ref_t ref, const std::string &uri, Block &out);
     /// The in-place form of `append` over `:var/take(xs)` (design principles 11.3): grows the
@@ -194,9 +197,12 @@ class FunctionEmitter {
     /// Whether the variable whose cell is `cell` is used outside this function (design note
     /// 5.3): then it is an rt::Cell, else a C++ local.
     bool cellEscapes(const GCGraph *graph, gc_node_ref_t cell);
-    /// The function value of `function` with `captures`, as a C++ expression.
-    std::optional<std::string>
-    functionValue(GCGraph *function, const std::vector<std::string> &captures);
+    /// The function value of `function` with `captures`, as a C++ expression. `expected` is the
+    /// function type of the position the value fills, when that is known: the value then spells
+    /// that type, and a `void` one drops the result the function gives (a `(x: int) => int` value
+    /// is what a `(x: int) => void` parameter takes, and C++ does not convert it by itself).
+    std::optional<std::string> functionValue(
+        GCGraph *function, const std::vector<std::string> &captures, const Type *expected = nullptr);
     static GCGraph *functionConstantOf(const GCGraph *graph, gc_node_ref_t ref);
     static bool bridgeCarries(const Type *type);
     /// The count of open calls a call at `ref` passes: `rt::call(depth, site)`, which checks
@@ -204,12 +210,12 @@ class FunctionEmitter {
     std::string callDepth(const GCGraph *graph, gc_node_ref_t ref);
 
     /// Names the value of `ref`: a statement `const T name = expr;` (or `expr;` when nothing
-    /// uses it), or the expression itself when it may be moved to its one use. `resultCpp` is the
-    /// C++ type of the value when it is not the one the node's Camel type names (an operator whose
-    /// result the runtime owns); null for the type of the node.
+    /// uses it), or the expression itself when it may be moved to its one use. The C++ type is the
+    /// one the node's Camel type names: a type has one representation, whichever operator built the
+    /// value (docs/design/cpp-standalone/README.cn.md 4).
     void bind(
         Frame &frame, gc_node_ref_t ref, std::string expr, bool inlinable, Block &out,
-        const std::string &hint, const char *resultCpp = nullptr);
+        const std::string &hint);
     const CppValue &valueOf(Frame &frame, gc_node_ref_t ref);
     std::string cppType(const GCGraph *graph, gc_node_ref_t ref, const Type *type);
     /// The accessor of the runtime operator `uri` in the generated file, and the registration that

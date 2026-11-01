@@ -149,7 +149,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "pass_internal_error_stage"
-desc = "An exception that escapes a pass (here the test-only pass test::drop_call_argument, whose commit is rejected by graph validation with a std::runtime_error) is reported as the diagnostic RuntimeDiag::PassInternalError with stage pass:<name> in a valid JSON array, exit 1; it used to be a plain text line on stdout. It has no source range. (The test used std::cpp on a tensor program until that became a located refusal, see trans.cpp refuse_tensor.)"
+desc = "An exception that escapes a pass (here the test-only pass test::drop_call_argument, whose commit is rejected by graph validation with a std::runtime_error) is reported as the diagnostic RuntimeDiag::PassInternalError with stage pass:<name> in a valid JSON array, exit 1; it used to be a plain text line on stdout. It has no source range. (The test used std::cpp on a tensor program until that became a located refusal.)"
 kind = "behavior"
 case = "../../../cases/opt/generic/broken_graph.cml"
 args = ["--output-format", "json", "${case}", "test::drop_call_argument", "std::fvm"]

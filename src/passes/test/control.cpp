@@ -81,9 +81,16 @@ void mandatoryDataPaths() {
             .normInputs = std::span<const gc_node_ref_t>(&a, 1),
         });
     check(appendControlDependency(*owner, a, gate), "GATE lost its required first control");
+    // The wait is the builder's to place, not this reduction's to repair: a gate whose control
+    // edge is covered by its value path loses it here, and the sync predecessor the builder writes
+    // where the block's chain ends (docs/design/effects/edges.cn.md 5.3) is where the wait lives.
+    // A hand-built graph like this one, with no sync predecessor, is what the runtime refuses at
+    // commit ("GATE node without a wait", src/runtime/graph.cpp) -- which is why nothing the builder
+    // makes reaches it. Measured: the rescue that used to put the edge back never fired once across
+    // the fast corpus (docs/handover/reports/opt-ctrl-inventory.md, item 7).
     check(
-        reduceControlDependencies(*owner) == 0 && draft.ctrlInputsOf(gate).size() == 1,
-        "GATE lost its last control");
+        reduceControlDependencies(*owner) == 1 && draft.ctrlInputsOf(gate).empty(),
+        "a covered control edge on a GATE survived the reduction");
 }
 void conditionalDataIsNotMandatory() {
     auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));

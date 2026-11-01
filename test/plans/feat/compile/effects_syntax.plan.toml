@@ -35,6 +35,15 @@ expect_exit = 0
 expect_output_not_contains = ["RuntimeDiag::PassBoundaryNodes", "has no entry node", "has no exit node"]
 
 [[tests]]
+name = "pass_boundary.ports_match_declaration"
+desc = "The third boundary, a diagnostic of its own (`RuntimeDiag::PassBoundaryPorts`, 0x04000013): after every pass, every operator node still names an operator the table knows and every ordinary port of it is a live node with a type. A pass may rewrite the graph, but it may not leave a call nothing can run. Measured on the whole tree when it was written: no pass breaks it, so what this pins is the silence."
+kind = "behavior"
+case = "../../../cases/effects/declared.cml"
+args = ["${case}", "std::opt::inline", "std::opt"]
+expect_exit = 0
+expect_output_not_contains = ["RuntimeDiag::PassBoundaryPorts", "no longer matches its declaration"]
+
+[[tests]]
 name = "source.declared_resources"
 desc = "Two calls of `consume` touch the same handle (the value they are given) and are ordered by control, two calls of `tick` touch the group's `db` and `stdout` and are visible outside the program -- naming an ambient resource in a clause promises the effect that comes with it -- and two calls of `bump` touch the same cell: the bodies touch nothing, so the footprint can only come from the clauses. The program's own output is unchanged."
 kind = "behavior"
@@ -583,3 +592,29 @@ expect_exit = 0
 expect_stdout_contains = ["3"]
 expect_output_contains = ["is not in a sync block, and it writes the captured variable 'counter'"]
 timeout_ms = 20000
+
+# ---- The writer table's third credential: a call through a value is the write ----
+#
+# The one shape `isWriterWithLaterRead` was added for: a call through a function value whose
+# callback writes a captured `var`, and a read written after that call. Nothing fills that field
+# today (no caller of `effectStandingOf` reads it), so this case measures what the graph itself
+# does with the shape: the read written before the call keeps 0, the read written after it takes
+# 41, and both back ends say so.
+
+[[tests]]
+name = "callback.writer_table_through_callee"
+desc = "A value written by a call through a function value, read after the call: the call is the write, so the read written before it keeps 0 and the read written after it takes 41. Same output on the node VM and the bytecode VM."
+kind = "behavior"
+case = "../../../cases/effects/writer_table_through_callee.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = ["0", "41"].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000

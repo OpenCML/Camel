@@ -40,14 +40,6 @@ camel::core::type::FunctionType *operatorOverloadType(
     const camel::core::type::type_vec_t &norm);
 
 /**
- * True when the argument at position `index` of `user`'s norm (or with) inputs is written by
- * `user`: for an OPER, what the operator's resource declaration says (design principles 3.3;
- * an operator without one is read conservatively, OperatorTable::writesOperand); for a FUNC,
- * a `var` parameter of the graph it calls; for a CALL, a `var` parameter of its callee's type.
- */
-bool isWrittenArgument(const GraphDraft &draft, gc_node_ref_t user, bool isWith, size_t index);
-
-/**
  * True when the value `id` holds may be written in place: it is passed to a `var` parameter,
  * directly or through GATEs. A GATE has no slot of its own, so writing it writes the value it
  * forwards, and a GATE over a written value is written too.
@@ -61,7 +53,7 @@ bool isWrittenInPlace(const GraphDraft &draft, gc_node_ref_t id);
  */
 class WrittenSlots {
   public:
-    explicit WrittenSlots(const GraphDraft &draft);
+    explicit WrittenSlots(const GraphTransaction &transaction);
     bool operator()(gc_node_ref_t id) const { return id < written_.size() && written_[id]; }
 
   private:

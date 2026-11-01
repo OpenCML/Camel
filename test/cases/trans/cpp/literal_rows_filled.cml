@@ -1,0 +1,16 @@
+/**
+ * A fill of a value of several dimensions: the computed elements go into the flat run in row
+ * order and the shape travels with them in the same block, so the folded constant is
+ * `rt::Array<double>{{1.0, 2.0, 2.0, 2.0}, {2, 2}}` and the program prints the two rows the
+ * interpreter prints.
+ *
+ * The fold read the template's first extent (`size()`) instead of its element count (`numel()`),
+ * so it wrote the first row's worth of elements and no shape: this program printed `[1.0, 2.0]`
+ * while std::fvm printed `[[1.0, 2.0], [2.0, 2.0]]`, and `agree_with_fvm` says so byte for byte.
+ */
+func main(): int sync {
+    let x: float = 2.0
+    let w: float[2, 2] = [[1.0, x], [x, 2.0]]
+    println(w)
+    return 0
+}

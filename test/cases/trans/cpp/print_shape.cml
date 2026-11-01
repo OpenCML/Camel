@@ -1,0 +1,31 @@
+/**
+ * Printing tells an element from an array of one.
+ *
+ * A value of no rank *is* the element (design principles 5.4): a struct field of type `f32[..]` holds
+ * such a value, and `println` of it writes `1.5`, not `[1.5]`. A value that carries a dimension is
+ * written as the whole literal -- `[2.5]` -- because the bracket is the difference between an element
+ * and an array of one, and a reader who cannot see it cannot tell the two apart.
+ *
+ * `agree_with_fvm` builds and runs this program against std::fvm, byte for byte.
+ *
+ * The same fact under a specification: `'{:>6}'->format<x>` writes the element of a value of no rank
+ * (`   1.5`) and the whole literal of a value of one dimension (`[   1.5]`), because the bracket is
+ * the shape's, not the format's.
+ */
+import { shape } from tensor
+
+type Box = { v: f32[..] }
+
+func main(): int sync {
+    let first: Box = { v: 1.5 }
+    println(first.v)
+    let one = [2.5] as f32[]
+    println(one, len(one))
+    let many: f32[] = [3.5, 4.5]
+    println(many, shape(many))
+    let grown = [3]->append<4>
+    println(grown)
+    println("[{:>6}]"->format<first.v>)
+    println("[{:>6}]"->format<one>)
+    return 0
+}

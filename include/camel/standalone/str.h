@@ -140,6 +140,7 @@ inline Str charAt(const Str &s, int64_t index, const Site &site) {
 }
 
 /// `s->contains<sub>` (:struct/contains_str): whether the bytes of `sub` occur in `s`.
+
 inline bool contains(const Str &s, const Str &sub) {
     return s.view().find(sub.view()) != std::string_view::npos;
 }

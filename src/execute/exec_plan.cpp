@@ -255,10 +255,12 @@ void buildLoopTables(const GCGraph &graph, ExecPlan &plan) {
         if (node == nullptr || node->kind != GCNodeKind::Loop) {
             continue;
         }
+        // A loop is its regions (design principles 3.10): a LOOP node without a body region is not
+        // a loop this plan can run, and there is no other form for it to be.
         const uint32_t condRegion = graph.loopRegionOf(ref, GCRegionKind::LoopCond);
         const uint32_t bodyRegion = graph.loopRegionOf(ref, GCRegionKind::LoopBody);
         if (bodyRegion == 0) {
-            continue; // a loop of two graphs: the back end calls them
+            continue;
         }
         if (!regions) {
             regions.emplace(graph);

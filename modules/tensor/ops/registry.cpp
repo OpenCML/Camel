@@ -136,7 +136,13 @@ class OpDefResolver final : public FuncTypeResolver {
                 element = array->elemTypeCode();
             }
         }
-        if (!element || !isNumericScalar(*element)) {
+        // The element the call states must be one a tensor stores, which is this module's own
+        // question: its list, not the core's `isNumericScalar`, which names the real numbers
+        // (`include/camel/core/type/base.h`) and so leaves the complex types out. The language's
+        // `is_numeric` is `is_real || is_complex`, and the creation operators' signatures are
+        // written with it: the signature is the target, so a call that states a complex element
+        // gets past this gate and meets whatever the storage layer does next.
+        if (!element || !isSupportedTensorScalar(*element)) {
             return std::nullopt;
         }
         return resolveFor(with, norm, normStatics, element);

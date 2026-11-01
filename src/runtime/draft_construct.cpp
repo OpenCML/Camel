@@ -307,8 +307,6 @@ gc_node_ref_t GraphDraft::addLoopNode(
     const GCLoopRef ref{
         .kind            = body.kind,
         .iterableForm    = body.iterableForm,
-        .condRef         = payloadGraphIndexOf(body.condGraph),
-        .bodyRef         = payloadGraphIndexOf(body.bodyGraph),
         .collectionCount = body.collectionCount,
     };
     const auto payload = bytesForStruct(ref);

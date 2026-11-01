@@ -1,0 +1,18 @@
+/**
+ * `math:abs` of the smallest integer: it has no positive counterpart, so `abs` answers the value
+ * itself -- the wrap -- and that is how `stdlib/math.cml`'s `gcd` recognises it and refuses it.
+ * The translation writes the wrap (`rt::absOf`), because `std::abs` of the smallest value is
+ * undefined behaviour and an optimiser may fold it into a positive answer, which would turn the
+ * refusal into a gcd of a negative number.
+ */
+
+import { abs, gcd } from math
+
+func main(): int sync {
+    let smallest = -9223372036854775807 - 1
+    println(abs(smallest))
+    println('before')
+    println(gcd(smallest, 0))
+    println('not reached')
+    return 0
+}

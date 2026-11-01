@@ -124,8 +124,8 @@ struct DraftRootsDebug {
 
 /// A DraftWritings's EngineRootScope covers its own draft, not a whole session: record it for
 /// the safepoint check. A draft of no session (one the front end built) is ignored.
-void debugDraftRootOpened(const GraphDraft &draft);
-void debugDraftRootClosed(const GraphDraft &draft);
+void debugDraftRootOpened(const GraphTransaction &transaction);
+void debugDraftRootClosed(const GraphTransaction &transaction);
 #endif
 
 class RuntimeGraphDraftSession {
@@ -156,8 +156,8 @@ class RuntimeGraphDraftSession {
     const camel::core::context::context_ptr_t &context() const { return context_; }
 
     bool hasDraft(const GCGraph *graph) const;
-    GraphDraft *tryDraft(const GCGraph *graph);
-    const GraphDraft *tryDraft(const GCGraph *graph) const;
+    GraphTransaction *tryDraft(const GCGraph *graph);
+    const GraphTransaction *tryDraft(const GCGraph *graph) const;
 
     /// The state of the graphs the commit encodes (graph.h, GraphState); the validator applies
     /// the rules of that state. Executable by default; a pass that proves equivalences between
@@ -342,8 +342,8 @@ class GraphDraftGroup {
 
     /// Reserves a member with an empty draft and returns its id.
     GraphId reserve(std::string mangledName, std::string name);
-    /// The graph of a member, to build in.
-    GraphDraft &draft(GraphId id);
+    /// The member's transaction, to build the graph in.
+    GraphTransaction &transaction(GraphId id);
     /// Replaces the graph of a member.
     void define(GraphId id, std::unique_ptr<GraphTransaction> transaction);
 

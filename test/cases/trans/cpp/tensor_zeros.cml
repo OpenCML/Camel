@@ -1,0 +1,20 @@
+/**
+ * `tensor:zeros` crosses the bridge as `tensor:ones` does, and comes back the same way.
+ *
+ * The result is a `T[..]`, which is the shaped array `rt::Array<T>` in this back end: the runtime
+ * fills the tensor, the bridge copies the elements out with the shape the value states, and the
+ * program prints it with the same `println` as an array of its own -- so the line below is
+ * std::fvm's, byte for byte. `zeros` was the last tensor builder refused as work not done
+ * ("std::cpp has no translation of it yet"); it is one rule of the table now, the same call as
+ * `ones`, because what differs between the two is the fill the runtime writes and not one byte this
+ * back end writes.
+ *
+ * `agree_with_fvm` builds and runs this program against std::fvm.
+ */
+
+import { zeros } from tensor
+
+func main(): int sync {
+    println(zeros::<f32>([2, 2]))
+    return 0
+}

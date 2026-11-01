@@ -1,0 +1,25 @@
+/**
+ * `as` on a value that does not hold the shape the type states is a fault, and the fault is the
+ * interpreter's.
+ *
+ * The conversion is where a shape is checked (design principles 5.4): `open2` answers a value of
+ * shape [2, 2], `as float[3, 3]` says the value has 3 rows of 3, and the program stops with
+ * `conversion to 'float[3, 3]' failed: the array has shape [2, 2]` at the conversion -- the same
+ * sentence the interpreter writes, from the same words (`ArrayType::castSlotFrom`), so the two
+ * reports are one. `not reached` is not printed either way.
+ *
+ * `agree_with_fvm` builds and runs this program against std::fvm and compares the report byte for
+ * byte, exit status included.
+ */
+
+func open2(v: float[2, 2]): float[..] {
+    return v as float[..]
+}
+
+func main(): int sync {
+    println('before')
+    let a = open2([[1.0, 2.0], [3.0, 4.0]]) as float[3, 3]
+    println(a)
+    println('not reached')
+    return 0
+}

@@ -101,6 +101,14 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::PassBoundaryPorts,
+            {
+                "PassBoundaryPorts",
+                "Pass '{0}' returned a program whose operator node {1} no longer matches its declaration: {2}.",
+                "An operator node's ordinary ports are the arguments of the declaration it names, in order: a pass may rewrite the graph, but not write an operand the declaration does not have, point one at a node that is gone or dead, or leave one without a type. A node that no longer matches its declaration is a call nothing can run.",
+            },
+        },
+        {
             RuntimeDiag::MacroEvaluationFailed,
             {
                 "MacroEvaluationFailed",

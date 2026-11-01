@@ -1,0 +1,16 @@
+// A struct indexed by a name it does not have: `[]` on a record is the field the name denotes, and
+// a name the struct has not is the interpreter's own report (FieldNotFound), with the name in it.
+// The generated code used to call the runtime's string index on the record, and the C++ compiler
+// rejected it.
+//
+// Run: camel test/cases/trans/cpp/field_name_missing.cml std::cpp
+
+type S = { x: int }
+
+#op(':op/idx_str')
+func field(s: S, k: string): int
+
+func main(): int sync {
+    let s: S = { x: 1 }
+    return field(s, 'y')
+}
