@@ -83,13 +83,15 @@ void declareResourcesAndDefinitions() {
  * operand: they answer `int64` positions over any numeric operand, so their rules are generic in the
  * operand's element and the key alone would not say which type the instance is made at.
  *
- * Only the operators whose batched meaning is "one axis in front" have a rule. `tensor:sum` and
- * `tensor:mean` reduce every axis of the operand, and a batch of rows under them is not the rows'
- * own sums -- the axis the reduction takes is what a batching rule shifts -- so the whole-array
- * form is refused by name rather than approximated (stdlib/rulesets/vmap.cml).
+ * Only the operators whose batched meaning is a rule this ruleset writes have a key: the six
+ * reductions along an axis, and `tensor:sum` and `tensor:mean`, which reduce every axis and whose
+ * rule folds the row's axes away behind the batch axis. `max` and `min` are declared with an axis
+ * only, so there is no operator over every axis for them to have a key for.
  */
 void declareVmapRuleKeys() {
     camel::core::bindVmapRule({"tensor:matmul", "rulesets.vmap", "matmul", 2});
+    camel::core::bindVmapRule({"tensor:sum", "rulesets.vmap", "sum", 1});
+    camel::core::bindVmapRule({"tensor:mean", "rulesets.vmap", "mean", 1});
     camel::core::bindVmapRule({"tensor:sum_axis", "rulesets.vmap", "sum_axis", 3});
     camel::core::bindVmapRule({"tensor:mean_axis", "rulesets.vmap", "mean_axis", 3});
     camel::core::bindVmapRule({"tensor:max_axis", "rulesets.vmap", "max_axis", 3});

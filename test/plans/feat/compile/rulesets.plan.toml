@@ -238,14 +238,24 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
-name = "vmap_transform_refuses_a_reduction_over_every_axis"
-desc = "The boundary of what the batching tier covers, said where it is written: a reduction over every axis (`tensor:sum`) has no rule, because a batch of rows under it is not the rows' own sums and it takes no axis for a rule to shift -- so `vmap(f)` with `f(x) = sum(x)` stops at the primitive with `asked=1 found=0 missing=1` and names it, instead of guessing a batched meaning from the rank. This is the other half of `vmap_reductions_shift_the_axis_and_agree_with_row_by_row_map`: the reductions that take an axis are batched, and the one that does not is refused by name."
-kind = "negative"
-case = "../../../cases/compile/transforms/vmap_whole_reduction_refused.cml"
+name = "vmap_whole_reduction_keeps_the_batch_axis_and_agrees_with_row_by_row_map"
+desc = "A reduction over every axis, batched: `sum(xs)` takes no axis, so there is none of the operator's to move one place in -- the rule keeps the batch axis in front and folds away each axis the row had after it, over the rank the value carries (`shape`), so a batch of `float[3]` rows answers one number per row, `float[?]`. The three rows `[1, 2, 3]`, `[4, 5, 6]` and `[-1, 0, 1]` sum to `6`, `15` and `0`, their means are `2`, `5` and `0`, and their sums doubled are `12`, `30` and `0`. This entry was a refusal before the rules existed -- `asked=1 found=0 missing=1` at `tensor:sum` -- and it is a reading now: `asked=1 found=1 missing=0` for the sum and for the mean, and `asked=2 found=2 missing=0` for the body that sums and then multiplies."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_whole_reduction.cml"
 args = ["${case}", "${backend}"]
-backends = ["nvm"]
-expect_exit = 1
-expect_stdout_contains = ["REINTERP vmap function=f skip=body construct=- uri=tensor:sum", "asked=1 found=0 missing=1"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_sum elements=float", "asked=1 found=1 missing=0 rules=vmap_rule_mean elements=float", "asked=2 found=2 missing=0 rules=vmap_rule_sum,vmap_rule_mul elements=float", "[6.0, 15.0, 0.0]", "[12.0, 30.0, 0.0]", "[2.0, 5.0, 0.0]"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
+assert(values.length === 6, `printed ${values.length} values: ${JSON.stringify(values)}`)
+for (let i = 0; i < 3; i += 1) {
+    assert(values[2 * i] === values[2 * i + 1], `pair ${i}: batched ${values[2 * i]} vs row by row ${values[2 * i + 1]}`)
+}
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
