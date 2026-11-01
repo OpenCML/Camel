@@ -7,9 +7,11 @@
 #include "camel/runtime/graph_txn.h"
 #include "camel/runtime/graph.h"
 
+#include <cstring>
 #include <map>
 #include <span>
 #include <string>
+#include <type_traits>
 
 namespace camel::compile::gir {
 
@@ -79,8 +81,29 @@ class GraphRead {
     /// The graph a FUNC node calls, `kInvalidGraphId` for another kind of node or one that names
     /// no callee yet (the same answer as `GCGraph::calleeIdOf`).
     virtual GraphId calleeIdOf(gc_node_ref_t ref) const = 0;
+
+    /// The node's payload bytes, empty when it has none: the tail of a draft's node, the payload
+    /// area of a frozen one. A body is read out of them with `bodyOf`, which copies -- a draft
+    /// keeps its payload at an arbitrary offset, so a body is never reinterpreted in place.
+    virtual std::span<const std::byte> payloadOf(gc_node_ref_t ref) const = 0;
+
+    /// The body of node `ref`, copied out of its payload; false when the node has none or the
+    /// payload is too small for the body. This is the `nodeBodyAs` the lift calls on a frozen
+    /// graph, answered for both faces from the bytes.
+    template <typename Body> bool bodyOf(gc_node_ref_t ref, Body &out) const {
+        static_assert(std::is_trivially_copyable_v<Body>, "A node body is trivially copyable.");
+        const std::span<const std::byte> bytes = payloadOf(ref);
+        if (bytes.size() < sizeof(Body)) {
+            return false;
+        }
+        std::memcpy(&out, bytes.data(), sizeof(Body));
+        return true;
+    }
+
     /// The operator of an OPER node, empty for another kind of node.
-    virtual std::string operUriOf(gc_node_ref_t ref) const = 0;
+    std::string operUriOf(gc_node_ref_t ref) const;
+    /// How many arms a BRCH node has, 0 for another kind of node.
+    gc_cnt_t armCountOf(gc_node_ref_t ref) const;
 };
 
 /// The face of a build-time draft: what a graph answers while it is being built.
@@ -116,7 +139,7 @@ class DraftGraphRead final : public GraphRead {
     std::vector<gc_node_ref_t> withInputsOf(gc_node_ref_t ref) const override;
     std::vector<gc_node_ref_t> ctrlInputsOf(gc_node_ref_t ref) const override;
     GraphId calleeIdOf(gc_node_ref_t ref) const override;
-    std::string operUriOf(gc_node_ref_t ref) const override;
+    std::span<const std::byte> payloadOf(gc_node_ref_t ref) const override;
 
   private:
     /// The draft's node the face's node `ref` is: `ref` itself when no id table was given, else
@@ -158,7 +181,9 @@ class FrozenGraphRead final : public GraphRead {
         return mappedListOf(graph_.ctrlInputsOf(ref));
     }
     GraphId calleeIdOf(gc_node_ref_t ref) const override { return graph_.calleeIdOf(ref); }
-    std::string operUriOf(gc_node_ref_t ref) const override;
+    std::span<const std::byte> payloadOf(gc_node_ref_t ref) const override {
+        return graph_.nodePayloadBytes(ref);
+    }
 
   private:
     /// A frozen graph's ids are its own, so a list is copied and nothing is translated.

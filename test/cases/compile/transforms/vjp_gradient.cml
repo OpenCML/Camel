@@ -2,10 +2,10 @@
 // The surface is JAX's (author's ruling of 2026-11-01), so `vjp(f)(3.0)` is the pair
 // `(27.0, pullback)` and `pullback(1.0)` is `27.0`; `grad(f)(3.0)` is the same number read through
 // the wrapper. All three come from the library's own composition --
-// `transpose(split(reinterp<jvp>(f)))` -- and not from the C++ autodiff. Skipped while the
-// composition cannot be run: the module compiles, and the walk `transpose` runs refuses the `Call`
-// inside the backward half, so the pullback raises (the plan's `skip_unless`).
-import rulesets.jvp
+// `transpose(split(reinterp<jvp>(f)))` -- and not from the C++ autodiff; the rulesets that
+// composition needs are the library's own imports, so this file imports `vjp` and nothing else.
+// Skipped while the composition cannot be run: the walk `transpose` runs refuses a call whose
+// callee takes several parameters (the plan's `skip_unless`).
 import { grad, vjp } from vjp
 
 func f(x: float): float {

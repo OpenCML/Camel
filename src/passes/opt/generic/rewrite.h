@@ -194,6 +194,16 @@ bool readsNoWrittenSlot(const camel::runtime::GraphTransaction &transaction, gc_
  * the statement that reads the effect, and the caller hands it the place the removed node stood in
  * (`handChainPlaceTo`). The last node built is returned, or the invalid ref when
  * nothing goes out.
+ *
+ * When this is reached: `replaceNode` calls it for a node with no sync user -- one that holds no
+ * place in a `sync` block's chain. A node that does hold one is not this case: the block hands its
+ * place on to the last reader instead (the block below in `replaceNode`, `handChainPlaceTo`), which
+ * is what keeps 3.3 true for every graph the builder writes. The shape this answers is measured and
+ * not hypothetical: `std::opt` over test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml
+ * holds two `:op/keep` nodes, and the test-only pass `test::keepshape`
+ * (test/plans/feat/opt/effects_kept.plan.toml) writes it on purpose. With the operator off, the
+ * commit refuses the graph -- "effect node 1 (':io/println') with neither a read of its value nor a
+ * place in its chain" -- which is the reading the pass prints and the plan asserts.
  */
 gc_node_ref_t keepThroughValue(
     camel::runtime::GraphTransaction &transaction, gc_node_ref_t removed, gc_node_ref_t value,
