@@ -869,9 +869,9 @@ for (let i = 0; i < argv.length; i++) {
         mode = argv[i]
     }
 }
-if (!['--check', '--write', '--generate', '--verify-doc', '--coverage', '--coverage-check', '--name-coverage', '--name-coverage-check', '--no-producer', '--no-producer-check', '--pin-examples'].includes(mode)) {
+if (!['--check', '--write', '--generate', '--verify-doc', '--coverage', '--coverage-check', '--name-coverage', '--name-coverage-check', '--no-producer', '--no-producer-check', '--text-coverage', '--text-coverage-check', '--pin-examples'].includes(mode)) {
     console.log(
-        'usage: node scripts/diagnostics-catalog.mjs --check | --write | --generate | --verify-doc | --coverage | --coverage-check | --name-coverage | --name-coverage-check | --no-producer | --no-producer-check | --pin-examples [--root DIR]'
+        'usage: node scripts/diagnostics-catalog.mjs --check | --write | --generate | --verify-doc | --coverage | --coverage-check | --name-coverage | --name-coverage-check | --no-producer | --no-producer-check | --text-coverage | --text-coverage-check | --pin-examples [--root DIR]'
     )
     process.exit(2)
 }
@@ -1141,6 +1141,133 @@ if (mode === '--name-coverage' || mode === '--name-coverage-check') {
                     + ' this file records: a case that pinned its diagnostic stopped pinning it, or a'
                     + ` ${r.id} code was added with no case of its own. Fix that case, or add one and`
                     + ' lower the record in the same commit, with the reason the number moved.'
+            )
+            process.exit(1)
+        }
+    }
+    process.exit(0)
+}
+
+// ---- whether a case reads the message a code prints -------------------------------------------
+// The other three counts ask whether a code exists, is raised, and is named by a case. None of them
+// reads the sentence the user sees, and a sentence nobody has ever read is broken as often as not:
+// `PassBoundaryNodes` printed "... whose graph has no graph 1 of it has no exit node ..." and
+// `PassBoundaryPorts` printed the graph where the node belonged, both from the day they were written
+// until a case made them print. So this asks a fifth question, of each code: does some test's
+// expected output contain a literal run of the code's own message?
+//
+// The comparison is against the registry's message with its placeholders as separators: only the
+// text between `{0}`, `{1}` ... is fixed, and a run of at least `TEXT_ASSERTED_RUN` characters of it
+// has to appear in a needle of a test that pins that code. A shorter template has no fixed run to
+// compare and counts as not asserted -- there is nothing in it a reader could have read wrong.
+//
+// What this cannot see is the arguments: a template whose slots are filled with the wrong values
+// (`{1}` given the whole sentence) still matches a needle that quotes the template's fixed text. That
+// class was caught by the plan cases that run the program, which is why they exist; this check is for
+// the sentence itself, which nothing else reads.
+const TEXT_ASSERTED_RUN = 12
+const TEXT_COVERAGE_RECORDED = new Map([
+    ['semantic', 128],
+    ['internal', 0],
+    ['lexical', 3],
+    ['syntax', 14],
+    ['runtime', 21],
+])
+
+if (mode === '--text-coverage' || mode === '--text-coverage-check') {
+    const entries = catalogEntries(records)
+    const sectionOf = new Map(entries.map((e) => [e.name, e.type]))
+    const plans = walk(path.join(root, 'test', 'plans'), (f) => f.endsWith('.plan.toml'))
+    // Code -> the needles of the tests that pin it.
+    const needleOf = new Map()
+    const addNeedles = (keys, needles) => {
+        if (needles.length === 0) return
+        for (const key of keys) {
+            if (!needleOf.has(key)) needleOf.set(key, [])
+            needleOf.get(key).push(needles.join('\n'))
+        }
+    }
+    for (const file of plans) {
+        const whole = fs
+            .readFileSync(file, 'utf8')
+            .replace(/^\s*#.*$/gm, '')
+            .replace(/desc\s*=\s*"""([\s\S]*?)"""/g, '')
+            .replace(/^\s*desc\s*=.*$/gm, '')
+        for (const block of whole.split(/\[\[tests\]\]/).slice(1)) {
+            const pins = new Set()
+            for (const m of block.matchAll(/expect_diagnostic_name\s*=\s*["']([A-Za-z]+)::([A-Za-z]+)["']/g))
+                pins.add(`${m[1]}::${m[2]}`)
+            for (const m of block.matchAll(/expect_diagnostic_code\s*=\s*["']?(0[xX][0-9A-Fa-f]{8})["']?/g))
+                pins.add(m[1].toLowerCase())
+            for (const m of block.matchAll(/\b([A-Za-z]+Diag)::([A-Za-z0-9_]+)/g)) pins.add(`${m[1]}::${m[2]}`)
+            for (const [name, section] of sectionOf) {
+                if (block.includes(name)) pins.add(`${section}::${name}`)
+            }
+            if (pins.size === 0) continue
+            const needles = []
+            for (const m of block.matchAll(
+                /expect_(?:output|stdout|stderr)_contains\s*=\s*\[([\s\S]*?)\]/g
+            )) {
+                for (const s of m[1].matchAll(/"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'/g)) {
+                    needles.push(s[1] ?? s[2])
+                }
+            }
+            // A snapshot compares a whole report, so its golden file is expected output too.
+            for (const g of block.matchAll(/^\s*golden\s*=\s*["']([^"']+)["']/gm)) {
+                const golden = path.resolve(path.dirname(file), g[1])
+                if (fs.existsSync(golden)) needles.push(fs.readFileSync(golden, 'utf8'))
+            }
+            addNeedles(pins, needles)
+        }
+    }
+    // The longest fixed run of a message: the text between its placeholders, most specific first.
+    const fixedRuns = (message) =>
+        message
+            .split(/\{\d+\}/)
+            .map((s) => s.trim())
+            .filter((s) => s.length >= TEXT_ASSERTED_RUN)
+            .sort((a, b) => b.length - a.length)
+    const report = SECTIONS.filter((s) => sectionFilter === null || s.id === sectionFilter).map((s) => {
+        const all = entries.filter((e) => e.sectionId === s.id)
+        const reading = all.filter((e) => {
+            const runs = fixedRuns(e.message)
+            if (runs.length === 0) return false
+            const seen = [
+                ...(needleOf.get(e.fullName) ?? []),
+                ...(needleOf.get(hex8(e.code).toLowerCase()) ?? []),
+            ]
+            return seen.some((text) => runs.some((run) => text.includes(run)))
+        })
+        return { id: s.id, all, reading, recorded: TEXT_COVERAGE_RECORDED.get(s.id) }
+    })
+    if (report.length === 0) {
+        console.log(`text coverage: no section named '${sectionFilter}'`)
+        process.exit(2)
+    }
+    for (const r of report) {
+        console.log(
+            `${r.id} codes whose message text a case asserts: ${r.reading.length} of ${r.all.length}`
+                + ` (recorded ${r.recorded})`
+        )
+        for (const e of r.all) {
+            const runs = fixedRuns(e.message)
+            if (runs.length === 0 || r.reading.includes(e)) continue
+            const why = runs.length === 0 ? 'no fixed text' : `no needle has "${runs[0]}"`
+            console.log(`  ${hex8(e.code)}  ${e.fullName}: ${why}`)
+        }
+    }
+    if (mode === '--text-coverage') process.exit(0)
+    for (const r of report) {
+        if (r.recorded === undefined || r.recorded === null) {
+            console.log(`text coverage: ${r.id} has no recorded value; add one to TEXT_COVERAGE_RECORDED`)
+            process.exit(1)
+        }
+        if (r.reading.length < r.recorded) {
+            console.log(
+                `text coverage: ${r.id} fell from ${r.recorded} to ${r.reading.length}: a case's`
+                    + ' expected output stopped quoting the message of a code it pins, or the message'
+                    + ' changed and no case followed it. Read the sentence, then make the case assert'
+                    + ' it -- or lower the record in the commit that lowers it, and say why.'
             )
             process.exit(1)
         }
