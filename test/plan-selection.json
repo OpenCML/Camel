@@ -59,6 +59,11 @@
             "plans": ["smoke", "feat/consistency/runner.plan.toml"]
         },
         {
+            "comment": "The diagnostic-form checker reads the tools that parse a diagnostic out of a run: a change to it, or to a tool it names, re-runs the plan that holds its reading.",
+            "paths": ["test/tools/check-diagnostic-form-readers.mjs"],
+            "plans": ["feat/tools/diagnostic_form_readers.plan.toml"]
+        },
+        {
             "comment": "The doc-readings check is a plan whose case is a tool under test/tools: a change here runs the plan that reads the readings the hand-written pages state, so the numbers a change moves are re-measured beside it.",
             "paths": ["test/tools/check-doc-readings.mjs"],
             "plans": ["feat/docs/doc_readings.plan.toml"]
