@@ -961,8 +961,8 @@ bool buildHalfBranch(
 ///
 /// - `[MAP S1]` the cuts (every value parameter, and the condition) -- outside the recursion, shared.
 /// - `[MAP S2]` the cut tuple and the two halves' signatures (`splitHalvesWith`) -- outside.
-/// - `[MAP S3]` the pair's two types, taken from `arms.front()` -- outside, and the one assumption to
-///   delete: a pair's type should come from the region's yield, not from the first arm.
+/// - `[MAP S3]` the pair's two types, read from **every** arm and required to agree -- outside the
+///   recursion; 'the first arm speaks for the others' lived here and is gone.
 /// - `[MAP S4]` the residual index -- outside.
 /// - `[MAP S5]` the group and its two members -- outside.
 /// - `[MAP S6]` the forward half: signature, value ports, the residuals projected in region 0, the
@@ -1020,12 +1020,34 @@ SplitGraph cutBranchGraph(
            << branchHalves.why << ")\n";
         return built;
     }
-    Type *valueType = function->node(arms.front().value) != nullptr
-                          ? function->node(arms.front().value)->dataType()
-                          : nullptr;
-    Type *tangentType = function->node(arms.front().tangent) != nullptr
-                            ? function->node(arms.front().tangent)->dataType()
-                            : nullptr;
+    // The pair's two types, read from **every** arm and required to agree. "The first arm speaks for
+    // the others" was the one thing in this function that lived on an assumption rather than on a fact
+    // about the graph: two arms of one branch write the same Join, so they must write the same pair
+    // type, and if they do not, this cut cannot name a type for the Join and says so. (P1-14's map,
+    // step S3.)
+    Type *valueType   = nullptr;
+    Type *tangentType = nullptr;
+    for (const ArmCut &arm : arms) {
+        const rt::GCNode *valueNode   = function->node(arm.value);
+        const rt::GCNode *tangentNode = function->node(arm.tangent);
+        const Type *oneValue   = valueNode != nullptr ? valueNode->dataType() : nullptr;
+        const Type *oneTangent = tangentNode != nullptr ? tangentNode->dataType() : nullptr;
+        if (valueType == nullptr) {
+            valueType   = const_cast<Type *>(oneValue);
+            tangentType = const_cast<Type *>(oneTangent);
+            continue;
+        }
+        if (oneValue != valueType || oneTangent != tangentType) {
+            os << "REINTERP split function=" << function->name()
+               << " skip=arm (the arms of the branch do not write one pair type: arm "
+               << arm.index << " writes (" << (oneValue != nullptr ? oneValue->toString() : "-")
+               << ", " << (oneTangent != nullptr ? oneTangent->toString() : "-")
+               << ") where the first writes ("
+               << (valueType != nullptr ? valueType->toString() : "-") << ", "
+               << (tangentType != nullptr ? tangentType->toString() : "-") << "))\n";
+            return built;
+        }
+    }
     if (valueType == nullptr || tangentType == nullptr) {
         os << "REINTERP split function=" << function->name()
            << " skip=arm (an arm's half of the pair has no type)\n";
