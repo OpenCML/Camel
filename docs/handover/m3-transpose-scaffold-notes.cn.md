@@ -35,7 +35,7 @@
 
 今天写出来的那一版（跑出 `5.0` 与 `20.0` 两个数）：`modules/transforms/transpose.cpp` **261 行**，`modules/transforms/transpose_operator.cpp` **146 行**（操作符那半：`TransposeResolver` 抄 `JvpResolver`，`transposeKernel` 抄 `jvpKernel`）。
 
-> **复核 2026-11-01**：现在读作 `transpose.cpp` **1159 行**、`transpose_operator.cpp` **169 行**（两笔合并——`lane-gs6` 与 `lane-reinterp2`——把它们的长处补完了；比上一次复核的 1010 行多的 149 行是 `4278f02a3`、`68b524478`、`6b4068b7e` 让每个逃逸值各带一个累加器）。
+> **复核 2026-11-01**：现在读作 `transpose.cpp` **1171 行**、`transpose_operator.cpp` **169 行**（两笔合并——`lane-gs6` 与 `lane-reinterp2`——把它们的长处补完了；比上一次复核的 1010 行多的 149 行是 `4278f02a3`、`68b524478`、`6b4068b7e` 让每个逃逸值各带一个累加器）；其后 `lane-remat` 建分支的切一刀时又多了 12 行（`transposeSignature` 接受余切空间为空的残差成员，`addCotangent` 统一丢掉不可微的目标）。
 
 **预计要改几段、几行：14 段里 4 段照抄、7 段改写、3 段删；约 260 行，其中照抄约 110 行、新写约 150 行。**
 
