@@ -60,7 +60,7 @@ class StaticFunction : public camel::core::rtdata::Object {
  * A function value whose graph is not one of this program's compile graphs.
  *
  * A value-level transform answers a call with a graph of its own, built while the caller's graph
- * is being built (`camel/compile/gir/compile_time.h`): the graph is made in a program of the
+ * is being built: the graph is made in a program of the
  * transform's -- the way the run-time kernel makes one in a program of its own -- and encoded
  * there, so there is no compile graph of this program to name. The value names that program and
  * the graph in it, which is what a run-time `::Function` holds, and the encoder turns this

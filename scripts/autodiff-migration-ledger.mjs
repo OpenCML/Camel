@@ -319,8 +319,28 @@ const library = rows.filter((r) => !r.offPath)
 // whether or not a binary is present.
 const countKind = (kind) => library.filter((r) => r.kind === kind).length
 const passed = library.filter((r) => r.pass).length
+
+// A run that never started is not a reading of `pass`. Every case whose process did not run comes
+// back with no exit code (`-1` from a spawn that failed, `null` for a case with no `main`), so on a
+// machine with no built tree `pass` is 0 for a reason that has nothing to do with the library --
+// and 0 is exactly the number a run of a tree where nothing passes reports. Measured 2026-11-02: a
+// Windows checkout with no `out/latest` read `pass=0` beside `library=118`, which looks like a
+// migration fact and was not one. So when no case produced an exit code at all, `pass` is printed as
+// `n/a` and the reason is said out loud; the three classes above are counted from the sources and stay.
+const ran = rows.filter((r) => r.exit !== null && r.exit !== -1).length
+const passCell = ran === 0 ? 'n/a' : String(passed)
+if (ran === 0) {
+    console.error(
+        'ledger: not one case could be run, so `pass` is printed as `n/a` rather than 0 -- ' +
+            'there is no built tree at ' +
+            `${path.relative(ROOT, path.dirname(camelBinary())).replace(/\\/g, '/') || 'out/latest'}, ` +
+            'and a run of nothing is not a run where nothing passes. The three classes are unaffected: ' +
+            'they are counted from the sources.',
+    )
+}
+
 const summary =
-    `[LEDGER] total=${rows.length} library=${library.length} pass=${passed} ` +
+    `[LEDGER] total=${rows.length} library=${library.length} pass=${passCell} ` +
     `with=${countKind('with')} array=${countKind('array')} other=${countKind('other')}`
 
 if (!quiet) {
@@ -413,6 +433,16 @@ if (ledgerCheck) {
         with: countKind('with'),
         array: countKind('array'),
         other: countKind('other'),
+    }
+    // `pass` is the one number here that needs a binary, so a check run without one cannot ratchet it:
+    // `pass=0` against a recorded 12 would read as a regression and send a reader hunting through the
+    // library for a fall that happened because nothing ran.
+    if (ran === 0) {
+        console.log(
+            '[LEDGER-CHECK] pass 没有量：这一跑没有任何用例起来（见上），所以 `pass` 的棘轮这一轮不判，' +
+                '三类照常按下不升判。',
+        )
+        measured.pass = LEDGER_RECORDED.pass
     }
     const problems = []
     const move = (key, direction, wording) => {
