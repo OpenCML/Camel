@@ -16,24 +16,27 @@
  *     reads is projected out of the residual tuple (ACCS, TupleIndex), so the cut is a value crossing
  *     between two graphs and not a recomputation.
  *
- * The residuals are a tuple in the signature (`ResidualsOf<F>`, the compiler's type function, not
- * written yet): one member per value parameter, in program order. The graph says which values cross
- * the cut, and `residualsOf` reads that from the graph; the signature says how many the tuple may
- * hold. Where the two differ the difference is measured and printed (`residuals=`, `carried=`,
- * `slots=`), never quietly assumed away.
+ * The residuals are a property of the *body*, not of the type: `f(x) = x` has none and
+ * `f(x) = x*x` has one, and the two have the same lifted type. So the tuple is read off the graph
+ * (`residualsOf`) before either half is built, and the halves are typed with it -- the identity
+ * graph's forward half answers `(result, ())`, `f(x, y) = x*x*y`'s answers a three-member tuple.
+ * The residual position in `Split<F>` is therefore a hole the compiler fills where the graph is in
+ * hand (author, 2026-11-01); the operator resolver, which sees types only, has the placeholder -- one
+ * slot per value parameter -- and that placeholder is what a call site is checked against, never what
+ * the graphs carry. Nothing on the far side of the cut is recomputed.
  *
  * `g(x) = x*x` at 3 reads `forward y= 9.0`, `residual r0= (3.0)` and `tangent dx1= 6.0`, and 12.0 and
  * 0.0 for dx = 2 and dx = 0. On a lifted graph that computes nothing (two parameter ports and one tuple
  * fill -- what `reinterp<jvp>` produces for `f(x) = x`) no value crosses at all: `fwd(3.0)` is 3.0,
- * `lin(r0, 1.0)` is 1.0, and the signature's one slot is a value parameter nothing reads.
+ * `lin(r0, 1.0)` is 1.0, and the residual tuple is empty.
  *
  * What is built is the straight-line tier: the body is copied node by node -- a port, a constant, an
  * operator, a fill, and a call (a rule's right side reaches the transform as a call whose callee is a
  * graph of the program, so the call is copied with its inputs placed on that half's side) -- and
  * everything else is refused *by name* at the node it was written at: a function value built by the
- * body, a branch, a loop, and an effect edge. A value that is not a parameter and that the backward
- * half needs is *recomputed* there this tier, because the tuple has no slot to carry it: that is a
- * correct graph, but it is a residual the cut did not carry, and `carried=` counts the ones it did.
+ * body, a branch, a loop, and an effect edge. A value the backward half reads crosses the cut as a
+ * residual whether or not it is a parameter, so nothing is recomputed on that side: what it reads is
+ * in the tuple, at the place `residualsOf` gave it.
  */
 
 #pragma once
@@ -64,6 +67,15 @@ struct SplitHalves {
 /// the function is not of that shape.
 SplitHalves splitHalvesOf(camel::core::type::FunctionType *function);
 
+/// The halves when the residual tuple is known -- which it is as soon as the *graph* is in hand,
+/// because which values cross the cut is a property of the body (`residualsOf`). `split` builds its
+/// halves with this one, so the identity graph's forward half answers `(result, ())` and
+/// `f(x, y) = x*x*y`'s answers a three-member tuple. `splitHalvesOf(function)` is the same call with
+/// the placeholder a caller that has only types can know: one slot per value parameter, the shape the
+/// operator resolver checks the call site against.
+SplitHalves splitHalvesWith(
+    camel::core::type::FunctionType *function, camel::core::type::Type *residuals);
+
 /// One residual: a value the forward half computes and the backward half reads, so that the cut
 /// between the two graphs carries it instead of recomputing it.
 struct Residual {
@@ -72,13 +84,13 @@ struct Residual {
     camel::runtime::gc_node_ref_t node = camel::runtime::kInvalidNodeRef;
     camel::core::type::Type *type      = nullptr;
     /// The parameter it is the value of, when it is a parameter; `kNotAParameter` when it is a value
-    /// the forward half computes (the next tier: this one refuses to carry those).
+    /// the forward half computes.
     size_t parameter = 0;
     static constexpr size_t kNotAParameter = static_cast<size_t>(-1);
 };
 
-/// `ResidualsOf<F>` -- the type function the author's ruling hands to the compiler (2026-10-31,
-/// pages 105-110), implemented where it can be computed: from the *graph*. A residual is a value the
+/// What crosses the cut, read from the graph: the answer the author's ruling (2026-11-01) asks for
+/// where the graph is in hand, since it cannot be asked of the type. A residual is a value the
 /// forward half computes and the backward half reads, so the answer is a property of the body and
 /// not of the signature: `f(x) = x` has none and `f(x) = x*x` has one, and the two functions have
 /// the same lifted type.
@@ -105,16 +117,10 @@ struct SplitGraph {
     std::string refusedConstruct;
     std::string refusedUri;
     std::string refusedWhy;
-    /// How many slots the residual tuple has, read from the backward half's signature. Part of the
-    /// reading: the type says how many values the tuple *may* hold.
-    size_t residualSlots = 0;
-    /// How many values actually cross the cut (`residualsOf`, read from the graph): zero on the
-    /// identity graph, one for `x*x`, and three for `f(x, y) = x*x*y` -- `x`, `y`, and `x*x`, because
-    /// the backward half's rule for the second `mul` reads that product.
+    /// How many values cross the cut (`residualsOf`, read from the graph): zero on the identity graph,
+    /// one for `x*x`, and three for `f(x, y) = x*x*y` -- `x`, `y`, and `x*x`, because the backward
+    /// half's rule for the second `mul` reads that product.
     size_t residuals = 0;
-    /// How many of those the tuple can carry: the ones that are parameter values. The rest the
-    /// backward half recomputes this tier, and the signature cannot name a slot for them.
-    size_t carried = 0;
 };
 
 /// Builds the two graphs of `split(f)` and prints what it built. `f`'s graph is read, never changed.

@@ -235,6 +235,29 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "vmap_argmax_shifts_the_axis_and_agrees_with_row_by_row_map"
+desc = "The two reductions whose result element is not their operand's, batched: `argmax_axis` and `argmin_axis` take a numeric tensor and answer `int64` positions, so their rules are the ones that show what a batching rule is generic in -- the element the operands are made of, read from an operand by the transform (`firstOperandTypeOf`), not from the node, whose type is the positions. The batch is three rows of `float[2, 3]` -- `[[1, 9, 3], [4, 5, 6]]`, `[[7, 2, 5], [0, 8, 1]]`, `[[2, 2, 1], [3, 1, 3]]` -- so down the columns the largest positions are `[1, 0, 1]`, `[0, 1, 0]`, `[1, 0, 1]`, the smallest ones kept as a row are `[[0, 1, 0]]`, `[[1, 0, 1]]`, `[[0, 1, 0]]`, and along the rows the largest positions are `[1, 2]`, `[0, 1]`, `[0, 0]` (the third row ties, and a tie keeps the earlier position). Each batched result is printed beside the row-by-row `array.vmap` of the same function and the plan compares the pairs; the elements print as integers and every `f` declares `int64[..]`, so positions are compared as positions."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_argmax.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_argmax_axis elements=float", "asked=1 found=1 missing=0 rules=vmap_rule_argmin_axis elements=float", "[[1, 0, 1], [0, 1, 0], [1, 0, 1]]", "[[[0, 1, 0]], [[1, 0, 1]], [[0, 1, 0]]]", "[[1, 2], [0, 1], [0, 0]]"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
+assert(values.length === 6, `printed ${values.length} values: ${JSON.stringify(values)}`)
+for (let i = 0; i < 3; i += 1) {
+    assert(values[2 * i] === values[2 * i + 1], `pair ${i}: batched ${values[2 * i]} vs row by row ${values[2 * i + 1]}`)
+}
+assert(!values.some(line => line.includes('.')), `a position came back as a float: ${JSON.stringify(values)}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "vmap_reductions_shift_the_axis_and_agree_with_row_by_row_map"
 desc = "The reductions along an axis, batched: the reduction keeps the axis it reduces -- as an extent of one with `keepdims`, as nothing without it -- and the batch adds one axis in front, so the rule is written in terms of the operator's own axis argument and translates only that argument (`batched_axis`: the row's axis `a` is `a + 1` in the lifted value, and an axis counted from the last stays as written). The batch is three rows of `float[2, 3]` -- `[[1, 2, 3], [4, 5, 6]]`, `[[10, 20, 30], [40, 50, 60]]`, `[[-1, 0, 1], [2, 4, 8]]` -- so the column sums are `[5, 7, 9]`, `[50, 70, 90]`, `[1, 4, 9]`; the row sums kept as a column are `[[6], [15]]`, `[[60], [150]]`, `[[0], [14]]`; the column maxima are `[4, 5, 6]`, `[40, 50, 60]`, `[2, 4, 8]`; the row minima are `[1, 4]`, `[10, 40]`, `[-1, 2]`; the column means are `[2.5, 3.5, 4.5]`, `[25, 35, 45]`, `[0.5, 2, 4.5]`. Every batched result is printed beside the row-by-row `array.vmap` of the same function and the plan compares the pairs, so what is pinned is that the two writings are one computation; the readings say each rule was asked for and answered (`asked=1 found=1` with the rule's own name, five times over)."
 kind = "behavior"
@@ -257,14 +280,24 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
-name = "vmap_transform_refuses_a_reduction_over_every_axis"
-desc = "The boundary of what the batching tier covers, said where it is written: a reduction over every axis (`tensor:sum`) has no rule, because a batch of rows under it is not the rows' own sums and it takes no axis for a rule to shift -- so `vmap(f)` with `f(x) = sum(x)` stops at the primitive with `asked=1 found=0 missing=1` and names it, instead of guessing a batched meaning from the rank. This is the other half of `vmap_reductions_shift_the_axis_and_agree_with_row_by_row_map`: the reductions that take an axis are batched, and the one that does not is refused by name."
-kind = "negative"
-case = "../../../cases/compile/transforms/vmap_whole_reduction_refused.cml"
+name = "vmap_whole_reduction_keeps_the_batch_axis_and_agrees_with_row_by_row_map"
+desc = "A reduction over every axis, batched: `sum(xs)` takes no axis, so there is none of the operator's to move one place in -- the rule keeps the batch axis in front and folds away each axis the row had after it, over the rank the value carries (`shape`), so a batch of `float[3]` rows answers one number per row, `float[?]`. The three rows `[1, 2, 3]`, `[4, 5, 6]` and `[-1, 0, 1]` sum to `6`, `15` and `0`, their means are `2`, `5` and `0`, and their sums doubled are `12`, `30` and `0`. This entry was a refusal before the rules existed -- `asked=1 found=0 missing=1` at `tensor:sum` -- and it is a reading now: `asked=1 found=1 missing=0` for the sum and for the mean, and `asked=2 found=2 missing=0` for the body that sums and then multiplies."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_whole_reduction.cml"
 args = ["${case}", "${backend}"]
-backends = ["nvm"]
-expect_exit = 1
-expect_stdout_contains = ["REINTERP vmap function=f skip=body construct=- uri=tensor:sum", "asked=1 found=0 missing=1"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["asked=1 found=1 missing=0 rules=vmap_rule_sum elements=float", "asked=1 found=1 missing=0 rules=vmap_rule_mean elements=float", "asked=2 found=2 missing=0 rules=vmap_rule_sum,vmap_rule_mul elements=float", "[6.0, 15.0, 0.0]", "[12.0, 30.0, 0.0]", "[2.0, 5.0, 0.0]"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
+assert(values.length === 6, `printed ${values.length} values: ${JSON.stringify(values)}`)
+for (let i = 0; i < 3; i += 1) {
+    assert(values[2 * i] === values[2 * i + 1], `pair ${i}: batched ${values[2 * i]} vs row by row ${values[2 * i + 1]}`)
+}
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
