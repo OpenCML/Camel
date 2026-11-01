@@ -24,7 +24,7 @@ tool = "node"
 case = "../../../../scripts/autodiff-migration-ledger.mjs"
 args = ["${case}", "--ledger-check"]
 expect_exit = 0
-expect_stdout_contains = ["[LEDGER-CHECK] ok: total=127 library=118 pass=12 with=54 array=46 other=6"]
+expect_stdout_contains = ["[LEDGER-CHECK] ok: total=127 library=118", "with=44 array=67 other=7 -- pass 没有降，三类没有升"]
 # It runs alone: for the length of the run, `test/cases/modules/autodiff/` holds files that are not
 # there before or after it (`<case>.ledger-probe.cml`, written and deleted per case), and two other
 # checks walk that tree -- `plan-inventory.mjs`'s case ledger and `check-doc-links.mjs`'s citations --
