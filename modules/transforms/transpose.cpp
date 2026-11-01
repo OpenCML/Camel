@@ -637,8 +637,42 @@ bool buildTransposeMember(
                     function->nodeRegion(norm.front()) != 0) {
                     break;
                 }
-                std::vector<gc_node_ref_t> &slots = tupleCotangents[norm.front()];
-                const size_t count                = tupleSlots(norm.front());
+                const gc_node_ref_t holder = norm.front();
+                // A tuple inside a tuple: the read this node takes a component of is itself read a
+                // component at a time, so its cotangent is a tuple, not a number, and it belongs to
+                // the value the slot holds rather than to a slot of the holder's own cotangent. A
+                // tuple put where a component cotangent belongs is not a cotangent at all, and the
+                // walk cannot see it: it answered a silent zero. So the sub-tuple's slots are handed
+                // over to the component the slot names -- `t.0.1` gives the second slot of `t.0`'s
+                // cotangent to `t.0`'s own value, which is a tuple written out in the body.
+                const auto nested = tupleCotangents.find(ref);
+                if (nested != tupleCotangents.end()) {
+                    const auto *held  = function->node(holder);
+                    const auto parts2 = function->withInputsOf(holder);
+                    if (held == nullptr || held->kind != rt::GCNodeKind::Fill ||
+                        body->value >= parts2.size()) {
+                        os << "TRANSPOSE function=" << function->name()
+                           << " skip=component node=" << ref << " holder=" << holder << '\n';
+                        return false;
+                    }
+                    std::vector<gc_node_ref_t> &into = tupleCotangents[parts2[body->value]];
+                    for (size_t j = 0; j < nested->second.size(); ++j) {
+                        const gc_node_ref_t part = nested->second[j];
+                        if (part == rt::kInvalidNodeRef) {
+                            continue;
+                        }
+                        if (into.size() <= j) {
+                            into.resize(j + 1, rt::kInvalidNodeRef);
+                        }
+                        into[j] = into[j] == rt::kInvalidNodeRef
+                                      ? part
+                                      : primitive(":op/add_d", {into[j], part});
+                    }
+                    hasCotangent[parts2[body->value]] = true;
+                    break;
+                }
+                std::vector<gc_node_ref_t> &slots = tupleCotangents[holder];
+                const size_t count                = tupleSlots(holder);
                 if (slots.size() < count) {
                     slots.resize(count, rt::kInvalidNodeRef);
                 }
@@ -649,7 +683,7 @@ bool buildTransposeMember(
                 slot = slot == rt::kInvalidNodeRef
                            ? cotangent[ref]
                            : primitive(":op/add_d", {slot, cotangent[ref]});
-                hasCotangent[norm.front()] = true;
+                hasCotangent[holder] = true;
                 break;
             }
             case rt::GCNodeKind::Fill: {

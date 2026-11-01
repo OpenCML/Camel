@@ -20,5 +20,8 @@ func main(): int sync {
     println(second(1.0))
     let back = transpose(second)
     println(back(1.0, 1.0))
+    // Twice the cotangent, four times the answer: the last reading is 4, which is not on any other
+    // line, so the plan's claim about the transpose cannot be met by the forward reading.
+    println(back(1.0, 2.0))
     return 0
 }
