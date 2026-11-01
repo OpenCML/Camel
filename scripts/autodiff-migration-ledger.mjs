@@ -319,8 +319,31 @@ const library = rows.filter((r) => !r.offPath)
 // whether or not a binary is present.
 const countKind = (kind) => library.filter((r) => r.kind === kind).length
 const passed = library.filter((r) => r.pass).length
+
+// A run of nothing is not a run where nothing passes, and a dead binary looks exactly like a clean
+// refusal -- six cases that expect exit 1 and pin no output "pass" against a compiler that never
+// started (measured 2026-11-02, a shell without LD_LIBRARY_PATH). So the detector is not the count:
+// if no case produced an exit code, and if any run failed to start the binary, the instrument is not
+// moving, and an instrument that is not moving does not report a number. `pass` is printed as `n/a`,
+// the reason is said out loud, and the process exits non-zero so a gate cannot carry the number on.
+const ran = rows.filter((r) => r.exit !== null && r.exit !== -1).length
+const blind = ran === 0 || Boolean(loaderFailure)
+const passCell = blind ? 'n/a' : String(passed)
+if (blind) {
+    console.error(
+        'ledger: the instrument is not running, so `pass` is printed as `n/a` rather than a number. ' +
+            (loaderFailure
+                ? `The binary did not start: ${loaderFailure}. `
+                : `Nothing ran at all: there is no built tree at ` +
+                  `${path.relative(ROOT, path.dirname(camelBinary())).replace(/\\/g, '/') || 'out/latest'}. `) +
+            'A run of nothing is not a run where nothing passes, and a binary that cannot start reads ' +
+            'like a clean refusal. The three classes above are unaffected: they are counted from the sources.',
+    )
+    process.exitCode = 1
+}
+
 const summary =
-    `[LEDGER] total=${rows.length} library=${library.length} pass=${passed} ` +
+    `[LEDGER] total=${rows.length} library=${library.length} pass=${passCell} ` +
     `with=${countKind('with')} array=${countKind('array')} other=${countKind('other')}`
 
 if (!quiet) {
@@ -388,24 +411,16 @@ if (!quiet) {
 }
 console.log(summary)
 
-if (loaderFailure) {
+if (ledgerCheck && blind) {
     console.log('')
-    console.log(`[LEDGER] the binary could not start: ${loaderFailure}`)
-    console.log(
-        '[LEDGER] so every run above reads as failing, and `pass` measures this shell rather than ' +
-            'the tree: put the newer libstdc++ on LD_LIBRARY_PATH and point CAMEL_HOME at the build, ' +
-            'then run it again. No number above is a reading.',
-    )
-    process.exitCode = 1
-}
-
-if (ledgerCheck && loaderFailure) {
-    console.log('')
-    console.log('[LEDGER-CHECK] not run: the binary does not start, so there is nothing to compare against.')
+    console.log('[LEDGER-CHECK] not run: the instrument is not running (see above), so `pass` is not ' +
+        'compared against its recorded 12 -- a number from a run of nothing would send a reader hunting ' +
+        'for a fall that happened because nothing started.')
     process.exit(1)
 }
 
 if (ledgerCheck) {
+    const problems = []
     const measured = {
         total: rows.length,
         library: library.length,
@@ -414,7 +429,6 @@ if (ledgerCheck) {
         array: countKind('array'),
         other: countKind('other'),
     }
-    const problems = []
     const move = (key, direction, wording) => {
         const recorded = LEDGER_RECORDED[key]
         const got = measured[key]
