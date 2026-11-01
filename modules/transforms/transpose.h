@@ -25,6 +25,8 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/runtime/graph.h"
 
+#include <vector>
+
 namespace camel::transforms {
 
 /// The graph of `transpose(f)` and the program of the graphs built with it.
@@ -37,7 +39,14 @@ struct TransposeGraph {
 /// `(ct: float) => (float)` for a function of one `float` parameter returning a `float`, since a
 /// linear function's pullback takes the cotangent of the result and gives the cotangent of the
 /// parameter.
-camel::core::type::FunctionType *transposeSignature(camel::core::type::FunctionType *function);
+///
+/// `participates` turns it into the signature of a *partial* transposition: one flag per parameter,
+/// true where a cotangent is answered for. A participating parameter is not a port -- the caller has no
+/// value for it, because it is what the answer is a cotangent of -- so the signature is the values and
+/// the cotangent in, one cotangent per participant out. Empty means every parameter participates, which
+/// is the ordinary transposition.
+camel::core::type::FunctionType *transposeSignature(
+    camel::core::type::FunctionType *function, const std::vector<bool> &participates = {});
 
 /// Builds the graph of `transpose(f)` for the graph `function` of `program`. The graph `function`
 /// is read, never changed. `os` receives what was built: which rule every primitive on the path was
