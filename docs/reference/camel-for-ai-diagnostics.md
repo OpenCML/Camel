@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 225
+**Semantic — errors** (`SemanticDiag`) — 223
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -186,7 +186,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `RestArgumentNotTuple` | The rest argument '..{0}' is not a compile-time tuple. |
 | `RestFunctionNeedsExpansion` | The rest function '{0}' cannot be used here: {1}. |
 | `RestArgumentsMismatch` | The call to '{0}' gives {1} argument(s), but its fixed parameters need {2}. |
-| `LambdaRestParameterNotLowered` | The rest parameter '..{0}' of a lambda is not lowered yet. |
 | `StaticTupleEscapes` | The build-time tuple '{0}' is not a value. |
 | `ConstasTypeRequired` | The 'constas' parameter '{0}' writes no type. |
 | `ConstasValueNotConstant` | The value given for the 'constas' parameter '{0}' is not a compile-time constant of its parameter's type ('{1}'). |
@@ -254,7 +253,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `CompOperandGenericWithoutType` | '..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type. |
 | `RangeStepZero` | The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers. |
 | `SliceStepZero` | The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are. |
-| `TransformArgumentIsNotAKnownFunction` | '{0}' is applied to {1}, and a transform's argument has to be a function this program knows before it runs. |
 | `WithPackNeedsNativeDeclaration` | The pack '..{0}' among the 'with' parameters needs a declaration without a body. |
 | `ImplOnBodylessDeclaration` | The body-less declaration '{0}' cannot carry '#impl({1})': it has no Camel body. |
 | `ImplKernelUnknown` | The '#impl' tag of '{0}' names '{1}', which is no body-less declaration. |
