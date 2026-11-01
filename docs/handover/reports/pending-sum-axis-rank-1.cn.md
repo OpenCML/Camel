@@ -116,3 +116,19 @@ python3 test/tools/cppexec/run.py /tmp/sum0.cml
 原因不是本笔：**本分支落后 `origin/develop` 392 笔**，这几条在新树上的状态与这里不同；fsh-dev 页里那句「does not build 1」是它那棵树（已合并 develop）的读数。所以「1 → 0」这个验收**在本树量不出来**，能给出的是：①秩 1 的 `sum<0>` 生成了正确的 C++ 并与解释器相同（上面两条读数）；②本树普查里 `int64_sum.cml` 从来不是 `does not build`。
 
 **判据**：「一条读数要连同它所在的那棵树、那个提交一起报——离开树的『1』和『7』都不是数。」
+
+## 八、对齐 `origin/develop` 之后的三个数
+
+`git merge --no-ff origin/develop`（不 rebase、不 force），一处冲突（本文件同族的 `operator_rules.cpp` 注释），按“两边都留”解完：`git grep -n '^<<<<<<< '` → **0**，`node scripts/diagnostics-catalog.mjs --check` → **exit 0**（305 codes 全有名字与消息）。合并提交 **75b9c4c5f**。
+
+| 验收 | 对齐后的读数 |
+|---|---|
+| 全树 `does not build` | **0**（普查 3277 个程序：same 1255、not a program 1082、refused 930、differs 9、crashes 1、**does not build 0**）——**逐条列文件名：空** |
+| `int64_sum.cml` | **`1 100.0% same`**，且 standalone；它不再 `refused`，也不再 `does not build` |
+| 本笔是否还绿（`feat/trans/cpp`） | `[SUMMARY] total: 51, pass: 51, fail: 0` |
+
+**替那句判据添一个例证**：旧树（落后 392 笔）的 7 条 `does not build`（`opt/generic` 4、`parse/constructs` 2、`trans/cml/interval` 1）**在对齐后的树上一条不剩**——它们不是缺口，是旧树上的红。
+
+**还有一处必须记住的细化**：对齐后立刻发现 `test/cases/trans/cpp/sum_axis_rank.cml` 红——`const rt::Array<float> v7_sum_axis = rt::sumAll(...)` 编不过。原因是**答案的形状由节点类型决定，不由规则自己挑**：`sum<0>(xs)` 的答案类型是元素（印 `8.0`），`sum_axis(xs, 0, false)` 的签名是 `T[..]`、答案是秩 0 的数组（印 `8.0`、`shape` 是 `[]`）。所以规则现在**先读节点自己的类型**：元素 → `rt::sumAll`，数组 → `rt::sumAxis`。两棵树 51 条全绿就是这条的读数。
+
+**判据（细化后的）**：「答案的形状由节点的类型说，不由写规则的人挑——挑错的那天，两个形式里总有一个编不过。」

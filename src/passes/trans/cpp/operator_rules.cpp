@@ -1180,16 +1180,23 @@ Rules buildRules() {
             } else {
                 return std::nullopt;
             }
-            // The one lane of a rank-1 value sums to the answer itself: the whole sum, of no
-            // dimension. `rt::sumAxis` would answer an array there -- the wrong shape at this
-            // node -- and `rt::sumAll` answers the element, walking the lanes in the same order
-            // (modules/tensor/kernels/reduce.cpp and the runtime's own `sumAll` add from +0 in
-            // ascending order). The axis has to be the one this value has, and the flag has to be
-            // the constant `false`: with `keepDims` true the answer is a rank-1 array of one
-            // element, which `rt::sumAxis` does write, and a computed flag or axis leaves the
-            // answer's rank unknown to the rule.
-            if (value->rank() == 1 && (axis == "0" || axis == "-1") && keepDims == "false") {
-                return std::format("rt::sumAll({})", c.operand(0));
+            // A rank-1 value has one lane, and what it sums to *is* the answer (design principles
+            // 5.4). Which shape that answer takes is the node's type, not the rule's choice: the
+            // template form `sum<0>(xs)` answers the element (printed `8.0`), while
+            // `sum_axis(xs, 0, false)` -- whose signature says `T[..]` -- answers an open-rank
+            // array whose recorded shape is `[]` (test/cases/trans/cpp/sum_axis_rank.cml is that
+            // reading). So the rule asks the node's own type: an element is `rt::sumAll` (the
+            // lanes from +0 in ascending order, the same walk), an array is `rt::sumAxis`. Writing
+            // the array form into the element's declaration was the defect the census reported
+            // against test/cases/modules/tensor/int64_sum.cml.
+            const bool answersArray = asArrayType(c.resultType()) != nullptr;
+            if (value->rank() == 1 && !answersArray) {
+                if ((axis == "0" || axis == "-1") && keepDims == "false") {
+                    return std::format("rt::sumAll({})", c.operand(0));
+                }
+                // An element answer is the whole sum and nothing else; a kept dimension or an axis
+                // the rule cannot name is not that answer, so the rule refuses instead of writing one.
+                return std::nullopt;
             }
             return std::format(
                 "rt::sumAxis({}, {}, {}, {})",
