@@ -126,6 +126,18 @@ class TupleType : public CompositeType {
         return typeAt(0);
     }
 
+    /// The tuple a `split` hands on beside the result: the forward values its second half reads
+    /// (design 4.4, the cut between now and later). It is a tuple for the compiler -- the members
+    /// are the graph's answer, read by the halves' own graphs through an element -- and not one for
+    /// a program: no destructuring and no element read reaches into it, and it travels whole, to the
+    /// backward half beside the tangents. The count belongs to the body (two bodies of one lifted
+    /// type can cross with none and with three), so a program that read a member would be reading a
+    /// number the graph chose; the guard is `SemanticDiag::ResidualsAreNotVisible` at the `let` or
+    /// the element read. Like a cell and the tagged forms it is a distinct type -- a residual tuple
+    /// is not the plain tuple with the same members -- and equal shapes yield the same object.
+    static TupleType *residuals(std::span<Type *const> members);
+    bool isResiduals() const { return residuals_; }
+
     size_t size() const { return size_; }
     Type *typeAt(size_t index) const {
         GUARD(index < size_, "TupleType: index out of range");
@@ -171,6 +183,7 @@ class TupleType : public CompositeType {
     static TupleType *allocate(const std::vector<Type *> &types);
 
     bool cell_ = false;      // A variable cell, see cell().
+    bool residuals_ = false; // The tuple a `split` hands on, see residuals().
     Tag tag_   = Tag::None;  // A tagged form, see nullable() and fallible().
     size_t size_;            // Element count.
     size_t refCount_;        // Number of reference indices.

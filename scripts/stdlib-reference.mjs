@@ -1176,6 +1176,18 @@ const RESERVED = new Set([
     'sync', 'with', 'type', 'struct', 'enum', 'rule', 'export', 'module', 'import', 'as', 'is',
 ])
 
+// The type to write for a parameter the declaration gives in terms of type variables, or null when
+// the example has to supply its own value. A function type is what a lambda annotates, and a doc
+// example counts in `float`, so each single-letter variable in one becomes `float`: `(x: T) => float`
+// is the instance `f` gets beside the call. Every other use of a variable -- `T[]`, `Map<K, V>`, a
+// bare `T`, `Device<T>` -- stays unwritable, and the compile reports the name as unresolved.
+function typeAtScalar(type) {
+    const text = (type || '').trim()
+    if (!/\b[A-Z]\b/.test(text)) return text
+    if (!text.includes('=>')) return null
+    return text.replace(/\b[A-Z]\b/g, 'float')
+}
+
 function bindArguments(entry, code) {
     const params = declaredParams(entry)
     const call = findCall(code, entry.name)
@@ -1183,11 +1195,9 @@ function bindArguments(entry, code) {
     const bindings = []
     const bind = (name, param) => {
         if (!param || !NAME.test(name) || RESERVED.has(name)) return
-        // A parameter typed by a type variable cannot be written in the wrapper: its type is not a
-        // type of the program (`T[]`, `Map<K, V>`, `(...args: A) => T`). The example has to
-        // supply a concrete value instead; the compile below reports the name as unresolved.
-        if (/\b[A-Z]\b/.test(param.type)) return
-        if (!bindings.some((binding) => binding.name === name)) bindings.push({ name, type: param.type })
+        const type = typeAtScalar(param.type)
+        if (type === null) return
+        if (!bindings.some((binding) => binding.name === name)) bindings.push({ name, type })
     }
     if (call.receiver) bind(call.receiver, params[0])
     splitArguments(call.args).forEach((argument, index) => {
@@ -2045,7 +2055,6 @@ const EXCEPTIONS = {
 // `function-typed parameter` on the parameter, the state `jvp`, `split`, `transpose` and `vmap` are
 // in. A tree that has not merged the operator finds one fewer in each class, and the failure there
 // says so rather than being excused: the number describes the tree the run measured.
-
 // The examples that do not compile, by the kind of diagnostic that stopped them, and the examples a
 // `@example-fragment` marker calls "not compiled" that the checker compiles anyway. Both are
 // numbers the run compares its own tally with: a class that appears, moves or disappears fails, so

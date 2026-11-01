@@ -104,6 +104,13 @@ void declareVmapRuleKeys() {
     camel::core::bindVmapRule({"tensor:min_axis", "rulesets.vmap", "min_axis", 3});
     camel::core::bindVmapRule({"tensor:argmax_axis", "rulesets.vmap", "argmax_axis", 3});
     camel::core::bindVmapRule({"tensor:argmin_axis", "rulesets.vmap", "argmin_axis", 3});
+    camel::core::bindVmapRule({"tensor:reshape", "rulesets.vmap", "reshape", 1});
+    camel::core::bindVmapRule({"tensor:unsqueeze", "rulesets.vmap", "unsqueeze", 1});
+    camel::core::bindVmapRule({"tensor:transpose", "rulesets.vmap", "transpose", 1});
+    camel::core::bindVmapRule({"tensor:permute", "rulesets.vmap", "permute", 1});
+    camel::core::bindVmapRule({"tensor:concat", "rulesets.vmap", "concat", 2});
+    camel::core::bindVmapRule({"tensor:dim", "rulesets.vmap", "dim", 1});
+    camel::core::bindVmapRule({"tensor:where", "rulesets.vmap", "where", 3});
 }
 
 } // namespace

@@ -9,12 +9,23 @@
 // blended.
 //
 // What blocks it is not the rule but the walk: an arm is a *region*, not a data input, so a half's
-// walk (which follows `dataInputsOf`) never enters it. The refusal now says that, and names the
-// condition it found in the graph (`condition=5` below) -- a fact read from the Brch, not guessed.
+// walk (which follows `dataInputsOf`) never enters it. The refusal says that, names the condition it
+// found in the graph (`condition=5`, read off the Brch and not guessed), and the `WALK` lines are the
+// entrance itself: each arm's region is entered and described before the refusal --
 //
-// The numbers this case cannot print are pinned where they do run: `control_flow_grad` in
-// `feat.modules.autodiff` differentiates through branches, including arms that read different values
-// (`a=6.0` and `b=0.5` are the two arms of `if x > 0.0 then x * x else 0.5 * x`).
+//     WALK half=backward region=1 arm=0 branch=6 members=3 ports=0 nested=0 outside=2
+//     WALK half=backward region=2 arm=1 branch=6 members=3 ports=0 nested=0 outside=2
+//
+// Two arms of three nodes each, no form ports, and two values read from outside the region (`x` and
+// the condition) -- which is the set a cut would have to carry, and exactly the author's sentence:
+// the condition is one of them. Entering is all this step does; building the arm comes after.
+//
+// Two things side by side, so the next reader does not confuse them. **A number where a number is
+// possible**: `control_flow_grad` in `feat.modules.autodiff` differentiates through branches, arms that
+// read different values included (`a=6.0` and `b=0.5` are the two arms of this same `if`), and those
+// entries pin the numbers. **A reading where only a reading is possible**: `split(jvp(branching body))`
+// is this case, and it pins the refusal. They are not one fact: `grad`'s route through a branch works
+// today, `split`'s direct route does not.
 import rulesets.jvp
 import { jvp, split } from transforms
 
