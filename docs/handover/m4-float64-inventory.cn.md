@@ -62,6 +62,7 @@
 
 - 行数：`transpose.cpp` 32 处、`jvp.cpp` 17 处（合计 **49**），与审查说的 34+25 同量级（审查数的是另一轮的树）。
 - **已完成**（第 4 步这一笔，`151212c7b`）：`jvp.cpp` 的端口构造那两处（值端口与切向端口）——**B 类，已改、已从尺子上划掉**。
+- **已完成**（A 类第一处，本笔）：`transpose.cpp` 多参数分支的 100/103/104 三行（判型与两处 `Float64()` 槽）——参数按自己的类型进、余切槽按 `tangentSpaceOf(参数).space` 给；**种子那一处 `params.emplace_back(Type::Float64())` 保留**，C 类并写理由（`transpose` 关心的是数的函数，种子就是那个数）。三条用例 `transpose_many_parameters`、`.is_linear_in_the_cotangent`、`transpose_unread_parameters` 改后仍绿。
 - **待办（A 类优先）**：`transpose.cpp` 的多参数分支（种子与余切槽）、`jvp.cpp` 的走图判型处。
 - **`with` 参数那一半**（原则 9.9）：位置在 `jvpSignature`（`function->withTypesCount()` 的处理）与 `transposeSignature`（`withTypesCount() != 0` 直接 `nullptr`，见 `transpose.cpp:38`），**判据**：一个带 `with` 参数的函数被提升/转置时不再整体拒绝，而是按 9.9 走"捕获值不产切向、但仍是已知值"。
 
