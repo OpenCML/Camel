@@ -17,6 +17,8 @@
 //   node scripts/diagnostics-catalog.mjs --verify-doc  docs/diagnostics.md is what --write produces
 //   node scripts/diagnostics-catalog.mjs --coverage    list the codes no test mentions (report only)
 //   node scripts/diagnostics-catalog.mjs --coverage-check  fail if any code is mentioned by no test
+//   node scripts/diagnostics-catalog.mjs --name-coverage   the semantic codes no case asserts by name
+//   node scripts/diagnostics-catalog.mjs --name-coverage-check  fail if that set grew past the record
 //   node scripts/diagnostics-catalog.mjs --pin-examples   fill in the example pins of new diagnostics
 //   --root DIR                                        read and write under DIR (the proof cases)
 //
@@ -53,6 +55,12 @@ const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 const REGISTRY_REL = 'diagnostics/registry.tsv'
 const DOC_REL = 'docs/diagnostics.md'
 const EXAMPLES_REL = 'diagnostics/examples.tsv'
+
+// The number of semantic codes with no case that asserts them by name, which `--name-coverage-check`
+// refuses to see grow. It was 23 until `load.module_not_found` pinned `SemanticDiag::ModuleNotFound`;
+// a case added for another code lowers it again in that commit. It is a count of what is *not* done,
+// so it is the one number here that is expected to fall.
+const NAME_COVERAGE_RECORDED = 22
 
 // The sections, in the order the headers are included. `id` is also the stem of the two
 // generated files; the type byte of the printed code is read from DiagType in base.h, under the
@@ -774,9 +782,9 @@ for (let i = 0; i < argv.length; i++) {
         mode = argv[i]
     }
 }
-if (!['--check', '--write', '--generate', '--verify-doc', '--coverage', '--coverage-check', '--pin-examples'].includes(mode)) {
+if (!['--check', '--write', '--generate', '--verify-doc', '--coverage', '--coverage-check', '--name-coverage', '--name-coverage-check', '--pin-examples'].includes(mode)) {
     console.log(
-        'usage: node scripts/diagnostics-catalog.mjs --check | --write | --generate | --verify-doc | --coverage | --coverage-check | --pin-examples [--root DIR]'
+        'usage: node scripts/diagnostics-catalog.mjs --check | --write | --generate | --verify-doc | --coverage | --coverage-check | --name-coverage | --name-coverage-check | --pin-examples [--root DIR]'
     )
     process.exit(2)
 }
@@ -819,6 +827,7 @@ if (mode === '--coverage' || mode === '--coverage-check') {
         for (const e of missing) console.log(`  ${hex8(e.code)}  ${e.fullName}`)
         process.exit(0)
     }
+
 
     // The property is the bijection between the two sets -- every code the registry declares is
     // mentioned by a test, and every code a test mentions is one the registry declares -- and not a
@@ -902,6 +911,55 @@ if (mode === '--coverage' || mode === '--coverage-check') {
 // --pin-examples fills in the pin of every diagnostic that has none and leaves the ones already
 // written alone: the first run pins what the search would have shown that day, and from then on
 // adding a test changes no other diagnostic's example.
+// ---- the stronger direction: a code a case acts on, not one the prose names -------------------
+// `--coverage-check` accepts a mention anywhere in the corpus, a plan's prose and its `desc`
+// included, so a code can be "covered" by a sentence that would not notice the compiler emitting
+// a different one. What tests a diagnostic is an assertion on the name (or the number) of the
+// report a run actually produced: `expect_diagnostic_name`, `expect_diagnostic_code`. A code
+// without one is a diagnostic whose identity no test would notice changing.
+//
+// The count is a ratchet. `NAME_COVERAGE_RECORDED` is where the tree stands, the check fails when
+// the set grows past it -- a case that stopped pinning its code is a regression here -- and it is
+// lowered in the commit that adds a case. The list is printed so the next case can be picked
+// without re-deriving it; nothing here reads a plan's prose, so a `desc` that names a code
+// neither counts for it nor hides it.
+if (mode === '--name-coverage' || mode === '--name-coverage-check') {
+    const semantic = catalogEntries(records).filter((e) => e.type === 'SemanticDiag')
+    const plans = walk(path.join(root, 'test', 'plans'), (f) => f.endsWith('.plan.toml'))
+    const pinned = new Set()
+    for (const file of plans) {
+        const text = fs.readFileSync(file, 'utf8').replace(/^\s*#.*$/gm, '')
+        for (const m of text.matchAll(/expect_diagnostic_name\s*=\s*["']([A-Za-z]+)::([A-Za-z]+)["']/g)) {
+            pinned.add(`${m[1]}::${m[2]}`)
+        }
+        for (const m of text.matchAll(/expect_diagnostic_code\s*=\s*["']?(0[xX][0-9A-Fa-f]{8})["']?/g)) {
+            pinned.add(m[1].toLowerCase())
+        }
+    }
+    const missing = semantic.filter((e) => !pinned.has(e.fullName) && !pinned.has(hex8(e.code).toLowerCase()))
+    console.log(
+        `semantic codes with no case that asserts them by name: ${missing.length} of ${semantic.length}`
+            + ` (recorded ${NAME_COVERAGE_RECORDED})`
+    )
+    for (const e of missing) console.log(`  ${hex8(e.code)}  ${e.fullName}`)
+    if (mode === '--name-coverage') process.exit(0)
+    if (semantic.length === 0 || pinned.size === 0) {
+        console.log('name coverage: the run read no semantic code or no assertion, which is not a pass')
+        process.exit(1)
+    }
+    if (missing.length > NAME_COVERAGE_RECORDED) {
+        console.log(
+            'name coverage: the set grew by '
+                + `${missing.length - NAME_COVERAGE_RECORDED} past the ${NAME_COVERAGE_RECORDED} this file`
+                + ' records: a case that pinned its diagnostic stopped pinning it, or a semantic code'
+                + ' was added with no case of its own. Fix that case, or add one and lower the record'
+                + ' in the same commit, with the reason the number moved.'
+        )
+        process.exit(1)
+    }
+    process.exit(0)
+}
+
 if (mode === '--pin-examples') {
     const entries = catalogEntries(records)
     const tests = loadTests(root)
