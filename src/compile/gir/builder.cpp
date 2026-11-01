@@ -1108,6 +1108,17 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     // fact is not a node attribute (`attr::fateOf` records that), so it stays cold metadata of
     // the graph rather than an attribute of a node.
     graph->edit().setDeclarationFacts(tags.declaration);
+    // `#remat` on the declaration is the same request as calling `remat(f)`: **"I require this to
+    // appear"** -- recompute it where it is needed instead of carrying it there as a value. It
+    // becomes the graph's own bit (`kGraphFlagRecomputeBackward`), which is the one thing `jvp`'s
+    // lift carries and `split` reads, so the whole downstream is one mechanism and the tag needs no
+    // reader of its own. Written here because this is the moment the graph exists and the
+    // declaration's facts are in hand; asking a pass to consult the module would give every pass a
+    // context it has no other use for.
+    if (camel::core::tag::hasRematTag(tags.declaration)) {
+        graph->edit().setFlags(
+            static_cast<uint8_t>(graph->edit().flags() | camel::runtime::kGraphFlagRecomputeBackward));
+    }
     if (name.empty()) {
         lambdaGraphs_[gct] = graph.get();
     }

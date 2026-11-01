@@ -170,3 +170,15 @@ expect_exit = 0
 expect_stdout_contains = ["7.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "remat_tag_removes_the_parameter_residual"
+desc = "`#remat` written on a function is the same request as calling `remat(f)`: it becomes the graph's recompute bit at build time (`src/compile/gir/builder.cpp`), so the whole downstream -- `jvp`'s lift carrying it, `split` reading it -- is one mechanism and the tag has no reader of its own. Two cubics, `g` tagged and `h` not: both lifts carry one non-parameter residual (`x*x`), and only `g`'s cut drops it, reading `residuals=1 recompute=1` against `h`'s `residuals=2`. The values are the same 27.0, which is what "store less, compute again" means; a cut that also changed the answer would be a different bug, not a cheaper cut."
+kind = "behavior"
+case = "../../../cases/transforms/split/remat_tag_residuals.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["split function=jvp_of_g forward=", "residuals=1 recompute=1", "split function=jvp_of_h forward=", "residuals=2", "tagged dx= 27.0", "plain dx= 27.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
