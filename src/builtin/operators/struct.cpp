@@ -1094,6 +1094,12 @@ slot_t __tangent_zeros_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // the axis for a higher rank, which is the row of a rank-2 array. `dx` is the zero tangent of the
 // array the subscript read: its shape is the array's, its elements give the zeros, so every
 // position the subscript did not take keeps the zero it holds.
+//
+// A read of an open-rank value takes the element itself at a flat position (`__index_arr__`, design
+// principles 5.4), so its gradient goes back to that flat position and the bound is the element
+// count, not the first dimension's length -- the same two counts `__index_arr__` decides between.
+// `dy` is what the read took's tangent: the element's (one slot, not an array) when the read was
+// the element, and the slab's (an array) when it was the slab.
 slot_t __tangent_scatter_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
     auto *arrayType     = tt::as_ptr<ArrayType>(norm.type(0));
@@ -1102,12 +1108,15 @@ slot_t __tangent_scatter_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx)
     const Int64 axisArg = norm.size() >= 4 ? norm.get<Int64>(3) : 0;
     const Int64 axis    = indexAxis(base, axisArg);
     const auto at       = static_cast<size_t>(axis);
-    const Int64 extent  = base->dim(at);
+    const bool elementRead =
+        at == 0 && base->rank() > 1 && norm.code(2) != TypeCode::Array;
+    const Int64 extent = elementRead ? static_cast<Int64>(base->numel()) : base->dim(at);
     if (index < 0 || index >= extent) {
         throwRuntimeFault(
             RuntimeDiag::IndexOutOfRange,
             index,
-            indexDimensionName(at, base->rank()),
+            elementRead ? std::string{"the elements"}
+                        : indexDimensionName(at, base->rank()),
             static_cast<size_t>(extent));
     }
     // The gradient carries the element type of the array it is the gradient of: an array created
@@ -1117,9 +1126,9 @@ slot_t __tangent_scatter_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx)
     for (uint64_t i = 0; i < base->numel(); ++i) {
         result->setSlot(i, base->getSlot(i), arrayType);
     }
-    if (base->rank() <= 1) {
-        // A rank-1 array's position is the element itself, so the gradient of the position is one
-        // slot (which is the element's own tangent, an array for an array of arrays).
+    if (elementRead || base->rank() <= 1) {
+        // The position is the element itself, so the gradient of the position is one slot (which
+        // is the element's own tangent, an array for an array of arrays).
         const auto slot = static_cast<uint64_t>(index);
         result->setSlot(
             slot, addTangent(ctx, arrayType->elemType(), base->getSlot(slot), norm.slot(2)), arrayType);
