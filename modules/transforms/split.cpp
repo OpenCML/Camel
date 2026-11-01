@@ -57,20 +57,84 @@ bool refuseAt(
 /// The condition of the branch whose Join is `join`, or `kInvalidNodeRef` when no branch names it: a
 /// `Brch` node holds the Join it fills and takes the condition as its input, so the condition of the
 /// branch is read off the graph and never guessed from the shape of the arms.
-gc_node_ref_t branchConditionOf(const rt::GCGraph *graph, gc_node_ref_t join) {
+gc_node_ref_t branchConditionOf(const rt::GCGraph *graph, gc_node_ref_t join);
+
+/// The `Brch` node that names `join` as its Join, or `kInvalidNodeRef`: a branch owns the arm regions,
+/// so a walk that wants to enter an arm starts here.
+gc_node_ref_t branchNodeOf(const rt::GCGraph *graph, gc_node_ref_t join) {
     for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
         const rt::GCNode *node = graph->node(ref);
         if (node == nullptr || node->kind != rt::GCNodeKind::Brch) {
             continue;
         }
         const auto *body = graph->nodeBodyAs<rt::GCBrchBody>(ref);
-        if (body == nullptr || body->join != join) {
-            continue;
+        if (body != nullptr && body->join == join) {
+            return ref;
         }
-        const std::span<const gc_node_ref_t> norm = graph->normInputsOf(ref);
-        return norm.empty() ? rt::kInvalidNodeRef : norm.front();
     }
     return rt::kInvalidNodeRef;
+}
+
+gc_node_ref_t branchConditionOf(const rt::GCGraph *graph, gc_node_ref_t join) {
+    const gc_node_ref_t branch = branchNodeOf(graph, join);
+    if (branch == rt::kInvalidNodeRef) {
+        return rt::kInvalidNodeRef;
+    }
+    const std::span<const gc_node_ref_t> norm = graph->normInputsOf(branch);
+    return norm.empty() ? rt::kInvalidNodeRef : norm.front();
+}
+
+/// The node's data inputs: its norm inputs followed by its with inputs, in order (`dataInputsOf`
+/// below has the whole of it; the walk is written before it and needs the name).
+std::vector<gc_node_ref_t> dataInputsOf(const rt::GCGraph *graph, gc_node_ref_t ref);
+
+/// What one half finds when it enters a region: which region, which arm of which branch, how many
+/// nodes live in it, and how many form ports it takes. This is the entrance a branch cut needs -- an
+/// arm is a region, and a walk that follows `dataInputsOf` never reaches it -- so these numbers are
+/// what a cut can say about an arm before it knows how to build one: the arm is not empty, and it is
+/// entered through its form ports rather than through a data input of the branch node.
+struct RegionWalk {
+    uint32_t region    = 0;
+    uint32_t arm       = 0;
+    size_t members     = 0;
+    size_t ports       = 0;
+    size_t nestedBrchs = 0; // branches inside the region: a walk that enters one meets another
+    size_t outside     = 0; // distinct nodes it reads from outside itself -- what the cut must carry
+};
+
+RegionWalk walkRegion(const rt::GCGraph *graph, uint32_t regionId) {
+    RegionWalk walk;
+    walk.region = regionId;
+    const rt::GCRegion *region = graph->region(regionId);
+    if (region == nullptr) {
+        return walk;
+    }
+    walk.arm   = region->index;
+    walk.ports = graph->regionPorts(regionId).size();
+    std::unordered_set<gc_node_ref_t> outside;
+    for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+        if (graph->nodeRegion(ref) != regionId) {
+            continue;
+        }
+        ++walk.members;
+        const rt::GCNode *node = graph->node(ref);
+        if (node == nullptr) {
+            continue;
+        }
+        if (node->kind == rt::GCNodeKind::Brch) {
+            ++walk.nestedBrchs;
+        }
+        for (gc_node_ref_t input : dataInputsOf(graph, ref)) {
+            if (input < graph->nodeCount() && graph->nodeRegion(input) != regionId) {
+                const rt::GCNode *read = graph->node(input);
+                if (read != nullptr && read->kind != rt::GCNodeKind::Data) {
+                    outside.insert(input);
+                }
+            }
+        }
+    }
+    walk.outside = outside.size();
+    return walk;
 }
 
 /// The node a value is read through with the gates that only forward it stripped (the same walk
@@ -793,12 +857,34 @@ SplitGraph buildSplitGraph(
             const gc_node_ref_t condition = branchConditionOf(function, exit);
             SplitGraph refusal;
             if (condition != rt::kInvalidNodeRef) {
+                // The first step of the cut a branch needs: enter each arm and say what is in it. The walk a half
+                // does follows `dataInputsOf` and never reaches an arm, so this is the entrance it does not
+                // have yet -- and the numbers are what the next step builds on (an arm is entered through
+                // its form ports, and it is not empty). `enterArmRegions` is the entrance itself: false
+                // leaves the reading exactly as it was before this step, which is how the two are compared.
+                constexpr bool enterArmRegions = true;
+                const gc_node_ref_t branch = branchNodeOf(function, exit);
+                if (enterArmRegions) {
+                    for (uint32_t region = 1; region < function->regionCount(); ++region) {
+                        const rt::GCRegion *one = function->region(region);
+                        if (one == nullptr || one->kind != rt::GCRegionKind::Arm ||
+                            one->owner != branch) {
+                            continue;
+                        }
+                        const RegionWalk walked = walkRegion(function, region);
+                        os << "WALK half=backward region=" << region << " arm=" << walked.arm
+                           << " branch=" << branch << " members=" << walked.members
+                           << " ports=" << walked.ports << " nested=" << walked.nestedBrchs
+                           << " outside=" << walked.outside << '\n';
+                    }
+                }
                 refuseAt(
                     refusal, function, exit, "the exit",
                     "this graph's exit is the Join of a branch (the arm the condition picks writes the "
                     "pair), so the cut has to happen inside the arms, with the condition carried as a "
                     "residual -- the backward half then picks the arm the forward half took by reading "
-                    "the same condition -- and a half's walk does not enter a region yet");
+                    "the same condition -- and a half's walk enters an arm's region now but does not "
+                    "build the arm it finds");
                 os << "REINTERP split function=" << function->name() << " skip=branch exit=Join"
                    << " condition=" << condition << " why=" << refusal.refusedWhy << '\n';
                 return refusal;
