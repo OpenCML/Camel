@@ -48,16 +48,27 @@ function run(file) {
 //                         author's ruling turns this into a compile error, not into a lift.
 //   `body_has_call`    -- the lifted body calls another function; the lift recurses into callees
 //                         only after the callee's own graph is built at build time.
+//   `split_of_a_branch` -- the cut of a lift whose body branches. The lift builds from a draft, and
+//                         a draft has no Join for a branch to answer at, so this one still lifts --
+//                         and is cut -- at run time. A gap in the lift, not in the cut.
 const shapes = [
     { name: 'direct', file: join(here, 'jvp_lifted.cml'), at: 'compile' },
-    { name: 'handed_to_split', file: join(here, '..', '..', 'transforms', 'split', 'split_branch_author.cml'), at: 'compile' },
+    { name: 'handed_to_split', file: join(here, 'runtime_branch_handed_to_split.cml'), at: 'compile' },
     { name: 'callee_parameter', file: join(here, 'runtime_branch_callee_parameter.cml'), at: 'run' },
     { name: 'body_has_call', file: join(here, 'jvp_call.cml'), at: 'run' },
+    {
+        name: 'split_of_a_branch',
+        file: join(here, '..', '..', 'transforms', 'split', 'split_branch_author.cml'),
+        at: 'run',
+    },
 ]
 
 // The number of run-time branches left. It is written here, and it may only be lowered: a shape that
 // goes back to the run-time path makes `remaining` grow, which is the red this file is for.
-const remaining = 2
+// Three, down from four: the cut of a straight-line lift is answered while the caller is built, so
+// `handed_to_split` left the run-time path; a branch joint, a callee that is only a value at run time,
+// and a body that calls are what is left.
+const remaining = 3
 
 const answered = new Map()
 for (const shape of shapes) {
@@ -81,10 +92,25 @@ for (const shape of shapes) {
 if (wrong.length > 0) throw new Error(wrong.join('\n'))
 
 // The cut is one step past the operator line: the halves it hands on were built while the caller was
-// built, so the reading of the cut has to say so.
-const splitOut = run(join(here, '..', '..', 'transforms', 'split', 'split_branch_author.cml'))
-if (!splitOut.includes('REINTERP split halves-at=compile')) {
-    throw new Error('split(jvp(f)) handed on halves without saying they were cut at build time')
+// built, so the reading of the cut has to say so. Both directions are named here -- a straight-line
+// lift is cut at build time, a branched one is not yet -- because the row that has to move is the
+// second one, and a check that only named the first would pass whatever happened to the second.
+const cutAt = (file, callee) => {
+    const line = run(file)
+        .split('\n')
+        .find((one) => one.includes(`REINTERP split halves-at=`) && one.includes(`function=${callee}`))
+    if (line === undefined) throw new Error(`no 'REINTERP split halves-at=' line for ${callee}`)
+    return /halves-at=(\S+)/.exec(line)[1]
+}
+const straightCut = cutAt(join(here, 'runtime_branch_handed_to_split.cml'), 'jvp_of_f')
+if (straightCut !== 'compile') {
+    throw new Error(`split(jvp(f)) of a straight-line lift says halves-at=${straightCut}, not compile`)
+}
+const branchCut = cutAt(join(here, '..', '..', 'transforms', 'split', 'split_branch_author.cml'), 'jvp_of_f')
+if (branchCut !== 'run') {
+    throw new Error(
+        `split(jvp(f)) of a branched lift says halves-at=${branchCut}: the lift reads a branch from a draft now, so this row moved -- lower 'remaining'`,
+    )
 }
 
 const atRun = shapes.filter((shape) => answered.get(shape.name) === 'run').map((shape) => shape.name)
@@ -95,4 +121,4 @@ if (atRun.length > remaining) {
     )
 }
 
-console.log(`remaining=${atRun.length} run=${atRun.join(',')} compile=${atCompile.join(',')}`)
+console.log(`remaining=${atRun.length} run=${atRun.join(',')} compile=${atCompile.join(',')} cut=${straightCut}/${branchCut}`)

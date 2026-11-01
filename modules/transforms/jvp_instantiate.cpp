@@ -143,15 +143,16 @@ std::optional<gir::node_handle_t> instantiateJvp(gir::CompileTimeCall &call) {
     }
     if (!callee->view().closureNodes().empty() || !callee->captureNames().empty()) {
         // It captures: the value it is called with carries the captures, which are not a constant of
-        // the program.这一形状还没挪。
+        // the program.
         return std::nullopt;
     }
     if (bodyCalls(callee)) {
-        // 这一形状还没挪：body 里有调用，lift 要读被调用者的图，而这里读的是草稿。
+        // The lifted body calls another function: the lift would have to read the callee's graph here,
+        // and this reads a draft.
         return std::nullopt;
     }
     if (!calledWhereItIsMade(call)) {
-        // 这一形状还没挪：值被交给 split/transpose，那些算子在自己的程序里读它的图。
+        // The value is handed to something else: that reader looks for it in the program it runs in.
         return std::nullopt;
     }
 
