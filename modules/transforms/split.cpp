@@ -54,6 +54,25 @@ bool refuseAt(
     return false;
 }
 
+/// The condition of the branch whose Join is `join`, or `kInvalidNodeRef` when no branch names it: a
+/// `Brch` node holds the Join it fills and takes the condition as its input, so the condition of the
+/// branch is read off the graph and never guessed from the shape of the arms.
+gc_node_ref_t branchConditionOf(const rt::GCGraph *graph, gc_node_ref_t join) {
+    for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+        const rt::GCNode *node = graph->node(ref);
+        if (node == nullptr || node->kind != rt::GCNodeKind::Brch) {
+            continue;
+        }
+        const auto *body = graph->nodeBodyAs<rt::GCBrchBody>(ref);
+        if (body == nullptr || body->join != join) {
+            continue;
+        }
+        const std::span<const gc_node_ref_t> norm = graph->normInputsOf(ref);
+        return norm.empty() ? rt::kInvalidNodeRef : norm.front();
+    }
+    return rt::kInvalidNodeRef;
+}
+
 /// The node a value is read through with the gates that only forward it stripped (the same walk
 /// `buildVmapGraph` takes to the exit): a gate consumes what it carries and produces that value.
 gc_node_ref_t ungated(const rt::GCGraph *graph, gc_node_ref_t ref) {
@@ -761,6 +780,38 @@ SplitGraph buildSplitGraph(
                                                : nullptr;
     if (exitFill == nullptr || exitFill->fillKind != rt::GCFillKind::Tuple ||
         function->withInputsOf(exit).size() != 2) {
+        // The pair does not have to be a tuple fill. A branch answers with its Join, and `jvp` gives
+        // that Join the lifted type, so the exit of `jvp(branch body)` is a Join whose slots hold the
+        // pair: one arm writes (value, tangent) into it and the other writes its own. There is a pair
+        // to cut in that graph all the same -- the author's rule for it is design 4.2: the condition
+        // itself is a residual, and the backward half picks the same arm by evaluating that condition.
+        // What `split` cannot do yet is step *inside* an arm: an arm is a region, not a data input, so
+        // `Half`'s walk (which follows `dataInputsOf`) does not reach it. Saying that is the point of
+        // this reading -- a `skip=exit` that does not say which exit leaves the reader with nothing.
+        if (exitNode->kind == rt::GCNodeKind::Join && function->funcType() != nullptr &&
+            exitNode->dataType() == function->funcType()->exitType()) {
+            const gc_node_ref_t condition = branchConditionOf(function, exit);
+            SplitGraph refusal;
+            if (condition != rt::kInvalidNodeRef) {
+                refuseAt(
+                    refusal, function, exit, "the exit",
+                    "this graph's exit is the Join of a branch (the arm the condition picks writes the "
+                    "pair), so the cut has to happen inside the arms, with the condition carried as a "
+                    "residual -- the backward half then picks the arm the forward half took by reading "
+                    "the same condition -- and a half's walk does not enter a region yet");
+                os << "REINTERP split function=" << function->name() << " skip=branch exit=Join"
+                   << " condition=" << condition << " why=" << refusal.refusedWhy << '\n';
+                return refusal;
+            }
+            refuseAt(
+                refusal, function, exit, "the exit",
+                "this graph's exit is a Join that holds the pair and no branch names it, so the two "
+                "halves' values meet at a loop -- a loop's residual is what one turn hands the next "
+                "(design 4.2), and a half's walk does not enter a region yet");
+            os << "REINTERP split function=" << function->name() << " skip=loop exit=Join"
+               << " why=" << refusal.refusedWhy << '\n';
+            return refusal;
+        }
         SplitGraph refusal;
         refuseAt(
             refusal, function, exit, "the exit",

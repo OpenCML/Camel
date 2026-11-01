@@ -107,6 +107,17 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "split_branch_arms"
+desc = "The cut at a branch, which it refuses -- and the refusal is the reading pinned here, because a refusal that does not say which exit it met leaves the reader with nothing. `jvp` gives a branch's Join the lifted type (the arm the condition picks writes the pair into it), so the exit of a lifted branching body is a Join and not a tuple fill, and the old answer was a bare `skip=exit`. The new answer names the shape and the author's rule for it: **the condition itself is a residual**, carried so the backward half picks the arm the forward half took by reading the same condition. What blocks the build is that an arm is a **region**, not a data input: a half's walk follows `dataInputsOf` and never enters it. The condition is read off the Brch that names the Join (`condition=5`), never guessed from the arms. The numbers this case cannot print are pinned where they do run -- `feat.modules.autodiff`'s `control_flow_grad` differentiates through branches, arms that read different values included (`a=6.0` and `b=0.5` are the two arms of `if x > 0.0 then x * x else 0.5 * x`)."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_branch_arms.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_stdout_contains = ["skip=branch exit=Join condition=", "the condition carried as a residual", "a half's walk does not enter a region yet"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "split_identity_pipeline"
 desc = "The identity graph: `reinterp<jvp>` builds a body with no operator in it, so `split` has nothing to move and the reading is the pipeline itself. The forward half gives the value the caller passed (3.0) and an **empty** residual tuple -- `(3.0, ())`, which the diagnostic reports as `residuals=0` and the forward half's type as `(float) => (float, ())` -- and the backward half gives the tangent back (1.0) without reading anything. Nothing crosses the cut because nothing is computed on the forward side of it. Gated on `split` existing (`test/tools/have-split.mjs`)."
 kind = "behavior"
