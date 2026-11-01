@@ -690,9 +690,17 @@ inline void writeSyncLink(node_handle_t from, node_handle_t to) {
 /// (src/runtime/graph_edges.cpp, `checkSyncEdges`). The caller has already decided the edge says
 /// something: this is the raw pair, and a chain that reaches a node the graph hands on asks it even
 /// when that node reads the tail (there the wait *is* the only thing that reaches the node).
+/// The one place a control edge is written on the builder's side: a caller that needs the kind
+/// beside a sync edge calls this instead of `linkNodes`, so what the kind means while it is being
+/// retired (docs/design/effects/edges.cn.md 1: a graph's edges are data, sync and order) is decided
+/// here rather than at fourteen call sites.
+inline void writeControlLink(node_handle_t from, node_handle_t to) {
+    linkNodes(LinkType::Ctrl, from, to);
+}
+
 inline void writeSyncStatement(node_handle_t from, node_handle_t to) {
     writeSyncLink(from, to);
-    linkNodes(LinkType::Ctrl, from, to);
+    writeControlLink(from, to);
 }
 
 /// A link of the chain between two statements of a `sync` block, written only if it says something

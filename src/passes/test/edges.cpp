@@ -254,9 +254,9 @@ EdgesOrderScheduleTestPass::apply(const camel::runtime::Program *program, std::o
     const gc_node_ref_t second = anchorNode(transaction);
     const gc_node_ref_t never  = anchorNode(transaction);
     const gc_node_ref_t late   = anchorNode(transaction);
-    draft.appendInput(DraftEdgeKind::Ctrl, exit, first);
-    draft.appendInput(DraftEdgeKind::Ctrl, exit, second);
-    draft.appendInput(DraftEdgeKind::Ctrl, exit, late);
+    draft.appendControlEdge(exit, first);
+    draft.appendControlEdge(exit, second);
+    draft.appendControlEdge(exit, late);
     // `second` orders `first` after it: the layout must put `second` first even though the exit
     // lists `first` first. `never` orders the exit after itself and must not enter the layout.
     const bool wroteOrdered = draft.appendOrderDependency(first, second);

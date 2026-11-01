@@ -4150,7 +4150,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                     *nodeTransactionOf(lastSyncedNode_), nodeIdOf(*modifierNode), nodeIdOf(lastSyncedNode_));
             if (sameGraph(*modifierNode, currGraph_) && !chainedAfterModifier &&
                 shouldAddSyncCtrlLink(*modifierNode, targetNode)) {
-                linkNodes(LinkType::Ctrl, *modifierNode, targetNode);
+                writeControlLink(*modifierNode, targetNode);
             }
         }
     }
@@ -4431,7 +4431,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         if (synced_) {
             writeSyncLink(targetNode, gate);
         } else {
-            linkNodes(LinkType::Ctrl, targetNode, gate);
+            writeControlLink(targetNode, gate);
         }
         LEAVE("LINK");
         return gate;
@@ -4462,7 +4462,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         if (synced_) {
             writeSyncLink(targetNode, gate);
         } else {
-            linkNodes(LinkType::Ctrl, targetNode, gate);
+            writeControlLink(targetNode, gate);
         }
         LEAVE("LINK");
         return gate;
