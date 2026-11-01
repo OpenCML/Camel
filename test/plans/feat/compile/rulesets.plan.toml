@@ -397,6 +397,47 @@ expect_stdout_contains = ["[2.0, 5.0, nan]", "[-0.0, 3.0, nan]", "[3.0, 12.0, na
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# The layout tier writes its axis, its target shape or its permutation in angle brackets, and that
+# argument is a `with` parameter of the operator, not an ordinary operand -- the transform used to
+# hand a rule only the norm inputs, so `reshape`'s call was built with one argument against a callee
+# with two. It now hands over the ports in port order (the normal ones, then the context ones), and
+# the six readings below are the same rules answering where they used to fail with
+# `has 1 args, target graph ... has 2 norm ports`. `reshape<[2, 2]>` of a four-element row is a 2x2
+# and three of them at once are `[3, 2, 2]`; `unsqueeze<0>` and `unsqueeze<-1>` put the row's axis of
+# extent one first and last; `transpose` and `permute<[1, 0]>` answer the same thing because a batch's
+# last two axes are the row's; `concat<1>` of a 2x2 row with itself is a 2x4 row; `dim<1>` is one
+# extent per row. The row-wise reshape printed beside the batch is the same numbers without the
+# batch's axis -- the batch's first row *is* that value.
+[[tests]]
+name = "vmap_layout_ops_are_batched_through_their_written_arguments"
+desc = "The six layout operators whose axis or shape is a `with` argument, batched through the transform: `reshape<[2, 2]>` of a row of four is a 2x2 and three rows at once are `[3, 2, 2]` (`[[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]], [[9.0, 1.0], [2.0, 3.0]]]`), `reshape<[2, 2, 1]>` keeps the trailing axis of extent one, `unsqueeze<0>` and `unsqueeze<-1>` put it first and last, `transpose` and `permute<[1, 0]>` both answer `[[[1.0, 3.0], [2.0, 4.0]], [[5.0, 7.0], [6.0, 8.0]]]`, `concat<1>` joins a row to itself into a 2x4, and `dim<1>` answers `[2, 2]`. The row's own reshape is printed beside the batch as the control. Each reading names its rule: `rules=vmap_rule_reshape`, `vmap_rule_unsqueeze`, `vmap_rule_transpose`, `vmap_rule_permute`, `vmap_rule_concat`, `vmap_rule_dim`, all `elements=float`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_layout_ops.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["[[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]], [[9.0, 1.0], [2.0, 3.0]]]", "[[[[1.0], [2.0]], [[3.0], [4.0]]], [[[5.0], [6.0]], [[7.0], [8.0]]], [[[9.0], [1.0]], [[2.0], [3.0]]]]", "[[[1.0, 2.0, 3.0]], [[4.0, 5.0, 6.0]]]", "[[[1.0], [2.0], [3.0]], [[4.0], [5.0], [6.0]]]", "[[[1.0, 3.0], [2.0, 4.0]], [[5.0, 7.0], [6.0, 8.0]]]", "[[[1.0, 2.0, 1.0, 2.0], [3.0, 4.0, 3.0, 4.0]], [[5.0, 6.0, 5.0, 6.0], [7.0, 8.0, 7.0, 8.0]]]", "[2, 2]", "rules=vmap_rule_reshape elements=float", "rules=vmap_rule_unsqueeze elements=float", "rules=vmap_rule_transpose elements=float", "rules=vmap_rule_permute elements=float", "rules=vmap_rule_concat elements=float", "rules=vmap_rule_dim elements=float"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+# `where`'s first operand is a condition, not a value arm: its element is `bool` and the answer's
+# element is the arms'. The transform used to instantiate a rule on the first port, so `where` was
+# asked for a `bool` rule and refused (`No candidate of 'vmap_where' applies to (bool[?, ..], ...)`).
+# It now reads the first port that is not a condition, and the reading says which element the rule
+# was made for: `elements=float`, not `bool`. The mask and the second arm are constants of the row's
+# shape, so they are the batch of one row and broadcast -- the batch's rows are the row-wise answers.
+[[tests]]
+name = "vmap_where_is_instantiated_on_the_value_arms"
+desc = "`where(cond, a, b)` batched: a constant mask `[true, false, true]` over `[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]` answers `[[1.0, 0.0, 3.0], [4.0, 0.0, 6.0]]` and with a constant second arm `[[1.0, 20.0, 3.0], [4.0, 20.0, 6.0]]`; the row-wise `where` printed beside them is `[1.0, 20.0, 3.0]`, the same numbers without the batch's axis. The reading is `asked=1 found=1 missing=0 rules=vmap_rule_where elements=float` -- instantiated on the arms' element, not on the condition's `bool`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_where_condition.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["[[1.0, 0.0, 3.0], [4.0, 0.0, 6.0]]", "[[1.0, 20.0, 3.0], [4.0, 20.0, 6.0]]", "[1.0, 20.0, 3.0]", "rules=vmap_rule_where elements=float"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
 # The batching index has two doors, and this entry is the second door of the table below: a program
 # with one body per key asks the transform for each, and the check compares what the transform
 # answers with what the table prints. `printed=20 looked=20 hit=18` is the reading: the table holds
@@ -404,17 +445,17 @@ timeout_ms = 20000
 # bodies reach eighteen of them (`mul_tensor/2` and `index_into/2` have no source spelling -- they
 # are the keys of a rule's own right side). The eight keys that a reader of the *tail* of a long
 # stdout does not see -- the five arithmetic tokens and `argmax/1`, `argmax_axis/3`, `argmin/1` --
-# are asserted by name, because a table that prints twenty rows and is read as twelve is the same
+# are asserted by name, because a table that prints twenty-seven rows and is read as twelve is the same
 # table as a table of twelve to anyone who reads the tail.
 [[tests]]
 name = "ruleset_index_agrees_with_the_transform"
-desc = "Both doors of the batching index, compared on one program: the table `std::rulesets` prints (twenty rows, `RULESET rulesets.vmap <head>/<arity> -> <rule> (rhs <callee>)`), the answers `lookupRule` gives for the same twenty keys (`LOOKUP ... -> <rule>`), and the `asked=1 found=1 missing=0 rules=<rule>` readings the transform prints for the eighteen primitives a body reaches. All three have to say the same thing: the table's size is the index's, every answer is the table's rule for that key, and every hit is a row of the table with the same rule name. The eight keys a tail-reading of the output does not show (`*/2`, `+/2`, `-/1`, `-/2`, `//2`, `argmax/1`, `argmax_axis/3`, `argmin/1`) are asserted by name."
+desc = "Both doors of the batching index, compared on one program: the table `std::rulesets` prints (twenty-seven rows, `RULESET rulesets.vmap <head>/<arity> -> <rule> (rhs <callee>)`), the answers `lookupRule` gives for the same twenty-seven keys (`LOOKUP ... -> <rule>`), and the `asked=1 found=1 missing=0 rules=<rule>` readings the transform prints for the twenty-five primitives a body reaches. All three have to say the same thing: the table's size is the index's, every answer is the table's rule for that key, and every hit is a row of the table with the same rule name. The eight keys a tail-reading of the output does not show (`*/2`, `+/2`, `-/1`, `-/2`, `//2`, `argmax/1`, `argmax_axis/3`, `argmin/1`) are asserted by name."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/compile/rulesets/ruleset_index_agrees_with_the_transform.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "printed=20 looked=20 hit=18 six_eights=8 first=*/2 last=sum_axis/3\n"
+expect_stdout_exact = "printed=27 looked=27 hit=25 six_eights=8 first=*/2 last=where/3\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
 
@@ -429,7 +470,7 @@ kind = "behavior"
 case = "../../../cases/compile/rulesets/ruleset_index_only.cml"
 args = ["${case}", "std::rulesets"]
 expect_exit = 0
-expect_stdout_exact = "RULESET rulesets.vmap */2 -> vmap_rule_mul (rhs vmap_mul)\nRULESET rulesets.vmap +/2 -> vmap_rule_add (rhs vmap_add)\nRULESET rulesets.vmap -/1 -> vmap_rule_neg (rhs vmap_neg)\nRULESET rulesets.vmap -/2 -> vmap_rule_sub (rhs vmap_sub)\nRULESET rulesets.vmap //2 -> vmap_rule_div (rhs vmap_div)\nRULESET rulesets.vmap argmax/1 -> vmap_rule_argmax (rhs vmap_argmax)\nRULESET rulesets.vmap argmax_axis/3 -> vmap_rule_argmax_axis (rhs vmap_argmax_axis)\nRULESET rulesets.vmap argmin/1 -> vmap_rule_argmin (rhs vmap_argmin)\nRULESET rulesets.vmap argmin_axis/3 -> vmap_rule_argmin_axis (rhs vmap_argmin_axis)\nRULESET rulesets.vmap index_into/2 -> vmap_rule_idx (rhs idx_batch)\nRULESET rulesets.vmap matmul/2 -> vmap_rule_matmul (rhs vmap_matmul)\nRULESET rulesets.vmap max/1 -> vmap_rule_max (rhs vmap_max)\nRULESET rulesets.vmap max_axis/3 -> vmap_rule_max_axis (rhs vmap_max_axis)\nRULESET rulesets.vmap mean/1 -> vmap_rule_mean (rhs vmap_mean)\nRULESET rulesets.vmap mean_axis/3 -> vmap_rule_mean_axis (rhs vmap_mean_axis)\nRULESET rulesets.vmap min/1 -> vmap_rule_min (rhs vmap_min)\nRULESET rulesets.vmap min_axis/3 -> vmap_rule_min_axis (rhs vmap_min_axis)\nRULESET rulesets.vmap mul_tensor/2 -> vmap_rule_mul_tensor (rhs vmap_mul_tensor)\nRULESET rulesets.vmap sum/1 -> vmap_rule_sum (rhs vmap_sum)\nRULESET rulesets.vmap sum_axis/3 -> vmap_rule_sum_axis (rhs vmap_sum_axis)\n"
+expect_stdout_exact = "RULESET rulesets.vmap */2 -> vmap_rule_mul (rhs vmap_mul)\nRULESET rulesets.vmap +/2 -> vmap_rule_add (rhs vmap_add)\nRULESET rulesets.vmap -/1 -> vmap_rule_neg (rhs vmap_neg)\nRULESET rulesets.vmap -/2 -> vmap_rule_sub (rhs vmap_sub)\nRULESET rulesets.vmap //2 -> vmap_rule_div (rhs vmap_div)\nRULESET rulesets.vmap argmax/1 -> vmap_rule_argmax (rhs vmap_argmax)\nRULESET rulesets.vmap argmax_axis/3 -> vmap_rule_argmax_axis (rhs vmap_argmax_axis)\nRULESET rulesets.vmap argmin/1 -> vmap_rule_argmin (rhs vmap_argmin)\nRULESET rulesets.vmap argmin_axis/3 -> vmap_rule_argmin_axis (rhs vmap_argmin_axis)\nRULESET rulesets.vmap concat/2 -> vmap_rule_concat (rhs vmap_concat)\nRULESET rulesets.vmap dim/1 -> vmap_rule_dim (rhs vmap_dim)\nRULESET rulesets.vmap index_into/2 -> vmap_rule_idx (rhs idx_batch)\nRULESET rulesets.vmap matmul/2 -> vmap_rule_matmul (rhs vmap_matmul)\nRULESET rulesets.vmap max/1 -> vmap_rule_max (rhs vmap_max)\nRULESET rulesets.vmap max_axis/3 -> vmap_rule_max_axis (rhs vmap_max_axis)\nRULESET rulesets.vmap mean/1 -> vmap_rule_mean (rhs vmap_mean)\nRULESET rulesets.vmap mean_axis/3 -> vmap_rule_mean_axis (rhs vmap_mean_axis)\nRULESET rulesets.vmap min/1 -> vmap_rule_min (rhs vmap_min)\nRULESET rulesets.vmap min_axis/3 -> vmap_rule_min_axis (rhs vmap_min_axis)\nRULESET rulesets.vmap mul_tensor/2 -> vmap_rule_mul_tensor (rhs vmap_mul_tensor)\nRULESET rulesets.vmap permute/1 -> vmap_rule_permute (rhs vmap_permute)\nRULESET rulesets.vmap reshape/1 -> vmap_rule_reshape (rhs vmap_reshape)\nRULESET rulesets.vmap sum/1 -> vmap_rule_sum (rhs vmap_sum)\nRULESET rulesets.vmap sum_axis/3 -> vmap_rule_sum_axis (rhs vmap_sum_axis)\nRULESET rulesets.vmap transpose/1 -> vmap_rule_transpose (rhs vmap_transpose)\nRULESET rulesets.vmap unsqueeze/1 -> vmap_rule_unsqueeze (rhs vmap_unsqueeze)\nRULESET rulesets.vmap where/3 -> vmap_rule_where (rhs vmap_where)\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 40000
 

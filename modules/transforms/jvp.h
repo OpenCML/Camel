@@ -37,9 +37,9 @@
 #include "camel/core/context/context.h"
 #include "camel/core/source/ids.h"
 #include "camel/core/type/composite/func.h"
-#include "camel/runtime/graph.h"
+#include "camel/compile/gir/graph_read.h"`r`n#include "camel/runtime/graph.h"
 
-#include <string>
+#include <string>`r`n#include <string_view>
 
 namespace camel::transforms {
 
@@ -71,5 +71,13 @@ camel::core::type::FunctionType *jvpSignature(camel::core::type::FunctionType *f
 JvpGraph buildJvpGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     camel::runtime::GCGraph *function, std::ostream &os);
+
+/// The same build, from any face of the graph: what a caller uses when it reads a draft that
+/// is still being written. `name` and `self` are the caller's because a draft has neither until
+/// it is encoded.
+JvpGraph buildJvpGraph(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    const camel::compile::gir::GraphRead &function, std::string_view name,
+    camel::runtime::GraphId self, std::ostream &os);
 
 } // namespace camel::transforms
