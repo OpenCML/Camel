@@ -57,10 +57,17 @@ const DOC_REL = 'docs/diagnostics.md'
 const EXAMPLES_REL = 'diagnostics/examples.tsv'
 
 // The number of semantic codes with no case that asserts them by name, which `--name-coverage-check`
-// refuses to see grow. It was 23 until `load.module_not_found` pinned `SemanticDiag::ModuleNotFound`;
-// a case added for another code lowers it again in that commit. It is a count of what is *not* done,
-// so it is the one number here that is expected to fall.
-const NAME_COVERAGE_RECORDED = 22
+// refuses to see grow. It counts what is *not* done, so it is the one number here expected to fall,
+// and it fell twice, recorded apart so neither hides in the other:
+//   23 -> 22  `load.module_not_found` pinned `ModuleNotFound`.
+//   22 -> 14  `calling_incomplete` pinned `CallingIncompleteFunction`, and the counter learned the
+//             `verify_script` form (`diagnostics[0].name === 'SemanticDiag::X'`, `.code === '0x...'`),
+//             which these seven had been pinned by all along: StatementAfterReturn,
+//             UnusedFallibleValue, EffectNotExecuted, IgnoredSideEffect, NeverArgumentCall,
+//             FailNotExecuted, StatementAfterFail.
+// A case added for a code lowers it in that commit; a correction lowers it in the commit that
+// teaches the counter the form, and names what it found.
+const NAME_COVERAGE_RECORDED = 14
 
 // The sections, in the order the headers are included. `id` is also the stem of the two
 // generated files; the type byte of the printed code is read from DiagType in base.h, under the
@@ -908,21 +915,25 @@ if (mode === '--coverage' || mode === '--coverage-check') {
     process.exit(0)
 }
 
-// --pin-examples fills in the pin of every diagnostic that has none and leaves the ones already
-// written alone: the first run pins what the search would have shown that day, and from then on
-// adding a test changes no other diagnostic's example.
 // ---- the stronger direction: a code a case acts on, not one the prose names -------------------
-// `--coverage-check` accepts a mention anywhere in the corpus, a plan's prose and its `desc`
-// included, so a code can be "covered" by a sentence that would not notice the compiler emitting
-// a different one. What tests a diagnostic is an assertion on the name (or the number) of the
-// report a run actually produced: `expect_diagnostic_name`, `expect_diagnostic_code`. A code
-// without one is a diagnostic whose identity no test would notice changing.
+// `--coverage-check` asks that every code be *mentioned* by a test, and a plan's prose counts as a
+// mention, so a sentence that would not notice the compiler emitting a different diagnostic keeps
+// it green. This counts the other thing: a case that *pins* the report a run produced -- the name
+// through `expect_diagnostic_name`, the number through `expect_diagnostic_code`, and the same two
+// read out of a `verify_script` (`diagnostics[0].name === 'SemanticDiag::X'`, which usually pins the
+// line and the column beside it). A code with none of those is a diagnostic whose identity no test
+// would notice changing.
+//
+// Both checks stay, and both run in `compile.diag_catalog`: this one narrows what counts, it does
+// not replace the wider one, because replacing it would drop the question "does any test at all
+// exercise this code" for the codes this one still counts as unpinned, and the wider check is the
+// layer that holds that question at zero.
 //
 // The count is a ratchet. `NAME_COVERAGE_RECORDED` is where the tree stands, the check fails when
 // the set grows past it -- a case that stopped pinning its code is a regression here -- and it is
-// lowered in the commit that adds a case. The list is printed so the next case can be picked
-// without re-deriving it; nothing here reads a plan's prose, so a `desc` that names a code
-// neither counts for it nor hides it.
+// lowered in the commit that adds a case, or in the commit that teaches this counter a form of
+// assertion it was missing, which is a correction and is recorded as one. The list is printed so
+// the next case can be picked without re-deriving it.
 if (mode === '--name-coverage' || mode === '--name-coverage-check') {
     const semantic = catalogEntries(records).filter((e) => e.type === 'SemanticDiag')
     const plans = walk(path.join(root, 'test', 'plans'), (f) => f.endsWith('.plan.toml'))
@@ -933,6 +944,14 @@ if (mode === '--name-coverage' || mode === '--name-coverage-check') {
             pinned.add(`${m[1]}::${m[2]}`)
         }
         for (const m of text.matchAll(/expect_diagnostic_code\s*=\s*["']?(0[xX][0-9A-Fa-f]{8})["']?/g)) {
+            pinned.add(m[1].toLowerCase())
+        }
+        // A `verify_script` reads the report as JSON and asserts on the field it names, so it pins
+        // the code as surely as the two keys above -- more surely where it also pins the line.
+        for (const m of text.matchAll(/\.name\s*===\s*["']([A-Za-z]+)::([A-Za-z]+)["']/g)) {
+            pinned.add(`${m[1]}::${m[2]}`)
+        }
+        for (const m of text.matchAll(/\.code\s*===\s*["'](0[xX][0-9A-Fa-f]{8})["']/g)) {
             pinned.add(m[1].toLowerCase())
         }
     }
