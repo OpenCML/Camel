@@ -236,9 +236,15 @@ assert(printing.every((o) => o.norm === -1 || o.norm === 0),
 """
 timeout_ms = 20000
 
+# Every example of every module is compiled -- the ones the page presents and the ones a
+# `@example-fragment` marker calls "not compiled" -- and the run prints how many it wrote, how many
+# of them are a program of their own, how many compile and how many do not, with the last group
+# counted by the kind of diagnostic that stopped it. An example that is neither compiled nor counted
+# is the skip this closes, so the test fails when the numbers do not add up as well as when a name
+# has no description or no example.
 [[tests]]
 name = "registry.docs_complete"
-desc = "Every name the reference prints has a description and an @example, every example compiles as a call of its declaration (its arguments bound to the declared parameter types, the types it mentions imported), a fallible result has an @fails line naming the error, and an example the checker cannot compile says why with @example-fragment <reason>."
+desc = "Every name the reference prints has a description and an @example, every example compiles as a call of its declaration (its arguments bound to the declared parameter types, the types it mentions imported), a fallible result has an @fails line naming the error, and an example the checker cannot compile says why with @example-fragment <reason> -- and that marker is tried, not trusted: every marked example is compiled too, so a fragment that compiles and an example that does not are both counted by class and named."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/stdlib-reference.mjs"
@@ -246,7 +252,26 @@ args = ["${case}", "--verify-docs", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["every declared name has a description and an @example"]
 normalizers = ["normalize_newlines"]
-timeout_ms = 120000
+timeout_ms = 180000
+verify_script = """
+({ input, assert }) => {
+const stdout = input.normalized.stdout
+const counted = /the examples: ([0-9]+) written in the modules, ([0-9]+) a program of their own, ([0-9]+) compile, ([0-9]+) do not/.exec(stdout)
+assert(counted !== null, 'the run did not say how many examples it compiled')
+const [written, programs, compiled, stopped] = counted.slice(1).map(Number)
+assert(compiled + stopped === programs,
+  `${programs} example(s) are a program of their own, and ${compiled} compile with ${stopped} that do not`)
+assert(written >= programs, `${written} example(s) written, ${programs} of them a program of their own`)
+// The claims the script makes about the list are printed as numbers; a class the script does not
+// record, or a count that moved, fails the run itself and this test with it.
+assert(/the example counts are the ones the script records/.test(stdout),
+  'the run did not say that its counts are the ones the script records')
+if (stopped > 0) {
+  const classes = stdout.split('\n').filter((line) => /^    an? [a-z]+ error: [0-9]+$/.test(line))
+  assert(classes.length > 0, `${stopped} example(s) do not compile and no class is listed`)
+}
+}
+"""
 
 [[tests]]
 name = "registry.migrations_stay_migrated"
