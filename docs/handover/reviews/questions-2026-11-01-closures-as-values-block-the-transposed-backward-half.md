@@ -75,7 +75,19 @@ B **新增**一条表示，且与裁定正面冲突；C 让 `split` 多背一个
 - 调用者数：每个算子 **1 个注册点 + 1 个 kernel**（`split_operator.cpp:179/:186`、`jvp_operator.cpp:218/:225`、`transpose_operator.cpp:170/:177`），**外部 C++ 调用点 0**。
 - 判据：**能删 342 行**（`split_operator.cpp` 179、`jvp_operator.cpp:81-226` 146、`transforms.cml:54-62,66` 10、`vjp.cml:47-53` 7），
   **但要搬 1720 行**（`split.cpp` 694 + `jvp.cpp` 1026）进一个新 pass。**按“删不掉就是净负”，甲是净负。**
+<<<<<<< HEAD
   （复核 2026-11-01：上面的行数是当天的文件量，今天读作 `split_operator.cpp` **209**、`jvp_operator.cpp` **277**、`transforms.cml` **116**、`vjp.cml` **104**，`split.cpp` **1470**、`jvp.cpp` **1376** —— 三个 `transforms/*.cpp` 随 `lane-gs6`、`lane-reinterp2` 两笔合并长出来，之后 `split.cpp` 又随 `914e09263`、`e0c206239`（残差元组自成一个类型）多了 96 行、随 `fdb60ba49`（选臂成为残差）多了 437 行，`jvp.cpp` 随 `728b9f27c`、`4fbdc4e3a` 与 `ba0a37be9`、`c98dd492f` 多了 37 行，`split_operator.cpp` 又随 `67509bd1a`（kernel 不再自己定类型）少了 2 行，`jvp_operator.cpp` 与 `jvp.cpp` 又随 `c8bc3d87f`（`jvp(f)` 在调用方的图建起来时实例化）多了 5 行与 32 行，`jvp.cpp` 再随 `lane-remat` 的核声明表多了 19 行（1315→1334），`split_operator.cpp` 再随本车道让切口在构建期回答（`printSplitCallReading` 一条读数）多了 8 行（196→204）、`jvp.cpp` 同时多 6 行（1366→1372，构建期的 `liftedFrom=` 读作 `unassigned`，那里没有运行期的图 id）；此后 `lane-remat` 又把 `jvp.cpp` 的核声明表删掉、改成调用节点上的 `tangentArgs`（1372→1376），`split.cpp` 拷贝调用时把那个计数一起带过去（1466→1470）；`vjp.cml` 随 `07451069e`（拉回一律返回元组、一元写成 `(float,)`）多了 10 行，此前随 `lane-m4-assembly` 的泛型化变短。命令：`node test/tools/check-doc-readings.mjs`。）
+||||||| merged common ancestors
+<<<<<<<<< Temporary merge branch 1
+  （复核 2026-11-01：上面的行数是当天的文件量，今天读作 `split_operator.cpp` **197**、`jvp_operator.cpp` **277**、`transforms.cml` **116**、`vjp.cml` **104**，`split.cpp` **1466**、`jvp.cpp` **1366** —— 三个 `transforms/*.cpp` 随 `lane-gs6`、`lane-reinterp2` 两笔合并长出来，之后 `split.cpp` 又随 `914e09263`、`e0c206239`（残差元组自成一个类型）多了 96 行、随 `fdb60ba49`（选臂成为残差）多了 437 行，`jvp.cpp` 随 `728b9f27c`、`4fbdc4e3a` 与 `ba0a37be9`、`c98dd492f` 多了 37 行，`split_operator.cpp` 又随 `67509bd1a`（kernel 不再自己定类型）少了 2 行、又随本页这条裁定（`split`、`jvp` 与 `transpose` 同一条实参检查）多了 1 行，`jvp_operator.cpp` 与 `jvp.cpp` 又随 `c8bc3d87f`（`jvp(f)` 在调用方的图建起来时实例化）多了 5 行与 32 行，`jvp_operator.cpp` 又随本页这条裁定（变换的实参必须是编译期已知的函数）多了 9 行，`jvp.cpp` 再随 `lane-remat` 的核声明表多了 19 行（1315→1334）；`vjp.cml` 随 `07451069e`（拉回一律返回元组、一元写成 `(float,)`）多了 10 行，此前随 `lane-m4-assembly` 的泛型化变短。命令：`node test/tools/check-doc-readings.mjs`。）
+||||||||| 57aa78289
+  （复核 2026-11-01：上面的行数是当天的文件量，今天读作 `split_operator.cpp` **196**、`jvp_operator.cpp` **268**、`transforms.cml` **116**、`vjp.cml` **104**，`split.cpp` **1466**、`jvp.cpp` **1366** —— 三个 `transforms/*.cpp` 随 `lane-gs6`、`lane-reinterp2` 两笔合并长出来，之后 `split.cpp` 又随 `914e09263`、`e0c206239`（残差元组自成一个类型）多了 96 行、随 `fdb60ba49`（选臂成为残差）多了 437 行，`jvp.cpp` 随 `728b9f27c`、`4fbdc4e3a` 与 `ba0a37be9`、`c98dd492f` 多了 37 行，`split_operator.cpp` 又随 `67509bd1a`（kernel 不再自己定类型）少了 2 行，`jvp_operator.cpp` 与 `jvp.cpp` 又随 `c8bc3d87f`（`jvp(f)` 在调用方的图建起来时实例化）多了 5 行与 32 行，`jvp.cpp` 再随 `lane-remat` 的核声明表多了 19 行（1315→1334）；`vjp.cml` 随 `07451069e`（拉回一律返回元组、一元写成 `(float,)`）多了 10 行，此前随 `lane-m4-assembly` 的泛型化变短。命令：`node test/tools/check-doc-readings.mjs`。）
+=========
+  （复核 2026-11-01：上面的行数是当天的文件量，今天读作 `split_operator.cpp` **204**、`jvp_operator.cpp` **268**、`transforms.cml` **116**、`vjp.cml` **104**，`split.cpp` **1466**、`jvp.cpp` **1372** —— 三个 `transforms/*.cpp` 随 `lane-gs6`、`lane-reinterp2` 两笔合并长出来，之后 `split.cpp` 又随 `914e09263`、`e0c206239`（残差元组自成一个类型）多了 96 行、随 `fdb60ba49`（选臂成为残差）多了 437 行，`jvp.cpp` 随 `728b9f27c`、`4fbdc4e3a` 与 `ba0a37be9`、`c98dd492f` 多了 37 行，`split_operator.cpp` 又随 `67509bd1a`（kernel 不再自己定类型）少了 2 行，`jvp_operator.cpp` 与 `jvp.cpp` 又随 `c8bc3d87f`（`jvp(f)` 在调用方的图建起来时实例化）多了 5 行与 32 行，`jvp.cpp` 再随 `lane-remat` 的核声明表多了 19 行（1315→1334），`split_operator.cpp` 再随本车道让切口在构建期回答（`printSplitCallReading` 一条读数）多了 8 行（196→204）、`jvp.cpp` 同时多 6 行（1366→1372，构建期的 `liftedFrom=` 读作 `unassigned`，那里没有运行期的图 id）；`vjp.cml` 随 `07451069e`（拉回一律返回元组、一元写成 `(float,)`）多了 10 行，此前随 `lane-m4-assembly` 的泛型化变短。命令：`node test/tools/check-doc-readings.mjs`。）
+>>>>>>>>> Temporary merge branch 2
+=======
+  （复核 2026-11-01：上面的行数是当天的文件量，今天读作 `split_operator.cpp` **209**、`jvp_operator.cpp` **277**、`transforms.cml` **116**、`vjp.cml` **104**，`split.cpp` **1466**、`jvp.cpp` **1372** —— 三个 `transforms/*.cpp` 随 `lane-gs6`、`lane-reinterp2` 两笔合并长出来，之后 `split.cpp` 又随 `914e09263`、`e0c206239`（残差元组自成一个类型）多了 96 行、随 `fdb60ba49`（选臂成为残差）多了 437 行，`jvp.cpp` 随 `728b9f27c`、`4fbdc4e3a` 与 `ba0a37be9`、`c98dd492f` 多了 37 行，`split_operator.cpp` 又随 `67509bd1a`（kernel 不再自己定类型）少了 2 行、又随本页这条裁定（`split`、`jvp` 与 `transpose` 同一条实参检查）多了 4 行，`jvp_operator.cpp` 与 `jvp.cpp` 又随 `c8bc3d87f`（`jvp(f)` 在调用方的图建起来时实例化）多了 5 行与 32 行，`jvp_operator.cpp` 又随本页这条裁定（变换的实参必须是编译期已知的函数）多了 9 行，`jvp.cpp` 再随 `lane-remat` 的核声明表多了 19 行（1315→1334）、又随 `c6b7104ae`（`split(jvp(f))` 在调用方建图时切开）与它带来的 `aa90827ba` 多了 6 行，`split_operator.cpp` 同随 `c6b7104ae` 多了 8 行；`vjp.cml` 随 `07451069e`（拉回一律返回元组、一元写成 `(float,)`）多了 10 行，此前随 `lane-m4-assembly` 的泛型化变短。命令：`node test/tools/check-doc-readings.mjs`。）
+>>>>>>> lane-gs6
 
 **乙 —— 每次实例化新铸一个刚性类型，并在原则 5.10 上开一条例外**
 - 一个 `TypeCode` 落地要动 **7 点**：枚举（`type/base.h:56` + `TypeFlag` `:39`）、`typeCodeToString`（`base.cpp:65`，35 分支且 `:111` 有 `default:` **漏了不报错**）、
@@ -117,3 +129,75 @@ B **新增**一条表示，且与裁定正面冲突；C 让 `split` 多背一个
 
 顺带一条同源的事实：转置后的调用必须把被调值放回原来的位置——原调用把被调方当 `with` 输入传，转置后的调用就得传一个**转置图的静态函数值**
 （空闭包）；放错位置得到的是"CALL node 3 without callee input"。
+<<<<<<< HEAD
+||||||| merged common ancestors
+
+**终点改了（作者 2026-11-01 15:30，`25852ba4b`）**：这一类**不是**"以后支持捕获"，而是**在调用处报编译错误**——"被调者是参数或捕获"
+那一类，按 09:35 的语言规则，变换的实参必须是编译期已知的函数，在调用处拒绝。所以本页上面那句"被转置的被调方得把捕获值收成自己的参数"
+**不再是路线**，它是这一类的旧样子；现在的样子是编译器在 `transpose(h)` 那一行就说不行：
+
+    error[SemanticDiag::TransformArgumentIsNotAKnownFunction]: 'transpose' is applied to a closure that
+    captures a value, and a transform's argument has to be a function this program knows before it runs.
+       --> .../transpose_arg_not_a_static_function.cml:52:26
+
+判据落在 `CallSpec::staticFunctionArgument` 上（操作符自己的事实，编译器不认识名字，设计原则 6.6），诊断由
+`diagnostics/registry.tsv` 声明、生成器编号（`0x000209`，`0x03000209`）。量出来的影响面：
+- **闭包实参**（`transpose(h)`，`h` 含捕获）：今天以前是**先编译通过、运行期**才打印 `TRANSPOSE function=__g_51__ skip=residual
+  uri=:op/mul_d operand=1`；现在编译期一行错误、指回实参那一行。A/B 关掉那两行 `declareCallSpec`，`skip=residual` 原样回来（`44/45`）。
+- **参数实参**（`transpose(f)`，`f` 是参数）：**没开**。编译器按调用点实例化，`by_param(double)` 处实参就是 `double`，纸面 2.0 照答；
+  它只在参数"留成参数"时才是问题，而**标准库自己**就是那个形状——`stdlib/vjp.cml:56` 的 `vjp(f: F)` 把参数交给 `jvp`。打开参数那半边
+  会拒掉 `vjp` 自己的库体和八个 `vjp_api` 用例（实测 `35/45`）。所以参数半边的开关是 `CallSpec::staticFunctionArgRefusesParameters`，
+  默认关，等 `vjp` 不再是那个形状。
+- **体里调用闭包**（`transpose(g2)`，`g2` 自己体内 `h(2.0)`）：实参是**名字**，这里什么都不拒，运行期仍是 `skip=call … reason=function-closure`；
+  15:30 给这一类的终点是"按被调图递归实例化"，不是这条错误。
+=======
+
+**终点改了（作者 2026-11-01 15:30，`25852ba4b`）**：这一类**不是**"以后支持捕获"，而是**在调用处报编译错误**——"被调者是参数或捕获"
+那一类，按 09:35 的语言规则，变换的实参必须是编译期已知的函数，在调用处拒绝。所以本页上面那句"被转置的被调方得把捕获值收成自己的参数"
+**不再是路线**，它是这一类的旧样子；现在的样子是编译器在 `transpose(h)` 那一行就说不行：
+
+    error[SemanticDiag::TransformArgumentIsNotAKnownFunction]: 'transpose' is applied to a closure that
+    captures a value, and a transform's argument has to be a function this program knows before it runs.
+       --> .../transpose_arg_not_a_static_function.cml:52:26
+
+判据落在 `CallSpec::staticFunctionArgument` 上（操作符自己的事实，编译器不认识名字，设计原则 6.6），诊断由
+`diagnostics/registry.tsv` 声明、生成器编号（`0x000209`，`0x03000209`）。量出来的影响面：
+- **闭包实参**（`transpose(h)`，`h` 含捕获）：今天以前是**先编译通过、运行期**才打印 `TRANSPOSE function=__g_51__ skip=residual
+  uri=:op/mul_d operand=1`；现在编译期一行错误、指回实参那一行。A/B 关掉那两行 `declareCallSpec`，`skip=residual` 原样回来（`44/45`）。
+- **参数实参**（`transpose(f)`，`f` 是参数）：**没开**。编译器按调用点实例化，`by_param(double)` 处实参就是 `double`，纸面 2.0 照答；
+  它只在参数"留成参数"时才是问题，而**标准库自己**就是那个形状——`stdlib/vjp.cml:56` 的 `vjp(f: F)` 把参数交给 `jvp`。打开参数那半边
+  会拒掉 `vjp` 自己的库体和八个 `vjp_api` 用例（实测 `35/45`）。所以参数半边的开关是 `CallSpec::staticFunctionArgRefusesParameters`，
+  默认关，等 `vjp` 不再是那个形状。
+- **体里调用闭包**（`transpose(g2)`，`g2` 自己体内 `h(2.0)`）：实参是**名字**，这里什么都不拒，运行期仍是 `skip=call … reason=function-closure`；
+  15:30 给这一类的终点是"按被调图递归实例化"，不是这条错误。
+
+**三个变换一条规则（2026-11-02）**：同一条 `CallSpec::staticFunctionArg` 声明在 `transforms:transpose`、`transforms:jvp`、`transforms:split` 上，
+三条用例各钉一次（`transpose_arg_not_a_static_function.cml` 52:26、`jvp_arg_not_a_static_function.cml` 20:23、
+`split_arg_not_a_static_function.cml` 19:22），诊断名、编号 `0x03000209`、行、列都由 `verify_script` 断言，并禁止 `skip=`。
+A/B 把三处的 `staticFunctionArg` 置为 `-1`：`transpose` 回到 `TRANSPOSE function=__g_51__ skip=residual uri=:op/mul_d operand=1`、
+`jvp` 回到 `REINTERP jvp function=__g_56__ skip=body`、而 `split` **不回退成读数**——它把编译器打断在
+`builder_operators.cpp(3831) visitLinkNode: "Target node of LINK must be a function or operator node"`。三个里它对这条检查最依赖。
+
+**参数那半边要开，先要三条前提**（今天一条都不在，归 `lit2` 那条车道——作者 15:30 说的"变换在编译期实例化"）：
+1. 变换在**调用点按实例化的 F 求值**：`vjp::<T>(f: T)` 在调用点 F 已具体，`jvp(f)` 那里看到的是已知函数——这要编译期实例化那一刀，不是今天运行期 operator 的形状。
+2. **库体自身不再把形参交给变换**：`stdlib/vjp.cml#vjp` 现在是 `split(jvp(f))`，只要它还这么写，参数就会被拒。
+3. **8 个 `vjp_api` 用例的形状随之改变**：今天它们靠运行期那一半活着（实测打开参数半边 → `35/45`），得先有编译期路径再改用例。
+
+这三条不是"以后再说"，是"谁来做"：前两条是 `lit2` 的编译期实例化，第三条随它一起改。
+
+**入口一共九个，其中两个今天静默算错数（2026-11-02 实测，探针用完即删）**：检查 `test/tools/check-transform-entry-points.mjs` 从源码里读
+`readsGraphs = true` 的 `transforms`/`autodiff` 算子，得到九个入口；名单在 `modules/transforms/entry-points.tsv`，
+每一行要么 `declared`（并由脚本核对源码里真有 `staticFunctionArg`），要么 `undeclared` 且写明今天的行为。结论没有写成"全都合规"，
+写成"每个入口都有交代"。两个漏声明的入口拿捕获闭包时会**给出错数且毫无提示**（无诊断、无 `skip=`）：
+- `transforms:vmap`：`let h = (y: float) => y * x`，`x = 3.0`，`vmap(h)([2.0, 4.0])` 应为 `6.0 + 12.0 = 18.0`，实测 **`20.0`**；
+  把捕获值换成 `x = 5.0` 仍是 **`20.0`**（即 `2*2 + 4*4`）——元素落进了闭包的 `with` 位、捕获值被丢掉，不是巧合。
+- `transforms:remat`：同一个 `h`，`remat(h)(2.0)` 应为 `6.0`，实测 **`0.0`**，行是
+  `REINTERP remat function=__g_49__ in_recompute=0 out_recompute=1 graph=50`。
+复现（各把这个形状存成 `.cml`）：`camel vmap_probe.cml std::nvm` → `20.0`；`camel remat_probe.cml std::nvm` → `0.0`。
+**归因**：`vmap` 的错在"元素顶替了闭包的 `with` 位"，所以补 `staticFunctionArg` 是对症；`remat` 的 `0.0` **未归因**——
+它要么本该支持捕获闭包（kernel 丢了捕获），要么本该拒绝（沉默就是缺陷），两边都轮不到 `0.0`，但**哪一边是后面单独一轮的事**，
+这一轮只补"拒绝"这个安全的一侧。两个错数只记在 `entry-points.tsv` 的 `Measured` 里，**没有**写成任何用例的期望——
+把 `20.0` 钉进断言等于把缺陷变成规格；用例断的是补上之后的拒绝原文。`autodiff:grad` 一族则登记为"今天无事可做"：
+它先被 `NotDifferentiable`（`it has no 'with' parameter`）挡掉，参数那条规则轮不到说话。
+
+>>>>>>> lane-gs6
