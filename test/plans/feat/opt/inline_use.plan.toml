@@ -14,10 +14,18 @@ desc = "Inlining a function that writes `stdout` keeps the write: the use is cou
 #                                and the program prints what it printed
 #   inline_keeps_stdout.drop     `test::inline_use_drop` erases both prints after the inline: the
 #                                boundary refuses the pass (`before stdout (write), after nothing`)
+#   ....twice_write / .twice_inline
+#                                the same function called twice: the copies replace the nodes they
+#                                came from (`48:0`, `48:3` -> `48:11`, `48:15`) and the count stays
+#                                six. A copy that names the same resource the same way is not a
+#                                change: `ambientUsesOf` compares the set, and design principles'
+#                                own note says so ("the count of effects is not the invariant
+#                                (inlining copies a body and the copies are not all run)").
 #
-# The count is the reading `test::inline_use` prints, taken over every graph of the program: a use
-# that merely changed graph is still one use, which is the point of comparing the program and not
-# one graph at a time.
+# The count is the reading `test::inline_use` prints, taken over every graph of the program, with a
+# line per node so a copy is visible as a node rather than folded into a total: a use that merely
+# changed graph is still one use, which is the point of comparing the program and not one graph at
+# a time.
 
 [defaults]
 kind = "behavior"
@@ -53,3 +61,21 @@ expect_exit = 1
 expect_stdout_contains = ["INLINE_USE_DROP erased=3"]
 expect_stderr_contains = ["PassBoundaryResources", "before stdout (write), after nothing"]
 expect_output_not_contains = ["PassBoundaryNodes", "PassBoundaryPorts"]
+
+[[tests]]
+name = "inline_keeps_stdout.twice_write"
+desc = "Two call sites of the same print: six nodes name `stdout`, one per print the source wrote plus the ones the calls bring."
+case = "../../../cases/opt/effects/inline_keeps_stdout_twice.cml"
+args = ["${case}", "test::inline_use", "${backend}"]
+expect_exit = 0
+expect_stdout_contains = ["INLINE_USE kinds=1 stdout (write)=6"]
+expect_output_not_contains = ["PassBoundaryResources"]
+
+[[tests]]
+name = "inline_keeps_stdout.twice_inline"
+desc = "Both calls inlined: the count stays six and so does the output, and the per-node lines show the copies replacing the nodes they came from (48:11, 48:15 for 48:0, 48:3) -- a copy is not a new resource, and it is not a new use either when the node it copies is gone."
+case = "../../../cases/opt/effects/inline_keeps_stdout_twice.cml"
+args = ["${case}", "std::opt::inline", "test::inline_use", "${backend}"]
+expect_exit = 0
+expect_stdout_contains = ["INLINE_USE kinds=1 stdout (write)=6", "noisy", "3"]
+expect_output_not_contains = ["PassBoundaryResources", "changed the ambient resources"]

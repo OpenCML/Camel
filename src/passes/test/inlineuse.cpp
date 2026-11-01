@@ -64,6 +64,33 @@ InlineUseTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         os << " " << use << "=" << count;
     }
     os << "\n";
+    // One line per print node, so a copy inlining made is visible as a node of its own rather than
+    // folded into a total: the total alone cannot say whether a print moved house or was doubled.
+    for (GCGraph *graph : program->graphs()) {
+        for (gc_node_ref_t id = 0; id < graph->nodeCount(); ++id) {
+            if (graph->node(id) == nullptr) {
+                continue;
+            }
+            const NodeResources resources = resourcesOf(*program, *graph, id);
+            std::string uses;
+            for (const NodeAccess &access : resources.accesses) {
+                if (access.resource.cls != camel::core::sem::ResourceClass::Ambient ||
+                    !camel::core::sem::isStandardResource(access.resource.name)) {
+                    continue;
+                }
+                if (!uses.empty()) {
+                    uses += ",";
+                }
+                uses += access.resource.name;
+                uses += "/";
+                uses.append(camel::core::sem::accessModeName(access.mode));
+            }
+            if (uses.empty()) {
+                continue;
+            }
+            os << "INLINE_USE node=" << camel::runtime::toValue(graph->id()) << ":" << id << " uses=[" << uses << "]\n";
+        }
+    }
     return program;
 }
 
