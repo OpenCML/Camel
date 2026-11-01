@@ -473,3 +473,49 @@ error[SemanticDiag::ArgumentsRejected]: Invalid call to 'split' with argument ty
 
 **`tangentSpaceOf` 表见 §12**；补一句：**`int` 的答案是"没有切空间"（`tangent_space.cpp:107-111`），与 18:50 的裁定一致；
 错在 `split` 要求每个形参都升起。**
+
+## 14. A2：`p.1` 作用在结构体上，段错误 → 诊断
+
+**复现（三次，逐次都是 139）**：`camel recompile_segv.cml "std::jgir canonical=true"` → `rc=139 SIGNAL 11` ×3。
+
+**栈（前 6 帧）**：
+
+```
+#0 camel::compile::gir::Builder::visitAccsNode(camel::compile::gct::Node* const&)   ← SIGSEGV
+#1 Builder::dispatch / #2 Builder::visit
+#3 Builder::visitCastNode
+#5 Builder::visit → #6 Builder::visitNRefNode
+#9 Builder::visitInPosition → #10 Builder::visitExecNode → #11 Builder::visitBodyNode
+```
+
+**根因（就是你要的那一条：位次与字段共用一条路径）**：`src/compile/gir/builder_expr.cpp` 的 `visitAccsNode` 里，
+`TypeCode::Struct` 这一支**无条件**读 `gct->accessKey()`；而 `accessKey()`（`include/camel/compile/gct/node.h:269-272`）是
+
+```cpp
+const std::string &accessKey() const { ASSERT(!accessByIndex(), "The access is by position"); return *payload_.name; }
+```
+
+**位次访问的 `payload_.name` 是空指针**——`ASSERT` 在 release 里被编掉，于是解引用空指针。
+**`p.1`（位次）与 `s.x`（字段名）走的是同一个 ACCS 节点、同一条下降路径，差别只在 `flags_` 的那一位**。
+
+**修法（不是"删掉那段代码让它不崩"，是给拒绝）**：在 `Struct` 这一支先判 `accessByIndex()`，命中就报
+`SemanticDiag::InvalidAccessIndex` 并 `throw BuildAbortException()`。
+
+**读数（崩 → 诊断）**：改后三次都是 `rc=1`：
+
+```
+error[SemanticDiag::InvalidAccessIndex]: Invalid access index: '1'.
+  --> recompile_segv.cml:3:18
+ 3 |     let v: int = p.1
+   |                  ^^^
+help: Ensure the index is within bounds for arrays or refers to a valid field in structs.
+```
+
+**第二个诊断（`nested` 没有返回值）这次没有印出来**：编译在类型错误处停下，`grep -c '^error'` = **1**。
+**是"未给"，不是"给了又吞掉"。**
+
+**一处没做到的**：本想给一条专门的 `StructMemberByIndex`（文案"结构体的成员按名字取，位次只给元组"）。
+往 `diagnostics/registry.tsv` 插了行（`0x000209`），但 `node scripts/diagnostics-catalog.mjs --write` 报告
+`wrote diagnostics/registry.tsv (unchanged) … 305 codes`，**那一行没有被接受**（文件被还原成 305 条）。
+所以今天用的是现成的 `InvalidAccessIndex`（help 里已有 "or refers to a valid field in structs"）。
+**专门的码留给下一次**，本条不回退。**`--check` 仍是 305。**

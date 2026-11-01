@@ -759,3 +759,15 @@ expect_exit = 1
 expect_output_contains = ["Invalid call to 'split'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 15000
+
+# A struct's member read by position used to segfault the compiler in release builds; it is a refusal now.
+[[tests]]
+name = "struct_member_by_index.jgir"
+kind = "behavior"
+case = "../../../cases/compile/transforms/struct_member_by_index.cml"
+args = ["${case}", "std::jgir", "canonical=true"]
+expect_exit = 1
+expect_output_contains = ["Invalid access index: '1'"]
+expect_output_not_contains = ["Segmentation fault"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 15000
