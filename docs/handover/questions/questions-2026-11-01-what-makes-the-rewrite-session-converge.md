@@ -89,25 +89,52 @@ Inline probe 'model' -> 'iterate$spec221': ...
 （`kTypeSpecializationFixedPointGuard`，`:1120`-`:1131` 的报错）只对**类型**特化生效，`"spec"` 这一路不在其中。
 **这才是"每一轮算不算有变化"里的那个'变化'。**
 
+## 一之三补：去重**已经在了**，但键里有一样每轮都变的东西
+
+`specializeGraphWithBindings` 开头就是按绑定组合查表（`src/runtime/draft_inline.cpp:824`-`:827`）：
+
+```cpp
+RuntimeSpecializationKey cacheKey = makeRuntimeSpecializationKey(baseGraph, bindings);
+if (GCGraph *cached = session.findSpecialization(cacheKey)) { return cached; }
+```
+
+它是**真在跑**的，只是**从来没有命中**。把每次未命中的键打出来（删边的树，`export_loop.cml std::macro`，
+20 秒，121 次未命中，`-vv` 里 113 个 `iterate$specN`）：
+
+```
+SPECKEY base=iterate tag=spec nonce=0 n=1 [k0 i0 c4 v0 f2]
+SPECKEY base=iterate tag=spec nonce=1 n=1 [k0 i0 c4 v1 f2]
+SPECKEY base=iterate tag=spec nonce=3 n=1 [k0 i0 c4 v2 f2]
+SPECKEY base=iterate tag=spec nonce=5 n=1 [k0 i0 c4 v3 f2]
+```
+
+`k`（绑定种类）、`i`（形式参数序号）、`c`（类型 canonical id）、`f`（flag）**四轮完全一样**，只有 `v`
+一路 `0,1,2,3` 往上走。`v` 是 `binding.staticValue.value`——**一个 slot 号**，即"这个静态值在哪一格"，
+不是它是什么值。所以：**同一个绑定、同一个常量、同一个类型，只要这一轮把它放进了新的一格，键就不同，
+副本就再造一张**。这不是"每轮多绑一层递归"（`bindings` 大小一直是 1），而是**键里记了一格会变的格子号**。
+
 ## 二、两条路的代价
 
-- **甲：让会话真的收敛。** 现在范围已经收窄到一处：**每轮新造一个 `iterate$specN` 特化副本**。要让会话
-  收敛，就得让"同一个绑定组合"认得出自己已经做过一次（nonce 换成按绑定组合去重），或者让
-  `kTypeSpecializationFixedPointGuard` 那条定点守卫把 `"spec"` 这一路也算进去。代价：一笔动的是特化的
-  身份判断，会牵动所有特化过的调用点，判据是"`export_loop.cml std::macro` 打出 `exported`、轮数 ≤ 5、
-  `iterate$specN` 的数量不再增长"。
-- **乙：接受这张图每轮长一个节点，把超时变成一句诊断。** 会话撞上 `kMaxSessions` 时给出明确的
-  "这个程序的重写不收敛"而不是挂死。代价：那条边仍然删不掉（`Loop` 还是变 `If`），只是不再挂死。
+- **甲：让键里那一格变成"它是什么值"，而不是"它在哪一格"。** 具体是把
+  `RuntimeSpecializationBindingKey::value` 从 slot 换成值本身（内容寻址：类型 + 那几个字节），于是第二轮
+  查表就命中、副本复用，会话收敛。代价：`specializations.h` 的键与比较要改，`value` 还兼作
+  `NullSlot` 的"这一项不是值绑定"标记，要分开；判据是"`exported`、轮数 ≤ 5、`iterate$specN` 停在个位数"。
+  **顺带要答**：复用同一张副本会不会让两处不同位置的调用共享一张图——同一组绑定（种类、序号、类型、值）
+  的副本按定义应当逐字节相同，所以复用安全；若这点不成立，就把去重范围收窄到同一个 `baseGraph` 之内
+  （今天的键已经带 `baseGraph`，即已收窄）。
+- **乙：把 `"spec"` 这一路也纳入 `kTypeSpecializationFixedPointGuard`**，让它撞上限制时给出编译错误而不是
+  挂死。代价：`export_loop.cml std::macro` 会从 124 变成一条明确的"特化没到定点"报错，**仍然不是
+  `exported`**，所以它不能替甲，只能当甲的护栏。
 
 ## 三、我方默认建议
 
-**甲**，下一刀：**在 `specializeGraphWithBindings` 之前把这次特化的"键"打出来**（`calleeGraph->name()` +
-每个绑定的 `kind/index/静态值`），看两轮之间的键到底哪里不同——今天只知道名字不同（`$spec217` →
-`$spec219`），不知道**内容**是否相同。键相同就说明缺的是"这个组合我做过"，键不同则要再问一句
-"为什么这个绑定组合每轮都会变出一个新的"。
+**甲**，而且这一刀已经小到一行：**把键里的 `value` 从"slot 号"换成"值本身"**。理由就是上面四行读数——
+同一个绑定、同一个类型、同一个常量，只有格子号在变；键比的是格子号，所以永远不命中。
+判据：`exported`、轮数 ≤ 5、`iterate$specN` 停在个位数、边留着时与今天逐字节相同。
 
 ## 请作者答一句
 
-**甲（把特化的键打出来，让它认得出自己做过一次）还是乙（把它变成诊断、先不删边）？**
-若选甲，请确认判据是"`export_loop.cml std::macro` 打出 `exported`、会话数 ≤ 1、`ort_loop_loaded_weights`
-仍打出 `Loop`"。
+**甲（键按内容寻址，slot 只作取值的入口）还是乙（同时给 `"spec"` 加一道定点护栏）？**
+若选甲，请确认判据是"`export_loop.cml std::macro` 打出 `exported`、轮数 ≤ 5、
+`ort_loop_loaded_weights` 仍打出 `Loop`"，以及**"复用同一组绑定的副本"是被允许的**（同一组绑定的图逐字节
+相同，两处调用共享它没有可观察差别）。
