@@ -24,15 +24,17 @@ remembered.
 
 The third family is `rulesets.vmap`, and the program imports it for one reason: the batching table
 (`bindVmapRule`) names it as the family of the array and tensor primitives' batching rules
-(`tensor:multiply`, `:op/idx_arr`, `matmul`, the four reductions along an axis). Each table is read as
-a whole, so a binding whose family is not in the program prints `-> no rule`, and that line is the
-thing a table must never show for a binding that has a rule. The family is therefore part of the
-fixture, and the counts below are what it adds: twelve rules (the five elementwise keys, `mul_tensor`,
-`index_into`, `matmul` and the four axis reductions) and twelve entries in the batching table -- the
-ten scalar operators plus the two array ones -- which is why that table is printed as a listing of its
-own (`VMAP`) instead of being folded into the forward one. The forward table is the ten scalar
-operators: a batching rule in the forward table would be a rule a differentiating transform reads as
-if it were a tangent rule, and the five of them are filed in their own family.
+(`tensor:multiply`, `:op/idx_arr`, `matmul`, the reductions). Each table is read as a whole, so a
+binding whose family is not in the program prints `-> no rule`, and that line is the thing a table
+must never show for a binding that has a rule. The family is therefore part of the fixture, and the
+three tables are printed apart (`FORWARD`, `TRANSPOSE`, `VMAP`) because they are asked apart: a
+differentiating transform reads the first, a pullback the second, `reinterp<vmap>` the third.
+
+Nothing in this file counts rules. The two halves of the same fact -- the index a module builds and
+the tables the operators bind into it -- are checked against each other: every binding resolves to a
+rule, asking the index for that key answers the same rule the binding printed, and each family holds
+exactly the keys its table binds. A rule added to a family, or an operator bound to a new key, moves
+both halves, so this test grows with them instead of going red at the next addition.
 
 Query the array primitives' keys like any other: `rulesets.vmap` at `mul_tensor` with two operands is
 `vmap_rule_mul_tensor`, and at `index_into` with two is `vmap_rule_idx`. A call is a key (`f(a, b)` is
@@ -116,30 +118,13 @@ expected = [want for _, want in QUERIES]
 check(lines == expected, f"the answers are {expected}, got {lines}")
 
 # The index itself is listed by the same pass, one line per rule, and the program still runs. Three
-# families are in the program: the two scalar ones (five keys each) and the batching family, which now
-# holds the most of the three -- five elementwise keys, `mul_tensor`, `index_into`, `matmul` and the
-# four reductions along an axis. The count is the real one, and every rule of the batching family is
-# also pinned by name, because a count says the index grew and a name says which rule grew it.
+# families are in the program: the two scalar ones and the batching family, which is now the largest
+# of the three. What the listing is checked against is the *other* half of the same fact -- the three
+# binding tables -- and not a number written here: a rule added to a family, or an operator bound to a
+# new key, changes both halves, and a count in this file would go red for the one thing that cannot be
+# wrong. So every count below is computed from the tables, and every binding is looked up by name.
 listed = [line for line in asked.splitlines() if line.startswith("RULESET ")]
-check(len(listed) == 22, f"the index lists twenty-two rules, got {len(listed)}: {listed}")
-check(
-    [line for line in listed if line.startswith("RULESET rulesets.vmap ")]
-    == [
-        "RULESET rulesets.vmap */2 -> vmap_rule_mul (rhs vmap_mul)",
-        "RULESET rulesets.vmap +/2 -> vmap_rule_add (rhs vmap_add)",
-        "RULESET rulesets.vmap -/1 -> vmap_rule_neg (rhs vmap_neg)",
-        "RULESET rulesets.vmap -/2 -> vmap_rule_sub (rhs vmap_sub)",
-        "RULESET rulesets.vmap //2 -> vmap_rule_div (rhs vmap_div)",
-        "RULESET rulesets.vmap index_into/2 -> vmap_rule_idx (rhs idx_batch)",
-        "RULESET rulesets.vmap matmul/2 -> vmap_rule_matmul (rhs vmap_matmul)",
-        "RULESET rulesets.vmap max_axis/3 -> vmap_rule_max_axis (rhs vmap_max_axis)",
-        "RULESET rulesets.vmap mean_axis/3 -> vmap_rule_mean_axis (rhs vmap_mean_axis)",
-        "RULESET rulesets.vmap min_axis/3 -> vmap_rule_min_axis (rhs vmap_min_axis)",
-        "RULESET rulesets.vmap mul_tensor/2 -> vmap_rule_mul_tensor (rhs vmap_mul_tensor)",
-        "RULESET rulesets.vmap sum_axis/3 -> vmap_rule_sum_axis (rhs vmap_sum_axis)",
-    ],
-    f"the batching family files these twelve rules: {listed}",
-)
+check(listed, f"the pass lists the index it built: {asked}")
 check(
     "RULESET rulesets.jvp -/1 -> jvp_neg (rhs neg_tangent)" in listed
     and "RULESET rulesets.transpose -/2 -> sub_t (rhs sub_cotangent)" in listed,
@@ -162,59 +147,85 @@ check(
 )
 
 # The bindings are the other half: a rule in the index is used by a transform only when an operator
-# is bound to that family's key. There are three tables now, and they are printed apart because they
-# are asked apart: a differentiating transform reads the forward one, a pullback reads the transpose
-# one, and `reinterp<vmap>` reads the batching one. The forward table holds the ten scalar operators,
-# whose five keys its family holds; the array and tensor primitives are in the batching table, because
-# a batching rule is not a tangent rule and an operator may have one of each.
+# is bound to that family's key. There are three tables and they are printed apart because they are
+# asked apart: a differentiating transform reads the forward one, a pullback reads the transpose one,
+# and `reinterp<vmap>` reads the batching one. Each table is checked against the index the same way,
+# so nothing here names an operator or counts a rule: a table that grows is checked as it grows.
+#
+#   * every binding resolves (`-> <rule>`, never `-> no rule` / `-> no such family`);
+#   * asking the index for that key directly answers the same rule the binding printed;
+#   * the family holds exactly the keys the table binds -- one rule per key, none unreached.
 code, bound = run(["std::rulesets", "forward=true"])
 check(code == 0, f"the program exits 0 asking for the bindings (got {code}):\n{bound}")
-forwards = [line for line in bound.splitlines() if line.startswith("FORWARD ")]
-check(len(forwards) == 10, f"ten operators have a forward rule, got {len(forwards)}: {forwards}")
+
+
+def parseBinding(line: str) -> tuple[str, str, str, int, str]:
+    """`uri family head/arity -> rule`, the four parts this file reads."""
+    fields = line.split()
+    head, _, arity = fields[2].rpartition("/")
+    return fields[0], fields[1], head, int(arity), line.partition(" -> ")[2]
+
+
+tables: dict[str, list[tuple[str, str, str, int, str]]] = {}
+for entry in bound.splitlines():
+    prefix, _, rest = entry.partition(" ")
+    if prefix in ("FORWARD", "TRANSPOSE", "VMAP") and rest:
+        tables.setdefault(prefix, []).append(parseBinding(rest))
 check(
-    all(" rulesets.jvp " in line for line in forwards),
-    f"the ten scalar operators are bound to the forward family: {forwards}",
-)
-check(
-    not any(" rulesets.transpose " in line or " rulesets.vmap " in line for line in forwards),
-    f"the forward table names neither of the other two families: {forwards}",
+    sorted(tables) == ["FORWARD", "TRANSPOSE", "VMAP"],
+    f"the pass prints all three tables: {sorted(tables)}",
 )
 
-vmaps = [line for line in bound.splitlines() if line.startswith("VMAP ")]
-check(len(vmaps) == 17, f"seventeen operators have a batching rule, got {len(vmaps)}: {vmaps}")
-arrays = [line for line in vmaps if line.startswith("VMAP tensor:") or line.startswith("VMAP :op/idx")]
+familyOf = {"FORWARD": "rulesets.jvp", "TRANSPOSE": "rulesets.transpose", "VMAP": "rulesets.vmap"}
+listedKeys = {family: set() for family in familyOf.values()}
+for line in listed:
+    _, family, key, _ = line.split(maxsplit=3)
+    head, _, arity = key.rpartition("/")
+    listedKeys.setdefault(family, set()).add((head, int(arity)))
+
+for prefix, rows in tables.items():
+    check(rows, f"the {prefix} table is empty: {bound}")
+    unresolved = [row for row in rows if row[4].startswith("no ")]
+    check(not unresolved, f"every {prefix} binding answers with a rule the family holds: {unresolved}")
+    foreign = [row for row in rows if row[1] != familyOf[prefix]]
+    check(not foreign, f"every {prefix} binding names its own family: {foreign}")
+    keys = {(row[2], row[3]) for row in rows}
+    check(
+        keys == listedKeys[familyOf[prefix]],
+        f"the {familyOf[prefix]} index and the {prefix} table hold the same keys: "
+        f"{sorted(keys)} vs {sorted(listedKeys[familyOf[prefix]])}",
+    )
+
+# Every binding, asked for by name: the answer is the rule the table printed, which is the same fact
+# read twice. This is the check a written count cannot make -- it says the two halves agree about
+# *which* rule, key by key.
+questions = sorted({f"{row[1]}|{row[2]}|{row[3]}" for rows in tables.values() for row in rows})
+code, answered = run(["std::rulesets", f"query={';'.join(questions)}"])
+check(code == 0, f"the program exits 0 asking every binding (got {code}):\n{answered}")
+looked = {
+    line.split(" -> ")[0]: line.partition(" -> ")[2]
+    for line in answered.splitlines()
+    if line.startswith("LOOKUP ")
+}
+for rows in tables.values():
+    for uri, family, head, arity, rule in rows:
+        want = f"LOOKUP {family} {head}/{arity}"
+        check(
+            looked.get(want) == rule,
+            f"`{uri}` is bound to {family} {head}/{arity} -> {rule}, and the index answers {looked.get(want)!r}",
+        )
+
+# The two operators this fixture exists for are in the batching table, by name: the array product and
+# the element of a row are what showed that an operator without a token of its own needs a key, and
+# they are the two whose bindings moved tables once already.
+arrays = [line for line in bound.splitlines() if line.startswith("VMAP :op/idx") or line.startswith("VMAP tensor:multiply")]
 check(
-    arrays
+    [line.split(" -> ")[0] for line in arrays]
     == [
-        "VMAP :op/idx_arr rulesets.vmap index_into/2 -> vmap_rule_idx",
-        "VMAP tensor:matmul rulesets.vmap matmul/2 -> vmap_rule_matmul",
-        "VMAP tensor:max_axis rulesets.vmap max_axis/3 -> vmap_rule_max_axis",
-        "VMAP tensor:mean_axis rulesets.vmap mean_axis/3 -> vmap_rule_mean_axis",
-        "VMAP tensor:min_axis rulesets.vmap min_axis/3 -> vmap_rule_min_axis",
-        "VMAP tensor:multiply rulesets.vmap mul_tensor/2 -> vmap_rule_mul_tensor",
-        "VMAP tensor:sum_axis rulesets.vmap sum_axis/3 -> vmap_rule_sum_axis",
+        "VMAP :op/idx_arr rulesets.vmap index_into/2",
+        "VMAP tensor:multiply rulesets.vmap mul_tensor/2",
     ],
-    f"the array and tensor primitives are bound to the family that holds their batching rules: {vmaps}",
-)
-check(
-    all(" rulesets.vmap " in line and not line.endswith("-> no rule") for line in vmaps),
-    f"the index answers every batching binding with a rule the family holds: {vmaps}",
-)
-
-# The transpose table is the second slot: the same five keys, the family a linear function's
-# pullback is written in, and the rules the index already holds for all five.
-transposes = [line for line in bound.splitlines() if line.startswith("TRANSPOSE ")]
-check(
-    len(transposes) == 10,
-    f"ten operators have a transpose rule, got {len(transposes)}: {transposes}",
-)
-check(
-    all(" rulesets.transpose " in line for line in transposes),
-    f"every one of them is bound to the transpose family: {transposes}",
-)
-check(
-    all(not line.endswith("-> no rule") and not line.endswith("-> no such family") for line in transposes),
-    f"and the index answers every binding with a rule the family holds: {transposes}",
+    f"the array operators are batching rules, filed under the batching family: {arrays}",
 )
 
 if failures:
