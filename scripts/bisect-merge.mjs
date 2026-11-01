@@ -16,6 +16,13 @@
  *     says whether the red needs one lane or two (a tree that stays green until the last merge was
  *     red because of the pair, and this mode says so instead of blaming the last one).
  *
+ * The two directions do not always reach the same granularity. A merge inside a train can be
+ * reverted on its own but cannot be applied on its own when the commits that complete it landed
+ * after it: merging it into the green base lands on a tree that does not build, and the plan never
+ * runs there. The forward series then has to name that unit with `--group` (the merge plus the
+ * commits that complete it) or start from the train's tip, and the answer it gives is the unit it
+ * was given -- which is a fact about the history, not about the plan.
+ *
  * A reading only counts when it came from the tree the script thinks it measured. The wrapper
  * syncs the workstation tree to the host before it builds, so a stale host is repaired by the run
  * itself -- but the reading is checked afterwards: `git rev-parse HEAD` on the host must equal the
