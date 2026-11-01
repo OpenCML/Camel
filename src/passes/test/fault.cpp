@@ -109,8 +109,7 @@ OrderOnlyEffectTestPass::apply(const camel::runtime::Program *program, std::ostr
         auto &draft       = transaction.edit();
         for (camel::runtime::gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
             const auto *header = draft.header(id);
-            if (header == nullptr || header->kind != GCNodeKind::Oper ||
-                draft.orderInputsOf(id).empty()) {
+            if (header == nullptr || header->kind != GCNodeKind::Oper) {
                 continue;
             }
             const auto uri = camel::passes::generic::operUriOf(transaction, id);
@@ -119,8 +118,22 @@ OrderOnlyEffectTestPass::apply(const camel::runtime::Program *program, std::ostr
             if (!uri.starts_with(":io/")) {
                 continue;
             }
-            // Every edge but the order ones goes, both directions: what is left is an effect that
-            // an order edge names and that nothing reads, no chain holds, and no result returns.
+            // A node to hang the order edge on: the effect's own chain predecessor when it has one,
+            // its first value input otherwise. The edge is what keeps the effect in the graph (a
+            // node with no edge at all is not a graph).
+            camel::runtime::gc_node_ref_t anchor = camel::runtime::kInvalidNodeRef;
+            if (!draft.ctrlInputsOf(id).empty()) {
+                anchor = draft.ctrlInputsOf(id).front();
+            } else if (!draft.normInputsOf(id).empty()) {
+                anchor = draft.normInputsOf(id).front();
+            }
+            if (anchor == camel::runtime::kInvalidNodeRef) {
+                continue;
+            }
+            // Every edge the effect stands on goes, both directions; what is left is one order
+            // edge -- an edge that orders two nodes that both run and makes neither of them run
+            // (docs/design/effects/edges.cn.md 1.5). Nothing reads the effect, no chain holds it,
+            // no result returns it: the commit must refuse it.
             for (camel::runtime::gc_node_ref_t pred : draft.normInputsOf(id)) {
                 draft.unlinkInput(DraftEdgeKind::Data, id, pred);
             }
@@ -133,6 +146,8 @@ OrderOnlyEffectTestPass::apply(const camel::runtime::Program *program, std::ostr
             for (camel::runtime::gc_node_ref_t pred : draft.syncInputsOf(id)) {
                 draft.unlinkInput(DraftEdgeKind::Sync, id, pred);
             }
+            const camel::runtime::gc_node_ref_t orders[1] = {anchor};
+            draft.setOrderInputs(id, orders);
             return session.commit();
         }
     }
