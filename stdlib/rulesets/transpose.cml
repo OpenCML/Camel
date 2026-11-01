@@ -72,7 +72,7 @@ export rule neg_t::<T>(x: T) when is_float::<T>() {
 // keeps no public name for it, because the only caller is the rule and a public name would be one more
 // shape the registry has to hold in step for no other user.
 //
-// The operator takes three or four operands: `axis` is optional (`src/builtin/operators/derivative.cpp`, the arm that refuses a scatter with the wrong operand count)
+// The operator takes three or four operands: `axis` is optional (src/builtin/operators/derivative.cpp#scatterAddArrayVjp)
 // and omitting it means the operand's last axis, which is the axis an index of this shape reads.
 
 /// `x[i]`: what `:op/idx_arr` means, and the left side this rule is filed under.

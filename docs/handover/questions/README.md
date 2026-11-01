@@ -1,10 +1,12 @@
+| [`is-an-arm-block-a-sync-chain`](questions-2026-11-02-is-an-arm-block-a-sync-chain.md) | 选臂的 `Block` 区域算不算一条 `sync` 链（`sync` 臂块是否同步链） | 待裁（`lane-guard` 的红与收敛读数见页内） |
+| [`does-the-pause-cover-a-lambdas-parameter-list`](questions-2026-11-02-does-the-pause-cover-a-lambdas-parameter-list.md) | 暂停是否覆盖 `vjp` 需要的 lambda 形参表：**被保留项与被暂停机制相撞**，不是语言做不到 | 默认 A（`split(jvp(f))` 是一对函数、`transpose` 要一个函数，见页内） |
 # 待裁索引：谁在等作者，堵着什么
 
 > **一页一问；索引按"堵住多少工作"排序，因为作者的时间应该花在最贵的那页上。**
 
 > **索引的价值在于与目录一一对应；一旦少一页，读者就会以为没有那一问。**
 
-> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 questions/ 里有 2 页**，文件名见下表。其余已裁完、整体挪进 `reviews/`。
+> **这个目录的机制**：作者把已经读过的页整体挪进 `reviews/`；`questions/` 只放**还在等回答**的页。所以 `questions/` 空不是没人在问，是问题都被读过了。新的页从车道落进来，落进来就在待裁表加一行；**现在 questions/ 里有 1 页**，文件名见下表。其余已裁完、整体挪进 `reviews/`。
 >
 > **索引以目录为准**：这张表曾经列着三页早就挪进 `reviews/` 的文件名，而目录里的另外三页不在表上——**一条指向不存在文件的索引，比没有索引更坏**（读者会以为那一问还在，而去回答一个已经裁过的形状）。以后每次并入前先数目录，再改这张表。
 >
@@ -12,17 +14,12 @@
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
 
-## 现在在等作者：2 页（与目录逐项一致）
+## 现在在等作者：1 页（与目录逐项一致）
 | 页 | 问句 | 默认建议 |
 |---|---|---|
-<<<<<<< HEAD
-| [`whether-the-empty-tangent-needs-a-port`](questions-2026-11-02-whether-the-empty-tangent-needs-a-port.md) | 没有切空间的形参（`int`/`bool`/`string`）在端口上是"少一个端口"，还是有一个类型为 `()` 的端口 | **沿用"没有槽"**（M3 的 `Tangent<bool> = ()` 就是 `contribution=0`，走图层今天也是"不占槽"）；沿用不了就保持在签名层拒绝，并把差距写在这一页上 |
 | [`whether-a-transpose-rule-answers-every-name-or-the-first`](questions-2026-11-02-whether-a-transpose-rule-answers-every-name-or-the-first.md) | 一条转置规则是"只答它左侧第一个名字的余切"，还是"答左侧每个名字的余切" | **按 B 落地**（一条规则按左侧顺序返回每个名字的余切，元组）：A 之下 `grad((x) => x / 4.0)` 会除零（第二位把被除数塞进除数槽），所以树逼着按 B 走；`transforms` 52/52，`grad((x) => x / 4.0)`@8 = `0.25`、`grad((x) => 4.0 / x)`@2 = `-1.0`；等作者确认这个读法 |
-||||||| 3645cdb0b
-=======
 
 **17:30 作者把 `nested-branch-stops-in-jvp` 也挪进 `reviews/` 并在 `questions-2026-10-29.md` 记了两条裁定**（`fsh-dev` 的 `9c2e5c7df`）：前端变换实例化**先停手**（已进树的不撤，等负责人一起处理），嵌套分支按区域**从内到外递归**、不为“嵌套”另写一支（`vjp` 在 `2 / 0.5 / -1` 处 `4.0 / 2.0 / 3.0`，四个后端一致）。
->>>>>>> origin/develop
 
 **16:10 作者把最后一页也挪进 `reviews/`**（`fsh-dev` 的 `56ce9259c`）：`whether-a-function-value-can-take-a-computed-pack`——lambda 形参表收无类型的 `..xs`（选 ①，不改 5.6），类型从期望类型来，落地后 `vjp` 并成一条声明。所以这一节现在是空的，不是没人在问。
 
@@ -41,7 +38,6 @@
 ## 已裁：按还堵着的活排
 
 | 页 | 问什么 | 状态 | 裁定 | 还堵着 |
-|---|---|---|---|---|
 | [`a-version-port-that-must-carry-a-value`](../reviews/questions-2026-10-31-a-version-port-that-must-carry-a-value.md) | `void` 调用写过的变量，它的读该靠什么后于那次调用 | 已裁未落 | 22:50——A：新算子 `:var/after(cell, call) : var T`（第二个实参接受 `void`），读写成 `:var/get(:var/after(cell, call))`；两条都是数据边，3.1 的"用到"沿数据边到调用；验收 `callback_write_ignored` 打印 `3`、`effects_syntax` 11 条红消失、拿 `133` 量 | `:var/after` 算子本身；`orderAfterLastWriter` 里那条 ctrl 替身随之可拆 |
 | [`two-references-write-one-object-outside-a-sync-block`](../reviews/questions-2026-10-31-two-references-write-one-object-outside-a-sync-block.md) | 同一可变对象被两条引用写、第二条在这一层看不见时，读拿谁的版本 | 已裁未落 | 22:50——②：**保守的写者集合**（程序里所有写该变量的函数，建图前整个程序扫一遍）；`twice` 里 `counter` 在集合里，`return counter` 的版本是 `:var/after(counter, f(v))`；**20:35 那句就此收回** | 保守写者集合的实现；`twice` 应打印 `3` |
 | [`parallel-map-fault-what-runs-after`](../reviews/questions-2026-10-31-parallel-map-fault-what-runs-after.md) | 并行 `map` 一处故障后，下标更小、还没开始的元素是否仍执行 | 已裁未落 | 22:50——①：保今天的实现，3.6 改措辞（"已经开始的元素跑完；下标大于已知最小故障、还没开始的元素不再开始，下标更小的仍会开始；报下标最小的故障"）；删 `taskflow.cpp:2797` 的 `DESIGN-QUESTION`；补部分故障、四后端同判的用例 | 3.6 措辞；`taskflow.cpp:2797`；四后端同判用例 |
@@ -76,7 +72,6 @@
 ## 已撤：1 页
 
 | 页 | 问什么 | 状态 | 裁定/去向 | 还堵着 |
-|---|---|---|---|---|
 | [`where-the-tag-for-an-operator-can-sit`](../reviews/questions-2026-10-31-where-the-tag-for-an-operator-can-sit.md) | 标签能不能挂在别处的算子声明上 | 已撤 | 20:50——没有跨模块挂标签这回事；结论并入上面 `the-ruleset-module-has-no-rules-in-it` 那一行 | 无 |
 
 ## 留档里仍写着"待裁/等裁决"的页（已裁，别再当待裁）
@@ -101,7 +96,6 @@
 判据同上：只有今天有人被它堵住的才值得成页，其余留在这里，等它真的挡住一条车道再动。原文在 [`docs/design-principles.cn.md`](../../design-principles.cn.md) 第 15 节。
 
 | 条目 | 问什么 | 今天堵着谁 |
-|---|---|---|
 | 类型运算 | 类型表达式要不要有交、差、并这类运算（文法里没有，也没预留运算符） | 无；要加的时候写法和含义一起定 |
 | `typeof` 常量 | `typeof` 作用于常量值时的含义，以及它在泛型里的用法 | 无；GCT 只用 `typeof <变量>`，口径已按 16:30 定成"只求类型" |
 | 类型函数失败 | 类型函数求值失败或不终止时怎么办 | 无；`Tangent`/`ParamsOf` 才刚开始写，还没人写坏过 |

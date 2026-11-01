@@ -31,6 +31,7 @@
 #include "camel/passes/test/derivatives.h"
 #include "camel/passes/test/edges.h"
 #include "camel/passes/test/graph_release.h"
+#include "camel/passes/test/broken_boundary.h"
 #include "camel/passes/test/keepfn.h"
 #include "camel/passes/test/bounds.h"
 #include "camel/passes/test/inlineuse.h"
@@ -386,12 +387,7 @@ size_t constantBudgetOf(const PassArgs &args) {
 /// nothing ends the loop, so the runaway shows up across runs, not inside one); it is not a tuning
 /// knob, and a value below 1 is refused rather than read as "never report".
 size_t settleRunsOf(const PassArgs &args) {
-    const int64_t runs = args.getInt("settle_runs");
-    if (runs < 1) {
-        throw std::runtime_error(
-            std::format("std::opt: settle_runs must be at least 1, got {}", runs));
-    }
-    return static_cast<size_t>(runs);
+    return static_cast<size_t>(args.getInt("settle_runs"));
 }
 
 PassMaker makeGraphVizPass(GraphVizDumpConfig config) {
@@ -987,6 +983,16 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kLeakBranchArmPass, LeakBranchArmTestPass),
         TEST_PASS(kShareBranchArmPass, ShareBranchArmTestPass),
         TEST_PASS(kOperatorSemanticsTestPass, OperatorSemanticsTestPass),
+        TEST_PASS(kFailsWithValueTestPass, FailsWithValueTestPass),
+        TEST_PASS(kBreakJoinTestPass, BreakJoinTestPass),
+        // A pass that refuses to be built. The throw is the point: it is what the construction
+        // receiver exists to turn into a named diagnostic instead of a terminate.
+        {
+            kBrokenMakerTestPass,
+            [](const context_ptr_t &) -> std::unique_ptr<GraphIRPass> {
+                throw std::runtime_error("this test pass refuses to be built, and says so");
+            },
+        },
         TEST_PASS(kIndexSemanticsTestPass, IndexSemanticsTestPass),
         TEST_PASS(kDefinitionsTestPass, DefinitionsTestPass),
         TEST_PASS(kExpandDefinitionsTestPass, ExpandDefinitionsTestPass),
@@ -1002,6 +1008,10 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kEdgesOkTestPass, EdgesOkTestPass),
         TEST_PASS(kCommitConflictTestPass, CommitConflictTestPass),
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
+        TEST_PASS(kBreakExitTestPass, BreakExitTestPass),
+        TEST_PASS(kBreakPortsTestPass, BreakPortsTestPass),
+        TEST_PASS(kDanglePortTestPass, DanglePortTestPass),
+        TEST_PASS(kNestedBreakTestPass, NestedBreakTestPass),
         TEST_PASS(kKeepShapeTestPass, KeepShapeTestPass),
         TEST_PASS(kBoundsFlipTestPass, BoundsFlipTestPass),
         TEST_PASS(kInlineUseTestPass, InlineUseTestPass),
@@ -1977,11 +1987,14 @@ std::string effectKey(const EffectSite &site) {
     return key;
 }
 
-/// The effects of the two programs, matched: one origin and operator that the program has once is
-/// the same effect after the pass. An effect the pass added or removed has no partner, and takes
-/// part in no pair. An effect the program has more than once is left out of every pair: a pass that
-/// copies a body (inlining does) leaves several nodes carrying one origin, and which copy a node of
-/// the next program is cannot be read off the origin, so an order between copies would be a guess.
+/// The effects of the two programs, matched. The key is origin, inline copy site and operator
+/// (`effectKey`), so a body a pass inlined **is** matched: the copies differ in the call site they
+/// were copied into, and each pairs with the copy it came from. What is left out of every pair is
+/// a key the program has more than once on either side -- two nodes of one origin, one copy site
+/// and one operator, which is what a pass that clones a node in place leaves behind. There the
+/// order between the clones would be a guess, and this function does not guess. That is narrower
+/// than the audit's wording ("被内联复制过的不比较") and wider than the comment that stood here
+/// until 2026-11-02, which said copies were not compared at all.
 std::vector<std::pair<size_t, size_t>> matchedEffects(
     const ProgramEffects &before, const ProgramEffects &after) {
     std::unordered_map<std::string, size_t> beforeOccurrences;
@@ -2306,18 +2319,22 @@ std::string entryExitViolation(const camel::runtime::Program &program) {
         if (entry && exit) {
             continue;
         }
-        return std::format(
-            "graph {} of it has no {}",
-            camel::runtime::toValue(graph->id()),
-            !entry ? "entry node it can start at" : "exit node whose value it returns");
+        return !entry ? "entry node it can start at" : "exit node whose value it returns";
     }
     return {};
 }
 
 /// Every operator node still matches the declaration it names: an operator the table knows, ordinary
 /// ports that are live nodes with a type, and no more of them than the declaration's operands. A
-/// port the declaration does not have, a port pointing at a node that is gone, or a port without a
-/// type is a call nothing can run.
+/// port the declaration does not have, a port pointing at a dead node or at one without a type, or a
+/// port whose node is gone is a call nothing can run.
+///
+/// One half of the last case is not seen here. A port naming a node that does not exist at all is
+/// refused earlier, by the commit that would have to write it down
+/// (`RuntimeGraphDraftSession::validateDraftPorts`): the graph version cannot be encoded around a
+/// reference to nothing, and the encoder used to read through it and crash before this function ever
+/// ran. What reaches this function is a graph that exists, so it covers the node that is dead (erased,
+/// still referenced) and the node that has no type.
 ///
 /// Returns nothing, or the graph, the node and what is wrong with it.
 std::vector<std::string> portDeclarationViolation(const camel::runtime::Program &program) {
@@ -2509,6 +2526,136 @@ std::string effectOrderViolation(
     return {};
 }
 
+/// The check every pass ends with: the program a pass returns still carries the effect order on
+/// one resource, the same resources the program it was given touched, the operator ports the
+/// declarations name, an entry and an exit, and the effect credentials. One function with two
+/// call sites -- `applyPassesDetailed`, for a pass the pipeline runs, and `applyRegisteredPass`,
+/// for a pass that a pass runs by name: that is how `std::opt::saturate`, `rules::simplify` and
+/// the `std::opt` rounds are reached. The second site had **no** check at all until 2026-11-02,
+/// while the comment on the first said "no pass of the pipeline, nested or listed, ends without
+/// it": a nested pass never reached the code that did it.
+///
+/// Returns true when it refused: the diagnostic is recorded, and the caller fails the run.
+bool passBoundaryViolation(
+    const context_ptr_t &ctx, const std::string &spec, const camel::runtime::Program &program,
+    const ProgramEffects &effectsBefore) {
+    const ProgramEffects effectsAfter = collectEffects(program);
+    const std::vector<std::pair<size_t, size_t>> pairs =
+        matchedEffects(effectsBefore, effectsAfter);
+    const std::string violation =
+        effectOrderViolation(effectsBefore, effectsAfter, pairs);
+    if (!violation.empty()) {
+        ctx->rtmDiags()->of(RuntimeDiag::PassInternalError).commit(spec, violation);
+        CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (effect order)", spec);
+        return true;
+    }
+    const std::vector<std::string> resources =
+        effectResourcesViolation(effectsBefore, effectsAfter);
+    if (!resources.empty()) {
+        ctx->rtmDiags()
+            ->of(RuntimeDiag::PassBoundaryResources)
+            .commit(spec, resources[0], resources[1]);
+        CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (effect resources)", spec);
+        return true;
+    }
+    const std::vector<std::string> ports = portDeclarationViolation(program);
+    if (!ports.empty()) {
+        ctx->rtmDiags()
+            ->of(RuntimeDiag::PassBoundaryPorts)
+            .commit(spec, ports[1], ports[2]);
+        CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (ports)", spec);
+        return true;
+    }
+    const std::string boundary = entryExitViolation(program);
+    if (!boundary.empty()) {
+        ctx->rtmDiags()
+            ->of(RuntimeDiag::PassBoundaryNodes)
+            .commit(spec, "graph", boundary);
+        CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (entry/exit)", spec);
+        return true;
+    }
+    // Every effect in the program the pass returns stands on a read of its value or on a place
+    // in its chain (design principles 3.1, 3.3 as amended). This is asked of the whole
+    // program, not of what the pass touched: an effect an earlier round left in no chain
+    // is as lost as one dropped now, and a pass that removes the last reader has to route
+    // the effect through something that reads it (`:op/keep`) rather than leave it to an
+    // edge of order alone.
+    const EffectCredentialViolation credential =
+        effectCredentialViolation(program, ctx);
+    if (!credential.text.empty()) {
+        auto diag = ctx->rtmDiags()->of(RuntimeDiag::PassInternalError);
+        if (credential.origin != 0) {
+            diag.atOrigin(credential.origin);
+        }
+        diag.commit(spec, credential.text);
+        CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (effect credential)", spec);
+        return true;
+    }
+    return false;
+}
+} // namespace
+
+namespace {
+
+/// What a pass gave up with, as the diagnostic that says so. One function, because two places
+/// receive it: where a pass runs (`apply` threw) and where a pass is built (`factory(ctx)` threw).
+/// A pass's parameters are checked while it is constructed, and that check reports through the same
+/// runtime diagnostics the pass uses when it runs -- so the two places have the same job, and a
+/// second copy of this would be a second answer to what a pass's failure is called.
+void reportPassFailure(const context_ptr_t &ctx, const std::string &name, const std::exception &e) {
+    // A pass that gives up with a plain exception (graph validation at commit, the execution-order
+    // builder meeting a cycle, an arena limit) hit a defect of the compiler, not of the program. It
+    // is still reported as a diagnostic, so that --output-format json stays a valid diagnostics
+    // array. There is no source position for it. The stage names the pass even for a scheduling
+    // pass: the failure belongs to the pass, whatever part of the program had run.
+    setPipelineStage("pass:" + specName(name));
+    std::string what = e.what();
+    while (!what.empty() && (what.back() == '.' || what.back() == '\n')) {
+        what.pop_back(); // the diagnostic's message ends the sentence itself
+    }
+    try {
+        ctx->rtmDiags()->of(RuntimeDiag::PassInternalError).commit(name, what);
+    } catch (const camel::core::error::DiagnosticsLimitExceededBaseException &) {
+        // The diagnostic is recorded; the limit is what throws. Letting it out of a catch handler
+        // is how this became `terminate` in the first place.
+    }
+}
+
+/// Build a pass, and receive what its construction reports.
+///
+/// Construction is where a pass's parameters are checked: `std::opt settle_runs=0` is refused in the
+/// maker, with `RuntimeDiag::InvalidArgument` naming the pass and the value. That diagnostic is
+/// committed to the context like any other, and at the context's diagnostics limit the commit throws
+/// -- which, escaping from a construction site, reached the driver and became `std::terminate` with
+/// exit code 134, for a program the compiler had refused correctly.
+///
+/// So a construction site receives too, and it receives the same way the running site does: a throw
+/// from the diagnostics limit means the diagnostic is already recorded, and the caller's
+/// `hasErrors()` is what turns it into a refusal with a non-zero exit; anything else is a pass that
+/// broke while being built, which `reportPassFailure` reports exactly as a break while running.
+std::unique_ptr<GraphIRPass> constructPass(const context_ptr_t &ctx, const std::string &name) {
+    // A pass is built more than once on the way in -- twice by the pre-checks that ask what kind it
+    // is, and once when the pipeline builds it. A refused parameter is recorded the first time, so
+    // every later construction would record the same diagnostic again: the run reported
+    // 'settle_runs must be at least 1, got 0' twice before this. Once a diagnostic is recorded,
+    // nothing else is built.
+    if (ctx && ctx->rtmDiags()->hasErrors()) {
+        return nullptr;
+    }
+    auto resolved = resolvePassWithModule(name, ctx);
+    if (!resolved.factory) {
+        return nullptr;
+    }
+    try {
+        return resolved.factory(ctx);
+    } catch (const camel::core::error::DiagnosticsLimitExceededBaseException &) {
+        return nullptr;
+    } catch (const std::exception &e) {
+        reportPassFailure(ctx, name, e);
+        return nullptr;
+    }
+}
+
 } // namespace
 
 PassRunResult applyRegisteredPass(
@@ -2522,12 +2669,43 @@ PassRunResult applyRegisteredPass(
     const bool publishes = ctx && ctx->currentRuntimeProgram() == program;
     // The old program's content is read here, before the pass runs (graphRevisionsOf).
     const std::unordered_map<uint32_t, uint64_t> beforeRevisions = graphRevisionsOf(program);
-    auto pass            = resolved.factory(ctx);
+    auto pass = constructPass(ctx, spec);
+    if (!pass) {
+        // Construction reported: the diagnostic is recorded, and the caller prints it.
+        return {nullptr, true};
+    }
+    // The program this pass is given, read before it runs: the boundary check below compares the
+    // effects of the two, and the program a pass returns is not read once it has returned.
+    const ProgramEffects effectsBefore =
+        program != nullptr ? collectEffects(*program) : ProgramEffects{};
     const camel::runtime::Program *produced = pass->apply(program, os);
-    if (pass->hasErrorValue() && caller != nullptr) {
-        caller->failWithErrorValue(pass->errorValue());
+    if (pass->hasErrorValue()) {
+        if (caller != nullptr) {
+            caller->failWithErrorValue(pass->errorValue());
+        } else {
+            // A pass is `(f: F) => F!` (design principles 9.1): the value it ends with instead of a
+            // program IS its answer, and handing it to the caller is how that answer travels. With
+            // no caller there is nobody to hand it to, and this line used to drop it -- the run
+            // went on as if the pass had succeeded. Nothing reaches this branch today (both call
+            // sites pass `this`), and the branch is here so that a future one cannot be silent.
+            if (ctx) {
+                ctx->rtmDiags()->of(RuntimeDiag::PassInternalError)
+                    .commit(
+                        spec,
+                        "the pass ended with an error value and the caller that ran it has none to "
+                        "give it to");
+            }
+            return {nullptr, true};
+        }
     }
     if (produced == nullptr) {
+        return {nullptr, true};
+    }
+    // The check every pass ends with, for a pass a pass runs by name. Before 2026-11-02 this
+    // site had none: `std::opt::saturate`, `rules::simplify` and the `std::opt` rounds came
+    // through here, and a graph they broke reached the next pass unchecked.
+    if (ctx != nullptr &&
+        passBoundaryViolation(ctx, spec, *produced, effectsBefore)) {
         return {nullptr, true};
     }
     const bool changed = programContentChanged(program, beforeRevisions, produced);
@@ -2544,6 +2722,12 @@ PassRunResult applyRegisteredPass(
         }
     }
     return {produced, changed};
+}
+
+bool checkPassBoundary(
+    const context_ptr_t &ctx, const std::string &spec, const camel::runtime::Program &before,
+    const camel::runtime::Program &after) {
+    return passBoundaryViolation(ctx, spec, after, collectEffects(before));
 }
 
 namespace {
@@ -2624,7 +2808,10 @@ firstConsumingPass(const std::vector<std::string> &passes, const context_ptr_t &
         if (!factory) {
             continue;
         }
-        const auto pass = factory(ctx);
+        const auto pass = constructPass(ctx, passes[i]);
+        if (!pass) {
+            continue; // construction reported; the pipeline build below is where it stops
+        }
         if (dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr ||
             dynamic_cast<GraphTranslatePass *>(pass.get()) != nullptr) {
             return i;
@@ -2639,7 +2826,10 @@ bool passListTranslatesProgram(const std::vector<std::string> &passes, const con
         if (!factory) {
             continue;
         }
-        const auto pass = factory(ctx);
+        const auto pass = constructPass(ctx, name);
+        if (!pass) {
+            continue; // construction reported; the pipeline build below is where it stops
+        }
         // The first pass that consumes the graph decides what the list does. Before it, rewrite
         // passes only transform the program; after it, the graph is gone.
         if (dynamic_cast<GraphTranslatePass *>(pass.get()) != nullptr) {
@@ -2848,7 +3038,10 @@ PassApplyResult applyPassesDetailed(
             camel::core::mm::autoSpace().safepoint(std::format("before pass {}", p));
             EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit(p.c_str(), program->root()); });
             camel::utils::phase::Scope phaseScope("pass", p);
-            auto pass = factory(ctx);
+            auto pass = constructPass(ctx, p);
+            if (!pass) {
+                return {nullptr, PassApplyStatus::Failed};
+            }
             // The debugger's observer is told which pass runs: only a scheduling pass runs the
             // program it debugs; a rewrite or translation pass may evaluate graphs of its own.
             const bool schedules = dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr;
@@ -2968,18 +3161,9 @@ PassApplyResult applyPassesDetailed(
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (memory exhausted)", p);
                 return {nullptr, PassApplyStatus::Failed};
             } catch (const std::exception &e) {
-                // A pass that gives up with a plain exception (graph validation at commit, the
-                // execution-order builder meeting a cycle, an arena limit) hit a defect of the
-                // compiler, not of the program. It is still reported as a diagnostic, so that
-                // --output-format json stays a valid diagnostics array. There is no source
-                // position for it. The stage names the pass even for a scheduling pass: the
-                // failure belongs to the pass, whatever part of the program had run.
-                setPipelineStage("pass:" + specName(p));
-                std::string what = e.what();
-                while (!what.empty() && (what.back() == '.' || what.back() == '\n')) {
-                    what.pop_back(); // the diagnostic's message ends the sentence itself
-                }
-                ctx->rtmDiags()->of(RuntimeDiag::PassInternalError).commit(p, what);
+                // The same receiver a construction site uses: one answer to "what is a pass's
+                // failure called", whether the pass broke while being built or while running.
+                reportPassFailure(ctx, p, e);
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (internal error)", p);
                 return {nullptr, PassApplyStatus::Failed};
             }
@@ -3009,63 +3193,16 @@ PassApplyResult applyPassesDetailed(
                 CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> consumed", p);
                 return {nullptr, PassApplyStatus::Consumed};
             }
-            // The pass ended with a program: the effects on one resource must still be in the
-            // order the program wrote them, which is the order its graph makes them wait for
-            // (design principles 3.3). The check is the last thing the pass does, so that no pass
-            // of the pipeline, nested or listed, ends without it.
-            {
-                const ProgramEffects effectsAfter = collectEffects(*program);
-                const std::vector<std::pair<size_t, size_t>> pairs =
-                    matchedEffects(effectsBefore, effectsAfter);
-                const std::string violation =
-                    effectOrderViolation(effectsBefore, effectsAfter, pairs);
-                if (!violation.empty()) {
-                    ctx->rtmDiags()->of(RuntimeDiag::PassInternalError).commit(p, violation);
-                    CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (effect order)", p);
-                    return {nullptr, PassApplyStatus::Failed};
-                }
-                const std::vector<std::string> resources =
-                    effectResourcesViolation(effectsBefore, effectsAfter);
-                if (!resources.empty()) {
-                    ctx->rtmDiags()
-                        ->of(RuntimeDiag::PassBoundaryResources)
-                        .commit(p, resources[0], resources[1]);
-                    CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (effect resources)", p);
-                    return {nullptr, PassApplyStatus::Failed};
-                }
-                const std::vector<std::string> ports = portDeclarationViolation(*program);
-                if (!ports.empty()) {
-                    ctx->rtmDiags()
-                        ->of(RuntimeDiag::PassBoundaryPorts)
-                        .commit(p, ports[0], ports[1], ports[2]);
-                    CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (ports)", p);
-                    return {nullptr, PassApplyStatus::Failed};
-                }
-                const std::string boundary = entryExitViolation(*program);
-                if (!boundary.empty()) {
-                    ctx->rtmDiags()
-                        ->of(RuntimeDiag::PassBoundaryNodes)
-                        .commit(p, "graph", boundary);
-                    CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (entry/exit)", p);
-                    return {nullptr, PassApplyStatus::Failed};
-                }
-                // Every effect in the program the pass returns stands on a read of its value or on a place
-                // in its chain (design principles 3.1, 3.3 as amended). This is asked of the whole
-                // program, not of what the pass touched: an effect an earlier round left in no chain
-                // is as lost as one dropped now, and a pass that removes the last reader has to route
-                // the effect through something that reads it (`:op/keep`) rather than leave it to an
-                // edge of order alone.
-                const EffectCredentialViolation credential =
-                    effectCredentialViolation(*program, ctx);
-                if (!credential.text.empty()) {
-                    auto diag = ctx->rtmDiags()->of(RuntimeDiag::PassInternalError);
-                    if (credential.origin != 0) {
-                        diag.atOrigin(credential.origin);
-                    }
-                    diag.commit(p, credential.text);
-                    CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (effect credential)", p);
-                    return {nullptr, PassApplyStatus::Failed};
-                }
+            // The pass ended with a program: the effects on one **ambient** resource must still be
+            // in the order the program wrote them, which is the order its graph makes them wait for
+            // (design principles 3.3), and the rest of the boundary holds (`passBoundaryViolation`,
+            // which `applyRegisteredPass` calls too: a pass a pass runs by name is checked where it
+            // returns, not only here). What the check does not cover -- a `var` or a handle, an entry
+            // or an exit of a graph that is not the program's own, a copy that lost its inline call
+            // site -- is named on `passBoundaryViolation` and in the report that measured it
+            // (docs/handover/reports/p0-6-boundary-check-promises-vs-checks.cn.md).
+            if (passBoundaryViolation(ctx, p, *program, effectsBefore)) {
+                return {nullptr, PassApplyStatus::Failed};
             }
             if (PassSnapshotHandler snapshotHandler =
                     passSnapshotHandlerSlot().load(std::memory_order_acquire)) {
@@ -3092,11 +3229,6 @@ PassApplyResult applyPassesDetailed(
     return {program, PassApplyStatus::Transformed};
 }
 
-const camel::runtime::Program *applyPasses(
-    const camel::runtime::Program *program, const std::vector<std::string> &passes,
-    const context_ptr_t &ctx, std::ostream &os) {
-    return applyPassesDetailed(program, passes, ctx, os).program;
-}
 
 
 

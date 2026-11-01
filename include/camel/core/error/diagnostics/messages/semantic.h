@@ -215,6 +215,8 @@ enum class SemanticDiag : uint32_t {
     RestFunctionNeedsExpansion = 0x00018F,
     /// A call passes fewer arguments than the fixed parameters of a rest function.
     RestArgumentsMismatch = 0x000190,
+    // A rest parameter of a lambda: the shape parses and is refused by name, because the parameters it
+    // stands for come from the function type the lambda stands in and the front end does not build them.
     /// A rest parameter's build-time tuple was used where a runtime value is needed.
     StaticTupleEscapes = 0x00019C,
 
@@ -394,8 +396,7 @@ enum class SemanticDiag : uint32_t {
     /// a parameter, or a closure that captures a value. The transform builds the transformed graph at the
     /// call, out of the graph of the function it is given, and neither of those names one until the program
     /// runs -- so it is refused at the call, by name, rather than left to the run.
-    TransformArgumentIsNotAKnownFunction = 0x000209,
-    WithPackNeedsNativeDeclaration       = 0x000191,
+    WithPackNeedsNativeDeclaration = 0x000191,
     // #impl(f) (design principles 10.4): the Camel body of the function is its semantics and the
     // body-less declaration f of the same module is the operator that runs it. The graph builder
     // resolves the tag when it declares the module, so no pass reads it and it names no reader.
