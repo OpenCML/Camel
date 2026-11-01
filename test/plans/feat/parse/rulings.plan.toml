@@ -346,3 +346,17 @@ expect_diagnostic_line = 5
 expect_output_contains = ["binds looser than", "(a..b)->reduce(f)"]
 expect_output_not_contains = ["UnknownInternalError", "NoMatchingFunction"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "rulings.function_type_needs_names"
+desc = "A function type names its parameters. `(float, float)` written in a type position is a tuple type, so the `=>` after it fits nothing; the refusal names the form and shows one that works, instead of reporting the `=>` as a token that does not belong."
+kind = "negative"
+case = "../../../cases/parse/rulings/function_type_needs_names.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::FuncTypeNeedsNames"
+expect_diagnostic_code = "0x02000014"
+expect_diagnostic_line = 7
+expect_output_contains = ["names its parameters", "(x: float, y: float) => float"]
+expect_output_not_contains = ["UnknownInternalError", "expected '='"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-306 diagnostics: 285 errors, 21 warnings. 15 carry a machine-applicable edit, 291 say why they carry none.
+307 diagnostics: 286 errors, 21 warnings. 15 carry a machine-applicable edit, 292 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -44,6 +44,7 @@ prints one entry.
 | `0x02000011` | [SyntaxDiag::AsRightSideIsType](#asrightsideistype) | Error | no |
 | `0x02000012` | [SyntaxDiag::LambdaParametersNeedParentheses](#lambdaparametersneedparentheses) | Error | yes |
 | `0x02000013` | [SyntaxDiag::RangeRightIsLink](#rangerightislink) | Error | no |
+| `0x02000014` | [SyntaxDiag::FuncTypeNeedsNames](#functypeneedsnames) | Error | no |
 | `0x02100001` | [SyntaxDiag::ComparisonAcrossLines](#comparisonacrosslines) | Warn | no |
 | `0x03000000` | [SemanticDiag::StaticHeadNameCount](#staticheadnamecount) | Error | no |
 | `0x03000001` | [SemanticDiag::Redeclaration](#redeclaration) | Error | no |
@@ -1140,6 +1141,40 @@ The interval is an expression, and the call is written after it in parentheses: 
 
 func main(): int sync {
     let n = (-2)..(-1)->reduce<(p: string, q: int): string => p, "cd">
+    return 0
+}
+```
+
+### FuncTypeNeedsNames
+
+`0x02000014` · Error · `SyntaxDiag::FuncTypeNeedsNames`
+
+**Fix**
+
+None: choice: the names the parameters take are the writer's, and a function value written with them keeps its meaning
+
+**Message**
+
+```text
+A function type names its parameters: write '(x: float, y: float) => float', not a list of types.
+```
+
+**Help**
+
+```text
+In parentheses a list of types is a tuple type, and '(float, float)' is read as one; the parameters of a function type are written 'name: type'. The names are the writer's to choose, and the types of the function's own parameters already say which is which.
+```
+
+**Example** (`test/cases/parse/rulings/function_type_needs_names.cml`, run as `camel test/cases/parse/rulings/function_type_needs_names.cml`)
+
+```camel
+// A function type names its parameters. Written without names, the types are a tuple type and the
+// `=>` that follows fits nothing: the refusal names the form instead.
+
+func g(x: float, y: float): float sync { return x + y }
+
+func main(): int sync {
+    let f: (float, float) => float = g
     return 0
 }
 ```

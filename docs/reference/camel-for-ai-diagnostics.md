@@ -34,7 +34,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `InvalidEscapeSequence` | Invalid escape sequence in string: {0}. |
 
-**Syntax — errors** (`SyntaxDiag`) — 19
+**Syntax — errors** (`SyntaxDiag`) — 20
 
 | `MissingClosingDelimiter` | Expected '{0}' before {2}, to close the '{1}'. |
 | `UnmatchedClosingDelimiter` | Unexpected '{0}': no '{1}' is open here. |
@@ -53,6 +53,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `EmptyInterpolation` | An interpolation has no expression to format. |
 | `AsRightSideIsType` | The right side of '{0}' is a type; write the interval as '(a..b)'. |
 | `RangeRightIsLink` | The right side of '..' is a '->' call: '..' binds looser than '->', so the call lands on the last value rather than on the interval. |
+| `FuncTypeNeedsNames` | A function type names its parameters: write '(x: float, y: float) => float', not a list of types. |
 | `WhenAfterBody` | A 'when' condition comes before what it guards, so {0} cannot follow it. |
 | `LambdaParametersNeedParentheses` | A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'. |
 

@@ -1256,3 +1256,71 @@ help: The interval is an expression, and the call is written after it in parenth
 
 **这条现在会直接点名**：`SyntaxDiag::RangeRightIsLink`（`0x02000013`）说"`..` 比 `->` 弱，调用落在最后一个值上，要加括号"。
 **优先级本身没改**（改不改是作者的裁决）；**改的只是"被误解时不至于只看到一条签名不匹配"**。
+
+## 39. `let f: (float, float) => float = g`：真因是"类型位置里的函数类型必须给参数起名"
+
+**① 复现（三个形态，同一次运行）**：
+
+| 程序 | 今天 |
+|---|---|
+| `let f: (float, float) => float = g` | **`rc=1`**，`error[SyntaxDiag::UnexpectedToken]: Unexpected '=>'; expected '='.`（插在 `=>`，4:27） |
+| `let f = g` | **`rc=0`** |
+| `let f: float = 1.0` | **`rc=0`** |
+| `let f: (a: float, b: float) => float = g` | **`rc=3`（编过并跑出 3）** |
+| `type Fn = (float, float) => float` | **`rc=1`**，`Unexpected '=>'; expected a declaration or the end of the file.` |
+
+⇒ **真因就是"函数类型的标注要写参数名"**：`(float, float)` 在类型位置被读成**元组类型**，后面的 `=>` 无处可去。**而加上名字就编过**。
+
+**② 答案（贴原文）**：`src/parse/syntax/parser_type.cpp:301-311`——`(` 之后**只有"像函数类型头"的形态**才走 `parseFuncType()`：
+
+```cpp
+    case TK::LParen: {
+        const TK t1 = peek(1);
+        if (!typeHead &&
+            (t1 == TK::KwVar || (t1 == TK::Identifier && peek(2) == TK::Colon) ||
+             (t1 == TK::RParen && peek(2) == TK::FatArrow) ||
+             (t1 == TK::DotDot && peek(2) == TK::Identifier && peek(3) == TK::RParen &&
+              peek(4) == TK::FatArrow) ||
+             (t1 == TK::DotDot && parenClosesBeforeArrow()) ||
+             (t1 == TK::Comma && peek(2) == TK::RParen && peek(3) == TK::FatArrow))) {
+            return parseFuncType();
+        }
+```
+
+**`(float, float)` 一个条件都不满足**（下一个是 `Identifier`，但再下一个是 `Comma` 而不是 `Colon`），于是落到元组类型那一支，
+`expectListEnd(TK::RParen)` 之后 `=>` 就"无处可去"——**这不是"标注的解析退回了更早的规则"，是"类型语法里函数类型的头就要求参数名或 `..` 包"**。
+
+**③ 改法（选"给一条点名病因的诊断"，不做语法扩展）**，理由：**Camel 的函数类型本来就是"给每个参数起名"的形状**
+（`stdlib/types.cml:100` 的 `Vjp<F> = (..ParamsOf<F>) => …` 走的是 `..` 那一支，不是"一串裸类型"）；
+**支持 `(T, U) => R` 等于引入"无名参数的函数类型"，那是语言扩展，要作者过目**——所以这轮只让它有名有姓地说清楚。
+
+```
+error[SyntaxDiag::FuncTypeNeedsNames]: A function type names its parameters: write
+       '(x: float, y: float) => float', not a list of types.
+  --> …:4:27
+ 4 |     let f: (float, float) => float = g
+   |                           ^^
+help: In parentheses a list of types is a tuple type, and '(float, float)' is read as one; the parameters
+      of a function type are written 'name: type'. The names are the writer's to choose, and the types of
+      the function's own parameters already say which is which.
+```
+
+**新码 `SyntaxDiag::FuncTypeNeedsNames` `0x02000014`**，仍走 registry 四处那一套（registry 行 → `--write` → 用例+计划条目 → `camel-for-ai --write`）。
+
+**④ "24 条"这条要说实话**：**作者页里点的这个形态我复现了，但 `e9_reduced` 里我能读到的用例用的是带名字的写法**
+（`rc00_seed27.cml:1` `func f1(a2: (a0: int, a1: string) => string, …)`），**它们今天都 `rc=0`**。
+**所以"24 条 `UnexpectedToken` 的真因是标注位置"这句我没有逐条核实**：**能核实的是这一条形态的真因，不是那 24 条的分布**。
+**要钉那 24 条，需要作者给出那批程序的清单**（页里已写）。
+
+**⑤ 读数**：`feat/parse` **116/116**（新增两支用例：`range_right_is_link`、`function_type_needs_names`）；全量见 §40。
+**③′ 落点改了两次，记下来**：第一版把检查放在 `parsePrimaryType` 的元组支里（`cur_ == FatArrow` 就报），**全量立刻红 40 条**
+（`generics.*`、`edges.*`、`onnx.export_*`、`collfuzz.quick` 等）——**因为在 `static for … in fields (T, U) => 块`、`case (x, y) => …` 这些地方，元组类型后面本来就该跟一个 `=>`**。
+**把检查从解析器挪到报告层**（`report.cpp`）：**只有当"解析器期望 `=`（标注结束）却遇到 `=>`"时才报 `FuncTypeNeedsNames`**——
+判据是 `error.kind == Unexpected && offToken.kind == FatArrow && expected 里有 Assign`。**这样语法一个字符没改，只在报告时换个说法。**
+**教训**：**"看到 `=>` 就报"是看形状，不是看语境；语境在 `expected` 里。**
+
+## 40. 读数
+
+`feat/parse` 116/116、`feat/linear` 一起 987 通过 0 失败（含 2 条已有的 known failure）；
+**全量 `total: 8369, pass: 8357, fail: 0, skip: 10, known failures: 2`**（比基线 8367/8356 多两条，正是新加的两支用例）。
+**四条本地闸门**：`--coverage-check`（307 个码，全部被用例点到）、`--pinned-coverage-check`、`--verify-doc`、`camel-for-ai --check` 全绿。

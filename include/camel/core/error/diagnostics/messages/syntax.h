@@ -35,9 +35,10 @@ enum class SyntaxDiag : uint32_t {
     //  4.4). The trailing position a rule used to accept is not read as a
     // condition, and saying so by name is what keeps the program from being told only that a token
     // did not fit.
-    AsRightSideIsType = 0x000011,
-    RangeRightIsLink  = 0x000013,
-    WhenAfterBody     = 0x000010,
+    AsRightSideIsType  = 0x000011,
+    RangeRightIsLink   = 0x000013,
+    FuncTypeNeedsNames = 0x000014,
+    WhenAfterBody      = 0x000010,
     // A lambda's parameters are written in parentheses (design principles 5.9). An unparenthesised
     // `x => e` is not a lambda at all -- inside a rule body the `=>` is the rule's own arrow -- so
     // naming the parentheses is what keeps the program from being told only that a token did not fit.
