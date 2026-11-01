@@ -1,3 +1,7 @@
+#!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // One ruleset import of `stdlib/vjp.cml`, dropped and put back.
 //
 // The library is `transpose(split(reinterp<jvp>(f)))`, so it imports two rulesets: `rulesets.jvp`
