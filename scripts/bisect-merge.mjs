@@ -454,19 +454,16 @@ function main() {
         )
     }
 
+    // The series is checked before anything is built: a wrong question costs no build.
+    const planned = args.forward ? planSteps(args) : null
+    if (planned?.refused) {
+        return 8
+    }
     const baseline = measure(args, '[baseline]', start)
     if (baseline.refused) {
         return 5
     }
-    if (args.forward) {
-        // The series is checked before anything is built: a wrong question costs no build.
-        const planned = planSteps(args)
-        if (planned.refused) {
-            return 8
-        }
-        return forward(args, baseline, planned.steps)
-    }
-    return revert(args, baseline)
+    return args.forward ? forward(args, baseline, planned.steps) : revert(args, baseline)
 }
 
 process.exitCode = main()
