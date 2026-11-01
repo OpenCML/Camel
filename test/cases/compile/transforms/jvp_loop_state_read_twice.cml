@@ -1,0 +1,25 @@
+// The state starts at the input and the body reads it twice: `f(x) = x^8`.
+//
+//   s0 = x            f(x) = x^8        f(3) = 6561
+//   s1 = s0 * s0 = x^2                  f'(x) = 8 x^7
+//   s2 = s1 * s1 = x^4                  f'(3) = 8 * 2187 = 17496
+//   s3 = s2 * s2 = x^8
+//
+// The seed is 1, so the tangent that rides the chain is `f'(x)`. The first tangent is *not* a zero
+// constant: `s0` is `x`, a port, and its tangent is the seed the caller passed -- the loop lifts the
+// initial state like any other node. If it were zero the answer would be `0.0`; if only the last
+// round carried it, the answer would be `2 x^7 * ... ` -- wrong by a factor the round count decides.
+import rulesets.jvp
+import { jvp } from transforms
+
+func f(x: float): float {
+    return loop s = x for i in [1, 2, 3] do s * s
+}
+
+func main(): int sync {
+    let (value, tangent) = jvp(f)(3.0, 1.0)
+    println(value)
+    println(tangent)
+    println(f(3.0))
+    return 0
+}
