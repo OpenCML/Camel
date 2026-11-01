@@ -4,6 +4,19 @@
 /*
  * Which merge made a plan red, asked in whichever direction the tree allows.
  *
+ * Who wants the two directions to cross-check has to give a unit that can be judged first: a step
+ * is only a step when it builds and the plan runs on it. Weaker than that, the plan never runs and
+ * the step answers nothing (exit 7) -- and the two directions then reach different granularities,
+ * because a merge inside a train can be reverted on its own but cannot be applied on its own when
+ * the commits that complete it landed after it.
+ *
+ * Two rules for a unit, before anything else:
+ *
+ *   1. it must build: a merge that lands on a tree the compiler refuses is not a step, and the
+ *      script says so and stops (exit 7) rather than calling the plan red there;
+ *   2. the plan must run on it: a step whose reading has no `[SUMMARY]` was never measured, and a
+ *      measurement that did not happen is not evidence either way.
+ *
  * Two directions, one judge (the plan's own exit code):
  *
  *   * `--revert` (default): the tree is already red. Revert its merges one at a time from the tip
