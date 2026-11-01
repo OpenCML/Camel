@@ -1,0 +1,7 @@
+func main(): int sync {
+    let a: int = 1
+    let b: int = 2
+    let m: int = if a < b then a else b
+    println(m)
+    return 0
+}

@@ -56,3 +56,15 @@ class FailsWithValueTestPass : public RuntimeGraphRewritePass {
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
+
+/// Points a BRCH node's `join` at a node of the same draft that is not a JOIN. The draft is allowed
+/// to be inconsistent while it is written (the draft's `setBrchJoin` does not validate), the encoder
+/// is not: `encodeDraftGraph` refuses the graph with the branch and the reference that does not
+/// resolve. This is the shape a lift that renumbers a graph can leave behind.
+inline constexpr const char *kBreakJoinTestPass = "test::break_join";
+class BreakJoinTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};

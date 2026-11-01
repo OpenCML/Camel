@@ -890,9 +890,9 @@ for (let i = 0; i < argv.length; i++) {
         mode = argv[i]
     }
 }
-if (!['--check', '--write', '--generate', '--verify-doc', '--coverage', '--coverage-check', '--name-coverage', '--name-coverage-check', '--no-producer', '--no-producer-check', '--text-coverage', '--text-coverage-check', '--pin-examples'].includes(mode)) {
+if (!['--check', '--write', '--generate', '--verify-doc', '--coverage', '--coverage-check', '--name-coverage', '--name-coverage-check', '--pinned-coverage', '--pinned-coverage-check', '--no-producer', '--no-producer-check', '--text-coverage', '--text-coverage-check', '--pin-examples'].includes(mode)) {
     console.log(
-        'usage: node scripts/diagnostics-catalog.mjs --check | --write | --generate | --verify-doc | --coverage | --coverage-check | --name-coverage | --name-coverage-check | --no-producer | --no-producer-check | --text-coverage | --text-coverage-check | --pin-examples [--root DIR]'
+        'usage: node scripts/diagnostics-catalog.mjs --check | --write | --generate | --verify-doc | --coverage | --coverage-check | --name-coverage | --name-coverage-check | --no-producer | --no-producer-check | --text-coverage | --text-coverage-check | --pinned-coverage | --pinned-coverage-check | --pin-examples [--root DIR]'
     )
     process.exit(2)
 }
@@ -1377,6 +1377,71 @@ if (mode === '--no-producer' || mode === '--no-producer-check') {
     process.exit(0)
 }
 
+// ---- the gate that replaced the name counter: the registry enumerated, a code asserted by code ---
+// P2-19. A code counts only when a plan asserts *it* (`expect_diagnostic_name`,
+// `expect_diagnostic_code`, or the same two inside a `verify_script`); free text is not read, because
+// free text was what could be pressed. A code no test can provoke is a named exception below, with its
+// reason printed. `PINNED_COVERAGE_RECORDED` is the floor this tree stands at.
+const PINNED_COVERAGE_EXCEPTIONS = [
+    {
+        fullName: 'InternalDiag::UnknownInternalError',
+        reason:
+            'the compiler reporting that it has no code for a state it reached; no program provokes it,'
+            + ' so no case can pin it -- the registry entry exists so the reporter has something to say',
+    },
+]
+
+const PINNED_COVERAGE_RECORDED = 16
+
+if (mode === '--pinned-coverage' || mode === '--pinned-coverage-check') {
+    const entries = catalogEntries(records)
+    const plans = walk(path.join(root, 'test', 'plans'), (f) => f.endsWith('.plan.toml'))
+    const asserted = new Set()
+    for (const file of plans) {
+        const text = fs
+            .readFileSync(file, 'utf8')
+            .replace(/^\s*#.*$/gm, '')
+            .replace(/desc\s*=\s*"""[\s\S]*?"""/g, '')
+            .replace(/^\s*desc\s*=.*$/gm, '')
+        for (const m of text.matchAll(/expect_diagnostic_name\s*=\s*["']([A-Za-z]+::[A-Za-z0-9_]+)["']/g)) {
+            asserted.add(m[1])
+        }
+        for (const m of text.matchAll(/expect_diagnostic_code\s*=\s*["']?(0[xX][0-9A-Fa-f]{8})["']?/g)) {
+            asserted.add(m[1].toLowerCase())
+        }
+        for (const m of text.matchAll(/\.name\s*===\s*["']([A-Za-z]+::[A-Za-z0-9_]+)["']/g)) {
+            asserted.add(m[1])
+        }
+        for (const m of text.matchAll(/\.code\s*===\s*["'](0[xX][0-9A-Fa-f]{8})["']/g)) {
+            asserted.add(m[1].toLowerCase())
+        }
+    }
+    const excepted = new Set(PINNED_COVERAGE_EXCEPTIONS.map((e) => e.fullName))
+    const missing = entries.filter(
+        (e) => !excepted.has(e.fullName) && !asserted.has(e.fullName) && !asserted.has(hex8(e.code).toLowerCase())
+    )
+    const covered = entries.length - missing.length - excepted.size
+    console.log(
+        `diagnostic codes a case asserts by code: ${covered} of ${entries.length}`
+            + ` (${excepted.size} named exception(s), ${missing.length} with no assertion)`
+    )
+    for (const e of PINNED_COVERAGE_EXCEPTIONS) console.log(`  excepted ${e.fullName}: ${e.reason}`)
+    for (const e of missing) console.log(`  no assertion ${hex8(e.code)}  ${e.fullName}`)
+    if (mode === '--pinned-coverage') process.exit(0)
+    if (entries.length === 0 || asserted.size === 0) {
+        console.log('pinned coverage: the run read no registry entry or no assertion, which is not a pass')
+        process.exit(1)
+    }
+    if (missing.length > PINNED_COVERAGE_RECORDED) {
+        console.log(
+            `pinned coverage: ${missing.length} code(s) with no case asserting them, past the`
+                + ` ${PINNED_COVERAGE_RECORDED} this file records. Lower the record only in the commit`
+                + ' that adds the case, and say why the number moved.'
+        )
+        process.exit(1)
+    }
+    process.exit(0)
+}
 if (mode === '--pin-examples') {
     const entries = catalogEntries(records)
     const tests = loadTests(root)

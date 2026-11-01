@@ -594,3 +594,15 @@ expect_output_contains = ["RuntimeDiag::UnhandledError", "An error value reached
 expect_output_not_contains = ["terminate called"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
+
+[[tests]]
+name = "pass_guard.encoded_graph_cross_references"
+desc = "A draft is allowed to be inconsistent while it is written: GraphDraft::setBrchJoin does not validate. The encoder is not: encodeDraftGraph runs the same four cross-reference checks the frozen graph gets (camel::runtime::checkGraphCrossReferences, graph_edges.cpp for EdgeChecker and draft_session.cpp for the encoder), and refuses a branch whose join is a node that is not a join, naming the graph, the branch and the reference. Measured over three runs: the same message each time, exit code 1."
+kind = "behavior"
+case = "../../../cases/compile/pass_guard/branch.cml"
+args = ["${case}", "test::break_join"]
+expect_exit = 1
+expect_output_contains = ["RuntimeDiag::PassInternalError", "test::break_join", "cannot be encoded", "graph 'main' branch 4: its join is node 0, which is not a join"]
+expect_output_not_contains = ["terminate called"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000

@@ -1173,15 +1173,38 @@ FunctionType *Builder::completeLambdaSignature(
             .commit(name, reason);
         throw BuildAbortException();
     };
-    if (expectedFunc->withTypesCount() != withCount ||
-        expectedFunc->normTypesCount() != funcType->normTypesCount()) {
+    // A rest parameter (`(..xs) => body`) stands for the parameters the lambda's list leaves over:
+    // it absorbs the expected type's members from its index on, so it is the one shape where the
+    // lambda's parameter count may be smaller than the expected type's. The flag is the written
+    // parameter's (GCT recorded it), not a difference in arithmetic -- an omitted parameter type
+    // keeps the strict comparison, because a hole that takes one type cannot stand for several.
+    const GCT::Tree::UnwrittenParam *restHole = nullptr;
+    for (const GCT::Tree::UnwrittenParam &param : *unwritten) {
+        if (param.rest) {
+            restHole = &param;
+            break;
+        }
+    }
+    const size_t expectedTotal =
+        expectedFunc->withTypesCount() + expectedFunc->normTypesCount();
+    if (restHole == nullptr) {
+        if (expectedTotal != total) {
+            report(
+                (*unwritten)[0],
+                std::format(
+                    "the expected type '{}' takes {} parameters and the lambda {}",
+                    expectedFunc->toString(),
+                    expectedTotal,
+                    total));
+        }
+    } else if (expectedTotal < restHole->index) {
         report(
-            (*unwritten)[0],
+            *restHole,
             std::format(
-                "the expected type '{}' takes {} parameters and the lambda {}",
+                "the expected type '{}' ends before the rest parameter, which stands for the "
+                "parameters from position {} on",
                 expectedFunc->toString(),
-                expectedFunc->withTypesCount() + expectedFunc->normTypesCount(),
-                total));
+                restHole->index + 1));
     }
     const auto typeAt = [&](size_t index) -> Type * {
         return index < withCount ? funcType->withTypeAt(index)
@@ -1206,6 +1229,24 @@ FunctionType *Builder::completeLambdaSignature(
         bool isHole  = hole < unwritten->size() && (*unwritten)[hole].index == i;
         if (isHole) {
             const GCT::Tree::UnwrittenParam &param = (*unwritten)[hole++];
+            if (param.rest) {
+                // The rest parameter stands for the expected type's members from this position on:
+                // one parameter each, named after the rest parameter (`xs_0`, `xs_1`, ...), typed
+                // by that member. The single `void` slot the GCT signature kept stands for none of
+                // them, so nothing is added for it. A rest parameter stands for any number of
+                // parameters including none, which is why the arity check above only requires the
+                // expected type to reach this position.
+                const std::string base = nameAt(i);
+                for (size_t k = i; k < expectedTotal; ++k) {
+                    Type *const expanded = k < withCount ? expectedFunc->withTypeAt(k)
+                                                         : expectedFunc->normTypeAt(k - withCount);
+                    if (expanded == nullptr) {
+                        report(param, "the expected function type does not say what this parameter is");
+                    }
+                    factory.addNormArg(base + "_" + std::to_string(k - i), expanded, false);
+                }
+                continue;
+            }
             Type *const wanted                     = i < withCount
                                                          ? expectedFunc->withTypeAt(i)
                                                          : expectedFunc->normTypeAt(i - withCount);
