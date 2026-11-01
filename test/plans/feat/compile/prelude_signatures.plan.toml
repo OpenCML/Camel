@@ -54,7 +54,8 @@ kind = "negative"
 case = "../../../cases/compile/prelude_signatures/with_pack_with_body.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["WithPackNeedsNativeDeclaration"]
+expect_diagnostic_name = "SemanticDiag::WithPackNeedsNativeDeclaration"
+expect_output_contains = ["WithPackNeedsNativeDeclaration", "The pack '..args' among the 'with' parameters needs a declaration without a body."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

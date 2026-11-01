@@ -16,14 +16,14 @@ timeout_ms = 20000
 
 [[tests]]
 name = "jvp_is_a_function_value.nvm"
-desc = "`reinterp<jvp>(f)` is the operator `jvp(f)`, and it produces a new function (the author's ruling a824031aa), not a rewritten graph: the call builds a graph of the transform's own and answers with a function value naming it. The lifted signature is `(float, float) => (float, float)` -- the ordinary parameter becomes a value and its tangent, and the result is the pair -- so `jvp(f)(2.0, 1.0)` passes two numbers and reads back `(value, tangent)`. Both halves are computed by the new graph: for `f(x) = x*x + 3/x` at 2 the chain gives `f(2) = 5.5`, and the forward rules along it give `f'(2) = 3.25` (2x - 3/x^2, seeded with the 1.0 the caller passed). The rules are the ruleset's: the reading says `source=ruleset` and names what it applied (`jvp_mul`, `jvp_div`, `jvp_add`), because the transform reads `stdlib/rulesets/jvp.cml`'s index at the moment it builds -- there is no second table of laws in C++. A primitive with no rule there is refused by name (`skip=rule uri=...`), never answered with 0 or 1. The type the reading prints is the one `jvpSignature` builds, and it is the same string `JvpResolver` gives the operator. Beside that reading the build now says what it made, in one line: `REINTERP jvp built graph=56 nodes=12 exit=11 regions=0 function=f` -- the member the lift reserved, the nodes and regions the draft holds before it is encoded, and the node the graph exits at (the pair, or the gate over it). Those are the facts a compile-time lift has to answer without running anything, so the step that moves this build earlier can be checked by the same numbers. That step is taken: the build happens while the graph the call is written in is built, and the operator's line says so -- `REINTERP jvp op lifted-at=compile ...` against the run-time lift's `lifted-at=run` -- with one count of the calls the front end answered, `REINTERP compile-time instantiated=1 calls`. Everything else in the two lines is the same text, the graph number included."
+desc = "`reinterp<jvp>(f)` is the operator `jvp(f)`, and it produces a new function (the author's ruling a824031aa), not a rewritten graph: the call builds a graph of the transform's own and answers with a function value naming it. The lifted signature is `(float, float) => (float, float)` -- the ordinary parameter becomes a value and its tangent, and the result is the pair -- so `jvp(f)(2.0, 1.0)` passes two numbers and reads back `(value, tangent)`. Both halves are computed by the new graph: for `f(x) = x*x + 3/x` at 2 the chain gives `f(2) = 5.5`, and the forward rules along it give `f'(2) = 3.25` (2x - 3/x^2, seeded with the 1.0 the caller passed). The rules are the ruleset's: the reading says `source=ruleset` and names what it applied (`jvp_mul`, `jvp_div`, `jvp_add`), because the transform reads `stdlib/rulesets/jvp.cml`'s index at the moment it builds -- there is no second table of laws in C++. A primitive with no rule there is refused by name (`skip=rule uri=...`), never answered with 0 or 1. The type the reading prints is the one `jvpSignature` builds, and it is the same string `JvpResolver` gives the operator. Beside that reading the build now says what it made, in one line: `REINTERP jvp built graph=56 nodes=12 exit=11 regions=0 function=f` -- the member the lift reserved, the nodes and regions the draft holds before it is encoded, and the node the graph exits at (the pair, or the gate over it). Those are the facts a compile-time lift has to answer without running anything, so the step that moves this build earlier can be checked by the same numbers. That step is taken: the build happens while the graph the call is written in is built, and the operator's line says so -- `REINTERP jvp op lifted-at=compile ...` against the run-time lift's `lifted-at=run` -- with one count of the calls the front end answered, `REINTERP compile-time instantiated=1 calls`. Everything else in the two lines is the same text, the graph number included. **How much of the run-time lift is left, by class -- and this number only goes down**: the callee is a parameter or a capture -- 1 (the author's ruling of 09:35 makes that a compile error at the call, so no code is written for it); the lifted body calls another function -- 1 (it recurses into the callee's graph once that graph is built at build time); the value is handed to another transform -- 1, and it is the *branched* lift only: a straight-line lift is cut at build time now (`split(jvp(f))`, `halves-at=compile`, the kernel never entered), while a branch is still lifted -- and cut -- at run time, because the lift builds from a draft and a draft has no Join where a branch answers. Three, down from four. `runtime_branches_remaining` below counts those shapes in code and is red the day one of them goes back to the run-time path."
 kind = "behavior"
 case = "../../../cases/compile/transforms/jvp_lifted.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_div,jvp_add", "REINTERP jvp op lifted-at=compile signature=(f: (float) => float) => (float, float) => (float, float)", "lifted=(float, float) => (float, float) pure graph=(float, float) => (float, float) pure same=yes", "REINTERP jvp built graph=56 nodes=12 exit=11 regions=0 function=f", "REINTERP compile-time instantiated=1 calls", "5.5", "3.25"]
+expect_stdout_contains = ["REINTERP jvp function=f graph=", "liftedFrom=unassigned", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_div,jvp_add", "REINTERP jvp op lifted-at=compile signature=(f: (float) => float) => (float, float) => (float, float)", "lifted=(float, float) => (float, float) pure graph=(float, float) => (float, float) pure same=yes", "REINTERP jvp built graph=56 nodes=12 exit=11 regions=0 function=f", "REINTERP compile-time instantiated=1 calls", "5.5", "3.25"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -694,6 +694,7 @@ expect_stdout_contains = ["TANGENT type=float space=self", "TANGENT type=f32 spa
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+
 # The 15:30 ruling on the class "被调者是参数或捕获": not "support the capture one day", but a compile
 # error at the call. The case holds both shapes, and only the closure is refused:
 #   - `transpose(f)` with `f` a parameter is instantiated per call site, so at `by_param(double)` the
@@ -766,3 +767,22 @@ assert(input.normalized.stdout.includes("'split' is applied to a closure that ca
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# How many shapes of `jvp(f)` still take the run-time lift, and which ones: the ruler the step that
+# moves the lift into the build is measured with. The number may only go down -- a shape that goes
+# back to the run-time path makes this entry red, which is the point of counting it in code rather
+# than saying it in prose. The rows are read from the operator's own line, `REINTERP jvp op
+# lifted-at=run` against `lifted-at=compile`, one program per shape; `handed_to_split` is checked a
+# second time on the cut's line, `REINTERP split halves-at=compile`, because a cut of a run-time lift
+# prints nothing there.
+[[tests]]
+name = "runtime_branches_remaining"
+desc = "The ruler for the compile-time lift: five shapes of `jvp(f)`, one program each, classified by the line the operator prints about itself. `direct` (`jvp(f)` called where it is written) and `handed_to_split` (`split(jvp(f))` of a straight-line lift: the cut is taken at build time and the halves are built with it) read `lifted-at=compile`; `callee_parameter` (`jvp(g)` with `g` a parameter -- the author's ruling turns this into a compile error, not into a lift), `body_has_call` (the lifted body calls another function; the lift recurses into callees only once the callee's graph is built at build time) and `split_of_a_branch` (the cut of a branched lift: a draft has no Join where a branch answers, so that one still lifts -- and is cut -- at run time) still read `lifted-at=run`. **Three shapes left, down from four**: the cut of a straight-line lift retired the one this step moved. The cut's own line is checked in both directions -- `halves-at=compile` for the straight-line lift, `halves-at=run` for the branched one -- because a check that only named the first would pass whatever happened to the second. The count is asserted here and may only be lowered -- a shape that returns to the run-time path makes it red."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/compile/transforms/runtime_branches_remaining.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "remaining=3 run=callee_parameter,body_has_call,split_of_a_branch compile=direct,handed_to_split cut=compile/run\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
