@@ -185,8 +185,7 @@ function runCase(file, test) {
             env: { ...process.env, CAMEL_HOME: process.env.CAMEL_HOME || path.join(ROOT, 'out', 'latest') },
         })
         const text = `${result.stdout || ''}${result.stderr || ''}`
-        const first = text.split('\n').find((l) => l.includes(': [Error]: ')) || ''
-        return { exit: result.status === null ? -1 : result.status, first: first.trim(), text }
+        return { exit: result.status === null ? -1 : result.status, first: firstDiagnostic(text), text }
     } finally {
         fs.rmSync(probe, { force: true })
     }
@@ -194,6 +193,20 @@ function runCase(file, test) {
 
 // --- the classes ------------------------------------------------------------------------------
 //
+// The first diagnostic of a failing run, in either spelling this tree has printed: the renderer's
+// one-line form carries `: [Error]: `, and the CLI's compact form starts the line with
+// `error[SemanticDiag::Name]:`. Both were the *only* spelling at some point, and a detector that
+// knows one of them matches nothing in the other -- which is how this ruler once reported 0/0/106
+// while the classification was 54/46/6. So it accepts both, and `--quiet` prints how many failing
+// rows it could not read, because a number that never moves is worse than no number at all.
+function firstDiagnostic(text) {
+    const lines = text.split('\n')
+    const rendered = lines.find((l) => l.includes(': [Error]: '))
+    if (rendered !== undefined) return rendered.trim()
+    const compact = lines.find((l) => /(^|\s)(error|warning)\[[A-Za-z_]+::[A-Za-z_]+\]/.test(l))
+    return compact === undefined ? '' : compact.trim()
+}
+
 // The shape, not the source: a diagnostic that prints a function type carrying a `with` parameter
 // (`<x: float> (y: float) => float`, `<w: float> () => float`) is the `with` class; one that names an
 // array or tensor parameter (`float[]`, `f32[..]`, `Model`, `Plain`) is the array class. Everything
