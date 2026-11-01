@@ -916,3 +916,23 @@ Stack Trace: (not available on this platform)
 
 **⑥ 还没修**：这一笔到"复现 + 栈 + 位置"。修的方向是让 `foldDraft` 在读之前核对 tag/字段数（**按 A2 的模板：把断言里的前提变成分支**），
 或者让规则匹配阶段只产出与自身 tag 一致的读 —— **下一笔做，改前 `signal 6` ×3、改后要一个结果或一条具名诊断**。
+
+## 27. A6 修之前必须先分清是哪一次读：两个候选分支，只有一个有守卫
+
+`foldDraft`（`src/passes/opt/generic/generic.cpp:1172`）自己不解引用变体；它是**帧**，真正读的是被内联进来的折叠函数。
+按 `Variant::get(index)` 的形状，候选是 `foldStaticAccess`（`:965`）里的两个分支：
+
+| 分支 | 读法 | 有没有先核对 |
+|---|---|---|
+| `TupleIndex` + `source->second->code() == Tuple`（`:980-986`） | `tuple->get<slot_t>(body->value)` | **有**：`if (body->value >= tuple->size()) return false;` |
+| `StructKey` + `source->second->code() == Struct`（`:987-991`） | `object->get<slot_t>(std::string(body->key()), source->second)` | **没有**：它信 `source->second`（静态类型）与运行时对象一致 |
+
+**崩点说的是"读 field 0 的一个 tag 1、声明 0 个 field 的 Variant"**——**按字段序号读、而运行时对象的字段数比静态类型声称的少**，这正是 `StructKey` 那支的形状
+（`Struct::get` 用类型里的字段序号去取，取值落在 `Variant::get` 上）。
+
+**但"形状对"不等于"证到了"**：要坐实得知道崩溃那一刻 `body->accsKind` 与 `source->second->code()` 的真实值。**release 二进制没有行号，gdb 只给到 `foldDraft` 这一帧**。
+所以**这一轮不改代码**——照今天的规矩，**宁可少改一处，也不按面相改**。下一笔的第一件事：**在这两个分支的 `get` 之前各打一次 `accsKind`/`code()`/字段数**，一次构建就能分清；
+分清后按 A2 模板改（**核对不过就 `return false` 跳过折叠**，不新增诊断、不放宽 `variant.h:47-54` 一个字）。
+
+**给作者的事实**：作者报的 26 支清单（`repro_checks.json`）**没有随报告进仓库**——`git ls-tree -r --name-only origin/fsh-dev` 在 `docs/handover/reports/eval-defects-2026-11-01/` 下只有 `README.md`、`minimal/`、`e9_reduced/`。
+所以这 2 支是**按 README 描述的类（enum 与 `match … when`）扫 40 支找到的**，不是清单里的原班人马。
