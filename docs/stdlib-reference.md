@@ -52,6 +52,7 @@ Not in this reference: the profiler (`perf`).
 | [ckpt](#ckpt) | `import { ... } from ckpt` | C++ |
 | [tree](#tree) | `import { ... } from tree` | Camel |
 | [transforms](#transforms) | `import { ... } from transforms` | C++ |
+| [vjp](#vjp) | `import { ... } from vjp` | Camel |
 | [tensor](#tensor) | `import { ... } from tensor` | C++ |
 | [types](#types) | `import { ... } from types` | Camel |
 | [array](#array) | `import { ... } from array` | Camel |
@@ -88,6 +89,7 @@ Not in this reference: the profiler (`perf`).
 | [ckpt](#ckpt) | `import { ... } from ckpt` |  |
 | [tree](#tree) | `import { ... } from tree` |  |
 | [transforms](#transforms) | `import { ... } from transforms` |  |
+| [vjp](#vjp) | `import { ... } from vjp` |  |
 | [tensor](#tensor) | `import { ... } from tensor` |  |
 | [types](#types) | `import { ... } from types` |  |
 | [array](#array) | `import { ... } from array` |  |
@@ -1477,6 +1479,64 @@ straight-line bodies.
 
 - Example (a fragment, not compiled): `let batched = vmap(f)`
 - Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+
+<a id="vjp"></a>
+
+## `vjp`: the derivative, as a library
+
+#### `vjp`
+
+```camel
+vjp: (f: (x: float) => float) => (x: float) => (float, (ct: float) => float)
+```
+
+The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
+`(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters. The juxtaposed call
+`transpose(residuals, ct)` is the internal step, not this signature.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example (a fragment, not compiled): `let reading = vjp(f)`
+- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+
+#### `vjp`
+
+```camel
+vjp: (f: (x: float, y: float) => float) => (x: float, y: float) => (float, (ct: float) => (float, float))
+```
+
+The same transform for a function of two parameters: `vjp(f)(x, y)` is `(value, pullback)` and
+`pullback(ct)` gives both cotangents, in the order `f` takes the parameters.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example (a fragment, not compiled): `let reading_of_two = vjp(f)`
+- Why it is not compiled: `f` is a function value of two parameters, so the example is a fragment of a program that declares one
+
+#### `grad`
+
+```camel
+grad: (f: (x: float) => float) => (x: float) => float
+```
+
+The gradient of a function of one parameter: `vjp` with the seed 1, its second half taken --
+`grad(f)(x)` is `vjp(f)(x).1(1.0)` (author's ruling of 2026-11-01). Read `grad(f)` as a name for
+that reading of `vjp`, not as a second transform.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example (a fragment, not compiled): `let slope = grad(f)`
+- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+
+#### `with_grad`
+
+```camel
+with_grad: (f: F) => F when is_function::<F>()
+```
+
+The gradient of the first `with` parameter of `f` (design principles 9.9): the same `vjp`, taken
+with respect to a captured value instead of a parameter.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example (a fragment, not compiled): `let slope_over_the_capture = with_grad(f)`
+- Why it is not compiled: `f` captures the value it differentiates against, so the example is a fragment of a program that declares one
 
 <a id="tensor"></a>
 

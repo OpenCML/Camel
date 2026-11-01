@@ -1,7 +1,7 @@
-# M4 组装：库层 `vjp` 自己带上它组合的规则集，落地只差转置"多参数被调函数"那一步
+# M4 组装：库层 `vjp` 拼好了，作者的三条读数由程序自己给出
 
 对象：`stdlib/vjp.cml`，分支 `lane-m4-assembly`（含 `lane-m4`、`origin/develop`、`split` 改成残差图定那笔）。
-判据：组装"完成"当且仅当 **一个只 `import { vjp }` 的程序**能拿到 `18.0` / `(12.0, 9.0)` 与 `grad` 的 `27.0`。
+判据（已满足）：**一个只 `import { grad, vjp } from vjp` 的程序**给出 `18.0` / `(12.0, 9.0)` 与 `27.0`。
 
 ## 组装长什么样
 
@@ -29,64 +29,50 @@ import rulesets.transpose
 ```
 
 理由只有一句：**一个库要能自己兑现它对外承诺的调用，否则每个调用者都得知道它的内部组成**——
-与"pass 是前置条件就诊断它"同一口径。所以 `probe_library_vjp.cml`、`vjp_analytic_gradient.cml`、
-`vjp_gradient.cml`、`vjp_carries_its_ruleset.cml` 四个程序**只 import 库**，不再每人抄一行规则集。
+与"pass 是前置条件就诊断它"同一口径。所以调用它的四个程序**只 import 库**。
 
-A/B（都在 `a05678523` + 本分支上量）：
+## 两条用例，各钉一行 import
 
-| 拿掉 | 读数 |
-| --- | --- |
-| `import rulesets.transpose` | `TRANSPOSE function=autodiff::mul_tangent<float> skip=rule uri=:op/add_d reason=no-such-family`，然后 `transforms: transpose has no transpose for this function`，落在 `stdlib/vjp.cml:68:32` |
-| `import rulesets.jvp` | `transforms: jvp has no forward rule for ':op/mul_d' (no ruleset module is loaded (import rulesets.jvp))`，`note: raised here` 指向 `stdlib/vjp.cml:47:35` |
+程序源码分辨不出这两行（调用者一行都不 import），所以只能做 A/B：
+`test/tools/check-vjp-ruleset.mjs` 把**其中一行**在"库的副本"里注释掉、`CAMEL_STD_LIB` 指过去，
+同一个程序跑两遍——拿掉时必须在**库自己那一行**停住并说出缺什么，放回时三个读数都在。
 
-两条都停在**库自己那一行**，不在调用者的文件里。
+| 用例 | 拿掉 | 读数 |
+| --- | --- | --- |
+| `vjp_api.the_jvp_import_is_load_bearing` | `rulesets.jvp` | `jvp has no forward rule for ':op/mul_d'`，`note: raised here` → `stdlib/vjp.cml:49:35` |
+| `vjp_api.the_transpose_import_is_load_bearing` | `rulesets.transpose` | `TRANSPOSE … skip=rule uri=:op/add_d reason=no-such-family` → `transpose has no transpose for this function` @ `stdlib/vjp.cml:56:30` |
+
+两条都验过反向：把该行从**装机后的库**里去掉，对应用例红（`the library does not import …，so there
+is nothing to drop`），放回去绿。工具里也写了原因：跑在计划里时 runner 给子进程
+`CAMEL_ERROR_FORMAT=short`，那一种格式只有一行消息、没有 `note:` 和 `-->`，所以工具自己按名字要
+`text`（rich）那一种——它读的是那两行位置，不改走图判了什么。
 
 ## 今天的读数（可复现）
 
 ```
 $ node scripts/test.js test/plans/feat/compile/transforms.plan.toml
-[SKIP] vjp_api.carries_its_own_ruleset.nvm    TRANSPOSE function=autodiff::mul_tangent<float> skip=signature
-[SKIP] vjp_api.analytic_gradient.nvm          （同一条读数）
-[SKIP] vjp_api.gradient_when_the_steps_land.nvm
-[SUMMARY] total: 19, pass: 16, fail: 0, skip: 3
+[PASS] vjp_api.carries_its_own_ruleset.nvm        27.0 / 27.0 / 27.0
+[PASS] vjp_api.analytic_gradient.nvm             f(3, 2) = 18.0, library y = 18.0,
+                                                  library/analytic df/dx = 12.0, df/dy = 9.0
+[PASS] vjp_api.the_jvp_import_is_load_bearing
+[PASS] vjp_api.the_transpose_import_is_load_bearing
+[SUMMARY] total: 21, pass: 21, fail: 0
 ```
 
-墙往下一层挪了：不再是"`skip=call`（backward 半里有 `Call`）"，而是**那个 `Call` 的被调函数有四个参数**。
-`split_of_jvp_of_f_backward` 里调 `mul_tangent(x, w, dx, dw)`（`stdlib/autodiff.cml:102`），
-`modules/transforms/transpose.cpp` 的 `transposeSignature`（`:29`，判据在 `:48-59`）只认"第一个参数是
-残差元组"的那种签名，四个 `float` 的被调函数拿不到转置签名，于是 `:833` 报 `skip=signature`。
+最后一步（转置"多参数被调函数"）由 `origin/develop` 的 `047f30f0b` 带进来；
+`probe_library_vjp.cml` 读 `39.0`（= 18 + 12 + 9）。
 
-这一笔**不在 `develop`（`a05678523`）里**，在 `lane-reinterp2` 的 `5b8333c53`
-（`transforms: transpose a call to a function of several parameters`，只改
-`modules/transforms/transpose.cpp` 一个文件）。把那个文件放进树里量到的是：
+## 参考页：`pending` 已退场
 
-```
-$ vjp_carries_its_ruleset.cml   → 27.0 / 27.0 / 27.0
-$ vjp_analytic_gradient.cml     → f(3, 2) = 18.0, library y = 18.0,
-                                  library/analytic df/dx = 12.0, library/analytic df/dy = 9.0
-$ probe_library_vjp.cml         → 39.0（= 18 + 12 + 9）
-[SUMMARY] total: 19, pass: 19, fail: 0
-```
+`vjp` 跑了得起来，所以 `scripts/stdlib-reference.mjs` 里那句 `pending:` 删掉了，`--write` 重生成：
 
-量完就把那个文件还回去了：它不是这支分支的活，也没并进 `lane-m4-assembly`。
+- `docs/stdlib-reference.md`：**519 条**（`--verify-doc` 说 up to date）；
+- `--audit`：**468 / 635**，37 条模块、8 个未读文件（与原表一致）；
+- `--verify-docs`：416 个示例编译、**85** 个标 fragment（原 81；多出来的是 `vjp` 的四个 `@example`，
+  它们引用未声明的 `f`，本来就是 fragment）。
 
-## 落地那天跟着动的地方
+## 还留着的两条旧账（不在本分支）
 
-1. 三个 `skip` 自己变成 PASS（门 `test/tools/have-library-vjp.mjs` 从"组合跑不起来"变成"跑起来并印数"）
-   ——`vjp_api.carries_its_own_ruleset`、`vjp_api.analytic_gradient`、`vjp_api.gradient_when_the_steps_land`。
-   没有谁要去改 `expect_*`：断言早就写好了。
-2. `scripts/stdlib-reference.mjs` 里 `vjp` 的 `pending:` 一行删掉再 `--write`，参考页就收进这个模块；
-   `--verify-docs` 在它跑得起来的当天会自己报"该删这一行了"。
-3. `docs/handover/m4-vjp-assembly.cn.md`（本文）与 `test/tools/have-library-vjp.mjs` 的 stage 措辞
-   跟着 `skip=signature` 那一层退场。
-
-## 这支分支为什么现在是绿的
-
-组装没让任何既有断言失效：拒绝形态的用例换成了正向数值用例（它守的是"库自带规则集"，不是"缺一步"），
-三个数由门挡着仍不出现。所以它可以随时并进 `develop`；三条读数在 `5b8333c53` 落地之前不会出现，
-也不会假装出现。
-
-```
-$ node scripts/diagnostics-catalog.mjs --check     # 退出 0
-$ git grep -n '^<<<<<<< '                          # 空
-```
+1. `Vjp<F>`/`Split<F>`/`ParamsOf<F>` 的泛型声明（设计 6.1）：`vjp` 仍按 arity 各声明一次。
+2. 残差位那个"类型由编译器填"的问题（`questions-2026-11-01-the-residual-slot-has-no-type-until-execution.md`，
+   甲/乙 两案已报价）：今天不影响任何读数。
