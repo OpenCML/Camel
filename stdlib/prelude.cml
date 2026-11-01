@@ -99,6 +99,110 @@ export func operator -(x: f32, y: f32): f32
 #op(':op/sub_d')
 export func operator -(x: float, y: float): float
 
+// The rest of the scalar arithmetic, one declaration per element type: a token's meaning at a type
+// is what the type's operator is, and the declaration below is that meaning written down. `*`, `/`
+// and unary `-` are one name with eight types each, so the eight are the overloads of one operator,
+// not eight operators: `a * b` is a call of whichever of these the operands' type selects.
+//
+// A unary `-` is the same token as the binary one above (`-x` and `x - y` are two calls of one
+// operator), so the two spellings are told apart by how many operands they take.
+
+/// The product of two 32-bit floats.
+#op(':op/mul_f')
+export func operator *(x: f32, y: f32): f32
+
+/// The product of two 64-bit floats.
+#op(':op/mul_d')
+export func operator *(x: float, y: float): float
+
+/// The product of two 32-bit integers.
+#op(':op/mul_i')
+export func operator *(x: i32, y: i32): i32
+
+/// The product of two 64-bit integers.
+#op(':op/mul_l')
+export func operator *(x: int, y: int): int
+
+/// The product of two 16-bit floats.
+#op(':op/mul_f6')
+export func operator *(x: f16, y: f16): f16
+
+/// The product of two `bf16` values.
+#op(':op/mul_bf')
+export func operator *(x: bf16, y: bf16): bf16
+
+/// The product of two single-precision complex numbers.
+#op(':op/mul_c')
+export func operator *(x: c64, y: c64): c64
+
+/// The product of two double-precision complex numbers.
+#op(':op/mul_z')
+export func operator *(x: c128, y: c128): c128
+
+/// The quotient of two 32-bit floats.
+#op(':op/div_f')
+export func operator /(x: f32, y: f32): f32
+
+/// The quotient of two 64-bit floats.
+#op(':op/div_d')
+export func operator /(x: float, y: float): float
+
+/// The truncated quotient of two 32-bit integers.
+#op(':op/div_i')
+export func operator /(x: i32, y: i32): i32
+
+/// The truncated quotient of two 64-bit integers.
+#op(':op/div_l')
+export func operator /(x: int, y: int): int
+
+/// The quotient of two 16-bit floats.
+#op(':op/div_f6')
+export func operator /(x: f16, y: f16): f16
+
+/// The quotient of two `bf16` values.
+#op(':op/div_bf')
+export func operator /(x: bf16, y: bf16): bf16
+
+/// The quotient of two single-precision complex numbers.
+#op(':op/div_c')
+export func operator /(x: c64, y: c64): c64
+
+/// The quotient of two double-precision complex numbers.
+#op(':op/div_z')
+export func operator /(x: c128, y: c128): c128
+
+/// The negation of a 32-bit float.
+#op(':op/neg_f')
+export func operator -(x: f32): f32
+
+/// The negation of a 64-bit float.
+#op(':op/neg_d')
+export func operator -(x: float): float
+
+/// The negation of a 32-bit integer.
+#op(':op/neg_i')
+export func operator -(x: i32): i32
+
+/// The negation of a 64-bit integer.
+#op(':op/neg_l')
+export func operator -(x: int): int
+
+/// The negation of a 16-bit float.
+#op(':op/neg_f6')
+export func operator -(x: f16): f16
+
+/// The negation of a `bf16` value.
+#op(':op/neg_bf')
+export func operator -(x: bf16): bf16
+
+/// The negation of a single-precision complex number.
+#op(':op/neg_c')
+export func operator -(x: c64): c64
+
+/// The negation of a double-precision complex number.
+#op(':op/neg_z')
+export func operator -(x: c128): c128
+
 // ---- conversions ----
 //
 // Numeric types are never converted implicitly; these functions do it. There is one conversion
