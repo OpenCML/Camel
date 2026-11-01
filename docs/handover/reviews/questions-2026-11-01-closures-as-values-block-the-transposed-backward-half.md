@@ -75,7 +75,7 @@ B **新增**一条表示，且与裁定正面冲突；C 让 `split` 多背一个
 - 调用者数：每个算子 **1 个注册点 + 1 个 kernel**（`split_operator.cpp:179/:186`、`jvp_operator.cpp:218/:225`、`transpose_operator.cpp:170/:177`），**外部 C++ 调用点 0**。
 - 判据：**能删 342 行**（`split_operator.cpp` 179、`jvp_operator.cpp:81-226` 146、`transforms.cml:54-62,66` 10、`vjp.cml:47-53` 7），
   **但要搬 1720 行**（`split.cpp` 694 + `jvp.cpp` 1026）进一个新 pass。**按“删不掉就是净负”，甲是净负。**
-  （复核 2026-11-01：上面的行数是当天的文件量，今天读作 `split_operator.cpp` **209**、`jvp_operator.cpp` **277**、`transforms.cml` **116**、`vjp.cml` **104**，`split.cpp` **1470**、`jvp.cpp` **1376** —— 三个 `transforms/*.cpp` 随 `lane-gs6`、`lane-reinterp2` 两笔合并长出来，之后 `split.cpp` 又随 `914e09263`、`e0c206239`（残差元组自成一个类型）多了 96 行、随 `fdb60ba49`（选臂成为残差）多了 437 行，`jvp.cpp` 随 `728b9f27c`、`4fbdc4e3a` 与 `ba0a37be9`、`c98dd492f` 多了 37 行，`split_operator.cpp` 又随 `67509bd1a`（kernel 不再自己定类型）少了 2 行、又随本页这条裁定（`split`、`jvp` 与 `transpose` 同一条实参检查）多了 4 行（196→200），`jvp_operator.cpp` 与 `jvp.cpp` 又随 `c8bc3d87f`（`jvp(f)` 在调用方的图建起来时实例化）多了 5 行与 32 行，`jvp_operator.cpp` 又随本页这条裁定（变换的实参必须是编译期已知的函数）多了 9 行，`jvp.cpp` 再随 `lane-remat` 的核声明表多了 19 行（1315→1334）、又随 `c6b7104ae`（`split(jvp(f))` 在调用方建图时切开）与它带来的 `aa90827ba` 多了 6 行，`split_operator.cpp` 同随 `c6b7104ae` 多了 8 行；`vjp.cml` 随 `07451069e`（拉回一律返回元组、一元写成 `(float,)`）多了 10 行，此前随 `lane-m4-assembly` 的泛型化变短。命令：`node test/tools/check-doc-readings.mjs`。）
+  （复核 2026-11-01：上面的行数是当天的文件量，今天读作 `split_operator.cpp` **202**、`jvp_operator.cpp` **268**、`transforms.cml` **116**、`vjp.cml` **104**，`split.cpp` **1470**、`jvp.cpp` **1355**（撤回之后少了构建期提升那一段，见本节末尾） —— 三个 `transforms/*.cpp` 随 `lane-gs6`、`lane-reinterp2` 两笔合并长出来，之后 `split.cpp` 又随 `914e09263`、`e0c206239`（残差元组自成一个类型）多了 96 行、随 `fdb60ba49`（选臂成为残差）多了 437 行，`jvp.cpp` 随 `728b9f27c`、`4fbdc4e3a` 与 `ba0a37be9`、`c98dd492f` 多了 37 行，`split_operator.cpp` 又随 `67509bd1a`（kernel 不再自己定类型）少了 2 行、又随本页这条裁定（`split`、`jvp` 与 `transpose` 同一条实参检查）多了 4 行（196→200），`jvp_operator.cpp` 与 `jvp.cpp` 又随 `c8bc3d87f`（`jvp(f)` 在调用方的图建起来时实例化）多了 5 行与 32 行，`jvp_operator.cpp` 又随本页这条裁定（变换的实参必须是编译期已知的函数）多了 9 行，`jvp.cpp` 再随 `lane-remat` 的核声明表多了 19 行（1315→1334）、又随 `c6b7104ae`（`split(jvp(f))` 在调用方建图时切开）与它带来的 `aa90827ba` 多了 6 行，`split_operator.cpp` 同随 `c6b7104ae` 多了 8 行；`vjp.cml` 随 `07451069e`（拉回一律返回元组、一元写成 `(float,)`）多了 10 行，此前随 `lane-m4-assembly` 的泛型化变短。命令：`node test/tools/check-doc-readings.mjs`。）
 
 **乙 —— 每次实例化新铸一个刚性类型，并在原则 5.10 上开一条例外**
 - 一个 `TypeCode` 落地要动 **7 点**：枚举（`type/base.h:56` + `TypeFlag` `:39`）、`typeCodeToString`（`base.cpp:65`，35 分支且 `:111` 有 `default:` **漏了不报错**）、
@@ -167,25 +167,104 @@ A/B 把三处的 `staticFunctionArg` 置为 `-1`：`transpose` 回到 `TRANSPOSE
 把 `20.0` 钉进断言等于把缺陷变成规格；用例断的是补上之后的拒绝原文。`autodiff:grad` 一族则登记为"今天无事可做"：
 它先被 `NotDifferentiable`（`it has no 'with' parameter`）挡掉，参数那条规则轮不到说话。
 
-**9 × 6 实参形状矩阵（2026-11-02 实测，同一台机 `88zjwei`、同一棵树、`std::nvm`；程序由 `test/tools/emit-transform-matrix.mjs` 生成，每格 ≤10 行）**
+**撤回之后：9 × 6 实参形状矩阵（2026-11-02 重测，四个后端各一遍）**
 
-形状：**S1** 声明的具名函数（`func dbl`） · **S2** 无捕获 lambda · **S3** 调用点内联的捕获 lambda（捕获局部 `x = 3.0`） · **S4** 形参（变换写在 `func via(f: …)` 里，调用方传 `dbl`） · **S5** 局部变量持有的捕获闭包（`let h = (y) => y * x`，按名传） · **S6** 算子/内置作为值。
-每格记三样之一：**答案（数与纸笔相等）** / **拒绝（诊断码与位置）** / **崩（不改写地贴出保证行）**；`n/a` 一律带理由。**纸笔期望**列在行里（`transpose` 的调用是 `back(knowns=3.0, cotangent=1.0)`，签名 `(knowns.., cotangent) => cotangents`）。
+> **这一节是撤回后的读数。** 负责人 2026-11-01 17:50 否决了整套前端变换表与调用处拒绝（`TransformArgumentIsNotAKnownFunction`、`CallSpec::staticFunctionArg`、`compile_time.h`、`jvp_instantiate.cpp` / `split_instantiate.cpp` 一并撤掉，见 `reviews/questions-2026-10-29.md` 的"撤回与返工"）。**否决的理由是"两个机制做同一件事"，不是"实现得不好"**：`#macro` 加 `std::macro`（设计原则第 8 节）就是"动态地构造静态图"的正路，前端那张按算子 URI 查的表是它的第二套。三个变换因此只剩运行期 kernel 一份实现，对任何函数值都能用。
+>
+> 下面每一格都是**撤完之后**量出来的，同一个生成器（`test/tools/emit-transform-matrix.mjs`）、同一台机、同一棵树，`nvm` / `fvm` / `jit` / `prl` 各一遍（45 格有程序的共 180 次运行）。**四个后端逐格一致：0 格不一致**；拒绝的格子连码带位置都相同。
 
-| 入口 | 纸笔 | S1 具名 | S2 无捕获 | S3 捕获内联 | S4 形参 | S5 捕获变量 | S6 算子 |
-|---|---|---|---|---|---|---|---|
-| `transpose` | `2.0` | `2.0` | `2.0` | 拒绝 `0x03000209` @6:26 | `2.0` | 拒绝 `0x03000209` @6:26 | n/a：`(:op/mul_d)` 不是表达式（`SyntaxDiag::UnexpectedToken`，`:` 处） |
-| `jvp` | `4.0 / 2.0` | `4.0 / 2.0` | `4.0 / 2.0` | 拒绝 `0x03000209` @7:22 | `4.0 / 2.0` | 拒绝 `0x03000209` @7:22 | n/a：同上 |
-| `split` | `4.0 / 2.0` | **崩**：`builder_operators.cpp(3831) visitLinkNode` / `Guarantee: dataType->code() == TypeCode::Function` / `Reading: Target node of LINK must be a function or operator node.`（core dumped） | **崩**：同上 | 拒绝 `0x03000209` @7:22 | **崩**：同上 | 拒绝 `0x03000209` @7:22 | n/a：同上 |
-| `vmap` | `2.0 / 4.0` | `2.0 / 4.0` | `2.0 / 4.0` | 拒绝 `0x03000209` @7:24 | `2.0 / 4.0` | 拒绝 `0x03000209` @7:24 | n/a：同上 |
-| `remat` | `4.0` | `4.0` | `4.0` | 拒绝 `0x03000209` @6:23 | `4.0` | 拒绝 `0x03000209` @6:23 | n/a：同上 |
-| `grad` | `2.0`（`d/dw(x·w)`，`x=2`） | `2.0` | 拒绝 `NotDifferentiable`（无 `with` 形参） | 拒绝 `NotDifferentiable` | n/a：带 `with` 的函数写成形参类型的拼法不存在——`func via(f: <float> (x: float) => float)` 报 `SyntaxDiag::MissingToken: Expected ':' before '>'` | 拒绝 `NotDifferentiable` | n/a：同上 |
-| `grad(f, true)` | `(2.0, 1.0)` | `(2.0, 1.0)` | 拒绝 `NotDifferentiable` | 拒绝 `NotDifferentiable` | n/a：同上 | 拒绝 `NotDifferentiable` | n/a：同上 |
-| `with_grad` | `6.0 / 2.0` | `6.0 / 2.0` | 拒绝 `NotDifferentiable` | 拒绝 `NotDifferentiable` | n/a：同上 | 拒绝 `NotDifferentiable` | n/a：同上 |
-| `with_grad(f, true)` | `(6.0, 1.0)` + `2.0` | `(6.0, 1.0)` + `2.0` | 拒绝 `NotDifferentiable` | 拒绝 `NotDifferentiable` | n/a：同上 | 拒绝 `NotDifferentiable` | n/a：同上 |
+形状：**S1** 声明的具名函数 · **S2** 无捕获 lambda · **S3** 调用点内联的捕获 lambda（捕获 `x = 3.0`） · **S4** 形参 · **S5** 局部变量持有的捕获闭包 · **S6** 算子作为值（`(:op/mul_d)` 不成表达式，`SyntaxDiag::UnexpectedToken`，四后端都无从量起，记 `n/a`）。
 
-读这张表要知道的三件事：
-1. **没有一格 `SILENT-WRONG`**：凡是给了数的格子，数与纸笔相等（`transpose` 的 `2.0` 是 `cotangent 1.0 × 2`，`grad` 的 `2.0` 是 `∂(x·w)/∂w = x = 2`，`with_grad` 的 `6.0/2.0` 是 `f(2)` 与 `∂/∂w`）。这与第十轮之前的 `vmap` 20.0、`remat` 0.0 不矛盾：那两个数出在**补声明之前**，今天同一个形状已经被拒绝。
-2. **`split` 那三格是崩，不是拒绝也不是数**：`split` 的实参必须是 `jvp` 升起的那张图（库里的写法是 `split(jvp(f))`），但**一个普通的具名函数、一个无捕获 lambda、一个形参**都能过调用点，然后在 builder 里撞 `LINK` 的保证。这是"该拒绝却崩"，比"该拒绝却给数"更难查：没有诊断可读，只有 core。
-3. **S4 形参在 `transpose`/`jvp`/`vmap`/`remat` 上全部给正确答案**，这与 `staticFunctionArgRefusesParameters` 关着一致——参数半边今天不是"拒绝"，是"照算"。`grad` 一族反过来：它们的 S2/S3/S5 全被 `NotDifferentiable` 先挡掉，所以那张"该不该有实参规则"的账对它们仍然是空的。
+| 入口 | 纸笔 | S1 具名 | S2 无捕获 | S3 捕获内联 | S4 形参 | S5 捕获变量 |
+|---|---|---|---|---|---|---|
+| `transpose`（`back(3.0, 1.0)`） | `2.0` | `2.0` | `2.0` | 运行期拒绝 `RuntimeDiag::RuntimeError` | `2.0` | 运行期拒绝 `RuntimeDiag::RuntimeError` |
+| `jvp` | `4.0 / 2.0` | `4.0 / 2.0` | `4.0 / 2.0` | 运行期拒绝 `RuntimeDiag::RuntimeError` | `4.0 / 2.0` | 运行期拒绝 `RuntimeDiag::RuntimeError` |
+| `split` | `4.0 / 2.0` | **崩** | **崩** | **崩** | **崩** | **崩** |
+| `vmap`（`[1.0, 2.0]`，`y * 3.0`） | `3.0 / 6.0` | `2.0 / 4.0`（无捕获，×2） | `2.0 / 4.0` | **`1.0 / 4.0`（错）** | `2.0 / 4.0` | **`1.0 / 4.0`（错）** |
+| `remat`（`y * 3.0`） | `6.0` | `4.0`（×2） | `4.0` | **`0.0`（错）** | `4.0` | **`0.0`（错）** |
+| `grad` | `2.0` | `2.0` | 拒绝 `NotDifferentiable` | 拒绝 `NotDifferentiable` | n/a：`<float> (x: float) => float` 拼不出来（`SyntaxDiag::MissingToken`） | 拒绝 `NotDifferentiable` |
+| `grad(f, true)` | `(2.0, 1.0)` | `(2.0, 1.0)` | 拒绝 `NotDifferentiable` | 拒绝 `NotDifferentiable` | n/a：同上 | 拒绝 `NotDifferentiable` |
+| `with_grad` | `6.0 / 2.0` | `6.0 / 2.0` | 拒绝 `NotDifferentiable` | 拒绝 `NotDifferentiable` | n/a：同上 | 拒绝 `NotDifferentiable` |
+| `with_grad(f, true)` | `(6.0, 1.0)` + `2.0` | `(6.0, 1.0)` + `2.0` | 拒绝 `NotDifferentiable` | 拒绝 `NotDifferentiable` | n/a：同上 | 拒绝 `NotDifferentiable` |
+
+**`SILENT-WRONG`（给了数，但数与纸笔不等）——这些是运行期 kernel 的缺陷，待修，不是被拒绝的合法程序：**
+
+| 格 | 纸笔 | 实测 | 形状 |
+|---|---|---|---|
+| `vmap-s3` | `3.0 / 6.0`（`y * 3.0` 批到 `[1.0, 2.0]`） | `1.0 / 4.0` | 内联捕获闭包 |
+| `vmap-s5` | `3.0 / 6.0` | `1.0 / 4.0` | 局部变量持有的捕获闭包 |
+| `remat-s3` | `6.0` | `0.0` | 内联捕获闭包 |
+| `remat-s5` | `6.0` | `0.0` | 局部变量持有的捕获闭包 |
+
+同一类的两个更早读数（第十五轮，形状是 `vmap(h)([2.0, 4.0])`、`remat(h)(2.0)`，`h` 捕获 `x = 3.0`）：`vmap` 报 **20.0**（纸笔 18.0，换一个捕获值仍是 20.0，说明捕获被整个丢掉），`remat` 报 **0.0**（纸笔 6.0）。**这批数字一律不进断言**——把错数钉成期望值等于把它变成规格。它们的归属是 `vmap_operator.cpp` 与 `remat_operator.cpp` 的 kernel：批元素占掉了闭包的 `with` 槽，捕获值没了。
+
+**`split` 的五格全是崩**，不是数也不是拒绝：`builder_operators.cpp` 的 `visitLinkNode` 保证（`Guarantee: dataType->code() == TypeCode::Function`，`Reading: Target node of LINK must be a function or operator node.`）加 core dump，没有诊断可读。`split` 的实参必须是 `jvp` 升起的那张图（库里写 `split(jvp(f))`），但调用点对任何函数值都放行，这个前提只有 builder 的保证在守。**这是全表唯一的红色事实，记成崩，没有写成期望，也没有一条用例去钉它。**
+
+四后端逐格读数（每格四列分别是 `nvm` / `fvm` / `jit` / `prl`；`ND` = `NotDifferentiable`（`0x000150`）、`MT` = `SyntaxDiag::MissingToken`（`0x000009`）、`RE` = `RuntimeDiag::RuntimeError`（`0x000000`）；`n/a` 见上）：
+
+| 格 | `nvm` | `fvm` | `jit` | `prl` |
+|---|---|---|---|---|
+| `transpose-s1` | `2.0` | `2.0` | `2.0` | `2.0` |
+| `transpose-s2` | `2.0` | `2.0` | `2.0` | `2.0` |
+| `transpose-s3` | `RE` | `RE` | `RE` | `RE` |
+| `transpose-s4` | `2.0` | `2.0` | `2.0` | `2.0` |
+| `transpose-s5` | `RE` | `RE` | `RE` | `RE` |
+| `transpose-s6` | n/a | n/a | n/a | n/a |
+| `jvp-s1` | `4.0,2.0` | `4.0,2.0` | `4.0,2.0` | `4.0,2.0` |
+| `jvp-s2` | `4.0,2.0` | `4.0,2.0` | `4.0,2.0` | `4.0,2.0` |
+| `jvp-s3` | `RE` | `RE` | `RE` | `RE` |
+| `jvp-s4` | `4.0,2.0` | `4.0,2.0` | `4.0,2.0` | `4.0,2.0` |
+| `jvp-s5` | `RE` | `RE` | `RE` | `RE` |
+| `jvp-s6` | n/a | n/a | n/a | n/a |
+| `split-s1` | **CRASH** | **CRASH** | **CRASH** | **CRASH** |
+| `split-s2` | **CRASH** | **CRASH** | **CRASH** | **CRASH** |
+| `split-s3` | **CRASH** | **CRASH** | **CRASH** | **CRASH** |
+| `split-s4` | **CRASH** | **CRASH** | **CRASH** | **CRASH** |
+| `split-s5` | **CRASH** | **CRASH** | **CRASH** | **CRASH** |
+| `split-s6` | n/a | n/a | n/a | n/a |
+| `vmap-s1` | `2.0,4.0` | `2.0,4.0` | `2.0,4.0` | `2.0,4.0` |
+| `vmap-s2` | `2.0,4.0` | `2.0,4.0` | `2.0,4.0` | `2.0,4.0` |
+| `vmap-s3` | `1.0,4.0` | `1.0,4.0` | `1.0,4.0` | `1.0,4.0` |
+| `vmap-s4` | `2.0,4.0` | `2.0,4.0` | `2.0,4.0` | `2.0,4.0` |
+| `vmap-s5` | `1.0,4.0` | `1.0,4.0` | `1.0,4.0` | `1.0,4.0` |
+| `vmap-s6` | n/a | n/a | n/a | n/a |
+| `remat-s1` | `4.0` | `4.0` | `4.0` | `4.0` |
+| `remat-s2` | `4.0` | `4.0` | `4.0` | `4.0` |
+| `remat-s3` | `0.0` | `0.0` | `0.0` | `0.0` |
+| `remat-s4` | `4.0` | `4.0` | `4.0` | `4.0` |
+| `remat-s5` | `0.0` | `0.0` | `0.0` | `0.0` |
+| `remat-s6` | n/a | n/a | n/a | n/a |
+| `grad-s1` | `2.0` | `2.0` | `2.0` | `2.0` |
+| `grad-s2` | `ND` | `ND` | `ND` | `ND` |
+| `grad-s3` | `ND` | `ND` | `ND` | `ND` |
+| `grad-s4` | `MT` | `MT` | `MT` | `MT` |
+| `grad-s5` | `ND` | `ND` | `ND` | `ND` |
+| `grad-s6` | n/a | n/a | n/a | n/a |
+| `grad_aux-s1` | `(2.0, 1.0)` | `(2.0, 1.0)` | `(2.0, 1.0)` | `(2.0, 1.0)` |
+| `grad_aux-s2` | `ND` | `ND` | `ND` | `ND` |
+| `grad_aux-s3` | `ND` | `ND` | `ND` | `ND` |
+| `grad_aux-s4` | `MT` | `MT` | `MT` | `MT` |
+| `grad_aux-s5` | `ND` | `ND` | `ND` | `ND` |
+| `grad_aux-s6` | n/a | n/a | n/a | n/a |
+| `with_grad-s1` | `6.0,2.0` | `6.0,2.0` | `6.0,2.0` | `6.0,2.0` |
+| `with_grad-s2` | `ND` | `ND` | `ND` | `ND` |
+| `with_grad-s3` | `ND` | `ND` | `ND` | `ND` |
+| `with_grad-s4` | `MT` | `MT` | `MT` | `MT` |
+| `with_grad-s5` | `ND` | `ND` | `ND` | `ND` |
+| `with_grad-s6` | n/a | n/a | n/a | n/a |
+| `with_grad_aux-s1` | `(6.0, 1.0),2.0` | `(6.0, 1.0),2.0` | `(6.0, 1.0),2.0` | `(6.0, 1.0),2.0` |
+| `with_grad_aux-s2` | `ND` | `ND` | `ND` | `ND` |
+| `with_grad_aux-s3` | `ND` | `ND` | `ND` | `ND` |
+| `with_grad_aux-s4` | `MT` | `MT` | `MT` | `MT` |
+| `with_grad_aux-s5` | `ND` | `ND` | `ND` | `ND` |
+| `with_grad_aux-s6` | n/a | n/a | n/a | n/a |
+
+这张表要说清三件事：
+1. **`vjp` 四后端逐位一致是已知的，这张表不是它的推广**：`vjp` 一致说的是库体那条链路，这里量的是九个入口 × 六种实参形状。结论碰巧同类，但它是量出来的。
+2. **三个变换现在只有运行期一份实现**：`transpose`/`jvp` 的捕获形状在运行期被 kernel 自己拒绝（`RuntimeDiag::RuntimeError`），`vmap`/`remat` 的捕获形状却被静默算错——同一个闭包形状，两个算子拒绝、两个算错，差别在 kernel 怎么处理闭包的 `with` 槽，不在前端。
+3. **测量程序本身也会错**：这份表第一次跑出来 `transpose` 的三格是 `RE`，因为生成器里省了 `import rulesets.transpose`——少了它，被转置的函数找不到规则族（`skip=rule uri=:op/mul_d reason=no-such-family`），量到的是"缺 import"，不是形状。补上 import 之后才是 `2.0`。**测量程序的 import 也是被测量的一部分。**
+
+敏感性也校过一次：把后端名写错（`std::zzz`）会当场报 `RuntimeDiag::UnrecognizedGraphPass`，所以 `std::prl` 被接受就意味着这个 pass 真的存在并跑了，四个后端不是同一台机器的四个名字。
+
+
 

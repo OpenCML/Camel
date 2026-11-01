@@ -2,7 +2,7 @@
 
 施工图。左边是 `modules/transforms/jvp.cpp` 的段（行号按该文件现文，共 319 行），中间是它做了什么，右边是转置版要怎么改。**三处一定会不同的地方**（逆序、k 份相加、换成 `transposeRuleOf`）单独标出落在哪一段。
 
-> **复核 2026-11-01**：`modules/transforms/jvp.cpp` 现在 **1376 行**（写下这一页时是 319 行，段号按那时的文本编号；比上一次复核的 1315 行多的 32 行是 `c8bc3d87f` 让 `jvp(f)` 在调用方的图建起来时就实例化（再往前 1305→1315 的 10 行是 `ba0a37be9` 与 `c98dd492f` 让提升从调用方取源图的 id、并打印它建出的图）；最后的 1366→1372 的 6 行是本车道让 `lifted-at=compile` 的读数把 `liftedFrom=` 读作 `unassigned` —— 构建期提升没有运行期的图 id，写一个数字会被读成另一张图，所以那六行是说明为什么这里是词而不是数），段行号今天已经对不上文本，重读这一页要先按段名找位置。`.cpp` 的行数由 `node test/tools/check-doc-readings.mjs` 核对。
+> **复核 2026-11-02**：`modules/transforms/jvp.cpp` 现在 **1355 行**（写下这一页时是 319 行，段号按那时的文本编号；上一次复核是 1376 行，去掉的 21 行是 2026-11-01 17:50 负责人否决整套前端变换表之后撤掉的构建期提升——`buildJvpGraphOfItsOwn` 与 `lifted-at=` 读数一起没了，`jvp(f)` 只剩运行期 kernel 一份实现，所以 `liftedFrom=` 又回到图 id；段行号今天已经对不上文本，重读这一页要先按段名找位置）。`.cpp` 的行数由 `node test/tools/check-doc-readings.mjs` 核对。
 
 ## 一、段
 

@@ -1,13 +1,11 @@
 #!/usr/bin/env node
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
-//
+
 // Emit the 9 x 6 argument-shape matrix the review page quotes: one small program per (entry point, shape).
 // It is a measurement tool, not a test: nothing here asserts a reading, because the readings it produces
 // include the ones that must never become expectations (the page records which). Run it, copy the output
 // directory to a machine with a built tree, and run each file with `camel <file>.cml std::nvm`.
-
-// Emit the matrix programs: transform entry points x 6 argument shapes, one small .cml per cell.
 import fs from 'fs'
 
 const OUT = 'D:/Temp/mx4'
@@ -18,7 +16,10 @@ const ROWS = ['transpose', 'jvp', 'split', 'vmap', 'remat', 'grad', 'grad_aux', 
 const SHAPES = ['s1', 's2', 's3', 's4', 's5', 's6']
 
 const IMPORTS = {
-    transpose: 'import { transpose } from transforms',
+    // The ruleset a transform reads is part of the program being measured: without
+    // `rulesets.transpose` the transposed function finds no family (`skip=rule uri=:op/mul_d
+    // reason=no-such-family`) and the cell measures the missing import, not the shape.
+    transpose: 'import { transpose } from transforms\nimport rulesets.transpose',
     jvp: 'import { jvp } from transforms\nimport rulesets.jvp',
     split: 'import { split } from transforms\nimport rulesets.jvp',
     vmap: 'import { vmap } from transforms\nimport rulesets.vmap',
