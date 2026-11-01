@@ -220,6 +220,13 @@ def artifact_stem(name):
     return readable + "_" + hashlib.sha1(name.encode("utf-8")).hexdigest()[:10]
 
 
+def identity_of(program, entry_args):
+    """What an entry is, for every question this tool asks about entries: the program's path with
+    one separator, and the arguments of its `main`. Two spellings of one path are one identity."""
+    return os.path.relpath(program, ROOT).replace("\\", "/") + \
+        "".join(" " + a for a in entry_args)
+
+
 def check_artifact_names(paths, args):
     """Every entry gets its own source and its own executable. The property is the name's, not the
     way it is spelled: two entries that differ -- in the program or in the arguments of its `main`
@@ -242,14 +249,36 @@ def check_artifact_names(paths, args):
     if not listed:
         print("FAIL: no programs")
         return 2
+    if args.fixture:
+        # A list that is *meant* to name one program twice, so that the deduplication is asked a
+        # question whose answer is known. Without it this assertion has no teeth the day the list
+        # is clean: nothing is left for a spelling-keyed deduplication to get wrong. Two things are
+        # asked of the fixture, and each is how a regression shows: the tool must keep one entry
+        # for the two spellings (so keying by the spelling is red), and the fixture must still
+        # contain two spellings (so deleting a line instead of fixing the tool is red too).
+        spelled = expand(read_expect(args.fixture), dedupe=False)
+        kept = expand(read_expect(args.fixture))
+        identities = {identity_of(program, entry_args) for program, entry_args in spelled}
+        if len(kept) != len(identities):
+            print("FAIL: the fixture names %d spellings of %d program(s) and the tool kept %d "
+                  "entr(ies): deduplication is keyed by the spelling of a path, not by identity"
+                  % (len(spelled), len(identities), len(kept)))
+            for program, entry_args in kept:
+                print("    " + program)
+            return 1
+        if len(spelled) == len(identities):
+            print("FAIL: the fixture no longer names one program twice (%d entries, %d programs): "
+                  "it is not asking anything" % (len(spelled), len(identities)))
+            return 1
+        print("the fixture: %d spellings of %d program, and the tool keeps %d entry for them"
+              % (len(spelled), len(identities), len(kept)))
     # The identity is computed here, not taken from the tool's own key: what is asked is whether
     # the list names one program twice, and a list has one answer to that whatever the tool does
     # with it. Two spellings of one path are one program (`exec/site_message.cml` written with a
     # separator the other line does not have), and the count says so.
     spellings = {}
     for program, entry_args in listed:
-        identity = os.path.relpath(program, ROOT).replace("\\", "/") + \
-                   "".join(" " + a for a in entry_args)
+        identity = identity_of(program, entry_args)
         spellings.setdefault(identity, []).append(program)
     repeated = {identity: found for identity, found in spellings.items() if len(found) > 1}
     if repeated:
@@ -263,8 +292,7 @@ def check_artifact_names(paths, args):
     entries = expand(paths + (read_expect(args.expect) if args.expect else []))
     names = {}
     for program, entry_args in entries:
-        identity = os.path.relpath(program, ROOT).replace("\\", "/") + \
-                   "".join(" " + a for a in entry_args)
+        identity = identity_of(program, entry_args)
         names.setdefault(artifact_stem(identity), []).append(identity)
     collisions = {stem: found for stem, found in names.items() if len(found) > 1}
     if collisions:
@@ -797,6 +825,11 @@ def main():
     ap.add_argument("--check-names", action="store_true",
                     help="check that no two entries of the list write the same file: entries that "
                          "differ in the program or in its arguments must get different names")
+    ap.add_argument("--fixture",
+                    help="with --check-names: a list that is meant to name one program twice (two "
+                         "spellings of one path). The tool must keep one entry for them -- else its "
+                         "deduplication is keyed by the spelling -- and the list must still hold two "
+                         "spellings, else the fixture is no longer asking anything")
     ap.add_argument("--four-backends", action="store_true",
                     help="run each program on std::nvm, std::fvm, std::cpp and std::jit, say what "
                          "each one said, and fail when they do not all say the same thing")
