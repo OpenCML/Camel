@@ -22,7 +22,16 @@
 //   node scripts/diagnostics-catalog.mjs --no-producer   the semantic codes no code constructs
 //   node scripts/diagnostics-catalog.mjs --no-producer-check  fail if any registered code is one
 //   node scripts/diagnostics-catalog.mjs --pin-examples   fill in the example pins of new diagnostics
+//   node scripts/diagnostics-catalog.mjs --text-coverage   the codes whose message a case reads
+//   node scripts/diagnostics-catalog.mjs --text-coverage-check  fail if a section falls below its floor
 //   --root DIR                                        read and write under DIR (the proof cases)
+//
+// The five counts answer five different questions and none of them replaces another. A code can be
+// named by a case and still print a sentence nobody has read, which is what --text-coverage asks
+// about; and a sentence that is right in the registry can be filled with the wrong arguments at the
+// call site, which only the cases that run the program and compare its output can catch. "The words
+// are in the registry" is not "the words the user sees", and "a needle quotes the sentence" is not
+// "the sentence is composed right".
 //
 // --check runs in two places, so a hand-edited number cannot reach a build or a test run: the
 // build (CMakeLists.txt makes it a dependency of libcamel_objects, before anything compiles
@@ -1166,12 +1175,24 @@ if (mode === '--name-coverage' || mode === '--name-coverage-check') {
 // class was caught by the plan cases that run the program, which is why they exist; this check is for
 // the sentence itself, which nothing else reads.
 const TEXT_ASSERTED_RUN = 12
+// Named exceptions: a code whose message cannot be asserted because no case can reach it, with the
+// reason. Not a silent skip -- an exception is a decision that is written down, and the count says
+// how many there are.
+const TEXT_COVERAGE_EXCEPTIONS = new Map([
+    [
+        'internal::UnknownInternalError',
+        'the compiler reports it when it reaches a state it has no code for; the tests that name it'
+            + ' assert its absence (expect_output_not_contains), and making it happen would mean'
+            + ' writing a defect into the compiler',
+    ],
+])
+
 const TEXT_COVERAGE_RECORDED = new Map([
-    ['semantic', 128],
+    ['semantic', 136],
     ['internal', 0],
     ['lexical', 3],
     ['syntax', 14],
-    ['runtime', 21],
+    ['runtime', 27],
 ])
 
 if (mode === '--text-coverage' || mode === '--text-coverage-check') {
@@ -1205,18 +1226,28 @@ if (mode === '--text-coverage' || mode === '--text-coverage-check') {
             }
             if (pins.size === 0) continue
             const needles = []
+            // One level of brackets is allowed inside the list: a needle is often a fragment of a
+            // printed value, and 'f64[..]' or '[0, 3, 6, 9]' ends the match early when the list is
+            // read up to the first ']'.
             for (const m of block.matchAll(
-                /expect_(?:output|stdout|stderr)_contains\s*=\s*\[([\s\S]*?)\]/g
+                /expect_(?:output|stdout|stderr)_contains\s*=\s*\[((?:[^\[\]]|\[[^\[\]]*\])*)\]/g
             )) {
                 for (const s of m[1].matchAll(/"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'/g)) {
                     needles.push(s[1] ?? s[2])
                 }
             }
-            // A snapshot compares a whole report, so its golden file is expected output too.
+            // A snapshot compares a whole report, so its golden file is expected output too -- and
+            // the name in it is what pins the code, since the plan block itself may name none.
             for (const g of block.matchAll(/^\s*golden\s*=\s*["']([^"']+)["']/gm)) {
                 const golden = path.resolve(path.dirname(file), g[1])
-                if (fs.existsSync(golden)) needles.push(fs.readFileSync(golden, 'utf8'))
+                if (!fs.existsSync(golden)) continue
+                const body = fs.readFileSync(golden, 'utf8')
+                needles.push(body)
+                for (const m of body.matchAll(/\b([A-Za-z]+Diag)::([A-Za-z0-9_]+)/g)) {
+                    pins.add(`${m[1]}::${m[2]}`)
+                }
             }
+            if (pins.size === 0) continue
             addNeedles(pins, needles)
         }
     }
@@ -1228,7 +1259,7 @@ if (mode === '--text-coverage' || mode === '--text-coverage-check') {
             .filter((s) => s.length >= TEXT_ASSERTED_RUN)
             .sort((a, b) => b.length - a.length)
     const report = SECTIONS.filter((s) => sectionFilter === null || s.id === sectionFilter).map((s) => {
-        const all = entries.filter((e) => e.sectionId === s.id)
+        const all = entries.filter((e) => e.sectionId === s.id && !TEXT_COVERAGE_EXCEPTIONS.has(e.fullName))
         const reading = all.filter((e) => {
             const runs = fixedRuns(e.message)
             if (runs.length === 0) return false
@@ -1243,6 +1274,9 @@ if (mode === '--text-coverage' || mode === '--text-coverage-check') {
     if (report.length === 0) {
         console.log(`text coverage: no section named '${sectionFilter}'`)
         process.exit(2)
+    }
+    for (const [key, why] of TEXT_COVERAGE_EXCEPTIONS) {
+        console.log(`  excepted: ${key} -- ${why}`)
     }
     for (const r of report) {
         console.log(
