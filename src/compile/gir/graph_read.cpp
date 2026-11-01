@@ -13,9 +13,8 @@ namespace {
 /// Reads a payload body off a draft's tail. A draft keeps a node's payload as bytes at an
 /// arbitrary offset, so the body is copied out instead of reinterpreted in place: the copy is what
 /// makes this safe for a body with pointers in it (`GCOperBody`, `GCFuncRef`).
-template <typename Body>
-bool draftBodyOf(
-    const camel::runtime::GraphDraft &draft, gc_node_ref_t ref, Body &out) {
+template <typename Body, typename Graph>
+bool draftBodyOf(const Graph &draft, gc_node_ref_t ref, Body &out) {
     const std::span<const std::byte> payload = draft.payloadOf(ref);
     if (payload.size() < sizeof(Body)) {
         return false;
@@ -86,7 +85,7 @@ std::string listDifference(
 } // namespace
 
 bool DraftGraphRead::alive(gc_node_ref_t ref) const {
-    return kept_.empty() ? draft_.alive(ref) : ref < kept_.size();
+    return kept_.empty() ? txn_.graph().alive(ref) : ref < kept_.size();
 }
 
 gc_node_ref_t DraftGraphRead::mappedIdOf(gc_node_ref_t id) const {
@@ -112,39 +111,39 @@ DraftGraphRead::mappedListOf(std::span<const gc_node_ref_t> inputs) const {
 }
 
 std::vector<gc_node_ref_t> DraftGraphRead::normInputsOf(gc_node_ref_t ref) const {
-    return mappedListOf(draft_.normInputsOf(sourceIdOf(ref)));
+    return mappedListOf(txn_.graph().normInputsOf(sourceIdOf(ref)));
 }
 
 std::vector<gc_node_ref_t> DraftGraphRead::withInputsOf(gc_node_ref_t ref) const {
-    return mappedListOf(draft_.withInputsOf(sourceIdOf(ref)));
+    return mappedListOf(txn_.graph().withInputsOf(sourceIdOf(ref)));
 }
 
 std::vector<gc_node_ref_t> DraftGraphRead::ctrlInputsOf(gc_node_ref_t ref) const {
-    return mappedListOf(draft_.ctrlInputsOf(sourceIdOf(ref)));
+    return mappedListOf(txn_.graph().ctrlInputsOf(sourceIdOf(ref)));
 }
 
 GCNodeKind DraftGraphRead::kindOf(gc_node_ref_t ref) const {
-    const camel::runtime::DraftNodeHeader *header = draft_.header(sourceIdOf(ref));
+    const camel::runtime::DraftNodeHeader *header = txn_.graph().header(sourceIdOf(ref));
     return header == nullptr ? GCNodeKind::Dead : header->kind;
 }
 
 gc_slot_idx_t DraftGraphRead::dataIndexOf(gc_node_ref_t ref) const {
-    const camel::runtime::DraftNodeHeader *header = draft_.header(sourceIdOf(ref));
+    const camel::runtime::DraftNodeHeader *header = txn_.graph().header(sourceIdOf(ref));
     return header == nullptr ? 0 : header->dataIndex;
 }
 
 const camel::core::type::Type *DraftGraphRead::typeOf(gc_node_ref_t ref) const {
-    const camel::runtime::DraftNodeHeader *header = draft_.header(sourceIdOf(ref));
+    const camel::runtime::DraftNodeHeader *header = txn_.graph().header(sourceIdOf(ref));
     return header == nullptr ? nullptr : header->dataType;
 }
 
 uint8_t DraftGraphRead::flagsOf(gc_node_ref_t ref) const {
-    const camel::runtime::DraftNodeHeader *header = draft_.header(sourceIdOf(ref));
+    const camel::runtime::DraftNodeHeader *header = txn_.graph().header(sourceIdOf(ref));
     return header == nullptr ? 0 : header->runtimeFlags;
 }
 
 bool DraftGraphRead::hasPayload(gc_node_ref_t ref) const {
-    const camel::runtime::DraftNodeHeader *header = draft_.header(sourceIdOf(ref));
+    const camel::runtime::DraftNodeHeader *header = txn_.graph().header(sourceIdOf(ref));
     return header != nullptr && header->payloadBytes != 0;
 }
 
@@ -152,13 +151,13 @@ GraphId DraftGraphRead::calleeIdOf(gc_node_ref_t ref) const {
     if (kindOf(ref) != GCNodeKind::Func) {
         return camel::runtime::kInvalidGraphId;
     }
-    const std::span<const std::byte> payload = draft_.payloadOf(sourceIdOf(ref));
+    const std::span<const std::byte> payload = txn_.graph().payloadOf(sourceIdOf(ref));
     if (payload.size() < sizeof(camel::runtime::GCFuncRef)) {
         return camel::runtime::kInvalidGraphId;
     }
     camel::runtime::GCFuncRef body{};
     std::memcpy(&body, payload.data(), sizeof(body));
-    const std::span<const GraphId> callees = draft_.payloadGraphs();
+    const std::span<const GraphId> callees = txn_.graph().payloadGraphs();
     return body.ref < callees.size() ? callees[body.ref] : camel::runtime::kInvalidGraphId;
 }
 
@@ -167,7 +166,7 @@ std::string DraftGraphRead::operUriOf(gc_node_ref_t ref) const {
         return {};
     }
     camel::runtime::GCOperBody body{};
-    if (!draftBodyOf(draft_, sourceIdOf(ref), body)) {
+    if (!draftBodyOf(txn_.graph(), sourceIdOf(ref), body)) {
         return {};
     }
     return std::string(body.uri());
@@ -322,8 +321,8 @@ std::string firstDifference(const GraphRead &draft, const GraphRead &frozen) {
 }
 
 
-void DraftGraphs::add(const camel::runtime::GraphDraft &draft) {
-    byId_.try_emplace(draft.id(), draft);
+void DraftGraphs::add(const camel::runtime::GraphTransaction &txn) {
+    byId_.try_emplace(txn.id(), txn);
 }
 
 const GraphRead *DraftGraphs::byId(GraphId id) const {
