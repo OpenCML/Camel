@@ -12,10 +12,11 @@
 
 状态四种：**待裁**（在等作者）、**已裁已落**（裁定有，改动已在 develop）、**已裁未落**（裁定有，改动还没进 develop）、**已撤**（问题作废）。"还堵着"一栏写的是这条裁定今天还挡着哪些具体工作；已经落地的写"无"。
 
-## 现在在等作者：1 页（与目录逐项一致）
+## 现在在等作者：2 页（与目录逐项一致）
 
 | 页 | 问句 | 默认建议 |
 |---|---|---|
+| [`nested-branch-stops-in-jvp`](questions-2026-11-02-nested-branch-stops-in-jvp.md) | 嵌套分支（臂里还有分支）在 `jvp` 里停下，是走图的缺口还是一个更大的形状 | 待补 |
 | [`whether-the-empty-tangent-needs-a-port`](questions-2026-11-02-whether-the-empty-tangent-needs-a-port.md) | 没有切空间的形参（`int`/`bool`/`string`）在端口上是"少一个端口"，还是有一个类型为 `()` 的端口 | **沿用"没有槽"**（M3 的 `Tangent<bool> = ()` 就是 `contribution=0`，走图层今天也是"不占槽"）；沿用不了就保持在签名层拒绝，并把差距写在这一页上 |
 
 **16:10 作者把最后一页也挪进 `reviews/`**（`fsh-dev` 的 `56ce9259c`）：`whether-a-function-value-can-take-a-computed-pack`——lambda 形参表收无类型的 `..xs`（选 ①，不改 5.6），类型从期望类型来，落地后 `vjp` 并成一条声明。所以这一节现在是空的，不是没人在问。

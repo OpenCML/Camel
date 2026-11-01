@@ -252,7 +252,7 @@ try {
             }
             assert.match(
                 failed.stdout + failed.stderr,
-                /FileSystemError|cannot create the checkpoint temporary directory/,
+                /cannot create the checkpoint temporary directory/,
                 'a save that cannot create its temporary directory did not report a fault'
             )
             assert.deepEqual(snapshotTree(failing), failingBefore, 'a failed save changed the old checkpoint')

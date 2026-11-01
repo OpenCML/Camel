@@ -92,12 +92,24 @@ const EXAMPLES_REL = 'diagnostics/examples.tsv'
 //             also asserts `expect_diagnostic_name` and the sentence it prints.
 // A case added for a code lowers it in that commit; a correction lowers it in the commit that
 // teaches the counter the form, and names what it found.
+// The same ratchet for producers: the number of codes in each section that no code
+// constructs. Measured on this tree: internal 0 of 1, lexical 0 of 5, syntax 0 of 19,
+// semantic 0 of 238, runtime 1 of 43 (`FileSystemError`, which is in the message table and in the
+// isolation predicate and nowhere else).
+const NO_PRODUCER_RECORDED = new Map([
+    ['semantic', 0],
+    ['internal', 0],
+    ['lexical', 0],
+    ['syntax', 0],
+    ['runtime', 0],
+])
+
 const NAME_COVERAGE_RECORDED = new Map([
     ['semantic', 0],
     ['internal', 0],
     ['lexical', 0],
     ['syntax', 0],
-    ['runtime', 3],
+    ['runtime', 2],
 ])
 
 // The sections, in the order the headers are included. `id` is also the stem of the two
@@ -578,6 +590,10 @@ function producedNames(root) {
             .readFileSync(file, 'utf8')
             .replace(/\/\*[\s\S]*?\*\//g, '')
             .replace(/\/\/.*$/gm, '')
+            // A switch label names a code to classify it, not to raise it: `case
+            // RuntimeDiag::FileSystemError:` sits in the "does this fault isolate?" predicate, and
+            // counting it kept that code looking alive while nothing constructed it.
+            .replace(/\bcase\s+[A-Za-z_:]*Diag::[A-Za-z0-9_]+\s*:/g, '')
         // Every section, section-qualified: `SyntaxDiag::X` and `RuntimeDiag::X` are as much a
         // producer as `SemanticDiag::X`, and keeping the section in the key means a name that
         // appears under one cannot make a code of another look alive.
@@ -993,6 +1009,8 @@ if (mode === '--coverage' || mode === '--coverage-check') {
 // exercise this code" for the codes this one still counts as unpinned, and the wider check is the
 // layer that holds that question at zero.
 //
+// Measured again after the deletion of FileSystemError (runtime 43 -> 42 codes): runtime 2 of 42.
+//
 // Measured again after the syntax round: syntax 0 of 19 (four cases: ExtraSemicolon,
 // MissingInitializer, UnmatchedClosingDelimiter, ComparisonAcrossLines) and runtime 3 of 43 --
 // RegexInvalid, TimeFormatFailed and FormatFailed are pinned by the golden snapshots of
@@ -1140,19 +1158,39 @@ if (mode === '--name-coverage' || mode === '--name-coverage-check') {
 // the call (`of(cond ? SemanticDiag::A : SemanticDiag::B)`) or returned by a helper that picks one
 // (`return SemanticDiag::NotDifferentiable`) and constructed by its caller, and both are producers.
 if (mode === '--no-producer' || mode === '--no-producer-check') {
-    const semantic = catalogEntries(records).filter((e) => e.type === 'SemanticDiag')
+    const entries = catalogEntries(records)
     const produced = producedNames(root)
-    const dead = semantic.filter((e) => !produced.has(e.fullName))
-    console.log(`semantic codes no code constructs: ${dead.length} of ${semantic.length}`)
-    for (const e of dead) console.log(`  ${hex8(e.code)}  ${e.fullName}`)
-    if (mode === '--no-producer') process.exit(0)
-    if (dead.length > 0) {
+    const report = SECTIONS.filter((s) => sectionFilter === null || s.id === sectionFilter).map((s) => {
+        const all = entries.filter((e) => e.sectionId === s.id)
+        const dead = all.filter((e) => !produced.has(e.fullName))
+        return { id: s.id, all, dead, recorded: NO_PRODUCER_RECORDED.get(s.id) }
+    })
+    if (report.length === 0) {
+        console.log(`no producer: no section named '${sectionFilter}'`)
+        process.exit(2)
+    }
+    for (const r of report) {
         console.log(
-            'no producer: a registered code that nothing constructs is either a path that should'
-                + ' refuse and does not, or a row that outlived its last use. Find the path, or delete'
-                + ' the row in the commit that says which it was.'
+            `${r.id} codes no code constructs: ${r.dead.length} of ${r.all.length}`
+                + ` (recorded ${r.recorded})`
         )
-        process.exit(1)
+        for (const e of r.dead) console.log(`  ${hex8(e.code)}  ${e.fullName}`)
+    }
+    if (mode === '--no-producer') process.exit(0)
+    for (const r of report) {
+        if (r.recorded === undefined || r.recorded === null) {
+            console.log(`no producer: ${r.id} has no recorded value; add one to NO_PRODUCER_RECORDED`)
+            process.exit(1)
+        }
+        if (r.dead.length > r.recorded) {
+            console.log(
+                `no producer: ${r.id} grew by ${r.dead.length - r.recorded} past the ${r.recorded} this`
+                    + ' file records. A registered code that nothing constructs is either a path that'
+                    + ' should refuse and does not, or a row that outlived its last use. Find the path,'
+                    + ' or delete the row in the commit that says which it was.'
+            )
+            process.exit(1)
+        }
     }
     process.exit(0)
 }
