@@ -845,6 +845,14 @@ bool buildTransposeMember(
                     os << "TRANSPOSE function=" << function->name() << " skip=condition\n";
                     return false;
                 }
+                // A condition is a choice, not a magnitude: the branch that ran is decided by it, and
+                // the transposed graph copies it forward rather than differentiating it. So the
+                // cotangent never reaches it, and the reading would say nothing about a value that is
+                // in the middle of the graph unless it is said here -- a bool contributes zero because
+                // it has no tangent space, and that is a fact about the derivative, not an omission.
+                if (kZeroTangentIntegers && !hasTangentSpace(conditionInputs.front())) {
+                    noteZero(conditionInputs.front(), normBranch.front());
+                }
                 draft.setNormInputs(brch, std::span<const gc_node_ref_t>(&condition, 1));
                 std::vector<gc_node_ref_t> armCotangents;
                 for (size_t k = 0; k < arms.size(); ++k) {

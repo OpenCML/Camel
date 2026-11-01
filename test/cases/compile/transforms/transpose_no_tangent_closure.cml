@@ -1,0 +1,28 @@
+// A function value in the middle of a differentiable graph: `g(x) = let h = (y: float) => y*x; h(2)`.
+//
+// On paper `h` is `y -> y*x`, so `h(2) = 2x`, `g(1) = 2`, and the pullback of 1.0 is 2 -- the product
+// `2*x` differentiated, reached through a value that is not a number at all.
+//
+// The claim is that a function value has no tangent space and that this stops *that value*, not the
+// chain around it: `h` itself is not differentiated, the capture `x` inside it is. So the reading should
+// name the function value as a zero contribution and still answer 2, and a transform that treated "no
+// tangent space" as "no derivative here" would refuse the call or answer 0 -- both of which are wrong
+// for the same reason: the derivative never went through `h`, it went through the arrow `h` names.
+//
+// The transpose is asked at cotangent 1 and 3, so the answers are 2 then 6: proportional, and 6 is a
+// number no forward line prints.
+import { transpose } from transforms
+import rulesets.transpose
+
+func g(x: float): float {
+    let h = (y: float) => y * x
+    return h(2.0)
+}
+
+func main(): int sync {
+    println(g(1.0))
+    let back = transpose(g)
+    println(back(1.0, 1.0))
+    println(back(1.0, 3.0))
+    return 0
+}
