@@ -2724,6 +2724,12 @@ PassRunResult applyRegisteredPass(
     return {produced, changed};
 }
 
+bool checkPassBoundary(
+    const context_ptr_t &ctx, const std::string &spec, const camel::runtime::Program &before,
+    const camel::runtime::Program &after) {
+    return passBoundaryViolation(ctx, spec, after, collectEffects(before));
+}
+
 namespace {
 
 const camel::runtime::Program *runRulesAlgebra(
