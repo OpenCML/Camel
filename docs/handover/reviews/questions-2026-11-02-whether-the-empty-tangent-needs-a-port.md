@@ -96,3 +96,60 @@ transpose_unread_parameters func at(x: float, w: float, dx: float, dw: float): f
 **为什么列这张表**：今天有人（我）引用过两组没有用例名的数（`4.0 / 4.0`、`-6.0 / 3.0`，来自 `stdlib/vjp.cml` 落笔时的对照），它们**查不到出处**，所以不算证据。**引用任何读数必须带用例名或计划名；没带名字的数就是假数**——它看起来像证据，但和"跨空间比较"是同一类错。
 
 **关于 `mt`/`at` 的归属，原样记一句**：`transpose_many_parameters` 与 `transpose_unread_parameters` 的形参全是 `float`、都有切空间，所以那三条红**错在我的改动（删了一个种子参数），不是期望该改**；`unread_parameters` 钉住的是"**不被读的参数仍要有一份余切**"，它与"**没有切空间的形参不产出余切**"是两件事。
+## `skip=rule` 有两种，别混（今天差点为它去改 `export`）
+
+```
+TRANSPOSE … skip=rule uri=:op/idx_arr reason=no-such-family   ← 规则集没加载（家族不在索引里）
+TRANSPOSE … skip=rule uri=:op/idx_arr reason=unbound          ← 键没绑上（transposeBindings() 里没有这个 uri）
+          （第三种：reason=no-rule —— 家族在、键在，索引里没有这条规则）
+```
+三个 reason 出自 `modules/transforms/transpose.cpp:1296–1301` 的同一个三元式：
+`!rule.has_value()` → `unbound`；`NoSuchFamily` → `no-such-family`；否则 `no-rule`。
+
+**`gs6` 那天量 `transpose` 时格子全是 `no-such-family`，根因是测量程序漏了 `import rulesets.transpose`**——**"测量程序的 import 也是被测量的一部分"**。看到 `skip=rule` 先分这两类：**`no-such-family` 去看 import，`unbound` 去看绑定表**；**别去改规则名的可见性**（`export` 与否不在这条链上：`index_into` 私有与公开，`unbound` 都会是 `unbound`）。
+
+`transposeBindings()` 是 `src/core/forward.cpp:26` 的**函数内 `static`**（`static std::map<std::string, ForwardRuleBinding> table;`），所以"另一个实例"不成立——进程内只有一张表。
+## 「按形状展开」这一步今天撞到的是缺一个读者，不是缺一个想法
+
+`transpose.cpp:1312–1363` 先把规则名记进读数、再按名字分派：
+```
+1313  noteRule(rule->rule);          // `rules=add_t,mul_t` 就是它记的
+1314  const std::string &law = rule->rule;
+1315..1358  add_t / sub_t / neg_t / mul_t / div_t 五条分支
+1359  else → skip=law rule=…
+```
+**读数是"按名字分派"的证据，不是"按形状"的证据**：换成形状路径时，读数也得跟着换说法（`law=` → `rhs=`），否则读数会说着旧机制。
+
+但"按形状展开"要用的是**规则右侧那个函数的参数签名**，而 `include/camel/parse/ast/rule_head.h` 今天只给四个读者：
+```
+rhsCalleeOf(family, rule)   // 右侧调用的函数名（`add_tangent` / `scatter_into`），没有参数表
+lookupRule(family, head, arity)
+ruleFamilies()
+RuleEntry{ head, arity, rule, variables }   // variables 是左侧绑定的名字
+```
+**没有"右侧的参数表"这个读者**。所以"从右侧签名读出余切位置与已知值位置"**今天表达不出来**——要加一个读者（不是字段，是从规则内容里读出来的东西），按原则 2.3 属于"能从内容推出"，可以做，**但要先把它写成一句话证明，而不是顺手加**。
+
+**这一步的可验收标准（作者已裁）**：五条规则各打印一行 `law=<名字> cotangentAt=<i> knownAt=<j…> sizeDependent=<yes/no>`，**必须与五条分支语义一一对上**；对不上就说明这套词汇表达不了现有五条，**那也是结论**，要写清差在哪一格。**今天这一条没有交出，因为读者不在。**
+## `rhsParams` 的落点（下一步照着做，四个锚都在这儿）
+
+作者已裁：**`rhsParams` 是 `RuleHead` 里"同一份文本的第四样摘要"**（与前三个同类），**但只记"右侧签名"，不记"解释"**——存 `{name, type}` 序列，**`cotangentAt`/`knownAt`/`sizeDependent` 一律不进索引**（那是 `transpose` 对签名的解读，属于消费者）。
+
+四条锚：
+```
+src/parse/ast/builder.cpp:899-916   右侧 callee / 左侧 variables / outerUses 都在这儿读，第四样加在这里
+                                    （`rightCalleeOf(sides[1])`、`variableNamesOf(sides[0])`、
+                                     `outerNamesUsedInRight(...)` 是现成的同族函数，新加一个 `rightParamsOf(sides[1])`）
+include/camel/parse/ast/rule_head.h:62-78   `variables` / `outerUses` 字段与 `RuleHead` 构造参数，
+                                            `rhsParams` 加在 `outerUses` 后面
+src/parse/ast/rule_head.cpp:280-291         构造函数的形参列表（同名同序加一项）
+src/parse/ast/rule_head.cpp  `indexRule`     索引时记的两张表 `callees[family][rule]` / `variables[family][rule]`
+                                            旁边加第三张，并加读者 `rhsParamsOf(family, rule)`
+```
+打印（下一步的验收）：**一行里分清"记的"与"推的"**——
+```
+law=<名字> params=[(x: T), …] → cotangentAt=<i> knownAt=<j…> sizeDependent=<y/n>
+     └─ 索引里记的 ─┘            └──── transpose 现场算出 ────┘
+```
+`transforms 51/51` 必须逐字不变，`if (law == …)` 不动。
+
+**这一轮没有再往前，是因为 `rightParamsOf` 要写一个新的 CST 走读**（同族的 `rightCalleeOf`/`variableNamesOf` 各是一小段），**不是加一个字段就完**；写它需要与 `cst::Expr` 的形状对齐，**改错了会红在解析层**——那比 `transpose` 那层红更难查。

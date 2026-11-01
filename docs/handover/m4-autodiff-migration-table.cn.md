@@ -91,6 +91,17 @@ camel test/cases/modules/autodiff/jax_vmap.cml std::nvm   # 退出码 0，打出
 这里的分账是**计量修正**（取数行错），不是断言升级、不是新用例、也不是删码：`pass`、`total`、`library` 一个都没动，`with`/`array`/`other` 也没有真的换类。
 
 **这个工具只读不写**：它扫用例、跑一遍、打印表与那一行 `[LEDGER]`，不更新本页——本页仍由人手改，工具给数。
+
+**仪表退役（2026-11-02，撤除之后）**：上表的 `with`/`array`/`other` 三列从 2026-11-02 起**不再按“失败时那条诊断的措辞”分**——旧实现是三条正则（`[]`/`[..]`/`f32`/`Model`/`Plain` 与 `<x: float>`），撤除把拒绝点搬走之后措辞不再命中，四个桶一起塌进 `other`（实测 `pass=0 with=0 array=0 other=118`）。**量措辞的仪表只能量出措辞**，所以那个分类器是**删掉**，不是调参。
+
+现在的口径（`scripts/autodiff-migration-ledger.mjs` 的文件头就是契约）：
+
+- **`with`/`array`/`other` 从源码数**：`array` = 用例源码里出现 `[]`/`[..]`/`f32`/`f16`/`bf16`/`Model`/`Plain`；`with` = 出现带 `with` 形参的函数类型（`<x: float> () => float`）；其余归 `other`。三列**把 118 条分完**，与 `pass` 不再相加。规则文件按同样两个写法数，命中处带 `stdlib/rulesets/<file>:<line>` 锚印在表下面。
+- **`pass` 是运行读数，依赖宿主机上的二进制**：它跑 `out/latest/bin/camel`，**同一棵树换个二进制读数就不同**（同一棵树在 2026-11-01 13:44 的二进制下读 `pass=6`，没有二进制时读 `pass=0`），所以**它不可跨机比较**，三列源码数可以。
+- **A/B（同一棵树，2026-11-02）**：连跑两遍 `pass=6 with=44 array=67 other=7`；把 `CAMEL_HOME` 指到没有二进制的目录再跑，`pass=0` 而 **`with=44 array=67 other=7` 一位不变**——分类不随二进制动，这是这次改口径的验收本身。
+- **旧口径的数（54 / 46 / 6 / 12）已作废**，它们量的是措辞，不再与任何一列对齐。**新记录**：`total=127 library=118 pass=6 with=44 array=67 other=7`（`--ledger-check` 通过）。`pass` 从 12 掉到 6 是撤除的直接后果：六条守着那条调用处拒绝的用例（期望 exit 1）现在按 exit 0 跑。
+
+**`array` 这一列的验收作废（显式作废，别让下一个人再去追它）**：**此后数组那一步的进度以 `grad(f)([3.0, 2.0])` 打印 `[2.0, 3.0]` 与 `skip=body` 消失为准，不再以台账的 `array` 列为准**——那一列只数“有多少条用例的源码里写着数组类型”，它不会因为工作落地而下降。
 （2026-11-01 23:00 重算：118 个顶层用例逐条跑，另 9 个在 `jax_names/` 子目录。）
 
 重算方法与上一版同一套（复制成 `.probe.cml`、把 `from autodiff` 里的 `vjp`/`grad`/`with_grad` 改从 `vjp` 取、跑 `std::nvm`、跑完即删），**只改了一处错**：上一版把 `import { … } from autodiff` 整条换成 `from vjp`，于是库里仍有的辅助名（`add_tangent`、`zero_tangent` 等）被判成"库里没有这个名字"。正确写法是**两行**——transform 的三个名字从 `vjp` 取，其余仍从 `autodiff` 取。改对之后 `transform_rules` 从"不过"变"过"（它只用 `add_tangent`，而 `add_tangent` 一直在 `stdlib/autodiff.cml` 里）。

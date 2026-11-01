@@ -501,27 +501,6 @@ JvpGraph buildJvpGraph(
     camel::runtime::GraphDraftGroup group(context, program);
     return buildJvpGraphInGroup(context, program, group, function, name, self, os);
 }
-JvpGraph buildJvpGraphOfItsOwn(
-    const camel::core::context::context_ptr_t &context, const GraphRead &function,
-    std::string_view name, camel::runtime::GraphId self, std::ostream &os) {
-    if (context == nullptr) {
-        return JvpGraph{};
-    }
-    FunctionType *signature = jvpSignature(function.funcType());
-    if (signature == nullptr) {
-        os << "REINTERP jvp function=" << name << " skip=signature\n";
-        return JvpGraph{};
-    }
-    // The program the lift's own graphs go into: an empty program of the context's, reserved here
-    // and kept by the context for as long as the value that names it lives. The graph the lift
-    // reads is a draft of the caller's, so there is no program of its to extend; the graph the
-    // caller's body calls is a graph of its own, the way the run-time kernel makes one, and this is
-    // the same build writing into it.
-    camel::runtime::Program *base = context->reserveProgram();
-    camel::runtime::GraphDraftGroup group(context, base);
-    return buildJvpGraphInGroup(context, base, group, function, name, self, os);
-}
-
 namespace {
 
 bool liftGraph(
