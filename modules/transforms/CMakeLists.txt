@@ -10,6 +10,7 @@ add_camel_module(
     jvp_operator.cpp
     remat_operator.cpp
     split.cpp
+    split_instantiate.cpp
     split_operator.cpp
     transpose.cpp
     transpose_operator.cpp

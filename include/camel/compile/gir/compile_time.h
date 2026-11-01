@@ -50,6 +50,19 @@ struct CompileTimeCall {
 /// say in `os`; one that declines has said nothing (a refusal is the run-time path's to report).
 using CompileTimeTransform = std::function<std::optional<node_handle_t>(CompileTimeCall &call)>;
 
+/// The hand-over every handler ends with: `node` (the call) becomes `value` (the node that stands for
+/// what it answered), and `node` goes.
+///
+/// The value takes the call's place in the graph, its place in a statement chain included. A call
+/// written as a statement of a `sync` block is a link of that block's chain (the `sync` edge and the
+/// control edge written beside it), and the statements after it follow it: a value that only reads
+/// the call's data users would leave the chain broken at the constant, and the statements written
+/// after the call would stop being statements of a block -- which is what decides whether they run
+/// at all (the effect rule, include/camel/runtime/effect_liveness.h). So the value inherits the
+/// call's `sync` and order predecessors, the mark that says it is a statement, and the edges of both
+/// directions, and the call is erased after every one of them points at the value.
+void replaceCallWithValue(graph_ptr_t caller, draft_node_ref_t node, draft_node_ref_t value);
+
 /// Registers `transform` for the operator `uri` (`transforms:jvp`). One transform per URI: a
 /// second registration is the same kind of defect as two operators under one name, and is refused.
 void registerCompileTimeTransform(std::string uri, CompileTimeTransform transform);
