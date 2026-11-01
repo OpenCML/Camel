@@ -228,11 +228,39 @@ def check_artifact_names(paths, args):
     check's own steps (measured: `--standalone --jobs 8` over this list went red on round 2 with
     `clang++: error: linker command failed`). What this does not fix is how the name is written:
     change the spelling inside `artifact_stem` and this stays green as long as two identities stay
-    two names."""
-    entries = expand(paths + (read_expect(args.expect) if args.expect else []))
-    if not entries:
+    two names.
+
+    It also asks the list itself, which is the other half of the same defect: one list, one entry
+    per file. `test/cases/trans/cpp/exec` was listed as a directory *and* `exec/site_message.cml` as
+    a file, and `loops/zero_leaf_state.cml` was listed twice outright; a list that names one file
+    twice asks one question twice, and the two entries are then built in one pool. The count is
+    taken here, on the paths as written, with the identity normalized by this function rather than
+    by the tool's key -- so that the answer does not depend on how the tool deduplicates. Before
+    this, Windows read that list as 175 entries for 174 programs and Linux as 174 for 174: the same
+    list, two answers, and no gate could see either."""
+    listed = expand(paths + (read_expect(args.expect) if args.expect else []), dedupe=False)
+    if not listed:
         print("FAIL: no programs")
         return 2
+    # The identity is computed here, not taken from the tool's own key: what is asked is whether
+    # the list names one program twice, and a list has one answer to that whatever the tool does
+    # with it. Two spellings of one path are one program (`exec/site_message.cml` written with a
+    # separator the other line does not have), and the count says so.
+    spellings = {}
+    for program, entry_args in listed:
+        identity = os.path.relpath(program, ROOT).replace("\\", "/") + \
+                   "".join(" " + a for a in entry_args)
+        spellings.setdefault(identity, []).append(program)
+    repeated = {identity: found for identity, found in spellings.items() if len(found) > 1}
+    if repeated:
+        for identity, found in sorted(repeated.items()):
+            print("FAIL: one entry, named %d times: %s" % (len(found), identity))
+            for spelling in sorted(set(found)):
+                print("    " + spelling)
+        print("FAIL: %d entries name %d programs: the list asks %d question(s) twice"
+              % (len(listed), len(spellings), len(listed) - len(spellings)))
+        return 1
+    entries = expand(paths + (read_expect(args.expect) if args.expect else []))
     names = {}
     for program, entry_args in entries:
         identity = os.path.relpath(program, ROOT).replace("\\", "/") + \
@@ -249,7 +277,8 @@ def check_artifact_names(paths, args):
         print("FAIL: %d file name(s) shared by %d of the %d entries"
               % (len(collisions), sum(len(f) for f in collisions.values()), len(entries)))
         return 1
-    print("PASS: %d entries, no two share a file name" % len(entries))
+    print("PASS: %d entries name %d programs, no two share a file name"
+          % (len(listed), len(entries)))
     return 0
 
 
@@ -702,7 +731,7 @@ def check_faults(paths, args):
     return 0
 
 
-def expand(paths):
+def expand(paths, dedupe=True):
     """(program, arguments of its main) for every path: a directory gives its programs, a path
     followed by arguments (an entry of an --expect list) that program with them.
 
@@ -712,8 +741,9 @@ def expand(paths):
     Windows the directory walk keeps the forward slashes of its root and the listed file does not).
     Two entries of one file are two threads writing one source and linking one executable, which is
     the race `artifact_stem` exists to keep out -- so the identity is the normalized path, and the
-    first spelling that names it is the one kept, for the message."""
-    files = {}
+    first spelling that names it is the one kept, for the message. `dedupe=False` keeps every road
+    as it was written, which is how `--check-names` counts the list itself."""
+    found = []  # (normalized identity, arguments, the path as it was written)
     for entry in paths:
         p, *entry_args = entry.split()
         p = os.path.join(ROOT, p) if not os.path.isabs(p) else p
@@ -722,11 +752,17 @@ def expand(paths):
                 for n in sorted(names):
                     if n.endswith(".cml"):
                         q = os.path.join(root, n)
-                        files.setdefault((os.path.normcase(os.path.abspath(q)), ()), q)
+                        found.append((os.path.normcase(os.path.abspath(q)), (), q))
         else:
-            key = (os.path.normcase(os.path.abspath(p)), tuple(entry_args))
-            files.setdefault(key, p)
-    return [(p, list(a)) for (_, a), p in sorted(files.items(), key=lambda item: (item[1], item[0][1]))]
+            found.append((os.path.normcase(os.path.abspath(p)), tuple(entry_args), p))
+    if dedupe:
+        first = {}
+        for identity, entry_args, p in found:
+            first.setdefault((identity, entry_args), p)
+        pairs = [(p, entry_args) for (identity, entry_args), p in first.items()]
+    else:
+        pairs = [(p, entry_args) for identity, entry_args, p in found]
+    return [(p, list(a)) for p, a in sorted(pairs, key=lambda item: (item[0], item[1]))]
 
 
 def read_expect(path):
