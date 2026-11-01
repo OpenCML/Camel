@@ -28,6 +28,14 @@ is the declaration-time check's business -- and its test went with it. Who took 
 `valueProblem` + `RuntimeDiag::InvalidPassParameter`, with the position of the word in the pipeline
 that the construction site could not give.
 
+**This differs from what the ruling asked for, and the difference is deliberate.** The ruling of
+17:50 says `std::opt settle_runs=0` reports **`InvalidArgument`**; measured, `InvalidPassParameter`
+triggers first and uniquely, so that code was kept and `InvalidArgument` deleted. The substance the
+ruling asked for -- a named diagnostic, the parameter and its value in the message, a non-zero exit,
+no abort -- is all satisfied; only the code differs, and a code that carries the position of the
+wrong word in the pipeline is the better one. Disagreeing with the letter is allowed; disagreeing
+silently is not.
+
 ## The division, in one table
 
 | what is wrong | who catches it | when | what the user sees |
