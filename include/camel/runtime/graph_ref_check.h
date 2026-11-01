@@ -31,8 +31,8 @@ namespace camel::runtime {
  * - The encoder's half of this check fires zero times over the whole plan tree: no program in the
  *   suite builds a draft with a reference that does not resolve. It is a refusal, not a report, and
  *   there is no case for it -- see the next point for why one cannot be written from a pass.
- * - A corrupted draft cannot be built with the draft API: `GraphDraft` has setters for a region's
- *   result and owner and none for `BRCH.join` / `JOIN.brch`. Writing the branch payload through
+ * - A corrupted draft cannot be built with the draft API's older setters: they cover a region's
+ *   result and owner and not `BRCH.join` / `JOIN.brch` (`setBrchJoin` was added for this case). Writing the branch payload through
  *   `DraftNodeView::payloadAs` compiles and is not sound -- the same write (join = 9999) produced
  *   "its join is node 0, which is not a join" on one run and "its join is 24469 and the graph has 8
  *   nodes" on the next, because the encoder rebuilds branch numbering from the draft's arms rather
