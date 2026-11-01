@@ -738,3 +738,24 @@ expect_stdout_contains = ["TANGENT type=float space=self", "TANGENT type=f32 spa
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# The two walls between here and the array arm of grad, pinned as refusals rather than known_fail: a wall
+# that falls must turn its assertion into a number, and known_fail would hide that.
+[[tests]]
+name = "grad_array_no_int.fvm"
+kind = "behavior"
+case = "../../../cases/compile/transforms/grad_array_no_int.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["transpose has no transpose for this function"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 15000
+
+[[tests]]
+name = "grad_array_with_int.fvm"
+kind = "behavior"
+case = "../../../cases/compile/transforms/grad_array_with_int.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["Invalid call to 'split'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 15000

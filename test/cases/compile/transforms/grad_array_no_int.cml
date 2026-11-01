@@ -1,0 +1,21 @@
+// The array function without the int parameter: `vjp(both)` gets through `split` (an array does have a
+// tangent space) and stops at the transpose, which has no rule for an array element times a scalar.
+// This refusal is the state of two walls, not a permanent truth:
+//   * wall A -- `split` demands every parameter be lifted; a discrete `int` parameter has no tangent
+//     space by the ruling of 2026-11-02 18:50, so `vjp` of a function that has one is refused earlier
+//     (grad_array_with_int.cml pins that one);
+//   * wall B -- the transpose has no rule for an array element times a scalar (this case).
+// When wall B falls, replace the assertion below with the number: the gradient of `xs` is [2.0, 3.0].
+import { vjp } from vjp
+
+func both(xs: float[]): float {
+    return xs[1] * xs[0]
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(both)([3.0, 2.0])
+    let cotangents = pullback(1.0)
+    println(value)
+    println(cotangents)
+    return 0
+}

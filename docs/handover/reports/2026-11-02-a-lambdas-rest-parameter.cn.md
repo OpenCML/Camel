@@ -458,3 +458,18 @@ error[SemanticDiag::ArgumentsRejected]: Invalid call to 'split' with argument ty
 
 **`grad` 泛不泛型，根本走不到。** 我们两轮先改上游签名，再量下游要什么——**顺序反了**。
 正确的第一问是"下游 `split`/`transpose` 要什么形状"，答案就在上面两条拒绝里。
+
+## 13. 两堵墙各有一条用例守着（不是 `known_fail`）
+
+| 用例 | 今天断言 | 墙倒了以后改哪一句 |
+|---|---|---|
+| `test/cases/compile/transforms/grad_array_with_int.cml` | `expect_exit = 1` + `Invalid call to 'split'` | **墙 A 倒了**（没有切空间的形参不占槽）⇒ 改成墙 B 的那句 `transpose has no transpose`；**墙 B 也倒了** ⇒ 改成数值：`xs` 的梯度 `[2.0, 3.0]`、`n` 的 `0.0` |
+| `test/cases/compile/transforms/grad_array_no_int.cml` | `expect_exit = 1` + `transpose has no transpose for this function` | **墙 B 倒了**（数组元素 × 标量的转置规则）⇒ 改成数值：`[2.0, 3.0]` |
+
+两条都写成"**期望拒绝**"（`expect_exit = 1` + `expect_output_contains`），**没有用 `known_fail`**：墙倒的那一刻它们会**变红**，
+逼下一个人把断言从"拒绝"改成"数值"——那正是墙倒的信号。
+
+**实测**：`transforms` + `rest_params` = **66/66**（48 + 2 新 + 16），`BUILD_EXIT=0`。
+
+**`tangentSpaceOf` 表见 §12**；补一句：**`int` 的答案是"没有切空间"（`tangent_space.cpp:107-111`），与 18:50 的裁定一致；
+错在 `split` 要求每个形参都升起。**
