@@ -48,3 +48,17 @@ REINTERP jvp function=f graph=64 liftedFrom=55 type=(float[], float[]) => (float
 **17:50 又叠了一层**：负责人否决了"前端变换表 + 调用处拒绝"整套（`fsh-dev` 的 `a5377eebe`），`compile_time.*`、`jvp_instantiate.cpp`、`split_instantiate.cpp`、`staticFunctionArg`、`lifted-at=`/`halves-at=` 正在被撤。所以今天有三件事要分清，别拧成一件：`staticFunctionArg`（被撤）与"这个类型没有切空间"（仍在，见下）是两件事；"实例化那一线被否决"也不等于"这一页的结论已被裁"。**这一页的两种可能都还开着**：签名层与走图层要不要对齐、对齐之后 `()` 走哪条路，都等复核。
 
 **还要分清的一件（别让下一个人读错）**：签名层今天仍然会拒绝一个**没有切空间**的类型（`int`、`string`）——那是"这个类型不能求导"，与**被撤的**那套"实参必须编译期已知"（`staticFunctionArg`、调用处拒绝）**不是一件事**。签名层并没有放行一切：放行的只有"有切空间的类型，切向按 `tangentSpaceOf` 给"。
+
+## 一条今天量出来的边界：库面声明的形状由算子注册决定，不由调用处决定
+
+想给 `:tangent/scatter_add_arr` 一个库面名字 `scatter_add::<T>(xs: T[], i: int, delta: T): T[]` 时，**两处同时红**：
+
+```
+调用处  error[SemanticDiag::ImportNameNotExported]: Reference 'scatter_add' is declared as imported but is not exported by its module.
+registry [FAIL] registry.signatures_match / registry.result_types_match / registry.parameter_types_match / registry.docs_complete
+```
+
+根在这一句（算子自己写的）：`src/builtin/operators/derivative.cpp:386` ——
+`Derivative of '{}' expects 3 or 4 inputs (base, index, delta, axis)`：**这个算子取三个或四个操作数，`axis` 可选**，三参声明与注册形状对不上。
+
+**所以"想怎么用"不能决定声明怎么写**：声明必须与注册的真实形状一致，四红就是那张注册表在说"你写错了"。同一件事的另一个读数：**规则右侧能名的只有函数**（`expandRuleRightSide` 的 `Func` 分支），所以在规则集里写 `:tangent/scatter_add_arr` 也得先有一个能名的函数——"不新造库名"并不等于"不用声明"，只是把声明挪进规则集、不放进公共库面。
