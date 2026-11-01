@@ -328,7 +328,10 @@ template <typename T> class Array {
     /// States the shape a reduction along one dimension leaves (`sumAxis`): the source's dimensions
     /// with the reduced one dropped, or written as one when the caller asked to keep it. The source
     /// may hold another element type, which is why this reads its shape and not its elements: an
-    /// argmax answers positions of the value it read.
+    /// argmax answers positions of the value it read. A value of one dimension leaves no dimension at
+    /// all -- the answer *is* the one element it reduced to (design principles 5.4) -- so rank zero is
+    /// recorded as the fact it is (`zeroDim`), and the answer prints as that element rather than as an
+    /// array of one.
     template <typename U> void shapeReduced(const Array<U> &source, std::size_t axis, bool keepDims) {
         if (rep_ == nullptr || axis >= source.rank()) {
             return;
@@ -341,7 +344,8 @@ template <typename T> class Array {
         if (product != size() || rank > kMaxRank) {
             return;
         }
-        rep_->rank = static_cast<std::uint32_t>(rank);
+        rep_->rank    = static_cast<std::uint32_t>(rank);
+        rep_->zeroDim = rank == 0;
         for (std::size_t i = 0; i < rank; ++i) {
             rep_->extents[i] = keepDims && i == axis ? 1 : source.extent(i < axis ? i : i + 1);
         }
@@ -639,6 +643,18 @@ template <typename To, typename From> Array<To> convertArray(const Array<From> &
     for (const From &x : xs) {
         out.push(static_cast<To>(x));
     }
+    // The conversion is of the elements, not of the shape: the interpreter's kernel walks the
+    // run and leaves the extents where they were (`core/array_convert.h`), so a value whose rank
+    // is only known at run time -- `bf16[..]` -- keeps its shape through `atof`. A value of no
+    // rank stays of no rank: its one element prints alone, as it did.
+    if (xs.rank() > 0) {
+        std::vector<std::int64_t> extents;
+        extents.reserve(xs.rank());
+        for (std::size_t i = 0; i < xs.rank(); ++i) {
+            extents.push_back(static_cast<std::int64_t>(xs.extent(i)));
+        }
+        out.setExtents(extents);
+    }
     return out;
 }
 
@@ -809,12 +825,12 @@ template <typename T> T last(const Array<T> &xs, const Site &site) {
     return xs[xs.size() - 1];
 }
 
-/// `array:sort_d` (src/builtin/operators/array.cpp): the elements in the order `min` and `max` use
-/// (design principles 7.7) -- every NaN after every number, -0 below +0, else the usual one -- and
-/// ties in the order they stand, so the result is the one `xs[argsort(xs)]` gives, a stable sort
-/// of the clone the returning form of the store makes.
-inline Array<double> sorted(const Array<double> &xs) {
-    const auto order = [](double a, double b) {
+/// The order `min`, `max`, `argsort` and `sort` put two keys in (design principles 7.7): every NaN
+/// after every number, -0 below +0, else the usual one; a string by its bytes and false below
+/// true. It is the runtime's own `numberLess` (src/builtin/operators/array.cpp), stated here once
+/// because the four kernels that read it are also here.
+template <typename T> bool numberLess(const T &a, const T &b) {
+    if constexpr (std::is_floating_point_v<T>) {
         if (std::isnan(b)) {
             return !std::isnan(a);
         }
@@ -824,15 +840,70 @@ inline Array<double> sorted(const Array<double> &xs) {
         if (a == b) {
             return std::signbit(a) && !std::signbit(b);
         }
-        return a < b;
-    };
-    std::vector<double> items(xs.begin(), xs.end());
-    std::stable_sort(items.begin(), items.end(), order);
-    Array<double> out;
+    }
+    return a < b;
+}
+
+/// `array:sort_*` (src/builtin/operators/array.cpp): the elements in the order `min` and `max` use
+/// (design principles 7.7) -- every NaN after every number, -0 below +0, else the usual one -- and
+/// ties in the order they stand, so the result is the one `xs[argsort(xs)]` gives, a stable sort
+/// of the clone the returning form of the store makes. The shape travels with the elements: it is
+/// the value's own, and sorting a run does not change it.
+template <typename T> Array<T> sorted(const Array<T> &xs) {
+    std::vector<T> items(xs.begin(), xs.end());
+    std::stable_sort(items.begin(), items.end(), [](const T &a, const T &b) {
+        return numberLess(a, b);
+    });
+    Array<T> out;
     out.reserve(items.size());
-    for (const double item : items) {
+    for (const T &item : items) {
         out.push(item);
     }
+    std::vector<int64_t> extents;
+    for (std::size_t i = 0; i < xs.rank(); ++i) {
+        extents.push_back(static_cast<int64_t>(xs.extent(i)));
+    }
+    out.setExtents(extents);
+    return out;
+}
+
+/// `array:argsort_*` (src/builtin/operators/array.cpp): the positions of the keys in ascending
+/// order of key, equal keys keeping their order (a stable sort of the positions, which is what the
+/// runtime's total order over key and position is).
+template <typename T> Array<int64_t> argsort(const Array<T> &xs) {
+    const std::size_t n = xs.size();
+    std::vector<std::size_t> order(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        order[i] = i;
+    }
+    std::stable_sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
+        return numberLess(xs[a], xs[b]);
+    });
+    Array<int64_t> out;
+    out.reserve(n);
+    for (const std::size_t position : order) {
+        out.push(static_cast<int64_t>(position));
+    }
+    return out;
+}
+
+/// `array:merge_sorted_*` (src/builtin/operators/array.cpp): the elements of both runs in ascending
+/// order, the meaning `sort(concat(xs, ys))` -- equal elements keep their order, those of `xs`
+/// first -- over a run each.
+template <typename T> Array<T> mergeSorted(const Array<T> &xs, const Array<T> &ys) {
+    std::vector<T> items(xs.begin(), xs.end());
+    for (const T &item : ys) {
+        items.push_back(item);
+    }
+    std::stable_sort(items.begin(), items.end(), [](const T &a, const T &b) {
+        return numberLess(a, b);
+    });
+    Array<T> out;
+    out.reserve(items.size());
+    for (const T &item : items) {
+        out.push(item);
+    }
+    out.setExtents(std::vector<int64_t>{static_cast<int64_t>(items.size())});
     return out;
 }
 
@@ -1024,15 +1095,18 @@ template <typename T> int64_t numel(const Array<T> &xs) { return static_cast<int
 /// `extent` elements `inner` apart, one lane per position of every other dimension, in row-major
 /// order of the answer. The lane is read where it lies -- no lane is gathered into a run of its own,
 /// and nothing is transposed first -- and the answer keeps the dimensions it did not reduce, or
-/// keeps the reduced one as a one when the caller asked for that. `R` is the answer's element type,
-/// which is not always the source's: an argmax answers positions.
+/// keeps the reduced one as a one when the caller asked for that. A value of one dimension is the
+/// case where there is nothing else: its one lane is the whole value, so the answer is of no
+/// dimension and *is* the element it reduced to (design principles 5.4), which is why the walk runs
+/// over the rank the value has rather than over two or more. `R` is the answer's element type, which
+/// is not always the source's: an argmax answers positions.
 template <typename T, typename R, typename Lane>
 Array<R> axisReduce(
     const Array<T> &xs, int64_t axisArg, bool keepDims, const char *name, const Site &invalid,
     Lane lane) {
     const auto rank    = static_cast<int64_t>(xs.rank());
     const int64_t axis = axisArg < 0 ? axisArg + rank : axisArg;
-    if (rank < 2 || axis < 0 || axis >= rank) [[unlikely]] {
+    if (rank < 1 || axis < 0 || axis >= rank) [[unlikely]] {
         fault(
             invalid,
             {"[]",
@@ -1088,6 +1162,49 @@ Array<T> sumAxis(const Array<T> &xs, int64_t axisArg, bool keepDims, const Site 
         });
 }
 
+/// `tensor:mean_axis` (modules/tensor/kernels/reduce.cpp, reduceAxis): the mean is not "the sum
+/// divided by a count" written a second way -- it is the interpreter's own two steps, in its order.
+/// The lane's sum is the accumulation `sumAxis` uses: every float element type adds into a `double`
+/// from +0 in ascending order, an integer adds exactly in `uint64_t`; the *unrounded* total is then
+/// divided by the extent of the lane in `double`, and that quotient is rounded into the element type
+/// once. Rounding the sum first would give a different number for an `f32` lane, and so would
+/// dividing in the element type.
+///
+/// An integer lane answers `int(sum / numel)`, the conversion `int(·)` already has (toward zero):
+/// `mean_axis([1, 2, 4], 0, false)` is `2`, which is the normative form of `mean` (design
+/// principles; modules/math/mean.h), not a lost average -- a program that wants a floating mean
+/// writes `float(xs)` first. So the answer keeps the element type, as the whole form's does.
+///
+/// A lane with no element is not refused here: the interpreter does not refuse it either, it divides
+/// `0.0` by `0.0` and answers the canonical NaN -- one per lane, so a `f32[2, 0]` reduced on axis 1
+/// answers `[nan, nan]`. That NaN is the arithmetic's, not a diagnostic's.
+template <typename T>
+Array<T> meanAxis(const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid) {
+    return axisReduce<T, T>(
+        xs,
+        axisArg,
+        keepDims,
+        "tensor:mean_axis",
+        invalid,
+        [](const Array<T> &v, std::size_t base, std::size_t extent, std::size_t inner) {
+            if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, int32_t>) {
+                std::uint64_t acc = 0;
+                for (std::size_t k = 0; k < extent; ++k) {
+                    acc += static_cast<std::uint64_t>(static_cast<int64_t>(v[base + k * inner]));
+                }
+                return static_cast<T>(
+                    static_cast<double>(static_cast<int64_t>(acc)) /
+                    static_cast<double>(extent));
+            } else {
+                double acc = 0.0;
+                for (std::size_t k = 0; k < extent; ++k) {
+                    acc += static_cast<double>(v[base + k * inner]);
+                }
+                return static_cast<T>(acc / static_cast<double>(extent));
+            }
+        });
+}
+
 /// IEEE 754-2019 maximum of two values (modules/math/minmax.h, `maxOf`): a NaN on either side gives
 /// the canonical quiet NaN, -0 is below +0, and otherwise the larger operand -- chosen on the values
 /// but returned as its own bits, so the sign of a zero survives.
@@ -1132,7 +1249,7 @@ Array<T> extremeAxis(
     const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid, const Site &empty) {
     const auto rank    = static_cast<int64_t>(xs.rank());
     const int64_t axis = axisArg < 0 ? axisArg + rank : axisArg;
-    if (rank >= 2 && axis >= 0 && axis < rank) {
+    if (rank >= 1 && axis >= 0 && axis < rank) {
         const auto dimension = static_cast<std::size_t>(axis);
         if (xs.extent(dimension) == 0) [[unlikely]] {
             fault(
@@ -1202,13 +1319,14 @@ template <bool Maximum, typename T> bool beyondExtreme(T v, T best) {
 /// `tensor:argmax_axis` and `tensor:argmin_axis` (modules/tensor/kernels/reduce.cpp): the position
 /// of the first element of the lane that equals its maximum (minimum), or of its first NaN. The
 /// answer's element type is int64 whatever the source holds, so it is a value of positions and not
-/// of elements; a lane with no element has no position, and the interpreter refuses that.
+/// of elements; a lane with no element has no position, and the interpreter refuses that. A value of
+/// one dimension answers one position, which is the answer itself (design principles 5.4).
 template <bool Maximum, typename T>
 Array<int64_t> argExtremeAxis(
     const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid, const Site &empty) {
     const auto rank    = static_cast<int64_t>(xs.rank());
     const int64_t axis = axisArg < 0 ? axisArg + rank : axisArg;
-    if (rank >= 2 && axis >= 0 && axis < rank) {
+    if (rank >= 1 && axis >= 0 && axis < rank) {
         const auto dimension = static_cast<std::size_t>(axis);
         if (xs.extent(dimension) == 0) [[unlikely]] {
             fault(
@@ -1283,6 +1401,44 @@ template <typename R, typename T> R meanAll(const Array<T> &xs, const Site &divi
         }
         return static_cast<R>(total / static_cast<double>(xs.size()));
     }
+}
+
+/// `array:min_*` / `array:max_*` (src/builtin/operators/array_reduce.cpp): the fold of the elements
+/// with `minOf` / `maxOf`, which is IEEE 754-2019 minimum and maximum -- exactly associative, so
+/// the order does not change the bits -- and a reduction over no element is a fault
+/// (`InvalidArgument`, "a reduction over no elements"), as the declaration in stdlib/array.cml
+/// says. `site` is that fault's place, its report taking the two values in `fault`.
+template <typename T, bool Maximum> T extremeOf(const Array<T> &xs, const Site &site) {
+    if (xs.size() == 0) [[unlikely]] {
+        fault(site);
+    }
+    T best = xs[0];
+    for (std::size_t i = 1; i < xs.size(); ++i) {
+        best = Maximum ? maxOf(best, xs[i]) : minOf(best, xs[i]);
+    }
+    return best;
+}
+
+/// `array:min_*` over the whole value.
+template <typename T> T minOf(const Array<T> &xs, const Site &site) {
+    return extremeOf<T, false>(xs, site);
+}
+
+/// `array:max_*` over the whole value.
+template <typename T> T maxOf(const Array<T> &xs, const Site &site) {
+    return extremeOf<T, true>(xs, site);
+}
+
+/// `array:dim` (src/builtin/operators/array_axis.cpp, `normalizedAxis`): the extent of one axis, a
+/// negative one counting from the last; an axis outside the rank is a fault (`InvalidArgument`,
+/// "the axis N is outside the rank R"), which is the runtime's own report with the two numbers in
+/// it, so it is written here with them.
+template <typename T> int64_t dim(const Array<T> &xs, int64_t axis, const Site &site) {
+    const int64_t rank = static_cast<int64_t>(xs.rank());
+    if (axis < -rank || axis >= rank) [[unlikely]] {
+        fault(site, {std::to_string(axis), std::to_string(rank)});
+    }
+    return static_cast<int64_t>(xs.extent(static_cast<std::size_t>(axis < 0 ? axis + rank : axis)));
 }
 
 /// `tail(xs)` (:struct/tail_arr): all but the first element; the empty array for one or none.

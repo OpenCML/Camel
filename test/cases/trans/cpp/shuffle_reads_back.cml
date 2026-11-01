@@ -1,0 +1,21 @@
+/**
+ * `xs->shuffle<k>` is one uniform draw for each position, the positions ordered by (draw, position)
+ * -- the interpreter's permutation, not another shuffle that is also uniform -- so a program whose
+ * key is a constant prints the same elements in the same order compiled or interpreted. The
+ * comparison is byte for byte: these lines are what `std::fvm` prints, and the key is a constant of
+ * the program (`key(42)`), not a seed taken from the clock.
+ */
+
+import { key, shuffle } from random
+
+func main(): int sync {
+    let k = key(42)
+    let xs: int[] = [1, 2, 3, 4, 5, 6, 7, 8]
+    println(shuffle<k>(xs))
+    println(xs)
+    let empty: int[] = []
+    println(shuffle<k>(empty), shuffle<k>([7]))
+    let fs: f32[] = [0.5, 1.5, 2.5]
+    println(shuffle<k>(fs))
+    return 0
+}

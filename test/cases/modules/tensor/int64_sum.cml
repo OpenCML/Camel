@@ -1,6 +1,7 @@
 // The sum of an int64 tensor accumulates exactly in int64 and wraps on overflow, as integer
-// arithmetic does (design principles 5.1, 7.7); the full sum and the mean convert the exact
-// sum to float once. Summed in f64, 2^53 + 1 + 1 would lose both ones.
+// arithmetic does (design principles 5.1, 7.7); the full sum converts the exact sum to float once,
+// and the mean divides that in f64 and answers the element type -- `int(quotient)`, the conversion
+// `int(·)` already has. Summed in f64, 2^53 + 1 + 1 would lose both ones.
 import { reshape, sum, mean } from tensor
 
 func main(): int sync {

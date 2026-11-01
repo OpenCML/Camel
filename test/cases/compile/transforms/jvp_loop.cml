@@ -1,0 +1,18 @@
+// A loop whose state accumulates: `s` starts at 0 and every iteration adds `x*x`, so
+//   f(x) = loop s = 0.0 for i in [1, 2, 3, 4] do s + x * x   ==   4 * x*x
+//   f(3) = 36,  f'(3) = 8x = 24
+// `x` is captured into the loop body; the item is an `int`, so nothing about the collection has to
+// be lifted. Three iterations of `ds = ds + 2x` is the point: keeping only the last gives 6.
+import rulesets.jvp
+import { jvp } from transforms
+
+func f(x: float): float {
+    return loop s = 0.0 for i in [1, 2, 3, 4] do s + x * x
+}
+
+func main(): int sync {
+    let (value, tangent) = jvp(f)(3.0, 1.0)
+    println(value)
+    println(tangent)
+    return 0
+}

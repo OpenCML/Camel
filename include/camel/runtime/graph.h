@@ -343,28 +343,23 @@ struct GCFuncRef {
 };
 static_assert(std::is_trivially_copyable_v<GCFuncRef>);
 
-/// Payload of a LOOP node in a frozen graph: its form, the indexes of its condition graph
-/// (kNoLoopGraph for For) and of its body graph in the graph's reference table, where both are
-/// marked callee and nested (the LOOP node calls them each round; they are written inside the
-/// graph), how many values the loop collects into arrays (its collection slots; 0 for a
-/// loop the source wrote, which has none), and where its elements come from
-/// (camel::core::LoopIterableForm: an array, or the pair of the interval's two bounds).
+/// Payload of a LOOP node in a frozen graph: its form, how many values the loop collects into
+/// arrays (its collection slots; 0 for a loop the source wrote, which has none), and where its
+/// elements come from (camel::core::LoopIterableForm: an array, or the pair of the interval's two
+/// bounds). A loop is its body *region* -- the condition and the body are two control regions of the
+/// same graph, sharing the frame of the computation around them (design principles 3.10) -- so the
+/// node names no graph at all.
 struct GCLoopRef {
     camel::core::LoopKind kind                        = camel::core::LoopKind::While;
     camel::core::LoopIterableForm iterableForm        = camel::core::LoopIterableForm::Array;
     uint16_t reserved1                                = 0;
-    uint32_t condRef                                  = kNoLoopGraph;
-    uint32_t bodyRef                                  = kNoLoopGraph;
     uint32_t collectionCount                          = 0;
 };
 static_assert(std::is_trivially_copyable_v<GCLoopRef>);
-static_assert(sizeof(GCLoopRef) == 16, "A LOOP payload is two words.");
+static_assert(sizeof(GCLoopRef) == 8, "A LOOP payload is one word.");
 
-/// What a LOOP node names, as values: the graphs themselves instead of their reference-table
-/// indexes (GraphDraft::loopGraphsOf, GCGraph's loopBodyOf).
+/// What a LOOP node is, as values: the payload's fields.
 struct GCLoopBody {
-    GraphId condGraph                                 = kInvalidGraphId; // invalid for a For loop
-    GraphId bodyGraph                                 = kInvalidGraphId;
     camel::core::LoopKind kind                        = camel::core::LoopKind::While;
     camel::core::LoopIterableForm iterableForm        = camel::core::LoopIterableForm::Array;
     uint16_t reserved1                                = 0;
@@ -756,10 +751,6 @@ class GCGraph : public camel::core::rtdata::Object {
     gc_node_ref_t nodeRef(const GCNode *node) const;
     /// FUNC node `ref`: the callee (invalid when `ref` is not a FUNC node).
     GraphId calleeIdOf(gc_node_ref_t ref) const;
-    /// LOOP node `ref`: its condition graph (invalid for a For loop, or when `ref` is not a
-    /// LOOP node) and its body graph (invalid when `ref` is not a LOOP node).
-    GraphId loopCondIdOf(gc_node_ref_t ref) const;
-    GraphId loopBodyIdOf(gc_node_ref_t ref) const;
     /// LOOP node `ref`: its form. The node must be a LOOP node.
     camel::core::LoopKind loopKindOf(gc_node_ref_t ref) const {
         return nodeBodyAs<GCLoopRef>(ref)->kind;
@@ -1098,11 +1089,9 @@ uint32_t funcWriteMaskOf(const GCGraph &graph, gc_node_ref_t ref);
 /// frozen graph, which is what the box check and the backends have.
 camel::core::type::Type *callValueTypeOf(const GCGraph &callee, uint32_t writtenCaptures);
 
-/// The draft payload of the LOOP node `ref` of a frozen graph: the graphs its GCLoopRef names.
+/// The payload of the LOOP node `ref` of a frozen graph, as values.
 inline GCLoopBody loopBodyOf(const GCGraph &graph, gc_node_ref_t ref) {
     return GCLoopBody{
-        .condGraph       = graph.loopCondIdOf(ref),
-        .bodyGraph       = graph.loopBodyIdOf(ref),
         .kind            = graph.loopKindOf(ref),
         .iterableForm    = graph.loopIterableFormOf(ref),
         .collectionCount = graph.loopCollectionCountOf(ref),

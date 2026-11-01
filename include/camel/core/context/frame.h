@@ -47,23 +47,23 @@ class Frame : public rtdata::Object {
     const camel::runtime::GCGraph *runtimeGraph() const { return runtimeGraph_; }
     bool hasRuntimeGraph() const { return runtimeGraph_ != nullptr; }
     const type::TupleType *runtimeDataLayout() const {
-        ASSERT(runtimeGraph_ != nullptr, "Runtime frame has no runtime graph for data layout.");
+        GUARD(runtimeGraph_ != nullptr, "Runtime frame has no runtime graph for data layout.");
         return runtimeGraph_->runtimeDataType();
     }
     const type::TupleType *staticDataLayout() const {
-        ASSERT(runtimeGraph_ != nullptr, "Runtime frame has no runtime graph for static layout.");
+        GUARD(runtimeGraph_ != nullptr, "Runtime frame has no runtime graph for static layout.");
         return runtimeGraph_->staticDataType();
     }
     const std::string &graphName() const {
-        ASSERT(runtimeGraph_ != nullptr, "Runtime frame has no runtime graph name.");
+        GUARD(runtimeGraph_ != nullptr, "Runtime frame has no runtime graph name.");
         return runtimeGraph_->name();
     }
 
     type::TypeCode codeAt(data_idx_t index) const {
-        ASSERT(index != 0, "Data index is invalid.");
+        GUARD(index != 0, "Data index is invalid.");
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
-            ASSERT(
+            GUARD(
                 idx < dynamicAreaType_->size(),
                 std::format(
                     "[{}] Invalid argument index, idx = {}, size = {}",
@@ -73,7 +73,7 @@ class Frame : public rtdata::Object {
             return dynamicAreaType_->codeAt(idx);
         } else {
             size_t idx = static_cast<size_t>(-index);
-            ASSERT(
+            GUARD(
                 idx < staticArea_->size(),
                 std::format(
                     "[{}] Invalid static data index, idx = {}, size = {}",
@@ -85,10 +85,10 @@ class Frame : public rtdata::Object {
     }
 
     template <typename T> T *typeAt(data_idx_t index) const {
-        ASSERT(index != 0, "Data index is invalid.");
+        GUARD(index != 0, "Data index is invalid.");
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
-            ASSERT(
+            GUARD(
                 idx < dynamicAreaType_->size(),
                 std::format(
                     "[{}] Invalid argument index, idx = {}, size = {}",
@@ -96,11 +96,11 @@ class Frame : public rtdata::Object {
                     idx,
                     dynamicAreaType_->size()));
             type::Type *res = runtimeDataLayout()->typeAt(idx);
-            ASSERT(res != nullptr, std::format("Type at index {} is null.", idx));
+            GUARD(res != nullptr, std::format("Type at index {} is null.", idx));
             return tt::as_ptr<T>(res);
         } else {
             size_t idx = static_cast<size_t>(-index);
-            ASSERT(
+            GUARD(
                 idx < staticArea_->size(),
                 std::format(
                     "[{}] Invalid static data index, idx = {}, size = {}",
@@ -108,18 +108,18 @@ class Frame : public rtdata::Object {
                     idx,
                     staticArea_->size()));
             type::Type *res = staticDataLayout()->typeAt(idx);
-            ASSERT(res != nullptr, std::format("Type at index {} is null.", idx));
+            GUARD(res != nullptr, std::format("Type at index {} is null.", idx));
             return tt::as_ptr<T>(res);
         }
     }
 
     template <typename T> T get(data_idx_t index) const {
-        ASSERT(index != 0, "Data index is invalid.");
+        GUARD(index != 0, "Data index is invalid.");
         T res;
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
             EXEC_WHEN_DEBUG({
-                ASSERT(
+                GUARD(
                     idx < dynamicAreaType_->size(),
                     std::format(
                         "[{}] Invalid argument index, idx = {}, size = {}",
@@ -130,7 +130,7 @@ class Frame : public rtdata::Object {
                 // allocation) or kDebugUninitializedSlot (the fill the Debug taskflow frame
                 // pool gives a frame before use). NullSlot is a legitimate empty element and
                 // stays readable.
-                ASSERT(
+                GUARD(
                     dynamicArea_[idx] != mm::kDebugUninitializedSlot &&
                         dynamicArea_[idx] != DeadSlot,
                     std::format(
@@ -142,7 +142,7 @@ class Frame : public rtdata::Object {
         } else {
             size_t idx = static_cast<size_t>(-index);
             EXEC_WHEN_DEBUG({
-                ASSERT(
+                GUARD(
                     idx < staticArea_->size(),
                     std::format(
                         "[{}] Invalid static data index, idx = {}, size = {}",
@@ -208,7 +208,7 @@ class Frame : public rtdata::Object {
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
             EXEC_WHEN_DEBUG({
-                ASSERT(
+                GUARD(
                     idx < dynamicAreaType_->size(),
                     std::format(
                         "Invalid argument index, idx = {}, size = {}",
@@ -233,7 +233,7 @@ class Frame : public rtdata::Object {
         } else {
             size_t idx = static_cast<size_t>(-index);
             EXEC_WHEN_DEBUG({
-                ASSERT(
+                GUARD(
                     idx < staticArea_->size(),
                     std::format(
                         "Invalid static data index, idx = {}, size = {}",
@@ -333,12 +333,12 @@ class FrameView {
           dynamicArea_(const_cast<slot_t *>(frame->dynamicArea_)) {}
 
     template <typename T> T get(data_idx_t index) const {
-        ASSERT(index != 0, "Data index is invalid.");
+        GUARD(index != 0, "Data index is invalid.");
         T res;
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
             EXEC_WHEN_DEBUG({
-                ASSERT(
+                GUARD(
                     dynamicArea_[idx] != mm::kDebugUninitializedSlot &&
                         dynamicArea_[idx] != DeadSlot,
                     std::format("Accessing uninitialized slot: idx = {}", index));
@@ -347,7 +347,7 @@ class FrameView {
         } else { // Static area
             size_t idx = static_cast<size_t>(-index);
             EXEC_WHEN_DEBUG({
-                ASSERT(
+                GUARD(
                     idx < staticArea_->size(),
                     std::format(
                         "Invalid static data index, idx = {}, size = {}",
@@ -370,7 +370,7 @@ class FrameView {
         } else { // Static area
             size_t idx = static_cast<size_t>(-index);
             EXEC_WHEN_DEBUG({
-                ASSERT(
+                GUARD(
                     idx < staticArea_->size(),
                     std::format(
                         "Invalid static data index, idx = {}, size = {}",
@@ -476,7 +476,7 @@ class FramePool {
             return lastFrame;
         }
 
-        ASSERT(
+        GUARD(
             graph->hasFrameLayout(),
             std::format("Runtime graph '{}' has no finalized frame layout.", graph->name()));
         size_t frameSize = graph->frameSize();
@@ -529,11 +529,11 @@ class FramePool {
                 mm::formatAddress(this, true),
                 frame->runtimeGraph_ ? frame->runtimeGraph_->name() : "(null)",
                 mm::formatAddress(frame, true));
-            ASSERT(
+            GUARD(
                 reinterpret_cast<std::byte *>(frame) < top_,
                 "Trying to release a frame that is already released.");
             Frame *last = frames_.back();
-            ASSERT(
+            GUARD(
                 last == frame,
                 std::format(
                     "Trying to release a frame that is not on top, top frame of graph <{}> is at "
@@ -590,7 +590,7 @@ class FramePool {
     }
 
     void clearGcSlots(Frame *frame) {
-        ASSERT(frame != nullptr, "Cannot clear a null frame.");
+        GUARD(frame != nullptr, "Cannot clear a null frame.");
         const type::TupleType *layout = frame->dynamicAreaType_;
         if (!layout || layout->refCount() == 0) {
             return;
@@ -643,25 +643,25 @@ class FrameArgsView : public ArgsView {
     size_t size() const override { return indices_.size(); }
 
     slot_t slot(size_t index) const override {
-        ASSERT(index < indices_.size(), "ArgsView index out of range");
+        GUARD(index < indices_.size(), "ArgsView index out of range");
         data_idx_t dataIdx = indices_[index];
         return frame_.get<slot_t>(dataIdx);
     }
 
     void setSlot(size_t index, slot_t value) override {
-        ASSERT(index < indices_.size(), "ArgsView index out of range");
+        GUARD(index < indices_.size(), "ArgsView index out of range");
         data_idx_t dataIdx = indices_[index];
         frame_.set(dataIdx, value);
     }
 
     type::TypeCode code(size_t index) const override {
-        ASSERT(index < indices_.size(), "ArgsView index out of range");
+        GUARD(index < indices_.size(), "ArgsView index out of range");
         data_idx_t dataIdx = indices_[index];
         return frame_.codeAt(dataIdx);
     }
 
     type::Type *type(size_t index) const override {
-        ASSERT(index < indices_.size(), "ArgsView index out of range");
+        GUARD(index < indices_.size(), "ArgsView index out of range");
         data_idx_t dataIdx = indices_[index];
         return frame_.typeAt<type::Type>(dataIdx);
     }
@@ -688,7 +688,7 @@ class SlotArgsView : public ArgsView {
     size_t size() const override { return indices_.size(); }
 
     slot_t slot(size_t index) const override {
-        ASSERT(index < indices_.size(), "ArgsView index out of range");
+        GUARD(index < indices_.size(), "ArgsView index out of range");
         data_idx_t dataIdx = indices_[index];
         if (dataIdx > 0)
             return slots_[dataIdx];
@@ -696,7 +696,7 @@ class SlotArgsView : public ArgsView {
     }
 
     void setSlot(size_t index, slot_t value) override {
-        ASSERT(index < indices_.size(), "ArgsView index out of range");
+        GUARD(index < indices_.size(), "ArgsView index out of range");
         data_idx_t dataIdx = indices_[index];
         if (dataIdx > 0)
             slots_[dataIdx] = value;
@@ -705,7 +705,7 @@ class SlotArgsView : public ArgsView {
     }
 
     type::TypeCode code(size_t index) const override {
-        ASSERT(index < indices_.size(), "ArgsView index out of range");
+        GUARD(index < indices_.size(), "ArgsView index out of range");
         data_idx_t dataIdx = indices_[index];
         if (dataIdx > 0)
             return runtimeDataType_->codeAt(static_cast<size_t>(dataIdx));
@@ -713,7 +713,7 @@ class SlotArgsView : public ArgsView {
     }
 
     type::Type *type(size_t index) const override {
-        ASSERT(index < indices_.size(), "ArgsView index out of range");
+        GUARD(index < indices_.size(), "ArgsView index out of range");
         data_idx_t dataIdx = indices_[index];
         if (dataIdx > 0)
             return runtimeDataType_->typeAt(static_cast<size_t>(dataIdx));

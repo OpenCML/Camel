@@ -131,6 +131,8 @@ b2 起消费者不再点类型名，写的是 `auto &draft = session.edit(g).edi
    手动再叠一遍全链：`camel cases/opt/generic/generic_passes.cml test::edges_ok std::opt std::gir`
    打出的仍是这两行，说明优化打开后它没有骗人。
 
+**账本只许降的时候，新代码遇到它只有一个动作：换一个不需要这个名字的人来拿图。**（作者，2026-10-31；`modules/transforms/jvp.cpp` 里那条规则路径就是这么过的——它原先收 `GraphDraft &`，改成收 `GraphTransaction &`，用 `GraphTransaction::borrow` 从一个没有事务在手、只有草稿的调用者那里借一个，账页的 files/references 因此各降一格，而不是各涨一格。）
+
 ## 3. 还没填的行
 
 b2 起逐笔往下填：b2.2 起按 `src/passes/test` → `opt/inline` ＋ `opt/generic` →

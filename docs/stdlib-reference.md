@@ -79,6 +79,7 @@ Not in this reference: the profiler (`perf`).
 | [optim](#optim) | `import { ... } from optim` | Camel |
 | [autodiff](#autodiff) | `import { ... } from autodiff` | C++ |
 | [rulesets.jvp](#rulesets.jvp) | `import { ... } from rulesets.jvp` | Camel |
+| [rulesets.vmap](#rulesets.vmap) | `import { ... } from rulesets.vmap` | Camel |
 | [sim](#sim) | `import { ... } from sim` | C++ |
 | [onnx](#onnx) | `import { ... } from onnx` | C++ |
 | [built-in](#built-in-functions) | none |  |
@@ -114,6 +115,7 @@ Not in this reference: the profiler (`perf`).
 | [optim](#optim) | `import { ... } from optim` |  |
 | [autodiff](#autodiff) | `import { ... } from autodiff` |  |
 | [rulesets.jvp](#rulesets.jvp) | `import { ... } from rulesets.jvp` |  |
+| [rulesets.vmap](#rulesets.vmap) | `import { ... } from rulesets.vmap` |  |
 | [sim](#sim) | `import { ... } from sim` |  |
 | [onnx](#onnx) | `import { ... } from onnx` |  |
 
@@ -1405,6 +1407,21 @@ together with the derivative of `f` at 2 in the direction 1.
 - Example (a fragment, not compiled): `let forward = jvp(f)`
 - Why it is not compiled: `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
 
+#### `split`
+
+```camel
+split: (f: (v: float, d: float) => (float, float)) => (v: float, d: float) => (float, float)
+```
+
+The step of `vjp` that separates a lifted function into the part computable now and the linear
+residue (design 4.4). Not implemented: the operator has a signature and no rule, so a call is
+refused where it is composed (`stdlib/vjp.cml`) and names this step. The signature is the
+shape the library's compositions can be written with today.
+fragment of the composition: `let (fwd, lin) = split(jvp(f))`.
+
+- Example (a fragment, not compiled): `let step = split`
+- Why it is not compiled: `split` takes the lifted function a `jvp` call writes, so the example is a
+
 #### `transpose`
 
 ```camel
@@ -1424,6 +1441,28 @@ or not. The type is `(..ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<Par
 
 - Example (a fragment, not compiled): `let back = transpose(f)`
 - Why it is not compiled: `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
+
+#### `vmap`
+
+```camel
+vmap: (f: F) => Vmap<F> when is_function::<F>()
+```
+
+Batching: `vmap(f)` gives the function that applies `f` to every row of a batch. A row is one
+dimension less than the batch: for `f: (f32) => f32` it is `(f32[]) => f32[]`, and for
+`f: (f32[3]) => f32` it is `(f32[?, 3]) => f32[]` -- `Lift<T> = RowsOf<T>`, the value with one
+dimension of unknown length in front of it (`stdlib/types.cml`). The arithmetic of every
+elementwise primitive is that primitive (`bx + bw` is `x + w` element by element), which is why
+`vmap(f)(xs)` and the row-by-row `map` answer the same bits.
+
+The rules come from `stdlib/rulesets/vmap.cml`: the transform asks that family, by the operator's
+key, for every primitive of `f`, and calls the function the rule names with the batches. An
+operator with no rule is refused by name at the primitive, never batched by a guess; a call, a
+branch or a loop in the body is refused the same way, because the elementwise tier batches
+straight-line bodies.
+
+- Example (a fragment, not compiled): `let batched = vmap(f)`
+- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
 
 <a id="tensor"></a>
 
@@ -6681,6 +6720,124 @@ The forward rule of `/` on two 64-bit floats.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `div_jvp(6.0, 2.0, (1.0, 0.25))` gives `(3.0, 0.125)`
+
+<a id="rulesets.vmap"></a>
+
+## `rulesets.vmap`: how a batched transform lifts a value
+
+The `vmap` ruleset: what a batched value is, and how a primitive is written when every operand
+carries a batch (`docs/design/program-transforms/README.cn.md` 4.1, 5.4).
+
+    let rows = lift(xs);          // the batch of rows a function of one value takes
+
+`Lift<T>` is `RowsOf<T>`: the one value a primitive works on, with one dimension of unknown length
+in front of it (`stdlib/types.cml`), which is exactly the type `vmap`'s parameter has. A scalar
+`f32` lifts to the batch of `f32` rows (`f32[]`); a row `f32[3]` lifts to the batch of rows
+(`f32[?, 3]`). So a batched program is a program over the same values with one more dimension in
+front, and an elementwise primitive needs no new arithmetic for it: `bx + bw` is `x + w` applied
+element by element, which is the row-by-row application `map` writes out.
+
+Every rule here is `export`ed: the transform that reads this family is in another module, and a
+rule that is not exported is refused where it is imported.
+
+A rule's right side takes the *lifted* operands and answers the *lifted* result. For `jvp` that is
+"the tangents in, the tangent out"; for `vmap` it is "the batches in, the batch out". The
+elementwise tier is therefore one rule per primitive, each of them the primitive itself: the
+batching of an elementwise operator is that operator.
+
+This round writes the elementwise tier only. `matmul`, the reductions (`sum`, `sum_axis`, `mean`),
+`reshape` and the broadcasting moves need a rule each that says *which* axis the batch is on --
+`sum` over a batch sums each row, not the batch -- and they come next, in the same module, with
+`RowsOf` doing the work (`reshape` of `RowsOf<T>` is a reshape that keeps the batch dimension).
+
+Adding a rule changes docs/stdlib-reference.md; regenerate it with
+`node scripts/stdlib-reference.mjs --write`.
+
+#### `lift`
+
+```camel
+lift: (x: T) => Lift<T>
+```
+
+`x` lifted: a constant or a captured value becomes a batch of one row, which every rule
+broadcasts over the batch it meets (the elementwise operators of `tensor` take a value beside an
+array as that value at every element).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `lift(3.0)` gives `[3.0]`
+
+### The elementwise tier
+
+A rule is filed in its ruleset module under the operator its left side is written with and the
+number of operands it takes, and a transform reads it from there (`lookupRule("rulesets.vmap",
+head, arity)`); a rule is not a function a program calls, so the rules below and the functions
+they call are two things with different names.
+
+The right side of each rule *names* the function that does the batched arithmetic
+(`vmap_add(bx, bw)`), and that name is the part a batching transform reads. A rule's right side is
+two arrows: the outer one takes the primitive's operands, the inner one takes the lifted half. A
+batched graph has no unbatched operands to give the outer one -- `Lift<T>` replaced the whole
+chain with batches -- so the transform calls the named function with the batches instead, and the
+rule mechanism is unchanged. `rhsCalleeOf("rulesets.vmap", "vmap_rule_add")` is `vmap_add`.
+
+Five keys cover the scalar arithmetic: `+`, `-`, `*`, `/` at two operands and `-` at one. `-x` and
+`x - w` are two primitives that share one token, which is why the operand count is part of the
+key (stdlib/rulesets/jvp.cml files the same five).
+
+#### `vmap_add`
+
+```camel
+vmap_add: (a: T[], b: T[]) => T[] when is_numeric::<T>()
+```
+
+`x + w` of one row, batched: the same addition, element by element.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_add([1.0, 2.0], [3.0, 4.0])` gives `[4.0, 6.0]`
+
+#### `vmap_sub`
+
+```camel
+vmap_sub: (a: T[], b: T[]) => T[] when is_numeric::<T>()
+```
+
+`x - w` of one row, batched.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_sub([3.0, 4.0], [1.0, 2.0])` gives `[2.0, 2.0]`
+
+#### `vmap_mul`
+
+```camel
+vmap_mul: (a: T[], b: T[]) => T[] when is_numeric::<T>()
+```
+
+`x * w` of one row, batched.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_mul([1.0, 2.0], [3.0, 4.0])` gives `[3.0, 8.0]`
+
+#### `vmap_div`
+
+```camel
+vmap_div: (a: T[], b: T[]) => T[] when is_numeric::<T>()
+```
+
+`x / w` of one row, batched.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_div([3.0, 8.0], [3.0, 4.0])` gives `[1.0, 2.0]`
+
+#### `vmap_neg`
+
+```camel
+vmap_neg: (a: T[]) => T[] when is_numeric::<T>()
+```
+
+`-x` of one row, batched. The key is `-` at one operand, not `-` at two.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `vmap_neg([1.0, -2.0])` gives `[-1.0, 2.0]`
 
 <a id="sim"></a>
 

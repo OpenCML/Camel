@@ -1789,6 +1789,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::RuleRightUsesOuterVariable,
+            {
+                "RuleRightUsesOuterVariable",
+                "The rule '{0}' reads '{1}' on its right side, and '{1}' is a name its left side binds: in this ruleset the right side names the function the transform calls, and the pattern's names are never bound.",
+                "A family whose transform reads a rule's callee and calls it with the batch never calls the rule's right side as a function, so nothing binds the names the left side's pattern writes ('x', 'w'): the batched graph has batches where those values used to be, and a reference to one is a value the graph has none of. Write the right side so it reads only the names its own arrow declares -- the batch parameters -- and passes them to the named function: 'x + w => (bx: Lift<T>, bw: Lift<T>) => vmap_add(bx, bw)'.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",

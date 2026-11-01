@@ -103,3 +103,81 @@ expect_exit = 0
 expect_stdout_contains = ["LOOKUP rulesets.probe_missing +/2 -> add_ok", "LOOKUP rulesets.probe_missing -/1 -> neg_ok", "LOOKUP rulesets.probe_missing */2 -> mul_ok", "LOOKUP rulesets.probe_missing //2 -> no rule", "RULESET rulesets.probe_missing -/2 -> sub_ok"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "rulesets_vmap_elementwise_keys"
+desc = "The `vmap` ruleset files the elementwise tier under the five keys the scalar arithmetic already has: `+`, `-`, `*`, `/` at two operands and `-` at one (`-x` and `x - w` are two primitives that share one token, which is why the operand count is part of the key). `std::rulesets query=` asks the index the way a transform asks it, and the answers are pinned: every key resolves to its `vmap_*` rule and `+` at three operands has no rule. The right side of each rule takes the *lifted* operands and answers the lifted result, which for `vmap` is one batch -- that is what `Lift<T> = RowsOf<T>` says, and the reading beside this one shows the two writings agree bit for bit."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/vmap_ruleset.cml"
+args = ["${case}", "std::rulesets", "query=rulesets.vmap|+|2;rulesets.vmap|-|2;rulesets.vmap|-|1;rulesets.vmap|*|2;rulesets.vmap|/|2;rulesets.vmap|+|3", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["RULESET rulesets.vmap +/2 -> vmap_rule_add", "RULESET rulesets.vmap -/2 -> vmap_rule_sub", "RULESET rulesets.vmap -/1 -> vmap_rule_neg", "RULESET rulesets.vmap */2 -> vmap_rule_mul", "RULESET rulesets.vmap //2 -> vmap_rule_div", "LOOKUP rulesets.vmap +/2 -> vmap_rule_add", "LOOKUP rulesets.vmap -/2 -> vmap_rule_sub", "LOOKUP rulesets.vmap -/1 -> vmap_rule_neg", "LOOKUP rulesets.vmap */2 -> vmap_rule_mul", "LOOKUP rulesets.vmap //2 -> vmap_rule_div", "LOOKUP rulesets.vmap +/3 -> no rule"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vmap_elementwise_agrees_with_row_by_row_map"
+desc = "The ruleset alone, with no transform: `array.vmap` is a row-writing `map`, and these are the numbers a batched function has to answer -- `[1.5, 4.0, 6.5, 0.25]` for `x*2.0 + x/2.0 - 1.0`, `[0.375, 6.0, -9.0]` for its negation, and `lift(3.0)` the batch of one row (`[3.0]`). The pairs are compared with each other rather than with a written golden, because what this pins is that the two writings are one computation; `vmap_transform_agrees_with_row_by_row_map` below is the same comparison for the transform that reads this ruleset, and the two readings must agree."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/vmap_ruleset.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split('\n')
+assert(out[0] === out[1] && out[0] === '[1.5, 4.0, 6.5, 0.25]', `f: ${out[0]} vs ${out[1]}`)
+assert(out[2] === out[3] && out[2] === '[0.375, 6.0, -9.0]', `g: ${out[2]} vs ${out[3]}`)
+assert(out[4] === '[3.0]', `lift: ${out[4]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vmap_transform_agrees_with_row_by_row_map"
+desc = "`reinterp<vmap>` -- the transform -- against the row-by-row `map` of the same function: `vmap(f)(xs)` and `xs->map(f)` print the same numbers bit for bit, and so do `vmap(g)(ys)` and `ys->map(g)`. The transform asks `rulesets.vmap` for every primitive of the body and calls the function the rule names with the batches, so the reading beside the values is the count: `asked=4 found=4` for `f` and `asked=5 found=5` for `g`, with the five rules named in the order the walk asked. A ruleset that is written is not a ruleset that is used, and this is the cell that says it was asked."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_elementwise.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["REINTERP vmap function=f graph=", "kinds=8/8 asked=4 found=4 missing=0 rules=vmap_rule_mul,vmap_rule_div,vmap_rule_add,vmap_rule_sub", "REINTERP vmap function=g graph=", "kinds=9/9 asked=5 found=5 missing=0 rules=vmap_rule_mul,vmap_rule_div,vmap_rule_add,vmap_rule_sub,vmap_rule_neg", "REINTERP vmap op signature=(f: (f32) => f32) => (f32[]) => f32[]", "same=yes"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.split('\n').filter(line => line.startsWith('['))
+assert(values.length === 4, `printed ${values.length} values: ${JSON.stringify(values)}`)
+assert(values[0] === values[1] && values[0] === '[1.5, 4.0, 6.5, 0.25]', `f: ${values[0]} vs ${values[1]}`)
+assert(values[2] === values[3] && values[2] === '[0.375, 6.0, -9.0]', `g: ${values[2]} vs ${values[3]}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vmap_transform_refuses_a_call_by_name"
+desc = "What the elementwise tier refuses, and that it says so at the node it was written at: `g` calls `f`, and `vmap(g)` stops at that call -- `skip=body construct=a call` with `asked=0 found=0`, because the walk never reached a primitive. The refusal is never a copied node hoping for the best: a construct the tier does not batch is named, with the reason, and the program exits with the fault at the call site."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_call_refused.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 1
+expect_stdout_contains = ["REINTERP vmap function=g skip=body construct=a call", "asked=0 found=0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vmap_rule_may_not_read_its_pattern_name"
+desc = "A rule of a family whose transform calls only the callee its right side names may not read a name its left side's pattern binds: nothing binds it in a batched graph, because the outer arrow is never called (the author's ruling of 2026-11-01 05:10). The refusal is a compile error at the rule, where it is written, and it names the rule and the name: `probe_rule_mul` reads `w`. The fixture `rulesets.probe_batch` is the reachable copy of that shape, the way `rulesets.probe_missing` is a copy of `jvp`'s family with a hole in it."
+kind = "negative"
+case = "../../../cases/compile/transforms/vmap_rule_outer_variable.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RuleRightUsesOuterVariable"
+expect_diagnostic_code = "0x03000207"
+expect_stdout_contains = ["probe_rule_mul"]

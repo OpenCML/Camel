@@ -221,10 +221,8 @@ bool bodyNeedsOrder(
             }
             break;
         case GCNodeKind::Loop:
-            if (bodyNeedsOrder(program, program.loopCondOf(*graph, it.ref()), seen) ||
-                bodyNeedsOrder(program, program.loopBodyOf(*graph, it.ref()), seen)) {
-                return true;
-            }
+            // A loop is its regions (design principles 3.10): it names no graph, so there is
+            // nothing here to walk.
             break;
         default:
             break;
@@ -489,13 +487,9 @@ RuntimeCallGraphSccInfo analyzeRuntimeCallGraphScc(
             continue;
         }
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
-            // A LOOP node calls its condition and body graphs as a FUNC node calls its
-            // callee: a function called from a loop body that calls the function the loop is
-            // in is a recursion through the loop.
-            for (GCGraph *callee :
-                 {program.calleeOf(*graph, it.ref()),
-                  program.loopCondOf(*graph, it.ref()),
-                  program.loopBodyOf(*graph, it.ref())}) {
+            // A FUNC node calls its callee the way a function called from a loop body calls the
+            // function the loop is in; the loop itself names no graph (design principles 3.10).
+            for (GCGraph *callee : {program.calleeOf(*graph, it.ref())}) {
                 if (!callee) {
                     continue;
                 }

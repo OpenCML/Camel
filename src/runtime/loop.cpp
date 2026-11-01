@@ -86,14 +86,14 @@ LoopDraftView::LoopDraftView(const Program &program, const GraphDraft &draft, gc
     : draft_(&draft), node_(node) {
     (void)program;
     [[maybe_unused]] const DraftNodeHeader *header = draft.header(node);
-    ASSERT(
+    GUARD(
         header != nullptr && header->kind == GCNodeKind::Loop,
         "LoopDraftView of a node that is not a LOOP node.");
     const GCLoopBody body = draft.loopGraphsOf(node);
     kind_                 = body.kind;
     condRegion_           = draft.loopRegionOf(node, GCRegionKind::LoopCond);
     bodyRegion_           = draft.loopRegionOf(node, GCRegionKind::LoopBody);
-    ASSERT(bodyRegion_ != 0, "A LOOP node has no body region.");
+    GUARD(bodyRegion_ != 0, "A LOOP node has no body region.");
     stateCount_      = draft.normInputsOf(node).size() - (loopHasIterable(kind_) ? 1 : 0);
     collectionCount_ = body.collectionCount;
 }
@@ -105,9 +105,9 @@ Type *LoopDraftView::stateType(size_t j) const {
 }
 
 Type *LoopDraftView::collectionArrayType(size_t c) const {
-    ASSERT(c < collectionCount_, "LoopDraftView: the loop has no such collection slot.");
+    GUARD(c < collectionCount_, "LoopDraftView: the loop has no such collection slot.");
     const auto *value = static_cast<const TupleType *>(valueType());
-    ASSERT(
+    GUARD(
         value != nullptr && value->size() == stateCount_ + collectionCount_,
         "LoopDraftView: the loop's value type does not have the k + s components its shape says.");
     return value->typeAt(collectionValueIndex(c));
@@ -115,7 +115,7 @@ Type *LoopDraftView::collectionArrayType(size_t c) const {
 
 Type *LoopDraftView::collectionElemType(size_t c) const {
     const Type *array = collectionArrayType(c);
-    ASSERT(
+    GUARD(
         array != nullptr && array->code() == TypeCode::Array,
         "LoopDraftView: a collection slot's value type is not an array.");
     return static_cast<const ArrayType *>(array)->elemType();
@@ -129,7 +129,7 @@ std::optional<gc_node_ref_t> LoopDraftView::iterable() const {
 }
 
 gc_node_ref_t LoopDraftView::initialState(size_t j) const {
-    ASSERT(j < stateCount_, "LoopDraftView: no such value of the state.");
+    GUARD(j < stateCount_, "LoopDraftView: no such value of the state.");
     return draft_->normInputsOf(node_)[j + (loopHasIterable(kind_) ? 1 : 0)];
 }
 
@@ -174,7 +174,7 @@ std::vector<gc_node_ref_t> LoopDraftView::externalInputs(bool constants) const {
 }
 
 gc_node_ref_t LoopDraftView::condStateParam(size_t j) const {
-    ASSERT(condRegion_ != 0 && j < stateCount_, "LoopDraftView: no such condition parameter.");
+    GUARD(condRegion_ != 0 && j < stateCount_, "LoopDraftView: no such condition parameter.");
     return draft_->regionPortsOf(condRegion_)[j];
 }
 
@@ -186,7 +186,7 @@ std::optional<gc_node_ref_t> LoopDraftView::bodyElementParam() const {
 }
 
 gc_node_ref_t LoopDraftView::bodyStateParam(size_t j) const {
-    ASSERT(j < stateCount_, "LoopDraftView: no such body parameter.");
+    GUARD(j < stateCount_, "LoopDraftView: no such body parameter.");
     const size_t at = j + (loopHasIterable(kind_) ? 1 : 0);
     return draft_->regionPortsOf(bodyRegion_)[at];
 }
@@ -211,13 +211,13 @@ Type *LoopDraftView::bodyResultType() const { return draft_->header(nextState())
 LoopView::LoopView(const Program &program, const GCGraph &graph, gc_node_ref_t node)
     : program_(&program), graph_(&graph), node_(node) {
     [[maybe_unused]] const GCNode *record = graph.node(node);
-    ASSERT(
+    GUARD(
         record != nullptr && record->kind == GCNodeKind::Loop,
         "LoopView of a node that is not a LOOP node.");
     kind_       = graph.loopKindOf(node);
     condRegion_ = graph.loopRegionOf(node, GCRegionKind::LoopCond);
     bodyRegion_ = graph.loopRegionOf(node, GCRegionKind::LoopBody);
-    ASSERT(bodyRegion_ != 0, "A LOOP node has no body region.");
+    GUARD(bodyRegion_ != 0, "A LOOP node has no body region.");
     stateCount_      = graph.normInputsOf(node).size() - (loopHasIterable(kind_) ? 1 : 0);
     collectionCount_ = graph.loopCollectionCountOf(node);
 }
@@ -225,9 +225,9 @@ LoopView::LoopView(const Program &program, const GCGraph &graph, gc_node_ref_t n
 Type *LoopView::stateType(size_t j) const { return graph_->node(bodyStateParam(j))->dataType(); }
 
 Type *LoopView::collectionArrayType(size_t c) const {
-    ASSERT(c < collectionCount_, "LoopView: the loop has no such collection slot.");
+    GUARD(c < collectionCount_, "LoopView: the loop has no such collection slot.");
     const auto *value = static_cast<const TupleType *>(valueType());
-    ASSERT(
+    GUARD(
         value != nullptr && value->size() == stateCount_ + collectionCount_,
         "LoopView: the loop's value type does not have the k + s components its shape says.");
     return value->typeAt(collectionValueIndex(c));
@@ -235,7 +235,7 @@ Type *LoopView::collectionArrayType(size_t c) const {
 
 Type *LoopView::collectionElemType(size_t c) const {
     const Type *array = collectionArrayType(c);
-    ASSERT(
+    GUARD(
         array != nullptr && array->code() == TypeCode::Array,
         "LoopView: a collection slot's value type is not an array.");
     return static_cast<const ArrayType *>(array)->elemType();
@@ -249,12 +249,12 @@ std::optional<gc_node_ref_t> LoopView::iterable() const {
 }
 
 gc_node_ref_t LoopView::initialState(size_t j) const {
-    ASSERT(j < stateCount_, "LoopView: no such value of the state.");
+    GUARD(j < stateCount_, "LoopView: no such value of the state.");
     return graph_->normInputsOf(node_)[j + (loopHasIterable(kind_) ? 1 : 0)];
 }
 
 gc_node_ref_t LoopView::condStateParam(size_t j) const {
-    ASSERT(condRegion_ != 0 && j < stateCount_, "LoopView: no such condition parameter.");
+    GUARD(condRegion_ != 0 && j < stateCount_, "LoopView: no such condition parameter.");
     return graph_->regionPorts(condRegion_)[j];
 }
 
@@ -266,7 +266,7 @@ std::optional<gc_node_ref_t> LoopView::bodyElementParam() const {
 }
 
 gc_node_ref_t LoopView::bodyStateParam(size_t j) const {
-    ASSERT(j < stateCount_, "LoopView: no such body parameter.");
+    GUARD(j < stateCount_, "LoopView: no such body parameter.");
     const size_t at = j + (loopHasIterable(kind_) ? 1 : 0);
     return graph_->regionPorts(bodyRegion_)[at];
 }
@@ -368,39 +368,35 @@ EffectSummary LoopView::effects() const {
 
 slot_t loopValueComponent(const LoopView &loop, slot_t value, size_t index) {
     if (!loop.valueIsTuple()) {
-        ASSERT(index == 0, "A loop that does not wrap its state has no other component.");
+        GUARD(index == 0, "A loop that does not wrap its state has no other component.");
         return value;
     }
-    ASSERT(
+    GUARD(
         index < loop.valueComponentCount(),
         "A component outside the loop's value tuple was asked for.");
     return fromSlot<Tuple *>(value)->get<slot_t>(index);
 }
 
 slot_t loopStateValue(const LoopView &loop, slot_t value, size_t j) {
-    ASSERT(j < loop.stateCount(), "The loop has no such state value.");
+    GUARD(j < loop.stateCount(), "The loop has no such state value.");
     return loopValueComponent(loop, value, loop.stateValueIndex(j));
 }
 
 slot_t loopCollectedValue(const LoopView &loop, slot_t value, size_t c) {
-    ASSERT(c < loop.collectionCount(), "The loop has no such collection slot.");
+    GUARD(c < loop.collectionCount(), "The loop has no such collection slot.");
     return loopValueComponent(loop, value, loop.collectionValueIndex(c));
 }
 
 void validateRuntimeLoopInterface(
     const Program &program, const GCGraph *graph, gc_node_ref_t node) {
     const LoopKind kind = graph->loopKindOf(node);
-    const GCGraph *cond = program.loopCondOf(*graph, node);
-    const GCGraph *body = program.loopBodyOf(*graph, node);
-    const bool regions  = body == nullptr;
-    const uint32_t condRegion = regions ? graph->loopRegionOf(node, GCRegionKind::LoopCond) : 0;
-    const uint32_t bodyRegion = regions ? graph->loopRegionOf(node, GCRegionKind::LoopBody) : 0;
-    if (regions ? (bodyRegion == 0 || (loopHasCondition(kind) != (condRegion != 0)))
-                : (loopHasCondition(kind) != (cond != nullptr))) {
+    // A loop names no graph: the condition and the body are regions of this graph (design
+    // principles 3.10), so the form it declares is exactly the regions it has.
+    (void)program;
+    const uint32_t condRegion = graph->loopRegionOf(node, GCRegionKind::LoopCond);
+    const uint32_t bodyRegion = graph->loopRegionOf(node, GCRegionKind::LoopBody);
+    if (bodyRegion == 0 || (loopHasCondition(kind) != (condRegion != 0))) {
         loopFails(graph, node, "its parts do not match its form");
-    }
-    if (!regions && (!body->hasNodePayload() || (cond && !cond->hasNodePayload()))) {
-        loopFails(graph, node, "a graph of the loop is not encoded");
     }
     const auto norm         = graph->normInputsOf(node);
     const size_t iterableAt = loopHasIterable(kind) ? 1 : 0;
@@ -413,70 +409,40 @@ void validateRuntimeLoopInterface(
     // The ports of the two parts: the element (body) and the k values of the state, as the ports
     // of the part's graph or of its region.
     const auto bodyPorts = [&]() -> std::span<const gc_node_ref_t> {
-        return regions ? graph->regionPorts(bodyRegion) : body->normPorts();
+        return graph->regionPorts(bodyRegion);
     };
     const auto condPorts = [&]() -> std::span<const gc_node_ref_t> {
-        return regions ? graph->regionPorts(condRegion) : cond->normPorts();
+        return graph->regionPorts(condRegion);
     };
-    const auto bodyType = [&](gc_node_ref_t port) {
-        return (regions ? graph : body)->node(port)->dataType();
-    };
-    const auto condType = [&](gc_node_ref_t port) {
-        return (regions ? graph : cond)->node(port)->dataType();
-    };
+    const auto bodyType = [&](gc_node_ref_t port) { return graph->node(port)->dataType(); };
+    const auto condType = [&](gc_node_ref_t port) { return graph->node(port)->dataType(); };
 
-    // I19: the ports. Both parts take the k values of the state (the body the element first)
-    // and, in graph form, the m captures, in the order of the node's With inputs. A loop in
-    // region form captures nothing: its parts read the values where they are, and its With inputs
-    // are the results of the parts.
-    if (regions && m != (condRegion != 0 ? 3u : 2u)) {
-        loopFails(
-            graph,
-            node,
-            "a loop in region form has the results of its parts and its round as With inputs");
+    // I19: the ports. Both parts take the k values of the state (the body the element first); a loop
+    // captures nothing, because its parts read the values where they are (one frame), and its With
+    // inputs are the results of the parts and the round.
+    if (m != (condRegion != 0 ? 3u : 2u)) {
+        loopFails(graph, node, "a loop has the results of its parts and its round as With inputs");
     }
-    if (bodyPorts().size() != iterableAt + k || (!regions && capturePortsOf(body).size() != m)) {
+    if (bodyPorts().size() != iterableAt + k) {
         loopFails(
             graph,
             node,
             std::format(
-                "its body takes {} values and {} captures, the node passes {} and {}",
+                "its body takes {} values, the node passes {}",
                 bodyPorts().size(),
-                regions ? 0 : capturePortsOf(body).size(),
-                iterableAt + k,
-                m));
+                iterableAt + k));
     }
-    if ((regions ? condRegion != 0 : cond != nullptr) &&
-        (condPorts().size() != k || (!regions && capturePortsOf(cond).size() != m))) {
+    if (condRegion != 0 && condPorts().size() != k) {
         loopFails(
             graph,
             node,
-            std::format(
-                "its condition takes {} values and {} captures, the node passes {} and {}",
-                condPorts().size(),
-                regions ? 0 : capturePortsOf(cond).size(),
-                k,
-                m));
-    }
-    for (size_t c = 0; !regions && cond && c < m; ++c) {
-        Type *a = cond->node(capturePortsOf(cond)[c])->dataType();
-        Type *b = body->node(capturePortsOf(body)[c])->dataType();
-        if (a != b && !(a && b && a->equals(b))) {
-            loopFails(
-                graph,
-                node,
-                std::format(
-                    "capture {} is a '{}' in the condition graph and a '{}' in the body graph",
-                    c,
-                    typeText(a),
-                    typeText(b)));
-        }
+            std::format("its condition takes {} values, the node passes {}", condPorts().size(), k));
     }
 
     // I18: the types. The state types are those of the body's state ports; the condition's
     // ports agree with them; each first value can be assigned to its state; the body returns
     // the state; the condition returns bool; the element port takes the array's elements.
-    const bool hasCondPart = regions ? condRegion != 0 : cond != nullptr;
+    const bool hasCondPart = condRegion != 0;
     std::vector<Type *> stateTypes;
     for (size_t j = 0; j < k; ++j) {
         stateTypes.push_back(bodyType(bodyPorts()[iterableAt + j]));
@@ -578,8 +544,7 @@ void validateRuntimeLoopInterface(
         }
         expectedValue = TupleType::create(std::move(valueTypes));
     }
-    Type *bodyExit = regions ? graph->node(LoopView(program, *graph, node).nextState())->dataType()
-                             : (body->funcType() ? body->funcType()->exitType() : nullptr);
+    Type *bodyExit = graph->node(LoopView(program, *graph, node).nextState())->dataType();
     if (bodyExit == nullptr ||
         (s == 0 ? !expected->assignableFrom(bodyExit) : !expected->equals(bodyExit))) {
         loopFails(
@@ -602,9 +567,7 @@ void validateRuntimeLoopInterface(
                 typeText(expectedValue)));
     }
     if (hasCondPart) {
-        Type *condExit =
-            regions ? graph->node(LoopView(program, *graph, node).condResult())->dataType()
-                    : (cond->funcType() ? cond->funcType()->exitType() : nullptr);
+        Type *condExit = graph->node(LoopView(program, *graph, node).condResult())->dataType();
         if (condExit == nullptr || condExit->code() != TypeCode::Bool) {
             loopFails(
                 graph,

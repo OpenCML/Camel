@@ -16,16 +16,208 @@ timeout_ms = 20000
 
 [[tests]]
 name = "jvp_is_a_function_value.nvm"
-desc = "`reinterp<jvp>(f)` is the operator `jvp(f)`, and it produces a new function (the author's ruling a824031aa), not a rewritten graph: the call builds a graph of the transform's own and answers with a function value naming it. The lifted signature is `(float, float) => (float, float)` -- the ordinary parameter becomes a value and its tangent, and the result is the pair -- so `jvp(f)(2.0, 1.0)` passes two numbers and reads back `(value, tangent)`. Both halves are computed by the new graph: for `f(x) = x*x + 3/x` at 2 the chain gives `f(2) = 5.5`, and the forward rules along it give `f'(2) = 3.25` (2x - 3/x^2, seeded with the 1.0 the caller passed). The reading names the rules it applied (`mul`, `div`, `add`) and says `tangent=computed`: a primitive without a rule is refused by name, never answered with 0 or 1. The type the reading prints is the one `jvpSignature` builds, and it is the same string `JvpResolver` gives the operator."
+desc = "`reinterp<jvp>(f)` is the operator `jvp(f)`, and it produces a new function (the author's ruling a824031aa), not a rewritten graph: the call builds a graph of the transform's own and answers with a function value naming it. The lifted signature is `(float, float) => (float, float)` -- the ordinary parameter becomes a value and its tangent, and the result is the pair -- so `jvp(f)(2.0, 1.0)` passes two numbers and reads back `(value, tangent)`. Both halves are computed by the new graph: for `f(x) = x*x + 3/x` at 2 the chain gives `f(2) = 5.5`, and the forward rules along it give `f'(2) = 3.25` (2x - 3/x^2, seeded with the 1.0 the caller passed). The rules are the ruleset's: the reading says `source=ruleset` and names what it applied (`jvp_mul`, `jvp_div`, `jvp_add`), because the transform reads `stdlib/rulesets/jvp.cml`'s index at the moment it builds -- there is no second table of laws in C++. A primitive with no rule there is refused by name (`skip=rule uri=...`), never answered with 0 or 1. The type the reading prints is the one `jvpSignature` builds, and it is the same string `JvpResolver` gives the operator."
 kind = "behavior"
 case = "../../../cases/compile/transforms/jvp_lifted.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed rules=mul,div,add", "REINTERP jvp op signature=(f: (float) => float) => (float, float) => (float, float)", "lifted=(float, float) => (float, float) graph=(float, float) => (float, float) same=yes", "5.5", "3.25"]
+expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_div,jvp_add", "REINTERP jvp op signature=(f: (float) => float) => (float, float) => (float, float)", "lifted=(float, float) => (float, float) pure graph=(float, float) => (float, float) pure same=yes", "5.5", "3.25"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# A branch is a property of the graph, not of a node: its arms are regions, its value is the Join's,
+# and each arm is interpreted on its own. `f(2) = 4` with `f'(2) = 4` and `f(-2) = 2` with
+# `f'(-2) = -1` say the arm the condition chose is the arm that was differentiated -- the four numbers
+# are also folded into one (4419) so a single string pins all of them.
+[[tests]]
+name = "jvp_branch.arms_are_each_interpreted"
+desc = "`f(x) = if x > 0 then x*x else -x` is differentiated the way it is written: the condition is copied and read by the `Brch`, never differentiated, and each arm's exit becomes the lifted pair of the arm's value and its tangent, which is what the `Join` yields. So `jvp(f)(2.0, 1.0)` reads `(4, 4)` -- `2x` at 2 -- and `jvp(f)(-2.0, 1.0)` reads `(2, -1)`, the arm that was actually taken. The arms stay arms in the lifted graph (their nodes are copied into their own regions), so an operator only one arm uses is not computed for the arm that was not taken."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_branch.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["REINTERP jvp function=f graph=", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_neg", "4419"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# A loop's state is the LOOP node's value and its rounds are a region of the same graph, so lifting
+# it is lifting the *state*: the node's value becomes the pair, the body's state port is a pair port
+# whose halves the body reads through projections, and the region's result is the pair of the body's
+# new value and its tangent. `f(x) = loop s = 0.0 for i in [1,2,3,4] do s + x*x` carries `x*x = 9`
+# four times at x = 3 -- `f(3) = 36` -- and carries `8x = 24` four times -- `f'(3) = 24`. The number
+# that says the tangent is *carried* and not recomputed is 24: keeping only the last round's
+# derivative would read 6, which is what the case's comment records as the failure symptom.
+[[tests]]
+name = "jvp_loop.state_is_lifted"
+desc = "A loop is reinterpreted by lifting its state, not by interpreting its body twice: the LOOP node's value is the state, the rounds are a region of the same graph, and the lifted graph carries `(value, tangent)` from the initial `(0.0, 0.0)` through every round. `jvp(f)(3.0, 1.0)` reads `(36, 24)` -- `36` is `x*x` added four times at x = 3, `24` is `8x` added four times -- and the reading names the rules it applied (`jvp_mul`, `jvp_add`). `6` would be the answer of a tangent recomputed from the last round alone, which is why the case's comment names it as the symptom."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_loop.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "exit=Tuple{chain,tangent} tangent=computed source=ruleset rules=jvp_mul,jvp_add", "36", "24"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# A loop whose body never reads the state's tangent -- `s + 1.0`, where the derivative does not
+# flow through the state at all -- is still lifted: the tangent is carried as zero, and the value is
+# what the loop computes. The pair is the loop's value whether or not anything differentiates it.
+[[tests]]
+name = "jvp_loop.value_only_is_still_lifted"
+desc = "A loop whose body does not touch the state's tangent (`s + 1.0` four times, so `f(3) = 4`) is lifted all the same: the state is carried as `(value, tangent)` from `(0.0, 0.0)`, the body reads only the value half, and the derivative stays 0 -- it does not flow through the state. The reading still says `tangent=computed source=ruleset`, and `jvp(f)(3.0, 1.0)` reads `(4, 0)`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_loop_value_only.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["REINTERP jvp function=f graph=", "type=(float, float) => (float, float)", "4.0", "0.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The initial state is lifted like every other node: a constant gets the zero tangent, a value that
+# comes from the input gets the tangent the chain computed for it. `s = x`, three rounds of `s * x`:
+# `f(x) = x**4`, so `f(3) = 81`, `f'(3) = 108` -- not `(81, 0)`, which is what a lift that starts
+# every state at `(value, 0)` reads, and not `(0, 0)` either.
+[[tests]]
+name = "jvp_loop.init_from_input_is_lifted"
+desc = "A loop whose state starts at the input, not at a constant: `loop s = x for i in [1, 2, 3] do s * x` is `f(x) = x**4`, so `jvp(f)(3, 1)` reads `(81, 108)`. The initial state's tangent is not zero-by-default: the state is a node on the chain like any other, so `x` hands in `x`'s tangent and only a constant hands in zero. `(81, 0)` and `(0, 0)` are both distinguishable from `(81, 108)`, so the two numbers name the defect if the initial state is ever wired as `(value, 0)` again."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_loop_init_from_input.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["REINTERP jvp function=f graph=", "81.0", "108.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# An effect is executed as written, not differentiated: the print inside `g` runs once (the same
+# number of times the original body ran it), and a number's tangent is still nonzero beside it.
+[[tests]]
+name = "jvp_effect.runs_as_written_and_zero_tangent"
+desc = "A function with an effect (`println` in the body) is lifted so that the effect keeps running exactly as often as it did -- once -- while the numeric part is differentiated: `g(x) = x*x` with a print reads `effect`, then `9.0` and `6.0`. The effect has no tangent and none is invented for it, but the tangent of the value does not become zero because an effect sits beside it, which is what a lift that gave up on the whole straight line at the first effect would read."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_effect.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+# The count: `g(3.0)` prints `3.0` once and the lifted `g` prints it once, so exactly two `3.0`
+# lines appear (the plain call's print, then the lifted call's print) -- a third would mean the
+# lift ran the effect again, and a single one would mean it dropped it. `9.0` and `6.0` are the
+# value and the tangent of the lifted call, and the plain call's `9.0` is the third.
+expect_stdout_contains = ["REINTERP jvp function=g graph=", "3.0\n9.0\n6.0"]
+expect_stdout_not_contains = ["3.0\n3.0\n3.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# A call is lifted as a call: the callee gets a lifted graph of its own, and it gets exactly one --
+# `f(x) = g(x) + g(x)` calls `g` twice and the reading says `callees=1`. The numbers are checked
+# against the derivative written by hand: `g(x) = x*x`, `f(x) = 2*x*x`, so `f(3) = 18` and
+# `f'(3) = 4x = 12`.
+[[tests]]
+name = "jvp_call.callee_is_lifted_once"
+desc = "A function that calls another one is reinterpreted through the call, not around it: a `Func` node names the callee graph, so the lift gives the callee a graph of its own with the lifted signature, and the call passes `(value, tangent)` in and answers with the pair. `f(x) = g(x) + g(x)` with `g(x) = x*x` reads `(18, 12)` at `x = 3, dx = 1` -- `f = 2x*x`, `f' = 4x` -- and `REINTERP jvp callees=1` says the two calls of `g` made one graph, not two."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_call.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["REINTERP jvp function=g graph=", "REINTERP jvp function=f graph=", "REINTERP jvp callees=1", "18.0", "12.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The negative side of the same rule table, and the point of it: a primitive the ruleset has no rule
+# for is not answered with 0 or 1 and is not only printed at -- it is a diagnostic that names the
+# primitive and stands *where the primitive is written*. `pow` is `math:pow_d`, which no forward rule
+# is bound for, so `jvp(f)` cannot build; the error is at `f`'s `pow` (`file:line:col`) and the
+# process stops without running `main`, while the call site is kept beside it as a related position.
+[[tests]]
+name = "rulesets_probe_missing.at_the_primitive"
+desc = "With a primitive carrying no forward rule, `jvp(f)` is a diagnostic and not a value: it names the operator (`math:pow_d`) and the reason no rule was found, and its position is the primitive's own -- `rulesets_probe_missing.cml:10:12`, the `pow` in `f` -- which is the position a reader has to be sent to, not the `jvp(f)` call. The reading line still names what was refused (`skip=rule uri=math:pow_d`), and the run's exit is non-zero: the program does not go on to print a value it could not differentiate. Read as a whole the assertions say *when* the fault is raised: the diagnostic carries the primitive's own position, the reason the table gave (`no forward rule bound at all`), and the raise-site hint (`[raised here`) that keeps the `jvp(f)` call beside it -- a graph-time fault, not a value computed and then checked."
+kind = "behavior"
+case = "../../../cases/compile/transforms/rulesets_probe_missing.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 1
+expect_output_contains = ["skip=rule uri=math:pow_d", "rulesets_probe_missing.cml:10:12: [Error]:", "jvp has no forward rule for `math:pow_d`", "no forward rule bound at all", "[raised here"]
+expect_stdout_not_contains = ["5.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+# The derivative as a library (design 4.4): the surface is `vjp`/`grad`/`with_grad`, and the middle
+# step of `transpose(split(reinterp<jvp>(f)))` is not implemented. What is checked is the *shape* of
+# the refusal -- which step, and where -- because a name that answers "not implemented yet" leaves
+# the reader nowhere. This is the assertion that has to be replaced by numbers the day the step
+# lands; the skipped test below is where those numbers go.
+#
+# The refusal moved once `transpose` stopped being a stand-in: it is a real transform now, and the
+# shape `split` stands in with -- a lifted function `(float, float) => (float, float)` -- is not the
+# shape `transpose` takes (a function of one `float` parameter). So the composition is refused when
+# the call is typed, still at the line of `stdlib/vjp.cml` that composes it and still in terms of a
+# transform rather than "not implemented". When `split` returns the shape `transpose` takes, the same
+# test reads as a runtime refusal naming `split`; the two readings are one step apart, and this line
+# is where that step will show up.
+[[tests]]
+name = "vjp_api.names_the_missing_step"
+desc = "`vjp(f)` is `transpose(split(reinterp<jvp>(f)))` written in `stdlib/vjp.cml`. The middle step is declared as an operator with no implementation, so a call is refused at the line of the library that composes it -- not at the `vjp(f)` call in the program, and not in a sentence of the form `not implemented yet`, which sends the reader to no line at all. Today the refusal names `transpose`, because `transpose` is real and `split` still stands in with a shape it does not take. The run exits non-zero and prints no value."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_missing_step.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 1
+expect_output_contains = ["stdlib/vjp.cml:33:", "Invalid call to 'transpose'"]
+expect_output_not_contains = ["not implemented", "尚未实现", "unimplemented"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The numbers the day the steps land. `f(x) = x*x*x`, so `vjp(f)(3.0, 1.0)` is `(27.0, 27.0)` and
+# `grad(f)(3.0)` is `27.0`; the three-step composition is checked against the derivative written by
+# hand, not against the C++ autodiff. Skipped, not red, while `split` has no implementation: a skip
+# says "not yet", a red says "wrong", and a library that is honestly not written is the first.
+[[tests]]
+name = "vjp_api.gradient_when_the_steps_land"
+desc = "With `split` and `transpose` implemented, `vjp(f)(3.0, 1.0)` on `f(x) = x*x*x` reads `(27.0, 27.0)` and `grad(f)(3.0)` reads `27.0`: the library's three-step composition against the derivative written by hand. The test is skipped while `modules/transforms/split.cpp` does not exist, so a not-yet-written library is a skip and never a red."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_gradient.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+skip_unless = ["node", "-e", "process.exit(require('fs').existsSync('modules/transforms/split.cpp') ? 0 : 1)"]
+expect_exit = 0
+expect_stdout_contains = ["27.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The two halves, and the type function between them. `ResidualsOf<F>` is what the first half
+# answers with beside the result -- the values the backward half reads, numbered in program order --
+# and it is the *compiler's* type: no signature names it (`stdlib/signatures/transforms.cml` writes
+# it out in a comment, as the author wrote it), so what a test can read is what the halves are worth,
+# not the type's spelling. `f(x) = x*x*x` at 3: the first half gives `27.0` and the residuals, the
+# second turns them and the cotangent `1.0` back into `27.0`. Skipped while `split` has no
+# implementation; the numbers are already written down.
+[[tests]]
+name = "vjp_api.split_halves"
+desc = "`split(jvp(f))` gives the two halves of `Lift<T> = (T, Tangent<T>)`: the first takes the ordinary parameters and answers `(ResultOf<F>, ResidualsOf<F>)` -- for `f(x) = x*x*x` at 3, the value `27.0` and the residuals in program order -- and the second takes those residuals and the cotangent `1.0` and answers `27.0`. `ResidualsOf<F>` is the compiler's type function and appears in no signature; the test reads the numbers, not its spelling. Skipped while `modules/transforms/split.cpp` does not exist."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_split_halves.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "stdout"]
+skip_unless = ["node", "-e", "process.exit(require('fs').existsSync('modules/transforms/split.cpp') ? 0 : 1)"]
+expect_exit = 0
+expect_stdout_contains = ["27.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 [[tests]]
 name = "transpose_runs_the_data_flow_backwards.nvm"
 desc = "`transpose(f)` is the pullback of a linear function's graph, built the way `jvp` builds the forward one: a new function value naming a graph of the transform's own, with `f` untouched. The walk runs the graph backwards -- a value used k times receives k cotangents that add -- and each primitive is replaced by the rule the `rulesets.transpose` family files under its operator, asked of the index by `transposeRuleOf` rather than matched against the uri in C++. For `f(x) = 2*x + 3*x` the parameter is used twice, so the cotangent 1.0 pulls back to 2 + 3 = 5; for `f(x) = (x*2 + x*3) * 4` the outer 4 reaches the sum before it splits, so the answer is 4*2 + 4*3 = 20. A primitive whose other operand is not a constant needs that operand's forward value, which is a residual this step does not have: it is refused by name, never answered with a wrong cotangent."
@@ -36,6 +228,38 @@ backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
 expect_stdout_contains = ["TRANSPOSE function=sum_of_scaled graph=", "type=(float, float) => float nodes=6 arms=0 rules=add_t,mul_t", "TRANSPOSE function=scaled_chain graph=", "rules=mul_t,add_t", "TRANSPOSE op signature=(f: (float) => float) => (float, float) => (float)", "transposed=(float, float) => float", "same=yes", "5.0", "20.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The initial state's tangent rides the chain like any other tangent: `s0 = x` is a port, its tangent
+# is the seed, and the body reads the state twice, so the chain's tangent is `8 x^7` and not a zero
+# and not the last round's `2 x^3`.
+[[tests]]
+name = "jvp_loop.state_read_twice_is_lifted"
+desc = "`loop s = x for i in [1, 2, 3] do s * s` is `f(x) = x^8`: at 3 the value is 6561 and the derivative 8*3^7 = 17496. The initial state is the input, not a constant, and the body reads it twice each round; a tangent that started at zero would read 0.0, one that carried only the last round would be off by a factor of the round count."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_loop_state_read_twice.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "stdout"]
+expect_exit = 0
+expect_stdout_contains = ["6561.0", "17496.0", "REINTERP jvp function=f graph="]
+expect_stdout_not_contains = ["0.0\n0.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# One lifted body per callee. `g` is called three times and the count says one.
+[[tests]]
+name = "jvp_call.three_calls_one_body"
+desc = "`g` is called three times in `f(x) = g(x) + g(x) + g(x) = 3 x^2`: the lift makes one body for it (`callees=1`), and the numbers are 27 at 3 with the derivative 6*3 = 18. A lift that made a body per call site would read `callees=3` and the same numbers; the count is what tells the two apart."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_call_three_times_one_body.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "stdout"]
+expect_exit = 0
+expect_stdout_contains = ["27.0", "18.0", "REINTERP jvp callees=1"]
+expect_stdout_not_contains = ["callees=3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

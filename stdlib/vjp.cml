@@ -1,0 +1,46 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/*
+ * The derivative, as a library (design 4.4, `docs/design/program-transforms/README.cn.md`).
+ *
+ *     vjp(f) = transpose(split(reinterp<jvp>(f)))
+ *     grad(f)              -- `vjp` read at one number, the seed 1
+ *     with_grad(f)         -- the same for the first `with` parameter (design principles 9.9)
+ *
+ * This file is the *surface*: the names and the composition, written in the design's order. The
+ * middle steps are operators of the `transforms` module with a signature and no rule, so a call is
+ * refused by the step that is missing, where it is composed -- the line of this file -- and never by
+ * a sentence of the form "not implemented yet", which sends the reader to no line at all.
+ *
+ * The signatures are the stand-in `(f: F) => F`, because the types the design writes --
+ * `Vjp<F>`, `Split<F>`, `ParamsOf<F>`, `ResultOf<F>` -- do not exist yet (design 6.1 is their step).
+ * They are the first thing to replace when those types land: the composition below does not change,
+ * only the names of the shapes it moves between.
+ *
+ * The wrapper names stay even when the implementation behind them changes, because they are the
+ * user's words already: a program says `grad`, and which three transforms answer it is the
+ * library's business. (Author, 2026-10-31.)
+ */
+
+import { is_function } from types
+import { jvp, split, transpose } from transforms
+
+/// The reverse transform: `jvp(f)` is the forward transform, `split` separates the part computable
+/// now from the linear residue, and `transpose` walks the residue backwards, so a cotangent comes
+/// back as the pullback. The body is the design's composition, step by step.
+export func vjp(f: (x: float) => float): (v: float, d: float) => (float, float) {
+    return transpose(split(jvp(f)))
+}
+
+/// The gradient of `f`: `vjp` with the seed 1, its second half taken. Read `grad(f)` as a name for
+/// that reading of `vjp`, not as a second transform.
+export func grad::<F>(f: F): F when is_function::<F>() {
+    return vjp(f)
+}
+
+/// The gradient of the first `with` parameter of `f` (design principles 9.9): the same `vjp`, taken
+/// with respect to a captured value instead of a parameter.
+export func with_grad::<F>(f: F): F when is_function::<F>() {
+    return vjp(f)
+}

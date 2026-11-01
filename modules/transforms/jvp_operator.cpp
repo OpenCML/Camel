@@ -26,6 +26,7 @@
 #include "camel/core/type/resolver.h"
 #include "camel/utils/type.h"
 
+#include <format>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -143,9 +144,27 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     const JvpGraph built = buildJvpGraph(
         ctx.shared_from_this(), function->program(), function->graph(), std::cout);
     if (built.graph == nullptr) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "transforms: jvp has no forward transform for this function");
+        if (built.refusedOrigin == camel::source::kInvalidOriginId) {
+            throwRuntimeFault(
+                RuntimeDiag::RuntimeError,
+                "transforms: jvp has no forward transform for this function");
+        }
+        // The fault stands where the primitive was written, not where `jvp` was called: the hint
+        // names the node's origin and keeps the raising site as a related position, so the error
+        // reads `f`'s `file:line` and still tells two calls of the same `jvp` apart
+        // (ExecutionSiteHint::keepRaiseSite). A refusal that only prints a reading would leave the
+        // reader at the call site, guessing which operator in `f` it was.
+        const std::string why = built.refusedConstruct.empty()
+                                    ? std::format(
+                                          "transforms: jvp has no forward rule for `{}` ({})",
+                                          built.refusedUri, built.refusedWhy)
+                                    : std::format(
+                                          "transforms: jvp does not reinterpret {} yet ({})",
+                                          built.refusedConstruct, built.refusedWhy);
+        throw camel::core::error::RuntimeFault(
+            RuntimeDiag::RuntimeError, {why}, "", nullptr,
+            camel::core::error::ExecutionSiteHint{
+                .cachedOrigin = built.refusedOrigin, .keepRaiseSite = true});
     }
     // The spellings of the operator, side by side. `signature()` is the text a declaration writes
     // (stdlib/signatures/transforms.cml repeats it) and the type `resolve()` gives the call; the two
@@ -176,6 +195,52 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 } // namespace
 
+namespace {
+
+/// The steps `vjp` is written in terms of that are not implemented yet (`split` and `transpose`).
+/// The signature is the shape the library declares -- the function it was given, back again -- so a
+/// program that names them type-checks; the kernel is the refusal, and it names the step that is
+/// missing instead of the composition, so a reader is sent to the line of `stdlib/vjp.cml` that asks
+/// for it. Nothing here is a placeholder that one day returns something: a step either has a rule or
+/// says it has none.
+class StepResolver final : public FuncTypeResolver {
+  public:
+    std::optional<FunctionType *> resolve(
+        const type_vec_t &with, const type_vec_t &norm) const override {
+        if (!with.empty() || norm.size() != 1 || norm[0] == nullptr ||
+            norm[0]->code() != TypeCode::Function) {
+            return std::nullopt;
+        }
+        FunctionTypeFactory factory;
+        factory.addNormArg("f", norm[0], false);
+        factory.setExitType(norm[0]);
+        return factory.build();
+    }
+
+    /// The declaration's text: one parameter named `f`, the result the same function.
+    std::string signature() const override {
+        return "(f: (float, float) => (float, float)) => (float, float) => (float, float)";
+    }
+};
+
+/// Refuses the step it is named for, at the line that asked for it.
+slot_t stepKernel(ArgsView &with, ArgsView &norm, Context &ctx, std::string_view step) {
+    (void)with;
+    (void)norm;
+    (void)ctx;
+    throwRuntimeFault(
+        RuntimeDiag::RuntimeError,
+        std::string{"transforms: `"} + std::string{step} +
+            "` has no rule for this function (the step of `vjp` that does this is not bound for "
+            "this function's graph)");
+}
+
+slot_t splitKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return stepKernel(with, norm, ctx, "split");
+}
+
+} // namespace
+
 const std::vector<oper_group_ptr_t> &operatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         // One rule: `jvp` takes a function and gives its forward transform (design principles 9.9
@@ -183,6 +248,12 @@ const std::vector<oper_group_ptr_t> &operatorGroups() {
         OperatorGroup::create(
             "jvp",
             {{"transforms:jvp", std::make_shared<JvpResolver>()}}),
+        // The step of `vjp` that is not written yet (stdlib/vjp.cml): the shape is the
+        // library's, the refusal is theirs. `transpose` is not here: it has a rule of its own
+        // (`transpose_operator.cpp`), and a second group under one name answers the signature
+        // with the shape of the function it was given -- `(x: float) => float`, not a pullback.
+        OperatorGroup::create(
+            "split", {{"transforms:split", std::make_shared<StepResolver>()}}),
     };
     return groups;
 }
@@ -190,13 +261,15 @@ const std::vector<oper_group_ptr_t> &operatorGroups() {
 std::unordered_map<std::string, operator_t> operatorKernels() {
     std::unordered_map<std::string, operator_t> kernels = transposeOperatorKernels();
     kernels["jvp"] = &jvpKernel;
+    kernels["split"] = &splitKernel;
     return kernels;
 }
 
 void registerOperatorMetadata() {
     // It builds a graph: the call does something the compiler cannot see from the arguments alone,
     // so it is declared, as every operator must be (design principles 3.3), as not pure.
-    camel::core::OperatorTable::instance().declare("transforms", {{"jvp", false}});
+    camel::core::OperatorTable::instance().declare(
+        "transforms", {{"jvp", false}, {"split", false}, {"transpose", false}});
     // `jvp` reads the graph of the function value it receives -- that is the whole transform -- so
     // it refuses a loop there as `grad` does (OperatorTraits::readsGraphs; op-semantics 11.4).
     camel::core::OperatorTable::instance().set(

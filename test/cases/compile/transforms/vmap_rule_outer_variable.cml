@@ -1,0 +1,18 @@
+/**
+ * The negative case for the batched ruleset: a rule may not read a name its left side's pattern
+ * binds. Nothing binds that name in a batched graph -- the transform reads the rule's callee and
+ * calls it with the batch, so the outer arrow is never called -- and the index refuses the rule
+ * where it is written, not at the call that would have used it.
+ */
+import rulesets.probe_batch
+import { vmap } from transforms
+
+func f(x: float): float {
+    return x * 2.0
+}
+
+func main(): int sync {
+    let xs: float[3] = [1.0, 2.0, 3.0]
+    println(vmap(f)(xs))
+    return 0
+}

@@ -567,10 +567,10 @@ class GraphDraft {
     GraphId calleeIdOf(gc_node_ref_t id) const;
     GCGraph *calleeGraphOf(gc_node_ref_t id) const;
     void setCalleeGraph(gc_node_ref_t id, GraphId callee);
-    /// What LOOP node `id` names: its condition graph (invalid for a For loop), its body graph,
-    /// its form and its collection count.
+    /// What LOOP node `id` is: its form, its iterable form and its collection count. A loop names no
+    /// graph -- the condition and the body are regions of the graph it is written in (design
+    /// principles 3.10).
     GCLoopBody loopGraphsOf(gc_node_ref_t id) const;
-    void setLoopGraphs(gc_node_ref_t id, GraphId cond, GraphId body);
     /// The graphs the payloads of FUNC and LOOP nodes index (GCFuncRef, GCLoopRef): the
     /// reference table of the graph the draft was decoded from, then the graphs added since.
     std::span<const GraphId> payloadGraphs() const { return payloadGraphs_; }
@@ -585,8 +585,8 @@ class GraphDraft {
     /// hands on carries the new version of each (camel::runtime::GCFuncRef::reserved).
     uint32_t funcWriteMaskOf(gc_node_ref_t id) const;
     void setFuncWriteMask(gc_node_ref_t id, uint32_t writtenCaptures);
-    /// A LOOP node calling `body.condGraph` and `body.bodyGraph` (camel/runtime/loop.h); the
-    /// caller links its inputs and keeps the two graphs among the draft's dependencies.
+    /// A LOOP node (camel/runtime/loop.h): its form, its collection count and its iterable form. The
+    /// caller links its inputs and writes the body's regions on the draft it is made in.
     gc_node_ref_t
     addLoopNode(const GCLoopBody &body, camel::core::type::Type *type, gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t addOperNode(

@@ -1,0 +1,28 @@
+/**
+ * `vmap(f)` read through the ruleset: the batched function and the row-by-row `map` of the same
+ * function, printed beside each other. `Lift<T> = RowsOf<T>` means a batch is the value with one
+ * dimension of unknown length in front, so an elementwise primitive needs no new arithmetic to be
+ * batched -- the transform still asks `rulesets.vmap` for every primitive of `f`, and the same rule
+ * names the function it calls.
+ */
+import rulesets.vmap
+import { map } from array
+import { vmap } from transforms
+
+func f(x: float): float {
+    return x * 2.0 + x / 2.0 - 1.0
+}
+
+func g(x: float): float {
+    return -(x * 2.0 + x / 2.0 - 1.0)
+}
+
+func main(): int sync {
+    let xs: float[4] = [1.0, 2.0, 3.0, 0.5]
+    println(vmap(f)(xs))
+    println(xs->map<(x: float) => f(x)>)
+    let ys: float[3] = [0.25, -2.0, 4.0]
+    println(vmap(g)(ys))
+    println(ys->map<(x: float) => g(x)>)
+    return 0
+}

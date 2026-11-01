@@ -760,7 +760,7 @@ Array *where(Operand cond, Operand lhs, Operand rhs, mm::IAllocator &allocator) 
 
 Array *cast(const Array *input, TypeCode dtype, mm::IAllocator &allocator) {
     if (!isSupportedTensorScalar(dtype)) {
-        throw std::invalid_argument("Unsupported array element type");
+        throw std::invalid_argument(noTensorElement(dtype, ElementSubject::Gap));
     }
     // The conversion of a type name applied to an array is the core's (camel/core/array_convert.h).
     return camel::core::convertArrayElements(input, dtype, allocator);

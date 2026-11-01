@@ -86,6 +86,15 @@ std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(const std::string &uri
     return ruleOf(bindings(), uri);
 }
 
+std::optional<ForwardRuleBinding> forwardBindingOf(const std::string &uri) {
+    std::lock_guard<std::mutex> lock(bindingMutex());
+    const auto at = bindings().find(uri);
+    if (at == bindings().end()) {
+        return std::nullopt;
+    }
+    return at->second;
+}
+
 std::vector<std::string> forwardRuleDescriptions() { return descriptionsOf(bindings()); }
 
 void bindTransposeRule(ForwardRuleBinding binding) {

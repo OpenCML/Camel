@@ -1,0 +1,21 @@
+/**
+ * The `array` module's kernels, read back one call at a time: the sort and its atom `argsort` (the
+ * order `min` and `max` use, equal keys where they stand), the whole-array reductions, the merge of
+ * two runs and one extent. `std::cpp` runs each of them natively now, and the reading is
+ * `std::fvm`'s line for line -- the order and the accumulation are the interpreter's own
+ * statements, not a second sort and a second sum that happen to agree on this input.
+ */
+
+import { argsort, sort, merge_sorted, sum, min, max, dim } from array
+
+func main(): int sync {
+    let xs = [30, 10, 20, 10]
+    println(argsort(xs))
+    println(sort(xs))
+    println(merge_sorted(sort(xs), [5, 40]))
+    println(sum(xs), min(xs), max(xs))
+    println(dim<0>(xs), dim<-1>(xs))
+    let fs = [0.5, 0.25, 1.0]
+    println(sort(fs), sum(fs), min(fs), max(fs))
+    return 0
+}

@@ -210,6 +210,45 @@ void checkCastLikeBoundary() {
     std::cout << "tiles cast_like boundary: plans never name it, and a conversion is rejected\n";
 }
 
+/// The bytes the device is handed come from `hostStorage`, at the node's own width. A scalar leaf
+/// keeps its value in `scalarBits`, not in the f32 array, so an f64 leaf must contribute its eight
+/// bytes there: reading the empty array instead left zeros in the staging buffer, and a device handed
+/// zeros returned `0.0` for `2.0 + 3.0` while the same call on the host returned `5.0`. The other
+/// widths keep their rule: an f32 tensor contributes its bits, an f64 value held as numbers widens
+/// exactly, and an element width the function has no rule for is refused instead of zero-filled.
+void checkHostStorage() {
+    const auto word = [](double value) {
+        uint64_t bits = 0;
+        std::memcpy(&bits, &value, sizeof(bits));
+        return bits;
+    };
+    const auto reading = [](const std::vector<std::byte> &storage, size_t width) {
+        uint64_t bits = 0;
+        if (storage.size() != width)
+            throw std::runtime_error(
+                "a host copy of an element is " + std::to_string(width) + " bytes");
+        std::memcpy(&bits, storage.data(), width);
+        return bits;
+    };
+    // The two operands the red case adds, as the host passes them: f64 scalars.
+    for (const double value : {2.0, 3.0, -0.0}) {
+        Node scalar{.op = "input", .scalarBits = word(value)};
+        scalar.dtype = DType::F64;
+        if (reading(hostStorage(scalar), sizeof(uint64_t)) != word(value))
+            throw std::runtime_error("an f64 scalar keeps its eight bytes");
+    }
+    // An f64 value the host copy holds as numbers widens exactly, and an f32 tensor keeps its bits.
+    Node widened{.op = "input", .shape = {1}, .data = {2.5f}, .dtype = DType::F64};
+    if (reading(hostStorage(widened), sizeof(uint64_t)) != word(2.5))
+        throw std::runtime_error("an f64 value held as numbers widens exactly");
+    Node single{.op = "input", .shape = {1}, .data = {0.5f}, .dtype = DType::F32};
+    if (reading(hostStorage(single), sizeof(uint32_t)) != 0x3F000000ULL)
+        throw std::runtime_error("an f32 tensor keeps its bits");
+    std::cout << "tiles host storage: an f64 scalar keeps its eight bytes (2.0 is 0x4000000000000000,"
+                 " 3.0 is 0x4008000000000000), an f64 value held as numbers widens exactly, and an"
+                 " f32 tensor keeps its bits\n";
+}
+
 size_t elementWidth(kernel::ScalarType type) {
     return type == kernel::ScalarType::F16 || type == kernel::ScalarType::BF16     ? 2
            : type == kernel::ScalarType::F32 || type == kernel::ScalarType::I32 ||
@@ -218,9 +257,10 @@ size_t elementWidth(kernel::ScalarType type) {
 }
 
 // One pointwise program over three elements, multiplied either by the constant two or by itself, with
-// the product stored in `store`: the store's type is what decides whether the narrowing happens.
-Program narrowProduct(DType element, DType store, bool square) {
-    const std::vector<float> values = {0.1f, 0.25f, 1.5f};
+// the product stored in `store`: the store's type is what decides whether the narrowing happens. The
+// values are the source case's own when a reading is meant to be tied to that program.
+Program narrowProduct(
+    DType element, DType store, bool square, const std::vector<float> &values = {0.1f, 0.25f, 1.5f}) {
     Program p;
     p.nodes = {
         {.op = "input", .shape = {3}, .dtype = element, .data = values},
@@ -289,6 +329,21 @@ void checkNarrowSerialRun() {
                  "0.199951171875 with an f16 element, bf16 wrote "
               << written(bf16Stored.at(0)) << " 0.2001953125, f16 wrote " << written(f16Stored.at(0))
               << " 0.199951171875\n";
+    // The same program the source case runs (`test/cases/gpu/nofallback/narrow_element_kernel.cml`):
+    // a bf16 and an f16 `[0.5, -1.5, 2.0] * 2.0`, whose host value is the `2.0 2.0` that case prints.
+    // The three stores are exact in both element types, so this reading ties the two halves -- the
+    // executor's body and the program the host runs -- to one arithmetic rather than to a coincidence.
+    const std::vector<float> program = {0.5f, -1.5f, 2.0f};
+    const auto bf16Program = serialStores(narrowProduct(DType::BF16, DType::BF16, false, program));
+    const auto f16Program  = serialStores(narrowProduct(DType::F16, DType::F16, false, program));
+    requireStored(bf16Program, 0, 0x3F80ULL, "bf16 0.5 doubled is 1.0");
+    requireStored(bf16Program, 1, 0xC040ULL, "bf16 -1.5 doubled is -3.0");
+    requireStored(bf16Program, 2, 0x4080ULL, "bf16 2.0 doubled is 4.0");
+    requireStored(f16Program, 0, 0x3C00ULL, "f16 0.5 doubled is 1.0");
+    requireStored(f16Program, 1, 0xC200ULL, "f16 -1.5 doubled is -3.0");
+    requireStored(f16Program, 2, 0x4400ULL, "f16 2.0 doubled is 4.0");
+    std::cout << "tiles narrow serial: the same program writes bf16 1 -3 4 and f16 1 -3 4"
+                 " (0.5 -1.5 2.0 doubled), which the host run sums to 2.0\n";
     // The same elements squared, where the store really rounds: 0.0100193... is nearer to bf16
     // 0x3C24 than to its neighbours, and 0.00999511... is nearer to f16 0x211E, one rounding each.
     const auto bf16Squared = serialStores(narrowProduct(DType::BF16, DType::BF16, true));
@@ -355,6 +410,7 @@ int main() {
         checkLoopSourceCache();
         checkMultiResultStorage();
         checkCastLikeBoundary();
+        checkHostStorage();
         checkNarrowSerialRun();
         using kernel::ScalarExpr;
         using kernel::ScalarValue;
@@ -778,7 +834,7 @@ int main() {
         // reduction is now a valid plan: what the schedule still refuses is one that is not a
         // scalar at all.
         rejects(scalar, [](auto &x) { x.nodes[1].shape = {1}; }, "scalar reduction type");
-        rejects(scalar, [](auto &x) { x.nodes[1].op = "relu"; }, "unsupported operation dtype");
+        rejects(scalar, [](auto &x) { x.nodes[1].op = "relu"; }, "this back end's plans carry f32 tensors and i64 positions");
         auto borrowed = indexed;
         auto resident = std::make_shared<DeviceValue>();
         resident->shape = {2,3};

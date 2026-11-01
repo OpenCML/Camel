@@ -1,0 +1,56 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
+# `split` (design doc 4.2): one function in, two out -- the forward half, which computes everything
+# the present inputs allow and hands the residuals on as values, and the backward half, which reads
+# those residuals and the tangent direction and gives the tangent.
+#
+# Three readings, all on the author's example of 2026-10-31 15:25: g(x) = x*x, f = reinterp<jvp>(g),
+# x = 3, dx = 1.
+#   * the forward half gives y = 9 and r0 = 3 (the residual is the value the backward half needs);
+#   * the backward half gives the tangent 6;
+#   * the backward half is linear in the tangent direction: dx = 2 gives 12 and dx = 0 gives 0.
+#
+# Every entry asks test/tools/have-split.mjs first. `split` does not exist yet, so the plan skips
+# with the reason that gate prints -- a missing operator is not a defect of the tree, and a red
+# here would say it is. The entries start running the moment the operator lands, with no edit to
+# this file: that is what the gate is for.
+
+[[tests]]
+name = "split_forward_half"
+desc = "The forward half of split(reinterp<jvp>(g)) for g(x) = x*x at x = 3: it computes what the present inputs allow and hands the residuals on as values. Reads `forward y= 9` and `residual r0= 3`, and the tangent 6 as well, since the same run is what a reader would write to see the pair."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_forward_half.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["forward y= 9", "residual r0= 3", "tangent dx1= 6"]
+skip_unless = ["node", "test/tools/have-split.mjs"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "split_backward_tangent"
+desc = "The backward half alone: it takes the residuals the forward half collected (r0 = 3) and the tangent direction, and gives the tangent 2x·dx = 6. The reading is the tangent and nothing else, because the forward half has its own entry."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_backward_tangent.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["tangent dx1= 6"]
+skip_unless = ["node", "test/tools/have-split.mjs"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "split_linear_in_dx"
+desc = "The backward half is linear in the tangent direction: at x = 3 it is dx -> 6·dx, so dx = 2 gives 12, dx = 0 gives 0, and `twice == once + once` holds. One reading at dx = 1 cannot tell 6 + 6 from 2·6 + 1; this entry is what says the half is linear rather than pointwise right."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_linear_in_dx.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["dx1= 6", "dx2= 12", "dx0= 0", "doubles= true"]
+skip_unless = ["node", "test/tools/have-split.mjs"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

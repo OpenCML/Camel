@@ -1,0 +1,17 @@
+// The derivative as a library, asked for the first time: `vjp(f)` is written here as
+// `transpose(split(reinterp<jvp>(f)))`, and the middle step is not implemented. What this case
+// reads is *which* step stopped it and *where*: the diagnostic has to name the operator and stand
+// on the line of `stdlib/vjp.cml` that composes it, not on this file, and it may not say anything
+// of the form "not implemented yet".
+import rulesets.jvp
+import { vjp } from vjp
+
+func f(x: float): float {
+    return x * x * x
+}
+
+func main(): int sync {
+    let backward = vjp(f)
+    println(backward)
+    return 0
+}

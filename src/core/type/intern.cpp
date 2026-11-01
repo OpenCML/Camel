@@ -54,7 +54,7 @@ Type *TypeTable::findOrInsert(
         return it->second;
     }
     Type *type = make();
-    ASSERT(type != nullptr, "A type constructor returned null to the type table.");
+    GUARD(type != nullptr, "A type constructor returned null to the type table.");
     assignId(type);
     byKey_.emplace(Key{shape, std::vector<uintptr_t>(words.begin(), words.end())}, type);
     return type;
@@ -76,6 +76,7 @@ Type *TypeTable::internOther(
 }
 
 Type *TypeTable::intern(
+
     Shape shape, std::span<const uintptr_t> words, const std::function<Type *()> &make,
     const Canonical &canonical) {
     std::lock_guard lock(mutex_);

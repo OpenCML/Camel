@@ -2470,11 +2470,13 @@ node_handle_t Builder::buildGuardedMatch(const GCT::node_ptr_t &gct, node_handle
         caseStep.bind  = [] {};
         switch (caseNode->caseType()) {
         case GCT::CaseType::Value: {
-            // The case value as its own node: the CASE keeps the one it was built with, and a
-            // node has one parent.
+            // The comparison gets a node of its own: the CASE keeps the one it was built with,
+            // and a node of this tree has one parent. The case value is a pattern constant -- a
+            // literal, or a name that folds to one -- so the copy is the same value, and nothing
+            // is evaluated twice by taking it.
             node_handle_t valueNode  = valueNodeOf(visit(caseNode->at(0)));
             Type *caseType           = valueTypeOf(nodeTypeOf(valueNode));
-            GCT::node_ptr_t operand  = caseNode->at(0);
+            GCT::node_ptr_t operand  = tree_->clone(caseNode->at(0));
             bool converted           = false;
             if (const std::optional<literal::Value> pattern = literalValueOfExpr(caseNode->at(0));
                 pattern.has_value() && subjectType != nullptr && subjectType->isPrimitive() &&

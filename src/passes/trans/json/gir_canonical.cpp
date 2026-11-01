@@ -910,10 +910,7 @@ class CanonicalDocument {
         if (graph->loopIterableFormOf(ref) == camel::core::LoopIterableForm::Interval) {
             loop["iterable"] = "interval";
         }
-        const GCGraph *condition = program_.loopCondOf(*graph, ref);
-        const GCGraph *body      = program_.loopBodyOf(*graph, ref);
-        loop["condition"] = condition == nullptr ? json(nullptr) : json(graphIds_.at(condition));
-        loop["body"]      = body == nullptr ? json(nullptr) : json(graphIds_.at(body));
+        // A loop names no graph: its condition and its body are regions of this graph.
         const uint32_t conditionRegion = graph->loopRegionOf(ref, GCRegionKind::LoopCond);
         const uint32_t bodyRegion      = graph->loopRegionOf(ref, GCRegionKind::LoopBody);
         if (conditionRegion != 0)

@@ -309,7 +309,7 @@ MapType::MapType(std::span<Type *const> params) : CollectionType(typeCode(), tru
 }
 
 MapType *MapType::get(Type *keyType, Type *valueType) {
-    ASSERT(keyType != nullptr && valueType != nullptr, "Map needs a key and a value type.");
+    GUARD(keyType != nullptr && valueType != nullptr, "Map needs a key and a value type.");
     Type *params[] = {keyType, valueType};
     return interned<MapType>(typeCode(), std::span<Type *const>(params), [&] {
         void *mem = allocTypeStorage<MapType>(TypeStorageKind::Collection);
@@ -330,7 +330,7 @@ std::string MapType::toString() const { return typeToString(this); }
 std::string MapType::mangle() const { return typeMangle(this); }
 
 OtherType *MapType::cloneWithParams(std::span<Type *const> params) const {
-    ASSERT(params.size() == 2, "Map takes a key type and a value type.");
+    GUARD(params.size() == 2, "Map takes a key type and a value type.");
     return get(params[0], params[1]);
 }
 
@@ -346,7 +346,7 @@ SetType::SetType(std::span<Type *const> params) : CollectionType(typeCode(), fal
 }
 
 SetType *SetType::get(Type *elemType) {
-    ASSERT(elemType != nullptr, "Set needs an element type.");
+    GUARD(elemType != nullptr, "Set needs an element type.");
     Type *params[] = {elemType};
     return interned<SetType>(typeCode(), std::span<Type *const>(params), [&] {
         void *mem = allocTypeStorage<SetType>(TypeStorageKind::Collection);
@@ -366,7 +366,7 @@ std::string SetType::toString() const { return typeToString(this); }
 std::string SetType::mangle() const { return typeMangle(this); }
 
 OtherType *SetType::cloneWithParams(std::span<Type *const> params) const {
-    ASSERT(params.size() == 1, "Set takes an element type.");
+    GUARD(params.size() == 1, "Set takes an element type.");
     return get(params[0]);
 }
 
