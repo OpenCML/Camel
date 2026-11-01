@@ -195,3 +195,16 @@ expect_exit = 0
 expect_stdout_contains = ["residuals=1 recompute=1", "jvp_of_remat_lib::g", "tagged dx= 27.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+
+[[tests]]
+name = "remat_effectful_body_is_not_recomputed"
+desc = "A body with an external effect is not marked for recompute: `jvp`'s lift asks `hasExternalEffect` before it carries `kGraphFlagRecomputeBackward`, and says `REINTERP jvp not_recomputed=g why=an operator of the body has an external effect, so it would run twice`. The cut then stops earlier and for another reason -- `split does not build this function` -- so this entry pins *where* an effectful `#remat` function is stopped, and both lines are compared, not just the exit code. If `split` learns to accept effectful bodies, this goes red first; the case file says what to read then."
+kind = "negative"
+case = "../../../cases/transforms/split/remat_effect_is_not_recomputed.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_contains = ["REINTERP jvp not_recomputed=g why=an operator of the body has an external effect, so it would run twice", "split does not build this function"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
