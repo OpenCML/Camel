@@ -99,6 +99,69 @@ export func operator -(x: f32, y: f32): f32
 #op(':op/sub_d')
 export func operator -(x: float, y: float): float
 
+// The remaining element types of `+` and `-`, one declaration per type: the sum of two integers is
+// `+` at those two types, the sum of two strings is `+` too, and `-` is the difference at every
+// numeric type. The two tokens end up as **ten** declarations for `+` (every one of them at two
+// operands) and **sixteen** for `-`: eight differences at two operands and eight negations at one.
+// One token, one operator, and the overloads are the element types -- the number of operands is what
+// tells a negation apart from a difference.
+
+/// The sum of two 32-bit integers.
+#op(':op/add_i')
+export func operator +(x: i32, y: i32): i32
+
+/// The sum of two 64-bit integers.
+#op(':op/add_l')
+export func operator +(x: int, y: int): int
+
+/// The sum of two 16-bit floats.
+#op(':op/add_f6')
+export func operator +(x: f16, y: f16): f16
+
+/// The sum of two `bf16` values.
+#op(':op/add_bf')
+export func operator +(x: bf16, y: bf16): bf16
+
+/// The sum of two single-precision complex numbers.
+#op(':op/add_c')
+export func operator +(x: c64, y: c64): c64
+
+/// The sum of two double-precision complex numbers.
+#op(':op/add_z')
+export func operator +(x: c128, y: c128): c128
+
+/// Two strings joined into one, the left one first.
+#op(':op/add_s')
+export func operator +(x: string, y: string): string
+
+/// Two byte strings joined into one, the left one first.
+#op(':op/add_bytes')
+export func operator +(x: Bytes, y: Bytes): Bytes
+
+/// The difference of two 32-bit integers.
+#op(':op/sub_i')
+export func operator -(x: i32, y: i32): i32
+
+/// The difference of two 64-bit integers.
+#op(':op/sub_l')
+export func operator -(x: int, y: int): int
+
+/// The difference of two 16-bit floats.
+#op(':op/sub_f6')
+export func operator -(x: f16, y: f16): f16
+
+/// The difference of two `bf16` values.
+#op(':op/sub_bf')
+export func operator -(x: bf16, y: bf16): bf16
+
+/// The difference of two single-precision complex numbers.
+#op(':op/sub_c')
+export func operator -(x: c64, y: c64): c64
+
+/// The difference of two double-precision complex numbers.
+#op(':op/sub_z')
+export func operator -(x: c128, y: c128): c128
+
 // The rest of the scalar arithmetic, one declaration per element type: a token's meaning at a type
 // is what the type's operator is, and the declaration below is that meaning written down. `*`, `/`
 // and unary `-` are one name with eight types each, so the eight are the overloads of one operator,
