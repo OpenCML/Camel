@@ -15,7 +15,7 @@
 
 | 页 | 问句 | 默认建议 |
 |---|---|---|
-| [`is-a-splits-residual-count-a-number-the-type-can-carry`](questions-2026-11-01-is-a-splits-residual-count-a-number-the-type-can-carry.md) | `split` 的残差项数是不是一个类型能携带的数：作者写的"0/1/3"是三档（可铸三个形状）还是"按图走的任意 N"（实测 4）；`Split<F>` 的残差位要不要带项数 | **B**：维持今天（项数由图定、静态类型只给占位），放在 M4 之后——因为今天 **0 个用例**能观察到它，而 A 要动 623 行内核 + 3039 行构图；页上写明"今天谁也不堵" |
+| [`is-a-splits-residual-count-a-number-the-type-can-carry`](questions-2026-11-01-is-a-splits-residual-count-a-number-the-type-can-carry.md) | `split` 的残差项数是不是一个类型能携带的数：作者写的"0/1/3"是三档（可铸三个形状）还是"按图走的任意 N"（实测 4）；`Split<F>` 的残差位要不要带项数 | **已裁已落（作者 2026-11-01 13:10 改判 A）**：残差数是图给的任意 N；`jvp`/`split`/`transpose` 在编译期实例化；残差位是每次实例化的不透明类型（`TupleType::residuals`），程序不解构、不索引、不数它，只能整块交给后一半——拒绝点是 `SemanticDiag::ResidualsAreNotVisible`（`0x000208`）。页末写了裁定原文与落地五项；本页等作者挪进 `reviews/` |
 | [`who-owns-the-count-of-a-splits-residuals`](questions-2026-11-01-who-owns-the-count-of-a-splits-residuals.md) | 残差是图的属性、元组项数是类型的属性：`split` 两半的项数由谁定（图给的 `residualsOf`，还是类型上写的替身） | 由图的 `residualsOf` 定（已按作者的裁定实施，此页留着等确认口径；**它与上一页是同一部法的两问**：上一页问"类型能不能携带这个数"，这一页问"谁定义这个数"） |
 | [`whether-transpose-takes-the-cotangent-beside-the-parameters`](questions-2026-11-01-whether-transpose-takes-the-cotangent-beside-the-parameters.md) | `transpose(f)` 的余切从哪进：与 `f` 的参数并列，还是由 `split` 提供 | 与参数并列（已落地，此页留着等确认） |
 | [`closures-as-values-block-the-transposed-backward-half`](questions-2026-11-01-closures-as-values-block-the-transposed-backward-half.md) | 转置的后一半里出现"闭包当值、调用返回闭包"时，是等去函数化、允许闭包当值，还是让 `split` 内联 | 三条路都不选：`reinterp` 在命中处展开成直接调用（作者 `9f85daeb0`） |
