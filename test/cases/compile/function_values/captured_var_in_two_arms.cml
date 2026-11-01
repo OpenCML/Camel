@@ -1,0 +1,49 @@
+// A call writes a captured `var`, and both arms of an `if` read that `var`. The read has to be
+// available in whichever arm is taken, and it has to give the version the call wrote.
+//
+// The front end builds one access node for the part of the call's value that holds the written
+// variable, and caches it per call. It used to make that node in the region being built, which for
+// the first reader was the arm it stood in: the second arm was handed the same node, which runs
+// only when the first arm is taken. The compiler's own validator refused the graph the front end
+// had just built (`runtime graph '__g_51__' breaks the branch-arm invariant`) on `std::nvm`, and it
+// does so when the graph is closed, before any pass sees it.
+//
+// `firstArm` takes arm 0 of the `if` and `secondArm` takes arm 1: both must print the value the
+// call wrote (2), not the value the variable held before the call (1). `callInArm` puts the call
+// itself inside each arm, so the access stays in the arm the call is in.
+func bump(var c: int): int sync {
+    c = c + 1;
+    return c;
+}
+
+func firstArm(): int sync {
+    var v = 1;
+    let lam = (p: int): int => sync {
+        let n = bump(v);
+        return if n > 0 then v else v;
+    };
+    return lam(0);
+}
+
+func secondArm(): int sync {
+    var v = 1;
+    let lam = (p: int): int => sync {
+        let n = bump(v);
+        return if n < 0 then v else v;
+    };
+    return lam(0);
+}
+
+func callInArm(flag: bool): int sync {
+    var v = 1;
+    let lam = (p: int): int => sync {
+        let n = bump(v);
+        return if flag then v + n else v * 10 + n;
+    };
+    return lam(0);
+}
+
+func main(): int sync {
+    println(firstArm(), secondArm(), callInArm(true), callInArm(false));
+    return 0;
+}

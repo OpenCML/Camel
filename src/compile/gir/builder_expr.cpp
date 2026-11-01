@@ -719,6 +719,18 @@ node_handle_t Builder::callValuePartOf(node_handle_t call, uint32_t part) {
         partType = static_cast<const TupleType *>(type)->typeAt(part);
     }
     node_handle_t node = currGraph_->addAccsNode(partType, part);
+    // The node reads the call's value, and that value exists from the call on, so the node belongs
+    // to the call's region and not to the region the first reader happens to stand in. It was made
+    // in the region being built, which for the first reader inside a branch arm is that arm: a
+    // second reader in the other arm was then handed the same node by the cache above and read a
+    // node that runs only when the first arm is taken (defect A3, `if c then v else v` over a `var`
+    // a call wrote). Nothing leaves a region here -- the input is already outside it, and a call
+    // inside the arm keeps its node in the arm -- so a graph whose reads all stood in the region of
+    // their call is unchanged.
+    const uint32_t callRegion = nodeDraftOf(call)->nodeRegion(nodeIdOf(call));
+    if (nodeDraftOf(node)->nodeRegion(nodeIdOf(node)) != callRegion) {
+        nodeDraftOf(node)->setNodeRegion(nodeIdOf(node), callRegion);
+    }
     if (value.parts.size() <= part) {
         value.parts.resize(part + 1, nullptr);
     }
