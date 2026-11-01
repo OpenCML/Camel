@@ -75,7 +75,7 @@ B **新增**一条表示，且与裁定正面冲突；C 让 `split` 多背一个
 - 调用者数：每个算子 **1 个注册点 + 1 个 kernel**（`split_operator.cpp:179/:186`、`jvp_operator.cpp:218/:225`、`transpose_operator.cpp:170/:177`），**外部 C++ 调用点 0**。
 - 判据：**能删 342 行**（`split_operator.cpp` 179、`jvp_operator.cpp:81-226` 146、`transforms.cml:54-62,66` 10、`vjp.cml:47-53` 7），
   **但要搬 1720 行**（`split.cpp` 694 + `jvp.cpp` 1026）进一个新 pass。**按“删不掉就是净负”，甲是净负。**
-  （复核 2026-11-01：上面的行数是当天的文件量，今天读作 `split_operator.cpp` **197**、`jvp_operator.cpp` **277**、`transforms.cml` **116**、`vjp.cml` **104**，`split.cpp` **1466**、`jvp.cpp` **1366** —— 三个 `transforms/*.cpp` 随 `lane-gs6`、`lane-reinterp2` 两笔合并长出来，之后 `split.cpp` 又随 `914e09263`、`e0c206239`（残差元组自成一个类型）多了 96 行、随 `fdb60ba49`（选臂成为残差）多了 437 行，`jvp.cpp` 随 `728b9f27c`、`4fbdc4e3a` 与 `ba0a37be9`、`c98dd492f` 多了 37 行，`split_operator.cpp` 又随 `67509bd1a`（kernel 不再自己定类型）少了 2 行、又随本页这条裁定（`split`、`jvp` 与 `transpose` 同一条实参检查）多了 1 行，`jvp_operator.cpp` 与 `jvp.cpp` 又随 `c8bc3d87f`（`jvp(f)` 在调用方的图建起来时实例化）多了 5 行与 32 行，`jvp_operator.cpp` 又随本页这条裁定（变换的实参必须是编译期已知的函数）多了 9 行，`jvp.cpp` 再随 `lane-remat` 的核声明表多了 19 行（1315→1334）；`vjp.cml` 随 `07451069e`（拉回一律返回元组、一元写成 `(float,)`）多了 10 行，此前随 `lane-m4-assembly` 的泛型化变短。命令：`node test/tools/check-doc-readings.mjs`。）
+  （复核 2026-11-01：上面的行数是当天的文件量，今天读作 `split_operator.cpp` **201**、`jvp_operator.cpp` **277**、`transforms.cml` **116**、`vjp.cml` **104**，`split.cpp` **1466**、`jvp.cpp` **1366** —— 三个 `transforms/*.cpp` 随 `lane-gs6`、`lane-reinterp2` 两笔合并长出来，之后 `split.cpp` 又随 `914e09263`、`e0c206239`（残差元组自成一个类型）多了 96 行、随 `fdb60ba49`（选臂成为残差）多了 437 行，`jvp.cpp` 随 `728b9f27c`、`4fbdc4e3a` 与 `ba0a37be9`、`c98dd492f` 多了 37 行，`split_operator.cpp` 又随 `67509bd1a`（kernel 不再自己定类型）少了 2 行、又随本页这条裁定（`split`、`jvp` 与 `transpose` 同一条实参检查）多了 4 行，`jvp_operator.cpp` 与 `jvp.cpp` 又随 `c8bc3d87f`（`jvp(f)` 在调用方的图建起来时实例化）多了 5 行与 32 行，`jvp_operator.cpp` 又随本页这条裁定（变换的实参必须是编译期已知的函数）多了 9 行，`jvp.cpp` 再随 `lane-remat` 的核声明表多了 19 行（1315→1334）；`vjp.cml` 随 `07451069e`（拉回一律返回元组、一元写成 `(float,)`）多了 10 行，此前随 `lane-m4-assembly` 的泛型化变短。命令：`node test/tools/check-doc-readings.mjs`。）
 
 **乙 —— 每次实例化新铸一个刚性类型，并在原则 5.10 上开一条例外**
 - 一个 `TypeCode` 落地要动 **7 点**：枚举（`type/base.h:56` + `TypeFlag` `:39`）、`typeCodeToString`（`base.cpp:65`，35 分支且 `:111` 有 `default:` **漏了不报错**）、
@@ -137,3 +137,18 @@ B **新增**一条表示，且与裁定正面冲突；C 让 `split` 多背一个
   默认关，等 `vjp` 不再是那个形状。
 - **体里调用闭包**（`transpose(g2)`，`g2` 自己体内 `h(2.0)`）：实参是**名字**，这里什么都不拒，运行期仍是 `skip=call … reason=function-closure`；
   15:30 给这一类的终点是"按被调图递归实例化"，不是这条错误。
+
+**三个变换一条规则（2026-11-02）**：同一条 `CallSpec::staticFunctionArg` 声明在 `transforms:transpose`、`transforms:jvp`、`transforms:split` 上，
+三条用例各钉一次（`transpose_arg_not_a_static_function.cml` 52:26、`jvp_arg_not_a_static_function.cml` 20:23、
+`split_arg_not_a_static_function.cml` 19:22），诊断名、编号 `0x03000209`、行、列都由 `verify_script` 断言，并禁止 `skip=`。
+A/B 把三处的 `staticFunctionArg` 置为 `-1`：`transpose` 回到 `TRANSPOSE function=__g_51__ skip=residual uri=:op/mul_d operand=1`、
+`jvp` 回到 `REINTERP jvp function=__g_56__ skip=body`、而 `split` **不回退成读数**——它把编译器打断在
+`builder_operators.cpp(3831) visitLinkNode: "Target node of LINK must be a function or operator node"`。三个里它对这条检查最依赖。
+
+**参数那半边要开，先要三条前提**（今天一条都不在，归 `lit2` 那条车道——作者 15:30 说的"变换在编译期实例化"）：
+1. 变换在**调用点按实例化的 F 求值**：`vjp::<T>(f: T)` 在调用点 F 已具体，`jvp(f)` 那里看到的是已知函数——这要编译期实例化那一刀，不是今天运行期 operator 的形状。
+2. **库体自身不再把形参交给变换**：`stdlib/vjp.cml#vjp` 现在是 `split(jvp(f))`，只要它还这么写，参数就会被拒。
+3. **8 个 `vjp_api` 用例的形状随之改变**：今天它们靠运行期那一半活着（实测打开参数半边 → `35/45`），得先有编译期路径再改用例。
+
+这三条不是"以后再说"，是"谁来做"：前两条是 `lit2` 的编译期实例化，第三条随它一起改。
+

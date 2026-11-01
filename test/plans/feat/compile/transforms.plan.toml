@@ -723,3 +723,46 @@ assert(input.normalized.stdout.includes("'transpose' is applied to a closure tha
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+# The rule is one rule: the same shape, refused at the other two transforms. The three entries
+# (`transpose.argument_is_not_a_function_it_can_name`, this one, and `split.…`) pin the same
+# diagnostic on the same shape, each at its own argument, so a reader who learns it once has learned
+# it everywhere -- and so that a transform that stops declaring the fact is a red test, not a silence.
+[[tests]]
+name = "jvp.argument_is_not_a_function_it_can_name"
+desc = "`jvp` reads the graph of the function value it is given -- that is the whole forward transform -- so it needs what `transpose` needs: a graph named at the call. A closure that captures a value names none, and it is refused by the same diagnostic at the same place: `error[SemanticDiag::TransformArgumentIsNotAKnownFunction]: 'jvp' is applied to a closure that captures a value, and a transform's argument has to be a function this program knows before it runs.` at 20:23, on the `h`. The number, the line and the column are asserted, and `skip=` is forbidden, so the run-time half's own refusal cannot come back unnoticed."
+kind = "negative"
+case = "../../../cases/compile/transforms/jvp_arg_not_a_static_function.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 1
+expect_output_not_contains = ["skip="]
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::TransformArgumentIsNotAKnownFunction', input.diagnostics[0].name)
+assert(input.diagnostics[0].code === '0x03000209', input.diagnostics[0].code)
+assert(input.diagnostics[0].line === 20 && input.diagnostics[0].column === 23, JSON.stringify(input.diagnostics[0]))
+assert(input.normalized.stdout.includes("'jvp' is applied to a closure that captures a value"), input.stdout)
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "split.argument_is_not_a_function_it_can_name"
+desc = "The third transform, the same rule: `split` separates a lifted function into the part computable now and the linear part, and it reads the graph it is handed, so the argument has to name one at the call. The closure here is written at `split`'s own parameter type, `(v: float, d: float) => (float, float)`, so this is the transform's rule and not a type mismatch: `error[SemanticDiag::TransformArgumentIsNotAKnownFunction]: 'split' is applied to a closure that captures a value, and a transform's argument has to be a function this program knows before it runs.` at 26:22, on the `h`. Same number, same shape, `skip=` forbidden."
+kind = "negative"
+case = "../../../cases/compile/transforms/split_arg_not_a_static_function.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code"]
+expect_exit = 1
+expect_output_not_contains = ["skip="]
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::TransformArgumentIsNotAKnownFunction', input.diagnostics[0].name)
+assert(input.diagnostics[0].code === '0x03000209', input.diagnostics[0].code)
+assert(input.diagnostics[0].line === 26 && input.diagnostics[0].column === 22, JSON.stringify(input.diagnostics[0]))
+assert(input.normalized.stdout.includes("'split' is applied to a closure that captures a value"), input.stdout)
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

@@ -245,6 +245,7 @@ SemanticDiag::TaggedOperandMismatch	test/cases/compile/tagged/err_wrong_form.cml
 SemanticDiag::TaggedTypeNesting	test/cases/compile/generic_explicit_nullable_error.cml
 SemanticDiag::TaggedValueNotOpened	test/cases/compile/tagged/err_member.cml
 SemanticDiag::TeeHintNotPositive	test/cases/compile/stream/tee_hint_not_positive.cml
+SemanticDiag::TransformArgumentIsNotAKnownFunction	test/cases/compile/transforms/jvp_arg_not_a_static_function.cml
 SemanticDiag::TupleUnpackingCountMismatch	test/cases/compile/err_lambda_tuple_arity.cml
 SemanticDiag::TypeAliasRecursionUnrepresented	test/cases/compile/semantic/type_recursion_through_map.cml
 SemanticDiag::TypeFunctionArguments	test/cases/compile/generics/err_tf_count.cml
