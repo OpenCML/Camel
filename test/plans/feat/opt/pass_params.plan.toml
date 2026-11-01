@@ -546,6 +546,17 @@ expect_diagnostic_name = "RuntimeDiag::PassBoundaryPorts"
 expect_output_contains = ["no longer matches its declaration: an ordinary port points at a node that is gone or has no type."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
+[[tests]]
+name = "pass_guard.nested_break"
+desc = "A pass that runs another pass by name hands back the graph the nested pass broke, and the same boundary check refuses it there: the check is on the route a nested pass takes, not only on the pass the pipeline lists. Before 2026-11-02 `applyRegisteredPass` called the nested pass directly and this graph reached the next pass unchecked."
+kind = "negative"
+case = "../../../cases/compile/pass_guard/plain.cml"
+args = ["${case}", "test::nested_break"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::PassBoundaryNodes"
+expect_output_contains = ["Pass 'test::break_exit' returned a program whose graph has no exit node whose value it returns."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
 
 [[tests]]
 name = "pass_guard.plain_pipeline_unaffected"

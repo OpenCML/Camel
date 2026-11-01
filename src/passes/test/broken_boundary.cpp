@@ -170,3 +170,14 @@ BreakJoinTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     os << "test::break_join: the program has no branch node\n";
     return program;
 }
+
+const camel::runtime::Program *
+NestedBreakTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    // The nested pass is named the way `std::opt::saturate` names `opt::saturate` and the `std::opt`
+    // rounds name `rules::simplify`: through the registry, not through a hand-built object.
+    const PassRunResult nested =
+        applyRegisteredPass(program, kBreakExitTestPass, context_, os, this);
+    os << "test::nested_break: the nested pass returned "
+       << (nested.program == nullptr ? "nothing" : "a program") << '\n';
+    return nested.program;
+}
