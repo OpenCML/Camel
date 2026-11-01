@@ -208,6 +208,7 @@ kind is the value it holds, so a print that cannot read it cannot write the stat
 | `unfaithful` | 10 | **10** | 不升；`DIFFERENT` **-1 新增 0** |
 | `families` | 52 | **52** | 不升；kind 不是常量的那条具名拒绝在本语料里**一次没触发** |
 
+**A7 那 8 个用例按"打印器漏了什么"分类（给作者）：** **陈述 1** —— `statement_after_fail`（`fail<...>` 语句被丢，本刀已修）；**写表 1** —— `writer_table_through_callee`（原 `0` `41`、打印版 `0` `0`，写作表经被调用者传出去的那条路没写回）；**其它 6** —— `linear/runtime/var_read_before_region`、`var_read_before_write`（`var` 的读被挪到写之后，2 条）、`order_edges_regions`（`exit 56`→`76`，区域顺序边）、`parse/rulings/power`（`-9 9`→`-9 -9`，一元负号的结合）、`trans/cpp/exec/print_formats`（`3-4|1+2`→`3 4|1 2`，格式说明符丢）、`consistency/values/float_special`（宽度与正号标志丢）。**这个分类比"8"这个数有用：陈述与写表各 1 条，剩下 6 条都不是"打印器忘了写一条语句"，是 print 的格式与求值顺序。**
 **两套计数（写进页，免得下一个人以为数字被改动）：** `EXAMPLE_STOPS` 的键是**诊断类别**（`a semantic error`、`an internal error`），值是该类的条数，**不是总停止数**。作者 22:30 那一笔记的 `40` 是 `a semantic error` 类，总停止数是 **41**；本轮把 `vjp` 的 `@example` 修好之后，`a semantic error` 回到 **39**、总停止数 **40**（`vjp` 已不在"编不过"的名单里，那份名单现在是 34 个名字、40 条，多为 `f`/`encode`/`n` 这类 fragment）。两个数一起看才不误会。
 **补声明清单（按节点数）。** 全语料里被打印机点名、确实没有任何声明的算子 **143 个、12520 个节点**。前 12：`:str/format` 1019、`tensor:sum` 934、`tensor:multiply` 862、`tensor:reshape` 856、`:op/tag_is_null` 689、`:struct/len_arr` 585、`tensor:add` 582、`:op/assn_l` 569、`:mark/map_arr` 389、`tensor:subtract` 324、`tensor:matmul` 238、`:op/slice_sub` 219。
 
