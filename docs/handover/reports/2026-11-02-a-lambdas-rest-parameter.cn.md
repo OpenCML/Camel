@@ -415,3 +415,46 @@ written and cannot be inferred: nothing here expects a function type.
    `Grad<F>` 这类类型函数 + 一条"位置上的 `F` 仍是函数类型"的表达方式（`types.cml` 里今天没有 `Grad<F>`）。
 
 **已回滚**：`stdlib/vjp.cml` 回到 HEAD，工作树干净；上面 (a)(b) 两次读数是在临时改动下取得的，已记在此处。
+
+## 12. `core::tangentSpaceOf` 今天覆盖哪些类型（只量不修）
+
+定义在 `src/core/tangent_space.cpp:76-124`（`answerOf`），入口 `:140`。三档答案：`Self`（切向就是它自己）/ `Other`（另一种类型）/ `None`（没有切空间）。
+
+| 类型 | 有/没有 | 依据 |
+|---|---|---|
+| `float`、`f32`、两种窄浮点 | **Self** | `:102-106` `isFloatingScalar` |
+| `i32`、`bool`（离散） | **没有** | `:107-111` `DerivativeRegistry::isDiscrete` → "the derivative is zero by definition and there is nothing to carry" |
+| 数组 `T[]` | **看元素**：元素 Self ⇒ 数组 Self（`float[]` 有切空间）；元素 Other ⇒ 元素类型替换后的数组；元素没有 ⇒ 数组也没有 | `:81-95` |
+| 元组 / 结构体 | **各成员的积**；任一成员没有 ⇒ 整个没有；空聚合体 ⇒ 没有 | `:96-98`，`:55-74` |
+| 张量等模块自有类型 | **由模块注册回答**（`tangentType` 为空或回自己 ⇒ Self，否则 Other） | `:112-122` `DerivativeRegistry::findTangentSpace` |
+| 其余一切 | **没有**（兜底 `:123`） | |
+
+**重点两条**：**`float[]` 有**（元素是浮点，取 Self）；**`int` 没有**（离散，兜底之前的显式一支），**与作者"没有切空间的形参不占槽"一致**。
+
+### 那么 `split` 到底被谁拦住——实测分辨出来了
+
+**(a) 只有数组形参（`func h(xs: float[]): float { return xs[1] * xs[0] }`）**：`vjp(h)` **过了 `split`**，往下走到
+
+```
+error[RuntimeDiag::RuntimeError]: transforms: transpose has no transpose for this function.
+   --> stdlib/vjp.cml:72:47  transpose(linear)(residuals, ct)
+```
+
+即：**数组的切空间有、`split` 也认**；卡的是**转置缺数组元素乘标量的规则**（那是 `d14d6a96` 的地盘）。
+
+**(b) 加一个 `int` 形参（作者那条 `f(xs: float[], n: int)`）**：**在 `split` 上就被拒**
+
+```
+error[SemanticDiag::ArgumentsRejected]: Invalid call to 'split' with argument types
+  <> ((float[], float[], int) => (float, float) pure): `split` takes a lifted function, whose every parameter…
+   --> stdlib/vjp.cml:69:34
+```
+
+**结论**：拦住的**不是 `float[]`，是那个离散的 `int`**——`tangentSpaceOf` 已经正确地答"没有切空间"（`:107-111`），
+**而 `split` 要求每个形参都升起**。这就是"**代码与作者 18:50 裁定正面冲突**"的那一处：裁定说"没有切空间的形参**不占槽**"，
+`split` 说"每个形参都得有"。**归 `split`/`jvp`（`remat` 正在做的 #7），本车道不动 `modules/transforms`。**
+
+### 纪律收获（写下来给下一个人）
+
+**`grad` 泛不泛型，根本走不到。** 我们两轮先改上游签名，再量下游要什么——**顺序反了**。
+正确的第一问是"下游 `split`/`transpose` 要什么形状"，答案就在上面两条拒绝里。
