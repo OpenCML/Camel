@@ -91,6 +91,31 @@ backends = ["nvm"]
 backends_agree = []
 golden = "golden/entering_positions.txt"
 
+# S1's mechanism as a reading rather than a claim: the plan the executor lays out for this program
+# is 552 nodes, and every control region the pass prints reports `in-plan == members` -- the range of
+# an arm is the members of its region (docs/design/effects/edges.cn.md 5.2). Both numbers are in the
+# check (`cases/consistency/entering/check_plan_regions.mjs`), so a change that computes a range from
+# liveness instead of membership, or that narrows the seed, is red here.
+#
+# What it deliberately does not assert: that the seeds carry the weight. While the control edges are
+# still built, the exit walk reaches every region result through its owner's ports too, so removing
+# the seeding branch leaves both readings identical -- the A/B of that change is 552 and `in-plan ==
+# members` either way. The check holds "range == members", not "the seed is load-bearing".
+[[tests]]
+name = "entering.positions.plan_regions"
+desc = "The plan of positions through std::opt is 552 nodes and every control region is in it as its members: the executor's ranges are the members of the regions, held as two numbers (the A/B that made this a reading: removing the seed leaves it green, breaking membership makes it red)."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/consistency/entering/check_plan_regions.mjs"
+args = ["${case}"]
+backends = ["nvm"]
+backends_agree = []
+expect_exit = 0
+expect_stdout_contains = ["[REGIONS] ok", "[REGIONS] graphs ", "planned 552"]
+expect_output_not_contains = ["[REGIONS] RED"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
 [[tests]]
 name = "entering.empty_array.opt"
 desc = "The same program through std::opt, std::nvm."
