@@ -1,16 +1,12 @@
 // The reading program the author named for the straight-line tier (2026-11-01): f(x, y) = x*x*y at
-// x = 3, y = 2, split into its two halves. The lifted function's parameters come in pairs -- (x, dx)
-// and (y, dy) -- and the cut is the pair, not a parameter number (author, 15:25): the forward half
-// takes the values (3, 2), the backward half the residuals and the tangents. What it would print is
-// what the tier is judged by: the residual count and its contents, the forward half's output, and
-// the backward half's output in both tangent directions (f(3, 2) = 18, and df = 2*x*y*dx + x*x*dy,
-// so dx = 1, dy = 0 reads 12 and dx = 0, dy = 1 reads 9).
+// x = 3, y = 2. The transform lifts every `float` parameter into the pair (value, tangent), so
+// `jvp(f)` takes four numbers -- (x, dx, y, dy) -- and answers the value and the derivative in the
+// direction the caller seeded. One run reads one direction, which is why the derivative is read
+// twice: with (1, 0) it is df/dx = 2xy = 12, with (0, 1) it is df/dy = x^2 = 9.
 //
-// It prints none of that today, and the reason is one step above `split`: `jvp` lifts a function of
-// exactly one parameter (modules/transforms/jvp_operator.cpp), so `jvp(f)` for this `f` is refused
-// when the call is typed, before any split exists to cut. The reading this file is for arrives when
-// `jvp` lifts a function of two parameters; the plan entry pins the refusal at `jvp` until then, so
-// the gap is a named one and not a missing case.
+// The same lifted function then goes through `split` (author, 2026-10-31 15:25): the cut is the
+// pair, not a parameter number, so the forward half takes the values (3, 2) and answers 18 with the
+// residuals, and the backward half turns a tangent direction into the tangent.
 import rulesets.jvp
 import { jvp, split } from transforms
 
@@ -26,6 +22,11 @@ func residual_count::<R>(r: R): int {
 
 func main(): int sync {
     let lifted = jvp(f)
+    let (vx, tx) = lifted(3.0, 1.0, 2.0, 0.0)
+    let (vy, ty) = lifted(3.0, 0.0, 2.0, 1.0)
+    println("value=", vx)
+    println("dfdx=", tx)
+    println("dfdy=", ty)
     let (fwd, lin) = split(lifted)
     let (value, res) = fwd(3.0, 2.0)
     println("residual count=", residual_count(res))
@@ -33,5 +34,7 @@ func main(): int sync {
     println("forward y=", value)
     println("tangent dx=", lin(res, 1.0, 0.0))
     println("tangent dy=", lin(res, 0.0, 1.0))
+    // The second value the lift answers is the same function read in the other direction.
+    println("value from dy=", vy)
     return 0
 }

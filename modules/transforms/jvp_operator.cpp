@@ -56,11 +56,12 @@ FunctionType *jvpOperatorSignature(FunctionType *function) {
     if (function == nullptr) {
         return nullptr;
     }
-    // What `buildJvpGraph` can build, and nothing else: it copies one body, so it takes one
-    // ordinary parameter, and it has no node that reads a captured value into a port, so the
-    // function has no `with` parameters. A function outside that shape is refused where it is
-    // written, not left to fail when the call runs.
-    if (function->withTypesCount() != 0 || function->normTypesCount() != 1) {
+    // What `buildJvpGraph` can build, and nothing else: it copies one body and gives every `float`
+    // parameter of that body a pair of ports, so it takes any number of them (at least one), and it
+    // has no node that reads a captured value into a port, so the function has no `with` parameters.
+    // A function outside that shape is refused where it is written, not left to fail when the call
+    // runs.
+    if (function->withTypesCount() != 0 || function->normTypesCount() == 0) {
         return nullptr;
     }
     FunctionType *lifted = jvpSignature(function);
@@ -73,9 +74,10 @@ FunctionType *jvpOperatorSignature(FunctionType *function) {
     return factory.build();
 }
 
-/// jvp: (f: (float) => float) => (float, float) => (float, float). The lifted signature is the pair
-/// `(value, tangent)` in and the pair `(value, tangent)` out (jvp.h); the seed is the tangent the
-/// caller passes, so `jvp(f)(2.0, 1.0)` is the derivative in the direction 1.
+/// jvp: (f: (float) => float) => (float, float) => (float, float). One pair `(value, tangent)` in
+/// per parameter of `f` and the pair `(value, tangent)` out (jvp.h); the seed is the tangent the
+/// caller passes, so `jvp(f)(2.0, 1.0)` is the derivative in the direction 1, and for a function of
+/// two parameters `jvp(f)(x, dx, y, dy)` is the derivative in the direction `(dx, dy)`.
 class JvpResolver final : public FuncTypeResolver {
   public:
     std::optional<FunctionType *> resolve(
@@ -104,13 +106,21 @@ class JvpResolver final : public FuncTypeResolver {
                 "`jvp` takes a function without `with` parameters: the transform copies the body "
                 "into a new graph, and a captured value has no port to enter it by");
         }
-        if (function->normTypesCount() != 1) {
-            return std::string("`jvp` takes a function of exactly one parameter");
+        if (function->normTypesCount() == 0) {
+            return std::string("`jvp` takes a function of at least one `float` parameter");
         }
-        if (function->normTypeAt(0) != Type::Float64() || function->exitType() != Type::Float64()) {
+        for (size_t i = 0; i < function->normTypesCount(); ++i) {
+            if (function->normTypeAt(i) != Type::Float64()) {
+                return std::string(
+                    "`jvp` takes a function whose every parameter is a `float` and whose result is "
+                    "a `float`: the lifted signature is one `(value, tangent)` pair in and out per "
+                    "`float` parameter");
+            }
+        }
+        if (function->exitType() != Type::Float64()) {
             return std::string(
-                "`jvp` takes a function of one `float` parameter that returns a `float`: the "
-                "lifted signature is `(float, float) => (float, float)`");
+                "`jvp` takes a function whose result is a `float`: the lifted signature answers the "
+                "pair `(value, tangent)`");
         }
         return std::nullopt;
     }

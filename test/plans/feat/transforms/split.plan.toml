@@ -11,20 +11,26 @@
 #     forward half hands the value through, the backward half hands the tangent through, and the
 #     residual tuple holds the value parameter and nothing else: the backward half reads none of it,
 #     so no *value computed by the body* crosses the cut. (The tuple is one member rather than none
-#     because the shape of the cut is the signature's, and a signature is computed from types: the
-#     type function that would say "no members here" -- `ResidualsOf<F>` -- is the compiler's and is
-#     not written yet, so the tuple holds one member per value parameter, in program order, and the
-#     graph fills it. The two agree the day that function lands.)
+#     because the shape of the cut is the signature's and a signature is computed from types, not from
+#     the graph: `ResidualsOf<F>` exists today as `export type ResidualsOf<F>` in
+#     stdlib/signatures/transforms.cml with no implementation behind it -- there is none in C++
+#     either -- so the type can only say "one slot per value parameter, in program order", the
+#     signature writes exactly that, and the graph fills the slots it has. On `x*x` the two agree to
+#     the member (the backward half reads `x` and nothing else); on the identity graph the type keeps
+#     a slot the graph has no reader for, which is why the count here is 1 and not 0. The two agree
+#     completely the day that type function is the compiler's.)
 #   * the numbers of the author's example of 2026-10-31 15:25 (g(x) = x*x, x = 3, dx = 1): the
 #     forward half gives y = 9 and r0 = (3.0) (the residual is the value the backward half needs), the
 #     backward half gives the tangent 6, and it is linear in the tangent direction (dx = 2 gives 12,
 #     dx = 0 gives 0). r0 is printed as the tuple it is: a one-member tuple prints `(3.0)`.
+#   * the two-parameter program the author named on 2026-11-01 (`f(x, y) = x*x*y` at 3, 2), read at
+#     both ends: the lift answers 18 with 12 in the direction (1, 0) and 9 in (0, 1), and the cut
+#     carries two residuals, `(3.0, 2.0)` -- one per value parameter, because this body reads both.
 #
-# The four readings of a cut run by themselves: `split` exists and its forward half hands the
-# residual tuple on, so there is nothing left for a gate to ask. The identity entry keeps
+# The five readings run by themselves: `split` exists and its forward half hands the residual tuple
+# on, so there is nothing left for a gate to ask. The identity entry keeps
 # `test/tools/have-split.mjs` (a tree without `modules/transforms/split.cpp` skips instead of
-# failing), and the two-parameter entry pins the refusal one step above `split`, until `jvp` lifts a
-# function of two parameters.
+# failing).
 #
 # `r0` reads `(3.0)` and not `3`: the residuals are a tuple in the signature the author wrote
 # (`ResidualsOf<F>` is a tuple of the values, numbered in program order), and a one-member tuple
@@ -66,14 +72,14 @@ expect_stdout_contains = ["dx1= 6", "dx2= 12", "dx0= 0", "doubles= true"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 [[tests]]
-name = "split_two_params_waits_for_jvp"
-desc = "The reading program the author named for this tier (f(x, y) = x*x*y at x = 3, y = 2) is refused one step above `split`: `jvp` lifts a function of exactly one parameter, so `jvp(f)` does not type and there are no halves to cut. The entry pins that refusal by name while it is the reason the two-parameter numbers do not exist, and it is the entry that turns red the day `jvp` lifts two -- which is when the count, the contents, the forward output and both tangent directions get written down here."
+name = "split_two_params"
+desc = "The reading program the author named for this tier (f(x, y) = x*x*y at x = 3, y = 2), read at both ends of the composition. The lift takes the four numbers (x, dx, y, dy) and answers the value 18.0 with the derivative in the direction the caller seeded: 12.0 for (1, 0) and 9.0 for (0, 1), which is 2xy and x^2. `split` of that lift cuts at the pair, so the forward half takes the values (3, 2) and answers 18.0 with two residuals -- `(3.0, 2.0)`, one per value parameter in program order -- and the backward half turns (1, 0) into 12.0 and (0, 1) into 9.0. Two residuals and not one, because both parameters are values the backward half reads."
 kind = "behavior"
 case = "../../../cases/transforms/split/split_two_params.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
-expect_exit = 1
-expect_output_contains = ["Invalid call to 'jvp'", "takes a function of exactly one parameter"]
+expect_exit = 0
+expect_stdout_contains = ["value= 18.0", "dfdx= 12.0", "dfdy= 9.0", "residual count= 2", "residual r0= (3.0, 2.0)", "forward y= 18.0", "tangent dx= 12.0", "tangent dy= 9.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
