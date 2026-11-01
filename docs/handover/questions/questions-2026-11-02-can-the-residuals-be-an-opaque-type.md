@@ -45,7 +45,7 @@ func use(r: Residuals<(x: float) => float>): int { let _ = r; return 0 }
 
 ## 路径与代价（四条候选）
 
-前三条**由 `remat` 的车道提供，见其页（同题，已并入本页）**；第四条是本页实测支持的那条。
+前三条**来源 `h-remat`，原页 `questions-2026-11-02-residual-bundle-needs-a-type-marker.md`（已删），原文并入本节**；第四条是本页实测支持的那条。
 
 1. **一个带名字/标记的类型**（残差包用 `TupleType` 的子类型，或一个带 tag 的实例）。最贴 P1-10 的
    要求；代价：类型系统里多一个概念，而 `TupleType` 是通用的、被解析器和 CML 的元组字面量共用；
@@ -76,3 +76,17 @@ func use(r: Residuals<(x: float) => float>): int { let _ = r; return 0 }
 本轮**没有删码**：诊断码仍是 307，`PINNED_COVERAGE_RECORDED` 仍是 27、按码断言仍是 279 of 307。
 删 `ResidualsAreNotVisible` 的那一笔若发生，按"删码"一栏记账：**307 → 306**，且 27/279 必须在
 **同一个提交**里复核（否则分母又被人为动过）。
+
+### 来源 `h-remat` 的两条事实（并入时保留）
+
+- `transpose.cpp` 今天的判据是 **`paramCount > 1 && 第一个参数是 `TupleType``**——**是数出来的，不是读出来的**；
+  对真的 backward half 恒真，**对假的 backward half 也恒真**。
+- `split` 造的残差包就是一个普通的 `TupleType::create(residualTypes)`，**与用户自己写的元组参数同类型**——
+  所以类型系统里"它"与"一个元组"没有区别，这正是"认不出"的根源。
+
+### 相邻一格（记录，免得有人为它造用例）
+
+`remat` 另量到：`split` 的 `Loop` 格**不可达**（`jvp` 今天不产"出口是无人认领的 Join"的图），`NotAPair`
+格也**不可达**（`split(plain)` 在变换之前就被类型检查拒）。**所以 `split` 的 `skip=loop` 从来没有用例：
+它不是没测，是到不了。** 这一条与残差标记无关，但它决定了"为一个不可达分支造用例"是白费——记在这里，
+比记在别处更容易被看到。
