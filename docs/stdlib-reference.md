@@ -6804,7 +6804,7 @@ vmap_sub: (a: T[], b: T[]) => T[] when is_numeric::<T>()
 `x - w` of one row, batched.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `vmap_sub([4.0, 6.0], [3.0, 4.0])` gives `[1.0, 2.0]`
+- Example: `vmap_sub([3.0, 4.0], [1.0, 2.0])` gives `[2.0, 2.0]`
 
 #### `vmap_mul`
 
@@ -6826,7 +6826,7 @@ vmap_div: (a: T[], b: T[]) => T[] when is_numeric::<T>()
 `x / w` of one row, batched.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `vmap_div([4.0, 6.0], [2.0, 3.0])` gives `[2.0, 2.0]`
+- Example: `vmap_div([3.0, 8.0], [3.0, 4.0])` gives `[1.0, 2.0]`
 
 #### `vmap_neg`
 

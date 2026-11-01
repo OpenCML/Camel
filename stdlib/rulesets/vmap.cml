@@ -88,7 +88,7 @@ export func vmap_add::<T>(a: T[], b: T[]): T[] when is_numeric::<T>() {
 }
 
 /// `x - w` of one row, batched.
-/// @example vmap_sub([4.0, 6.0], [3.0, 4.0])    // [1.0, 2.0]
+/// @example vmap_sub([3.0, 4.0], [1.0, 2.0])    // [2.0, 2.0]
 export func vmap_sub::<T>(a: T[], b: T[]): T[] when is_numeric::<T>() {
     return range(0, len(a), 1)->map<(i: int): T => at(a, i) - at(b, i)>
 }
@@ -100,7 +100,7 @@ export func vmap_mul::<T>(a: T[], b: T[]): T[] when is_numeric::<T>() {
 }
 
 /// `x / w` of one row, batched.
-/// @example vmap_div([4.0, 6.0], [2.0, 3.0])    // [2.0, 2.0]
+/// @example vmap_div([3.0, 8.0], [3.0, 4.0])    // [1.0, 2.0]
 export func vmap_div::<T>(a: T[], b: T[]): T[] when is_numeric::<T>() {
     return range(0, len(a), 1)->map<(i: int): T => at(a, i) / at(b, i)>
 }

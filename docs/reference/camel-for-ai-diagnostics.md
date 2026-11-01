@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 222
+**Semantic — errors** (`SemanticDiag`) — 223
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -283,6 +283,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `YieldRequiresStreamHead` | A function whose body writes 'yield' hands out a stream, and this function's head does not write one. |
 | `RuleLeftIsNotAnOperator` | The rule '{0}' has a left side that is not one operator; it is written as '{1}', and a ruleset indexes its rules by the head of the left side. |
 | `DuplicateRuleForOperator` | The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side, and one ruleset has one rule per operator. |
+| `RuleRightUsesOuterVariable` | The rule '{0}' reads '{1}' on its right side, and '{1}' is a name its left side binds: in this ruleset the right side names the function the transform calls, and the pattern's names are never bound. |
 
 **Semantic — warnings** (`SemanticDiag`) — 15
 

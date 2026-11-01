@@ -900,6 +900,11 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         // The names the left side binds, read here for the same reason as the head: the tuple both
         // sides of the rule take is written in this expression and nowhere else.
         std::string variables = variableNamesOf(sides[0]);
+        // Which of the pattern's names the right side writes: a family whose transform calls only
+        // the name the right side names has nothing to bind them with, so the index refuses such a
+        // rule where it is written (the rule is wrong here, not at the call that would use it).
+        std::string outerUses =
+            sides[1] ? outerNamesUsedInRight(sides[0], sides[1]) : std::string();
         collectRuleHead(
             diags_->moduleName(),
             std::move(head),
@@ -907,6 +912,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
             std::move(rhsCallee),
             std::move(shape),
             std::move(variables),
+            std::move(outerUses),
             arity,
             range.start,
             range.end);

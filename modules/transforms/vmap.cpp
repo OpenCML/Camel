@@ -19,6 +19,7 @@
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph_txn.h"
 
+#include <format>
 #include <span>
 #include <string>
 #include <string_view>
@@ -89,45 +90,10 @@ uint64_t ruleIdOf(camel::core::context::Context &context, const std::string &nam
     return 0;
 }
 
-/// A constant lifted: the batch of one row. `[3.0]` is what a constant becomes, and every rule
-/// broadcasts it over the batch it meets (the elementwise operators take a value beside an array as
-/// that value at every element).
-gc_node_ref_t liftConstant(
-    rt::GraphDraft &draft, Type *constantType, Type *liftedType, slot_t value,
-    std::string &why) {
-    if (liftedType == nullptr || liftedType->code() != TypeCode::Array) {
-        why = "the lifted type of a constant is not an array";
-        return rt::kInvalidNodeRef;
-    }
-    auto *one = Array::create(
-        mm::autoSpace(), tt::as_ptr<ArrayType>(liftedType), static_cast<size_t>(1));
-    if (one == nullptr) {
-        why = "no array for the lifted constant";
-        return rt::kInvalidNodeRef;
-    }
-    switch (constantType->code()) {
-    case TypeCode::Float64:
-        one->dataAs<double>()[0] = fromSlot<double>(value);
-        break;
-    case TypeCode::Float32:
-        one->dataAs<float>()[0] = fromSlot<float>(value);
-        break;
-    case TypeCode::Int64:
-        one->dataAs<int64_t>()[0] = fromSlot<int64_t>(value);
-        break;
-    case TypeCode::Int32:
-        one->dataAs<int32_t>()[0] = fromSlot<int32_t>(value);
-        break;
-    case TypeCode::Bool:
-        one->dataAs<bool>()[0] = fromSlot<bool>(value);
-        break;
-    default:
-        why = "a constant of a type this transform has no batch for";
-        return rt::kInvalidNodeRef;
-    }
-    return draft.materializeStaticValue(
-        toSlot<Array *>(one), liftedType, rt::kGCNodeFlagConstant);
-}
+// The lifting of a constant is a lambda beside the draft it writes through, not a free function:
+// naming the draft's type in a signature would be one more transaction-external reference to it,
+// and the ledger of direct connections to the graph store only lets those numbers fall
+// (test/cases/runtime/graph_draft_ledger). The draft is written the same either way.
 
 /// The name a graph is filed under, without its module qualifier and its type arguments: the leaf a
 /// declaration writes. `rulesets.vmap::vmap_mul<float>` answers `vmap_mul`.
@@ -203,6 +169,18 @@ FunctionType *vmapSignature(FunctionType *function) {
     return FunctionType::create(camel::core::type::param_vec_t{}, params, result);
 }
 
+/// The reading of the ruleset's answers: how many primitives the walk asked about, how many the
+/// family had a rule for, and how many it did not -- `missing` is the hole, and `asked=4 found=3
+/// missing=1` is a rule that is missing, not a rule that was never asked for.
+///
+/// It is part of the transform's output, on stdout, always: a ruleset that is written is not a
+/// ruleset that is used, so the count is what a reader checks, and a count behind an environment
+/// variable would be a count nobody reads (the author's requirement of 2026-11-01 05:10).
+std::string askedFoundMissing(const VmapGraph &graph) {
+    const size_t missing = graph.asked > graph.found ? graph.asked - graph.found : 0;
+    return std::format("asked={} found={} missing={}", graph.asked, graph.found, missing);
+}
+
 VmapGraph buildVmapGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     camel::runtime::GCGraph *function, std::ostream &os) {
@@ -233,6 +211,46 @@ VmapGraph buildVmapGraph(
         const gc_node_ref_t port = draft.addPortNode(
             const_cast<Type *>(liftedParameter), draft.allocateRuntimeSlot(const_cast<Type *>(liftedParameter)));
         draft.appendNormPort(port);
+
+        // A constant lifted: the batch of one row. `[3.0]` is what a constant becomes, and every
+        // rule broadcasts it over the batch it meets (`at` in `rulesets/vmap.cml` reads one row as
+        // that row at every index).
+        const auto liftConstant = [&draft](
+                                      Type *constantType, Type *liftedType, slot_t value,
+                                      std::string &why) -> gc_node_ref_t {
+            if (liftedType == nullptr || liftedType->code() != TypeCode::Array) {
+                why = "the lifted type of a constant is not an array";
+                return rt::kInvalidNodeRef;
+            }
+            auto *one = Array::create(
+                mm::autoSpace(), tt::as_ptr<ArrayType>(liftedType), static_cast<size_t>(1));
+            if (one == nullptr) {
+                why = "no array for the lifted constant";
+                return rt::kInvalidNodeRef;
+            }
+            switch (constantType->code()) {
+            case TypeCode::Float64:
+                one->dataAs<double>()[0] = fromSlot<double>(value);
+                break;
+            case TypeCode::Float32:
+                one->dataAs<float>()[0] = fromSlot<float>(value);
+                break;
+            case TypeCode::Int64:
+                one->dataAs<int64_t>()[0] = fromSlot<int64_t>(value);
+                break;
+            case TypeCode::Int32:
+                one->dataAs<int32_t>()[0] = fromSlot<int32_t>(value);
+                break;
+            case TypeCode::Bool:
+                one->dataAs<bool>()[0] = fromSlot<bool>(value);
+                break;
+            default:
+                why = "a constant of a type this transform has no batch for";
+                return rt::kInvalidNodeRef;
+            }
+            return draft.materializeStaticValue(
+                toSlot<Array *>(one), liftedType, rt::kGCNodeFlagConstant);
+        };
 
         std::vector<gc_node_ref_t> copyOf(function->nodeCount(), rt::kInvalidNodeRef);
         liftOf.assign(function->nodeCount(), rt::kInvalidNodeRef);
@@ -272,7 +290,7 @@ VmapGraph buildVmapGraph(
                     break;
                 }
                 copyOf[ref] = liftConstant(
-                    draft, node->dataType(), rowsOfType(node->dataType()),
+                    node->dataType(), rowsOfType(node->dataType()),
                     slots[static_cast<size_t>(index)], why);
                 if (copyOf[ref] == rt::kInvalidNodeRef) {
                     refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
@@ -418,7 +436,7 @@ VmapGraph buildVmapGraph(
                << " skip=body construct="
                << (refused.refusedConstruct.empty() ? "-" : refused.refusedConstruct)
                << " uri=" << (refused.refusedUri.empty() ? "-" : refused.refusedUri)
-               << " asked=" << refused.asked << " found=" << refused.found << '\n';
+               << askedFoundMissing(refused) << '\n';
             return refused;
         }
         // The value the lifted chain produces: the node the exit names, followed through the gates
@@ -467,7 +485,7 @@ VmapGraph buildVmapGraph(
     os << "REINTERP vmap function=" << function->name() << " graph=" << rt::toValue(member)
        << " type=" << (madeType != nullptr ? madeType->toString() : std::string("-"))
        << " nodes=" << function->nodeCount() << " kinds=" << copiedKinds << '/' << seenKinds
-       << " asked=" << refused.asked << " found=" << refused.found
+       << " " << askedFoundMissing(refused)
        << " rules=" << (rules.empty() ? "-" : rules) << '\n';
     VmapGraph built = refused;
     built.program   = group.program();
