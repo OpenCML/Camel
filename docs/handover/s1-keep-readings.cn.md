@@ -47,7 +47,16 @@
 
 ## 4. 下一步
 
-1. 定位用例：`git grep -n 'EffectNotExecuted\|顺序边保活\|keep' -- test/plans docs/design`
-2. 逐条判：靠顺序边 / 靠数据 / 两者均可；
-3. 3.3 第 160 行改成数据保活的写法，9.7 补一条"`:op/keep` 怎么用"；
+1. **写算子（四处，一笔只做算子本身 + 一处插入）**：
+   `include/camel/core/operator_table.h`（`OperId` 与 `mayBeRecomputed`——**新算子不参与重算**，
+   否则 DCE 会把它当"可重算的纯计算"再删一次）→ `src/builtin/executors/builtin.cpp:39-43`
+   （`keep(x, v)` 的执行就是返回 `v`）→ `include/camel/core/operator_semantics.h:68` 起的 URI 格式 →
+   插入点 `src/passes/opt/generic/rewrite.cpp` 的 `replaceNode`（273/277/313 附近）与
+   `generic.cpp:1464` 的 `dceDraft`。
+   **提交信息里要写一行"为什么插入点选在 `replaceNode` 而不是别处"**——下一个人读代码时的第一个问题。
+2. **验收**：`std::opt` 前后 × 四后端 = **8 行都是 `1`**（程序：`let a = println(1) return if 1 > 2 then a else 0`）；
+   **A/B：把插入拿掉 → `1` 必须消失**；两轮全量。
+3. **逐条判那 17 处**：每处一行——`文件:行 / 它现在靠什么成立 / 数据保活下还成不成立 /
+   不成立就改用 `:op/keep` 后钉什么`，给出 `N`、`M`。
 4. 然后才按 `fold` → `dce` → 内联清理，一笔一处地改代码。
+5. **9.7 的增补只写本页**（"建议 9.7 增补如下"），**不改 `docs/design-principles.cn.md`**——原则文件是作者的。
