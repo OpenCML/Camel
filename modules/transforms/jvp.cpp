@@ -380,35 +380,6 @@ bool liftGraph(
                 return fail(refusal);
             }
         }
-        // A loop whose rounds are a region of this graph is lifted with the rest; one that keeps a
-        // condition graph and a body graph for a call a round is refused here, at the loop. The
-        // presence of the region, not the payload's graph ids, tells the two apart (a lowered loop
-        // keeps the ids it was built with).
-        for (gc_node_ref_t ref = 0; ref < function->nodeCount(); ++ref) {
-            const camel::runtime::GCNode *node = function->node(ref);
-            if (node == nullptr || node->kind != rt::GCNodeKind::Loop) {
-                continue;
-            }
-            bool hasRounds = false;
-            for (uint32_t r = 1; r < function->regionCount(); ++r) {
-                const rt::GCRegion *part = function->region(r);
-                if (part != nullptr && part->owner == ref &&
-                    part->kind == rt::GCRegionKind::LoopBody) {
-                    hasRounds = true;
-                    break;
-                }
-            }
-            if (!hasRounds) {
-                JvpGraph refused;
-                refused.refusedOrigin =
-                    static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
-                refused.refusedConstruct = "a loop that runs its rounds as calls";
-                refused.refusedWhy =
-                    "its body is a graph of its own, and only a loop whose rounds are a region of "
-                    "this graph is lifted yet";
-                return fail(refusal, refused);
-            }
-        }
         for (std::uint8_t kind = 0; kind <= static_cast<std::uint8_t>(rt::GCNodeKind::Dref); ++kind) {
             bool seen = false;
             for (camel::runtime::gc_node_ref_t ref = 0; ref < function->nodeCount(); ++ref) {
@@ -667,15 +638,9 @@ bool liftGraph(
                 // node's type is the pair, the body's state port is a pair port (whose halves the
                 // body reads through projections), and the region's result is the pair of the
                 // body's new value and its tangent. The inputs and the region are wired after the
-                // walk. The payload names no graph: the rounds are the region (a region-form loop),
-                // and the ids a lowered loop still carries name graphs of the *other* program.
-                // The payload is a `GCLoopRef` (reference-table indexes), not a `GCLoopBody`
-                // (graphs): reading it through the wrong struct gives a node whose kind is 255 and
-                // whose graphs are none. `loopBodyOf` is the reading that converts.
+                // walk. The node names no graph: the rounds are the region (design principles 3.10).
                 const rt::GCLoopBody body = rt::loopBodyOf(*function, ref);
                 rt::GCLoopBody liftedBody = body;
-                liftedBody.condGraph      = camel::runtime::kInvalidGraphId;
-                liftedBody.bodyGraph      = camel::runtime::kInvalidGraphId;
                 copyOf[ref]               = draft.addLoopNode(liftedBody, lifted);
                 liftedLoopNode            = copyOf[ref];
                 copied[ref]               = true;

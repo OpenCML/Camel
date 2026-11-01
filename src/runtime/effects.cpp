@@ -85,8 +85,8 @@ struct EffectWalk {
                 summary |= of(program.calleeOf(*graph, ref));
                 break;
             case GCNodeKind::Loop:
-                summary |= of(program.loopCondOf(*graph, ref));
-                summary |= of(program.loopBodyOf(*graph, ref));
+                // The condition and the body are regions of this graph, so their effects are in
+                // this graph's own summary; a loop may fault and may not terminate.
                 summary.mayFault        = true;
                 summary.mayNotTerminate = true;
                 break;
