@@ -168,10 +168,8 @@ slot_t splitKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     auto *pair = ::Tuple::create(2, mm::autoSpace());
     pair->set<slot_t>(0, toSlot<::Function *>(forwardFunction));
     pair->set<slot_t>(1, toSlot<::Function *>(backwardFunction));
-    // The call's reading, in the words the front end's instantiation prints it in: the graphs are
-    // the same ones either way, and the `at` word says which half built them (halves-at=run here,
-    // halves-at=compile when the cut was made while the caller's graph was built).
-    printSplitCallReading(std::cout, function->graph()->name(), "run");
+    // The call's reading: which graph the two halves were built from.
+    printSplitCallReading(std::cout, function->graph()->name());
     return toSlot<::Tuple *>(pair);
 }
 
@@ -184,8 +182,8 @@ const std::vector<oper_group_ptr_t> &splitOperatorGroups() {
     return groups;
 }
 
-void printSplitCallReading(std::ostream &os, std::string_view function, std::string_view at) {
-    os << "REINTERP split halves-at=" << at << " function=" << function << '\n';
+void printSplitCallReading(std::ostream &os, std::string_view function) {
+    os << "REINTERP split function=" << function << '\n';
 }
 
 std::unordered_map<std::string, operator_t> splitOperatorKernels() {

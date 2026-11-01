@@ -189,14 +189,6 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
-            RuntimeDiag::FileSystemError,
-            {
-                "FileSystemError",
-                "'{0}' failed for '{1}': {2}.",
-                "Check the path and the permissions of the directories on it.",
-            },
-        },
-        {
             RuntimeDiag::RegexInvalid,
             {
                 "RegexInvalid",

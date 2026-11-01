@@ -184,6 +184,10 @@ void registerVmapOperatorMetadata() {
     camel::core::OperatorTable::instance().declare("transforms", {{"vmap", false}});
     camel::core::OperatorTable::instance().set(
         "transforms:vmap", {.pure = false, .readsGraphs = true});
+    // It builds the batched graph out of the graph of the function value it is handed. Measured
+    // 2026-11-02: a closure capturing `x` is accepted and answers 20.0 where the capture says 18.0,
+    // silently -- the batch element takes the closure's `with` slot and the capture is dropped. That
+    // is a defect of this kernel, recorded on the review page and not fixed here.
 }
 
 } // namespace camel::transforms
