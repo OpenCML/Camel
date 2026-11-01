@@ -1324,3 +1324,85 @@ help: In parentheses a list of types is a tuple type, and '(float, float)' is re
 `feat/parse` 116/116、`feat/linear` 一起 987 通过 0 失败（含 2 条已有的 known failure）；
 **全量 `total: 8369, pass: 8357, fail: 0, skip: 10, known failures: 2`**（比基线 8367/8356 多两条，正是新加的两支用例）。
 **四条本地闸门**：`--coverage-check`（307 个码，全部被用例点到）、`--pinned-coverage-check`、`--verify-doc`、`camel-for-ai --check` 全绿。
+
+## 41. A8：Camel 阶段的 `opt::cse` 会去替换"锚住图"的节点，而事务按设计不许
+
+**① 复现（两侧，`minimal/camel_cse_anchor.cml` 原样）**：
+
+```camel
+func echo(x: int): int sync {
+}
+func main(): int sync {
+    var x = 0
+    echo(x)
+    return 0
+}
+```
+
+| 命令 | 改前 | 改后 |
+|---|---|---|
+| `camel … opt::cse std::gir` | **`rc=1`**，`Invalid argument of 'graph.replace': the node anchors its graph (an exit, an output, a return or the end of a branch arm)`（指向 `out/latest/stdlib/opt.cml:126`） | **`rc=0`** |
+| `camel … std::opt::cse std::gir` | `rc=0`（画出 GIR） | `rc=0`（**同一个数**） |
+
+**② 那是设计上的禁止，还是拒绝过宽？** —— **是设计上的禁止**，两处原文：
+`stdlib/graph.cml:121-125`：
+
+```
+/// Whether the node anchors its graph (its exit, output or return, or the end of a branch arm); a
+/// transaction does not replace or erase it.
+export func is_anchor(n: Node): bool
+```
+
+`replace` 的 `@fails` 也写着"when a node anchors its graph"。**而 `opt.cml` 的 `is_hit` 从来没问过 `is_anchor`**：
+
+```camel
+func keep_of(ns: Node[], n: Node): Node {           // 改前
+    let earlier = ns->filter<(m: Node): bool => id(m) < id(n) && same_node(n, m)>
+    return if len(earlier) == 0 then n else earlier[0]
+}
+func is_hit(ns: Node[], n: Node): bool { return keep_of(ns, n) != n }
+```
+
+⇒ **不是 `graph.replace` 过宽，是 Camel 阶段的 `cse` 漏了原生遍有的那条约束**（原生遍合并的是"值"，Camel 阶段合并的是"节点"，**节点可以是锚**）。
+
+**③ 修在 Camel 阶段这一侧**（`graph.replace` 的语义一个字没改）：
+
+```camel
+func keep_of(ns: Node[], n: Node): Node {
+    let earlier = ns->filter<(m: Node): bool => id(m) < id(n) && !is_anchor(m) && same_node(n, m)>
+    return if len(earlier) == 0 then n else earlier[0]
+}
+func is_hit(ns: Node[], n: Node): bool {
+    // A node that anchors its graph is not merged away: the transaction does not replace or erase
+    // it, and a round that tried would stop on the refusal instead of merging the rest.
+    return !is_anchor(n) && keep_of(ns, n) != n
+}
+```
+
+**两处都要改**：`is_hit` 挡住"被替换的是锚"，`keep_of` 挡住"拿锚当替身"（`replace(t, n, anchor)` 会把别处的值挂到出口节点上）。
+
+**④ 读数（逐个数，不是估）**：
+- `test/cases/opt` 下先筛"能编过"的程序：**149 支**；
+- 其中 `opt::cse std::gir` 失败：**改前 36 支，改后 0 支**（`cse_fail=36` → `cse_fail=0`），**36 支全部转绿**；
+- `std::opt::cse` 一侧：**同一个数，0**（未受影响）；
+- `feat/opt` 计划：**1129/1129 通过**。
+- **eval 报的 `143 of 576`（1/4 抽样）这一层我没有重跑**（那份抽样集不在仓库里）——**能逐个数的是 `test/cases/opt` 的 36**。
+
+## 42. 给作者：Camel 阶段与原生遍的差值
+
+| 阶段 | 失败的支数 | 原生遍同一个数 |
+|---|---|---|
+| `opt::cse`（Camel，`stdlib/opt.cml`） | **36 of 149**（eval 记 36 of 145） | `std::opt::cse` **0** |
+| `opt::fold`（A9） | —— **`constant_budget` 缺失：43,890,478 字节 vs 1,789** | `std::opt` 的 `constant_budget` 有 |
+
+**两条同一族**：**Camel 阶段缺了原生遍的某一个约束**——`cse` 缺 `is_anchor`，`fold` 缺 `constant_budget`。
+**这不是"两边实现细节不同"，是"约束没有随实现一起搬过去"。** 凡是把原生遍改写成 Camel 阶段的活，**都要先列出原生遍遵守的约束清单**，逐条问"这一条在新实现里由谁保证"。
+A9 也一样：`opt::fold` 今天没有预算上限，**一个常量能把内存吃到 4300 万字节**，而原生遍停在 1789。
+## 43. A8 的读数汇总
+
+- `minimal/camel_cse_anchor.cml`：`opt::cse std::gir` **`rc=1` → `rc=0`**；`std::opt::cse std::gir` **`rc=0` → `rc=0`**（同一个数）。
+- `test/cases/opt`：能编过 **149** 支，其中 `opt::cse` 失败 **36 → 0**（逐支数出来的，`cse_fail=36` → `cse_fail=0`）。
+- `feat/opt`：**1129/1129**。
+- **全量**：`total: 8369, pass: 8357, fail: 0, skip: 10, known failures: 2`（与基线同一个数，**没有回退也没有新增**）。
+- `stdlib-reference --verify-docs`：**exit 0**（558 个 example 全查、计数与脚本记录一致）；`diagnostics --verify-doc`：up to date。
+- eval 报的 **143 of 576（1/4 抽样）** 那一层**没有重跑**——那份抽样集不在仓库里；能逐个数的是上面 149 支里的 36。
