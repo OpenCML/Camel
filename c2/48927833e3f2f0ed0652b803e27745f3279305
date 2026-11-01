@@ -1,0 +1,5 @@
+train160: merged verify, remat, reinterp2, m5, m4-assembly, capabort(fix), lit2(face swap), and the three reds the previous gate found in keepnode.cpp.
+
+Gate: 8283 total, 8271 pass, 0 fail, 10 skip, 2 known failures (fast tier, all plans).
+Contents: EXCEPTIONS_JOINED for transforms:remat; every doc example now compiled (512 pass, 40 fail, STALE_FRAGMENTS 0); transpose answers a parameter no cotangent reaches with zero (skip=output family); reshape batch rule and the ruleset index three-way equality; the read face replacing GCGraph in modules/transforms/jvp.cpp (12 -> 10 grep lines) plus a dangling-span bug it exposed; the 127-case autodiff migration table.
+Red first, then fixed: keep_shape.reachability pinned the numerator; graph_draft_ledger counted keepnode.cpp (now reads the draft through GraphTransaction); docs.headers.canonical.
