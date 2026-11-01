@@ -19,6 +19,7 @@
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph_txn.h"
 
+#include <cstring>
 #include <format>
 #include <span>
 #include <string>
@@ -67,13 +68,28 @@ Type *rowsOfType(Type *type) {
     return ArrayType::create(array->elemType(), forms, array->packName());
 }
 
+/// The type a rule is generic in: the type the primitive works on. A primitive over scalars is its
+/// own type (`+` on two `f32`), and one over arrays works on the element of the array -- `matmul`
+/// multiplies elements, `sum_axis` adds them -- so the rule is filed once per element type and says
+/// which axis the batch is on, never what shape a row has. Asking for the array type instead would
+/// file one instance per shape and would name the rows in type of the rule's `T`.
+Type *ruleElementTypeOf(Type *type) {
+    while (type != nullptr && type->code() == TypeCode::Array) {
+        type = tt::as_ptr<ArrayType>(type)->elemType();
+    }
+    return type;
+}
+
 /// The rule `rulesets.vmap` files for `uri`, or nullptr and why not. The family is read through the
-/// operator's key: `forwardBindingOf` answers the binding the *bound* family was filed under, and
-/// the head and the operand count in it are the operator's, not that family's.
+/// operator's key: `vmapBindingOf` answers the key the operator's batching rule is filed under, and
+/// the head and the operand count in it are the operator's, not this family's. The key comes from
+/// the operator's own module (`camel/core/forward.h#bindVmapRule`), because the spelling a rule is
+/// written with (`x @ w`, `sum_axis(xs, axis, keepdims)`) is not the URI the node holds
+/// (`tensor:matmul`, `tensor:sum_axis`).
 std::optional<camel::parse::ast::RuleMatch> ruleOfUri(const std::string &uri, std::string &why) {
-    const auto binding = camel::core::forwardBindingOf(uri);
+    const auto binding = camel::core::vmapBindingOf(uri);
     if (!binding.has_value()) {
-        why = "the operator has no rule key bound at all";
+        why = "the operator has no batching rule key bound at all";
         return std::nullopt;
     }
     return camel::parse::ast::lookupRule(kFamily, binding->head, binding->arity);
@@ -214,7 +230,9 @@ VmapGraph buildVmapGraph(
 
         // A constant lifted: the batch of one row. `[3.0]` is what a constant becomes, and every
         // rule broadcasts it over the batch it meets (`at` in `rulesets/vmap.cml` reads one row as
-        // that row at every index).
+        // that row at every index). An array constant lifts the same way -- the array is the row,
+        // and the batch is that one row -- which is what a body that multiplies by a written matrix
+        // needs: `matmul(a, w)` with `w` written in the body is one row of `w` at every index.
         const auto liftConstant = [&draft](
                                       Type *constantType, Type *liftedType, slot_t value,
                                       std::string &why) -> gc_node_ref_t {
@@ -227,6 +245,30 @@ VmapGraph buildVmapGraph(
             if (one == nullptr) {
                 why = "no array for the lifted constant";
                 return rt::kInvalidNodeRef;
+            }
+            if (constantType->code() == TypeCode::Array) {
+                // The row is the constant's own elements, so the batch is those bytes under one
+                // leading extent of length one, and the shape is read from the value rather than
+                // from the type: the type states no extent the value does not.
+                const auto *source = fromSlot<Array *>(value);
+                if (source == nullptr || source->isSlots()) {
+                    why = "a constant array whose elements are not stored as bytes";
+                    return rt::kInvalidNodeRef;
+                }
+                std::vector<int64_t> extents;
+                extents.reserve(source->rank() + 1);
+                extents.push_back(1);
+                extents.insert(extents.end(), source->shape(), source->shape() + source->rank());
+                auto *batch = Array::create(
+                    mm::autoSpace(), tt::as_ptr<ArrayType>(liftedType),
+                    std::span<const int64_t>(extents));
+                if (batch == nullptr || batch->byteSize() != source->byteSize()) {
+                    why = "no array for the lifted constant";
+                    return rt::kInvalidNodeRef;
+                }
+                std::memcpy(batch->rawData(), source->rawData(), source->byteSize());
+                return draft.materializeStaticValue(
+                    toSlot<Array *>(batch), liftedType, rt::kGCNodeFlagConstant);
             }
             switch (constantType->code()) {
             case TypeCode::Float64:
@@ -325,7 +367,7 @@ VmapGraph buildVmapGraph(
                 // The rule's right side names the function that does the batched arithmetic; the
                 // transform calls it with the batches. The instance is made at the element type the
                 // primitive works on, because that is the type the rule is generic in.
-                Type *elementType = node->dataType();
+                Type *elementType = ruleElementTypeOf(node->dataType());
                 const uint64_t ruleId = ruleIdOf(*context, match->rule);
                 if (ruleId == 0) {
                     refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
