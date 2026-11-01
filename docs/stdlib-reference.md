@@ -1407,6 +1407,41 @@ together with the derivative of `f` at 2 in the direction 1.
 - Example (a fragment, not compiled): `let forward = jvp(f)`
 - Why it is not compiled: `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
 
+#### `split`
+
+```camel
+split: (f: (v: float, d: float) => (float, float)) => (v: float, d: float) => (float, float)
+```
+
+The step of `vjp` that separates a lifted function into the part computable now and the linear
+residue (design 4.4). Not implemented: the operator has a signature and no rule, so a call is
+refused where it is composed (`stdlib/vjp.cml`) and names this step. The signature is the
+shape the library's compositions can be written with today.
+fragment of the composition: `let (fwd, lin) = split(jvp(f))`.
+
+- Example (a fragment, not compiled): `let step = split`
+- Why it is not compiled: `split` takes the lifted function a `jvp` call writes, so the example is a
+
+#### `transpose`
+
+```camel
+transpose: (f: F) => Transpose<F> when is_function::<F>()
+```
+
+The transpose of a linear function: `transpose(f)` takes the cotangent of `f`'s result and
+gives the cotangent of its parameter. The data flow runs backwards -- each primitive is replaced
+by the rule the `rulesets.transpose` family files under it, and a value used k times receives k
+cotangents that add. `f(x) = 2*x + 3*x` transposed at the cotangent `1.0` gives `5.0`.
+
+- Example (a fragment, not compiled): `let back = transpose(f)`
+- Why it is not compiled: `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
+
+#### `jvp`
+
+```camel
+jvp: (f: F) => Jvp<F> when is_function::<F>()
+```
+
 #### `vmap`
 
 ```camel
