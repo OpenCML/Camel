@@ -1347,7 +1347,13 @@ bool liftGraph(
             rules += (rules.empty() ? "" : ",") + rule;
         }
         os << "REINTERP jvp function=" << name << " graph=" << rt::toValue(member)
-           << " liftedFrom=" << rt::toValue(source)
+           // The graph the lift was asked about. A run-time lift knows it -- it is the callee graph
+           // the call named -- and prints its id there. A build-time lift does not and cannot: the
+           // callee's runtime id is handed out when the program is encoded, which is after this
+           // build, and a number here would read as the id of some graph. So the reading is a word
+           // for "not assigned yet" rather than a number that looks like an answer.
+           << " liftedFrom="
+           << (rt::isValid(source) ? std::to_string(rt::toValue(source)) : std::string("unassigned"))
            << " type=" << signature->toString() << " nodes=" << function.nodeCount()
            << " kinds=" << copiedKinds << '/' << seenKinds
            << " exit=Tuple{chain,tangent} tangent=computed source=ruleset rules="
