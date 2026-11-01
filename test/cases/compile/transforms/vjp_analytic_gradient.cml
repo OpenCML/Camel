@@ -1,14 +1,14 @@
-// The comparison the author named (ruling of 2026-11-01 06:30): `f(x, y) = x*x*y` at `x = 3`,
-// `y = 2`. The derivative written by hand is `df/dx = 2*x*y = 12` and `df/dy = x*x = 9`, and the
-// library's own gradient -- `transpose(split(reinterp<jvp>(f)))`, the composition `stdlib/vjp.cml`
-// writes -- has to answer the same two numbers from the same `f`. The two readings are printed one
-// under the other, so what a reader sees is a comparison and not a promise: `library` is what the
-// composition answered, `analytic` is the derivative worked out on paper.
+// The comparison the author named (ruling of 2026-11-01 06:30 and 06:50): `f(x, y) = x*x*y` at
+// `x = 3`, `y = 2`. The derivative written by hand is `df/dx = 2*x*y = 12` and `df/dy = x*x = 9`,
+// and the library's own gradient -- `transpose(split(reinterp<jvp>(f)))`, the composition
+// `stdlib/vjp.cml` writes -- has to answer the same two numbers from the same `f`. The two readings
+// are printed one under the other, so what a reader sees is a comparison and not a promise:
+// `library` is what the composition answered, `analytic` is the derivative worked out on paper.
 //
-// The call shape is the transposed one (design 4.3 and the author's ruling): the parameters of `f`
-// first and the cotangent last, so `vjp(f)(3.0, 2.0, 1.0)` reads "at `(3, 2)`, pull the seed `1.0`
-// back". That shape is the same for every `f`, which is why the seed has a place in the call rather
-// than in a second argument to `vjp`.
+// The shape is JAX's, which is the shape the standard library declares: `vjp(f)(x)` is the pair
+// `(y, pullback)` and `pullback(ct)` is the cotangent of `f`'s parameters, so the call is
+// `vjp(f)(3.0, 2.0)` and then `pullback(1.0)`. The juxtaposed `(parameters, cotangent)` call
+// `transpose` writes is the internal assembly and does not reach this file.
 //
 // Skipped, not red, while the composition cannot be built: `split` stands in with a lifted function
 // `(float, float) => (float, float)` and `transpose` takes a function of one parameter, so the
@@ -22,8 +22,10 @@ func f(x: float, y: float): float {
 
 func main(): int sync {
     let value = f(3.0, 2.0)
-    let (dx, dy) = vjp(f)(3.0, 2.0, 1.0)
+    let (pair_value, pullback) = vjp(f)(3.0, 2.0)
+    let (dx, dy) = pullback(1.0)
     println(`f(3, 2) = ${value:.1f}`)
+    println(`library  y = ${pair_value:.1f}`)
     println(`library  df/dx = ${dx:.1f}`)
     println(`analytic df/dx = 12.0`)
     println(`library  df/dy = ${dy:.1f}`)
