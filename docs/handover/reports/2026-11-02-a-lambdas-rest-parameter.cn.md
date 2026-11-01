@@ -277,3 +277,59 @@ P1-12 的原话是"同一个签名写在三处，收成一处"。把三处挨个
 
 **所以 P1-12 作废**：它假定的"同一个签名写三处"不存在，实际是"**一份紧凑布局，多处按参数个数做指针算术**"。
 把算术收到一处是另一种改动（不是 P1-12 说的那件），而且没有重复文本可收——**没有可迁移的东西**。
+
+## 9. 除法族的段错误（待修，不归本车道）与四族数值表
+
+### 9.1 段错误：`got null` 是崩溃，不是慢
+
+单跑一遍，带退出码与墙钟（远端直跑，`LD_LIBRARY_PATH=$HOME/camel-eval/conda/envs/clang/lib`）：
+
+| 程序 | 遍 | 退出码 | 墙钟 |
+|---|---|---|---|
+| `println(4.0 / 2.0)` | `std::gir` / `std::nvm` | 0 / 0 | 58 / 33 ms |
+| `grad((x) => x * 3.0)` | `std::gir` / `std::nvm` | 0 / 0 | 56 / 82 ms |
+| `grad((x) => -x)` | `std::nvm` | 0 | 55 ms |
+| `grad((x) => x / 4.0)` | `std::nvm` | **139 SIGSEGV** | 147 ms |
+| `grad((x) => 4.0 / x)` | `std::gir` / `std::nvm` | 0 / **139 SIGSEGV** | 56 / 137 ms |
+
+两条除法 `std::gir` 都 **rc=0**（图建得出），`std::nvm` 都 **rc=139**；不带 `grad` 的除法 rc=0。
+⇒ **前端与图无事，崩在 autodiff 建反向图时。**
+
+### 9.2 栈（`gdb -batch -ex run -ex bt`，前 8 帧）
+
+```
+#0 camel::runtime::(anonymous namespace)::emitDraftPayload(GraphDraft const&, DraftPayloadPlan const&, GCGraph…)
+#1 camel::runtime::emitDraftNativePayload(GraphDraft const&, GCGraphPayloadArena&, …)
+#2 encodeDraftGraph 的 _Function_handler<void(GCGraphPayloadArena&)>
+#3 camel::runtime::GCGraphBuildAccess::constructInPlace(…)
+#4 encodeDraftGraph(Context const&, RuntimeDraftIdentity const&, …)
+#5 camel::runtime::GraphDraftGroup::encode()
+#6 camel::transforms::buildTransposeGraph(Context const&, Program const*, GCGraph*, ostream&)
+#7 camel::transforms::(anonymous namespace)::transposeKernel(ArgsView&, ArgsView&, Context&)
+```
+
+**读法**：崩在 `transposeKernel → buildTransposeGraph → GraphDraftGroup::encode → emitDraftPayload`，
+**不是算子求值**；乘法（`mul_t`）与取负（`neg_t`）走同一条链**不崩**，所以差别在**除法规则产出的图的形状/槽位**上。
+
+### 9.3 不是 `d14d6a96` 引入（lineage 两行）
+
+```
+$ git merge-base --is-ancestor 21aa36805 HEAD  →  rc=1   (fb0d4b1ea / b578ab2db 同 rc=1)
+$ git merge-base --is-ancestor d14d6a96 HEAD   →  fatal: Not a valid object name d14d6a96
+```
+
+即：本树**没有**那三笔的内容，**`d14d6a96` 这个对象在本检出里根本不存在**。崩溃在一棵**不含 `d14d6a96`** 的树上复现
+⇒ **它是旧崩溃，与那一笔无关**。归重写那条路的人，本车道不动 `modules/transforms/`。
+
+### 9.4 四族数值（`grad` vs 手写中心差分，h=1e-5；`rc=0`，54 ms）
+
+| 族 | `grad` | 中心差分 | 判 |
+|---|---|---|---|
+| add（`x + 3` @2） | `1.0` | `0.9999999999621422` | ✓ |
+| sub（`x - 3` @2） | `1.0` | `1.0000000000065512` | ✓ |
+| mul（`x * 3` @2） | `3.0` | `3.000000000064062` | ✓ |
+| neg（`-x` @2） | **`1.0`** | **`-1.0000000000065512`** | **✗ 待修**（转置给 +1.0） |
+| div（两位） | — | — | **未取得读数：崩在 `emitDraftPayload`，见 9.1/9.2** |
+
+`neg` 的 `1.0` 是**已知待修现象的第一次数值读数**：`neg_t` 的转置给了 `+1.0`，而答案是 `-1.0`。
+`add`/`sub`/`mul` 三族**数值对**，这三族的 `*_tangent` 可以放心作为"转置切到规则路径后应保持不变"的对照值。
