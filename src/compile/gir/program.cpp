@@ -35,6 +35,9 @@
 #include "camel/parse/ast/rule_head.h"
 #include "camel/runtime/graph.h"
 
+#include "camel/compile/gir/compile_time.h"
+#include "camel/compile/gir/reachable.h"
+
 #include <algorithm>
 #include <cctype>
 #include <format>
@@ -931,6 +934,12 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
         // Before the graphs are encoded: the reads whose value cannot be kept leave the mark
         // that lets `acc = acc->append<v>` append in place (design principles 11.3).
         markNonRetainingReads();
+        // A call whose value is a function is answered here, while the graphs it is written among
+        // are still being built and nothing has been encoded: the transform's graph becomes a
+        // value of the program rather than a graph made the first time the call runs
+        // (compile_time.h). Last, because a transform reads the bodies it is given and may not
+        // see a graph the steps above still change.
+        instantiateCompileTimeTransforms();
         for (ModuleUnit *unit : order) {
             UnitContext context(*this, *unit);
             try {
@@ -991,6 +1000,46 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
         }
     }
     return ok;
+}
+
+void Builder::instantiateCompileTimeTransforms() {
+    resetCompileTimeInstantiations();
+    // Every graph the program is made of, not only the root's own: a call written in a function
+    // the root never names is a call of the program all the same.
+    size_t answered = 0;
+    for (const graph_ptr_t &graph : collectReachableGraphs(rootGraph_)) {
+        // The calls this graph was built with: a transform appends the nodes it stands for, and
+        // those are not calls of their own.
+        const size_t callCount = graph->view().nodeSlotCount();
+        for (size_t index = 0; index < callCount; ++index) {
+            const draft_node_ref_t node = static_cast<draft_node_ref_t>(index);
+            if (!graph->view().alive(node)) {
+                continue;
+            }
+            const auto *header = graph->view().header(node);
+            if (header == nullptr || header->kind != camel::runtime::GCNodeKind::Oper) {
+                continue;
+            }
+            const oper_idx_ptr_t &op = graph->operTarget(node);
+            if (op == nullptr) {
+                continue;
+            }
+            const CompileTimeTransform *transform = compileTimeTransformOf(op->uri());
+            if (transform == nullptr) {
+                continue;
+            }
+            CompileTimeCall call{context_, graph, node, std::cout};
+            if ((*transform)(call).has_value()) {
+                ++answered;
+            }
+        }
+    }
+    if (answered != 0) {
+        // A count, because the point of the step is that the call did not survive into the
+        // program: a run of the same program with the transform answering nothing reads zero
+        // here and lifts the same value at run time.
+        std::cout << "REINTERP compile-time instantiated=" << answered << " calls\n";
+    }
 }
 
 } // namespace camel::compile::gir
