@@ -861,10 +861,12 @@ struct ArmCut {
     gc_node_ref_t tangent = rt::kInvalidNodeRef;
 };
 
-/// Builds one half of a branch cut: the half's own Brch and Join, one region per arm, and the arm's
-/// half of the pair copied into it. `tangentSide` says which half of the pair this half keeps, and
-/// `conditionCopy` is the condition as this half reads it -- the forward half computes it, the backward
-/// half takes it out of the residual tuple, which is what carrying it across the cut means.
+/// Wires one half of a branch cut: the half's own Brch and Join, and one `cutArm` call per arm -- the
+/// arm loop is *here*, at `cutArm`'s call site, and nowhere else (`cutBranchGraph` calls this twice,
+/// once per half, and has no per-arm loop of its own). `tangentSide` says which half of the pair this
+/// half keeps, and `conditionCopy` is the condition as this half reads it -- the forward half computes
+/// it, the backward half takes it out of the residual tuple, which is what carrying it across the cut
+/// means.
 ///
 /// The shape is the one `jvp` builds when it lifts a branch (`modules/transforms/jvp.cpp`): the Join is
 /// made first and the Brch names it, then the Join is rewritten to take the Brch as its norm input and
@@ -905,7 +907,7 @@ bool cutArm(
 }
 
 template <typename Draft>
-bool buildHalfBranch(
+bool wireBranchJoin(
     Draft &draft, Half &half, gc_node_ref_t conditionCopy, const std::vector<ArmCut> &arms,
     bool tangentSide, Type *joinType, SplitGraph &refusal, gc_node_ref_t &joinOut) {
     const rt::gc_cnt_t armCount = static_cast<rt::gc_cnt_t>(arms.size());
@@ -1086,7 +1088,7 @@ SplitGraph cutBranchGraph(
             }
         }
         gc_node_ref_t join = rt::kInvalidNodeRef;
-        if (!buildHalfBranch(draft, forward, forward.copyOf[condition], arms, false, valueType,
+        if (!wireBranchJoin(draft, forward, forward.copyOf[condition], arms, false, valueType,
                              built, join)) {
             os << "REINTERP split function=" << function->name()
                << " skip=forward construct=" << built.refusedConstruct
@@ -1152,7 +1154,7 @@ SplitGraph cutBranchGraph(
             }
         }
         gc_node_ref_t join = rt::kInvalidNodeRef;
-        if (!buildHalfBranch(draft, backward, backward.copyOf[condition], arms, true, tangentType,
+        if (!wireBranchJoin(draft, backward, backward.copyOf[condition], arms, true, tangentType,
                              built, join)) {
             os << "REINTERP split function=" << function->name()
                << " skip=backward construct=" << built.refusedConstruct
