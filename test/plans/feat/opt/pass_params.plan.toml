@@ -571,14 +571,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 20000
 
 [[tests]]
-name = "pass_params.settle_runs_zero_refused_at_construction"
-desc = "A pass parameter is checked where the pass is built, and a value it cannot take is reported through the same channel a running pass reports through: RuntimeDiag::InvalidArgument naming the pass and the value, exit code 1, and no 'terminate called' -- the construction site had no receiver, so the diagnostic was recorded and then escaped as DiagnosticsLimitExceededException, which unterminated the process with code 134 for a program the compiler had refused correctly."
+name = "pass_guard.maker_failure_reported"
+desc = "A pass that refuses to be built is reported by name, with exit code 1: the construction site receives what the maker threw, through the same function the running site uses. Before, a throw from a maker reached the driver uncaught and the run ended with 'terminate called' and exit 134 -- the diagnostic existed, the receiver did not. The settle_runs=0 refusal this receiver was written for is now made earlier, while the pipeline is read, by the declaration's own check (diag_json::pass_parameter_value_refused); this case keeps the receiver itself under test."
 kind = "negative"
-case = "../../../cases/modules/onnx/export_loop.cml"
-args = ["${case}", "std::opt settle_runs=0", "onnx::export"]
+case = "../../../cases/compile/pass_guard/plain.cml"
+args = ["${case}", "test::broken_maker"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_output_contains = ["Invalid argument of 'std::opt': settle_runs must be at least 1, got 0"]
+expect_diagnostic_name = "RuntimeDiag::PassInternalError"
+expect_output_contains = ["Pass 'test::broken_maker' failed with an internal error: this test pass refuses to be built, and says so"]
 expect_output_not_contains = ["terminate called", "DiagnosticsLimitExceededException"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000

@@ -40,3 +40,8 @@ class DanglePortTestPass : public RuntimeGraphRewritePass {
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
+
+/// A pass whose maker refuses to build it. Nothing is wrong with the program: the pass itself
+/// declares that it cannot be built, which is the other thing a construction site has to receive --
+/// a break while being built, as opposed to a parameter the declaration already refused.
+inline constexpr const char *kBrokenMakerTestPass = "test::broken_maker";

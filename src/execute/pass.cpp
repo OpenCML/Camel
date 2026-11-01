@@ -381,44 +381,13 @@ size_t constantBudgetOf(const PassArgs &args) {
     return bytes < 0 ? 0 : static_cast<size_t>(bytes);
 }
 
-/// A pass parameter the maker cannot take. It is committed as `RuntimeDiag::InvalidArgument` -- the
-/// pass spec is the program's, so this is not a defect of the compiler and must not be reported as
-/// `PassInternalError` -- and then thrown, only to stop the construction: the receiver at the
-/// construction site (constructPass) lets it through, because the diagnostic is already recorded.
-class PassParameterViolation : public std::runtime_error {
-  public:
-    explicit PassParameterViolation(const std::string &what) : std::runtime_error(what) {}
-};
-
-/// Refuse a pass parameter: name the pass and the value, record it, and stop the construction.
-/// Design principles 9.3: a parameter is read at its declared type, and a value the pass cannot take
-/// is refused where the pass is built. Before this, the maker threw a bare `std::runtime_error`
-/// that reached the driver uncaught: `terminate called after throwing DiagnosticsLimitExceededException`
-/// with exit code 134, for a program the compiler had refused correctly.
-[[noreturn]] void refusePassParameter(
-    const context_ptr_t &ctx, const std::string &pass, const std::string &why) {
-    if (ctx) {
-        try {
-            ctx->rtmDiags()->of(RuntimeDiag::InvalidArgument).commit(pass, why);
-        } catch (const camel::core::error::DiagnosticsLimitExceededBaseException &) {
-            // The diagnostic is recorded; the limit is what throws, not the refusal.
-        }
-    }
-    throw PassParameterViolation(why);
-}
-
 /// The `settle_runs` parameter of `std::opt`: how many runs of the rewrite in a row may each change
 /// the same graph before the pass reports that the rewrite does not settle. It is an internal bound
 /// of the engine, exposed so that a test can prove the report happens at all (a run that changes
 /// nothing ends the loop, so the runaway shows up across runs, not inside one); it is not a tuning
 /// knob, and a value below 1 is refused rather than read as "never report".
-size_t settleRunsOf(const context_ptr_t &ctx, const PassArgs &args) {
-    const int64_t runs = args.getInt("settle_runs");
-    if (runs < 1) {
-        refusePassParameter(
-            ctx, "std::opt", std::format("settle_runs must be at least 1, got {}", runs));
-    }
-    return static_cast<size_t>(runs);
+size_t settleRunsOf(const PassArgs &args) {
+    return static_cast<size_t>(args.getInt("settle_runs"));
 }
 
 PassMaker makeGraphVizPass(GraphVizDumpConfig config) {
@@ -453,7 +422,7 @@ PassMaker optimizePass() {
         config.checkScreens        = args.getBool("check_screens");
         config.growthBudget        = growthBudgetOf(args, "std::opt");
         config.constantBudgetBytes = constantBudgetOf(args);
-        config.settleRuns          = settleRunsOf(ctx, args);
+        config.settleRuns          = settleRunsOf(args);
         return std::make_unique<OptimizeRewritePass>(ctx, config);
     };
 }
@@ -1014,6 +983,14 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kLeakBranchArmPass, LeakBranchArmTestPass),
         TEST_PASS(kShareBranchArmPass, ShareBranchArmTestPass),
         TEST_PASS(kOperatorSemanticsTestPass, OperatorSemanticsTestPass),
+        // A pass that refuses to be built. The throw is the point: it is what the construction
+        // receiver exists to turn into a named diagnostic instead of a terminate.
+        {
+            kBrokenMakerTestPass,
+            [](const context_ptr_t &) -> std::unique_ptr<GraphIRPass> {
+                throw std::runtime_error("this test pass refuses to be built, and says so");
+            },
+        },
         TEST_PASS(kIndexSemanticsTestPass, IndexSemanticsTestPass),
         TEST_PASS(kDefinitionsTestPass, DefinitionsTestPass),
         TEST_PASS(kExpandDefinitionsTestPass, ExpandDefinitionsTestPass),
@@ -2600,8 +2577,6 @@ std::unique_ptr<GraphIRPass> constructPass(const context_ptr_t &ctx, const std::
         return resolved.factory(ctx);
     } catch (const camel::core::error::DiagnosticsLimitExceededBaseException &) {
         return nullptr;
-    } catch (const PassParameterViolation &) {
-        return nullptr; // refused and recorded by refusePassParameter
     } catch (const std::exception &e) {
         reportPassFailure(ctx, name, e);
         return nullptr;
