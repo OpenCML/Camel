@@ -5,16 +5,21 @@
 # the present inputs allow and hands the residuals on as values, and the backward half, which reads
 # those residuals and the tangent direction and gives the tangent.
 #
-# Three readings, all on the author's example of 2026-10-31 15:25: g(x) = x*x, f = reinterp<jvp>(g),
-# x = 3, dx = 1.
-#   * the forward half gives y = 9 and r0 = 3 (the residual is the value the backward half needs);
-#   * the backward half gives the tangent 6;
-#   * the backward half is linear in the tangent direction: dx = 2 gives 12 and dx = 0 gives 0.
+# Two acceptance forms live here, and they do not light up at the same moment:
+#   * the identity graph (`split_identity_pipeline`): a lifted body that computes nothing is two
+#     parameter ports and one tuple fill, so the cut has nothing to move between the halves -- the
+#     forward half hands the value through, the backward half hands the tangent through, and the
+#     residuals hold nothing. This is the reading the plumbing lands with;
+#   * the numbers of the author's example of 2026-10-31 15:25 (g(x) = x*x, x = 3, dx = 1): the
+#     forward half gives y = 9 and r0 = 3 (the residual is the value the backward half needs), the
+#     backward half gives the tangent 6, and it is linear in the tangent direction (dx = 2 gives 12,
+#     dx = 0 gives 0). Those readings need the backward half to *read* a residual, which is the step
+#     after the plumbing: they stay written and open by themselves.
 #
-# Every entry asks test/tools/have-split.mjs first. `split` does not exist yet, so the plan skips
-# with the reason that gate prints -- a missing operator is not a defect of the tree, and a red
-# here would say it is. The entries start running the moment the operator lands, with no edit to
-# this file: that is what the gate is for.
+# So the entries ask two different gates, each the question its own readings need -- a missing
+# construct is not a defect of the tree, and a red here would say it is. The identity entry asks
+# `test/tools/have-split.mjs` (does `split` exist), and the three number entries ask
+# `test/tools/have-split-residuals.mjs` (does the forward half hand residuals on).
 
 [[tests]]
 name = "split_forward_half"
@@ -25,7 +30,7 @@ args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["forward y= 9", "residual r0= 3", "tangent dx1= 6"]
-skip_unless = ["node", "test/tools/have-split.mjs"]
+skip_unless = ["node", "test/tools/have-split-residuals.mjs"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -38,7 +43,7 @@ args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["tangent dx1= 6"]
-skip_unless = ["node", "test/tools/have-split.mjs"]
+skip_unless = ["node", "test/tools/have-split-residuals.mjs"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -51,12 +56,12 @@ args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["dx1= 6", "dx2= 12", "dx0= 0", "doubles= true"]
-skip_unless = ["node", "test/tools/have-split.mjs"]
+skip_unless = ["node", "test/tools/have-split-residuals.mjs"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 [[tests]]
 name = "split_identity_pipeline"
-desc = "The identity graph: `reinterp<jvp>` builds a body with no operator in it, so `split` has nothing to move and the reading is the pipeline itself. The forward half gives the value the caller passed (3.0) with no residuals, and the backward half gives the tangent back (1.0). A non-zero residual count is a value carried across the cut that the backward half never needs. Gated like the other entries: the plan skips while `split` does not exist, and this entry lights the moment it lands, with no edit here."
+desc = "The identity graph: `reinterp<jvp>` builds a body with no operator in it, so `split` has nothing to move and the reading is the pipeline itself. The forward half gives the value the caller passed (3.0) with no residuals, and the backward half gives the tangent back (1.0). A non-zero residual count is a value carried across the cut that the backward half never needs. Gated on `split` existing (`test/tools/have-split.mjs`), which the other three entries also need but not enough of: this entry lights the moment the operator lands, with no edit here."
 kind = "behavior"
 case = "../../../cases/compile/transforms/split_identity_pipeline.cml"
 args = ["${case}", "std::nvm"]

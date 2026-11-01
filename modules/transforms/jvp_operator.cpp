@@ -197,12 +197,12 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 namespace {
 
-/// The steps `vjp` is written in terms of that are not implemented yet (`split` and `transpose`).
-/// The signature is the shape the library declares -- the function it was given, back again -- so a
-/// program that names them type-checks; the kernel is the refusal, and it names the step that is
-/// missing instead of the composition, so a reader is sent to the line of `stdlib/vjp.cml` that asks
-/// for it. Nothing here is a placeholder that one day returns something: a step either has a rule or
-/// says it has none.
+/// The step `vjp` is written in terms of that is not implemented yet (`transpose`). The signature is
+/// the shape the library declares -- the function it was given, back again -- so a program that
+/// names it type-checks; the kernel is the refusal, and it names the step that is missing instead of
+/// the composition, so a reader is sent to the line of `stdlib/vjp.cml` that asks for it. Nothing
+/// here is a placeholder that one day returns something: a step either has a rule or says it has
+/// none. (`split`, the other step of that composition, has one now: modules/transforms/split.cpp.)
 class StepResolver final : public FuncTypeResolver {
   public:
     std::optional<FunctionType *> resolve(
@@ -235,10 +235,6 @@ slot_t stepKernel(ArgsView &with, ArgsView &norm, Context &ctx, std::string_view
             "this function's graph)");
 }
 
-slot_t splitKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
-    return stepKernel(with, norm, ctx, "split");
-}
-
 slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     return stepKernel(with, norm, ctx, "transpose");
 }
@@ -252,10 +248,9 @@ const std::vector<oper_group_ptr_t> &operatorGroups() {
         OperatorGroup::create(
             "jvp",
             {{"transforms:jvp", std::make_shared<JvpResolver>()}}),
-        // The two steps of `vjp` that are not written yet (stdlib/vjp.cml): the shape is the
-        // library's, the refusal is theirs.
-        OperatorGroup::create(
-            "split", {{"transforms:split", std::make_shared<StepResolver>()}}),
+        // The step of `vjp` that is not written yet (stdlib/vjp.cml): the shape is the library's,
+        // the refusal is its. `split`, the other step of that composition, has a rule of its own
+        // (modules/transforms/split_operator.cpp) and is not registered here.
         OperatorGroup::create(
             "transpose", {{"transforms:transpose", std::make_shared<StepResolver>()}}),
     };
@@ -265,7 +260,6 @@ const std::vector<oper_group_ptr_t> &operatorGroups() {
 std::unordered_map<std::string, operator_t> operatorKernels() {
     std::unordered_map<std::string, operator_t> kernels = transposeOperatorKernels();
     kernels["jvp"] = &jvpKernel;
-    kernels["split"] = &splitKernel;
     return kernels;
 }
 
@@ -273,7 +267,7 @@ void registerOperatorMetadata() {
     // It builds a graph: the call does something the compiler cannot see from the arguments alone,
     // so it is declared, as every operator must be (design principles 3.3), as not pure.
     camel::core::OperatorTable::instance().declare(
-        "transforms", {{"jvp", false}, {"split", false}, {"transpose", false}});
+        "transforms", {{"jvp", false}, {"transpose", false}});
     // `jvp` reads the graph of the function value it receives -- that is the whole transform -- so
     // it refuses a loop there as `grad` does (OperatorTraits::readsGraphs; op-semantics 11.4).
     camel::core::OperatorTable::instance().set(
