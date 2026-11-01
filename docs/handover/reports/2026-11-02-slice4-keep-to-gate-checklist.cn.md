@@ -70,13 +70,14 @@ test/cases/opt/pass_written/check.mjs:53
 ## 5. 验收（这一笔落地的判据）
 
 1. `git grep -n ':op/keep' -- src include modules test` → **0 命中**；`git grep -n 'oper::Keep\|__keep__'` → **0 命中**。
-2. **`GATE` 的等待只剩一种读法**：`src/runtime/graph.cpp:561` 那段里的
-   `facts.hasWaitEdge = !graph->ctrlInputsOf(ref).empty();` **删掉**，只留
-   `facts.isSyncStatement = !graph->syncPredsOf(ref).empty();`，并且断言条件从"两者都空才拒"变成"**没有同步前驱就拒**"。这一条与片 3b（读侧 ctrl 半边）同向，**若 3b 先落，它就只是把注释里的"曾经还认控制入边"删掉**。
-3. **四后端读数**：`let a = println(1); return if 1 > 2 then a else 0` 在 `std::nvm`/`std::fvm`/`std::jit`/`std::tf` 下**都打印 `1`**，开关 `std::opt` 一致（负责人 19:30 给的读数）。
-4. `std::cml` 往返：结果打印成带 `sync` 块的源码，往返等价。
-5. 全量 `[SUMMARY] fail 0`、`headers --check`、`static_GUARD` 0。
-6. **id 22 空出不复用**：`kWellKnownCount` 回到 22 之后，`OperId 22` 不分配给任何新算子——复用会让"删掉"变成"换了名字"。
+2. **四后端读数**：`let a = println(1); return if 1 > 2 then a else 0` 在 `std::nvm`/`std::fvm`/`std::jit`/`std::tf` 下**都打印 `1`**，开关 `std::opt` 一致（负责人 19:30 给的读数）。
+3. `std::cml` 往返：结果打印成带 `sync` 块的源码，往返等价。
+4. 全量 `[SUMMARY] fail 0`、`headers --check`、`static_GUARD` 0。
+5. **id 22 空出不复用**：`kWellKnownCount` 回到 22 之后，`OperId 22` 不分配给任何新算子——复用会让"删掉"变成"换了名字"。
+
+## 5.1 这一笔**不动** `graph.cpp:561`（原第五节把它并进来的写法作废）
+
+`src/runtime/graph.cpp:561` 的 `facts.hasWaitEdge = !graph->ctrlInputsOf(ref).empty();` 问的是**一个 `GATE` 有没有等待**，不是"效应有没有凭据"——两件事。片 4 把 `:op/keep` 换成 `GATE` 之后，`GATE` 的等待是同步前驱（5.3），控制入边那一项在**这一段**里可以继续存在，直到"谁还在写 `GATE` 的控制入边"这件事单独清完（那是 `coerceArmExit` 一族，属于控制边删除的另一个分片）。**所以片 4 不碰它**，只在清单里记一句：等 `GATE` 的控制入边写点全部迁到同步前驱之后，这一项才是删的对象。
 
 ## 6. 这一笔不做的事
 
