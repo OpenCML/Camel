@@ -2,26 +2,30 @@
  * The same shape as `split_branch_author.cml`, read through `vjp` -- and the refusal is what this case
  * pins, because the gap is real and must not be silent.
  *
- * `vjp = transpose . split . reinterp<jvp>`. The cut now builds the author's branch
- * (`split_branch_author.cml` reads 4.0 and 3.0 through it), so the refusal is `transpose`'s:
+ * `vjp = transpose . split . reinterp<jvp>`. The cut builds the author's branch
+ * (`split_branch_author.cml` reads 4.0 and 3.0 through it), so what stops is `transpose`. Where it
+ * stops has moved once, and both readings are worth keeping:
  *
- *     TRANSPOSE function=split_of_jvp_of_f_backward skip=signature
+ * 1. **`skip=signature`** (2026-11-01, the first branch cut): the condition crosses the cut as a
+ *    residual so the backward half picks the arm the forward half picked (design 4.2), and a condition
+ *    is a `bool`; `transposeSignature` wanted every residual to be a `float`. The ruling on that was
+ *    that a residual slot whose cotangent space is empty contributes nothing -- no tangent of a
+ *    predicate -- which is now stated once, in the cotangent space (`addCotangent` drops a target that
+ *    is not a `float`), instead of as a per-type test under a subscript. `transposeSignature` accepts
+ *    such a member, and that refusal is gone.
+ * 2. **`skip=arm arm=0`** (this entry): with the signature accepted, `transpose` reaches the branch and
+ *    cannot transpose the *arm body* a split backward half contains. Two reasons, both in
+ *    `runArm` (`modules/transforms/transpose.cpp`): the arm's nodes must be `Oper`s with a transpose
+ *    rule, while a split backward half's arm holds the **lifted call** `jvp_mul` (a `Func`, not an
+ *    `Oper`); and a value the arm reads from outside must be the parameter the arm stops at, while this
+ *    arm reads its `x` out of the **residual tuple** (an `Accs`), which is by construction not the
+ *    parameter.
  *
- * and then, at the call site, `transforms: transpose has no transpose for this function`.
- *
- * Why: the condition crosses the cut as a residual so the backward half picks the arm the same way the
- * forward half did (design 4.2), and a condition is a `bool`. `transposeSignature` takes a residuals
- * bundle whose members are all `float` (`modules/transforms/transpose.cpp`: `bundle->typeAt(i) !=
- * Type::Float64()` returns nullptr, which prints `skip=signature`). So the two facts cannot both hold
- * as the code stands, and the choice between them is the author's:
- *
- * 1. `transpose` admits a known value that is not a float -- the bundle is "values the walk cannot
- *    carry", and a bool is such a value;
- * 2. the cut carries the condition in another form (a float, or the arm index as an int).
- *
- * Nothing in this lane changes `transpose` or the residual typing to make the number appear: a number
- * bought that way would not be the author's 3.0. The plan pins the refusal, so the day either choice is
- * made this case fails and asks to be re-read.
+ * So the missing piece is exactly "transpose a split backward half's arm", which is a cut of its own:
+ * it has to transpose a lifted callee (or see through it to its primal), and it has to treat a
+ * residual read as a value whose cotangent goes nowhere -- the same statement as (1), one level down.
+ * Nothing here changes `transpose`'s arm walk to make a number appear: the author's 4.0 and 3.0 are
+ * read through the cut in `split_branch_author.cml`, and this case keeps the *next* step named.
  */
 import { vjp } from vjp
 

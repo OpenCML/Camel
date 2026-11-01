@@ -134,13 +134,13 @@ timeout_ms = 20000
 
 [[tests]]
 name = "split_branch_author_vjp"
-desc = "The same shape read through `vjp`, which is `transpose . split . reinterp<jvp>` -- and the refusal is what this entry pins, because the gap must not be silent. The cut builds the branch (the entry above reads 4.0 and 3.0), so what stops is `transpose`, at its signature: `TRANSPOSE function=split_of_jvp_of_f_backward skip=signature`, then `transforms: transpose has no transpose for this function`. Why: the condition crosses the cut as a residual so the backward half picks the arm the same way the forward half did (design 4.2), and a condition is a `bool`; `transposeSignature` takes a residuals bundle whose members are all `float` (`modules/transforms/transpose.cpp`). The choice between admitting a non-float known value and carrying the condition in another form is the author's, not this lane's -- no number is bought by changing either. When that choice is made this entry fails and asks to be re-read."
+desc = "The same shape read through `vjp`, which is `transpose . split . reinterp<jvp>` -- and the refusal is what this entry pins, because the gap must not be silent. The cut builds the branch (the entry above reads 4.0 and 3.0), so what stops is `transpose`, and where it stops has moved once: the first branch cut refused at `TRANSPOSE function=split_of_jvp_of_f_backward skip=signature`, because a condition crossing as a residual is a `bool` and `transposeSignature` wanted every residual to be a `float`. That was ruled and fixed -- an empty cotangent space is now stated once, in `addCotangent`, and the signature accepts such a member -- so today the refusal is one level down: `skip=arm arm=0`. A split backward half's arm holds the lifted call `jvp_mul` (a `Func`, while `runArm` takes only `Oper`s that have a transpose rule) and reads its `x` out of the residual tuple (an `Accs`, while `runArm` lets an arm stop only at the parameter), so transposing a split backward half's arm is a cut of its own. This entry keeps that named: it fails the day it is made."
 kind = "behavior"
 case = "../../../cases/transforms/split/split_branch_author_vjp.cml"
 args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 1
-expect_stdout_contains = ["TRANSPOSE function=split_of_jvp_of_f_backward skip=signature", "transpose has no transpose for this function"]
+expect_stdout_contains = ["TRANSPOSE function=split_of_jvp_of_f_backward skip=arm arm=0", "transpose has no transpose for this function"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

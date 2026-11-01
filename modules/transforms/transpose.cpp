@@ -70,11 +70,12 @@ FunctionType *transposeSignature(FunctionType *function) {
                 camel::core::type::param_vec_t{}, params,
                 camel::core::type::TupleType::create(cotangentsOfAll));
         }
-        for (size_t i = 0; i < bundle->size(); ++i) {
-            if (bundle->typeAt(i) != Type::Float64()) {
-                return nullptr;
-            }
-        }
+        // A residual's cotangent space may be empty: a branch's condition crosses the cut as a
+        // residual (so the backward half picks the arm the forward half picked, design 4.2) and a
+        // predicate is not a value anything is differentiable with respect to. Such a member is
+        // accepted here and contributes nothing at the other end -- the statement is made once, in the
+        // cotangent space (`addCotangent` drops a target whose type has no cotangent), rather than as a
+        // per-type test at every use.
         for (size_t i = 1; i < count; ++i) {
             if (function->normTypeAt(i) != Type::Float64()) {
                 return nullptr;
@@ -238,6 +239,17 @@ bool buildTransposeMember(
         };
         std::unordered_map<gc_node_ref_t, Escape> escapes;
         const auto addCotangent = [&](gc_node_ref_t ref, gc_node_ref_t node) {
+            // The cotangent space of a value that is not a float is empty: there is no tangent of a
+            // predicate, so nothing flows back to it and it never meets arithmetic. This is where that
+            // is stated -- once, for every such value -- and it is why a residual slot that is not a
+            // float (`a branch's condition` is the one that exists) needs no test of its own: the
+            // signature accepts it, the walk never differentiates it, and this drop is what makes the
+            // two agree. A zero cotangent of a `bool` would not even be a value of its type; dropping it
+            // is the same statement without inventing one.
+            const camel::runtime::GCNode *target = function->node(ref);
+            if (target == nullptr || target->dataType() != Type::Float64()) {
+                return;
+            }
             if (!hasCotangent[ref]) {
                 cotangent[ref]    = node;
                 hasCotangent[ref] = true;
