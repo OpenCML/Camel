@@ -1,0 +1,69 @@
+/**
+ * `vmap(f)` where `f` reduces along an axis: the reduction keeps the axis it reduces -- as an extent
+ * of one with `keepdims`, as nothing without it -- and the batch adds one axis in front, so the rule
+ * is written in terms of the operator's own axis argument (`rulesets.vmap`'s `batched_axis`).
+ *
+ * The batch is three rows of `float[2, 3]`:
+ *
+ *     r0 = [[1, 2, 3], [4, 5, 6]]     r1 = [[10, 20, 30], [40, 50, 60]]
+ *     r2 = [[-1, 0, 1], [2, 4, 8]]
+ *
+ * so the column sums are `[5, 7, 9]`, `[50, 70, 90]` and `[1, 4, 9]`; the row sums kept as a column
+ * are `[[6], [15]]`, `[[60], [150]]` and `[[0], [14]]`; the column maxima are `[4, 5, 6]`,
+ * `[40, 50, 60]` and `[2, 4, 8]`; the row minima are `[1, 4]`, `[10, 40]` and `[-1, 2]`; and the
+ * column means are `[2.5, 3.5, 4.5]`, `[25, 35, 45]` and `[0.5, 2, 4.5]`.
+ *
+ * Each batched result is printed beside the row-by-row `array.vmap` of the same function, and the
+ * plan compares the two strings rather than a written golden: what this pins is that the two
+ * writings are one computation.
+ *
+ * A reduction's result type is the open rank `T[..]` -- the rank is a fact about the value, which
+ * carries it, not about the type (`test/cases/trans/cpp/sum_axis_rank.cml`) -- so each `f` here
+ * declares its result open-rank, and the brackets of the numbers below are the shape the value has.
+ */
+import rulesets.vmap
+import { vmap as row_vmap } from array
+import { max_axis, mean_axis, min_axis, sum_axis } from tensor
+import { vmap } from transforms
+
+// The axis is the row's first one: in the lifted value it is the second.
+func column_sum(x: float[2, 3]): float[..] {
+    return sum_axis(x, 0, false)
+}
+
+// `keepdims` keeps the reduced axis, so the batch keeps it too: `float[?, 2, 1]`.
+func row_sum_kept(x: float[2, 3]): float[..] {
+    return sum_axis(x, 1, true)
+}
+
+func column_max(x: float[2, 3]): float[..] {
+    return max_axis(x, 0, false)
+}
+
+// The axis is the row's last one: it stays the last one of the lifted value.
+func row_min(x: float[2, 3]): float[..] {
+    return min_axis(x, 1, false)
+}
+
+func column_mean(x: float[2, 3]): float[..] {
+    return mean_axis(x, 0, false)
+}
+
+func main(): int sync {
+    let batch: float[3, 2, 3] = [
+        [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
+        [[10.0, 20.0, 30.0], [40.0, 50.0, 60.0]],
+        [[-1.0, 0.0, 1.0], [2.0, 4.0, 8.0]]
+    ]
+    println(vmap(column_sum)(batch))
+    println(row_vmap(column_sum)(batch))
+    println(vmap(row_sum_kept)(batch))
+    println(row_vmap(row_sum_kept)(batch))
+    println(vmap(column_max)(batch))
+    println(row_vmap(column_max)(batch))
+    println(vmap(row_min)(batch))
+    println(row_vmap(row_min)(batch))
+    println(vmap(column_mean)(batch))
+    println(row_vmap(column_mean)(batch))
+    return 0
+}

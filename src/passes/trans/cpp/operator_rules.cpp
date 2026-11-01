@@ -1141,6 +1141,13 @@ Rules buildRules() {
     // answer itself (design principles 5.4), a value of no dimension, and the open rank of the
     // result's type writes that like any other answer. It was refused here until the same sentence
     // was found to be wrong for `argmax_axis`; the reason was never about the sum.
+    //
+    // What that answer is *written as* is a second question, and the answer is `rt::sumAll`. Writing
+    // it as `rt::sumAxis` hands an array to a node whose type is the element, and the C++ compiler
+    // rejects `const int64_t v = rt::sumAxis(...)` -- the defect the census reported against
+    // `test/cases/modules/tensor/int64_sum.cml`. The shortcut is taken only when the axis is the one
+    // the value has (0 or -1) and the flag is the constant `false`; a computed flag, an operand axis,
+    // or `keepDims` true keeps `rt::sumAxis`, which writes those shapes as arrays.
     r["tensor:sum_axis"] = {
         [](OperatorCall &c) -> std::optional<std::string> {
             const ArrayType *value = asArrayType(c.normType(0));
@@ -1171,6 +1178,24 @@ Rules buildRules() {
                     keepDims = c.with(1).text;
                 }
             } else {
+                return std::nullopt;
+            }
+            // A rank-1 value has one lane, and what it sums to *is* the answer (design principles
+            // 5.4). Which shape that answer takes is the node's type, not the rule's choice: the
+            // template form `sum<0>(xs)` answers the element (printed `8.0`), while
+            // `sum_axis(xs, 0, false)` -- whose signature says `T[..]` -- answers an open-rank
+            // array whose recorded shape is `[]` (test/cases/trans/cpp/sum_axis_rank.cml is that
+            // reading). So the rule asks the node's own type: an element is `rt::sumAll` (the
+            // lanes from +0 in ascending order, the same walk), an array is `rt::sumAxis`. Writing
+            // the array form into the element's declaration was the defect the census reported
+            // against test/cases/modules/tensor/int64_sum.cml.
+            const bool answersArray = asArrayType(c.resultType()) != nullptr;
+            if (value->rank() == 1 && !answersArray) {
+                if ((axis == "0" || axis == "-1") && keepDims == "false") {
+                    return std::format("rt::sumAll({})", c.operand(0));
+                }
+                // An element answer is the whole sum and nothing else; a kept dimension or an axis
+                // the rule cannot name is not that answer, so the rule refuses instead of writing one.
                 return std::nullopt;
             }
             return std::format(

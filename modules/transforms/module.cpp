@@ -25,6 +25,8 @@
 
 #include "jvp.h"
 #include "jvp_operator.h"
+#include "split.h"
+#include "split_operator.h"
 #include "transpose_operator.h"
 #include "vmap.h"
 #include "vmap_operator.h"
@@ -282,9 +284,9 @@ class ReinterpPass : public RuntimeGraphRewritePass {
 
 } // namespace
 
-/// The executors this module's operators run on: `jvp` and `vmap`, whose kernels build the
-/// transform's graph when the call runs (jvp_operator.cpp, vmap_operator.cpp). One executor per
-/// module, so the two kernel tables are handed over as one.
+/// The executors this module's operators run on: `jvp`, `vmap` and `split`, whose kernels build the
+/// transform's graph when the call runs (jvp_operator.cpp, vmap_operator.cpp, split_operator.cpp).
+/// One executor per module, so the kernel tables are handed over as one.
 class TransformsExecutor : public Executor {
   public:
     explicit TransformsExecutor(context_ptr_t ctx) : Executor(std::move(ctx), kernels()) {}
@@ -295,16 +297,20 @@ class TransformsExecutor : public Executor {
         for (auto &[name, kernel] : camel::transforms::vmapOperatorKernels()) {
             all[name] = kernel;
         }
+        for (auto &[name, kernel] : camel::transforms::splitOperatorKernels()) {
+            all[name] = kernel;
+        }
         return all;
     }
 };
 
 TransformsModule::TransformsModule(context_ptr_t ctx) : BuiltinModule("transforms", ctx) {
-    // `jvp` and `vmap` are the module's operators, beside the pass: `reinterp<jvp>(f)` and
-    // `reinterp<vmap>(f)` are value-level transforms (jvp.h, vmap.h), so they are reached as calls
-    // and not as passes.
+    // `jvp`, `vmap` and `split` are the module's operators, beside the pass: `reinterp<jvp>(f)`,
+    // `reinterp<vmap>(f)` and `split(f)` are value-level transforms (jvp.h, vmap.h, split.h), so
+    // they are reached as calls and not as passes.
     camel::transforms::registerOperatorMetadata();
     camel::transforms::registerVmapOperatorMetadata();
+    camel::transforms::registerSplitOperatorMetadata();
     for (const auto &group : camel::transforms::operatorGroups()) {
         exportEntity(group->name(), group);
     }
@@ -314,6 +320,10 @@ TransformsModule::TransformsModule(context_ptr_t ctx) : BuiltinModule("transform
         exportEntity(group->name(), group);
     }
     for (const auto &group : camel::transforms::vmapOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
+    // `split` cuts a lifted function into the two halves `vjp` is written with (split.cpp).
+    for (const auto &group : camel::transforms::splitOperatorGroups()) {
         exportEntity(group->name(), group);
     }
 }
