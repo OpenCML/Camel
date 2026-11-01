@@ -104,3 +104,25 @@ tangent= (24.0, 36.0)
 **要作者答的一句**：`Split<F>` 的残差位取哪一条——**A**（带上项数，`jvp`/`split` 挪进编译期，`vjp.cml` 的组合写法跟着改），
 还是 **B**（维持今天：项数由图定、静态类型只给占位，并在类型文档里写明；若选 B，请确认"任意 N"进文档，
 而不是"0/1/3"）？两条都能照字面执行；页上三种收益与今天谁被堵都已写明。
+
+## 裁定（2026-11-01 13:10）：走 **A**，已落地
+
+作者改判 A。原文三条：**"残差数由图给，是任意 N"**；**"A 就是那条路"**——`jvp`/`split`/`transpose`
+在编译期实例化（623 行内核 + 3039 行构图，已接受）；**"残差对用户不可见，程序不写它、不解构它、不数它，
+只能整块交给后一半"**。落地的形状：
+
+- **残差位是每次实例化的一个不透明类型**：`TupleType::residuals(...)`，与 `cell`/`T?`/`T!` 同一种做法——
+  自己的 intern 形状、参与 `equals`、`clone`/`resolve`/`widen`/`unify` 保持标记。不铸三个形状，
+  也不设"超过三个就拒绝"的规矩：项数跟着图走，类型不写它。
+- **铸造点在 `splitHalvesWith`**（`modules/transforms/split.cpp`），两条路都铸——图给的元组和
+  `splitHalvesOf` 的替身——所以图里两半的类型和调用点检查的类型是同一个对象，替身也不再是"第二种说法"。
+- **拒绝点在新诊断** `SemanticDiag::ResidualsAreNotVisible`（`0x000208`）：`let (r0, r1) = residuals`
+  和 `residuals.0` 在 `let`／读处报一条（一次声明一条，与 `TupleUnpackingCountMismatch` 同规则）。
+  普通元组的解构不受影响（`equals` 只区分标记，不区分成员）。
+- **用例**：`test/cases/compile/transforms/split_residuals_destructured.cml` 改成期望这条诊断，
+  `not_contains`（`r0= 9.0`/`r1= 4.0`）删掉——关掉新诊断它跑出今天那三个数（`value= 36.0`、
+  `r0= 3.0`、`r1= 2.0`），打开就被拒；整块交给后一半仍是 `tangent= (24.0, 36.0)`。
+- 注册表随之从 306 条到 **307** 条（`node scripts/diagnostics-catalog.mjs --check` 通过）。
+
+本页请作者挪进 `reviews/`（`reviews/questions-2026-11-01-the-residual-slot-has-no-type-until-execution.md`
+是这道题的评审页）。

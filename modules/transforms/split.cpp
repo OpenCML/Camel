@@ -770,6 +770,16 @@ SplitHalves splitHalvesWith(FunctionType *function, Type *residuals) {
         }
         residuals = TupleType::create(residualTypes);
     }
+    // Whichever way it was named, the tuple is the transform's own kind of tuple
+    // (`TupleType::residuals`): the members are the graph's answer, so a program neither
+    // destructures the tuple nor reads an element of it -- it hands it on whole, to the backward
+    // half beside the tangents (SemanticDiag::ResidualsAreNotVisible). Marking it here is what makes
+    // that hold on both sides at once: the halves' types in the graphs, and the type a call site is
+    // checked against.
+    if (residuals->code() == TypeCode::Tuple &&
+        !static_cast<TupleType *>(residuals)->isResiduals()) {
+        residuals = TupleType::residuals(static_cast<TupleType *>(residuals)->types());
+    }
 
     param_vec_t forwardParams;
     param_vec_t tangentParams;
