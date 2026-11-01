@@ -409,8 +409,8 @@ bool fail(JvpGraph &refusal, const JvpGraph &why) {
 
 bool liftGraph(
     LiftState &state, const GraphRead &function, std::string_view name,
-    camel::runtime::GraphId source, camel::runtime::GraphId member, std::ostream &os,
-    JvpGraph &refusal);
+    camel::runtime::GraphId member, camel::runtime::GraphId from,
+    std::ostream &os, JvpGraph &refusal);
 
 } // namespace
 
@@ -448,7 +448,7 @@ JvpGraph buildJvpGraph(
         "jvp_of_" + std::string(name), "jvp_of_" + std::string(name));
     LiftState state{context, program, group};
     JvpGraph refusal;
-    if (!liftGraph(state, function, name, self, member, os, refusal)) {
+    if (!liftGraph(state, function, name, member, self, os, refusal)) {
         return refusal;
     }
     // The count the "one graph per callee" rule is read from: the callee graphs this lift made, in
@@ -463,8 +463,8 @@ namespace {
 
 bool liftGraph(
     LiftState &state, const GraphRead &function, std::string_view name,
-    camel::runtime::GraphId source, camel::runtime::GraphId member, std::ostream &os,
-    JvpGraph &refusal) {
+    camel::runtime::GraphId member, camel::runtime::GraphId from,
+    std::ostream &os, JvpGraph &refusal) {
     const camel::core::context::context_ptr_t &context = state.context;
     const camel::runtime::Program *program             = state.program;
     camel::runtime::GraphDraftGroup &group             = state.group;
@@ -489,8 +489,7 @@ bool liftGraph(
         // `split` reads it when it has to carry a call of a lifted graph into a half, so that the
         // value half can call the primal instead of the lift (whose first parameter is the pair).
         // Every member the lift makes gets it, the top-level `jvp_of_f` and each `jvp_of_callee`.
-        // The id is the caller's, like the name: a draft is numbered when it is encoded.
-        draft.addLiftedFromRef(source);
+        draft.addLiftedFromRef(from);
         // One pair of ports per parameter of `f`, in its order: the value the caller passes and the
         // seed of that direction. A port node is a node; the graph's *parameters* are the port nodes
         // it lists as its norm ports, and a call is checked against that list ("has 0 norm ports" is
@@ -618,7 +617,7 @@ bool liftGraph(
                     "jvp_of_" + std::string(callee->name()));
                 state.callees.emplace(rt::toValue(calleeId), liftedCallee);
                 JvpGraph sub;
-                if (!liftGraph(state, calleeFace, calleeName, calleeId, liftedCallee, os, sub)) {
+                if (!liftGraph(state, calleeFace, calleeName, liftedCallee, calleeId, os, sub)) {
                     refusal = sub;
                     return false;
                 }
@@ -1293,7 +1292,7 @@ bool liftGraph(
             rules += (rules.empty() ? "" : ",") + rule;
         }
         os << "REINTERP jvp function=" << name << " graph=" << rt::toValue(member)
-           << " liftedFrom=" << rt::toValue(source)
+           << " liftedFrom=" << rt::toValue(from)
            << " type=" << signature->toString() << " nodes=" << function.nodeCount()
            << " kinds=" << copiedKinds << '/' << seenKinds
            << " exit=Tuple{chain,tangent} tangent=computed source=ruleset rules="
