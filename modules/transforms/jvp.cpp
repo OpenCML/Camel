@@ -548,7 +548,33 @@ bool liftGraph(
         // the graph that copies its body.
         if (const camel::runtime::GCGraph *primal = program->graph(source);
             primal != nullptr && primal->recomputesOnBackward()) {
-            draft.setFlags(static_cast<uint8_t>(draft.flags() | rt::kGraphFlagRecomputeBackward));
+            // **The request is honoured only when running the body twice cannot be seen.** The bit
+            // means "store less, compute again", and recomputing is only safe when the body has no
+            // external effect: a second run of something that prints, writes or reads the world is a
+            // second effect the program never asked for. The question is the operator table's --
+            // `hasExternalEffect` (`src/core/operator_table.cpp`) is "does running this get noticed" --
+            // and it is asked *here*, where the graph is in hand, rather than where the bit is read,
+            // because a graph cannot be judged from a place that cannot reach it.
+            // `mayBeRecomputed` is deliberately not used: it also requires `foldable`, and "can this
+            // be folded" is a different question from "is recomputing it safe".
+            bool recomputable      = true;
+            const auto &table      = camel::core::OperatorTable::instance();
+            for (rt::gc_node_ref_t ref = 0; ref < primal->nodeCount(); ++ref) {
+                const rt::GCNode *node = primal->node(ref);
+                if (node == nullptr || node->kind != rt::GCNodeKind::Oper) {
+                    continue;
+                }
+                const auto *body = primal->nodeBodyAs<rt::GCOperBody>(ref);
+                if (body != nullptr && table.hasExternalEffect(body->oper)) {
+                    recomputable = false;
+                    os << "REINTERP jvp not_recomputed=" << primal->name()
+                       << " why=an operator of the body has an external effect, so it would run twice\n";
+                    break;
+                }
+            }
+            if (recomputable) {
+                draft.setFlags(static_cast<uint8_t>(draft.flags() | rt::kGraphFlagRecomputeBackward));
+            }
         }
         // One pair of ports per parameter of `f`, in its order: the value the caller passes and the
         // seed of that direction. A port node is a node; the graph's *parameters* are the port nodes
