@@ -73,4 +73,37 @@
 **lambda 的形参表**还没有；`..xs` 的取值（元组）是再下一格 `NK::RestValue`，`src/compile` 里至今
 没有它的下降路径。
 
-这一节的实测没有落地任何代码：试完即回退，树停在 `d44f5f344`。
+这一节的实测没有落地任何代码：试完即回退。
+
+## 4. 结论：`Vjp<F>` 作为类型可用，作为 lambda 形参表不可用
+
+**`Vjp<F>` 作为类型可用**（`d8105565a` 已落地）：`Pullback<F>`、`Vjp<F>`、`Jvp<F>`、`Transpose<F>`
+写进 `stdlib/types.cml`，用的全是 `types` 已有的词（`ParamsOf`、`ResultOf`、`Tangent`），**没有给类型
+模型加任何字段**——原则 2.3 的正面样板，也是 P1-12 里"从内容推得出"的那一半：
+
+    export type Pullback<F>  = (ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)
+    export type Vjp<F>       = (..ParamsOf<F>) => (ResultOf<F>, Pullback<F>)
+    export type Jvp<F>       = (..ParamsOf<F>, ..Tangent<ParamsOf<F>>) => (ResultOf<F>, Tangent<ResultOf<F>>)
+    export type Transpose<F> = (..ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)
+
+顺带纠了一处假绿：原来那个用例自己写 `type Tangent<T> = T` 当替身，于是它把 `F3` 的拉回钉成
+`(ct: float) => (int, string, bool)`；用真的 `Tangent`，一个 `int` 的切空间是空元组，答案是
+`((), (), ())`。改的正是那两行**量替身**的断言。
+
+**`..xs` 作为 lambda 形参表不可用**：卡在被暂停的"按所在函数类型替 lambda 建形参"上（第 3 节的两条
+内部错误）。**所以 `vjp` 该走返回类型，不走形参表。**
+
+但"走返回类型"只解决**声明**，解决不了**体**：写成一条泛型声明并 `return transpose(split(jvp(f)))`
+时，墙上原文是
+
+    error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types:
+      <> (((float) => (float, ()), ((), float) => float)).
+      --> stdlib/vjp.cml:60:22   (code=0x0300000F)
+
+—— `split(jvp(f))` 是**一对函数**，`transpose` 要的是**一个函数**（`is_function::<F>`）。把它们接起来
+（forward 半边的残差喂给 transpose 的线性半边）必须由一个形参表是 `..xs` 的 lambda 来做，也就是回到被
+暂停的机制上。于是 `vjp` 今天仍是**两条**声明（元数 1 与 2）；一条泛型的路要等那台机制，或等一个
+不需要 lambda 的接法。
+
+**这是 P1-12 剩下的那一半**：类型已经能在 `.cml` 里写出来并可被引用；`vjp` 的**签名**仍在 C++ 里，
+因为一条泛型声明需要一个 `(..xs)` 的体。
