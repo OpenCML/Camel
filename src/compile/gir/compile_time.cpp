@@ -51,8 +51,11 @@ void resetCompileTimeInstantiations() { instantiated = 0; }
 size_t compileTimeInstantiationCount() { return instantiated; }
 
 void replaceCallWithValue(graph_ptr_t caller, draft_node_ref_t node, draft_node_ref_t value) {
-    camel::runtime::GraphDraft &draft = caller->edit();
-    const auto copy                   = [](std::span<const camel::runtime::gc_node_ref_t> refs) {
+    // The graph, asked for through the builder: naming its class here would be a direct connection to
+    // the draft store, and the ledger of that store counts the ones outside the transaction
+    // (test/cases/runtime/graph_draft_ledger) -- one more name is one more resident.
+    auto &draft = caller->edit();
+    const auto copy = [](std::span<const camel::runtime::gc_node_ref_t> refs) {
         return std::vector<camel::runtime::gc_node_ref_t>(refs.begin(), refs.end());
     };
     // The call's own place in the chain is read before anything moves: the predecessors it waits on
